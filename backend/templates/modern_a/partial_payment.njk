@@ -1,0 +1,249 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+/* Self-contained minimal styling */
+body {
+  font-family: Arial, sans-serif;
+  color: #111827;
+  font-size: 12px;
+}
+
+.page { page-break-after: always; }
+.page:last-child { page-break-after: auto; }
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6mm;
+}
+.headerRow .leftSpacer { flex: 1; }
+.headerRow .logoBox {
+  width: 60mm;
+  display: flex;
+  justify-content: flex-end;
+}
+.headerRow .logoBox img {
+  max-height: {{ theme.header.logoMaxHeightMm or 18 }}mm;
+  max-width: 60mm;
+  object-fit: contain;
+}
+
+.companyLine {
+  font-size: 10px;
+  color: #374151;
+  margin-bottom: 6mm;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10mm;
+  margin-bottom: 6mm;
+}
+
+.addressBlock { white-space: pre-line; font-size: 12px; }
+
+.metaBlock .title {
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 4mm;
+}
+.metaBlock .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 6mm;
+  margin: 1.5mm 0;
+}
+.metaBlock .label { color: #374151; min-width: 34mm; }
+.metaBlock .value { text-align: right; font-weight: 500; }
+
+.textBlock { margin: 5mm 0; white-space: pre-line; }
+
+.calcTable { width: 100%; border-collapse: collapse; margin: 5mm 0; }
+.calcTable td { padding: 1.8mm 0; }
+.calcTable td:first-child { color: #374151; }
+.calcTable td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.calcTable tr.total td:last-child { font-weight: 700; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.table th, .table td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 2mm 1.5mm;
+  vertical-align: top;
+}
+.table th { text-align: left; font-weight: 700; color: #111827; }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.muted { color: #6b7280; }
+.bold { font-weight: 700; }
+</style>
+</head>
+
+<body>
+
+<!-- PAGE 1 -->
+<div class="page">
+  <div class="headerRow">
+    <div class="leftSpacer"></div>
+    <div class="logoBox">
+      {% if theme.header.showLogo and logoDataUri %}
+        <img src="{{ logoDataUri }}" alt="Logo">
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="companyLine">
+    {{ seller.name1 }}, {{ seller.street }}, {{ seller.postCode }} {{ seller.city }}
+  </div>
+
+  <div class="grid2">
+    <div class="addressBlock">
+{{ buyer.name1 }}
+{% if buyer.contactName %}{{ buyer.contactName }}{% elif buyer.name2 %}{{ buyer.name2 }}{% endif %}
+{{ buyer.street }}
+{{ buyer.postCode }} {{ buyer.city }}
+    </div>
+
+    <div class="metaBlock">
+      <div class="title">{{ doc.title }}</div>
+
+      <div class="row">
+        <div class="label">Rechnungsnummer</div>
+        <div class="value">{{ doc.number }}</div>
+      </div>
+      <div class="row">
+        <div class="label">Zahlungsziel</div>
+        <div class="value">{{ doc.dueDate | date_de }}</div>
+      </div>
+      <div class="row">
+        <div class="label">Projekt</div>
+        <div class="value">{{ project.nameShort }}{% if project.nameLong %}: {{ project.nameLong }}{% endif %}</div>
+      </div>
+      <div class="row">
+        <div class="label">Vertrag</div>
+        <div class="value">{{ contract.nameShort }}{% if contract.nameLong %}: {{ contract.nameLong }}{% endif %}</div>
+      </div>
+      <div class="row">
+        <div class="label">Leistungszeitraum</div>
+        <div class="value">{{ doc.billingPeriodStart | date_range_de(doc.billingPeriodFinish) }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% if doc.text1 %}
+    <div class="textBlock">{{ doc.text1 }}</div>
+  {% endif %}
+
+  <table class="calcTable">
+    <tr>
+      <td>Honorar</td>
+      <td>{{ formatMoneyEUR(doc.amountNet) }}</td>
+    </tr>
+    <tr>
+      <td>Nebenkosten</td>
+      <td>{{ formatMoneyEUR(doc.amountExtrasNet) }}</td>
+    </tr>
+    <tr>
+      <td>Rechnungssumme netto</td>
+      <td>{{ formatMoneyEUR(doc.totalAmountNet) }}</td>
+    </tr>
+    <tr>
+      <td>MwSt. ({{ doc.vatPercent }}%)</td>
+      <td>{{ formatMoneyEUR(totals.vatAmount) }}</td>
+    </tr>
+    <tr class="total">
+      <td>Rechnungssumme brutto</td>
+      <td>{{ formatMoneyEUR(totals.totalGross) }}</td>
+    </tr>
+  </table>
+
+  {% if doc.text2 %}
+    <div class="textBlock">{{ doc.text2 }}</div>
+  {% endif %}
+</div>
+
+<!-- PAGE 2 -->
+<div class="page">
+  <div class="headerRow">
+    <div class="leftSpacer"></div>
+    <div class="logoBox">
+      {% if theme.header.showLogo and logoDataUri %}
+        <img src="{{ logoDataUri }}" alt="Logo">
+      {% endif %}
+    </div>
+  </div>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th></th>
+        <th class="num">Honorar und Nebenkosten</th>
+        <th class="num">Erbrachte Leistung</th>
+        <th class="num">Diese Rechnung</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in projectStructureRows %}
+      <tr>
+        <td>
+          <div class="bold">{{ r.nameShort }}</div>
+          {% if r.nameLong %}<div class="muted">{{ r.nameLong }}</div>{% endif %}
+        </td>
+        <td class="num">{{ formatMoneyEUR(r.feeTotal) }}</td>
+        <td class="num">{{ formatMoneyEUR(r.performed) }}</td>
+        <td class="num">{{ formatMoneyEUR(r.thisDocNet) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- PAGE 3 -->
+<div class="page">
+  <div class="headerRow">
+    <div class="leftSpacer"></div>
+    <div class="logoBox">
+      {% if theme.header.showLogo and logoDataUri %}
+        <img src="{{ logoDataUri }}" alt="Logo">
+      {% endif %}
+    </div>
+  </div>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Datum</th>
+        <th>Mitarbeiter</th>
+        <th class="num">Menge</th>
+        <th class="num">Stundensatz</th>
+        <th class="num">Summe</th>
+        <th>Beschreibung</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tec.rows %}
+      <tr>
+        <td>{{ t.dateVoucher | date_de }}</td>
+        <td>{{ t.employeeName }}</td>
+        <td class="num">{{ t.quantityExt }}</td>
+        <td class="num">{{ formatMoneyEUR(t.spRate) }}</td>
+        <td class="num">{{ formatMoneyEUR(t.spTot) }}</td>
+        <td>{{ t.postingDescription }}</td>
+      </tr>
+      {% endfor %}
+
+      <tr>
+        <td class="bold" colspan="2">Summe</td>
+        <td class="num bold">{{ tec.sumQty }}</td>
+        <td></td>
+        <td class="num bold">{{ formatMoneyEUR(tec.sumTot) }}</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

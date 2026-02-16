@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID>
+  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
+  <cbc:ID>RE-2026-0003</cbc:ID>
+  <cbc:IssueDate>2026-02-01</cbc:IssueDate>
+  <cbc:DueDate>2026-02-02</cbc:DueDate>
+  <cbc:InvoiceTypeCode>326</cbc:InvoiceTypeCode>
+  <cbc:Note>Abschlagsrechnung</cbc:Note>
+  
+  <cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+  <cbc:BuyerReference>12345</cbc:BuyerReference>
+
+
+
+  
+  <cac:OrderReference>
+    <cbc:ID>P26-0001</cbc:ID>
+  </cac:OrderReference>
+  
+  <cac:AccountingSupplierParty>
+    <cac:Party>
+      <cbc:EndpointID schemeID="9930">sm@plain.de</cbc:EndpointID>
+      <cac:PartyName>
+        <cbc:Name>Plain GmbH</cbc:Name>
+      </cac:PartyName>
+      <cac:PostalAddress>
+        <cbc:StreetName>Westmarkstraße 76</cbc:StreetName>
+        <cbc:CityName>Karlsruhe</cbc:CityName>
+        <cbc:PostalZone>76227</cbc:PostalZone>
+        <cac:Country>
+          <cbc:IdentificationCode>DE</cbc:IdentificationCode>
+        </cac:Country>
+      </cac:PostalAddress>
+      
+      <cac:PartyTaxScheme>
+        <cbc:CompanyID>DE652225416</cbc:CompanyID>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:PartyTaxScheme>
+      
+      <cac:PartyLegalEntity>
+        <cbc:RegistrationName>Plain GmbH</cbc:RegistrationName>
+      </cac:PartyLegalEntity>
+      <cac:Contact>
+        <cbc:Name>SM: Simon Messina</cbc:Name>
+        <cbc:Telephone>017660184162</cbc:Telephone>
+        <cbc:ElectronicMail>sm@plain.de</cbc:ElectronicMail>
+      </cac:Contact>
+    </cac:Party>
+  </cac:AccountingSupplierParty>
+
+  <cac:AccountingCustomerParty>
+    <cac:Party>
+      <cbc:EndpointID schemeID="0204">bv@projo.de</cbc:EndpointID>
+      <cac:PartyName>
+        <cbc:Name>projo GmbH</cbc:Name>
+      </cac:PartyName>
+
+      <cac:PostalAddress>
+        <cbc:StreetName>Blumenstraße 11A</cbc:StreetName>
+        <cbc:CityName>Berlin</cbc:CityName>
+        <cbc:PostalZone>10119</cbc:PostalZone>
+        <cac:Country>
+          <cbc:IdentificationCode>DE</cbc:IdentificationCode>
+        </cac:Country>
+      </cac:PostalAddress>
+      <!--
+        For XRechnung/EN16931, BT-44 (Buyer name) is typically mapped to
+        AccountingCustomerParty/Party/PartyLegalEntity/RegistrationName.
+        Some validators do not accept PartyName/Name alone, so we provide both.
+      -->
+      <cac:PartyLegalEntity>
+        <cbc:RegistrationName>projo GmbH</cbc:RegistrationName>
+      </cac:PartyLegalEntity>    </cac:Party>
+  </cac:AccountingCustomerParty>
+
+  <cac:PaymentMeans>
+    <cbc:PaymentMeansCode>58</cbc:PaymentMeansCode>
+    
+    <cac:PayeeFinancialAccount>
+      <cbc:ID>DE58200411330597544600</cbc:ID>
+      
+    </cac:PayeeFinancialAccount>
+    
+  </cac:PaymentMeans>
+
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="EUR">104.5</cbc:TaxAmount>
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="EUR">550</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="EUR">104.5</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:ID>S</cbc:ID>
+        <cbc:Percent>19</cbc:Percent>
+        <cac:TaxScheme>
+          <cbc:ID>VAT</cbc:ID>
+        </cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>
+  </cac:TaxTotal>
+
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="EUR">550</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="EUR">550</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="EUR">654.5</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="EUR">654.5</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+
+  
+    <cac:InvoiceLine>
+      <cbc:ID>1</cbc:ID>
+      <cbc:InvoicedQuantity unitCode="C62">1</cbc:InvoicedQuantity>
+      <cbc:LineExtensionAmount currencyID="EUR">550</cbc:LineExtensionAmount>
+      <cac:Item>
+        <cbc:Name>Abschlagsrechnung</cbc:Name>
+        <cac:ClassifiedTaxCategory>
+          <cbc:ID>S</cbc:ID>
+          <cbc:Percent>19</cbc:Percent>
+          <cac:TaxScheme>
+            <cbc:ID>VAT</cbc:ID>
+          </cac:TaxScheme>
+        </cac:ClassifiedTaxCategory>
+      </cac:Item>
+      <cac:Price>
+        <cbc:PriceAmount currencyID="EUR">550</cbc:PriceAmount>
+      </cac:Price>
+    </cac:InvoiceLine>
+</Invoice>

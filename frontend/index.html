@@ -1,0 +1,2256 @@
+<!DOCTYPE html>
+
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PlaIn Projektsteuerung</title>
+<link href="style.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div id="app">
+<!-- Dashboard / main -->
+<div class="view" id="main-menu">
+  <header class="topbar">
+    <div class="topbar-title">
+      <div class="topbar-greeting">PlaIn</div>
+      <div class="topbar-subtitle">Projektsteuerung</div>
+    </div>
+    <button class="icon-btn" id="btn-notifications" type="button" aria-label="Benachrichtigungen">
+      <span class="icon">🔔</span>
+    </button>
+  </header>
+
+  <div class="searchbar">
+    <span class="icon">🔎</span>
+    <input id="dash-search" type="search" placeholder="Suchen …" />
+  </div>
+  <div class="search-suggest hidden" id="dash-search-suggest" aria-label="Suchvorschläge"></div>
+
+  <section class="card kpi-card">
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">Umsatz</div>
+        <div class="kpi-value" id="kpi-revenue">—</div>
+        <div class="kpi-meta" id="kpi-revenue-meta">Diese Woche</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Offen</div>
+        <div class="kpi-value" id="kpi-open">—</div>
+        <div class="kpi-meta" id="kpi-open-meta">Rechnungen</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Übersicht</div>
+        <div class="card-subtitle">Status der letzten 7 Tage</div>
+      </div>
+      <div class="chip">Woche</div>
+    </div>
+    <div class="dash-chart" id="dash-chart"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      <div class="card-title">Schnellzugriff</div>
+      <div class="card-subtitle">Häufige Aktionen</div>
+    </div>
+    <div class="quick-actions">
+      <button class="pill" id="qa-stunden-buchen" type="button">Stunden buchen</button>
+      <button class="pill" id="qa-abschlagsrechnung" type="button">Abschlagsrechnung</button>
+      <button class="pill" id="qa-rechnung" type="button">Rechnung</button>
+      <button class="pill" id="qa-rechnungsliste" type="button">Rechnungsliste</button>
+    </div>
+  </section>
+
+  <section class="card menu-grid">
+    <button class="menu-card" id="nav-adressen" type="button">
+      <div class="menu-card-icon">📇</div>
+      <div class="menu-card-title">Adressen &amp; Kontakte</div>
+      <div class="menu-card-sub">Adressen, Kontakte</div>
+    </button>
+
+    <button class="menu-card" id="nav-projekte" type="button">
+      <div class="menu-card-icon">📁</div>
+      <div class="menu-card-title">Projekte</div>
+      <div class="menu-card-sub">Struktur, Liste</div>
+    </button>
+
+    <button class="menu-card" id="nav-projektdaten" type="button">
+      <div class="menu-card-icon">⏱️</div>
+      <div class="menu-card-title">Projektdaten</div>
+      <div class="menu-card-sub">Buchen, Buchungen</div>
+    </button>
+
+    <button class="menu-card" id="nav-rechnungen" type="button">
+      <div class="menu-card-icon">🧾</div>
+      <div class="menu-card-title">Verträge &amp; Rechnungen</div>
+      <div class="menu-card-sub">AR, RE, Zahlungen</div>
+    </button>
+
+    <button class="menu-card" id="nav-mitarbeiter" type="button">
+      <div class="menu-card-icon">👤</div>
+      <div class="menu-card-title">Mitarbeiter</div>
+      <div class="menu-card-sub">Liste, Anlegen</div>
+    </button>
+
+    <button class="menu-card" id="nav-admin" type="button">
+      <div class="menu-card-icon">⚙️</div>
+      <div class="menu-card-title">Administration</div>
+      <div class="menu-card-sub">Stammdaten, Vorlagen</div>
+    </button>
+  </section>
+</div>
+
+</div>
+
+
+<!-- Adressen & Kontakte menu -->
+<div class="view hidden" id="view-adressen-kontakte">
+  <h2>Adressen &amp; Kontakte</h2>
+  <nav class="menu-list">
+    <button id="btn-adresse-anlegen">Adresse anlegen</button>
+    <button id="btn-adressenliste">Adressenliste</button>
+    <button id="btn-kontakt-anlegen">Kontakt anlegen</button>
+    <button id="btn-kontaktliste">Kontaktliste</button>
+  </nav>
+  <button class="btn-back">Zurück</button>
+</div>
+
+<!-- Projekte menu -->
+<div class="view hidden" id="view-projekte-menu">
+  <h2>Projekte</h2>
+  <nav class="menu-list">
+    <button id="btn-projekt-anlegen">Projekt anlegen</button>
+    <button id="btn-projektstruktur-menu">Projektstruktur</button>
+    <button id="btn-projektliste-menu">Projektliste</button>
+	<button id="btn-reporting-project">Reporting (Projekt)</button>
+  </nav>
+  <button class="btn-back">Zurück</button>
+</div>
+
+<!-- Projektdaten menu -->
+<div class="view hidden" id="view-projektdaten-menu">
+  <h2>Projektdaten</h2>
+  <nav class="menu-list">
+    <button id="btn-stunden-buchen-menu">Stunden buchen</button>
+    <button id="btn-buchungsliste-menu">Buchungsliste</button>
+    <button id="btn-leistungsstaende-menu">Leistungsstände</button>
+  </nav>
+  <button class="btn-back">Zurück</button>
+</div>
+
+<!-- Verträge und Rechnungen menu -->
+<div class="view hidden" id="view-vertraege-rechnungen-menu">
+  <h2>Verträge und Rechnungen</h2>
+  <nav class="menu-list">
+    <button id="btn-abschlagsrechnungen-menu">Abschlagsrechnungen</button>
+    <button id="btn-rechnungen-menu">Rechnungen</button>
+    <button id="btn-zahlungen-menu">Zahlungen</button>
+    <button id="btn-rechnungsliste-menu">Rechnungsliste</button>
+  </nav>
+  <button class="btn-back">Zurück</button>
+</div>
+
+<!-- Mitarbeiter menu -->
+<div class="view hidden" id="view-mitarbeiter">
+  <h2>Mitarbeiter</h2>
+  <nav>
+    <button id="btn-mitarbeiter-anlegen">Mitarbeiter anlegen</button>
+    <button id="btn-mitarbeiter-liste">Mitarbeiterliste</button>
+  </nav>
+  <button class="btn-back">Zurück zur Übersicht</button>
+</div>
+
+<div class="view hidden" id="view-projektuebersicht">
+<h2>Projektübersicht</h2>
+<nav>
+<button id="btn-projekte">Projekt anlegen</button>
+<button id="btn-projektliste">Projektliste</button>
+<button id="btn-rechnungsliste">Rechnungsliste</button>
+<button id="btn-projektstruktur">Projektstruktur</button>
+
+
+<button id="btn-leistungsstaende">Leistungsstände eintragen</button>
+<button id="btn-buchung">Stunden buchen</button>
+<button id="btn-buchungsliste">Buchungsliste</button>
+<button id="btn-abschlagsrechnung">Abschlagsrechnung</button>
+<button id="btn-rechnungen">Rechnungen</button>
+<button id="btn-zahlungen">Zahlungen</button>
+
+<!-- Reporting -->
+<button id="btn-reporting-project">Reporting (Projekt)</button>
+</nav>
+<button class="btn-back">Zurück zur Übersicht</button>
+</div>
+
+<!-- Reporting: Project Detail (header + structure tree) -->
+<section class="view hidden" id="view-reporting-project">
+  <h2>Reporting – Projekt</h2>
+
+  <div class="form-group">
+    <label for="rep-tenant-id">TENANT_ID*</label>
+    <input id="rep-tenant-id" type="text" placeholder="z.B. 550e8400-e29b-41d4-a716-446655440000" />
+  </div>
+
+  <div class="form-group">
+    <label for="rep-project-id">PROJECT_ID*</label>
+    <input id="rep-project-id" type="number" step="1" />
+    <div class="muted">Tipp: Die PROJECT_ID findest du in der Projektliste (oder wir bauen im nächsten Schritt einen Projekt-Picker).</div>
+  </div>
+
+  <button id="btn-load-project-report">Report laden</button>
+  <button class="btn-back">Zurück</button>
+
+  <div class="message" id="msg-reporting-project"></div>
+
+  <h3>Header</h3>
+  <div id="rep-project-header" class="card"></div>
+
+  <h3>Projektstruktur</h3>
+  <div id="rep-project-structure" class="card"></div>
+</section>
+
+<!-- Zahlungen (Payment entry) -->
+<section class="view hidden" id="view-zahlungen">
+  <h2>Zahlungen</h2>
+
+  <div class="form-group autocomplete-container">
+    <label for="pay-pp">Abschlagsrechnung*</label>
+    <input id="pay-pp" type="text" autocomplete="off" placeholder="Abschlagsrechnung suchen (mind. 2 Zeichen)" />
+    <input id="pay-pp-id" type="hidden" />
+    <div class="autocomplete-list" id="pay-pp-autocomplete"></div>
+  </div>
+
+  <div class="form-group autocomplete-container">
+    <label for="pay-invoice">Rechnung*</label>
+    <input id="pay-invoice" type="text" autocomplete="off" placeholder="Rechnung suchen (mind. 2 Zeichen)" />
+    <input id="pay-invoice-id" type="hidden" />
+    <div class="autocomplete-list" id="pay-invoice-autocomplete"></div>
+  </div>
+
+  <div class="form-group">
+    <label for="pay-amount-gross">Summe (brutto)*</label>
+    <input id="pay-amount-gross" type="number" step="0.01" />
+  </div>
+
+  <div class="form-group">
+    <label for="pay-date">Zahlungsdatum*</label>
+    <input id="pay-date" type="date" />
+  </div>
+
+  <div class="form-group">
+    <label for="pay-purpose">Verwendungszweck</label>
+    <input id="pay-purpose" type="text" />
+  </div>
+
+  <div class="form-group">
+    <label for="pay-comment">Kommentar (intern)</label>
+    <input id="pay-comment" type="text" />
+  </div>
+
+  <button id="btn-save-payment">Speichern</button>
+  <button class="btn-back">Zurück</button>
+  <div class="message" id="msg-payments"></div>
+</section>
+<div class="view hidden" id="view-administration">
+<h2>Administration</h2>
+<nav class="menu-list">
+<button id="btn-stammdaten">Stammdaten</button>
+<button id="btn-unternehmen">Unternehmen</button>
+<button id="btn-nummernkreise">Nummernkreise</button>
+<button id="btn-dokumente">Dokumentvorlagen</button>
+</nav>
+<button class="btn-back">Zurück</button>
+</div>
+
+
+<!-- Nummernkreise -->
+<div class="view hidden" id="view-nummernkreise">
+  <h2>Nummernkreise</h2>
+
+  <div class="form-group">
+    <label for="nr-company">Unternehmen</label>
+    <select id="nr-company">
+      <option value="">Bitte wählen …</option>
+    </select>
+  </div>
+
+  <p class="muted">Aktuelle Formate (fix): <strong>RE-YYYY-CCCC</strong> (global für Rechnungen &amp; Abschlagsrechnungen, CCCC = 4-stellig) &nbsp;|&nbsp; <strong>P-YY-CCC</strong> (Projekt, CCC = 3-stellig)</p>
+
+  <div class="form-group">
+    <label for="nr-next">Nächste Nummer (Zähler C) – global für Rechnungen &amp; Abschlagsrechnungen</label>
+    <input id="nr-next" type="number" min="1" max="9999" step="1" />
+    <div class="muted" id="nr-preview"></div>
+  </div>
+
+  <div class="form-group">
+    <label for="nr-project-next">Nächste Projektnummer (Zähler C)</label>
+    <input id="nr-project-next" type="number" min="1" max="999" step="1" />
+    <div class="muted" id="nr-project-preview"></div>
+  </div>
+
+  <button id="nr-save" type="button">Speichern</button>
+  <button class="btn-back" type="button">Zurück</button>
+  <div class="message" id="nr-msg"></div>
+</div>
+
+<!-- Dokumente / Vorlagen -->
+<div class="view hidden" id="view-dokumente">
+  <h2>Dokumente – Vorlagen</h2>
+
+  <div class="form-group">
+    <label for="doc-company">Unternehmen</label>
+    <select id="doc-company">
+      <option value="">Bitte wählen …</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="doc-type">Dokumenttyp</label>
+    <select id="doc-type">
+      <option value="INVOICE">Rechnung</option>
+      <option value="PARTIAL_PAYMENT">Abschlagsrechnung</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="doc-template">Vorlage</label>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <select id="doc-template" style="flex:1;">
+        <option value="">–</option>
+      </select>
+      <button id="doc-template-new" type="button">Neu</button>
+      <button id="doc-template-default" type="button">Als Standard</button>
+    </div>
+
+	<div class="row gap">
+  <button id="doc-template-duplicate" class="btn">Duplizieren</button>
+  <button id="doc-template-publish" class="btn btn-primary">Veröffentlichen</button>
+  <button id="doc-template-archive" class="btn btn-danger">Archivieren</button><br/>
+  <span id="doc-template-status" class="muted"></span>
+</div>
+
+
+  </div>
+
+  <div class="box" style="margin-top:12px;">
+    <h3 style="margin:0 0 10px 0;">Design</h3>
+    <div class="form-group">
+      <label for="doc-template-name">Name</label>
+      <input id="doc-template-name" type="text" />
+    </div>
+
+    <div class="form-group">
+      <label for="doc-layout">Layout</label>
+      <select id="doc-layout">
+        <option value="modern_a">Modern A</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="doc-logo">Logo</label>
+      <input id="doc-logo" type="file" accept="image/*" />
+      <div class="small" id="doc-logo-info"></div>
+    </div>
+
+    <div class="form-group">
+      <label for="doc-primary">Primärfarbe</label>
+      <input id="doc-primary" type="color" value="#111827" />
+    </div>
+    <div class="form-group">
+      <label for="doc-accent">Akzentfarbe</label>
+      <input id="doc-accent" type="color" value="#2563eb" />
+    </div>
+
+    <div class="form-group">
+      <label for="doc-font">Schriftart</label>
+      <select id="doc-font">
+        <option value="Inter">Inter</option>
+        <option value="Arial">Arial</option>
+        <option value="Roboto">Roboto</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="doc-footer-left">Footer links</label>
+      <input id="doc-footer-left" type="text" />
+    </div>
+    <div class="form-group">
+      <label for="doc-footer-right">Footer rechts</label>
+      <input id="doc-footer-right" type="text" />
+      <div class="small">Platzhalter: {page}, {pages}</div>
+    </div>
+
+    <div class="form-group">
+      <label>Optionen</label>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <label><input type="checkbox" id="doc-show-project" checked> Projekt anzeigen</label>
+        <label><input type="checkbox" id="doc-show-contract" checked> Vertrag anzeigen</label>
+        <label><input type="checkbox" id="doc-show-tax" checked> MwSt.-Zeile anzeigen</label>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:8px;">
+      <button id="doc-template-save" type="button">Speichern</button>
+      <button id="doc-template-preview" type="button">Vorschau PDF</button>
+    </div>
+
+    <div class="message" id="msg-documents"></div>
+  </div>
+
+  <div class="box" style="margin-top:12px;">
+    <h3 style="margin:0 0 10px 0;">Vorschau – Dokument wählen</h3>
+    <div class="form-group">
+      <label for="doc-preview-id">Dokument-ID</label>
+      <input id="doc-preview-id" type="number" placeholder="z.B. 123" />
+      <div class="small">Die PDF Vorschau öffnet das Dokument mit der ausgewählten Vorlage.</div>
+    </div>
+  </div>
+
+  <button id="doc-back" type="button">Zurück</button>
+</div>
+<!-- Unternehmen view -->
+<div class="view hidden" id="view-unternehmen">
+<h2>Unternehmen</h2>
+<div class="form-group">
+<label for="input-company-name-1">Firmenbezeichnung*:</label>
+<input id="input-company-name-1" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-company-name-2">Ergänzende Firmenbezeichnung:</label>
+<input id="input-company-name-2" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-company-street">Straße*:</label>
+<input id="input-company-street" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-company-post-code">PLZ*:</label>
+<input id="input-company-post-code" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-company-city">Stadt*:</label>
+<input id="input-company-city" type="text"/>
+</div>
+<div class="form-group">
+<label for="select-company-country">Land*:</label>
+<select id="select-company-country">
+<option value="">Bitte wählen …</option>
+</select>
+</div>
+<div class="form-group">
+<label for="input-company-tax-id">Steuernummer / USt-IdNr.:</label>
+<input id="input-company-tax-id" type="text"/>
+</div>
+<button id="btn-save-unternehmen">Speichern</button>
+<button class="btn-back">Zurück zur Übersicht</button>
+<div class="message" id="msg-unternehmen"></div>
+</div>
+<!-- Anschriften view -->
+<div class="view hidden" id="view-address">
+<h2>Anschriften</h2>
+<div class="form-group">
+<label for="input-address-name-1">Anschrift*:</label>
+<input id="input-address-name-1" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-address-name-2">Ergänzende Anschrift:</label>
+<input id="input-address-name-2" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-address-street">Straße:</label>
+<input id="input-address-street" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-address-post-code">PLZ:</label>
+<input id="input-address-post-code" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-address-city">Stadt:</label>
+<input id="input-address-city" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-address-post-office-box">Postbox:</label>
+<input id="input-address-post-office-box" type="text"/>
+</div>
+<div class="form-group">
+<label for="select-address-country">Land*:</label>
+<select id="select-address-country">
+<option value="">Bitte wählen …</option>
+</select>
+</div>
+<div class="form-group">
+<label for="input-address-customer-number">Kundennummer:</label>
+<input id="input-address-customer-number" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-address-tax-id">Umsatzsteuer-ID:</label>
+<input id="input-address-tax-id" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-address-buyer-reference">Käuferreferenz:</label>
+<input id="input-address-buyer-reference" type="text"/>
+</div>
+<button id="btn-save-address">Speichern</button>
+<button class="btn-back">Zurück zur Übersicht</button>
+<div class="message" id="msg-address"></div>
+</div>
+<!-- Kontakte view -->
+<div class="view hidden" id="view-kontakte">
+<h2>Kontakte</h2>
+<div class="form-group">
+<label for="input-kontakte-title">Titel:</label>
+<input id="input-kontakte-title" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-kontakte-first-name">Vorname*:</label>
+<input id="input-kontakte-first-name" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-kontakte-last-name">Nachname*:</label>
+<input id="input-kontakte-last-name" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-kontakte-email">E-Mail:</label>
+<input id="input-kontakte-email" type="email"/>
+</div>
+<div class="form-group">
+<label for="input-kontakte-mobile">Mobil:</label>
+<input id="input-kontakte-mobile" type="text"/>
+</div>
+<div class="form-group">
+<label for="select-kontakte-salutation">Anrede*:</label>
+<select id="select-kontakte-salutation">
+<option value="">Bitte wählen …</option>
+</select>
+</div>
+<div class="form-group">
+<label for="select-kontakte-gender">Geschlecht*:</label>
+<select id="select-kontakte-gender">
+<option value="">Bitte wählen …</option>
+</select>
+</div>
+<div class="form-group autocomplete-container">
+<label for="input-kontakte-address">Adresse*:</label>
+<input autocomplete="off" id="input-kontakte-address" placeholder="Adresse suchen (mind. 2 Zeichen)" type="text"/>
+<input id="input-kontakte-address-id" type="hidden"/>
+<div class="autocomplete-list" id="kontakte-address-autocomplete"></div>
+</div>
+<button id="btn-save-kontakte">Speichern</button>
+<button class="btn-back">Zurück zur Übersicht</button>
+<div class="message" id="msg-kontakte"></div>
+</div>
+<!-- Rollen view -->
+<div class="view hidden" id="view-rollen">
+<h2>Rollen</h2>
+<div class="form-group">
+<label for="input-role-name-short">Kürzel*:</label>
+<input id="input-role-name-short" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-role-name-long">Rolle:</label>
+<input id="input-role-name-long" type="text"/>
+</div>
+<button id="btn-save-rollen">Speichern</button>
+<button class="btn-back">Zurück zur Übersicht</button>
+<div class="message" id="msg-rollen"></div>
+</div>
+<!-- Stammdaten view -->
+<div class="view hidden" id="view-stammdaten">
+<h2>Stammdaten</h2>
+<div class="form-group">
+<label for="input-status">Projektstatus (Kurz):</label>
+<input id="input-status" type="text"/>
+<button id="btn-save-status">Speichern</button>
+</div>
+<div class="form-group">
+<label for="input-typ">Projekttyp (Kurz):</label>
+<input id="input-typ" type="text"/>
+<button id="btn-save-typ">Speichern</button>
+</div>
+<button class="btn-back">Zurück zur Übersicht</button>
+<div class="message" id="msg-stammdaten"></div>
+</div>
+<!-- Mitarbeiter view -->
+<div class="view hidden" id="view-mitarbeiter-anlegen">
+<h2>Mitarbeiter</h2>
+<div class="form-group">
+<label for="input-username">Benutzername*:</label>
+<input id="input-username" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-titel">Titel:</label>
+<input id="input-titel" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-vorname">Vorname*:</label>
+<input id="input-vorname" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-nachname">Nachname*:</label>
+<input id="input-nachname" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-passwort">Passwort:</label>
+<input id="input-passwort" type="password"/>
+</div>
+<div class="form-group">
+<label for="input-email">E‑Mail:</label>
+<input id="input-email" type="email"/>
+</div>
+<div class="form-group">
+<label for="input-mobil">Mobilnummer:</label>
+<input id="input-mobil" type="text"/>
+</div>
+<div class="form-group">
+<label for="input-personalnummer">Personalnummer:</label>
+<input id="input-personalnummer" type="text"/>
+</div>
+<div class="form-group">
+<label for="select-geschlecht">Geschlecht*:</label>
+<select id="select-geschlecht">
+<option value="">Bitte wählen …</option>
+</select>
+</div>
+<button id="btn-save-mitarbeiter">Speichern</button>
+<button id="btn-back-mitarbeiter-anlegen">Zurück</button>
+<div class="message" id="msg-mitarbeiter"></div>
+</div>
+<!-- Projekte view -->
+<div class="view hidden" id="view-projekte">
+<h2>Projekt anlegen</h2>
+
+<div class="wizard" id="prj-wizard">
+  <div class="wizard-steps" id="prj-steps">
+    <div class="wizard-step" data-step="1">1. Pflichtangaben</div>
+    <div class="wizard-step" data-step="2">2. Optional</div>
+    <div class="wizard-step" data-step="3">3. Mitarbeiter</div>
+    <div class="wizard-step" data-step="4">4. Projektstruktur</div>
+    <div class="wizard-step" data-step="5">5. Zusammenfassung</div>
+  </div>
+
+  <!-- Page 1 -->
+  <div class="wizard-page" id="prj-step-1">
+    <h3>Stammdaten (Pflichtangaben)</h3>
+
+    <div class="form-group">
+      <label for="select-projekt-company">Firma*:</label>
+      <select id="select-projekt-company">
+        <option value="">Bitte wählen …</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="input-projektname">Projektname*:</label>
+      <input id="input-projektname" type="text"/>
+    </div>
+
+    <div class="form-group">
+      <label for="select-projektstatus">Projektstatus*:</label>
+      <select id="select-projektstatus">
+        <option value="">Bitte wählen …</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="select-projektleiter">Projektleiter*:</label>
+      <select id="select-projektleiter">
+        <option value="">Bitte wählen …</option>
+      </select>
+    </div>
+
+    <div class="form-group autocomplete-container">
+      <label for="input-projekt-invoice-address">Rechnungsadresse*:</label>
+      <input autocomplete="off" id="input-projekt-invoice-address" placeholder="Adresse suchen (mind. 2 Zeichen)" type="text"/>
+      <input id="input-projekt-invoice-address-id" type="hidden"/>
+      <div class="autocomplete-list" id="projekt-invoice-address-autocomplete"></div>
+    </div>
+
+    <div class="form-group autocomplete-container">
+      <label for="input-projekt-invoice-contact">Kontakt*:</label>
+      <input autocomplete="off" id="input-projekt-invoice-contact" placeholder="Kontakt suchen (mind. 2 Zeichen)" type="text"/>
+      <input id="input-projekt-invoice-contact-id" type="hidden"/>
+      <div class="autocomplete-list" id="projekt-invoice-contact-autocomplete"></div>
+    </div>
+
+    <div class="wizard-nav">
+      <button class="btn-back">Zurück zur Übersicht</button>
+      <button id="prj-next-1">Weiter</button>
+    </div>
+  </div>
+
+  <!-- Page 2 -->
+  <div class="wizard-page hidden" id="prj-step-2">
+    <h3>Stammdaten (optional)</h3>
+
+    <div class="form-group">
+      <label for="select-projekttyp">Projekttyp:</label>
+      <select id="select-projekttyp">
+        <option value="">Bitte wählen …</option>
+      </select>
+    </div>
+
+    <div class="wizard-nav">
+      <button id="prj-prev-2">Zurück</button>
+      <button id="prj-next-2">Weiter</button>
+    </div>
+  </div>
+
+  <!-- Page 3 -->
+  <div class="wizard-page hidden" id="prj-step-3">
+    <h3>Mitarbeiter und Stundensätze</h3>
+
+    <h4>3.1 Mitarbeiter zuordnen</h4>
+    <div class="form-group">
+      <label>
+        <input type="checkbox" id="prj-emp-toggleall"/>
+        Alle Mitarbeiter zuordnen/entfernen
+      </label>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" id="prj-emp-table">
+        <thead>
+          <tr>
+            <th style="width:70px;">Auswahl</th>
+            <th>Mitarbeiter</th>
+          </tr>
+        </thead>
+        <tbody id="prj-emp-list"></tbody>
+      </table>
+    </div>
+
+    <button id="prj-emp-confirm">Bestätigen</button>
+
+    <h4 style="margin-top: 18px;">3.2 Rollen und Stundensätze</h4>
+    <div class="table-wrap">
+      <table class="data-table" id="prj-e2p-table">
+        <thead>
+          <tr>
+            <th>Mitarbeiter</th>
+            <th style="min-width:220px;">Rolle (Dropdown)</th>
+            <th>Kürzel</th>
+            <th>Rolle</th>
+            <th style="width:140px;">Stundensatz</th>
+          </tr>
+        </thead>
+        <tbody id="prj-e2p-body"></tbody>
+      </table>
+    </div>
+
+    <div class="wizard-nav">
+      <button id="prj-prev-3">Zurück</button>
+      <button id="prj-next-3">Weiter</button>
+    </div>
+  </div>
+
+  <!-- Page 4 -->
+  <div class="wizard-page hidden" id="prj-step-4">
+        <h3>Projektstruktur</h3>
+
+    <div class="prj-struct-options">
+      <label><input type="radio" name="prj-struct-mode" value="manual" checked> Option 1: Projektstruktur manuell anlegen / bearbeiten</label><br>
+      <label><input type="radio" name="prj-struct-mode" value="copy"> Option 2: Projektstruktur aus bestehendem Projekt kopieren</label><br>
+      <label class="muted"><input type="radio" name="prj-struct-mode" value="template" disabled> Option 3: Projektstruktur aus Vorlage (kommt später)</label>
+    </div>
+
+    <div id="prj-struct-manual" class="card">
+      <div class="card-header">
+        <h4>Manuell</h4>
+        <button id="prj-struct-add-row" type="button">+ Zeile hinzufügen</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="prj-struct-table">
+          <thead>
+            <tr>
+              <th>Nr.</th>
+              <th>Kürzel</th>
+              <th>Name</th>
+              <th>Abrechnungsart</th>
+              <th>Übergeordnet</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="prj-struct-body"></tbody>
+        </table>
+      </div>
+      <p class="hint">Hinweis: Die Hierarchie wird über „Übergeordnet“ abgebildet. Weitere Felder werden beim Kopieren/Anlegen zunächst leer gelassen.</p>
+    </div>
+
+    <div id="prj-struct-copy" class="card hidden">
+      <div class="card-header">
+        <h4>Kopieren</h4>
+      </div>
+      <div class="form-row">
+        <label for="prj-struct-source-project">Quellprojekt</label>
+        <select id="prj-struct-source-project"></select>
+        <button id="prj-struct-copy-btn" type="button">Struktur kopieren</button>
+      </div>
+      <div class="hint">Es werden NAME_SHORT, NAME_LONG, BILLING_TYPE_ID kopiert. PROJECT_ID wird auf das neue Projekt gesetzt. FATHER_ID wird anhand der Hierarchie neu zugeordnet.</div>
+    </div>
+
+    <div class="wizard-nav">
+      <button id="prj-prev-4">Zurück</button>
+      <button id="prj-next-4">Weiter</button>
+    </div>
+  </div>
+
+  <!-- Page 5 -->
+  <div class="wizard-page hidden" id="prj-step-5">
+    <h3>Zusammenfassung</h3>
+    <div id="prj-summary" class="summary-box"></div>
+
+    <div class="wizard-nav">
+      <button id="prj-prev-5">Zurück</button>
+      <button id="prj-create">Projekt anlegen</button>
+    </div>
+  </div>
+</div>
+
+<div class="message" id="msg-projekt"></div>
+</div>
+<!-- Projektliste view -->
+<section class="view hidden" id="view-projektliste">
+<h2>Projektliste</h2>
+<div class="list-toolbar">
+<div class="form-group" style="margin: 0;">
+<label for="prj-list-global">Suche:</label>
+<input id="prj-list-global" placeholder="Nr., Name, Status, Typ, Leiter …" type="text"/>
+</div>
+<div class="list-actions">
+<button id="prj-list-refresh">Aktualisieren</button>
+</div>
+</div>
+<div class="message" id="msg-projektliste"></div>
+<div class="table-wrap">
+<table class="data-table" id="tbl-projektliste">
+<thead>
+<tr>
+<th data-key="NAME_SHORT">Projektnr</th>
+<th data-key="NAME_LONG">Projektname</th>
+<th data-key="STATUS_NAME">Status</th>
+<th data-key="TYPE_NAME">Typ</th>
+<th data-key="MANAGER_NAME">Leiter</th>
+<th data-key="ID">ID</th>
+<th>Aktion</th>
+</tr>
+<tr>
+<th><input data-filter="NAME_SHORT" placeholder="Filter" type="text"/></th>
+<th><input data-filter="NAME_LONG" placeholder="Filter" type="text"/></th>
+<th><input data-filter="STATUS_NAME" placeholder="Filter" type="text"/></th>
+<th><input data-filter="TYPE_NAME" placeholder="Filter" type="text"/></th>
+<th><input data-filter="MANAGER_NAME" placeholder="Filter" type="text"/></th>
+<th><input data-filter="ID" placeholder="Filter" type="text"/></th>
+<th></th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+<div class="pagination">
+<button id="prj-list-prev">Zurück</button>
+<div class="pagination-info" id="prj-list-pageinfo"></div>
+<button id="prj-list-next">Weiter</button>
+</div>
+<button class="btn-back">Zurück</button>
+</section>
+
+<!-- Anschriftenliste -->
+<section class="view hidden" id="view-addressliste">
+<h2>Anschriftenliste</h2>
+<div class="list-toolbar">
+<div class="form-group" style="margin: 0;">
+<label for="addr-list-global">Suche:</label>
+<input id="addr-list-global" placeholder="Anschrift, Stadt, Land, Kundennummer …" type="text"/>
+</div>
+<div class="list-actions">
+<button id="addr-list-refresh">Aktualisieren</button>
+</div>
+</div>
+<div class="message" id="msg-addressliste"></div>
+<div class="table-wrap">
+<table class="data-table" id="tbl-addressliste">
+<thead>
+<tr>
+<th data-key="ADDRESS_NAME_1">Anschrift</th>
+<th data-key="ADDRESS_NAME_2">Ergänzend</th>
+<th data-key="STREET">Straße</th>
+<th data-key="POST_CODE">PLZ</th>
+<th data-key="CITY">Stadt</th>
+<th data-key="COUNTRY">Land</th>
+<th data-key="CUSTOMER_NUMBER">Kundennr.</th>
+<th data-key="TAX_ID">USt-ID</th>
+<th data-key="BUYER_REFERENCE">Käuferref.</th>
+<th>Aktion</th>
+</tr>
+<tr class="filter-row">
+<th><input data-filter="ADDRESS_NAME_1" placeholder="Filter" type="text"/></th>
+<th><input data-filter="ADDRESS_NAME_2" placeholder="Filter" type="text"/></th>
+<th><input data-filter="STREET" placeholder="Filter" type="text"/></th>
+<th><input data-filter="POST_CODE" placeholder="Filter" type="text"/></th>
+<th><input data-filter="CITY" placeholder="Filter" type="text"/></th>
+<th><input data-filter="COUNTRY" placeholder="Filter" type="text"/></th>
+<th><input data-filter="CUSTOMER_NUMBER" placeholder="Filter" type="text"/></th>
+<th><input data-filter="TAX_ID" placeholder="Filter" type="text"/></th>
+<th><input data-filter="BUYER_REFERENCE" placeholder="Filter" type="text"/></th>
+<th></th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+<div class="pagination">
+<button id="addr-list-prev">Zurück</button>
+<div class="pagination-info" id="addr-list-pageinfo"></div>
+<button id="addr-list-next">Weiter</button>
+</div>
+<button class="btn-back">Zurück</button>
+</section>
+
+<!-- Kontaktliste -->
+<section class="view hidden" id="view-kontaktliste">
+<h2>Kontaktliste</h2>
+<div class="list-toolbar">
+<div class="form-group" style="margin: 0;">
+<label for="ct-list-global">Suche:</label>
+<input id="ct-list-global" placeholder="Name, E-Mail, Adresse …" type="text"/>
+</div>
+<div class="list-actions">
+<button id="ct-list-refresh">Aktualisieren</button>
+</div>
+</div>
+<div class="message" id="msg-kontaktliste"></div>
+<div class="table-wrap">
+<table class="data-table" id="tbl-kontaktliste">
+<thead>
+<tr>
+<th data-key="NAME">Name</th>
+<th data-key="TITLE">Titel</th>
+<th data-key="EMAIL">E-Mail</th>
+<th data-key="MOBILE">Mobil</th>
+<th data-key="SALUTATION">Anrede</th>
+<th data-key="GENDER">Geschlecht</th>
+<th data-key="ADDRESS">Adresse</th>
+<th>Aktion</th>
+</tr>
+<tr class="filter-row">
+<th><input data-filter="NAME" placeholder="Filter" type="text"/></th>
+<th><input data-filter="TITLE" placeholder="Filter" type="text"/></th>
+<th><input data-filter="EMAIL" placeholder="Filter" type="text"/></th>
+<th><input data-filter="MOBILE" placeholder="Filter" type="text"/></th>
+<th><input data-filter="SALUTATION" placeholder="Filter" type="text"/></th>
+<th><input data-filter="GENDER" placeholder="Filter" type="text"/></th>
+<th><input data-filter="ADDRESS" placeholder="Filter" type="text"/></th>
+<th></th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+<div class="pagination">
+<button id="ct-list-prev">Zurück</button>
+<div class="pagination-info" id="ct-list-pageinfo"></div>
+<button id="ct-list-next">Weiter</button>
+</div>
+<button class="btn-back">Zurück</button>
+</section>
+
+
+<!-- Mitarbeiterliste -->
+<section class="view hidden" id="view-mitarbeiterliste">
+  <h2>Mitarbeiterliste</h2>
+  <div class="list-toolbar">
+    <div class="form-group" style="margin: 0;">
+      <label for="emp-list-global">Suche:</label>
+      <input id="emp-list-global" placeholder="Kürzel, Name, Mail, Mobil …" type="text"/>
+    </div>
+    <div class="list-actions">
+      <button id="emp-list-refresh">Aktualisieren</button>
+    </div>
+  </div>
+  <div class="message" id="msg-mitarbeiterliste"></div>
+  <div class="table-wrap">
+    <table class="data-table" id="tbl-mitarbeiterliste">
+      <thead>
+        <tr>
+          <th data-key="SHORT_NAME">Kürzel</th>
+          <th data-key="FIRST_NAME">Vorname</th>
+          <th data-key="LAST_NAME">Nachname</th>
+          <th data-key="MAIL">Mail</th>
+          <th data-key="MOBILE">Mobil</th>
+          <th data-key="PERSONNEL_NUMBER">Personalnr.</th>
+          <th data-key="GENDER">Geschlecht</th>
+          <th>Aktion</th>
+        </tr>
+        <tr class="filter-row">
+          <th><input data-filter="SHORT_NAME" placeholder="Filter…"/></th>
+          <th><input data-filter="FIRST_NAME" placeholder="Filter…"/></th>
+          <th><input data-filter="LAST_NAME" placeholder="Filter…"/></th>
+          <th><input data-filter="MAIL" placeholder="Filter…"/></th>
+          <th><input data-filter="MOBILE" placeholder="Filter…"/></th>
+          <th><input data-filter="PERSONNEL_NUMBER" placeholder="Filter…"/></th>
+          <th><input data-filter="GENDER" placeholder="Filter…"/></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    <button id="emp-list-prev">Zurück</button>
+    <div class="pagination-info" id="emp-list-pageinfo"></div>
+    <button id="emp-list-next">Weiter</button>
+  </div>
+  <button id="btn-back-mitarbeiterliste">Zurück</button>
+</section>
+
+<!-- Modal: Mitarbeiter bearbeiten -->
+<div aria-hidden="true" class="modal hidden" id="emp-edit-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Mitarbeiter bearbeiten</h3>
+      <button aria-label="Schließen" class="modal-close" id="emp-edit-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input id="emp-edit-id" type="hidden"/>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="emp-edit-short-name">Kürzel*</label>
+          <input id="emp-edit-short-name" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="emp-edit-title">Titel</label>
+          <input id="emp-edit-title" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="emp-edit-first-name">Vorname*</label>
+          <input id="emp-edit-first-name" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="emp-edit-last-name">Nachname*</label>
+          <input id="emp-edit-last-name" type="text"/>
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="emp-edit-mail">Mail</label>
+          <input id="emp-edit-mail" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="emp-edit-mobile">Mobil</label>
+          <input id="emp-edit-mobile" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="emp-edit-personnel">Personalnummer</label>
+          <input id="emp-edit-personnel" type="text"/>
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="emp-edit-gender">Geschlecht*</label>
+          <select id="emp-edit-gender">
+            <option value="">Bitte wählen …</option>
+          </select>
+        </div>
+      </div>
+      <div class="message" id="msg-emp-edit"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="emp-edit-save">Speichern</button>
+      <button class="btn-secondary" id="emp-edit-cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Anschrift bearbeiten -->
+<div aria-hidden="true" class="modal hidden" id="addr-edit-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Anschrift bearbeiten</h3>
+      <button aria-label="Schließen" class="modal-close" id="addr-edit-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input id="addr-edit-id" type="hidden"/>
+      <div class="form-grid">
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="addr-edit-name-1">Anschrift*</label>
+          <input id="addr-edit-name-1" type="text"/>
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="addr-edit-name-2">Ergänzende Anschrift</label>
+          <input id="addr-edit-name-2" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="addr-edit-street">Straße</label>
+          <input id="addr-edit-street" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="addr-edit-post-code">PLZ</label>
+          <input id="addr-edit-post-code" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="addr-edit-city">Stadt</label>
+          <input id="addr-edit-city" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="addr-edit-post-office-box">Postbox</label>
+          <input id="addr-edit-post-office-box" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="addr-edit-country">Land*</label>
+          <select id="addr-edit-country"></select>
+        </div>
+        <div class="form-group">
+          <label for="addr-edit-customer-number">Kundennummer</label>
+          <input id="addr-edit-customer-number" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="addr-edit-tax-id">Umsatzsteuer-ID</label>
+          <input id="addr-edit-tax-id" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="addr-edit-buyer-reference">Käuferreferenz</label>
+          <input id="addr-edit-buyer-reference" type="text"/>
+        </div>
+      </div>
+      <div class="message" id="addr-edit-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="addr-edit-save">Speichern</button>
+      <button id="addr-edit-cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Kontakt bearbeiten -->
+<div aria-hidden="true" class="modal hidden" id="ct-edit-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Kontakt bearbeiten</h3>
+      <button aria-label="Schließen" class="modal-close" id="ct-edit-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input id="ct-edit-id" type="hidden"/>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="ct-edit-title">Titel</label>
+          <input id="ct-edit-title" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="ct-edit-first-name">Vorname*</label>
+          <input id="ct-edit-first-name" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="ct-edit-last-name">Nachname*</label>
+          <input id="ct-edit-last-name" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="ct-edit-email">E-Mail</label>
+          <input id="ct-edit-email" type="email"/>
+        </div>
+        <div class="form-group">
+          <label for="ct-edit-mobile">Mobil</label>
+          <input id="ct-edit-mobile" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="ct-edit-salutation">Anrede*</label>
+          <select id="ct-edit-salutation"></select>
+        </div>
+        <div class="form-group">
+          <label for="ct-edit-gender">Geschlecht*</label>
+          <select id="ct-edit-gender"></select>
+        </div>
+        <div class="form-group autocomplete-container" style="grid-column: 1 / -1;">
+          <label for="ct-edit-address">Adresse*</label>
+          <input autocomplete="off" id="ct-edit-address" placeholder="Adresse suchen (mind. 2 Zeichen)" type="text"/>
+          <input id="ct-edit-address-id" type="hidden"/>
+          <div class="autocomplete-list" id="ct-edit-address-autocomplete"></div>
+        </div>
+      </div>
+      <div class="message" id="ct-edit-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="ct-edit-save">Speichern</button>
+      <button id="ct-edit-cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rechnungsliste (Abschlagsrechnungen + Rechnungen) -->
+<section class="view hidden" id="view-rechnungsliste">
+<h2>Rechnungsliste</h2>
+<div class="list-toolbar">
+<div class="form-group" style="margin: 0;">
+<label for="pp-list-global">Suche:</label>
+<input id="pp-list-global" placeholder="Typ, Nr., Projekt, Vertrag, Kontakt …" type="text"/>
+</div>
+<div class="list-actions">
+<button id="pp-list-refresh">Aktualisieren</button>
+<button class="secondary" id="pp-list-columns">Spalten</button>
+</div>
+</div>
+<div class="message" id="msg-rechnungsliste"></div>
+<div class="table-wrap">
+<table class="data-table" id="tbl-rechnungsliste">
+<thead></thead>
+<tbody></tbody>
+</table>
+</div>
+<div class="pagination">
+<button id="pp-list-prev">Zurück</button>
+<div class="pagination-info" id="pp-list-pageinfo"></div>
+<button id="pp-list-next">Weiter</button>
+</div>
+<button class="btn-back">Zurück</button>
+</section>
+
+<!-- Modal: Spalten konfigurieren (Rechnungsliste) -->
+<div aria-hidden="true" class="modal hidden" id="pp-cols-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Spalten konfigurieren</h3>
+      <button aria-label="Schließen" class="modal-close" id="pp-cols-close">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-top:0;">Wählen Sie Spalten aus und bestimmen Sie die Reihenfolge.</p>
+      <div class="message" id="pp-cols-msg"></div>
+      <div id="pp-cols-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="secondary" id="pp-cols-reset">Zurücksetzen</button>
+      <button id="pp-cols-save">Speichern</button>
+      <button id="pp-cols-cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Rechnung bearbeiten -->
+<div aria-hidden="true" class="modal hidden" id="pp-edit-modal">
+<div class="modal-content">
+<div class="modal-header">
+<h3>Rechnung bearbeiten</h3>
+<button aria-label="Schließen" class="modal-close" id="pp-edit-close">×</button>
+</div>
+<div class="modal-body">
+<input id="pp-edit-id" type="hidden"/>
+<div class="form-grid">
+<div class="form-group">
+<label for="pp-edit-number">Abschlagsrechnung Nr.*</label>
+<input id="pp-edit-number" type="text"/>
+</div>
+<div class="form-group">
+<label for="pp-edit-date">Rechnungsdatum</label>
+<input id="pp-edit-date" type="date"/>
+</div>
+<div class="form-group">
+<label for="pp-edit-due">Fällig am</label>
+<input id="pp-edit-due" type="date"/>
+</div>
+<div class="form-group">
+<label for="pp-edit-period-start">Leistungszeitraum Beginn</label>
+<input id="pp-edit-period-start" type="date"/>
+</div>
+<div class="form-group">
+<label for="pp-edit-period-finish">Leistungszeitraum Ende</label>
+<input id="pp-edit-period-finish" type="date"/>
+</div>
+<div class="form-group">
+<label for="pp-edit-amount-net">Honorar (netto)</label>
+<input id="pp-edit-amount-net" step="0.01" type="number"/>
+</div>
+<div class="form-group">
+<label for="pp-edit-amount-extras">Nebenkosten (netto)</label>
+<input id="pp-edit-amount-extras" step="0.01" type="number"/>
+</div>
+<div class="form-group">
+<label>Netto gesamt</label>
+<div class="readonly-field" id="pp-edit-total"></div>
+</div>
+<div class="form-group" style="grid-column: 1 / -1;">
+<label for="pp-edit-comment">Bemerkung</label>
+<input id="pp-edit-comment" type="text"/>
+</div>
+</div>
+
+<div class="message" id="pp-edit-msg"></div>
+</div>
+<div class="modal-footer">
+<button id="pp-edit-save">Speichern</button>
+<button id="pp-edit-cancel">Abbrechen</button>
+</div>
+</div>
+</div>
+
+
+<!-- Modal: Rechnung bearbeiten (INVOICE) -->
+<div aria-hidden="true" class="modal hidden" id="inv-edit-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Rechnung bearbeiten</h3>
+      <button aria-label="Schließen" class="modal-close" id="inv-edit-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input id="inv-edit-id" type="hidden"/>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="inv-edit-number">Rechnungsnummer*</label>
+          <input id="inv-edit-number" type="text"/>
+        </div>
+        <div class="form-group">
+          <label for="inv-edit-date">Rechnungsdatum</label>
+          <input id="inv-edit-date" type="date"/>
+        </div>
+        <div class="form-group">
+          <label for="inv-edit-due">Fällig am</label>
+          <input id="inv-edit-due" type="date"/>
+        </div>
+        <div class="form-group">
+          <label for="inv-edit-period-start">Leistungszeitraum Beginn</label>
+          <input id="inv-edit-period-start" type="date"/>
+        </div>
+        <div class="form-group">
+          <label for="inv-edit-period-finish">Leistungszeitraum Ende</label>
+          <input id="inv-edit-period-finish" type="date"/>
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="inv-edit-comment">Bemerkung</label>
+          <input id="inv-edit-comment" type="text"/>
+        </div>
+      </div>
+      <div class="message" id="inv-edit-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="inv-edit-save">Speichern</button>
+      <button id="inv-edit-cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" class="modal hidden" id="prj-edit-modal">
+<div class="modal-content">
+<div class="modal-header">
+<h3>Projekt bearbeiten</h3>
+<button aria-label="Schließen" class="modal-close" id="prj-edit-close">×</button>
+</div>
+<div class="modal-body">
+<input id="prj-edit-id" type="hidden"/>
+<div class="form-grid">
+<div class="form-group">
+<label for="prj-edit-name-short">Projektnr*</label>
+<input id="prj-edit-name-short" type="text"/>
+</div>
+<div class="form-group">
+<label for="prj-edit-name-long">Projektname</label>
+<input id="prj-edit-name-long" type="text"/>
+</div>
+<div class="form-group">
+<label for="prj-edit-status">Status</label>
+<select id="prj-edit-status"></select>
+</div>
+<div class="form-group">
+<label for="prj-edit-type">Typ</label>
+<select id="prj-edit-type"></select>
+</div>
+<div class="form-group">
+<label for="prj-edit-manager">Leiter</label>
+<select id="prj-edit-manager"></select>
+</div>
+</div>
+<div class="message" id="prj-edit-msg"></div>
+</div>
+<div class="modal-footer">
+<button id="prj-edit-save">Speichern</button>
+<button id="prj-edit-cancel">Abbrechen</button>
+</div>
+</div>
+</div>
+
+<!-- Projektstruktur -->
+<section class="view hidden" id="view-projektstruktur">
+  <h2>Projektstruktur</h2>
+
+  <div class="form-group autocomplete-container" style="max-width: 760px;">
+    <label for="ps-project">Projekt wählen:</label>
+    <input id="ps-project" type="text" autocomplete="off" placeholder="Projekt suchen (mind. 2 Zeichen)" />
+    <input id="ps-project-id" type="hidden" />
+    <div class="autocomplete-list" id="ps-project-autocomplete"></div>
+  </div>
+
+  <div class="message" id="ps-msg"></div>
+
+  <div id="ps-table-wrap" class="hidden">
+
+  <div class="ps-toolbar">
+    <div class="ps-toolbar-left">
+      <button id="ps-refresh" type="button">Aktualisieren</button>
+      <button id="ps-add" type="button">Element anlegen</button>
+      <button id="ps-save-all" type="button" disabled>Änderungen speichern</button>
+      <button id="ps-bulk-toggle" type="button" disabled>Massenbearbeitung</button>
+    </div>
+    <div class="ps-toolbar-hint">
+      Tipp: Ziehe ein Element auf ein anderes, um es darunter einzuordnen. Ziehe es auf „Root“, um es auf oberster Ebene zu platzieren.
+    </div>
+  </div>
+
+  <div id="ps-bulk-panel" class="ps-bulk-panel hidden">
+    <div class="ps-bulk-row">
+      <div><strong>Auswahl:</strong> <span id="ps-selected-count">0</span></div>
+      <button id="ps-select-all" type="button">Alle auswählen</button>
+      <button id="ps-select-none" type="button">Auswahl leeren</button>
+    </div>
+
+    <div class="ps-bulk-row">
+      <label for="ps-bulk-billing-type">Abrechnungsart:</label>
+      <select id="ps-bulk-billing-type"></select>
+
+      <label for="ps-bulk-extras-percent">Nebenkosten %:</label>
+      <input id="ps-bulk-extras-percent" type="number" step="0.01" placeholder="—" />
+
+      <button id="ps-bulk-apply" type="button">Auf Auswahl anwenden</button>
+    </div>
+
+    <div class="ps-bulk-row ps-bulk-note">
+      Hinweis: Honorar wird nur bei Abrechnungsart ≠ 2 automatisch nicht überschrieben. Bei Abrechnungsart 2 wird Honorar aus TEC abgeleitet.
+    </div>
+  </div>
+
+  <div id="ps-drop-root" class="ps-drop-root" title="Zum Root ziehen">
+    Root (oberste Ebene)
+  </div>
+
+  <!-- Projektstruktur: Kontextmenü (Rechtsklick) -->
+  <div id="ps-context-menu" class="ps-context-menu hidden" role="menu" aria-label="Projektstruktur Aktionen">
+    <button type="button" class="ps-context-item" data-action="add">Element anlegen</button>
+    <button type="button" class="ps-context-item" data-action="delete">Löschen</button>
+  </div>
+
+  <table class="styled-table" id="table-projektstruktur">
+
+      <thead>
+        <tr>
+          <th class="ps-col-select" title="Auswahl / Verschieben">⇅</th>
+          <th>Name (kurz)</th>
+          <th>Beschreibung</th>
+          <th>Honorar</th>
+          <th>Abrechnungsart</th>
+          <th>Nebenkosten %</th>
+          <th>Aktion</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+
+    </table>
+  </div>
+
+  <!-- Projektstruktur: Element anlegen -->
+  <div class="modal hidden" id="ps-add-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Element anlegen</h3>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="ps-add-parent">Übergeordnetes Element</label>
+          <select id="ps-add-parent"></select>
+        </div>
+
+        <div class="form-group">
+          <label for="ps-add-name-short">Name (kurz)*</label>
+          <input id="ps-add-name-short" type="text" />
+        </div>
+
+        <div class="form-group">
+          <label for="ps-add-name-long">Beschreibung</label>
+          <input id="ps-add-name-long" type="text" />
+        </div>
+
+        <div class="form-group">
+          <label for="ps-add-billing-type">Abrechnungsart*</label>
+          <select id="ps-add-billing-type"></select>
+        </div>
+
+        <div class="form-group">
+          <label for="ps-add-revenue">Honorar</label>
+          <input id="ps-add-revenue" type="number" step="0.01" />
+        </div>
+
+        <div class="form-group">
+          <label for="ps-add-extras-percent">Nebenkosten %</label>
+          <input id="ps-add-extras-percent" type="number" step="0.01" />
+        </div>
+
+        <div class="message" id="ps-add-msg"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="ps-add-save" type="button">Anlegen</button>
+        <button id="ps-add-cancel" type="button">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Projektstruktur: Löschen -->
+  <div class="modal hidden" id="ps-del-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Element löschen</h3>
+      </div>
+
+      <div class="modal-body">
+        <div id="ps-del-text"></div>
+        <div class="message" id="ps-del-msg"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="ps-del-confirm" type="button">Löschen</button>
+        <button id="ps-del-confirm-cascade" type="button" class="hidden">Unterstruktur mitlöschen</button>
+        <button id="ps-del-cancel" type="button">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-back">Zurück</button>
+
+</section>
+
+<!-- Leistungsstände -->
+
+<section class="view hidden" id="view-leistungsstaende">
+  <h2>Leistungsstände eintragen</h2>
+
+  <div class="form-group autocomplete-container" style="max-width: 760px;">
+    <label for="ls-project">Projekt wählen:</label>
+    <input id="ls-project" type="text" autocomplete="off" placeholder="Projekt suchen (mind. 2 Zeichen)" />
+    <input id="ls-project-id" type="hidden" />
+    <div class="autocomplete-list" id="ls-project-autocomplete"></div>
+  </div>
+
+  <div class="message" id="ls-msg"></div>
+
+  <div id="ls-table-wrap" class="hidden">
+    <div class="row gap" style="margin: 8px 0 12px 0;">
+      <button id="ls-refresh" type="button">Aktualisieren</button>
+      <button id="ls-save" type="button">Speichern</button>
+    </div>
+
+    <table class="styled-table" id="table-leistungsstaende">
+      <thead>
+        <tr>
+          <th>Element</th>
+          <th>Honorar</th>
+          <th>Nebenkosten</th>
+          <th>Lst % Honorar</th>
+          <th>Honorar fertig</th>
+          <th>Nebenkosten fertig</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <button class="btn-back">Zurück</button>
+</section>
+
+<!-- Stunden Buchungen -->
+<div class="view hidden" id="view-buchung">
+
+<h2>Stunden buchen</h2>
+<div class="form-group">
+<label for="select-employee">Mitarbeiter*:</label>
+<select id="select-employee"><option value="">Bitte wählen …</option></select>
+</div>
+<div class="form-group">
+<label for="select-project">Projekt*:</label>
+<select id="select-project"><option value="">Bitte wählen …</option></select>
+</div>
+<div class="form-group">
+<label for="input-date">Buchungsdatum*:</label>
+<input id="input-date" type="date">
+</input></div>
+<div class="form-group">
+<label for="input-start">Beginn:</label>
+<input id="input-start" type="time">
+</input></div>
+<div class="form-group">
+<label for="input-end">Ende:</label>
+<input id="input-end" type="time"/>
+</div>
+<div class="form-group">
+<label for="input-quantity-int">Menge intern*:</label>
+<input id="input-quantity-int" step="0.1" type="number"/>
+</div>
+<div class="form-group">
+<label for="input-cp-rate">Kostensatz*:</label>
+<input id="input-cp-rate" step="0.01" type="number"/>
+</div>
+<div class="form-group">
+<label for="input-quantity-ext">Menge extern*:</label>
+<input id="input-quantity-ext" step="0.1" type="number"/>
+</div>
+<div class="form-group">
+<label for="input-sp-rate">Verkaufssatz*:</label>
+<input id="input-sp-rate" step="0.01" type="number"/>
+</div>
+<div class="form-group">
+<label for="input-description">Buchungstext*:</label>
+<input id="input-description" type="text"/>
+</div>
+<div class="form-group">
+<label for="select-structure-element">Element:</label>
+<select id="select-structure-element"><option value="">Bitte wählen …</option></select>
+</div>
+<button id="btn-save-buchung">Speichern</button>
+<button class="btn-back">Zurück zur Übersicht</button>
+<div class="message" id="msg-buchung"></div>
+
+</div>
+<!-- Buchungsliste (neu) -->
+<div class="view hidden" id="view-buchungsliste">
+  <h2>Buchungsliste</h2>
+
+  <div class="list-toolbar">
+    <div class="form-group" style="margin: 0; min-width: 320px;">
+      <label for="select-buchungsliste-projekt">Projekt*:</label>
+      <select id="select-buchungsliste-projekt">
+        <option value="">Bitte wählen …</option>
+      </select>
+    </div>
+
+    <div class="form-group" style="margin: 0; min-width: 320px;">
+      <label for="select-buchungsliste-structure">Strukturelement:</label>
+      <select id="select-buchungsliste-structure">
+        <option value="">Alle Elemente</option>
+      </select>
+    </div>
+
+    <div class="form-group" style="margin: 0; flex: 1;">
+      <label for="tec-list-global">Suche:</label>
+      <input id="tec-list-global" type="text" placeholder="Datum, Mitarbeiter, Buchungstext …" />
+    </div>
+
+    <div class="list-actions">
+      <button id="tec-list-refresh">Aktualisieren</button>
+    </div>
+  </div>
+
+  <div class="message" id="msg-buchungsliste"></div>
+
+  <div class="table-wrap">
+    <table class="data-table" id="tbl-buchungsliste">
+      <thead>
+        <tr>
+          <th data-key="DATE_VOUCHER">Datum</th>
+          <th data-key="EMPLOYEE_SHORT">Mitarbeiter</th>
+          <th data-key="STRUCTURE_LABEL">Struktur</th>
+          <th data-key="TIME_START">Start</th>
+          <th data-key="TIME_FINISH">Ende</th>
+          <th data-key="QUANTITY_INT">Menge intern</th>
+          <th data-key="CP_RATE">CP Satz</th>
+          <th data-key="CP_TOT">CP Total</th>
+          <th data-key="QUANTITY_EXT">Menge extern</th>
+          <th data-key="SP_RATE">SP Satz</th>
+          <th data-key="SP_TOT">SP Total</th>
+          <th data-key="POSTING_DESCRIPTION">Buchungstext</th>
+          <th>Aktion</th>
+        </tr>
+        <tr class="filter-row">
+          <th><input class="tec-filter" data-filter-key="DATE_VOUCHER" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="EMPLOYEE_SHORT" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="STRUCTURE_LABEL" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="TIME_START" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="TIME_FINISH" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="QUANTITY_INT" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="CP_RATE" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="CP_TOT" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="QUANTITY_EXT" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="SP_RATE" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="SP_TOT" placeholder="Filter" /></th>
+          <th><input class="tec-filter" data-filter-key="POSTING_DESCRIPTION" placeholder="Filter" /></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="list-footer">
+    <div class="totals">
+      <div><strong>Summe Menge intern:</strong> <span id="tec-sum-qty-int">0</span></div>
+      <div><strong>Summe CP Total:</strong> <span id="tec-sum-cp">0</span></div>
+      <div><strong>Summe SP Total:</strong> <span id="tec-sum-sp">0</span></div>
+    </div>
+
+    <div class="pagination">
+      <button id="tec-page-prev">Zurück</button>
+      <span id="tec-page-info">Seite 1</span>
+      <button id="tec-page-next">Weiter</button>
+    </div>
+  </div>
+
+  <button class="btn-back">Zurück zur Übersicht</button>
+</div>
+
+<!-- Modal: Buchung bearbeiten -->
+<div class="modal hidden" id="tec-edit-modal" role="dialog" aria-modal="true">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Buchung bearbeiten</h3>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="tec-edit-date">Datum</label>
+          <input id="tec-edit-date" type="date" />
+        </div>
+        <div class="form-group">
+          <label for="tec-edit-start">Start</label>
+          <input id="tec-edit-start" type="time" />
+        </div>
+        <div class="form-group">
+          <label for="tec-edit-finish">Ende</label>
+          <input id="tec-edit-finish" type="time" />
+        </div>
+
+        <div class="form-group">
+          <label for="tec-edit-qty-int">Menge intern</label>
+          <input id="tec-edit-qty-int" type="number" step="0.25" />
+        </div>
+        <div class="form-group">
+          <label for="tec-edit-cp-rate">CP Satz</label>
+          <input id="tec-edit-cp-rate" type="number" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label for="tec-edit-cp-tot">CP Total</label>
+          <input id="tec-edit-cp-tot" type="number" step="0.01" readonly />
+        </div>
+
+        <div class="form-group">
+          <label for="tec-edit-qty-ext">Menge extern</label>
+          <input id="tec-edit-qty-ext" type="number" step="0.25" />
+        </div>
+        <div class="form-group">
+          <label for="tec-edit-sp-rate">SP Satz</label>
+          <input id="tec-edit-sp-rate" type="number" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label for="tec-edit-sp-tot">SP Total</label>
+          <input id="tec-edit-sp-tot" type="number" step="0.01" readonly />
+        </div>
+
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="tec-edit-desc">Buchungstext</label>
+          <input id="tec-edit-desc" type="text" />
+        </div>
+      </div>
+
+      <input id="tec-edit-id" type="hidden" />
+      <div class="message" id="tec-edit-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="tec-edit-save">Speichern</button>
+      <button id="tec-edit-delete" class="btn-danger">Löschen</button>
+      <button id="tec-edit-cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Rechnungen Wizard -->
+<div class="view hidden" id="view-rechnungen">
+<h2>Rechnung erstellen</h2>
+<div id="inv-wizard">
+<!-- Page 1 -->
+<div class="inv-page" id="inv-page-1">
+<h3>Rahmendaten</h3>
+<div class="form-group">
+<label for="inv-company">Firma*:</label>
+<select id="inv-company">
+<option value="">Bitte wählen …</option>
+</select>
+</div>
+<div class="form-group autocomplete-container">
+<label for="inv-employee">Mitarbeiter*:</label>
+<input autocomplete="off" id="inv-employee" placeholder="Mitarbeiter suchen (mind. 2 Zeichen)" type="text"/>
+<input id="inv-employee-id" type="hidden"/>
+<div class="autocomplete-list" id="inv-employee-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="inv-project">Projekt*:</label>
+<input autocomplete="off" id="inv-project" placeholder="Projekt suchen (mind. 2 Zeichen)" type="text"/>
+<input id="inv-project-id" type="hidden"/>
+<div class="autocomplete-list" id="inv-project-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="inv-contract">Vertrag*:</label>
+<input autocomplete="off" id="inv-contract" placeholder="Vertrag suchen (mind. 2 Zeichen)" type="text"/>
+<input id="inv-contract-id" type="hidden"/>
+<div class="autocomplete-list" id="inv-contract-autocomplete"></div>
+</div>
+<div class="wizard-nav">
+<button type="button" class="btn-back" id="inv-back-1">Zurück zur Übersicht</button>
+<button type="button" id="inv-next-1">Weiter</button>
+</div>
+<div class="message" id="inv-msg-1"></div>
+</div>
+
+<!-- Page 2 -->
+<div class="inv-page hidden" id="inv-page-2">
+<h3>Rechnungsinformationen</h3>
+<p class="muted">Die Rechnungsnummer wird beim Buchen automatisch vergeben.</p>
+<div class="form-group">
+<label for="inv-date">Rechnungsdatum*:</label>
+<input id="inv-date" type="date"/>
+</div>
+<div class="form-group">
+<label for="inv-due">Zahlungsziel*:</label>
+<input id="inv-due" type="date"/>
+</div>
+<div class="form-group">
+<label for="inv-period-start">Leistungszeitraum Beginn*:</label>
+<input id="inv-period-start" type="date"/>
+</div>
+<div class="form-group">
+<label for="inv-period-finish">Leistungszeitraum Ende*:</label>
+<input id="inv-period-finish" type="date"/>
+</div>
+<div class="wizard-nav">
+<button type="button" id="inv-prev-2">Zurück</button>
+<button type="button" id="inv-next-2">Weiter</button>
+</div>
+<div class="message" id="inv-msg-2"></div>
+</div>
+
+<!-- Page 3 -->
+<div class="inv-page hidden" id="inv-page-3">
+<h3>Abrechnung</h3>
+
+<div class="form-group">
+  <label for="inv-amount-performance">nach Leistungsstand:</label>
+  <input id="inv-amount-performance" step="0.01" type="number" />
+</div>
+
+<div class="form-group">
+  <label for="inv-amount-bookings">Buchungen:</label>
+  <div style="display:flex; gap:10px; align-items:center;">
+    <input id="inv-amount-bookings" step="0.01" type="number" readonly style="flex:1;" />
+    <button class="btn-small" id="inv-btn-edit-bookings" type="button" disabled>Buchungen bearbeiten</button>
+  </div>
+</div>
+
+<div class="form-group">
+<label for="inv-amount-net">Abrechnung (Honorar)*:</label>
+<input id="inv-amount-net" step="0.01" type="number" readonly />
+</div>
+
+<div class="form-group">
+<label for="inv-amount-extras">Abrechnung (Nebenkosten)*:</label>
+<input id="inv-amount-extras" step="0.01" type="number" readonly />
+</div>
+<div class="form-group">
+<label for="inv-total-net">Abrechnung (gesamt):</label>
+<input id="inv-total-net" readonly="" step="0.01" type="number"/>
+</div>
+<div class="wizard-nav">
+<button type="button" id="inv-prev-3">Zurück</button>
+<button type="button" id="inv-next-3">Weiter</button>
+</div>
+<div class="message" id="inv-msg-3"></div>
+</div>
+
+<!-- Page 4 -->
+<div class="inv-page hidden" id="inv-page-4">
+<h3>Rechnungsinformationen (erweitert)</h3>
+<div class="form-group">
+<label for="inv-comment">Bemerkung:</label>
+<input id="inv-comment" type="text"/>
+</div>
+<div class="form-group autocomplete-container">
+<label for="inv-vat">Mehrwertsteuersatz*:</label>
+<input autocomplete="off" id="inv-vat" placeholder="VAT suchen" type="text"/>
+<input id="inv-vat-id" type="hidden"/>
+<div class="autocomplete-list" id="inv-vat-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="inv-payment-means">Zahlungsart*:</label>
+<input autocomplete="off" id="inv-payment-means" placeholder="Zahlungsart suchen" type="text"/>
+<input id="inv-payment-means-id" type="hidden"/>
+<div class="autocomplete-list" id="inv-payment-means-autocomplete"></div>
+</div>
+<div class="wizard-nav">
+<button type="button" id="inv-prev-4">Zurück</button>
+<button type="button" id="inv-next-4">Weiter</button>
+</div>
+<div class="message" id="inv-msg-4"></div>
+</div>
+
+<!-- Page 5 -->
+<div class="inv-page hidden" id="inv-page-5">
+<h3>Zusammenfassung und Buchung</h3>
+<div class="form-group">
+<label>Projekt:</label>
+<div class="readonly-field" id="inv-sum-project"></div>
+</div>
+<div class="form-group">
+<label>Vertrag:</label>
+<div class="readonly-field" id="inv-sum-contract"></div>
+</div>
+<div class="form-group">
+<label>Rechnung Nr.:</label>
+<div class="readonly-field" id="inv-sum-number"></div>
+</div>
+<div class="form-group">
+<label>Rechnungsdatum:</label>
+<div class="readonly-field" id="inv-sum-date"></div>
+</div>
+<div class="form-group">
+<label>Zahlungsziel:</label>
+<div class="readonly-field" id="inv-sum-due"></div>
+</div>
+<div class="form-group">
+<label>Leistungszeitraum Beginn:</label>
+<div class="readonly-field" id="inv-sum-period-start"></div>
+</div>
+<div class="form-group">
+<label>Leistungszeitraum Ende:</label>
+<div class="readonly-field" id="inv-sum-period-finish"></div>
+</div>
+<div class="form-group">
+<label>Rechnungsadresse:</label>
+<div class="readonly-field" id="inv-sum-address"></div>
+</div>
+<div class="form-group">
+<label>Kontakt:</label>
+<div class="readonly-field" id="inv-sum-contact"></div>
+</div>
+<div class="form-group">
+<label>Abrechnung (Honorar):</label>
+<div class="readonly-field" id="inv-sum-amount-net"></div>
+</div>
+<div class="form-group">
+<label>Abrechnung (Nebenkosten):</label>
+<div class="readonly-field" id="inv-sum-amount-extras"></div>
+</div>
+<div class="form-group">
+<label>Abrechnung (gesamt):</label>
+<div class="readonly-field" id="inv-sum-total-net"></div>
+</div>
+<div class="form-group">
+<label>Mehrwertsteuer:</label>
+<div class="readonly-field" id="inv-sum-tax"></div>
+</div>
+<div class="form-group">
+<label>Forderungssumme:</label>
+<div class="readonly-field" id="inv-sum-gross"></div>
+</div>
+<div class="wizard-nav">
+<button type="button" id="inv-prev-5">Zurück</button>
+<button id="inv-pdf" type="button">PDF herunterladen</button>
+<button id="inv-einvoice-ubl" type="button">E-Rechnung (XML)</button>
+<button type="button" id="inv-book">Buchen</button>
+</div>
+<div class="message" id="inv-msg-5"></div>
+</div>
+
+</div>
+</div>
+</div>
+
+
+<!-- Abschlagsrechnung Wizard -->
+<div class="view hidden" id="view-abschlagsrechnung">
+<h2>Abschlagsrechnung erstellen</h2>
+<div id="pp-wizard">
+<!-- Page 1 -->
+<div class="pp-page" id="pp-page-1">
+<h3>Rahmendaten</h3>
+<div class="form-group">
+<label for="pp-company">Firma*:</label>
+<select id="pp-company">
+<option value="">Bitte wählen …</option>
+</select>
+</div>
+<div class="form-group autocomplete-container">
+<label for="pp-employee">Mitarbeiter*:</label>
+<input autocomplete="off" id="pp-employee" placeholder="Mitarbeiter suchen (mind. 2 Zeichen)" type="text"/>
+<input id="pp-employee-id" type="hidden"/>
+<div class="autocomplete-list" id="pp-employee-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="pp-project">Projekt*:</label>
+<input autocomplete="off" id="pp-project" placeholder="Projekt suchen (mind. 2 Zeichen)" type="text"/>
+<input id="pp-project-id" type="hidden"/>
+<div class="autocomplete-list" id="pp-project-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="pp-contract">Vertrag*:</label>
+<input autocomplete="off" id="pp-contract" placeholder="Vertrag suchen (mind. 2 Zeichen)" type="text"/>
+<input id="pp-contract-id" type="hidden"/>
+<div class="autocomplete-list" id="pp-contract-autocomplete"></div>
+</div>
+<div class="wizard-nav">
+<button type="button" class="btn-back" id="pp-back-1">Zurück zur Übersicht</button>
+<button id="pp-next-1">Weiter</button>
+</div>
+<div class="message" id="pp-msg-1"></div>
+</div>
+<!-- Page 2 -->
+<div class="pp-page hidden" id="pp-page-2">
+<h3>Rechnungsinformationen</h3>
+<p class="muted">Die Abschlagsrechnungsnummer wird beim Buchen automatisch vergeben.</p>
+<div class="form-group">
+<label for="pp-date">Rechnungsdatum*:</label>
+<input id="pp-date" type="date"/>
+</div>
+<div class="form-group">
+<label for="pp-due">Zahlungsziel*:</label>
+<input id="pp-due" type="date"/>
+</div>
+<div class="form-group">
+<label for="pp-period-start">Leistungszeitraum Beginn*:</label>
+<input id="pp-period-start" type="date"/>
+</div>
+<div class="form-group">
+<label for="pp-period-finish">Leistungszeitraum Ende*:</label>
+<input id="pp-period-finish" type="date"/>
+</div>
+<div class="wizard-nav">
+<button id="pp-prev-2">Zurück</button>
+<button id="pp-next-2">Weiter</button>
+</div>
+<div class="message" id="pp-msg-2"></div>
+</div>
+<!-- Page 3 -->
+<div class="pp-page hidden" id="pp-page-3">
+<h3>Abrechnung</h3>
+
+<div class="form-group">
+  <label for="pp-amount-performance">nach Leistungsstand:</label>
+  <input id="pp-amount-performance" step="0.01" type="number" />
+</div>
+
+<div class="form-group">
+  <label for="pp-amount-bookings">Buchungen:</label>
+  <div style="display:flex; gap:10px; align-items:center;">
+    <input id="pp-amount-bookings" step="0.01" type="number" readonly style="flex:1;" />
+    <button class="btn-small" id="pp-btn-edit-bookings" type="button" disabled>Buchungen bearbeiten</button>
+  </div>
+</div>
+
+<div class="form-group">
+<label for="pp-amount-net">Abrechnung (Honorar)*:</label>
+<input id="pp-amount-net" step="0.01" type="number" readonly />
+</div>
+
+<div class="form-group">
+<label for="pp-amount-extras">Abrechnung (Nebenkosten)*:</label>
+<input id="pp-amount-extras" step="0.01" type="number" readonly />
+</div>
+<div class="form-group">
+<label for="pp-total-net">Abrechnung (gesamt):</label>
+<input id="pp-total-net" readonly="" step="0.01" type="number"/>
+</div>
+<div class="wizard-nav">
+<button id="pp-prev-3">Zurück</button>
+<button id="pp-next-3">Weiter</button>
+</div>
+<div class="message" id="pp-msg-3"></div>
+</div>
+<!-- Page 4 -->
+<div class="pp-page hidden" id="pp-page-4">
+<h3>Rechnungsinformationen (erweitert)</h3>
+<div class="form-group">
+<label for="pp-comment">Bemerkung:</label>
+<input id="pp-comment" type="text"/>
+</div>
+<div class="form-group autocomplete-container">
+<label for="pp-vat">Mehrwertsteuersatz*:</label>
+<input autocomplete="off" id="pp-vat" placeholder="VAT suchen" type="text"/>
+<input id="pp-vat-id" type="hidden"/>
+<div class="autocomplete-list" id="pp-vat-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="pp-payment-means">Zahlungsart*:</label>
+<input autocomplete="off" id="pp-payment-means" placeholder="Zahlungsart suchen" type="text"/>
+<input id="pp-payment-means-id" type="hidden"/>
+<div class="autocomplete-list" id="pp-payment-means-autocomplete"></div>
+</div>
+<div class="wizard-nav">
+<button id="pp-prev-4">Zurück</button>
+<button id="pp-next-4">Weiter</button>
+</div>
+<div class="message" id="pp-msg-4"></div>
+</div>
+<!-- Page 5 -->
+<div class="pp-page hidden" id="pp-page-5">
+<h3>Zusammenfassung und Buchung</h3>
+<div class="form-group">
+<label>Projekt:</label>
+<div class="readonly-field" id="pp-sum-project"></div>
+</div>
+<div class="form-group">
+<label>Vertrag:</label>
+<div class="readonly-field" id="pp-sum-contract"></div>
+</div>
+<div class="form-group">
+<label>Abschlagsrechnung Nr.:</label>
+<div class="readonly-field" id="pp-sum-number"></div>
+</div>
+<div class="form-group">
+<label>Rechnungsdatum:</label>
+<div class="readonly-field" id="pp-sum-date"></div>
+</div>
+<div class="form-group">
+<label>Zahlungsziel:</label>
+<div class="readonly-field" id="pp-sum-due"></div>
+</div>
+<div class="form-group">
+<label>Leistungszeitraum Beginn:</label>
+<div class="readonly-field" id="pp-sum-period-start"></div>
+</div>
+<div class="form-group">
+<label>Leistungszeitraum Ende:</label>
+<div class="readonly-field" id="pp-sum-period-finish"></div>
+</div>
+<div class="form-group">
+<label>Rechnungsadresse:</label>
+<div class="readonly-field" id="pp-sum-address"></div>
+</div>
+<div class="form-group">
+<label>Kontakt:</label>
+<div class="readonly-field" id="pp-sum-contact"></div>
+</div>
+<div class="form-group">
+<label>Abrechnung (Honorar):</label>
+<div class="readonly-field" id="pp-sum-amount-net"></div>
+</div>
+<div class="form-group">
+<label>Abrechnung (Nebenkosten):</label>
+<div class="readonly-field" id="pp-sum-amount-extras"></div>
+</div>
+<div class="form-group">
+<label>Abrechnung (gesamt):</label>
+<div class="readonly-field" id="pp-sum-total-net"></div>
+</div>
+<div class="form-group">
+<label>Mehrwertsteuer:</label>
+<div class="readonly-field" id="pp-sum-tax"></div>
+</div>
+<div class="form-group">
+<label>Forderungssumme:</label>
+<div class="readonly-field" id="pp-sum-gross"></div>
+</div>
+<div class="wizard-nav">
+<button id="pp-prev-5">Zurück</button>
+<button id="pp-pdf" type="button">PDF herunterladen</button>
+<button id="pp-einvoice-ubl" type="button">E-Rechnung (XML)</button>
+<button id="pp-book">Buchen</button>
+</div>
+<div class="message" id="pp-msg-5"></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Modal: Buchungen bearbeiten (Abschlagsrechnung) -->
+<div aria-hidden="true" class="modal hidden" id="pp-tec-modal" role="dialog" aria-modal="true">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Buchungen bearbeiten</h3>
+      <button aria-label="Schließen" class="modal-close" id="pp-tec-close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="message" id="pp-tec-msg"></div>
+      <div class="table-wrap">
+        <table class="data-table" id="pp-tec-table">
+          <thead>
+            <tr>
+              <th>Auswahl</th>
+              <th>Datum</th>
+              <th>Mitarbeiter</th>
+              <th>Beschreibung</th>
+              <th>Summe (netto)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="form-group">
+        <label>Summe ausgewählt (netto):</label>
+        <div class="readonly-field" id="pp-tec-sum"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="pp-tec-save">Speichern</button>
+      <button id="pp-tec-cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Buchungen bearbeiten (Rechnung) -->
+<div aria-hidden="true" class="modal hidden" id="inv-tec-modal" role="dialog" aria-modal="true">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Buchungen bearbeiten</h3>
+      <button aria-label="Schließen" class="modal-close" id="inv-tec-close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="message" id="inv-tec-msg"></div>
+      <div class="table-wrap">
+        <table class="data-table" id="inv-tec-table">
+          <thead>
+            <tr>
+              <th>Auswahl</th>
+              <th>Datum</th>
+              <th>Mitarbeiter</th>
+              <th>Beschreibung</th>
+              <th>Summe (netto)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="form-group">
+        <label>Summe ausgewählt (netto):</label>
+        <div class="readonly-field" id="inv-tec-sum"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="inv-tec-save">Speichern</button>
+      <button id="inv-tec-cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
+
+<!-- Bottom navigation -->
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bottom-nav-item active" data-target="main-menu" id="tab-uebersicht" type="button">
+    <span class="bn-icon">▦</span><span class="bn-label">Übersicht</span>
+  </button>
+  <button class="bottom-nav-item" data-target="view-adressen-kontakte" id="tab-adressen" type="button">
+    <span class="bn-icon">📇</span><span class="bn-label">Adressen</span>
+  </button>
+  <button class="bottom-nav-item" data-target="view-projekte-menu" id="tab-projekte" type="button">
+    <span class="bn-icon">📁</span><span class="bn-label">Projekte</span>
+  </button>
+  <button class="bottom-nav-item" data-target="view-projektdaten-menu" id="tab-daten" type="button">
+    <span class="bn-icon">⏱️</span><span class="bn-label">Daten</span>
+  </button>
+  <button class="bottom-nav-item" data-target="view-vertraege-rechnungen-menu" id="tab-rechnungen" type="button">
+    <span class="bn-icon">🧾</span><span class="bn-label">Rechnungen</span>
+  </button>
+  <button class="bottom-nav-item" data-target="view-administration" id="tab-admin" type="button">
+    <span class="bn-icon">⚙️</span><span class="bn-label">Admin</span>
+  </button>
+  <button class="bottom-nav-item" data-target="view-mitarbeiter" id="tab-mitarbeiter" type="button">
+    <span class="bn-icon">👤</span><span class="bn-label">Mitarbeiter</span>
+  </button>
+</nav>
+
+</body>
+</html>
