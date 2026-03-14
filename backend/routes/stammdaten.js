@@ -3,6 +3,137 @@ const express = require("express");
 module.exports = (supabase) => {
   const router = express.Router();
 
+  const FEE_ZONE_COLUMN_BY_ROMAN = {
+    I: { min: "ZONE_1", max: "ZONE_2" },
+    II: { min: "ZONE_2", max: "ZONE_3" },
+    III: { min: "ZONE_3", max: "ZONE_4" },
+    IV: { min: "ZONE_4", max: "ZONE_5" },
+    V: { min: "ZONE_5", max: "ZONE_TOP" },
+  };
+
+  function toNumberOrNull(v) {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function findBounds(rowsAsc, kx) {
+    if (!Array.isArray(rowsAsc) || rowsAsc.length === 0 || kx === null) {
+      return { lower: null, upper: null };
+    }
+
+    let lower = null;
+    let upper = null;
+
+    for (const row of rowsAsc) {
+      const base = toNumberOrNull(row.BASE);
+      if (base === null) continue;
+      if (base <= kx) lower = row;
+      if (base >= kx) {
+        upper = row;
+        break;
+      }
+    }
+
+    if (!lower) lower = rowsAsc[0] || null;
+    if (!upper) upper = rowsAsc[rowsAsc.length - 1] || null;
+    return { lower, upper };
+  }
+
+  // Default interpolation strategy (prepared for future fee-master specific formulas)
+  // Official HOAI interpolation per §13:
+  // Hx = H1 + ((Kx - K1) * (H2 - H1)) / (K2 - K1)
+  function calculateRevenueLinearInterpolation(kx, lowerBase, upperBase, h1, h2) {
+    if ([kx, lowerBase, upperBase, h1, h2].some((x) => x === null)) return null;
+    if (upperBase === lowerBase) return h1;
+    return h1 + (((kx - lowerBase) * (h2 - h1)) / (upperBase - lowerBase));
+  }
+
+  function resolveRevenueStrategy(/* feeMasterId */) {
+    return calculateRevenueLinearInterpolation;
+  }
+
+  async function calculateRevenueFields({ feeMasterId, zoneId, zonePercent, costsByKey }) {
+    if (!feeMasterId || !zoneId) {
+      return {
+        REVENUE_K0: null,
+        REVENUE_K1: null,
+        REVENUE_K2: null,
+        REVENUE_K3: null,
+        REVENUE_K4: null,
+      };
+    }
+
+    const { data: zone, error: zoneErr } = await supabase
+      .from("FEE_ZONES")
+      .select("ID, NAME_SHORT")
+      .eq("ID", zoneId)
+      .single();
+    if (zoneErr) throw new Error(zoneErr.message);
+    if (!zone) throw new Error("FEE_ZONE not found");
+
+    const zoneKeyRaw = String(zone.NAME_SHORT || "").trim().toUpperCase();
+    const zoneColumns = FEE_ZONE_COLUMN_BY_ROMAN[zoneKeyRaw];
+    if (!zoneColumns) {
+      throw new Error(`Unsupported FEE_ZONE.NAME_SHORT "${zone.NAME_SHORT}"`);
+    }
+
+    const { data: feeTables, error: tblErr } = await supabase
+      .from("FEE_TABLES")
+      .select(`BASE, ${zoneColumns.min}, ${zoneColumns.max}`)
+      .eq("FEE_MASTER_ID", feeMasterId)
+      .order("BASE", { ascending: true, nullsFirst: false });
+    if (tblErr) throw new Error(tblErr.message);
+    const rows = Array.isArray(feeTables) ? feeTables : [];
+    if (!rows.length) {
+      throw new Error("No FEE_TABLES rows found for selected FEE_MASTER_ID");
+    }
+
+    const strategy = resolveRevenueStrategy(feeMasterId);
+    const zonePercentNumber = toNumberOrNull(zonePercent) ?? 0;
+
+    const calcOne = (costValue) => {
+      const kx = toNumberOrNull(costValue);
+      if (kx === null) return null;
+
+      const { lower, upper } = findBounds(rows, kx);
+      if (!lower || !upper) return null;
+
+      const k1 = toNumberOrNull(lower.BASE);
+      const k2 = toNumberOrNull(upper.BASE);
+      const hm1 = toNumberOrNull(lower[zoneColumns.min]);
+      const hm2 = toNumberOrNull(upper[zoneColumns.min]);
+      const hh1 = toNumberOrNull(lower[zoneColumns.max]);
+      const hh2 = toNumberOrNull(upper[zoneColumns.max]);
+
+      const hm = strategy(
+        kx,
+        k1,
+        k2,
+        hm1,
+        hm2
+      );
+      const hh = strategy(
+        kx,
+        k1,
+        k2,
+        hh1,
+        hh2
+      );
+      if (hm === null || hh === null) return null;
+
+      return hm + ((hh - hm) * (zonePercentNumber / 100));
+    };
+
+    return {
+      REVENUE_K0: calcOne(costsByKey.CONSTRUCTION_COSTS_K0),
+      REVENUE_K1: calcOne(costsByKey.CONSTRUCTION_COSTS_K1),
+      REVENUE_K2: calcOne(costsByKey.CONSTRUCTION_COSTS_K2),
+      REVENUE_K3: calcOne(costsByKey.CONSTRUCTION_COSTS_K3),
+      REVENUE_K4: calcOne(costsByKey.CONSTRUCTION_COSTS_K4),
+    };
+  }
+
   // Save PROJECT_STATUS
   router.post("/status", async (req, res) => {
     const name_short = req.body.name_short;
@@ -68,6 +199,181 @@ module.exports = (supabase) => {
     }
 
     res.json({ data });
+  });
+
+  // List FEE_GROUPS (for Honorarordnungen dropdown)
+  router.get("/fee-groups", async (req, res) => {
+    const { data, error } = await supabase
+      .from("FEE_GROUPS")
+      .select("ID, NAME_SHORT, NAME_LONG")
+      .order("NAME_SHORT", { ascending: true, nullsFirst: false });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ data });
+  });
+
+  // List FEE_MASTERS filtered by fee_group_id (Leistungsbild dropdown)
+  router.get("/fee-masters", async (req, res) => {
+    const feeGroupIdRaw = (req.query.fee_group_id || "").toString().trim();
+    const feeGroupId = feeGroupIdRaw ? Number.parseInt(feeGroupIdRaw, 10) : null;
+
+    if (feeGroupIdRaw && Number.isNaN(feeGroupId)) {
+      return res.status(400).json({ error: "fee_group_id must be a number" });
+    }
+
+    let query = supabase
+      .from("FEE_MASTERS")
+      .select("ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID")
+      .order("NAME_SHORT", { ascending: true, nullsFirst: false });
+
+    if (feeGroupId !== null) {
+      query = query.eq("FEE_GROUP_ID", feeGroupId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ data });
+  });
+
+  // List FEE_ZONES filtered by fee_master_id (Honorarzone dropdown)
+  router.get("/fee-zones", async (req, res) => {
+    const feeMasterIdRaw = (req.query.fee_master_id || "").toString().trim();
+    const feeMasterId = feeMasterIdRaw ? Number.parseInt(feeMasterIdRaw, 10) : null;
+    if (!feeMasterId) {
+      return res.status(400).json({ error: "fee_master_id is required" });
+    }
+
+    const { data, error } = await supabase
+      .from("FEE_ZONES")
+      .select("ID, NAME_SHORT, NAME_LONG, FEE_MASTER_ID")
+      .eq("FEE_MASTER_ID", feeMasterId)
+      .order("NAME_SHORT", { ascending: true, nullsFirst: false });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ data: data || [] });
+  });
+
+  // Create FEE_CALCULATION_MASTER row from selected FEE_MASTER_ID
+  router.post("/fee-calculation-masters/init", async (req, res) => {
+    const feeMasterIdRaw = (req.body?.fee_master_id ?? "").toString().trim();
+    const feeMasterId = feeMasterIdRaw ? Number.parseInt(feeMasterIdRaw, 10) : null;
+    if (!feeMasterId) {
+      return res.status(400).json({ error: "fee_master_id is required" });
+    }
+
+    const { data: feeMaster, error: fmErr } = await supabase
+      .from("FEE_MASTERS")
+      .select("ID, NAME_SHORT, NAME_LONG")
+      .eq("ID", feeMasterId)
+      .single();
+
+    if (fmErr) {
+      return res.status(500).json({ error: fmErr.message });
+    }
+    if (!feeMaster) {
+      return res.status(404).json({ error: "FEE_MASTER not found" });
+    }
+
+    const insertRow = {
+      FEE_MASTER_ID: feeMasterId,
+      NAME_SHORT: feeMaster.NAME_SHORT || null,
+      NAME_LONG: feeMaster.NAME_LONG || null,
+    };
+
+    const { data, error } = await supabase
+      .from("FEE_CALCULATION_MASTER")
+      .insert([insertRow])
+      .select("*")
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ data });
+  });
+
+  // Update page-2 basis fields in FEE_CALCULATION_MASTER
+  router.patch("/fee-calculation-masters/:id/basis", async (req, res) => {
+    const idRaw = (req.params.id || "").toString().trim();
+    const id = idRaw ? Number.parseInt(idRaw, 10) : null;
+    if (!id) {
+      return res.status(400).json({ error: "id is required" });
+    }
+
+    try {
+      const { data: existing, error: existingErr } = await supabase
+        .from("FEE_CALCULATION_MASTER")
+        .select("ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT")
+        .eq("ID", id)
+        .single();
+      if (existingErr) {
+        return res.status(500).json({ error: existingErr.message });
+      }
+      if (!existing) {
+        return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
+      }
+
+      const body = req.body || {};
+      const costsByKey = {
+        CONSTRUCTION_COSTS_K0: body.CONSTRUCTION_COSTS_K0 ?? null,
+        CONSTRUCTION_COSTS_K1: body.CONSTRUCTION_COSTS_K1 ?? null,
+        CONSTRUCTION_COSTS_K2: body.CONSTRUCTION_COSTS_K2 ?? null,
+        CONSTRUCTION_COSTS_K3: body.CONSTRUCTION_COSTS_K3 ?? null,
+        CONSTRUCTION_COSTS_K4: body.CONSTRUCTION_COSTS_K4 ?? null,
+      };
+
+      const effectiveZoneId = body.ZONE_ID ?? existing.ZONE_ID ?? null;
+      const effectiveZonePercent = body.ZONE_PERCENT ?? existing.ZONE_PERCENT ?? null;
+      const revenueFields = await calculateRevenueFields({
+        feeMasterId: existing.FEE_MASTER_ID,
+        zoneId: effectiveZoneId,
+        zonePercent: effectiveZonePercent,
+        costsByKey,
+      });
+
+      const updateRow = {
+        NAME_SHORT: body.NAME_SHORT ?? null,
+        NAME_LONG: body.NAME_LONG ?? null,
+        PROJECT_ID: body.PROJECT_ID ?? null,
+        ZONE_ID: body.ZONE_ID ?? null,
+        ZONE_PERCENT: body.ZONE_PERCENT ?? null,
+        CONSTRUCTION_COSTS_K0: costsByKey.CONSTRUCTION_COSTS_K0,
+        CONSTRUCTION_COSTS_K1: costsByKey.CONSTRUCTION_COSTS_K1,
+        CONSTRUCTION_COSTS_K2: costsByKey.CONSTRUCTION_COSTS_K2,
+        CONSTRUCTION_COSTS_K3: costsByKey.CONSTRUCTION_COSTS_K3,
+        CONSTRUCTION_COSTS_K4: costsByKey.CONSTRUCTION_COSTS_K4,
+        REVENUE_K0: revenueFields.REVENUE_K0,
+        REVENUE_K1: revenueFields.REVENUE_K1,
+        REVENUE_K2: revenueFields.REVENUE_K2,
+        REVENUE_K3: revenueFields.REVENUE_K3,
+        REVENUE_K4: revenueFields.REVENUE_K4,
+      };
+
+      const { data, error } = await supabase
+        .from("FEE_CALCULATION_MASTER")
+        .update(updateRow)
+        .eq("ID", id)
+        .select("*")
+        .single();
+
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+
+      res.json({ data });
+    } catch (err) {
+      return res.status(500).json({ error: err?.message || String(err) });
+    }
   });
 
   // List COMPANY (for dropdowns)
