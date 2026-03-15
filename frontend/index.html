@@ -824,6 +824,9 @@
   <div class="wizard-steps" id="fee-steps">
     <div class="wizard-step active" data-step="1">1. Honorarordnungen</div>
     <div class="wizard-step" data-step="2">2. Basis</div>
+    <div class="wizard-step" data-step="3">3. Leistungsphasen</div>
+    <div class="wizard-step" data-step="4">4. Zu- und Abschläge</div>
+    <div class="wizard-step" data-step="5">5. Übersicht</div>
   </div>
 
   <div class="wizard-page" id="fee-step-1">
@@ -919,7 +922,91 @@
     <div class="wizard-nav">
       <button id="fee-prev-2" type="button">Zurück</button>
       <button id="fee-save-2" type="button">Speichern</button>
+      <button id="fee-next-2" type="button">Weiter</button>
     </div>
+  </div>
+
+  <div class="wizard-page hidden" id="fee-step-3">
+    <h3>Leistungsphasen</h3>
+
+    <div class="table-wrap">
+      <table class="data-table" id="fee-phase-table">
+        <thead>
+          <tr>
+            <th>Leistungsphase</th>
+            <th>% Basis</th>
+            <th>Kx</th>
+            <th>Kostenbasis</th>
+            <th>% LPH</th>
+            <th>Honorar LPH</th>
+          </tr>
+        </thead>
+        <tbody id="fee-phase-body"></tbody>
+        <tfoot id="fee-phase-foot"></tfoot>
+      </table>
+    </div>
+
+    <div class="wizard-nav">
+      <button id="fee-prev-3" type="button">Zurück</button>
+      <button id="fee-save-3" type="button">Speichern</button>
+      <button id="fee-next-3" type="button">Weiter</button>
+    </div>
+  </div>
+
+  <div class="wizard-page hidden" id="fee-step-4">
+    <h3>Zu- und Abschläge</h3>
+    <p>Diese Seite wird im nächsten Schritt ergänzt.</p>
+
+    <div class="wizard-nav">
+      <button id="fee-prev-4" type="button">Zurück</button>
+      <button id="fee-next-4" type="button">Weiter</button>
+    </div>
+  </div>
+
+  <div class="wizard-page hidden" id="fee-step-5">
+    <h3>Übersicht</h3>
+
+    <section class="card" style="padding:16px; margin-bottom:16px;">
+      <h4>Übersicht</h4>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Leistungsbild</label>
+          <div id="fee-summary-master"></div>
+        </div>
+        <div class="form-group">
+          <label>Honorarzone</label>
+          <div id="fee-summary-zone"></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table" id="fee-summary-phase-table">
+          <thead>
+            <tr>
+              <th>Leistungsphase</th>
+              <th>% LPH</th>
+              <th>Honorar LPH</th>
+            </tr>
+          </thead>
+          <tbody id="fee-summary-phase-body"></tbody>
+          <tfoot id="fee-summary-phase-foot"></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="padding:16px;">
+      <h4>HOAI zu Projekt hinzufügen</h4>
+      <div class="form-group">
+        <label for="fee-structure-select">Übergeordnetes Projektelement</label>
+        <select id="fee-structure-select">
+          <option value="">Bitte wählen …</option>
+        </select>
+      </div>
+      <div class="wizard-nav">
+        <button id="fee-prev-5" type="button">Zurück</button>
+        <button id="fee-finish" type="button">Zu Projektstruktur hinzufügen</button>
+      </div>
+    </section>
   </div>
 </div>
 

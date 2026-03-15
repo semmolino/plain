@@ -134,6 +134,108 @@ module.exports = (supabase) => {
     };
   }
 
+  function getRevenueByKx(calcMaster, kx) {
+    const key = String(kx || "").trim().toUpperCase();
+    const mapping = {
+      K0: calcMaster?.REVENUE_K0,
+      K1: calcMaster?.REVENUE_K1,
+      K2: calcMaster?.REVENUE_K2,
+      K3: calcMaster?.REVENUE_K3,
+      K4: calcMaster?.REVENUE_K4,
+    };
+    return toNumberOrNull(mapping[key] ?? null);
+  }
+
+  function calculatePhaseRevenue(feePercent, revenueBase) {
+    const pct = toNumberOrNull(feePercent);
+    const base = toNumberOrNull(revenueBase);
+    if (pct === null || base === null) return null;
+    return (pct * base) / 100;
+  }
+
+  async function loadPhaseRowsWithLabels(calcMasterId) {
+    const { data: phaseRows, error: rowsErr } = await supabase
+      .from("FEE_CALCULATION_PHASE")
+      .select("ID, FEE_MASTER_ID, FEE_PHASE_ID, FEE_PERCENT_BASE, KX, REVENUE_BASE, FEE_PERCENT, PHASE_REVENUE")
+      .eq("FEE_MASTER_ID", calcMasterId)
+      .order("FEE_PHASE_ID", { ascending: true });
+    if (rowsErr) throw new Error(rowsErr.message);
+
+    const phaseIds = Array.from(new Set((phaseRows || []).map((r) => r.FEE_PHASE_ID).filter(Boolean)));
+    let phaseMap = new Map();
+    if (phaseIds.length) {
+      const { data: phases, error: phaseErr } = await supabase
+        .from("FEE_PHASE")
+        .select("ID, NAME_SHORT, NAME_LONG, FEE_PERCENT")
+        .in("ID", phaseIds);
+      if (phaseErr) throw new Error(phaseErr.message);
+      phaseMap = new Map((phases || []).map((p) => [p.ID, p]));
+    }
+
+    return (phaseRows || []).map((row) => {
+      const phase = phaseMap.get(row.FEE_PHASE_ID) || {};
+      return {
+        ...row,
+        PHASE_LABEL: `${phase.NAME_SHORT || ""}: ${phase.NAME_LONG || ""}`.replace(/:\s*$/, ""),
+        FEE_PERCENT_BASE: row.FEE_PERCENT_BASE ?? phase.FEE_PERCENT ?? null,
+      };
+    });
+  }
+
+  function buildProjectProgressRow(structureRow) {
+    return {
+      STRUCTURE_ID: structureRow.ID,
+      REVENUE: structureRow.REVENUE ?? 0,
+      EXTRAS_PERCENT: structureRow.EXTRAS_PERCENT ?? 0,
+      EXTRAS: structureRow.EXTRAS ?? 0,
+      REVENUE_COMPLETION_PERCENT: structureRow.REVENUE_COMPLETION_PERCENT ?? 0,
+      EXTRAS_COMPLETION_PERCENT: structureRow.EXTRAS_COMPLETION_PERCENT ?? 0,
+      REVENUE_COMPLETION: structureRow.REVENUE_COMPLETION ?? 0,
+      EXTRAS_COMPLETION: structureRow.EXTRAS_COMPLETION ?? 0,
+    };
+  }
+
+  async function recomputeStructureAggregates(structureId) {
+    if (!structureId) return;
+
+    const { data: structureRow, error: structureErr } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .select("ID, BILLING_TYPE_ID, EXTRAS_PERCENT")
+      .eq("ID", structureId)
+      .single();
+    if (structureErr) throw new Error(structureErr.message);
+    if (!structureRow) return;
+
+    const { data: tecRows, error: tecErr } = await supabase
+      .from("TEC")
+      .select("QUANTITY_INT, CP_RATE, SP_TOT")
+      .eq("STRUCTURE_ID", structureId);
+    if (tecErr) throw new Error(tecErr.message);
+
+    const costs = (tecRows || []).reduce((sum, row) => {
+      return sum + ((Number(row.QUANTITY_INT) || 0) * (Number(row.CP_RATE) || 0));
+    }, 0);
+
+    const updatePayload = { COSTS: costs };
+    if (Number(structureRow.BILLING_TYPE_ID) === 2) {
+      const revenue = (tecRows || []).reduce((sum, row) => sum + (Number(row.SP_TOT) || 0), 0);
+      const extrasPercent = Number(structureRow.EXTRAS_PERCENT ?? 0) || 0;
+      const extras = (revenue * extrasPercent) / 100;
+      updatePayload.REVENUE = revenue;
+      updatePayload.EXTRAS = extras;
+      updatePayload.REVENUE_COMPLETION_PERCENT = 100;
+      updatePayload.EXTRAS_COMPLETION_PERCENT = 100;
+      updatePayload.REVENUE_COMPLETION = revenue;
+      updatePayload.EXTRAS_COMPLETION = extras;
+    }
+
+    const { error: updateErr } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .update(updatePayload)
+      .eq("ID", structureId);
+    if (updateErr) throw new Error(updateErr.message);
+  }
+
   // Save PROJECT_STATUS
   router.post("/status", async (req, res) => {
     const name_short = req.body.name_short;
@@ -371,6 +473,298 @@ module.exports = (supabase) => {
       }
 
       res.json({ data });
+    } catch (err) {
+      return res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
+  router.post("/fee-calculation-masters/:id/phases/init", async (req, res) => {
+    const idRaw = (req.params.id || "").toString().trim();
+    const id = idRaw ? Number.parseInt(idRaw, 10) : null;
+    if (!id) {
+      return res.status(400).json({ error: "id is required" });
+    }
+
+    try {
+      const { data: calcMaster, error: calcErr } = await supabase
+        .from("FEE_CALCULATION_MASTER")
+        .select("ID, FEE_MASTER_ID, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4")
+        .eq("ID", id)
+        .single();
+      if (calcErr) {
+        return res.status(500).json({ error: calcErr.message });
+      }
+      if (!calcMaster) {
+        return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
+      }
+
+      const { data: existingRows, error: existingErr } = await supabase
+        .from("FEE_CALCULATION_PHASE")
+        .select("ID")
+        .eq("FEE_MASTER_ID", id)
+        .limit(1);
+      if (existingErr) {
+        return res.status(500).json({ error: existingErr.message });
+      }
+
+      if (!existingRows || existingRows.length === 0) {
+        const { data: feePhases, error: feePhaseErr } = await supabase
+          .from("FEE_PHASE")
+          .select("ID, NAME_SHORT, NAME_LONG, FEE_PERCENT")
+          .eq("FEE_MASTER_ID", calcMaster.FEE_MASTER_ID)
+          .order("ID", { ascending: true });
+        if (feePhaseErr) {
+          return res.status(500).json({ error: feePhaseErr.message });
+        }
+
+        const revenueBase = getRevenueByKx(calcMaster, "K0");
+        const insertRows = (feePhases || []).map((phase) => ({
+          FEE_MASTER_ID: id,
+          FEE_PHASE_ID: phase.ID,
+          FEE_PERCENT_BASE: phase.FEE_PERCENT ?? null,
+          KX: "K0",
+          REVENUE_BASE: revenueBase,
+          FEE_PERCENT: phase.FEE_PERCENT ?? null,
+          PHASE_REVENUE: calculatePhaseRevenue(phase.FEE_PERCENT ?? null, revenueBase),
+        }));
+
+        if (insertRows.length) {
+          const { error: insertErr } = await supabase
+            .from("FEE_CALCULATION_PHASE")
+            .insert(insertRows);
+          if (insertErr) {
+            return res.status(500).json({ error: insertErr.message });
+          }
+        }
+      }
+
+      const rows = await loadPhaseRowsWithLabels(id);
+      return res.json({ data: rows });
+    } catch (err) {
+      return res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
+  router.patch("/fee-calculation-phases/:id", async (req, res) => {
+    const idRaw = (req.params.id || "").toString().trim();
+    const id = idRaw ? Number.parseInt(idRaw, 10) : null;
+    if (!id) {
+      return res.status(400).json({ error: "id is required" });
+    }
+
+    try {
+      const { data: phaseRow, error: phaseErr } = await supabase
+        .from("FEE_CALCULATION_PHASE")
+        .select("ID, FEE_MASTER_ID, FEE_PHASE_ID, FEE_PERCENT_BASE")
+        .eq("ID", id)
+        .single();
+      if (phaseErr) {
+        return res.status(500).json({ error: phaseErr.message });
+      }
+      if (!phaseRow) {
+        return res.status(404).json({ error: "FEE_CALCULATION_PHASE not found" });
+      }
+
+      const { data: calcMaster, error: calcErr } = await supabase
+        .from("FEE_CALCULATION_MASTER")
+        .select("ID, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4")
+        .eq("ID", phaseRow.FEE_MASTER_ID)
+        .single();
+      if (calcErr) {
+        return res.status(500).json({ error: calcErr.message });
+      }
+      if (!calcMaster) {
+        return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
+      }
+
+      const body = req.body || {};
+      const kx = String(body.KX || "K0").trim().toUpperCase();
+      const revenueBase = getRevenueByKx(calcMaster, kx);
+      const feePercent = body.FEE_PERCENT ?? null;
+      const phaseRevenue = calculatePhaseRevenue(feePercent, revenueBase);
+
+      const updateRow = {
+        KX: kx,
+        REVENUE_BASE: revenueBase,
+        FEE_PERCENT: feePercent,
+        PHASE_REVENUE: phaseRevenue,
+      };
+
+      const { data, error } = await supabase
+        .from("FEE_CALCULATION_PHASE")
+        .update(updateRow)
+        .eq("ID", id)
+        .select("ID, FEE_MASTER_ID, FEE_PHASE_ID, FEE_PERCENT_BASE, KX, REVENUE_BASE, FEE_PERCENT, PHASE_REVENUE")
+        .single();
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+
+      const rows = await loadPhaseRowsWithLabels(phaseRow.FEE_MASTER_ID);
+      const enriched = rows.find((r) => r.ID === id) || data;
+      return res.json({ data: enriched });
+    } catch (err) {
+      return res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
+  router.delete("/fee-calculation-masters/:id", async (req, res) => {
+    const idRaw = (req.params.id || "").toString().trim();
+    const id = idRaw ? Number.parseInt(idRaw, 10) : null;
+    if (!id) return res.status(400).json({ error: "id is required" });
+
+    try {
+      const { error: phaseErr } = await supabase
+        .from("FEE_CALCULATION_PHASE")
+        .delete()
+        .eq("FEE_MASTER_ID", id);
+      if (phaseErr) return res.status(500).json({ error: phaseErr.message });
+
+      const { error: masterErr } = await supabase
+        .from("FEE_CALCULATION_MASTER")
+        .delete()
+        .eq("ID", id);
+      if (masterErr) return res.status(500).json({ error: masterErr.message });
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
+  router.post("/fee-calculation-masters/:id/add-to-project-structure", async (req, res) => {
+    const idRaw = (req.params.id || "").toString().trim();
+    const id = idRaw ? Number.parseInt(idRaw, 10) : null;
+    const fatherIdRaw = (req.body?.father_id ?? "").toString().trim();
+    const fatherId = fatherIdRaw ? Number.parseInt(fatherIdRaw, 10) : null;
+    if (!id) return res.status(400).json({ error: "id is required" });
+    if (!fatherId) return res.status(400).json({ error: "father_id is required" });
+
+    try {
+      const { data: calcMaster, error: calcErr } = await supabase
+        .from("FEE_CALCULATION_MASTER")
+        .select("ID, PROJECT_ID")
+        .eq("ID", id)
+        .single();
+      if (calcErr) return res.status(500).json({ error: calcErr.message });
+      if (!calcMaster) return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
+      if (!calcMaster.PROJECT_ID) {
+        return res.status(400).json({ error: "Für die Honorarberechnung ist kein Projekt ausgewählt." });
+      }
+
+      const { data: project, error: projectErr } = await supabase
+        .from("PROJECT")
+        .select("ID, TENANT_ID")
+        .eq("ID", calcMaster.PROJECT_ID)
+        .single();
+      if (projectErr) return res.status(500).json({ error: projectErr.message });
+      if (!project) return res.status(404).json({ error: "Projekt nicht gefunden" });
+
+      const { data: father, error: fatherErr } = await supabase
+        .from("PROJECT_STRUCTURE")
+        .select("ID, PROJECT_ID, NAME_SHORT, NAME_LONG, EXTRAS_PERCENT")
+        .eq("ID", fatherId)
+        .single();
+      if (fatherErr) return res.status(500).json({ error: fatherErr.message });
+      if (!father) return res.status(404).json({ error: "Übergeordnetes Projektelement nicht gefunden" });
+      if (String(father.PROJECT_ID) !== String(calcMaster.PROJECT_ID)) {
+        return res.status(400).json({ error: "Das übergeordnete Projektelement gehört nicht zum ausgewählten Projekt." });
+      }
+
+      const { data: calcPhases, error: calcPhasesErr } = await supabase
+        .from("FEE_CALCULATION_PHASE")
+        .select("ID, FEE_PHASE_ID, FEE_PERCENT, PHASE_REVENUE")
+        .eq("FEE_MASTER_ID", id)
+        .order("FEE_PHASE_ID", { ascending: true });
+      if (calcPhasesErr) return res.status(500).json({ error: calcPhasesErr.message });
+      if (!Array.isArray(calcPhases) || calcPhases.length === 0) {
+        return res.status(400).json({ error: "Es sind keine Leistungsphasen zum Übertragen vorhanden." });
+      }
+
+      const phaseIds = Array.from(new Set(calcPhases.map((row) => row.FEE_PHASE_ID).filter(Boolean)));
+      const { data: phaseDefs, error: phaseDefsErr } = await supabase
+        .from("FEE_PHASE")
+        .select("ID, NAME_SHORT, NAME_LONG")
+        .in("ID", phaseIds);
+      if (phaseDefsErr) return res.status(500).json({ error: phaseDefsErr.message });
+      const phaseMap = new Map((phaseDefs || []).map((row) => [row.ID, row]));
+
+      const extrasPercent = Number(father.EXTRAS_PERCENT ?? 0) || 0;
+      const insertRows = calcPhases.map((row) => {
+        const phaseDef = phaseMap.get(row.FEE_PHASE_ID) || {};
+        const revenue = Number(row.PHASE_REVENUE ?? 0) || 0;
+        const extras = (revenue * extrasPercent) / 100;
+        return {
+          NAME_SHORT: phaseDef.NAME_SHORT || `LPH ${row.FEE_PHASE_ID}`,
+          NAME_LONG: phaseDef.NAME_LONG || null,
+          REVENUE: revenue,
+          EXTRAS: extras,
+          COSTS: 0,
+          PROJECT_ID: calcMaster.PROJECT_ID,
+          FATHER_ID: fatherId,
+          EXTRAS_PERCENT: extrasPercent,
+          BILLING_TYPE_ID: 1,
+          TENANT_ID: project.TENANT_ID,
+          REVENUE_COMPLETION_PERCENT: 0,
+          EXTRAS_COMPLETION_PERCENT: 0,
+          REVENUE_COMPLETION: 0,
+          EXTRAS_COMPLETION: 0,
+        };
+      });
+
+      const { data: createdRows, error: createErr } = await supabase
+        .from("PROJECT_STRUCTURE")
+        .insert(insertRows)
+        .select("*");
+      if (createErr) return res.status(500).json({ error: createErr.message });
+
+      try {
+        const progressRows = (createdRows || []).map(buildProjectProgressRow);
+        if (progressRows.length) {
+          const { error: progressErr } = await supabase.from("PROJECT_PROGRESS").insert(progressRows);
+          if (progressErr) {
+            return res.status(500).json({ error: "Projektstruktur angelegt, aber PROJECT_PROGRESS fehlgeschlagen: " + progressErr.message });
+          }
+        }
+      } catch (progressOuterErr) {
+        return res.status(500).json({ error: progressOuterErr?.message || String(progressOuterErr) });
+      }
+
+      let movedTecCount = 0;
+      let movedToName = "";
+      const firstCreated = Array.isArray(createdRows) && createdRows.length ? createdRows[0] : null;
+      if (firstCreated) {
+        const { data: tecRows, error: tecErr } = await supabase
+          .from("TEC")
+          .select("ID")
+          .eq("STRUCTURE_ID", fatherId);
+        if (tecErr) return res.status(500).json({ error: tecErr.message });
+
+        movedTecCount = Array.isArray(tecRows) ? tecRows.length : 0;
+        if (movedTecCount > 0) {
+          const { error: moveErr } = await supabase
+            .from("TEC")
+            .update({ STRUCTURE_ID: firstCreated.ID })
+            .eq("STRUCTURE_ID", fatherId);
+          if (moveErr) return res.status(500).json({ error: moveErr.message });
+
+          await recomputeStructureAggregates(fatherId);
+          await recomputeStructureAggregates(firstCreated.ID);
+          movedToName = [firstCreated.NAME_SHORT, firstCreated.NAME_LONG].filter(Boolean).join(": ");
+        }
+      }
+
+      const fatherName = [father.NAME_SHORT, father.NAME_LONG].filter(Boolean).join(": ");
+      const message = movedTecCount > 0
+        ? `${createdRows.length} Elemente wurden angelegt. ${movedTecCount} Buchungen wurden von ${fatherName || `#${fatherId}`} nach ${movedToName || `#${firstCreated?.ID}`} verschoben.`
+        : `${createdRows.length} Elemente wurden angelegt.`;
+
+      return res.json({
+        success: true,
+        data: createdRows || [],
+        moved_tec_count: movedTecCount,
+        message,
+      });
     } catch (err) {
       return res.status(500).json({ error: err?.message || String(err) });
     }

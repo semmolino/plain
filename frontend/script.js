@@ -7,6 +7,7 @@ let __ppCancelOnUnload = false;
 let __ppId = null;
 // Prevent duplicate draft creation via double-clicks / slow network
 let __ppInitInFlight = false;
+let __feeCancelOnUnload = false;
 
 async function getBillingTypes() {
   if (Array.isArray(__billingTypesCache)) return __billingTypesCache;
@@ -73,6 +74,22 @@ async function guardLeaveDraftIfNeeded() {
 
     __ppCancelOnUnload = false;
     ppReset();
+  }
+
+  if (isViewActive("view-honorar-berechnen") && __feeWizard.calcMasterId) {
+    const ok = window.confirm(
+      "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht."
+    );
+    if (!ok) return false;
+
+    const okDelete = await feeDeleteDraftIfAny();
+    if (!okDelete) {
+      feeSetMsg("Entwurf konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.", "error");
+      return false;
+    }
+
+    __feeCancelOnUnload = false;
+    feeResetWizardState();
   }
 
   return true;
@@ -944,6 +961,23 @@ window.addEventListener("beforeunload", (e) => {
 window.addEventListener("pagehide", () => {
   if (!__invCancelOnUnload) return;
   invDeleteDraftIfAny();
+});
+
+window.addEventListener("beforeunload", (e) => {
+  const view = document.getElementById("view-honorar-berechnen");
+  if (!view || view.classList.contains("hidden")) return;
+  if (!__feeWizard.calcMasterId) return;
+
+  __feeCancelOnUnload = true;
+  const msg = "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht.";
+  e.preventDefault();
+  e.returnValue = msg;
+  return msg;
+});
+
+window.addEventListener("pagehide", () => {
+  if (!__feeCancelOnUnload) return;
+  feeDeleteDraftIfAny();
 });
 
 // Zahlungen
@@ -2647,9 +2681,12 @@ const __feeWizard = {
   feeMasters: [],
   feeZones: [],
   projects: [],
+  phaseRows: [],
+  structureRows: [],
   selectedFeeGroupId: "",
   selectedFeeMasterId: "",
   calcMasterId: "",
+  calcMasterRow: null,
 };
 
 function feeSetMsg(text, type = "info") {
@@ -2665,7 +2702,7 @@ function feeLabel(row) {
 
 function feeShowStep(step) {
   __feeWizard.step = step;
-  [1, 2].forEach((s) => {
+  [1, 2, 3, 4, 5].forEach((s) => {
     const el = document.getElementById(`fee-step-${s}`);
     if (el) el.classList.toggle("hidden", s !== step);
   });
@@ -2674,6 +2711,37 @@ function feeShowStep(step) {
     const s = Number.parseInt(el.getAttribute("data-step") || "0", 10);
     el.classList.toggle("active", s === step);
   });
+}
+
+function feeResetWizardState() {
+  __feeWizard.step = 1;
+  __feeWizard.feeGroups = [];
+  __feeWizard.feeMasters = [];
+  __feeWizard.feeZones = [];
+  __feeWizard.projects = [];
+  __feeWizard.phaseRows = [];
+  __feeWizard.structureRows = [];
+  __feeWizard.selectedFeeGroupId = "";
+  __feeWizard.selectedFeeMasterId = "";
+  __feeWizard.calcMasterId = "";
+  __feeWizard.calcMasterRow = null;
+  __feeCancelOnUnload = false;
+
+  feeSetMsg("", "info");
+  const groupSel = document.getElementById("fee-group-select");
+  if (groupSel) groupSel.value = "";
+  const masterSel = document.getElementById("fee-master-select");
+  if (masterSel) masterSel.innerHTML = `<option value="">Bitte zuerst Honorarordnung wählen …</option>`;
+  const structureSel = document.getElementById("fee-structure-select");
+  if (structureSel) structureSel.innerHTML = `<option value="">Bitte wählen …</option>`;
+  const phaseBody = document.getElementById("fee-summary-phase-body");
+  if (phaseBody) phaseBody.innerHTML = "";
+  const phaseFoot = document.getElementById("fee-summary-phase-foot");
+  if (phaseFoot) phaseFoot.innerHTML = "";
+  feeSetText("fee-summary-master", "");
+  feeSetText("fee-summary-zone", "");
+  feeResetBasisInputs();
+  feeShowStep(1);
 }
 
 function feeResetBasisInputs() {
@@ -2704,6 +2772,136 @@ function feeResetBasisInputs() {
       el.value = "";
     }
   });
+}
+
+function feeFormatNumber(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "";
+  return String(num);
+}
+
+function feeRevenueByKx(kx) {
+  const row = __feeWizard.calcMasterRow || {};
+  const mapping = {
+    K0: row.REVENUE_K0,
+    K1: row.REVENUE_K1,
+    K2: row.REVENUE_K2,
+    K3: row.REVENUE_K3,
+    K4: row.REVENUE_K4,
+  };
+  return feeNumOrNull(mapping[kx] ?? null);
+}
+
+function feeComputePhaseRevenue(base, percent) {
+  const baseNum = feeNumOrNull(base);
+  const pctNum = feeNumOrNull(percent);
+  if (baseNum === null || pctNum === null) return null;
+  return (pctNum * baseNum) / 100;
+}
+
+function feeSyncPhaseRow(row) {
+  row.REVENUE_BASE = feeRevenueByKx(row.KX || "K0");
+  row.PHASE_REVENUE = feeComputePhaseRevenue(row.REVENUE_BASE, row.FEE_PERCENT);
+}
+
+function feeRenderPhaseTable() {
+  const tbody = document.getElementById("fee-phase-body");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  (__feeWizard.phaseRows || []).forEach((row) => {
+    const tr = document.createElement("tr");
+
+    const tdPhase = document.createElement("td");
+    tdPhase.textContent = row.PHASE_LABEL || "";
+
+    const tdBasePct = document.createElement("td");
+    tdBasePct.textContent = feeFormatNumber(row.FEE_PERCENT_BASE);
+
+    const tdKx = document.createElement("td");
+    const selKx = document.createElement("select");
+    ["K0", "K1", "K2", "K3", "K4"].forEach((kx) => {
+      const opt = document.createElement("option");
+      opt.value = kx;
+      opt.textContent = kx;
+      selKx.appendChild(opt);
+    });
+    selKx.value = row.KX || "K0";
+
+    const tdBase = document.createElement("td");
+    const baseOut = document.createElement("input");
+    baseOut.type = "number";
+    baseOut.step = "0.01";
+    baseOut.readOnly = true;
+    baseOut.value = feeFormatNumber(row.REVENUE_BASE);
+
+    const tdPct = document.createElement("td");
+    const pctInp = document.createElement("input");
+    pctInp.type = "number";
+    pctInp.step = "0.01";
+    pctInp.value = feeFormatNumber(row.FEE_PERCENT);
+
+    const tdRevenue = document.createElement("td");
+    const revenueOut = document.createElement("input");
+    revenueOut.type = "number";
+    revenueOut.step = "0.01";
+    revenueOut.readOnly = true;
+    revenueOut.value = feeFormatNumber(row.PHASE_REVENUE);
+
+    selKx.addEventListener("change", () => {
+      row.KX = selKx.value;
+      feeSyncPhaseRow(row);
+      baseOut.value = feeFormatNumber(row.REVENUE_BASE);
+      revenueOut.value = feeFormatNumber(row.PHASE_REVENUE);
+      feeRenderPhaseFooter();
+    });
+
+    pctInp.addEventListener("input", () => {
+      row.FEE_PERCENT = feeNumOrNull(pctInp.value);
+      feeSyncPhaseRow(row);
+      revenueOut.value = feeFormatNumber(row.PHASE_REVENUE);
+      feeRenderPhaseFooter();
+    });
+
+    tdKx.appendChild(selKx);
+    tdBase.appendChild(baseOut);
+    tdPct.appendChild(pctInp);
+    tdRevenue.appendChild(revenueOut);
+
+    tr.appendChild(tdPhase);
+    tr.appendChild(tdBasePct);
+    tr.appendChild(tdKx);
+    tr.appendChild(tdBase);
+    tr.appendChild(tdPct);
+    tr.appendChild(tdRevenue);
+    tbody.appendChild(tr);
+  });
+
+  feeRenderPhaseFooter();
+}
+
+function feeRenderPhaseFooter() {
+  const tfoot = document.getElementById("fee-phase-foot");
+  if (!tfoot) return;
+
+  const rows = Array.isArray(__feeWizard.phaseRows) ? __feeWizard.phaseRows : [];
+  const sum = (key) => rows.reduce((acc, row) => acc + (feeNumOrNull(row[key]) ?? 0), 0);
+
+  const totalBasePct = sum("FEE_PERCENT_BASE");
+  const totalFeePercent = sum("FEE_PERCENT");
+  const totalPhaseRevenue = sum("PHASE_REVENUE");
+
+  tfoot.innerHTML = `
+    <tr>
+      <th>Summe</th>
+      <th>${feeFormatNumber(totalBasePct)}</th>
+      <th></th>
+      <th></th>
+      <th>${feeFormatNumber(totalFeePercent)}</th>
+      <th>${feeFormatNumber(totalPhaseRevenue)}</th>
+    </tr>
+  `;
 }
 
 function feeRenderGroupDropdown() {
@@ -2760,6 +2958,80 @@ function feeRenderZoneDropdown() {
   });
 }
 
+function feeSetText(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = value == null ? "" : String(value);
+}
+
+function feeCurrentZoneLabel() {
+  const zoneId = String(__feeWizard.calcMasterRow?.ZONE_ID || "");
+  const zone = (__feeWizard.feeZones || []).find((row) => String(row.ID) === zoneId);
+  return feeLabel(zone);
+}
+
+function feeRenderStructureDropdown() {
+  const sel = document.getElementById("fee-structure-select");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  (__feeWizard.structureRows || []).forEach((row) => {
+    const opt = document.createElement("option");
+    opt.value = row.ID;
+    opt.textContent = `${row.NAME_SHORT || ""} – ${row.NAME_LONG || ""}`.replace(/\s+–\s*$/, "");
+    sel.appendChild(opt);
+  });
+}
+
+async function feeLoadStructureRows(projectId) {
+  const pid = String(projectId || "").trim();
+  __feeWizard.structureRows = [];
+  if (!pid) {
+    feeRenderStructureDropdown();
+    return;
+  }
+  const res = await fetch(`${API_BASE}/projekte/${encodeURIComponent(pid)}/structure`);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || "Fehler beim Laden der Projektstruktur");
+  __feeWizard.structureRows = Array.isArray(json.data) ? json.data : [];
+  feeRenderStructureDropdown();
+}
+
+function feeRenderOverview() {
+  const row = __feeWizard.calcMasterRow || {};
+  const masterText = [row.NAME_SHORT, row.NAME_LONG].filter(Boolean).join(" | ");
+  const zoneText = [feeCurrentZoneLabel(), row.ZONE_PERCENT != null && row.ZONE_PERCENT !== "" ? `${row.ZONE_PERCENT} %` : ""]
+    .filter(Boolean)
+    .join(" | ");
+
+  feeSetText("fee-summary-master", masterText);
+  feeSetText("fee-summary-zone", zoneText);
+
+  const tbody = document.getElementById("fee-summary-phase-body");
+  const tfoot = document.getElementById("fee-summary-phase-foot");
+  if (!tbody || !tfoot) return;
+  tbody.innerHTML = "";
+
+  (__feeWizard.phaseRows || []).forEach((phase) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(phase.PHASE_LABEL || "")}</td>
+      <td>${escapeHtml(feeFormatNumber(phase.FEE_PERCENT))}</td>
+      <td>${escapeHtml(feeFormatNumber(phase.PHASE_REVENUE))}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const totalPercent = (__feeWizard.phaseRows || []).reduce((acc, rowItem) => acc + (feeNumOrNull(rowItem.FEE_PERCENT) ?? 0), 0);
+  const totalRevenue = (__feeWizard.phaseRows || []).reduce((acc, rowItem) => acc + (feeNumOrNull(rowItem.PHASE_REVENUE) ?? 0), 0);
+  tfoot.innerHTML = `
+    <tr>
+      <th>Summe</th>
+      <th>${escapeHtml(feeFormatNumber(totalPercent))}</th>
+      <th>${escapeHtml(feeFormatNumber(totalRevenue))}</th>
+    </tr>
+  `;
+}
+
 async function feeLoadGroups() {
   const res = await fetch(`${API_BASE}/stammdaten/fee-groups`);
   const json = await res.json().catch(() => ({}));
@@ -2811,6 +3083,7 @@ function feeSetInputValue(id, value) {
 function feePopulateBasis(row) {
   if (!row) return;
   __feeWizard.calcMasterId = row.ID ? String(row.ID) : "";
+  __feeWizard.calcMasterRow = row;
 
   feeSetInputValue("fee-calc-id", row.ID);
   feeSetInputValue("fee-basis-paragraph", row.NAME_SHORT);
@@ -2881,23 +3154,53 @@ async function feeSaveBasis() {
   return json.data || null;
 }
 
-async function feeInitWizard() {
-  __feeWizard.step = 1;
-  __feeWizard.feeGroups = [];
-  __feeWizard.feeMasters = [];
-  __feeWizard.feeZones = [];
-  __feeWizard.projects = [];
-  __feeWizard.selectedFeeGroupId = "";
-  __feeWizard.selectedFeeMasterId = "";
-  __feeWizard.calcMasterId = "";
+async function feeInitPhases() {
+  const calcId = String(__feeWizard.calcMasterId || "").trim();
+  if (!calcId) throw new Error("Keine Honorarberechnung ausgewählt.");
 
-  feeSetMsg("", "info");
-  const groupSel = document.getElementById("fee-group-select");
-  if (groupSel) groupSel.value = "";
-  const masterSel = document.getElementById("fee-master-select");
-  if (masterSel) masterSel.innerHTML = `<option value="">Bitte zuerst Honorarordnung wÃ¤hlen â€¦</option>`;
-  feeResetBasisInputs();
-  feeShowStep(1);
+  const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-masters/${encodeURIComponent(calcId)}/phases/init`, {
+    method: "POST",
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || "Fehler beim Laden der Leistungsphasen");
+  __feeWizard.phaseRows = Array.isArray(json.data) ? json.data : [];
+  feeRenderPhaseTable();
+}
+
+async function feeSavePhases() {
+  const rows = Array.isArray(__feeWizard.phaseRows) ? __feeWizard.phaseRows : [];
+  for (const row of rows) {
+    const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-phases/${encodeURIComponent(row.ID)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        KX: row.KX,
+        FEE_PERCENT: row.FEE_PERCENT,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler beim Speichern der Leistungsphasen");
+    Object.assign(row, json.data || {});
+  }
+  feeRenderPhaseTable();
+}
+
+async function feeDeleteDraftIfAny() {
+  if (!__feeWizard.calcMasterId) return true;
+  try {
+    const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-masters/${encodeURIComponent(__feeWizard.calcMasterId)}`, {
+      method: "DELETE",
+      keepalive: true,
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("feeDeleteDraftIfAny error", err);
+    return false;
+  }
+}
+
+async function feeInitWizard() {
+  feeResetWizardState();
   await feeLoadGroups();
 }
 
@@ -2930,6 +3233,7 @@ document.getElementById("fee-next-1")?.addEventListener("click", async () => {
     __feeWizard.selectedFeeMasterId = feeMasterId;
     feeSetMsg("Anlegen der Honorarberechnung â€¦", "info");
     const row = await feeCreateCalculationMaster();
+    __feeCancelOnUnload = true;
     await Promise.all([feeLoadProjects(), feeLoadZonesByMaster(feeMasterId)]);
     feePopulateBasis(row);
     feeShowStep(2);
@@ -2953,6 +3257,96 @@ document.getElementById("fee-save-2")?.addEventListener("click", async () => {
     feeSetMsg("Fehler: " + (err.message || err), "error");
   }
 });
+
+document.getElementById("fee-next-2")?.addEventListener("click", async () => {
+  try {
+    feeSetMsg("Speichere Basisdaten â€¦", "info");
+    const row = await feeSaveBasis();
+    feePopulateBasis(row);
+    feeSetMsg("Lade Leistungsphasen â€¦", "info");
+    await feeInitPhases();
+    feeShowStep(3);
+    feeSetMsg("Leistungsphasen geladen.", "success");
+  } catch (err) {
+    feeSetMsg("Fehler: " + (err.message || err), "error");
+  }
+});
+
+document.getElementById("fee-prev-3")?.addEventListener("click", () => {
+  feeShowStep(2);
+});
+
+document.getElementById("fee-save-3")?.addEventListener("click", async () => {
+  try {
+    feeSetMsg("Speichere Leistungsphasen â€¦", "info");
+    await feeSavePhases();
+    feeSetMsg("Leistungsphasen gespeichert.", "success");
+  } catch (err) {
+    feeSetMsg("Fehler: " + (err.message || err), "error");
+  }
+});
+
+document.getElementById("fee-next-3")?.addEventListener("click", () => {
+  feeSavePhases()
+    .then(() => {
+      feeShowStep(4);
+      feeSetMsg("Zu- und Abschläge können später ergänzt werden.", "info");
+    })
+    .catch((err) => {
+      feeSetMsg("Fehler: " + (err.message || err), "error");
+    });
+});
+
+document.getElementById("fee-prev-4")?.addEventListener("click", () => {
+  feeShowStep(3);
+});
+
+document.getElementById("fee-next-4")?.addEventListener("click", async () => {
+  try {
+    await feeSavePhases();
+    await feeLoadStructureRows(__feeWizard.calcMasterRow?.PROJECT_ID);
+    feeRenderOverview();
+    feeShowStep(5);
+    feeSetMsg("Übersicht geladen.", "success");
+  } catch (err) {
+    feeSetMsg("Fehler: " + (err.message || err), "error");
+  }
+});
+
+document.getElementById("fee-prev-5")?.addEventListener("click", () => {
+  feeShowStep(4);
+});
+
+document.getElementById("fee-finish")?.addEventListener("click", async () => {
+  try {
+    const calcId = String(__feeWizard.calcMasterId || "").trim();
+    const fatherId = String(document.getElementById("fee-structure-select")?.value || "").trim();
+    const projectId = String(__feeWizard.calcMasterRow?.PROJECT_ID || "").trim();
+    if (!calcId) throw new Error("Keine Honorarberechnung ausgewählt.");
+    if (!fatherId) throw new Error("Bitte ein übergeordnetes Projektelement auswählen.");
+    if (!projectId) throw new Error("Bitte zuerst ein Projekt in der Basis auswählen.");
+
+    feeSetMsg("Erzeuge Projektstruktur aus HOAI …", "info");
+    const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-masters/${encodeURIComponent(calcId)}/add-to-project-structure`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ father_id: Number.parseInt(fatherId, 10) }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler beim Anlegen der Projektstruktur");
+
+    __feeCancelOnUnload = false;
+    feeSetMsg(json.message || "Projektstruktur wurde angelegt.", "success");
+
+    wireProjektstrukturNeu();
+    showView("view-projektstruktur");
+    await psLoadProjectStructure(projectId);
+    psMsg(json.message || "HOAI-Struktur wurde angelegt.", "success");
+  } catch (err) {
+    feeSetMsg("Fehler: " + (err.message || err), "error");
+  }
+});
+
 const __prjWizard = {
   step: 1,
   employees: [],
