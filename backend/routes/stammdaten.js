@@ -608,6 +608,74 @@ module.exports = (supabase) => {
     }
   });
 
+  router.post("/fee-calculation-masters/:id/phases/save", async (req, res) => {
+    const idRaw = (req.params.id || "").toString().trim();
+    const id = idRaw ? Number.parseInt(idRaw, 10) : null;
+    if (!id) {
+      return res.status(400).json({ error: "id is required" });
+    }
+
+    try {
+      const rowsInput = Array.isArray(req.body?.rows) ? req.body.rows : [];
+      if (!rowsInput.length) {
+        const rows = await loadPhaseRowsWithLabels(id);
+        return res.json({ data: rows });
+      }
+
+      const { data: calcMaster, error: calcErr } = await supabase
+        .from("FEE_CALCULATION_MASTER")
+        .select("ID, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4")
+        .eq("ID", id)
+        .single();
+      if (calcErr) {
+        return res.status(500).json({ error: calcErr.message });
+      }
+      if (!calcMaster) {
+        return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
+      }
+
+      const { data: existingRows, error: rowsErr } = await supabase
+        .from("FEE_CALCULATION_PHASE")
+        .select("ID, FEE_MASTER_ID")
+        .eq("FEE_MASTER_ID", id);
+      if (rowsErr) {
+        return res.status(500).json({ error: rowsErr.message });
+      }
+
+      const allowedIds = new Set((existingRows || []).map((row) => Number(row.ID)));
+      const updates = rowsInput
+        .map((row) => ({
+          id: Number.parseInt(String(row?.ID || ""), 10),
+          kx: String(row?.KX || "K0").trim().toUpperCase(),
+          feePercent: row?.FEE_PERCENT ?? null,
+        }))
+        .filter((row) => Number.isFinite(row.id) && allowedIds.has(row.id));
+
+      await Promise.all(
+        updates.map(async (row) => {
+          const revenueBase = getRevenueByKx(calcMaster, row.kx);
+          const phaseRevenue = calculatePhaseRevenue(row.feePercent, revenueBase);
+          const { error: updateErr } = await supabase
+            .from("FEE_CALCULATION_PHASE")
+            .update({
+              KX: row.kx,
+              REVENUE_BASE: revenueBase,
+              FEE_PERCENT: row.feePercent,
+              PHASE_REVENUE: phaseRevenue,
+            })
+            .eq("ID", row.id)
+            .eq("FEE_MASTER_ID", id);
+          if (updateErr) throw new Error(updateErr.message);
+        })
+      );
+
+      const rows = await loadPhaseRowsWithLabels(id);
+      return res.json({ data: rows });
+    } catch (err) {
+      return res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
   router.delete("/fee-calculation-masters/:id", async (req, res) => {
     const idRaw = (req.params.id || "").toString().trim();
     const id = idRaw ? Number.parseInt(idRaw, 10) : null;
@@ -652,30 +720,34 @@ module.exports = (supabase) => {
         return res.status(400).json({ error: "Für die Honorarberechnung ist kein Projekt ausgewählt." });
       }
 
-      const { data: project, error: projectErr } = await supabase
-        .from("PROJECT")
-        .select("ID, TENANT_ID")
-        .eq("ID", calcMaster.PROJECT_ID)
-        .single();
-      if (projectErr) return res.status(500).json({ error: projectErr.message });
-      if (!project) return res.status(404).json({ error: "Projekt nicht gefunden" });
-
-      const { data: father, error: fatherErr } = await supabase
-        .from("PROJECT_STRUCTURE")
-        .select("ID, PROJECT_ID, NAME_SHORT, NAME_LONG, EXTRAS_PERCENT")
-        .eq("ID", fatherId)
-        .single();
+      const [
+        { data: project, error: projectErr },
+        { data: father, error: fatherErr },
+        { data: calcPhases, error: calcPhasesErr },
+      ] = await Promise.all([
+        supabase
+          .from("PROJECT")
+          .select("ID, TENANT_ID")
+          .eq("ID", calcMaster.PROJECT_ID)
+          .single(),
+        supabase
+          .from("PROJECT_STRUCTURE")
+          .select("ID, PROJECT_ID, NAME_SHORT, NAME_LONG, EXTRAS_PERCENT")
+          .eq("ID", fatherId)
+          .single(),
+        supabase
+          .from("FEE_CALCULATION_PHASE")
+          .select("ID, FEE_PHASE_ID, FEE_PERCENT, PHASE_REVENUE")
+          .eq("FEE_MASTER_ID", id)
+          .order("FEE_PHASE_ID", { ascending: true }),
+      ]);
       if (fatherErr) return res.status(500).json({ error: fatherErr.message });
       if (!father) return res.status(404).json({ error: "Übergeordnetes Projektelement nicht gefunden" });
       if (String(father.PROJECT_ID) !== String(calcMaster.PROJECT_ID)) {
         return res.status(400).json({ error: "Das übergeordnete Projektelement gehört nicht zum ausgewählten Projekt." });
       }
-
-      const { data: calcPhases, error: calcPhasesErr } = await supabase
-        .from("FEE_CALCULATION_PHASE")
-        .select("ID, FEE_PHASE_ID, FEE_PERCENT, PHASE_REVENUE")
-        .eq("FEE_MASTER_ID", id)
-        .order("FEE_PHASE_ID", { ascending: true });
+      if (projectErr) return res.status(500).json({ error: projectErr.message });
+      if (!project) return res.status(404).json({ error: "Projekt nicht gefunden" });
       if (calcPhasesErr) return res.status(500).json({ error: calcPhasesErr.message });
       if (!Array.isArray(calcPhases) || calcPhases.length === 0) {
         return res.status(400).json({ error: "Es sind keine Leistungsphasen zum Übertragen vorhanden." });
@@ -734,22 +806,19 @@ module.exports = (supabase) => {
       let movedToName = "";
       const firstCreated = Array.isArray(createdRows) && createdRows.length ? createdRows[0] : null;
       if (firstCreated) {
-        const { data: tecRows, error: tecErr } = await supabase
+        const { data: movedTecRows, error: moveErr } = await supabase
           .from("TEC")
-          .select("ID")
-          .eq("STRUCTURE_ID", fatherId);
-        if (tecErr) return res.status(500).json({ error: tecErr.message });
+          .update({ STRUCTURE_ID: firstCreated.ID })
+          .eq("STRUCTURE_ID", fatherId)
+          .select("ID");
+        if (moveErr) return res.status(500).json({ error: moveErr.message });
 
-        movedTecCount = Array.isArray(tecRows) ? tecRows.length : 0;
+        movedTecCount = Array.isArray(movedTecRows) ? movedTecRows.length : 0;
         if (movedTecCount > 0) {
-          const { error: moveErr } = await supabase
-            .from("TEC")
-            .update({ STRUCTURE_ID: firstCreated.ID })
-            .eq("STRUCTURE_ID", fatherId);
-          if (moveErr) return res.status(500).json({ error: moveErr.message });
-
-          await recomputeStructureAggregates(fatherId);
-          await recomputeStructureAggregates(firstCreated.ID);
+          await Promise.all([
+            recomputeStructureAggregates(fatherId),
+            recomputeStructureAggregates(firstCreated.ID),
+          ]);
           movedToName = [firstCreated.NAME_SHORT, firstCreated.NAME_LONG].filter(Boolean).join(": ");
         }
       }

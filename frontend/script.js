@@ -3169,19 +3169,27 @@ async function feeInitPhases() {
 
 async function feeSavePhases() {
   const rows = Array.isArray(__feeWizard.phaseRows) ? __feeWizard.phaseRows : [];
-  for (const row of rows) {
-    const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-phases/${encodeURIComponent(row.ID)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+  if (!rows.length) {
+    feeRenderPhaseTable();
+    return;
+  }
+  const calcId = String(__feeWizard.calcMasterId || "").trim();
+  if (!calcId) throw new Error("Keine Honorarberechnung ausgewählt.");
+
+  const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-masters/${encodeURIComponent(calcId)}/phases/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      rows: rows.map((row) => ({
+        ID: row.ID,
         KX: row.KX,
         FEE_PERCENT: row.FEE_PERCENT,
-      }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json.error || "Fehler beim Speichern der Leistungsphasen");
-    Object.assign(row, json.data || {});
-  }
+      })),
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || "Fehler beim Speichern der Leistungsphasen");
+  __feeWizard.phaseRows = Array.isArray(json.data) ? json.data : [];
   feeRenderPhaseTable();
 }
 
