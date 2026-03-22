@@ -160,6 +160,7 @@ module.exports = (supabase) => {
       .from("TEC")
       .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID")
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .single();
 
     if (exErr || !existing) {
@@ -415,6 +416,7 @@ router.get("/project/:id", async (req, res) => {
 		  POSTING_DESCRIPTION,
 		  EMPLOYEE:EMPLOYEE_ID(SHORT_NAME)
 		`)
+		.eq("TENANT_ID", req.tenantId)
 		.eq("PROJECT_ID", projectId)
 		.order("DATE_VOUCHER", { ascending: true });
 

@@ -389,7 +389,7 @@ module.exports = (supabase) => {
       FEE_MASTER_ID: feeMasterId,
       NAME_SHORT: feeMaster.NAME_SHORT || null,
       NAME_LONG: feeMaster.NAME_LONG || null,
-      TENANT_ID: req.body.TENANT_ID || null,
+      TENANT_ID: req.tenantId ?? null,
     };
 
     const { data, error } = await supabase
@@ -418,6 +418,7 @@ module.exports = (supabase) => {
         .from("FEE_CALCULATION_MASTER")
         .select("ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT")
         .eq("ID", id)
+        .eq("TENANT_ID", req.tenantId)
         .single();
       if (existingErr) {
         return res.status(500).json({ error: existingErr.message });
@@ -466,6 +467,7 @@ module.exports = (supabase) => {
         .from("FEE_CALCULATION_MASTER")
         .update(updateRow)
         .eq("ID", id)
+        .eq("TENANT_ID", req.tenantId)
         .select("*")
         .single();
 
@@ -491,6 +493,7 @@ module.exports = (supabase) => {
         .from("FEE_CALCULATION_MASTER")
         .select("ID, FEE_MASTER_ID, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, TENANT_ID")
         .eq("ID", id)
+        .eq("TENANT_ID", req.tenantId)
         .single();
       if (calcErr) {
         return res.status(500).json({ error: calcErr.message });
@@ -628,6 +631,7 @@ module.exports = (supabase) => {
         .from("FEE_CALCULATION_MASTER")
         .select("ID, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4")
         .eq("ID", id)
+        .eq("TENANT_ID", req.tenantId)
         .single();
       if (calcErr) {
         return res.status(500).json({ error: calcErr.message });
@@ -693,7 +697,8 @@ module.exports = (supabase) => {
       const { error: masterErr } = await supabase
         .from("FEE_CALCULATION_MASTER")
         .delete()
-        .eq("ID", id);
+        .eq("ID", id)
+        .eq("TENANT_ID", req.tenantId);
       if (masterErr) return res.status(500).json({ error: masterErr.message });
 
       return res.json({ success: true });
@@ -715,6 +720,7 @@ module.exports = (supabase) => {
         .from("FEE_CALCULATION_MASTER")
         .select("ID, PROJECT_ID")
         .eq("ID", id)
+        .eq("TENANT_ID", req.tenantId)
         .single();
       if (calcErr) return res.status(500).json({ error: calcErr.message });
       if (!calcMaster) return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
@@ -847,6 +853,7 @@ module.exports = (supabase) => {
     const { data, error } = await supabase
       .from("COMPANY")
       .select("ID, COMPANY_NAME_1")
+      .eq("TENANT_ID", req.tenantId)
       .order("COMPANY_NAME_1", { ascending: true, nullsFirst: false });
 
     if (error) return res.status(500).json({ error: error.message });
@@ -890,7 +897,7 @@ module.exports = (supabase) => {
       CITY: city.trim(),
       COUNTRY_ID: country_id.trim(),
       "TAX-ID": (tax_id || "").trim() || null,
-      TENANT_ID: req.body.TENANT_ID || null,
+      TENANT_ID: req.tenantId ?? null,
     };
 
     const { data, error } = await supabase
@@ -941,7 +948,7 @@ module.exports = (supabase) => {
       CUSTOMER_NUMBER: (customer_number || "").trim() || null,
       "TAX-ID": (tax_id || "").trim() || null,
       BUYER_REFERENCE: (buyer_reference || "").trim() || null,
-      TENANT_ID: req.body.TENANT_ID || null,
+      TENANT_ID: req.tenantId ?? null,
     };
 
     const { data, error } = await supabase
@@ -968,7 +975,7 @@ module.exports = (supabase) => {
     const insertRow = {
       NAME_SHORT: name_short.trim(),
       NAME_LONG: (name_long || "").trim() || null,
-      TENANT_ID: req.body.TENANT_ID || null,
+      TENANT_ID: req.tenantId ?? null,
     };
 
     // Try ROLE first (most likely for "Rollen"), then fall back to ADDRESS
@@ -1046,6 +1053,7 @@ router.get("/genders", async (req, res) => {
     const { data, error } = await supabase
       .from("ADDRESS")
       .select("ID, ADDRESS_NAME_1")
+      .eq("TENANT_ID", req.tenantId)
       .ilike("ADDRESS_NAME_1", `%${q}%`)
       .limit(20);
 
@@ -1063,6 +1071,7 @@ router.get("/genders", async (req, res) => {
     const { data: addresses, error: aErr } = await supabase
       .from("ADDRESS")
       .select('ID, ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, CUSTOMER_NUMBER, "TAX-ID", BUYER_REFERENCE')
+      .eq("TENANT_ID", req.tenantId)
       .order("ADDRESS_NAME_1", { ascending: true })
       .limit(limit);
 
@@ -1125,6 +1134,7 @@ router.get("/genders", async (req, res) => {
       .from("ADDRESS")
       .update(updateRow)
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .select('*')
       .single();
 
@@ -1165,6 +1175,7 @@ router.get("/genders", async (req, res) => {
     const { data, error } = await supabase
       .from("CONTACTS")
       .select("ID, FIRST_NAME, LAST_NAME, ADDRESS_ID")
+      .eq("TENANT_ID", req.tenantId)
       .eq("ADDRESS_ID", parsedAddressId)
       .or(`FIRST_NAME.ilike.%${q}%,LAST_NAME.ilike.%${q}%`)
       .order("LAST_NAME", { ascending: true })
@@ -1184,6 +1195,7 @@ router.get("/genders", async (req, res) => {
     const { data: contacts, error: cErr } = await supabase
       .from("CONTACTS")
       .select("ID, TITLE, FIRST_NAME, LAST_NAME, EMAIL, MOBILE, SALUTATION_ID, GENDER_ID, ADDRESS_ID")
+      .eq("TENANT_ID", req.tenantId)
       .order("LAST_NAME", { ascending: true })
       .limit(limit);
     if (cErr) return res.status(500).json({ error: cErr.message });
@@ -1246,6 +1258,7 @@ router.get("/genders", async (req, res) => {
       .from("CONTACTS")
       .update(updateRow)
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .select('*')
       .single();
     if (error) return res.status(500).json({ error: error.message });
@@ -1355,7 +1368,7 @@ router.get("/genders", async (req, res) => {
       SALUTATION_ID: parsedSalutationId,
       GENDER_ID: parsedGenderId,
       ADDRESS_ID: parsedAddressId,
-      TENANT_ID: req.body.TENANT_ID || null,
+      TENANT_ID: req.tenantId ?? null,
     };
 
     const { data, error } = await supabase.from("CONTACTS").insert([insertRow]);

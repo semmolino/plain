@@ -26,13 +26,26 @@ function defaultTheme() {
 module.exports = (supabase) => {
   const router = express.Router();
 
-  // GET /api/document-templates?company_id=..&doc_type=INVOICE
+  async function resolveCompanyId(tenantId) {
+    const { data, error } = await supabase
+      .from("COMPANY")
+      .select("ID")
+      .eq("TENANT_ID", tenantId)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.ID ?? null;
+  }
+
+  // GET /api/document-templates?doc_type=INVOICE
   router.get("/", async (req, res) => {
-    const companyId = parseInt(String(req.query.company_id || ""), 10);
     const docType = String(req.query.doc_type || "").toUpperCase().trim();
 
-    if (!companyId || Number.isNaN(companyId)) return res.status(400).json({ error: "company_id is required" });
     if (!docType) return res.status(400).json({ error: "doc_type is required" });
+
+    let companyId;
+    try { companyId = await resolveCompanyId(req.tenantId); } catch (e) { return res.status(500).json({ error: e.message }); }
+    if (!companyId) return res.status(404).json({ error: "Kein Unternehmen für diesen Mandanten gefunden." });
 
     const { data, error } = await supabase
       .from("DOCUMENT_TEMPLATE")
@@ -54,15 +67,17 @@ module.exports = (supabase) => {
 
   // POST /api/document-templates
   router.post("/", async (req, res) => {
-    const { company_id, name, doc_type, layout_key, theme_json, logo_asset_id } = req.body || {};
+    const { name, doc_type, layout_key, theme_json, logo_asset_id } = req.body || {};
 
-    const companyId = parseInt(String(company_id || ""), 10);
     const docType = String(doc_type || "").toUpperCase().trim();
     const layoutKey = String(layout_key || "modern_a").trim();
     const tplName = String(name || "").trim() || `${docType} Vorlage`;
 
-    if (!companyId || Number.isNaN(companyId)) return res.status(400).json({ error: "company_id is required" });
     if (!docType) return res.status(400).json({ error: "doc_type is required" });
+
+    let companyId;
+    try { companyId = await resolveCompanyId(req.tenantId); } catch (e) { return res.status(500).json({ error: e.message }); }
+    if (!companyId) return res.status(404).json({ error: "Kein Unternehmen für diesen Mandanten gefunden." });
 
     const theme = theme_json && typeof theme_json === "object" ? theme_json : defaultTheme();
     const logoId = logo_asset_id ? parseInt(String(logo_asset_id), 10) : null;

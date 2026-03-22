@@ -35,7 +35,8 @@ module.exports = (supabase) => {
         "MAIL": body.email,
         "MOBILE": body.mobile,
         "PERSONNEL_NUMBER": body.personnel_number,
-        "GENDER_ID": body.gender_id
+        "GENDER_ID": body.gender_id,
+        "TENANT_ID": req.tenantId ?? null,
       }]);
 
     if (error) {
@@ -49,6 +50,7 @@ router.get("/", async (req, res) => {
   const { data, error } = await supabase
     .from("EMPLOYEE")
     .select("ID, SHORT_NAME")
+    .eq("TENANT_ID", req.tenantId)
     .order("SHORT_NAME", { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
@@ -65,6 +67,7 @@ router.get("/", async (req, res) => {
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
       .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID")
+      .eq("TENANT_ID", req.tenantId)
       .order("SHORT_NAME", { ascending: true })
       .limit(limit);
 
@@ -112,6 +115,7 @@ router.get("/", async (req, res) => {
       .from("EMPLOYEE")
       .update(updateObj)
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID")
       .single();
 
@@ -141,6 +145,7 @@ router.get("/search", async (req, res) => {
     .from("EMPLOYEE")
     // Select only columns that exist in the EMPLOYEE table (avoid schema mismatches)
     .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+    .eq("TENANT_ID", req.tenantId)
     .or(`SHORT_NAME.ilike.%${q}%,FIRST_NAME.ilike.%${q}%,LAST_NAME.ilike.%${q}%`)
     .order("SHORT_NAME", { ascending: true })
     .limit(20);

@@ -533,6 +533,7 @@ module.exports = (supabase) => {
       .select(
         "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT"
       )
+      .eq("TENANT_ID", req.tenantId)
       .order("INVOICE_DATE", { ascending: false })
       .limit(limit);
 

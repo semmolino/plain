@@ -126,6 +126,7 @@ module.exports = (supabase) => {
         CONTRACT_ID: contractId,
         PURPOSE_OF_PAYMENT: String(b.purpose_of_payment || "").trim() || null,
         COMMENT: String(b.comment || "").trim() || null,
+        TENANT_ID: req.tenantId ?? null,
         // Not used yet in UI:
         AMOUNT_PAYED_EXTRAS_NET: null,
       };

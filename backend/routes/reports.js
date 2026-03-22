@@ -17,9 +17,9 @@ module.exports = (supabase) => {
   const router = express.Router();
 
   function requireTenantId(req, res) {
-    const tenantId = req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) {
-      res.status(400).json({ error: "Missing required query param: tenant_id" });
+      res.status(401).json({ error: "Kein Mandant für diesen Benutzer hinterlegt." });
       return null;
     }
     return tenantId;

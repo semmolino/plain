@@ -5,17 +5,35 @@ module.exports = (supabase) => {
 
   const currentYear = () => new Date().getFullYear();
 
-  // Get number ranges for a company/year
+  // Resolve the tenant's company ID from the JWT tenant_id
+  async function resolveCompanyId(tenantId) {
+    const { data, error } = await supabase
+      .from("COMPANY")
+      .select("ID")
+      .eq("TENANT_ID", tenantId)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.ID ?? null;
+  }
+
+  // Get number ranges for the authenticated tenant's company/year
   // - GLOBAL: shared counter for INVOICE/PARTIAL_PAYMENT
   // - PROJECT: separate counter for projects
   router.get("/", async (req, res) => {
-    const companyId = req.query.company_id;
     const year = parseInt(String(req.query.year || currentYear()), 10);
 
-    if (!companyId) return res.status(400).json({ error: "company_id ist erforderlich" });
     if (!Number.isFinite(year) || year < 2000 || year > 3000) {
       return res.status(400).json({ error: "Ungültiges Jahr" });
     }
+
+    let companyId;
+    try {
+      companyId = await resolveCompanyId(req.tenantId);
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+    if (!companyId) return res.status(404).json({ error: "Kein Unternehmen für diesen Mandanten gefunden." });
 
     const { data, error } = await supabase
       .from("DOCUMENT_NUMBER_RANGE")
@@ -53,22 +71,19 @@ module.exports = (supabase) => {
     return res.json({ year, next_counter: nextCounter, project_next_counter: projectNextCounter });
   });
 
-  // Upsert the ranges
+  // Upsert the ranges for the authenticated tenant's company
   // Body:
-  // - company_id (required)
   // - year (optional)
   // - next_counter (required, 1..9999) => GLOBAL
   // - project_next_counter (optional, 1..999) => PROJECT
   router.post("/set", async (req, res) => {
     const b = req.body || {};
-    const companyId = b.company_id;
     const year = parseInt(String(b.year || currentYear()), 10);
     const nextCounter = parseInt(String(b.next_counter || ""), 10);
 
     const projectProvided = b.project_next_counter !== undefined && b.project_next_counter !== null && String(b.project_next_counter) !== "";
     const projectNextCounter = projectProvided ? parseInt(String(b.project_next_counter), 10) : null;
 
-    if (!companyId) return res.status(400).json({ error: "company_id ist erforderlich" });
     if (!Number.isFinite(year) || year < 2000 || year > 3000) {
       return res.status(400).json({ error: "Ungültiges Jahr" });
     }
@@ -78,6 +93,14 @@ module.exports = (supabase) => {
     if (projectProvided && (!Number.isFinite(projectNextCounter) || projectNextCounter < 1 || projectNextCounter > 999)) {
       return res.status(400).json({ error: "project_next_counter muss zwischen 1 und 999 liegen" });
     }
+
+    let companyId;
+    try {
+      companyId = await resolveCompanyId(req.tenantId);
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+    if (!companyId) return res.status(404).json({ error: "Kein Unternehmen für diesen Mandanten gefunden." });
 
     const upsert = async (docType, counter) => {
       const { error } = await supabase

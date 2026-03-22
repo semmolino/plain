@@ -75,6 +75,63 @@
   </div>
 </div>
 
+<!-- Account / Settings -->
+<div class="view hidden" id="view-account">
+  <header class="topbar">
+    <div class="topbar-title">
+      <div class="topbar-greeting">Konto</div>
+      <div class="topbar-subtitle">Einstellungen</div>
+    </div>
+    <button class="btn-back icon-btn" type="button" aria-label="Zurück"><span class="icon">←</span></button>
+  </header>
+
+  <div class="card" style="max-width:480px; margin:24px auto;">
+    <div class="card-title">Profil</div>
+
+    <div class="form-group">
+      <label for="acc-email">E-Mail-Adresse</label>
+      <input id="acc-email" type="email" autocomplete="email" />
+    </div>
+
+    <div class="card-title" style="margin-top:20px">Firmenname</div>
+    <div class="form-group">
+      <label for="acc-company">Firmenname</label>
+      <input id="acc-company" type="text" autocomplete="organization" />
+    </div>
+
+    <div class="card-title" style="margin-top:20px">Passwort ändern</div>
+    <div class="form-group">
+      <label for="acc-password">Neues Passwort</label>
+      <input id="acc-password" type="password" autocomplete="new-password" placeholder="Leer lassen, um nicht zu ändern" />
+    </div>
+    <div class="form-group">
+      <label for="acc-password2">Passwort bestätigen</label>
+      <input id="acc-password2" type="password" autocomplete="new-password" />
+    </div>
+
+    <button id="acc-save" type="button" class="btn-primary" style="margin-top:8px">Speichern</button>
+    <div class="message" id="acc-msg" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card" style="max-width:480px; margin:24px auto;">
+    <div class="card-title">Team</div>
+    <p class="card-subtitle" style="margin-bottom:12px">Teammitglieder einladen – sie erhalten Zugriff auf denselben Mandanten.</p>
+
+    <div style="display:flex; gap:8px; margin-bottom:16px;">
+      <input id="team-invite-email" type="email" placeholder="E-Mail-Adresse" style="flex:1" />
+      <button id="team-invite-btn" type="button" class="btn-primary">Einladen</button>
+    </div>
+    <div class="message" id="team-msg" style="margin-bottom:12px"></div>
+
+    <table class="rep-structure-table" id="team-table" style="width:100%">
+      <thead>
+        <tr><th>E-Mail</th><th>Zuletzt angemeldet</th><th></th></tr>
+      </thead>
+      <tbody id="team-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- Dashboard / main -->
 <div class="view" id="main-menu">
   <header class="topbar">
@@ -82,8 +139,8 @@
       <div class="topbar-greeting">PlaIn</div>
       <div class="topbar-subtitle">Projektsteuerung</div>
     </div>
-    <button class="icon-btn" id="btn-notifications" type="button" aria-label="Benachrichtigungen">
-      <span class="icon">🔔</span>
+    <button class="icon-btn" id="btn-account" type="button" aria-label="Konto" title="Kontoeinstellungen">
+      <span class="icon">⚙</span>
     </button>
     <button class="icon-btn" id="btn-logout" type="button" aria-label="Abmelden" title="Abmelden">
       <span class="icon">⏏</span>
@@ -95,16 +152,6 @@
     <input id="dash-search" type="search" placeholder="Suchen …" />
   </div>
   <div class="search-suggest hidden" id="dash-search-suggest" aria-label="Suchvorschläge"></div>
-
-  <!-- Tenant config (shown when tenant_id not yet stored) -->
-  <div class="card dash-config-panel" id="dash-config-panel">
-    <div class="card-title">Mandant auswählen</div>
-    <div class="card-subtitle" style="margin-bottom:8px">TENANT_ID eingeben, um das Dashboard zu laden.</div>
-    <div class="dash-config-row">
-      <input id="dash-tenant-input" type="number" step="1" placeholder="TENANT_ID" />
-      <button id="dash-tenant-save" type="button">Laden</button>
-    </div>
-  </div>
 
   <!-- KPI Strip -->
   <section class="card kpi-card" id="dash-kpi-section">
@@ -330,10 +377,6 @@
   <!-- Config panel -->
   <div class="card dash-config-panel" id="rep-config-panel">
     <div class="card-title">Projekt &amp; Filter</div>
-    <div class="dash-config-row">
-      <label>Mandant</label>
-      <input id="rep-tenant-id" type="number" step="1" placeholder="TENANT_ID" style="max-width:160px" />
-    </div>
     <div class="dash-config-row autocomplete-container" style="position:relative">
       <label>Projekt</label>
       <input id="rep-project" type="text" autocomplete="off" placeholder="Projekt suchen …" style="flex:1" />
@@ -488,13 +531,6 @@
 <div class="view hidden" id="view-nummernkreise">
   <h2>Nummernkreise</h2>
 
-  <div class="form-group">
-    <label for="nr-company">Unternehmen</label>
-    <select id="nr-company">
-      <option value="">Bitte wählen …</option>
-    </select>
-  </div>
-
   <p class="muted">Aktuelle Formate (fix): <strong>RE-YYYY-CCCC</strong> (global für Rechnungen &amp; Abschlagsrechnungen, CCCC = 4-stellig) &nbsp;|&nbsp; <strong>P-YY-CCC</strong> (Projekt, CCC = 3-stellig)</p>
 
   <div class="form-group">
@@ -517,13 +553,6 @@
 <!-- Dokumente / Vorlagen -->
 <div class="view hidden" id="view-dokumente">
   <h2>Dokumente – Vorlagen</h2>
-
-  <div class="form-group">
-    <label for="doc-company">Unternehmen</label>
-    <select id="doc-company">
-      <option value="">Bitte wählen …</option>
-    </select>
-  </div>
 
   <div class="form-group">
     <label for="doc-type">Dokumenttyp</label>

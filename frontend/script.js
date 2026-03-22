@@ -5,6 +5,8 @@
 let __supabase = null;
 // Current session — updated via onAuthStateChange
 let __authSession = null;
+// Tenant ID from JWT app_metadata — single source of truth
+let __tenantId = null;
 
 // Intercept all fetch() calls to API_BASE and inject Authorization header.
 // Using a native reference so signup can call backend without a session.
@@ -44,11 +46,13 @@ async function initAuth() {
   // React to auth state changes
   __supabase.auth.onAuthStateChange((event, session) => {
     __authSession = session;
+    __tenantId = session?.user?.app_metadata?.tenant_id ?? null;
     if (event === "SIGNED_IN") {
       document.getElementById("auth-loading")?.classList.add("hidden");
       showView("main-menu");
       loadDashboard();
     } else if (event === "SIGNED_OUT") {
+      __tenantId = null;
       document.getElementById("auth-loading")?.classList.add("hidden");
       showView("view-login");
     }
@@ -57,6 +61,7 @@ async function initAuth() {
   // Check for an existing session (e.g. page refresh)
   const { data: { session } } = await __supabase.auth.getSession();
   __authSession = session;
+  __tenantId = session?.user?.app_metadata?.tenant_id ?? null;
 
   document.getElementById("auth-loading")?.classList.add("hidden");
 
@@ -133,6 +138,129 @@ document.getElementById("btn-logout")?.addEventListener("click", async () => {
   await __supabase?.auth.signOut();
   // onAuthStateChange handles the redirect to login
 });
+
+// Account / Settings
+document.getElementById("btn-account")?.addEventListener("click", async () => {
+  showView("view-account");
+  await Promise.all([loadAccountData(), loadTeamMembers()]);
+});
+
+async function loadAccountData() {
+  const msg = document.getElementById("acc-msg");
+  const emailEl = document.getElementById("acc-email");
+  const companyEl = document.getElementById("acc-company");
+  if (!emailEl || !companyEl) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler beim Laden");
+    if (emailEl)   emailEl.value   = json.email       || "";
+    if (companyEl) companyEl.value = json.companyName  || "";
+  } catch (e) {
+    if (msg) showMessage(msg, e.message, "error");
+  }
+}
+
+document.getElementById("acc-save")?.addEventListener("click", async () => {
+  const msg      = document.getElementById("acc-msg");
+  const email    = document.getElementById("acc-email")?.value.trim();
+  const company  = document.getElementById("acc-company")?.value.trim();
+  const pw1      = document.getElementById("acc-password")?.value;
+  const pw2      = document.getElementById("acc-password2")?.value;
+
+  if (pw1 && pw1 !== pw2) {
+    return showMessage(msg, "Passwörter stimmen nicht überein.", "error");
+  }
+
+  const body = {};
+  if (email)   body.email       = email;
+  if (company) body.companyName = company;
+  if (pw1)     body.password    = pw1;
+
+  try {
+    showMessage(msg, "Speichere …", "info");
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler beim Speichern");
+
+    document.getElementById("acc-password").value  = "";
+    document.getElementById("acc-password2").value = "";
+    showMessage(msg, "Gespeichert.", "success");
+  } catch (e) {
+    showMessage(msg, e.message, "error");
+  }
+});
+
+// Team invite
+document.getElementById("team-invite-btn")?.addEventListener("click", async () => {
+  const emailEl = document.getElementById("team-invite-email");
+  const msg     = document.getElementById("team-msg");
+  const email   = emailEl?.value.trim();
+  if (!email) return showMessage(msg, "Bitte E-Mail-Adresse eingeben.", "error");
+
+  try {
+    showMessage(msg, "Sende Einladung …", "info");
+    const res = await fetch(`${API_BASE}/auth/invite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler beim Einladen");
+    if (emailEl) emailEl.value = "";
+    showMessage(msg, json.message || "Einladung gesendet.", "success");
+    await loadTeamMembers();
+  } catch (e) {
+    showMessage(msg, e.message, "error");
+  }
+});
+
+async function loadTeamMembers() {
+  const tbody = document.getElementById("team-tbody");
+  const msg   = document.getElementById("team-msg");
+  if (!tbody) return;
+
+  try {
+    const res  = await fetch(`${API_BASE}/auth/team`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler beim Laden");
+
+    tbody.innerHTML = "";
+    (json.data || []).forEach((m) => {
+      const lastSeen = m.last_sign_in_at
+        ? new Date(m.last_sign_in_at).toLocaleDateString("de-DE")
+        : "–";
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${m.email}${m.is_self ? ' <span style="opacity:.5">(Sie)</span>' : ""}</td>
+        <td>${lastSeen}</td>
+        <td>${m.is_self ? "" : `<button class="btn-remove-member" data-id="${m.id}" type="button" style="color:var(--color-error,#dc2626);background:none;border:none;cursor:pointer;">Entfernen</button>`}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll(".btn-remove-member").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Teammitglied wirklich entfernen?")) return;
+        try {
+          const r = await fetch(`${API_BASE}/auth/team/${btn.dataset.id}`, { method: "DELETE" });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || "Fehler");
+          await loadTeamMembers();
+        } catch (e) {
+          showMessage(msg, e.message, "error");
+        }
+      });
+    });
+  } catch (e) {
+    showMessage(msg, e.message, "error");
+  }
+}
 
 // ── End Auth ──────────────────────────────────────────────────────────────────
 
@@ -607,7 +735,6 @@ function initBottomNav() {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────
 
-let __dashTenantId = localStorage.getItem("plain_dash_tenant_id") || "";
 const __dashCharts = {};
 
 const MONTH_NAMES_DE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -626,21 +753,15 @@ function dashMonthLabel(yyyymm) {
   return (MONTH_NAMES_DE[m - 1] || yyyymm);
 }
 
-function dashShowConfig(show) {
-  document.getElementById("dash-config-panel")?.classList.toggle("hidden", !show);
-}
-
 async function loadDashboard() {
-  if (!__dashTenantId) { dashShowConfig(true); return; }
-  dashShowConfig(false);
+  if (!__tenantId) return;
 
   try {
-    const tid = encodeURIComponent(__dashTenantId);
     const [kpisRes, projRes, monthlyRes, statusRes] = await Promise.all([
-      fetch(`${API_BASE}/reports/dashboard/kpis?tenant_id=${tid}`),
-      fetch(`${API_BASE}/reports/dashboard/projects?tenant_id=${tid}`),
-      fetch(`${API_BASE}/reports/dashboard/monthly?tenant_id=${tid}`),
-      fetch(`${API_BASE}/reports/dashboard/by-status?tenant_id=${tid}`),
+      fetch(`${API_BASE}/reports/dashboard/kpis`),
+      fetch(`${API_BASE}/reports/dashboard/projects`),
+      fetch(`${API_BASE}/reports/dashboard/monthly`),
+      fetch(`${API_BASE}/reports/dashboard/by-status`),
     ]);
 
     const kpis    = (await kpisRes.json().catch(() => ({}))).data || {};
@@ -805,14 +926,6 @@ function dashRenderByStatus(byStatus) {
   }).join("");
 }
 
-// Tenant config panel handlers
-document.getElementById("dash-tenant-save")?.addEventListener("click", () => {
-  const val = String(document.getElementById("dash-tenant-input")?.value || "").trim();
-  if (!val) return;
-  __dashTenantId = val;
-  localStorage.setItem("plain_dash_tenant_id", val);
-  loadDashboard();
-});
 
 function initDashboardSearch() {
   const input = document.getElementById("dash-search");
@@ -874,6 +987,10 @@ document.addEventListener("DOMContentLoaded", () => {
   initBottomNav();
   initDashboardSearch();
   initAuth(); // handles session check → showView + loadDashboard
+
+  document.querySelector("#view-account .btn-back")?.addEventListener("click", () => {
+    showView("main-menu");
+  });
 });
 
 
@@ -1007,12 +1124,11 @@ function nrUpdatePreviews() {
 
 async function initNumberRangesView() {
   const msg = document.getElementById("nr-msg");
-  const companySel = document.getElementById("nr-company");
   const nextEl = document.getElementById("nr-next");
   const prjNextEl = document.getElementById("nr-project-next");
   const saveBtn = document.getElementById("nr-save");
 
-  if (!companySel || !nextEl || !prjNextEl || !saveBtn) return;
+  if (!nextEl || !prjNextEl || !saveBtn) return;
 
   const showNrMsg = (t, type) => {
     if (!msg) return;
@@ -1022,15 +1138,9 @@ async function initNumberRangesView() {
   if (!__nrBound) {
     __nrBound = true;
 
-    companySel.addEventListener("change", () => {
-      nrLoadRangesForCompany(companySel.value).catch((e) => showNrMsg("Fehler: " + e.message, "error"));
-    });
-
     [nextEl, prjNextEl].forEach((el) => el.addEventListener("input", nrUpdatePreviews));
 
     saveBtn.addEventListener("click", async () => {
-      const companyId = companySel.value;
-      if (!companyId) return showNrMsg("Bitte ein Unternehmen auswählen", "error");
       const val = parseInt(nextEl.value || "0", 10);
       const prjVal = parseInt(prjNextEl.value || "0", 10);
       const valid9999 = (v) => Number.isFinite(v) && v >= 1 && v <= 9999;
@@ -1041,22 +1151,15 @@ async function initNumberRangesView() {
 
       try {
         showNrMsg("Speichere …", "info");
-        const year = nrYear();
-
         const res = await fetch(`${API_BASE}/number-ranges/set`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            company_id: companyId,
-            year,
-            next_counter: val,
-            project_next_counter: prjVal,
-          }),
+          body: JSON.stringify({ year: nrYear(), next_counter: val, project_next_counter: prjVal }),
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(json.error || "Speichern fehlgeschlagen");
 
-        await nrLoadRangesForCompany(companyId);
+        await nrLoadRanges();
         showNrMsg("Gespeichert", "success");
       } catch (e) {
         showNrMsg("Fehler: " + (e.message || e), "error");
@@ -1064,32 +1167,10 @@ async function initNumberRangesView() {
     });
   }
 
-  // Load companies
-  companySel.innerHTML = `<option value="">Bitte wählen …</option>`;
-  try {
-    const res = await fetch(`${API_BASE}/stammdaten/companies`);
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json.error || "Fehler beim Laden der Firmen");
-    (json.data || []).forEach((c) => {
-      const opt = document.createElement("option");
-      opt.value = c.ID;
-      opt.textContent = c.NAME_SHORT || c.NAME_LONG || `Firma ${c.ID}`;
-      companySel.appendChild(opt);
-    });
-  } catch (e) {
-    showNrMsg("Fehler: " + (e.message || e), "error");
-    return;
-  }
-
-  // If only one company exists, preselect
-  if (companySel.options.length === 2) {
-    companySel.value = companySel.options[1].value;
-  }
-
-  await nrLoadRangesForCompany(companySel.value);
+  await nrLoadRanges();
 }
 
-async function nrLoadRangesForCompany(companyId) {
+async function nrLoadRanges() {
   const msg = document.getElementById("nr-msg");
   const nextEl = document.getElementById("nr-next");
   const prjNextEl = document.getElementById("nr-project-next");
@@ -1097,16 +1178,7 @@ async function nrLoadRangesForCompany(companyId) {
 
   if (!nextEl || !prjNextEl) return;
 
-  if (!companyId) {
-    nextEl.value = "";
-    prjNextEl.value = "";
-    nrUpdatePreviews();
-    showNrMsg("", "success");
-    return;
-  }
-
-  const year = nrYear();
-  const res = await fetch(`${API_BASE}/number-ranges?company_id=${encodeURIComponent(companyId)}&year=${encodeURIComponent(year)}`);
+  const res = await fetch(`${API_BASE}/number-ranges?year=${encodeURIComponent(nrYear())}`);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error || "Fehler beim Laden der Nummernkreise");
 
@@ -1339,7 +1411,6 @@ document.getElementById("btn-zahlungen")?.addEventListener("click", async () => 
 
 // Reporting – Projekt: toggle date-filter inputs based on selected mode
 // Reporting – Projekt
-const REP_TENANT_KEY = "plain_rep_tenant_id";
 let __repWired = false;
 
 const repFmtEur = (v) => {
@@ -1362,13 +1433,6 @@ function repShowSections(visible) {
 function wireRepView() {
   if (__repWired) return;
   __repWired = true;
-
-  // Restore saved tenant ID
-  const saved = localStorage.getItem(REP_TENANT_KEY);
-  if (saved) {
-    const el = document.getElementById("rep-tenant-id");
-    if (el && !el.value) el.value = saved;
-  }
 
   // Filter mode toggle
   document.querySelectorAll("input[name='rep-filter-mode']").forEach((radio) => {
@@ -1407,18 +1471,15 @@ document.getElementById("btn-reporting-project")?.addEventListener("click", asyn
 
 document.getElementById("btn-load-project-report")?.addEventListener("click", async () => {
   const msgEl = document.getElementById("msg-reporting-project");
-  const tenantId = String(document.getElementById("rep-tenant-id")?.value || "").trim();
   const projectId = String(document.getElementById("rep-project-id")?.value || "").trim();
 
-  if (!tenantId || !projectId) {
-    showMessage(msgEl, "Bitte Mandant und Projekt angeben.", "error");
+  if (!projectId) {
+    showMessage(msgEl, "Bitte ein Projekt auswählen.", "error");
     return;
   }
 
-  localStorage.setItem(REP_TENANT_KEY, tenantId);
-
   const filterMode = document.querySelector("input[name='rep-filter-mode']:checked")?.value || "now";
-  const filterParams = new URLSearchParams({ tenant_id: tenantId, filter_mode: filterMode });
+  const filterParams = new URLSearchParams({ filter_mode: filterMode });
 
   if (filterMode === "as_of") {
     const asOf = String(document.getElementById("rep-as-of-date")?.value || "").trim();
@@ -9923,25 +9984,9 @@ function setCurrentTemplate(id) {
   if (e.btnDefault) e.btnDefault.disabled = !(isPublished && tpl.IS_ACTIVE !== false);
 }
 
-async function loadCompaniesForDocuments() {
-  const e = docEls();
-  const json = await apiJson(`${API_BASE}/stammdaten/companies`);
-  const companies = Array.isArray(json.data) ? json.data : [];
-  e.company.innerHTML = `<option value="">Bitte wählen …</option>`;
-  companies.forEach((c) => {
-    const opt = document.createElement("option");
-    opt.value = String(c.ID);
-    opt.textContent = c.COMPANY_NAME_1 || `Company ${c.ID}`;
-    e.company.appendChild(opt);
-  });
-
-  if (!e.company.value && companies.length) e.company.value = String(companies[0].ID);
-  __docsState.companyId = e.company.value ? parseInt(e.company.value, 10) : null;
-}
-
 async function loadTemplates() {
   const e = docEls();
-  if (!e.company.value) {
+  if (!e.type.value) {
     __docsState.templates = [];
     __docsState.currentTemplateId = null;
     fillTemplateDropdown();
@@ -9949,10 +9994,9 @@ async function loadTemplates() {
     return;
   }
 
-  __docsState.companyId = parseInt(e.company.value, 10);
   __docsState.docType = e.type.value;
 
-  const json = await apiJson(`${API_BASE}/document-templates?company_id=${__docsState.companyId}&doc_type=${encodeURIComponent(__docsState.docType)}`);
+  const json = await apiJson(`${API_BASE}/document-templates?doc_type=${encodeURIComponent(__docsState.docType)}`);
   __docsState.templates = Array.isArray(json.data) ? json.data : [];
   __docsState.currentTemplateId = __docsState.templates[0]?.ID || null;
 
@@ -9962,10 +10006,8 @@ async function loadTemplates() {
 
 async function createTemplate() {
   const e = docEls();
-  if (!e.company.value) return showMessage(e.msg, "Bitte zuerst ein Unternehmen auswählen.", "error");
 
   const body = {
-    company_id: parseInt(e.company.value, 10),
     name: `Vorlage ${new Date().toLocaleDateString("de-DE")}`,
     doc_type: e.type.value,
     layout_key: "modern_a",
@@ -9987,11 +10029,9 @@ async function uploadLogoIfSelected() {
   const e = docEls();
   const file = e.logo?.files?.[0];
   if (!file) return null;
-  if (!e.company.value) throw new Error("Bitte zuerst ein Unternehmen auswählen.");
 
   const form = new FormData();
   form.append("file", file);
-  form.append("company_id", e.company.value);
   form.append("asset_type", "LOGO");
 
   const res = await fetch(`${API_BASE}/assets/upload`, { method: "POST", body: form });
@@ -10090,11 +10130,6 @@ async function initDocumentsView() {
       showView("view-administration");
     });
 
-    e.company?.addEventListener("change", async () => {
-      showMessage(e.msg, "");
-      await loadTemplates().catch((err) => showMessage(e.msg, "Fehler: " + (err.message || err), "error"));
-    });
-
     e.type?.addEventListener("change", async () => {
       showMessage(e.msg, "");
       await loadTemplates().catch((err) => showMessage(e.msg, "Fehler: " + (err.message || err), "error"));
@@ -10142,7 +10177,6 @@ async function initDocumentsView() {
   }
 
   showMessage(e.msg, "");
-  await loadCompaniesForDocuments().catch((err) => showMessage(e.msg, "Fehler: " + (err.message || err), "error"));
   await loadTemplates().catch((err) => showMessage(e.msg, "Fehler: " + (err.message || err), "error"));
 }
 

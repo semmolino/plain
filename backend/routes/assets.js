@@ -12,13 +12,25 @@ function isTableMissingErr(err, tableName) {
 module.exports = (supabase) => {
   const router = express.Router();
 
+  async function resolveCompanyId(tenantId) {
+    const { data, error } = await supabase
+      .from("COMPANY")
+      .select("ID")
+      .eq("TENANT_ID", tenantId)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.ID ?? null;
+  }
+
   const uploadRoot = path.join(__dirname, "..", "uploads");
   if (!fs.existsSync(uploadRoot)) fs.mkdirSync(uploadRoot, { recursive: true });
 
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-      const companyId = String(req.body.company_id || "0");
-      const dir = path.join(uploadRoot, companyId);
+      // Use tenantId as the folder key (company_id resolved later in the handler)
+      const folder = String(req.tenantId || "0");
+      const dir = path.join(uploadRoot, folder);
       fs.mkdirSync(dir, { recursive: true });
       cb(null, dir);
     },
@@ -32,13 +44,18 @@ module.exports = (supabase) => {
   const upload = multer({ storage });
 
   // POST /api/assets/upload
-  // multipart/form-data: file, company_id, asset_type
+  // multipart/form-data: file, asset_type
   router.post("/upload", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: "file is required" });
 
-      const companyId = parseInt(String(req.body.company_id || ""), 10);
-      if (!companyId || Number.isNaN(companyId)) return res.status(400).json({ error: "company_id is required" });
+      let companyId;
+      try {
+        companyId = await resolveCompanyId(req.tenantId);
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+      if (!companyId) return res.status(404).json({ error: "Kein Unternehmen für diesen Mandanten gefunden." });
 
       const assetType = String(req.body.asset_type || "OTHER").toUpperCase().trim();
 

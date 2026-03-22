@@ -100,7 +100,7 @@ module.exports = (supabase) => {
       PROJECT_MANAGER_ID: b.project_manager_id,
       ADDRESS_ID: parsedAddressId,
       CONTACT_ID: parsedContactId,
-      TENANT_ID: b.tenant_id || null,
+      TENANT_ID: req.tenantId ?? null,
     };
 
     const tryInsertProject = async (row) => {
@@ -291,7 +291,8 @@ if (Array.isArray(b.project_structure) && b.project_structure.length) {
 			STATUS:PROJECT_STATUS_ID(NAME_SHORT),
 			TYPE:PROJECT_TYPE_ID(NAME_SHORT),
 			MANAGER:PROJECT_MANAGER_ID(SHORT_NAME)
-		  `);
+		  `)
+		  .eq("TENANT_ID", req.tenantId);
 
 		if (error) throw error;
 		return res.json({ data });
@@ -300,6 +301,7 @@ if (Array.isArray(b.project_structure) && b.project_structure.length) {
 		const { data, error } = await supabase
 		  .from("PROJECT")
 		  .select("ID, NAME_SHORT, NAME_LONG")
+		  .eq("TENANT_ID", req.tenantId)
 		  .order("NAME_SHORT", { ascending: true });
 		if (error) return res.status(500).json({ error: error.message });
 		return res.json({ data });
@@ -316,6 +318,7 @@ router.get("/list", async (req, res) => {
   const { data: projects, error: pErr } = await supabase
     .from("PROJECT")
     .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID")
+    .eq("TENANT_ID", req.tenantId)
     .order("NAME_SHORT", { ascending: true })
     .limit(limit);
 
@@ -375,6 +378,7 @@ router.patch("/:id", async (req, res) => {
     .from("PROJECT")
     .update(upd)
     .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId)
     .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID")
     .single();
 
@@ -405,6 +409,7 @@ router.patch("/:id", async (req, res) => {
     const { data, error } = await supabase
       .from("PROJECT")
       .select("ID, NAME_SHORT, NAME_LONG")
+      .eq("TENANT_ID", req.tenantId)
       .or(`NAME_SHORT.ilike.%${q}%,NAME_LONG.ilike.%${q}%`)
       .order("NAME_SHORT", { ascending: true })
       .limit(20);
