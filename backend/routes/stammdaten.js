@@ -389,6 +389,7 @@ module.exports = (supabase) => {
       FEE_MASTER_ID: feeMasterId,
       NAME_SHORT: feeMaster.NAME_SHORT || null,
       NAME_LONG: feeMaster.NAME_LONG || null,
+      TENANT_ID: req.body.TENANT_ID || null,
     };
 
     const { data, error } = await supabase
@@ -488,7 +489,7 @@ module.exports = (supabase) => {
     try {
       const { data: calcMaster, error: calcErr } = await supabase
         .from("FEE_CALCULATION_MASTER")
-        .select("ID, FEE_MASTER_ID, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4")
+        .select("ID, FEE_MASTER_ID, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, TENANT_ID")
         .eq("ID", id)
         .single();
       if (calcErr) {
@@ -526,6 +527,7 @@ module.exports = (supabase) => {
           REVENUE_BASE: revenueBase,
           FEE_PERCENT: phase.FEE_PERCENT ?? null,
           PHASE_REVENUE: calculatePhaseRevenue(phase.FEE_PERCENT ?? null, revenueBase),
+          TENANT_ID: calcMaster.TENANT_ID ?? null,
         }));
 
         if (insertRows.length) {
@@ -887,7 +889,8 @@ module.exports = (supabase) => {
       POST_CODE: post_code.trim(),
       CITY: city.trim(),
       COUNTRY_ID: country_id.trim(),
-      "TAX-ID": (tax_id || "").trim() || null
+      "TAX-ID": (tax_id || "").trim() || null,
+      TENANT_ID: req.body.TENANT_ID || null,
     };
 
     const { data, error } = await supabase
@@ -937,7 +940,8 @@ module.exports = (supabase) => {
       COUNTRY_ID: parsedCountryId,
       CUSTOMER_NUMBER: (customer_number || "").trim() || null,
       "TAX-ID": (tax_id || "").trim() || null,
-      BUYER_REFERENCE: (buyer_reference || "").trim() || null
+      BUYER_REFERENCE: (buyer_reference || "").trim() || null,
+      TENANT_ID: req.body.TENANT_ID || null,
     };
 
     const { data, error } = await supabase
@@ -963,7 +967,8 @@ module.exports = (supabase) => {
 
     const insertRow = {
       NAME_SHORT: name_short.trim(),
-      NAME_LONG: (name_long || "").trim() || null
+      NAME_LONG: (name_long || "").trim() || null,
+      TENANT_ID: req.body.TENANT_ID || null,
     };
 
     // Try ROLE first (most likely for "Rollen"), then fall back to ADDRESS
@@ -1349,7 +1354,8 @@ router.get("/genders", async (req, res) => {
       MOBILE: (mobile || "").trim() || null,
       SALUTATION_ID: parsedSalutationId,
       GENDER_ID: parsedGenderId,
-      ADDRESS_ID: parsedAddressId
+      ADDRESS_ID: parsedAddressId,
+      TENANT_ID: req.body.TENANT_ID || null,
     };
 
     const { data, error } = await supabase.from("CONTACTS").insert([insertRow]);

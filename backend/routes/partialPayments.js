@@ -429,7 +429,11 @@ module.exports = (supabase) => {
     };
   }
 
-  async function applyPerformanceAmount({ partialPaymentId, contractId, projectId, amount }) {
+  async function applyPerformanceAmount({ partialPaymentId, contractId, projectId, amount, tenantId = undefined }) {
+    if (tenantId === undefined && projectId) {
+      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+      tenantId = projT?.TENANT_ID ?? null;
+    }
     const structures = await loadProjectStructuresForContext({ contractId, projectId });
     const bt1 = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 1);
     const bt1Ids = bt1.map((s) => s.ID);
@@ -473,6 +477,7 @@ module.exports = (supabase) => {
         STRUCTURE_ID: s.ID,
         AMOUNT_NET: amt,
         AMOUNT_EXTRAS_NET: extras,
+        TENANT_ID: tenantId ?? null,
       };
     });
 
@@ -482,7 +487,11 @@ module.exports = (supabase) => {
     return { performance_amount: perfSum, bt1Ids: idList };
   }
 
-  async function updateBt2FromTec({ partialPaymentId, contractId, projectId }) {
+  async function updateBt2FromTec({ partialPaymentId, contractId, projectId, tenantId = undefined }) {
+    if (tenantId === undefined && projectId) {
+      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+      tenantId = projT?.TENANT_ID ?? null;
+    }
     const structures = await loadProjectStructuresForContext({ contractId, projectId });
     const bt2 = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 2);
     const bt2Ids = bt2.map((s) => s.ID);
@@ -515,6 +524,7 @@ module.exports = (supabase) => {
         STRUCTURE_ID: s.ID,
         AMOUNT_NET: amt,
         AMOUNT_EXTRAS_NET: extras,
+        TENANT_ID: tenantId ?? null,
       };
     });
 
@@ -634,7 +644,7 @@ async function getSalutationText(salutationId) {
     // --- PROJECT --- (for summary display)
     const { data: project, error: projectErr } = await supabase
       .from("PROJECT")
-      .select("ID, NAME_SHORT, NAME_LONG")
+      .select("ID, NAME_SHORT, NAME_LONG, TENANT_ID")
       .eq("ID", projectId)
       .maybeSingle();
     if (projectErr || !project) {
@@ -764,6 +774,7 @@ async function getSalutationText(salutationId) {
       CONTACT_SALUTATION: contactSalutation,
       CONTACT_MAIL: invoiceContact.EMAIL ?? null,
       CONTACT_PHONE: invoiceContact.MOBILE ?? null,
+      TENANT_ID: project.TENANT_ID ?? null,
     };
 
     const { data: created, error: insertErr } = await supabase

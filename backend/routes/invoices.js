@@ -400,7 +400,11 @@ module.exports = (supabase) => {
     return { amount_net: amountNet, amount_extras_net: amountExtras, total_amount_net: totalNet, tax_amount_net: taxAmountNet, total_amount_gross: totalGross };
   }
 
-  async function applyPerformanceAmount({ invoiceId, contractId, projectId, amount }) {
+  async function applyPerformanceAmount({ invoiceId, contractId, projectId, amount, tenantId = undefined }) {
+    if (tenantId === undefined && projectId) {
+      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+      tenantId = projT?.TENANT_ID ?? null;
+    }
     const structures = await loadProjectStructuresForContext({ contractId, projectId });
     const bt1 = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 1);
     const bt1Ids = bt1.map((s) => s.ID);
@@ -435,6 +439,7 @@ module.exports = (supabase) => {
           STRUCTURE_ID: s.ID,
           AMOUNT_NET: aNet,
           AMOUNT_EXTRAS_NET: aExtras,
+          TENANT_ID: tenantId ?? null,
         };
       })
       .filter(Boolean);
@@ -444,7 +449,11 @@ module.exports = (supabase) => {
     return { performance_amount: sum };
   }
 
-  async function updateBt2FromTec({ invoiceId, contractId, projectId }) {
+  async function updateBt2FromTec({ invoiceId, contractId, projectId, tenantId = undefined }) {
+    if (tenantId === undefined && projectId) {
+      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+      tenantId = projT?.TENANT_ID ?? null;
+    }
     const structures = await loadProjectStructuresForContext({ contractId, projectId });
     const bt2Ids = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
     if (bt2Ids.length === 0) {
@@ -480,7 +489,7 @@ module.exports = (supabase) => {
         const extrasPct = toNum(sObj?.EXTRAS_PERCENT);
         const aNet = round2(sum);
         const aExtras = round2((aNet * extrasPct) / 100);
-        return { INVOICE_ID: invoiceId, STRUCTURE_ID: parseInt(String(sid), 10), AMOUNT_NET: aNet, AMOUNT_EXTRAS_NET: aExtras };
+        return { INVOICE_ID: invoiceId, STRUCTURE_ID: parseInt(String(sid), 10), AMOUNT_NET: aNet, AMOUNT_EXTRAS_NET: aExtras, TENANT_ID: tenantId ?? null };
       })
       .filter((r) => Number.isFinite(r.STRUCTURE_ID));
 
@@ -691,7 +700,7 @@ module.exports = (supabase) => {
     // --- PROJECT ---
     const { data: project, error: projectErr } = await supabase
       .from("PROJECT")
-      .select("ID, NAME_SHORT, NAME_LONG")
+      .select("ID, NAME_SHORT, NAME_LONG, TENANT_ID")
       .eq("ID", projectId)
       .maybeSingle();
     if (projectErr || !project) {
@@ -808,6 +817,7 @@ module.exports = (supabase) => {
       CONTACT_SALUTATION: contactSalutation,
       CONTACT_MAIL: invoiceContact.EMAIL ?? null,
       CONTACT_PHONE: invoiceContact.MOBILE ?? null,
+      TENANT_ID: project.TENANT_ID ?? null,
     };
 
     const { data: created, error: insertErr } = await supabase

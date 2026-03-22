@@ -314,6 +314,7 @@ bindClick("qa-stunden-buchen", async () => {
   const saveBtn = document.getElementById("btn-save-buchung");
   if (saveBtn) saveBtn.textContent = "Speichern";
   loadBuchungDropdowns();
+  wireBuchungDropdownEvents();
   showView("view-buchung");
   setBottomNavActive("view-projektdaten-menu");
 });
@@ -401,6 +402,7 @@ bindClick("btn-stunden-buchen-menu", async () => {
   const saveBtn = document.getElementById("btn-save-buchung");
   if (saveBtn) saveBtn.textContent = "Speichern";
   loadBuchungDropdowns();
+  wireBuchungDropdownEvents();
   showView("view-buchung");
 });
 
@@ -1034,6 +1036,7 @@ document.getElementById("btn-buchung").addEventListener("click", async () => {
   const saveBtn = document.getElementById("btn-save-buchung");
   if (saveBtn) saveBtn.textContent = "Speichern";
   loadBuchungDropdowns();
+  wireBuchungDropdownEvents();
   showView("view-buchung");
 });
 
@@ -6917,6 +6920,7 @@ async function enterBuchungEditMode(row) {
   if (saveBtn) saveBtn.textContent = "Aktualisieren";
 
   await loadBuchungDropdowns();
+  wireBuchungDropdownEvents();
   // Fill form fields
   document.getElementById("select-employee").value = String(row.EMPLOYEE_ID ?? "");
   document.getElementById("input-date").value = row.DATE_VOUCHER ?? "";
@@ -6946,21 +6950,22 @@ async function loadBuchungDropdowns() {
     loadDropdown("employee", "mitarbeiter", "ID", "SHORT_NAME"),
     loadDropdown("project", "projekte", "ID", "NAME_SHORT", "NAME_LONG")
   ]);
+}
 
-  // 👇 Add this to load structure elements dynamically
+function wireBuchungDropdownEvents() {
+  if (wireBuchungDropdownEvents.__wired) return;
+  wireBuchungDropdownEvents.__wired = true;
+
   const projectSelect = document.getElementById("select-project");
   const employeeSelect = document.getElementById("select-employee");
 
   if (employeeSelect) {
-    employeeSelect.addEventListener("change", () => {
-      applyEmployee2ProjectPreset();
-    });
+    employeeSelect.addEventListener("change", () => applyEmployee2ProjectPreset());
   }
 
   if (projectSelect) {
     projectSelect.addEventListener("change", () => {
-      const projectId = projectSelect.value;
-      loadStructureElements(projectId); // 🧠 Function already exists!
+      loadStructureElements(projectSelect.value);
       applyEmployee2ProjectPreset();
     });
   }

@@ -100,13 +100,14 @@ module.exports = (supabase) => {
       PROJECT_MANAGER_ID: b.project_manager_id,
       ADDRESS_ID: parsedAddressId,
       CONTACT_ID: parsedContactId,
+      TENANT_ID: b.tenant_id || null,
     };
 
     const tryInsertProject = async (row) => {
       const r = await supabase
         .from("PROJECT")
         .insert([row])
-        .select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID")
+        .select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID")
         .single();
       return r;
     };
@@ -137,6 +138,7 @@ module.exports = (supabase) => {
         ROLE_NAME_SHORT: r0.role_name_short || "",
         ROLE_NAME_LONG: r0.role_name_long || "",
         SP_RATE: r0.sp_rate === "" || r0.sp_rate === undefined ? null : r0.sp_rate,
+        TENANT_ID: project.TENANT_ID,
       }));
 
       const { error: e2pErr } = await supabase.from("EMPLOYEE2PROJECT").insert(rows);
@@ -179,6 +181,7 @@ if (Array.isArray(b.project_structure) && b.project_structure.length) {
     EXTRAS_COMPLETION_PERCENT: 0,
     REVENUE_COMPLETION: 0,
     EXTRAS_COMPLETION: 0,
+    TENANT_ID: project.TENANT_ID,
   }));
 
   // Ensure billing type is set
@@ -233,6 +236,7 @@ if (Array.isArray(b.project_structure) && b.project_structure.length) {
       EXTRAS_COMPLETION_PERCENT: 0,
       REVENUE_COMPLETION: 0,
       EXTRAS_COMPLETION: 0,
+      TENANT_ID: project.TENANT_ID,
     }));
     if (progressRows.length) await supabase.from("PROJECT_PROGRESS").insert(progressRows);
   } catch (e) {
@@ -247,6 +251,7 @@ if (Array.isArray(b.project_structure) && b.project_structure.length) {
       PROJECT_ID: project.ID,
       INVOICE_ADDRESS_ID: project.ADDRESS_ID,
       INVOICE_CONTACT_ID: project.CONTACT_ID,
+      TENANT_ID: project.TENANT_ID,
     };
 
     let contractInsertError = null;
@@ -518,7 +523,7 @@ router.patch("/:id", async (req, res) => {
 
     const { data: structures, error: sErr } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT")
+      .select("ID, TENANT_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT")
       .eq("PROJECT_ID", projectId);
 
     if (sErr) return res.status(500).json({ error: sErr.message });
@@ -570,6 +575,7 @@ router.patch("/:id", async (req, res) => {
       updates.push({ sid, btId, revenue, extras, revenueCompletion, extrasCompletion });
 
       progressRows.push({
+        TENANT_ID: r.TENANT_ID,
         STRUCTURE_ID: sid,
         REVENUE: revenue,
         EXTRAS_PERCENT: extrasPercent,
@@ -708,6 +714,8 @@ router.post("/:id/structure", async (req, res) => {
   const revenueCompletion = (revenuePct * revenue) / 100;
   const extrasCompletion = (extrasPct * extras) / 100;
 
+  const { data: projForTenant } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+
   const insertPayload = {
     NAME_SHORT: nameShort,
     NAME_LONG: nameLong,
@@ -721,6 +729,7 @@ router.post("/:id/structure", async (req, res) => {
     EXTRAS_COMPLETION_PERCENT: extrasPct,
     REVENUE_COMPLETION: revenueCompletion,
     EXTRAS_COMPLETION: extrasCompletion,
+    TENANT_ID: projForTenant?.TENANT_ID,
   };
 
   const { data: created, error: cErr } = await supabase
@@ -733,6 +742,7 @@ router.post("/:id/structure", async (req, res) => {
 
   // Create progress snapshot
   const progressRow = {
+    TENANT_ID: created.TENANT_ID,
     STRUCTURE_ID: created.ID,
     REVENUE: created.REVENUE,
     EXTRAS_PERCENT: created.EXTRAS_PERCENT,
@@ -762,7 +772,7 @@ router.patch("/structure/:id", async (req, res) => {
   const { data: current, error: currentErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .select(
-      "NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT"
+      "NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID"
     )
     .eq("ID", structureId)
     .maybeSingle();
@@ -865,6 +875,7 @@ router.patch("/structure/:id", async (req, res) => {
 
   // Add a progress snapshot row
   const progressRow = {
+    TENANT_ID: current.TENANT_ID,
     STRUCTURE_ID: structureId,
     REVENUE: revenue,
     EXTRAS_PERCENT: extrasPercent,
@@ -933,7 +944,7 @@ router.patch("/structure/:id/inherit", async (req, res) => {
   // Load all nodes in this project
   const { data: all, error: allErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT")
+    .select("ID, TENANT_ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT")
     .eq("PROJECT_ID", root.PROJECT_ID);
   if (allErr) return res.status(500).json({ error: allErr.message });
 
@@ -1033,6 +1044,7 @@ router.patch("/structure/:id/inherit", async (req, res) => {
 
     updatedIds.push(String(sid));
     progressRows.push({
+      TENANT_ID: nodeById.get(String(sid))?.TENANT_ID,
       STRUCTURE_ID: sid,
       REVENUE: revenue,
       EXTRAS_PERCENT: effExtrasPercent,

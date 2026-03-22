@@ -30,6 +30,15 @@ module.exports = (supabase) => {
     }
 
 
+    // Load TENANT_ID from PROJECT (needed for dashboard aggregates)
+    const { data: projRow, error: projErr } = await supabase
+      .from("PROJECT")
+      .select("TENANT_ID")
+      .eq("ID", b.PROJECT_ID)
+      .maybeSingle();
+    if (projErr) return res.status(500).json({ error: "Fehler beim Laden des Projekts: " + projErr.message });
+    const tenantId = projRow?.TENANT_ID ?? null;
+
     // Load preset values from EMPLOYEE2PROJECT (authoritative)
     let preset = null;
     try {
@@ -47,23 +56,24 @@ module.exports = (supabase) => {
     const { error: insertError } = await supabase
       .from("TEC")
       .insert([{
-	  EMPLOYEE_ID: b.EMPLOYEE_ID,
-	  DATE_VOUCHER: b.DATE_VOUCHER,
-	  TIME_START: b.TIME_START || null,
-	  TIME_FINISH: b.TIME_FINISH || null,
-	  QUANTITY_INT: b.QUANTITY_INT,
-	  CP_RATE: b.CP_RATE,
-	  CP_TOT: b.QUANTITY_INT * b.CP_RATE,
-	  QUANTITY_EXT: b.QUANTITY_EXT,
-	  ROLE_ID: roleId,
-	  ROLE_NAME_SHORT: roleNameShort,
-	  ROLE_NAME_LONG: roleNameLong,
-	  SP_RATE: effectiveSpRate,
-	  SP_TOT: b.QUANTITY_EXT * effectiveSpRate,
-	  POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
-	  PROJECT_ID: b.PROJECT_ID,
-	  STRUCTURE_ID: b.STRUCTURE_ID || null
-	}]);
+        TENANT_ID: tenantId,
+        EMPLOYEE_ID: b.EMPLOYEE_ID,
+        DATE_VOUCHER: b.DATE_VOUCHER,
+        TIME_START: b.TIME_START || null,
+        TIME_FINISH: b.TIME_FINISH || null,
+        QUANTITY_INT: b.QUANTITY_INT,
+        CP_RATE: b.CP_RATE,
+        CP_TOT: b.QUANTITY_INT * b.CP_RATE,
+        QUANTITY_EXT: b.QUANTITY_EXT,
+        ROLE_ID: roleId,
+        ROLE_NAME_SHORT: roleNameShort,
+        ROLE_NAME_LONG: roleNameLong,
+        SP_RATE: effectiveSpRate,
+        SP_TOT: b.QUANTITY_EXT * effectiveSpRate,
+        POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
+        PROJECT_ID: b.PROJECT_ID,
+        STRUCTURE_ID: b.STRUCTURE_ID || null,
+      }]);
 
     if (insertError) {
       return res.status(500).json({ error: "Fehler beim Speichern in TEC: " + insertError.message });
@@ -148,7 +158,7 @@ module.exports = (supabase) => {
     // Load existing TEC row to know current links (STRUCTURE/PROJECT/EMPLOYEE)
     const { data: existing, error: exErr } = await supabase
       .from("TEC")
-      .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID")
+      .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID")
       .eq("ID", id)
       .single();
 
@@ -187,7 +197,16 @@ module.exports = (supabase) => {
       return s === "" ? null : s;
     };
 
+    // Backfill TENANT_ID if missing on existing row
+    let tenantId = existing.TENANT_ID ?? null;
+    if (!tenantId) {
+      const effectivePid = (newProjectId !== undefined ? newProjectId : existing.PROJECT_ID);
+      const { data: projRow } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", effectivePid).maybeSingle();
+      tenantId = projRow?.TENANT_ID ?? null;
+    }
+
     const updateTec = {
+      TENANT_ID: tenantId,
       DATE_VOUCHER: b.DATE_VOUCHER ?? null,
       TIME_START: toNullIfEmpty(b.TIME_START),
       TIME_FINISH: toNullIfEmpty(b.TIME_FINISH),
