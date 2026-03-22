@@ -75,6 +75,27 @@
   </div>
 </div>
 
+<!-- Password reset (shown when user arrives via reset-link email) -->
+<div class="view hidden" id="view-reset-password">
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-logo">PlaIn</div>
+      <div class="auth-subtitle">Projektsteuerung</div>
+      <h2 class="auth-title">Neues Passwort setzen</h2>
+      <div class="form-group">
+        <label for="reset-password">Neues Passwort <span class="auth-hint">(min. 8 Zeichen)</span></label>
+        <input id="reset-password" type="password" autocomplete="new-password" />
+      </div>
+      <div class="form-group">
+        <label for="reset-password2">Passwort bestätigen</label>
+        <input id="reset-password2" type="password" autocomplete="new-password" />
+      </div>
+      <div class="message" id="reset-msg"></div>
+      <button class="btn-primary" id="btn-reset-save" type="button">Passwort speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- Account / Settings -->
 <div class="view hidden" id="view-account">
   <header class="topbar">

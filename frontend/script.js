@@ -47,7 +47,11 @@ async function initAuth() {
   __supabase.auth.onAuthStateChange((event, session) => {
     __authSession = session;
     __tenantId = session?.user?.app_metadata?.tenant_id ?? null;
-    if (event === "SIGNED_IN") {
+    if (event === "PASSWORD_RECOVERY") {
+      // User clicked the reset-link in their email — show the set-password form
+      document.getElementById("auth-loading")?.classList.add("hidden");
+      showView("view-reset-password");
+    } else if (event === "SIGNED_IN") {
       document.getElementById("auth-loading")?.classList.add("hidden");
       showView("main-menu");
       loadDashboard();
@@ -125,8 +129,35 @@ document.getElementById("link-forgot-password")?.addEventListener("click", async
   const email = document.getElementById("login-email")?.value.trim();
   const msg   = document.getElementById("login-msg");
   if (!email) return showMessage(msg, "Bitte zuerst E-Mail eingeben.", "error");
-  const { error } = await __supabase.auth.resetPasswordForEmail(email);
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await __supabase.auth.resetPasswordForEmail(email, { redirectTo });
   showMessage(msg, error ? error.message : "Reset-Link wurde an Ihre E-Mail gesendet.", error ? "error" : "success");
+});
+
+// Set new password (after clicking reset link in email)
+document.getElementById("btn-reset-save")?.addEventListener("click", async () => {
+  const pw1 = document.getElementById("reset-password")?.value;
+  const pw2 = document.getElementById("reset-password2")?.value;
+  const msg = document.getElementById("reset-msg");
+
+  if (!pw1) return showMessage(msg, "Bitte neues Passwort eingeben.", "error");
+  if (pw1.length < 8) return showMessage(msg, "Passwort muss mindestens 8 Zeichen haben.", "error");
+  if (pw1 !== pw2) return showMessage(msg, "Passwörter stimmen nicht überein.", "error");
+
+  showMessage(msg, "Speichere …", "info");
+  const { error } = await __supabase.auth.updateUser({ password: pw1 });
+  if (error) return showMessage(msg, error.message, "error");
+
+  showMessage(msg, "Passwort gesetzt. Sie werden angemeldet …", "success");
+  // Supabase keeps the session active after updateUser; go to dashboard
+  setTimeout(() => {
+    showView("main-menu");
+    loadDashboard();
+  }, 1500);
+});
+
+document.getElementById("reset-password2")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btn-reset-save")?.click();
 });
 
 // View toggles
