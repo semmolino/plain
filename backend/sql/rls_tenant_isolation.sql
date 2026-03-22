@@ -197,21 +197,23 @@ CREATE POLICY "tenant_isolation" ON "DOCUMENT_TEMPLATE"
     )
   );
 
--- ── DOCUMENT_NUMBER_RANGE ────────────────────────────────────
-ALTER TABLE "DOCUMENT_NUMBER_RANGE" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "tenant_isolation" ON "DOCUMENT_NUMBER_RANGE";
-CREATE POLICY "tenant_isolation" ON "DOCUMENT_NUMBER_RANGE"
+-- ── document_number_range ────────────────────────────────────
+-- Note: "DOCUMENT_NUMBER_RANGE" (uppercase) is a compatibility VIEW
+-- over the lowercase table. RLS must be applied to the base table.
+ALTER TABLE document_number_range ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tenant_isolation" ON document_number_range;
+CREATE POLICY "tenant_isolation" ON document_number_range
   USING (
     EXISTS (
       SELECT 1 FROM "COMPANY"
-      WHERE "COMPANY"."ID" = "DOCUMENT_NUMBER_RANGE"."COMPANY_ID"
+      WHERE "COMPANY"."ID" = document_number_range."COMPANY_ID"
         AND "COMPANY"."TENANT_ID" = public.current_tenant_id()
     )
   )
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM "COMPANY"
-      WHERE "COMPANY"."ID" = "DOCUMENT_NUMBER_RANGE"."COMPANY_ID"
+      WHERE "COMPANY"."ID" = document_number_range."COMPANY_ID"
         AND "COMPANY"."TENANT_ID" = public.current_tenant_id()
     )
   );
