@@ -186,13 +186,14 @@ module.exports = (supabase) => {
     const tenantId = user.app_metadata?.tenant_id ?? null;
     if (!tenantId) return res.status(403).json({ error: "Kein Mandant zugewiesen." });
 
-    const { email } = req.body || {};
+    const { email, redirectTo } = req.body || {};
     if (!email || !email.includes("@")) {
       return res.status(400).json({ error: "Gültige E-Mail-Adresse ist erforderlich." });
     }
 
     // Invite via Supabase admin (sends confirmation email automatically)
-    const { data: invited, error: invErr } = await supabase.auth.admin.inviteUserByEmail(email);
+    const inviteOptions = redirectTo ? { redirectTo } : {};
+    const { data: invited, error: invErr } = await supabase.auth.admin.inviteUserByEmail(email, inviteOptions);
     if (invErr) return res.status(400).json({ error: invErr.message });
 
     // Assign the same tenant_id so the invited user lands in the right workspace

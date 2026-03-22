@@ -41,6 +41,10 @@ async function initAuth() {
     return;
   }
 
+  // Read URL hash *before* createClient so Supabase doesn't consume it first
+  const _hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const _urlFlowType = _hashParams.get("type"); // "invite", "recovery", or null
+
   __supabase = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
 
   // React to auth state changes
@@ -53,8 +57,13 @@ async function initAuth() {
       showView("view-reset-password");
     } else if (event === "SIGNED_IN") {
       document.getElementById("auth-loading")?.classList.add("hidden");
-      showView("main-menu");
-      loadDashboard();
+      if (_urlFlowType === "invite") {
+        // Invited user just confirmed their email — let them set a password first
+        showView("view-reset-password");
+      } else {
+        showView("main-menu");
+        loadDashboard();
+      }
     } else if (event === "SIGNED_OUT") {
       __tenantId = null;
       document.getElementById("auth-loading")?.classList.add("hidden");
@@ -239,7 +248,7 @@ document.getElementById("team-invite-btn")?.addEventListener("click", async () =
     const res = await fetch(`${API_BASE}/auth/invite`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, redirectTo: window.location.origin + window.location.pathname }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || "Fehler beim Einladen");
