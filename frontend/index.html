@@ -7,9 +7,74 @@
 <title>PlaIn Projektsteuerung</title>
 <link href="style.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+
+<!-- Auth loading overlay (hidden once auth resolves) -->
+<div id="auth-loading">
+  <div class="auth-loading-inner">
+    <div class="auth-loading-logo">PlaIn</div>
+    <div class="auth-loading-spinner"></div>
+  </div>
+</div>
+
 <div id="app">
+
+<!-- Login -->
+<div class="view hidden" id="view-login">
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-logo">PlaIn</div>
+      <div class="auth-subtitle">Projektsteuerung</div>
+      <h2 class="auth-title">Anmelden</h2>
+      <div class="form-group">
+        <label for="login-email">E-Mail</label>
+        <input id="login-email" type="email" placeholder="name@firma.de" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="login-password">Passwort</label>
+        <input id="login-password" type="password" autocomplete="current-password" />
+      </div>
+      <div class="message" id="login-msg"></div>
+      <button class="btn-primary" id="btn-login" type="button">Anmelden</button>
+      <div class="auth-links">
+        <a href="#" id="link-forgot-password">Passwort vergessen?</a>
+        <span class="auth-sep">·</span>
+        <a href="#" id="link-to-signup">Konto erstellen</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sign up -->
+<div class="view hidden" id="view-signup">
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-logo">PlaIn</div>
+      <div class="auth-subtitle">Projektsteuerung</div>
+      <h2 class="auth-title">Konto erstellen</h2>
+      <div class="form-group">
+        <label for="signup-company">Firmenname*</label>
+        <input id="signup-company" type="text" placeholder="Mein Unternehmen GmbH" />
+      </div>
+      <div class="form-group">
+        <label for="signup-email">E-Mail*</label>
+        <input id="signup-email" type="email" placeholder="name@firma.de" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="signup-password">Passwort* <span class="auth-hint">(min. 8 Zeichen)</span></label>
+        <input id="signup-password" type="password" autocomplete="new-password" />
+      </div>
+      <div class="message" id="signup-msg"></div>
+      <button class="btn-primary" id="btn-signup" type="button">Registrieren</button>
+      <div class="auth-links">
+        <a href="#" id="link-to-login">Zurück zur Anmeldung</a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Dashboard / main -->
 <div class="view" id="main-menu">
   <header class="topbar">
@@ -19,6 +84,9 @@
     </div>
     <button class="icon-btn" id="btn-notifications" type="button" aria-label="Benachrichtigungen">
       <span class="icon">🔔</span>
+    </button>
+    <button class="icon-btn" id="btn-logout" type="button" aria-label="Abmelden" title="Abmelden">
+      <span class="icon">⏏</span>
     </button>
   </header>
 
@@ -250,50 +318,116 @@
 
 <!-- Reporting: Project Detail (header + structure tree) -->
 <section class="view hidden" id="view-reporting-project">
-  <h2>Reporting – Projekt</h2>
 
-  <div class="form-group">
-    <label for="rep-tenant-id">TENANT_ID*</label>
-    <input id="rep-tenant-id" type="text" placeholder="z.B. 550e8400-e29b-41d4-a716-446655440000" />
-  </div>
+  <header class="topbar">
+    <div class="topbar-title">
+      <div class="topbar-greeting">Reporting</div>
+      <div class="topbar-subtitle">Projektbericht</div>
+    </div>
+    <button class="btn-back icon-btn" type="button" aria-label="Zurück"><span class="icon">←</span></button>
+  </header>
 
-  <div class="form-group">
-    <label for="rep-project-id">PROJECT_ID*</label>
-    <input id="rep-project-id" type="number" step="1" />
-    <div class="muted">Tipp: Die PROJECT_ID findest du in der Projektliste (oder wir bauen im nächsten Schritt einen Projekt-Picker).</div>
-  </div>
-
-  <div class="form-group">
-    <label>Zeitfilter</label>
-    <div class="radio-group">
-      <label><input type="radio" name="rep-filter-mode" value="now" checked /> Aktuell</label>
-      <label><input type="radio" name="rep-filter-mode" value="as_of" /> Stichtag</label>
-      <label><input type="radio" name="rep-filter-mode" value="period" /> Zeitraum</label>
+  <!-- Config panel -->
+  <div class="card dash-config-panel" id="rep-config-panel">
+    <div class="card-title">Projekt &amp; Filter</div>
+    <div class="dash-config-row">
+      <label>Mandant</label>
+      <input id="rep-tenant-id" type="number" step="1" placeholder="TENANT_ID" style="max-width:160px" />
+    </div>
+    <div class="dash-config-row autocomplete-container" style="position:relative">
+      <label>Projekt</label>
+      <input id="rep-project" type="text" autocomplete="off" placeholder="Projekt suchen …" style="flex:1" />
+      <input id="rep-project-id" type="hidden" />
+      <div class="autocomplete-list" id="rep-project-autocomplete"></div>
+    </div>
+    <div class="dash-config-row">
+      <label>Zeitfilter</label>
+      <div class="radio-group">
+        <label><input type="radio" name="rep-filter-mode" value="now" checked /> Aktuell</label>
+        <label><input type="radio" name="rep-filter-mode" value="as_of" /> Stichtag</label>
+        <label><input type="radio" name="rep-filter-mode" value="period" /> Zeitraum</label>
+      </div>
+    </div>
+    <div id="rep-filter-as-of" class="dash-config-row hidden">
+      <label>Stichtag</label>
+      <input id="rep-as-of-date" type="date" />
+    </div>
+    <div id="rep-filter-period" class="dash-config-row hidden">
+      <label>Zeitraum</label>
+      <input id="rep-date-from" type="date" />
+      <span style="align-self:center;padding:0 4px">–</span>
+      <input id="rep-date-to" type="date" />
+    </div>
+    <div class="dash-config-row">
+      <button id="btn-load-project-report" type="button">Report laden</button>
     </div>
   </div>
 
-  <div id="rep-filter-as-of" class="form-group hidden">
-    <label for="rep-as-of-date">Stichtag</label>
-    <input id="rep-as-of-date" type="date" />
-  </div>
-
-  <div id="rep-filter-period" class="form-group hidden">
-    <label for="rep-date-from">Von</label>
-    <input id="rep-date-from" type="date" />
-    <label for="rep-date-to">Bis</label>
-    <input id="rep-date-to" type="date" />
-  </div>
-
-  <button id="btn-load-project-report">Report laden</button>
-  <button class="btn-back">Zurück</button>
-
   <div class="message" id="msg-reporting-project"></div>
 
-  <h3>Header</h3>
-  <div id="rep-project-header" class="card"></div>
+  <!-- KPI strip -->
+  <section class="card kpi-card hidden" id="rep-kpi-section">
+    <div class="card-header">
+      <div>
+        <div class="card-title" id="rep-project-name">—</div>
+        <div class="card-subtitle">Projektkennzahlen</div>
+      </div>
+    </div>
+    <div class="kpi-row kpi-row-4">
+      <div class="kpi">
+        <div class="kpi-label">Honorar</div>
+        <div class="kpi-value" id="rep-kpi-honorar">—</div>
+        <div class="kpi-meta">Budget netto</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Leistungsstand</div>
+        <div class="kpi-value" id="rep-kpi-leistungsstand">—</div>
+        <div class="kpi-meta">Erbrachte Leistung</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Stunden</div>
+        <div class="kpi-value" id="rep-kpi-stunden">—</div>
+        <div class="kpi-meta">Intern gesamt</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Kosten</div>
+        <div class="kpi-value" id="rep-kpi-kosten">—</div>
+        <div class="kpi-meta">Intern gesamt</div>
+      </div>
+    </div>
+  </section>
 
-  <h3>Projektstruktur</h3>
-  <div id="rep-project-structure" class="card"></div>
+  <!-- Billing section -->
+  <section class="card hidden" id="rep-billing-section">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Abrechnung</div>
+        <div class="card-subtitle">Rechnungsstatus</div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">Abschlagsrechnungen</div>
+        <div class="kpi-value" id="rep-kpi-abschlag">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Schlussgerechnet</div>
+        <div class="kpi-value" id="rep-kpi-schluss">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Structure table -->
+  <section class="card hidden" id="rep-structure-section">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Projektstruktur</div>
+        <div class="card-subtitle">Honorar, Leistungsstand &amp; Kosten je Element</div>
+      </div>
+    </div>
+    <div id="rep-project-structure"></div>
+  </section>
+
 </section>
 
 <!-- Zahlungen (Payment entry) -->

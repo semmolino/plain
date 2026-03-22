@@ -1,3 +1,58 @@
+/* ── Auth loading overlay ──────────────────────────────────────────────── */
+#auth-loading {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+#auth-loading.hidden { display: none; }
+.auth-loading-inner { text-align: center; }
+.auth-loading-logo { font-size: 32px; font-weight: 900; color: #1a1a2e; margin-bottom: 16px; }
+.auth-loading-spinner {
+  width: 28px; height: 28px; margin: 0 auto;
+  border: 3px solid rgba(17,24,39,0.12);
+  border-top-color: #1a1a2e;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Auth views (login / signup) ───────────────────────────────────────── */
+.auth-container {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0f4ff 0%, #f9fafb 100%);
+  padding: 24px;
+}
+.auth-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px 36px;
+  width: 100%; max-width: 400px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.10);
+}
+.auth-logo {
+  font-size: 30px; font-weight: 900; color: #1a1a2e; letter-spacing: -1px;
+}
+.auth-subtitle { font-size: 13px; color: rgba(17,24,39,0.45); margin-top: 2px; margin-bottom: 24px; }
+.auth-title { font-size: 22px; font-weight: 800; margin-bottom: 20px; color: #111827; }
+.auth-hint { font-size: 11px; font-weight: 400; color: rgba(17,24,39,0.45); }
+.btn-primary {
+  width: 100%; padding: 13px;
+  background: #1a1a2e; color: #fff;
+  border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 700;
+  cursor: pointer; margin-top: 4px;
+  transition: background 0.15s;
+}
+.btn-primary:hover { background: #2d2d4e; }
+.auth-links {
+  text-align: center; margin-top: 18px;
+  font-size: 13px; color: rgba(17,24,39,0.55);
+}
+.auth-links a { color: #2563eb; text-decoration: none; }
+.auth-links a:hover { text-decoration: underline; }
+.auth-sep { margin: 0 6px; }
+
 /* Reset / base */
 * {
   box-sizing: border-box;
@@ -877,4 +932,8 @@ th { background: rgba(17,24,39,0.03); font-weight: 800; }
 .kv .v { color: rgba(17,24,39,0.85); }
 
 .report-table th, .report-table td { font-size: 13px; }
+
+/* Project report structure table */
+.rep-structure-table td:first-child { white-space:normal; max-width:260px; }
+.rep-structure-table tr.rep-row-parent td { font-weight:700; background:rgba(17,24,39,0.025); }
 

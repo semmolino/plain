@@ -1,4 +1,141 @@
 ﻿const API_BASE = "http://localhost:3000/api";
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+// Supabase client (initialised in initAuth)
+let __supabase = null;
+// Current session — updated via onAuthStateChange
+let __authSession = null;
+
+// Intercept all fetch() calls to API_BASE and inject Authorization header.
+// Using a native reference so signup can call backend without a session.
+const _nativeFetch = window.fetch.bind(window);
+window.fetch = function (url, options = {}) {
+  if (__authSession?.access_token && typeof url === "string" && url.startsWith(API_BASE)) {
+    options = {
+      ...options,
+      headers: { Authorization: `Bearer ${__authSession.access_token}`, ...(options.headers || {}) },
+    };
+  }
+  return _nativeFetch(url, options);
+};
+
+async function initAuth() {
+  // Fetch public Supabase config from backend
+  let config;
+  try {
+    const res = await _nativeFetch(`${API_BASE}/auth/config`);
+    config = await res.json();
+  } catch {
+    console.error("Backend nicht erreichbar. Auth konnte nicht initialisiert werden.");
+    document.getElementById("auth-loading")?.classList.add("hidden");
+    showView("view-login");
+    return;
+  }
+
+  if (!config.supabaseUrl || !config.supabaseAnonKey) {
+    console.error("SUPABASE_ANON_KEY fehlt in der .env des Backends.");
+    document.getElementById("auth-loading")?.classList.add("hidden");
+    showView("view-login");
+    return;
+  }
+
+  __supabase = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+
+  // React to auth state changes
+  __supabase.auth.onAuthStateChange((event, session) => {
+    __authSession = session;
+    if (event === "SIGNED_IN") {
+      document.getElementById("auth-loading")?.classList.add("hidden");
+      showView("main-menu");
+      loadDashboard();
+    } else if (event === "SIGNED_OUT") {
+      document.getElementById("auth-loading")?.classList.add("hidden");
+      showView("view-login");
+    }
+  });
+
+  // Check for an existing session (e.g. page refresh)
+  const { data: { session } } = await __supabase.auth.getSession();
+  __authSession = session;
+
+  document.getElementById("auth-loading")?.classList.add("hidden");
+
+  if (session) {
+    showView("main-menu");
+    loadDashboard();
+  } else {
+    showView("view-login");
+  }
+}
+
+// Login
+document.getElementById("btn-login")?.addEventListener("click", async () => {
+  const email    = document.getElementById("login-email")?.value.trim();
+  const password = document.getElementById("login-password")?.value;
+  const msg      = document.getElementById("login-msg");
+  if (!email || !password) return showMessage(msg, "Bitte E-Mail und Passwort eingeben.", "error");
+
+  showMessage(msg, "Anmelden …", "info");
+  const { error } = await __supabase.auth.signInWithPassword({ email, password });
+  if (error) return showMessage(msg, error.message, "error");
+  // onAuthStateChange handles the view switch
+});
+
+document.getElementById("login-password")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btn-login")?.click();
+});
+
+// Sign up
+document.getElementById("btn-signup")?.addEventListener("click", async () => {
+  const company  = document.getElementById("signup-company")?.value.trim();
+  const email    = document.getElementById("signup-email")?.value.trim();
+  const password = document.getElementById("signup-password")?.value;
+  const msg      = document.getElementById("signup-msg");
+
+  if (!company || !email || !password) return showMessage(msg, "Bitte alle Felder ausfüllen.", "error");
+  if (password.length < 8) return showMessage(msg, "Passwort muss mindestens 8 Zeichen haben.", "error");
+
+  showMessage(msg, "Konto wird erstellt …", "info");
+
+  const res = await _nativeFetch(`${API_BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, companyName: company }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) return showMessage(msg, json.error || "Fehler beim Registrieren.", "error");
+
+  // Auto sign-in after signup
+  showMessage(msg, "Konto erstellt. Melden Sie sich an …", "success");
+  const { error } = await __supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    showMessage(msg, "Konto erstellt. Bitte jetzt anmelden.", "success");
+    showView("view-login");
+  }
+});
+
+// Forgot password
+document.getElementById("link-forgot-password")?.addEventListener("click", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("login-email")?.value.trim();
+  const msg   = document.getElementById("login-msg");
+  if (!email) return showMessage(msg, "Bitte zuerst E-Mail eingeben.", "error");
+  const { error } = await __supabase.auth.resetPasswordForEmail(email);
+  showMessage(msg, error ? error.message : "Reset-Link wurde an Ihre E-Mail gesendet.", error ? "error" : "success");
+});
+
+// View toggles
+document.getElementById("link-to-signup")?.addEventListener("click", (e) => { e.preventDefault(); showView("view-signup"); });
+document.getElementById("link-to-login")?.addEventListener("click",  (e) => { e.preventDefault(); showView("view-login");  });
+
+// Logout
+document.getElementById("btn-logout")?.addEventListener("click", async () => {
+  await __supabase?.auth.signOut();
+  // onAuthStateChange handles the redirect to login
+});
+
+// ── End Auth ──────────────────────────────────────────────────────────────────
+
 let __billingTypesCache = null;
 
 // Abschlagsrechnung wizard draft cancellation handling
@@ -736,7 +873,7 @@ function initDashboardSearch() {
 document.addEventListener("DOMContentLoaded", () => {
   initBottomNav();
   initDashboardSearch();
-  loadDashboard();
+  initAuth(); // handles session check → showView + loadDashboard
 });
 
 
@@ -1201,24 +1338,71 @@ document.getElementById("btn-zahlungen")?.addEventListener("click", async () => 
 });
 
 // Reporting – Projekt: toggle date-filter inputs based on selected mode
-document.querySelectorAll("input[name='rep-filter-mode']").forEach((radio) => {
-  radio.addEventListener("change", () => {
-    const mode = document.querySelector("input[name='rep-filter-mode']:checked")?.value || "now";
-    document.getElementById("rep-filter-as-of").classList.toggle("hidden", mode !== "as_of");
-    document.getElementById("rep-filter-period").classList.toggle("hidden", mode !== "period");
-  });
-});
+// Reporting – Projekt
+const REP_TENANT_KEY = "plain_rep_tenant_id";
+let __repWired = false;
 
-// Reporting – Projekt (Header + Struktur)
+const repFmtEur = (v) => {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
+  if (!Number.isFinite(n)) return "—";
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+};
+const repFmtH = (v) => {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
+  if (!Number.isFinite(n)) return "—";
+  return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(n) + " h";
+};
+
+function repShowSections(visible) {
+  ["rep-kpi-section", "rep-billing-section", "rep-structure-section"].forEach(id => {
+    document.getElementById(id)?.classList.toggle("hidden", !visible);
+  });
+}
+
+function wireRepView() {
+  if (__repWired) return;
+  __repWired = true;
+
+  // Restore saved tenant ID
+  const saved = localStorage.getItem(REP_TENANT_KEY);
+  if (saved) {
+    const el = document.getElementById("rep-tenant-id");
+    if (el && !el.value) el.value = saved;
+  }
+
+  // Filter mode toggle
+  document.querySelectorAll("input[name='rep-filter-mode']").forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const mode = document.querySelector("input[name='rep-filter-mode']:checked")?.value || "now";
+      document.getElementById("rep-filter-as-of").classList.toggle("hidden", mode !== "as_of");
+      document.getElementById("rep-filter-period").classList.toggle("hidden", mode !== "period");
+    });
+  });
+
+  // Project autocomplete
+  setupAutocomplete({
+    inputId: "rep-project",
+    hiddenId: "rep-project-id",
+    listId: "rep-project-autocomplete",
+    minLen: 2,
+    search: async (q) => {
+      const res = await fetch(`${API_BASE}/projekte/search?q=${encodeURIComponent(q)}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Suche fehlgeschlagen");
+      return json.data || [];
+    },
+    formatLabel: (p) => `${p.NAME_SHORT || ""}: ${p.NAME_LONG || ""}`.trim(),
+    onSelect: () => {},
+  });
+}
+
 document.getElementById("btn-reporting-project")?.addEventListener("click", async () => {
   if (!(await guardLeaveDraftIfNeeded())) return;
-  // reset UI
+  repShowSections(false);
   showMessage(document.getElementById("msg-reporting-project"), "", "");
-  const headerBox = document.getElementById("rep-project-header");
-  const structureBox = document.getElementById("rep-project-structure");
-  if (headerBox) headerBox.innerHTML = "";
-  if (structureBox) structureBox.innerHTML = "";
+  document.getElementById("rep-project-structure").innerHTML = "";
   showView("view-reporting-project");
+  wireRepView();
 });
 
 document.getElementById("btn-load-project-report")?.addEventListener("click", async () => {
@@ -1227,11 +1411,12 @@ document.getElementById("btn-load-project-report")?.addEventListener("click", as
   const projectId = String(document.getElementById("rep-project-id")?.value || "").trim();
 
   if (!tenantId || !projectId) {
-    showMessage(msgEl, "Bitte TENANT_ID und PROJECT_ID angeben.", "error");
+    showMessage(msgEl, "Bitte Mandant und Projekt angeben.", "error");
     return;
   }
 
-  // Build date-filter query string
+  localStorage.setItem(REP_TENANT_KEY, tenantId);
+
   const filterMode = document.querySelector("input[name='rep-filter-mode']:checked")?.value || "now";
   const filterParams = new URLSearchParams({ tenant_id: tenantId, filter_mode: filterMode });
 
@@ -1247,6 +1432,7 @@ document.getElementById("btn-load-project-report")?.addEventListener("click", as
     filterParams.set("date_to", dateTo);
   }
 
+  repShowSections(false);
   showMessage(msgEl, "Lade Report …", "info");
 
   try {
@@ -1265,59 +1451,50 @@ document.getElementById("btn-load-project-report")?.addEventListener("click", as
     const header = hJson.data;
     const rows = Array.isArray(sJson.data) ? sJson.data : [];
 
-    // Render header
-    const headerBox = document.getElementById("rep-project-header");
-    if (headerBox) {
-      headerBox.innerHTML = `
-        <div class="kv"><div class="k">Projekt</div><div class="v">${escapeHtml(header.NAME_SHORT || "")}</div></div>
-        <div class="kv"><div class="k">Budget</div><div class="v">${escapeHtml(header.BUDGET_TOTAL_NET ?? "")}</div></div>
-        <div class="kv"><div class="k">Leistungsstand</div><div class="v">${escapeHtml(header.LEISTUNGSSTAND_VALUE ?? "")}</div></div>
-        <div class="kv"><div class="k">Stunden</div><div class="v">${escapeHtml(header.HOURS_TOTAL ?? "")}</div></div>
-        <div class="kv"><div class="k">Kosten</div><div class="v">${escapeHtml(header.COST_TOTAL ?? "")}</div></div>
-        <div class="kv"><div class="k">Abschlagsrechnungen</div><div class="v">${escapeHtml(header.PARTIAL_PAYMENT_NET_TOTAL ?? "")}</div></div>
-        <div class="kv"><div class="k">Schlussgerechnet</div><div class="v">${escapeHtml(header.INVOICE_NET_TOTAL ?? "")}</div></div>
-      `;
-    }
+    // Fill KPI strip
+    document.getElementById("rep-project-name").textContent = header.NAME_SHORT || "—";
+    document.getElementById("rep-kpi-honorar").textContent      = repFmtEur(header.BUDGET_TOTAL_NET);
+    document.getElementById("rep-kpi-leistungsstand").textContent = repFmtEur(header.LEISTUNGSSTAND_VALUE);
+    document.getElementById("rep-kpi-stunden").textContent      = repFmtH(header.HOURS_TOTAL);
+    document.getElementById("rep-kpi-kosten").textContent       = repFmtEur(header.COST_TOTAL);
+    document.getElementById("rep-kpi-abschlag").textContent     = repFmtEur(header.PARTIAL_PAYMENT_NET_TOTAL);
+    document.getElementById("rep-kpi-schluss").textContent      = repFmtEur(header.INVOICE_NET_TOTAL);
 
-    // Build tree and render a simple indented table
+    // Structure table
     const root = buildStructureTree(rows);
     const flat = flattenTree(root);
 
-    const structureBox = document.getElementById("rep-project-structure");
-    if (structureBox) {
-      const lines = flat.map(({ node, depth }) => {
-        const indent = `padding-left:${depth * 18}px`;
-        const label = node.STRUCTURE_NAME_SHORT || node.NAME_SHORT || node.STRUCTURE_ID;
-        return `
+    const lines = flat.map(({ node, depth }) => {
+      const label = escapeHtml(node.STRUCTURE_NAME_SHORT || node.NAME_SHORT || node.STRUCTURE_ID);
+      const isParent = flat.some(r => r.node.PARENT_STRUCTURE_ID == node.STRUCTURE_ID || r.node.FATHER_ID == node.STRUCTURE_ID);
+      const rowClass = isParent ? ' class="rep-row-parent"' : '';
+      return `<tr${rowClass}>
+        <td style="padding-left:${depth * 16 + 8}px">${label}</td>
+        <td class="num">${repFmtEur(node.HONORAR_NET)}</td>
+        <td class="num">${repFmtEur(node.EARNED_VALUE_NET)}</td>
+        <td class="num">${repFmtEur(node.REST_HONORAR)}</td>
+        <td class="num">${repFmtH(node.HOURS_TOTAL)}</td>
+        <td class="num">${repFmtEur(node.COST_TOTAL)}</td>
+      </tr>`;
+    }).join("");
+
+    document.getElementById("rep-project-structure").innerHTML = `
+      <table class="dash-proj-table rep-structure-table">
+        <thead>
           <tr>
-            <td style="${indent}">${escapeHtml(label)}</td>
-            <td>${escapeHtml(node.HONORAR_NET ?? "")}</td>
-            <td>${escapeHtml(node.EARNED_VALUE_NET ?? "")}</td>
-            <td>${escapeHtml(node.REST_HONORAR ?? "")}</td>
-            <td>${escapeHtml(node.HOURS_TOTAL ?? "")}</td>
-            <td>${escapeHtml(node.COST_TOTAL ?? "")}</td>
+            <th>Element</th>
+            <th class="num">Honorar</th>
+            <th class="num">Leistungsstand</th>
+            <th class="num">Resthonorar</th>
+            <th class="num">Stunden</th>
+            <th class="num">Kosten</th>
           </tr>
-        `;
-      }).join("");
+        </thead>
+        <tbody>${lines}</tbody>
+      </table>`;
 
-      structureBox.innerHTML = `
-        <table class="report-table">
-          <thead>
-            <tr>
-              <th>Struktur</th>
-              <th>Honorar</th>
-              <th>Leistungsstand</th>
-              <th>Resthonorar</th>
-              <th>Stunden</th>
-              <th>Kosten</th>
-            </tr>
-          </thead>
-          <tbody>${lines}</tbody>
-        </table>
-      `;
-    }
-
-    showMessage(msgEl, `OK – ${rows.length} Struktur-Zeilen geladen.`, "success");
+    repShowSections(true);
+    showMessage(msgEl, "", "");
   } catch (err) {
     showMessage(msgEl, err.message || String(err), "error");
   }
@@ -7520,9 +7697,8 @@ function wireTecListEvents() {
   });
 }
 
-// Initial view boot
+// Initial view boot (view selection handled by initAuth)
 document.addEventListener("DOMContentLoaded", () => {
-  showView("main-menu");
   wireTecListEvents();
 });
 
