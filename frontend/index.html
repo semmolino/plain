@@ -28,31 +28,90 @@
   </div>
   <div class="search-suggest hidden" id="dash-search-suggest" aria-label="Suchvorschläge"></div>
 
-  <section class="card kpi-card">
-    <div class="kpi-row">
+  <!-- Tenant config (shown when tenant_id not yet stored) -->
+  <div class="card dash-config-panel" id="dash-config-panel">
+    <div class="card-title">Mandant auswählen</div>
+    <div class="card-subtitle" style="margin-bottom:8px">TENANT_ID eingeben, um das Dashboard zu laden.</div>
+    <div class="dash-config-row">
+      <input id="dash-tenant-input" type="number" step="1" placeholder="TENANT_ID" />
+      <button id="dash-tenant-save" type="button">Laden</button>
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <section class="card kpi-card" id="dash-kpi-section">
+    <div class="kpi-row kpi-row-4">
       <div class="kpi">
-        <div class="kpi-label">Umsatz</div>
-        <div class="kpi-value" id="kpi-revenue">—</div>
-        <div class="kpi-meta" id="kpi-revenue-meta">Diese Woche</div>
+        <div class="kpi-label">Honorar gesamt</div>
+        <div class="kpi-value" id="kpi-honorar">—</div>
+        <div class="kpi-meta">Alle Projekte</div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">Offen</div>
-        <div class="kpi-value" id="kpi-open">—</div>
-        <div class="kpi-meta" id="kpi-open-meta">Rechnungen</div>
+        <div class="kpi-label">Leistungsstand</div>
+        <div class="kpi-value" id="kpi-leistungsstand">—</div>
+        <div class="kpi-meta">Erbrachte Leistung</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Offene Leistung</div>
+        <div class="kpi-value" id="kpi-offen">—</div>
+        <div class="kpi-meta">Noch nicht abgerechnet</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Stunden (Monat)</div>
+        <div class="kpi-value" id="kpi-stunden">—</div>
+        <div class="kpi-meta" id="kpi-stunden-meta">Aktueller Monat</div>
       </div>
     </div>
   </section>
 
+  <!-- Bar chart: Stunden & Kosten (letzte 6 Monate) -->
   <section class="card">
     <div class="card-header">
       <div>
-        <div class="card-title">Übersicht</div>
-        <div class="card-subtitle">Status der letzten 7 Tage</div>
+        <div class="card-title">Stunden &amp; Kosten</div>
+        <div class="card-subtitle">Letzte 6 Monate</div>
       </div>
-      <div class="chip">Woche</div>
     </div>
-    <div class="dash-chart" id="dash-chart"></div>
+    <div style="position:relative;height:180px">
+      <canvas id="dash-monthly-chart"></canvas>
+    </div>
   </section>
+
+  <!-- Projektübersicht -->
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Projektübersicht</div>
+        <div class="card-subtitle">Top 10 nach Budget</div>
+      </div>
+    </div>
+    <div id="dash-proj-table-wrap"></div>
+  </section>
+
+  <!-- Rechnungsstatus + Projekte nach Status -->
+  <div class="dash-two-col">
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Rechnungsstatus</div>
+          <div class="card-subtitle">Abrechnung gesamt</div>
+        </div>
+      </div>
+      <div style="position:relative;height:160px">
+        <canvas id="dash-donut-chart"></canvas>
+      </div>
+      <div id="dash-donut-legend" class="dash-donut-legend"></div>
+    </section>
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Projekte nach Status</div>
+          <div class="card-subtitle">Anzahl Projekte</div>
+        </div>
+      </div>
+      <div id="dash-status-list" class="dash-status-list"></div>
+    </section>
+  </div>
 
   <section class="card">
     <div class="card-header">
@@ -202,6 +261,27 @@
     <label for="rep-project-id">PROJECT_ID*</label>
     <input id="rep-project-id" type="number" step="1" />
     <div class="muted">Tipp: Die PROJECT_ID findest du in der Projektliste (oder wir bauen im nächsten Schritt einen Projekt-Picker).</div>
+  </div>
+
+  <div class="form-group">
+    <label>Zeitfilter</label>
+    <div class="radio-group">
+      <label><input type="radio" name="rep-filter-mode" value="now" checked /> Aktuell</label>
+      <label><input type="radio" name="rep-filter-mode" value="as_of" /> Stichtag</label>
+      <label><input type="radio" name="rep-filter-mode" value="period" /> Zeitraum</label>
+    </div>
+  </div>
+
+  <div id="rep-filter-as-of" class="form-group hidden">
+    <label for="rep-as-of-date">Stichtag</label>
+    <input id="rep-as-of-date" type="date" />
+  </div>
+
+  <div id="rep-filter-period" class="form-group hidden">
+    <label for="rep-date-from">Von</label>
+    <input id="rep-date-from" type="date" />
+    <label for="rep-date-to">Bis</label>
+    <input id="rep-date-to" type="date" />
   </div>
 
   <button id="btn-load-project-report">Report laden</button>

@@ -744,17 +744,43 @@ tr.ps-drag-over td{outline:2px dashed rgba(0,0,0,.25);outline-offset:-2px;}
 }
 
 .kpi-row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.kpi-row-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+@media (max-width: 600px) { .kpi-row-4 { grid-template-columns: 1fr 1fr; } }
 .kpi-card { padding: 14px; }
 .kpi-label { font-size: 12px; color: rgba(17,24,39,0.55); }
 .kpi-value { font-size: 20px; font-weight: 900; margin-top: 2px; }
 .kpi-meta { font-size: 12px; color: rgba(17,24,39,0.55); margin-top: 2px; }
 
-.dash-chart {
-  height: 140px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(59,130,246,0.14), rgba(59,130,246,0.03));
-  border: 1px dashed rgba(59,130,246,0.28);
-}
+/* Dashboard two-column layout */
+.dash-two-col { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.dash-two-col > .card { margin-bottom:0; }
+@media (max-width: 600px) { .dash-two-col { grid-template-columns:1fr; } }
+
+/* Tenant config panel */
+.dash-config-panel { }
+.dash-config-row { display:flex; gap:8px; margin-top:8px; }
+.dash-config-row input { flex:1; }
+
+/* Dashboard project table */
+.dash-proj-table { width:100%; border-collapse:collapse; font-size:12px; }
+.dash-proj-table th { text-align:left; padding:4px 8px; color:rgba(17,24,39,0.55); font-weight:700; white-space:nowrap; }
+.dash-proj-table td { padding:7px 8px; border-top:1px solid rgba(17,24,39,0.06); white-space:nowrap; }
+.dash-proj-table td:first-child { white-space:normal; max-width:140px; }
+.dash-proj-table td.num { text-align:right; }
+.dash-proj-table th.num { text-align:right; }
+
+/* Donut legend */
+.dash-donut-legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.dash-donut-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:rgba(17,24,39,0.75); }
+.dash-donut-legend-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+/* Status list */
+.dash-status-list { display:flex; flex-direction:column; gap:10px; }
+.dash-status-row { }
+.dash-status-label-row { display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; }
+.dash-status-count { font-weight:700; }
+.dash-status-bar-wrap { height:5px; background:rgba(17,24,39,0.07); border-radius:3px; }
+.dash-status-bar { height:5px; background:rgba(59,130,246,0.65); border-radius:3px; transition:width .4s; }
 
 .quick-actions { display:flex; flex-wrap: wrap; gap: 10px; }
 .pill {

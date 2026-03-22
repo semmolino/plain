@@ -97,7 +97,7 @@ group by p."TENANT_ID", p."ID";
 -- ============================================================================
 -- REPORT 1: Project Detail (one row per project)
 -- ============================================================================
-create or replace view "REPORTING"."VW_REPORT_PROJECT_DETAIL" as
+create or replace view public."VW_REPORT_PROJECT_DETAIL" as
 select
   p."TENANT_ID",
   p."ID" as "PROJECT_ID",
@@ -149,13 +149,13 @@ select
   (coalesce(pa."REVENUE_BUDGET",0) + coalesce(pa."EXTRAS_BUDGET",0))
   - (coalesce(pa."REVENUE_COMPLETION_VALUE",0) + coalesce(pa."EXTRAS_COMPLETION_VALUE",0)) as "REMAINING_BUDGET_NET",
 
-  coalesce(ba."PARTIAL_PAYMENT_NET_TOTAL",0) as "PARTIAL_PAYMENT_NET_TOTAL",
-  coalesce(ba."INVOICE_NET_TOTAL",0)         as "INVOICE_NET_TOTAL",
-  coalesce(ba."PAYED_NET_TOTAL",0)           as "PAYED_NET_TOTAL",
-  (coalesce(ba."PARTIAL_PAYMENT_NET_TOTAL",0) + coalesce(ba."INVOICE_NET_TOTAL",0)) as "BILLED_NET_TOTAL",
+  coalesce(p."PARTIAL_PAYMENTS",0) as "PARTIAL_PAYMENT_NET_TOTAL",
+  coalesce(p."INVOICED",0)         as "INVOICE_NET_TOTAL",
+  coalesce(ba."PAYED_NET_TOTAL",0) as "PAYED_NET_TOTAL",
+  (coalesce(p."PARTIAL_PAYMENTS",0) + coalesce(p."INVOICED",0)) as "BILLED_NET_TOTAL",
 
   (coalesce(pa."REVENUE_COMPLETION_VALUE",0) + coalesce(pa."EXTRAS_COMPLETION_VALUE",0))
-  - (coalesce(ba."PARTIAL_PAYMENT_NET_TOTAL",0) + coalesce(ba."INVOICE_NET_TOTAL",0)) as "OPEN_NET_TOTAL",
+  - (coalesce(p."PARTIAL_PAYMENTS",0) + coalesce(p."INVOICED",0)) as "OPEN_NET_TOTAL",
 
   coalesce(ta."SALES_TOTAL",0) as "SALES_TOTAL",
   coalesce(ta."QTY_EXT_TOTAL",0) as "QTY_EXT_TOTAL"
@@ -194,7 +194,7 @@ left join public."CONTACTS" co
 -- REPORT 2: Project List (one row per project root)
 -- Current definition: root == PROJECT.ID
 -- ============================================================================
-create or replace view "REPORTING"."VW_REPORT_PROJECT_LIST_ROOT" as
+create or replace view public."VW_REPORT_PROJECT_LIST_ROOT" as
 select
   pd."TENANT_ID",
   pd."PROJECT_ID",
@@ -231,4 +231,42 @@ select
   pd."BILLED_NET_TOTAL",
   pd."OPEN_NET_TOTAL"
 
-from "REPORTING"."VW_REPORT_PROJECT_DETAIL" pd;
+from public."VW_REPORT_PROJECT_DETAIL" pd;
+
+-- ============================================================================
+-- REPORT 3: Project Detail Structure (one row per structure element)
+-- ============================================================================
+create or replace view public."VW_REPORT_PROJECT_DETAIL_STRUCTURE" as
+select
+  ps."TENANT_ID",
+  ps."PROJECT_ID",
+  ps."ID"        as "STRUCTURE_ID",
+  ps."FATHER_ID" as "PARENT_STRUCTURE_ID",
+  ps."NAME_SHORT",
+  ps."NAME_LONG",
+
+  coalesce(sum(t."QUANTITY_INT"), 0)                                                                    as "HOURS_TOTAL",
+  coalesce(sum(t."CP_TOT"), 0)                                                                          as "COST_TOTAL",
+  coalesce(ppl."REVENUE_COMPLETION", 0) + coalesce(ppl."EXTRAS_COMPLETION", 0)                         as "EARNED_VALUE_NET",
+  coalesce(ppl."REVENUE", 0)            + coalesce(ppl."EXTRAS", 0)                                     as "HONORAR_NET",
+  ( coalesce(ppl."REVENUE", 0) + coalesce(ppl."EXTRAS", 0) )
+  - ( coalesce(ppl."REVENUE_COMPLETION", 0) + coalesce(ppl."EXTRAS_COMPLETION", 0) )                   as "REST_HONORAR"
+
+from public."PROJECT_STRUCTURE" ps
+left join public."TEC" t
+  on t."TENANT_ID"    = ps."TENANT_ID"
+ and t."STRUCTURE_ID" = ps."ID"
+left join "REPORTING"."VW_PROJECT_PROGRESS_LATEST" ppl
+  on ppl."TENANT_ID"    = ps."TENANT_ID"
+ and ppl."STRUCTURE_ID" = ps."ID"
+group by
+  ps."TENANT_ID",
+  ps."PROJECT_ID",
+  ps."ID",
+  ps."FATHER_ID",
+  ps."NAME_SHORT",
+  ps."NAME_LONG",
+  ppl."REVENUE",
+  ppl."EXTRAS",
+  ppl."REVENUE_COMPLETION",
+  ppl."EXTRAS_COMPLETION";

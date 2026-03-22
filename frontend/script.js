@@ -35,7 +35,7 @@ async function guardLeaveDraftIfNeeded() {
   // Rechnungen wizard
   if (isViewActive("view-rechnungen") && __invId) {
     const ok = window.confirm(
-      "MÃ¶chten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelÃ¶scht."
+      "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht."
     );
     if (!ok) return false;
 
@@ -44,7 +44,7 @@ async function guardLeaveDraftIfNeeded() {
       const msgEl = document.getElementById("inv-msg-1");
       showMessage(
         msgEl,
-        "Entwurf konnte nicht gelÃ¶scht werden. Bitte versuchen Sie es erneut.",
+        "Entwurf konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.",
         "error"
       );
       return false;
@@ -57,7 +57,7 @@ async function guardLeaveDraftIfNeeded() {
   // Abschlagsrechnung wizard
   if (isViewActive("view-abschlagsrechnung") && __ppId) {
     const ok = window.confirm(
-      "MÃ¶chten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelÃ¶scht."
+      "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht."
     );
     if (!ok) return false;
 
@@ -66,7 +66,7 @@ async function guardLeaveDraftIfNeeded() {
       const msgEl = document.getElementById("pp-msg-1");
       showMessage(
         msgEl,
-        "Entwurf konnte nicht gelÃ¶scht werden. Bitte versuchen Sie es erneut.",
+        "Entwurf konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.",
         "error"
       );
       return false;
@@ -78,13 +78,13 @@ async function guardLeaveDraftIfNeeded() {
 
   if (isViewActive("view-honorar-berechnen") && __feeWizard.calcMasterId) {
     const ok = window.confirm(
-      "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht."
+      "M�chten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gel�scht."
     );
     if (!ok) return false;
 
     const okDelete = await feeDeleteDraftIfAny();
     if (!okDelete) {
-      feeSetMsg("Entwurf konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.", "error");
+      feeSetMsg("Entwurf konnte nicht gel�scht werden. Bitte versuchen Sie es erneut.", "error");
       return false;
     }
 
@@ -213,7 +213,7 @@ function dashRenderSuggestions(items, query) {
   const top = items.slice(0, 8);
   box.innerHTML = top
     .map((p) => {
-      const label = `${escapeHtml(p.NAME_SHORT || "")} â€” ${escapeHtml(p.NAME_LONG || "")}`.replace(/\s+â€”\s+$/, "");
+      const label = `${escapeHtml(p.NAME_SHORT || "")} — ${escapeHtml(p.NAME_LONG || "")}`.replace(/\s+—\s+$/, "");
       return `
         <div class="suggest-item" role="button" tabindex="0" data-proj-id="${escapeHtml(p.ID)}" data-proj-q="${escapeHtml(q)}">
           <span class="suggest-pill">Projekt</span>
@@ -466,6 +466,215 @@ function initBottomNav() {
   });
 }
 
+// ── Dashboard ─────────────────────────────────────────────────────────────
+
+let __dashTenantId = localStorage.getItem("plain_dash_tenant_id") || "";
+const __dashCharts = {};
+
+const MONTH_NAMES_DE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+
+function dashFmtEur(val) {
+  if (val == null) return "—";
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(val);
+}
+function dashFmtH(val) {
+  if (val == null) return "—";
+  return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(val) + " h";
+}
+function dashMonthLabel(yyyymm) {
+  if (!yyyymm) return "";
+  const m = parseInt(yyyymm.split("-")[1], 10);
+  return (MONTH_NAMES_DE[m - 1] || yyyymm);
+}
+
+function dashShowConfig(show) {
+  document.getElementById("dash-config-panel")?.classList.toggle("hidden", !show);
+}
+
+async function loadDashboard() {
+  if (!__dashTenantId) { dashShowConfig(true); return; }
+  dashShowConfig(false);
+
+  try {
+    const tid = encodeURIComponent(__dashTenantId);
+    const [kpisRes, projRes, monthlyRes, statusRes] = await Promise.all([
+      fetch(`${API_BASE}/reports/dashboard/kpis?tenant_id=${tid}`),
+      fetch(`${API_BASE}/reports/dashboard/projects?tenant_id=${tid}`),
+      fetch(`${API_BASE}/reports/dashboard/monthly?tenant_id=${tid}`),
+      fetch(`${API_BASE}/reports/dashboard/by-status?tenant_id=${tid}`),
+    ]);
+
+    const kpis    = (await kpisRes.json().catch(() => ({}))).data || {};
+    const projs   = (await projRes.json().catch(() => ({}))).data || [];
+    const monthly = (await monthlyRes.json().catch(() => ({}))).data || [];
+    const byStatus = (await statusRes.json().catch(() => ({}))).data || [];
+
+    dashRenderKpis(kpis);
+    dashRenderMonthlyChart(monthly);
+    dashRenderProjectTable(projs);
+    dashRenderDonut(kpis);
+    dashRenderByStatus(byStatus);
+  } catch (err) {
+    console.error("Dashboard load error", err);
+  }
+}
+
+function dashRenderKpis(kpis) {
+  const now = new Date();
+  const monthLabel = `${MONTH_NAMES_DE[now.getMonth()]} ${now.getFullYear()}`;
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set("kpi-honorar",       dashFmtEur(kpis.HONORAR_GESAMT));
+  set("kpi-leistungsstand", dashFmtEur(kpis.LEISTUNGSSTAND_VALUE));
+  set("kpi-offen",         dashFmtEur(kpis.OFFENE_LEISTUNG));
+  set("kpi-stunden",       dashFmtH(kpis.STUNDEN_MONAT));
+  set("kpi-stunden-meta",  monthLabel);
+}
+
+function dashRenderMonthlyChart(monthly) {
+  const canvas = document.getElementById("dash-monthly-chart");
+  if (!canvas) return;
+
+  if (__dashCharts.monthly) { __dashCharts.monthly.destroy(); delete __dashCharts.monthly; }
+
+  const labels = monthly.map(r => dashMonthLabel(r.MONTH));
+  const hours  = monthly.map(r => Number(r.HOURS_TOTAL) || 0);
+  const costs  = monthly.map(r => Number(r.COST_TOTAL)  || 0);
+
+  __dashCharts.monthly = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Stunden (h)",
+          data: hours,
+          backgroundColor: "rgba(59,130,246,0.65)",
+          borderRadius: 5,
+          yAxisID: "yH",
+        },
+        {
+          label: "Kosten (€)",
+          data: costs,
+          backgroundColor: "rgba(249,115,22,0.55)",
+          borderRadius: 5,
+          yAxisID: "yC",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "top", labels: { font: { size: 11 }, boxWidth: 10 } } },
+      scales: {
+        yH: { type: "linear", position: "left",  ticks: { font: { size: 10 } }, grid: { color: "rgba(0,0,0,0.05)" } },
+        yC: { type: "linear", position: "right", ticks: { font: { size: 10 }, callback: v => dashFmtEur(v) }, grid: { display: false } },
+        x:  { ticks: { font: { size: 11 } }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+function dashRenderProjectTable(projs) {
+  const wrap = document.getElementById("dash-proj-table-wrap");
+  if (!wrap) return;
+  if (!projs.length) { wrap.innerHTML = '<div style="opacity:.5;font-size:13px;padding:8px 0">Keine Projekte gefunden.</div>'; return; }
+
+  const rows = projs.map(p => `
+    <tr>
+      <td>${escapeHtml(p.NAME_SHORT || p.NAME_LONG || "—")}</td>
+      <td class="num">${dashFmtEur(p.BUDGET_TOTAL_NET)}</td>
+      <td class="num">${dashFmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
+      <td class="num">${dashFmtH(p.HOURS_TOTAL)}</td>
+      <td class="num">${dashFmtEur(p.COST_TOTAL)}</td>
+    </tr>`).join("");
+
+  wrap.innerHTML = `
+    <table class="dash-proj-table">
+      <thead>
+        <tr>
+          <th>Projekt</th>
+          <th class="num">Budget</th>
+          <th class="num">Leistungsstand</th>
+          <th class="num">Stunden</th>
+          <th class="num">Kosten</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function dashRenderDonut(kpis) {
+  const canvas = document.getElementById("dash-donut-chart");
+  if (!canvas) return;
+
+  if (__dashCharts.donut) { __dashCharts.donut.destroy(); delete __dashCharts.donut; }
+
+  const abschl = Number(kpis.ABSCHLAGSRECHNUNGEN) || 0;
+  const schluss = Number(kpis.SCHLUSSGERECHNET)    || 0;
+  const offen   = Math.max(0, Number(kpis.OFFENE_LEISTUNG) || 0);
+  const total   = abschl + schluss + offen;
+
+  const colors = ["rgba(59,130,246,0.75)", "rgba(34,197,94,0.75)", "rgba(156,163,175,0.55)"];
+  const labels = ["Abschlagsrechnungen", "Schlussgerechnet", "Offene Leistung"];
+  const values = [abschl, schluss, offen];
+
+  __dashCharts.donut = new Chart(canvas, {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: "#fff" }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      cutout: "65%",
+    },
+  });
+
+  const legend = document.getElementById("dash-donut-legend");
+  if (legend) {
+    legend.innerHTML = labels.map((lbl, i) => {
+      const pct = total > 0 ? ((values[i] / total) * 100).toFixed(0) : 0;
+      return `<div class="dash-donut-legend-item">
+        <div class="dash-donut-legend-dot" style="background:${colors[i]}"></div>
+        <span>${escapeHtml(lbl)}: <strong>${dashFmtEur(values[i])}</strong> (${pct}%)</span>
+      </div>`;
+    }).join("");
+  }
+}
+
+function dashRenderByStatus(byStatus) {
+  const list = document.getElementById("dash-status-list");
+  if (!list) return;
+  if (!byStatus.length) { list.innerHTML = '<div style="opacity:.5;font-size:13px">Keine Daten.</div>'; return; }
+
+  const max = Math.max(...byStatus.map(r => Number(r.PROJECT_COUNT) || 0), 1);
+  list.innerHTML = byStatus.map(r => {
+    const count = Number(r.PROJECT_COUNT) || 0;
+    const pct   = Math.round((count / max) * 100);
+    return `<div class="dash-status-row">
+      <div class="dash-status-label-row">
+        <span>${escapeHtml(r.STATUS_NAME || "—")}</span>
+        <span class="dash-status-count">${count}</span>
+      </div>
+      <div class="dash-status-bar-wrap">
+        <div class="dash-status-bar" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// Tenant config panel handlers
+document.getElementById("dash-tenant-save")?.addEventListener("click", () => {
+  const val = String(document.getElementById("dash-tenant-input")?.value || "").trim();
+  if (!val) return;
+  __dashTenantId = val;
+  localStorage.setItem("plain_dash_tenant_id", val);
+  loadDashboard();
+});
+
 function initDashboardSearch() {
   const input = document.getElementById("dash-search");
   const box = document.getElementById("dash-search-suggest");
@@ -525,6 +734,7 @@ function initDashboardSearch() {
 document.addEventListener("DOMContentLoaded", () => {
   initBottomNav();
   initDashboardSearch();
+  loadDashboard();
 });
 
 
@@ -681,17 +891,17 @@ async function initNumberRangesView() {
 
     saveBtn.addEventListener("click", async () => {
       const companyId = companySel.value;
-      if (!companyId) return showNrMsg("Bitte ein Unternehmen auswÃ¤hlen", "error");
+      if (!companyId) return showNrMsg("Bitte ein Unternehmen auswählen", "error");
       const val = parseInt(nextEl.value || "0", 10);
       const prjVal = parseInt(prjNextEl.value || "0", 10);
       const valid9999 = (v) => Number.isFinite(v) && v >= 1 && v <= 9999;
       const valid999 = (v) => Number.isFinite(v) && v >= 1 && v <= 999;
       if (!valid9999(val) || !valid999(prjVal)) {
-        return showNrMsg("Bitte gÃ¼ltige Werte eingeben (Global: 1â€“9999, Projekt: 1â€“999)", "error");
+        return showNrMsg("Bitte gültige Werte eingeben (Global: 1–9999, Projekt: 1–999)", "error");
       }
 
       try {
-        showNrMsg("Speichere â€¦", "info");
+        showNrMsg("Speichere …", "info");
         const year = nrYear();
 
         const res = await fetch(`${API_BASE}/number-ranges/set`, {
@@ -716,7 +926,7 @@ async function initNumberRangesView() {
   }
 
   // Load companies
-  companySel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  companySel.innerHTML = `<option value="">Bitte wählen …</option>`;
   try {
     const res = await fetch(`${API_BASE}/stammdaten/companies`);
     const json = await res.json().catch(() => ({}));
@@ -847,7 +1057,7 @@ document.getElementById("btn-rechnungen")?.addEventListener("click", async () =>
   showView("view-rechnungen");
 });
 
-// Abschlagsrechnung: Abbruch Ã¼ber "ZurÃ¼ck zur Ãœbersicht" inkl. LÃ¶schung des Entwurfs
+// Abschlagsrechnung: Abbruch über "Zurück zur Übersicht" inkl. Löschung des Entwurfs
 document.getElementById("pp-back-1")?.addEventListener(
   "click",
   async (e) => {
@@ -863,7 +1073,7 @@ document.getElementById("pp-back-1")?.addEventListener(
       return;
     }
 
-    const text = "MÃ¶chten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelÃ¶scht.";
+    const text = "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht.";
     const ok = window.confirm(text);
     if (!ok) return;
 
@@ -871,7 +1081,7 @@ document.getElementById("pp-back-1")?.addEventListener(
     if (!okDelete) {
       // Do not navigate away if we could not delete the draft.
       const msgEl = document.getElementById("pp-msg-1");
-      showMessage(msgEl, "Entwurf konnte nicht gelÃ¶scht werden. Bitte versuchen Sie es erneut.", "error");
+      showMessage(msgEl, "Entwurf konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.", "error");
       return;
     }
     __ppCancelOnUnload = false;
@@ -882,7 +1092,7 @@ document.getElementById("pp-back-1")?.addEventListener(
 );
 
 
-// Rechnungen: Abbruch Ã¼ber "ZurÃ¼ck zur Ãœbersicht" inkl. LÃ¶schung des Entwurfs
+// Rechnungen: Abbruch über "Zurück zur Übersicht" inkl. Löschung des Entwurfs
 document.getElementById("inv-back-1")?.addEventListener(
   "click",
   async (e) => {
@@ -899,7 +1109,7 @@ document.getElementById("inv-back-1")?.addEventListener(
     }
 
     const text =
-      "MÃ¶chten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelÃ¶scht.";
+      "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht.";
     const ok = window.confirm(text);
     if (!ok) return;
 
@@ -908,7 +1118,7 @@ document.getElementById("inv-back-1")?.addEventListener(
       const msgEl = document.getElementById("inv-msg-1");
       showMessage(
         msgEl,
-        "Entwurf konnte nicht gelÃ¶scht werden. Bitte versuchen Sie es erneut.",
+        "Entwurf konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.",
         "error"
       );
       return;
@@ -921,8 +1131,8 @@ document.getElementById("inv-back-1")?.addEventListener(
   true // capture
 );
 
-// Abschlagsrechnung: Warnung beim SchlieÃŸen/Neuladen des Tabs, solange ein Entwurf existiert.
-// Hinweis: Browser zeigen hier einen Standard-Dialog; Texte kÃ¶nnen je nach Browser abweichen.
+// Abschlagsrechnung: Warnung beim Schließen/Neuladen des Tabs, solange ein Entwurf existiert.
+// Hinweis: Browser zeigen hier einen Standard-Dialog; Texte können je nach Browser abweichen.
 window.addEventListener("beforeunload", (e) => {
   // Only warn when Abschlagsrechnung view is active and a draft exists
   const view = document.getElementById("view-abschlagsrechnung");
@@ -930,7 +1140,7 @@ window.addEventListener("beforeunload", (e) => {
   if (!__ppId) return;
 
   __ppCancelOnUnload = true;
-  const msg = "MÃ¶chten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelÃ¶scht.";
+  const msg = "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht.";
   e.preventDefault();
   e.returnValue = msg;
   return msg;
@@ -943,7 +1153,7 @@ window.addEventListener("pagehide", () => {
   ppDeleteDraftIfAny();
 });
 
-// Rechnungen: Warnung beim SchlieÃŸen/Neuladen des Tabs, solange ein Entwurf existiert.
+// Rechnungen: Warnung beim Schließen/Neuladen des Tabs, solange ein Entwurf existiert.
 window.addEventListener("beforeunload", (e) => {
   const view = document.getElementById("view-rechnungen");
   if (!view || view.classList.contains("hidden")) return;
@@ -951,7 +1161,7 @@ window.addEventListener("beforeunload", (e) => {
 
   __invCancelOnUnload = true;
   const msg =
-    "MÃ¶chten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelÃ¶scht.";
+    "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht.";
   e.preventDefault();
   e.returnValue = msg;
   return msg;
@@ -969,7 +1179,7 @@ window.addEventListener("beforeunload", (e) => {
   if (!__feeWizard.calcMasterId) return;
 
   __feeCancelOnUnload = true;
-  const msg = "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht.";
+  const msg = "M�chten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gel�scht.";
   e.preventDefault();
   e.returnValue = msg;
   return msg;
@@ -987,7 +1197,16 @@ document.getElementById("btn-zahlungen")?.addEventListener("click", async () => 
   showView("view-zahlungen");
 });
 
-// Reporting â€“ Projekt (Header + Struktur)
+// Reporting – Projekt: toggle date-filter inputs based on selected mode
+document.querySelectorAll("input[name='rep-filter-mode']").forEach((radio) => {
+  radio.addEventListener("change", () => {
+    const mode = document.querySelector("input[name='rep-filter-mode']:checked")?.value || "now";
+    document.getElementById("rep-filter-as-of").classList.toggle("hidden", mode !== "as_of");
+    document.getElementById("rep-filter-period").classList.toggle("hidden", mode !== "period");
+  });
+});
+
+// Reporting – Projekt (Header + Struktur)
 document.getElementById("btn-reporting-project")?.addEventListener("click", async () => {
   if (!(await guardLeaveDraftIfNeeded())) return;
   // reset UI
@@ -1009,12 +1228,29 @@ document.getElementById("btn-load-project-report")?.addEventListener("click", as
     return;
   }
 
-  showMessage(msgEl, "Lade Report â€¦", "info");
+  // Build date-filter query string
+  const filterMode = document.querySelector("input[name='rep-filter-mode']:checked")?.value || "now";
+  const filterParams = new URLSearchParams({ tenant_id: tenantId, filter_mode: filterMode });
+
+  if (filterMode === "as_of") {
+    const asOf = String(document.getElementById("rep-as-of-date")?.value || "").trim();
+    if (!asOf) { showMessage(msgEl, "Bitte einen Stichtag angeben.", "error"); return; }
+    filterParams.set("as_of_date", asOf);
+  } else if (filterMode === "period") {
+    const dateFrom = String(document.getElementById("rep-date-from")?.value || "").trim();
+    const dateTo   = String(document.getElementById("rep-date-to")?.value || "").trim();
+    if (!dateFrom || !dateTo) { showMessage(msgEl, "Bitte Von- und Bis-Datum angeben.", "error"); return; }
+    filterParams.set("date_from", dateFrom);
+    filterParams.set("date_to", dateTo);
+  }
+
+  showMessage(msgEl, "Lade Report …", "info");
 
   try {
+    const base = `${API_BASE}/reports/project/${encodeURIComponent(projectId)}`;
     const [hRes, sRes] = await Promise.all([
-      fetch(`${API_BASE}/reports/project/${encodeURIComponent(projectId)}/header?tenant_id=${encodeURIComponent(tenantId)}`),
-      fetch(`${API_BASE}/reports/project/${encodeURIComponent(projectId)}/structure?tenant_id=${encodeURIComponent(tenantId)}`),
+      fetch(`${base}/header?${filterParams}`),
+      fetch(`${base}/structure?${filterParams}`),
     ]);
 
     const hJson = await hRes.json().catch(() => ({}));
@@ -1030,13 +1266,13 @@ document.getElementById("btn-load-project-report")?.addEventListener("click", as
     const headerBox = document.getElementById("rep-project-header");
     if (headerBox) {
       headerBox.innerHTML = `
-        <div class="kv"><div class="k">Projekt</div><div class="v">${escapeHtml(header.PROJECT_NUMBER || "")} â€“ ${escapeHtml(header.PROJECT_NAME || "")}</div></div>
+        <div class="kv"><div class="k">Projekt</div><div class="v">${escapeHtml(header.NAME_SHORT || "")}</div></div>
         <div class="kv"><div class="k">Budget</div><div class="v">${escapeHtml(header.BUDGET_TOTAL_NET ?? "")}</div></div>
         <div class="kv"><div class="k">Leistungsstand</div><div class="v">${escapeHtml(header.LEISTUNGSSTAND_VALUE ?? "")}</div></div>
         <div class="kv"><div class="k">Stunden</div><div class="v">${escapeHtml(header.HOURS_TOTAL ?? "")}</div></div>
         <div class="kv"><div class="k">Kosten</div><div class="v">${escapeHtml(header.COST_TOTAL ?? "")}</div></div>
-        <div class="kv"><div class="k">Abgerechnet</div><div class="v">${escapeHtml(header.BILLED_NET_TOTAL ?? "")}</div></div>
-        <div class="kv"><div class="k">Offen</div><div class="v">${escapeHtml(header.OPEN_NET_TOTAL ?? "")}</div></div>
+        <div class="kv"><div class="k">Abschlagsrechnungen</div><div class="v">${escapeHtml(header.PARTIAL_PAYMENT_NET_TOTAL ?? "")}</div></div>
+        <div class="kv"><div class="k">Schlussgerechnet</div><div class="v">${escapeHtml(header.INVOICE_NET_TOTAL ?? "")}</div></div>
       `;
     }
 
@@ -1052,7 +1288,9 @@ document.getElementById("btn-load-project-report")?.addEventListener("click", as
         return `
           <tr>
             <td style="${indent}">${escapeHtml(label)}</td>
+            <td>${escapeHtml(node.HONORAR_NET ?? "")}</td>
             <td>${escapeHtml(node.EARNED_VALUE_NET ?? "")}</td>
+            <td>${escapeHtml(node.REST_HONORAR ?? "")}</td>
             <td>${escapeHtml(node.HOURS_TOTAL ?? "")}</td>
             <td>${escapeHtml(node.COST_TOTAL ?? "")}</td>
           </tr>
@@ -1064,7 +1302,9 @@ document.getElementById("btn-load-project-report")?.addEventListener("click", as
           <thead>
             <tr>
               <th>Struktur</th>
+              <th>Honorar</th>
               <th>Leistungsstand</th>
+              <th>Resthonorar</th>
               <th>Stunden</th>
               <th>Kosten</th>
             </tr>
@@ -1074,7 +1314,7 @@ document.getElementById("btn-load-project-report")?.addEventListener("click", as
       `;
     }
 
-    showMessage(msgEl, `OK â€“ ${rows.length} Struktur-Zeilen geladen.`, "success");
+    showMessage(msgEl, `OK – ${rows.length} Struktur-Zeilen geladen.`, "success");
   } catch (err) {
     showMessage(msgEl, err.message || String(err), "error");
   }
@@ -1140,7 +1380,7 @@ const __ppListAllowedColumns = [
   { id: "DOC_TYPE", label: "Typ", get: (r) => r.DOC_TYPE, filterable: true },
   { id: "DOC_DATE", label: "Datum", get: (r) => _fmtDate(r.DOC_DATE), raw: (r) => r.DOC_DATE, filterable: true },
   { id: "STATUS_ID", label: "Status", get: (r) => _ppStatusLabel(r.STATUS_ID), raw: (r) => r.STATUS_ID, filterable: true },
-  { id: "DUE_DATE", label: "FÃ¤llig", get: (r) => _fmtDate(r.DUE_DATE), raw: (r) => r.DUE_DATE, filterable: true },
+  { id: "DUE_DATE", label: "Fällig", get: (r) => _fmtDate(r.DUE_DATE), raw: (r) => r.DUE_DATE, filterable: true },
   { id: "PROJECT", label: "Projekt", get: (r) => r.PROJECT, filterable: true },
   { id: "CONTRACT", label: "Vertrag", get: (r) => r.CONTRACT, filterable: true },
   { id: "ADDRESS_NAME_1", label: "Adresse", get: (r) => r.ADDRESS_NAME_1, filterable: true },
@@ -1320,7 +1560,7 @@ function _renderRechnungsliste() {
     tbody.appendChild(tr);
   });
 
-  if (pageInfo) pageInfo.textContent = `Seite ${__ppList.page} / ${pages} (EintrÃ¤ge: ${total})`;
+  if (pageInfo) pageInfo.textContent = `Seite ${__ppList.page} / ${pages} (Einträge: ${total})`;
 }
 
 async function loadRechnungsliste() {
@@ -1330,7 +1570,7 @@ async function loadRechnungsliste() {
       __ppList.columns = _ppListLoadColumnsFromStorage();
     }
 
-    showMessage(msg, "Lade Rechnungsliste â€¦", "");
+    showMessage(msg, "Lade Rechnungsliste …", "");
 
     const [ppRes, invRes] = await Promise.all([
       fetch(`${API_BASE}/partial-payments?limit=500`),
@@ -1570,14 +1810,14 @@ function _closeInvEditModal() {
 
   return `
     <div class="cols-row" data-col="${c.id}" data-checked="${checked ? "1" : "0"}" ${checked ? 'draggable="true"' : ""}>
-      <span class="cols-drag ${checked ? "" : "disabled"}" title="Ziehen zum Sortieren" aria-hidden="true">â‹®â‹®</span>
+      <span class="cols-drag ${checked ? "" : "disabled"}" title="Ziehen zum Sortieren" aria-hidden="true">⋮⋮</span>
       <label class="cols-check">
         <input type="checkbox" data-action="toggle" data-col="${c.id}" ${checked ? "checked" : ""} />
         <span>${c.label}</span>
       </label>
       <div class="cols-order">
-        <button type="button" class="btn-small secondary" data-action="up" data-col="${c.id}" ${upDisabled ? "disabled" : ""}>â†‘</button>
-        <button type="button" class="btn-small secondary" data-action="down" data-col="${c.id}" ${downDisabled ? "disabled" : ""}>â†“</button>
+        <button type="button" class="btn-small secondary" data-action="up" data-col="${c.id}" ${upDisabled ? "disabled" : ""}>↑</button>
+        <button type="button" class="btn-small secondary" data-action="down" data-col="${c.id}" ${downDisabled ? "disabled" : ""}>↓</button>
       </div>
     </div>
   `;
@@ -1717,7 +1957,7 @@ colsList?.addEventListener("dragend", () => {
   document.getElementById("pp-cols-save")?.addEventListener("click", () => {
     const cols = Array.isArray(__ppList.columns) && __ppList.columns.length ? __ppList.columns : _ppListDefaultColumns();
     if (cols.length === 0) {
-      return showMessage(colsMsg, "Bitte mindestens eine Spalte auswÃ¤hlen", "error");
+      return showMessage(colsMsg, "Bitte mindestens eine Spalte auswählen", "error");
     }
     _ppListSaveColumnsToStorage(cols);
     closeColsModal();
@@ -1758,7 +1998,7 @@ colsList?.addEventListener("dragend", () => {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "Speichern fehlgeschlagen");
 
-      showMessage(msg, "Gespeichert âœ…", "success");
+      showMessage(msg, "Gespeichert ✅", "success");
       await loadRechnungsliste();
       _closePpEditModal();
     } catch (e) {
@@ -1798,7 +2038,7 @@ colsList?.addEventListener("dragend", () => {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "Speichern fehlgeschlagen");
 
-      showMessage(msg, "Gespeichert âœ…", "success");
+      showMessage(msg, "Gespeichert ✅", "success");
       await loadRechnungsliste();
       _closeInvEditModal();
     } catch (e) {
@@ -1813,7 +2053,7 @@ async function loadCountriesForUnternehmen() {
   const sel = document.getElementById("select-company-country");
   if (!sel) return;
 
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
 
   try {
     const res = await fetch(`${API_BASE}/stammdaten/countries`);
@@ -1828,7 +2068,7 @@ async function loadCountriesForUnternehmen() {
       sel.appendChild(opt);
     });
   } catch (err) {
-    console.error("Fehler beim Laden der LÃ¤nder", err);
+    console.error("Fehler beim Laden der Länder", err);
   }
 }
 
@@ -1846,7 +2086,7 @@ document.getElementById("btn-save-unternehmen")?.addEventListener("click", async
   };
 
   if (!payload.company_name_1 || !payload.street || !payload.post_code || !payload.city || !payload.country_id) {
-    return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
   }
 
   try {
@@ -1859,7 +2099,7 @@ document.getElementById("btn-save-unternehmen")?.addEventListener("click", async
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "company save failed");
 
-    showMessage(msg, "Unternehmen gespeichert âœ…", "success");
+    showMessage(msg, "Unternehmen gespeichert ✅", "success");
 
     [
       "input-company-name-1",
@@ -1881,7 +2121,7 @@ async function loadCountriesForAddress() {
   const sel = document.getElementById("select-address-country");
   if (!sel) return;
 
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
 
   try {
     const res = await fetch(`${API_BASE}/stammdaten/countries`);
@@ -1895,7 +2135,7 @@ async function loadCountriesForAddress() {
       sel.appendChild(opt);
     });
   } catch (err) {
-    console.error("Fehler beim Laden der LÃ¤nder", err);
+    console.error("Fehler beim Laden der Länder", err);
   }
 }
 
@@ -1917,7 +2157,7 @@ document.getElementById("btn-save-address")?.addEventListener("click", async () 
   };
 
   if (!payload.address_name_1 || !payload.country_id) {
-    return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
   }
 
   try {
@@ -1930,7 +2170,7 @@ document.getElementById("btn-save-address")?.addEventListener("click", async () 
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "address save failed");
 
-    showMessage(msg, "Anschrift gespeichert âœ…", "success");
+    showMessage(msg, "Anschrift gespeichert ✅", "success");
 
     [
       "input-address-name-1",
@@ -1960,7 +2200,7 @@ document.getElementById("btn-save-rollen")?.addEventListener("click", async () =
   };
 
   if (!payload.name_short) {
-    return showMessage(msg, "Bitte KÃ¼rzel (Pflichtfeld) eingeben", "error");
+    return showMessage(msg, "Bitte Kürzel (Pflichtfeld) eingeben", "error");
   }
 
   try {
@@ -1973,7 +2213,7 @@ document.getElementById("btn-save-rollen")?.addEventListener("click", async () =
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "rollen save failed");
 
-    showMessage(msg, "Rolle gespeichert âœ…", "success");
+    showMessage(msg, "Rolle gespeichert ✅", "success");
 
     document.getElementById("input-role-name-short").value = "";
     document.getElementById("input-role-name-long").value = "";
@@ -1990,7 +2230,7 @@ async function loadSalutationsForKontakte() {
   const sel = document.getElementById("select-kontakte-salutation");
   if (!sel) return;
 
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
 
   try {
     const res = await fetch(`${API_BASE}/stammdaten/salutations`);
@@ -2014,7 +2254,7 @@ async function loadGendersForKontakte() {
   const sel = document.getElementById("select-kontakte-gender");
   if (!sel) return;
 
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
 
   try {
     const res = await fetch(`${API_BASE}/stammdaten/genders`);
@@ -2198,7 +2438,7 @@ document.getElementById("btn-save-kontakte")?.addEventListener("click", async ()
   };
 
   if (!payload.first_name || !payload.last_name || !payload.salutation_id || !payload.gender_id || !payload.address_id) {
-    return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
   }
 
   try {
@@ -2211,7 +2451,7 @@ document.getElementById("btn-save-kontakte")?.addEventListener("click", async ()
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "contacts save failed");
 
-    showMessage(msg, "Kontakt gespeichert âœ…", "success");
+    showMessage(msg, "Kontakt gespeichert ✅", "success");
 
     [
       "input-kontakte-title",
@@ -2248,7 +2488,7 @@ document.getElementById("btn-save-status").addEventListener("click", async () =>
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error);
-    showMessage(msg, "Status gespeichert âœ…", "success");
+    showMessage(msg, "Status gespeichert ✅", "success");
     document.getElementById("input-status").value = "";
   } catch (err) {
     showMessage(msg, "Fehler: " + err.message, "error");
@@ -2268,7 +2508,7 @@ document.getElementById("btn-save-typ").addEventListener("click", async () => {
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error);
-    showMessage(msg, "Typ gespeichert âœ…", "success");
+    showMessage(msg, "Typ gespeichert ✅", "success");
     document.getElementById("input-typ").value = "";
   } catch (err) {
     showMessage(msg, "Fehler: " + err.message, "error");
@@ -2278,7 +2518,7 @@ document.getElementById("btn-save-typ").addEventListener("click", async () => {
 // --- MITARBEITER ---
 async function loadGeschlechter() {
   const sel = document.getElementById("select-geschlecht");
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   try {
     const res = await fetch(`${API_BASE}/mitarbeiter/genders`);
     const json = await res.json();
@@ -2309,7 +2549,7 @@ document.getElementById("btn-save-mitarbeiter").addEventListener("click", async 
   };
 
   if (!payload.short_name || !payload.first_name || !payload.last_name || !payload.gender_id) {
-    return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
   }
 
   try {
@@ -2320,7 +2560,7 @@ document.getElementById("btn-save-mitarbeiter").addEventListener("click", async 
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error);
-    showMessage(msg, "Mitarbeiter gespeichert âœ…", "success");
+    showMessage(msg, "Mitarbeiter gespeichert ✅", "success");
 
     ["input-username", "input-titel", "input-vorname", "input-nachname",
      "input-passwort", "input-email", "input-mobil", "input-personalnummer"]
@@ -2625,7 +2865,7 @@ async function loadDropdown(fieldSuffix, endpoint, valField, labelField, labelFi
   const sel = document.getElementById(`select-${fieldSuffix}`);
   if (!sel) return;
 
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   try {
     const res = await fetch(`${API_BASE}/${endpoint}`);
     const json = await res.json().catch(() => ({}));
@@ -2653,7 +2893,7 @@ async function loadProjectDropdown(dropdownId) {
   const sel = document.getElementById(dropdownId);
   if (!sel) return;
 
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
 
   try {
     // IMPORTANT: always call the backend (port 3000) and not the frontend origin
@@ -2665,7 +2905,7 @@ async function loadProjectDropdown(dropdownId) {
     json.data.forEach(p => {
       const opt = document.createElement("option");
       opt.value = p.ID;
-      opt.textContent = `${p.NAME_SHORT} â€“ ${p.NAME_LONG}`;
+      opt.textContent = `${p.NAME_SHORT} – ${p.NAME_LONG}`;
       sel.appendChild(opt);
     });
   } catch (err) {
@@ -2731,9 +2971,9 @@ function feeResetWizardState() {
   const groupSel = document.getElementById("fee-group-select");
   if (groupSel) groupSel.value = "";
   const masterSel = document.getElementById("fee-master-select");
-  if (masterSel) masterSel.innerHTML = `<option value="">Bitte zuerst Honorarordnung wählen …</option>`;
+  if (masterSel) masterSel.innerHTML = `<option value="">Bitte zuerst Honorarordnung w�hlen �</option>`;
   const structureSel = document.getElementById("fee-structure-select");
-  if (structureSel) structureSel.innerHTML = `<option value="">Bitte wählen …</option>`;
+  if (structureSel) structureSel.innerHTML = `<option value="">Bitte w�hlen �</option>`;
   const phaseBody = document.getElementById("fee-summary-phase-body");
   if (phaseBody) phaseBody.innerHTML = "";
   const phaseFoot = document.getElementById("fee-summary-phase-foot");
@@ -2767,7 +3007,7 @@ function feeResetBasisInputs() {
     const el = document.getElementById(id);
     if (!el) return;
     if (el.tagName === "SELECT") {
-      el.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+      el.innerHTML = `<option value="">Bitte wählen …</option>`;
     } else {
       el.value = "";
     }
@@ -2907,7 +3147,7 @@ function feeRenderPhaseFooter() {
 function feeRenderGroupDropdown() {
   const sel = document.getElementById("fee-group-select");
   if (!sel) return;
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   (__feeWizard.feeGroups || []).forEach((row) => {
     const opt = document.createElement("option");
     opt.value = row.ID;
@@ -2921,10 +3161,10 @@ function feeRenderMasterDropdown() {
   const sel = document.getElementById("fee-master-select");
   if (!sel) return;
   if (!__feeWizard.selectedFeeGroupId) {
-    sel.innerHTML = `<option value="">Bitte zuerst Honorarordnung wÃ¤hlen â€¦</option>`;
+    sel.innerHTML = `<option value="">Bitte zuerst Honorarordnung wählen …</option>`;
     return;
   }
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   (__feeWizard.feeMasters || []).forEach((row) => {
     const opt = document.createElement("option");
     opt.value = row.ID;
@@ -2937,7 +3177,7 @@ function feeRenderMasterDropdown() {
 function feeRenderProjectDropdown() {
   const sel = document.getElementById("fee-project-select");
   if (!sel) return;
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   (__feeWizard.projects || []).forEach((row) => {
     const opt = document.createElement("option");
     opt.value = row.ID;
@@ -2949,7 +3189,7 @@ function feeRenderProjectDropdown() {
 function feeRenderZoneDropdown() {
   const sel = document.getElementById("fee-zone-select");
   if (!sel) return;
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   (__feeWizard.feeZones || []).forEach((row) => {
     const opt = document.createElement("option");
     opt.value = row.ID;
@@ -2973,11 +3213,11 @@ function feeCurrentZoneLabel() {
 function feeRenderStructureDropdown() {
   const sel = document.getElementById("fee-structure-select");
   if (!sel) return;
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   (__feeWizard.structureRows || []).forEach((row) => {
     const opt = document.createElement("option");
     opt.value = row.ID;
-    opt.textContent = `${row.NAME_SHORT || ""} – ${row.NAME_LONG || ""}`.replace(/\s+–\s*$/, "");
+    opt.textContent = `${row.NAME_SHORT || ""} � ${row.NAME_LONG || ""}`.replace(/\s+�\s*$/, "");
     sel.appendChild(opt);
   });
 }
@@ -3115,7 +3355,7 @@ function feeNumOrNull(v) {
 
 async function feeCreateCalculationMaster() {
   const feeMasterId = String(__feeWizard.selectedFeeMasterId || "").trim();
-  if (!feeMasterId) throw new Error("Bitte Leistungsbild auswÃ¤hlen.");
+  if (!feeMasterId) throw new Error("Bitte Leistungsbild auswählen.");
 
   const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-masters/init`, {
     method: "POST",
@@ -3129,7 +3369,7 @@ async function feeCreateCalculationMaster() {
 
 async function feeSaveBasis() {
   const calcId = String(__feeWizard.calcMasterId || "").trim();
-  if (!calcId) throw new Error("Keine Honorarberechnung ausgewÃ¤hlt.");
+  if (!calcId) throw new Error("Keine Honorarberechnung ausgewählt.");
 
   const payload = {
     NAME_SHORT: document.getElementById("fee-basis-paragraph")?.value?.trim() || null,
@@ -3156,7 +3396,7 @@ async function feeSaveBasis() {
 
 async function feeInitPhases() {
   const calcId = String(__feeWizard.calcMasterId || "").trim();
-  if (!calcId) throw new Error("Keine Honorarberechnung ausgewählt.");
+  if (!calcId) throw new Error("Keine Honorarberechnung ausgew�hlt.");
 
   const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-masters/${encodeURIComponent(calcId)}/phases/init`, {
     method: "POST",
@@ -3174,7 +3414,7 @@ async function feeSavePhases() {
     return;
   }
   const calcId = String(__feeWizard.calcMasterId || "").trim();
-  if (!calcId) throw new Error("Keine Honorarberechnung ausgewählt.");
+  if (!calcId) throw new Error("Keine Honorarberechnung ausgew�hlt.");
 
   const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-masters/${encodeURIComponent(calcId)}/phases/save`, {
     method: "POST",
@@ -3235,11 +3475,11 @@ document.getElementById("fee-next-1")?.addEventListener("click", async () => {
   try {
     const feeMasterId = String(document.getElementById("fee-master-select")?.value || "").trim();
     if (!feeMasterId) {
-      feeSetMsg("Bitte Leistungsbild auswÃ¤hlen.", "error");
+      feeSetMsg("Bitte Leistungsbild auswählen.", "error");
       return;
     }
     __feeWizard.selectedFeeMasterId = feeMasterId;
-    feeSetMsg("Anlegen der Honorarberechnung â€¦", "info");
+    feeSetMsg("Anlegen der Honorarberechnung …", "info");
     const row = await feeCreateCalculationMaster();
     __feeCancelOnUnload = true;
     await Promise.all([feeLoadProjects(), feeLoadZonesByMaster(feeMasterId)]);
@@ -3257,7 +3497,7 @@ document.getElementById("fee-prev-2")?.addEventListener("click", () => {
 
 document.getElementById("fee-save-2")?.addEventListener("click", async () => {
   try {
-    feeSetMsg("Speichere Basisdaten â€¦", "info");
+    feeSetMsg("Speichere Basisdaten …", "info");
     const row = await feeSaveBasis();
     feePopulateBasis(row);
     feeSetMsg("Basisdaten gespeichert.", "success");
@@ -3268,10 +3508,10 @@ document.getElementById("fee-save-2")?.addEventListener("click", async () => {
 
 document.getElementById("fee-next-2")?.addEventListener("click", async () => {
   try {
-    feeSetMsg("Speichere Basisdaten â€¦", "info");
+    feeSetMsg("Speichere Basisdaten …", "info");
     const row = await feeSaveBasis();
     feePopulateBasis(row);
-    feeSetMsg("Lade Leistungsphasen â€¦", "info");
+    feeSetMsg("Lade Leistungsphasen …", "info");
     await feeInitPhases();
     feeShowStep(3);
     feeSetMsg("Leistungsphasen geladen.", "success");
@@ -3286,7 +3526,7 @@ document.getElementById("fee-prev-3")?.addEventListener("click", () => {
 
 document.getElementById("fee-save-3")?.addEventListener("click", async () => {
   try {
-    feeSetMsg("Speichere Leistungsphasen â€¦", "info");
+    feeSetMsg("Speichere Leistungsphasen …", "info");
     await feeSavePhases();
     feeSetMsg("Leistungsphasen gespeichert.", "success");
   } catch (err) {
@@ -3298,7 +3538,7 @@ document.getElementById("fee-next-3")?.addEventListener("click", () => {
   feeSavePhases()
     .then(() => {
       feeShowStep(4);
-      feeSetMsg("Zu- und Abschläge können später ergänzt werden.", "info");
+      feeSetMsg("Zu- und Abschl�ge k�nnen sp�ter erg�nzt werden.", "info");
     })
     .catch((err) => {
       feeSetMsg("Fehler: " + (err.message || err), "error");
@@ -3315,7 +3555,7 @@ document.getElementById("fee-next-4")?.addEventListener("click", async () => {
     await feeLoadStructureRows(__feeWizard.calcMasterRow?.PROJECT_ID);
     feeRenderOverview();
     feeShowStep(5);
-    feeSetMsg("Übersicht geladen.", "success");
+    feeSetMsg("�bersicht geladen.", "success");
   } catch (err) {
     feeSetMsg("Fehler: " + (err.message || err), "error");
   }
@@ -3330,11 +3570,11 @@ document.getElementById("fee-finish")?.addEventListener("click", async () => {
     const calcId = String(__feeWizard.calcMasterId || "").trim();
     const fatherId = String(document.getElementById("fee-structure-select")?.value || "").trim();
     const projectId = String(__feeWizard.calcMasterRow?.PROJECT_ID || "").trim();
-    if (!calcId) throw new Error("Keine Honorarberechnung ausgewählt.");
-    if (!fatherId) throw new Error("Bitte ein übergeordnetes Projektelement auswählen.");
-    if (!projectId) throw new Error("Bitte zuerst ein Projekt in der Basis auswählen.");
+    if (!calcId) throw new Error("Keine Honorarberechnung ausgew�hlt.");
+    if (!fatherId) throw new Error("Bitte ein �bergeordnetes Projektelement ausw�hlen.");
+    if (!projectId) throw new Error("Bitte zuerst ein Projekt in der Basis ausw�hlen.");
 
-    feeSetMsg("Erzeuge Projektstruktur aus HOAI …", "info");
+    feeSetMsg("Erzeuge Projektstruktur aus HOAI �", "info");
     const res = await fetch(`${API_BASE}/stammdaten/fee-calculation-masters/${encodeURIComponent(calcId)}/add-to-project-structure`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3388,7 +3628,7 @@ async function prjLoadCompanies() {
   const companySel = document.getElementById("select-projekt-company");
   if (!companySel) return;
 
-  companySel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  companySel.innerHTML = `<option value="">Bitte wählen …</option>`;
   const res = await fetch(`${API_BASE}/stammdaten/companies`);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error || "Fehler beim Laden der Firmen");
@@ -3474,11 +3714,11 @@ function prjRenderE2PTable() {
 
     const tdRoleSel = document.createElement("td");
     const sel = document.createElement("select");
-    sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+    sel.innerHTML = `<option value="">Bitte wählen …</option>`;
     (__prjWizard.roles || []).forEach((r) => {
       const opt = document.createElement("option");
       opt.value = r.ID;
-      opt.textContent = `${r.NAME_SHORT || ""}${r.NAME_LONG ? " â€“ " + r.NAME_LONG : ""}`.trim();
+      opt.textContent = `${r.NAME_SHORT || ""}${r.NAME_LONG ? " – " + r.NAME_LONG : ""}`.trim();
       sel.appendChild(opt);
     });
     sel.value = rowState.role_id || "";
@@ -3576,11 +3816,11 @@ function prjRenderStructTable() {
 
     const tdBt = document.createElement("td");
     const selBt = document.createElement("select");
-    selBt.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+    selBt.innerHTML = `<option value="">Bitte wählen …</option>`;
     bt.forEach((b0) => {
       const opt = document.createElement("option");
       opt.value = b0.ID;
-      opt.textContent = `${b0.NAME_SHORT || ""}${b0.NAME_LONG ? " â€“ " + b0.NAME_LONG : ""}`.trim();
+      opt.textContent = `${b0.NAME_SHORT || ""}${b0.NAME_LONG ? " – " + b0.NAME_LONG : ""}`.trim();
       selBt.appendChild(opt);
     });
     selBt.value = r.BILLING_TYPE_ID || "";
@@ -3629,7 +3869,7 @@ function prjRenderStructTable() {
 async function prjLoadCopyProjectsDropdown() {
   const sel = document.getElementById("prj-struct-source-project");
   if (!sel) return;
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   try {
     const res = await fetch(`${API_BASE}/projekte/list?limit=2000`);
     const json = await res.json().catch(() => ({}));
@@ -3637,7 +3877,7 @@ async function prjLoadCopyProjectsDropdown() {
     (json.data || []).forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.ID;
-      opt.textContent = `${p.NAME_SHORT || ""} â€“ ${p.NAME_LONG || ""}`.trim();
+      opt.textContent = `${p.NAME_SHORT || ""} – ${p.NAME_LONG || ""}`.trim();
       sel.appendChild(opt);
     });
   } catch (e) {
@@ -3646,7 +3886,7 @@ async function prjLoadCopyProjectsDropdown() {
 }
 
 async function prjCopyStructureFromProject(sourceProjectId) {
-  if (!sourceProjectId) throw new Error("Bitte Quellprojekt auswÃ¤hlen.");
+  if (!sourceProjectId) throw new Error("Bitte Quellprojekt auswählen.");
   const res = await fetch(`${API_BASE}/projekte/${sourceProjectId}/structure`);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error || "Fehler beim Laden der Projektstruktur");
@@ -3707,7 +3947,7 @@ function prjBuildSummary() {
 
   if (rows.length) {
     html += `<h4>Mitarbeiter</h4>`;
-    html += `<div class="table-wrap"><table class="data-table"><thead><tr><th>Mitarbeiter</th><th>KÃ¼rzel</th><th>Rolle</th><th>Stundensatz</th></tr></thead><tbody>`;
+    html += `<div class="table-wrap"><table class="data-table"><thead><tr><th>Mitarbeiter</th><th>Kürzel</th><th>Rolle</th><th>Stundensatz</th></tr></thead><tbody>`;
     rows.forEach((r) => {
       html += `<tr><td>${escapeHtml(r.emp)}</td><td>${escapeHtml(r.roleShort)}</td><td>${escapeHtml(r.roleLong)}</td><td>${escapeHtml(String(r.rate))}</td></tr>`;
     });
@@ -3767,7 +4007,7 @@ function prjValidateStep1() {
   const contactId = document.getElementById("input-projekt-invoice-contact-id").value;
 
   if (!companyId || !nameLong || !statusId || !managerId || !addressId || !contactId) {
-    prjSetMsg("Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    prjSetMsg("Bitte alle Pflichtfelder ausfüllen", "error");
     return false;
   }
   return true;
@@ -3822,7 +4062,7 @@ if (prjCopyBtn) prjCopyBtn.addEventListener('click', async () => {
   const srcId = sel ? sel.value : '';
   try {
     await prjCopyStructureFromProject(srcId);
-    prjSetMsg('Projektstruktur kopiert âœ…', 'success');
+    prjSetMsg('Projektstruktur kopiert ✅', 'success');
   } catch (e) {
     prjSetMsg('Fehler: ' + (e.message || e), 'error');
   }
@@ -3853,7 +4093,7 @@ document.getElementById("prj-emp-confirm").addEventListener("click", () => {
     else __prjWizard.selectedEmpIds.delete(emp.ID);
   });
   prjRenderE2PTable();
-  prjSetMsg("Mitarbeiter Ã¼bernommen âœ…", "success");
+  prjSetMsg("Mitarbeiter übernommen ✅", "success");
 });
 
 document.getElementById("prj-create").addEventListener("click", async () => {
@@ -3894,7 +4134,7 @@ document.getElementById("prj-create").addEventListener("click", async () => {
   });
 
   try {
-    showMessage(msg, "Speichere Projekt â€¦", "info");
+    showMessage(msg, "Speichere Projekt …", "info");
 
     const res = await fetch(`${API_BASE}/projekte`, {
       method: "POST",
@@ -3904,7 +4144,7 @@ document.getElementById("prj-create").addEventListener("click", async () => {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || "Speichern fehlgeschlagen");
 
-    showMessage(msg, `Projekt angelegt âœ… (${json?.data?.NAME_SHORT || "Nr. vergeben"})`, "success");
+    showMessage(msg, `Projekt angelegt ✅ (${json?.data?.NAME_SHORT || "Nr. vergeben"})`, "success");
     prjResetWizardState();
     prjShowStep(1);
   } catch (err) {
@@ -4039,7 +4279,7 @@ function _renderProjektliste() {
     tblBody.appendChild(tr);
   });
 
-  if (pageInfo) pageInfo.textContent = `Seite ${__prjList.page} / ${totalPages} (${total} EintrÃ¤ge)`;
+  if (pageInfo) pageInfo.textContent = `Seite ${__prjList.page} / ${totalPages} (${total} Einträge)`;
   showMessage(msg, total === 0 ? "Keine Projekte gefunden." : "", "info");
 }
 
@@ -4060,7 +4300,7 @@ async function _ensureProjektEditLookups() {
 
 function _fillSelect(selectEl, items, getLabel) {
   if (!selectEl) return;
-  selectEl.innerHTML = `<option value="">â€”</option>`;
+  selectEl.innerHTML = `<option value="">—</option>`;
   items.forEach(it => {
     const opt = document.createElement("option");
     opt.value = it.ID;
@@ -4253,14 +4493,14 @@ async function _ensureCountriesForAddrEdit() {
   if (__addrLookups.loadedCountries) return;
   const res = await fetch(`${API_BASE}/stammdaten/countries`);
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || "LÃ¤nder konnten nicht geladen werden");
+  if (!res.ok) throw new Error(json.error || "Länder konnten nicht geladen werden");
   __addrLookups.countries = Array.isArray(json.data) ? json.data : [];
   __addrLookups.loadedCountries = true;
 }
 
 function _fillCountrySelect(selectEl, selectedId) {
   if (!selectEl) return;
-  selectEl.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  selectEl.innerHTML = `<option value="">Bitte wählen …</option>`;
   (__addrLookups.countries || []).forEach(c => {
     const opt = document.createElement("option");
     opt.value = c.ID;
@@ -4344,13 +4584,13 @@ function _renderAddressliste() {
     tbody.appendChild(tr);
   });
 
-  if (pageInfo) pageInfo.textContent = `Seite ${__addrList.page} / ${pages} (EintrÃ¤ge: ${total})`;
+  if (pageInfo) pageInfo.textContent = `Seite ${__addrList.page} / ${pages} (Einträge: ${total})`;
 }
 
 async function loadAddressListe() {
   const msg = document.getElementById("msg-addressliste");
   try {
-    showMessage(msg, "Lade Anschriftenliste â€¦", "");
+    showMessage(msg, "Lade Anschriftenliste …", "");
     const res = await fetch(`${API_BASE}/stammdaten/addresses/list?limit=2000`);
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || "Anschriftenliste konnte nicht geladen werden");
@@ -4413,7 +4653,7 @@ async function _saveAddrEditModal() {
     };
 
     if (!payload.address_name_1 || !payload.country_id) {
-      showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen (Anschrift, Land)", "error");
+      showMessage(msg, "Bitte alle Pflichtfelder ausfüllen (Anschrift, Land)", "error");
       return;
     }
 
@@ -4539,7 +4779,7 @@ async function _ensureKontaktLookups() {
 
 function _fillLookupSelect(selectEl, items, labelFn, selectedVal) {
   if (!selectEl) return;
-  selectEl.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  selectEl.innerHTML = `<option value="">Bitte wählen …</option>`;
   (items || []).forEach(it => {
     const opt = document.createElement("option");
     opt.value = it.ID;
@@ -4617,13 +4857,13 @@ function _renderKontaktliste() {
     tbody.appendChild(tr);
   });
 
-  if (pageInfo) pageInfo.textContent = `Seite ${__ctList.page} / ${pages} (EintrÃ¤ge: ${total})`;
+  if (pageInfo) pageInfo.textContent = `Seite ${__ctList.page} / ${pages} (Einträge: ${total})`;
 }
 
 async function loadKontaktListe() {
   const msg = document.getElementById("msg-kontaktliste");
   try {
-    showMessage(msg, "Lade Kontaktliste â€¦", "");
+    showMessage(msg, "Lade Kontaktliste …", "");
     const res = await fetch(`${API_BASE}/stammdaten/contacts/list?limit=2000`);
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || "Kontaktliste konnte nicht geladen werden");
@@ -4788,7 +5028,7 @@ async function _saveCtEditModal() {
     };
 
     if (!payload.first_name || !payload.last_name || !payload.salutation_id || !payload.gender_id || !payload.address_id) {
-      showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen (Vorname, Nachname, Anrede, Geschlecht, Adresse)", "error");
+      showMessage(msg, "Bitte alle Pflichtfelder ausfüllen (Vorname, Nachname, Anrede, Geschlecht, Adresse)", "error");
       return;
     }
 
@@ -5074,7 +5314,7 @@ function psClearMessages() {
   });
 }
 
-function psFillBillingTypeSelect(selectEl, { allowEmpty = false, emptyLabel = "â€”" } = {}) {
+function psFillBillingTypeSelect(selectEl, { allowEmpty = false, emptyLabel = "—" } = {}) {
   if (!selectEl) return;
   const opts = [];
   if (allowEmpty) opts.push(`<option value="">${emptyLabel}</option>`);
@@ -5094,7 +5334,7 @@ function psBuildParentOptions() {
 
   const opts = [`<option value="">(Root / oberste Ebene)</option>`];
   flat.forEach(({ node, level }) => {
-    const label = `${"â€”".repeat(level)} ${node.NAME_SHORT || ("#" + node.ID)}`.trim();
+    const label = `${"—".repeat(level)} ${node.NAME_SHORT || ("#" + node.ID)}`.trim();
     opts.push(`<option value="${node.ID}">${escapeHtml(label)}</option>`);
   });
   sel.innerHTML = opts.join("");
@@ -5155,7 +5395,7 @@ function psFlattenTree(roots) {
 
 async function psLoadProjectStructure(projectId) {
   if (!projectId) {
-    psMsg("Bitte ein Projekt auswÃ¤hlen.", "error");
+    psMsg("Bitte ein Projekt auswählen.", "error");
     psShowTable(false);
     psClearTable();
     return;
@@ -5165,7 +5405,7 @@ async function psLoadProjectStructure(projectId) {
   psResetState();
   const addBtn = document.getElementById("ps-add");
   if (addBtn) addBtn.disabled = false;
-  psMsg("Lade Projektstruktur â€¦", "info");
+  psMsg("Lade Projektstruktur …", "info");
   psShowTable(false);
   psClearTable();
 
@@ -5184,7 +5424,7 @@ async function psLoadProjectStructure(projectId) {
     // compute parent revenues as sum(children), leaf revenues as stored / TEC (BT=2)
     psComputeRevenuesFromNodes(__psNodes);
     // prepare bulk + add modal selects
-    psFillBillingTypeSelect(document.getElementById("ps-bulk-billing-type"), { allowEmpty: true, emptyLabel: "(nicht Ã¤ndern)" });
+    psFillBillingTypeSelect(document.getElementById("ps-bulk-billing-type"), { allowEmpty: true, emptyLabel: "(nicht ändern)" });
     psFillBillingTypeSelect(document.getElementById("ps-add-billing-type"));
     psBuildParentOptions();
     if (!nodes.length) {
@@ -5202,7 +5442,7 @@ async function psLoadProjectStructure(projectId) {
           return `<option value="${id}" ${id === sel ? "selected" : ""}>${label}</option>`;
         })
         .join("");
-      return `<option value="">Bitte wÃ¤hlen â€¦</option>` + opts;
+      return `<option value="">Bitte wählen …</option>` + opts;
     };
 
     const roots = psBuildTree(nodes);
@@ -5236,7 +5476,7 @@ async function psLoadProjectStructure(projectId) {
         <td class="ps-col-select">
           <div class="ps-select-cell">
             <input type="checkbox" class="ps-select-row" data-id="${node.ID}" />
-            <span class="ps-drag-handle" draggable="true" data-id="${node.ID}" title="Ziehen zum Verschieben">â‹®â‹®</span>
+            <span class="ps-drag-handle" draggable="true" data-id="${node.ID}" title="Ziehen zum Verschieben">⋮⋮</span>
           </div>
         </td>
         <td>
@@ -5261,7 +5501,7 @@ async function psLoadProjectStructure(projectId) {
         <td>
           <div class="ps-row-actions">
             <button type="button" class="btn-ps-save" data-id="${node.ID}">Speichern</button>
-            <button type="button" class="btn-ps-del" data-id="${node.ID}">LÃ¶schen</button>
+            <button type="button" class="btn-ps-del" data-id="${node.ID}">Löschen</button>
           </div>
         </td>
       `;
@@ -5385,7 +5625,7 @@ function wireProjektstrukturNeu() {
 
 }
 
-// --- Projektstruktur: KontextmenÃ¼ (Rechtsklick) ---
+// --- Projektstruktur: Kontextmenü (Rechtsklick) ---
 function psHideContextMenu() {
   const menu = document.getElementById("ps-context-menu");
   if (!menu) return;
@@ -5422,9 +5662,9 @@ function psShowContextMenu(x, y, targetId) {
 async function psDeleteMany(ids) {
   const uniq = Array.from(new Set((ids || []).map((x) => String(x))));
   if (!uniq.length) return;
-  if (!confirm(`${uniq.length} Elemente lÃ¶schen?\n\nHinweis: LÃ¶schen ist nur mÃ¶glich, wenn keine Buchungen/Rechnungen darauf verweisen.`)) return;
+  if (!confirm(`${uniq.length} Elemente löschen?\n\nHinweis: Löschen ist nur möglich, wenn keine Buchungen/Rechnungen darauf verweisen.`)) return;
 
-  psMsg("LÃ¶sche Auswahl â€¦", "info");
+  psMsg("Lösche Auswahl …", "info");
   const failed = [];
 
   // Delete deepest first (children before parents) using current father relationships in DOM
@@ -5451,10 +5691,10 @@ async function psDeleteMany(ids) {
   for (let i = 0; i < uniq.length; i++) {
     const id = uniq[i];
     try {
-      psMsg(`LÃ¶sche ${i + 1} / ${uniq.length} â€¦`, "info");
+      psMsg(`Lösche ${i + 1} / ${uniq.length} …`, "info");
       const res = await fetch(`${API_BASE}/projekte/structure/${encodeURIComponent(id)}?cascade=0`, { method: "DELETE" });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || "Fehler beim LÃ¶schen");
+      if (!res.ok) throw new Error(json.error || "Fehler beim Löschen");
     } catch (err) {
       failed.push({ id, error: err.message || "Fehler" });
     }
@@ -5466,9 +5706,9 @@ async function psDeleteMany(ids) {
 
   if (failed.length) {
     const msg = failed.slice(0, 6).map((f) => `#${f.id}: ${f.error}`).join("\n");
-    psMsg(`Einige Elemente konnten nicht gelÃ¶scht werden (${failed.length}/${uniq.length}).\n${msg}`, "error");
+    psMsg(`Einige Elemente konnten nicht gelöscht werden (${failed.length}/${uniq.length}).\n${msg}`, "error");
   } else {
-    psMsg("Auswahl gelÃ¶scht.", "success");
+    psMsg("Auswahl gelöscht.", "success");
   }
 }
 
@@ -5502,7 +5742,7 @@ document.addEventListener("click", async (e) => {
 
   if (act === "add") {
     if ((__psSelectedIds || new Set()).size > 1) {
-      psMsg("Element anlegen ist nur bei einer Auswahl mÃ¶glich.", "error");
+      psMsg("Element anlegen ist nur bei einer Auswahl möglich.", "error");
       return;
     }
     if (!clickedId) return;
@@ -5528,7 +5768,7 @@ document.getElementById("btn-projektstruktur")?.addEventListener("click", () => 
   showView("view-projektstruktur");
 });
 
-// LeistungsstÃ¤nde (ProjektÃ¼bersicht)
+// Leistungsstände (Projektübersicht)
 document.getElementById("btn-leistungsstaende")?.addEventListener("click", () => {
   wireLeistungsstaende();
   lsMsg("", "");
@@ -5613,7 +5853,7 @@ document.addEventListener("click", async (e) => {
     return;
   }
   if (!billingTypeId || Number.isNaN(billingTypeId)) {
-    psMsg("Bitte eine Abrechnungsart auswÃ¤hlen.", "error");
+    psMsg("Bitte eine Abrechnungsart auswählen.", "error");
     return;
   }
 
@@ -5626,7 +5866,7 @@ document.addEventListener("click", async (e) => {
   };
 
   btn.disabled = true;
-  btn.textContent = "Speichere â€¦";
+  btn.textContent = "Speichere …";
   psMsg("", "");
 
   try {
@@ -5660,7 +5900,7 @@ document.addEventListener("click", async (e) => {
       const parts = [];
       if (changedBillingType) parts.push("Abrechnungsart");
       if (changedExtrasPercent) parts.push("Nebenkosten %");
-      const msg = `${parts.join(" und ")} wurde${parts.length === 1 ? "" : "n"} geÃ¤ndert. Auf alle Unterelemente Ã¼bernehmen?`;
+      const msg = `${parts.join(" und ")} wurde${parts.length === 1 ? "" : "n"} geändert. Auf alle Unterelemente übernehmen?`;
       const ok = window.confirm(msg);
       if (ok) {
         try {
@@ -5676,7 +5916,7 @@ document.addEventListener("click", async (e) => {
           const inhJson = await inhRes.json().catch(() => ({}));
           if (!inhRes.ok) throw new Error(inhJson.error || "Fehler bei der Vererbung");
 
-          psMsg("Gespeichert und auf Unterelemente Ã¼bernommen.", "success");
+          psMsg("Gespeichert und auf Unterelemente übernommen.", "success");
           await psLoadProjectStructure(__psProjectId);
           return;
         } catch (inhErr) {
@@ -5879,30 +6119,30 @@ async function psSaveAllDirty() {
   const btn = document.getElementById("ps-save-all");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Speichere â€¦";
+    btn.textContent = "Speichere …";
   }
   psMsg("", "");
 
   try {
     for (let i = 0; i < ids.length; i++) {
-      psMsg(`Speichere ${i + 1} / ${ids.length} â€¦`, "info");
+      psMsg(`Speichere ${i + 1} / ${ids.length} …`, "info");
       await psSaveRowById(ids[i]);
     }
-    psMsg("Alle Ã„nderungen gespeichert.", "success");
+    psMsg("Alle Änderungen gespeichert.", "success");
   } catch (err) {
     console.error(err);
     psMsg(err.message || "Fehler", "error");
   } finally {
     if (btn) {
       btn.disabled = __psDirtyIds.size === 0;
-      btn.textContent = "Ã„nderungen speichern";
+      btn.textContent = "Änderungen speichern";
     }
   }
 }
 
 function psOpenAddModal(opts = {}) {
   if (!__psProjectId) {
-    psMsg("Bitte zuerst ein Projekt auswÃ¤hlen.", "error");
+    psMsg("Bitte zuerst ein Projekt auswählen.", "error");
     return;
   }
   psClearMessages();
@@ -5944,7 +6184,7 @@ async function psCreateStructure() {
   const fatherIdRaw = document.getElementById("ps-add-parent")?.value;
 
   if (!nameShort) return showMessage(msgEl, "NAME_SHORT ist erforderlich.", "error");
-  if (!billingTypeId) return showMessage(msgEl, "Bitte eine Abrechnungsart auswÃ¤hlen.", "error");
+  if (!billingTypeId) return showMessage(msgEl, "Bitte eine Abrechnungsart auswählen.", "error");
 
   const payload = {
     NAME_SHORT: nameShort,
@@ -5955,7 +6195,7 @@ async function psCreateStructure() {
     FATHER_ID: fatherIdRaw ? parseInt(fatherIdRaw, 10) : null,
   };
 
-  showMessage(msgEl, "Lege Element an â€¦", "info");
+  showMessage(msgEl, "Lege Element an …", "info");
 
   const res = await fetch(`${API_BASE}/projekte/${encodeURIComponent(__psProjectId)}/structure`, {
     method: "POST",
@@ -5985,9 +6225,9 @@ function psOpenDeleteModal(id) {
 
   if (textEl) {
     textEl.innerHTML = `
-      <p>Soll das Element <strong>${escapeHtml(name)}</strong> gelÃ¶scht werden?</p>
+      <p>Soll das Element <strong>${escapeHtml(name)}</strong> gelöscht werden?</p>
       ${hasChildren ? `<p><strong>Achtung:</strong> Das Element hat Unterelemente.</p>` : ""}
-      <p>Hinweis: LÃ¶schen ist nur mÃ¶glich, wenn keine Buchungen/Rechnungen darauf verweisen.</p>
+      <p>Hinweis: Löschen ist nur möglich, wenn keine Buchungen/Rechnungen darauf verweisen.</p>
     `;
   }
 
@@ -6002,15 +6242,15 @@ async function psDeleteStructure({ cascade }) {
   const msgEl = document.getElementById("ps-del-msg");
   if (!id) return;
 
-  showMessage(msgEl, "LÃ¶sche â€¦", "info");
+  showMessage(msgEl, "Lösche …", "info");
 
   const res = await fetch(`${API_BASE}/projekte/structure/${encodeURIComponent(id)}?cascade=${cascade ? "1" : "0"}`, {
     method: "DELETE",
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || "Fehler beim LÃ¶schen");
+  if (!res.ok) throw new Error(json.error || "Fehler beim Löschen");
 
-  showMessage(msgEl, "GelÃ¶scht.", "success");
+  showMessage(msgEl, "Gelöscht.", "success");
   psCloseModal("ps-del-modal");
   await psLoadProjectStructure(__psProjectId);
 }
@@ -6018,7 +6258,7 @@ async function psDeleteStructure({ cascade }) {
 // Apply bulk values to selected rows (UI only; then mark dirty)
 function psBulkApplyToSelection() {
   if (!__psSelectedIds.size) {
-    psMsg("Keine Elemente ausgewÃ¤hlt.", "error");
+    psMsg("Keine Elemente ausgewählt.", "error");
     return;
   }
 
@@ -6055,7 +6295,7 @@ function psBulkApplyToSelection() {
 
 
 
-// --- LeistungsstÃ¤nde eintragen (ProjektÃ¼bersicht) ---
+// --- Leistungsstände eintragen (Projektübersicht) ---
 let __lsWired = false;
 let __lsProjectId = null;
 let __lsNodes = [];
@@ -6223,13 +6463,13 @@ function lsRenderTable() {
 async function lsLoadProjectStructure(projectId) {
   const pid = String(projectId || "").trim();
   if (!pid) {
-    lsMsg("Bitte ein Projekt auswÃ¤hlen.", "error");
+    lsMsg("Bitte ein Projekt auswählen.", "error");
     lsResetState();
     return;
   }
 
   __lsProjectId = pid;
-  lsMsg("Lade Projektstruktur â€¦", "info");
+  lsMsg("Lade Projektstruktur …", "info");
   lsShowTable(false);
   lsClearTable();
 
@@ -6294,14 +6534,14 @@ async function lsPersistPercents(structureId, revenuePct, extrasPct) {
 
 async function lsFinalizeSnapshot() {
   if (!__lsProjectId) {
-    lsMsg("Bitte ein Projekt auswÃ¤hlen.", "error");
+    lsMsg("Bitte ein Projekt auswählen.", "error");
     return;
   }
 
   const btnSave = document.getElementById("ls-save");
   if (btnSave) btnSave.disabled = true;
 
-  lsMsg("Speichere LeistungsstÃ¤nde â€¦", "info");
+  lsMsg("Speichere Leistungsstände …", "info");
   try {
     const res = await fetch(`${API_BASE}/projekte/${encodeURIComponent(__lsProjectId)}/progress-snapshot`, {
       method: "POST",
@@ -6439,7 +6679,7 @@ document.getElementById("select-project-edit")?.addEventListener("change", async
           return `<option value="${id}" ${id === sel ? "selected" : ""}>${label}</option>`;
         })
         .join("");
-      return `<option value="">Bitte wÃ¤hlen â€¦</option>` + opts;
+      return `<option value="">Bitte wählen …</option>` + opts;
     };
 
     json.data.forEach((node) => {
@@ -6596,7 +6836,7 @@ document.addEventListener("click", async (e) => {
   });
 
   if (!payload.BILLING_TYPE_ID) {
-    alert("Bitte Abrechnungsart auswÃ¤hlen");
+    alert("Bitte Abrechnungsart auswählen");
     return;
   }
 
@@ -6707,7 +6947,7 @@ async function loadBuchungDropdowns() {
     loadDropdown("project", "projekte", "ID", "NAME_SHORT", "NAME_LONG")
   ]);
 
-  // ðŸ‘‡ Add this to load structure elements dynamically
+  // 👇 Add this to load structure elements dynamically
   const projectSelect = document.getElementById("select-project");
   const employeeSelect = document.getElementById("select-employee");
 
@@ -6720,7 +6960,7 @@ async function loadBuchungDropdowns() {
   if (projectSelect) {
     projectSelect.addEventListener("change", () => {
       const projectId = projectSelect.value;
-      loadStructureElements(projectId); // ðŸ§  Function already exists!
+      loadStructureElements(projectId); // 🧠 Function already exists!
       applyEmployee2ProjectPreset();
     });
   }
@@ -6747,7 +6987,7 @@ document.getElementById("btn-save-buchung").addEventListener("click", async () =
   if (!payload.EMPLOYEE_ID || !payload.DATE_VOUCHER || !payload.QUANTITY_INT ||
       !payload.CP_RATE || !payload.QUANTITY_EXT || !payload.SP_RATE ||
       !payload.POSTING_DESCRIPTION || !payload.PROJECT_ID || !payload.STRUCTURE_ID) {
-    return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
   }
 
   try {
@@ -6763,7 +7003,7 @@ document.getElementById("btn-save-buchung").addEventListener("click", async () =
 
     const json = await res.json();
     if (!res.ok) throw new Error(json.error);
-    showMessage(msg, isEdit ? "Buchung aktualisiert" : "Buchung gespeichert âœ…", "success");
+    showMessage(msg, isEdit ? "Buchung aktualisiert" : "Buchung gespeichert ✅", "success");
 
     // Reset fields
     ["input-date", "input-start", "input-end", "input-quantity-int", "input-cp-rate",
@@ -6793,7 +7033,7 @@ document.getElementById("btn-save-buchung").addEventListener("click", async () =
 
 async function loadStructureElements(projectId) {
   const sel = document.getElementById("select-structure-element");
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
   if (!projectId) return;
 
   try {
@@ -6804,7 +7044,7 @@ async function loadStructureElements(projectId) {
     json.data.forEach(el => {
       const opt = document.createElement("option");
       opt.value = el.ID;
-      opt.textContent = `${el.NAME_SHORT} â€“ ${el.NAME_LONG}`;
+      opt.textContent = `${el.NAME_SHORT} – ${el.NAME_LONG}`;
       sel.appendChild(opt);
     });
   } catch (err) {
@@ -6815,7 +7055,7 @@ async function loadStructureElements(projectId) {
 
 // -
 // ----------------------------
-// Buchungsliste (TEC) â€“ neue Listenansicht
+// Buchungsliste (TEC) – neue Listenansicht
 // ----------------------------
 
 const __tecList = {
@@ -6850,7 +7090,7 @@ function _normalizeTecRows(rows) {
 async function loadBuchungslisteProjects() {
   const sel = document.getElementById("select-buchungsliste-projekt");
   if (!sel) return;
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
 
   try {
     const res = await fetch(`${API_BASE}/projekte`);
@@ -7075,7 +7315,7 @@ function _renderTecList() {
       <td>${_str(r.POSTING_DESCRIPTION)}</td>
       <td>
         <button class="btn-small tec-edit-btn" data-id="${_str(r.ID)}">Bearbeiten</button>
-        <button class="btn-small btn-danger tec-del-btn" data-id="${_str(r.ID)}">LÃ¶schen</button>
+        <button class="btn-small btn-danger tec-del-btn" data-id="${_str(r.ID)}">Löschen</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -7130,7 +7370,7 @@ function _recalcTecEditTotals() {
 
 async function _deleteTecBooking(id) {
   if (!id) return;
-  const ok = confirm("Buchung wirklich lÃ¶schen?");
+  const ok = confirm("Buchung wirklich löschen?");
   if (!ok) return;
 
   try {
@@ -7140,7 +7380,7 @@ async function _deleteTecBooking(id) {
     await loadTecListForProject(__tecList.projectId);
   } catch (err) {
     console.error(err);
-    alert("Fehler beim LÃ¶schen: " + err.message);
+    alert("Fehler beim Löschen: " + err.message);
   }
 }
 async function _saveTecEdit() {
@@ -7439,7 +7679,7 @@ let __paymentsWired = false;
     formatLabel: (p) => {
       const num = _str(p.PARTIAL_PAYMENT_NUMBER);
       const proj = _str(p.PROJECT);
-      return proj ? `${num} â€” ${proj}` : num;
+      return proj ? `${num} — ${proj}` : num;
     },
     onSelect: () => {
       // enforce exclusivity
@@ -7462,7 +7702,7 @@ let __paymentsWired = false;
     formatLabel: (i) => {
       const num = _str(i.INVOICE_NUMBER);
       const proj = _str(i.PROJECT);
-      return proj ? `${num} â€” ${proj}` : num;
+      return proj ? `${num} — ${proj}` : num;
     },
     onSelect: () => {
       // enforce exclusivity
@@ -7491,20 +7731,20 @@ let __paymentsWired = false;
     const comment = document.getElementById("pay-comment")?.value || "";
 
     if ((!!ppId && !!invId) || (!ppId && !invId)) {
-      return showMessage(msg, "Bitte entweder Abschlagsrechnung ODER Rechnung auswÃ¤hlen.", "error");
+      return showMessage(msg, "Bitte entweder Abschlagsrechnung ODER Rechnung auswählen.", "error");
     }
 
     const gross = parseFloat(String(grossRaw || ""));
     if (!Number.isFinite(gross) || gross <= 0) {
-      return showMessage(msg, "Bitte eine gÃ¼ltige Summe (brutto) eingeben.", "error");
+      return showMessage(msg, "Bitte eine gültige Summe (brutto) eingeben.", "error");
     }
 
     if (!date) {
-      return showMessage(msg, "Bitte ein Zahlungsdatum wÃ¤hlen.", "error");
+      return showMessage(msg, "Bitte ein Zahlungsdatum wählen.", "error");
     }
 
     try {
-      showMessage(msg, "Speichere Zahlung â€¦", "");
+      showMessage(msg, "Speichere Zahlung …", "");
       const res = await fetch(`${API_BASE}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -7525,7 +7765,7 @@ let __paymentsWired = false;
       const vat = json.amount_payed_vat;
       showMessage(
         msg,
-        `Zahlung gespeichert âœ… (Netto: ${_fmtMoney(net)}, MwSt: ${_fmtMoney(vat)})`,
+        `Zahlung gespeichert ✅ (Netto: ${_fmtMoney(net)}, MwSt: ${_fmtMoney(vat)})`,
         "success"
       );
 
@@ -7533,7 +7773,7 @@ let __paymentsWired = false;
       // keep success message visible after reset
       showMessage(
         msg,
-        `Zahlung gespeichert âœ… (Netto: ${_fmtMoney(net)}, MwSt: ${_fmtMoney(vat)})`,
+        `Zahlung gespeichert ✅ (Netto: ${_fmtMoney(net)}, MwSt: ${_fmtMoney(vat)})`,
         "success"
       );
     } catch (e) {
@@ -7610,7 +7850,7 @@ async function loadCompaniesForPartialPayment() {
   const sel = document.getElementById("pp-company");
   if (!sel) return;
 
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
 
   try {
     const res = await fetch(`${API_BASE}/stammdaten/companies`);
@@ -8114,7 +8354,7 @@ document.getElementById("pp-next-1")?.addEventListener("click", async () => {
   const contractId = document.getElementById("pp-contract-id")?.value;
 
   if (!companyId || !employeeId || !projectId || !contractId) {
-    return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
   }
 
   try {
@@ -8163,7 +8403,7 @@ document.getElementById("pp-next-2")?.addEventListener("click", async () => {
   };
 
   if (!payload.partial_payment_date || !payload.due_date || !payload.billing_period_start || !payload.billing_period_finish) {
-    return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
   }
 
   try {
@@ -8208,7 +8448,7 @@ document.getElementById("pp-next-4")?.addEventListener("click", async () => {
   const pmId = document.getElementById("pp-payment-means-id")?.value;
 
   if (!vatId || !pmId) {
-    return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+    return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
   }
 
   const payload = {
@@ -8281,7 +8521,7 @@ document.getElementById("pp-book")?.addEventListener("click", async () => {
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "booking failed");
-    showMessage(msg, `Abschlagsrechnung gebucht âœ…${json?.number ? " (" + json.number + ")" : ""}`, "success");
+    showMessage(msg, `Abschlagsrechnung gebucht ✅${json?.number ? " (" + json.number + ")" : ""}`, "success");
     // Reset wizard for next entry
     await initPartialPaymentWizard();
   } catch (err) {
@@ -8404,12 +8644,12 @@ function _renderMitarbeiterliste() {
     tbody.appendChild(tr);
   });
 
-  pageInfo.textContent = `Seite ${__empList.page} / ${pages} (EintrÃ¤ge: ${total})`;
+  pageInfo.textContent = `Seite ${__empList.page} / ${pages} (Einträge: ${total})`;
 }
 
 async function loadMitarbeiterListe() {
   const msg = document.getElementById("msg-mitarbeiterliste");
-  showMessage(msg, "Lade Mitarbeiterliste â€¦", "");
+  showMessage(msg, "Lade Mitarbeiterliste …", "");
 
   try {
     const res = await fetch(`${API_BASE}/mitarbeiter/list?limit=2000`);
@@ -8428,7 +8668,7 @@ async function loadMitarbeiterListe() {
 
 async function _loadGenderSelect(selectEl, selectedId) {
   if (!selectEl) return;
-  selectEl.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  selectEl.innerHTML = `<option value="">Bitte wählen …</option>`;
   try {
     const res = await fetch(`${API_BASE}/mitarbeiter/genders`);
     const json = await res.json();
@@ -8559,7 +8799,7 @@ document.getElementById("emp-edit-save")?.addEventListener("click", async () => 
   };
 
   if (!payload.short_name || !payload.first_name || !payload.last_name || !payload.gender_id) {
-    if (msg) msg.textContent = "Bitte Pflichtfelder ausfÃ¼llen (KÃ¼rzel, Vorname, Nachname, Geschlecht).";
+    if (msg) msg.textContent = "Bitte Pflichtfelder ausfüllen (Kürzel, Vorname, Nachname, Geschlecht).";
     return;
   }
 
@@ -8687,7 +8927,7 @@ async function loadCompaniesForInvoice() {
   const sel = document.getElementById("inv-company");
   if (!sel) return;
 
-  sel.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  sel.innerHTML = `<option value="">Bitte wählen …</option>`;
 
   try {
     const res = await fetch(`${API_BASE}/stammdaten/companies`);
@@ -9195,19 +9435,19 @@ function wireInvoiceWizard() {
 
     // More explicit validation: Autocomplete fields must be selected (hidden id filled).
     if (!companyId) {
-      showMessage(msg, "Bitte eine Firma auswÃ¤hlen.", "error");
+      showMessage(msg, "Bitte eine Firma auswählen.", "error");
       return;
     }
     if (!employeeId) {
-      showMessage(msg, "Bitte einen Mitarbeiter aus der Trefferliste auswÃ¤hlen.", "error");
+      showMessage(msg, "Bitte einen Mitarbeiter aus der Trefferliste auswählen.", "error");
       return;
     }
     if (!projectId) {
-      showMessage(msg, "Bitte ein Projekt aus der Trefferliste auswÃ¤hlen.", "error");
+      showMessage(msg, "Bitte ein Projekt aus der Trefferliste auswählen.", "error");
       return;
     }
     if (!contractId) {
-      showMessage(msg, "Bitte einen Vertrag aus der Trefferliste auswÃ¤hlen.", "error");
+      showMessage(msg, "Bitte einen Vertrag aus der Trefferliste auswählen.", "error");
       return;
     }
 
@@ -9223,7 +9463,7 @@ function wireInvoiceWizard() {
     if (__invInitInFlight) return;
     __invInitInFlight = true;
     try {
-      showMessage(msg, "Entwurf wird erstellt â€¦", "info");
+      showMessage(msg, "Entwurf wird erstellt …", "info");
       const res = await fetch(`${API_BASE}/invoices/init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -9261,19 +9501,19 @@ function wireInvoiceWizard() {
     const pf = document.getElementById("inv-period-finish")?.value;
 
     if (!date || !due || !ps || !pf) {
-      return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+      return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
     }
 
     if (!__invId) {
       return showMessage(
         msg,
-        "Entwurf fehlt (bitte Schritt 1 erneut ausfÃ¼hren)",
+        "Entwurf fehlt (bitte Schritt 1 erneut ausführen)",
         "error"
       );
     }
 
     try {
-      showMessage(msg, "Daten werden gespeichert â€¦", "info");
+      showMessage(msg, "Daten werden gespeichert …", "info");
       const res = await fetch(`${API_BASE}/invoices/${__invId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -9307,7 +9547,7 @@ function wireInvoiceWizard() {
     const pmId = document.getElementById("inv-payment-means-id")?.value;
 
     if (!vatId || !pmId) {
-      return showMessage(msg, "Bitte alle Pflichtfelder ausfÃ¼llen", "error");
+      return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
     }
 
     const payload = {
@@ -9317,7 +9557,7 @@ function wireInvoiceWizard() {
     };
 
     try {
-      showMessage(msg, "Daten werden gespeichert â€¦", "info");
+      showMessage(msg, "Daten werden gespeichert …", "info");
       const res = await fetch(`${API_BASE}/invoices/${__invId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -9342,7 +9582,7 @@ function wireInvoiceWizard() {
       const res = await fetch(`${API_BASE}/invoices/${__invId}/book`, { method: "POST" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "booking failed");
-      showMessage(msg, `Rechnung gebucht âœ…${json?.number ? " (" + json.number + ")" : ""}`, "success");
+      showMessage(msg, `Rechnung gebucht ✅${json?.number ? " (" + json.number + ")" : ""}`, "success");
       await initInvoiceWizard();
     } catch (err) {
       showMessage(msg, "Fehler: " + (err.message || err), "error");
@@ -9409,7 +9649,7 @@ function getDefaultThemeUi() {
   return {
     brand: { primaryColor: "#111827", accentColor: "#2563eb", fontFamily: "Inter", fontScale: 1.0 },
     header: { showLogo: true, logoMaxHeightMm: 18 },
-    footer: { textLeft: "Vielen Dank fÃ¼r Ihren Auftrag.", textRight: "Seite {page} von {pages}", showPageNumbers: true },
+    footer: { textLeft: "Vielen Dank für Ihren Auftrag.", textRight: "Seite {page} von {pages}", showPageNumbers: true },
     blocks: { showProject: true, showContract: true, showTaxSummary: true },
   };
 }
@@ -9443,7 +9683,7 @@ function applyThemeToUi(theme) {
 
 function fillTemplateDropdown() {
   const e = docEls();
-  e.template.innerHTML = `<option value="">â€“</option>`;
+  e.template.innerHTML = `<option value="">–</option>`;
   (__docsState.templates || []).forEach((t) => {
     const opt = document.createElement("option");
     opt.value = String(t.ID);
@@ -9486,7 +9726,7 @@ function setCurrentTemplate(id) {
   // Stage B1 lifecycle UI
   const status = String(tpl.STATUS || "").toUpperCase();
   const version = tpl.VERSION != null ? `v${tpl.VERSION}` : "";
-  const statusText = status ? `${status}${version ? " Â· " + version : ""}` : (version || "");
+  const statusText = status ? `${status}${version ? " · " + version : ""}` : (version || "");
   if (e.statusInfo) e.statusInfo.textContent = statusText ? `Status: ${statusText}` : "";
 
   const isDraft = status === "DRAFT" || !status;
@@ -9506,7 +9746,7 @@ async function loadCompaniesForDocuments() {
   const e = docEls();
   const json = await apiJson(`${API_BASE}/stammdaten/companies`);
   const companies = Array.isArray(json.data) ? json.data : [];
-  e.company.innerHTML = `<option value="">Bitte wÃ¤hlen â€¦</option>`;
+  e.company.innerHTML = `<option value="">Bitte wählen …</option>`;
   companies.forEach((c) => {
     const opt = document.createElement("option");
     opt.value = String(c.ID);
@@ -9541,7 +9781,7 @@ async function loadTemplates() {
 
 async function createTemplate() {
   const e = docEls();
-  if (!e.company.value) return showMessage(e.msg, "Bitte zuerst ein Unternehmen auswÃ¤hlen.", "error");
+  if (!e.company.value) return showMessage(e.msg, "Bitte zuerst ein Unternehmen auswählen.", "error");
 
   const body = {
     company_id: parseInt(e.company.value, 10),
@@ -9566,7 +9806,7 @@ async function uploadLogoIfSelected() {
   const e = docEls();
   const file = e.logo?.files?.[0];
   if (!file) return null;
-  if (!e.company.value) throw new Error("Bitte zuerst ein Unternehmen auswÃ¤hlen.");
+  if (!e.company.value) throw new Error("Bitte zuerst ein Unternehmen auswählen.");
 
   const form = new FormData();
   form.append("file", file);
@@ -9582,7 +9822,7 @@ async function uploadLogoIfSelected() {
 
 async function saveTemplate() {
   const e = docEls();
-  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswÃ¤hlen oder neu erstellen.", "error");
+  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswählen oder neu erstellen.", "error");
 
   const logoId = await uploadLogoIfSelected().catch((err) => {
     // allow save without logo
@@ -9611,7 +9851,7 @@ async function saveTemplate() {
 
 async function setDefaultTemplate() {
   const e = docEls();
-  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswÃ¤hlen.", "error");
+  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswählen.", "error");
   await apiJson(`${API_BASE}/document-templates/${__docsState.currentTemplateId}/set-default`, { method: "POST" });
   await loadTemplates();
   showMessage(e.msg, "Als Standard gesetzt.", "success");
@@ -9620,7 +9860,7 @@ async function setDefaultTemplate() {
 
 async function duplicateTemplate() {
   const e = docEls();
-  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswÃ¤hlen.", "error");
+  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswählen.", "error");
 
   await apiJson(`${API_BASE}/document-templates/${__docsState.currentTemplateId}/duplicate`, { method: "POST" });
   await loadTemplates();
@@ -9629,16 +9869,16 @@ async function duplicateTemplate() {
 
 async function publishTemplate() {
   const e = docEls();
-  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswÃ¤hlen.", "error");
+  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswählen.", "error");
 
   await apiJson(`${API_BASE}/document-templates/${__docsState.currentTemplateId}/publish`, { method: "POST" });
   await loadTemplates();
-  showMessage(e.msg, "Vorlage verÃ¶ffentlicht.", "success");
+  showMessage(e.msg, "Vorlage veröffentlicht.", "success");
 }
 
 async function archiveTemplate() {
   const e = docEls();
-  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswÃ¤hlen.", "error");
+  if (!__docsState.currentTemplateId) return showMessage(e.msg, "Bitte eine Vorlage auswählen.", "error");
 
   await apiJson(`${API_BASE}/document-templates/${__docsState.currentTemplateId}/archive`, { method: "POST" });
   await loadTemplates();
@@ -9648,7 +9888,7 @@ async function archiveTemplate() {
 function previewPdf() {
   const e = docEls();
   const id = parseInt(String(e.previewId.value || ""), 10);
-  if (!id || Number.isNaN(id)) return showMessage(e.msg, "Bitte eine gÃ¼ltige Dokument-ID fÃ¼r die Vorschau eingeben.", "error");
+  if (!id || Number.isNaN(id)) return showMessage(e.msg, "Bitte eine gültige Dokument-ID für die Vorschau eingeben.", "error");
 
   const tplId = __docsState.currentTemplateId ? `template_id=${__docsState.currentTemplateId}` : "";
   const url =
