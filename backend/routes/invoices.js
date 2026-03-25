@@ -641,6 +641,9 @@ module.exports = (supabase) => {
     const employeeId = b.employee_id;
     const projectId = b.project_id;
     const contractId = b.contract_id;
+    const invoiceType = ["schlussrechnung", "teilschlussrechnung"].includes(b.invoice_type)
+      ? b.invoice_type
+      : "rechnung";
 
     if (!companyId || !employeeId || !projectId || !contractId) {
       return res.status(400).json({
@@ -819,6 +822,7 @@ module.exports = (supabase) => {
       CONTACT_MAIL: invoiceContact.EMAIL ?? null,
       CONTACT_PHONE: invoiceContact.MOBILE ?? null,
       TENANT_ID: project.TENANT_ID ?? null,
+      INVOICE_TYPE: invoiceType,
     };
 
     const { data: created, error: insertErr } = await supabase

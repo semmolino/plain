@@ -36,6 +36,7 @@ const documentTemplatesRoutes = require("./routes/documentTemplates")(supabase);
 const documentsRoutes        = require("./routes/documents")(supabase);
 const numberRangesRoutes     = require("./routes/numberRanges")(supabase);
 const reportsRoutes          = require("./routes/reports")(supabase);
+const finalInvoicesRoutes    = require("./routes/finalInvoices")(supabase);
 
 app.use("/api/stammdaten",        authMiddleware, stammdatenRoutes);
 app.use("/api/mitarbeiter",       authMiddleware, mitarbeiterRoutes);
@@ -50,6 +51,7 @@ app.use("/api/document-templates",authMiddleware, documentTemplatesRoutes);
 app.use("/api/documents",         authMiddleware, documentsRoutes);
 app.use("/api/number-ranges",     authMiddleware, numberRangesRoutes);
 app.use("/api/reports",           authMiddleware, reportsRoutes);
+app.use("/api/final-invoices",    authMiddleware, finalInvoicesRoutes);
 
 
 

@@ -346,6 +346,7 @@
   <nav class="menu-list">
     <button id="btn-abschlagsrechnungen-menu">Abschlagsrechnungen</button>
     <button id="btn-rechnungen-menu">Rechnungen</button>
+    <button id="btn-schlussrechnungen-menu">Teil-/Schlussrechnungen</button>
     <button id="btn-zahlungen-menu">Zahlungen</button>
     <button id="btn-rechnungsliste-menu">Rechnungsliste</button>
   </nav>
@@ -2685,6 +2686,248 @@
     </div>
   </div>
 </div>
+
+<!-- Teil-/Schlussrechnung Wizard -->
+<div class="view hidden" id="view-schlussrechnung">
+<h2 id="fi-view-title">Teil-/Schlussrechnung erstellen</h2>
+<div id="fi-wizard">
+
+<!-- Page 1: Rahmendaten -->
+<div class="fi-page" id="fi-page-1">
+<h3>Rahmendaten</h3>
+<div class="form-group">
+<label>Typ*:</label>
+<div style="display:flex;gap:16px;align-items:center;margin-top:4px;">
+  <label style="display:flex;gap:6px;align-items:center;font-weight:normal;">
+    <input type="radio" name="fi-type" id="fi-type-teilschluss" value="teilschlussrechnung" checked/>
+    Teilschlussrechnung
+  </label>
+  <label style="display:flex;gap:6px;align-items:center;font-weight:normal;">
+    <input type="radio" name="fi-type" id="fi-type-schluss" value="schlussrechnung"/>
+    Schlussrechnung
+  </label>
+</div>
+</div>
+<div class="form-group">
+<label for="fi-company">Firma*:</label>
+<select id="fi-company"><option value="">Bitte wählen …</option></select>
+</div>
+<div class="form-group autocomplete-container">
+<label for="fi-employee">Mitarbeiter*:</label>
+<input autocomplete="off" id="fi-employee" placeholder="Mitarbeiter suchen (mind. 2 Zeichen)" type="text"/>
+<input id="fi-employee-id" type="hidden"/>
+<div class="autocomplete-list" id="fi-employee-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="fi-project">Projekt*:</label>
+<input autocomplete="off" id="fi-project" placeholder="Projekt suchen (mind. 2 Zeichen)" type="text"/>
+<input id="fi-project-id" type="hidden"/>
+<div class="autocomplete-list" id="fi-project-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="fi-contract">Vertrag*:</label>
+<input autocomplete="off" id="fi-contract" placeholder="Vertrag suchen (mind. 2 Zeichen)" type="text"/>
+<input id="fi-contract-id" type="hidden"/>
+<div class="autocomplete-list" id="fi-contract-autocomplete"></div>
+</div>
+<div class="wizard-nav">
+<button type="button" class="btn-back" id="fi-back-1">Zurück zur Übersicht</button>
+<button type="button" id="fi-next-1">Weiter</button>
+</div>
+<div class="message" id="fi-msg-1"></div>
+</div>
+
+<!-- Page 2: Rechnungsinformationen -->
+<div class="fi-page hidden" id="fi-page-2">
+<h3>Rechnungsinformationen</h3>
+<p class="muted">Die Rechnungsnummer wird beim Buchen automatisch vergeben.</p>
+<div class="form-group">
+<label for="fi-date">Rechnungsdatum*:</label>
+<input id="fi-date" type="date"/>
+</div>
+<div class="form-group">
+<label for="fi-due">Zahlungsziel*:</label>
+<input id="fi-due" type="date"/>
+</div>
+<div class="form-group">
+<label for="fi-period-start">Leistungszeitraum Beginn*:</label>
+<input id="fi-period-start" type="date"/>
+</div>
+<div class="form-group">
+<label for="fi-period-finish">Leistungszeitraum Ende*:</label>
+<input id="fi-period-finish" type="date"/>
+</div>
+<div class="wizard-nav">
+<button type="button" id="fi-prev-2">Zurück</button>
+<button type="button" id="fi-next-2">Weiter</button>
+</div>
+<div class="message" id="fi-msg-2"></div>
+</div>
+
+<!-- Page 3: Phasenauswahl -->
+<div class="fi-page hidden" id="fi-page-3">
+<h3>Phasenauswahl</h3>
+<p class="muted">Wählen Sie die Leistungspositionen, die mit dieser Rechnung definitiv abgerechnet werden.</p>
+<div class="message" id="fi-msg-3-load"></div>
+<div class="table-wrap">
+<table class="data-table" id="fi-phases-table">
+  <thead>
+    <tr>
+      <th>Auswahl</th>
+      <th>Bezeichnung</th>
+      <th>Verdient (netto)</th>
+      <th>Bereits abgerechnet</th>
+      <th>Honorar (netto)</th>
+      <th>Nebenkosten (netto)</th>
+    </tr>
+  </thead>
+  <tbody id="fi-phases-tbody"></tbody>
+</table>
+</div>
+<div class="form-group" style="margin-top:12px;">
+<label>Honorar gesamt (netto):</label>
+<div class="readonly-field" id="fi-phases-honorar-total">0,00</div>
+</div>
+<div class="form-group">
+<label>Nebenkosten gesamt (netto):</label>
+<div class="readonly-field" id="fi-phases-extras-total">0,00</div>
+</div>
+<div class="form-group">
+<label>Phasensumme (netto):</label>
+<div class="readonly-field" id="fi-phases-total">0,00</div>
+</div>
+<div class="wizard-nav">
+<button type="button" id="fi-prev-3">Zurück</button>
+<button type="button" id="fi-next-3">Weiter</button>
+</div>
+<div class="message" id="fi-msg-3"></div>
+</div>
+
+<!-- Page 4: Abzüge -->
+<div class="fi-page hidden" id="fi-page-4">
+<h3>Abzüge (Abschlagsrechnungen)</h3>
+<p class="muted">Wählen Sie die Abschlagsrechnungen, die von dieser Rechnung abgezogen werden sollen.</p>
+<div class="message" id="fi-msg-4-load"></div>
+<div class="table-wrap">
+<table class="data-table" id="fi-deductions-table">
+  <thead>
+    <tr>
+      <th>Abzug</th>
+      <th>Nr.</th>
+      <th>Datum</th>
+      <th>Betrag (netto)</th>
+    </tr>
+  </thead>
+  <tbody id="fi-deductions-tbody"></tbody>
+</table>
+</div>
+<div class="form-group" style="margin-top:12px;">
+<label>Abzüge gesamt (netto):</label>
+<div class="readonly-field" id="fi-deductions-total">0,00</div>
+</div>
+<div class="form-group">
+<label>Verbleibender Honoraranspruch (netto):</label>
+<div class="readonly-field" id="fi-net-due">0,00</div>
+</div>
+<div class="wizard-nav">
+<button type="button" id="fi-prev-4">Zurück</button>
+<button type="button" id="fi-next-4">Weiter</button>
+</div>
+<div class="message" id="fi-msg-4"></div>
+</div>
+
+<!-- Page 5: Erweiterte Informationen -->
+<div class="fi-page hidden" id="fi-page-5">
+<h3>Rechnungsinformationen (erweitert)</h3>
+<div class="form-group">
+<label for="fi-comment">Bemerkung:</label>
+<input id="fi-comment" type="text"/>
+</div>
+<div class="form-group autocomplete-container">
+<label for="fi-vat">Mehrwertsteuersatz*:</label>
+<input autocomplete="off" id="fi-vat" placeholder="VAT suchen" type="text"/>
+<input id="fi-vat-id" type="hidden"/>
+<div class="autocomplete-list" id="fi-vat-autocomplete"></div>
+</div>
+<div class="form-group autocomplete-container">
+<label for="fi-payment-means">Zahlungsart*:</label>
+<input autocomplete="off" id="fi-payment-means" placeholder="Zahlungsart suchen" type="text"/>
+<input id="fi-payment-means-id" type="hidden"/>
+<div class="autocomplete-list" id="fi-payment-means-autocomplete"></div>
+</div>
+<div class="wizard-nav">
+<button type="button" id="fi-prev-5">Zurück</button>
+<button type="button" id="fi-next-5">Weiter</button>
+</div>
+<div class="message" id="fi-msg-5"></div>
+</div>
+
+<!-- Page 6: Zusammenfassung und Buchung -->
+<div class="fi-page hidden" id="fi-page-6">
+<h3>Zusammenfassung und Buchung</h3>
+<div class="form-group">
+<label>Typ:</label>
+<div class="readonly-field" id="fi-sum-type"></div>
+</div>
+<div class="form-group">
+<label>Projekt:</label>
+<div class="readonly-field" id="fi-sum-project"></div>
+</div>
+<div class="form-group">
+<label>Vertrag:</label>
+<div class="readonly-field" id="fi-sum-contract"></div>
+</div>
+<div class="form-group">
+<label>Rechnung Nr.:</label>
+<div class="readonly-field" id="fi-sum-number">wird beim Buchen vergeben</div>
+</div>
+<div class="form-group">
+<label>Rechnungsdatum:</label>
+<div class="readonly-field" id="fi-sum-date"></div>
+</div>
+<div class="form-group">
+<label>Zahlungsziel:</label>
+<div class="readonly-field" id="fi-sum-due"></div>
+</div>
+<div class="form-group">
+<label>Rechnungsadresse:</label>
+<div class="readonly-field" id="fi-sum-address"></div>
+</div>
+<div class="form-group">
+<label>Kontakt:</label>
+<div class="readonly-field" id="fi-sum-contact"></div>
+</div>
+<hr style="margin:12px 0;border-color:var(--border,#ddd);"/>
+<div class="form-group">
+<label>Honoraransatz (netto):</label>
+<div class="readonly-field" id="fi-sum-phase-total"></div>
+</div>
+<div class="form-group">
+<label>Abzüge Abschlagszahlungen (netto):</label>
+<div class="readonly-field" id="fi-sum-deductions"></div>
+</div>
+<div class="form-group">
+<label>Verbleibender Honoraranspruch (netto):</label>
+<div class="readonly-field" id="fi-sum-total-net"></div>
+</div>
+<div class="form-group">
+<label>Mehrwertsteuer:</label>
+<div class="readonly-field" id="fi-sum-tax"></div>
+</div>
+<div class="form-group">
+<label>Forderungssumme (brutto):</label>
+<div class="readonly-field" id="fi-sum-gross"></div>
+</div>
+<div class="wizard-nav">
+<button type="button" id="fi-prev-6">Zurück</button>
+<button id="fi-pdf" type="button">PDF herunterladen</button>
+<button type="button" id="fi-book">Buchen</button>
+</div>
+<div class="message" id="fi-msg-6"></div>
+</div>
+
+</div><!-- #fi-wizard -->
+</div><!-- #view-schlussrechnung -->
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="script.js"></script>

@@ -397,6 +397,16 @@ async function guardLeaveDraftIfNeeded() {
     feeResetWizardState();
   }
 
+  // Teil-/Schlussrechnung wizard
+  if (isViewActive("view-schlussrechnung") && __fiId) {
+    const ok = window.confirm(
+      "Möchten Sie den Vorgang abbrechen? Alle ungespeicherten Daten werden gelöscht."
+    );
+    if (!ok) return false;
+    await fiDeleteDraftIfAny();
+    fiReset();
+  }
+
   return true;
 }
 
@@ -735,6 +745,12 @@ bindClick("btn-rechnungen-menu", async () => {
   if (!(await guardLeaveDraftIfNeeded())) return;
   await initInvoiceWizard();
   showView("view-rechnungen");
+});
+
+bindClick("btn-schlussrechnungen-menu", async () => {
+  if (!(await guardLeaveDraftIfNeeded())) return;
+  await initFinalInvoiceWizard();
+  showView("view-schlussrechnung");
 });
 
 bindClick("btn-zahlungen-menu", async () => {
@@ -10220,3 +10236,431 @@ async function initDocumentsView() {
   await loadTemplates().catch((err) => showMessage(e.msg, "Fehler: " + (err.message || err), "error"));
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Teil-/Schlussrechnung Wizard  (prefix: fi-)
+// ─────────────────────────────────────────────────────────────────────────────
+
+let __fiId = null;
+let __fiInitInFlight = false;
+let __fiInitDone = false;
+
+const _fiNum = (v) => { const n = parseFloat(String(v ?? "")); return Number.isFinite(n) ? n : 0; };
+const _fiRound2 = (v) => Math.round(_fiNum(v) * 100) / 100;
+const _fiFmt = (v) => _fiRound2(v).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function fiDeleteDraftIfAny() {
+  if (!__fiId) return true;
+  try { await fetch(`${API_BASE}/invoices/${__fiId}`, { method: "DELETE", keepalive: true }); } catch (_) {}
+  return true;
+}
+
+function fiReset() {
+  __fiId = null;
+  __fiInitInFlight = false;
+  const ids = [
+    "fi-company","fi-employee","fi-employee-id","fi-project","fi-project-id",
+    "fi-contract","fi-contract-id","fi-date","fi-due","fi-period-start","fi-period-finish",
+    "fi-comment","fi-vat","fi-vat-id","fi-payment-means","fi-payment-means-id",
+  ];
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.tagName === "INPUT" || el.tagName === "SELECT") el.value = "";
+    if (el.dataset) el.dataset.selectedLabel = "";
+  });
+  const dateEl = document.getElementById("fi-date");
+  if (dateEl) dateEl.value = todayIso();
+  const radio = document.getElementById("fi-type-teilschluss");
+  if (radio) radio.checked = true;
+  const tbody3 = document.getElementById("fi-phases-tbody");
+  if (tbody3) tbody3.innerHTML = "";
+  const tbody4 = document.getElementById("fi-deductions-tbody");
+  if (tbody4) tbody4.innerHTML = "";
+  ["fi-phases-honorar-total","fi-phases-extras-total","fi-phases-total","fi-deductions-total","fi-net-due"].forEach((id) => {
+    const el = document.getElementById(id); if (el) el.textContent = "0,00";
+  });
+  ["fi-msg-1","fi-msg-2","fi-msg-3","fi-msg-3-load","fi-msg-4","fi-msg-4-load","fi-msg-5","fi-msg-6"].forEach((mid) => {
+    const m = document.getElementById(mid); if (m) showMessage(m, "", "success");
+  });
+}
+
+function fiShowPage(pageNo) {
+  document.querySelectorAll("#fi-wizard .fi-page").forEach((p) => p.classList.add("hidden"));
+  const active = document.getElementById(`fi-page-${pageNo}`);
+  if (active) active.classList.remove("hidden");
+}
+
+function fiGetType() {
+  const r = document.querySelector('input[name="fi-type"]:checked');
+  return r ? r.value : "teilschlussrechnung";
+}
+
+async function loadCompaniesForFinalInvoice() {
+  const sel = document.getElementById("fi-company");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Bitte wählen …</option>';
+  try {
+    const res = await fetch(`${API_BASE}/stammdaten/companies`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler beim Laden");
+    (json.data || []).forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.ID;
+      opt.textContent = c.COMPANY_NAME_1 || String(c.ID);
+      sel.appendChild(opt);
+    });
+  } catch (err) { console.error("loadCompaniesForFinalInvoice", err); }
+}
+
+async function fiLoadPhases() {
+  const msgLoad = document.getElementById("fi-msg-3-load");
+  const tbody = document.getElementById("fi-phases-tbody");
+  if (!__fiId) return;
+  showMessage(msgLoad, "Leistungspositionen werden geladen …", "info");
+  tbody.innerHTML = "";
+  try {
+    const res = await fetch(`${API_BASE}/final-invoices/${__fiId}/phases`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler");
+    showMessage(msgLoad, "", "success");
+    fiRenderPhases(json.data || []);
+  } catch (err) { showMessage(msgLoad, err.message || String(err), "error"); }
+}
+
+function fiRenderPhases(phases) {
+  const tbody = document.getElementById("fi-phases-tbody");
+  tbody.innerHTML = "";
+  phases.forEach((ps) => {
+    const tr = document.createElement("tr");
+    if (ps.CLOSED) tr.style.opacity = "0.45";
+    const closedNote = ps.CLOSED ? ' <span style="font-size:0.8em;color:#888;">(abgeschlossen)</span>' : "";
+    const label = (ps.NAME_SHORT || "") + (ps.NAME_LONG ? " – " + ps.NAME_LONG : "") + closedNote;
+    tr.innerHTML =
+      '<td><input type="checkbox" data-ps-id="' + ps.ID + '" data-honorar="' + ps.AMOUNT_NET + '" data-extras="' + ps.AMOUNT_EXTRAS_NET + '"' +
+      (ps.SELECTED ? " checked" : "") + (ps.CLOSED ? " disabled" : "") + '></td>' +
+      "<td>" + label + "</td>" +
+      '<td style="text-align:right">' + _fiFmt(ps.TOTAL_EARNED) + "</td>" +
+      '<td style="text-align:right">' + _fiFmt(ps.ALREADY_BILLED) + "</td>" +
+      '<td style="text-align:right">' + _fiFmt(ps.AMOUNT_NET) + "</td>" +
+      '<td style="text-align:right">' + _fiFmt(ps.AMOUNT_EXTRAS_NET) + "</td>";
+    tbody.appendChild(tr);
+  });
+  fiRecomputePhaseTotals();
+}
+
+function fiRecomputePhaseTotals() {
+  let honorar = 0, extras = 0;
+  document.querySelectorAll("#fi-phases-tbody input[type=checkbox]:checked").forEach((cb) => {
+    honorar += _fiNum(cb.dataset.honorar);
+    extras  += _fiNum(cb.dataset.extras);
+  });
+  const honorarEl = document.getElementById("fi-phases-honorar-total");
+  const extrasEl  = document.getElementById("fi-phases-extras-total");
+  const totalEl   = document.getElementById("fi-phases-total");
+  if (honorarEl) honorarEl.textContent = _fiFmt(honorar);
+  if (extrasEl)  extrasEl.textContent  = _fiFmt(extras);
+  if (totalEl)   totalEl.textContent   = _fiFmt(honorar + extras);
+}
+
+async function fiSavePhases() {
+  const checked = Array.from(document.querySelectorAll("#fi-phases-tbody input[type=checkbox]:checked"))
+    .map((cb) => parseInt(cb.dataset.psId, 10)).filter((n) => Number.isFinite(n));
+  const res = await fetch(`${API_BASE}/final-invoices/${__fiId}/phases`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ structure_ids: checked }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || "Phasen konnten nicht gespeichert werden");
+  return json;
+}
+
+async function fiLoadDeductions() {
+  const msgLoad = document.getElementById("fi-msg-4-load");
+  const tbody = document.getElementById("fi-deductions-tbody");
+  if (!__fiId) return;
+  showMessage(msgLoad, "Abschlagsrechnungen werden geladen …", "info");
+  tbody.innerHTML = "";
+  try {
+    const res = await fetch(`${API_BASE}/final-invoices/${__fiId}/deductions`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || "Fehler");
+    showMessage(msgLoad, "", "success");
+    fiRenderDeductions(json.data || []);
+  } catch (err) { showMessage(msgLoad, err.message || String(err), "error"); }
+}
+
+function fiRenderDeductions(items) {
+  const tbody = document.getElementById("fi-deductions-tbody");
+  tbody.innerHTML = "";
+  if (items.length === 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td colspan="4" style="text-align:center;color:#888;">Keine Abschlagsrechnungen vorhanden</td>';
+    tbody.appendChild(tr);
+    fiRecomputeDeductionTotals();
+    return;
+  }
+  items.forEach((pp) => {
+    const tr = document.createElement("tr");
+    const dateStr = pp.PARTIAL_PAYMENT_DATE ? new Date(pp.PARTIAL_PAYMENT_DATE).toLocaleDateString("de-DE") : "";
+    tr.innerHTML =
+      '<td><input type="checkbox" data-pp-id="' + pp.PARTIAL_PAYMENT_ID + '" data-amount="' + pp.DEDUCTION_AMOUNT_NET + '"' +
+      (pp.SELECTED ? " checked" : "") + '></td>' +
+      "<td>" + (pp.PARTIAL_PAYMENT_NUMBER || pp.PARTIAL_PAYMENT_ID) + "</td>" +
+      "<td>" + dateStr + "</td>" +
+      '<td style="text-align:right">' + _fiFmt(pp.TOTAL_AMOUNT_NET) + "</td>";
+    tbody.appendChild(tr);
+  });
+  fiRecomputeDeductionTotals();
+}
+
+function fiRecomputeDeductionTotals() {
+  let deductions = 0;
+  document.querySelectorAll("#fi-deductions-tbody input[type=checkbox]:checked").forEach((cb) => {
+    deductions += _fiNum(cb.dataset.amount);
+  });
+  const phaseTotalText = (document.getElementById("fi-phases-total") || {}).textContent || "0";
+  const phaseTotal = _fiNum(phaseTotalText.replace(/\./g, "").replace(",", "."));
+  const deductEl = document.getElementById("fi-deductions-total");
+  const netEl    = document.getElementById("fi-net-due");
+  if (deductEl) deductEl.textContent = _fiFmt(deductions);
+  if (netEl)    netEl.textContent    = _fiFmt(phaseTotal - deductions);
+}
+
+async function fiSaveDeductions() {
+  const items = Array.from(document.querySelectorAll("#fi-deductions-tbody input[type=checkbox]:checked"))
+    .map((cb) => ({ partial_payment_id: parseInt(cb.dataset.ppId, 10), deduction_amount_net: _fiNum(cb.dataset.amount) }))
+    .filter((item) => Number.isFinite(item.partial_payment_id));
+  const res = await fetch(`${API_BASE}/final-invoices/${__fiId}/deductions`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || "Abzüge konnten nicht gespeichert werden");
+  return json;
+}
+
+async function fiLoadSummary() {
+  if (!__fiId) return;
+  const res = await fetch(`${API_BASE}/final-invoices/${__fiId}`);
+  const inv = await res.json().catch(() => ({}));
+  if (!res.ok) return;
+
+  const typeLabel = inv.INVOICE_TYPE === "schlussrechnung" ? "Schlussrechnung" : "Teilschlussrechnung";
+  const titleEl = document.getElementById("fi-view-title");
+  if (titleEl) titleEl.textContent = typeLabel + " erstellen";
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set("fi-sum-type", typeLabel);
+  const projLabel = (document.getElementById("fi-project") || {}).dataset.selectedLabel || (document.getElementById("fi-project") || {}).value || String(inv.PROJECT_ID || "");
+  set("fi-sum-project", projLabel);
+  const contractLabel = (document.getElementById("fi-contract") || {}).dataset.selectedLabel || (document.getElementById("fi-contract") || {}).value || String(inv.CONTRACT_ID || "");
+  set("fi-sum-contract", contractLabel);
+  set("fi-sum-number", inv.INVOICE_NUMBER || "wird beim Buchen vergeben");
+  set("fi-sum-date", inv.INVOICE_DATE ? new Date(inv.INVOICE_DATE).toLocaleDateString("de-DE") : "");
+  set("fi-sum-due",  inv.DUE_DATE ? new Date(inv.DUE_DATE).toLocaleDateString("de-DE") : "");
+  set("fi-sum-address", [inv.ADDRESS_NAME_1, inv.ADDRESS_STREET, ((inv.ADDRESS_POST_CODE || "") + " " + (inv.ADDRESS_CITY || "")).trim()].filter(Boolean).join(", "));
+  set("fi-sum-contact", inv.CONTACT || "");
+
+  const phaseTotal      = _fiNum(inv.PHASE_TOTAL);
+  const deductionsTotal = _fiNum(inv.DEDUCTIONS_TOTAL);
+  const totalNet        = _fiNum(inv.TOTAL_AMOUNT_NET);
+  const vatPct          = _fiNum(inv.VAT_PERCENT);
+  const tax             = _fiRound2(totalNet * vatPct / 100);
+  const gross           = _fiRound2(totalNet + tax);
+
+  set("fi-sum-phase-total",  _fiFmt(phaseTotal));
+  set("fi-sum-deductions",   _fiFmt(deductionsTotal));
+  set("fi-sum-total-net",    _fiFmt(totalNet));
+  set("fi-sum-tax",          _fiFmt(tax) + " (" + vatPct + " %)");
+  set("fi-sum-gross",        _fiFmt(gross));
+}
+
+async function initFinalInvoiceWizard() {
+  fiReset();
+  await loadCompaniesForFinalInvoice();
+  fiShowPage(1);
+  if (!__fiInitDone) {
+    __fiInitDone = true;
+    wireFinalInvoiceWizard();
+  }
+}
+
+function wireFinalInvoiceWizard() {
+  document.querySelectorAll('input[name="fi-type"]').forEach((r) => {
+    r.addEventListener("change", () => {
+      const titleEl = document.getElementById("fi-view-title");
+      if (titleEl) titleEl.textContent = r.value === "schlussrechnung" ? "Schlussrechnung erstellen" : "Teilschlussrechnung erstellen";
+    });
+  });
+
+  setupAutocomplete({
+    inputId: "fi-employee", hiddenId: "fi-employee-id", listId: "fi-employee-autocomplete", minLen: 2,
+    search: async (q) => { const res = await fetch(`${API_BASE}/mitarbeiter/search?q=${encodeURIComponent(q)}`); const json = await res.json().catch(() => ({})); return json.data || []; },
+    formatLabel: (e) => (e.SHORT_NAME || "") + ": " + ((e.FIRST_NAME || "").trim() + " " + (e.LAST_NAME || "").trim()).trim(),
+  });
+
+  setupAutocomplete({
+    inputId: "fi-project", hiddenId: "fi-project-id", listId: "fi-project-autocomplete", minLen: 2,
+    search: async (q) => { const res = await fetch(`${API_BASE}/projekte/search?q=${encodeURIComponent(q)}`); const json = await res.json().catch(() => ({})); return json.data || []; },
+    formatLabel: (p) => (p.NAME_SHORT || "") + ": " + (p.NAME_LONG || ""),
+    onSelect: () => {
+      const cIn = document.getElementById("fi-contract"); const cId = document.getElementById("fi-contract-id");
+      if (cIn) { cIn.value = ""; cIn.dataset.selectedLabel = ""; } if (cId) cId.value = "";
+    },
+  });
+
+  setupAutocomplete({
+    inputId: "fi-contract", hiddenId: "fi-contract-id", listId: "fi-contract-autocomplete", minLen: 2,
+    search: async (q) => {
+      const pid = (document.getElementById("fi-project-id") || {}).value; if (!pid) return [];
+      const res = await fetch(`${API_BASE}/projekte/contracts/search?project_id=${encodeURIComponent(pid)}&q=${encodeURIComponent(q)}`);
+      const json = await res.json().catch(() => ({})); return json.data || [];
+    },
+    formatLabel: (c) => (c.NAME_SHORT || "") + ": " + (c.NAME_LONG || ""),
+  });
+
+  setupAutocomplete({
+    inputId: "fi-vat", hiddenId: "fi-vat-id", listId: "fi-vat-autocomplete", minLen: 1,
+    search: async (q) => { const res = await fetch(`${API_BASE}/stammdaten/vat/search?q=${encodeURIComponent(q)}`); const json = await res.json().catch(() => ({})); return json.data || []; },
+    formatLabel: (v) => (v.VAT || "") + ": " + (v.VAT_PERCENT != null ? v.VAT_PERCENT : "") + " %",
+  });
+
+  setupAutocomplete({
+    inputId: "fi-payment-means", hiddenId: "fi-payment-means-id", listId: "fi-payment-means-autocomplete", minLen: 2,
+    search: async (q) => { const res = await fetch(`${API_BASE}/stammdaten/payment-means/search?q=${encodeURIComponent(q)}`); const json = await res.json().catch(() => ({})); return json.data || []; },
+    formatLabel: (p) => (p.NAME_SHORT || "") + ": " + (p.NAME_LONG || ""),
+  });
+
+  document.getElementById("fi-phases-tbody")?.addEventListener("change", (e) => { if (e.target.type === "checkbox") fiRecomputePhaseTotals(); });
+  document.getElementById("fi-deductions-tbody")?.addEventListener("change", (e) => { if (e.target.type === "checkbox") fiRecomputeDeductionTotals(); });
+
+  document.getElementById("fi-back-1")?.addEventListener("click", async () => {
+    if (!(await guardLeaveDraftIfNeeded())) return;
+    showView("view-vertraege-rechnungen-menu");
+  });
+
+  // Page 1 -> 2: create draft
+  document.getElementById("fi-next-1")?.addEventListener("click", async () => {
+    const msg = document.getElementById("fi-msg-1");
+    const companyId  = (document.getElementById("fi-company") || {}).value;
+    const employeeId = (document.getElementById("fi-employee-id") || {}).value;
+    const projectId  = (document.getElementById("fi-project-id") || {}).value;
+    const contractId = (document.getElementById("fi-contract-id") || {}).value;
+    if (!companyId)  return showMessage(msg, "Bitte eine Firma auswählen.", "error");
+    if (!employeeId) return showMessage(msg, "Bitte einen Mitarbeiter auswählen.", "error");
+    if (!projectId)  return showMessage(msg, "Bitte ein Projekt auswählen.", "error");
+    if (!contractId) return showMessage(msg, "Bitte einen Vertrag auswählen.", "error");
+    const d = document.getElementById("fi-date"); if (d && !d.value) d.value = todayIso();
+    if (__fiId) { showMessage(msg, "", "success"); return fiShowPage(2); }
+    if (__fiInitInFlight) return;
+    __fiInitInFlight = true;
+    try {
+      showMessage(msg, "Entwurf wird erstellt …", "info");
+      const res = await fetch(`${API_BASE}/invoices/init`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: companyId, employee_id: employeeId, project_id: projectId, contract_id: contractId, invoice_type: fiGetType() }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Entwurf konnte nicht erstellt werden");
+      __fiId = json.id; showMessage(msg, "", "success"); fiShowPage(2);
+    } catch (err) { showMessage(msg, err.message || String(err), "error"); }
+    finally { __fiInitInFlight = false; }
+  });
+
+  document.getElementById("fi-prev-2")?.addEventListener("click", () => fiShowPage(1));
+
+  // Page 2 -> 3: save dates
+  document.getElementById("fi-next-2")?.addEventListener("click", async () => {
+    const msg  = document.getElementById("fi-msg-2");
+    const date = (document.getElementById("fi-date") || {}).value;
+    const due  = (document.getElementById("fi-due") || {}).value;
+    const ps   = (document.getElementById("fi-period-start") || {}).value;
+    const pf   = (document.getElementById("fi-period-finish") || {}).value;
+    if (!date || !due || !ps || !pf) return showMessage(msg, "Bitte alle Pflichtfelder ausfüllen", "error");
+    if (!__fiId) return showMessage(msg, "Entwurf fehlt", "error");
+    try {
+      showMessage(msg, "Daten werden gespeichert …", "info");
+      const res = await fetch(`${API_BASE}/invoices/${__fiId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_date: date, due_date: due, billing_period_start: ps, billing_period_finish: pf }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Speichern fehlgeschlagen");
+      showMessage(msg, "", "success"); fiShowPage(3); await fiLoadPhases();
+    } catch (err) { showMessage(msg, err.message || String(err), "error"); }
+  });
+
+  document.getElementById("fi-prev-3")?.addEventListener("click", () => fiShowPage(2));
+
+  // Page 3 -> 4: save phase selection
+  document.getElementById("fi-next-3")?.addEventListener("click", async () => {
+    const msg = document.getElementById("fi-msg-3");
+    if (!__fiId) return showMessage(msg, "Entwurf fehlt", "error");
+    const checked = document.querySelectorAll("#fi-phases-tbody input[type=checkbox]:checked");
+    if (checked.length === 0) return showMessage(msg, "Bitte mindestens eine Leistungsposition auswählen.", "error");
+    try {
+      showMessage(msg, "Phasen werden gespeichert …", "info");
+      await fiSavePhases();
+      showMessage(msg, "", "success"); fiShowPage(4); await fiLoadDeductions();
+    } catch (err) { showMessage(msg, err.message || String(err), "error"); }
+  });
+
+  document.getElementById("fi-prev-4")?.addEventListener("click", () => fiShowPage(3));
+
+  // Page 4 -> 5: save deductions
+  document.getElementById("fi-next-4")?.addEventListener("click", async () => {
+    const msg = document.getElementById("fi-msg-4");
+    if (!__fiId) return showMessage(msg, "Entwurf fehlt", "error");
+    try {
+      showMessage(msg, "Abzüge werden gespeichert …", "info");
+      await fiSaveDeductions();
+      showMessage(msg, "", "success"); fiShowPage(5);
+    } catch (err) { showMessage(msg, err.message || String(err), "error"); }
+  });
+
+  document.getElementById("fi-prev-5")?.addEventListener("click", () => fiShowPage(4));
+
+  // Page 5 -> 6: save VAT/comment/payment-means
+  document.getElementById("fi-next-5")?.addEventListener("click", async () => {
+    const msg            = document.getElementById("fi-msg-5");
+    const vatId          = (document.getElementById("fi-vat-id") || {}).value;
+    const paymentMeansId = (document.getElementById("fi-payment-means-id") || {}).value;
+    if (!vatId)          return showMessage(msg, "Bitte einen Mehrwertsteuersatz auswählen.", "error");
+    if (!paymentMeansId) return showMessage(msg, "Bitte eine Zahlungsart auswählen.", "error");
+    if (!__fiId) return showMessage(msg, "Entwurf fehlt", "error");
+    try {
+      showMessage(msg, "Daten werden gespeichert …", "info");
+      const res = await fetch(`${API_BASE}/invoices/${__fiId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment: (document.getElementById("fi-comment") || {}).value || "", vat_id: vatId, payment_means_id: paymentMeansId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Speichern fehlgeschlagen");
+      showMessage(msg, "", "success"); fiShowPage(6); await fiLoadSummary();
+    } catch (err) { showMessage(msg, err.message || String(err), "error"); }
+  });
+
+  document.getElementById("fi-prev-6")?.addEventListener("click", () => fiShowPage(5));
+
+  document.getElementById("fi-pdf")?.addEventListener("click", () => {
+    if (!__fiId) return;
+    window.open(`${API_BASE}/invoices/${__fiId}/pdf?download=1`, "_blank");
+  });
+
+  document.getElementById("fi-book")?.addEventListener("click", async () => {
+    const msg = document.getElementById("fi-msg-6");
+    if (!__fiId) return showMessage(msg, "Kein Entwurf gefunden", "error");
+    if (!window.confirm("Rechnung jetzt buchen? Dieser Vorgang kann nicht rückgängig gemacht werden.")) return;
+    try {
+      showMessage(msg, "Rechnung wird gebucht …", "info");
+      const res = await fetch(`${API_BASE}/final-invoices/${__fiId}/book`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Buchen fehlgeschlagen");
+      showMessage(msg, "Rechnung " + (json.number || "") + " wurde erfolgreich gebucht.", "success");
+      const bookBtn = document.getElementById("fi-book");
+      if (bookBtn) bookBtn.disabled = true;
+      await fiLoadSummary();
+    } catch (err) { showMessage(msg, err.message || String(err), "error"); }
+  });
+}
