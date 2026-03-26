@@ -87,13 +87,17 @@ export interface DateFilter {
 }
 
 function buildDateParams(f: DateFilter): string {
-  if (f.mode === 'now') return ''
-  if (f.mode === 'as_of') return `&filter_mode=as_of&as_of_date=${f.asOfDate ?? ''}`
-  return `&filter_mode=period&date_from=${f.dateFrom ?? ''}&date_to=${f.dateTo ?? ''}`
+  if (f.mode === 'as_of') return `filter_mode=as_of&as_of_date=${f.asOfDate ?? ''}`
+  if (f.mode === 'period') return `filter_mode=period&date_from=${f.dateFrom ?? ''}&date_to=${f.dateTo ?? ''}`
+  return ''
 }
 
-export const fetchProjectReportHeader = (projectId: number, filter: DateFilter = { mode: 'now' }) =>
-  apiClient.get<{ data: ProjectReportHeader }>(`/reports/project/${projectId}/header?${buildDateParams(filter)}`)
+export const fetchProjectReportHeader = (projectId: number, filter: DateFilter = { mode: 'now' }) => {
+  const qs = buildDateParams(filter)
+  return apiClient.get<{ data: ProjectReportHeader }>(`/reports/project/${projectId}/header${qs ? `?${qs}` : ''}`)
+}
 
-export const fetchProjectReportStructure = (projectId: number, filter: DateFilter = { mode: 'now' }) =>
-  apiClient.get<{ data: ProjectReportStructure[] }>(`/reports/project/${projectId}/structure?${buildDateParams(filter)}`)
+export const fetchProjectReportStructure = (projectId: number, filter: DateFilter = { mode: 'now' }) => {
+  const qs = buildDateParams(filter)
+  return apiClient.get<{ data: ProjectReportStructure[] }>(`/reports/project/${projectId}/structure${qs ? `?${qs}` : ''}`)
+}
