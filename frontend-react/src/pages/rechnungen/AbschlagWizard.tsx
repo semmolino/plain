@@ -193,36 +193,32 @@ export function AbschlagWizard() {
       {step === 0 && (
         <div className="wizard-step-content">
           <p className="wizard-step-title">Projekt & Vertrag wählen</p>
-          <div className="form-group">
-            <label>Projekt*</label>
-            <Autocomplete
-              value={projectLabel}
-              onChange={setProjectLabel}
-              onSelect={(id, label) => {
-                setProjectId(Number(id)); setProjectLabel(label)
-                setContractId(null); setContractLabel('')
-              }}
-              search={async q => {
-                const res = await searchProjectsApi(q)
-                return res.data.map(p => ({ id: p.ID, label: `${p.NAME_SHORT} – ${p.NAME_LONG}` }))
-              }}
-              placeholder="Projekt suchen …"
-            />
-          </div>
-          <div className="form-group">
-            <label>Vertrag*</label>
-            <Autocomplete
-              value={contractLabel}
-              onChange={setContractLabel}
-              onSelect={(id, label) => { setContractId(Number(id)); setContractLabel(label) }}
-              search={async q => {
-                if (!projectId) return []
-                const res = await searchContracts(projectId, q)
-                return res.data.map(c => ({ id: c.ID, label: `${c.NAME_SHORT} – ${c.NAME_LONG}` }))
-              }}
-              placeholder={projectId ? 'Vertrag suchen …' : 'Erst Projekt wählen'}
-            />
-          </div>
+          <Autocomplete
+            label="Projekt*" htmlId="pp-project"
+            value={projectLabel}
+            onChange={setProjectLabel}
+            onSelect={(id, label) => {
+              setProjectId(Number(id)); setProjectLabel(label)
+              setContractId(null); setContractLabel('')
+            }}
+            search={async q => {
+              const res = await searchProjectsApi(q)
+              return res.data.map(p => ({ id: p.ID, label: `${p.NAME_SHORT} – ${p.NAME_LONG}` }))
+            }}
+            placeholder="Projekt suchen …"
+          />
+          <Autocomplete
+            label="Vertrag*" htmlId="pp-contract"
+            value={contractLabel}
+            onChange={setContractLabel}
+            onSelect={(id, label) => { setContractId(Number(id)); setContractLabel(label) }}
+            search={async q => {
+              if (!projectId) return []
+              const res = await searchContracts(projectId, q)
+              return res.data.map(c => ({ id: c.ID, label: `${c.NAME_SHORT} – ${c.NAME_LONG}` }))
+            }}
+            placeholder={projectId ? 'Vertrag suchen …' : 'Erst Projekt wählen'}
+          />
           <div className="form-group">
             <label>Mitarbeiter*</label>
             <select value={employeeId} onChange={e => setEmployeeId(e.target.value)}>

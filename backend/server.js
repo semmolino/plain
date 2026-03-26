@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
@@ -56,8 +57,13 @@ app.use("/api/v1/final-invoices",    authMiddleware, finalInvoicesRoutes);
 
 
 
-app.get("/", (req, res) => {
-  res.send("Backend läuft ✅");
+// ── Serve React frontend (SPA) ───────────────────────────────────────────────
+const FRONTEND_DIST = path.join(__dirname, "../frontend-react/dist");
+app.use(express.static(FRONTEND_DIST));
+
+// SPA fallback — all non-API routes return index.html
+app.get(/^(?!\/api\/).*/, (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIST, "index.html"));
 });
 
 app.listen(port, () => {

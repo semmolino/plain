@@ -105,14 +105,9 @@ export function MitarbeiterPage() {
 
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: UpdateEmployeePayload }) => updateEmployee(id, body),
-    onSuccess: (res) => {
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['employees'] })
       setEditMsg({ text: 'Gespeichert ✅', type: 'success' })
-      // Optimistic local update
-      if (res.data) {
-        const updated = res.data
-        // invalidation above handles reload
-      }
       setTimeout(() => setEditRow(null), 800)
     },
     onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),

@@ -3,13 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
 import {
   fetchProjectsShort, fetchProjectStructure, patchStructureCompletion, createProgressSnapshot,
-  type StructureNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
-const fmtPct  = (v: number | null | undefined) => v == null ? '—' : `${v} %`
 
 export function ProjektStruktur({ initialProjectId }: { initialProjectId?: number }) {
   const qc = useQueryClient()
@@ -40,10 +38,10 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
     : []
 
   function setEdit(structId: number, field: 'rev' | 'ext', value: string) {
-    setCompletionEdits(prev => ({
-      ...prev,
-      [structId]: { rev: '', ext: '', ...prev[structId], [field]: value },
-    }))
+    setCompletionEdits(prev => {
+      const current = prev[structId] ?? { rev: '', ext: '' }
+      return { ...prev, [structId]: { ...current, [field]: value } }
+    })
   }
 
   const saveMut = useMutation({

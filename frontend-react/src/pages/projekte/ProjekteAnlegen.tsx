@@ -7,7 +7,6 @@ import {
   fetchActiveEmployees, fetchActiveRoles, fetchBillingTypes,
   createProject, type E2PRow, type StructureDraftRow,
 } from '@/api/projekte'
-import { fetchCountries } from '@/api/stammdaten'
 import { searchAddressesApi, searchContactsApi } from '@/api/stammdaten'
 
 // ── Wizard state ──────────────────────────────────────────────────────────────
@@ -66,9 +65,6 @@ export function ProjekteAnlegen() {
   const { data: empData     } = useQuery({ queryKey: ['active-employees'],  queryFn: fetchActiveEmployees  })
   const { data: roleData    } = useQuery({ queryKey: ['active-roles'],      queryFn: fetchActiveRoles      })
   const { data: btData      } = useQuery({ queryKey: ['billing-types'],     queryFn: fetchBillingTypes     })
-  const { data: companyData } = useQuery({ queryKey: ['companies'], queryFn: () =>
-    import('@/api/stammdaten').then(m => m.fetchCountries()) // placeholder — companies need own endpoint
-  })
 
   const statuses  = statusData?.data ?? []
   const types     = typeData?.data   ?? []
@@ -112,10 +108,10 @@ export function ProjekteAnlegen() {
   }
 
   function setE2pField(empId: number, field: string, value: string) {
-    setE2p(prev => ({
-      ...prev,
-      [empId]: { role_id: '', role_name_short: '', role_name_long: '', sp_rate: '', ...prev[empId], [field]: value },
-    }))
+    setE2p(prev => {
+      const current = prev[empId] ?? { role_id: '', role_name_short: '', role_name_long: '', sp_rate: '' }
+      return { ...prev, [empId]: { ...current, [field]: value } }
+    })
   }
 
   function applyRolePreset(empId: number, roleId: string) {

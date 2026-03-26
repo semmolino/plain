@@ -8,7 +8,7 @@ import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchCountries, fetchSalutations, fetchGenders,
   fetchAddressList, searchAddressesApi, createAddress, updateAddress,
-  fetchContactList, searchContactsApi, createContact, updateContact,
+  fetchContactList, createContact, updateContact,
   type Address, type Contact, type AddressPayload, type ContactPayload,
 } from '@/api/stammdaten'
 
@@ -110,7 +110,7 @@ function AdressenSection() {
   const set    = (k: keyof AddressPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v }))
   const setE   = (k: keyof AddressPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v }))
 
-  function AddrForm({ vals, setK, msg: m, loading, submitLabel }: {
+  function AddrForm({ vals, setK, msg: m, loading: _loading, submitLabel: _submitLabel }: {
     vals: AddressPayload
     setK: (k: keyof AddressPayload) => (v: string) => void
     msg: { text: string; type: 'success' | 'error' } | null
