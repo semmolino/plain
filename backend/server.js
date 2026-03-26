@@ -20,7 +20,7 @@ const authRoutes    = require("./routes/auth")(supabase);
 const authMiddleware = require("./middleware/auth")(supabase);
 
 // Public auth routes (no token required)
-app.use("/api/auth", authRoutes);
+app.use("/api/v1/auth", authRoutes);
 
 // All other API routes require a valid session
 const stammdatenRoutes       = require("./routes/stammdaten")(supabase);
@@ -38,20 +38,20 @@ const numberRangesRoutes     = require("./routes/numberRanges")(supabase);
 const reportsRoutes          = require("./routes/reports")(supabase);
 const finalInvoicesRoutes    = require("./routes/finalInvoices")(supabase);
 
-app.use("/api/stammdaten",        authMiddleware, stammdatenRoutes);
-app.use("/api/mitarbeiter",       authMiddleware, mitarbeiterRoutes);
-app.use("/api/projekte",          authMiddleware, projekteRoutes);
-app.use("/api/buchungen",         authMiddleware, buchungenRoutes);
-app.use("/api/employee2project",  authMiddleware, employee2projectRoutes);
-app.use("/api/partial-payments",  authMiddleware, partialPaymentsRoutes);
-app.use("/api/invoices",          authMiddleware, invoicesRoutes);
-app.use("/api/payments",          authMiddleware, paymentsRoutes);
-app.use("/api/assets",            authMiddleware, assetsRoutes);
-app.use("/api/document-templates",authMiddleware, documentTemplatesRoutes);
-app.use("/api/documents",         authMiddleware, documentsRoutes);
-app.use("/api/number-ranges",     authMiddleware, numberRangesRoutes);
-app.use("/api/reports",           authMiddleware, reportsRoutes);
-app.use("/api/final-invoices",    authMiddleware, finalInvoicesRoutes);
+app.use("/api/v1/stammdaten",        authMiddleware, stammdatenRoutes);
+app.use("/api/v1/mitarbeiter",       authMiddleware, mitarbeiterRoutes);
+app.use("/api/v1/projekte",          authMiddleware, projekteRoutes);
+app.use("/api/v1/buchungen",         authMiddleware, buchungenRoutes);
+app.use("/api/v1/employee2project",  authMiddleware, employee2projectRoutes);
+app.use("/api/v1/partial-payments",  authMiddleware, partialPaymentsRoutes);
+app.use("/api/v1/invoices",          authMiddleware, invoicesRoutes);
+app.use("/api/v1/payments",          authMiddleware, paymentsRoutes);
+app.use("/api/v1/assets",            authMiddleware, assetsRoutes);
+app.use("/api/v1/document-templates",authMiddleware, documentTemplatesRoutes);
+app.use("/api/v1/documents",         authMiddleware, documentsRoutes);
+app.use("/api/v1/number-ranges",     authMiddleware, numberRangesRoutes);
+app.use("/api/v1/reports",           authMiddleware, reportsRoutes);
+app.use("/api/v1/final-invoices",    authMiddleware, finalInvoicesRoutes);
 
 
 
