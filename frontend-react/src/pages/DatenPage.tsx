@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchProjectsShort } from '@/api/projekte'
-import { fetchProjectReportHeader, fetchProjectReportStructure } from '@/api/reports'
+import { fetchProjectReportHeader, fetchProjectReportStructure, type DateFilter, type FilterMode } from '@/api/reports'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H   = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
@@ -20,21 +20,33 @@ function KpiTile({ label, value, accent }: { label: string; value: string; accen
 }
 
 export function DatenPage() {
-  const [pid, setPid] = useState<number | null>(null)
+  const [pid,      setPid]      = useState<number | null>(null)
+  const [mode,     setMode]     = useState<FilterMode>('now')
+  const [asOfDate, setAsOfDate] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo,   setDateTo]   = useState('')
+
+  const filter: DateFilter = { mode, asOfDate, dateFrom, dateTo }
+
+  // Only fire the query when the filter is fully specified
+  const filterReady =
+    mode === 'now' ||
+    (mode === 'as_of'  && asOfDate !== '') ||
+    (mode === 'period' && dateFrom !== '' && dateTo !== '')
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects-short'],
     queryFn:  fetchProjectsShort,
   })
   const { data: headerData, isLoading: headerLoading } = useQuery({
-    queryKey: ['report-header', pid],
-    queryFn:  () => fetchProjectReportHeader(pid!),
-    enabled:  pid !== null,
+    queryKey: ['report-header', pid, filter],
+    queryFn:  () => fetchProjectReportHeader(pid!, filter),
+    enabled:  pid !== null && filterReady,
   })
   const { data: structData, isLoading: structLoading } = useQuery({
-    queryKey: ['report-structure', pid],
-    queryFn:  () => fetchProjectReportStructure(pid!),
-    enabled:  pid !== null,
+    queryKey: ['report-structure', pid, filter],
+    queryFn:  () => fetchProjectReportStructure(pid!, filter),
+    enabled:  pid !== null && filterReady,
   })
 
   const projects  = projectsData?.data ?? []
@@ -52,6 +64,36 @@ export function DatenPage() {
           <option value="">Bitte wählen …</option>
           {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
         </select>
+      </div>
+
+      {/* Date filter */}
+      <div className="daten-filter-bar">
+        <div className="daten-filter-modes">
+          {(['now', 'as_of', 'period'] as FilterMode[]).map(m => (
+            <label key={m} className={`daten-filter-mode-btn${mode === m ? ' active' : ''}`}>
+              <input type="radio" name="filterMode" value={m} checked={mode === m}
+                onChange={() => setMode(m)} />
+              {m === 'now' ? 'Aktuell' : m === 'as_of' ? 'Stichtag' : 'Zeitraum'}
+            </label>
+          ))}
+        </div>
+        {mode === 'as_of' && (
+          <div className="daten-filter-dates">
+            <label>Stichtag
+              <input type="date" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} />
+            </label>
+          </div>
+        )}
+        {mode === 'period' && (
+          <div className="daten-filter-dates">
+            <label>Von
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            </label>
+            <label>Bis
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            </label>
+          </div>
+        )}
       </div>
 
       {pid !== null && loading && <p className="empty-note">Laden …</p>}

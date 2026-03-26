@@ -521,6 +521,33 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 }
 .daten-header-meta strong { color: rgba(17,24,39,0.85); }
 
+.daten-filter-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  margin-bottom: 16px;
+}
+.daten-filter-modes {
+  display: flex; gap: 6px;
+}
+.daten-filter-mode-btn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 12px; border-radius: 20px; border: 1px solid #d1d5db;
+  background: #fff; font-size: 0.85rem; cursor: pointer; user-select: none;
+}
+.daten-filter-mode-btn input { display: none; }
+.daten-filter-mode-btn.active {
+  background: #2563eb; color: #fff; border-color: #2563eb;
+}
+.daten-filter-dates {
+  display: flex; gap: 12px; align-items: center;
+}
+.daten-filter-dates label {
+  display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #6b7280;
+}
+.daten-filter-dates input[type="date"] {
+  padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px;
+  font-size: 0.85rem; background: #fff;
+}
+
 .daten-kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
