@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Tabs } from '@/components/ui/Tabs'
 import {
-  fetchInvoices, fetchPartialPayments, invoicePdfUrl, ppPdfUrl,
+  fetchInvoices, fetchPartialPayments,
+  openInvoicePdf, openPpPdf,
+  downloadInvoiceEinvoice, downloadPpEinvoice,
   type Invoice, type PartialPayment,
 } from '@/api/rechnungen'
 
@@ -77,10 +79,10 @@ export function RechnungenListe() {
                           {STATUS(inv.STATUS_ID)}
                         </span>
                       </td>
-                      <td>
-                        <a href={invoicePdfUrl(inv.ID)} target="_blank" rel="noreferrer" className="btn-small">
-                          PDF
-                        </a>
+                      <td className="doc-actions">
+                        <button className="btn-small" onClick={() => openInvoicePdf(inv.ID)}>PDF</button>
+                        <button className="btn-small" onClick={() => downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'ubl')}>UBL</button>
+                        <button className="btn-small" onClick={() => downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'cii')}>ZUGFeRD</button>
                       </td>
                     </tr>
                   ))}
@@ -122,10 +124,10 @@ export function RechnungenListe() {
                           {STATUS(pp.STATUS_ID)}
                         </span>
                       </td>
-                      <td>
-                        <a href={ppPdfUrl(pp.ID)} target="_blank" rel="noreferrer" className="btn-small">
-                          PDF
-                        </a>
+                      <td className="doc-actions">
+                        <button className="btn-small" onClick={() => openPpPdf(pp.ID)}>PDF</button>
+                        <button className="btn-small" onClick={() => downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'ubl')}>UBL</button>
+                        <button className="btn-small" onClick={() => downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'cii')}>ZUGFeRD</button>
                       </td>
                     </tr>
                   ))}

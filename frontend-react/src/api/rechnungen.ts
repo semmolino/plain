@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, downloadWithAuth, openPdfWithAuth } from './client'
 
 // ── Lookup types ──────────────────────────────────────────────────────────────
 
@@ -155,8 +155,27 @@ export const bookInvoice = (id: number) =>
 export const deleteInvoice = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/invoices/${id}`)
 
-export const invoicePdfUrl = (id: number, preview = true) =>
-  `/api/v1/invoices/${id}/pdf${preview ? '?preview=1' : ''}`
+export const openInvoicePdf = (id: number) =>
+  openPdfWithAuth(`/invoices/${id}/pdf?preview=1`)
+
+export const openPpPdf = (id: number) =>
+  openPdfWithAuth(`/partial-payments/${id}/pdf?preview=1`)
+
+export function downloadInvoiceEinvoice(
+  id: number,
+  invoiceType: InvoiceType | null | undefined,
+  invoiceNumber: string | null | undefined,
+  format: 'ubl' | 'cii',
+  profile = 'EN16931'
+): Promise<void> {
+  const isFinal = invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung'
+  const base    = isFinal ? `/final-invoices/${id}` : `/invoices/${id}`
+  const params  = new URLSearchParams({ download: '1' })
+  if (format === 'cii') params.set('profile', profile)
+  const num      = invoiceNumber || String(id)
+  const fileName = format === 'ubl' ? `XRechnung_${num}.xml` : `ZUGFeRD_${num}.xml`
+  return downloadWithAuth(`${base}/einvoice/${format}?${params}`, fileName)
+}
 
 // ── Partial Payments ──────────────────────────────────────────────────────────
 
@@ -196,8 +215,19 @@ export const bookPartialPayment = (id: number) =>
 export const deletePartialPayment = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/partial-payments/${id}`)
 
-export const ppPdfUrl = (id: number, preview = true) =>
-  `/api/v1/partial-payments/${id}/pdf${preview ? '?preview=1' : ''}`
+
+export function downloadPpEinvoice(
+  id: number,
+  ppNumber: string | null | undefined,
+  format: 'ubl' | 'cii',
+  profile = 'EN16931'
+): Promise<void> {
+  const params   = new URLSearchParams({ download: '1' })
+  if (format === 'cii') params.set('profile', profile)
+  const num      = ppNumber || String(id)
+  const fileName = format === 'ubl' ? `XRechnung_${num}.xml` : `ZUGFeRD_${num}.xml`
+  return downloadWithAuth(`/partial-payments/${id}/einvoice/${format}?${params}`, fileName)
+}
 
 // ── Final Invoices ────────────────────────────────────────────────────────────
 

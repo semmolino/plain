@@ -331,6 +331,7 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 .btn-small:hover { background: #f4f6fb; transform: none; box-shadow: none; }
 .btn-save { background: #f0f4ff; border-color: #2563eb; color: #2563eb; }
 .btn-save:hover { background: #e0e8ff; }
+.doc-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
 
 /* ── Pagination ──────────────────────────────────────────────────────────── */
 .pagination { display: flex; gap: 8px; margin-top: 12px; align-items: center; }

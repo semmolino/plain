@@ -53,6 +53,63 @@ async function request<T>(
   return res.json() as Promise<T>
 }
 
+/**
+ * Fetch a binary/text file with the auth header and trigger a browser download.
+ * @param path  API path (e.g. /invoices/1/einvoice/ubl)
+ * @param fileName  Suggested file name for the download dialog
+ */
+export async function downloadWithAuth(path: string, fileName: string): Promise<void> {
+  const token = useAuthStore.getState().session?.access_token
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${path}`, { headers })
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`
+    try {
+      const body = await res.json() as { error?: string }
+      if (body.error) message = body.error
+    } catch { /* ignore */ }
+    throw new ApiRequestError(res.status, message)
+  }
+
+  const blob = await res.blob()
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * Fetch a PDF with the auth header and open it inline in a new browser tab.
+ * @param path  API path (e.g. /invoices/1/pdf?preview=1)
+ */
+export async function openPdfWithAuth(path: string): Promise<void> {
+  const token = useAuthStore.getState().session?.access_token
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${path}`, { headers })
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`
+    try {
+      const body = await res.json() as { error?: string }
+      if (body.error) message = body.error
+    } catch { /* ignore */ }
+    throw new ApiRequestError(res.status, message)
+  }
+
+  const blob = await res.blob()
+  const url  = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  // Revoke after a short delay to allow the new tab to load
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
 

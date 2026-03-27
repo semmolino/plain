@@ -2,6 +2,8 @@
 
 const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/invoices");
+const { loadInvoiceData } = require("../services_einvoice_data");
+const { generateCiiXml } = require("../services_einvoice_cii");
 
 // ---------------------------------------------------------------------------
 // GET /api/invoices
@@ -548,6 +550,94 @@ async function getPdf(req, res, supabase) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// GET /api/invoices/:id/einvoice/cii?profile=EN16931
+// ---------------------------------------------------------------------------
+async function getEinvoiceCii(req, res, supabase) {
+  const invoiceId = parseInt(String(req.params.id || ""), 10);
+  if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
+
+  const profile  = String(req.query.profile  || "EN16931").toUpperCase();
+  const download = String(req.query.download || "") === "1";
+  const preview  = String(req.query.preview  || "") === "1";
+
+  const { data: invRow, error: invRowErr } = await supabase
+    .from("INVOICE")
+    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, DOCUMENT_XML_PROFILE, INVOICE_NUMBER, COMPANY_ID")
+    .eq("ID", invoiceId)
+    .maybeSingle();
+
+  if (invRowErr) return res.status(500).json({ error: invRowErr.message });
+  if (!invRow)   return res.status(404).json({ error: "INVOICE nicht gefunden" });
+
+  const fname      = `ZUGFeRD_${invRow.INVOICE_NUMBER || invRow.ID}.xml`;
+  const profileKey = `zugferd-${profile.toLowerCase()}`;
+
+  // Serve snapshot only if format matches
+  if (!preview && String(invRow.STATUS_ID) === "2" && invRow.DOCUMENT_XML_ASSET_ID && invRow.DOCUMENT_XML_PROFILE === profileKey) {
+    return svc.streamXmlAsset({ supabase, res, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+  }
+
+  try {
+    const data = await loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId);
+    const xml  = generateCiiXml(data, profile);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fname}"`);
+    return res.send(xml);
+  } catch (err) {
+    console.error("[EINVOICE_CII_INV]", { invoice_id: invoiceId, profile, error: err?.message, stack: err?.stack });
+    return res.status(500).json({ error: `E-Rechnung (CII) konnte nicht erzeugt werden: ${err?.message || err}`, invoice_id: invRow.ID });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/invoices/:id/einvoice/cii/snapshot?profile=EN16931
+// ---------------------------------------------------------------------------
+async function postEinvoiceCiiSnapshot(req, res, supabase) {
+  const invoiceId = parseInt(String(req.params.id || ""), 10);
+  if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
+
+  const profile = String(req.query.profile || "EN16931").toUpperCase();
+
+  const { data: invRow, error: invRowErr } = await supabase
+    .from("INVOICE")
+    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, INVOICE_NUMBER, COMPANY_ID")
+    .eq("ID", invoiceId)
+    .maybeSingle();
+
+  if (invRowErr) return res.status(500).json({ error: invRowErr.message });
+  if (!invRow)   return res.status(404).json({ error: "INVOICE nicht gefunden" });
+  if (String(invRow.STATUS_ID) !== "2") {
+    return res.status(400).json({ error: "Snapshot ist nur fuer gebuchte Rechnungen (STATUS_ID=2) erlaubt" });
+  }
+  if (invRow.DOCUMENT_XML_ASSET_ID) {
+    return res.json({ success: true, invoice_id: invRow.ID, xml_asset_id: invRow.DOCUMENT_XML_ASSET_ID, already_existed: true });
+  }
+
+  const fname = `ZUGFeRD_${invRow.INVOICE_NUMBER || invRow.ID}.xml`;
+  try {
+    const data     = await loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId);
+    const xml      = generateCiiXml(data, profile);
+    const xmlAsset = await svc.storeGeneratedXmlAsAsset({ supabase, companyId: invRow.COMPANY_ID, fileName: fname, xmlString: xml, assetType: "XML_ZUGFERD_INVOICE" });
+
+    const { error: upErr } = await supabase.from("INVOICE").update({
+      DOCUMENT_XML_ASSET_ID:   xmlAsset?.ID ?? null,
+      DOCUMENT_XML_PROFILE:    `zugferd-${profile.toLowerCase()}`,
+      DOCUMENT_XML_RENDERED_AT: new Date().toISOString(),
+    }).eq("ID", invoiceId);
+
+    if (upErr) {
+      await svc.bestEffortDeleteAsset({ supabase, asset: xmlAsset });
+      throw new Error(upErr.message);
+    }
+
+    return res.json({ success: true, invoice_id: invRow.ID, xml_asset_id: xmlAsset.ID, already_existed: false });
+  } catch (e) {
+    console.error("[EINVOICE_CII_SNAPSHOT_INV]", { invoice_id: invoiceId, error: e?.message, stack: e?.stack });
+    return res.status(500).json({ error: `Snapshot konnte nicht erzeugt werden: ${e?.message || e}` });
+  }
+}
+
 module.exports = {
   listInvoices,
   initInvoice,
@@ -558,6 +648,8 @@ module.exports = {
   postTec,
   getEinvoiceUbl,
   postEinvoiceUblSnapshot,
+  getEinvoiceCii,
+  postEinvoiceCiiSnapshot,
   bookInvoice,
   deleteInvoice,
   getInvoice,

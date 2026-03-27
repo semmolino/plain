@@ -2,6 +2,8 @@
 
 const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/partialPayments");
+const { loadInvoiceData } = require("../services_einvoice_data");
+const { generateCiiXml } = require("../services_einvoice_cii");
 
 // ---------------------------------------------------------------------------
 // GET /api/partial-payments
@@ -595,6 +597,93 @@ async function getPdf(req, res, supabase) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// GET /api/partial-payments/:id/einvoice/cii?profile=EN16931
+// ---------------------------------------------------------------------------
+async function getEinvoiceCii(req, res, supabase) {
+  const ppId = parseInt(String(req.params.id || ""), 10);
+  if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
+
+  const profile  = String(req.query.profile  || "EN16931").toUpperCase();
+  const download = String(req.query.download || "") === "1";
+  const preview  = String(req.query.preview  || "") === "1";
+
+  const { data: ppRow, error: ppRowErr } = await supabase
+    .from("PARTIAL_PAYMENT")
+    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, DOCUMENT_XML_PROFILE, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
+    .eq("ID", ppId)
+    .maybeSingle();
+
+  if (ppRowErr) return res.status(500).json({ error: ppRowErr.message });
+  if (!ppRow)   return res.status(404).json({ error: "PARTIAL_PAYMENT nicht gefunden" });
+
+  const fname      = `ZUGFeRD_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
+  const profileKey = `zugferd-${profile.toLowerCase()}`;
+
+  if (!preview && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_XML_ASSET_ID && ppRow.DOCUMENT_XML_PROFILE === profileKey) {
+    return svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+  }
+
+  try {
+    const data = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const xml  = generateCiiXml(data, profile);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fname}"`);
+    return res.send(xml);
+  } catch (err) {
+    console.error("[EINVOICE_CII_PP]", { partial_payment_id: ppId, profile, error: err?.message, stack: err?.stack });
+    return res.status(500).json({ error: `E-Rechnung (CII) konnte nicht erzeugt werden: ${err?.message || err}`, partial_payment_id: ppRow.ID });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/partial-payments/:id/einvoice/cii/snapshot?profile=EN16931
+// ---------------------------------------------------------------------------
+async function postEinvoiceCiiSnapshot(req, res, supabase) {
+  const ppId = parseInt(String(req.params.id || ""), 10);
+  if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
+
+  const profile = String(req.query.profile || "EN16931").toUpperCase();
+
+  const { data: ppRow, error: ppRowErr } = await supabase
+    .from("PARTIAL_PAYMENT")
+    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
+    .eq("ID", ppId)
+    .maybeSingle();
+
+  if (ppRowErr) return res.status(500).json({ error: ppRowErr.message });
+  if (!ppRow)   return res.status(404).json({ error: "PARTIAL_PAYMENT nicht gefunden" });
+  if (String(ppRow.STATUS_ID) !== "2") {
+    return res.status(400).json({ error: "Snapshot ist nur fuer gebuchte Abschlagsrechnungen (STATUS_ID=2) erlaubt" });
+  }
+  if (ppRow.DOCUMENT_XML_ASSET_ID) {
+    return res.json({ success: true, partial_payment_id: ppRow.ID, xml_asset_id: ppRow.DOCUMENT_XML_ASSET_ID, already_existed: true });
+  }
+
+  const fname = `ZUGFeRD_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
+  try {
+    const data     = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const xml      = generateCiiXml(data, profile);
+    const xmlAsset = await svc.storeGeneratedXmlAsAsset({ supabase, companyId: ppRow.COMPANY_ID, fileName: fname, xmlString: xml, assetType: "XML_ZUGFERD_PARTIAL_PAYMENT" });
+
+    const { error: upErr } = await supabase.from("PARTIAL_PAYMENT").update({
+      DOCUMENT_XML_ASSET_ID:    xmlAsset?.ID ?? null,
+      DOCUMENT_XML_PROFILE:     `zugferd-${profile.toLowerCase()}`,
+      DOCUMENT_XML_RENDERED_AT: new Date().toISOString(),
+    }).eq("ID", ppId);
+
+    if (upErr) {
+      await svc.bestEffortDeleteAsset({ supabase, asset: xmlAsset });
+      throw new Error(upErr.message);
+    }
+
+    return res.json({ success: true, partial_payment_id: ppRow.ID, xml_asset_id: xmlAsset.ID, already_existed: false });
+  } catch (e) {
+    console.error("[EINVOICE_CII_SNAPSHOT_PP]", { partial_payment_id: ppId, error: e?.message, stack: e?.stack });
+    return res.status(500).json({ error: `Snapshot konnte nicht erzeugt werden: ${e?.message || e}` });
+  }
+}
+
 module.exports = {
   listPartialPayments,
   initPartialPayment,
@@ -607,6 +696,8 @@ module.exports = {
   deletePartialPayment,
   getEinvoiceUbl,
   postEinvoiceUblSnapshot,
+  getEinvoiceCii,
+  postEinvoiceCiiSnapshot,
   bookPartialPayment,
   getPdf,
 };
