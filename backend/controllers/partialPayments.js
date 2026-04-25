@@ -418,6 +418,20 @@ async function deletePartialPayment(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/partial-payments/:id/cancel
+// ---------------------------------------------------------------------------
+async function cancelPartialPayment(req, res, supabase) {
+  const { id } = req.params;
+  try {
+    const result = await svc.cancelPartialPayment(supabase, { id });
+    return res.json(result);
+  } catch (e) {
+    const status = e?.status || 500;
+    return res.status(status).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/partial-payments/:id/einvoice/ubl
 // ---------------------------------------------------------------------------
 async function getEinvoiceUbl(req, res, supabase) {
@@ -694,6 +708,7 @@ module.exports = {
   postTec,
   getPartialPayment,
   deletePartialPayment,
+  cancelPartialPayment,
   getEinvoiceUbl,
   postEinvoiceUblSnapshot,
   getEinvoiceCii,

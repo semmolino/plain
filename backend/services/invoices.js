@@ -463,7 +463,7 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
   let query = supabase
     .from("INVOICE")
     .select(
-      "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT"
+      "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, INVOICE_TYPE, CANCELS_INVOICE_ID"
     )
     .eq("TENANT_ID", tenantId)
     .order("INVOICE_DATE", { ascending: false })
@@ -903,7 +903,88 @@ async function bookInvoice(supabase, { id, inv }) {
     throw { status: 500, message: `PROJECT_STRUCTURE konnte nicht aktualisiert werden: ${e?.message || e}` };
   }
 
+  // If this is a Stornorechnung, mark the original invoice as cancelled
+  if (inv.CANCELS_INVOICE_ID) {
+    await supabase.from("INVOICE").update({ STATUS_ID: 3 }).eq("ID", inv.CANCELS_INVOICE_ID);
+  }
+
   return { success: true, number: inv.INVOICE_NUMBER || null, pdf_asset_id: pdfAsset?.ID ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// cancelInvoice – create a draft Stornorechnung for a booked invoice
+// The original is marked STATUS_ID=3 only when the Stornorechnung is booked.
+// ---------------------------------------------------------------------------
+async function cancelInvoice(supabase, { id }) {
+  const { data: orig, error: origErr } = await supabase
+    .from("INVOICE").select("*").eq("ID", id).maybeSingle();
+  if (origErr || !orig) throw { status: 404, message: "Rechnung nicht gefunden" };
+  if (String(orig.STATUS_ID) !== "2") throw { status: 400, message: "Nur gebuchte Rechnungen können storniert werden" };
+  if (orig.INVOICE_TYPE === "stornorechnung") throw { status: 400, message: "Eine Stornorechnung kann nicht storniert werden" };
+
+  // Prevent duplicate: check for an existing (non-deleted) Stornorechnung
+  const { data: existing } = await supabase
+    .from("INVOICE").select("ID, STATUS_ID").eq("CANCELS_INVOICE_ID", id).maybeSingle();
+  if (existing) {
+    const label = String(existing.STATUS_ID) === "2" ? "gebucht" : "als Entwurf angelegt";
+    throw { status: 409, message: `Es existiert bereits eine Stornorechnung (${label}) für diese Rechnung` };
+  }
+
+  // Clone the row, negate monetary amounts, clear document assets
+  const {
+    ID: _id, INVOICE_NUMBER: _num, STATUS_ID: _st,
+    DOCUMENT_PDF_ASSET_ID: _pdf, DOCUMENT_XML_ASSET_ID: _xml,
+    DOCUMENT_XML_PROFILE: _xp, DOCUMENT_XML_RENDERED_AT: _xr,
+    DOCUMENT_RENDERED_AT: _dr, DOCUMENT_TEMPLATE_ID: _tpl,
+    DOCUMENT_LAYOUT_KEY_SNAPSHOT: _lk, DOCUMENT_THEME_SNAPSHOT_JSON: _th,
+    DOCUMENT_LOGO_ASSET_ID_SNAPSHOT: _lo,
+    ...rest
+  } = orig;
+
+  const cancelRow = {
+    ...rest,
+    INVOICE_TYPE:         "stornorechnung",
+    CANCELS_INVOICE_ID:   parseInt(id, 10),
+    STATUS_ID:            1,
+    TOTAL_AMOUNT_NET:    -round2(toNum(orig.TOTAL_AMOUNT_NET)),
+    TAX_AMOUNT_NET:      -round2(toNum(orig.TAX_AMOUNT_NET)),
+    TOTAL_AMOUNT_GROSS:  -round2(toNum(orig.TOTAL_AMOUNT_GROSS)),
+  };
+
+  const { data: created, error: insertErr } = await supabase
+    .from("INVOICE").insert([cancelRow]).select("ID").single();
+  if (insertErr) throw { status: 500, message: insertErr.message };
+
+  const newId = created.ID;
+
+  // Copy INVOICE_STRUCTURE rows with negated amounts so bookInvoice
+  // correctly decrements PROJECT_STRUCTURE.INVOICED when booked.
+  const { data: structRows } = await supabase
+    .from("INVOICE_STRUCTURE")
+    .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, BILLING_TYPE_ID, TENANT_ID")
+    .eq("INVOICE_ID", id);
+
+  if (structRows && structRows.length > 0) {
+    const newStructRows = structRows.map(r => ({
+      INVOICE_ID:       newId,
+      STRUCTURE_ID:     r.STRUCTURE_ID,
+      AMOUNT_NET:      -round2(toNum(r.AMOUNT_NET)),
+      AMOUNT_EXTRAS_NET: -round2(toNum(r.AMOUNT_EXTRAS_NET)),
+      BILLING_TYPE_ID:  r.BILLING_TYPE_ID ?? null,
+      TENANT_ID:        r.TENANT_ID ?? null,
+    }));
+    const { error: sErr } = await supabase.from("INVOICE_STRUCTURE").insert(newStructRows);
+    if (sErr && !isTableMissingErr(sErr, "invoice_structure")) {
+      // Non-fatal: booking will still update PROJECT.INVOICED via TOTAL_AMOUNT_NET
+      console.error("[CANCEL_INVOICE][STRUCTURE]", sErr.message);
+    }
+  }
+
+  // Auto-book: immediately finalise the Stornorechnung so original is marked Storniert at once
+  const cancelInv = { ...cancelRow, ID: newId };
+  await bookInvoice(supabase, { id: newId, inv: cancelInv });
+
+  return { id: newId };
 }
 
 module.exports = {
@@ -932,6 +1013,7 @@ module.exports = {
   patchInvoice,
   getInvoice,
   deleteInvoice,
+  cancelInvoice,
   bookInvoice,
   // for einvoice routes
   generateUblInvoiceXml,

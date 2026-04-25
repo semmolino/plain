@@ -72,7 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (flowType === 'invite') {
                 navigate('/reset-password')
               } else {
-                navigate('/')
+                // Only redirect to dashboard when coming from an auth page.
+                // Silent token refreshes also fire SIGNED_IN — don't hijack the
+                // current route in that case.
+                const onAuthPage = ['/login', '/signup', '/reset-password'].includes(window.location.pathname)
+                if (onAuthPage) navigate('/')
               }
             } else if (event === 'SIGNED_OUT') {
               navigate('/login')

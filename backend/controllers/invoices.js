@@ -493,6 +493,21 @@ async function deleteInvoice(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/invoices/:id/cancel
+// ---------------------------------------------------------------------------
+async function cancelInvoice(req, res, supabase) {
+  const { id } = req.params;
+
+  try {
+    const result = await svc.cancelInvoice(supabase, { id });
+    return res.json(result);
+  } catch (e) {
+    const status = e?.status || 500;
+    return res.status(status).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/invoices/:id
 // ---------------------------------------------------------------------------
 async function getInvoice(req, res, supabase) {
@@ -652,6 +667,7 @@ module.exports = {
   postEinvoiceCiiSnapshot,
   bookInvoice,
   deleteInvoice,
+  cancelInvoice,
   getInvoice,
   getPdf,
 };

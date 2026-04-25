@@ -160,8 +160,9 @@ async function createProject(supabase, { body, tenantId }) {
       BILLING_TYPE_ID: n.BILLING_TYPE_ID ? parseInt(n.BILLING_TYPE_ID, 10) : null,
       FATHER_ID: null,
       REVENUE: 0,
-      EXTRAS_PERCENT: 0,
+      EXTRAS_PERCENT: n.EXTRAS_PERCENT !== undefined && n.EXTRAS_PERCENT !== null && String(n.EXTRAS_PERCENT) !== '' ? Number(n.EXTRAS_PERCENT) : 0,
       EXTRAS: 0,
+      COSTS: 0,
       REVENUE_COMPLETION_PERCENT: 0,
       EXTRAS_COMPLETION_PERCENT: 0,
       REVENUE_COMPLETION: 0,
@@ -401,7 +402,9 @@ async function getProjectStructure(supabase, { projectId }) {
   const { data: structures, error } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("*")
-    .eq("PROJECT_ID", projectId);
+    .eq("PROJECT_ID", projectId)
+    .order("SORT_ORDER", { ascending: true })
+    .order("ID", { ascending: true });
 
   if (error) throw error;
   if (!Array.isArray(structures) || structures.length === 0) return [];
@@ -424,6 +427,7 @@ async function getProjectStructure(supabase, { projectId }) {
 
   return structures.map((s) => ({
     ...s,
+    STRUCTURE_ID:   s.ID,
     TEC_SP_TOT_SUM: tecSums[String(s.ID)] ?? 0,
   }));
 }
@@ -434,6 +438,62 @@ async function patchStructureCompletionPercents(supabase, { structureId, revPct,
     .update({ REVENUE_COMPLETION_PERCENT: revPct, EXTRAS_COMPLETION_PERCENT: exPct })
     .eq("ID", structureId);
   if (error) throw error;
+  await propagateUpwards(supabase, { structureId });
+}
+
+// ---------------------------------------------------------------------------
+// Parent aggregation helpers
+// ---------------------------------------------------------------------------
+
+async function recalcParent(supabase, { parentId }) {
+  const { data: children, error } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("REVENUE, EXTRAS, COSTS, REVENUE_COMPLETION, EXTRAS_COMPLETION, PARTIAL_PAYMENTS, INVOICED, PAYED")
+    .eq("FATHER_ID", parentId);
+  if (error) throw error;
+  if (!children || children.length === 0) return;
+
+  const s = (field) => children.reduce((acc, c) => acc + Number(c[field] ?? 0), 0);
+  const revenue          = s("REVENUE");
+  const extras           = s("EXTRAS");
+  const costs            = s("COSTS");
+  const revenueCompletion = s("REVENUE_COMPLETION");
+  const extrasCompletion  = s("EXTRAS_COMPLETION");
+  const partialPayments  = s("PARTIAL_PAYMENTS");
+  const invoiced         = s("INVOICED");
+  const payed            = s("PAYED");
+  const revenuePct = revenue > 0 ? (revenueCompletion / revenue) * 100 : 0;
+  const extrasPct  = extras  > 0 ? (extrasCompletion  / extras)  * 100 : 0;
+  const extrasPercent = revenue > 0 ? (extras / revenue) * 100 : 0;
+
+  const { error: uErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .update({
+      REVENUE: revenue,
+      EXTRAS: extras,
+      COSTS: costs,
+      // EXTRAS_PERCENT is NOT aggregated — parent keeps its own manually-set NK%
+      REVENUE_COMPLETION: revenueCompletion,
+      EXTRAS_COMPLETION: extrasCompletion,
+      REVENUE_COMPLETION_PERCENT: revenuePct,
+      EXTRAS_COMPLETION_PERCENT: extrasPct,
+      PARTIAL_PAYMENTS: partialPayments,
+      INVOICED: invoiced,
+      PAYED: payed,
+    })
+    .eq("ID", parentId);
+  if (uErr) throw uErr;
+}
+
+async function propagateUpwards(supabase, { structureId }) {
+  const { data: node } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("FATHER_ID")
+    .eq("ID", structureId)
+    .maybeSingle();
+  if (!node || node.FATHER_ID === null || node.FATHER_ID === undefined) return;
+  await recalcParent(supabase, { parentId: node.FATHER_ID });
+  await propagateUpwards(supabase, { structureId: node.FATHER_ID });
 }
 
 async function progressSnapshot(supabase, { projectId }) {
@@ -584,6 +644,19 @@ async function createStructureNode(supabase, { projectId, node }) {
 
   const { data: projForTenant } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
 
+  // Place new node at end of its sibling group
+  const siblingQuery = supabase
+    .from("PROJECT_STRUCTURE")
+    .select("SORT_ORDER")
+    .eq("PROJECT_ID", projectId);
+  const { data: existingSiblings } = fatherIdParsed !== null
+    ? await siblingQuery.eq("FATHER_ID", fatherIdParsed)
+    : await siblingQuery.is("FATHER_ID", null);
+  const maxSortOrder = existingSiblings && existingSiblings.length > 0
+    ? Math.max(...existingSiblings.map(s => Number(s.SORT_ORDER ?? 0)))
+    : -10;
+  const newSortOrder = maxSortOrder + 10;
+
   const insertPayload = {
     NAME_SHORT: nameShort,
     NAME_LONG: nameLong,
@@ -598,6 +671,7 @@ async function createStructureNode(supabase, { projectId, node }) {
     REVENUE_COMPLETION: revenueCompletion,
     EXTRAS_COMPLETION: extrasCompletion,
     TENANT_ID: projForTenant?.TENANT_ID,
+    SORT_ORDER: newSortOrder,
   };
 
   const { data: created, error: cErr } = await supabase
@@ -622,7 +696,30 @@ async function createStructureNode(supabase, { projectId, node }) {
   const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert([progressRow]);
   if (prErr) throw { status: 500, message: "Element angelegt, aber PROJECT_PROGRESS fehlgeschlagen: " + prErr.message };
 
-  return created;
+  // TEC transfer: if this is the first child, move parent's TEC entries to this new element
+  let tec_moved = false;
+  if (fatherIdParsed !== null) {
+    const { data: siblings } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .select("ID")
+      .eq("FATHER_ID", fatherIdParsed)
+      .neq("ID", created.ID);
+    const isFirstChild = !siblings || siblings.length === 0;
+    if (isFirstChild) {
+      const { data: parentTec } = await supabase
+        .from("TEC")
+        .select("ID")
+        .eq("STRUCTURE_ID", fatherIdParsed);
+      if (parentTec && parentTec.length > 0) {
+        await supabase.from("TEC").update({ STRUCTURE_ID: created.ID }).eq("STRUCTURE_ID", fatherIdParsed);
+        tec_moved = true;
+      }
+    }
+    // Propagate aggregated values upwards
+    await propagateUpwards(supabase, { structureId: created.ID });
+  }
+
+  return { ...created, tec_moved };
 }
 
 async function patchStructure(supabase, { structureId, update }) {
@@ -718,6 +815,8 @@ async function patchStructure(supabase, { structureId, update }) {
       message: "Projektstruktur gespeichert, aber PROJECT_PROGRESS konnte nicht geschrieben werden: " + progressError.message,
     };
   }
+
+  await propagateUpwards(supabase, { structureId });
 
   return { billingTypeId, revenue, extras, revenueCompletion, extrasCompletion };
 }
@@ -836,7 +935,7 @@ async function inheritStructure(supabase, { structureId, inheritBt, inheritExtra
   return { updated: updatedIds.length, updated_ids: updatedIds };
 }
 
-async function moveStructure(supabase, { structureId, fatherRaw }) {
+async function moveStructure(supabase, { structureId, fatherRaw, sortAfterId }) {
   const newFatherId =
     fatherRaw === undefined || fatherRaw === null || String(fatherRaw) === "" || String(fatherRaw) === "0"
       ? null
@@ -885,11 +984,48 @@ async function moveStructure(supabase, { structureId, fatherRaw }) {
     }
   }
 
+  const oldFatherId = current.FATHER_ID === null || current.FATHER_ID === undefined
+    ? null : String(current.FATHER_ID);
+
   const { error: uErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .update({ FATHER_ID: newFatherId })
     .eq("ID", structureId);
   if (uErr) throw uErr;
+
+  // Re-order siblings in the new parent group
+  const newSiblingsQuery = supabase
+    .from("PROJECT_STRUCTURE")
+    .select("ID, SORT_ORDER")
+    .eq("PROJECT_ID", current.PROJECT_ID)
+    .neq("ID", structureId)
+    .order("SORT_ORDER", { ascending: true })
+    .order("ID", { ascending: true });
+  const { data: newSiblings } = newFatherId !== null
+    ? await newSiblingsQuery.eq("FATHER_ID", newFatherId)
+    : await newSiblingsQuery.is("FATHER_ID", null);
+
+  const ordered = [...(newSiblings || [])];
+  const insertIdx = sortAfterId === null || sortAfterId === undefined
+    ? 0  // prepend (for 'above' with no previous sibling) — will be overridden below
+    : (() => {
+        const idx = ordered.findIndex(s => String(s.ID) === String(sortAfterId));
+        return idx === -1 ? ordered.length : idx + 1;
+      })();
+  // sortAfterId === '__end__' → append; sortAfterId === null → prepend
+  const finalIdx = sortAfterId === '__end__' ? ordered.length : (sortAfterId === null ? 0 : insertIdx);
+  ordered.splice(finalIdx, 0, { ID: structureId });
+
+  for (let i = 0; i < ordered.length; i++) {
+    await supabase.from("PROJECT_STRUCTURE").update({ SORT_ORDER: i * 10 }).eq("ID", ordered[i].ID);
+  }
+
+  // Propagate aggregation: update both old and new parent chains
+  await propagateUpwards(supabase, { structureId });
+  if (oldFatherId !== null && oldFatherId !== newFatherId) {
+    await recalcParent(supabase, { parentId: oldFatherId });
+    await propagateUpwards(supabase, { structureId: oldFatherId });
+  }
 }
 
 async function deleteStructure(supabase, { structureId, cascade }) {

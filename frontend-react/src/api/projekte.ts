@@ -28,6 +28,7 @@ export interface StructureNode {
   PROJECT_ID:                  number
   BILLING_TYPE_ID:             number | null
   FATHER_ID:                   number | null
+  SORT_ORDER:                  number
   REVENUE:                     number
   EXTRAS_PERCENT:              number
   EXTRAS:                      number
@@ -47,11 +48,12 @@ export interface E2PRow {
 }
 
 export interface StructureDraftRow {
-  tmp_key:        string
-  father_tmp_key: string
-  NAME_SHORT:     string
-  NAME_LONG:      string
+  tmp_key:         string
+  father_tmp_key:  string
+  NAME_SHORT:      string
+  NAME_LONG:       string
   BILLING_TYPE_ID: string | number
+  EXTRAS_PERCENT:  string | number
 }
 
 export interface CreateProjectPayload {
@@ -105,6 +107,36 @@ export const patchStructureCompletion = (structureId: number, body: {
   revenue_completion_percent: number
   extras_completion_percent: number
 }) => apiClient.patch<{ data: StructureNode }>(`/projekte/structure/${structureId}/completion-percents`, body)
+
+export const patchStructureExtras = (structureId: number, extrasPercent: number) =>
+  apiClient.patch<{ data: StructureNode }>(`/projekte/structure/${structureId}`, { EXTRAS_PERCENT: extrasPercent })
+
+export const patchStructureNode = (structureId: number, body: Partial<{
+  NAME_SHORT: string; NAME_LONG: string
+  BILLING_TYPE_ID: number; REVENUE: number; EXTRAS_PERCENT: number
+  REVENUE_COMPLETION_PERCENT: number; EXTRAS_COMPLETION_PERCENT: number
+}>) => apiClient.patch<{ data: StructureNode }>(`/projekte/structure/${structureId}`, body)
+
+export const inheritStructureExtras = (structureId: number, extrasPercent: number) =>
+  apiClient.patch<{ updated: number }>(`/projekte/structure/${structureId}/inherit`, { EXTRAS_PERCENT: extrasPercent })
+
+export const createStructureNode = (projectId: number, node: {
+  NAME_SHORT: string
+  NAME_LONG?: string
+  BILLING_TYPE_ID: number
+  FATHER_ID?: number | null
+  REVENUE?: number
+  EXTRAS_PERCENT?: number
+}) => apiClient.post<{ data: StructureNode }>(`/projekte/${projectId}/structure`, node)
+
+export const deleteStructureNode = (structureId: number, cascade = true) =>
+  apiClient.delete<{ success: boolean; deleted_ids: number[] }>(`/projekte/structure/${structureId}?cascade=${cascade ? 1 : 0}`)
+
+export const moveStructureNode = (structureId: number, fatherId: number | null, sortAfterId?: number | null | '__end__') =>
+  apiClient.patch<{ success: boolean }>(`/projekte/structure/${structureId}/move`, {
+    father_id: fatherId,
+    ...(sortAfterId !== undefined ? { sort_after_id: sortAfterId } : {}),
+  })
 
 export const createProgressSnapshot = (projectId: number) =>
   apiClient.post<{ success: boolean }>(`/projekte/${projectId}/progress-snapshot`, {})

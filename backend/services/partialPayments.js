@@ -472,7 +472,7 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
 async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
   let query = supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT")
+    .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_PARTIAL_PAYMENT_ID")
     .eq("TENANT_ID", tenantId)
     .order("PARTIAL_PAYMENT_DATE", { ascending: false })
     .limit(limit);
@@ -812,7 +812,63 @@ async function bookPartialPayment(supabase, { id, pp }) {
     throw { status: 500, message: `PROJECT_STRUCTURE konnte nicht aktualisiert werden: ${e?.message || e}` };
   }
 
+  // If this is a Storno-AR, mark the original partial payment as cancelled
+  if (pp.CANCELS_PARTIAL_PAYMENT_ID) {
+    await supabase.from("PARTIAL_PAYMENT").update({ STATUS_ID: 3 }).eq("ID", pp.CANCELS_PARTIAL_PAYMENT_ID);
+  }
+
   return { success: true, pdf_asset_id: pdfAsset?.ID ?? null, xml_asset_id: xmlAsset?.ID ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// cancelPartialPayment – create a draft Storno-AR for a booked partial payment
+// ---------------------------------------------------------------------------
+async function cancelPartialPayment(supabase, { id }) {
+  const { data: orig, error: origErr } = await supabase
+    .from("PARTIAL_PAYMENT").select("*").eq("ID", id).maybeSingle();
+  if (origErr || !orig) throw { status: 404, message: "Abschlagsrechnung nicht gefunden" };
+  if (String(orig.STATUS_ID) !== "2") throw { status: 400, message: "Nur gebuchte Abschlagsrechnungen können storniert werden" };
+
+  // Prevent duplicate
+  const { data: existing } = await supabase
+    .from("PARTIAL_PAYMENT").select("ID, STATUS_ID").eq("CANCELS_PARTIAL_PAYMENT_ID", id).maybeSingle();
+  if (existing) {
+    const label = String(existing.STATUS_ID) === "2" ? "gebucht" : "als Entwurf angelegt";
+    throw { status: 409, message: `Es existiert bereits eine Storno-Abschlagsrechnung (${label}) für diesen Eintrag` };
+  }
+
+  const {
+    ID: _id, PARTIAL_PAYMENT_NUMBER: _num, STATUS_ID: _st,
+    DOCUMENT_PDF_ASSET_ID: _pdf, DOCUMENT_XML_ASSET_ID: _xml,
+    DOCUMENT_XML_PROFILE: _xp, DOCUMENT_XML_RENDERED_AT: _xr,
+    DOCUMENT_RENDERED_AT: _dr, DOCUMENT_TEMPLATE_ID: _tpl,
+    DOCUMENT_LAYOUT_KEY_SNAPSHOT: _lk, DOCUMENT_THEME_SNAPSHOT_JSON: _th,
+    DOCUMENT_LOGO_ASSET_ID_SNAPSHOT: _lo,
+    ...rest
+  } = orig;
+
+  const cancelRow = {
+    ...rest,
+    CANCELS_PARTIAL_PAYMENT_ID: parseInt(id, 10),
+    STATUS_ID:         1,
+    AMOUNT_NET:       -round2(toNum(orig.AMOUNT_NET)),
+    AMOUNT_EXTRAS_NET:-round2(toNum(orig.AMOUNT_EXTRAS_NET)),
+    TOTAL_AMOUNT_NET: -round2(toNum(orig.TOTAL_AMOUNT_NET)),
+    TAX_AMOUNT_NET:   -round2(toNum(orig.TAX_AMOUNT_NET)),
+    TOTAL_AMOUNT_GROSS:-round2(toNum(orig.TOTAL_AMOUNT_GROSS)),
+  };
+
+  const { data: created, error: insertErr } = await supabase
+    .from("PARTIAL_PAYMENT").insert([cancelRow]).select("ID").single();
+  if (insertErr) throw { status: 500, message: insertErr.message };
+
+  const newId = created.ID;
+
+  // Auto-book: immediately finalise the Storno-AR so original is marked Storniert at once
+  const cancelPp = { ...cancelRow, ID: newId };
+  await bookPartialPayment(supabase, { id: newId, pp: cancelPp });
+
+  return { id: newId };
 }
 
 module.exports = {
@@ -838,6 +894,7 @@ module.exports = {
   initPartialPayment,
   getPartialPayment,
   deletePartialPayment,
+  cancelPartialPayment,
   bookPartialPayment,
   generateUblInvoiceXml,
 };

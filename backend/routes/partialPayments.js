@@ -18,6 +18,7 @@ module.exports = (supabase) => {
   router.get("/:id/einvoice/cii",              (req, res) => ctrl.getEinvoiceCii(req, res, supabase));
   router.post("/:id/einvoice/cii/snapshot",    (req, res) => ctrl.postEinvoiceCiiSnapshot(req, res, supabase));
   router.post("/:id/book",                     (req, res) => ctrl.bookPartialPayment(req, res, supabase));
+  router.post("/:id/cancel",                   (req, res) => ctrl.cancelPartialPayment(req, res, supabase));
   router.delete("/:id",                        (req, res) => ctrl.deletePartialPayment(req, res, supabase));
   router.get("/:id/pdf",                       (req, res) => ctrl.getPdf(req, res, supabase));
   router.get("/:id",                           (req, res) => ctrl.getPartialPayment(req, res, supabase));

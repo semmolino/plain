@@ -9,7 +9,7 @@ export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: strin
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
 
-export type InvoiceType = 'rechnung' | 'schlussrechnung' | 'teilschlussrechnung'
+export type InvoiceType = 'rechnung' | 'schlussrechnung' | 'teilschlussrechnung' | 'stornorechnung'
 
 export interface Invoice {
   ID:                   number
@@ -33,22 +33,23 @@ export interface Invoice {
 }
 
 export interface PartialPayment {
-  ID:                       number
-  PARTIAL_PAYMENT_NUMBER:   string | null
-  PARTIAL_PAYMENT_DATE:     string | null
-  DUE_DATE:                 string | null
-  TOTAL_AMOUNT_NET:         number | null
-  TAX_AMOUNT_NET:           number | null
-  TOTAL_AMOUNT_GROSS:       number | null
-  AMOUNT_NET:               number | null
-  AMOUNT_EXTRAS_NET:        number | null
-  STATUS_ID:                number
-  PROJECT_ID:               number | null
-  CONTRACT_ID:              number | null
-  VAT_PERCENT:              number | null
-  PROJECT:                  string | null
-  CONTRACT:                 string | null
-  COMMENT:                  string | null
+  ID:                           number
+  PARTIAL_PAYMENT_NUMBER:       string | null
+  PARTIAL_PAYMENT_DATE:         string | null
+  DUE_DATE:                     string | null
+  TOTAL_AMOUNT_NET:             number | null
+  TAX_AMOUNT_NET:               number | null
+  TOTAL_AMOUNT_GROSS:           number | null
+  AMOUNT_NET:                   number | null
+  AMOUNT_EXTRAS_NET:            number | null
+  STATUS_ID:                    number
+  PROJECT_ID:                   number | null
+  CONTRACT_ID:                  number | null
+  VAT_PERCENT:                  number | null
+  PROJECT:                      string | null
+  CONTRACT:                     string | null
+  COMMENT:                      string | null
+  CANCELS_PARTIAL_PAYMENT_ID:   number | null
 }
 
 export interface BillingProposal {
@@ -155,6 +156,9 @@ export const bookInvoice = (id: number) =>
 export const deleteInvoice = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/invoices/${id}`)
 
+export const cancelInvoice = (id: number) =>
+  apiClient.post<{ id: number }>(`/invoices/${id}/cancel`, {})
+
 export const openInvoicePdf = (id: number) =>
   openPdfWithAuth(`/invoices/${id}/pdf?preview=1`)
 
@@ -214,6 +218,9 @@ export const bookPartialPayment = (id: number) =>
 
 export const deletePartialPayment = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/partial-payments/${id}`)
+
+export const cancelPartialPayment = (id: number) =>
+  apiClient.post<{ id: number }>(`/partial-payments/${id}/cancel`, {})
 
 
 export function downloadPpEinvoice(

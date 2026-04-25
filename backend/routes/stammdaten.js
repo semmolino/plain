@@ -30,6 +30,7 @@ module.exports = (supabase) => {
   router.get("/addresses/list",                                      (req, res) => ctrl.listAddresses(req, res, supabase));
   router.patch("/addresses/:id",                                     (req, res) => ctrl.patchAddress(req, res, supabase));
   router.get("/contacts/search",                                     (req, res) => ctrl.searchContacts(req, res, supabase));
+  router.get("/contacts/by-address",                                 (req, res) => ctrl.getContactsByAddress(req, res, supabase));
   router.get("/contacts/list",                                       (req, res) => ctrl.listContacts(req, res, supabase));
   router.patch("/contacts/:id",                                      (req, res) => ctrl.patchContact(req, res, supabase));
   router.get("/vat/search",                                          (req, res) => ctrl.searchVat(req, res, supabase));

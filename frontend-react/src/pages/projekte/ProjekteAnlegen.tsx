@@ -7,7 +7,8 @@ import {
   fetchActiveEmployees, fetchActiveRoles, fetchBillingTypes,
   createProject, type E2PRow, type StructureDraftRow,
 } from '@/api/projekte'
-import { searchAddressesApi, searchContactsApi } from '@/api/stammdaten'
+import { fetchCompanies } from '@/api/rechnungen'
+import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
 
 // ── Wizard state ──────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ function emptyBasic(): BasicForm {
 
 function newStructRow(): StructureDraftRow {
   const tmp = 't' + Date.now().toString(36) + Math.floor(Math.random() * 1000)
-  return { tmp_key: tmp, father_tmp_key: '', NAME_SHORT: '', NAME_LONG: '', BILLING_TYPE_ID: '' }
+  return { tmp_key: tmp, father_tmp_key: '', NAME_SHORT: '', NAME_LONG: '', BILLING_TYPE_ID: '', EXTRAS_PERCENT: '' }
 }
 
 // ── Sub-wizard components ─────────────────────────────────────────────────────
@@ -53,7 +54,6 @@ export function ProjekteAnlegen() {
   const [step, setStep]           = useState(1)
   const [basic, setBasic]         = useState<BasicForm>(emptyBasic)
   const [addrText, setAddrText]   = useState('')
-  const [contactText, setContactText] = useState('')
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<number>>(new Set())
   const [e2p, setE2p]             = useState<E2PState>({})
   const [structDraft, setStructDraft] = useState<StructureDraftRow[]>([])
@@ -65,24 +65,32 @@ export function ProjekteAnlegen() {
   const { data: empData     } = useQuery({ queryKey: ['active-employees'],  queryFn: fetchActiveEmployees  })
   const { data: roleData    } = useQuery({ queryKey: ['active-roles'],      queryFn: fetchActiveRoles      })
   const { data: btData      } = useQuery({ queryKey: ['billing-types'],     queryFn: fetchBillingTypes     })
+  const { data: companyData } = useQuery({ queryKey: ['companies'],         queryFn: fetchCompanies        })
+  const addressId = basic.address_id ? Number(basic.address_id) : null
+  const { data: contactData } = useQuery({
+    queryKey: ['contacts-by-address', addressId],
+    queryFn:  () => fetchContactsByAddress(addressId!),
+    enabled:  !!addressId,
+  })
 
-  const statuses  = statusData?.data ?? []
-  const types     = typeData?.data   ?? []
-  const managers  = mgrData?.data    ?? []
-  const employees = empData?.data    ?? []
-  const roles     = roleData?.data   ?? []
-  const btypes    = btData?.data     ?? []
+  const statuses  = statusData?.data  ?? []
+  const types     = typeData?.data    ?? []
+  const managers  = mgrData?.data     ?? []
+  const employees = empData?.data     ?? []
+  const roles     = roleData?.data    ?? []
+  const btypes    = btData?.data      ?? []
+  const contacts  = contactData?.data ?? []
+  const companies = companyData?.data ?? []
+
+  // Auto-select company when there is exactly one
+  if (companies.length === 1 && !basic.company_id) {
+    setBasic(f => ({ ...f, company_id: String(companies[0].ID) }))
+  }
 
   const searchAddresses = useCallback(async (q: string) => {
     const res = await searchAddressesApi(q)
     return res.data.map(a => ({ id: a.ID, label: a.ADDRESS_NAME_1 }))
   }, [])
-
-  const searchContacts = useCallback(async (q: string) => {
-    if (!basic.address_id) return []
-    const res = await searchContactsApi(Number(basic.address_id), q)
-    return res.data.map(c => ({ id: c.ID, label: `${c.FIRST_NAME} ${c.LAST_NAME}`.trim() }))
-  }, [basic.address_id])
 
   const createMut = useMutation({
     mutationFn: createProject,
@@ -90,7 +98,7 @@ export function ProjekteAnlegen() {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
       setMsg({ text: `Projekt "${res.data.NAME_SHORT}" wurde angelegt ✅`, type: 'success' })
       // reset
-      setStep(1); setBasic(emptyBasic()); setAddrText(''); setContactText('')
+      setStep(1); setBasic(emptyBasic()); setAddrText('')
       setSelectedEmpIds(new Set()); setE2p({}); setStructDraft([])
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -192,6 +200,15 @@ export function ProjekteAnlegen() {
       {step === 1 && (
         <div className="wizard-step-content">
           <h3 className="wizard-step-title">Schritt 1: Basisdaten</h3>
+          {companies.length > 1 && (
+            <div className="form-group">
+              <label>Firma*</label>
+              <select value={basic.company_id} onChange={e => setB('company_id')(e.target.value)}>
+                <option value="">Bitte wählen …</option>
+                {companies.map(c => <option key={c.ID} value={c.ID}>{c.COMPANY_NAME_1}</option>)}
+              </select>
+            </div>
+          )}
           <div className="form-group">
             <label>Projektname*</label>
             <input value={basic.name_long} onChange={e => setB('name_long')(e.target.value)} placeholder="Langer Projektname" />
@@ -219,15 +236,24 @@ export function ProjekteAnlegen() {
           </div>
           <Autocomplete label="Rechnungsadresse*" htmlId="prj-addr"
             value={addrText}
-            onChange={t => { setAddrText(t); if (!t) { setB('address_id')(''); setB('contact_id')(''); setContactText('') } }}
-            onSelect={(id, lbl) => { setAddrText(lbl); setB('address_id')(String(id)); setB('contact_id')(''); setContactText('') }}
+            onChange={t => { setAddrText(t); if (!t) { setB('address_id')(''); setB('contact_id')('') } }}
+            onSelect={(id, lbl) => { setAddrText(lbl); setB('address_id')(String(id)); setB('contact_id')('') }}
             search={searchAddresses} placeholder="Name eingeben …" />
-          <Autocomplete label="Rechnungskontakt*" htmlId="prj-con"
-            value={contactText}
-            onChange={t => { setContactText(t); if (!t) setB('contact_id')('') }}
-            onSelect={(id, lbl) => { setContactText(lbl); setB('contact_id')(String(id)) }}
-            search={searchContacts}
-            placeholder={basic.address_id ? 'Name eingeben …' : 'Erst Adresse wählen'} />
+          <div className="form-group">
+            <label>Rechnungskontakt*</label>
+            <select
+              value={basic.contact_id}
+              onChange={e => setB('contact_id')(e.target.value)}
+              disabled={!basic.address_id}
+            >
+              <option value="">{basic.address_id ? 'Bitte wählen …' : 'Erst Adresse wählen'}</option>
+              {contacts.map(c => (
+                <option key={c.ID} value={c.ID}>
+                  {`${c.FIRST_NAME ?? ''} ${c.LAST_NAME ?? ''}`.trim()}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
@@ -300,41 +326,51 @@ export function ProjekteAnlegen() {
         <div className="wizard-step-content">
           <h3 className="wizard-step-title">Schritt 4: Projektstruktur</h3>
           <p className="admin-section-hint">Optional — Strukturelemente können später ergänzt werden.</p>
-          <div className="table-scroll">
-            <table className="master-table">
-              <thead>
-                <tr><th>#</th><th>Kürzel</th><th>Bezeichnung</th><th>Abrechnungsart*</th><th>Übergeordnet</th><th></th></tr>
-              </thead>
-              <tbody>
-                {structDraft.map((r, i) => (
-                  <tr key={r.tmp_key}>
-                    <td>{i + 1}</td>
-                    <td><input style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
-                    <td><input style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
-                    <td>
-                      <select style={{ fontSize: 11 }} value={String(r.BILLING_TYPE_ID)} onChange={e => setStructField(r.tmp_key, 'BILLING_TYPE_ID', e.target.value)}>
-                        <option value="">Bitte wählen …</option>
-                        {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <select style={{ fontSize: 11 }} value={r.father_tmp_key} onChange={e => setStructField(r.tmp_key, 'father_tmp_key', e.target.value)}>
-                        <option value="">(Root)</option>
-                        {structDraft.filter(x => x.tmp_key !== r.tmp_key).map(x => (
-                          <option key={x.tmp_key} value={x.tmp_key}>
-                            {(`${x.NAME_SHORT} ${x.NAME_LONG}`).trim() || `Zeile ${structDraft.indexOf(x) + 1}`}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td><button className="btn-small" type="button" onClick={() => removeStructRow(r.tmp_key)}>Entfernen</button></td>
-                  </tr>
-                ))}
-                {!structDraft.length && <tr><td colSpan={6} className="empty-note">Keine Strukturelemente</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <button className="btn-small btn-save" type="button" onClick={addStructRow} style={{ marginTop: 8 }}>+ Zeile hinzufügen</button>
+          <button className="btn-small btn-save" type="button" onClick={addStructRow} style={{ marginBottom: 8 }}>+ Zeile hinzufügen</button>
+          {structDraft.length > 0 && (
+            <div className="table-scroll">
+              <table className="master-table">
+                <thead>
+                  <tr><th>#</th><th>Kürzel</th><th>Bezeichnung</th><th>Abrechnungsart*</th><th>NK %</th><th>Übergeordnet</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {structDraft.map((r, i) => (
+                    <tr key={r.tmp_key}>
+                      <td>{i + 1}</td>
+                      <td><input style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
+                      <td><input style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
+                      <td>
+                        <select style={{ fontSize: 11 }} value={String(r.BILLING_TYPE_ID)} onChange={e => setStructField(r.tmp_key, 'BILLING_TYPE_ID', e.target.value)}>
+                          <option value="">Bitte wählen …</option>
+                          {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="number" min={0} max={100} step={0.1}
+                          style={{ width: 70 }}
+                          value={String(r.EXTRAS_PERCENT)}
+                          placeholder="0"
+                          onChange={e => setStructField(r.tmp_key, 'EXTRAS_PERCENT', e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <select style={{ fontSize: 11 }} value={r.father_tmp_key} onChange={e => setStructField(r.tmp_key, 'father_tmp_key', e.target.value)}>
+                          <option value="">(Root)</option>
+                          {structDraft.filter(x => x.tmp_key !== r.tmp_key).map(x => (
+                            <option key={x.tmp_key} value={x.tmp_key}>
+                              {(`${x.NAME_SHORT} ${x.NAME_LONG}`).trim() || `Zeile ${structDraft.indexOf(x) + 1}`}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td><button className="btn-small" type="button" onClick={() => removeStructRow(r.tmp_key)}>Entfernen</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

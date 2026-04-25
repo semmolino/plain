@@ -93,6 +93,11 @@ export const searchContactsApi = (addressId: number, q: string) =>
     `/stammdaten/contacts/search?address_id=${addressId}&q=${encodeURIComponent(q)}`
   )
 
+export const fetchContactsByAddress = (addressId: number) =>
+  apiClient.get<{ data: Array<{ ID: number; FIRST_NAME: string; LAST_NAME: string }> }>(
+    `/stammdaten/contacts/by-address?address_id=${addressId}`
+  )
+
 export const createContact = (body: ContactPayload) =>
   apiClient.post<{ data: Contact }>('/stammdaten/contacts', body)
 

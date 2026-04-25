@@ -233,8 +233,9 @@ async function moveStructure(req, res, supabase) {
   const structureId = String(id || "").trim();
   if (!structureId) return res.status(400).json({ error: "ID fehlt" });
   const fatherRaw = (req.body || {}).father_id;
+  const sortAfterId = (req.body || {}).sort_after_id; // null=prepend, '__end__'=append, id=insert after
   try {
-    await svc.moveStructure(supabase, { structureId, fatherRaw });
+    await svc.moveStructure(supabase, { structureId, fatherRaw, sortAfterId });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;

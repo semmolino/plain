@@ -47,14 +47,14 @@ export function flattenTree(root: RootNode): FlatNode[] {
     if ('STRUCTURE_ID' in node) out.push({ node: node as TreeNode, depth })
     const children = Array.isArray(node.children) ? node.children : []
     const sorted = [...children].sort((a, b) => {
-      const fa = a.FATHER_ID ?? -1
-      const fb = b.FATHER_ID ?? -1
-      if (fa !== fb) return fa < fb ? -1 : 1
-      return (a.STRUCTURE_ID ?? 0) - (b.STRUCTURE_ID ?? 0)
+      const sa = a.SORT_ORDER ?? a.STRUCTURE_ID ?? 0
+      const sb = b.SORT_ORDER ?? b.STRUCTURE_ID ?? 0
+      return sa - sb
     })
     for (const ch of sorted) walk(ch, depth + 1)
   }
 
-  for (const ch of root.children) walk(ch, 0)
+  const sortedRoot = [...root.children].sort((a, b) => (a.SORT_ORDER ?? a.STRUCTURE_ID ?? 0) - (b.SORT_ORDER ?? b.STRUCTURE_ID ?? 0))
+  for (const ch of sortedRoot) walk(ch, 0)
   return out
 }

@@ -39,7 +39,8 @@ async function getCountries(req, res, supabase) {
 async function getBillingTypes(req, res, supabase) {
   const { data, error } = await supabase.from("BILLING_TYPE").select("ID, BILLING_TYPE").order("BILLING_TYPE", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+  const mapped = (data || []).map(r => ({ ID: r.ID, NAME_SHORT: r.BILLING_TYPE, NAME_LONG: null }));
+  res.json({ data: mapped });
 }
 
 // ---------------------------------------------------------------------------
@@ -579,6 +580,24 @@ async function searchContacts(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/stammdaten/contacts/by-address?address_id=X
+// ---------------------------------------------------------------------------
+async function getContactsByAddress(req, res, supabase) {
+  const addressId = parseInt((req.query.address_id || "").toString(), 10);
+  if (!addressId) return res.json({ data: [] });
+
+  const { data, error } = await supabase
+    .from("CONTACTS")
+    .select("ID, FIRST_NAME, LAST_NAME")
+    .eq("TENANT_ID", req.tenantId)
+    .eq("ADDRESS_ID", addressId)
+    .order("LAST_NAME", { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/stammdaten/contacts/list
 // ---------------------------------------------------------------------------
 async function listContacts(req, res, supabase) {
@@ -682,5 +701,5 @@ module.exports = {
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure,
   getCompanies, postCompany, postAddress, postRollen,
   getSalutations, getGenders, searchAddresses, listAddresses, patchAddress,
-  searchContacts, listContacts, patchContact, searchVat, searchPaymentMeans, postContact,
+  searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, searchPaymentMeans, postContact,
 };

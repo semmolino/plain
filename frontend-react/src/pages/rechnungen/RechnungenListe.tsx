@@ -1,17 +1,44 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Tabs } from '@/components/ui/Tabs'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   fetchInvoices, fetchPartialPayments,
   openInvoicePdf, openPpPdf,
   downloadInvoiceEinvoice, downloadPpEinvoice,
+  cancelInvoice, cancelPartialPayment,
+  deleteInvoice, deletePartialPayment,
   type Invoice, type PartialPayment,
 } from '@/api/rechnungen'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtDate = (v: string | null | undefined) => v ? v.slice(0, 10) : '—'
-const STATUS  = (id: number) => id === 2 ? 'Gebucht' : 'Entwurf'
+
+function invStatusLabel(inv: Invoice): string {
+  if (inv.INVOICE_TYPE === 'stornorechnung') return 'Storno'
+  if (inv.STATUS_ID === 3) return 'Storniert'
+  if (inv.STATUS_ID === 2) return 'Gebucht'
+  return 'Entwurf'
+}
+function invStatusClass(inv: Invoice): string {
+  if (inv.INVOICE_TYPE === 'stornorechnung') return 'cancelled'
+  if (inv.STATUS_ID === 3) return 'cancelled'
+  if (inv.STATUS_ID === 2) return 'booked'
+  return 'draft'
+}
+function ppStatusLabel(pp: PartialPayment): string {
+  if (pp.CANCELS_PARTIAL_PAYMENT_ID != null) return 'Storno'
+  if (pp.STATUS_ID === 3) return 'Storniert'
+  if (pp.STATUS_ID === 2) return 'Gebucht'
+  return 'Entwurf'
+}
+function ppStatusClass(pp: PartialPayment): string {
+  if (pp.CANCELS_PARTIAL_PAYMENT_ID != null) return 'cancelled'
+  if (pp.STATUS_ID === 3) return 'cancelled'
+  if (pp.STATUS_ID === 2) return 'booked'
+  return 'draft'
+}
 
 const LIST_TABS = [
   { id: 'invoices', label: 'Rechnungen' },
@@ -21,6 +48,7 @@ const LIST_TABS = [
 export function RechnungenListe() {
   const [tab,    setTab]    = useState<'invoices' | 'pp'>('invoices')
   const [search, setSearch] = useState('')
+  const qc = useQueryClient()
 
   const { data: invData, isLoading: invLoading } = useQuery({
     queryKey: ['invoices', search],
@@ -33,6 +61,46 @@ export function RechnungenListe() {
 
   const invoices = invData?.data ?? []
   const payments = ppData?.data  ?? []
+
+  async function handleCancelInvoice(inv: Invoice) {
+    if (!window.confirm(`Stornorechnung für Rechnung ${inv.INVOICE_NUMBER ?? inv.ID} erstellen?`)) return
+    try {
+      await cancelInvoice(inv.ID)
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+    } catch (e: unknown) {
+      alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
+    }
+  }
+
+  async function handleCancelPp(pp: PartialPayment) {
+    if (!window.confirm(`Storno-Abschlagsrechnung für ${pp.PARTIAL_PAYMENT_NUMBER ?? pp.ID} erstellen?`)) return
+    try {
+      await cancelPartialPayment(pp.ID)
+      qc.invalidateQueries({ queryKey: ['partial-payments'] })
+    } catch (e: unknown) {
+      alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
+    }
+  }
+
+  async function handleDeleteInvoice(inv: Invoice) {
+    if (!window.confirm(`Entwurf ${inv.ID} löschen?`)) return
+    try {
+      await deleteInvoice(inv.ID)
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+    } catch (e: unknown) {
+      alert((e as { message?: string })?.message ?? 'Fehler beim Löschen')
+    }
+  }
+
+  async function handleDeletePp(pp: PartialPayment) {
+    if (!window.confirm(`Entwurf ${pp.ID} löschen?`)) return
+    try {
+      await deletePartialPayment(pp.ID)
+      qc.invalidateQueries({ queryKey: ['partial-payments'] })
+    } catch (e: unknown) {
+      alert((e as { message?: string })?.message ?? 'Fehler beim Löschen')
+    }
+  }
 
   return (
     <div>
@@ -75,14 +143,20 @@ export function RechnungenListe() {
                       <td className="num">{fmtEur(inv.TOTAL_AMOUNT_NET)}</td>
                       <td className="num">{fmtEur(inv.TOTAL_AMOUNT_GROSS)}</td>
                       <td>
-                        <span className={`status-badge ${inv.STATUS_ID === 2 ? 'booked' : 'draft'}`}>
-                          {STATUS(inv.STATUS_ID)}
+                        <span className={`status-badge ${invStatusClass(inv)}`}>
+                          {invStatusLabel(inv)}
                         </span>
                       </td>
                       <td className="doc-actions">
                         <button className="btn-small" onClick={() => openInvoicePdf(inv.ID)}>PDF</button>
                         <button className="btn-small" onClick={() => downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'ubl')}>UBL</button>
                         <button className="btn-small" onClick={() => downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'cii')}>ZUGFeRD</button>
+                        {inv.STATUS_ID === 2 && inv.INVOICE_TYPE !== 'stornorechnung' && (
+                          <button className="btn-small btn-danger" onClick={() => handleCancelInvoice(inv)}>Storno</button>
+                        )}
+                        {inv.STATUS_ID === 1 && (
+                          <button className="btn-small btn-danger" onClick={() => handleDeleteInvoice(inv)}>Löschen</button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -120,14 +194,20 @@ export function RechnungenListe() {
                       <td className="num">{fmtEur(pp.TOTAL_AMOUNT_NET)}</td>
                       <td className="num">{fmtEur(pp.TOTAL_AMOUNT_GROSS)}</td>
                       <td>
-                        <span className={`status-badge ${pp.STATUS_ID === 2 ? 'booked' : 'draft'}`}>
-                          {STATUS(pp.STATUS_ID)}
+                        <span className={`status-badge ${ppStatusClass(pp)}`}>
+                          {ppStatusLabel(pp)}
                         </span>
                       </td>
                       <td className="doc-actions">
                         <button className="btn-small" onClick={() => openPpPdf(pp.ID)}>PDF</button>
                         <button className="btn-small" onClick={() => downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'ubl')}>UBL</button>
                         <button className="btn-small" onClick={() => downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'cii')}>ZUGFeRD</button>
+                        {pp.STATUS_ID === 2 && !pp.CANCELS_PARTIAL_PAYMENT_ID && (
+                          <button className="btn-small btn-danger" onClick={() => handleCancelPp(pp)}>Storno</button>
+                        )}
+                        {pp.STATUS_ID === 1 && (
+                          <button className="btn-small btn-danger" onClick={() => handleDeletePp(pp)}>Löschen</button>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -260,6 +260,7 @@ const DOC_TITLES = {
   partial_payment:    'Abschlagsrechnung',
   schlussrechnung:    'Schlussrechnung',
   teilschlussrechnung:'Teilschlussrechnung',
+  stornorechnung:     'Stornorechnung',
 };
 
 async function buildPdfViewModel({ supabase, docType, docId }) {
