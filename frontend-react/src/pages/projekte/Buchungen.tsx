@@ -36,9 +36,11 @@ function emptyForm(): BuchungForm {
   }
 }
 
-export function Buchungen() {
+interface Props { initialProjectId?: number; onProjectChange?: (id: number | null) => void }
+
+export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const qc = useQueryClient()
-  const [pid,     setPid]     = useState<number | null>(null)
+  const [pid,     setPid]     = useState<number | null>(initialProjectId ?? null)
   const [showForm, setShowForm] = useState(false)
   const [form,    setForm]    = useState<BuchungForm>(emptyForm)
   const [msg,     setMsg]     = useState<{ text: string; type: 'success'|'error' } | null>(null)
@@ -116,7 +118,7 @@ export function Buchungen() {
     <div>
       <div className="form-group" style={{ maxWidth: 400, marginBottom: 12 }}>
         <label>Projekt</label>
-        <select value={pid ?? ''} onChange={e => { setPid(e.target.value ? Number(e.target.value) : null); setMsg(null); setShowForm(false) }}>
+        <select value={pid ?? ''} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setPid(id); onProjectChange?.(id); setMsg(null); setShowForm(false) }}>
           <option value="">Bitte wählen …</option>
           {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
         </select>

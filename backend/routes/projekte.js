@@ -26,6 +26,8 @@ module.exports = (supabase) => {
   router.patch("/structure/:id/inherit",               (req, res) => ctrl.inheritStructure(req, res, supabase));
   router.patch("/structure/:id/move",                  (req, res) => ctrl.moveStructure(req, res, supabase));
   router.delete("/structure/:id",                      (req, res) => ctrl.deleteStructure(req, res, supabase));
+  router.get("/:id/leistungsstand",                    (req, res) => ctrl.getLeistungsstand(req, res, supabase));
+  router.post("/:id/leistungsstand",                   (req, res) => ctrl.saveLeistungsstand(req, res, supabase));
 
   return router;
 };

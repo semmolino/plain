@@ -141,6 +141,26 @@ export const moveStructureNode = (structureId: number, fatherId: number | null, 
 export const createProgressSnapshot = (projectId: number) =>
   apiClient.post<{ success: boolean }>(`/projekte/${projectId}/progress-snapshot`, {})
 
+// ── Leistungsstände ───────────────────────────────────────────────────────────
+
+export interface LeistungsstandNode extends StructureNode {
+  IS_LEAF:                          boolean
+  PREV_REVENUE_COMPLETION_PERCENT:  number | null
+  PREV_EXTRAS_COMPLETION_PERCENT:   number | null
+  PREV_AT:                          string | null
+}
+
+export const fetchLeistungsstand = (projectId: number) =>
+  apiClient.get<{ data: LeistungsstandNode[] }>(`/projekte/${projectId}/leistungsstand`)
+
+export const saveLeistungsstand = (projectId: number, updates: Array<{
+  structure_id: number
+  revenue_completion_percent: number
+}>) => apiClient.post<{ success: boolean; saved: number; inserted: number }>(
+  `/projekte/${projectId}/leistungsstand`,
+  { updates }
+)
+
 // ── Buchungen ─────────────────────────────────────────────────────────────────
 
 export interface Buchung {

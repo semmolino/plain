@@ -5,15 +5,17 @@ import { ProjekteAnlegen } from '@/pages/projekte/ProjekteAnlegen'
 import { HonorarWizard }  from '@/pages/projekte/HonorarWizard'
 import { ProjektStruktur } from '@/pages/projekte/ProjektStruktur'
 import { Buchungen }      from '@/pages/projekte/Buchungen'
+import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
 
-type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen'
+type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'liste',    label: 'Liste' },
-  { id: 'anlegen',  label: 'Anlegen' },
-  { id: 'honorar',  label: 'Honorar (HOAI)' },
-  { id: 'struktur', label: 'Struktur' },
-  { id: 'buchungen', label: 'Buchungen' },
+  { id: 'liste',           label: 'Liste' },
+  { id: 'anlegen',         label: 'Anlegen' },
+  { id: 'honorar',         label: 'Honorar (HOAI)' },
+  { id: 'struktur',        label: 'Struktur' },
+  { id: 'buchungen',       label: 'Buchungen' },
+  { id: 'leistungsstand',  label: 'Leistungsstände' },
 ]
 
 export function ProjektePage() {
@@ -25,6 +27,10 @@ export function ProjektePage() {
     setTab('struktur')
   }
 
+  function onProjectChange(id: number | null) {
+    setSelectedProjectId(id ?? undefined)
+  }
+
   return (
     <div className="master-page">
       <h1 className="master-title">Projekte</h1>
@@ -34,11 +40,12 @@ export function ProjektePage() {
         onChange={id => setTab(id as Tab)}
       />
       <div className="master-tab-content">
-        {tab === 'liste'    && <ProjekteListe onSelectProject={openProject} />}
-        {tab === 'anlegen'  && <ProjekteAnlegen />}
-        {tab === 'honorar'  && <HonorarWizard />}
-        {tab === 'struktur' && <ProjektStruktur initialProjectId={selectedProjectId} />}
-        {tab === 'buchungen' && <Buchungen />}
+        {tab === 'liste'          && <ProjekteListe onSelectProject={openProject} />}
+        {tab === 'anlegen'        && <ProjekteAnlegen />}
+        {tab === 'honorar'        && <HonorarWizard />}
+        {tab === 'struktur'       && <ProjektStruktur initialProjectId={selectedProjectId} />}
+        {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
+        {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
       </div>
     </div>
   )

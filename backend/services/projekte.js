@@ -1028,6 +1028,110 @@ async function moveStructure(supabase, { structureId, fatherRaw, sortAfterId }) 
   }
 }
 
+async function getLeistungsstand(supabase, { projectId }) {
+  const { data: nodes, error: nErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("ID, NAME_SHORT, NAME_LONG, FATHER_ID, SORT_ORDER, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION, TENANT_ID")
+    .eq("PROJECT_ID", projectId)
+    .order("SORT_ORDER")
+    .order("ID");
+  if (nErr) throw nErr;
+
+  const rows = Array.isArray(nodes) ? nodes : [];
+  if (!rows.length) return [];
+
+  const fatherIds = new Set(rows.filter(r => r.FATHER_ID !== null && r.FATHER_ID !== undefined).map(r => String(r.FATHER_ID)));
+  const structureIds = rows.map(r => String(r.ID));
+
+  const { data: progress, error: pErr } = await supabase
+    .from("PROJECT_PROGRESS")
+    .select("STRUCTURE_ID, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, created_at")
+    .in("STRUCTURE_ID", structureIds)
+    .order("created_at", { ascending: false });
+  if (pErr) throw pErr;
+
+  const latestProgress = new Map();
+  for (const p of (progress || [])) {
+    const sid = String(p.STRUCTURE_ID);
+    if (!latestProgress.has(sid)) latestProgress.set(sid, p);
+  }
+
+  return rows.map(r => ({
+    ...r,
+    STRUCTURE_ID: r.ID,
+    IS_LEAF: !fatherIds.has(String(r.ID)),
+    PREV_REVENUE_COMPLETION_PERCENT: latestProgress.get(String(r.ID))?.REVENUE_COMPLETION_PERCENT ?? null,
+    PREV_EXTRAS_COMPLETION_PERCENT: latestProgress.get(String(r.ID))?.EXTRAS_COMPLETION_PERCENT ?? null,
+    PREV_AT: latestProgress.get(String(r.ID))?.created_at ?? null,
+  }));
+}
+
+async function saveLeistungsstand(supabase, { projectId, updates }) {
+  if (!Array.isArray(updates) || !updates.length) return { saved: 0, updated: 0, inserted: 0 };
+
+  const ids = updates.map(u => String(u.structure_id));
+  const { data: nodes, error: nErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID")
+    .eq("PROJECT_ID", projectId)
+    .in("ID", ids);
+  if (nErr) throw nErr;
+
+  const nodeMap = new Map((nodes || []).map(n => [String(n.ID), n]));
+
+  const bt2Ids = (nodes || []).filter(n => Number(n.BILLING_TYPE_ID) === 2).map(n => String(n.ID));
+  const tecSums = {};
+  if (bt2Ids.length) {
+    const { data: tecRows, error: tecErr } = await supabase
+      .from("TEC")
+      .select("STRUCTURE_ID, SP_TOT")
+      .in("STRUCTURE_ID", bt2Ids);
+    if (tecErr) throw tecErr;
+    (tecRows || []).forEach(t => {
+      const sid = String(t.STRUCTURE_ID);
+      const v = Number(t.SP_TOT ?? 0);
+      tecSums[sid] = (tecSums[sid] ?? 0) + (Number.isFinite(v) ? v : 0);
+    });
+  }
+
+  for (const u of updates) {
+    const sid = String(u.structure_id);
+    const node = nodeMap.get(sid);
+    if (!node) continue;
+
+    const revPct = Math.min(100, Math.max(0, Number(u.revenue_completion_percent ?? 0)));
+    const extrasPct = revPct;
+    const extrasPercent = Number(node.EXTRAS_PERCENT ?? 0);
+
+    const revenue = Number(node.BILLING_TYPE_ID) === 2
+      ? Number(tecSums[sid] ?? 0)
+      : Number(node.REVENUE ?? 0);
+    const extras = (revenue * extrasPercent) / 100;
+    const revenueCompletion = (revPct * revenue) / 100;
+    const extrasCompletion = (extrasPct * extras) / 100;
+
+    const { error: uErr } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .update({
+        REVENUE_COMPLETION_PERCENT: revPct,
+        EXTRAS_COMPLETION_PERCENT: extrasPct,
+        REVENUE: revenue,
+        EXTRAS: extras,
+        REVENUE_COMPLETION: revenueCompletion,
+        EXTRAS_COMPLETION: extrasCompletion,
+      })
+      .eq("ID", sid);
+    if (uErr) throw uErr;
+  }
+
+  for (const u of updates) {
+    await propagateUpwards(supabase, { structureId: String(u.structure_id) });
+  }
+
+  const snapshotResult = await progressSnapshot(supabase, { projectId: String(projectId) });
+  return { saved: updates.length, ...snapshotResult };
+}
+
 async function deleteStructure(supabase, { structureId, cascade }) {
   const { data: current, error: curErr } = await supabase
     .from("PROJECT_STRUCTURE")
@@ -1118,4 +1222,6 @@ module.exports = {
   inheritStructure,
   moveStructure,
   deleteStructure,
+  getLeistungsstand,
+  saveLeistungsstand,
 };

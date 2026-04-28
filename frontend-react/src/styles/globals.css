@@ -759,3 +759,51 @@ input::placeholder { color: rgba(17,24,39,0.45); }
   color: rgba(17,24,39,0.35);
   margin-top: 2px;
 }
+
+/* ── Leistungsstände ─────────────────────────────────────────────────────── */
+.ls-wrap { display: flex; flex-direction: column; gap: 16px; }
+.ls-toolbar { display: flex; align-items: center; gap: 10px; }
+.ls-label { font-size: 13px; font-weight: 600; color: rgba(17,24,39,0.65); white-space: nowrap; }
+.ls-select {
+  flex: 1; max-width: 480px; height: 34px; padding: 0 10px;
+  border: 1px solid rgba(17,24,39,0.18); border-radius: 6px;
+  background: #fff; font-size: 13px; color: #111827;
+}
+.ls-empty { color: rgba(17,24,39,0.45); font-size: 13px; padding: 24px 0; text-align: center; }
+.ls-table-wrap { overflow-x: auto; border: 1px solid rgba(17,24,39,0.1); border-radius: 8px; }
+.ls-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ls-th {
+  padding: 8px 10px; background: #f8f9fb; text-align: left;
+  font-weight: 600; font-size: 12px; color: rgba(17,24,39,0.55);
+  border-bottom: 1px solid rgba(17,24,39,0.1); white-space: nowrap;
+}
+.ls-td { padding: 6px 10px; border-bottom: 1px solid rgba(17,24,39,0.06); vertical-align: middle; }
+.ls-row-parent td { background: #fafafa; }
+.ls-row-parent .ls-td { color: rgba(17,24,39,0.55); }
+.ls-row-leaf:hover td { background: rgba(37,99,235,0.03); }
+.ls-col-short { width: 140px; }
+.ls-col-name  { min-width: 180px; }
+.ls-col-num   { width: 120px; }
+.ls-col-input { width: 110px; }
+.ls-col-delta { width: 80px; }
+.ls-right { text-align: right; }
+.ls-muted { color: rgba(17,24,39,0.38); }
+.ls-prev-wrap { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.ls-badge-prev {
+  font-size: 10px; font-weight: 600; padding: 1px 5px;
+  background: rgba(245,158,11,0.12); color: rgba(180,110,0,0.9);
+  border-radius: 4px; white-space: nowrap;
+}
+.ls-input-wrap { display: flex; align-items: center; gap: 4px; }
+.ls-input {
+  width: 64px; height: 28px; padding: 0 6px;
+  border: 1px solid rgba(17,24,39,0.2); border-radius: 5px;
+  font-size: 13px; text-align: right; background: #fff;
+  transition: border-color 0.15s;
+}
+.ls-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+.ls-input-unit { font-size: 12px; color: rgba(17,24,39,0.45); }
+.ls-delta-pos { color: #16a34a; font-weight: 600; }
+.ls-delta-neg { color: #dc2626; font-weight: 600; }
+.ls-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 4px; }
+.ls-hint { font-size: 12px; color: rgba(17,24,39,0.38); }

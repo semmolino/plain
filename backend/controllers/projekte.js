@@ -243,6 +243,31 @@ async function moveStructure(req, res, supabase) {
   }
 }
 
+async function getLeistungsstand(req, res, supabase) {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
+  try {
+    const data = await svc.getLeistungsstand(supabase, { projectId: id });
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+}
+
+async function saveLeistungsstand(req, res, supabase) {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
+  const updates = (req.body || {}).updates;
+  if (!Array.isArray(updates)) return res.status(400).json({ error: "updates muss ein Array sein" });
+  try {
+    const result = await svc.saveLeistungsstand(supabase, { projectId: id, updates });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || err });
+  }
+}
+
 async function deleteStructure(req, res, supabase) {
   const { id } = req.params;
   const structureId = String(id || "").trim();
@@ -278,4 +303,6 @@ module.exports = {
   inheritStructure,
   moveStructure,
   deleteStructure,
+  getLeistungsstand,
+  saveLeistungsstand,
 };
