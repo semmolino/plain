@@ -6,6 +6,7 @@ const ctrl = require("../controllers/projekte");
 module.exports = (supabase) => {
   const router = express.Router();
 
+  router.get("/departments",                           (req, res) => ctrl.getDepartments(req, res, supabase));
   router.get("/statuses",                              (req, res) => ctrl.getStatuses(req, res, supabase));
   router.get("/types",                                 (req, res) => ctrl.getTypes(req, res, supabase));
   router.get("/managers",                              (req, res) => ctrl.getManagers(req, res, supabase));

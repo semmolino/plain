@@ -14,6 +14,15 @@ function chunk(arr, size) {
 // Lookup / reference data
 // ---------------------------------------------------------------------------
 
+async function getDepartments(supabase) {
+  const { data, error } = await supabase
+    .from("DEPARTMENT")
+    .select("ID, NAME_SHORT, NAME_LONG")
+    .order("NAME_SHORT", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
 async function getStatuses(supabase) {
   const { data, error } = await supabase.from("PROJECT_STATUS").select("ID, NAME_SHORT");
   if (error) throw error;
@@ -92,6 +101,7 @@ async function createProject(supabase, { body, tenantId }) {
     COMPANY_ID: companyId,
     PROJECT_STATUS_ID: b.project_status_id,
     PROJECT_TYPE_ID: b.project_type_id || null,
+    DEPARTMENT_ID: b.department_id ? parseInt(b.department_id, 10) : null,
     PROJECT_MANAGER_ID: b.project_manager_id,
     ADDRESS_ID: parsedAddressId,
     CONTACT_ID: parsedContactId,
@@ -1237,6 +1247,7 @@ async function deleteStructure(supabase, { structureId, cascade }) {
 }
 
 module.exports = {
+  getDepartments,
   getStatuses,
   getTypes,
   getManagers,

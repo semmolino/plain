@@ -2,9 +2,10 @@ import { apiClient } from './client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface ProjectStatus  { ID: number; NAME_SHORT: string }
-export interface ProjectType    { ID: number; NAME_SHORT: string }
-export interface ProjectManager { ID: number; SHORT_NAME: string }
+export interface ProjectStatus     { ID: number; NAME_SHORT: string }
+export interface ProjectType       { ID: number; NAME_SHORT: string }
+export interface ProjectManager    { ID: number; SHORT_NAME: string }
+export interface Department        { ID: number; NAME_SHORT: string; NAME_LONG: string }
 export interface ActiveEmployee { ID: number; SHORT_NAME: string; FIRST_NAME: string; LAST_NAME: string }
 export interface ActiveRole     { ID: number; NAME_SHORT: string; NAME_LONG: string }
 export interface BillingType    { ID: number; NAME_SHORT: string; NAME_LONG: string }
@@ -61,6 +62,7 @@ export interface CreateProjectPayload {
   name_long:           string
   project_status_id:   string | number
   project_type_id?:    string | number
+  department_id?:      string | number
   project_manager_id:  string | number
   address_id:          string | number
   contact_id:          string | number
@@ -70,6 +72,7 @@ export interface CreateProjectPayload {
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
 
+export const fetchDepartments      = () => apiClient.get<{ data: Department[] }>('/projekte/departments')
 export const fetchProjectStatuses  = () => apiClient.get<{ data: ProjectStatus[] }>('/projekte/statuses')
 export const fetchProjectTypes     = () => apiClient.get<{ data: ProjectType[] }>('/projekte/types')
 export const fetchProjectManagers  = () => apiClient.get<{ data: ProjectManager[] }>('/projekte/managers')

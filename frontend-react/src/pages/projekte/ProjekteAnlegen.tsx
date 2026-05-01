@@ -4,7 +4,7 @@ import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers,
-  fetchActiveEmployees, fetchActiveRoles, fetchBillingTypes,
+  fetchActiveEmployees, fetchActiveRoles, fetchBillingTypes, fetchDepartments,
   createProject, type E2PRow, type StructureDraftRow,
 } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
@@ -17,6 +17,7 @@ interface BasicForm {
   company_id:          string
   project_status_id:   string
   project_type_id:     string
+  department_id:       string
   project_manager_id:  string
   address_id:          string
   contact_id:          string
@@ -27,7 +28,7 @@ interface E2PState {
 }
 
 function emptyBasic(): BasicForm {
-  return { name_long: '', company_id: '', project_status_id: '', project_type_id: '', project_manager_id: '', address_id: '', contact_id: '' }
+  return { name_long: '', company_id: '', project_status_id: '', project_type_id: '', department_id: '', project_manager_id: '', address_id: '', contact_id: '' }
 }
 
 function newStructRow(): StructureDraftRow {
@@ -59,6 +60,7 @@ export function ProjekteAnlegen() {
   const [structDraft, setStructDraft] = useState<StructureDraftRow[]>([])
   const [msg, setMsg]             = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
 
+  const { data: deptData    } = useQuery({ queryKey: ['departments'],        queryFn: fetchDepartments      })
   const { data: statusData  } = useQuery({ queryKey: ['project-statuses'],  queryFn: fetchProjectStatuses  })
   const { data: typeData    } = useQuery({ queryKey: ['project-types'],     queryFn: fetchProjectTypes     })
   const { data: mgrData     } = useQuery({ queryKey: ['project-managers'],  queryFn: fetchProjectManagers  })
@@ -73,9 +75,10 @@ export function ProjekteAnlegen() {
     enabled:  !!addressId,
   })
 
-  const statuses  = statusData?.data  ?? []
-  const types     = typeData?.data    ?? []
-  const managers  = mgrData?.data     ?? []
+  const departments = deptData?.data    ?? []
+  const statuses    = statusData?.data  ?? []
+  const types       = typeData?.data    ?? []
+  const managers    = mgrData?.data     ?? []
   const employees = empData?.data     ?? []
   const roles     = roleData?.data    ?? []
   const btypes    = btData?.data      ?? []
@@ -181,6 +184,7 @@ export function ProjekteAnlegen() {
       company_id:         basic.company_id || 0,
       project_status_id:  Number(basic.project_status_id),
       project_type_id:    basic.project_type_id ? Number(basic.project_type_id) : undefined,
+      department_id:      basic.department_id  ? Number(basic.department_id)  : undefined,
       project_manager_id: Number(basic.project_manager_id),
       address_id:         Number(basic.address_id),
       contact_id:         Number(basic.contact_id),
@@ -225,6 +229,15 @@ export function ProjekteAnlegen() {
             <select value={basic.project_type_id} onChange={e => setB('project_type_id')(e.target.value)}>
               <option value="">—</option>
               {types.map(t => <option key={t.ID} value={t.ID}>{t.NAME_SHORT}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Abteilung</label>
+            <select value={basic.department_id} onChange={e => setB('department_id')(e.target.value)}>
+              <option value="">—</option>
+              {departments.map(d => (
+                <option key={d.ID} value={d.ID}>{d.NAME_SHORT}: {d.NAME_LONG}</option>
+              ))}
             </select>
           </div>
           <div className="form-group">

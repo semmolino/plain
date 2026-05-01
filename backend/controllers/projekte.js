@@ -2,6 +2,15 @@
 
 const svc = require("../services/projekte");
 
+async function getDepartments(req, res, supabase) {
+  try {
+    const data = await svc.getDepartments(supabase);
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+}
+
 async function getStatuses(req, res, supabase) {
   try {
     const data = await svc.getStatuses(supabase);
@@ -306,6 +315,7 @@ async function deleteStructure(req, res, supabase) {
 }
 
 module.exports = {
+  getDepartments,
   getStatuses,
   getTypes,
   getManagers,
