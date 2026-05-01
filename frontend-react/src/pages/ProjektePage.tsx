@@ -6,8 +6,9 @@ import { HonorarWizard }  from '@/pages/projekte/HonorarWizard'
 import { ProjektStruktur } from '@/pages/projekte/ProjektStruktur'
 import { Buchungen }      from '@/pages/projekte/Buchungen'
 import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
+import { Vertraege }      from '@/pages/projekte/Vertraege'
 
-type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand'
+type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand' | 'vertraege'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'liste',           label: 'Liste' },
@@ -16,6 +17,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'struktur',        label: 'Struktur' },
   { id: 'buchungen',       label: 'Buchungen' },
   { id: 'leistungsstand',  label: 'Leistungsstände' },
+  { id: 'vertraege',       label: 'Verträge' },
 ]
 
 export function ProjektePage() {
@@ -46,6 +48,7 @@ export function ProjektePage() {
         {tab === 'struktur'       && <ProjektStruktur initialProjectId={selectedProjectId} />}
         {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
+        {tab === 'vertraege'      && <Vertraege      initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
       </div>
     </div>
   )

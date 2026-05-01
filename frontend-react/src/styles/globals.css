@@ -911,3 +911,16 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 .tbm-icon-btn.tbm-save { color: #16a34a; }
 .tbm-inline-edit { display: flex; align-items: center; gap: 4px; }
 .tbm-inline-edit .tbm-input { height: 28px; flex: 1; }
+
+/* ── Verträge ─────────────────────────────────────────────────────────────── */
+.vtr-wrap    { display: flex; flex-direction: column; gap: 20px; max-width: 560px; }
+.vtr-toolbar { display: flex; align-items: center; gap: 10px; }
+.vtr-select  { flex: 1; height: 34px; padding: 0 10px; border: 1px solid rgba(17,24,39,0.18); border-radius: 6px; font-size: 13px; color: #111827; background: #fff; }
+.vtr-empty   { color: rgba(17,24,39,0.45); font-size: 13px; padding: 24px 0; }
+.vtr-form    { display: flex; flex-direction: column; gap: 16px; }
+.vtr-field   { display: flex; flex-direction: column; gap: 5px; }
+.vtr-label   { font-size: 12px; font-weight: 600; color: rgba(17,24,39,0.55); }
+.vtr-input   { height: 36px; padding: 0 10px; border: 1px solid rgba(17,24,39,0.18); border-radius: 6px; font-size: 13px; color: #111827; background: #fff; transition: border-color 0.15s; }
+.vtr-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+.vtr-addr-id { font-size: 11px; color: rgba(17,24,39,0.35); margin-top: 2px; }
+.vtr-footer  { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }

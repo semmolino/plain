@@ -243,6 +243,29 @@ async function moveStructure(req, res, supabase) {
   }
 }
 
+async function getContractByProject(req, res, supabase) {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
+  try {
+    const data = await svc.getContractByProject(supabase, { projectId: id });
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+}
+
+async function patchContract(req, res, supabase) {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "Vertrags-ID fehlt" });
+  try {
+    await svc.patchContract(supabase, { contractId: id, body: req.body || {} });
+    res.json({ success: true });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || err });
+  }
+}
+
 async function getLeistungsstand(req, res, supabase) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
@@ -305,4 +328,6 @@ module.exports = {
   deleteStructure,
   getLeistungsstand,
   saveLeistungsstand,
+  getContractByProject,
+  patchContract,
 };

@@ -141,6 +141,26 @@ export const moveStructureNode = (structureId: number, fatherId: number | null, 
 export const createProgressSnapshot = (projectId: number) =>
   apiClient.post<{ success: boolean }>(`/projekte/${projectId}/progress-snapshot`, {})
 
+// ── Verträge ──────────────────────────────────────────────────────────────────
+
+export interface Contract {
+  ID:                   number
+  NAME_SHORT:           string
+  NAME_LONG:            string
+  PROJECT_ID:           number
+  INVOICE_ADDRESS_ID:   number | null
+  INVOICE_CONTACT_ID:   number | null
+}
+
+export const fetchContractByProject = (projectId: number) =>
+  apiClient.get<{ data: Contract | null }>(`/projekte/${projectId}/contract`)
+
+export const patchContract = (contractId: number, body: Partial<{
+  NAME_SHORT: string
+  NAME_LONG: string
+  INVOICE_ADDRESS_ID: number | null
+}>) => apiClient.patch<{ success: boolean }>(`/projekte/contract/${contractId}`, body)
+
 // ── Leistungsstände ───────────────────────────────────────────────────────────
 
 export interface LeistungsstandNode extends StructureNode {

@@ -28,6 +28,8 @@ module.exports = (supabase) => {
   router.delete("/structure/:id",                      (req, res) => ctrl.deleteStructure(req, res, supabase));
   router.get("/:id/leistungsstand",                    (req, res) => ctrl.getLeistungsstand(req, res, supabase));
   router.post("/:id/leistungsstand",                   (req, res) => ctrl.saveLeistungsstand(req, res, supabase));
+  router.get("/:id/contract",                          (req, res) => ctrl.getContractByProject(req, res, supabase));
+  router.patch("/contract/:id",                        (req, res) => ctrl.patchContract(req, res, supabase));
 
   return router;
 };

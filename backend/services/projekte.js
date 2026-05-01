@@ -1028,6 +1028,41 @@ async function moveStructure(supabase, { structureId, fatherRaw, sortAfterId }) 
   }
 }
 
+async function getContractByProject(supabase, { projectId }) {
+  const query = (table) =>
+    supabase
+      .from(table)
+      .select("ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID")
+      .eq("PROJECT_ID", projectId)
+      .limit(1)
+      .maybeSingle();
+
+  let { data, error } = await query("CONTRACT");
+  if (error) ({ data, error } = await query("CONTRACTS"));
+  if (error) throw error;
+  return data || null;
+}
+
+async function patchContract(supabase, { contractId, body }) {
+  const allowed = {};
+  if (body.NAME_SHORT !== undefined) allowed.NAME_SHORT = String(body.NAME_SHORT).trim();
+  if (body.NAME_LONG  !== undefined) allowed.NAME_LONG  = String(body.NAME_LONG).trim();
+  if (body.INVOICE_ADDRESS_ID !== undefined) {
+    const v = body.INVOICE_ADDRESS_ID;
+    allowed.INVOICE_ADDRESS_ID = v === null || v === "" ? null : parseInt(v, 10);
+  }
+
+  if (!Object.keys(allowed).length) throw { status: 400, message: "Keine Felder zum Aktualisieren" };
+
+  let error;
+  ({ error } = await supabase.from("CONTRACT").update(allowed).eq("ID", contractId));
+  if (error) {
+    const r = await supabase.from("CONTRACTS").update(allowed).eq("ID", contractId);
+    error = r.error;
+  }
+  if (error) throw error;
+}
+
 async function getLeistungsstand(supabase, { projectId }) {
   const { data: nodes, error: nErr } = await supabase
     .from("PROJECT_STRUCTURE")
@@ -1224,4 +1259,6 @@ module.exports = {
   deleteStructure,
   getLeistungsstand,
   saveLeistungsstand,
+  getContractByProject,
+  patchContract,
 };
