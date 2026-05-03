@@ -129,3 +129,18 @@ export const createTyp = (name_short: string) =>
 
 export const createRolle = (name_short: string, name_long?: string) =>
   apiClient.post<{ data: unknown }>('/stammdaten/rollen', { name_short, name_long })
+
+export interface Currency { ID: number; NAME_SHORT: string }
+export interface VatRate  { ID: number; VAT: string; VAT_PERCENT: number }
+
+export const fetchCurrencies = () =>
+  apiClient.get<{ data: Currency[] }>('/stammdaten/currencies')
+
+export const fetchVatList = () =>
+  apiClient.get<{ data: VatRate[] }>('/stammdaten/vat')
+
+export const fetchDefaults = () =>
+  apiClient.get<{ data: Record<string, string | null> }>('/stammdaten/defaults')
+
+export const putDefault = (key: string, value: string | null) =>
+  apiClient.put<{ ok: boolean }>('/stammdaten/defaults', { key, value })

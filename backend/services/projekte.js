@@ -240,7 +240,14 @@ async function createProject(supabase, { body, tenantId }) {
     }
   }
 
-  // CONTRACT row
+  // CONTRACT row – apply tenant defaults for currency and VAT if configured
+  const { data: settingsRows } = await supabase
+    .from("TENANT_SETTINGS")
+    .select("KEY, VALUE")
+    .eq("TENANT_ID", project.TENANT_ID);
+  const defaults = {};
+  for (const row of settingsRows || []) defaults[row.KEY] = row.VALUE;
+
   const contractRow = {
     NAME_SHORT: project.NAME_SHORT,
     NAME_LONG: project.NAME_LONG,
@@ -248,6 +255,8 @@ async function createProject(supabase, { body, tenantId }) {
     INVOICE_ADDRESS_ID: project.ADDRESS_ID,
     INVOICE_CONTACT_ID: project.CONTACT_ID,
     TENANT_ID: project.TENANT_ID,
+    ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
+    ...(defaults.default_vat_id      ? { VAT_ID:      Number(defaults.default_vat_id)      } : {}),
   };
 
   let contractInsertError = null;
@@ -379,7 +388,7 @@ async function patchProject(supabase, { id, body, tenantId }) {
 async function searchProjects(supabase, { q, tenantId }) {
   const { data, error } = await supabase
     .from("PROJECT")
-    .select("ID, NAME_SHORT, NAME_LONG")
+    .select("ID, NAME_SHORT, NAME_LONG, COMPANY_ID")
     .eq("TENANT_ID", tenantId)
     .or(`NAME_SHORT.ilike.%${q}%,NAME_LONG.ilike.%${q}%`)
     .order("NAME_SHORT", { ascending: true })

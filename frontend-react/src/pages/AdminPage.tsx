@@ -3,13 +3,15 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
-import { fetchCountries, createStatus, createTyp, createRolle, createCompany } from '@/api/stammdaten'
+import { fetchCountries, createStatus, createTyp, createRolle, createCompany,
+         fetchCurrencies, fetchVatList, fetchDefaults, putDefault } from '@/api/stammdaten'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 
 const PAGE_TABS = [
-  { id: 'stammdaten',   label: 'Stammdaten'   },
+  { id: 'stammdaten',    label: 'Stammdaten'    },
   { id: 'nummernkreise', label: 'Nummernkreise' },
-  { id: 'unternehmen',  label: 'Unternehmen'  },
+  { id: 'unternehmen',   label: 'Unternehmen'   },
+  { id: 'vorbelegungen', label: 'Vorbelegungen' },
 ]
 
 // ── Stammdaten ────────────────────────────────────────────────────────────────
@@ -263,6 +265,85 @@ function UnternehmenSection() {
   )
 }
 
+// ── Vorbelegungen ─────────────────────────────────────────────────────────────
+
+function VorbelegungenSection() {
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [currencyId, setCurrencyId] = useState('')
+  const [vatId,      setVatId]      = useState('')
+
+  const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
+  const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
+  const { data: defData, isLoading } = useQuery({ queryKey: ['defaults'], queryFn: fetchDefaults })
+
+  const currencies = currData?.data ?? []
+  const vatList    = vatData?.data  ?? []
+
+  useEffect(() => {
+    if (!defData?.data) return
+    setCurrencyId(defData.data.default_currency_id ?? '')
+    setVatId(defData.data.default_vat_id ?? '')
+  }, [defData?.data])
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      await putDefault('default_currency_id', currencyId || null)
+      await putDefault('default_vat_id',      vatId      || null)
+    },
+    onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
+    onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  return (
+    <div className="admin-section">
+      <p className="admin-section-hint">
+        Diese Werte werden automatisch bei der Erstellung neuer Verträge vorbelegt.
+      </p>
+
+      {isLoading && <p className="empty-note">Laden …</p>}
+
+      {!isLoading && (
+        <>
+          <div className="admin-block">
+            <h3 className="admin-block-title">Vertrag</h3>
+
+            <div className="form-group">
+              <label>Währung</label>
+              <select value={currencyId} onChange={e => setCurrencyId(e.target.value)}>
+                <option value="">— keine Vorbelegung —</option>
+                {currencies.map(c => (
+                  <option key={c.ID} value={c.ID}>{c.NAME_SHORT}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>MwSt.</label>
+              <select value={vatId} onChange={e => setVatId(e.target.value)}>
+                <option value="">— keine Vorbelegung —</option>
+                {vatList.map(v => (
+                  <option key={v.ID} value={v.ID}>{v.VAT}: {v.VAT_PERCENT} %</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <Message text={msg?.text ?? null} type={msg?.type} />
+          <button
+            className="btn-primary"
+            style={{ marginTop: 8 }}
+            disabled={saveMut.isPending}
+            onClick={() => { setMsg(null); saveMut.mutate() }}
+            type="button"
+          >
+            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -277,6 +358,7 @@ export function AdminPage() {
         {tab === 'stammdaten'    && <StammdatenSection />}
         {tab === 'nummernkreise' && <NummernkreiseSection />}
         {tab === 'unternehmen'   && <UnternehmenSection />}
+        {tab === 'vorbelegungen' && <VorbelegungenSection />}
       </div>
     </div>
   )

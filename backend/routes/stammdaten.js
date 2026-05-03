@@ -34,6 +34,10 @@ module.exports = (supabase) => {
   router.get("/contacts/list",                                       (req, res) => ctrl.listContacts(req, res, supabase));
   router.patch("/contacts/:id",                                      (req, res) => ctrl.patchContact(req, res, supabase));
   router.get("/vat/search",                                          (req, res) => ctrl.searchVat(req, res, supabase));
+  router.get("/vat",                                                 (req, res) => ctrl.getVat(req, res, supabase));
+  router.get("/currencies",                                          (req, res) => ctrl.getCurrencies(req, res, supabase));
+  router.get("/defaults",                                            (req, res) => ctrl.getDefaults(req, res, supabase));
+  router.put("/defaults",                                            (req, res) => ctrl.putDefault(req, res, supabase));
   router.get("/payment-means/search",                                (req, res) => ctrl.searchPaymentMeans(req, res, supabase));
   router.post("/contacts",                                           (req, res) => ctrl.postContact(req, res, supabase));
 

@@ -98,7 +98,7 @@ export const updateProject = (id: number, body: Partial<{
 }>) => apiClient.patch<{ data: Project }>(`/projekte/${id}`, body)
 
 export const searchProjectsApi = (q: string) =>
-  apiClient.get<{ data: Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string }> }>(
+  apiClient.get<{ data: Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string; COMPANY_ID: number | null }> }>(
     `/projekte/search?q=${encodeURIComponent(q)}`
   )
 

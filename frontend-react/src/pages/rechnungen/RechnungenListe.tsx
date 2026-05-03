@@ -149,7 +149,7 @@ export function RechnungenListe() {
                       </td>
                       <td className="doc-actions">
                         <button className="btn-small" onClick={() => openInvoicePdf(inv.ID)}>PDF</button>
-                        <button className="btn-small" onClick={() => downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'ubl')}>UBL</button>
+                        <button className="btn-small" onClick={() => downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'ubl')}>XRechnung</button>
                         <button className="btn-small" onClick={() => downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'cii')}>ZUGFeRD</button>
                         {inv.STATUS_ID === 2 && inv.INVOICE_TYPE !== 'stornorechnung' && (
                           <button className="btn-small btn-danger" onClick={() => handleCancelInvoice(inv)}>Storno</button>
@@ -200,7 +200,7 @@ export function RechnungenListe() {
                       </td>
                       <td className="doc-actions">
                         <button className="btn-small" onClick={() => openPpPdf(pp.ID)}>PDF</button>
-                        <button className="btn-small" onClick={() => downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'ubl')}>UBL</button>
+                        <button className="btn-small" onClick={() => downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'ubl')}>XRechnung</button>
                         <button className="btn-small" onClick={() => downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'cii')}>ZUGFeRD</button>
                         {pp.STATUS_ID === 2 && !pp.CANCELS_PARTIAL_PAYMENT_ID && (
                           <button className="btn-small btn-danger" onClick={() => handleCancelPp(pp)}>Storno</button>

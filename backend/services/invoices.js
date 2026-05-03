@@ -545,10 +545,24 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
 }
 
 async function initInvoice(supabase, { companyId, employeeId, projectId, contractId, invoiceType }) {
+  const { data: project, error: projectErr } = await supabase
+    .from("PROJECT")
+    .select("ID, NAME_SHORT, NAME_LONG, TENANT_ID, COMPANY_ID")
+    .eq("ID", projectId)
+    .maybeSingle();
+  if (projectErr || !project) throw { status: 500, message: "Projekt konnte nicht geladen werden" };
+
+  let resolvedCompanyId = companyId || project.COMPANY_ID;
+  if (!resolvedCompanyId) {
+    const { data: cos } = await supabase.from("COMPANY").select("ID").eq("TENANT_ID", project.TENANT_ID).limit(1);
+    resolvedCompanyId = cos?.[0]?.ID ?? null;
+  }
+  if (!resolvedCompanyId) throw { status: 500, message: "Firma konnte nicht ermittelt werden" };
+
   const company_q = await supabase
     .from("COMPANY")
     .select(`ID, COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, COUNTRY_ID, POST_OFFICE_BOX, BIC, TAX_NUMBER, IBAN, "TAX-ID", "CREDITOR-ID"`)
-    .eq("ID", companyId)
+    .eq("ID", resolvedCompanyId)
     .maybeSingle();
   if (company_q.error || !company_q.data) throw { status: 500, message: "Firma konnte nicht geladen werden" };
   const company = company_q.data;
@@ -578,18 +592,11 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   }
   if (!employee) throw { status: 500, message: "Mitarbeiter konnte nicht geladen werden" };
 
-  const { data: project, error: projectErr } = await supabase
-    .from("PROJECT")
-    .select("ID, NAME_SHORT, NAME_LONG, TENANT_ID")
-    .eq("ID", projectId)
-    .maybeSingle();
-  if (projectErr || !project) throw { status: 500, message: "Projekt konnte nicht geladen werden" };
-
   let contractRow = null;
   {
     const { data: c1, error: c1Err } = await supabase
       .from("CONTRACT")
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID")
       .eq("ID", contractId)
       .maybeSingle();
     if (!c1Err && c1) contractRow = c1;
@@ -597,11 +604,17 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   if (!contractRow) {
     const { data: c2, error: c2Err } = await supabase
       .from("CONTRACTS")
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID")
       .eq("ID", contractId)
       .maybeSingle();
     if (c2Err || !c2) throw { status: 500, message: "Vertrag konnte nicht geladen werden" };
     contractRow = c2;
+  }
+
+  let contractVatPercent = null;
+  if (contractRow.VAT_ID) {
+    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", contractRow.VAT_ID).maybeSingle();
+    contractVatPercent = vat?.VAT_PERCENT ?? null;
   }
 
   if (String(contractRow.PROJECT_ID) !== String(projectId)) {
@@ -632,6 +645,8 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     PROJECT_ID: projectId,
     CONTRACT_ID: contractId,
     CURRENCY_ID: contractRow.CURRENCY_ID ?? null,
+    VAT_ID: contractRow.VAT_ID ?? null,
+    VAT_PERCENT: contractVatPercent,
     STATUS_ID: 1,
     COMPANY_NAME_1: company.COMPANY_NAME_1 ?? null,
     COMPANY_NAME_2: company.COMPANY_NAME_2 ?? null,

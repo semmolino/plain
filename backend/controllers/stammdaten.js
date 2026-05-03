@@ -647,6 +647,51 @@ async function patchContact(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/stammdaten/currencies
+// ---------------------------------------------------------------------------
+async function getCurrencies(req, res, supabase) {
+  const { data, error } = await supabase.from("CURRENCY").select("ID, NAME_SHORT").order("NAME_SHORT", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/stammdaten/vat
+// ---------------------------------------------------------------------------
+async function getVat(req, res, supabase) {
+  const { data, error } = await supabase.from("VAT").select("ID, VAT, VAT_PERCENT").order("VAT_PERCENT", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/stammdaten/defaults
+// PUT /api/stammdaten/defaults  { key, value }
+// ---------------------------------------------------------------------------
+async function getDefaults(req, res, supabase) {
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(401).json({ error: "no tenant" });
+  const { data, error } = await supabase.from("TENANT_SETTINGS").select("KEY, VALUE").eq("TENANT_ID", tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  const settings = {};
+  for (const row of data || []) settings[row.KEY] = row.VALUE;
+  res.json({ data: settings });
+}
+
+async function putDefault(req, res, supabase) {
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(401).json({ error: "no tenant" });
+  const { key, value } = req.body || {};
+  if (!key) return res.status(400).json({ error: "key required" });
+  const { error } = await supabase.from("TENANT_SETTINGS").upsert(
+    [{ TENANT_ID: tenantId, KEY: key, VALUE: value ?? null, UPDATED_AT: new Date().toISOString() }],
+    { onConflict: "TENANT_ID,KEY" }
+  );
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/stammdaten/vat/search
 // ---------------------------------------------------------------------------
 async function searchVat(req, res, supabase) {
@@ -702,4 +747,5 @@ module.exports = {
   getCompanies, postCompany, postAddress, postRollen,
   getSalutations, getGenders, searchAddresses, listAddresses, patchAddress,
   searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, searchPaymentMeans, postContact,
+  getCurrencies, getVat, getDefaults, putDefault,
 };

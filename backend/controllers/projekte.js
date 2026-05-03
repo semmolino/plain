@@ -111,7 +111,7 @@ async function searchContracts(req, res, supabase) {
   const q = (req.query.q || "").toString().trim();
   const projectIdRaw = (req.query.project_id || "").toString().trim();
   if (!projectIdRaw) return res.json({ data: [] });
-  if (!q || q.length < 2) return res.json({ data: [] });
+  if (q.length > 0 && q.length < 2) return res.json({ data: [] });
   try {
     const data = await svc.searchContracts(supabase, { projectId: projectIdRaw, q });
     res.json({ data });
