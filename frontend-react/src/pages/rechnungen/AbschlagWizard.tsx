@@ -56,6 +56,7 @@ export function AbschlagWizard() {
   const [perfInput, setPerfInput] = useState('')
   const [tecList,   setTecList]   = useState<TecEntry[]>([])
   const [selected,  setSelected]  = useState<Set<number>>(new Set())
+  const [hasBt2,    setHasBt2]    = useState(false)
 
   const { data: empData }  = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
   const { data: compData } = useQuery({ queryKey: ['companies'],        queryFn: fetchCompanies })
@@ -88,7 +89,8 @@ export function AbschlagWizard() {
       setProposal(prop.data)
       setPerfInput(String(prop.data.performance_amount ?? ''))
       setTecList(tec.data)
-      setSelected(new Set(tec.data.filter(t => t.ASSIGNED).map(t => t.ID)))
+      setHasBt2(tec.hasBt2 ?? tec.data.length > 0)
+      setSelected(new Set(tec.data.map(t => t.ID)))
       setStep(2)
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -129,7 +131,7 @@ export function AbschlagWizard() {
     setStep(0); setDraftId(null); setProjectId(null); setProjectLabel('')
     setContractId(null); setContractLabel(''); setEmployeeId(''); setCompanyId('')
     setDetDate(todayIso()); setDueDate(''); setBpStart(''); setBpFinish(''); setComment('')
-    setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set())
+    setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set()); setHasBt2(false)
     setMsg(null)
   }
 
@@ -175,12 +177,13 @@ export function AbschlagWizard() {
     })
   }
 
-  function saveTec() {
-    if (!draftId) return
-    const originalAssigned = new Set(tecList.filter(t => t.ASSIGNED).map(t => t.ID))
-    const ids_assign   = tecList.filter(t =>  selected.has(t.ID) && !originalAssigned.has(t.ID)).map(t => t.ID)
-    const ids_unassign = tecList.filter(t => !selected.has(t.ID) &&  originalAssigned.has(t.ID)).map(t => t.ID)
-    tecMut.mutate({ id: draftId, body: { ids_assign, ids_unassign } })
+  function handleWeiterStep2() {
+    setMsg(null)
+    if (!draftId || !hasBt2) { setStep(3); return }
+    const orig = new Set(tecList.filter(t => t.ASSIGNED).map(t => t.ID))
+    const ids_assign   = tecList.filter(t =>  selected.has(t.ID) && !orig.has(t.ID)).map(t => t.ID)
+    const ids_unassign = tecList.filter(t => !selected.has(t.ID) &&  orig.has(t.ID)).map(t => t.ID)
+    tecMut.mutate({ id: draftId, body: { ids_assign, ids_unassign } }, { onSuccess: () => setStep(3) })
   }
 
   // ── render ───────────────────────────────────────────────────────────────────
@@ -270,16 +273,22 @@ export function AbschlagWizard() {
       )}
 
       {/* Step 2: Amounts */}
-      {step === 2 && (
+      {step === 2 && (() => {
+        const selectedTecSum = tecList.filter(t => selected.has(t.ID)).reduce((s, t) => s + (t.SP_TOT ?? 0), 0)
+        const liveNet   = (proposal?.performance_amount ?? 0) + selectedTecSum
+        const vatFactor = 1 + (proposal?.vat_percent ?? 0) / 100
+        const liveGross = liveNet * vatFactor
+        return (
         <div className="wizard-step-content">
           <p className="wizard-step-title">Beträge & Leistungsnachweise</p>
 
           {proposal && (
             <div className="billing-proposal-box">
               <div className="bp-row"><span>Empfohlener Leistungsbetrag</span><strong>{fmtEur(proposal.performance_suggested)}</strong></div>
-              <div className="bp-row"><span>Gebuchte TEC-Beträge</span><strong>{fmtEur(proposal.bookings_sum)}</strong></div>
-              <div className="bp-row total"><span>Netto gesamt</span><strong>{fmtEur(proposal.total_amount_net)}</strong></div>
-              <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(proposal.total_amount_gross)}</strong></div>
+              <div className="bp-row"><span>Leistungsbetrag (Netto)</span><strong>{fmtEur(proposal.performance_amount)}</strong></div>
+              {hasBt2 && <div className="bp-row"><span>TEC-Buchungen (ausgewählt)</span><strong>{fmtEur(selectedTecSum)}</strong></div>}
+              <div className="bp-row total"><span>Netto gesamt</span><strong>{fmtEur(liveNet)}</strong></div>
+              <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(liveGross)}</strong></div>
             </div>
           )}
 
@@ -291,40 +300,48 @@ export function AbschlagWizard() {
             </button>
           </div>
 
-          {tecList.length > 0 && (
+          {hasBt2 && (
             <>
-              <p style={{ margin: '14px 0 6px', fontWeight: 700, fontSize: 14 }}>TEC-Einträge zuweisen</p>
-              <div className="list-section table-scroll">
-                <table className="master-table">
-                  <thead>
-                    <tr><th></th><th>Datum</th><th>Mitarbeiter</th><th>Beschreibung</th><th className="num">Betrag €</th></tr>
-                  </thead>
-                  <tbody>
-                    {tecList.map(t => (
-                      <tr key={t.ID}>
-                        <td><input type="checkbox" checked={selected.has(t.ID)} onChange={() => toggleTec(t.ID)} /></td>
-                        <td>{fmtDate(t.DATE_VOUCHER)}</td>
-                        <td>{t.EMPLOYEE_SHORT_NAME ?? '—'}</td>
-                        <td>{t.POSTING_DESCRIPTION}</td>
-                        <td className="num">{fmtEur(t.SP_TOT)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <button onClick={saveTec} disabled={tecMut.isPending} style={{ marginTop: 8 }}>
-                {tecMut.isPending ? 'Speichert …' : 'TEC-Zuweisung speichern'}
-              </button>
+              <p style={{ margin: '14px 0 6px', fontWeight: 700, fontSize: 14 }}>TEC-Buchungen zuweisen</p>
+              {tecList.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.45)', margin: '4px 0 8px' }}>
+                  Keine offenen Buchungen für dieses Projekt vorhanden.
+                </p>
+              ) : (
+                <>
+                  <div className="list-section table-scroll">
+                    <table className="master-table">
+                      <thead>
+                        <tr><th></th><th>Datum</th><th>Mitarbeiter</th><th>Beschreibung</th><th className="num">Betrag €</th></tr>
+                      </thead>
+                      <tbody>
+                        {tecList.map(t => (
+                          <tr key={t.ID}>
+                            <td><input type="checkbox" checked={selected.has(t.ID)} onChange={() => toggleTec(t.ID)} /></td>
+                            <td>{fmtDate(t.DATE_VOUCHER)}</td>
+                            <td>{t.EMPLOYEE_SHORT_NAME ?? '—'}</td>
+                            <td>{t.POSTING_DESCRIPTION}</td>
+                            <td className="num">{fmtEur(t.SP_TOT)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </>
           )}
 
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">
             <button onClick={handleCancel}>Abbrechen</button>
-            <button className="btn-primary" onClick={() => { setMsg(null); setStep(3) }}>Weiter →</button>
+            <button className="btn-primary" onClick={handleWeiterStep2} disabled={tecMut.isPending}>
+              {tecMut.isPending ? 'Speichert …' : 'Weiter →'}
+            </button>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Step 3: Book */}
       {step === 3 && (

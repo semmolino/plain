@@ -226,7 +226,8 @@ async function sumTecForStructures(supabase, { structureIds, partialPaymentId })
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
     .select("ID, SP_TOT, PARTIAL_PAYMENT_ID, INVOICE_ID, STRUCTURE_ID")
-    .in("STRUCTURE_ID", structureIds);
+    .in("STRUCTURE_ID", structureIds)
+    .neq("STATUS", "DRAFT");
   if (tecErr) throw new Error(tecErr.message);
 
   const eligible = (tecRows || []).filter((t) => {
@@ -435,7 +436,8 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
     .from("TEC")
     .select("STRUCTURE_ID, SP_TOT")
     .eq("PARTIAL_PAYMENT_ID", partialPaymentId)
-    .in("STRUCTURE_ID", bt2Ids);
+    .in("STRUCTURE_ID", bt2Ids)
+    .neq("STATUS", "DRAFT");
   if (tecErr) throw new Error(tecErr.message);
 
   const bySid = new Map();

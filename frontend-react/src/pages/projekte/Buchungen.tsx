@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBuchungen, createBuchung, deleteBuchung,
+  fetchEmployee2ProjectPreset,
   type Buchung,
 } from '@/api/projekte'
 import { fetchActiveEmployees } from '@/api/projekte'
@@ -58,10 +59,44 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     enabled:  pid !== null,
   })
 
-  const projects  = projectsData?.data ?? []
-  const employees = empData?.data      ?? []
-  const buchungen = buchData?.data     ?? []
-  const structure = structData?.data   ?? []
+  const empId = form.EMPLOYEE_ID ? Number(form.EMPLOYEE_ID) : null
+
+  const { data: presetData } = useQuery({
+    queryKey: ['e2p-preset', empId, pid],
+    queryFn:  () => fetchEmployee2ProjectPreset(empId!, pid!),
+    enabled:  empId !== null && pid !== null && showForm,
+  })
+
+  useEffect(() => {
+    if (!presetData) return
+    setForm(f => ({ ...f, SP_RATE: presetData.found && presetData.SP_RATE != null ? String(presetData.SP_RATE) : f.SP_RATE }))
+  }, [presetData])
+
+  const projects     = projectsData?.data ?? []
+  const employees    = empData?.data      ?? []
+  const buchungen    = buchData?.data     ?? []
+  const structure    = structData?.data   ?? []
+  const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => Number(n.FATHER_ID)))
+  const nodeById  = new Map(structure.map(n => [n.STRUCTURE_ID, n]))
+
+  function structPath(id: number): string {
+    const ancestors: string[] = []
+    const cur = nodeById.get(id)
+    if (!cur) return ''
+    const label = `${cur.NAME_SHORT}${cur.NAME_LONG ? ' – ' + cur.NAME_LONG : ''}`
+    let fatherId = cur.FATHER_ID ? Number(cur.FATHER_ID) : null
+    while (fatherId != null) {
+      const parent = nodeById.get(fatherId)
+      if (!parent) break
+      ancestors.unshift(parent.NAME_SHORT)
+      fatherId = parent.FATHER_ID ? Number(parent.FATHER_ID) : null
+    }
+    return ancestors.length ? `${ancestors.join(' > ')} > ${label}` : label
+  }
+
+  const leafStructure = structure
+    .filter(n => !parentIds.has(n.STRUCTURE_ID))
+    .sort((a, b) => structPath(a.STRUCTURE_ID).localeCompare(structPath(b.STRUCTURE_ID), 'de', { numeric: true }))
 
   const totalIntH = buchungen.reduce((s, b) => s + (Number(b.QUANTITY_INT) || 0), 0)
   const totalCost = buchungen.reduce((s, b) => s + (Number(b.CP_TOT) || 0), 0)
@@ -105,8 +140,10 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     })
   }
 
-  const setF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm(f => ({ ...f, [k]: e.target.value }))
+  const setF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setForm(f => ({ ...f, [k]: value, ...(k === 'EMPLOYEE_ID' ? { SP_RATE: '' } : {}) }))
+  }
 
   function confirmDelete(b: Buchung) {
     if (!window.confirm(`Buchung vom ${fmtDate(b.DATE_VOUCHER)} löschen?`)) return
@@ -186,7 +223,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <label>Strukturelement</label>
                     <select value={form.STRUCTURE_ID} onChange={setF('STRUCTURE_ID')}>
                       <option value="">—</option>
-                      {structure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{s.NAME_SHORT} – {s.NAME_LONG}</option>)}
+                      {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{structPath(s.STRUCTURE_ID)}</option>)}
                     </select>
                   </div>
                   <div className="form-row">
@@ -199,8 +236,11 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <FormField label="Stunden ext.*" id="bqe" type="number" value={form.QUANTITY_EXT}  onChange={setF('QUANTITY_EXT')} step="0.25" required />
                   </div>
                   <div className="form-row">
-                    <FormField label="Kostenrate*"   id="bcr" type="number" value={form.CP_RATE}       onChange={setF('CP_RATE')} step="0.01" required />
-                    <FormField label="Erlösrate*"    id="bsr" type="number" value={form.SP_RATE}       onChange={setF('SP_RATE')} step="0.01" required />
+                    <FormField label="Kostensatz*"   id="bcr" type="number" value={form.CP_RATE}       onChange={setF('CP_RATE')} step="0.01" required />
+                    <FormField label="Stundensatz*"  id="bsr" type="number" value={form.SP_RATE}       onChange={setF('SP_RATE')} step="0.01" required
+                      readOnly={presetData?.found === true && presetData.SP_RATE != null}
+                      title={presetData?.found === true && presetData.SP_RATE != null ? 'Aus Mitarbeiter/Projekt-Zuordnung vorbelegt' : undefined}
+                      style={{ background: presetData?.found === true && presetData.SP_RATE != null ? 'rgba(17,24,39,0.04)' : undefined }} />
                   </div>
                   <div className="form-group">
                     <label>Beschreibung*</label>

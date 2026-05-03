@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchProjectsShort, fetchLeistungsstand, saveLeistungsstand,
+  createProgressSnapshot,
   type LeistungsstandNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
@@ -22,8 +23,9 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
   const qc = useQueryClient()
   const [pid,  setPid]  = useState<number | null>(initialProjectId ?? null)
   const [vals, setVals] = useState<Record<number, string>>({})
-  const [msg,  setMsg]  = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const inputRefs       = useRef<Record<number, HTMLInputElement | null>>({})
+  const [msg,     setMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [snapMsg, setSnapMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const inputRefs             = useRef<Record<number, HTMLInputElement | null>>({})
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects-short'],
@@ -60,6 +62,12 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
     },
     onError: (err: unknown) =>
       setMsg({ text: (err as { message?: string }).message || 'Fehler beim Speichern', type: 'error' }),
+  })
+
+  const snapMut = useMutation({
+    mutationFn: () => createProgressSnapshot(pid!),
+    onSuccess: () => setSnapMsg({ text: 'Snapshot gespeichert ✅', type: 'success' }),
+    onError:   (err: unknown) => setSnapMsg({ text: (err as { message?: string }).message || 'Fehler', type: 'error' }),
   })
 
   const handleSave = useCallback(() => {
@@ -106,6 +114,7 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
     setPid(id)
     onProjectChange?.(id)
     setMsg(null)
+    setSnapMsg(null)
   }
 
   return (
@@ -228,6 +237,13 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
           <div className="ls-footer">
             <span className="ls-hint">Strg+S zum Speichern</span>
             <button
+              type="button"
+              disabled={snapMut.isPending}
+              onClick={() => { setSnapMsg(null); snapMut.mutate() }}
+            >
+              {snapMut.isPending ? 'Snapshot …' : 'Progress-Snapshot'}
+            </button>
+            <button
               className="btn btn-primary"
               disabled={saveMut.isPending}
               onClick={handleSave}
@@ -235,6 +251,7 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
               {saveMut.isPending ? 'Speichern…' : 'Leistungsstände speichern'}
             </button>
           </div>
+          {snapMsg && <div style={{ marginTop: 8 }}><Message type={snapMsg.type} text={snapMsg.text} /></div>}
         </>
       )}
 

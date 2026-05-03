@@ -37,6 +37,7 @@ export interface StructureNode {
   EXTRAS_COMPLETION_PERCENT:   number
   REVENUE_COMPLETION:          number
   EXTRAS_COMPLETION:           number
+  TEC_SP_TOT_SUM:              number
   children?:                   StructureNode[]
 }
 
@@ -226,3 +227,16 @@ export const createBuchung = (body: CreateBuchungPayload) =>
 
 export const deleteBuchung = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/buchungen/${id}`)
+
+export interface Employee2ProjectPreset {
+  found:           boolean
+  SP_RATE:         number | null
+  ROLE_ID:         number | null
+  ROLE_NAME_SHORT: string | null
+  ROLE_NAME_LONG:  string | null
+}
+
+export const fetchEmployee2ProjectPreset = (employeeId: number, projectId: number) =>
+  apiClient.get<Employee2ProjectPreset>(
+    `/employee2project/preset?employee_id=${employeeId}&project_id=${projectId}`
+  )

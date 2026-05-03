@@ -87,7 +87,7 @@ async function getBillingProposal(req, res, supabase) {
   try {
     const { data: inv, error: invErr } = await supabase
       .from("INVOICE")
-      .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID")
+      .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT")
       .eq("ID", id)
       .maybeSingle();
     if (invErr) throw new Error(invErr.message);
@@ -128,22 +128,8 @@ async function getBillingProposal(req, res, supabase) {
       });
     }
 
+    // Compute bookings sum from TEC entries already assigned to this invoice (no auto-assignment).
     if (bt2Ids.length > 0) {
-      const { data: hasAny, error: hasAnyErr } = await supabase
-        .from("TEC")
-        .select("ID")
-        .eq("INVOICE_ID", id)
-        .limit(1);
-      if (hasAnyErr) throw new Error(hasAnyErr.message);
-
-      if (!Array.isArray(hasAny) || hasAny.length === 0) {
-        const { toAssignIds } = await svc.findTecIdsToAutoAssign(supabase, { invoiceId: id, structureIds: bt2Ids });
-        if (toAssignIds.length > 0) {
-          const { error: asErr } = await supabase.from("TEC").update({ INVOICE_ID: id }).in("ID", toAssignIds);
-          if (asErr) throw new Error(asErr.message);
-        }
-      }
-
       await svc.updateBt2FromTec(supabase, { invoiceId: id, contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
     }
 
@@ -157,6 +143,7 @@ async function getBillingProposal(req, res, supabase) {
         performance_amount: bt1Now.net,
         bookings_sum: bt2Now.net,
         ...totals,
+        vat_percent: Number(inv.VAT_PERCENT ?? 0),
       },
     });
   } catch (e) {
@@ -231,12 +218,13 @@ async function getTec(req, res, supabase) {
 
     const structures = await svc.loadProjectStructuresForContext(supabase, { contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
     const bt2Ids = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
-    if (bt2Ids.length === 0) return res.json({ data: [] });
+    if (bt2Ids.length === 0) return res.json({ data: [], hasBt2: false });
 
     const { data: tecRows, error: tecErr } = await supabase
       .from("TEC")
       .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, SP_TOT, STRUCTURE_ID, PARTIAL_PAYMENT_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(SHORT_NAME)")
       .in("STRUCTURE_ID", bt2Ids)
+      .neq("STATUS", "DRAFT")
       .order("DATE_VOUCHER", { ascending: true });
     if (tecErr) throw new Error(tecErr.message);
 
@@ -254,7 +242,7 @@ async function getTec(req, res, supabase) {
         ASSIGNED: String(t.INVOICE_ID) === String(id),
       }));
 
-    return res.json({ data: out });
+    return res.json({ data: out, hasBt2: true });
   } catch (e) {
     return res.status(500).json({ error: e?.message || String(e) });
   }

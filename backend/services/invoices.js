@@ -411,7 +411,8 @@ async function updateBt2FromTec(supabase, { invoiceId, contractId, projectId, te
     .from("TEC")
     .select("ID, STRUCTURE_ID, SP_TOT, PARTIAL_PAYMENT_ID, INVOICE_ID")
     .in("STRUCTURE_ID", bt2Ids)
-    .eq("INVOICE_ID", invoiceId);
+    .eq("INVOICE_ID", invoiceId)
+    .neq("STATUS", "DRAFT");
 
   if (tecErr) throw new Error(tecErr.message);
 
@@ -445,7 +446,8 @@ async function findTecIdsToAutoAssign(supabase, { invoiceId, structureIds }) {
   const { data: tecRows, error } = await supabase
     .from("TEC")
     .select("ID, PARTIAL_PAYMENT_ID, INVOICE_ID")
-    .in("STRUCTURE_ID", ids);
+    .in("STRUCTURE_ID", ids)
+    .neq("STATUS", "DRAFT");
   if (error) throw new Error(error.message);
 
   const toAssignIds = (tecRows || [])

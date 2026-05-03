@@ -4,7 +4,6 @@ import { Message } from '@/components/ui/Message'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
   inheritStructureExtras, patchStructureNode,
-  patchStructureCompletion, createProgressSnapshot,
   createStructureNode, deleteStructureNode, moveStructureNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
@@ -14,7 +13,7 @@ const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.fo
 
 type RowEdit = {
   nameShort: string; nameLong: string; billingTypeId: string
-  nk: string; rev: string; budget: string
+  nk: string; budget: string
 }
 
 type AddForm = {
@@ -53,7 +52,6 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const flatTreeRef                     = useRef<typeof flatTree>([])
   const selectedIdsRef                  = useRef<Set<number>>(new Set())
   const [saveMsg, setSaveMsg]           = useState<{ text: string; type: 'success'|'error' } | null>(null)
-  const [snapMsg, setSnapMsg]           = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [addForm, setAddForm]           = useState<AddForm | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
@@ -82,7 +80,6 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       nameLong:     node?.NAME_LONG  ?? '',
       billingTypeId: String(node?.BILLING_TYPE_ID ?? ''),
       nk:     String(node?.EXTRAS_PERCENT ?? 0),
-      rev:    String(node?.REVENUE_COMPLETION_PERCENT ?? 0),
       budget: String(node?.REVENUE ?? 0),
     }
   }
@@ -98,25 +95,18 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
 
   const saveMut = useMutation({
     mutationFn: async (rows: Array<{
-      id: number; name: string; nk: number; rev: number; budget: number
+      id: number; name: string; nk: number; budget: number
       nameShort: string; nameLong: string; billingTypeId: string
-      nkChanged: boolean; revChanged: boolean; budgetChanged: boolean
+      nkChanged: boolean; budgetChanged: boolean
       nameShortChanged: boolean; nameLongChanged: boolean; billingTypeIdChanged: boolean
     }>) => {
       for (const r of rows) {
-        const needsPatch = r.nkChanged || r.budgetChanged || r.nameShortChanged || r.nameLongChanged || r.billingTypeIdChanged
-        if (needsPatch) {
-          await patchStructureNode(r.id, {
-            ...(r.nameShortChanged    ? { NAME_SHORT:      r.nameShort }           : {}),
-            ...(r.nameLongChanged     ? { NAME_LONG:       r.nameLong }            : {}),
-            ...(r.billingTypeIdChanged ? { BILLING_TYPE_ID: Number(r.billingTypeId) } : {}),
-            ...(r.nkChanged           ? { EXTRAS_PERCENT: r.nk }                  : {}),
-            ...(r.budgetChanged       ? { REVENUE:        r.budget }              : {}),
-          })
-        }
-        if (r.revChanged) await patchStructureCompletion(r.id, {
-          revenue_completion_percent: r.rev,
-          extras_completion_percent:  r.rev,
+        await patchStructureNode(r.id, {
+          ...(r.nameShortChanged     ? { NAME_SHORT:      r.nameShort }              : {}),
+          ...(r.nameLongChanged      ? { NAME_LONG:       r.nameLong }               : {}),
+          ...(r.billingTypeIdChanged ? { BILLING_TYPE_ID: Number(r.billingTypeId) }  : {}),
+          ...(r.nkChanged            ? { EXTRAS_PERCENT:  r.nk }                     : {}),
+          ...(r.budgetChanged        ? { REVENUE:         r.budget }                 : {}),
         })
       }
       return rows
@@ -143,12 +133,6 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       setTimeout(() => setSaveMsg(null), 3000)
     },
     onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
-  })
-
-  const snapMut = useMutation({
-    mutationFn: () => createProgressSnapshot(selectedPid!),
-    onSuccess: () => setSnapMsg({ text: 'Snapshot gespeichert ✅', type: 'success' }),
-    onError:   (e: Error) => setSnapMsg({ text: e.message, type: 'error' }),
   })
 
   const addMut = useMutation({
@@ -216,29 +200,26 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       const id   = Number(idStr)
       const node = structure.find(n => n.STRUCTURE_ID === id)
       const origNk           = node?.EXTRAS_PERCENT ?? 0
-      const origRev          = node?.REVENUE_COMPLETION_PERCENT ?? 0
       const origBudget       = node?.REVENUE ?? 0
       const origNameShort    = node?.NAME_SHORT ?? ''
       const origNameLong     = node?.NAME_LONG  ?? ''
       const origBillingTypeId = String(node?.BILLING_TYPE_ID ?? '')
       const nk     = edit.nk     !== '' ? Number(edit.nk)     : origNk
-      const rev    = edit.rev    !== '' ? Number(edit.rev)    : origRev
       const budget = edit.budget !== '' ? Number(edit.budget) : origBudget
       return {
         id, name: origNameShort,
-        nk, rev, budget,
+        nk, budget,
         nameShort:    edit.nameShort    ?? origNameShort,
         nameLong:     edit.nameLong     ?? origNameLong,
         billingTypeId: edit.billingTypeId ?? origBillingTypeId,
         nkChanged:           nk     !== origNk,
-        revChanged:          rev    !== origRev,
         budgetChanged:       budget !== origBudget,
         nameShortChanged:    (edit.nameShort    ?? origNameShort)    !== origNameShort,
         nameLongChanged:     (edit.nameLong     ?? origNameLong)     !== origNameLong,
         billingTypeIdChanged: (edit.billingTypeId ?? origBillingTypeId) !== origBillingTypeId,
       }
     }).filter(r =>
-      r.nkChanged || r.revChanged || r.budgetChanged ||
+      r.nkChanged || r.budgetChanged ||
       r.nameShortChanged || r.nameLongChanged || r.billingTypeIdChanged
     )
     if (!rows.length) { setSaveMsg({ text: 'Keine Änderungen', type: 'error' }); return }
@@ -396,7 +377,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
     <div>
       <div className="form-group" style={{ maxWidth: 400, marginBottom: 12 }}>
         <label>Projekt</label>
-        <select value={selectedPid ?? ''} onChange={e => { setSelectedPid(e.target.value ? Number(e.target.value) : null); setSnapMsg(null) }}>
+        <select value={selectedPid ?? ''} onChange={e => { setSelectedPid(e.target.value ? Number(e.target.value) : null) }}>
           <option value="">Bitte wählen …</option>
           {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
         </select>
@@ -446,7 +427,6 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                         <th className="num">Honorar €</th>
                         <th className="num">NK %</th>
                         <th className="num">Extras</th>
-                        <th className="num">Leistungsstand %</th>
                         <th className="num">Stand €</th>
                         <th></th>
                       </tr>
@@ -454,9 +434,8 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                     <tbody ref={tbodyRef}>
                       {flatTree.map(({ node, depth }) => {
                         const edit      = edits[node.STRUCTURE_ID]
-                        const nkVal     = edit?.nk           ?? String(node.EXTRAS_PERCENT ?? 0)
-                        const revVal    = edit?.rev           ?? String(node.REVENUE_COMPLETION_PERCENT ?? 0)
-                        const budgetVal = edit?.budget        ?? String(node.REVENUE ?? 0)
+                        const nkVal     = edit?.nk     ?? String(node.EXTRAS_PERCENT ?? 0)
+                        const budgetVal = edit?.budget ?? String(node.REVENUE ?? 0)
                         const nameShort = edit?.nameShort     ?? (node.NAME_SHORT ?? '')
                         const nameLong  = edit?.nameLong      ?? (node.NAME_LONG  ?? '')
                         const btId      = edit?.billingTypeId ?? String(node.BILLING_TYPE_ID ?? '')
@@ -509,7 +488,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                             </td>
                             <td className="num">
                               {isParent || isTec ? (
-                                <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(node.REVENUE)}</span>
+                                <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(isTec ? node.TEC_SP_TOT_SUM : node.REVENUE)}</span>
                               ) : (
                                 <input type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
                                   value={budgetVal}
@@ -533,17 +512,6 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               </div>
                             </td>
                             <td className="num">{fmtEur(node.EXTRAS)}</td>
-                            <td className="num">
-                              {isParent ? (
-                                <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>
-                                  {node.REVENUE_COMPLETION_PERCENT != null ? `${Number(node.REVENUE_COMPLETION_PERCENT).toFixed(1)} %` : '—'}
-                                </span>
-                              ) : (
-                                <input type="number" min={0} max={100} step={1} style={{ width: 60 }}
-                                  value={revVal}
-                                  onChange={e => setField(node.STRUCTURE_ID, 'rev', e.target.value)} />
-                              )}
-                            </td>
                             <td className="num">{fmtEur(node.REVENUE_COMPLETION)}</td>
                             <td>
                               <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c' }}
@@ -641,12 +609,8 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                 <button type="button" onClick={() => { setSaveMsg(null); setAddForm(f => f ? null : emptyAdd()) }}>
                   {addForm ? 'Formular schließen' : '+ Neues Element'}
                 </button>
-                <button type="button" onClick={() => { setSnapMsg(null); snapMut.mutate() }} disabled={snapMut.isPending}>
-                  {snapMut.isPending ? 'Snapshot …' : 'Progress-Snapshot'}
-                </button>
               </div>
               <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />
-              <Message text={snapMsg?.text ?? null} type={snapMsg?.type} />
             </>
           )}
         </>

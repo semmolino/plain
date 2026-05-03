@@ -23,7 +23,8 @@ async function recomputeStructure(supabase, structureId) {
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
     .select("QUANTITY_INT, CP_RATE, SP_TOT")
-    .eq("STRUCTURE_ID", structureId);
+    .eq("STRUCTURE_ID", structureId)
+    .neq("STATUS", "DRAFT");
   if (tecErr) throw new Error("Fehler beim Laden der TEC-Daten: " + tecErr.message);
 
   const newCosts = (tecRows || []).reduce(

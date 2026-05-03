@@ -196,20 +196,10 @@ async function getBillingProposal(req, res, supabase) {
     return res.status(500).json({ error: "Leistungsstand konnte nicht gespeichert werden: " + e.message });
   }
 
+  // Compute bookings sum from TEC entries already assigned to this PP (no auto-assignment).
+  // The user selects which entries to include manually in the wizard.
   let bookingsSum = 0;
   try {
-    const { data: already, error: alreadyErr } = await supabase.from("TEC").select("ID").eq("PARTIAL_PAYMENT_ID", id).limit(1);
-    if (alreadyErr) throw new Error(alreadyErr.message);
-    const hasAssigned = Array.isArray(already) && already.length > 0;
-
-    if (!hasAssigned) {
-      const { toAssignIds } = await svc.sumTecForStructures(supabase, { structureIds: bt2Ids, partialPaymentId: id });
-      if (Array.isArray(toAssignIds) && toAssignIds.length > 0) {
-        const { error: upErr } = await supabase.from("TEC").update({ PARTIAL_PAYMENT_ID: id }).in("ID", toAssignIds);
-        if (upErr) throw new Error(upErr.message);
-      }
-    }
-
     const bt2Res = await svc.updateBt2FromTec(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID });
     bookingsSum = bt2Res.bookings_sum;
   } catch (e) {
@@ -232,6 +222,7 @@ async function getBillingProposal(req, res, supabase) {
       amount_extras_net: totals.amount_extras_net,
       total_amount_net: totals.total_amount_net,
       total_amount_gross: totals.total_amount_gross,
+      vat_percent: svc.toNum(pp.VAT_PERCENT),
     },
   });
 }
@@ -290,12 +281,13 @@ async function getTec(req, res, supabase) {
   }
 
   const bt2Ids = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
-  if (!Array.isArray(bt2Ids) || bt2Ids.length === 0) return res.json({ data: [] });
+  if (!Array.isArray(bt2Ids) || bt2Ids.length === 0) return res.json({ data: [], hasBt2: false });
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
     .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, SP_TOT, PARTIAL_PAYMENT_ID, INVOICE_ID, STRUCTURE_ID, EMPLOYEE:EMPLOYEE_ID(SHORT_NAME)")
     .in("STRUCTURE_ID", bt2Ids)
+    .neq("STATUS", "DRAFT")
     .order("DATE_VOUCHER", { ascending: true });
   if (tecErr) return res.status(500).json({ error: tecErr.message });
 
@@ -314,7 +306,7 @@ async function getTec(req, res, supabase) {
       ASSIGNED: String(t.PARTIAL_PAYMENT_ID) === String(id),
     }));
 
-  return res.json({ data: rows });
+  return res.json({ data: rows, hasBt2: true });
 }
 
 // ---------------------------------------------------------------------------

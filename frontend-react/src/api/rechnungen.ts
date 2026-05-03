@@ -60,6 +60,7 @@ export interface BillingProposal {
   amount_extras_net:     number | null
   total_amount_net:      number | null
   total_amount_gross:    number | null
+  vat_percent:           number | null
 }
 
 export interface TecEntry {
@@ -144,7 +145,7 @@ export const putInvoicePerformance = (id: number, amount: number) =>
   apiClient.put<{ data: BillingProposal }>(`/invoices/${id}/performance`, { amount })
 
 export const getInvoiceTec = (id: number) =>
-  apiClient.get<{ data: TecEntry[] }>(`/invoices/${id}/tec`)
+  apiClient.get<{ data: TecEntry[]; hasBt2: boolean }>(`/invoices/${id}/tec`)
 
 export const postInvoiceTec = (id: number, body: {
   ids_assign: number[]; ids_unassign: number[]; performance_amount?: number
@@ -207,7 +208,7 @@ export const putPpPerformance = (id: number, amount: number) =>
   apiClient.put<{ data: BillingProposal }>(`/partial-payments/${id}/performance`, { amount })
 
 export const getPpTec = (id: number) =>
-  apiClient.get<{ data: TecEntry[] }>(`/partial-payments/${id}/tec`)
+  apiClient.get<{ data: TecEntry[]; hasBt2: boolean }>(`/partial-payments/${id}/tec`)
 
 export const postPpTec = (id: number, body: {
   ids_assign: number[]; ids_unassign: number[]; performance_amount?: number
