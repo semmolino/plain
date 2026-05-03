@@ -251,6 +251,9 @@ async function sumTecForStructures(supabase, { structureIds, partialPaymentId })
 async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId, structureIds, excludePartialPaymentId, bookedStatusId = 2 }) {
   if (!Array.isArray(structureIds) || structureIds.length === 0) return new Map();
 
+  const map = new Map();
+
+  // --- Amounts from booked PARTIAL_PAYMENT rows ---
   let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID");
   if (contractId !== null && contractId !== undefined) ppQ = ppQ.eq("CONTRACT_ID", contractId);
   else if (projectId !== null && projectId !== undefined) ppQ = ppQ.eq("PROJECT_ID", projectId);
@@ -260,19 +263,38 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   const { data: ppRows, error: ppErr } = await ppQ;
   if (ppErr) throw new Error(ppErr.message);
   const ppIds = (ppRows || []).map((r) => r.ID);
-  if (ppIds.length === 0) return new Map();
+  if (ppIds.length > 0) {
+    const { data, error } = await execWithPpsTableFallback(supabase, (sb, table) =>
+      sb.from(table).select("STRUCTURE_ID, AMOUNT_NET").in("STRUCTURE_ID", structureIds).in("PARTIAL_PAYMENT_ID", ppIds)
+    );
+    if (error) throw new Error(error.message);
+    (data || []).forEach((r) => {
+      const sid = String(r.STRUCTURE_ID);
+      map.set(sid, round2((map.get(sid) || 0) + toNum(r.AMOUNT_NET)));
+    });
+  }
 
-  const { data, error } = await execWithPpsTableFallback(supabase, (sb, table) =>
-    sb.from(table).select("STRUCTURE_ID, AMOUNT_NET").in("STRUCTURE_ID", structureIds).in("PARTIAL_PAYMENT_ID", ppIds)
-  );
-  if (error) throw new Error(error.message);
+  // --- Amounts from booked INVOICE rows (must also be subtracted) ---
+  let invQ = supabase.from("INVOICE").select("ID").eq("STATUS_ID", bookedStatusId);
+  if (contractId !== null && contractId !== undefined) invQ = invQ.eq("CONTRACT_ID", contractId);
+  else if (projectId !== null && projectId !== undefined) invQ = invQ.eq("PROJECT_ID", projectId);
 
-  const map = new Map();
-  (data || []).forEach((r) => {
-    const sid = r.STRUCTURE_ID;
-    const cur = map.get(String(sid)) || 0;
-    map.set(String(sid), round2(cur + toNum(r.AMOUNT_NET)));
-  });
+  const { data: invRows, error: invErr } = await invQ;
+  if (!invErr && invRows && invRows.length > 0) {
+    const invIds = invRows.map((r) => r.ID);
+    const { data: isRows, error: isErr } = await supabase
+      .from("INVOICE_STRUCTURE")
+      .select("STRUCTURE_ID, AMOUNT_NET")
+      .in("INVOICE_ID", invIds)
+      .in("STRUCTURE_ID", structureIds);
+    if (!isErr) {
+      (isRows || []).forEach((r) => {
+        const sid = String(r.STRUCTURE_ID);
+        map.set(sid, round2((map.get(sid) || 0) + toNum(r.AMOUNT_NET)));
+      });
+    }
+  }
+
   return map;
 }
 

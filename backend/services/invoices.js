@@ -242,6 +242,9 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   const ids = Array.isArray(structureIds) ? structureIds : [];
   if (ids.length === 0) return new Map();
 
+  const m = new Map();
+
+  // --- Amounts from booked INVOICE rows ---
   let invQ = supabase.from("INVOICE").select("ID").eq("STATUS_ID", bookedStatusId);
   if (contractId) invQ = invQ.eq("CONTRACT_ID", contractId);
   else invQ = invQ.eq("PROJECT_ID", projectId);
@@ -251,25 +254,46 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   if (invErr) throw new Error(invErr.message);
 
   const invoiceIds = (invRows || []).map((r) => r.ID).filter((x) => x !== null && x !== undefined);
-  if (invoiceIds.length === 0) return new Map();
+  if (invoiceIds.length > 0) {
+    const { data: rows, error } = await supabase
+      .from("INVOICE_STRUCTURE")
+      .select("STRUCTURE_ID, AMOUNT_NET")
+      .in("INVOICE_ID", invoiceIds)
+      .in("STRUCTURE_ID", ids);
 
-  const { data: rows, error } = await supabase
-    .from("INVOICE_STRUCTURE")
-    .select("STRUCTURE_ID, AMOUNT_NET")
-    .in("INVOICE_ID", invoiceIds)
-    .in("STRUCTURE_ID", ids);
-
-  if (error) {
-    if (isTableMissingErr(error, "invoice_structure")) return new Map();
-    throw new Error(error.message);
+    if (error && !isTableMissingErr(error, "invoice_structure")) throw new Error(error.message);
+    (rows || []).forEach((r) => {
+      const sid = String(r.STRUCTURE_ID);
+      m.set(sid, round2((m.get(sid) || 0) + toNum(r.AMOUNT_NET)));
+    });
   }
 
-  const m = new Map();
-  (rows || []).forEach((r) => {
-    const sid = String(r.STRUCTURE_ID);
-    const cur = m.get(sid) || 0;
-    m.set(sid, round2(cur + toNum(r.AMOUNT_NET)));
-  });
+  // --- Amounts from booked PARTIAL_PAYMENT rows (must also be subtracted) ---
+  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID").eq("STATUS_ID", bookedStatusId);
+  if (contractId) ppQ = ppQ.eq("CONTRACT_ID", contractId);
+  else ppQ = ppQ.eq("PROJECT_ID", projectId);
+
+  const { data: ppRows, error: ppErr } = await ppQ;
+  if (!ppErr && ppRows && ppRows.length > 0) {
+    const ppIds = ppRows.map((r) => r.ID);
+    for (const table of ["PARTIAL_PAYMENT_STRUCTURE", "PARTIAL_PAYMENTS_STRUCTURE"]) {
+      const { data: ppsRows, error: ppsErr } = await supabase
+        .from(table)
+        .select("STRUCTURE_ID, AMOUNT_NET")
+        .in("PARTIAL_PAYMENT_ID", ppIds)
+        .in("STRUCTURE_ID", ids);
+      if (!ppsErr) {
+        (ppsRows || []).forEach((r) => {
+          const sid = String(r.STRUCTURE_ID);
+          m.set(sid, round2((m.get(sid) || 0) + toNum(r.AMOUNT_NET)));
+        });
+        break;
+      }
+      const msg = String(ppsErr?.message || "");
+      if (!/relation.*does\s+not\s+exist/i.test(msg)) break;
+    }
+  }
+
   return m;
 }
 
