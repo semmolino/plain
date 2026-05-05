@@ -1,0 +1,11 @@
+[phases.install]
+cmds = [
+  "npm ci --prefix frontend-react",
+  "npm ci --prefix backend"
+]
+
+[phases.build]
+cmds = ["npm --prefix frontend-react run build"]
+
+[start]
+cmd = "node backend/server.js"
