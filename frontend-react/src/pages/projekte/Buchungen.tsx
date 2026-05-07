@@ -200,6 +200,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   }, [buchungen, filterDescendants, search, sortCol, sortDir, pathCache])
 
   const totalIntH = visibleBuchungen.reduce((s, b) => s + (Number(b.QUANTITY_INT) || 0), 0)
+  const totalExtH = visibleBuchungen.reduce((s, b) => s + (Number(b.QUANTITY_EXT) || 0), 0)
   const totalCost = visibleBuchungen.reduce((s, b) => s + (Number(b.CP_TOT) || 0), 0)
   const totalRev  = visibleBuchungen.reduce((s, b) => s + (Number(b.SP_TOT) || 0), 0)
 
@@ -304,14 +305,6 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 </div>
               </div>
 
-              {/* Summary row */}
-              <div className="buchungen-summary">
-                <span>Einträge: <strong>{visibleBuchungen.length}</strong>{visibleBuchungen.length !== buchungen.length ? ` / ${buchungen.length}` : ''}</span>
-                <span>Stunden (int): <strong>{fmtN(totalIntH)}</strong></span>
-                <span>Kosten: <strong>{fmtN(totalCost)} €</strong></span>
-                <span>Erlös: <strong>{fmtN(totalRev)} €</strong></span>
-              </div>
-
               <div className="list-section">
                 <table className="master-table">
                   <thead>
@@ -345,6 +338,21 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     ))}
                     {!visibleBuchungen.length && <tr><td colSpan={9} className="empty-note">Keine Buchungen</td></tr>}
                   </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                      <td colSpan={3} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                        {visibleBuchungen.length !== buchungen.length
+                          ? `${visibleBuchungen.length} / ${buchungen.length} Einträge`
+                          : `${buchungen.length} Einträge`}
+                      </td>
+                      <td></td>
+                      <td className="num">{fmtN(totalIntH)}</td>
+                      <td className="num">{fmtN(totalExtH)}</td>
+                      <td className="num">{fmtN(totalCost)}</td>
+                      <td className="num">{fmtN(totalRev)}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
 
