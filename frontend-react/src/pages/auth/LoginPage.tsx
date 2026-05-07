@@ -111,7 +111,7 @@ export function LoginPage() {
               <button
                 className="auth-link-btn"
                 type="button"
-                onClick={() => { setShowReset(true); setResetMsg(null); setResetUrl(null) }}
+                onClick={() => { setShowReset(true); setResetMsg(null) }}
               >
                 Passwort vergessen?
               </button>
