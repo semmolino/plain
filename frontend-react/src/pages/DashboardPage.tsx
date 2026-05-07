@@ -181,7 +181,7 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
 export function DashboardPage() {
   const navigate    = useNavigate()
   const clearAuth   = useAuthStore(s => s.clearAuth)
-  const { email }   = useSession()
+  useSession()
   const qc          = useQueryClient()
   const [confirmLogout, setConfirmLogout] = useState(false)
 
