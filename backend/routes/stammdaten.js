@@ -8,6 +8,7 @@ module.exports = (supabase) => {
 
   router.post("/status",                                             (req, res) => ctrl.postStatus(req, res, supabase));
   router.post("/typ",                                                (req, res) => ctrl.postTyp(req, res, supabase));
+  router.post("/department",                                         (req, res) => ctrl.postDepartment(req, res, supabase));
   router.get("/countries",                                           (req, res) => ctrl.getCountries(req, res, supabase));
   router.get("/billing-types",                                       (req, res) => ctrl.getBillingTypes(req, res, supabase));
   router.get("/fee-groups",                                          (req, res) => ctrl.getFeeGroups(req, res, supabase));

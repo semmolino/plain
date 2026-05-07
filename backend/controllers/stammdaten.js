@@ -19,7 +19,18 @@ async function postStatus(req, res, supabase) {
 async function postTyp(req, res, supabase) {
   const name_short = req.body.name_short;
   if (!name_short || typeof name_short !== "string") return res.status(400).json({ error: "name_short is required" });
-  const { data, error } = await supabase.from("PROJECT_TYPE").insert([{ NAME_SHORT: name_short }]);
+  const { data, error } = await supabase.from("PROJECT_TYPE").insert([{ NAME_SHORT: name_short, TENANT_ID: req.tenantId }]);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/stammdaten/department
+// ---------------------------------------------------------------------------
+async function postDepartment(req, res, supabase) {
+  const name_short = req.body.name_short;
+  if (!name_short || typeof name_short !== "string") return res.status(400).json({ error: "name_short is required" });
+  const { data, error } = await supabase.from("DEPARTMENT").insert([{ NAME_SHORT: name_short, TENANT_ID: req.tenantId }]);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -741,7 +752,7 @@ async function postContact(req, res, supabase) {
 }
 
 module.exports = {
-  postStatus, postTyp, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
+  postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure,
   getCompanies, postCompany, postAddress, postRollen,

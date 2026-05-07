@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
-import { fetchCountries, createStatus, createTyp, createRolle, createCompany,
+import { fetchCountries, createDepartment, createTyp, createRolle, createCompany,
          fetchCurrencies, fetchVatList, fetchDefaults, putDefault } from '@/api/stammdaten'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 
@@ -52,9 +52,9 @@ function StammdatenSection() {
     setMsg(null); mutFn()
   }
 
-  const statusMut = useMutation({
-    mutationFn: createStatus,
-    onSuccess: () => setMsg({ text: 'Status gespeichert ✅', type: 'success' }),
+  const deptMut = useMutation({
+    mutationFn: createDepartment,
+    onSuccess: () => setMsg({ text: 'Abteilung gespeichert ✅', type: 'success' }),
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
   const typMut = useMutation({
@@ -73,11 +73,11 @@ function StammdatenSection() {
       <p className="admin-section-hint">Neue Einträge hinzufügen</p>
 
       <div className="admin-block">
-        <h3 className="admin-block-title">Projektstatus</h3>
+        <h3 className="admin-block-title">Abteilung</h3>
         <SingleInputMutation
-          label="Status"
-          onSubmit={v => withMsg(() => statusMut.mutate(v))}
-          isPending={statusMut.isPending}
+          label="Abteilung"
+          onSubmit={v => withMsg(() => deptMut.mutate(v))}
+          isPending={deptMut.isPending}
         />
       </div>
 

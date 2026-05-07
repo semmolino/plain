@@ -127,6 +127,9 @@ export const createStatus = (name_short: string) =>
 export const createTyp = (name_short: string) =>
   apiClient.post<{ data: unknown }>('/stammdaten/typ', { name_short })
 
+export const createDepartment = (name_short: string) =>
+  apiClient.post<{ data: unknown }>('/stammdaten/department', { name_short })
+
 export const createRolle = (name_short: string, name_long?: string) =>
   apiClient.post<{ data: unknown }>('/stammdaten/rollen', { name_short, name_long })
 
