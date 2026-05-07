@@ -73,6 +73,35 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => Number(n.FATHER_ID)))
   const parentMap = new Map(structure.map(n => [n.STRUCTURE_ID, n.FATHER_ID ? Number(n.FATHER_ID) : null]))
 
+  // Aggregate sums for parent nodes (computed bottom-up, client-side)
+  const aggMap = (() => {
+    const childrenOf = new Map<number, number[]>()
+    for (const n of structure) {
+      if (n.FATHER_ID != null) {
+        const arr = childrenOf.get(Number(n.FATHER_ID)) ?? []
+        arr.push(n.STRUCTURE_ID)
+        childrenOf.set(Number(n.FATHER_ID), arr)
+      }
+    }
+    const nodeMap = new Map(structure.map(n => [n.STRUCTURE_ID, n]))
+    const cache = new Map<number, { revenue: number; extras: number }>()
+    function agg(id: number): { revenue: number; extras: number } {
+      if (cache.has(id)) return cache.get(id)!
+      const children = childrenOf.get(id) ?? []
+      if (children.length === 0) {
+        const n = nodeMap.get(id)!
+        const isTec = Number(n.BILLING_TYPE_ID) === 2
+        const r = { revenue: isTec ? (n.TEC_SP_TOT_SUM ?? 0) : (n.REVENUE ?? 0), extras: n.EXTRAS ?? 0 }
+        cache.set(id, r); return r
+      }
+      let revenue = 0, extras = 0
+      for (const cid of children) { const c = agg(cid); revenue += c.revenue; extras += c.extras }
+      cache.set(id, { revenue, extras }); return { revenue, extras }
+    }
+    for (const n of structure) agg(n.STRUCTURE_ID)
+    return cache
+  })()
+
   function nodeDefault(structId: number): RowEdit {
     const node = structure.find(n => n.STRUCTURE_ID === structId)
     return {
@@ -426,7 +455,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th>Abrechnung</th>
                         <th className="num">Honorar €</th>
                         <th className="num">NK %</th>
-                        <th className="num">Extras</th>
+                        <th className="num">Nebenkosten €</th>
                         <th className="num">Stand €</th>
                         <th></th>
                       </tr>
@@ -488,7 +517,9 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             </td>
                             <td className="num">
                               {isParent || isTec ? (
-                                <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(isTec ? node.TEC_SP_TOT_SUM : node.REVENUE)}</span>
+                                <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>
+                                  {fmtEur(isParent ? aggMap.get(node.STRUCTURE_ID)?.revenue : node.TEC_SP_TOT_SUM)}
+                                </span>
                               ) : (
                                 <input type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
                                   value={budgetVal}
@@ -511,7 +542,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                                 )}
                               </div>
                             </td>
-                            <td className="num">{fmtEur(node.EXTRAS)}</td>
+                            <td className="num">{fmtEur(isParent ? aggMap.get(node.STRUCTURE_ID)?.extras : node.EXTRAS)}</td>
                             <td className="num">{fmtEur(node.REVENUE_COMPLETION)}</td>
                             <td>
                               <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c' }}
