@@ -5,7 +5,7 @@ import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
   inheritStructureExtras, patchStructureNode,
   createStructureNode, deleteStructureNode, moveStructureNode,
-  fetchParentChildCheck,
+  fetchParentChildCheck, transferFatherToChild,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 
@@ -376,6 +376,28 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
         .map(n => n.STRUCTURE_ID)
 
       if (ordered.length === 0) return
+
+      // When dropping AS A CHILD (zone='on') into a non-root target, check the new parent
+      if ((zone === 'on' && !rootZone) && fatherId !== null) {
+        try {
+          const check = await fetchParentChildCheck(fatherId)
+          if (check.status === 'blocked') {
+            setSaveMsg({ text: check.reason ?? 'Dieses Element kann keine Unterelemente erhalten.', type: 'error' })
+            return
+          }
+          if (check.status === 'needs_transfer') {
+            const confirmMsg = check.hasTec
+              ? 'Das Zielelement enthält bereits Werte und/oder Buchungen. Diese werden auf das verschobene Element übertragen. Möchten Sie fortfahren?'
+              : 'Das Zielelement enthält bereits Werte. Diese werden auf das verschobene Element übertragen. Möchten Sie fortfahren?'
+            if (!confirm(confirmMsg)) return
+            // Transfer father's values/TEC to the first element being moved
+            await transferFatherToChild(fatherId, ordered[0])
+          }
+        } catch (e) {
+          setSaveMsg({ text: (e as Error).message ?? 'Fehler beim Prüfen des Zielelements', type: 'error' })
+          return
+        }
+      }
 
       try {
         if (zone === 'on' || rootZone) {

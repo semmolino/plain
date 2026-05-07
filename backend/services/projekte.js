@@ -1326,6 +1326,65 @@ async function deleteStructure(supabase, { structureId, cascade }) {
   return toDelete;
 }
 
+// Transfer father's values/TEC to an existing child (used before drag-drop reparenting)
+async function transferFatherToChild(supabase, { fatherId, childId }) {
+  const n = (v) => Number(v ?? 0);
+
+  const { data: father, error: fErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION_PERCENT, EXTRAS_COMPLETION, COSTS")
+    .eq("ID", fatherId)
+    .maybeSingle();
+  if (fErr) throw fErr;
+  if (!father) throw { status: 404, message: "Übergeordnetes Element nicht gefunden" };
+
+  const { data: child, error: cErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("REVENUE, EXTRAS, REVENUE_COMPLETION, EXTRAS_COMPLETION, COSTS")
+    .eq("ID", childId)
+    .maybeSingle();
+  if (cErr) throw cErr;
+  if (!child) throw { status: 404, message: "Kind-Element nicht gefunden" };
+
+  const newRevenue  = n(child.REVENUE)            + n(father.REVENUE);
+  const newExtras   = n(child.EXTRAS)             + n(father.EXTRAS);
+  const newRevComp  = n(child.REVENUE_COMPLETION) + n(father.REVENUE_COMPLETION);
+  const newExtComp  = n(child.EXTRAS_COMPLETION)  + n(father.EXTRAS_COMPLETION);
+  const newCosts    = n(child.COSTS)              + n(father.COSTS);
+
+  const newRevPct  = newRevenue > 0 ? Math.round((newRevComp / newRevenue) * 10000) / 100 : 0;
+  const newExtPct  = newRevenue > 0 ? Math.round((newExtras  / newRevenue) * 10000) / 100 : 0;
+  const newExtCompPct = newExtras > 0 ? Math.round((newExtComp / newExtras) * 10000) / 100 : 0;
+
+  const { error: uErr } = await supabase.from("PROJECT_STRUCTURE").update({
+    REVENUE:                    newRevenue,
+    EXTRAS:                     newExtras,
+    EXTRAS_PERCENT:             newExtPct,
+    REVENUE_COMPLETION_PERCENT: newRevPct,
+    REVENUE_COMPLETION:         newRevComp,
+    EXTRAS_COMPLETION_PERCENT:  newExtCompPct,
+    EXTRAS_COMPLETION:          newExtComp,
+    COSTS:                      newCosts,
+  }).eq("ID", childId);
+  if (uErr) throw uErr;
+
+  // Move TEC bookings from father to child
+  await supabase.from("TEC").update({ STRUCTURE_ID: childId }).eq("STRUCTURE_ID", fatherId);
+
+  // Zero out father
+  const { error: zErr } = await supabase.from("PROJECT_STRUCTURE").update({
+    REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: 0,
+    REVENUE_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0,
+    EXTRAS_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION: 0,
+    COSTS: 0,
+  }).eq("ID", fatherId);
+  if (zErr) throw zErr;
+
+  await propagateUpwards(supabase, { structureId: childId });
+
+  return { success: true };
+}
+
 module.exports = {
   getDepartments,
   getStatuses,
@@ -1353,4 +1412,5 @@ module.exports = {
   saveLeistungsstand,
   getContractByProject,
   patchContract,
+  transferFatherToChild,
 };

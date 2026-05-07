@@ -133,6 +133,9 @@ export interface ParentChildCheckResult {
 export const fetchParentChildCheck = (parentId: number) =>
   apiClient.get<ParentChildCheckResult>(`/projekte/structure/${parentId}/child-check`)
 
+export const transferFatherToChild = (fatherId: number, childId: number) =>
+  apiClient.post<{ success: boolean }>(`/projekte/structure/${fatherId}/transfer-to-child`, { child_id: childId })
+
 export const createStructureNode = (projectId: number, node: {
   NAME_SHORT: string
   NAME_LONG?: string

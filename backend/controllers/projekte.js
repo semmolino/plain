@@ -326,6 +326,19 @@ async function deleteStructure(req, res, supabase) {
   }
 }
 
+async function transferFatherToChild(req, res, supabase) {
+  const { id } = req.params;
+  const { child_id } = req.body || {};
+  if (!child_id) return res.status(400).json({ error: "child_id ist erforderlich" });
+  try {
+    const result = await svc.transferFatherToChild(supabase, { fatherId: Number(id), childId: Number(child_id) });
+    res.json(result);
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || err });
+  }
+}
+
 module.exports = {
   getDepartments,
   getStatuses,
@@ -353,4 +366,5 @@ module.exports = {
   saveLeistungsstand,
   getContractByProject,
   patchContract,
+  transferFatherToChild,
 };

@@ -23,6 +23,7 @@ module.exports = (supabase) => {
   router.post("/:id/progress-snapshot",                (req, res) => ctrl.progressSnapshot(req, res, supabase));
   router.get("/structure/:id/tec-sum",                 (req, res) => ctrl.getTecSum(req, res, supabase));
   router.get("/structure/:id/child-check",             (req, res) => ctrl.checkParentForChild(req, res, supabase));
+  router.post("/structure/:id/transfer-to-child",      (req, res) => ctrl.transferFatherToChild(req, res, supabase));
   router.post("/:id/structure",                        (req, res) => ctrl.createStructureNode(req, res, supabase));
   router.patch("/structure/:id",                       (req, res) => ctrl.patchStructure(req, res, supabase));
   router.patch("/structure/:id/inherit",               (req, res) => ctrl.inheritStructure(req, res, supabase));
