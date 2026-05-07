@@ -19,7 +19,6 @@ export function LoginPage() {
   const [showReset,   setShowReset]   = useState(false)
   const [resetEmail,  setResetEmail]  = useState('')
   const [resetMsg,    setResetMsg]    = useState<{ text: string; type: 'error' | 'info' | 'success' } | null>(null)
-  const [resetUrl,    setResetUrl]    = useState<string | null>(null)
   const [resetLoading, setResetLoading] = useState(false)
 
   async function handleLogin() {
@@ -60,15 +59,9 @@ export function LoginPage() {
     }
     setResetLoading(true)
     setResetMsg({ text: 'Sende …', type: 'info' })
-    setResetUrl(null)
     try {
-      const res = await requestPasswordReset(resetEmail)
-      if (res.resetUrl) {
-        setResetUrl(res.resetUrl)
-        setResetMsg({ text: 'Link generiert. Bitte unten kopieren.', type: 'success' })
-      } else {
-        setResetMsg({ text: 'Falls die Adresse bekannt ist, wurde ein Link erstellt.', type: 'info' })
-      }
+      await requestPasswordReset(resetEmail)
+      setResetMsg({ text: 'Link wurde an Ihre E-Mail-Adresse gesendet.', type: 'success' })
     } catch (err) {
       setResetMsg({ text: err instanceof Error ? err.message : 'Fehler', type: 'error' })
     } finally {
@@ -147,15 +140,6 @@ export function LoginPage() {
             </button>
 
             {resetMsg && <Message text={resetMsg.text} type={resetMsg.type} />}
-
-            {resetUrl && (
-              <div className="reset-url-box">
-                <p style={{ fontSize: 12, marginBottom: 4, color: 'rgba(17,24,39,0.6)' }}>
-                  Reset-Link (an Benutzer weitergeben):
-                </p>
-                <a href={resetUrl} style={{ fontSize: 12, wordBreak: 'break-all' }}>{resetUrl}</a>
-              </div>
-            )}
 
             <div className="auth-links">
               <button
