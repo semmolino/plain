@@ -154,11 +154,16 @@ export function ProjekteAnlegen() {
   }
 
   function validateStep1() {
-    if (!basic.name_long || !basic.project_status_id || !basic.project_manager_id || !basic.address_id || !basic.contact_id) {
-      setMsg({ text: 'Bitte alle Pflichtfelder ausfüllen (Name, Status, Leitung, Adresse, Kontakt)', type: 'error' })
+    const missing: string[] = []
+    if (!basic.name_long)          missing.push('Projektname')
+    if (!basic.project_status_id)  missing.push('Status')
+    if (!basic.project_manager_id) missing.push('Projektleitung')
+    if (!basic.address_id)         missing.push('Rechnungsadresse')
+    if (!basic.contact_id)         missing.push('Rechnungskontakt')
+    if (missing.length) {
+      setMsg({ text: `Pflichtfeld${missing.length > 1 ? 'er' : ''} fehlt: ${missing.join(', ')}`, type: 'error' })
       return false
     }
-    // company_id — we'll skip for now and pass empty (backend may allow null)
     setMsg(null)
     return true
   }
