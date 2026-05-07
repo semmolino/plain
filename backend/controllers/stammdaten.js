@@ -512,7 +512,7 @@ async function postRollen(req, res, supabase) {
 async function getSalutations(req, res, supabase) {
   const { data, error } = await supabase.from("SALUTATION").select("ID, SALUTATION").order("SALUTATION", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data: (data || []).map((r) => ({ ID: r.ID, NAME_LONG: r.SALUTATION ?? null })) });
+  res.json({ data: (data || []).map((r) => ({ ID: r.ID, SALUTATION: r.SALUTATION ?? '' })) });
 }
 
 // ---------------------------------------------------------------------------
@@ -521,7 +521,7 @@ async function getSalutations(req, res, supabase) {
 async function getGenders(req, res, supabase) {
   const { data, error } = await supabase.from("GENDER").select("ID, GENDER").order("GENDER", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data: (data || []).map((r) => ({ ID: r.ID, NAME_LONG: r.GENDER ?? null })) });
+  res.json({ data: (data || []).map((r) => ({ ID: r.ID, GENDER: r.GENDER ?? '' })) });
 }
 
 // ---------------------------------------------------------------------------
