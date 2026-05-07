@@ -209,6 +209,13 @@ export function MitarbeiterPage() {
                     ))}
                     {!pageRows.length && <tr><td colSpan={8} className="empty-note">Keine Einträge</td></tr>}
                   </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                      <td colSpan={8} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                        {processed.length !== employees.length ? `${processed.length} / ${employees.length} Einträge` : `${employees.length} Einträge`}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
                 <div className="pagination">
                   <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}>← Zurück</button>

@@ -279,13 +279,10 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
           {!isLoading && (
             <>
               {/* Filters row */}
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 260px', minWidth: 200 }}>
-                  <select
-                    value={filterStruct}
-                    onChange={e => setFilterStruct(e.target.value)}
-                    style={{ width: '100%' }}
-                  >
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 10, flexWrap: 'wrap' }}>
+                <div className="form-group" style={{ flex: '1 1 260px', minWidth: 200, marginBottom: 0 }}>
+                  <label>Strukturelement</label>
+                  <select value={filterStruct} onChange={e => setFilterStruct(e.target.value)}>
                     <option value="">Alle Strukturelemente</option>
                     {allStructureSorted.map(n => (
                       <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
@@ -294,13 +291,14 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     ))}
                   </select>
                 </div>
-                <div style={{ flex: '1 1 220px', minWidth: 180 }}>
+                <div style={{ flex: '1 1 220px', minWidth: 180, paddingBottom: 2 }}>
                   <input
+                    className="list-search"
                     type="search"
                     placeholder="Suchen …"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 10, fontSize: 14 }}
+                    style={{ width: '100%' }}
                   />
                 </div>
               </div>

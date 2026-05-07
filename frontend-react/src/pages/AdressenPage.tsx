@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
@@ -122,12 +122,27 @@ function ContactForm({ vals, setK, addrTxt, setAddrTxt, msg: m, isEdit = false, 
   )
 }
 
+type AddrSortKey = 'ADDRESS_NAME_1' | 'CITY' | 'COUNTRY' | 'CUSTOMER_NUMBER'
+type ConSortKey  = 'NAME' | 'SALUTATION' | 'GENDER' | 'ADDRESS'
+
+function SortTh<K extends string>({ label, k, sortKey, dir, onClick }: {
+  label: string; k: K; sortKey: K; dir: 'asc'|'desc'; onClick: (k: K) => void
+}) {
+  return (
+    <th className="sortable-th" onClick={() => onClick(k)}>
+      {label} {sortKey === k ? (dir === 'asc' ? '▲' : '▼') : ''}
+    </th>
+  )
+}
+
 // ── Address section ───────────────────────────────────────────────────────────
 
 function AdressenSection() {
   const qc = useQueryClient()
   const [tab,      setTab]      = useState('list')
   const [search,   setSearch]   = useState('')
+  const [sortKey,  setSortKey]  = useState<AddrSortKey>('ADDRESS_NAME_1')
+  const [sortDir,  setSortDir]  = useState<'asc'|'desc'>('asc')
   const [editAddr, setEditAddr] = useState<Address | null>(null)
   const [form,     setForm]     = useState<AddressPayload>(emptyAddr)
   const [editForm, setEditForm] = useState<AddressPayload>(emptyAddr)
@@ -139,9 +154,27 @@ function AdressenSection() {
 
   const countries = countriesData?.data ?? []
   const addresses = listData?.data ?? []
-  const filtered  = search
-    ? addresses.filter(a => a.ADDRESS_NAME_1?.toLowerCase().includes(search.toLowerCase()))
-    : addresses
+
+  function toggleSort(k: AddrSortKey) {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('asc') }
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let rows = q
+      ? addresses.filter(a =>
+          `${a.ADDRESS_NAME_1 ?? ''} ${a.POST_CODE ?? ''} ${a.CITY ?? ''} ${a.COUNTRY ?? ''} ${a.CUSTOMER_NUMBER ?? ''}`
+            .toLowerCase().includes(q)
+        )
+      : addresses
+    return [...rows].sort((a, b) => {
+      const av = String(sortKey === 'CITY' ? `${a.POST_CODE ?? ''} ${a.CITY ?? ''}` : (a[sortKey as keyof Address] ?? ''))
+      const bv = String(sortKey === 'CITY' ? `${b.POST_CODE ?? ''} ${b.CITY ?? ''}` : (b[sortKey as keyof Address] ?? ''))
+      const cmp = av.localeCompare(bv, 'de', { sensitivity: 'base', numeric: true })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [addresses, search, sortKey, sortDir])
 
   const createMut = useMutation({
     mutationFn: createAddress,
@@ -204,12 +237,23 @@ function AdressenSection() {
 
       {tab === 'list' && (
         <div className="list-section">
-          <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="list-toolbar">
+            <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+            <span className="list-info">
+              {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length} Einträge` : `${addresses.length} Einträge`}
+            </span>
+          </div>
           {isLoading && <p className="empty-note">Laden …</p>}
           {!isLoading && (
             <table className="master-table">
               <thead>
-                <tr><th>Name</th><th>Ort</th><th>Land</th><th>Kundennr.</th><th></th></tr>
+                <tr>
+                  <SortTh label="Name"      k="ADDRESS_NAME_1"  sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Ort"       k="CITY"            sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Land"      k="COUNTRY"         sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Kundennr." k="CUSTOMER_NUMBER" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
                 {filtered.map(a => (
@@ -223,6 +267,13 @@ function AdressenSection() {
                 ))}
                 {!filtered.length && <tr><td colSpan={5} className="empty-note">Keine Einträge</td></tr>}
               </tbody>
+              <tfoot>
+                <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                  <td colSpan={5} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                    {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length} Einträge` : `${addresses.length} Einträge`}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           )}
         </div>
@@ -258,6 +309,8 @@ function KontakteSection() {
   const qc = useQueryClient()
   const [tab,          setTab]          = useState('list')
   const [search,       setSearch]       = useState('')
+  const [sortKey,      setSortKey]      = useState<ConSortKey>('NAME')
+  const [sortDir,      setSortDir]      = useState<'asc'|'desc'>('asc')
   const [editContact,  setEditContact]  = useState<Contact | null>(null)
   const [form,         setForm]         = useState<ContactPayload>(emptyContact)
   const [editForm,     setEditForm]     = useState<ContactPayload>(emptyContact)
@@ -273,12 +326,27 @@ function KontakteSection() {
   const salutations = salData?.data  ?? []
   const genders     = genData?.data  ?? []
   const contacts    = listData?.data ?? []
-  const filtered    = search
-    ? contacts.filter(c =>
-        (c.FIRST_NAME + ' ' + c.LAST_NAME + ' ' + c.ADDRESS)
-          .toLowerCase().includes(search.toLowerCase())
-      )
-    : contacts
+
+  function toggleSort(k: ConSortKey) {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('asc') }
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let rows = q
+      ? contacts.filter(c =>
+          `${c.FIRST_NAME} ${c.LAST_NAME} ${c.ADDRESS ?? ''} ${c.SALUTATION ?? ''} ${c.GENDER ?? ''}`
+            .toLowerCase().includes(q)
+        )
+      : contacts
+    return [...rows].sort((a, b) => {
+      const av = String(sortKey === 'NAME' ? `${a.LAST_NAME ?? ''} ${a.FIRST_NAME ?? ''}` : (a[sortKey as keyof Contact] ?? ''))
+      const bv = String(sortKey === 'NAME' ? `${b.LAST_NAME ?? ''} ${b.FIRST_NAME ?? ''}` : (b[sortKey as keyof Contact] ?? ''))
+      const cmp = av.localeCompare(bv, 'de', { sensitivity: 'base', numeric: true })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [contacts, search, sortKey, sortDir])
 
   const searchAddresses = useCallback(async (q: string) => {
     const res = await searchAddressesApi(q)
@@ -347,13 +415,24 @@ function KontakteSection() {
 
       {tab === 'list' && (
         <div className="list-section">
-          <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="list-toolbar">
+            <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+            <span className="list-info">
+              {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length} Einträge` : `${contacts.length} Einträge`}
+            </span>
+          </div>
           {isLoading && <p className="empty-note">Laden …</p>}
           {!isLoading && (
             <table className="master-table">
               <thead>
-                <tr><th>Name</th><th>Anrede</th><th>Geschlecht</th><th>Adresse</th><th></th></tr>
-            </thead>
+                <tr>
+                  <SortTh label="Name"       k="NAME"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Anrede"     k="SALUTATION" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Geschlecht" k="GENDER"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Adresse"    k="ADDRESS"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <th></th>
+                </tr>
+              </thead>
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.ID}>
@@ -366,6 +445,13 @@ function KontakteSection() {
                 ))}
                 {!filtered.length && <tr><td colSpan={5} className="empty-note">Keine Einträge</td></tr>}
               </tbody>
+              <tfoot>
+                <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                  <td colSpan={5} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                    {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length} Einträge` : `${contacts.length} Einträge`}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }    from '@/components/ui/Tabs'
 import { Modal }   from '@/components/ui/Modal'
@@ -61,25 +61,103 @@ function emptyPaymentForm() {
   return { amount_payed_gross: '', payment_date: todayIso(), purpose_of_payment: '', comment: '' }
 }
 
+type InvSortKey = 'INVOICE_NUMBER' | 'INVOICE_TYPE' | 'INVOICE_DATE' | 'PROJECT' | 'TOTAL_AMOUNT_NET' | 'TOTAL_AMOUNT_GROSS' | 'AMOUNT_PAYED_GROSS' | 'STATUS'
+type PpSortKey  = 'PARTIAL_PAYMENT_NUMBER' | 'PARTIAL_PAYMENT_DATE' | 'PROJECT' | 'TOTAL_AMOUNT_NET' | 'TOTAL_AMOUNT_GROSS' | 'AMOUNT_PAYED_GROSS' | 'STATUS'
+
+function SortTh<K extends string>({ label, k, sortKey, dir, onClick, className }: {
+  label: string; k: K; sortKey: K; dir: 'asc'|'desc'; onClick: (k: K) => void; className?: string
+}) {
+  return (
+    <th className={`sortable-th${className ? ' ' + className : ''}`} onClick={() => onClick(k)}>
+      {label} {sortKey === k ? (dir === 'asc' ? '▲' : '▼') : ''}
+    </th>
+  )
+}
+
 export function RechnungenListe() {
   const [tab,    setTab]    = useState<'invoices' | 'pp'>('invoices')
   const [search, setSearch] = useState('')
+
+  const [invSortKey, setInvSortKey] = useState<InvSortKey>('INVOICE_DATE')
+  const [invSortDir, setInvSortDir] = useState<'asc'|'desc'>('desc')
+  const [ppSortKey,  setPpSortKey]  = useState<PpSortKey>('PARTIAL_PAYMENT_DATE')
+  const [ppSortDir,  setPpSortDir]  = useState<'asc'|'desc'>('desc')
+
   const [payTarget, setPayTarget] = useState<PaymentTarget | null>(null)
   const [payForm,   setPayForm]   = useState(emptyPaymentForm())
   const [payMsg,    setPayMsg]    = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const qc = useQueryClient()
 
   const { data: invData, isLoading: invLoading } = useQuery({
-    queryKey: ['invoices', search],
-    queryFn:  () => fetchInvoices(search),
+    queryKey: ['invoices'],
+    queryFn:  () => fetchInvoices(''),
   })
   const { data: ppData, isLoading: ppLoading } = useQuery({
-    queryKey: ['partial-payments', search],
-    queryFn:  () => fetchPartialPayments(search),
+    queryKey: ['partial-payments'],
+    queryFn:  () => fetchPartialPayments(''),
   })
 
-  const invoices = invData?.data ?? []
-  const payments = ppData?.data  ?? []
+  const allInvoices = invData?.data ?? []
+  const allPayments = ppData?.data  ?? []
+
+  const invoices = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let rows = q
+      ? allInvoices.filter(inv =>
+          `${inv.INVOICE_NUMBER ?? ''} ${inv.INVOICE_TYPE ?? ''} ${inv.PROJECT ?? ''} ${invStatusLabel(inv)}`
+            .toLowerCase().includes(q)
+        )
+      : allInvoices
+    return [...rows].sort((a, b) => {
+      let av: string | number = '', bv: string | number = ''
+      if (invSortKey === 'STATUS') { av = invStatusLabel(a); bv = invStatusLabel(b) }
+      else { av = (a[invSortKey as keyof Invoice] ?? '') as string | number; bv = (b[invSortKey as keyof Invoice] ?? '') as string | number }
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv), 'de', { numeric: true })
+      return invSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [allInvoices, search, invSortKey, invSortDir])
+
+  const payments = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let rows = q
+      ? allPayments.filter(pp =>
+          `${pp.PARTIAL_PAYMENT_NUMBER ?? ''} ${pp.PROJECT ?? ''} ${ppStatusLabel(pp)}`
+            .toLowerCase().includes(q)
+        )
+      : allPayments
+    return [...rows].sort((a, b) => {
+      let av: string | number = '', bv: string | number = ''
+      if (ppSortKey === 'STATUS') { av = ppStatusLabel(a); bv = ppStatusLabel(b) }
+      else { av = (a[ppSortKey as keyof PartialPayment] ?? '') as string | number; bv = (b[ppSortKey as keyof PartialPayment] ?? '') as string | number }
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv), 'de', { numeric: true })
+      return ppSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [allPayments, search, ppSortKey, ppSortDir])
+
+  function toggleInvSort(k: InvSortKey) {
+    if (invSortKey === k) setInvSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setInvSortKey(k); setInvSortDir('asc') }
+  }
+  function togglePpSort(k: PpSortKey) {
+    if (ppSortKey === k) setPpSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setPpSortKey(k); setPpSortDir('asc') }
+  }
+
+  const invTotals = useMemo(() => ({
+    net:   invoices.reduce((s, r) => s + (Number(r.TOTAL_AMOUNT_NET)   || 0), 0),
+    gross: invoices.reduce((s, r) => s + (Number(r.TOTAL_AMOUNT_GROSS) || 0), 0),
+    paid:  invoices.reduce((s, r) => s + (Number(r.AMOUNT_PAYED_GROSS) || 0), 0),
+  }), [invoices])
+
+  const ppTotals = useMemo(() => ({
+    net:   payments.reduce((s, r) => s + (Number(r.TOTAL_AMOUNT_NET)   || 0), 0),
+    gross: payments.reduce((s, r) => s + (Number(r.TOTAL_AMOUNT_GROSS) || 0), 0),
+    paid:  payments.reduce((s, r) => s + (Number(r.AMOUNT_PAYED_GROSS) || 0), 0),
+  }), [payments])
 
   const payMut = useMutation({
     mutationFn: createPayment,
@@ -162,6 +240,9 @@ export function RechnungenListe() {
     ? ((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0))
     : null
 
+  const invSortProps = { sortKey: invSortKey, dir: invSortDir, onClick: toggleInvSort }
+  const ppSortProps  = { sortKey: ppSortKey,  dir: ppSortDir,  onClick: togglePpSort  }
+
   return (
     <div>
       <Tabs tabs={LIST_TABS} active={tab} onChange={id => setTab(id as typeof tab)} />
@@ -169,10 +250,15 @@ export function RechnungenListe() {
       <div className="list-toolbar" style={{ marginTop: 10 }}>
         <input
           className="list-search"
-          placeholder="Nummer suchen …"
+          placeholder="Suchen …"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+        <span className="list-info">
+          {tab === 'invoices'
+            ? `${invoices.length}${invoices.length !== allInvoices.length ? ` / ${allInvoices.length}` : ''} Rechnungen`
+            : `${payments.length}${payments.length !== allPayments.length ? ` / ${allPayments.length}` : ''} Abschlagsrechnungen`}
+        </span>
       </div>
 
       {tab === 'invoices' && (
@@ -183,14 +269,14 @@ export function RechnungenListe() {
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th>Nummer</th>
-                    <th>Typ</th>
-                    <th>Datum</th>
-                    <th>Projekt</th>
-                    <th className="num">Netto €</th>
-                    <th className="num">Brutto €</th>
-                    <th className="num">Bezahlt €</th>
-                    <th>Status</th>
+                    <SortTh label="Nummer"    k="INVOICE_NUMBER"    {...invSortProps} />
+                    <SortTh label="Typ"       k="INVOICE_TYPE"      {...invSortProps} />
+                    <SortTh label="Datum"     k="INVOICE_DATE"      {...invSortProps} />
+                    <SortTh label="Projekt"   k="PROJECT"           {...invSortProps} />
+                    <SortTh label="Netto €"   k="TOTAL_AMOUNT_NET"  {...invSortProps} className="num" />
+                    <SortTh label="Brutto €"  k="TOTAL_AMOUNT_GROSS"{...invSortProps} className="num" />
+                    <SortTh label="Bezahlt €" k="AMOUNT_PAYED_GROSS"{...invSortProps} className="num" />
+                    <SortTh label="Status"    k="STATUS"            {...invSortProps} />
                     <th></th>
                   </tr>
                 </thead>
@@ -232,6 +318,17 @@ export function RechnungenListe() {
                   ))}
                   {!invoices.length && <tr><td colSpan={9} className="empty-note">Keine Rechnungen</td></tr>}
                 </tbody>
+                <tfoot>
+                  <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                    <td colSpan={4} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                      {invoices.length !== allInvoices.length ? `${invoices.length} / ${allInvoices.length} Einträge` : `${allInvoices.length} Einträge`}
+                    </td>
+                    <td className="num">{fmtEur(invTotals.net)}</td>
+                    <td className="num">{fmtEur(invTotals.gross)}</td>
+                    <td className="num">{fmtEur(invTotals.paid)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
@@ -246,13 +343,13 @@ export function RechnungenListe() {
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th>Nummer</th>
-                    <th>Datum</th>
-                    <th>Projekt</th>
-                    <th className="num">Netto €</th>
-                    <th className="num">Brutto €</th>
-                    <th className="num">Bezahlt €</th>
-                    <th>Status</th>
+                    <SortTh label="Nummer"    k="PARTIAL_PAYMENT_NUMBER" {...ppSortProps} />
+                    <SortTh label="Datum"     k="PARTIAL_PAYMENT_DATE"   {...ppSortProps} />
+                    <SortTh label="Projekt"   k="PROJECT"                {...ppSortProps} />
+                    <SortTh label="Netto €"   k="TOTAL_AMOUNT_NET"       {...ppSortProps} className="num" />
+                    <SortTh label="Brutto €"  k="TOTAL_AMOUNT_GROSS"     {...ppSortProps} className="num" />
+                    <SortTh label="Bezahlt €" k="AMOUNT_PAYED_GROSS"     {...ppSortProps} className="num" />
+                    <SortTh label="Status"    k="STATUS"                 {...ppSortProps} />
                     <th></th>
                   </tr>
                 </thead>
@@ -293,6 +390,17 @@ export function RechnungenListe() {
                   ))}
                   {!payments.length && <tr><td colSpan={8} className="empty-note">Keine Abschlagsrechnungen</td></tr>}
                 </tbody>
+                <tfoot>
+                  <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                    <td colSpan={3} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                      {payments.length !== allPayments.length ? `${payments.length} / ${allPayments.length} Einträge` : `${allPayments.length} Einträge`}
+                    </td>
+                    <td className="num">{fmtEur(ppTotals.net)}</td>
+                    <td className="num">{fmtEur(ppTotals.gross)}</td>
+                    <td className="num">{fmtEur(ppTotals.paid)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}

@@ -150,6 +150,13 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                 ))}
                 {!pageRows.length && <tr><td colSpan={6} className="empty-note">Keine Einträge</td></tr>}
               </tbody>
+              <tfoot>
+                <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                  <td colSpan={6} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                    {processed.length !== projects.length ? `${processed.length} / ${projects.length} Einträge` : `${projects.length} Einträge`}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
           <div className="pagination">
