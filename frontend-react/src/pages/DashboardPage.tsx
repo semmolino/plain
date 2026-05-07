@@ -1,4 +1,5 @@
-import { useQueries } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale, BarElement, ArcElement,
@@ -181,6 +182,8 @@ export function DashboardPage() {
   const navigate    = useNavigate()
   const clearAuth   = useAuthStore(s => s.clearAuth)
   const { email }   = useSession()
+  const qc          = useQueryClient()
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   const now        = new Date()
   const monthLabel_ = `${MONTHS_DE[now.getMonth()]} ${now.getFullYear()}`
@@ -206,9 +209,18 @@ export function DashboardPage() {
       {/* ── Header ── */}
       <div className="dash-header">
         <div className="dash-title">Übersicht</div>
-        <button className="dash-logout" onClick={() => { clearAuth(); navigate('/login') }}>
-          {email ?? 'Abmelden'}
-        </button>
+        {confirmLogout ? (
+          <span className="dash-logout-confirm">
+            Wirklich abmelden?&nbsp;
+            <button className="dash-logout-yes" onClick={() => { qc.clear(); clearAuth(); navigate('/login') }}>Ja</button>
+            &nbsp;
+            <button className="dash-logout-no" onClick={() => setConfirmLogout(false)}>Nein</button>
+          </span>
+        ) : (
+          <button className="dash-logout" onClick={() => setConfirmLogout(true)}>
+            Abmelden
+          </button>
+        )}
       </div>
 
       {isLoading && <div className="dash-loading">Laden …</div>}

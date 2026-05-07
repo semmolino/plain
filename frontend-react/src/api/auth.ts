@@ -48,6 +48,29 @@ export async function changePassword(currentPassword: string, newPassword: strin
   return apiClient.patch('/auth/me/password', { current_password: currentPassword, new_password: newPassword })
 }
 
+export async function requestPasswordReset(email: string): Promise<{ resetUrl?: string }> {
+  const res = await fetch('/api/v1/auth/reset-request', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ email }),
+  })
+  const body = await res.json() as { success?: boolean; resetUrl?: string; error?: string }
+  if (!res.ok) throw new Error(body.error ?? 'Fehler beim Zurücksetzen')
+  return body
+}
+
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+  const res = await fetch('/api/v1/auth/reset-confirm', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ token, new_password: newPassword }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? 'Fehler beim Speichern des Passworts')
+  }
+}
+
 export async function signup(data: {
   email: string
   password: string

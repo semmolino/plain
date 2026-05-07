@@ -166,6 +166,63 @@ module.exports = (supabase) => {
     return res.json({ success: true });
   });
 
+  // ── Password reset request ────────────────────────────────────────────────
+  router.post("/reset-request", async (req, res) => {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: "E-Mail ist erforderlich." });
+
+    const { data: employee } = await supabase
+      .from("EMPLOYEE")
+      .select("ID, MAIL")
+      .ilike("MAIL", email.trim())
+      .maybeSingle();
+
+    if (employee) {
+      const resetToken = jwt.sign(
+        { employee_id: employee.ID, email: employee.MAIL, purpose: "reset" },
+        jwtSecret(),
+        { expiresIn: "1h" }
+      );
+      const baseUrl  = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
+      const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+      console.log(`[PASSWORD RESET] ${employee.MAIL}: ${resetUrl}`);
+      return res.json({ success: true, resetUrl });
+    }
+
+    // Always return success to avoid email enumeration
+    return res.json({ success: true });
+  });
+
+  // ── Password reset confirm ────────────────────────────────────────────────
+  router.post("/reset-confirm", async (req, res) => {
+    const { token, new_password } = req.body || {};
+    if (!token || !new_password) {
+      return res.status(400).json({ error: "Token und neues Passwort sind erforderlich." });
+    }
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen haben." });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, jwtSecret());
+    } catch {
+      return res.status(400).json({ error: "Link ist ungültig oder abgelaufen." });
+    }
+    if (decoded.purpose !== "reset") {
+      return res.status(400).json({ error: "Ungültiger Link." });
+    }
+
+    const hashed = await bcrypt.hash(new_password, 10);
+    const { error: updErr } = await supabase
+      .from("EMPLOYEE")
+      .update({ PASSWORD: hashed })
+      .eq("ID", decoded.employee_id);
+
+    if (updErr) return res.status(500).json({ error: updErr.message });
+    return res.json({ success: true });
+  });
+
   // ── Sign up ───────────────────────────────────────────────────────────────
   // Creates a new tenant: TENANT + COMPANY + Supabase Auth user + first EMPLOYEE.
   router.post("/signup", async (req, res) => {
