@@ -487,6 +487,7 @@ async function postRollen(req, res, supabase) {
     NAME_LONG:  (name_long || "").trim() || null,
     SP_RATE:    sp_rate !== undefined && sp_rate !== "" ? parseFloat(sp_rate) : null,
     TENANT_ID:  req.tenantId ?? null,
+    ACTIVE:     1,
   };
 
   let data, error, usedTable;

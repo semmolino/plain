@@ -49,7 +49,7 @@ async function getActiveEmployees(req, res, supabase) {
 
 async function getActiveRoles(req, res, supabase) {
   try {
-    const data = await svc.getActiveRoles(supabase);
+    const data = await svc.getActiveRoles(supabase, { tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
