@@ -45,14 +45,11 @@ async function getManagers(supabase, { tenantId }) {
 }
 
 async function getActiveEmployees(supabase, { tenantId }) {
-  let q = supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, CP_RATE").eq("TENANT_ID", tenantId).eq("ACTIVE", 1);
-  let { data, error } = await q;
-  if (error && String(error.message || "").toLowerCase().includes("active")) {
-    const r = await supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, CP_RATE, ACTIVE").eq("TENANT_ID", tenantId);
-    data = r.data;
-    error = r.error;
-    if (!error && Array.isArray(data)) data = data.filter((e) => String(e.ACTIVE) === "1" || e.ACTIVE === true);
-  }
+  const { data, error } = await supabase
+    .from("EMPLOYEE")
+    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, CP_RATE, ACTIVE")
+    .eq("TENANT_ID", tenantId)
+    .or("ACTIVE.eq.1,ACTIVE.is.null");
   if (error) throw error;
   return data || [];
 }
