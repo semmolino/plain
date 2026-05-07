@@ -124,6 +124,15 @@ export const patchStructureNode = (structureId: number, body: Partial<{
 export const inheritStructureExtras = (structureId: number, extrasPercent: number) =>
   apiClient.patch<{ updated: number }>(`/projekte/structure/${structureId}/inherit`, { EXTRAS_PERCENT: extrasPercent })
 
+export interface ParentChildCheckResult {
+  status: 'ok' | 'needs_transfer' | 'blocked'
+  reason?: string
+  hasTec?: boolean
+  parentValues?: { REVENUE: number; EXTRAS: number; [k: string]: unknown }
+}
+export const fetchParentChildCheck = (parentId: number) =>
+  apiClient.get<ParentChildCheckResult>(`/projekte/structure/${parentId}/child-check`)
+
 export const createStructureNode = (projectId: number, node: {
   NAME_SHORT: string
   NAME_LONG?: string
@@ -131,6 +140,7 @@ export const createStructureNode = (projectId: number, node: {
   FATHER_ID?: number | null
   REVENUE?: number
   EXTRAS_PERCENT?: number
+  transfer_parent_values?: boolean
 }) => apiClient.post<{ data: StructureNode }>(`/projekte/${projectId}/structure`, node)
 
 export const deleteStructureNode = (structureId: number, cascade = true) =>

@@ -7,7 +7,7 @@ import {
   deleteFeeCalcMaster, attachFeeToStructure,
   type FeeCalcMaster, type FeePhaseRow,
 } from '@/api/fee'
-import { fetchProjectsShort, fetchProjectStructure } from '@/api/projekte'
+import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from '@/api/projekte'
 
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
@@ -202,9 +202,25 @@ export function HonorarWizard() {
   async function finish() {
     if (!calcMaster) return
     if (!fatherId) { setMsg({ text: 'Bitte übergeordnetes Strukturelement wählen', type: 'error' }); return }
+
+    // Pre-check parent
+    try {
+      const check = await fetchParentChildCheck(Number(fatherId))
+      if (check.status === 'blocked') {
+        setMsg({ text: check.reason ?? 'Dieses Element kann keine Unterelemente erhalten.', type: 'error' })
+        return
+      }
+      if (check.status === 'needs_transfer') {
+        const confirmMsg = check.hasTec
+          ? 'Das übergeordnete Element enthält bereits Werte und/oder Buchungen. Buchungen werden auf das erste neue Element übertragen. Möchten Sie fortfahren?'
+          : 'Das übergeordnete Element enthält bereits Werte. Diese werden nach dem Anlegen der neuen Elemente neu berechnet. Möchten Sie fortfahren?'
+        if (!confirm(confirmMsg)) return
+      }
+    } catch { /* ignore check errors */ }
+
     setLoading(true); setMsg({ text: 'Erzeuge Projektstruktur …', type: 'info' })
     try {
-      const res = await attachFeeToStructure(calcMaster.ID, Number(fatherId))
+      const res = await attachFeeToStructure(calcMaster.ID, Number(fatherId), true)
       setMsg({ text: res.message || 'HOAI-Struktur wurde angelegt ✅', type: 'success' })
       if (calcMaster.PROJECT_ID != null) {
         void qc.invalidateQueries({ queryKey: ['structure', calcMaster.PROJECT_ID] })

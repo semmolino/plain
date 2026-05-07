@@ -354,6 +354,16 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     if (fatherErr) return res.status(500).json({ error: fatherErr.message });
     if (!father) return res.status(404).json({ error: "Übergeordnetes Projektelement nicht gefunden" });
     if (String(father.PROJECT_ID) !== String(calcMaster.PROJECT_ID)) return res.status(400).json({ error: "Das übergeordnete Projektelement gehört nicht zum ausgewählten Projekt." });
+
+    // Check parent for billing/payment data (Option 2 = block; Option 1 = needs confirmation)
+    const parentCheck = await require('../services/projekte').checkParentForChild(supabase, { parentId: fatherId });
+    if (parentCheck.status === 'blocked') {
+      return res.status(409).json({ error: parentCheck.reason });
+    }
+    const confirmed = req.body?.confirmed === true;
+    if (parentCheck.status === 'needs_transfer' && !confirmed) {
+      return res.status(409).json({ error: 'needs_transfer', needsTransfer: true, hasTec: parentCheck.hasTec, parentValues: parentCheck.parentValues });
+    }
     if (projectErr) return res.status(500).json({ error: projectErr.message });
     if (!project) return res.status(404).json({ error: "Projekt nicht gefunden" });
     if (calcPhasesErr) return res.status(500).json({ error: calcPhasesErr.message });

@@ -5,6 +5,7 @@ import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
   inheritStructureExtras, patchStructureNode,
   createStructureNode, deleteStructureNode, moveStructureNode,
+  fetchParentChildCheck,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 
@@ -165,13 +166,14 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   })
 
   const addMut = useMutation({
-    mutationFn: (f: AddForm) => createStructureNode(selectedPid!, {
-      NAME_SHORT:      f.NAME_SHORT.trim(),
-      NAME_LONG:       f.NAME_LONG.trim() || undefined,
-      BILLING_TYPE_ID: Number(f.BILLING_TYPE_ID),
-      FATHER_ID:       f.FATHER_ID ? Number(f.FATHER_ID) : null,
-      REVENUE:         f.REVENUE !== '' ? Number(f.REVENUE) : undefined,
-      EXTRAS_PERCENT:  f.EXTRAS_PERCENT !== '' ? Number(f.EXTRAS_PERCENT) : undefined,
+    mutationFn: (f: AddForm & { transfer_parent_values?: boolean }) => createStructureNode(selectedPid!, {
+      NAME_SHORT:             f.NAME_SHORT.trim(),
+      NAME_LONG:              f.NAME_LONG.trim() || undefined,
+      BILLING_TYPE_ID:        Number(f.BILLING_TYPE_ID),
+      FATHER_ID:              f.FATHER_ID ? Number(f.FATHER_ID) : null,
+      REVENUE:                f.REVENUE !== '' ? Number(f.REVENUE) : undefined,
+      EXTRAS_PERCENT:         f.EXTRAS_PERCENT !== '' ? Number(f.EXTRAS_PERCENT) : undefined,
+      transfer_parent_values: f.transfer_parent_values,
     }),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['structure', selectedPid] })
@@ -255,11 +257,31 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
     saveMut.mutate(rows)
   }, [edits, structure, saveMut])
 
-  const submitAdd = useCallback(() => {
+  const submitAdd = useCallback(async () => {
     if (!addForm) return
     if (!addForm.NAME_SHORT.trim()) { setSaveMsg({ text: 'Kürzel ist erforderlich', type: 'error' }); return }
     if (!addForm.BILLING_TYPE_ID)  { setSaveMsg({ text: 'Abrechnungsart ist erforderlich', type: 'error' }); return }
     setSaveMsg(null)
+
+    if (addForm.FATHER_ID) {
+      try {
+        const check = await fetchParentChildCheck(Number(addForm.FATHER_ID))
+        if (check.status === 'blocked') {
+          setSaveMsg({ text: check.reason ?? 'Dieses Element kann keine Unterelemente erhalten.', type: 'error' })
+          return
+        }
+        if (check.status === 'needs_transfer') {
+          const confirmMsg = check.hasTec
+            ? 'Das übergeordnete Element enthält bereits Werte und/oder Buchungen. Diese werden auf das neue Element übertragen. Möchten Sie fortfahren?'
+            : 'Das übergeordnete Element enthält bereits Werte. Diese werden auf das neue Element übertragen. Möchten Sie fortfahren?'
+          if (!confirm(confirmMsg)) return
+          addMut.mutate({ ...addForm, transfer_parent_values: true } as typeof addForm & { transfer_parent_values: boolean })
+          return
+        }
+      } catch {
+        // ignore check errors, proceed normally
+      }
+    }
     addMut.mutate(addForm)
   }, [addForm, addMut])
 

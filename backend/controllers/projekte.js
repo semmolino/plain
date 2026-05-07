@@ -177,10 +177,22 @@ async function getTecSum(req, res, supabase) {
   }
 }
 
+async function checkParentForChild(req, res, supabase) {
+  const { id } = req.params;
+  try {
+    const result = await svc.checkParentForChild(supabase, { parentId: Number(id) });
+    res.json(result);
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || err });
+  }
+}
+
 async function createStructureNode(req, res, supabase) {
   const { id: projectId } = req.params;
   try {
-    const data = await svc.createStructureNode(supabase, { projectId, node: req.body || {} });
+    const { transfer_parent_values, ...nodeBody } = req.body || {};
+    const data = await svc.createStructureNode(supabase, { projectId, node: nodeBody, transferParentValues: !!transfer_parent_values });
     res.json({ data });
   } catch (err) {
     const status = err.status || 500;
@@ -331,6 +343,7 @@ module.exports = {
   patchStructureCompletionPercents,
   progressSnapshot,
   getTecSum,
+  checkParentForChild,
   createStructureNode,
   patchStructure,
   inheritStructure,

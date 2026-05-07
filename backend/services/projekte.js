@@ -606,7 +606,48 @@ async function getTecSum(supabase, { structureId }) {
   return sum;
 }
 
-async function createStructureNode(supabase, { projectId, node }) {
+async function checkParentForChild(supabase, { parentId }) {
+  const { data: parent, error } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION_PERCENT, EXTRAS_COMPLETION, COSTS, PARTIAL_PAYMENTS, INVOICED, PAYED, CLOSED_BY_INVOICED_ID")
+    .eq("ID", parentId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!parent) throw { status: 404, message: "Übergeordnetes Element nicht gefunden" };
+
+  const num = (v) => Number(v ?? 0);
+
+  // Option 2: billing/payment data → block
+  if (num(parent.PARTIAL_PAYMENTS) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICED_ID != null) {
+    return { status: "blocked", reason: "Das übergeordnete Element enthält Rechnungs- oder Zahlungsdaten. Neue Unterelemente können daher nicht erstellt werden." };
+  }
+
+  // Option 1: value/TEC data → needs transfer
+  const hasValues = num(parent.REVENUE) !== 0 || num(parent.EXTRAS) !== 0 || num(parent.REVENUE_COMPLETION) !== 0 || num(parent.EXTRAS_COMPLETION) !== 0 || num(parent.COSTS) !== 0;
+  const { data: tecRows } = await supabase.from("TEC").select("ID").eq("STRUCTURE_ID", parentId).limit(1);
+  const hasTec = Array.isArray(tecRows) && tecRows.length > 0;
+
+  if (hasValues || hasTec) {
+    return {
+      status: "needs_transfer",
+      hasTec,
+      parentValues: {
+        REVENUE: parent.REVENUE,
+        EXTRAS: parent.EXTRAS,
+        EXTRAS_PERCENT: parent.EXTRAS_PERCENT,
+        REVENUE_COMPLETION_PERCENT: parent.REVENUE_COMPLETION_PERCENT,
+        REVENUE_COMPLETION: parent.REVENUE_COMPLETION,
+        EXTRAS_COMPLETION_PERCENT: parent.EXTRAS_COMPLETION_PERCENT,
+        EXTRAS_COMPLETION: parent.EXTRAS_COMPLETION,
+        COSTS: parent.COSTS,
+      },
+    };
+  }
+
+  return { status: "ok" };
+}
+
+async function createStructureNode(supabase, { projectId, node, transferParentValues = false }) {
   const nameShort = String(node.NAME_SHORT || "").trim();
   const nameLong = String(node.NAME_LONG || "").trim();
   if (!nameShort) throw { status: 400, message: "NAME_SHORT ist erforderlich" };
@@ -719,24 +760,68 @@ async function createStructureNode(supabase, { projectId, node }) {
   const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert([progressRow]);
   if (prErr) throw { status: 500, message: "Element angelegt, aber PROJECT_PROGRESS fehlgeschlagen: " + prErr.message };
 
-  // TEC transfer: if this is the first child, move parent's TEC entries to this new element
+  // If transferring parent values to this new child
+  if (transferParentValues && fatherIdParsed !== null) {
+    const { data: parentData } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .select("REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION_PERCENT, EXTRAS_COMPLETION, COSTS, TENANT_ID")
+      .eq("ID", fatherIdParsed)
+      .single();
+    if (parentData) {
+      // 1. Copy values to child
+      await supabase.from("PROJECT_STRUCTURE").update({
+        REVENUE: parentData.REVENUE ?? 0,
+        EXTRAS: parentData.EXTRAS ?? 0,
+        EXTRAS_PERCENT: parentData.EXTRAS_PERCENT ?? 0,
+        REVENUE_COMPLETION_PERCENT: parentData.REVENUE_COMPLETION_PERCENT ?? 0,
+        REVENUE_COMPLETION: parentData.REVENUE_COMPLETION ?? 0,
+        EXTRAS_COMPLETION_PERCENT: parentData.EXTRAS_COMPLETION_PERCENT ?? 0,
+        EXTRAS_COMPLETION: parentData.EXTRAS_COMPLETION ?? 0,
+        COSTS: parentData.COSTS ?? 0,
+      }).eq("ID", created.ID);
+      // 2. Move ALL TEC from parent to child
+      await supabase.from("TEC").update({ STRUCTURE_ID: created.ID }).eq("STRUCTURE_ID", fatherIdParsed);
+      // 3. Zero parent values
+      await supabase.from("PROJECT_STRUCTURE").update({
+        REVENUE: 0, EXTRAS: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0, COSTS: 0,
+      }).eq("ID", fatherIdParsed);
+      // 4. Insert updated progress row for child
+      await supabase.from("PROJECT_PROGRESS").insert([{
+        TENANT_ID: created.TENANT_ID,
+        STRUCTURE_ID: created.ID,
+        REVENUE: parentData.REVENUE ?? 0,
+        EXTRAS_PERCENT: parentData.EXTRAS_PERCENT ?? 0,
+        EXTRAS: parentData.EXTRAS ?? 0,
+        REVENUE_COMPLETION_PERCENT: parentData.REVENUE_COMPLETION_PERCENT ?? 0,
+        EXTRAS_COMPLETION_PERCENT: parentData.EXTRAS_COMPLETION_PERCENT ?? 0,
+        REVENUE_COMPLETION: parentData.REVENUE_COMPLETION ?? 0,
+        EXTRAS_COMPLETION: parentData.EXTRAS_COMPLETION ?? 0,
+      }]);
+    }
+  }
+
   let tec_moved = false;
   if (fatherIdParsed !== null) {
-    const { data: siblings } = await supabase
-      .from("PROJECT_STRUCTURE")
-      .select("ID")
-      .eq("FATHER_ID", fatherIdParsed)
-      .neq("ID", created.ID);
-    const isFirstChild = !siblings || siblings.length === 0;
-    if (isFirstChild) {
-      const { data: parentTec } = await supabase
-        .from("TEC")
+    if (!transferParentValues) {
+      // Auto-move TEC only when this is the first child (original behavior)
+      const { data: siblings } = await supabase
+        .from("PROJECT_STRUCTURE")
         .select("ID")
-        .eq("STRUCTURE_ID", fatherIdParsed);
-      if (parentTec && parentTec.length > 0) {
-        await supabase.from("TEC").update({ STRUCTURE_ID: created.ID }).eq("STRUCTURE_ID", fatherIdParsed);
-        tec_moved = true;
+        .eq("FATHER_ID", fatherIdParsed)
+        .neq("ID", created.ID);
+      const isFirstChild = !siblings || siblings.length === 0;
+      if (isFirstChild) {
+        const { data: parentTec } = await supabase
+          .from("TEC")
+          .select("ID")
+          .eq("STRUCTURE_ID", fatherIdParsed);
+        if (parentTec && parentTec.length > 0) {
+          await supabase.from("TEC").update({ STRUCTURE_ID: created.ID }).eq("STRUCTURE_ID", fatherIdParsed);
+          tec_moved = true;
+        }
       }
+    } else {
+      tec_moved = true; // Transfer already done above
     }
     // Propagate aggregated values upwards
     await propagateUpwards(supabase, { structureId: created.ID });
@@ -1276,6 +1361,7 @@ module.exports = {
   patchStructureCompletionPercents,
   progressSnapshot,
   getTecSum,
+  checkParentForChild,
   createStructureNode,
   patchStructure,
   inheritStructure,

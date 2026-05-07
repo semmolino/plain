@@ -57,5 +57,5 @@ export const saveFeePhases = (id: number, rows: Array<{ ID: number; KX: string; 
 export const deleteFeeCalcMaster = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/stammdaten/fee-calculation-masters/${id}`)
 
-export const attachFeeToStructure = (id: number, father_id: number) =>
-  apiClient.post<{ message: string }>(`/stammdaten/fee-calculation-masters/${id}/add-to-project-structure`, { father_id })
+export const attachFeeToStructure = (id: number, father_id: number, confirmed?: boolean) =>
+  apiClient.post<{ message: string }>(`/stammdaten/fee-calculation-masters/${id}/add-to-project-structure`, { father_id, ...(confirmed ? { confirmed: true } : {}) })
