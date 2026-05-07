@@ -193,7 +193,7 @@ async function createProject(supabase, { body, tenantId }) {
     const { data: createdNodes, error: psErr } = await supabase
       .from("PROJECT_STRUCTURE")
       .insert(insertRows)
-      .select("ID, NAME_SHORT, NAME_LONG");
+      .select("ID, NAME_SHORT, NAME_LONG, REVENUE, EXTRAS, EXTRAS_PERCENT");
 
     if (psErr) {
       throw {
@@ -229,14 +229,14 @@ async function createProject(supabase, { body, tenantId }) {
     try {
       const progressRows = (createdNodes || []).map((r) => ({
         STRUCTURE_ID: r.ID,
-        REVENUE: 0,
-        EXTRAS_PERCENT: 0,
-        EXTRAS: 0,
+        TENANT_ID: project.TENANT_ID,
+        REVENUE: r.REVENUE ?? 0,
+        EXTRAS_PERCENT: r.EXTRAS_PERCENT ?? 0,
+        EXTRAS: r.EXTRAS ?? 0,
         REVENUE_COMPLETION_PERCENT: 0,
         EXTRAS_COMPLETION_PERCENT: 0,
         REVENUE_COMPLETION: 0,
         EXTRAS_COMPLETION: 0,
-        TENANT_ID: project.TENANT_ID,
       }));
       if (progressRows.length) await supabase.from("PROJECT_PROGRESS").insert(progressRows);
     } catch (e) {
@@ -707,13 +707,13 @@ async function createStructureNode(supabase, { projectId, node }) {
   const progressRow = {
     TENANT_ID: created.TENANT_ID,
     STRUCTURE_ID: created.ID,
-    REVENUE: created.REVENUE,
-    EXTRAS_PERCENT: created.EXTRAS_PERCENT,
-    EXTRAS: created.EXTRAS,
-    REVENUE_COMPLETION_PERCENT: created.REVENUE_COMPLETION_PERCENT,
-    EXTRAS_COMPLETION_PERCENT: created.EXTRAS_COMPLETION_PERCENT,
-    REVENUE_COMPLETION: created.REVENUE_COMPLETION,
-    EXTRAS_COMPLETION: created.EXTRAS_COMPLETION,
+    REVENUE: created.REVENUE ?? 0,
+    EXTRAS_PERCENT: created.EXTRAS_PERCENT ?? 0,
+    EXTRAS: created.EXTRAS ?? 0,
+    REVENUE_COMPLETION_PERCENT: 0,
+    EXTRAS_COMPLETION_PERCENT: 0,
+    REVENUE_COMPLETION: 0,
+    EXTRAS_COMPLETION: 0,
   };
 
   const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert([progressRow]);
