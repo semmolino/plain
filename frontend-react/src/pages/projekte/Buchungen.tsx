@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
@@ -38,14 +38,21 @@ function emptyForm(): BuchungForm {
   }
 }
 
+type SortCol = 'date' | 'employee' | 'path' | 'description' | 'h_int' | 'h_ext' | 'cost' | 'revenue'
+type SortDir = 'asc' | 'desc'
+
 interface Props { initialProjectId?: number; onProjectChange?: (id: number | null) => void }
 
 export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const qc = useQueryClient()
-  const [pid,     setPid]     = useState<number | null>(initialProjectId ?? null)
-  const [showForm, setShowForm] = useState(false)
-  const [form,    setForm]    = useState<BuchungForm>(emptyForm)
-  const [msg,     setMsg]     = useState<{ text: string; type: 'success'|'error' } | null>(null)
+  const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
+  const [showForm,     setShowForm]     = useState(false)
+  const [form,         setForm]         = useState<BuchungForm>(emptyForm)
+  const [msg,          setMsg]          = useState<{ text: string; type: 'success'|'error' } | null>(null)
+  const [filterStruct, setFilterStruct] = useState<string>('')
+  const [search,       setSearch]       = useState('')
+  const [sortCol,      setSortCol]      = useState<SortCol>('date')
+  const [sortDir,      setSortDir]      = useState<SortDir>('asc')
 
   const { data: projectsData }  = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }       = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
@@ -68,8 +75,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     enabled:  empId !== null && pid !== null && showForm,
   })
 
-  const projects     = projectsData?.data ?? []
-  const employees    = empData?.data      ?? []
+  const projects  = projectsData?.data ?? []
+  const employees = empData?.data      ?? []
 
   useEffect(() => {
     if (!presetData) return
@@ -81,16 +88,46 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     const emp = employees.find(e => e.ID === empId)
     if (emp?.CP_RATE != null) setForm(f => ({ ...f, CP_RATE: String(emp.CP_RATE) }))
   }, [empId, employees])
-  const buchungen    = buchData?.data     ?? []
-  const structure    = structData?.data   ?? []
-  const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => Number(n.FATHER_ID)))
-  const nodeById  = new Map(structure.map(n => [n.STRUCTURE_ID, n]))
 
+  // Reset filters when project changes
+  useEffect(() => { setFilterStruct(''); setSearch('') }, [pid])
+
+  const buchungen = buchData?.data   ?? []
+  const structure = structData?.data ?? []
+
+  const nodeById = useMemo(() => new Map(structure.map(n => [n.STRUCTURE_ID, n])), [structure])
+  const parentIds = useMemo(() => new Set(structure.filter(n => n.FATHER_ID != null).map(n => Number(n.FATHER_ID))), [structure])
+
+  // childrenMap for descendant lookup
+  const childrenMap = useMemo(() => {
+    const m = new Map<number, number[]>()
+    for (const n of structure) {
+      if (n.FATHER_ID != null) {
+        const fid = Number(n.FATHER_ID)
+        if (!m.has(fid)) m.set(fid, [])
+        m.get(fid)!.push(n.STRUCTURE_ID)
+      }
+    }
+    return m
+  }, [structure])
+
+  function getDescendantIds(id: number): Set<number> {
+    const result = new Set<number>()
+    const queue = [id]
+    while (queue.length) {
+      const cur = queue.shift()!
+      result.add(cur)
+      for (const child of (childrenMap.get(cur) ?? [])) queue.push(child)
+    }
+    return result
+  }
+
+  // Path builder: ancestors show NAME_SHORT only; leaf shows "NAME_SHORT: NAME_LONG"
   function structPath(id: number): string {
-    const ancestors: string[] = []
     const cur = nodeById.get(id)
     if (!cur) return ''
-    const label = `${cur.NAME_SHORT}${cur.NAME_LONG ? ' – ' + cur.NAME_LONG : ''}`
+    const leaf = cur.NAME_LONG ? `${cur.NAME_SHORT}: ${cur.NAME_LONG}` : cur.NAME_SHORT
+    const ancestors: string[] = []
     let fatherId = cur.FATHER_ID ? Number(cur.FATHER_ID) : null
     while (fatherId != null) {
       const parent = nodeById.get(fatherId)
@@ -98,16 +135,83 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
       ancestors.unshift(parent.NAME_SHORT)
       fatherId = parent.FATHER_ID ? Number(parent.FATHER_ID) : null
     }
-    return ancestors.length ? `${ancestors.join(' > ')} > ${label}` : label
+    return ancestors.length ? `${ancestors.join(' > ')} > ${leaf}` : leaf
   }
 
-  const leafStructure = structure
-    .filter(n => !parentIds.has(n.STRUCTURE_ID))
-    .sort((a, b) => structPath(a.STRUCTURE_ID).localeCompare(structPath(b.STRUCTURE_ID), 'de', { numeric: true }))
+  // All structure nodes sorted by path for dropdowns
+  const allStructureSorted = useMemo(() =>
+    [...structure].sort((a, b) => structPath(a.STRUCTURE_ID).localeCompare(structPath(b.STRUCTURE_ID), 'de', { numeric: true })),
+    [structure, nodeById]
+  )
 
-  const totalIntH = buchungen.reduce((s, b) => s + (Number(b.QUANTITY_INT) || 0), 0)
-  const totalCost = buchungen.reduce((s, b) => s + (Number(b.CP_TOT) || 0), 0)
-  const totalRev  = buchungen.reduce((s, b) => s + (Number(b.SP_TOT) || 0), 0)
+  // Leaf-only nodes for the booking form
+  const leafStructure = useMemo(() =>
+    allStructureSorted.filter(n => !parentIds.has(n.STRUCTURE_ID)),
+    [allStructureSorted, parentIds]
+  )
+
+  // Path cache for display
+  const pathCache = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const n of structure) m.set(n.STRUCTURE_ID, structPath(n.STRUCTURE_ID))
+    return m
+  }, [structure, nodeById])
+
+  // Descendant set for active filter
+  const filterDescendants = useMemo(() => {
+    if (!filterStruct) return null
+    return getDescendantIds(Number(filterStruct))
+  }, [filterStruct, childrenMap])
+
+  // Filtered + sorted buchungen
+  const visibleBuchungen = useMemo(() => {
+    let rows = buchungen
+
+    if (filterDescendants !== null) {
+      rows = rows.filter(b => b.STRUCTURE_ID != null && filterDescendants.has(b.STRUCTURE_ID))
+    }
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      rows = rows.filter(b =>
+        fmtDate(b.DATE_VOUCHER).includes(q) ||
+        (b.EMPLOYEE?.SHORT_NAME ?? '').toLowerCase().includes(q) ||
+        (b.POSTING_DESCRIPTION ?? '').toLowerCase().includes(q) ||
+        (b.STRUCTURE_ID != null ? (pathCache.get(b.STRUCTURE_ID) ?? '').toLowerCase().includes(q) : false)
+      )
+    }
+
+    rows = [...rows].sort((a, b) => {
+      let cmp = 0
+      switch (sortCol) {
+        case 'date':        cmp = (a.DATE_VOUCHER ?? '').localeCompare(b.DATE_VOUCHER ?? ''); break
+        case 'employee':    cmp = (a.EMPLOYEE?.SHORT_NAME ?? '').localeCompare(b.EMPLOYEE?.SHORT_NAME ?? '', 'de'); break
+        case 'path':        cmp = (a.STRUCTURE_ID != null ? pathCache.get(a.STRUCTURE_ID) ?? '' : '').localeCompare(b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '' : '', 'de', { numeric: true }); break
+        case 'description': cmp = (a.POSTING_DESCRIPTION ?? '').localeCompare(b.POSTING_DESCRIPTION ?? '', 'de'); break
+        case 'h_int':       cmp = (a.QUANTITY_INT ?? 0) - (b.QUANTITY_INT ?? 0); break
+        case 'h_ext':       cmp = (a.QUANTITY_EXT ?? 0) - (b.QUANTITY_EXT ?? 0); break
+        case 'cost':        cmp = (a.CP_TOT ?? 0) - (b.CP_TOT ?? 0); break
+        case 'revenue':     cmp = (a.SP_TOT ?? 0) - (b.SP_TOT ?? 0); break
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+
+    return rows
+  }, [buchungen, filterDescendants, search, sortCol, sortDir, pathCache])
+
+  const totalIntH = visibleBuchungen.reduce((s, b) => s + (Number(b.QUANTITY_INT) || 0), 0)
+  const totalCost = visibleBuchungen.reduce((s, b) => s + (Number(b.CP_TOT) || 0), 0)
+  const totalRev  = visibleBuchungen.reduce((s, b) => s + (Number(b.SP_TOT) || 0), 0)
+
+  function toggleSort(col: SortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
+
+  function sortIndicator(col: SortCol) {
+    if (sortCol !== col) return <span style={{ opacity: 0.25, marginLeft: 4 }}>↕</span>
+    return <span style={{ marginLeft: 4 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
 
   const createMut = useMutation({
     mutationFn: createBuchung,
@@ -173,9 +277,36 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
           {isLoading && <p className="empty-note">Laden …</p>}
           {!isLoading && (
             <>
+              {/* Filters row */}
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 260px', minWidth: 200 }}>
+                  <select
+                    value={filterStruct}
+                    onChange={e => setFilterStruct(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="">Alle Strukturelemente</option>
+                    {allStructureSorted.map(n => (
+                      <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
+                        {pathCache.get(n.STRUCTURE_ID) ?? n.NAME_SHORT}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: '1 1 220px', minWidth: 180 }}>
+                  <input
+                    type="search"
+                    placeholder="Suchen …"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 10, fontSize: 14 }}
+                  />
+                </div>
+              </div>
+
               {/* Summary row */}
               <div className="buchungen-summary">
-                <span>Einträge: <strong>{buchungen.length}</strong></span>
+                <span>Einträge: <strong>{visibleBuchungen.length}</strong>{visibleBuchungen.length !== buchungen.length ? ` / ${buchungen.length}` : ''}</span>
                 <span>Stunden (int): <strong>{fmtN(totalIntH)}</strong></span>
                 <span>Kosten: <strong>{fmtN(totalCost)} €</strong></span>
                 <span>Erlös: <strong>{fmtN(totalRev)} €</strong></span>
@@ -185,21 +316,25 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 <table className="master-table">
                   <thead>
                     <tr>
-                      <th>Datum</th>
-                      <th>Mitarbeiter</th>
-                      <th>Beschreibung</th>
-                      <th className="num">h int.</th>
-                      <th className="num">h ext.</th>
-                      <th className="num">Kosten €</th>
-                      <th className="num">Erlös €</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('date')}>Datum{sortIndicator('date')}</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('employee')}>Mitarbeiter{sortIndicator('employee')}</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('path')}>Strukturpfad{sortIndicator('path')}</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('description')}>Beschreibung{sortIndicator('description')}</th>
+                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_int')}>h int.{sortIndicator('h_int')}</th>
+                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_ext')}>h ext.{sortIndicator('h_ext')}</th>
+                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('cost')}>Kosten €{sortIndicator('cost')}</th>
+                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('revenue')}>Erlös €{sortIndicator('revenue')}</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {buchungen.map(b => (
+                    {visibleBuchungen.map(b => (
                       <tr key={b.ID}>
                         <td>{fmtDate(b.DATE_VOUCHER)}</td>
                         <td>{b.EMPLOYEE?.SHORT_NAME}</td>
+                        <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.6)' }}>
+                          {b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'}
+                        </td>
                         <td>{b.POSTING_DESCRIPTION}</td>
                         <td className="num">{fmtN(b.QUANTITY_INT)}</td>
                         <td className="num">{fmtN(b.QUANTITY_EXT)}</td>
@@ -208,7 +343,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         <td><button className="btn-small" onClick={() => confirmDelete(b)}>×</button></td>
                       </tr>
                     ))}
-                    {!buchungen.length && <tr><td colSpan={8} className="empty-note">Keine Buchungen</td></tr>}
+                    {!visibleBuchungen.length && <tr><td colSpan={9} className="empty-note">Keine Buchungen</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -230,7 +365,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <label>Strukturelement</label>
                     <select value={form.STRUCTURE_ID} onChange={setF('STRUCTURE_ID')}>
                       <option value="">—</option>
-                      {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{structPath(s.STRUCTURE_ID)}</option>)}
+                      {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}
                     </select>
                   </div>
                   <div className="form-row">
