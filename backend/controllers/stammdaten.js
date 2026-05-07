@@ -479,10 +479,15 @@ async function postAddress(req, res, supabase) {
 // POST /api/stammdaten/rollen
 // ---------------------------------------------------------------------------
 async function postRollen(req, res, supabase) {
-  const { name_short, name_long } = req.body || {};
+  const { name_short, name_long, sp_rate } = req.body || {};
   if (!name_short || typeof name_short !== "string") return res.status(400).json({ error: "name_short is required" });
 
-  const insertRow = { NAME_SHORT: name_short.trim(), NAME_LONG: (name_long || "").trim() || null, TENANT_ID: req.tenantId ?? null };
+  const insertRow = {
+    NAME_SHORT: name_short.trim(),
+    NAME_LONG:  (name_long || "").trim() || null,
+    SP_RATE:    sp_rate !== undefined && sp_rate !== "" ? parseFloat(sp_rate) : null,
+    TENANT_ID:  req.tenantId ?? null,
+  };
 
   let data, error, usedTable;
   ({ data, error } = await supabase.from("ROLE").insert([insertRow]));

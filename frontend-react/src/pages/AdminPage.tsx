@@ -47,6 +47,7 @@ function StammdatenSection() {
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [rolleShort, setRolleShort] = useState('')
   const [rolleLong,  setRolleLong]  = useState('')
+  const [rolleSpRate, setRolleSpRate] = useState('')
 
   function withMsg(mutFn: () => void) {
     setMsg(null); mutFn()
@@ -63,8 +64,8 @@ function StammdatenSection() {
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
   const rolleMut = useMutation({
-    mutationFn: ({ short, long }: { short: string; long: string }) => createRolle(short, long),
-    onSuccess: () => { setMsg({ text: 'Rolle gespeichert ✅', type: 'success' }); setRolleShort(''); setRolleLong('') },
+    mutationFn: ({ short, long, spRate }: { short: string; long: string; spRate: string }) => createRolle(short, long, spRate),
+    onSuccess: () => { setMsg({ text: 'Rolle gespeichert ✅', type: 'success' }); setRolleShort(''); setRolleLong(''); setRolleSpRate('') },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -101,11 +102,15 @@ function StammdatenSection() {
             <label>Bezeichnung</label>
             <input value={rolleLong} onChange={e => setRolleLong(e.target.value)} placeholder="z. B. Projektleiter" />
           </div>
+          <div className="form-group">
+            <label>SP-Rate</label>
+            <input type="number" step="0.01" min="0" value={rolleSpRate} onChange={e => setRolleSpRate(e.target.value)} placeholder="z. B. 95.00" />
+          </div>
         </div>
         <button
           className="btn-small btn-save"
           disabled={rolleMut.isPending || !rolleShort.trim()}
-          onClick={() => { setMsg(null); rolleMut.mutate({ short: rolleShort.trim(), long: rolleLong.trim() }) }}
+          onClick={() => { setMsg(null); rolleMut.mutate({ short: rolleShort.trim(), long: rolleLong.trim(), spRate: rolleSpRate.trim() }) }}
           type="button"
         >
           {rolleMut.isPending ? 'Speichert …' : 'Speichern'}

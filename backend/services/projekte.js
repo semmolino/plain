@@ -59,10 +59,10 @@ async function getActiveEmployees(supabase, { tenantId }) {
 }
 
 async function getActiveRoles(supabase) {
-  let q = supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG").eq("ACTIVE", 1);
+  let q = supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, SP_RATE").eq("ACTIVE", 1);
   let { data, error } = await q;
   if (error && String(error.message || "").toLowerCase().includes("active")) {
-    const r = await supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, ACTIVE");
+    const r = await supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, SP_RATE, ACTIVE");
     data = r.data;
     error = r.error;
     if (!error && Array.isArray(data)) data = data.filter((r0) => String(r0.ACTIVE) === "1" || r0.ACTIVE === true);

@@ -134,7 +134,7 @@ export function ProjekteAnlegen() {
         role_id:         roleId,
         role_name_short: role?.NAME_SHORT ?? '',
         role_name_long:  role?.NAME_LONG  ?? '',
-        sp_rate:         prev[empId]?.sp_rate ?? '',
+        sp_rate:         role?.SP_RATE != null ? String(role.SP_RATE) : (prev[empId]?.sp_rate ?? ''),
       },
     }))
   }
