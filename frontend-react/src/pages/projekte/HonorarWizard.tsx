@@ -216,7 +216,10 @@ export function HonorarWizard() {
           : 'Das übergeordnete Element enthält bereits Werte. Diese werden nach dem Anlegen der neuen Elemente neu berechnet. Möchten Sie fortfahren?'
         if (!confirm(confirmMsg)) return
       }
-    } catch { /* ignore check errors */ }
+    } catch (e: unknown) {
+      setMsg({ text: (e as Error).message ?? 'Fehler beim Prüfen des übergeordneten Elements', type: 'error' })
+      return
+    }
 
     setLoading(true); setMsg({ text: 'Erzeuge Projektstruktur …', type: 'info' })
     try {

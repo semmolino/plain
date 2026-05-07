@@ -52,10 +52,14 @@ function fmtDateDE(input) {
 let _browserPromise = null;
 
 async function getBrowser() {
-  if (_browserPromise) return _browserPromise;
+  if (_browserPromise) {
+    try { return await _browserPromise; } catch { _browserPromise = null; }
+  }
   _browserPromise = (async () => {
     const { chromium } = require('playwright-chromium');
-    return chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    browser.on('disconnected', () => { _browserPromise = null; });
+    return browser;
   })();
   return _browserPromise;
 }

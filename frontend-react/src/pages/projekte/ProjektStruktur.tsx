@@ -278,8 +278,9 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
           addMut.mutate({ ...addForm, transfer_parent_values: true } as typeof addForm & { transfer_parent_values: boolean })
           return
         }
-      } catch {
-        // ignore check errors, proceed normally
+      } catch (e) {
+        setSaveMsg({ text: (e as Error).message ?? 'Fehler beim Prüfen des übergeordneten Elements', type: 'error' })
+        return
       }
     }
     addMut.mutate(addForm)

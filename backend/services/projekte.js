@@ -609,7 +609,7 @@ async function getTecSum(supabase, { structureId }) {
 async function checkParentForChild(supabase, { parentId }) {
   const { data: parent, error } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION_PERCENT, EXTRAS_COMPLETION, COSTS, PARTIAL_PAYMENTS, INVOICED, PAYED, CLOSED_BY_INVOICED_ID")
+    .select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION_PERCENT, EXTRAS_COMPLETION, COSTS, PARTIAL_PAYMENTS, INVOICED, PAYED, CLOSED_BY_INVOICE_ID")
     .eq("ID", parentId)
     .maybeSingle();
   if (error) throw error;
@@ -618,7 +618,7 @@ async function checkParentForChild(supabase, { parentId }) {
   const num = (v) => Number(v ?? 0);
 
   // Option 2: billing/payment data → block
-  if (num(parent.PARTIAL_PAYMENTS) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICED_ID != null) {
+  if (num(parent.PARTIAL_PAYMENTS) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICE_ID != null) {
     return { status: "blocked", reason: "Das übergeordnete Element enthält Rechnungs- oder Zahlungsdaten. Neue Unterelemente können daher nicht erstellt werden." };
   }
 
@@ -802,25 +802,7 @@ async function createStructureNode(supabase, { projectId, node, transferParentVa
 
   let tec_moved = false;
   if (fatherIdParsed !== null) {
-    if (!transferParentValues) {
-      // Auto-move TEC only when this is the first child (original behavior)
-      const { data: siblings } = await supabase
-        .from("PROJECT_STRUCTURE")
-        .select("ID")
-        .eq("FATHER_ID", fatherIdParsed)
-        .neq("ID", created.ID);
-      const isFirstChild = !siblings || siblings.length === 0;
-      if (isFirstChild) {
-        const { data: parentTec } = await supabase
-          .from("TEC")
-          .select("ID")
-          .eq("STRUCTURE_ID", fatherIdParsed);
-        if (parentTec && parentTec.length > 0) {
-          await supabase.from("TEC").update({ STRUCTURE_ID: created.ID }).eq("STRUCTURE_ID", fatherIdParsed);
-          tec_moved = true;
-        }
-      }
-    } else {
+    if (transferParentValues) {
       tec_moved = true; // Transfer already done above
     }
     // Propagate aggregated values upwards

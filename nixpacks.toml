@@ -1,7 +1,31 @@
+[phases.setup]
+nixPkgs = [
+  "nodejs_20",
+  "chromium",
+  "nss",
+  "nspr",
+  "atk",
+  "at-spi2-atk",
+  "cups",
+  "libdrm",
+  "libxkbcommon",
+  "libxcomposite",
+  "libxdamage",
+  "libxfixes",
+  "libxrandr",
+  "mesa",
+  "alsa-lib",
+  "pango",
+  "cairo",
+  "fontconfig",
+  "freetype",
+]
+
 [phases.install]
 cmds = [
   "npm ci --prefix frontend-react",
-  "npm ci --prefix backend"
+  "npm ci --prefix backend",
+  "cd backend && npx playwright install chromium"
 ]
 
 [phases.build]
