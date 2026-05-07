@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
 import {
   fetchFeeGroups, fetchFeeMasters, fetchFeeZones,
@@ -44,6 +44,7 @@ function StepIndicator({ step }: { step: number }) {
 }
 
 export function HonorarWizard() {
+  const qc = useQueryClient()
   const [step, setStep]     = useState(1)
   const [msg,  setMsg]      = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
   const [loading, setLoading] = useState(false)
@@ -205,6 +206,9 @@ export function HonorarWizard() {
     try {
       const res = await attachFeeToStructure(calcMaster.ID, Number(fatherId))
       setMsg({ text: res.message || 'HOAI-Struktur wurde angelegt ✅', type: 'success' })
+      if (calcMaster.PROJECT_ID != null) {
+        void qc.invalidateQueries({ queryKey: ['structure', calcMaster.PROJECT_ID] })
+      }
       // Reset wizard
       setStep(1); setCalcMaster(null); setPhases([]); setFeeGroupId(''); setFeeMasterId('')
       setMasters([]); setBasis({ NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '', K0: '', K1: '', K2: '', K3: '', K4: '' })
