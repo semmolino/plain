@@ -14,10 +14,11 @@ function chunk(arr, size) {
 // Lookup / reference data
 // ---------------------------------------------------------------------------
 
-async function getDepartments(supabase) {
+async function getDepartments(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from("DEPARTMENT")
     .select("ID, NAME_SHORT, NAME_LONG")
+    .eq("TENANT_ID", tenantId)
     .order("NAME_SHORT", { ascending: true });
   if (error) throw error;
   return data || [];
@@ -29,8 +30,11 @@ async function getStatuses(supabase) {
   return data;
 }
 
-async function getTypes(supabase) {
-  const { data, error } = await supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT");
+async function getTypes(supabase, { tenantId }) {
+  const { data, error } = await supabase
+    .from("PROJECT_TYPE")
+    .select("ID, NAME_SHORT")
+    .eq("TENANT_ID", tenantId);
   if (error) throw error;
   return data;
 }

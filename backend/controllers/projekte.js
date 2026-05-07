@@ -4,7 +4,7 @@ const svc = require("../services/projekte");
 
 async function getDepartments(req, res, supabase) {
   try {
-    const data = await svc.getDepartments(supabase);
+    const data = await svc.getDepartments(supabase, { tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
@@ -22,7 +22,7 @@ async function getStatuses(req, res, supabase) {
 
 async function getTypes(req, res, supabase) {
   try {
-    const data = await svc.getTypes(supabase);
+    const data = await svc.getTypes(supabase, { tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
