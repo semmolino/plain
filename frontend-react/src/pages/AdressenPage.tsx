@@ -15,16 +15,16 @@ import {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const ADDR_TABS = [
-  { id: 'list',   label: 'Anschriften' },
-  { id: 'create', label: 'Neue Anschrift' },
+  { id: 'list',   label: 'Adressen' },
+  { id: 'create', label: 'Neue Adresse' },
 ]
 const CON_TABS = [
   { id: 'list',   label: 'Kontakte' },
   { id: 'create', label: 'Neuer Kontakt' },
 ]
 const PAGE_TABS = [
-  { id: 'adressen', label: 'Anschriften' },
-  { id: 'kontakte', label: 'Kontakte'    },
+  { id: 'adressen', label: 'Adressen'  },
+  { id: 'kontakte', label: 'Kontakte'  },
 ]
 
 function emptyAddr(): AddressPayload {
@@ -32,6 +32,94 @@ function emptyAddr(): AddressPayload {
 }
 function emptyContact(): ContactPayload {
   return { title: '', first_name: '', last_name: '', email: '', mobile: '', salutation_id: '', gender_id: '', address_id: '' }
+}
+
+// ── AddrForm (top-level to preserve focus) ────────────────────────────────────
+
+interface AddrFormProps {
+  vals:        AddressPayload
+  setK:        (k: keyof AddressPayload) => (v: string) => void
+  msg:         { text: string; type: 'success' | 'error' } | null
+  countries:   { ID: number | string; NAME_LONG?: string; NAME_SHORT?: string }[]
+}
+
+function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
+  return (
+    <div className="master-form">
+      <FormField label="Name 1*"        id="an1" value={vals.address_name_1}       onChange={e => setK('address_name_1')(e.target.value)} />
+      <FormField label="Name 2"         id="an2" value={vals.address_name_2 ?? ''} onChange={e => setK('address_name_2')(e.target.value)} />
+      <FormField label="Straße"         id="ast" value={vals.street ?? ''}         onChange={e => setK('street')(e.target.value)} />
+      <div className="form-row">
+        <FormField label="PLZ"          id="apc" value={vals.post_code ?? ''}      onChange={e => setK('post_code')(e.target.value)} />
+        <FormField label="Ort"          id="aci" value={vals.city ?? ''}           onChange={e => setK('city')(e.target.value)} />
+      </div>
+      <div className="form-group">
+        <label htmlFor="aco">Land*</label>
+        <select id="aco" value={vals.country_id ?? ''} onChange={e => setK('country_id')(e.target.value)} required>
+          <option value="">Bitte wählen …</option>
+          {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.NAME_SHORT || c.ID}</option>)}
+        </select>
+      </div>
+      <FormField label="Kundennr."      id="acn" value={vals.customer_number ?? ''} onChange={e => setK('customer_number')(e.target.value)} />
+      <FormField label="Steuernummer"   id="ati" value={vals.tax_id ?? ''}          onChange={e => setK('tax_id')(e.target.value)} />
+      <FormField label="Käuferreferenz" id="abr" value={vals.buyer_reference ?? ''} onChange={e => setK('buyer_reference')(e.target.value)} />
+      <Message text={m?.text ?? null} type={m?.type} />
+    </div>
+  )
+}
+
+// ── ContactForm (top-level to preserve focus) ─────────────────────────────────
+
+interface ContactFormProps {
+  vals:         ContactPayload
+  setK:         (k: keyof ContactPayload) => (v: string) => void
+  addrTxt:      string
+  setAddrTxt:   (v: string) => void
+  msg:          { text: string; type: 'success' | 'error' } | null
+  isEdit?:      boolean
+  salutations:  { ID: number | string; SALUTATION: string }[]
+  genders:      { ID: number | string; GENDER: string }[]
+  searchAddresses: (q: string) => Promise<{ id: number; label: string }[]>
+}
+
+function ContactForm({ vals, setK, addrTxt, setAddrTxt, msg: m, isEdit = false, salutations, genders, searchAddresses }: ContactFormProps) {
+  const formId = isEdit ? 'e' : 'c'
+  return (
+    <>
+      <FormField label="Titel"       id={`${formId}-ct`} value={vals.title ?? ''} onChange={e => setK('title')(e.target.value)} />
+      <div className="form-row">
+        <FormField label="Vorname*"  id={`${formId}-fn`} value={vals.first_name} onChange={e => setK('first_name')(e.target.value)} required />
+        <FormField label="Nachname*" id={`${formId}-ln`} value={vals.last_name}  onChange={e => setK('last_name')(e.target.value)} required />
+      </div>
+      <FormField label="E-Mail"      id={`${formId}-em`} value={vals.email ?? ''} onChange={e => setK('email')(e.target.value)} type="email" />
+      <FormField label="Mobil"       id={`${formId}-mo`} value={vals.mobile ?? ''} onChange={e => setK('mobile')(e.target.value)} />
+      <div className="form-group">
+        <label htmlFor={`${formId}-sal`}>Anrede*</label>
+        <select id={`${formId}-sal`} value={String(vals.salutation_id ?? '')} onChange={e => setK('salutation_id')(e.target.value)} required>
+          <option value="">Bitte wählen …</option>
+          {salutations.map(s => <option key={s.ID} value={s.ID}>{s.SALUTATION}</option>)}
+        </select>
+      </div>
+      <div className="form-group">
+        <label htmlFor={`${formId}-gen`}>Geschlecht*</label>
+        <select id={`${formId}-gen`} value={String(vals.gender_id ?? '')} onChange={e => setK('gender_id')(e.target.value)} required>
+          <option value="">Bitte wählen …</option>
+          {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
+        </select>
+      </div>
+      <Autocomplete
+        label="Adresse*"
+        htmlId={`${formId}-addr`}
+        value={addrTxt}
+        onChange={(t) => { setAddrTxt(t); if (!t) setK('address_id')('') }}
+        onSelect={(id, lbl) => { setAddrTxt(lbl); setK('address_id')(String(id)) }}
+        search={searchAddresses}
+        placeholder="Name eingeben …"
+        required
+      />
+      <Message text={m?.text ?? null} type={m?.type} />
+    </>
+  )
 }
 
 // ── Address section ───────────────────────────────────────────────────────────
@@ -59,7 +147,7 @@ function AdressenSection() {
     mutationFn: createAddress,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['addresses'] })
-      setMsg({ text: 'Anschrift gespeichert ✅', type: 'success' })
+      setMsg({ text: 'Adresse gespeichert ✅', type: 'success' })
       setForm(emptyAddr())
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -77,14 +165,14 @@ function AdressenSection() {
 
   function openEdit(a: Address) {
     setEditForm({
-      address_name_1: a.ADDRESS_NAME_1 ?? '',
-      address_name_2: a.ADDRESS_NAME_2 ?? '',
-      street:         a.STREET         ?? '',
-      post_code:      a.POST_CODE       ?? '',
-      city:           a.CITY           ?? '',
-      country_id:     a.COUNTRY_ID     ?? '',
+      address_name_1:  a.ADDRESS_NAME_1  ?? '',
+      address_name_2:  a.ADDRESS_NAME_2  ?? '',
+      street:          a.STREET          ?? '',
+      post_code:       a.POST_CODE        ?? '',
+      city:            a.CITY            ?? '',
+      country_id:      a.COUNTRY_ID      ?? '',
       customer_number: a.CUSTOMER_NUMBER ?? '',
-      tax_id:         a.TAX_ID         ?? '',
+      tax_id:          a.TAX_ID          ?? '',
       buyer_reference: a.BUYER_REFERENCE ?? '',
     })
     setEditMsg(null)
@@ -107,39 +195,8 @@ function AdressenSection() {
     updateMut.mutate({ id: editAddr.ID, body: editForm })
   }
 
-  const set    = (k: keyof AddressPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v }))
-  const setE   = (k: keyof AddressPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v }))
-
-  function AddrForm({ vals, setK, msg: m, loading: _loading, submitLabel: _submitLabel }: {
-    vals: AddressPayload
-    setK: (k: keyof AddressPayload) => (v: string) => void
-    msg: { text: string; type: 'success' | 'error' } | null
-    loading: boolean
-    submitLabel: string
-  }) {
-    return (
-      <form onSubmit={e => { e.preventDefault(); /* handled by outer */ }} className="master-form">
-        <FormField label="Name 1*"         id="an1" value={vals.address_name_1} onChange={e => setK('address_name_1')(e.target.value)} />
-        <FormField label="Name 2"          id="an2" value={vals.address_name_2 ?? ''} onChange={e => setK('address_name_2')(e.target.value)} />
-        <FormField label="Straße"          id="ast" value={vals.street ?? ''} onChange={e => setK('street')(e.target.value)} />
-        <div className="form-row">
-          <FormField label="PLZ"           id="apc" value={vals.post_code ?? ''} onChange={e => setK('post_code')(e.target.value)} />
-          <FormField label="Ort"           id="aci" value={vals.city ?? ''} onChange={e => setK('city')(e.target.value)} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="aco">Land*</label>
-          <select id="aco" value={vals.country_id ?? ''} onChange={e => setK('country_id')(e.target.value)} required>
-            <option value="">Bitte wählen …</option>
-            {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.NAME_SHORT || c.ID}</option>)}
-          </select>
-        </div>
-        <FormField label="Kundennr."       id="acn" value={vals.customer_number ?? ''} onChange={e => setK('customer_number')(e.target.value)} />
-        <FormField label="Steuernummer"    id="ati" value={vals.tax_id ?? ''} onChange={e => setK('tax_id')(e.target.value)} />
-        <FormField label="Käuferreferenz"  id="abr" value={vals.buyer_reference ?? ''} onChange={e => setK('buyer_reference')(e.target.value)} />
-        <Message text={m?.text ?? null} type={m?.type} />
-      </form>
-    )
-  }
+  const set  = useCallback((k: keyof AddressPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v })), [])
+  const setE = useCallback((k: keyof AddressPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v })), [])
 
   return (
     <>
@@ -173,17 +230,16 @@ function AdressenSection() {
 
       {tab === 'create' && (
         <form onSubmit={submitCreate} className="master-form">
-          <AddrForm vals={form} setK={set} msg={msg} loading={createMut.isPending} submitLabel="Speichern" />
+          <AddrForm vals={form} setK={set} msg={msg} countries={countries} />
           <button className="btn-primary" type="submit" disabled={createMut.isPending}>
             {createMut.isPending ? 'Speichert …' : 'Speichern'}
           </button>
         </form>
       )}
 
-      {/* Edit modal */}
-      <Modal open={editAddr !== null} onClose={() => setEditAddr(null)} title="Anschrift bearbeiten">
+      <Modal open={editAddr !== null} onClose={() => setEditAddr(null)} title="Adresse bearbeiten">
         <form onSubmit={submitEdit} className="master-form">
-          <AddrForm vals={editForm} setK={setE} msg={editMsg} loading={updateMut.isPending} submitLabel="Speichern" />
+          <AddrForm vals={editForm} setK={setE} msg={editMsg} countries={countries} />
           <div className="modal-actions">
             <button className="btn-primary" type="submit" disabled={updateMut.isPending}>
               {updateMut.isPending ? 'Speichert …' : 'Speichern'}
@@ -200,15 +256,15 @@ function AdressenSection() {
 
 function KontakteSection() {
   const qc = useQueryClient()
-  const [tab,        setTab]        = useState('list')
-  const [search,     setSearch]     = useState('')
-  const [editContact, setEditContact] = useState<Contact | null>(null)
-  const [form,       setForm]       = useState<ContactPayload>(emptyContact)
-  const [editForm,   setEditForm]   = useState<ContactPayload>(emptyContact)
-  const [addrText,   setAddrText]   = useState('')
+  const [tab,          setTab]          = useState('list')
+  const [search,       setSearch]       = useState('')
+  const [editContact,  setEditContact]  = useState<Contact | null>(null)
+  const [form,         setForm]         = useState<ContactPayload>(emptyContact)
+  const [editForm,     setEditForm]     = useState<ContactPayload>(emptyContact)
+  const [addrText,     setAddrText]     = useState('')
   const [editAddrText, setEditAddrText] = useState('')
-  const [msg,        setMsg]        = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [editMsg,    setEditMsg]    = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const { data: salData }  = useQuery({ queryKey: ['salutations'], queryFn: fetchSalutations })
   const { data: genData }  = useQuery({ queryKey: ['genders-std'], queryFn: fetchGenders })
@@ -252,14 +308,14 @@ function KontakteSection() {
 
   function openEdit(c: Contact) {
     setEditForm({
-      title:        c.TITLE    ?? '',
-      first_name:   c.FIRST_NAME,
-      last_name:    c.LAST_NAME,
-      email:        c.EMAIL    ?? '',
-      mobile:       c.MOBILE   ?? '',
+      title:         c.TITLE         ?? '',
+      first_name:    c.FIRST_NAME,
+      last_name:     c.LAST_NAME,
+      email:         c.EMAIL         ?? '',
+      mobile:        c.MOBILE        ?? '',
       salutation_id: c.SALUTATION_ID ?? '',
-      gender_id:    c.GENDER_ID ?? '',
-      address_id:   c.ADDRESS_ID ?? '',
+      gender_id:     c.GENDER_ID     ?? '',
+      address_id:    c.ADDRESS_ID    ?? '',
     })
     setEditAddrText(c.ADDRESS ?? '')
     setEditMsg(null)
@@ -282,55 +338,8 @@ function KontakteSection() {
     updateMut.mutate({ id: editContact.ID, body: editForm })
   }
 
-  const set  = (k: keyof ContactPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v }))
-  const setE = (k: keyof ContactPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v }))
-
-  function ContactForm({ vals, setK, addrTxt, setAddrTxt, msg: m, isEdit = false }: {
-    vals: ContactPayload
-    setK: (k: keyof ContactPayload) => (v: string) => void
-    addrTxt: string
-    setAddrTxt: (v: string) => void
-    msg: { text: string; type: 'success' | 'error' } | null
-    isEdit?: boolean
-  }) {
-    const formId = isEdit ? 'e' : 'c'
-    return (
-      <>
-        <FormField label="Titel"      id={`${formId}-ct`} value={vals.title ?? ''} onChange={e => setK('title')(e.target.value)} />
-        <div className="form-row">
-          <FormField label="Vorname*" id={`${formId}-fn`} value={vals.first_name} onChange={e => setK('first_name')(e.target.value)} required />
-          <FormField label="Nachname*" id={`${formId}-ln`} value={vals.last_name} onChange={e => setK('last_name')(e.target.value)} required />
-        </div>
-        <FormField label="E-Mail"     id={`${formId}-em`} value={vals.email ?? ''} onChange={e => setK('email')(e.target.value)} type="email" />
-        <FormField label="Mobil"      id={`${formId}-mo`} value={vals.mobile ?? ''} onChange={e => setK('mobile')(e.target.value)} />
-        <div className="form-group">
-          <label htmlFor={`${formId}-sal`}>Anrede*</label>
-          <select id={`${formId}-sal`} value={String(vals.salutation_id ?? '')} onChange={e => setK('salutation_id')(e.target.value)} required>
-            <option value="">Bitte wählen …</option>
-            {salutations.map(s => <option key={s.ID} value={s.ID}>{s.SALUTATION}</option>)}
-          </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor={`${formId}-gen`}>Geschlecht*</label>
-          <select id={`${formId}-gen`} value={String(vals.gender_id ?? '')} onChange={e => setK('gender_id')(e.target.value)} required>
-            <option value="">Bitte wählen …</option>
-            {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
-          </select>
-        </div>
-        <Autocomplete
-          label="Anschrift*"
-          htmlId={`${formId}-addr`}
-          value={addrTxt}
-          onChange={(t) => { setAddrTxt(t); if (!t) setK('address_id')('') }}
-          onSelect={(id, lbl) => { setAddrTxt(lbl); setK('address_id')(String(id)) }}
-          search={searchAddresses}
-          placeholder="Name eingeben …"
-          required
-        />
-        <Message text={m?.text ?? null} type={m?.type} />
-      </>
-    )
-  }
+  const set  = useCallback((k: keyof ContactPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v })), [])
+  const setE = useCallback((k: keyof ContactPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v })), [])
 
   return (
     <>
@@ -343,8 +352,8 @@ function KontakteSection() {
           {!isLoading && (
             <table className="master-table">
               <thead>
-                <tr><th>Name</th><th>Anrede</th><th>Geschlecht</th><th>Anschrift</th><th></th></tr>
-              </thead>
+                <tr><th>Name</th><th>Anrede</th><th>Geschlecht</th><th>Adresse</th><th></th></tr>
+            </thead>
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.ID}>
@@ -364,7 +373,10 @@ function KontakteSection() {
 
       {tab === 'create' && (
         <form onSubmit={submitCreate} className="master-form">
-          <ContactForm vals={form} setK={set} addrTxt={addrText} setAddrTxt={setAddrText} msg={msg} />
+          <ContactForm
+            vals={form} setK={set} addrTxt={addrText} setAddrTxt={setAddrText}
+            msg={msg} salutations={salutations} genders={genders} searchAddresses={searchAddresses}
+          />
           <button className="btn-primary" type="submit" disabled={createMut.isPending}>
             {createMut.isPending ? 'Speichert …' : 'Speichern'}
           </button>
@@ -373,7 +385,10 @@ function KontakteSection() {
 
       <Modal open={editContact !== null} onClose={() => setEditContact(null)} title="Kontakt bearbeiten">
         <form onSubmit={submitEdit} className="master-form">
-          <ContactForm vals={editForm} setK={setE} addrTxt={editAddrText} setAddrTxt={setEditAddrText} msg={editMsg} isEdit />
+          <ContactForm
+            vals={editForm} setK={setE} addrTxt={editAddrText} setAddrTxt={setEditAddrText}
+            msg={editMsg} isEdit salutations={salutations} genders={genders} searchAddresses={searchAddresses}
+          />
           <div className="modal-actions">
             <button className="btn-primary" type="submit" disabled={updateMut.isPending}>
               {updateMut.isPending ? 'Speichert …' : 'Speichern'}
