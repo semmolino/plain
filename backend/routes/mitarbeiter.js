@@ -1,6 +1,30 @@
 const express = require("express");
 const bcrypt  = require("bcryptjs");
 
+// Returns an error message string if a duplicate is found, otherwise null.
+// excludeId: skip this employee ID (used on update to ignore self).
+async function checkEmployeeDuplicates(supabase, tenantId, { short_name, personnel_number, email }, excludeId = null) {
+  let q = supabase
+    .from("EMPLOYEE")
+    .select("ID, SHORT_NAME, PERSONNEL_NUMBER, MAIL")
+    .eq("TENANT_ID", tenantId);
+
+  if (excludeId != null) q = q.neq("ID", excludeId);
+
+  const { data, error } = await q;
+  if (error) return null; // don't block on lookup failure
+
+  for (const emp of data || []) {
+    if (short_name && emp.SHORT_NAME && emp.SHORT_NAME.toLowerCase() === short_name.toLowerCase())
+      return `Kürzel „${short_name}" wird bereits von einem anderen Mitarbeiter verwendet.`;
+    if (personnel_number && emp.PERSONNEL_NUMBER && String(emp.PERSONNEL_NUMBER) === String(personnel_number))
+      return `Personalnummer „${personnel_number}" wird bereits von einem anderen Mitarbeiter verwendet.`;
+    if (email && emp.MAIL && emp.MAIL.toLowerCase() === email.toLowerCase())
+      return `E-Mail „${email}" wird bereits von einem anderen Mitarbeiter verwendet.`;
+  }
+  return null;
+}
+
 module.exports = (supabase) => {
   const router = express.Router();
 
@@ -23,6 +47,14 @@ module.exports = (supabase) => {
     if (!body.short_name || !body.first_name || !body.last_name || !body.gender_id) {
       return res.status(400).json({ error: "Pflichtfelder fehlen" });
     }
+
+    // Uniqueness check within tenant
+    const dupConflict = await checkEmployeeDuplicates(supabase, req.tenantId, {
+      short_name: body.short_name,
+      personnel_number: body.personnel_number,
+      email: body.email,
+    });
+    if (dupConflict) return res.status(409).json({ error: dupConflict });
 
     const hashedPassword = body.password ? await bcrypt.hash(body.password, 10) : null;
 
@@ -102,6 +134,15 @@ router.get("/", async (req, res) => {
     if (!body.short_name || !body.first_name || !body.last_name || !body.gender_id) {
       return res.status(400).json({ error: "Pflichtfelder fehlen" });
     }
+
+    // Uniqueness check within tenant (exclude current employee)
+    const dupConflict = await checkEmployeeDuplicates(supabase, req.tenantId, {
+      short_name: body.short_name,
+      personnel_number: body.personnel_number,
+      email: body.mail,
+    }, Number(id));
+    if (dupConflict) return res.status(409).json({ error: dupConflict });
+
 
     const updateObj = {
       SHORT_NAME: body.short_name,
