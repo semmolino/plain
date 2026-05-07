@@ -6,7 +6,7 @@ export interface ProjectStatus     { ID: number; NAME_SHORT: string }
 export interface ProjectType       { ID: number; NAME_SHORT: string }
 export interface ProjectManager    { ID: number; SHORT_NAME: string }
 export interface Department        { ID: number; NAME_SHORT: string; NAME_LONG: string }
-export interface ActiveEmployee { ID: number; SHORT_NAME: string; FIRST_NAME: string; LAST_NAME: string }
+export interface ActiveEmployee { ID: number; SHORT_NAME: string; FIRST_NAME: string; LAST_NAME: string; CP_RATE: number | null }
 export interface ActiveRole     { ID: number; NAME_SHORT: string; NAME_LONG: string }
 export interface BillingType    { ID: number; NAME_SHORT: string; NAME_LONG: string }
 

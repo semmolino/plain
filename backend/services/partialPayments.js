@@ -176,21 +176,26 @@ async function getSalutationText(supabase, salutationId) {
 // Project-structure helpers
 // ---------------------------------------------------------------------------
 
+function leafOnly(rows) {
+  const parentIds = new Set((rows || []).filter(r => r.FATHER_ID != null).map(r => Number(r.FATHER_ID)));
+  return (rows || []).filter(r => !parentIds.has(Number(r.ID)));
+}
+
 async function loadProjectStructuresForContext(supabase, { contractId, projectId }) {
   if (contractId) {
     const { data: byContract, error: byContractErr } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
+      .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
       .eq("CONTRACT_ID", contractId);
-    if (!byContractErr && Array.isArray(byContract) && byContract.length > 0) return byContract;
+    if (!byContractErr && Array.isArray(byContract) && byContract.length > 0) return leafOnly(byContract);
   }
 
   const { data: byProject, error: byProjectErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
+    .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
     .eq("PROJECT_ID", projectId);
   if (byProjectErr) throw new Error(byProjectErr.message);
-  return byProject || [];
+  return leafOnly(byProject);
 }
 
 // ---------------------------------------------------------------------------
@@ -693,8 +698,8 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   return { id: created.ID };
 }
 
-async function getPartialPayment(supabase, { id }) {
-  const { data: pp, error } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", id).maybeSingle();
+async function getPartialPayment(supabase, { id, tenantId }) {
+  const { data: pp, error } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (error || !pp) throw { status: 500, message: "PARTIAL_PAYMENT konnte nicht geladen werden" };
 
   const { data: project } = await supabase.from("PROJECT").select("NAME_SHORT, NAME_LONG").eq("ID", pp.PROJECT_ID).maybeSingle();
@@ -710,8 +715,8 @@ async function getPartialPayment(supabase, { id }) {
   return { pp, project, contract };
 }
 
-async function deletePartialPayment(supabase, { id }) {
-  const { data: pp, error: ppErr } = await supabase.from("PARTIAL_PAYMENT").select("ID, STATUS_ID").eq("ID", id).maybeSingle();
+async function deletePartialPayment(supabase, { id, tenantId }) {
+  const { data: pp, error: ppErr } = await supabase.from("PARTIAL_PAYMENT").select("ID, STATUS_ID").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (ppErr || !pp) throw { status: 404, message: "PARTIAL_PAYMENT nicht gefunden" };
   if (String(pp.STATUS_ID) === "2") throw { status: 400, message: "Gebuchte Abschlagsrechnungen können nicht gelöscht werden" };
 
@@ -723,7 +728,7 @@ async function deletePartialPayment(supabase, { id }) {
   );
   if (ppsErr) throw new Error(ppsErr.message);
 
-  const { error: delErr } = await supabase.from("PARTIAL_PAYMENT").delete().eq("ID", id);
+  const { error: delErr } = await supabase.from("PARTIAL_PAYMENT").delete().eq("ID", id).eq("TENANT_ID", tenantId);
   if (delErr) throw new Error(delErr.message);
 }
 
@@ -862,9 +867,9 @@ async function bookPartialPayment(supabase, { id, pp }) {
 // ---------------------------------------------------------------------------
 // cancelPartialPayment – create a draft Storno-AR for a booked partial payment
 // ---------------------------------------------------------------------------
-async function cancelPartialPayment(supabase, { id }) {
+async function cancelPartialPayment(supabase, { id, tenantId }) {
   const { data: orig, error: origErr } = await supabase
-    .from("PARTIAL_PAYMENT").select("*").eq("ID", id).maybeSingle();
+    .from("PARTIAL_PAYMENT").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (origErr || !orig) throw { status: 404, message: "Abschlagsrechnung nicht gefunden" };
   if (String(orig.STATUS_ID) !== "2") throw { status: 400, message: "Nur gebuchte Abschlagsrechnungen können storniert werden" };
 

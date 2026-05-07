@@ -42,10 +42,10 @@ async function getManagers(supabase) {
 }
 
 async function getActiveEmployees(supabase) {
-  let q = supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME").eq("ACTIVE", 1);
+  let q = supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, CP_RATE").eq("ACTIVE", 1);
   let { data, error } = await q;
   if (error && String(error.message || "").toLowerCase().includes("active")) {
-    const r = await supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, ACTIVE");
+    const r = await supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, CP_RATE, ACTIVE");
     data = r.data;
     error = r.error;
     if (!error && Array.isArray(data)) data = data.filter((e) => String(e.ACTIVE) === "1" || e.ACTIVE === true);

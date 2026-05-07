@@ -12,6 +12,7 @@ export interface Employee {
   GENDER_ID:        number | null
   GENDER:           string
   NAME:             string
+  CP_RATE:          number | null
 }
 
 export interface EmpGender { ID: number; GENDER: string }
@@ -26,6 +27,7 @@ export interface CreateEmployeePayload {
   mobile?:          string
   personnel_number?: string
   gender_id:        string | number
+  cp_rate?:         string | number
 }
 
 export interface UpdateEmployeePayload {
@@ -37,6 +39,7 @@ export interface UpdateEmployeePayload {
   mobile?:          string
   personnel_number?: string
   gender_id:        number
+  cp_rate?:         string | number
 }
 
 export const fetchEmployeeGenders = () =>

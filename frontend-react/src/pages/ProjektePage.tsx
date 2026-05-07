@@ -45,7 +45,7 @@ export function ProjektePage() {
         {tab === 'liste'          && <ProjekteListe onSelectProject={openProject} />}
         {tab === 'anlegen'        && <ProjekteAnlegen />}
         {tab === 'honorar'        && <HonorarWizard />}
-        {tab === 'struktur'       && <ProjektStruktur initialProjectId={selectedProjectId} />}
+        {tab === 'struktur'       && <ProjektStruktur initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'vertraege'      && <Vertraege      initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}

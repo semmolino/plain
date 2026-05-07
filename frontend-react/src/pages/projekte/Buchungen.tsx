@@ -67,13 +67,19 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     enabled:  empId !== null && pid !== null && showForm,
   })
 
+  const projects     = projectsData?.data ?? []
+  const employees    = empData?.data      ?? []
+
   useEffect(() => {
     if (!presetData) return
     setForm(f => ({ ...f, SP_RATE: presetData.found && presetData.SP_RATE != null ? String(presetData.SP_RATE) : f.SP_RATE }))
   }, [presetData])
 
-  const projects     = projectsData?.data ?? []
-  const employees    = empData?.data      ?? []
+  useEffect(() => {
+    if (!empId) return
+    const emp = employees.find(e => e.ID === empId)
+    if (emp?.CP_RATE != null) setForm(f => ({ ...f, CP_RATE: String(emp.CP_RATE) }))
+  }, [empId, employees])
   const buchungen    = buchData?.data     ?? []
   const structure    = structData?.data   ?? []
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => Number(n.FATHER_ID)))
@@ -142,7 +148,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
 
   const setF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const value = e.target.value
-    setForm(f => ({ ...f, [k]: value, ...(k === 'EMPLOYEE_ID' ? { SP_RATE: '' } : {}) }))
+    setForm(f => ({ ...f, [k]: value, ...(k === 'EMPLOYEE_ID' ? { SP_RATE: '', CP_RATE: '' } : {}) }))
   }
 
   function confirmDelete(b: Buchung) {
@@ -236,7 +242,9 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <FormField label="Stunden ext.*" id="bqe" type="number" value={form.QUANTITY_EXT}  onChange={setF('QUANTITY_EXT')} step="0.25" required />
                   </div>
                   <div className="form-row">
-                    <FormField label="Kostensatz*"   id="bcr" type="number" value={form.CP_RATE}       onChange={setF('CP_RATE')} step="0.01" required />
+                    <FormField label="Kostensatz*"   id="bcr" type="number" value={form.CP_RATE}       onChange={setF('CP_RATE')} step="0.01" required
+                      readOnly={employees.find(e => e.ID === empId)?.CP_RATE != null}
+                      style={{ background: employees.find(e => e.ID === empId)?.CP_RATE != null ? 'rgba(17,24,39,0.04)' : undefined }} />
                     <FormField label="Stundensatz*"  id="bsr" type="number" value={form.SP_RATE}       onChange={setF('SP_RATE')} step="0.01" required
                       readOnly={presetData?.found === true && presetData.SP_RATE != null}
                       title={presetData?.found === true && presetData.SP_RATE != null ? 'Aus Mitarbeiter/Projekt-Zuordnung vorbelegt' : undefined}

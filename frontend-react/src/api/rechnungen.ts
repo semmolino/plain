@@ -42,6 +42,7 @@ export interface PartialPayment {
   TOTAL_AMOUNT_GROSS:           number | null
   AMOUNT_NET:                   number | null
   AMOUNT_EXTRAS_NET:            number | null
+  AMOUNT_PAYED_GROSS:           number | null
   STATUS_ID:                    number
   PROJECT_ID:                   number | null
   CONTRACT_ID:                  number | null
@@ -81,6 +82,7 @@ export interface FinalPhase {
   REVENUE_COMPLETION:   number | null
   EXTRAS_AMOUNT:        number | null
   TOTAL_EARNED:         number | null
+  BILLED_FINAL:         number | null
   ALREADY_BILLED:       number | null
   AMOUNT_NET:           number | null
   AMOUNT_EXTRAS_NET:    number | null
@@ -95,6 +97,9 @@ export interface FinalDeduction {
   PARTIAL_PAYMENT_DATE:    string | null
   AMOUNT_NET:              number | null
   TOTAL_AMOUNT_NET:        number | null
+  DEDUCTION_AMOUNT_NET:    number | null
+  SELECTED:                boolean
+  STRUCTURE_IDS:           number[]
 }
 
 export interface FinalTotals {
@@ -253,3 +258,14 @@ export const saveFinalInvoiceDeductions = (id: number, items: { partial_payment_
 
 export const bookFinalInvoice = (id: number) =>
   apiClient.post<{ success: boolean; invoice_number: string }>(`/final-invoices/${id}/book`, {})
+
+// ── Payments ──────────────────────────────────────────────────────────────────
+
+export const createPayment = (body: {
+  invoice_id?: number
+  partial_payment_id?: number
+  amount_payed_gross: number
+  payment_date: string
+  purpose_of_payment?: string
+  comment?: string
+}) => apiClient.post<{ success: boolean; id: number }>('/payments', body)

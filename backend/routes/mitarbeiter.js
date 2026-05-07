@@ -31,11 +31,11 @@ module.exports = (supabase) => {
         "FIRST_NAME": body.first_name,
         "LAST_NAME": body.last_name,
         "PASSWORD": body.password,
-        // EMPLOYEE schema uses MAIL (not EMAIL)
         "MAIL": body.email,
         "MOBILE": body.mobile,
         "PERSONNEL_NUMBER": body.personnel_number,
         "GENDER_ID": body.gender_id,
+        "CP_RATE": body.cp_rate != null && body.cp_rate !== '' ? Number(body.cp_rate) : null,
         "TENANT_ID": req.tenantId ?? null,
       }]);
 
@@ -66,7 +66,7 @@ router.get("/", async (req, res) => {
 
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID")
+      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, CP_RATE")
       .eq("TENANT_ID", req.tenantId)
       .order("SHORT_NAME", { ascending: true })
       .limit(limit);
@@ -109,6 +109,7 @@ router.get("/", async (req, res) => {
       MOBILE: body.mobile || null,
       PERSONNEL_NUMBER: body.personnel_number || null,
       GENDER_ID: body.gender_id,
+      CP_RATE: body.cp_rate != null && body.cp_rate !== '' ? Number(body.cp_rate) : null,
     };
 
     const { data: upd, error: updErr } = await supabase

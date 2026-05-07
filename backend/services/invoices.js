@@ -193,23 +193,28 @@ async function getSalutationText(supabase, salutationId) {
 // Project-structure helpers
 // ---------------------------------------------------------------------------
 
+function leafOnly(rows) {
+  const parentIds = new Set((rows || []).filter(r => r.FATHER_ID != null).map(r => Number(r.FATHER_ID)));
+  return (rows || []).filter(r => !parentIds.has(Number(r.ID)));
+}
+
 async function loadProjectStructuresForContext(supabase, { contractId, projectId }) {
   if (contractId) {
     const { data: byContract, error: byContractErr } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
+      .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
       .eq("CONTRACT_ID", contractId);
 
-    if (!byContractErr && Array.isArray(byContract) && byContract.length > 0) return byContract;
+    if (!byContractErr && Array.isArray(byContract) && byContract.length > 0) return leafOnly(byContract);
   }
 
   const { data: byProject, error: byProjectErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
+    .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
     .eq("PROJECT_ID", projectId);
 
   if (byProjectErr) throw new Error(byProjectErr.message);
-  return byProject || [];
+  return leafOnly(byProject);
 }
 
 function distributeAcrossRemaining({ total, remainingByStructure }) {
@@ -664,7 +669,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   const contactSalutation = await getSalutationText(supabase, invoiceContact.SALUTATION_ID);
 
   const insertRow = {
-    COMPANY_ID: companyId,
+    COMPANY_ID: resolvedCompanyId,
     EMPLOYEE_ID: employeeId,
     PROJECT_ID: projectId,
     CONTRACT_ID: contractId,
@@ -779,8 +784,8 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   return { ok: true };
 }
 
-async function getInvoice(supabase, { id }) {
-  const { data: inv, error } = await supabase.from("INVOICE").select("*").eq("ID", id).maybeSingle();
+async function getInvoice(supabase, { id, tenantId }) {
+  const { data: inv, error } = await supabase.from("INVOICE").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (error || !inv) throw { status: 500, message: "INVOICE konnte nicht geladen werden" };
 
   const { data: project } = await supabase.from("PROJECT").select("NAME_SHORT, NAME_LONG").eq("ID", inv.PROJECT_ID).maybeSingle();
@@ -796,8 +801,8 @@ async function getInvoice(supabase, { id }) {
   return { inv, project, contract };
 }
 
-async function deleteInvoice(supabase, { id }) {
-  const { data: inv, error: invErr } = await supabase.from("INVOICE").select("ID, STATUS_ID").eq("ID", id).maybeSingle();
+async function deleteInvoice(supabase, { id, tenantId }) {
+  const { data: inv, error: invErr } = await supabase.from("INVOICE").select("ID, STATUS_ID").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (invErr || !inv) throw { status: 404, message: "INVOICE nicht gefunden" };
   if (String(inv.STATUS_ID) === "2") throw { status: 400, message: "Gebuchte Rechnungen können nicht gelöscht werden" };
 
@@ -814,7 +819,7 @@ async function deleteInvoice(supabase, { id }) {
     if (sErr && !isTableMissingErr(sErr, "invoice_structure")) throw new Error(sErr.message);
   }
 
-  const { error: delErr } = await supabase.from("INVOICE").delete().eq("ID", id);
+  const { error: delErr } = await supabase.from("INVOICE").delete().eq("ID", id).eq("TENANT_ID", tenantId);
   if (delErr) throw new Error(delErr.message);
 }
 
@@ -956,9 +961,9 @@ async function bookInvoice(supabase, { id, inv }) {
 // cancelInvoice – create a draft Stornorechnung for a booked invoice
 // The original is marked STATUS_ID=3 only when the Stornorechnung is booked.
 // ---------------------------------------------------------------------------
-async function cancelInvoice(supabase, { id }) {
+async function cancelInvoice(supabase, { id, tenantId }) {
   const { data: orig, error: origErr } = await supabase
-    .from("INVOICE").select("*").eq("ID", id).maybeSingle();
+    .from("INVOICE").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (origErr || !orig) throw { status: 404, message: "Rechnung nicht gefunden" };
   if (String(orig.STATUS_ID) !== "2") throw { status: 400, message: "Nur gebuchte Rechnungen können storniert werden" };
   if (orig.INVOICE_TYPE === "stornorechnung") throw { status: 400, message: "Eine Stornorechnung kann nicht storniert werden" };

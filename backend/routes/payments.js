@@ -78,6 +78,7 @@ module.exports = (supabase) => {
           .from("PARTIAL_PAYMENT")
           .select("ID, PROJECT_ID, CONTRACT_ID, VAT_ID, VAT_PERCENT")
           .eq("ID", partialPaymentId)
+          .eq("TENANT_ID", req.tenantId)
           .maybeSingle();
         if (error) return res.status(500).json({ error: error.message });
         if (!data) return res.status(404).json({ error: "Abschlagsrechnung nicht gefunden." });
@@ -89,6 +90,7 @@ module.exports = (supabase) => {
           .from("INVOICE")
           .select("ID, PROJECT_ID, CONTRACT_ID, VAT_ID, VAT_PERCENT")
           .eq("ID", invoiceId)
+          .eq("TENANT_ID", req.tenantId)
           .maybeSingle();
         if (error) {
           const msg = (error.message || "").toLowerCase();

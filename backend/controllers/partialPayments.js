@@ -32,8 +32,8 @@ async function initPartialPayment(req, res, supabase) {
   const b = req.body || {};
   const { company_id: companyId, employee_id: employeeId, project_id: projectId, contract_id: contractId } = b;
 
-  if (!companyId || !employeeId || !projectId || !contractId) {
-    return res.status(400).json({ error: "Pflichtfelder fehlen (Firma/Mitarbeiter/Projekt/Vertrag)" });
+  if (!employeeId || !projectId || !contractId) {
+    return res.status(400).json({ error: "Pflichtfelder fehlen (Mitarbeiter/Projekt/Vertrag)" });
   }
 
   try {
@@ -65,6 +65,7 @@ async function patchPartialPayment(req, res, supabase) {
       .from("PARTIAL_PAYMENT")
       .select("ID")
       .eq("PARTIAL_PAYMENT_NUMBER", num)
+      .eq("TENANT_ID", req.tenantId)
       .neq("ID", id)
       .limit(1);
     if (existErr) return res.status(500).json({ error: existErr.message });
@@ -105,6 +106,7 @@ async function patchPartialPayment(req, res, supabase) {
       .from("PARTIAL_PAYMENT")
       .select("TOTAL_AMOUNT_NET, VAT_PERCENT")
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
     if (curErr) return res.status(500).json({ error: curErr.message });
 
@@ -125,7 +127,7 @@ async function patchPartialPayment(req, res, supabase) {
     payload.PAYMENT_MEANS_ID = pm;
   }
 
-  const { error } = await supabase.from("PARTIAL_PAYMENT").update(payload).eq("ID", id);
+  const { error } = await supabase.from("PARTIAL_PAYMENT").update(payload).eq("ID", id).eq("TENANT_ID", req.tenantId);
   if (error) return res.status(500).json({ error: error.message });
 
   return res.json({ success: true });
@@ -141,6 +143,7 @@ async function getBillingProposal(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, PROJECT_ID, CONTRACT_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT")
     .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
 
@@ -238,6 +241,7 @@ async function putPerformance(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, PROJECT_ID, CONTRACT_ID")
     .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
 
@@ -270,6 +274,7 @@ async function getTec(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, PROJECT_ID, CONTRACT_ID")
     .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
 
@@ -324,6 +329,7 @@ async function postTec(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, PROJECT_ID, CONTRACT_ID")
     .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
 
@@ -387,7 +393,7 @@ async function postTec(req, res, supabase) {
 async function getPartialPayment(req, res, supabase) {
   const { id } = req.params;
   try {
-    const { pp, project, contract } = await svc.getPartialPayment(supabase, { id });
+    const { pp, project, contract } = await svc.getPartialPayment(supabase, { id, tenantId: req.tenantId });
     return res.json({ data: { pp, project, contract } });
   } catch (e) {
     const status = e?.status || 500;
@@ -401,7 +407,7 @@ async function getPartialPayment(req, res, supabase) {
 async function deletePartialPayment(req, res, supabase) {
   const { id } = req.params;
   try {
-    await svc.deletePartialPayment(supabase, { id });
+    await svc.deletePartialPayment(supabase, { id, tenantId: req.tenantId });
     return res.json({ ok: true });
   } catch (e) {
     const status = e?.status || 500;
@@ -415,7 +421,7 @@ async function deletePartialPayment(req, res, supabase) {
 async function cancelPartialPayment(req, res, supabase) {
   const { id } = req.params;
   try {
-    const result = await svc.cancelPartialPayment(supabase, { id });
+    const result = await svc.cancelPartialPayment(supabase, { id, tenantId: req.tenantId });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;
@@ -442,6 +448,7 @@ async function getEinvoiceUbl(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
     .eq("ID", ppId)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (ppRowErr) { logError({ step: "load_pp_min" }, ppRowErr); return res.status(500).json({ error: ppRowErr.message }); }
@@ -463,7 +470,7 @@ async function getEinvoiceUbl(req, res, supabase) {
   }
 
   try {
-    const { data: ppFull, error: ppFullErr } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", ppId).maybeSingle();
+    const { data: ppFull, error: ppFullErr } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", ppId).eq("TENANT_ID", req.tenantId).maybeSingle();
     if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "PARTIAL_PAYMENT nicht gefunden");
 
     const xml = await svc.generateUblInvoiceXml({ supabase, partialPayment: ppFull });
@@ -494,6 +501,7 @@ async function postEinvoiceUblSnapshot(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
     .eq("ID", ppId)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (ppRowErr) {
@@ -510,7 +518,7 @@ async function postEinvoiceUblSnapshot(req, res, supabase) {
   const fname = `XRechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
 
   try {
-    const { data: ppFull, error: ppFullErr } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", ppId).maybeSingle();
+    const { data: ppFull, error: ppFullErr } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", ppId).eq("TENANT_ID", req.tenantId).maybeSingle();
     if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "PARTIAL_PAYMENT nicht gefunden");
 
     const xml = await svc.generateUblInvoiceXml({ supabase, partialPayment: ppFull });
@@ -544,6 +552,7 @@ async function bookPartialPayment(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, PARTIAL_PAYMENT_NUMBER, DOCUMENT_TEMPLATE_ID")
     .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
 
@@ -577,6 +586,7 @@ async function getPdf(req, res, supabase) {
         .from("PARTIAL_PAYMENT")
         .select("ID, STATUS_ID, DOCUMENT_PDF_ASSET_ID, PARTIAL_PAYMENT_NUMBER")
         .eq("ID", ppId)
+        .eq("TENANT_ID", req.tenantId)
         .maybeSingle();
 
       if (!ppRowErr && ppRow && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_PDF_ASSET_ID) {
@@ -618,6 +628,7 @@ async function getEinvoiceCii(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, DOCUMENT_XML_PROFILE, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
     .eq("ID", ppId)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (ppRowErr) return res.status(500).json({ error: ppRowErr.message });
@@ -655,6 +666,7 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
     .from("PARTIAL_PAYMENT")
     .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
     .eq("ID", ppId)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (ppRowErr) return res.status(500).json({ error: ppRowErr.message });

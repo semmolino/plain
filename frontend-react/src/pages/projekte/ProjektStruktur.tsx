@@ -37,7 +37,7 @@ function depthOf(id: number, parentMap: Map<number, number | null>): number {
   return d
 }
 
-export function ProjektStruktur({ initialProjectId }: { initialProjectId?: number }) {
+export function ProjektStruktur({ initialProjectId, onProjectChange }: { initialProjectId?: number; onProjectChange?: (id: number | null) => void }) {
   const qc = useQueryClient()
   const [selectedPid, setSelectedPid]   = useState<number | null>(initialProjectId ?? null)
   const [edits, setEdits]               = useState<Record<number, RowEdit>>({})
@@ -377,7 +377,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
     <div>
       <div className="form-group" style={{ maxWidth: 400, marginBottom: 12 }}>
         <label>Projekt</label>
-        <select value={selectedPid ?? ''} onChange={e => { setSelectedPid(e.target.value ? Number(e.target.value) : null) }}>
+        <select value={selectedPid ?? ''} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setSelectedPid(id); onProjectChange?.(id) }}>
           <option value="">Bitte wählen …</option>
           {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
         </select>

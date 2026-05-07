@@ -163,9 +163,13 @@ async function getPhases(supabase, { id, tenantId }) {
     const revenue = toNum(ps.REVENUE_COMPLETION);
     const extrasAmount = round2((revenue * toNum(ps.EXTRAS_PERCENT)) / 100);
     const totalEarned = round2(revenue + extrasAmount);
-    const alreadyBilled = round2(toNum(ps.PARTIAL_PAYMENTS) + toNum(ps.INVOICED));
+    // BILLED_FINAL = amount already invoiced via previous final invoices (not Abschlagsrechnungen)
+    const billedFinal = round2(toNum(ps.INVOICED));
+    // ALREADY_BILLED = informational total (partial payments + final invoices)
+    const alreadyBilled = round2(toNum(ps.PARTIAL_PAYMENTS) + billedFinal);
     const sel = selectedMap.get(String(ps.ID));
     const closedByOther = ps.CLOSED_BY_INVOICE_ID && String(ps.CLOSED_BY_INVOICE_ID) !== String(id);
+    const defaultAmount = round2(Math.max(0, totalEarned - billedFinal));
     return {
       ID: ps.ID,
       FATHER_ID: ps.FATHER_ID ?? null,
@@ -175,9 +179,10 @@ async function getPhases(supabase, { id, tenantId }) {
       REVENUE_COMPLETION: revenue,
       EXTRAS_AMOUNT: extrasAmount,
       TOTAL_EARNED: totalEarned,
+      BILLED_FINAL: billedFinal,
       ALREADY_BILLED: alreadyBilled,
-      AMOUNT_NET: sel ? toNum(sel.AMOUNT_NET) : revenue,
-      AMOUNT_EXTRAS_NET: sel ? toNum(sel.AMOUNT_EXTRAS_NET) : extrasAmount,
+      AMOUNT_NET: sel ? toNum(sel.AMOUNT_NET) : round2(Math.max(0, revenue - billedFinal * (totalEarned > 0 ? revenue / totalEarned : 1))),
+      AMOUNT_EXTRAS_NET: sel ? toNum(sel.AMOUNT_EXTRAS_NET) : round2(Math.max(0, defaultAmount - Math.max(0, revenue - billedFinal * (totalEarned > 0 ? revenue / totalEarned : 1)))),
       SELECTED: !!sel,
       CLOSED_BY_INVOICE_ID: ps.CLOSED_BY_INVOICE_ID ?? null,
       CLOSED: !!closedByOther,
@@ -201,17 +206,27 @@ async function savePhases(supabase, { id, tenantId, structureIds }) {
   if (structureIds.length > 0) {
     const { data: psRows, error: psErr } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
+      .select("ID, REVENUE_COMPLETION, EXTRAS_PERCENT, PARTIAL_PAYMENTS, INVOICED")
       .in("ID", structureIds);
     if (psErr) throw new Error(psErr.message);
 
-    const rows = (psRows || []).map((ps) => ({
-      INVOICE_ID: parseInt(id, 10),
-      STRUCTURE_ID: ps.ID,
-      AMOUNT_NET: toNum(ps.REVENUE_COMPLETION),
-      AMOUNT_EXTRAS_NET: round2((toNum(ps.REVENUE_COMPLETION) * toNum(ps.EXTRAS_PERCENT)) / 100),
-      TENANT_ID: inv.TENANT_ID,
-    }));
+    const rows = (psRows || []).map((ps) => {
+      const revenue = toNum(ps.REVENUE_COMPLETION);
+      const extras = round2((revenue * toNum(ps.EXTRAS_PERCENT)) / 100);
+      const totalEarned = round2(revenue + extras);
+      // Only subtract amounts already invoiced via previous FINAL invoices (not Abschlagsrechnungen)
+      const billedFinal = round2(toNum(ps.INVOICED));
+      const remaining = Math.max(0, round2(totalEarned - billedFinal));
+      const remainingRevenue = totalEarned > 0 ? round2(remaining * revenue / totalEarned) : remaining;
+      const remainingExtras = round2(remaining - remainingRevenue);
+      return {
+        INVOICE_ID: parseInt(id, 10),
+        STRUCTURE_ID: ps.ID,
+        AMOUNT_NET: remainingRevenue,
+        AMOUNT_EXTRAS_NET: remainingExtras,
+        TENANT_ID: inv.TENANT_ID,
+      };
+    });
 
     if (rows.length > 0) {
       const { error: insErr } = await supabase.from("INVOICE_STRUCTURE").insert(rows);
@@ -240,6 +255,33 @@ async function getDeductions(supabase, { id, tenantId }) {
     .order("PARTIAL_PAYMENT_DATE", { ascending: true });
   if (ppErr) throw new Error(ppErr.message);
 
+  // Find PPs already claimed by other booked final invoices
+  const { data: usedRows } = await supabase
+    .from("INVOICE_DEDUCTION")
+    .select("PARTIAL_PAYMENT_ID, INVOICE_ID")
+    .eq("TENANT_ID", tenantId)
+    .neq("INVOICE_ID", id);
+
+  let alreadyUsedPpIds = new Set();
+  if ((usedRows || []).length > 0) {
+    const usedInvoiceIds = [...new Set((usedRows || []).map((r) => r.INVOICE_ID))];
+    const { data: bookedInvRows } = await supabase
+      .from("INVOICE")
+      .select("ID")
+      .in("ID", usedInvoiceIds)
+      .eq("STATUS_ID", 2)
+      .in("INVOICE_TYPE", ["schlussrechnung", "teilschlussrechnung"]);
+    const bookedFinalIds = new Set((bookedInvRows || []).map((r) => String(r.ID)));
+    alreadyUsedPpIds = new Set(
+      (usedRows || [])
+        .filter((r) => bookedFinalIds.has(String(r.INVOICE_ID)))
+        .map((r) => String(r.PARTIAL_PAYMENT_ID))
+    );
+  }
+
+  const filteredPpRows = (ppRows || []).filter((pp) => !alreadyUsedPpIds.has(String(pp.ID)));
+
+  // Saved deduction amounts for this draft invoice
   const { data: idRows } = await supabase
     .from("INVOICE_DEDUCTION")
     .select("PARTIAL_PAYMENT_ID, DEDUCTION_AMOUNT_NET")
@@ -248,15 +290,32 @@ async function getDeductions(supabase, { id, tenantId }) {
     (idRows || []).map((r) => [String(r.PARTIAL_PAYMENT_ID), toNum(r.DEDUCTION_AMOUNT_NET)])
   );
 
-  return (ppRows || []).map((pp) => ({
-    PARTIAL_PAYMENT_ID: pp.ID,
+  // Structure IDs linked to each PP (for warning feature in frontend)
+  const ppIds = filteredPpRows.map((pp) => pp.ID);
+  const ppStructureMap = new Map();
+  if (ppIds.length > 0) {
+    const { data: ppsRows } = await supabase
+      .from("PARTIAL_PAYMENT_STRUCTURE")
+      .select("PARTIAL_PAYMENT_ID, STRUCTURE_ID")
+      .in("PARTIAL_PAYMENT_ID", ppIds);
+    for (const pps of (ppsRows || [])) {
+      const key = String(pps.PARTIAL_PAYMENT_ID);
+      if (!ppStructureMap.has(key)) ppStructureMap.set(key, []);
+      ppStructureMap.get(key).push(pps.STRUCTURE_ID);
+    }
+  }
+
+  return filteredPpRows.map((pp) => ({
+    ID: pp.ID,
     PARTIAL_PAYMENT_NUMBER: pp.PARTIAL_PAYMENT_NUMBER ?? "",
     PARTIAL_PAYMENT_DATE: pp.PARTIAL_PAYMENT_DATE ?? null,
+    AMOUNT_NET: toNum(pp.TOTAL_AMOUNT_NET),
     TOTAL_AMOUNT_NET: toNum(pp.TOTAL_AMOUNT_NET),
     SELECTED: selectedMap.has(String(pp.ID)),
     DEDUCTION_AMOUNT_NET: selectedMap.has(String(pp.ID))
       ? selectedMap.get(String(pp.ID))
       : toNum(pp.TOTAL_AMOUNT_NET),
+    STRUCTURE_IDS: ppStructureMap.get(String(pp.ID)) ?? [],
   }));
 }
 

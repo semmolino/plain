@@ -19,7 +19,7 @@ const TABS = [
 type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'MAIL'
 
 function emptyForm(): CreateEmployeePayload {
-  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '' }
+  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '', cp_rate: '' }
 }
 
 // ── Employee list ─────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ export function MitarbeiterPage() {
   const [editRow,  setEditRow]  = useState<Employee | null>(null)
   const [form,     setForm]     = useState<CreateEmployeePayload>(emptyForm)
   const [editForm, setEditForm] = useState<UpdateEmployeePayload>({
-    short_name: '', title: '', first_name: '', last_name: '', mail: '', mobile: '', personnel_number: '', gender_id: 0,
+    short_name: '', title: '', first_name: '', last_name: '', mail: '', mobile: '', personnel_number: '', gender_id: 0, cp_rate: '',
   })
   const [createMsg, setCreateMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [editMsg,   setEditMsg]   = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -123,6 +123,7 @@ export function MitarbeiterPage() {
       mobile:           row.MOBILE ?? '',
       personnel_number: row.PERSONNEL_NUMBER ?? '',
       gender_id:        row.GENDER_ID ?? 0,
+      cp_rate:          row.CP_RATE ?? '',
     })
     setEditMsg(null)
     setEditRow(row)
@@ -230,6 +231,7 @@ export function MitarbeiterPage() {
             <FormField label="Mobil"          id="mmo" value={form.mobile ?? ''} onChange={setF('mobile')} />
             <FormField label="Personalnr."    id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
             <FormField label="Passwort"       id="mpw" value={form.password ?? ''} onChange={setF('password')} type="password" />
+            <FormField label="Kostensatz (€/h)" id="mcr" value={String(form.cp_rate ?? '')} onChange={setF('cp_rate')} type="number" step="0.01" />
             <div className="form-group">
               <label htmlFor="mge">Geschlecht*</label>
               <select id="mge" value={String(form.gender_id)} onChange={setF('gender_id')} required>
@@ -257,6 +259,7 @@ export function MitarbeiterPage() {
           <FormField label="E-Mail"       id="eem" value={editForm.mail ?? ''} onChange={setE('mail')} type="email" />
           <FormField label="Mobil"        id="emo" value={editForm.mobile ?? ''} onChange={setE('mobile')} />
           <FormField label="Personalnr."  id="epn" value={editForm.personnel_number ?? ''} onChange={setE('personnel_number')} />
+          <FormField label="Kostensatz (€/h)" id="ecr" value={String(editForm.cp_rate ?? '')} onChange={setE('cp_rate')} type="number" step="0.01" />
           <div className="form-group">
             <label htmlFor="ege">Geschlecht*</label>
             <select id="ege" value={String(editForm.gender_id)} onChange={setE('gender_id')} required>

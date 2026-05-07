@@ -38,8 +38,8 @@ async function initInvoice(req, res, supabase) {
     ? b.invoice_type
     : "rechnung";
 
-  if (!companyId || !employeeId || !projectId || !contractId) {
-    return res.status(400).json({ error: "Pflichtfelder fehlen (Firma/Mitarbeiter/Projekt/Vertrag)" });
+  if (!employeeId || !projectId || !contractId) {
+    return res.status(400).json({ error: "Pflichtfelder fehlen (Mitarbeiter/Projekt/Vertrag)" });
   }
 
   try {
@@ -62,6 +62,7 @@ async function patchInvoice(req, res, supabase) {
     .from("INVOICE")
     .select("ID, STATUS_ID, TOTAL_AMOUNT_NET, VAT_PERCENT")
     .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (invErr) return res.status(500).json({ error: invErr.message });
   if (!inv) return res.status(404).json({ error: "INVOICE nicht gefunden" });
@@ -89,6 +90,7 @@ async function getBillingProposal(req, res, supabase) {
       .from("INVOICE")
       .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT")
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
     if (invErr) throw new Error(invErr.message);
     if (!inv) return res.status(404).json({ error: "INVOICE nicht gefunden" });
@@ -163,6 +165,7 @@ async function putPerformance(req, res, supabase) {
       .from("INVOICE")
       .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID")
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
     if (invErr) throw new Error(invErr.message);
     if (!inv) return res.status(404).json({ error: "INVOICE nicht gefunden" });
@@ -209,6 +212,7 @@ async function getTec(req, res, supabase) {
       .from("INVOICE")
       .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID")
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
     if (invErr) throw new Error(invErr.message);
     if (!inv) return res.status(404).json({ error: "INVOICE nicht gefunden" });
@@ -262,6 +266,7 @@ async function postTec(req, res, supabase) {
       .from("INVOICE")
       .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID")
       .eq("ID", id)
+      .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
     if (invErr) throw new Error(invErr.message);
     if (!inv) return res.status(404).json({ error: "INVOICE nicht gefunden" });
@@ -344,6 +349,7 @@ async function getEinvoiceUbl(req, res, supabase) {
     .from("INVOICE")
     .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, INVOICE_NUMBER, COMPANY_ID")
     .eq("ID", invoiceId)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (invRowErr) {
@@ -368,7 +374,7 @@ async function getEinvoiceUbl(req, res, supabase) {
   }
 
   try {
-    const { data: invFull, error: invFullErr } = await supabase.from("INVOICE").select("*").eq("ID", invoiceId).maybeSingle();
+    const { data: invFull, error: invFullErr } = await supabase.from("INVOICE").select("*").eq("ID", invoiceId).eq("TENANT_ID", req.tenantId).maybeSingle();
     if (invFullErr || !invFull) throw new Error(invFullErr?.message || "INVOICE nicht gefunden");
 
     const xml = await svc.generateUblInvoiceXml({ supabase, invoice: invFull, docType: "INVOICE" });
@@ -396,6 +402,7 @@ async function postEinvoiceUblSnapshot(req, res, supabase) {
     .from("INVOICE")
     .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, INVOICE_NUMBER, COMPANY_ID")
     .eq("ID", invoiceId)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (invRowErr) {
@@ -415,7 +422,7 @@ async function postEinvoiceUblSnapshot(req, res, supabase) {
   const fname = `XRechnung_${invRow.INVOICE_NUMBER || invRow.ID}.xml`;
 
   try {
-    const { data: invFull, error: invFullErr } = await supabase.from("INVOICE").select("*").eq("ID", invoiceId).maybeSingle();
+    const { data: invFull, error: invFullErr } = await supabase.from("INVOICE").select("*").eq("ID", invoiceId).eq("TENANT_ID", req.tenantId).maybeSingle();
     if (invFullErr || !invFull) throw new Error(invFullErr?.message || "INVOICE nicht gefunden");
 
     const xml = await svc.generateUblInvoiceXml({ supabase, invoice: invFull, docType: "INVOICE" });
@@ -449,6 +456,7 @@ async function bookInvoice(req, res, supabase) {
     .from("INVOICE")
     .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID")
     .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (invErr || !inv) return res.status(500).json({ error: "INVOICE konnte nicht geladen werden" });
 
@@ -472,7 +480,7 @@ async function deleteInvoice(req, res, supabase) {
   const { id } = req.params;
 
   try {
-    await svc.deleteInvoice(supabase, { id });
+    await svc.deleteInvoice(supabase, { id, tenantId: req.tenantId });
     return res.json({ ok: true });
   } catch (e) {
     const status = e?.status || 500;
@@ -487,7 +495,7 @@ async function cancelInvoice(req, res, supabase) {
   const { id } = req.params;
 
   try {
-    const result = await svc.cancelInvoice(supabase, { id });
+    const result = await svc.cancelInvoice(supabase, { id, tenantId: req.tenantId });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;
@@ -502,7 +510,7 @@ async function getInvoice(req, res, supabase) {
   const { id } = req.params;
 
   try {
-    const { inv, project, contract } = await svc.getInvoice(supabase, { id });
+    const { inv, project, contract } = await svc.getInvoice(supabase, { id, tenantId: req.tenantId });
     return res.json({ data: { inv, project, contract } });
   } catch (e) {
     const status = e?.status || 500;
@@ -527,6 +535,7 @@ async function getPdf(req, res, supabase) {
         .from("INVOICE")
         .select("ID, STATUS_ID, DOCUMENT_PDF_ASSET_ID, INVOICE_NUMBER")
         .eq("ID", invoiceId)
+        .eq("TENANT_ID", req.tenantId)
         .maybeSingle();
 
       if (!invRowErr && invRow && String(invRow.STATUS_ID) === "2" && invRow.DOCUMENT_PDF_ASSET_ID) {
@@ -568,6 +577,7 @@ async function getEinvoiceCii(req, res, supabase) {
     .from("INVOICE")
     .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, DOCUMENT_XML_PROFILE, INVOICE_NUMBER, COMPANY_ID")
     .eq("ID", invoiceId)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (invRowErr) return res.status(500).json({ error: invRowErr.message });
@@ -606,6 +616,7 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
     .from("INVOICE")
     .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, INVOICE_NUMBER, COMPANY_ID")
     .eq("ID", invoiceId)
+    .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (invRowErr) return res.status(500).json({ error: invRowErr.message });
