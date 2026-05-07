@@ -31,7 +31,7 @@ async function getTypes(req, res, supabase) {
 
 async function getManagers(req, res, supabase) {
   try {
-    const data = await svc.getManagers(supabase);
+    const data = await svc.getManagers(supabase, { tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
@@ -40,7 +40,7 @@ async function getManagers(req, res, supabase) {
 
 async function getActiveEmployees(req, res, supabase) {
   try {
-    const data = await svc.getActiveEmployees(supabase);
+    const data = await svc.getActiveEmployees(supabase, { tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });

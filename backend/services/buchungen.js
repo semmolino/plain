@@ -106,7 +106,7 @@ async function createTimerDraft(supabase, { body }) {
   return inserted;
 }
 
-async function listDraftsByEmployee(supabase, { employeeId, date }) {
+async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
   if (!employeeId || !date) throw { status: 400, message: "employee_id und date sind erforderlich" };
 
   const { data, error } = await supabase
@@ -123,6 +123,7 @@ async function listDraftsByEmployee(supabase, { employeeId, date }) {
     .eq("EMPLOYEE_ID", employeeId)
     .eq("DATE_VOUCHER", date)
     .eq("STATUS", "DRAFT")
+    .eq("TENANT_ID", tenantId)
     .order("TIME_START", { ascending: true });
 
   if (error) throw error;

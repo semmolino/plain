@@ -59,7 +59,7 @@ async function createTimerDraft(req, res, supabase) {
 async function listDraftsByEmployee(req, res, supabase) {
   const { employee_id, date } = req.query;
   try {
-    const data = await svc.listDraftsByEmployee(supabase, { employeeId: employee_id, date });
+    const data = await svc.listDraftsByEmployee(supabase, { employeeId: employee_id, date, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
