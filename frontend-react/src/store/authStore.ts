@@ -1,38 +1,67 @@
 import { create } from 'zustand'
-import type { Session, SupabaseClient } from '@supabase/supabase-js'
-import type { AuthUser } from '@/types/auth'
+import { persist } from 'zustand/middleware'
 
-interface AuthStore {
-  supabase: SupabaseClient | null
-  session: Session | null
-  user: AuthUser | null
-  tenantId: number | null
-  isLoading: boolean
-
-  setSupabase: (client: SupabaseClient) => void
-  setSession: (session: Session | null) => void
-  setLoading: (loading: boolean) => void
-  reset: () => void
+export interface AuthState {
+  token:       string | null
+  employeeId:  number | null
+  tenantId:    number | null
+  shortName:   string | null
+  email:       string | null
+  companyName: string | null
+  isLoading:   boolean
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
-  supabase: null,
-  session: null,
-  user: null,
-  tenantId: null,
-  isLoading: true,
+interface AuthStore extends AuthState {
+  setAuth: (data: {
+    token:       string
+    employeeId:  number
+    tenantId:    number
+    shortName:   string
+    email:       string
+    companyName: string | null
+  }) => void
+  clearAuth:  () => void
+  setLoading: (loading: boolean) => void
+}
 
-  setSupabase: (client) => set({ supabase: client }),
+export const useAuthStore = create<AuthStore>()(
+  persist(
+    (set) => ({
+      token:       null,
+      employeeId:  null,
+      tenantId:    null,
+      shortName:   null,
+      email:       null,
+      companyName: null,
+      isLoading:   true,
 
-  setSession: (session) =>
-    set({
-      session,
-      user: (session?.user as AuthUser) ?? null,
-      tenantId: (session?.user?.app_metadata?.tenant_id as number) ?? null,
+      setAuth: (data) =>
+        set({
+          token:       data.token,
+          employeeId:  data.employeeId,
+          tenantId:    data.tenantId,
+          shortName:   data.shortName,
+          email:       data.email,
+          companyName: data.companyName,
+          isLoading:   false,
+        }),
+
+      clearAuth: () =>
+        set({
+          token:       null,
+          employeeId:  null,
+          tenantId:    null,
+          shortName:   null,
+          email:       null,
+          companyName: null,
+          isLoading:   false,
+        }),
+
+      setLoading: (isLoading) => set({ isLoading }),
     }),
-
-  setLoading: (isLoading) => set({ isLoading }),
-
-  reset: () =>
-    set({ session: null, user: null, tenantId: null, isLoading: false }),
-}))
+    {
+      name: 'plain_auth',
+      partialize: (s) => ({ token: s.token, employeeId: s.employeeId, tenantId: s.tenantId, shortName: s.shortName, email: s.email, companyName: s.companyName }),
+    },
+  ),
+)

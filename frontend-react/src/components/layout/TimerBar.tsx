@@ -6,6 +6,7 @@ import { fetchActiveEmployees, fetchProjectsShort, fetchProjectStructure } from 
 import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraftDescription } from '@/api/timer'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
+import { useAuthStore } from '@/store/authStore'
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
   const { data: empData } = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
   const employees = empData?.data ?? []
 
-  const [employeeId,    setEmployeeId]    = useState<number | null>(null)
+  const [employeeId,    setEmployeeId]    = useState<number | null>(() => useAuthStore.getState().employeeId)
   const [cpRate,        setCpRate]        = useState('0')
   const [projectId,     setProjectId]     = useState<number | null>(null)
   const [structureId,   setStructureId]   = useState<number | null>(null)

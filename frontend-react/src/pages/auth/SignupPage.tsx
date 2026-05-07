@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { signup } from '@/api/auth'
-import { useAuth } from '@/context/AuthContext'
-import { Message } from '@/components/ui/Message'
+import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 
 export function SignupPage() {
-  const { supabase } = useAuth()
+  const navigate = useNavigate()
   const [company, setCompany]   = useState('')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -22,20 +21,14 @@ export function SignupPage() {
       setMsg({ text: 'Passwort muss mindestens 8 Zeichen haben.', type: 'error' })
       return
     }
-    if (!supabase) return
 
     setLoading(true)
     setMsg({ text: 'Konto wird erstellt …', type: 'info' })
 
     try {
       await signup({ email, password, companyName: company })
-      setMsg({ text: 'Konto erstellt. Melden Sie sich an …', type: 'success' })
-
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        setMsg({ text: 'Konto erstellt. Bitte jetzt anmelden.', type: 'success' })
-      }
-      // On success, AuthProvider's onAuthStateChange handles navigation
+      setMsg({ text: 'Konto erstellt. Bitte jetzt anmelden.', type: 'success' })
+      setTimeout(() => navigate('/login'), 1500)
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : 'Fehler beim Registrieren.', type: 'error' })
       setLoading(false)

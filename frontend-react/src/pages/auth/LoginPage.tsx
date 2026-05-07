@@ -1,11 +1,13 @@
 import { useState, type KeyboardEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { useAuth } from '@/context/AuthContext'
-import { Message } from '@/components/ui/Message'
+import { Link, useNavigate } from 'react-router-dom'
+import { loginEmployee } from '@/api/auth'
+import { useAuthStore } from '@/store/authStore'
+import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 
 export function LoginPage() {
-  const { supabase } = useAuth()
+  const navigate  = useNavigate()
+  const setAuth   = useAuthStore(s => s.setAuth)
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [msg, setMsg]           = useState<{ text: string; type: 'error' | 'info' } | null>(null)
@@ -16,32 +18,25 @@ export function LoginPage() {
       setMsg({ text: 'Bitte E-Mail und Passwort eingeben.', type: 'error' })
       return
     }
-    if (!supabase) return
 
     setLoading(true)
     setMsg({ text: 'Anmelden …', type: 'info' })
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setMsg({ text: error.message, type: 'error' })
+    try {
+      const res = await loginEmployee(email, password)
+      setAuth({
+        token:       res.token,
+        employeeId:  res.employee_id,
+        tenantId:    res.tenant_id,
+        shortName:   res.short_name,
+        email:       res.email,
+        companyName: res.company_name,
+      })
+      navigate('/')
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen.', type: 'error' })
       setLoading(false)
     }
-    // On success, AuthProvider's onAuthStateChange triggers navigation
-  }
-
-  async function handleForgotPassword() {
-    if (!email) {
-      setMsg({ text: 'Bitte zuerst E-Mail eingeben.', type: 'error' })
-      return
-    }
-    if (!supabase) return
-
-    const redirectTo = window.location.origin + '/'
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
-    setMsg({
-      text: error ? error.message : 'Reset-Link wurde an Ihre E-Mail gesendet.',
-      type: error ? 'error' : 'info',
-    })
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -84,13 +79,6 @@ export function LoginPage() {
         {msg && <Message text={msg.text} type={msg.type} />}
 
         <div className="auth-links">
-          <a
-            href="#"
-            onClick={(e) => { e.preventDefault(); void handleForgotPassword() }}
-          >
-            Passwort vergessen?
-          </a>
-          <span className="auth-sep">·</span>
           <Link to="/signup">Konto erstellen</Link>
         </div>
       </div>

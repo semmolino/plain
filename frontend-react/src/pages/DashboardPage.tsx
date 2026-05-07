@@ -5,7 +5,8 @@ import {
   Tooltip, Legend,
 } from 'chart.js'
 import { Bar, Doughnut } from 'react-chartjs-2'
-import { useAuth }    from '@/context/AuthContext'
+import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/store/authStore'
 import { useSession } from '@/hooks/useSession'
 import {
   fetchDashboardKpis,
@@ -177,8 +178,9 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
-  const { supabase } = useAuth()
-  const { user }     = useSession()
+  const navigate    = useNavigate()
+  const clearAuth   = useAuthStore(s => s.clearAuth)
+  const { email }   = useSession()
 
   const now        = new Date()
   const monthLabel_ = `${MONTHS_DE[now.getMonth()]} ${now.getFullYear()}`
@@ -204,8 +206,8 @@ export function DashboardPage() {
       {/* ── Header ── */}
       <div className="dash-header">
         <div className="dash-title">Übersicht</div>
-        <button className="dash-logout" onClick={() => void supabase?.auth.signOut()}>
-          {user?.email ?? 'Abmelden'}
+        <button className="dash-logout" onClick={() => { clearAuth(); navigate('/login') }}>
+          {email ?? 'Abmelden'}
         </button>
       </div>
 

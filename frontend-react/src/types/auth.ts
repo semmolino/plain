@@ -1,15 +1,17 @@
-import type { Session, User } from '@supabase/supabase-js'
-
-export interface AuthUser extends User {
-  app_metadata: {
-    tenant_id?: number
-    [key: string]: unknown
-  }
+export interface AuthUser {
+  employee_id:  number
+  tenant_id:    number
+  email:        string
+  short_name:   string
+  company_name: string | null
 }
 
 export interface AuthState {
-  session: Session | null
-  user: AuthUser | null
-  tenantId: number | null
-  isLoading: boolean
+  token:       string | null
+  employeeId:  number | null
+  tenantId:    number | null
+  shortName:   string | null
+  email:       string | null
+  companyName: string | null
+  isLoading:   boolean
 }

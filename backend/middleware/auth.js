@@ -1,10 +1,7 @@
-/**
- * Auth middleware — verifies Supabase JWT, injects req.userId + req.tenantId.
- * TENANT_ID is read from the user's app_metadata (set server-side on signup,
- * cannot be forged by the client).
- */
-module.exports = (supabase) => {
-  return async function authMiddleware(req, res, next) {
+const jwt = require("jsonwebtoken");
+
+module.exports = (_supabase) => {
+  return function authMiddleware(req, res, next) {
     const authHeader = req.headers.authorization || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
 
@@ -12,15 +9,15 @@ module.exports = (supabase) => {
       return res.status(401).json({ error: "Nicht authentifiziert" });
     }
 
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
+    const secret = process.env.JWT_SECRET || "plain-dev-secret-change-me";
+    try {
+      const decoded = jwt.verify(token, secret);
+      req.userId     = decoded.employee_id;
+      req.employeeId = decoded.employee_id;
+      req.tenantId   = decoded.tenant_id;
+      next();
+    } catch {
       return res.status(401).json({ error: "Sitzung abgelaufen oder ungültig. Bitte neu anmelden." });
     }
-
-    req.userId   = user.id;
-    req.tenantId = user.app_metadata?.tenant_id ?? null;
-    req.user     = user;
-    next();
   };
 };

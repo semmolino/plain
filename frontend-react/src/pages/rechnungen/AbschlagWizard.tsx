@@ -49,7 +49,7 @@ export function AbschlagWizard() {
   const [contractId,   setContractId]   = useState<number | null>(null)
   const [contractLabel, setContractLabel] = useState('')
   const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string }>>([])
-  const [employeeId,   setEmployeeId]   = useState('')
+  const [employeeId,   setEmployeeId]   = useState(() => String(useAuthStore.getState().employeeId ?? ''))
 
   // Step 1 fields
   const [detDate,  setDetDate]  = useState(todayIso())
@@ -78,7 +78,7 @@ export function AbschlagWizard() {
       if (!id) return
       e.preventDefault()
       e.returnValue = ''
-      const token = useAuthStore.getState().session?.access_token
+      const token = useAuthStore.getState().token
       fetch(`${API_BASE}/partial-payments/${id}`, {
         method: 'DELETE', keepalive: true,
         headers: token ? { Authorization: `Bearer ${token}` } : {},

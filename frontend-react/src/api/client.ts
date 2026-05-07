@@ -23,7 +23,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = useAuthStore.getState().session?.access_token
+  const token = useAuthStore.getState().token
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -59,7 +59,7 @@ async function request<T>(
  * @param fileName  Suggested file name for the download dialog
  */
 export async function downloadWithAuth(path: string, fileName: string): Promise<void> {
-  const token = useAuthStore.getState().session?.access_token
+  const token = useAuthStore.getState().token
   const headers: Record<string, string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
 
@@ -89,7 +89,7 @@ export async function downloadWithAuth(path: string, fileName: string): Promise<
  * @param path  API path (e.g. /invoices/1/pdf?preview=1)
  */
 export async function openPdfWithAuth(path: string): Promise<void> {
-  const token = useAuthStore.getState().session?.access_token
+  const token = useAuthStore.getState().token
   const headers: Record<string, string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
 

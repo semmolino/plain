@@ -1,4 +1,5 @@
 const express = require("express");
+const bcrypt  = require("bcryptjs");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -23,6 +24,8 @@ module.exports = (supabase) => {
       return res.status(400).json({ error: "Pflichtfelder fehlen" });
     }
 
+    const hashedPassword = body.password ? await bcrypt.hash(body.password, 10) : null;
+
     const { data, error } = await supabase
       .from("EMPLOYEE")
       .insert([{
@@ -30,7 +33,7 @@ module.exports = (supabase) => {
         "TITLE": body.title,
         "FIRST_NAME": body.first_name,
         "LAST_NAME": body.last_name,
-        "PASSWORD": body.password,
+        "PASSWORD": hashedPassword,
         "MAIL": body.email,
         "MOBILE": body.mobile,
         "PERSONNEL_NUMBER": body.personnel_number,

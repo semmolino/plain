@@ -8,6 +8,7 @@ import {
   type Buchung,
 } from '@/api/projekte'
 import { fetchActiveEmployees } from '@/api/projekte'
+import { useAuthStore } from '@/store/authStore'
 
 const FMT_NUM = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
 const fmtN    = (v: number | null | undefined) => v == null ? '—' : FMT_NUM.format(v)
@@ -30,7 +31,7 @@ interface BuchungForm {
 
 function emptyForm(): BuchungForm {
   return {
-    EMPLOYEE_ID: '', STRUCTURE_ID: '', DATE_VOUCHER: todayIso(),
+    EMPLOYEE_ID: String(useAuthStore.getState().employeeId ?? ''), STRUCTURE_ID: '', DATE_VOUCHER: todayIso(),
     TIME_START: '', TIME_FINISH: '',
     QUANTITY_INT: '', CP_RATE: '', QUANTITY_EXT: '', SP_RATE: '',
     POSTING_DESCRIPTION: '',
