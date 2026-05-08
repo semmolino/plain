@@ -847,6 +847,17 @@ async function bookPartialPayment(supabase, { id, pp }) {
 
         const { error: psUpErr } = await supabase.from("PROJECT_STRUCTURE").upsert(updates, { onConflict: "ID" });
         if (psUpErr) throw new Error(psUpErr.message);
+
+        // PROJECT_PROGRESS: one row per structure with the PARTIAL_PAYMENTS delta
+        const ppProgressRows = structureIds.map((sid) => ({
+          TENANT_ID:        pp.TENANT_ID ?? null,
+          STRUCTURE_ID:     sid,
+          PARTIAL_PAYMENTS: round2(addByStructure.get(String(sid)) || 0),
+        }));
+        if (ppProgressRows.length > 0) {
+          const { error: ppProgErr } = await supabase.from("PROJECT_PROGRESS").insert(ppProgressRows);
+          if (ppProgErr) console.error("[BOOK_PP][PROGRESS]", ppProgErr.message);
+        }
       }
     }
   } catch (e) {

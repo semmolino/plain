@@ -485,7 +485,7 @@ async function bookFinalInvoice(supabase, { id, tenantId }) {
   try {
     const { data: isRows } = await supabase
       .from("INVOICE_STRUCTURE")
-      .select("STRUCTURE_ID")
+      .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
       .eq("INVOICE_ID", id);
     const structureIds = (isRows || [])
       .map((r) => parseInt(r.STRUCTURE_ID, 10))
@@ -494,6 +494,24 @@ async function bookFinalInvoice(supabase, { id, tenantId }) {
       await supabase.from("PROJECT_STRUCTURE")
         .update({ CLOSED_BY_INVOICE_ID: parseInt(id, 10) })
         .in("ID", structureIds);
+    }
+
+    // PROJECT_PROGRESS: one row per structure with the INVOICED delta
+    if ((isRows || []).length > 0) {
+      const addByStructure = new Map();
+      (isRows || []).forEach((r) => {
+        const sid = String(r.STRUCTURE_ID);
+        addByStructure.set(sid, round2((addByStructure.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+      });
+      const finalProgressRows = Array.from(addByStructure.entries()).map(([sid, invoiced]) => ({
+        TENANT_ID:    inv.TENANT_ID ?? tenantId ?? null,
+        STRUCTURE_ID: parseInt(sid, 10),
+        INVOICED:     invoiced,
+      }));
+      if (finalProgressRows.length > 0) {
+        const { error: fpErr } = await supabase.from("PROJECT_PROGRESS").insert(finalProgressRows);
+        if (fpErr) console.error("[BOOK_FINAL][PROGRESS]", fpErr.message);
+      }
     }
   } catch (e) {
     console.error("[BOOK_FINAL][CLOSE_PHASES]", e);

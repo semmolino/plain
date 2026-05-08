@@ -149,6 +149,67 @@ module.exports = (supabase) => {
         .eq("ID", projectId);
       if (updErr) return res.status(500).json({ error: updErr.message });
 
+      // PROJECT_PROGRESS: distribute payment proportionally across linked structures
+      try {
+        let structureRows = [];
+        if (partialPaymentId) {
+          const { data } = await supabase
+            .from("PARTIAL_PAYMENT_STRUCTURE")
+            .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+            .eq("PARTIAL_PAYMENT_ID", partialPaymentId);
+          structureRows = data || [];
+        } else if (invoiceId) {
+          const { data } = await supabase
+            .from("INVOICE_STRUCTURE")
+            .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+            .eq("INVOICE_ID", invoiceId);
+          structureRows = data || [];
+        }
+
+        if (structureRows.length > 0) {
+          const totalAllocated = structureRows.reduce(
+            (s, r) => s + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET), 0
+          );
+
+          // Build PAYMENT_STRUCTURE rows with proportional net distribution
+          const payStructRows = structureRows.map((r, i) => {
+            const share = totalAllocated !== 0
+              ? round2(net * (toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)) / totalAllocated)
+              : round2(net / structureRows.length);
+            return {
+              PAYMENT_ID:              created.ID,
+              STRUCTURE_ID:            r.STRUCTURE_ID,
+              AMOUNT_PAYED_NET:        share,
+              AMOUNT_PAYED_EXTRAS_NET: 0,
+              TENANT_ID:               req.tenantId ?? null,
+            };
+          });
+
+          // Fix rounding so rows sum exactly to net
+          const rowSum = payStructRows.reduce((s, r) => s + r.AMOUNT_PAYED_NET, 0);
+          const diff   = round2(net - rowSum);
+          if (diff !== 0 && payStructRows.length > 0) {
+            payStructRows[0].AMOUNT_PAYED_NET = round2(payStructRows[0].AMOUNT_PAYED_NET + diff);
+          }
+
+          const { error: psInsErr } = await supabase.from("PAYMENT_STRUCTURE").insert(payStructRows);
+          if (psInsErr) {
+            console.error("[PAYMENT][PAYMENT_STRUCTURE]", psInsErr.message);
+          } else {
+            // PROJECT_PROGRESS: one row per structure with the PAYED delta
+            const payProgressRows = payStructRows.map((r) => ({
+              TENANT_ID:    req.tenantId ?? null,
+              STRUCTURE_ID: r.STRUCTURE_ID,
+              PAYED:        r.AMOUNT_PAYED_NET,
+            }));
+            const { error: ppErr } = await supabase.from("PROJECT_PROGRESS").insert(payProgressRows);
+            if (ppErr) console.error("[PAYMENT][PROGRESS]", ppErr.message);
+          }
+        }
+      } catch (progressErr) {
+        console.error("[PAYMENT][PROGRESS_OUTER]", progressErr?.message || progressErr);
+      }
+
       return res.json({
         success: true,
         id: created?.ID,

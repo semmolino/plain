@@ -941,6 +941,17 @@ async function bookInvoice(supabase, { id, inv }) {
 
         const { error: psUpErr } = await supabase.from("PROJECT_STRUCTURE").upsert(updates, { onConflict: "ID" });
         if (psUpErr) throw new Error(psUpErr.message);
+
+        // PROJECT_PROGRESS: one row per structure with the INVOICED delta
+        const invProgressRows = structureIds.map((sid) => ({
+          TENANT_ID:    inv.TENANT_ID ?? null,
+          STRUCTURE_ID: sid,
+          INVOICED:     round2(addByStructure.get(String(sid)) || 0),
+        }));
+        if (invProgressRows.length > 0) {
+          const { error: invProgErr } = await supabase.from("PROJECT_PROGRESS").insert(invProgressRows);
+          if (invProgErr) console.error("[BOOK_INVOICE][PROGRESS]", invProgErr.message);
+        }
       }
     }
   } catch (e) {
