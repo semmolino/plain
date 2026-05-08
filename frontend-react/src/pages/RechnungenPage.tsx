@@ -8,10 +8,10 @@ import { SchlussrechnungWizard } from '@/pages/rechnungen/SchlussrechnungWizard'
 type Tab = 'liste' | 'abschlag' | 'rechnung' | 'schluss'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'liste',    label: 'Liste' },
+  { id: 'liste',    label: 'Rechnungsliste' },
   { id: 'abschlag', label: 'Abschlagsrechnung' },
   { id: 'rechnung', label: 'Rechnung' },
-  { id: 'schluss',  label: 'Schlussrechnung' },
+  { id: 'schluss',  label: 'Teilschluss-/Schlussrechnung' },
 ]
 
 export function RechnungenPage() {

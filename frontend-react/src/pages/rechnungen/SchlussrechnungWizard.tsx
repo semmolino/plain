@@ -51,7 +51,6 @@ export function SchlussrechnungWizard() {
   const [contractLabel,       setContractLabel]       = useState('')
   const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string }>>([])
   const [employeeId,          setEmployeeId]          = useState(() => String(useAuthStore.getState().employeeId ?? ''))
-  const [isTeil,              setIsTeil]              = useState(false)
 
   // Step 1
   const [detDate,  setDetDate]  = useState(todayIso())
@@ -253,7 +252,7 @@ export function SchlussrechnungWizard() {
     initMut.mutate({
       company_id: 0, employee_id: Number(employeeId),
       project_id: projectId, contract_id: contractId,
-      invoice_type: isTeil ? 'teilschlussrechnung' : 'schlussrechnung',
+      invoice_type: 'schlussrechnung',
     })
   }
 
@@ -349,7 +348,7 @@ export function SchlussrechnungWizard() {
     }
   }
 
-  const invType: InvoiceType = isTeil ? 'teilschlussrechnung' : 'schlussrechnung'
+  const invType: InvoiceType = 'schlussrechnung'
   const singleContract = contractsForProject.length === 1
 
   const hiddenCount = phases.filter(p => {
@@ -370,12 +369,6 @@ export function SchlussrechnungWizard() {
       {step === 0 && (
         <div className="wizard-step-content">
           <p className="wizard-step-title">Projekt & Vertrag wählen</p>
-          <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input type="checkbox" checked={isTeil} onChange={e => setIsTeil(e.target.checked)} />
-              Teilschlussrechnung (nur ausgewählte Positionen)
-            </label>
-          </div>
           <Autocomplete
             label="Projekt*" htmlId="sw-project"
             value={projectLabel}
@@ -614,7 +607,7 @@ export function SchlussrechnungWizard() {
 
           {/* Invoice summary */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 14, marginBottom: 18, padding: '12px 16px', background: 'rgba(17,24,39,0.03)', borderRadius: 10 }}>
-            <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Typ: </span><strong>{isTeil ? 'Teilschlussrechnung' : 'Schlussrechnung'}</strong></div>
+            <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Typ: </span><strong>Teilschluss-/Schlussrechnung</strong></div>
             <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Projekt: </span><strong>{projectLabel || '—'}</strong></div>
             <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Vertrag: </span><strong>{contractLabel || '—'}</strong></div>
             <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Rechnungsdatum: </span><strong>{fmtDate(detDate)}</strong></div>

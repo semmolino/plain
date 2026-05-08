@@ -21,9 +21,10 @@ function todayIso() { return new Date().toISOString().slice(0, 10) }
 function capitalizeInvType(t: string | null | undefined): string {
   if (!t) return 'Rechnung'
   const map: Record<string, string> = {
-    rechnung:       'Rechnung',
-    schlussrechnung: 'Schlussrechnung',
-    stornorechnung:  'Stornorechnung',
+    rechnung:            'Rechnung',
+    schlussrechnung:     'Teilschluss-/Schlussrechnung',
+    teilschlussrechnung: 'Teilschluss-/Schlussrechnung',
+    stornorechnung:      'Stornorechnung',
   }
   return map[t.toLowerCase()] ?? (t.charAt(0).toUpperCase() + t.slice(1))
 }
