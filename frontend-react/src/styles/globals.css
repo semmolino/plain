@@ -317,6 +317,7 @@ input::placeholder { color: rgba(17,24,39,0.45); }
   background: #fff; font-size: 14px; outline: none;
 }
 .list-info { font-size: 12px; color: rgba(17,24,39,0.45); white-space: nowrap; }
+.list-checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: rgba(17,24,39,0.7); cursor: pointer; white-space: nowrap; user-select: none; }
 
 /* ── Master table ────────────────────────────────────────────────────────── */
 .master-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 400px; }

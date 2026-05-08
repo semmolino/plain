@@ -115,7 +115,8 @@ function emptyPaymentForm() {
 export function RechnungenListe() {
   const qc = useQueryClient()
 
-  const [search,  setSearch]  = useState('')
+  const [search,    setSearch]    = useState('')
+  const [onlyOpen,  setOnlyOpen]  = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
@@ -147,6 +148,12 @@ export function RechnungenListe() {
             .toLowerCase().includes(q)
         )
       : allRows
+    if (onlyOpen) {
+      filtered = filtered.filter(r =>
+        r.statusClass === 'booked' &&
+        Math.round((r.gross ?? 0) * 100) !== Math.round((r.paid ?? 0) * 100)
+      )
+    }
     return [...filtered].sort((a, b) => {
       const av = a[sortKey] ?? ''
       const bv = b[sortKey] ?? ''
@@ -155,7 +162,7 @@ export function RechnungenListe() {
         : String(av).localeCompare(String(bv), 'de', { numeric: true })
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [allRows, search, sortKey, sortDir])
+  }, [allRows, search, onlyOpen, sortKey, sortDir])
 
   const totals = useMemo(() => ({
     net:   rows.reduce((s, r) => s + (r.net   ?? 0), 0),
@@ -298,6 +305,14 @@ export function RechnungenListe() {
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+        <label className="list-checkbox-label">
+          <input
+            type="checkbox"
+            checked={onlyOpen}
+            onChange={e => setOnlyOpen(e.target.checked)}
+          />
+          nur offene Posten
+        </label>
         <span className="list-info">
           {rows.length}{rows.length !== allRows.length ? ` / ${allRows.length}` : ''} Einträge
         </span>
