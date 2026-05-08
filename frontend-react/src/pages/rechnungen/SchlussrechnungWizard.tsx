@@ -219,7 +219,7 @@ export function SchlussrechnungWizard() {
   function resetAll() {
     setStep(0); setDraftId(null); setProjectId(null); setProjectLabel('')
     setContractId(null); setContractLabel(''); setContractsForProject([])
-    setEmployeeId(''); setIsTeil(false)
+    setEmployeeId('')
     setDetDate(todayIso()); setDueDate(''); setBpStart(''); setBpFinish(''); setComment('')
     setPhases([]); setPhaseChecked(new Set()); setPhaseTotals(null)
     setDeductions([]); setDeductAmounts({}); setDedSelected(new Set()); setDedTotals(null); setDedWarn(null)

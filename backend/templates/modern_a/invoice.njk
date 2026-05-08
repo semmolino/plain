@@ -292,8 +292,50 @@ body {
   {# ── Calculation table ── #}
   <table class="calc-table">
 
+    {% if inv.invoiceType == 'schlussrechnung' or inv.invoiceType == 'teilschlussrechnung' %}
+
+    {# Schlussrechnung: Honorar → Nebenkosten → Zwischensumme → abzgl. AR → MwSt → Rechnungssumme #}
+    <tr>
+      <td class="label">erbrachtes Honorar</td>
+      <td class="amount">{{ amountNet | money }}</td>
+    </tr>
     {% if amountExtrasNet and amountExtrasNet != 0 %}
-    {# Show Honorar + NK split #}
+    <tr>
+      <td class="label">zzgl. Nebenkosten</td>
+      <td class="amount">{{ amountExtrasNet | money }}</td>
+    </tr>
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">Zwischensumme</td>
+      <td class="amount">{{ inv.totals.lineTotal | money }}</td>
+    </tr>
+    {% endif %}
+
+    {% if deductionTotals.net > 0 %}
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">abzgl. Abschlagsrechnungen (gemäß Zahlungsübersicht)</td>
+      <td class="amount">&minus;&#8239;{{ deductionTotals.net | money }}</td>
+    </tr>
+    {% endif %}
+
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    {% for vat in inv.vatBreakdown %}
+    <tr>
+      <td class="label">zzgl. {{ vat.rate }}&#8239;% Mehrwertsteuer</td>
+      <td class="amount">{{ vat.amount | money }}</td>
+    </tr>
+    {% endfor %}
+
+    <tr class="total-row">
+      <td class="label">Rechnungssumme</td>
+      <td class="amount">{{ inv.totals.grandTotal | money }}</td>
+    </tr>
+
+    {% else %}
+
+    {# Regular invoice / Abschlagsrechnung layout #}
+    {% if amountExtrasNet and amountExtrasNet != 0 %}
     <tr>
       <td class="label">Honorar erbracht (lt. Leistungsstandsmeldung)</td>
       <td class="amount">{{ amountNet | money }}</td>
@@ -308,14 +350,12 @@ body {
       <td class="amount">{{ inv.totals.lineTotal | money }}</td>
     </tr>
     {% else %}
-    {# Single net line #}
     <tr>
       <td class="label">Rechnungsbetrag netto</td>
       <td class="amount">{{ inv.totals.lineTotal | money }}</td>
     </tr>
     {% endif %}
 
-    {# VAT rows #}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     {% for vat in inv.vatBreakdown %}
     <tr>
@@ -324,15 +364,10 @@ body {
     </tr>
     {% endfor %}
 
-    {# Grand total (= full invoice gross before any AR deductions) #}
     <tr class="total-row">
       <td class="label">
         {%- if inv.invoiceType == 'partial_payment' -%}
           Abschlagsrechnungsbetrag
-        {%- elif inv.invoiceType == 'schlussrechnung' -%}
-          Schlussrechnungsbetrag
-        {%- elif inv.invoiceType == 'teilschlussrechnung' -%}
-          Teilschlussrechnungsbetrag
         {%- else -%}
           Rechnungsbetrag
         {%- endif -%}
@@ -340,16 +375,6 @@ body {
       <td class="amount">{{ inv.totals.grandTotal | money }}</td>
     </tr>
 
-    {# For Schlussrechnung: deduct previous partial payments to show Zahlbetrag #}
-    {% if (inv.invoiceType == 'schlussrechnung' or inv.invoiceType == 'teilschlussrechnung') and inv.totals.prepaidAmount > 0 %}
-    <tr>
-      <td class="label">abzgl. Abschlagszahlungen (gemäß Zahlungsübersicht)</td>
-      <td class="amount">&minus;&#8239;{{ inv.totals.prepaidAmount | money }}</td>
-    </tr>
-    <tr class="due-row">
-      <td class="label">Zahlbetrag</td>
-      <td class="amount">{{ inv.totals.duePayable | money }}</td>
-    </tr>
     {% endif %}
 
   </table>
@@ -360,13 +385,7 @@ body {
   {% else %}
   <div class="payment-note">
     Bitte überweisen Sie
-    <strong>
-      {%- if (inv.invoiceType == 'schlussrechnung' or inv.invoiceType == 'teilschlussrechnung') and inv.totals.prepaidAmount > 0 -%}
-        {{ inv.totals.duePayable | money }}
-      {%- else -%}
-        {{ inv.totals.grandTotal | money }}
-      {%- endif -%}
-    </strong>
+    <strong>{{ inv.totals.grandTotal | money }}</strong>
     unter Angabe der Rechnungsnummer <strong>{{ inv.number }}</strong>
     {% if inv.dueDate %}bis zum <strong>{{ inv.dueDate | date_de }}</strong>{% endif %}
     auf folgendes Konto:{% if inv.seller.iban %}<br>

@@ -160,7 +160,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   // ── 6. VAT ────────────────────────────────────────────────────────────────
 
-  const vatPercent = toNum(doc.VAT_PERCENT ?? 19);
+  const vatPercent = toNum(doc.VAT_PERCENT ?? 0);
   const vatCategory = vatPercent > 0 ? 'S' : 'Z';
 
   // ── 7. Line items ─────────────────────────────────────────────────────────
@@ -273,13 +273,18 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   // ── 9. Monetary totals ────────────────────────────────────────────────────
 
   const lineTotal  = fmt2(lines.reduce((s, l) => s + l.lineTotal, 0));
-  const taxBasis   = lineTotal;
-  const taxAmount  = fmt2(doc.TAX_AMOUNT_NET ?? (taxBasis * vatPercent / 100));
-  const grandTotal = fmt2(doc.TOTAL_AMOUNT_GROSS ?? (taxBasis + taxAmount));
 
-  // Prepaid = sum of gross deductions (for Schlussrechnung)
+  // Prepaid amounts — net deduction shifts the VAT basis for Schlussrechnung
+  const prepaidNet    = fmt2(deductions.reduce((s, d) => s + d.netAmount,   0));
   const prepaidAmount = fmt2(deductions.reduce((s, d) => s + d.grossAmount, 0));
-  const duePayable    = fmt2(grandTotal - prepaidAmount);
+
+  // For Schlussrechnung: deduct AR amounts (net) before computing VAT
+  const taxBasis   = isFinal ? fmt2(lineTotal - prepaidNet) : lineTotal;
+  const taxAmount  = isFinal
+    ? fmt2(taxBasis * vatPercent / 100)
+    : fmt2(doc.TAX_AMOUNT_NET ?? (taxBasis * vatPercent / 100));
+  const grandTotal = fmt2(taxBasis + taxAmount);
+  const duePayable = grandTotal; // kept for template compat
 
   // VAT breakdown — single rate for now
   const vatBreakdown = [{
