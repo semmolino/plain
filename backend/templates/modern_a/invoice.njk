@@ -335,24 +335,14 @@ body {
     {% else %}
 
     {# Regular invoice / Abschlagsrechnung layout #}
-    {% if amountExtrasNet and amountExtrasNet != 0 %}
     <tr>
-      <td class="label">Honorar erbracht (lt. Leistungsstandsmeldung)</td>
+      <td class="label">erbrachtes Honorar</td>
       <td class="amount">{{ amountNet | money }}</td>
     </tr>
+    {% if amountExtrasNet and amountExtrasNet != 0 %}
     <tr>
-      <td class="label">Nebenkosten erbracht</td>
+      <td class="label">zzgl. Nebenkosten</td>
       <td class="amount">{{ amountExtrasNet | money }}</td>
-    </tr>
-    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
-    <tr>
-      <td class="label">erbrachte Leistung</td>
-      <td class="amount">{{ inv.totals.lineTotal | money }}</td>
-    </tr>
-    {% else %}
-    <tr>
-      <td class="label">Rechnungsbetrag netto</td>
-      <td class="amount">{{ inv.totals.lineTotal | money }}</td>
     </tr>
     {% endif %}
 
@@ -365,13 +355,7 @@ body {
     {% endfor %}
 
     <tr class="total-row">
-      <td class="label">
-        {%- if inv.invoiceType == 'partial_payment' -%}
-          Abschlagsrechnungsbetrag
-        {%- else -%}
-          Rechnungsbetrag
-        {%- endif -%}
-      </td>
+      <td class="label">Rechnungssumme</td>
       <td class="amount">{{ inv.totals.grandTotal | money }}</td>
     </tr>
 
