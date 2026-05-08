@@ -50,7 +50,7 @@ export function RechnungWizard() {
   const [contractLabel, setContractLabel] = useState('')
   const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string }>>([])
   const [employeeId,   setEmployeeId]   = useState(() => String(useAuthStore.getState().employeeId ?? ''))
-  const [invType,      setInvType]      = useState<InvoiceType>('rechnung')
+  const invType: InvoiceType = 'rechnung'
 
   // Step 1 fields
   const [detDate,  setDetDate]  = useState(todayIso())
@@ -171,7 +171,7 @@ export function RechnungWizard() {
   function resetAll() {
     setStep(0); setDraftId(null); setProjectId(null); setProjectLabel('')
     setCompanyId(null); setContractId(null); setContractLabel(''); setContractsForProject([])
-    setEmployeeId(''); setInvType('rechnung')
+    setEmployeeId('')
     setDetDate(todayIso()); setDueDate(''); setBpStart(''); setBpFinish(''); setComment('')
     setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set()); setHasBt2(false)
     setMsg(null)
@@ -251,14 +251,6 @@ export function RechnungWizard() {
       {step === 0 && (
         <div className="wizard-step-content">
           <p className="wizard-step-title">Projekt & Vertrag wählen</p>
-          <div className="form-group">
-            <label>Rechnungstyp</label>
-            <select value={invType} onChange={e => setInvType(e.target.value as InvoiceType)}>
-              <option value="rechnung">Rechnung</option>
-              <option value="schlussrechnung">Schlussrechnung</option>
-              <option value="teilschlussrechnung">Teilschlussrechnung</option>
-            </select>
-          </div>
           <Autocomplete
             label="Projekt*" htmlId="rw-project"
             value={projectLabel}
