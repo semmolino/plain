@@ -1224,11 +1224,12 @@ async function saveLeistungsstand(supabase, { projectId, updates }) {
     const node = nodeMap.get(sid);
     if (!node) continue;
 
-    const revPct = Math.min(100, Math.max(0, Number(u.revenue_completion_percent ?? 0)));
+    const isNachweis = Number(node.BILLING_TYPE_ID) === 2;
+    const revPct = isNachweis ? 100 : Math.min(100, Math.max(0, Number(u.revenue_completion_percent ?? 0)));
     const extrasPct = revPct;
     const extrasPercent = Number(node.EXTRAS_PERCENT ?? 0);
 
-    const revenue = Number(node.BILLING_TYPE_ID) === 2
+    const revenue = isNachweis
       ? Number(tecSums[sid] ?? 0)
       : Number(node.REVENUE ?? 0);
     const extras = (revenue * extrasPercent) / 100;
