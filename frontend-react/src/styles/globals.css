@@ -811,6 +811,19 @@ input::placeholder { color: rgba(17,24,39,0.45); }
   background: rgba(245,158,11,0.12); color: rgba(180,110,0,0.9);
   border-radius: 4px; white-space: nowrap;
 }
+/* ── Table inputs (compact, used in Angebote / inline editing tables) ───────── */
+.tbl-input, .tbl-select {
+  height: 28px; padding: 0 7px;
+  border: 1px solid rgba(17,24,39,0.2); border-radius: 5px;
+  font-size: 12px; background: #fff;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.tbl-input:focus, .tbl-select:focus {
+  outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+}
+.tbl-select { padding-right: 20px; cursor: pointer; }
+
 .ls-input-wrap { display: flex; align-items: center; gap: 4px; }
 .ls-input {
   width: 64px; height: 28px; padding: 0 6px;

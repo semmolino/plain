@@ -60,33 +60,50 @@ async function createOfferStatus(supabase, { tenantId, name_short }) {
 async function listOffers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from('OFFER')
-    .select(`
-      ID, NAME_SHORT, NAME_LONG, PROBABILITY, CREATED_AT,
-      OFFER_STATUS_ID,
-      OFFER_STATUS!left(NAME_SHORT),
-      EMPLOYEE!left(ID, SHORT_NAME, FIRST_NAME, LAST_NAME),
-      ADDRESS!left(ID, ADDRESS_NAME_1),
-      CONTACT!left(ID, FIRST_NAME, LAST_NAME)
-    `)
+    .select('ID, NAME_SHORT, NAME_LONG, PROBABILITY, CREATED_AT, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID')
     .eq('TENANT_ID', tenantId)
     .order('ID', { ascending: false });
   if (error) throw error;
-  return (data || []).map(r => ({
-    ID:            r.ID,
-    NAME_SHORT:    r.NAME_SHORT,
-    NAME_LONG:     r.NAME_LONG,
-    PROBABILITY:   r.PROBABILITY,
-    CREATED_AT:    r.CREATED_AT,
-    STATUS_NAME:   r.OFFER_STATUS?.NAME_SHORT ?? null,
-    OFFER_STATUS_ID: r.OFFER_STATUS_ID,
-    EMPLOYEE_NAME: r.EMPLOYEE
-      ? `${r.EMPLOYEE.SHORT_NAME ? r.EMPLOYEE.SHORT_NAME + ': ' : ''}${r.EMPLOYEE.FIRST_NAME ?? ''} ${r.EMPLOYEE.LAST_NAME ?? ''}`.trim()
-      : null,
-    ADDRESS_NAME:  r.ADDRESS?.ADDRESS_NAME_1 ?? null,
-    CONTACT_NAME:  r.CONTACT
-      ? `${r.CONTACT.FIRST_NAME ?? ''} ${r.CONTACT.LAST_NAME ?? ''}`.trim()
-      : null,
-  }));
+  const rows = data || [];
+  if (!rows.length) return [];
+
+  const statusIds  = [...new Set(rows.map(r => r.OFFER_STATUS_ID).filter(Boolean))];
+  const empIds     = [...new Set(rows.map(r => r.EMPLOYEE_ID).filter(Boolean))];
+  const addrIds    = [...new Set(rows.map(r => r.ADDRESS_ID).filter(Boolean))];
+  const contactIds = [...new Set(rows.map(r => r.CONTACT_ID).filter(Boolean))];
+
+  const [statusRes, empRes, addrRes, contactRes] = await Promise.all([
+    statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, NAME_SHORT').in('ID', statusIds) : Promise.resolve({ data: [] }),
+    empIds.length     ? supabase.from('EMPLOYEE').select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
+    addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
+    contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
+  ]);
+
+  const statusMap  = new Map((statusRes.data  || []).map(r => [r.ID, r]));
+  const empMap     = new Map((empRes.data      || []).map(r => [r.ID, r]));
+  const addrMap    = new Map((addrRes.data     || []).map(r => [r.ID, r]));
+  const contactMap = new Map((contactRes.data  || []).map(r => [r.ID, r]));
+
+  return rows.map(r => {
+    const emp     = empMap.get(r.EMPLOYEE_ID);
+    const contact = contactMap.get(r.CONTACT_ID);
+    return {
+      ID:              r.ID,
+      NAME_SHORT:      r.NAME_SHORT,
+      NAME_LONG:       r.NAME_LONG,
+      PROBABILITY:     r.PROBABILITY,
+      CREATED_AT:      r.CREATED_AT,
+      STATUS_NAME:     statusMap.get(r.OFFER_STATUS_ID)?.NAME_SHORT ?? null,
+      OFFER_STATUS_ID: r.OFFER_STATUS_ID,
+      EMPLOYEE_NAME:   emp
+        ? `${emp.SHORT_NAME ? emp.SHORT_NAME + ': ' : ''}${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim()
+        : null,
+      ADDRESS_NAME:    addrMap.get(r.ADDRESS_ID)?.ADDRESS_NAME_1 ?? null,
+      CONTACT_NAME:    contact
+        ? `${contact.FIRST_NAME ?? ''} ${contact.LAST_NAME ?? ''}`.trim()
+        : null,
+    };
+  });
 }
 
 async function getOffer(supabase, { tenantId, offerId }) {

@@ -167,6 +167,7 @@ function NummernkreiseSection() {
   const { data, isLoading } = useQuery({
     queryKey: ['number-ranges', YEAR],
     queryFn:  () => fetchNumberRanges(YEAR),
+    staleTime: 0,
   })
 
   useEffect(() => {

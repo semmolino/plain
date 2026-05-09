@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
-import { fetchOfferStatuses, createOffer, type OfferStructureDraftRow } from '@/api/angebote'
+import { fetchOfferStatuses, createOffer, getOfferPdfUrl, type OfferStructureDraftRow } from '@/api/angebote'
 import { fetchProjectManagers, fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
@@ -49,6 +49,7 @@ export function AngeboteAnlegen() {
   const [addrText, setAddrText]   = useState('')
   const [structDraft, setStructDraft] = useState<OfferStructureDraftRow[]>([])
   const [msg, setMsg]             = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const [createdOfferId, setCreatedOfferId] = useState<number | null>(null)
 
   const { data: statusData  } = useQuery({ queryKey: ['offer-statuses'],  queryFn: fetchOfferStatuses  })
   const { data: mgrData     } = useQuery({ queryKey: ['project-managers'],queryFn: fetchProjectManagers })
@@ -82,6 +83,8 @@ export function AngeboteAnlegen() {
     mutationFn: createOffer,
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['offers'] })
+      void qc.invalidateQueries({ queryKey: ['number-ranges'] })
+      setCreatedOfferId(res.data.ID)
       setMsg({ text: `Angebot "${res.data.NAME_SHORT}" wurde angelegt ✅`, type: 'success' })
       setStep(1); setBasic(emptyBasic()); setAddrText(''); setStructDraft([])
     },
@@ -116,12 +119,15 @@ export function AngeboteAnlegen() {
     const role = roles.find(r => String(r.ID) === roleId)
     setStructDraft(d => d.map(r => {
       if (r.tmp_key !== tmpKey) return r
+      const newSpRate = role?.SP_RATE != null ? String(role.SP_RATE) : r.SP_RATE
+      const newRevenue = String(Math.round((Number(r.QUANTITY) || 0) * (Number(newSpRate) || 0) * 100) / 100)
       return {
         ...r,
         ROLE_ID:         roleId,
         ROLE_NAME_SHORT: role?.NAME_SHORT ?? '',
         ROLE_NAME_LONG:  role?.NAME_LONG  ?? '',
-        SP_RATE:         role?.SP_RATE != null ? String(role.SP_RATE) : r.SP_RATE,
+        SP_RATE:         newSpRate,
+        REVENUE:         newRevenue,
       }
     }))
   }
@@ -257,32 +263,32 @@ export function AngeboteAnlegen() {
                     return (
                       <tr key={r.tmp_key}>
                         <td>{i + 1}</td>
-                        <td><input style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
-                        <td><input style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
                         <td>
-                          <select style={{ fontSize: 11 }} value={r.BILLING_TYPE_ID}
+                          <select className="tbl-select" style={{ width: 120 }} value={r.BILLING_TYPE_ID}
                             onChange={e => setStructField(r.tmp_key, 'BILLING_TYPE_ID', e.target.value)}>
                             <option value="">Bitte wählen …</option>
                             {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
                           </select>
                         </td>
                         <td>
-                          <input type="number" min={0} max={100} step={0.1} style={{ width: 60 }}
+                          <input className="tbl-input" type="number" min={0} max={100} step={0.1} style={{ width: 60 }}
                             value={r.EXTRAS_PERCENT} placeholder="0"
                             onChange={e => setStructField(r.tmp_key, 'EXTRAS_PERCENT', e.target.value)} />
                         </td>
                         <td>
                           {isHourly ? (
                             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                              <select style={{ fontSize: 11, width: 100 }} value={r.ROLE_ID}
+                              <select className="tbl-select" style={{ width: 110 }} value={r.ROLE_ID}
                                 onChange={e => applyRolePreset(r.tmp_key, e.target.value)}>
                                 <option value="">Rolle …</option>
                                 {roles.map(ro => <option key={ro.ID} value={ro.ID}>{ro.NAME_SHORT}{ro.NAME_LONG ? ' – ' + ro.NAME_LONG : ''}</option>)}
                               </select>
-                              <input style={{ width: 60 }} placeholder="Aufwand h"
+                              <input className="tbl-input" style={{ width: 70 }} placeholder="Aufwand h"
                                 type="number" min={0} step={0.5} value={r.QUANTITY}
                                 onChange={e => setStructField(r.tmp_key, 'QUANTITY', e.target.value)} />
-                              <input style={{ width: 70 }} placeholder="€/h"
+                              <input className="tbl-input" style={{ width: 70 }} placeholder="€/h"
                                 type="number" min={0} step={0.01} value={r.SP_RATE}
                                 onChange={e => setStructField(r.tmp_key, 'SP_RATE', e.target.value)} />
                               <span style={{ fontSize: 11, color: '#6b7280' }}>
@@ -290,13 +296,13 @@ export function AngeboteAnlegen() {
                               </span>
                             </div>
                           ) : (
-                            <input style={{ width: 100 }} type="number" min={0} step={0.01} placeholder="Honorar"
+                            <input className="tbl-input" style={{ width: 110 }} type="number" min={0} step={0.01} placeholder="Honorar"
                               value={r.REVENUE}
                               onChange={e => setStructField(r.tmp_key, 'REVENUE', e.target.value)} />
                           )}
                         </td>
                         <td>
-                          <select style={{ fontSize: 11 }} value={r.father_tmp_key}
+                          <select className="tbl-select" style={{ width: 120 }} value={r.father_tmp_key}
                             onChange={e => setStructField(r.tmp_key, 'father_tmp_key', e.target.value)}>
                             <option value="">(Root)</option>
                             {structDraft.filter(x => x.tmp_key !== r.tmp_key).map(x => (
@@ -318,6 +324,14 @@ export function AngeboteAnlegen() {
       )}
 
       <Message text={msg?.text ?? null} type={msg?.type} />
+
+      {createdOfferId && msg?.type === 'success' && (
+        <div style={{ marginTop: 8 }}>
+          <a className="btn-small btn-save" href={getOfferPdfUrl(createdOfferId)} target="_blank" rel="noreferrer">
+            PDF öffnen
+          </a>
+        </div>
+      )}
 
       <div className="wizard-nav">
         {step > 1 && <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>}
