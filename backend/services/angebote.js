@@ -406,7 +406,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   // Load company (seller)
   const { data: company } = await supabase
     .from('COMPANY')
-    .select('COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, IBAN, BIC, "TAX-ID", TAX_NUMBER, CREDITOR_ID')
+    .select('COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, IBAN, BIC, "TAX-ID", TAX_NUMBER, "CREDITOR-ID"')
     .eq('ID', offer.COMPANY_ID)
     .maybeSingle();
 
@@ -453,15 +453,16 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   return {
     offer,
     seller: {
-      name:       sellerName || '',
-      street:     company?.STREET      || '',
-      postCode:   company?.POST_CODE   || '',
-      city:       company?.CITY        || '',
-      iban:       company?.IBAN        || '',
-      bic:        company?.BIC         || '',
-      taxId:      company?.TAX_NUMBER  || '',
-      vatId:      company?.['TAX-ID']  || '',
-      creditorId: company?.CREDITOR_ID || '',
+      name:          sellerName || '',
+      street:        company?.STREET          || '',
+      postCode:      company?.POST_CODE       || '',
+      city:          company?.CITY            || '',
+      postOfficeBox: company?.POST_OFFICE_BOX || '',
+      iban:          company?.IBAN            || '',
+      bic:           company?.BIC             || '',
+      taxId:         company?.TAX_NUMBER      || '',
+      vatId:         company?.['TAX-ID']      || '',
+      creditorId:    company?.['CREDITOR-ID'] || '',
     },
     buyer: {
       name:     address?.ADDRESS_NAME_1 || '',
