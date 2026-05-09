@@ -260,55 +260,66 @@ module.exports = (supabase) => {
   // ── Sign up ───────────────────────────────────────────────────────────────
   // Creates a new tenant: TENANT + COMPANY + Supabase Auth user + first EMPLOYEE.
   router.post("/signup", async (req, res) => {
-    const { email, password, companyName, shortName } = req.body || {};
+    try {
+      const { email, password, companyName, shortName } = req.body || {};
 
-    if (!email || !password || !companyName || !shortName) {
-      return res.status(400).json({ error: "E-Mail, Passwort, Firmenname und Kürzel sind erforderlich." });
+      if (!email || !password || !companyName || !shortName) {
+        return res.status(400).json({ error: "E-Mail, Passwort, Firmenname und Kürzel sind erforderlich." });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen haben." });
+      }
+
+      // 1. Create Supabase Auth user (email auto-confirmed)
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+      if (authError) return res.status(400).json({ error: authError.message || String(authError) || "Auth-Benutzer konnte nicht erstellt werden." });
+      const userId = authData.user.id;
+
+      // 2. Create TENANTS record
+      const { data: tenant, error: tenantError } = await supabase
+        .from("TENANTS")
+        .insert([{ TENANT: companyName }])
+        .select("ID")
+        .single();
+
+      if (tenantError) {
+        await supabase.auth.admin.deleteUser(userId).catch(() => {});
+        return res.status(500).json({ error: "Mandant konnte nicht angelegt werden: " + tenantError.message });
+      }
+      const tenantId = tenant.ID;
+
+      // 3. Create COMPANY record
+      await supabase.from("COMPANY").insert([{ COMPANY_NAME_1: companyName, TENANT_ID: tenantId }]);
+
+      // 4. Store tenant_id in Supabase app_metadata (best-effort, non-fatal)
+      await supabase.auth.admin.updateUserById(userId, { app_metadata: { tenant_id: tenantId } }).catch((e) => {
+        console.error("[SIGNUP][APP_METADATA]", e?.message || e);
+      });
+
+      // 5. Create the first EMPLOYEE so they can log in
+      const hashedPw = await bcrypt.hash(password, 10);
+      const { error: empErr } = await supabase.from("EMPLOYEE").insert([{
+        MAIL:       email,
+        PASSWORD:   hashedPw,
+        SHORT_NAME: shortName.trim().toUpperCase(),
+        FIRST_NAME: "Administrator",
+        LAST_NAME:  "",
+        TENANT_ID:  tenantId,
+      }]);
+      if (empErr) {
+        console.error("[SIGNUP][EMPLOYEE]", empErr.message);
+        return res.status(500).json({ error: "Mitarbeiter konnte nicht angelegt werden: " + empErr.message });
+      }
+
+      return res.json({ success: true, message: "Konto erstellt. Bitte anmelden." });
+    } catch (e) {
+      console.error("[SIGNUP]", e?.message || e);
+      return res.status(500).json({ error: e?.message || "Unbekannter Fehler beim Registrieren." });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen haben." });
-    }
-
-    // 1. Create Supabase Auth user (email auto-confirmed)
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-    if (authError) return res.status(400).json({ error: authError.message });
-    const userId = authData.user.id;
-
-    // 2. Create TENANTS record
-    const { data: tenant, error: tenantError } = await supabase
-      .from("TENANTS")
-      .insert([{ TENANT: companyName }])
-      .select("ID")
-      .single();
-
-    if (tenantError) {
-      await supabase.auth.admin.deleteUser(userId).catch(() => {});
-      return res.status(500).json({ error: "Mandant konnte nicht angelegt werden: " + tenantError.message });
-    }
-    const tenantId = tenant.ID;
-
-    // 3. Create COMPANY record
-    await supabase.from("COMPANY").insert([{ COMPANY_NAME_1: companyName, TENANT_ID: tenantId }]);
-
-    // 4. Store tenant_id in Supabase app_metadata
-    await supabase.auth.admin.updateUserById(userId, { app_metadata: { tenant_id: tenantId } });
-
-    // 5. Create the first EMPLOYEE (admin user) so they can log in with EMPLOYEE credentials
-    const hashedPw = await bcrypt.hash(password, 10);
-    await supabase.from("EMPLOYEE").insert([{
-      MAIL:       email,
-      PASSWORD:   hashedPw,
-      SHORT_NAME: shortName.trim().toUpperCase(),
-      FIRST_NAME: "Administrator",
-      LAST_NAME:  "",
-      TENANT_ID:  tenantId,
-    }]).catch(() => {});
-
-    return res.json({ success: true, message: "Konto erstellt. Bitte anmelden." });
   });
 
   return router;
