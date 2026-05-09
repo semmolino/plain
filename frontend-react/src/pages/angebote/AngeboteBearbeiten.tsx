@@ -26,6 +26,8 @@ interface EditForm {
   offer_text_2:     string
   address_id:       string
   contact_id:       string
+  offer_date:       string
+  valid_until:      string
 }
 
 function offerToForm(o: Offer): EditForm {
@@ -39,6 +41,8 @@ function offerToForm(o: Offer): EditForm {
     offer_text_2:     o.OFFER_TEXT_2 ?? '',
     address_id:       o.ADDRESS_ID != null ? String(o.ADDRESS_ID) : '',
     contact_id:       o.CONTACT_ID != null ? String(o.CONTACT_ID) : '',
+    offer_date:       o.OFFER_DATE   ?? '',
+    valid_until:      o.VALID_UNTIL  ?? '',
   }
 }
 
@@ -136,6 +140,8 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
       probability:      f.probability !== '' ? Number(f.probability) : null,
       offer_text_1:     f.offer_text_1 || null,
       offer_text_2:     f.offer_text_2 || null,
+      offer_date:       f.offer_date   || null,
+      valid_until:      f.valid_until  || null,
     }),
     onSuccess: () => {
       setMsg({ text: 'Angebot gespeichert ✅', type: 'success' })
@@ -276,6 +282,17 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                 <option value="">Bitte wählen …</option>
                 {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
               </select>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Angebotsdatum</label>
+                <input type="date" value={form.offer_date} onChange={e => setF('offer_date')(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>Gültigkeitsdatum</label>
+                <input type="date" value={form.valid_until} onChange={e => setF('valid_until')(e.target.value)} />
+              </div>
             </div>
 
             <div className="form-group">

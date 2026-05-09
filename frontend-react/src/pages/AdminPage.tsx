@@ -392,8 +392,9 @@ function UnternehmenSection() {
 
 function VorbelegungenSection() {
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [currencyId, setCurrencyId] = useState('')
-  const [vatId,      setVatId]      = useState('')
+  const [currencyId,    setCurrencyId]    = useState('')
+  const [vatId,         setVatId]         = useState('')
+  const [offerValidDays, setOfferValidDays] = useState('')
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -406,12 +407,14 @@ function VorbelegungenSection() {
     if (!defData?.data) return
     setCurrencyId(defData.data.default_currency_id ?? '')
     setVatId(defData.data.default_vat_id ?? '')
+    setOfferValidDays(defData.data.offer_valid_days ?? '')
   }, [defData?.data])
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      await putDefault('default_currency_id', currencyId || null)
-      await putDefault('default_vat_id',      vatId      || null)
+      await putDefault('default_currency_id', currencyId    || null)
+      await putDefault('default_vat_id',      vatId         || null)
+      await putDefault('offer_valid_days',     offerValidDays || null)
     },
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -449,6 +452,20 @@ function VorbelegungenSection() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="admin-block">
+            <h3 className="admin-block-title">Angebote</h3>
+            <div className="form-group">
+              <label>Gültigkeitsdauer (Tage)</label>
+              <input
+                type="number" min={1} max={365} step={1}
+                value={offerValidDays}
+                onChange={e => setOfferValidDays(e.target.value)}
+                placeholder="z. B. 30"
+              />
+            </div>
+            <p className="admin-section-hint">Tage, um die das Gültigkeitsdatum im Angebots-Wizard vorbelegt wird.</p>
           </div>
 
           <Message text={msg?.text ?? null} type={msg?.type} />

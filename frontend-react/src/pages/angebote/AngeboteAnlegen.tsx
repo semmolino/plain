@@ -1,13 +1,21 @@
-import { useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { fetchOfferStatuses, createOffer, openOfferPdf, type OfferStructureDraftRow } from '@/api/angebote'
 import { fetchProjectManagers, fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
-import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
+import { searchAddressesApi, fetchContactsByAddress, fetchDefaults } from '@/api/stammdaten'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+function todayIso() { return new Date().toISOString().slice(0, 10) }
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
 
 interface BasicForm {
   name_long:        string
@@ -19,10 +27,12 @@ interface BasicForm {
   offer_text_2:     string
   address_id:       string
   contact_id:       string
+  offer_date:       string
+  valid_until:      string
 }
 
 function emptyBasic(): BasicForm {
-  return { name_long: '', company_id: '', offer_status_id: '', employee_id: '', probability: '', offer_text_1: '', offer_text_2: '', address_id: '', contact_id: '' }
+  return { name_long: '', company_id: '', offer_status_id: '', employee_id: '', probability: '', offer_text_1: '', offer_text_2: '', address_id: '', contact_id: '', offer_date: todayIso(), valid_until: '' }
 }
 
 function newStructRow(): OfferStructureDraftRow {
@@ -56,6 +66,7 @@ export function AngeboteAnlegen() {
   const { data: btData      } = useQuery({ queryKey: ['billing-types'],   queryFn: fetchBillingTypes   })
   const { data: roleData    } = useQuery({ queryKey: ['active-roles'],    queryFn: fetchActiveRoles    })
   const { data: companyData } = useQuery({ queryKey: ['companies'],       queryFn: fetchCompanies      })
+  const { data: defData     } = useQuery({ queryKey: ['defaults'],        queryFn: fetchDefaults       })
   const addressId = basic.address_id ? Number(basic.address_id) : null
   const { data: contactData } = useQuery({
     queryKey: ['contacts-by-address', addressId],
@@ -73,6 +84,13 @@ export function AngeboteAnlegen() {
   if (companies.length === 1 && !basic.company_id) {
     setBasic(f => ({ ...f, company_id: String(companies[0].ID) }))
   }
+
+  // Pre-fill valid_until = offer_date + offer_valid_days when defaults load
+  useEffect(() => {
+    const days = parseInt(defData?.data?.offer_valid_days ?? '', 10)
+    if (!Number.isFinite(days) || days <= 0) return
+    setBasic(f => ({ ...f, valid_until: addDays(f.offer_date || todayIso(), days) }))
+  }, [defData?.data?.offer_valid_days])
 
   const searchAddresses = useCallback(async (q: string) => {
     const res = await searchAddressesApi(q)
@@ -158,6 +176,8 @@ export function AngeboteAnlegen() {
       probability:      basic.probability || undefined,
       offer_text_1:     basic.offer_text_1 || undefined,
       offer_text_2:     basic.offer_text_2 || undefined,
+      offer_date:       basic.offer_date   || undefined,
+      valid_until:      basic.valid_until  || null,
       offer_structure:  structDraft.length ? structDraft : undefined,
     })
   }
@@ -200,6 +220,17 @@ export function AngeboteAnlegen() {
               <option value="">Bitte wählen …</option>
               {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
             </select>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Angebotsdatum</label>
+              <input type="date" value={basic.offer_date} onChange={e => setB('offer_date')(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Gültigkeitsdatum</label>
+              <input type="date" value={basic.valid_until} onChange={e => setB('valid_until')(e.target.value)} />
+            </div>
           </div>
 
           <div className="form-group">

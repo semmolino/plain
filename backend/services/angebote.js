@@ -60,29 +60,48 @@ async function createOfferStatus(supabase, { tenantId, name_short }) {
 async function listOffers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from('OFFER')
-    .select('ID, NAME_SHORT, NAME_LONG, PROBABILITY, CREATED_AT, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID')
+    .select('ID, NAME_SHORT, NAME_LONG, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID')
     .eq('TENANT_ID', tenantId)
     .order('ID', { ascending: false });
   if (error) throw error;
   const rows = data || [];
   if (!rows.length) return [];
 
+  const offerIds   = rows.map(r => r.ID);
   const statusIds  = [...new Set(rows.map(r => r.OFFER_STATUS_ID).filter(Boolean))];
   const empIds     = [...new Set(rows.map(r => r.EMPLOYEE_ID).filter(Boolean))];
   const addrIds    = [...new Set(rows.map(r => r.ADDRESS_ID).filter(Boolean))];
   const contactIds = [...new Set(rows.map(r => r.CONTACT_ID).filter(Boolean))];
 
-  const [statusRes, empRes, addrRes, contactRes] = await Promise.all([
+  const [statusRes, empRes, addrRes, contactRes, structRes] = await Promise.all([
     statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, NAME_SHORT').in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
     contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
+    supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
   ]);
 
   const statusMap  = new Map((statusRes.data  || []).map(r => [r.ID, r]));
   const empMap     = new Map((empRes.data      || []).map(r => [r.ID, r]));
   const addrMap    = new Map((addrRes.data     || []).map(r => [r.ID, r]));
   const contactMap = new Map((contactRes.data  || []).map(r => [r.ID, r]));
+
+  // Leaf-based totals per offer
+  const totalMap = new Map();
+  if (structRes.data?.length) {
+    const byOffer = new Map();
+    for (const s of structRes.data) {
+      if (!byOffer.has(s.OFFER_ID)) byOffer.set(s.OFFER_ID, []);
+      byOffer.get(s.OFFER_ID).push(s);
+    }
+    for (const [oId, sRows] of byOffer) {
+      const withChildren = new Set(sRows.map(r => r.FATHER_ID).filter(Boolean));
+      const leaves = sRows.filter(r => !withChildren.has(r.ID));
+      const rev  = leaves.reduce((s, r) => s + (Number(r.REVENUE) || 0), 0);
+      const ext  = leaves.reduce((s, r) => s + (Number(r.EXTRAS)  || 0), 0);
+      totalMap.set(oId, fmt2(rev + ext));
+    }
+  }
 
   return rows.map(r => {
     const emp     = empMap.get(r.EMPLOYEE_ID);
@@ -93,6 +112,9 @@ async function listOffers(supabase, { tenantId }) {
       NAME_LONG:       r.NAME_LONG,
       PROBABILITY:     r.PROBABILITY,
       CREATED_AT:      r.CREATED_AT,
+      OFFER_DATE:      r.OFFER_DATE   ?? null,
+      VALID_UNTIL:     r.VALID_UNTIL  ?? null,
+      TOTAL_AMOUNT:    totalMap.get(r.ID) ?? null,
       STATUS_NAME:     statusMap.get(r.OFFER_STATUS_ID)?.NAME_SHORT ?? null,
       OFFER_STATUS_ID: r.OFFER_STATUS_ID,
       EMPLOYEE_NAME:   emp
@@ -152,6 +174,8 @@ async function createOffer(supabase, { tenantId, body }) {
       OFFER_STATUS_ID: parseInt(String(b.offer_status_id), 10),
       COMPANY_ID:      parseInt(String(b.company_id), 10),
       TENANT_ID:       tenantId,
+      OFFER_DATE:      b.offer_date   || new Date().toISOString().slice(0, 10),
+      VALID_UNTIL:     b.valid_until  || null,
     }])
     .select('*')
     .single();
@@ -231,6 +255,8 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
   if (b.contact_id      !== undefined) patch.CONTACT_ID      = parseInt(String(b.contact_id), 10);
   if (b.offer_status_id !== undefined) patch.OFFER_STATUS_ID = parseInt(String(b.offer_status_id), 10);
   if (b.company_id      !== undefined) patch.COMPANY_ID      = parseInt(String(b.company_id), 10);
+  if (b.offer_date      !== undefined) patch.OFFER_DATE      = b.offer_date   || null;
+  if (b.valid_until     !== undefined) patch.VALID_UNTIL     = b.valid_until  || null;
 
   const { data, error } = await supabase
     .from('OFFER')

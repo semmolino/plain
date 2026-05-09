@@ -21,6 +21,8 @@ export interface Offer {
   COMPANY_ID:      number | null
   TENANT_ID:       number | null
   CREATED_AT:      string | null
+  OFFER_DATE:      string | null
+  VALID_UNTIL:     string | null
 }
 
 export interface OfferListItem {
@@ -29,6 +31,9 @@ export interface OfferListItem {
   NAME_LONG:       string
   PROBABILITY:     number | null
   CREATED_AT:      string | null
+  OFFER_DATE:      string | null
+  VALID_UNTIL:     string | null
+  TOTAL_AMOUNT:    number | null
   STATUS_NAME:     string | null
   OFFER_STATUS_ID: number | null
   EMPLOYEE_NAME:   string | null
@@ -80,6 +85,8 @@ export interface CreateOfferPayload {
   probability?:     string | number
   offer_text_1?:    string
   offer_text_2?:    string
+  offer_date?:      string
+  valid_until?:     string | null
   offer_structure?: OfferStructureDraftRow[]
 }
 
@@ -93,6 +100,8 @@ export interface UpdateOfferPayload {
   probability?:      string | number | null
   offer_text_1?:     string | null
   offer_text_2?:     string | null
+  offer_date?:       string | null
+  valid_until?:      string | null
 }
 
 export interface AddStructureNodePayload {

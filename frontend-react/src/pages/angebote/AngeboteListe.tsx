@@ -5,6 +5,9 @@ import { fetchOffers, deleteOffer, openOfferPdf, type OfferListItem } from '@/ap
 
 const PAGE_SIZE = 25
 
+const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
+
 function fmtDate(s: string | null | undefined) {
   if (!s) return '—'
   const d = new Date(s)
@@ -37,6 +40,11 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
       ? rows.filter(r => `${r.NAME_SHORT} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q))
       : rows
   }, [rows, search])
+
+  const totalSum = useMemo(
+    () => filtered.reduce((s, r) => s + (r.TOTAL_AMOUNT ?? 0), 0),
+    [filtered]
+  )
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage   = Math.min(page, totalPages)
@@ -73,8 +81,10 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                 <th>Status</th>
                 <th>Ansprechpartner</th>
                 <th>Adresse</th>
+                <th className="num">Angebotssumme</th>
                 <th className="num">Wahrsch.</th>
-                <th>Erstellt</th>
+                <th>Angebotsdatum</th>
+                <th>Gültig bis</th>
                 <th></th>
               </tr>
             </thead>
@@ -86,8 +96,10 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                   <td>{r.STATUS_NAME ?? '—'}</td>
                   <td>{r.EMPLOYEE_NAME ?? '—'}</td>
                   <td>{r.ADDRESS_NAME ?? '—'}</td>
+                  <td className="num">{fmtEur(r.TOTAL_AMOUNT)}</td>
                   <td className="num">{r.PROBABILITY != null ? `${r.PROBABILITY} %` : '—'}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.CREATED_AT)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.OFFER_DATE ?? r.CREATED_AT)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.VALID_UNTIL)}</td>
                   <td className="doc-actions">
                     <button className="btn-small" onClick={() => onSelectOffer?.(r.ID)}>Bearbeiten</button>
                     <button className="btn-small" onClick={() => openOfferPdf(r.ID)}>PDF</button>
@@ -95,8 +107,17 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                   </td>
                 </tr>
               ))}
-              {!pageRows.length && <tr><td colSpan={8} className="empty-note">Keine Angebote vorhanden.</td></tr>}
+              {!pageRows.length && <tr><td colSpan={10} className="empty-note">Keine Angebote vorhanden.</td></tr>}
             </tbody>
+            <tfoot>
+              <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                <td colSpan={5} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                  {filtered.length} Einträge
+                </td>
+                <td className="num">{fmtEur(totalSum)}</td>
+                <td colSpan={4}></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}

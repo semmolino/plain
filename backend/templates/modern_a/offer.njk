@@ -166,24 +166,24 @@ body {
         <tr><td class="meta-sep" colspan="2"></td></tr>
         <tr>
           <td class="ml">Datum</td>
-          <td class="mv">{{ offer.CREATED_AT | date_de }}</td>
+          <td class="mv">{{ (offer.OFFER_DATE or offer.CREATED_AT) | date_de }}</td>
         </tr>
+        {% if offer.VALID_UNTIL %}
+        <tr>
+          <td class="ml">Gültig bis</td>
+          <td class="mv">{{ offer.VALID_UNTIL | date_de }}</td>
+        </tr>
+        {% endif %}
         <tr>
           <td class="ml">Angebots-Nr.</td>
           <td class="mv bold">{{ offer.NAME_SHORT }}</td>
         </tr>
-        {% if offer.PROBABILITY %}
-        <tr>
-          <td class="ml">Wahrscheinlichkeit</td>
-          <td class="mv">{{ offer.PROBABILITY }}&thinsp;%</td>
-        </tr>
-        {% endif %}
       </table>
     </div>
   </div>
 
   {# Document title #}
-  <div class="doc-title">Angebot</div>
+  <div class="doc-title">Angebot: {{ offer.NAME_LONG }}</div>
 
   {# Kopftext #}
   {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
