@@ -5,7 +5,7 @@ import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchOffers, fetchOffer, updateOffer, fetchOfferStructure,
   addOfferStructureNode, deleteOfferStructureNode,
-  getOfferPdfUrl, type Offer, type OfferStructureNode, type AddStructureNodePayload,
+  openOfferPdf, type Offer, type OfferStructureNode, type AddStructureNodePayload,
 } from '@/api/angebote'
 import { fetchOfferStatuses } from '@/api/angebote'
 import { fetchProjectManagers, fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
@@ -235,7 +235,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
           {offers.map(o => <option key={o.ID} value={o.ID}>{o.NAME_SHORT} – {o.NAME_LONG}</option>)}
         </select>
         {selectedId && (
-          <a className="btn-small" href={getOfferPdfUrl(selectedId)} target="_blank" rel="noreferrer" style={{ marginLeft: 8 }}>PDF</a>
+          <button className="btn-small" onClick={() => openOfferPdf(selectedId)} style={{ marginLeft: 8 }}>PDF</button>
         )}
       </div>
 

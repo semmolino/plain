@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, openPdfWithAuth } from './client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -157,5 +157,5 @@ export const updateOfferStructureNode = (offerId: number, nodeId: number, body: 
 export const deleteOfferStructureNode = (offerId: number, nodeId: number) =>
   apiClient.delete<{ ok: boolean }>(`/angebote/${offerId}/structure/${nodeId}`)
 
-export const getOfferPdfUrl = (id: number, download = false) =>
-  `/api/v1/angebote/${id}/pdf${download ? '?download=1' : ''}`
+export const openOfferPdf = (id: number) =>
+  openPdfWithAuth(`/angebote/${id}/pdf`)

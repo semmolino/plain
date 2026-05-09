@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
-import { fetchOfferStatuses, createOffer, getOfferPdfUrl, type OfferStructureDraftRow } from '@/api/angebote'
+import { fetchOfferStatuses, createOffer, openOfferPdf, type OfferStructureDraftRow } from '@/api/angebote'
 import { fetchProjectManagers, fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
@@ -327,9 +327,9 @@ export function AngeboteAnlegen() {
 
       {createdOfferId && msg?.type === 'success' && (
         <div style={{ marginTop: 8 }}>
-          <a className="btn-small btn-save" href={getOfferPdfUrl(createdOfferId)} target="_blank" rel="noreferrer">
+          <button className="btn-small btn-save" onClick={() => openOfferPdf(createdOfferId)}>
             PDF öffnen
-          </a>
+          </button>
         </div>
       )}
 

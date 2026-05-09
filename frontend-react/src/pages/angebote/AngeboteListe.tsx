@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
-import { fetchOffers, deleteOffer, getOfferPdfUrl, type OfferListItem } from '@/api/angebote'
+import { fetchOffers, deleteOffer, openOfferPdf, type OfferListItem } from '@/api/angebote'
 
 const PAGE_SIZE = 25
 
@@ -48,84 +48,65 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
   }
 
   return (
-    <div className="ls-wrap">
-      <div className="ls-toolbar">
+    <div>
+      <div className="list-toolbar" style={{ marginTop: 10 }}>
         <input
-          className="ls-select"
+          className="list-search"
           placeholder="Suchen …"
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1) }}
         />
+        <span className="list-info">{filtered.length} Einträge</span>
       </div>
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
 
-      {isLoading && <p className="ls-empty">Lade Daten …</p>}
-      {!isLoading && filtered.length === 0 && <p className="ls-empty">Keine Angebote vorhanden.</p>}
+      {isLoading && <p className="empty-note">Laden …</p>}
 
-      {!isLoading && filtered.length > 0 && (
-        <>
-          <div className="ls-table-wrap">
-            <table className="ls-table">
-              <thead>
-                <tr>
-                  <th className="ls-th">Nr.</th>
-                  <th className="ls-th">Titel</th>
-                  <th className="ls-th">Status</th>
-                  <th className="ls-th">Ansprechpartner</th>
-                  <th className="ls-th">Adresse</th>
-                  <th className="ls-th ls-col-num">Wahrsch.</th>
-                  <th className="ls-th">Erstellt</th>
-                  <th className="ls-th"></th>
+      {!isLoading && (
+        <div className="list-section table-scroll">
+          <table className="master-table">
+            <thead>
+              <tr>
+                <th>Nr.</th>
+                <th>Titel</th>
+                <th>Status</th>
+                <th>Ansprechpartner</th>
+                <th>Adresse</th>
+                <th className="num">Wahrsch.</th>
+                <th>Erstellt</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map(r => (
+                <tr key={r.ID}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.NAME_SHORT ?? '—'}</td>
+                  <td>{r.NAME_LONG}</td>
+                  <td>{r.STATUS_NAME ?? '—'}</td>
+                  <td>{r.EMPLOYEE_NAME ?? '—'}</td>
+                  <td>{r.ADDRESS_NAME ?? '—'}</td>
+                  <td className="num">{r.PROBABILITY != null ? `${r.PROBABILITY} %` : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.CREATED_AT)}</td>
+                  <td className="doc-actions">
+                    <button className="btn-small" onClick={() => onSelectOffer?.(r.ID)}>Bearbeiten</button>
+                    <button className="btn-small" onClick={() => openOfferPdf(r.ID)}>PDF</button>
+                    <button className="btn-small btn-danger" disabled={deleteMut.isPending} onClick={() => handleDelete(r)}>Löschen</button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {pageRows.map(r => (
-                  <tr key={r.ID} className="ls-row ls-row-leaf">
-                    <td className="ls-td" style={{ whiteSpace: 'nowrap' }}>{r.NAME_SHORT ?? '—'}</td>
-                    <td className="ls-td">{r.NAME_LONG}</td>
-                    <td className="ls-td">{r.STATUS_NAME ?? '—'}</td>
-                    <td className="ls-td">{r.EMPLOYEE_NAME ?? '—'}</td>
-                    <td className="ls-td">{r.ADDRESS_NAME ?? '—'}</td>
-                    <td className="ls-td ls-right">{r.PROBABILITY != null ? `${r.PROBABILITY} %` : '—'}</td>
-                    <td className="ls-td" style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.CREATED_AT)}</td>
-                    <td className="ls-td" style={{ whiteSpace: 'nowrap' }}>
-                      <button
-                        className="btn-small"
-                        onClick={() => onSelectOffer?.(r.ID)}
-                        title="Bearbeiten"
-                      >Bearbeiten</button>
-                      {' '}
-                      <a
-                        className="btn-small"
-                        href={getOfferPdfUrl(r.ID)}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="PDF öffnen"
-                      >PDF</a>
-                      {' '}
-                      <button
-                        className="btn-small"
-                        style={{ color: 'var(--color-danger, #ef4444)' }}
-                        disabled={deleteMut.isPending}
-                        onClick={() => handleDelete(r)}
-                        title="Löschen"
-                      >✕</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+              {!pageRows.length && <tr><td colSpan={8} className="empty-note">Keine Angebote vorhanden.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-          {totalPages > 1 && (
-            <div className="ls-footer" style={{ justifyContent: 'flex-start', gap: 8 }}>
-              <button disabled={safePage <= 1} onClick={() => setPage(p => p - 1)}>‹</button>
-              <span style={{ fontSize: 13 }}>Seite {safePage} / {totalPages}</span>
-              <button disabled={safePage >= totalPages} onClick={() => setPage(p => p + 1)}>›</button>
-            </div>
-          )}
-        </>
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+          <button disabled={safePage <= 1} onClick={() => setPage(p => p - 1)}>‹</button>
+          <span style={{ fontSize: 13 }}>Seite {safePage} / {totalPages}</span>
+          <button disabled={safePage >= totalPages} onClick={() => setPage(p => p + 1)}>›</button>
+        </div>
       )}
     </div>
   )
