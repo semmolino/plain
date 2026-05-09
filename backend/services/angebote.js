@@ -453,14 +453,15 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   return {
     offer,
     seller: {
-      name:    sellerName || '',
-      street:  company?.STREET    || '',
-      postCode: company?.POST_CODE || '',
-      city:    company?.CITY      || '',
-      iban:    company?.IBAN      || '',
-      bic:     company?.BIC       || '',
-      taxId:   company?.TAX_NUMBER || '',
-      vatId:   company?.['TAX-ID'] || '',
+      name:       sellerName || '',
+      street:     company?.STREET      || '',
+      postCode:   company?.POST_CODE   || '',
+      city:       company?.CITY        || '',
+      iban:       company?.IBAN        || '',
+      bic:        company?.BIC         || '',
+      taxId:      company?.TAX_NUMBER  || '',
+      vatId:      company?.['TAX-ID']  || '',
+      creditorId: company?.CREDITOR_ID || '',
     },
     buyer: {
       name:     address?.ADDRESS_NAME_1 || '',
@@ -484,7 +485,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
       extrasPct:  Number(n.EXTRAS_PERCENT || 0),
       extras:     Number(n.EXTRAS      || 0),
       total:      fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
-      roleName:   n.ROLE_NAME_SHORT || '',
+      roleName:   n.ROLE_NAME_LONG  || n.ROLE_NAME_SHORT || '',
     })),
     totals: {
       revenue:    fmt2(totalRevenue),

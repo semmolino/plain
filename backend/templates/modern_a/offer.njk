@@ -119,6 +119,20 @@ body {
   padding-top: 2mm;
   border-top: 1pt solid #1a1a1a;
 }
+
+/* ── Document footer ─────────────────────────────────────── */
+.doc-footer {
+  margin-top: 12mm;
+  padding-top: 3mm;
+  border-top: 0.5pt solid #d1d5db;
+  display: flex;
+  gap: 6mm;
+  font-size: 7.5pt;
+  color: #6b7280;
+  line-height: 1.6;
+}
+.doc-footer-col { flex: 1; }
+.doc-footer-col strong { color: #374151; font-weight: 600; display: block; margin-bottom: 1mm; }
 </style>
 </head>
 <body>
@@ -242,6 +256,31 @@ body {
 
   {# Fußtext #}
   {% if text2 %}<div class="text-block">{{ text2 }}</div>{% endif %}
+
+  {# ── Document footer ── #}
+  <div class="doc-footer">
+    <div class="doc-footer-col">
+      <strong>{{ seller.name }}</strong>
+      {% if seller.street %}{{ seller.street }}<br>{% endif %}
+      {% if seller.postCode or seller.city %}{{ seller.postCode }} {{ seller.city }}{% endif %}
+    </div>
+    <div class="doc-footer-col">
+      <strong>Bankverbindung</strong>
+      {% if seller.iban %}IBAN: {{ seller.iban }}<br>{% endif %}
+      {% if seller.bic %}BIC: {{ seller.bic }}{% endif %}
+    </div>
+    <div class="doc-footer-col">
+      <strong>Steuer</strong>
+      {% if seller.taxId %}Steuernummer: {{ seller.taxId }}<br>{% endif %}
+      {% if seller.vatId %}USt-IdNr.: {{ seller.vatId }}{% endif %}
+    </div>
+    {% if seller.creditorId %}
+    <div class="doc-footer-col">
+      <strong>Sonstiges</strong>
+      Gläubiger-ID: {{ seller.creditorId }}
+    </div>
+    {% endif %}
+  </div>
 
 </div>
 
