@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useState, useEffect, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
-import { fetchCountries, createDepartment, createTyp, createRolle, createCompany,
-         fetchCurrencies, fetchVatList, fetchDefaults, putDefault } from '@/api/stammdaten'
+import { fetchCountries, fetchCompanies, createDepartment, createTyp, createRolle,
+         createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchDefaults, putDefault,
+         type Company } from '@/api/stammdaten'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 
 const PAGE_TABS = [
@@ -215,55 +216,131 @@ function NummernkreiseSection() {
 
 // ── Unternehmen ───────────────────────────────────────────────────────────────
 
+const EMPTY_COMPANY_FORM = {
+  company_name_1: '', company_name_2: '', street: '', post_code: '', city: '',
+  post_office_box: '', country_id: '', tax_number: '', tax_id: '',
+  bic: '', iban: '', creditor_id: '',
+}
+
+function companyToForm(c: Company) {
+  return {
+    company_name_1: c.COMPANY_NAME_1 ?? '',
+    company_name_2: c.COMPANY_NAME_2 ?? '',
+    street:         c.STREET ?? '',
+    post_code:      c.POST_CODE ?? '',
+    city:           c.CITY ?? '',
+    post_office_box: c.POST_OFFICE_BOX ?? '',
+    country_id:     c.COUNTRY_ID ?? '',
+    tax_number:     c.TAX_NUMBER ?? '',
+    tax_id:         c['TAX-ID'] ?? '',
+    bic:            c.BIC ?? '',
+    iban:           c.IBAN ?? '',
+    creditor_id:    c['CREDITOR-ID'] ?? '',
+  }
+}
+
 function UnternehmenSection() {
-  const [form, setForm] = useState({
-    company_name_1: '', company_name_2: '', street: '',
-    post_code: '', city: '', country_id: '', tax_id: '',
-  })
+  const qc = useQueryClient()
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [form, setForm] = useState({ ...EMPTY_COMPANY_FORM })
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
+  const { data: companiesData } = useQuery({ queryKey: ['companies'], queryFn: fetchCompanies })
   const { data: countriesData } = useQuery({ queryKey: ['countries'], queryFn: fetchCountries })
+  const companies = companiesData?.data ?? []
   const countries = countriesData?.data ?? []
 
-  const createMut = useMutation({
-    mutationFn: createCompany,
-    onSuccess: () => { setMsg({ text: 'Unternehmen gespeichert ✅', type: 'success' }); setForm({ company_name_1: '', company_name_2: '', street: '', post_code: '', city: '', country_id: '', tax_id: '' }) },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  const loadCompany = useCallback((c: Company) => {
+    setSelectedId(c.ID)
+    setForm(companyToForm(c))
+    setMsg(null)
+  }, [])
+
+  function newCompany() {
+    setSelectedId(null)
+    setForm({ ...EMPTY_COMPANY_FORM })
+    setMsg(null)
+  }
+
+  const onSuccess = () => {
+    qc.invalidateQueries({ queryKey: ['companies'] })
+    setMsg({ text: 'Unternehmen gespeichert ✅', type: 'success' })
+  }
+  const onError = (e: Error) => setMsg({ text: e.message, type: 'error' })
+
+  const createMut = useMutation({ mutationFn: createCompany, onSuccess, onError })
+  const updateMut = useMutation({
+    mutationFn: (body: typeof form) => updateCompany(selectedId!, body),
+    onSuccess, onError,
   })
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
-    if (!form.company_name_1 || !form.street || !form.post_code || !form.city || !form.country_id) {
-      setMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
+    if (!form.company_name_1.trim()) {
+      setMsg({ text: 'Firmenname 1 ist erforderlich', type: 'error' }); return
     }
-    createMut.mutate(form)
+    if (selectedId !== null) {
+      updateMut.mutate(form)
+    } else {
+      createMut.mutate(form)
+    }
   }
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
 
+  const isPending = createMut.isPending || updateMut.isPending
+
   return (
     <div className="admin-section">
+      {/* Company selector */}
+      <div className="admin-company-selector">
+        {companies.map(c => (
+          <button
+            key={c.ID}
+            type="button"
+            className={`admin-company-btn${selectedId === c.ID ? ' active' : ''}`}
+            onClick={() => loadCompany(c)}
+          >
+            {c.COMPANY_NAME_1}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`admin-company-btn${selectedId === null ? ' active' : ''}`}
+          onClick={newCompany}
+        >
+          + Neue Firma
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="master-form">
-        <FormField label="Firmenname 1*"  id="ufn1" value={form.company_name_1} onChange={set('company_name_1')} required />
-        <FormField label="Firmenname 2"   id="ufn2" value={form.company_name_2} onChange={set('company_name_2')} />
-        <FormField label="Straße*"        id="ust"  value={form.street} onChange={set('street')} required />
+        <FormField label="Unternehmen*"               id="ufn1" value={form.company_name_1}  onChange={set('company_name_1')}  required />
+        <FormField label="Unternehmen (Zusatz)"        id="ufn2" value={form.company_name_2}  onChange={set('company_name_2')} />
+        <FormField label="Straße"                      id="ust"  value={form.street}          onChange={set('street')} />
         <div className="form-row">
-          <FormField label="PLZ*"         id="upc"  value={form.post_code} onChange={set('post_code')} required />
-          <FormField label="Ort*"         id="uct"  value={form.city} onChange={set('city')} required />
+          <FormField label="PLZ"                       id="upc"  value={form.post_code}       onChange={set('post_code')} />
+          <FormField label="Stadt"                     id="uct"  value={form.city}            onChange={set('city')} />
         </div>
+        <FormField label="Postfach"                    id="upob" value={form.post_office_box} onChange={set('post_office_box')} />
         <div className="form-group">
-          <label htmlFor="uco">Land*</label>
-          <select id="uco" value={form.country_id} onChange={set('country_id')} required>
+          <label htmlFor="uco">Land</label>
+          <select id="uco" value={form.country_id} onChange={set('country_id')}>
             <option value="">Bitte wählen …</option>
-            {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.NAME_SHORT || c.ID}</option>)}
+            {countries.map(c => (
+              <option key={c.ID} value={c.ID}>{c.NAME_SHORT}: {c.NAME_LONG}</option>
+            ))}
           </select>
         </div>
-        <FormField label="Steuernummer"   id="uti"  value={form.tax_id} onChange={set('tax_id')} />
+        <FormField label="Steuernummer"                id="utn"  value={form.tax_number}      onChange={set('tax_number')} />
+        <FormField label="Steuer-IdNr."                id="uti"  value={form.tax_id}          onChange={set('tax_id')} />
+        <FormField label="BIC"                         id="ubic" value={form.bic}             onChange={set('bic')} />
+        <FormField label="IBAN"                        id="uiban" value={form.iban}           onChange={set('iban')} />
+        <FormField label="Gläubiger-Identifikationsnummer" id="ucid" value={form.creditor_id} onChange={set('creditor_id')} />
         <Message text={msg?.text ?? null} type={msg?.type} />
-        <button className="btn-primary" type="submit" disabled={createMut.isPending}>
-          {createMut.isPending ? 'Speichert …' : 'Speichern'}
+        <button className="btn-primary" type="submit" disabled={isPending}>
+          {isPending ? 'Speichert …' : selectedId !== null ? 'Änderungen speichern' : 'Neu anlegen'}
         </button>
       </form>
     </div>

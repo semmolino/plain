@@ -106,18 +106,45 @@ export const updateContact = (id: number, body: ContactPayload) =>
 
 // ── Company ───────────────────────────────────────────────────────────────────
 
+export interface Company {
+  ID: number
+  COMPANY_NAME_1: string
+  COMPANY_NAME_2: string | null
+  STREET: string | null
+  POST_CODE: string | null
+  CITY: string | null
+  POST_OFFICE_BOX: string | null
+  COUNTRY_ID: string | null
+  TAX_NUMBER: string | null
+  'TAX-ID': string | null
+  BIC: string | null
+  IBAN: string | null
+  'CREDITOR-ID': string | null
+}
+
 export interface CompanyPayload {
   company_name_1: string
   company_name_2?: string
-  street: string
-  post_code: string
-  city: string
-  country_id: string
+  street?: string
+  post_code?: string
+  city?: string
+  post_office_box?: string
+  country_id?: string
+  tax_number?: string
   tax_id?: string
+  bic?: string
+  iban?: string
+  creditor_id?: string
 }
+
+export const fetchCompanies = () =>
+  apiClient.get<{ data: Company[] }>('/stammdaten/companies')
 
 export const createCompany = (body: CompanyPayload) =>
   apiClient.post<{ data: unknown }>('/stammdaten/company', body)
+
+export const updateCompany = (id: number, body: CompanyPayload) =>
+  apiClient.put<{ data: unknown }>(`/stammdaten/company/${id}`, body)
 
 // ── Stammdaten (status, typ, rollen) ──────────────────────────────────────────
 

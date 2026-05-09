@@ -398,6 +398,10 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 .admin-input-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .admin-single-input { flex: 1; min-width: 160px; padding: 8px 12px; border: 1px solid rgba(17,24,39,0.10); border-radius: 10px; font-size: 14px; outline: none; }
 .admin-field-label { font-size: 11px; color: rgba(17,24,39,0.4); }
+.admin-company-selector { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.admin-company-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(17,24,39,0.15); background: #fff; font-size: 13px; cursor: pointer; color: rgba(17,24,39,0.75); transition: background 0.15s, border-color 0.15s; }
+.admin-company-btn:hover { background: rgba(17,24,39,0.05); }
+.admin-company-btn.active { background: #111827; color: #fff; border-color: #111827; }
 
 /* Nummernkreise */
 .nr-preview { font-size: 12px; color: #2563eb; font-weight: 600; margin-top: -6px; margin-bottom: 4px; }

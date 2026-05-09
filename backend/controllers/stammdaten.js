@@ -431,29 +431,60 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
 // GET /api/stammdaten/companies
 // ---------------------------------------------------------------------------
 async function getCompanies(req, res, supabase) {
-  const { data, error } = await supabase.from("COMPANY").select("ID, COMPANY_NAME_1").eq("TENANT_ID", req.tenantId).order("COMPANY_NAME_1", { ascending: true, nullsFirst: false });
+  const { data, error } = await supabase
+    .from("COMPANY")
+    .select("ID, COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, TAX_NUMBER, \"TAX-ID\", BIC, IBAN, \"CREDITOR-ID\"")
+    .eq("TENANT_ID", req.tenantId)
+    .order("COMPANY_NAME_1", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
+}
+
+function buildCompanyRow(body) {
+  const s = (v) => (typeof v === "string" ? v.trim() : "") || null;
+  return {
+    COMPANY_NAME_1:  (body.company_name_1 || "").trim(),
+    COMPANY_NAME_2:  s(body.company_name_2),
+    STREET:          s(body.street),
+    POST_CODE:       s(body.post_code),
+    CITY:            s(body.city),
+    POST_OFFICE_BOX: s(body.post_office_box),
+    COUNTRY_ID:      s(body.country_id),
+    TAX_NUMBER:      s(body.tax_number),
+    "TAX-ID":        s(body.tax_id),
+    BIC:             s(body.bic),
+    IBAN:            s(body.iban),
+    "CREDITOR-ID":   s(body.creditor_id),
+  };
 }
 
 // ---------------------------------------------------------------------------
 // POST /api/stammdaten/company
 // ---------------------------------------------------------------------------
 async function postCompany(req, res, supabase) {
-  const { company_name_1, company_name_2, street, post_code, city, country_id, tax_id } = req.body || {};
+  const { company_name_1 } = req.body || {};
   if (!company_name_1 || typeof company_name_1 !== "string") return res.status(400).json({ error: "company_name_1 is required" });
-  if (!street || typeof street !== "string") return res.status(400).json({ error: "street is required" });
-  if (!post_code || typeof post_code !== "string") return res.status(400).json({ error: "post_code is required" });
-  if (!city || typeof city !== "string") return res.status(400).json({ error: "city is required" });
-  if (!country_id || typeof country_id !== "string") return res.status(400).json({ error: "country_id is required" });
 
-  const { data, error } = await supabase.from("COMPANY").insert([{
-    COMPANY_NAME_1: company_name_1.trim(),
-    COMPANY_NAME_2: (company_name_2 || "").trim() || null,
-    STREET: street.trim(), POST_CODE: post_code.trim(), CITY: city.trim(),
-    COUNTRY_ID: country_id.trim(), "TAX-ID": (tax_id || "").trim() || null,
-    TENANT_ID: req.tenantId ?? null,
-  }]);
+  const row = { ...buildCompanyRow(req.body), TENANT_ID: req.tenantId ?? null };
+  const { data, error } = await supabase.from("COMPANY").insert([row]);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+}
+
+// ---------------------------------------------------------------------------
+// PUT /api/stammdaten/company/:id
+// ---------------------------------------------------------------------------
+async function putCompany(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id || Number.isNaN(id)) return res.status(400).json({ error: "Invalid company id" });
+  const { company_name_1 } = req.body || {};
+  if (!company_name_1 || typeof company_name_1 !== "string") return res.status(400).json({ error: "company_name_1 is required" });
+
+  const { data, error } = await supabase
+    .from("COMPANY")
+    .update(buildCompanyRow(req.body))
+    .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -771,7 +802,7 @@ module.exports = {
   postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure,
-  getCompanies, postCompany, postAddress, postRollen,
+  getCompanies, postCompany, putCompany, postAddress, postRollen,
   getSalutations, getGenders, searchAddresses, listAddresses, patchAddress,
   searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, searchPaymentMeans, postContact,
   getCurrencies, getVat, getDefaults, putDefault,
