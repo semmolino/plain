@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+.logo-area {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6mm;
+  min-height: 4mm;
+}
+.logo-area img {
+  max-height: {{ (theme.header.logoMaxHeightMm or 20) }}mm;
+  max-width: 70mm;
+  object-fit: contain;
+}
+
+.sender-line {
+  font-size: 7.5pt;
+  color: #6b7280;
+  border-bottom: 0.3pt solid #d1d5db;
+  padding-bottom: 1mm;
+  margin-bottom: 5mm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.letter-header {
+  display: flex;
+  gap: 10mm;
+  margin-bottom: 8mm;
+  align-items: flex-start;
+}
+.address-col { width: 85mm; flex-shrink: 0; }
+.address-block { font-size: 10pt; line-height: 1.5; min-height: 35mm; }
+.address-block .name1 { font-weight: 600; }
+
+.meta-col { flex: 1; }
+.meta-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.meta-table td { padding: 0.8mm 0; vertical-align: top; }
+.meta-table td.ml { color: #6b7280; width: 36mm; padding-right: 2mm; }
+.meta-table td.mv { font-weight: 500; }
+.meta-table td.mv.bold { font-weight: 700; }
+.meta-sep { border-top: 0.3pt solid #d1d5db; padding-top: 1.5mm; height: 3mm; }
+
+.doc-title {
+  font-size: 14pt;
+  font-weight: 700;
+  margin-bottom: 5mm;
+  color: #111827;
+}
+
+.text-block {
+  font-size: 10pt;
+  margin-bottom: 5mm;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+/* ── Positions table ─────────────────────────────────────── */
+.pos-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0 6mm 0;
+  font-size: 9.5pt;
+}
+.pos-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 0.5pt solid #9ca3af;
+  padding: 1.5mm 2mm 1.5mm 0;
+}
+.pos-table th.r { text-align: right; padding-left: 3mm; }
+.pos-table td {
+  padding: 1.5mm 2mm 1.5mm 0;
+  border-bottom: 0.3pt solid #e5e7eb;
+  vertical-align: top;
+}
+.pos-table td.r {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-left: 3mm;
+}
+.pos-table tr.parent-row td { font-weight: 600; background: #f9fafb; }
+.pos-table tr.leaf-row td { }
+.pos-table .sub-info { font-size: 8.5pt; color: #6b7280; }
+
+/* ── Calculation table ───────────────────────────────────── */
+.calc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0 6mm 0;
+}
+.calc-table td { padding: 1.5mm 0; font-size: 10pt; vertical-align: baseline; }
+.calc-table td.label { color: #374151; }
+.calc-table td.amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-left: 6mm;
+}
+.calc-table tr.sep td { padding: 0; height: 2mm; }
+.calc-table tr.sep td.line-cell { border-top: 0.5pt solid #9ca3af; }
+.calc-table tr.total-row td {
+  font-weight: 700;
+  font-size: 11pt;
+  padding-top: 2mm;
+  border-top: 1pt solid #1a1a1a;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  {# Logo #}
+  <div class="logo-area">
+    {% if theme.header.showLogo and logoDataUri %}
+      <img src="{{ logoDataUri }}" alt="Logo">
+    {% endif %}
+  </div>
+
+  {# Sender line #}
+  <div class="sender-line">
+    {{ seller.name }}{% if seller.street %} &middot; {{ seller.street }}{% endif %}{% if seller.postCode or seller.city %} &middot; {{ seller.postCode }} {{ seller.city }}{% endif %}
+  </div>
+
+  {# Two-column: buyer address | meta block #}
+  <div class="letter-header">
+
+    <div class="address-col">
+      <div class="address-block">
+        <div class="name1">{{ buyer.name }}</div>
+        {% if buyer.name2 %}<div>{{ buyer.name2 }}</div>{% endif %}
+        {% if buyer.street %}<div>{{ buyer.street }}</div>{% endif %}
+        <div>{{ buyer.postCode }} {{ buyer.city }}</div>
+      </div>
+    </div>
+
+    <div class="meta-col">
+      <table class="meta-table">
+        {% if employee %}
+        <tr>
+          <td class="ml">Ansprechpartner</td>
+          <td class="mv">{{ employee.FIRST_NAME }} {{ employee.LAST_NAME }}</td>
+        </tr>
+        {% endif %}
+        {% if contact and contact.EMAIL %}
+        <tr>
+          <td class="ml">E-Mail</td>
+          <td class="mv">{{ contact.EMAIL }}</td>
+        </tr>
+        {% endif %}
+        <tr><td class="meta-sep" colspan="2"></td></tr>
+        <tr>
+          <td class="ml">Datum</td>
+          <td class="mv">{{ offer.CREATED_AT | date_de }}</td>
+        </tr>
+        <tr>
+          <td class="ml">Angebots-Nr.</td>
+          <td class="mv bold">{{ offer.NAME_SHORT }}</td>
+        </tr>
+        {% if offer.PROBABILITY %}
+        <tr>
+          <td class="ml">Wahrscheinlichkeit</td>
+          <td class="mv">{{ offer.PROBABILITY }}&thinsp;%</td>
+        </tr>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {# Document title #}
+  <div class="doc-title">Angebot</div>
+
+  {# Kopftext #}
+  {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
+
+  {# ── Positions table ── #}
+  {% if structureRows and structureRows.length > 0 %}
+  <table class="pos-table">
+    <thead>
+      <tr>
+        <th style="width:18mm">Position</th>
+        <th>Bezeichnung</th>
+        <th class="r" style="width:26mm">Honorar</th>
+        <th class="r" style="width:18mm">Nebenkosten</th>
+        <th class="r" style="width:22mm">Gesamt</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in structureRows %}
+      <tr class="{{ 'parent-row' if row.depth === 0 and not row.isLeaf else 'leaf-row' }}">
+        <td style="padding-left: {{ row.depth * 5 + 2 }}mm">{{ row.nameShort }}</td>
+        <td>
+          {{ row.nameLong }}
+          {% if row.isHourly and row.quantity > 0 %}
+          <div class="sub-info">{{ row.quantity }}&thinsp;h &times; {{ row.spRate | money }}/h{% if row.roleName %} ({{ row.roleName }}){% endif %}</div>
+          {% endif %}
+        </td>
+        <td class="r">{{ row.revenue | money }}</td>
+        <td class="r">
+          {% if row.extras > 0 %}{{ row.extras | money }}{% else %}&mdash;{% endif %}
+        </td>
+        <td class="r">{{ row.total | money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# ── Calculation table ── #}
+  <table class="calc-table">
+    <tr>
+      <td class="label">Honorar (netto)</td>
+      <td class="amount">{{ totals.revenue | money }}</td>
+    </tr>
+    {% if totals.extras > 0 %}
+    <tr>
+      <td class="label">zzgl. Nebenkosten</td>
+      <td class="amount">{{ totals.extras | money }}</td>
+    </tr>
+    {% endif %}
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr class="total-row">
+      <td class="label">Angebotssumme (netto)</td>
+      <td class="amount">{{ totals.total | money }}</td>
+    </tr>
+  </table>
+
+  {# Fußtext #}
+  {% if text2 %}<div class="text-block">{{ text2 }}</div>{% endif %}
+
+</div>
+
+</body>
+</html>

@@ -14,6 +14,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/rechnungen', icon: '🧾', label: 'Rechnungen'  },
   { to: '/admin',      icon: '⚙️', label: 'Admin'       },
   { to: '/mitarbeiter',icon: '👤', label: 'Mitarbeiter' },
+  { to: '/angebote',   icon: '📄', label: 'Angebote'    },
 ]
 
 export function BottomNav() {

@@ -39,6 +39,7 @@ const numberRangesRoutes     = require("./routes/numberRanges")(supabase);
 const reportsRoutes          = require("./routes/reports")(supabase);
 const finalInvoicesRoutes    = require("./routes/finalInvoices")(supabase);
 const notificationsRoutes    = require("./routes/notifications")(supabase);
+const angeboteRoutes         = require("./routes/angebote")(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
 
 app.use("/api/v1/stammdaten",        authMiddleware, stammdatenRoutes);
@@ -56,6 +57,7 @@ app.use("/api/v1/number-ranges",     authMiddleware, numberRangesRoutes);
 app.use("/api/v1/reports",           authMiddleware, reportsRoutes);
 app.use("/api/v1/final-invoices",    authMiddleware, finalInvoicesRoutes);
 app.use("/api/v1/notifications",     authMiddleware, notificationsRoutes);
+app.use("/api/v1/angebote",          authMiddleware, angeboteRoutes);
 
 
 

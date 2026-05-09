@@ -7,6 +7,7 @@ import { fetchCountries, fetchCompanies, createDepartment, createTyp, createRoll
          createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchDefaults, putDefault,
          type Company } from '@/api/stammdaten'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
+import { fetchOfferStatuses, createOfferStatus } from '@/api/angebote'
 
 const PAGE_TABS = [
   { id: 'stammdaten',    label: 'Stammdaten'    },
@@ -69,6 +70,11 @@ function StammdatenSection() {
     onSuccess: () => { setMsg({ text: 'Rolle gespeichert ✅', type: 'success' }); setRolleShort(''); setRolleLong(''); setRolleSpRate('') },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
+  const offerStatusMut = useMutation({
+    mutationFn: (name: string) => createOfferStatus(name),
+    onSuccess: () => setMsg({ text: 'Angebotsstatus gespeichert ✅', type: 'success' }),
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
 
   return (
     <div className="admin-section">
@@ -118,6 +124,16 @@ function StammdatenSection() {
         </button>
       </div>
 
+      <div className="admin-block">
+        <h3 className="admin-block-title">Angebotsstatus</h3>
+        <SingleInputMutation
+          label="Angebotsstatus"
+          placeholder="z. B. In Bearbeitung"
+          onSubmit={v => withMsg(() => offerStatusMut.mutate(v))}
+          isPending={offerStatusMut.isPending}
+        />
+      </div>
+
       <Message text={msg?.text ?? null} type={msg?.type} />
     </div>
   )
@@ -136,10 +152,16 @@ function nrFormatProject(v: number) {
   const c  = String(Math.max(0, v)).padStart(3, '0')
   return `P-${yy}-${c}`
 }
+function nrFormatOffer(v: number) {
+  const yy = String(YEAR % 100).padStart(2, '0')
+  const c  = String(Math.max(0, v)).padStart(3, '0')
+  return `A-${yy}-${c}`
+}
 
 function NummernkreiseSection() {
   const [invoiceNext, setInvoiceNext] = useState(1)
   const [projectNext, setProjectNext] = useState(1)
+  const [offerNext,   setOfferNext]   = useState(1)
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -151,6 +173,7 @@ function NummernkreiseSection() {
     if (data) {
       setInvoiceNext(data.next_counter ?? 1)
       setProjectNext(data.project_next_counter ?? 1)
+      setOfferNext(data.offer_next_counter ?? 1)
     }
   }, [data])
 
@@ -163,14 +186,18 @@ function NummernkreiseSection() {
   function handleSave() {
     const v = invoiceNext
     const p = projectNext
+    const a = offerNext
     if (!Number.isFinite(v) || v < 1 || v > 9999) {
       setMsg({ text: 'Rechnungsnummer: Wert 1–9999', type: 'error' }); return
     }
     if (!Number.isFinite(p) || p < 1 || p > 999) {
       setMsg({ text: 'Projektnummer: Wert 1–999', type: 'error' }); return
     }
+    if (!Number.isFinite(a) || a < 1 || a > 999) {
+      setMsg({ text: 'Angebotsnummer: Wert 1–999', type: 'error' }); return
+    }
     setMsg(null)
-    saveMut.mutate({ year: YEAR, next_counter: v, project_next_counter: p })
+    saveMut.mutate({ year: YEAR, next_counter: v, project_next_counter: p, offer_next_counter: a })
   }
 
   return (
@@ -202,6 +229,19 @@ function NummernkreiseSection() {
               />
             </div>
             <p className="nr-preview">Vorschau: {nrFormatProject(projectNext)}</p>
+          </div>
+
+          <div className="admin-block">
+            <h3 className="admin-block-title">Angebote ({YEAR})</h3>
+            <div className="form-group">
+              <label>Nächste Nummer</label>
+              <input
+                type="number" min={1} max={999}
+                value={offerNext}
+                onChange={e => setOfferNext(parseInt(e.target.value, 10) || 1)}
+              />
+            </div>
+            <p className="nr-preview">Vorschau: {nrFormatOffer(offerNext)}</p>
           </div>
 
           <Message text={msg?.text ?? null} type={msg?.type} />

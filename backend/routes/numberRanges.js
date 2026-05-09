@@ -46,6 +46,7 @@ module.exports = (supabase) => {
     let nextCounter = 1;
     let hasGlobal = false;
     let projectNextCounter = 1;
+    let offerNextCounter = 1;
 
     (data || []).forEach((r) => {
       const t = String(r.DOC_TYPE || "").toUpperCase();
@@ -58,6 +59,9 @@ module.exports = (supabase) => {
       if (t === "PROJECT") {
         projectNextCounter = v;
       }
+      if (t === "OFFER") {
+        offerNextCounter = v;
+      }
     });
 
     // If GLOBAL does not exist yet, show the highest NEXT_COUNTER across legacy rows
@@ -68,7 +72,7 @@ module.exports = (supabase) => {
       });
     }
 
-    return res.json({ year, next_counter: nextCounter, project_next_counter: projectNextCounter });
+    return res.json({ year, next_counter: nextCounter, project_next_counter: projectNextCounter, offer_next_counter: offerNextCounter });
   });
 
   // Upsert the ranges for the authenticated tenant's company
@@ -83,6 +87,8 @@ module.exports = (supabase) => {
 
     const projectProvided = b.project_next_counter !== undefined && b.project_next_counter !== null && String(b.project_next_counter) !== "";
     const projectNextCounter = projectProvided ? parseInt(String(b.project_next_counter), 10) : null;
+    const offerProvided = b.offer_next_counter !== undefined && b.offer_next_counter !== null && String(b.offer_next_counter) !== "";
+    const offerNextCounter = offerProvided ? parseInt(String(b.offer_next_counter), 10) : null;
 
     if (!Number.isFinite(year) || year < 2000 || year > 3000) {
       return res.status(400).json({ error: "Ungültiges Jahr" });
@@ -92,6 +98,9 @@ module.exports = (supabase) => {
     }
     if (projectProvided && (!Number.isFinite(projectNextCounter) || projectNextCounter < 1 || projectNextCounter > 999)) {
       return res.status(400).json({ error: "project_next_counter muss zwischen 1 und 999 liegen" });
+    }
+    if (offerProvided && (!Number.isFinite(offerNextCounter) || offerNextCounter < 1 || offerNextCounter > 999)) {
+      return res.status(400).json({ error: "offer_next_counter muss zwischen 1 und 999 liegen" });
     }
 
     let companyId;
@@ -122,6 +131,9 @@ module.exports = (supabase) => {
       await upsert("GLOBAL", nextCounter);
       if (projectProvided) {
         await upsert("PROJECT", projectNextCounter);
+      }
+      if (offerProvided) {
+        await upsert("OFFER", offerNextCounter);
       }
       return res.json({ ok: true });
     } catch (err) {

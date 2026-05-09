@@ -4,6 +4,7 @@ const path = require('path');
 const fs   = require('fs');
 const nunjucks = require('nunjucks');
 const { loadInvoiceData } = require('./services_einvoice_data');
+const angeboteSvc = require('./services/angebote');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -395,4 +396,31 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   return { pdf, template: tpl, theme };
 }
 
-module.exports = { renderDocumentPdf };
+// ── Offer PDF ─────────────────────────────────────────────────────────────────
+
+async function renderOfferPdf({ supabase, offerId, tenantId }) {
+  const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
+
+  // Load company's document template (or default)
+  const companyId = vm.offer.COMPANY_ID;
+  const tpl         = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
+  const theme       = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const logoDataUri = await loadLogoDataUri({ supabase, logoAssetId: tpl.LOGO_ASSET_ID });
+
+  const context = { ...vm, theme, logoDataUri };
+  const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
+  const html = env().render(path.join(layoutKey, 'offer.njk'), context);
+
+  const s = vm.seller;
+  const companyLine = [
+    s.name, s.street, `${s.postCode} ${s.city}`.trim(),
+    s.vatId ? `USt-IdNr.: ${s.vatId}` : (s.taxId ? `St.-Nr.: ${s.taxId}` : ''),
+    s.iban ? `IBAN: ${s.iban}` : '',
+    s.bic  ? `BIC: ${s.bic}`   : '',
+  ].filter(Boolean).join(' · ');
+
+  const pdf = await renderPdf({ html, footerLeft: companyLine });
+  return { pdf, offer: vm.offer };
+}
+
+module.exports = { renderDocumentPdf, renderOfferPdf };
