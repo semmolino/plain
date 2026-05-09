@@ -7,7 +7,7 @@ import { fetchCountries, fetchCompanies, createDepartment, createTyp, createRoll
          createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchDefaults, putDefault,
          type Company } from '@/api/stammdaten'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
-import { fetchOfferStatuses, createOfferStatus } from '@/api/angebote'
+import { createOfferStatus } from '@/api/angebote'
 
 const PAGE_TABS = [
   { id: 'stammdaten',    label: 'Stammdaten'    },

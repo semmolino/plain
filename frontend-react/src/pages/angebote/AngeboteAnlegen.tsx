@@ -192,7 +192,7 @@ export function AngeboteAnlegen() {
             <label>Ansprechpartner*</label>
             <select value={basic.employee_id} onChange={e => setB('employee_id')(e.target.value)}>
               <option value="">Bitte wählen …</option>
-              {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}{m.FIRST_NAME || m.LAST_NAME ? ': ' + [m.FIRST_NAME, m.LAST_NAME].filter(Boolean).join(' ') : ''}</option>)}
+              {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
             </select>
           </div>
 

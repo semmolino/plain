@@ -4,7 +4,7 @@ import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchOffers, fetchOffer, updateOffer, fetchOfferStructure,
-  addOfferStructureNode, updateOfferStructureNode, deleteOfferStructureNode,
+  addOfferStructureNode, deleteOfferStructureNode,
   getOfferPdfUrl, type Offer, type OfferStructureNode, type AddStructureNodePayload,
 } from '@/api/angebote'
 import { fetchOfferStatuses } from '@/api/angebote'
@@ -274,7 +274,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
               <label>Ansprechpartner*</label>
               <select value={form.employee_id} onChange={e => setF('employee_id')(e.target.value)}>
                 <option value="">Bitte wählen …</option>
-                {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}{m.FIRST_NAME || m.LAST_NAME ? ': ' + [m.FIRST_NAME, m.LAST_NAME].filter(Boolean).join(' ') : ''}</option>)}
+                {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
               </select>
             </div>
 
