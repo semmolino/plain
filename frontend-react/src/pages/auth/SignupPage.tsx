@@ -6,14 +6,15 @@ import { FormField } from '@/components/ui/FormField'
 
 export function SignupPage() {
   const navigate = useNavigate()
-  const [company, setCompany]   = useState('')
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [msg, setMsg]           = useState<{ text: string; type: 'error' | 'info' | 'success' } | null>(null)
-  const [loading, setLoading]   = useState(false)
+  const [company, setCompany]     = useState('')
+  const [shortName, setShortName] = useState('')
+  const [email, setEmail]         = useState('')
+  const [password, setPassword]   = useState('')
+  const [msg, setMsg]             = useState<{ text: string; type: 'error' | 'info' | 'success' } | null>(null)
+  const [loading, setLoading]     = useState(false)
 
   async function handleSignup() {
-    if (!company || !email || !password) {
+    if (!company || !shortName || !email || !password) {
       setMsg({ text: 'Bitte alle Felder ausfüllen.', type: 'error' })
       return
     }
@@ -26,7 +27,7 @@ export function SignupPage() {
     setMsg({ text: 'Konto wird erstellt …', type: 'info' })
 
     try {
-      await signup({ email, password, companyName: company })
+      await signup({ email, password, companyName: company, shortName })
       setMsg({ text: 'Konto erstellt. Bitte jetzt anmelden.', type: 'success' })
       setTimeout(() => navigate('/login'), 1500)
     } catch (err) {
@@ -49,6 +50,14 @@ export function SignupPage() {
           autoComplete="organization"
           value={company}
           onChange={(e) => setCompany(e.target.value)}
+        />
+        <FormField
+          label="Kürzel"
+          id="signup-short"
+          type="text"
+          autoComplete="off"
+          value={shortName}
+          onChange={(e) => setShortName(e.target.value)}
         />
         <FormField
           label="E-Mail"

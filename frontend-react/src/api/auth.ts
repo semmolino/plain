@@ -74,6 +74,7 @@ export async function signup(data: {
   email: string
   password: string
   companyName: string
+  shortName: string
 }): Promise<void> {
   const res = await fetch('/api/v1/auth/signup', {
     method:  'POST',

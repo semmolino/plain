@@ -260,10 +260,10 @@ module.exports = (supabase) => {
   // ── Sign up ───────────────────────────────────────────────────────────────
   // Creates a new tenant: TENANT + COMPANY + Supabase Auth user + first EMPLOYEE.
   router.post("/signup", async (req, res) => {
-    const { email, password, companyName } = req.body || {};
+    const { email, password, companyName, shortName } = req.body || {};
 
-    if (!email || !password || !companyName) {
-      return res.status(400).json({ error: "E-Mail, Passwort und Firmenname sind erforderlich." });
+    if (!email || !password || !companyName || !shortName) {
+      return res.status(400).json({ error: "E-Mail, Passwort, Firmenname und Kürzel sind erforderlich." });
     }
     if (password.length < 8) {
       return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen haben." });
@@ -298,12 +298,11 @@ module.exports = (supabase) => {
     await supabase.auth.admin.updateUserById(userId, { app_metadata: { tenant_id: tenantId } });
 
     // 5. Create the first EMPLOYEE (admin user) so they can log in with EMPLOYEE credentials
-    const shortName = email.split("@")[0].slice(0, 10).toUpperCase();
-    const hashedPw  = await bcrypt.hash(password, 10);
+    const hashedPw = await bcrypt.hash(password, 10);
     await supabase.from("EMPLOYEE").insert([{
       MAIL:       email,
       PASSWORD:   hashedPw,
-      SHORT_NAME: shortName,
+      SHORT_NAME: shortName.trim().toUpperCase(),
       FIRST_NAME: "Administrator",
       LAST_NAME:  "",
       TENANT_ID:  tenantId,
