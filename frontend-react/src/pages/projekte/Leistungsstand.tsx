@@ -42,7 +42,11 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
     if (!lsData?.data) return
     const init: Record<number, string> = {}
     for (const n of lsData.data) {
-      if (n.IS_LEAF) init[n.STRUCTURE_ID] = String(n.REVENUE_COMPLETION_PERCENT ?? 0)
+      if (n.IS_LEAF) {
+        init[n.STRUCTURE_ID] = Number((n as LeistungsstandNode & { BILLING_TYPE_ID?: number }).BILLING_TYPE_ID) === 2
+          ? '100'
+          : String(n.REVENUE_COMPLETION_PERCENT ?? 0)
+      }
     }
     setVals(init)
   }, [lsData?.data])
@@ -164,10 +168,11 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
                   const sid    = n.STRUCTURE_ID
                   const isLeaf = n.IS_LEAF
 
+                  const isNachweis = Number((n as LeistungsstandNode & { BILLING_TYPE_ID?: number }).BILLING_TYPE_ID) === 2
                   const revenue   = Number(n.REVENUE ?? 0)
                   const prevPct   = n.PREV_REVENUE_COMPLETION_PERCENT
                   const curPct    = Number(n.REVENUE_COMPLETION_PERCENT ?? 0)
-                  const newPctRaw = isLeaf ? (Number(vals[sid]) || 0) : curPct
+                  const newPctRaw = isLeaf ? (isNachweis ? 100 : (Number(vals[sid]) || 0)) : curPct
                   const oldVal    = (curPct / 100) * revenue
                   const newVal    = (newPctRaw / 100) * revenue
                   const deltaEur  = newVal - oldVal
@@ -194,21 +199,34 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
                       </td>
                       <td className="ls-td ls-col-input">
                         {isLeaf ? (
-                          <div className="ls-input-wrap">
-                            <input
-                              ref={el => { inputRefs.current[sid] = el }}
-                              type="number"
-                              min={0}
-                              max={100}
-                              step={1}
-                              className="ls-input"
-                              value={vals[sid] ?? ''}
-                              onChange={e => setVal(sid, e.target.value)}
-                              onKeyDown={e => handleKeyDown(e, sid)}
-                              onFocus={e => e.currentTarget.select()}
-                            />
-                            <span className="ls-input-unit">%</span>
-                          </div>
+                          isNachweis ? (
+                            <div className="ls-input-wrap">
+                              <input
+                                type="number"
+                                className="ls-input ls-input-readonly"
+                                value="100"
+                                readOnly
+                                tabIndex={-1}
+                              />
+                              <span className="ls-input-unit">%</span>
+                            </div>
+                          ) : (
+                            <div className="ls-input-wrap">
+                              <input
+                                ref={el => { inputRefs.current[sid] = el }}
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={1}
+                                className="ls-input"
+                                value={vals[sid] ?? ''}
+                                onChange={e => setVal(sid, e.target.value)}
+                                onKeyDown={e => handleKeyDown(e, sid)}
+                                onFocus={e => e.currentTarget.select()}
+                              />
+                              <span className="ls-input-unit">%</span>
+                            </div>
+                          )
                         ) : (
                           <span className="ls-muted ls-right">{fmtP(curPct)}</span>
                         )}
@@ -235,7 +253,6 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
           </div>
 
           <div className="ls-footer">
-            <span className="ls-hint">Strg+S zum Speichern</span>
             <button
               type="button"
               disabled={snapMut.isPending}

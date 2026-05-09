@@ -819,6 +819,7 @@ input::placeholder { color: rgba(17,24,39,0.45); }
   transition: border-color 0.15s;
 }
 .ls-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+.ls-input-readonly { background: rgba(17,24,39,0.04); color: rgba(17,24,39,0.45); cursor: default; }
 .ls-input-unit { font-size: 12px; color: rgba(17,24,39,0.45); }
 .ls-delta-pos { color: #16a34a; font-weight: 600; }
 .ls-delta-neg { color: #dc2626; font-weight: 600; }
