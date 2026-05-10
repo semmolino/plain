@@ -1083,7 +1083,7 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
   // Copy INVOICE_STRUCTURE rows with negated amounts
   const { data: structRows, error: structSelErr } = await supabase
     .from("INVOICE_STRUCTURE")
-    .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, BILLING_TYPE_ID, TENANT_ID")
+    .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, TENANT_ID")
     .eq("INVOICE_ID", id);
   if (structSelErr && !isTableMissingErr(structSelErr, "invoice_structure")) {
     throw { status: 500, message: `INVOICE_STRUCTURE lesen fehlgeschlagen: ${structSelErr.message}` };
@@ -1095,7 +1095,6 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
       STRUCTURE_ID:      r.STRUCTURE_ID,
       AMOUNT_NET:       -round2(toNum(r.AMOUNT_NET)),
       AMOUNT_EXTRAS_NET: -round2(toNum(r.AMOUNT_EXTRAS_NET)),
-      BILLING_TYPE_ID:   r.BILLING_TYPE_ID ?? null,
       TENANT_ID:         r.TENANT_ID ?? null,
     }));
     const { error: sErr } = await supabase.from("INVOICE_STRUCTURE").insert(newStructRows);
