@@ -395,7 +395,19 @@ export function RechnungenListe() {
             )}
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="pay-amount">Betrag brutto (€)*</label>
+                <label htmlFor="pay-amount">
+                  Betrag brutto (€)*
+                  {payTarget.totalGross != null && (
+                    <button
+                      type="button"
+                      className="btn-small"
+                      style={{ marginLeft: 8, verticalAlign: 'middle' }}
+                      onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(payTarget.totalGross) }))}
+                    >
+                      wie gefordert
+                    </button>
+                  )}
+                </label>
                 <input
                   id="pay-amount" type="number" step="0.01" min="0.01" required
                   value={payForm.amount_payed_gross}
