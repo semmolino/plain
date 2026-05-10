@@ -114,8 +114,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   // Tax registration number (FC scheme, e.g. 78910/12345)
   const sellerTaxId = String(doc['COMPANY_TAX-ID'] ?? company?.['TAX-ID'] ?? '').trim();
 
-  const sellerIban = String(doc.COMPANY_IBAN ?? company?.IBAN ?? '').trim();
-  const sellerBic  = String(doc.COMPANY_BIC  ?? company?.BIC  ?? '').trim();
+  const sellerIban        = String(doc.COMPANY_IBAN ?? company?.IBAN ?? '').trim();
+  const sellerBic         = String(doc.COMPANY_BIC  ?? company?.BIC  ?? '').trim();
+  const sellerCreditorId  = String(doc['COMPANY_CREDITOR-ID'] ?? company?.['CREDITOR-ID'] ?? '').trim();
+  const sellerPostOfficeBox = String(doc.COMPANY_POST_OFFICE_BOX ?? company?.POST_OFFICE_BOX ?? '').trim();
 
   // ── 3. Seller contact (EMPLOYEE) ─────────────────────────────────────────
 
@@ -319,8 +321,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       countryId:    sellerCountry,
       vatId:        sellerVatId,   // VA scheme (Umsatzsteuer-ID)
       taxId:        sellerTaxId,   // FC scheme (Steuernummer)
-      iban:         sellerIban,
-      bic:          sellerBic,
+      iban:          sellerIban,
+      bic:           sellerBic,
+      creditorId:    sellerCreditorId,
+      postOfficeBox: sellerPostOfficeBox,
       contactName:  contactName,
       contactPhone: contactPhone,
       contactEmail: contactEmail,

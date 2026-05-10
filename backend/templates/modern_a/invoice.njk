@@ -195,6 +195,26 @@ body {
 }
 .data-table .muted { color: #6b7280; font-size: 8.5pt; }
 .data-table .bold  { font-weight: 600; }
+
+/* ── Document footer ────────────────────────────────────── */
+.doc-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding-top: 2.5mm;
+  border-top: 0.5pt solid #d1d5db;
+  display: flex;
+  gap: 5mm;
+  font-size: 7pt;
+  color: #6b7280;
+  line-height: 1.55;
+}
+.doc-footer-col { flex: 1; }
+.doc-footer-col strong { color: #374151; font-weight: 600; display: block; margin-bottom: 0.5mm; font-size: 7.5pt; }
+
+/* Reserve space so body content never flows behind the fixed footer */
+body { padding-bottom: 28mm; }
 </style>
 </head>
 <body>
@@ -530,6 +550,32 @@ body {
 
 </div>
 {% endif %}
+
+{# ── Document footer (fixed, all pages) ── #}
+<div class="doc-footer">
+  <div class="doc-footer-col">
+    <strong>{{ inv.seller.name }}</strong>
+    {% if inv.seller.street %}{{ inv.seller.street }}<br>{% endif %}
+    {% if inv.seller.postOfficeBox %}Postfach {{ inv.seller.postOfficeBox }}<br>{% endif %}
+    {% if inv.seller.postCode or inv.seller.city %}{{ inv.seller.postCode }} {{ inv.seller.city }}{% endif %}
+  </div>
+  <div class="doc-footer-col">
+    <strong>Bankverbindung</strong>
+    {% if inv.seller.iban %}IBAN: {{ inv.seller.iban }}<br>{% endif %}
+    {% if inv.seller.bic %}BIC: {{ inv.seller.bic }}{% endif %}
+  </div>
+  <div class="doc-footer-col">
+    <strong>Steuer</strong>
+    {% if inv.seller.taxId %}Steuernummer: {{ inv.seller.taxId }}<br>{% endif %}
+    {% if inv.seller.vatId %}USt-IdNr.: {{ inv.seller.vatId }}{% endif %}
+  </div>
+  {% if inv.seller.creditorId %}
+  <div class="doc-footer-col">
+    <strong>Sonstiges</strong>
+    Gläubiger-ID: {{ inv.seller.creditorId }}
+  </div>
+  {% endif %}
+</div>
 
 </body>
 </html>
