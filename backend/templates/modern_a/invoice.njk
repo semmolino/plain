@@ -334,8 +334,13 @@ body { padding-bottom: 28mm; }
     {% if deductionTotals.net > 0 %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     <tr>
-      <td class="label">abzgl. Abschlagsrechnungen (gemäß Zahlungsübersicht)</td>
+      <td class="label">abzgl. Abschlagsrechnungen</td>
       <td class="amount">&minus;&#8239;{{ deductionTotals.net | money }}</td>
+    </tr>
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">Rechnungssumme netto</td>
+      <td class="amount">{{ (inv.totals.lineTotal - deductionTotals.net) | money }}</td>
     </tr>
     {% endif %}
 
@@ -348,7 +353,7 @@ body { padding-bottom: 28mm; }
     {% endfor %}
 
     <tr class="total-row">
-      <td class="label">Rechnungssumme</td>
+      <td class="label">Rechnungssumme brutto</td>
       <td class="amount">{{ inv.totals.grandTotal | money }}</td>
     </tr>
 
