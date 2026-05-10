@@ -191,6 +191,17 @@ async function createBuchung(supabase, { body, tenantId }) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
 
+  if (b.STRUCTURE_ID) {
+    const { data: childCheck } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .select("ID")
+      .eq("FATHER_ID", b.STRUCTURE_ID)
+      .limit(1);
+    if (childCheck && childCheck.length > 0) {
+      throw { status: 400, message: "Buchungen können nur auf Blatt-Elemente (ohne Unterpositionen) gebucht werden" };
+    }
+  }
+
   const { data: projRow, error: projErr } = await supabase
     .from("PROJECT")
     .select("TENANT_ID")

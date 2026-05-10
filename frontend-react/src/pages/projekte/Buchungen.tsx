@@ -96,7 +96,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const structure = structData?.data ?? []
 
   const nodeById = useMemo(() => new Map(structure.map(n => [n.STRUCTURE_ID, n])), [structure])
-  const parentIds = useMemo(() => new Set(structure.filter(n => n.FATHER_ID != null).map(n => Number(n.FATHER_ID))), [structure])
+  const parentIds = useMemo(() => new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID))), [structure])
 
   // childrenMap for descendant lookup
   const childrenMap = useMemo(() => {
@@ -146,7 +146,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
 
   // Leaf-only nodes for the booking form
   const leafStructure = useMemo(() =>
-    allStructureSorted.filter(n => !parentIds.has(n.STRUCTURE_ID)),
+    allStructureSorted.filter(n => !parentIds.has(String(n.STRUCTURE_ID))),
     [allStructureSorted, parentIds]
   )
 
