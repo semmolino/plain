@@ -1,10 +1,11 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
 import { Message }     from '@/components/ui/Message'
 import { FormField }   from '@/components/ui/FormField'
 import { Autocomplete } from '@/components/ui/Autocomplete'
+import { useCtrlS } from '@/hooks/useCtrlS'
 import {
   fetchCountries, fetchSalutations, fetchGenders,
   fetchAddressList, searchAddressesApi, createAddress, updateAddress,
@@ -231,6 +232,11 @@ function AdressenSection() {
   const set  = useCallback((k: keyof AddressPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v })), [])
   const setE = useCallback((k: keyof AddressPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v })), [])
 
+  const createAddrFormRef = useRef<HTMLFormElement>(null)
+  const editAddrFormRef   = useRef<HTMLFormElement>(null)
+  useCtrlS(() => createAddrFormRef.current?.requestSubmit(), tab === 'create')
+  useCtrlS(() => editAddrFormRef.current?.requestSubmit(),   editAddr !== null)
+
   return (
     <>
       <Tabs tabs={ADDR_TABS} active={tab} onChange={setTab} />
@@ -280,7 +286,7 @@ function AdressenSection() {
       )}
 
       {tab === 'create' && (
-        <form onSubmit={submitCreate} className="master-form">
+        <form ref={createAddrFormRef} onSubmit={submitCreate} className="master-form">
           <AddrForm vals={form} setK={set} msg={msg} countries={countries} />
           <button className="btn-primary" type="submit" disabled={createMut.isPending}>
             {createMut.isPending ? 'Speichert …' : 'Speichern'}
@@ -289,7 +295,7 @@ function AdressenSection() {
       )}
 
       <Modal open={editAddr !== null} onClose={() => setEditAddr(null)} title="Adresse bearbeiten">
-        <form onSubmit={submitEdit} className="master-form">
+        <form ref={editAddrFormRef} onSubmit={submitEdit} className="master-form">
           <AddrForm vals={editForm} setK={setE} msg={editMsg} countries={countries} />
           <div className="modal-actions">
             <button className="btn-primary" type="submit" disabled={updateMut.isPending}>
@@ -409,6 +415,11 @@ function KontakteSection() {
   const set  = useCallback((k: keyof ContactPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v })), [])
   const setE = useCallback((k: keyof ContactPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v })), [])
 
+  const createConFormRef = useRef<HTMLFormElement>(null)
+  const editConFormRef   = useRef<HTMLFormElement>(null)
+  useCtrlS(() => createConFormRef.current?.requestSubmit(), tab === 'create')
+  useCtrlS(() => editConFormRef.current?.requestSubmit(),   editContact !== null)
+
   return (
     <>
       <Tabs tabs={CON_TABS} active={tab} onChange={setTab} />
@@ -458,7 +469,7 @@ function KontakteSection() {
       )}
 
       {tab === 'create' && (
-        <form onSubmit={submitCreate} className="master-form">
+        <form ref={createConFormRef} onSubmit={submitCreate} className="master-form">
           <ContactForm
             vals={form} setK={set} addrTxt={addrText} setAddrTxt={setAddrText}
             msg={msg} salutations={salutations} genders={genders} searchAddresses={searchAddresses}
@@ -470,7 +481,7 @@ function KontakteSection() {
       )}
 
       <Modal open={editContact !== null} onClose={() => setEditContact(null)} title="Kontakt bearbeiten">
-        <form onSubmit={submitEdit} className="master-form">
+        <form ref={editConFormRef} onSubmit={submitEdit} className="master-form">
           <ContactForm
             vals={editForm} setK={setE} addrTxt={editAddrText} setAddrTxt={setEditAddrText}
             msg={editMsg} isEdit salutations={salutations} genders={genders} searchAddresses={searchAddresses}

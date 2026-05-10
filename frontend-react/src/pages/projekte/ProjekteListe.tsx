@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal }     from '@/components/ui/Modal'
 import { Message }   from '@/components/ui/Message'
+import { useCtrlS } from '@/hooks/useCtrlS'
 import {
   fetchProjectListFull, updateProject,
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers,
@@ -30,6 +31,8 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
   const [editRow, setEditRow] = useState<Project | null>(null)
   const [editForm, setEditForm] = useState({ name_short: '', name_long: '', project_status_id: '', project_type_id: '', project_manager_id: '' })
   const [editMsg, setEditMsg]   = useState<{ text: string; type: 'success'|'error' } | null>(null)
+
+  const editFormRef = useRef<HTMLFormElement>(null)
 
   const { data: listData, isLoading } = useQuery({ queryKey: ['projects-full'], queryFn: fetchProjectListFull })
   const { data: statusData }          = useQuery({ queryKey: ['project-statuses'], queryFn: fetchProjectStatuses })
@@ -103,6 +106,8 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
     })
   }
 
+  useCtrlS(() => editFormRef.current?.requestSubmit(), editRow !== null)
+
   const setE = (k: keyof typeof editForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setEditForm(f => ({ ...f, [k]: e.target.value }))
 
@@ -167,7 +172,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
       )}
 
       <Modal open={editRow !== null} onClose={() => setEditRow(null)} title="Projekt bearbeiten">
-        <form onSubmit={submitEdit} className="master-form">
+        <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
           <div className="form-group">
             <label>Kürzel</label>
             <input value={editForm.name_short} onChange={setE('name_short')} />

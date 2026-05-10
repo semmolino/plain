@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
@@ -9,6 +9,7 @@ import {
 } from '@/api/projekte'
 import { fetchActiveEmployees } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
+import { useCtrlS } from '@/hooks/useCtrlS'
 
 const FMT_NUM = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
 const fmtN    = (v: number | null | undefined) => v == null ? '—' : FMT_NUM.format(v)
@@ -45,6 +46,7 @@ interface Props { initialProjectId?: number; onProjectChange?: (id: number | nul
 
 export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const qc = useQueryClient()
+  const formRef = useRef<HTMLFormElement>(null)
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
   const [showForm,     setShowForm]     = useState(false)
   const [form,         setForm]         = useState<BuchungForm>(emptyForm)
@@ -231,6 +233,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
+  useCtrlS(() => formRef.current?.requestSubmit(), showForm)
+
   function submitForm(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
@@ -359,7 +363,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
               </button>
 
               {showForm && (
-                <form onSubmit={submitForm} className="master-form" style={{ marginTop: 12 }}>
+                <form ref={formRef} onSubmit={submitForm} className="master-form" style={{ marginTop: 12 }}>
                   <div className="form-group">
                     <label>Mitarbeiter*</label>
                     <select value={form.EMPLOYEE_ID} onChange={setF('EMPLOYEE_ID')} required>

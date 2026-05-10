@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useCtrlS } from '@/hooks/useCtrlS'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
@@ -150,6 +151,8 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
+
+  useCtrlS(() => { if (!saveMut.isPending && form) saveMut.mutate(form) }, !!form)
 
   const addNodeMut = useMutation({
     mutationFn: (f: AddNodeForm) => {

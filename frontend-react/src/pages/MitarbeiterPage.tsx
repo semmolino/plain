@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Modal }     from '@/components/ui/Modal'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
+import { useCtrlS } from '@/hooks/useCtrlS'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
@@ -51,6 +52,9 @@ export function MitarbeiterPage() {
   })
   const [createMsg, setCreateMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [editMsg,   setEditMsg]   = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  const createFormRef = useRef<HTMLFormElement>(null)
+  const editFormRef   = useRef<HTMLFormElement>(null)
 
   const { data: listData, isLoading } = useQuery({ queryKey: ['employees'], queryFn: fetchEmployeeList })
   const { data: genData }             = useQuery({ queryKey: ['emp-genders'], queryFn: fetchEmployeeGenders })
@@ -148,6 +152,9 @@ export function MitarbeiterPage() {
     updateMut.mutate({ id: editRow.ID, body: editForm })
   }
 
+  useCtrlS(() => createFormRef.current?.requestSubmit(), tab === 'create')
+  useCtrlS(() => editFormRef.current?.requestSubmit(), editRow !== null)
+
   const setF = (k: keyof CreateEmployeePayload) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
 
@@ -227,7 +234,7 @@ export function MitarbeiterPage() {
         )}
 
         {tab === 'create' && (
-          <form onSubmit={submitCreate} className="master-form">
+          <form ref={createFormRef} onSubmit={submitCreate} className="master-form">
             <FormField label="Kürzel*"        id="mku" value={form.short_name} onChange={setF('short_name')} required />
             <FormField label="Titel"          id="mti" value={form.title ?? ''} onChange={setF('title')} />
             <div className="form-row">
@@ -256,7 +263,7 @@ export function MitarbeiterPage() {
 
       {/* Edit modal */}
       <Modal open={editRow !== null} onClose={() => setEditRow(null)} title="Mitarbeiter bearbeiten">
-        <form onSubmit={submitEdit} className="master-form">
+        <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
           <FormField label="Kürzel*"      id="eku" value={editForm.short_name} onChange={setE('short_name')} required />
           <FormField label="Titel"        id="eti" value={editForm.title ?? ''} onChange={setE('title')} />
           <div className="form-row">

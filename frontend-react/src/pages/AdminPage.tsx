@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Message }   from '@/components/ui/Message'
@@ -6,6 +6,7 @@ import { FormField } from '@/components/ui/FormField'
 import { fetchCountries, fetchCompanies, createDepartment, createTyp, createRolle,
          createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchDefaults, putDefault,
          type Company } from '@/api/stammdaten'
+import { useCtrlS } from '@/hooks/useCtrlS'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 import { createOfferStatus } from '@/api/angebote'
 
@@ -201,6 +202,8 @@ function NummernkreiseSection() {
     saveMut.mutate({ year: YEAR, next_counter: v, project_next_counter: p, offer_next_counter: a })
   }
 
+  useCtrlS(handleSave, !isLoading)
+
   return (
     <div className="admin-section">
       {isLoading && <p className="empty-note">Laden …</p>}
@@ -333,6 +336,9 @@ function UnternehmenSection() {
 
   const isPending = createMut.isPending || updateMut.isPending
 
+  const unternehmenFormRef = useRef<HTMLFormElement>(null)
+  useCtrlS(() => unternehmenFormRef.current?.requestSubmit(), !isPending)
+
   return (
     <div className="admin-section">
       {/* Company selector */}
@@ -356,7 +362,7 @@ function UnternehmenSection() {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="master-form">
+      <form ref={unternehmenFormRef} onSubmit={handleSubmit} className="master-form">
         <FormField label="Unternehmen*"               id="ufn1" value={form.company_name_1}  onChange={set('company_name_1')}  required />
         <FormField label="Unternehmen (Zusatz)"        id="ufn2" value={form.company_name_2}  onChange={set('company_name_2')} />
         <FormField label="Straße"                      id="ust"  value={form.street}          onChange={set('street')} />
@@ -419,6 +425,8 @@ function VorbelegungenSection() {
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
+
+  useCtrlS(() => { setMsg(null); saveMut.mutate() }, !isLoading && !saveMut.isPending)
 
   return (
     <div className="admin-section">

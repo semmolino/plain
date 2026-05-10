@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useCtrlS } from '@/hooks/useCtrlS'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchProjectsShort, fetchContractByProject, patchContract } from '@/api/projekte'
 import { searchAddressesApi, fetchAddressList } from '@/api/stammdaten'
@@ -60,6 +61,8 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
     onError: (err: unknown) =>
       setMsg({ text: (err as { message?: string }).message || 'Fehler beim Speichern', type: 'error' }),
   })
+
+  useCtrlS(() => { if (dirty && !saveMut.isPending) saveMut.mutate() }, dirty)
 
   const searchAddresses = useCallback(async (q: string) => {
     const res = await searchAddressesApi(q)
