@@ -410,7 +410,8 @@ export function AbschlagWizard() {
           {proposal && (
             <div className="billing-proposal-box">
               <div className="bp-row"><span>Leistungsbetrag Netto</span><strong>{fmtEur(proposal.performance_amount)}</strong></div>
-              <div className="bp-row"><span>TEC-Beträge Netto</span><strong>{fmtEur(proposal.bookings_sum)}</strong></div>
+              <div className="bp-row"><span>Buchungen Netto</span><strong>{fmtEur(proposal.bookings_sum)}</strong></div>
+              <div className="bp-row"><span>Nebenkosten Netto</span><strong>{fmtEur(proposal.amount_extras_net)}</strong></div>
               <div className="bp-row total"><span>Netto gesamt</span><strong>{fmtEur(proposal.total_amount_net)}</strong></div>
               <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(proposal.total_amount_gross)}</strong></div>
             </div>
