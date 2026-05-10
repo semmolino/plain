@@ -385,29 +385,26 @@ export function RechnungenListe() {
         {payTarget && (
           <form onSubmit={submitPayment} className="master-form">
             {payTarget.totalGross != null && (
-              <div style={{ marginBottom: 12, fontSize: 14, color: 'rgba(17,24,39,0.6)' }}>
-                Rechnungsbetrag: <strong>{fmtEur(payTarget.totalGross)}</strong>
-                {payTarget.paidGross != null && payTarget.paidGross > 0 && (
-                  <> · bereits bezahlt: <strong>{fmtEur(payTarget.paidGross)}</strong>
-                  · offen: <strong>{fmtEur(remaining)}</strong></>
-                )}
+              <div style={{ marginBottom: 12, fontSize: 14, color: 'rgba(17,24,39,0.6)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span>
+                  Rechnungsbetrag: <strong>{fmtEur(payTarget.totalGross)}</strong>
+                  {payTarget.paidGross != null && payTarget.paidGross > 0 && (
+                    <> · bereits bezahlt: <strong>{fmtEur(payTarget.paidGross)}</strong>
+                    · offen: <strong>{fmtEur(remaining)}</strong></>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="btn-small"
+                  onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(payTarget.totalGross) }))}
+                >
+                  wie gefordert
+                </button>
               </div>
             )}
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="pay-amount">
-                  Betrag brutto (€)*
-                  {payTarget.totalGross != null && (
-                    <button
-                      type="button"
-                      className="btn-small"
-                      style={{ marginLeft: 8, verticalAlign: 'middle' }}
-                      onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(payTarget.totalGross) }))}
-                    >
-                      wie gefordert
-                    </button>
-                  )}
-                </label>
+                <label htmlFor="pay-amount">Betrag brutto (€)*</label>
                 <input
                   id="pay-amount" type="number" step="0.01" min="0.01" required
                   value={payForm.amount_payed_gross}
