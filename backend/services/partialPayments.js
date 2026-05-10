@@ -561,6 +561,7 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
     TAX_AMOUNT_NET: r.TAX_AMOUNT_NET ?? 0,
     TOTAL_AMOUNT_GROSS: r.TOTAL_AMOUNT_GROSS ?? 0,
     STATUS_ID: r.STATUS_ID ?? null,
+    CANCELS_PARTIAL_PAYMENT_ID: r.CANCELS_PARTIAL_PAYMENT_ID ?? null,
     PROJECT_ID: r.PROJECT_ID ?? null,
     CONTRACT_ID: r.CONTRACT_ID ?? null,
     VAT_PERCENT: r.VAT_PERCENT ?? null,

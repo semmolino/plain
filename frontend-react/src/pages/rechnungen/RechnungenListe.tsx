@@ -74,7 +74,16 @@ function fromInvoice(inv: Invoice): UnifiedRow {
 }
 
 function fromPp(pp: PartialPayment): UnifiedRow {
-  const cancelled = pp.CANCELS_PARTIAL_PAYMENT_ID != null || pp.STATUS_ID === 3
+  const isOrigCancelled = pp.STATUS_ID === 3
+  const isStornoRow     = pp.CANCELS_PARTIAL_PAYMENT_ID != null
+
+  let statusLabel: string
+  let statusClass: string
+  if (isOrigCancelled)          { statusLabel = 'Storniert';       statusClass = 'cancelled' }
+  else if (isStornoRow)         { statusLabel = 'Storno-Rechnung'; statusClass = 'cancelled' }
+  else if (pp.STATUS_ID === 2)  { statusLabel = 'Gebucht';         statusClass = 'booked' }
+  else                          { statusLabel = 'Entwurf';         statusClass = 'draft' }
+
   return {
     key:         `pp-${pp.ID}`,
     source:      'pp',
@@ -85,8 +94,8 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     net:         pp.TOTAL_AMOUNT_NET  != null ? Number(pp.TOTAL_AMOUNT_NET)  : null,
     gross:       pp.TOTAL_AMOUNT_GROSS != null ? Number(pp.TOTAL_AMOUNT_GROSS) : null,
     paid:        pp.AMOUNT_PAYED_GROSS != null ? Number(pp.AMOUNT_PAYED_GROSS) : null,
-    statusLabel: cancelled ? 'Storniert' : pp.STATUS_ID === 2 ? 'Gebucht' : 'Entwurf',
-    statusClass: cancelled ? 'cancelled' : pp.STATUS_ID === 2 ? 'booked'  : 'draft',
+    statusLabel,
+    statusClass,
     raw:         pp,
   }
 }
