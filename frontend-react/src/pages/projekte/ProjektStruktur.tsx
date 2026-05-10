@@ -26,9 +26,9 @@ function emptyAdd(): AddForm {
   return { NAME_SHORT: '', NAME_LONG: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '' }
 }
 
-function depthOf(id: number, parentMap: Map<number, number | null>): number {
-  let d = 0, cur: number | null | undefined = id
-  const seen = new Set<number>()
+function depthOf(id: string, parentMap: Map<string, string | null>): number {
+  let d = 0, cur: string | null | undefined = id
+  const seen = new Set<string>()
   while (cur != null) {
     if (seen.has(cur)) break
     seen.add(cur)
@@ -71,35 +71,37 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   useEffect(() => { if (initialProjectId) setSelectedPid(initialProjectId) }, [initialProjectId])
 
   const flatTree = structure.length ? flattenTree(buildStructureTree(structure)) : []
-  const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => Number(n.FATHER_ID)))
-  const parentMap = new Map(structure.map(n => [n.STRUCTURE_ID, n.FATHER_ID ? Number(n.FATHER_ID) : null]))
+  // Use String keys throughout to avoid bigint vs number type mismatches at runtime
+  const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
+  const parentMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
 
   // Aggregate sums for parent nodes (computed bottom-up, client-side)
   const aggMap = (() => {
-    const childrenOf = new Map<number, number[]>()
+    const childrenOf = new Map<string, string[]>()
     for (const n of structure) {
       if (n.FATHER_ID != null) {
-        const arr = childrenOf.get(Number(n.FATHER_ID)) ?? []
-        arr.push(n.STRUCTURE_ID)
-        childrenOf.set(Number(n.FATHER_ID), arr)
+        const fid = String(n.FATHER_ID)
+        const arr = childrenOf.get(fid) ?? []
+        arr.push(String(n.STRUCTURE_ID))
+        childrenOf.set(fid, arr)
       }
     }
-    const nodeMap = new Map(structure.map(n => [n.STRUCTURE_ID, n]))
-    const cache = new Map<number, { revenue: number; extras: number }>()
-    function agg(id: number): { revenue: number; extras: number } {
+    const nodeMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n]))
+    const cache = new Map<string, { revenue: number; extras: number }>()
+    function agg(id: string): { revenue: number; extras: number } {
       if (cache.has(id)) return cache.get(id)!
       const children = childrenOf.get(id) ?? []
       if (children.length === 0) {
         const n = nodeMap.get(id)!
-        const isTec = Number(n.BILLING_TYPE_ID) === 2
-        const r = { revenue: isTec ? (n.TEC_SP_TOT_SUM ?? 0) : (n.REVENUE ?? 0), extras: n.EXTRAS ?? 0 }
+        const isTec = Number(n?.BILLING_TYPE_ID) === 2
+        const r = { revenue: isTec ? (n?.TEC_SP_TOT_SUM ?? 0) : (n?.REVENUE ?? 0), extras: n?.EXTRAS ?? 0 }
         cache.set(id, r); return r
       }
       let revenue = 0, extras = 0
       for (const cid of children) { const c = agg(cid); revenue += c.revenue; extras += c.extras }
       cache.set(id, { revenue, extras }); return { revenue, extras }
     }
-    for (const n of structure) agg(n.STRUCTURE_ID)
+    for (const n of structure) agg(String(n.STRUCTURE_ID))
     return cache
   })()
 
@@ -146,7 +148,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       setSaveMsg({ text: 'Gespeichert ✅', type: 'success' })
       setEdits({})
       setTimeout(() => setSaveMsg(null), 3000)
-      const toInherit = rows.filter(r => r.nkChanged && parentIds.has(r.id))
+      const toInherit = rows.filter(r => r.nkChanged && parentIds.has(String(r.id)))
       for (const r of toInherit) {
         if (confirm(`NK % (${r.nk} %) für „${r.name}" auch an alle untergeordneten Elemente übertragen?`))
           inheritMut.mutate({ id: r.id, val: r.nk })
@@ -208,7 +210,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
     if (!ids.length) return
     if (!confirm(`${ids.length} Element${ids.length > 1 ? 'e' : ''} löschen?\nHinweis: Nur möglich wenn keine Buchungen/Rechnungen darauf verweisen.`)) return
     // deepest first (children before parents)
-    ids.sort((a, b) => depthOf(b, parentMap) - depthOf(a, parentMap))
+    ids.sort((a, b) => depthOf(String(b), parentMap) - depthOf(String(a), parentMap))
     setSaveMsg(null)
     let failed = 0
     for (const id of ids) {
@@ -305,10 +307,10 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   flatTreeRef.current    = flatTree
   selectedIdsRef.current = selectedIds
 
-  function isDescendant(targetId: number, srcId: number, pMap: Map<number, number | null>): boolean {
-    let cursor: number | null | undefined = pMap.get(targetId)
+  function isDescendant(targetId: string | number, srcId: string | number, pMap: Map<string, string | null>): boolean {
+    let cursor: string | null | undefined = pMap.get(String(targetId))
     while (cursor != null) {
-      if (cursor === srcId) return true
+      if (cursor === String(srcId)) return true
       cursor = pMap.get(cursor)
     }
     return false
@@ -514,7 +516,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         const nameLong  = edit?.nameLong      ?? (node.NAME_LONG  ?? '')
                         const btId      = edit?.billingTypeId ?? String(node.BILLING_TYPE_ID ?? '')
                         const isTec     = Number(btId || node.BILLING_TYPE_ID) === 2
-                        const isParent  = parentIds.has(node.STRUCTURE_ID)
+                        const isParent  = parentIds.has(String(node.STRUCTURE_ID))
                         const isDragOver = dragOverId === node.STRUCTURE_ID
 
                         return (
@@ -563,7 +565,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             <td className="num">
                               {isParent || isTec ? (
                                 <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>
-                                  {fmtEur(isParent ? aggMap.get(node.STRUCTURE_ID)?.revenue : node.TEC_SP_TOT_SUM)}
+                                  {fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.revenue : node.TEC_SP_TOT_SUM)}
                                 </span>
                               ) : (
                                 <input type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
@@ -587,7 +589,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                                 )}
                               </div>
                             </td>
-                            <td className="num">{fmtEur(isParent ? aggMap.get(node.STRUCTURE_ID)?.extras : node.EXTRAS)}</td>
+                            <td className="num">{fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
                             <td className="num">{fmtEur(node.REVENUE_COMPLETION)}</td>
                             <td>
                               <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c' }}
