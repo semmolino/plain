@@ -320,16 +320,18 @@ async function sumInvStructureForInvoice(supabase, { invoiceId, structureIds }) 
   return { net, extras, rows: arr };
 }
 
-async function writeInvoiceStructureRows(supabase, { invoiceId, rows }) {
+async function writeInvoiceStructureRows(supabase, { invoiceId, rows, deleteStructureIds }) {
   const arr = Array.isArray(rows) ? rows : [];
-  const structureIds = Array.from(new Set(arr.map((r) => r.STRUCTURE_ID))).filter((x) => x !== null && x !== undefined);
+  const toDelete = Array.isArray(deleteStructureIds) && deleteStructureIds.length > 0
+    ? deleteStructureIds
+    : Array.from(new Set(arr.map((r) => r.STRUCTURE_ID))).filter((x) => x !== null && x !== undefined);
 
-  if (structureIds.length > 0) {
+  if (toDelete.length > 0) {
     const { error: delErr } = await supabase
       .from("INVOICE_STRUCTURE")
       .delete()
       .eq("INVOICE_ID", invoiceId)
-      .in("STRUCTURE_ID", structureIds);
+      .in("STRUCTURE_ID", toDelete);
     if (delErr && !isTableMissingErr(delErr, "invoice_structure")) throw new Error(delErr.message);
   }
 
@@ -417,7 +419,7 @@ async function applyPerformanceAmount(supabase, { invoiceId, contractId, project
     })
     .filter(Boolean);
 
-  await writeInvoiceStructureRows(supabase, { invoiceId, rows });
+  await writeInvoiceStructureRows(supabase, { invoiceId, rows, deleteStructureIds: bt1Ids });
   const sum = round2(rows.reduce((acc, r) => acc + toNum(r.AMOUNT_NET), 0));
   return { performance_amount: sum };
 }
