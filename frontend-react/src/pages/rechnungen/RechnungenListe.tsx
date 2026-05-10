@@ -490,7 +490,7 @@ export function RechnungenListe() {
                 <button
                   type="button"
                   className="btn-small"
-                  onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(payTarget.totalGross) }))}
+                  onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(remaining ?? payTarget.totalGross) }))}
                 >
                   wie gefordert
                 </button>
