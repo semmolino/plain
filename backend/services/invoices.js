@@ -1118,6 +1118,9 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
       .eq("INVOICE_ID", id);
   }
 
+  // Unlink TEC bookings so they can be re-invoiced
+  await supabase.from("TEC").update({ INVOICE_ID: null }).eq("INVOICE_ID", id);
+
   return { id: newId };
 }
 

@@ -923,6 +923,9 @@ async function cancelPartialPayment(supabase, { id, tenantId }) {
   const cancelPp = { ...cancelRow, ID: newId };
   await bookPartialPayment(supabase, { id: newId, pp: cancelPp });
 
+  // Unlink TEC bookings so they can be re-invoiced
+  await supabase.from("TEC").update({ PARTIAL_PAYMENT_ID: null }).eq("PARTIAL_PAYMENT_ID", id);
+
   return { id: newId };
 }
 
