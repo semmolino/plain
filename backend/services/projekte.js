@@ -621,8 +621,13 @@ async function checkParentForChild(supabase, { parentId }) {
 
   const num = (v) => Number(v ?? 0);
 
-  // Option 2: billing/payment data → block
-  if (num(parent.PARTIAL_PAYMENTS) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICE_ID != null) {
+  // Option 2: billing/payment data → block only for leaf elements.
+  // Node elements (already have children) only carry aggregated values — never directly billed.
+  const { data: existingChildren } = await supabase
+    .from("PROJECT_STRUCTURE").select("ID").eq("FATHER_ID", parentId).limit(1);
+  const isAlreadyNode = Array.isArray(existingChildren) && existingChildren.length > 0;
+
+  if (!isAlreadyNode && (num(parent.PARTIAL_PAYMENTS) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICE_ID != null)) {
     return { status: "blocked", reason: "Das übergeordnete Element enthält Rechnungs- oder Zahlungsdaten. Neue Unterelemente können daher nicht erstellt werden." };
   }
 
