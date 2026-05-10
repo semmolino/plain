@@ -290,9 +290,26 @@ export function RechnungenListe() {
         alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
       }
     } else {
-      if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
+      const pp = row.raw as PartialPayment
+      let deletePayments = false
       try {
-        await cancelPartialPayment((row.raw as PartialPayment).ID)
+        const paysRes = await fetchPayments({ partial_payment_id: pp.ID })
+        const pays = paysRes.data ?? []
+        if (pays.length > 0) {
+          const totalPaid = pays.reduce((s, p) => s + (p.AMOUNT_PAYED_GROSS ?? 0), 0)
+          const choice = window.confirm(
+            `Für Abschlagsrechnung ${label} existieren ${pays.length} Zahlung(en) über ${FMT_EUR.format(totalPaid)}.\n\n` +
+            `OK = Zahlung(en) ebenfalls löschen\nAbbrechen = nur Abschlagsrechnung stornieren`
+          )
+          deletePayments = choice
+        } else {
+          if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
+        }
+      } catch {
+        if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
+      }
+      try {
+        await cancelPartialPayment(pp.ID, { delete_payments: deletePayments })
         void qc.invalidateQueries({ queryKey: ['partial-payments'] })
       } catch (e: unknown) {
         alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')

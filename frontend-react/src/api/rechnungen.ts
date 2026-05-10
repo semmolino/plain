@@ -226,8 +226,8 @@ export const bookPartialPayment = (id: number) =>
 export const deletePartialPayment = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/partial-payments/${id}`)
 
-export const cancelPartialPayment = (id: number) =>
-  apiClient.post<{ id: number }>(`/partial-payments/${id}/cancel`, {})
+export const cancelPartialPayment = (id: number, opts?: { delete_payments?: boolean }) =>
+  apiClient.post<{ id: number }>(`/partial-payments/${id}/cancel`, opts ?? {})
 
 
 export function downloadPpEinvoice(

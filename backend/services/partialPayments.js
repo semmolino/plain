@@ -876,9 +876,9 @@ async function bookPartialPayment(supabase, { id, pp }) {
 }
 
 // ---------------------------------------------------------------------------
-// cancelPartialPayment – create a draft Storno-AR for a booked partial payment
+// cancelPartialPayment – create a Storno-AR for a booked partial payment
 // ---------------------------------------------------------------------------
-async function cancelPartialPayment(supabase, { id, tenantId }) {
+async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = false }) {
   const { data: orig, error: origErr } = await supabase
     .from("PARTIAL_PAYMENT").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (origErr || !orig) throw { status: 404, message: "Abschlagsrechnung nicht gefunden" };
@@ -890,6 +890,56 @@ async function cancelPartialPayment(supabase, { id, tenantId }) {
   if (existing) {
     const label = String(existing.STATUS_ID) === "2" ? "gebucht" : "als Entwurf angelegt";
     throw { status: 409, message: `Es existiert bereits eine Storno-Abschlagsrechnung (${label}) für diesen Eintrag` };
+  }
+
+  // ── Optional: delete existing payments ──────────────────────────────────
+  if (deletePayments) {
+    const { data: payments } = await supabase
+      .from("PAYMENT")
+      .select("ID, AMOUNT_PAYED_NET, PROJECT_ID")
+      .eq("PARTIAL_PAYMENT_ID", id)
+      .eq("TENANT_ID", tenantId);
+
+    for (const payment of payments || []) {
+      const { data: psRows } = await supabase
+        .from("PAYMENT_STRUCTURE")
+        .select("STRUCTURE_ID, AMOUNT_PAYED_NET")
+        .eq("PAYMENT_ID", payment.ID);
+
+      await supabase.from("PAYMENT_STRUCTURE").delete().eq("PAYMENT_ID", payment.ID);
+      await supabase.from("PAYMENT").delete().eq("ID", payment.ID);
+
+      if (psRows && psRows.length > 0) {
+        await supabase.from("PROJECT_PROGRESS").insert(
+          psRows.map(r => ({
+            TENANT_ID:    tenantId ?? null,
+            STRUCTURE_ID: r.STRUCTURE_ID,
+            PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
+          }))
+        );
+      }
+    }
+
+    // Re-sum PROJECT.PAYED from remaining payments
+    const { data: remainingPay } = await supabase
+      .from("PAYMENT").select("AMOUNT_PAYED_NET").eq("PROJECT_ID", orig.PROJECT_ID).eq("TENANT_ID", tenantId);
+    const newPayed = round2((remainingPay || []).reduce((s, r) => s + toNum(r.AMOUNT_PAYED_NET), 0));
+    await supabase.from("PROJECT").update({ PAYED: newPayed }).eq("ID", orig.PROJECT_ID);
+
+    // Re-aggregate PROJECT_STRUCTURE.PAYED from remaining PAYMENT_STRUCTURE rows
+    const { data: remainingPS } = await supabase
+      .from("PAYMENT_STRUCTURE").select("STRUCTURE_ID, AMOUNT_PAYED_NET").eq("TENANT_ID", tenantId);
+    const payedByStructure = new Map();
+    for (const r of remainingPS || []) {
+      const sid = String(r.STRUCTURE_ID);
+      payedByStructure.set(sid, round2((payedByStructure.get(sid) ?? 0) + toNum(r.AMOUNT_PAYED_NET)));
+    }
+    if (payedByStructure.size > 0) {
+      const upserts = [...payedByStructure.entries()].map(([sid, payed]) => ({
+        ID: parseInt(sid, 10), PAYED: payed,
+      }));
+      await supabase.from("PROJECT_STRUCTURE").upsert(upserts);
+    }
   }
 
   const {
@@ -904,12 +954,13 @@ async function cancelPartialPayment(supabase, { id, tenantId }) {
 
   const cancelRow = {
     ...rest,
+    PARTIAL_PAYMENT_NUMBER: `S-${orig.PARTIAL_PAYMENT_NUMBER || ""}`,
     CANCELS_PARTIAL_PAYMENT_ID: parseInt(id, 10),
-    STATUS_ID:         1,
-    AMOUNT_NET:       -round2(toNum(orig.AMOUNT_NET)),
-    AMOUNT_EXTRAS_NET:-round2(toNum(orig.AMOUNT_EXTRAS_NET)),
-    TOTAL_AMOUNT_NET: -round2(toNum(orig.TOTAL_AMOUNT_NET)),
-    TAX_AMOUNT_NET:   -round2(toNum(orig.TAX_AMOUNT_NET)),
+    STATUS_ID:          1,
+    AMOUNT_NET:        -round2(toNum(orig.AMOUNT_NET)),
+    AMOUNT_EXTRAS_NET: -round2(toNum(orig.AMOUNT_EXTRAS_NET)),
+    TOTAL_AMOUNT_NET:  -round2(toNum(orig.TOTAL_AMOUNT_NET)),
+    TAX_AMOUNT_NET:    -round2(toNum(orig.TAX_AMOUNT_NET)),
     TOTAL_AMOUNT_GROSS:-round2(toNum(orig.TOTAL_AMOUNT_GROSS)),
   };
 
@@ -918,6 +969,29 @@ async function cancelPartialPayment(supabase, { id, tenantId }) {
   if (insertErr) throw { status: 500, message: insertErr.message };
 
   const newId = created.ID;
+
+  // Copy PARTIAL_PAYMENT_STRUCTURE rows with negated amounts
+  const { data: ppsRows, error: ppsSelErr } = await execWithPpsTableFallback(supabase, (sb, table) =>
+    sb.from(table).select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, TENANT_ID").eq("PARTIAL_PAYMENT_ID", id)
+  );
+  if (ppsSelErr && !isMissingPpsRelation(ppsSelErr)) {
+    throw { status: 500, message: `PARTIAL_PAYMENT_STRUCTURE lesen fehlgeschlagen: ${ppsSelErr.message}` };
+  }
+  if (ppsRows && ppsRows.length > 0) {
+    const newPpsRows = ppsRows.map(r => ({
+      PARTIAL_PAYMENT_ID: newId,
+      STRUCTURE_ID:       r.STRUCTURE_ID,
+      AMOUNT_NET:        -round2(toNum(r.AMOUNT_NET)),
+      AMOUNT_EXTRAS_NET: -round2(toNum(r.AMOUNT_EXTRAS_NET)),
+      TENANT_ID:          r.TENANT_ID ?? null,
+    }));
+    const { error: ppsInsErr } = await execWithPpsTableFallback(supabase, (sb, table) =>
+      sb.from(table).insert(newPpsRows)
+    );
+    if (ppsInsErr && !isMissingPpsRelation(ppsInsErr)) {
+      throw { status: 500, message: `PARTIAL_PAYMENT_STRUCTURE copy failed: ${ppsInsErr.message}` };
+    }
+  }
 
   // Auto-book: immediately finalise the Storno-AR so original is marked Storniert at once
   const cancelPp = { ...cancelRow, ID: newId };
