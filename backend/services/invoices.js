@@ -962,7 +962,10 @@ async function bookInvoice(supabase, { id, inv }) {
 
   // If this is a Stornorechnung, mark the original invoice as cancelled
   if (inv.CANCELS_INVOICE_ID) {
-    await supabase.from("INVOICE").update({ STATUS_ID: 3 }).eq("ID", inv.CANCELS_INVOICE_ID);
+    await supabase.from("INVOICE").update({
+      STATUS_ID: 3,
+      CANCELLATION_DATE: new Date().toISOString().slice(0, 10),
+    }).eq("ID", inv.CANCELS_INVOICE_ID);
   }
 
   return { success: true, number: inv.INVOICE_NUMBER || null, pdf_asset_id: pdfAsset?.ID ?? null };
@@ -972,7 +975,7 @@ async function bookInvoice(supabase, { id, inv }) {
 // cancelInvoice – create a draft Stornorechnung for a booked invoice
 // The original is marked STATUS_ID=3 only when the Stornorechnung is booked.
 // ---------------------------------------------------------------------------
-async function cancelInvoice(supabase, { id, tenantId }) {
+async function cancelInvoice(supabase, { id, tenantId, deletePayments = false }) {
   const { data: orig, error: origErr } = await supabase
     .from("INVOICE").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (origErr || !orig) throw { status: 404, message: "Rechnung nicht gefunden" };
@@ -987,7 +990,66 @@ async function cancelInvoice(supabase, { id, tenantId }) {
     throw { status: 409, message: `Es existiert bereits eine Stornorechnung (${label}) für diese Rechnung` };
   }
 
-  // Clone the row, negate monetary amounts, clear document assets
+  const isFinalInvoice = orig.INVOICE_TYPE === "schlussrechnung" || orig.INVOICE_TYPE === "teilschlussrechnung";
+
+  // ── Optional: delete existing payments for this invoice ──────────────────
+  if (deletePayments) {
+    const { data: payments } = await supabase
+      .from("PAYMENT")
+      .select("ID, AMOUNT_PAYED_NET, PROJECT_ID")
+      .eq("INVOICE_ID", id)
+      .eq("TENANT_ID", tenantId);
+
+    for (const payment of payments || []) {
+      const { data: psRows } = await supabase
+        .from("PAYMENT_STRUCTURE")
+        .select("STRUCTURE_ID, AMOUNT_PAYED_NET")
+        .eq("PAYMENT_ID", payment.ID);
+
+      await supabase.from("PAYMENT_STRUCTURE").delete().eq("PAYMENT_ID", payment.ID);
+      await supabase.from("PAYMENT").delete().eq("ID", payment.ID);
+
+      // Insert negative PROJECT_PROGRESS reversal rows
+      if (psRows && psRows.length > 0) {
+        await supabase.from("PROJECT_PROGRESS").insert(
+          psRows.map(r => ({
+            TENANT_ID:    tenantId ?? null,
+            STRUCTURE_ID: r.STRUCTURE_ID,
+            PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
+          }))
+        );
+      }
+    }
+
+    // Re-sum PROJECT.PAYED from remaining payments
+    const { data: remainingPay } = await supabase
+      .from("PAYMENT").select("AMOUNT_PAYED_NET").eq("PROJECT_ID", orig.PROJECT_ID).eq("TENANT_ID", tenantId);
+    const newPayed = round2((remainingPay || []).reduce((s, r) => s + toNum(r.AMOUNT_PAYED_NET), 0));
+    await supabase.from("PROJECT").update({ PAYED: newPayed }).eq("ID", orig.PROJECT_ID);
+
+    // Re-sum PROJECT_STRUCTURE.PAYED per affected leaf
+    const affectedSids = [...new Set((payments || []).flatMap(p => {
+      // We need structure IDs — they were already deleted above, so we rely on PAYMENT_STRUCTURE
+      // being already gone. Use the psRows captured before deletion.
+      return [];
+    }))];
+    // Re-aggregate all structure PAYED values for this project from remaining PAYMENT_STRUCTURE
+    const { data: remainingPS } = await supabase
+      .from("PAYMENT_STRUCTURE").select("STRUCTURE_ID, AMOUNT_PAYED_NET").eq("TENANT_ID", tenantId);
+    const payedByStructure = new Map();
+    for (const r of remainingPS || []) {
+      const sid = String(r.STRUCTURE_ID);
+      payedByStructure.set(sid, round2((payedByStructure.get(sid) ?? 0) + toNum(r.AMOUNT_PAYED_NET)));
+    }
+    if (payedByStructure.size > 0) {
+      const upserts = [...payedByStructure.entries()].map(([sid, payed]) => ({
+        ID: parseInt(sid, 10), PAYED: payed,
+      }));
+      await supabase.from("PROJECT_STRUCTURE").upsert(upserts);
+    }
+  }
+
+  // Clone the row, negate monetary amounts, set S- prefix, clear document assets
   const {
     ID: _id, INVOICE_NUMBER: _num, STATUS_ID: _st,
     DOCUMENT_PDF_ASSET_ID: _pdf, DOCUMENT_XML_ASSET_ID: _xml,
@@ -995,11 +1057,13 @@ async function cancelInvoice(supabase, { id, tenantId }) {
     DOCUMENT_RENDERED_AT: _dr, DOCUMENT_TEMPLATE_ID: _tpl,
     DOCUMENT_LAYOUT_KEY_SNAPSHOT: _lk, DOCUMENT_THEME_SNAPSHOT_JSON: _th,
     DOCUMENT_LOGO_ASSET_ID_SNAPSHOT: _lo,
+    CANCELLATION_DATE: _cd,
     ...rest
   } = orig;
 
   const cancelRow = {
     ...rest,
+    INVOICE_NUMBER:       `S-${orig.INVOICE_NUMBER || ""}`,
     INVOICE_TYPE:         "stornorechnung",
     CANCELS_INVOICE_ID:   parseInt(id, 10),
     STATUS_ID:            1,
@@ -1014,8 +1078,7 @@ async function cancelInvoice(supabase, { id, tenantId }) {
 
   const newId = created.ID;
 
-  // Copy INVOICE_STRUCTURE rows with negated amounts so bookInvoice
-  // correctly decrements PROJECT_STRUCTURE.INVOICED when booked.
+  // Copy INVOICE_STRUCTURE rows with negated amounts
   const { data: structRows } = await supabase
     .from("INVOICE_STRUCTURE")
     .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, BILLING_TYPE_ID, TENANT_ID")
@@ -1023,23 +1086,37 @@ async function cancelInvoice(supabase, { id, tenantId }) {
 
   if (structRows && structRows.length > 0) {
     const newStructRows = structRows.map(r => ({
-      INVOICE_ID:       newId,
-      STRUCTURE_ID:     r.STRUCTURE_ID,
-      AMOUNT_NET:      -round2(toNum(r.AMOUNT_NET)),
+      INVOICE_ID:        newId,
+      STRUCTURE_ID:      r.STRUCTURE_ID,
+      AMOUNT_NET:       -round2(toNum(r.AMOUNT_NET)),
       AMOUNT_EXTRAS_NET: -round2(toNum(r.AMOUNT_EXTRAS_NET)),
-      BILLING_TYPE_ID:  r.BILLING_TYPE_ID ?? null,
-      TENANT_ID:        r.TENANT_ID ?? null,
+      BILLING_TYPE_ID:   r.BILLING_TYPE_ID ?? null,
+      TENANT_ID:         r.TENANT_ID ?? null,
     }));
     const { error: sErr } = await supabase.from("INVOICE_STRUCTURE").insert(newStructRows);
     if (sErr && !isTableMissingErr(sErr, "invoice_structure")) {
-      // Non-fatal: booking will still update PROJECT.INVOICED via TOTAL_AMOUNT_NET
       console.error("[CANCEL_INVOICE][STRUCTURE]", sErr.message);
     }
   }
 
-  // Auto-book: immediately finalise the Stornorechnung so original is marked Storniert at once
+  // Auto-book: immediately finalise the Stornorechnung
   const cancelInv = { ...cancelRow, ID: newId };
   await bookInvoice(supabase, { id: newId, inv: cancelInv });
+
+  // ── Post-booking cleanup ──────────────────────────────────────────────────
+
+  // Reopen PROJECT_STRUCTURE entries that were closed by this invoice
+  await supabase.from("PROJECT_STRUCTURE")
+    .update({ CLOSED_BY_INVOICE_ID: null })
+    .eq("CLOSED_BY_INVOICE_ID", id);
+
+  // For Schlussrechnung/Teilschlussrechnung: unlink PARTIAL_PAYMENTs that were
+  // closed by this invoice (they should become "open" again for a new Schlussrechnung)
+  if (isFinalInvoice) {
+    await supabase.from("PARTIAL_PAYMENT")
+      .update({ INVOICE_ID: null })
+      .eq("INVOICE_ID", id);
+  }
 
   return { id: newId };
 }

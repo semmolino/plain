@@ -93,8 +93,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const addressIdField = isInvoice ? 'INVOICE_ADDRESS_ID' : 'PARTIAL_PAYMENT_ADDRESS_ID';
   const contactIdField = isInvoice ? 'INVOICE_CONTACT_ID' : 'PARTIAL_PAYMENT_CONTACT_ID';
 
-  // type code: 326 = partial invoice (Abschlagsrechnung), 380 = commercial invoice
-  const typeCode = (docType === 'PARTIAL_PAYMENT') ? '326' : '380';
+  // type code: 326 = partial invoice, 380 = commercial invoice, 381 = credit note (Stornorechnung)
+  const typeCode = (docType === 'PARTIAL_PAYMENT') ? '326'
+    : invoiceType === 'stornorechnung' ? '381'
+    : '380';
 
   // ── 2. Seller (COMPANY) ───────────────────────────────────────────────────
 

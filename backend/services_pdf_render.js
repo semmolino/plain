@@ -380,8 +380,29 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   vm.theme       = theme;
   vm.logoDataUri = logoDataUri;
 
+  // For Stornorechnung: load the original invoice for the reference line
+  if (vm.inv.invoiceType === 'stornorechnung') {
+    // rawDoc is not in scope here — re-read CANCELS_INVOICE_ID from the booked invoice
+    const { data: cancelsDoc } = await supabase
+      .from('INVOICE')
+      .select('CANCELS_INVOICE_ID')
+      .eq('ID', docId)
+      .maybeSingle();
+    const cancelsId = cancelsDoc?.CANCELS_INVOICE_ID;
+    if (cancelsId) {
+      const { data: origInv } = await supabase
+        .from('INVOICE')
+        .select('INVOICE_NUMBER, INVOICE_DATE, INVOICE_TYPE')
+        .eq('ID', cancelsId)
+        .maybeSingle();
+      vm.origInvoice = origInv ?? null;
+    }
+  }
+
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
-  const html = env().render(path.join(layoutKey, 'invoice.njk'), vm);
+  const isStorno  = vm.inv.invoiceType === 'stornorechnung';
+  const template  = isStorno ? 'storno.njk' : 'invoice.njk';
+  const html = env().render(path.join(layoutKey, template), vm);
 
   const pdf = await renderPdf({ html });
   return { pdf, template: tpl, theme };

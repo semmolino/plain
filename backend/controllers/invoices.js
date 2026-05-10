@@ -493,9 +493,10 @@ async function deleteInvoice(req, res, supabase) {
 // ---------------------------------------------------------------------------
 async function cancelInvoice(req, res, supabase) {
   const { id } = req.params;
+  const deletePayments = req.body?.delete_payments === true;
 
   try {
-    const result = await svc.cancelInvoice(supabase, { id, tenantId: req.tenantId });
+    const result = await svc.cancelInvoice(supabase, { id, tenantId: req.tenantId, deletePayments });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;

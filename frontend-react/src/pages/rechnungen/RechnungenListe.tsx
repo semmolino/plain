@@ -47,7 +47,16 @@ interface UnifiedRow {
 }
 
 function fromInvoice(inv: Invoice): UnifiedRow {
-  const cancelled = inv.INVOICE_TYPE === 'stornorechnung' || inv.STATUS_ID === 3
+  const isOrigCancelled = inv.STATUS_ID === 3
+  const isStornoRow     = inv.INVOICE_TYPE === 'stornorechnung'
+
+  let statusLabel: string
+  let statusClass: string
+  if (isOrigCancelled)    { statusLabel = 'Storniert';       statusClass = 'cancelled' }
+  else if (isStornoRow)   { statusLabel = 'Storno-Rechnung'; statusClass = 'cancelled' }
+  else if (inv.STATUS_ID === 2) { statusLabel = 'Gebucht';   statusClass = 'booked' }
+  else                    { statusLabel = 'Entwurf';         statusClass = 'draft' }
+
   return {
     key:         `inv-${inv.ID}`,
     source:      'invoice',
@@ -55,11 +64,11 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     typ:         capitalizeInvType(inv.INVOICE_TYPE),
     date:        inv.INVOICE_DATE ?? null,
     project:     inv.PROJECT ?? null,
-    net:         inv.TOTAL_AMOUNT_NET  != null ? Number(inv.TOTAL_AMOUNT_NET)  : null,
+    net:         inv.TOTAL_AMOUNT_NET   != null ? Number(inv.TOTAL_AMOUNT_NET)   : null,
     gross:       inv.TOTAL_AMOUNT_GROSS != null ? Number(inv.TOTAL_AMOUNT_GROSS) : null,
     paid:        inv.AMOUNT_PAYED_GROSS != null ? Number(inv.AMOUNT_PAYED_GROSS) : null,
-    statusLabel: cancelled ? 'Storniert' : inv.STATUS_ID === 2 ? 'Gebucht' : 'Entwurf',
-    statusClass: cancelled ? 'cancelled' : inv.STATUS_ID === 2 ? 'booked'  : 'draft',
+    statusLabel,
+    statusClass,
     raw:         inv,
   }
 }
@@ -252,17 +261,42 @@ export function RechnungenListe() {
 
   async function handleCancel(row: UnifiedRow) {
     const label = row.number ?? `#${(row.raw as Invoice).ID}`
-    if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
-    try {
-      if (row.source === 'invoice') {
-        await cancelInvoice((row.raw as Invoice).ID)
+
+    if (row.source === 'invoice') {
+      const inv = row.raw as Invoice
+      // Check for existing payments before cancelling
+      let deletePayments = false
+      try {
+        const paysRes = await fetchPayments({ invoice_id: inv.ID })
+        const pays = paysRes.data ?? []
+        if (pays.length > 0) {
+          const totalPaid = pays.reduce((s, p) => s + (p.AMOUNT_PAYED_GROSS ?? 0), 0)
+          const choice = window.confirm(
+            `Für Rechnung ${label} existieren ${pays.length} Zahlung(en) über ${FMT_EUR.format(totalPaid)}.\n\n` +
+            `OK = Zahlung(en) ebenfalls löschen\nAbbrechen = nur Rechnung stornieren`
+          )
+          deletePayments = choice
+        } else {
+          if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
+        }
+      } catch {
+        if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
+      }
+      try {
+        await cancelInvoice(inv.ID, { delete_payments: deletePayments })
         void qc.invalidateQueries({ queryKey: ['invoices'] })
-      } else {
+        void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+      } catch (e: unknown) {
+        alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
+      }
+    } else {
+      if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
+      try {
         await cancelPartialPayment((row.raw as PartialPayment).ID)
         void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+      } catch (e: unknown) {
+        alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
       }
-    } catch (e: unknown) {
-      alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
     }
   }
 

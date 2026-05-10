@@ -162,8 +162,8 @@ export const bookInvoice = (id: number) =>
 export const deleteInvoice = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/invoices/${id}`)
 
-export const cancelInvoice = (id: number) =>
-  apiClient.post<{ id: number }>(`/invoices/${id}/cancel`, {})
+export const cancelInvoice = (id: number, opts?: { delete_payments?: boolean }) =>
+  apiClient.post<{ id: number }>(`/invoices/${id}/cancel`, opts ?? {})
 
 export const openInvoicePdf = (id: number) =>
   openPdfWithAuth(`/invoices/${id}/pdf?preview=1`)

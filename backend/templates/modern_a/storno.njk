@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+.page { page-break-after: always; }
+.page:last-child { page-break-after: auto; }
+
+.logo-area {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6mm;
+  min-height: 4mm;
+}
+.logo-area img {
+  max-height: {{ (theme.header.logoMaxHeightMm or 20) }}mm;
+  max-width: 70mm;
+  object-fit: contain;
+}
+
+.sender-line {
+  font-size: 7.5pt;
+  color: #6b7280;
+  border-bottom: 0.3pt solid #d1d5db;
+  padding-bottom: 1mm;
+  margin-bottom: 5mm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.letter-header {
+  display: flex;
+  gap: 10mm;
+  margin-bottom: 8mm;
+  align-items: flex-start;
+}
+.address-col { width: 85mm; flex-shrink: 0; }
+.address-block { font-size: 10pt; line-height: 1.5; min-height: 35mm; }
+.address-block .name1 { font-weight: 600; }
+
+.meta-col { flex: 1; }
+.meta-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.meta-table td { padding: 0.8mm 0; vertical-align: top; }
+.meta-table td.ml { color: #6b7280; width: 32mm; padding-right: 2mm; }
+.meta-table td.mv { font-weight: 500; }
+.meta-table td.mv.bold { font-weight: 700; }
+.meta-sep { border-top: 0.3pt solid #d1d5db; padding-top: 1.5mm; height: 3mm; }
+
+.ref-block {
+  margin-bottom: 6mm;
+  font-size: 9pt;
+  color: #374151;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8mm;
+}
+.ref-block .rf { display: flex; gap: 2mm; }
+.ref-block .rl { color: #6b7280; }
+
+.doc-title {
+  font-size: 14pt;
+  font-weight: 700;
+  margin-bottom: 2mm;
+  color: #dc2626;
+}
+
+.storno-ref {
+  font-size: 9.5pt;
+  color: #374151;
+  margin-bottom: 5mm;
+  padding: 2mm 3mm;
+  background: #fef2f2;
+  border-left: 2.5pt solid #dc2626;
+  border-radius: 1mm;
+}
+
+.text-block {
+  font-size: 10pt;
+  margin-bottom: 5mm;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.calc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0 6mm 0;
+}
+.calc-table td {
+  padding: 1.5mm 0;
+  font-size: 10pt;
+  vertical-align: baseline;
+}
+.calc-table td.label { color: #374151; }
+.calc-table td.amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-left: 6mm;
+}
+.calc-table tr.sep td { padding: 0; height: 2mm; }
+.calc-table tr.sep td.line-cell { border-top: 0.5pt solid #9ca3af; }
+.calc-table tr.total-row td {
+  font-weight: 700;
+  font-size: 11pt;
+  padding-top: 2mm;
+  border-top: 1pt solid #dc2626;
+  color: #dc2626;
+}
+
+.payment-note {
+  font-size: 9.5pt;
+  color: #374151;
+  margin-top: 5mm;
+  line-height: 1.5;
+}
+
+/* ── Document footer ────────────────────────────────────── */
+.doc-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding-top: 2.5mm;
+  border-top: 0.5pt solid #d1d5db;
+  display: flex;
+  gap: 5mm;
+  font-size: 7pt;
+  color: #6b7280;
+  line-height: 1.55;
+}
+.doc-footer-col { flex: 1; }
+.doc-footer-col strong { color: #374151; font-weight: 600; display: block; margin-bottom: 0.5mm; font-size: 7.5pt; }
+
+body { padding-bottom: 28mm; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  {# Logo #}
+  <div class="logo-area">
+    {% if theme.header.showLogo and logoDataUri %}
+      <img src="{{ logoDataUri }}" alt="Logo">
+    {% endif %}
+  </div>
+
+  {# Sender line #}
+  <div class="sender-line">
+    {{ inv.seller.name }}{% if inv.seller.street %} &middot; {{ inv.seller.street }}{% endif %}{% if inv.seller.postCode or inv.seller.city %} &middot; {{ inv.seller.postCode }} {{ inv.seller.city }}{% endif %}
+  </div>
+
+  {# Two-column: buyer address | meta block #}
+  <div class="letter-header">
+    <div class="address-col">
+      <div class="address-block">
+        <div class="name1">{{ inv.buyer.name }}</div>
+        {% if buyerName2 %}<div>{{ buyerName2 }}</div>{% endif %}
+        {% if inv.buyer.street %}<div>{{ inv.buyer.street }}</div>{% endif %}
+        <div>{{ inv.buyer.postCode }} {{ inv.buyer.city }}</div>
+      </div>
+    </div>
+
+    <div class="meta-col">
+      <table class="meta-table">
+        {% if inv.seller.contactName %}
+        <tr>
+          <td class="ml">Kontakt</td>
+          <td class="mv">{{ inv.seller.contactName }}</td>
+        </tr>
+        {% endif %}
+        {% if inv.seller.contactEmail %}
+        <tr>
+          <td class="ml">E-Mail</td>
+          <td class="mv">{{ inv.seller.contactEmail }}</td>
+        </tr>
+        {% endif %}
+        <tr><td class="meta-sep" colspan="2"></td></tr>
+        <tr>
+          <td class="ml">Datum</td>
+          <td class="mv">{{ inv.date | date_de }}</td>
+        </tr>
+        <tr>
+          <td class="ml">Stornorechnung</td>
+          <td class="mv bold">{{ inv.number }}</td>
+        </tr>
+        {% if origInvoice %}
+        <tr>
+          <td class="ml">Storno von</td>
+          <td class="mv">{{ origInvoice.INVOICE_NUMBER }}</td>
+        </tr>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {# Ref block #}
+  <div class="ref-block">
+    {% if inv.buyerReference %}
+    <div class="rf"><span class="rl">Ihre Zeichen:</span><span>{{ inv.buyerReference }}</span></div>
+    {% endif %}
+    {% if projectName %}
+    <div class="rf"><span class="rl">Projekt:</span><span>{{ projectName }}</span></div>
+    {% endif %}
+    {% if contractName %}
+    <div class="rf"><span class="rl">Auftrag:</span><span>{{ contractName }}</span></div>
+    {% endif %}
+  </div>
+
+  {# Document title #}
+  <div class="doc-title">Stornorechnung</div>
+
+  {# Reference to original invoice #}
+  {% if origInvoice %}
+  <div class="storno-ref">
+    Hiermit stornieren wir
+    {% if origInvoice.INVOICE_TYPE == 'schlussrechnung' %}unsere Schlussrechnung{% elif origInvoice.INVOICE_TYPE == 'teilschlussrechnung' %}unsere Teilschlussrechnung{% else %}unsere Rechnung{% endif %}
+    Nr. <strong>{{ origInvoice.INVOICE_NUMBER }}</strong>
+    {% if origInvoice.INVOICE_DATE %}vom <strong>{{ origInvoice.INVOICE_DATE | date_de }}</strong>{% endif %}
+    vollständig.
+  </div>
+  {% endif %}
+
+  {# Optional intro text #}
+  {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
+
+  {# ── Calculation table ── #}
+  <table class="calc-table">
+    <tr>
+      <td class="label">Honorar (netto)</td>
+      <td class="amount">{{ amountNet | money }}</td>
+    </tr>
+    {% if amountExtrasNet and amountExtrasNet != 0 %}
+    <tr>
+      <td class="label">zzgl. Nebenkosten</td>
+      <td class="amount">{{ amountExtrasNet | money }}</td>
+    </tr>
+    {% endif %}
+
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    {% for vat in inv.vatBreakdown %}
+    <tr>
+      <td class="label">zzgl. {{ vat.rate }}&#8239;% Mehrwertsteuer</td>
+      <td class="amount">{{ vat.amount | money }}</td>
+    </tr>
+    {% endfor %}
+
+    <tr class="total-row">
+      <td class="label">Stornobetrag</td>
+      <td class="amount">{{ inv.totals.grandTotal | money }}</td>
+    </tr>
+  </table>
+
+  {# Optional closing text #}
+  {% if text2 %}<div class="text-block">{{ text2 }}</div>{% endif %}
+
+  {# ── Document footer ── #}
+  <div class="doc-footer">
+    <div class="doc-footer-col">
+      <strong>{{ inv.seller.name }}</strong>
+      {% if inv.seller.street %}{{ inv.seller.street }}<br>{% endif %}
+      {% if inv.seller.postOfficeBox %}Postfach {{ inv.seller.postOfficeBox }}<br>{% endif %}
+      {% if inv.seller.postCode or inv.seller.city %}{{ inv.seller.postCode }} {{ inv.seller.city }}{% endif %}
+    </div>
+    <div class="doc-footer-col">
+      <strong>Bankverbindung</strong>
+      {% if inv.seller.iban %}IBAN: {{ inv.seller.iban }}<br>{% endif %}
+      {% if inv.seller.bic %}BIC: {{ inv.seller.bic }}{% endif %}
+    </div>
+    <div class="doc-footer-col">
+      <strong>Steuer</strong>
+      {% if inv.seller.taxId %}Steuernummer: {{ inv.seller.taxId }}<br>{% endif %}
+      {% if inv.seller.vatId %}USt-IdNr.: {{ inv.seller.vatId }}{% endif %}
+    </div>
+    {% if inv.seller.creditorId %}
+    <div class="doc-footer-col">
+      <strong>Sonstiges</strong>
+      Gläubiger-ID: {{ inv.seller.creditorId }}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+</body>
+</html>
