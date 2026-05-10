@@ -575,13 +575,17 @@ async function progressSnapshot(supabase, { projectId }) {
     });
   }
 
-  for (const u of updates) {
-    const payload = { REVENUE_COMPLETION: u.revenueCompletion, EXTRAS_COMPLETION: u.extrasCompletion };
-    if (Number(u.btId) === 2) {
-      payload.REVENUE = u.revenue;
-      payload.EXTRAS = u.extras;
-    }
-    const { error: uErr } = await supabase.from("PROJECT_STRUCTURE").update(payload).eq("ID", u.sid);
+  // Batch all PROJECT_STRUCTURE updates in one upsert instead of N individual calls.
+  // REVENUE/EXTRAS are always included: for non-BT2 rows they equal the stored values (no-op).
+  const structureUpserts = updates.map(u => ({
+    ID: parseInt(u.sid, 10),
+    REVENUE: u.revenue,
+    EXTRAS: u.extras,
+    REVENUE_COMPLETION: u.revenueCompletion,
+    EXTRAS_COMPLETION: u.extrasCompletion,
+  }));
+  if (structureUpserts.length) {
+    const { error: uErr } = await supabase.from("PROJECT_STRUCTURE").upsert(structureUpserts);
     if (uErr) throw uErr;
   }
 
@@ -1197,7 +1201,7 @@ async function saveLeistungsstand(supabase, { projectId, updates }) {
   const ids = updates.map(u => String(u.structure_id));
   const { data: nodes, error: nErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID")
+    .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID")
     .eq("PROJECT_ID", projectId)
     .in("ID", ids);
   if (nErr) throw nErr;
@@ -1219,6 +1223,8 @@ async function saveLeistungsstand(supabase, { projectId, updates }) {
     });
   }
 
+  // Build all payloads in memory, then batch-upsert in a single roundtrip
+  const structureUpserts = [];
   for (const u of updates) {
     const sid = String(u.structure_id);
     const node = nodeMap.get(sid);
@@ -1229,29 +1235,38 @@ async function saveLeistungsstand(supabase, { projectId, updates }) {
     const extrasPct = revPct;
     const extrasPercent = Number(node.EXTRAS_PERCENT ?? 0);
 
-    const revenue = isNachweis
-      ? Number(tecSums[sid] ?? 0)
-      : Number(node.REVENUE ?? 0);
+    const revenue = isNachweis ? Number(tecSums[sid] ?? 0) : Number(node.REVENUE ?? 0);
     const extras = (revenue * extrasPercent) / 100;
     const revenueCompletion = (revPct * revenue) / 100;
     const extrasCompletion = (extrasPct * extras) / 100;
 
-    const { error: uErr } = await supabase
-      .from("PROJECT_STRUCTURE")
-      .update({
-        REVENUE_COMPLETION_PERCENT: revPct,
-        EXTRAS_COMPLETION_PERCENT: extrasPct,
-        REVENUE: revenue,
-        EXTRAS: extras,
-        REVENUE_COMPLETION: revenueCompletion,
-        EXTRAS_COMPLETION: extrasCompletion,
-      })
-      .eq("ID", sid);
+    structureUpserts.push({
+      ID: parseInt(sid, 10),
+      REVENUE_COMPLETION_PERCENT: revPct,
+      EXTRAS_COMPLETION_PERCENT: extrasPct,
+      REVENUE: revenue,
+      EXTRAS: extras,
+      REVENUE_COMPLETION: revenueCompletion,
+      EXTRAS_COMPLETION: extrasCompletion,
+    });
+  }
+
+  if (structureUpserts.length) {
+    const { error: uErr } = await supabase.from("PROJECT_STRUCTURE").upsert(structureUpserts);
     if (uErr) throw uErr;
   }
 
-  for (const u of updates) {
-    await propagateUpwards(supabase, { structureId: String(u.structure_id) });
+  // Propagate upwards only once per unique parent (avoids redundant recalculations
+  // when multiple siblings share the same parent node)
+  const uniqueParentIds = [...new Set(
+    [...nodeMap.values()]
+      .map(n => n.FATHER_ID)
+      .filter(id => id != null)
+      .map(String)
+  )];
+  for (const parentId of uniqueParentIds) {
+    await recalcParent(supabase, { parentId });
+    await propagateUpwards(supabase, { structureId: parentId });
   }
 
   const snapshotResult = await progressSnapshot(supabase, { projectId: String(projectId) });
