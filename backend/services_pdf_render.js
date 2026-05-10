@@ -65,15 +65,14 @@ async function getBrowser() {
   return _browserPromise;
 }
 
-async function renderPdf({ html, footerLeft }) {
+async function renderPdf({ html }) {
   const browser = await getBrowser();
   const page    = await browser.newPage();
   await page.setContent(html, { waitUntil: 'load' });
 
   const footerTemplate = `
-    <div style="font-size:7.5px;width:100%;padding:0 20mm 0 25mm;color:#9ca3af;display:flex;justify-content:space-between;align-items:center;">
-      <div style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${(footerLeft || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-      <div style="white-space:nowrap;margin-left:4mm;">Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>
+    <div style="font-size:7.5px;width:100%;padding:0 20mm 0 25mm;color:#9ca3af;display:flex;justify-content:flex-end;align-items:center;">
+      <div style="white-space:nowrap;">Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>
     </div>`;
 
   const pdf = await page.pdf({
@@ -384,15 +383,7 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'invoice.njk'), vm);
 
-  const s = vm.inv.seller;
-  const companyLine = [
-    s.name, s.street, `${s.postCode} ${s.city}`.trim(),
-    s.vatId ? `USt-IdNr.: ${s.vatId}` : (s.taxId ? `St.-Nr.: ${s.taxId}` : ''),
-    s.iban ? `IBAN: ${s.iban}` : '',
-    s.bic  ? `BIC: ${s.bic}`   : '',
-  ].filter(Boolean).join(' \u00b7 ');
-
-  const pdf = await renderPdf({ html, footerLeft: companyLine });
+  const pdf = await renderPdf({ html });
   return { pdf, template: tpl, theme };
 }
 
@@ -411,15 +402,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
 
-  const s = vm.seller;
-  const companyLine = [
-    s.name, s.street, `${s.postCode} ${s.city}`.trim(),
-    s.vatId ? `USt-IdNr.: ${s.vatId}` : (s.taxId ? `St.-Nr.: ${s.taxId}` : ''),
-    s.iban ? `IBAN: ${s.iban}` : '',
-    s.bic  ? `BIC: ${s.bic}`   : '',
-  ].filter(Boolean).join(' · ');
-
-  const pdf = await renderPdf({ html, footerLeft: companyLine });
+  const pdf = await renderPdf({ html });
   return { pdf, offer: vm.offer };
 }
 
