@@ -172,12 +172,15 @@ module.exports = (supabase) => {
           );
 
           // Build PAYMENT_STRUCTURE rows with proportional net distribution
-          const payStructRows = structureRows.map((r, i) => {
+          const payStructRows = structureRows.map((r) => {
+            const rowTotal = toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET);
             const share = totalAllocated !== 0
-              ? round2(net * (toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)) / totalAllocated)
+              ? round2(net * rowTotal / totalAllocated)
               : round2(net / structureRows.length);
             return {
               PAYMENT_ID:              created.ID,
+              PARTIAL_PAYMENT_ID:      partialPaymentId ? parseInt(String(partialPaymentId), 10) : null,
+              INVOICE_ID:              invoiceId ? parseInt(String(invoiceId), 10) : null,
               STRUCTURE_ID:            r.STRUCTURE_ID,
               AMOUNT_PAYED_NET:        share,
               AMOUNT_PAYED_EXTRAS_NET: 0,
