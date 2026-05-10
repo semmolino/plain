@@ -357,7 +357,7 @@ export function RechnungenListe() {
   }
 
   const sp = { sortKey, dir: sortDir, onClick: toggleSort }
-  const remaining = payTarget ? ((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) : null
+  const remaining = payTarget ? (Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100) : null
 
   return (
     <div>
