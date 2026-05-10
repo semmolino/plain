@@ -41,6 +41,7 @@ interface UnifiedRow {
   net:        number | null
   gross:      number | null
   paid:       number | null
+  open:       number | null
   statusLabel: string
   statusClass: string
   raw:        Invoice | PartialPayment
@@ -57,6 +58,8 @@ function fromInvoice(inv: Invoice): UnifiedRow {
   else if (inv.STATUS_ID === 2) { statusLabel = 'Gebucht';         statusClass = 'booked' }
   else                          { statusLabel = 'Entwurf';         statusClass = 'draft' }
 
+  const gross = inv.TOTAL_AMOUNT_GROSS != null ? Number(inv.TOTAL_AMOUNT_GROSS) : null
+  const paid  = inv.AMOUNT_PAYED_GROSS != null ? Number(inv.AMOUNT_PAYED_GROSS) : null
   return {
     key:         `inv-${inv.ID}`,
     source:      'invoice',
@@ -64,9 +67,10 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     typ:         capitalizeInvType(inv.INVOICE_TYPE),
     date:        inv.INVOICE_DATE ?? null,
     project:     inv.PROJECT ?? null,
-    net:         inv.TOTAL_AMOUNT_NET   != null ? Number(inv.TOTAL_AMOUNT_NET)   : null,
-    gross:       inv.TOTAL_AMOUNT_GROSS != null ? Number(inv.TOTAL_AMOUNT_GROSS) : null,
-    paid:        inv.AMOUNT_PAYED_GROSS != null ? Number(inv.AMOUNT_PAYED_GROSS) : null,
+    net:         inv.TOTAL_AMOUNT_NET != null ? Number(inv.TOTAL_AMOUNT_NET) : null,
+    gross,
+    paid,
+    open:        gross != null ? Math.round((gross - (paid ?? 0)) * 100) / 100 : null,
     statusLabel,
     statusClass,
     raw:         inv,
@@ -84,6 +88,8 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   else if (pp.STATUS_ID === 2)  { statusLabel = 'Gebucht';         statusClass = 'booked' }
   else                          { statusLabel = 'Entwurf';         statusClass = 'draft' }
 
+  const gross = pp.TOTAL_AMOUNT_GROSS != null ? Number(pp.TOTAL_AMOUNT_GROSS) : null
+  const paid  = pp.AMOUNT_PAYED_GROSS != null ? Number(pp.AMOUNT_PAYED_GROSS) : null
   return {
     key:         `pp-${pp.ID}`,
     source:      'pp',
@@ -91,9 +97,10 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     typ:         'Abschlagsrechnung',
     date:        pp.PARTIAL_PAYMENT_DATE ?? null,
     project:     pp.PROJECT ?? null,
-    net:         pp.TOTAL_AMOUNT_NET  != null ? Number(pp.TOTAL_AMOUNT_NET)  : null,
-    gross:       pp.TOTAL_AMOUNT_GROSS != null ? Number(pp.TOTAL_AMOUNT_GROSS) : null,
-    paid:        pp.AMOUNT_PAYED_GROSS != null ? Number(pp.AMOUNT_PAYED_GROSS) : null,
+    net:         pp.TOTAL_AMOUNT_NET != null ? Number(pp.TOTAL_AMOUNT_NET) : null,
+    gross,
+    paid,
+    open:        gross != null ? Math.round((gross - (paid ?? 0)) * 100) / 100 : null,
     statusLabel,
     statusClass,
     raw:         pp,
@@ -102,7 +109,7 @@ function fromPp(pp: PartialPayment): UnifiedRow {
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-type SortKey = 'number' | 'typ' | 'date' | 'project' | 'net' | 'gross' | 'paid' | 'statusLabel'
+type SortKey = 'number' | 'typ' | 'date' | 'project' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
 
 function SortTh({ label, k, sortKey, dir, onClick, className }: {
   label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'
@@ -189,6 +196,7 @@ export function RechnungenListe() {
     net:   rows.reduce((s, r) => s + (r.net   ?? 0), 0),
     gross: rows.reduce((s, r) => s + (r.gross ?? 0), 0),
     paid:  rows.reduce((s, r) => s + (r.paid  ?? 0), 0),
+    open:  rows.reduce((s, r) => s + (r.open  ?? 0), 0),
   }), [rows])
 
   function toggleSort(k: SortKey) {
@@ -417,10 +425,11 @@ export function RechnungenListe() {
                 <SortTh label="Typ"       k="typ"         {...sp} />
                 <SortTh label="Datum"     k="date"        {...sp} />
                 <SortTh label="Projekt"   k="project"     {...sp} />
-                <SortTh label="Netto €"   k="net"         {...sp} className="num" />
-                <SortTh label="Brutto €"  k="gross"       {...sp} className="num" />
-                <SortTh label="Bezahlt €" k="paid"        {...sp} className="num" />
-                <SortTh label="Status"    k="statusLabel" {...sp} />
+                <SortTh label="Netto €"          k="net"         {...sp} className="num" />
+                <SortTh label="Brutto €"         k="gross"       {...sp} className="num" />
+                <SortTh label="Bezahlt €"        k="paid"        {...sp} className="num" />
+                <SortTh label="Offene Posten €"  k="open"        {...sp} className="num" />
+                <SortTh label="Status"           k="statusLabel" {...sp} />
                 <th></th>
               </tr>
             </thead>
@@ -434,6 +443,7 @@ export function RechnungenListe() {
                   <td className="num">{fmtEur(row.net)}</td>
                   <td className="num">{fmtEur(row.gross)}</td>
                   <td className="num">{fmtEur(row.paid)}</td>
+                  <td className="num">{fmtEur(row.open)}</td>
                   <td><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span></td>
                   <td className="doc-actions">
                     <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
@@ -451,7 +461,7 @@ export function RechnungenListe() {
                   </td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={9} className="empty-note">Keine Einträge</td></tr>}
+              {!rows.length && <tr><td colSpan={10} className="empty-note">Keine Einträge</td></tr>}
             </tbody>
             <tfoot>
               <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
@@ -461,6 +471,7 @@ export function RechnungenListe() {
                 <td className="num">{fmtEur(totals.net)}</td>
                 <td className="num">{fmtEur(totals.gross)}</td>
                 <td className="num">{fmtEur(totals.paid)}</td>
+                <td className="num">{fmtEur(totals.open)}</td>
                 <td colSpan={2}></td>
               </tr>
             </tfoot>
