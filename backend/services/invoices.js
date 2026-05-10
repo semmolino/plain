@@ -1095,7 +1095,7 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
     }));
     const { error: sErr } = await supabase.from("INVOICE_STRUCTURE").insert(newStructRows);
     if (sErr && !isTableMissingErr(sErr, "invoice_structure")) {
-      console.error("[CANCEL_INVOICE][STRUCTURE]", sErr.message);
+      throw { status: 500, message: `INVOICE_STRUCTURE copy failed: ${sErr.message}` };
     }
   }
 

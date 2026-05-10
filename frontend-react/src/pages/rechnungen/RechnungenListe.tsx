@@ -48,14 +48,12 @@ interface UnifiedRow {
 
 function fromInvoice(inv: Invoice): UnifiedRow {
   const isOrigCancelled = inv.STATUS_ID === 3
-  const isStornoRow     = inv.INVOICE_TYPE === 'stornorechnung'
 
   let statusLabel: string
   let statusClass: string
-  if (isOrigCancelled)    { statusLabel = 'Storniert';       statusClass = 'cancelled' }
-  else if (isStornoRow)   { statusLabel = 'Storno-Rechnung'; statusClass = 'cancelled' }
+  if (isOrigCancelled)          { statusLabel = 'Storniert'; statusClass = 'cancelled' }
   else if (inv.STATUS_ID === 2) { statusLabel = 'Gebucht';   statusClass = 'booked' }
-  else                    { statusLabel = 'Entwurf';         statusClass = 'draft' }
+  else                          { statusLabel = 'Entwurf';   statusClass = 'draft' }
 
   return {
     key:         `inv-${inv.ID}`,
