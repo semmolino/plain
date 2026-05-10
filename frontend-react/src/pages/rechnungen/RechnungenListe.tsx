@@ -8,8 +8,8 @@ import {
   downloadInvoiceEinvoice, downloadPpEinvoice,
   cancelInvoice, cancelPartialPayment,
   deleteInvoice, deletePartialPayment,
-  createPayment,
-  type Invoice, type PartialPayment,
+  fetchPayments, createPayment, deletePayment,
+  type Invoice, type PartialPayment, type Payment,
 } from '@/api/rechnungen'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
@@ -121,9 +121,11 @@ export function RechnungenListe() {
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
-  const [payTarget, setPayTarget] = useState<PaymentTarget | null>(null)
-  const [payForm,   setPayForm]   = useState(emptyPaymentForm())
-  const [payMsg,    setPayMsg]    = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [payTarget,   setPayTarget]   = useState<PaymentTarget | null>(null)
+  const [payForm,     setPayForm]     = useState(emptyPaymentForm())
+  const [payMsg,      setPayMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [existingPayments, setExistingPayments] = useState<Payment[]>([])
+  const [deletingPayId, setDeletingPayId] = useState<number | null>(null)
 
   const { data: invData, isLoading: invLoading } = useQuery({
     queryKey: ['invoices'],
@@ -190,6 +192,8 @@ export function RechnungenListe() {
   function openPayment(row: UnifiedRow) {
     setPayForm(emptyPaymentForm())
     setPayMsg(null)
+    setExistingPayments([])
+    setDeletingPayId(null)
     const id = (row.raw as Invoice).ID ?? (row.raw as PartialPayment).ID
     setPayTarget({
       source:     row.source,
@@ -198,6 +202,30 @@ export function RechnungenListe() {
       totalGross: row.gross,
       paidGross:  row.paid,
     })
+    const params = row.source === 'invoice' ? { invoice_id: id } : { partial_payment_id: id }
+    fetchPayments(params).then(r => setExistingPayments(r.data ?? [])).catch(() => {})
+  }
+
+  async function handleDeletePayment(payId: number) {
+    if (!window.confirm('Zahlung wirklich löschen?')) return
+    setDeletingPayId(payId)
+    try {
+      await deletePayment(payId)
+      setExistingPayments(prev => prev.filter(p => p.ID !== payId))
+      void qc.invalidateQueries({ queryKey: ['invoices'] })
+      void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+      // Update the displayed paidGross in the modal header
+      setPayTarget(prev => {
+        if (!prev) return prev
+        const removed = existingPayments.find(p => p.ID === payId)
+        if (!removed) return prev
+        return { ...prev, paidGross: (prev.paidGross ?? 0) - removed.AMOUNT_PAYED_GROSS }
+      })
+    } catch (e: unknown) {
+      setPayMsg({ text: (e as { message?: string })?.message ?? 'Fehler beim Löschen', type: 'error' })
+    } finally {
+      setDeletingPayId(null)
+    }
   }
 
   function submitPayment(e: React.FormEvent) {
@@ -384,6 +412,38 @@ export function RechnungenListe() {
       <Modal open={payTarget !== null} onClose={() => setPayTarget(null)} title={`Zahlung erfassen – ${payTarget?.label ?? ''}`}>
         {payTarget && (
           <form onSubmit={submitPayment} className="master-form">
+
+            {/* Existing payments list */}
+            {existingPayments.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(17,24,39,0.5)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Bisherige Zahlungen
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {existingPayments.map(p => (
+                      <tr key={p.ID} style={{ borderBottom: '1px solid rgba(17,24,39,0.08)' }}>
+                        <td style={{ padding: '4px 0', color: 'rgba(17,24,39,0.55)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
+                        <td style={{ padding: '4px 6px', fontWeight: 500 }}>{fmtEur(p.AMOUNT_PAYED_GROSS)}</td>
+                        <td style={{ padding: '4px 0', color: 'rgba(17,24,39,0.45)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
+                        <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            title="Zahlung löschen"
+                            disabled={deletingPayId === p.ID}
+                            onClick={() => handleDeletePayment(p.ID)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 16, lineHeight: 1, padding: '0 2px' }}
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {payTarget.totalGross != null && (
               <div style={{ marginBottom: 12, fontSize: 14, color: 'rgba(17,24,39,0.6)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span>

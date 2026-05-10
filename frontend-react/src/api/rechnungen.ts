@@ -261,6 +261,23 @@ export const bookFinalInvoice = (id: number) =>
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 
+export interface Payment {
+  ID: number
+  AMOUNT_PAYED_GROSS: number
+  AMOUNT_PAYED_NET: number
+  AMOUNT_PAYED_VAT: number
+  PAYMENT_DATE: string
+  PURPOSE_OF_PAYMENT: string | null
+  COMMENT: string | null
+}
+
+export const fetchPayments = (params: { invoice_id?: number; partial_payment_id?: number }) => {
+  const q = params.invoice_id
+    ? `invoice_id=${params.invoice_id}`
+    : `partial_payment_id=${params.partial_payment_id}`
+  return apiClient.get<{ data: Payment[] }>(`/payments?${q}`)
+}
+
 export const createPayment = (body: {
   invoice_id?: number
   partial_payment_id?: number
@@ -269,3 +286,6 @@ export const createPayment = (body: {
   purpose_of_payment?: string
   comment?: string
 }) => apiClient.post<{ success: boolean; id: number }>('/payments', body)
+
+export const deletePayment = (id: number) =>
+  apiClient.delete<{ success: boolean }>(`/payments/${id}`)

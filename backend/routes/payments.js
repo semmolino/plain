@@ -1,6 +1,6 @@
 const express = require("express");
 
-// Payment creation
+// Payment routes
 // Base path: /api/payments
 module.exports = (supabase) => {
   const router = express.Router();
@@ -32,24 +32,63 @@ module.exports = (supabase) => {
     return Number.isFinite(p) ? p : 0;
   }
 
-  async function getProjectPayed(projectId) {
-    const { data, error } = await supabase
-      .from("PROJECT")
-      .select("PAYED")
-      .eq("ID", projectId)
+  // Re-aggregate PROJECT_STRUCTURE upward from a given node's parent
+  async function propagatePayedUpwards(structureId) {
+    const { data: node } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .select("FATHER_ID")
+      .eq("ID", structureId)
       .maybeSingle();
-    if (error) throw new Error(error.message);
-    const cur = toNum(data?.PAYED);
-    return Number.isFinite(cur) ? cur : 0;
+    if (!node || node.FATHER_ID == null) return;
+    const parentId = String(node.FATHER_ID);
+
+    const { data: siblings } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .select("REVENUE, EXTRAS, COSTS, REVENUE_COMPLETION, EXTRAS_COMPLETION, PARTIAL_PAYMENTS, INVOICED, PAYED")
+      .eq("FATHER_ID", parentId);
+    if (siblings && siblings.length > 0) {
+      const s = (f) => siblings.reduce((acc, c) => acc + Number(c[f] ?? 0), 0);
+      await supabase.from("PROJECT_STRUCTURE").update({
+        REVENUE:                   s("REVENUE"),
+        EXTRAS:                    s("EXTRAS"),
+        COSTS:                     s("COSTS"),
+        REVENUE_COMPLETION:        s("REVENUE_COMPLETION"),
+        EXTRAS_COMPLETION:         s("EXTRAS_COMPLETION"),
+        PARTIAL_PAYMENTS:          s("PARTIAL_PAYMENTS"),
+        INVOICED:                  s("INVOICED"),
+        PAYED:                     s("PAYED"),
+      }).eq("ID", parentId);
+    }
+    await propagatePayedUpwards(parentId);
   }
 
+  // GET /api/payments?invoice_id=X  or  ?partial_payment_id=X
+  router.get("/", async (req, res) => {
+    try {
+      const invoiceId = req.query.invoice_id ? parseInt(req.query.invoice_id, 10) : null;
+      const ppId = req.query.partial_payment_id ? parseInt(req.query.partial_payment_id, 10) : null;
+      if (!invoiceId && !ppId) {
+        return res.status(400).json({ error: "invoice_id oder partial_payment_id erforderlich." });
+      }
+
+      let query = supabase
+        .from("PAYMENT")
+        .select("ID, AMOUNT_PAYED_GROSS, AMOUNT_PAYED_NET, AMOUNT_PAYED_VAT, PAYMENT_DATE, PURPOSE_OF_PAYMENT, COMMENT")
+        .eq("TENANT_ID", req.tenantId)
+        .order("PAYMENT_DATE", { ascending: true });
+
+      if (invoiceId) query = query.eq("INVOICE_ID", invoiceId);
+      else query = query.eq("PARTIAL_PAYMENT_ID", ppId);
+
+      const { data, error } = await query;
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ data: data || [] });
+    } catch (e) {
+      return res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
   // POST /api/payments
-  // Body:
-  //   - partial_payment_id OR invoice_id (exactly one)
-  //   - amount_payed_gross (mandatory)
-  //   - payment_date (mandatory, YYYY-MM-DD)
-  //   - purpose_of_payment (optional)
-  //   - comment (optional)
   router.post("/", async (req, res) => {
     try {
       const b = req.body || {};
@@ -70,7 +109,6 @@ module.exports = (supabase) => {
         return res.status(400).json({ error: "Zahlungsdatum ist erforderlich (YYYY-MM-DD)." });
       }
 
-      // Resolve reference (project/contract/vat)
       let ref = null;
 
       if (partialPaymentId) {
@@ -129,7 +167,6 @@ module.exports = (supabase) => {
         PURPOSE_OF_PAYMENT: String(b.purpose_of_payment || "").trim() || null,
         COMMENT: String(b.comment || "").trim() || null,
         TENANT_ID: req.tenantId ?? null,
-        // Not used yet in UI:
         AMOUNT_PAYED_EXTRAS_NET: null,
       };
 
@@ -141,15 +178,13 @@ module.exports = (supabase) => {
       if (insErr) return res.status(500).json({ error: insErr.message });
 
       // Update PROJECT.PAYED += net
-      const currentPayed = await getProjectPayed(projectId);
-      const newPayed = round2(currentPayed + net);
-      const { error: updErr } = await supabase
-        .from("PROJECT")
-        .update({ PAYED: newPayed })
-        .eq("ID", projectId);
+      const { data: projRow } = await supabase.from("PROJECT").select("PAYED").eq("ID", projectId).maybeSingle();
+      const currentPayed = toNum(projRow?.PAYED);
+      const newPayed = round2((Number.isFinite(currentPayed) ? currentPayed : 0) + net);
+      const { error: updErr } = await supabase.from("PROJECT").update({ PAYED: newPayed }).eq("ID", projectId);
       if (updErr) return res.status(500).json({ error: updErr.message });
 
-      // PROJECT_PROGRESS: distribute payment proportionally across linked structures
+      // Distribute payment across structure elements
       try {
         let structureRows = [];
         if (partialPaymentId) {
@@ -171,7 +206,6 @@ module.exports = (supabase) => {
             (s, r) => s + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET), 0
           );
 
-          // Build PAYMENT_STRUCTURE rows with proportional net distribution
           const payStructRows = structureRows.map((r) => {
             const rowTotal = toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET);
             const share = totalAllocated !== 0
@@ -188,7 +222,6 @@ module.exports = (supabase) => {
             };
           });
 
-          // Fix rounding so rows sum exactly to net
           const rowSum = payStructRows.reduce((s, r) => s + r.AMOUNT_PAYED_NET, 0);
           const diff   = round2(net - rowSum);
           if (diff !== 0 && payStructRows.length > 0) {
@@ -199,7 +232,6 @@ module.exports = (supabase) => {
           if (psInsErr) {
             console.error("[PAYMENT][PAYMENT_STRUCTURE]", psInsErr.message);
           } else {
-            // PROJECT_PROGRESS: one row per structure with the PAYED delta
             const payProgressRows = payStructRows.map((r) => ({
               TENANT_ID:    req.tenantId ?? null,
               STRUCTURE_ID: r.STRUCTURE_ID,
@@ -222,6 +254,76 @@ module.exports = (supabase) => {
         amount_payed_net: net,
         amount_payed_vat: vat,
       });
+    } catch (e) {
+      return res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
+  // DELETE /api/payments/:id
+  router.delete("/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "Ungültige ID." });
+
+      // 1. Load the payment (tenant check)
+      const { data: payment, error: pErr } = await supabase
+        .from("PAYMENT")
+        .select("ID, PROJECT_ID, INVOICE_ID, PARTIAL_PAYMENT_ID, AMOUNT_PAYED_NET, TENANT_ID")
+        .eq("ID", id)
+        .eq("TENANT_ID", req.tenantId)
+        .maybeSingle();
+      if (pErr) return res.status(500).json({ error: pErr.message });
+      if (!payment) return res.status(404).json({ error: "Zahlung nicht gefunden." });
+
+      // 2. Load PAYMENT_STRUCTURE rows before deletion (needed for reversal + propagation)
+      const { data: psRows } = await supabase
+        .from("PAYMENT_STRUCTURE")
+        .select("STRUCTURE_ID, AMOUNT_PAYED_NET")
+        .eq("PAYMENT_ID", id);
+      const structureRows = psRows || [];
+
+      // 3. Delete PAYMENT_STRUCTURE, then PAYMENT
+      await supabase.from("PAYMENT_STRUCTURE").delete().eq("PAYMENT_ID", id);
+      const { error: delErr } = await supabase.from("PAYMENT").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
+      if (delErr) return res.status(500).json({ error: delErr.message });
+
+      // 4. Re-sum PROJECT.PAYED from remaining payments (accurate re-aggregate, not a delta)
+      const { data: remainingPayments } = await supabase
+        .from("PAYMENT")
+        .select("AMOUNT_PAYED_NET")
+        .eq("PROJECT_ID", payment.PROJECT_ID)
+        .eq("TENANT_ID", req.tenantId);
+      const newProjectPayed = round2(
+        (remainingPayments || []).reduce((s, r) => s + (Number.isFinite(toNum(r.AMOUNT_PAYED_NET)) ? toNum(r.AMOUNT_PAYED_NET) : 0), 0)
+      );
+      await supabase.from("PROJECT").update({ PAYED: newProjectPayed }).eq("ID", payment.PROJECT_ID);
+
+      // 5. Re-sum PROJECT_STRUCTURE.PAYED per affected leaf, then propagate upward
+      const uniqueStructureIds = [...new Set(structureRows.map(r => String(r.STRUCTURE_ID)))];
+      for (const sid of uniqueStructureIds) {
+        const { data: sPayments } = await supabase
+          .from("PAYMENT_STRUCTURE")
+          .select("AMOUNT_PAYED_NET")
+          .eq("STRUCTURE_ID", sid);
+        const newPayed = round2(
+          (sPayments || []).reduce((s, r) => s + (Number.isFinite(toNum(r.AMOUNT_PAYED_NET)) ? toNum(r.AMOUNT_PAYED_NET) : 0), 0)
+        );
+        await supabase.from("PROJECT_STRUCTURE").update({ PAYED: newPayed }).eq("ID", sid);
+        await propagatePayedUpwards(sid);
+      }
+
+      // 6. Insert negative PROJECT_PROGRESS rows as reversal entries
+      if (structureRows.length > 0) {
+        const reversalRows = structureRows.map(r => ({
+          TENANT_ID:    req.tenantId ?? null,
+          STRUCTURE_ID: r.STRUCTURE_ID,
+          PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
+        }));
+        const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert(reversalRows);
+        if (prErr) console.error("[PAYMENT_DELETE][PROGRESS]", prErr.message);
+      }
+
+      return res.json({ success: true });
     } catch (e) {
       return res.status(500).json({ error: e.message || String(e) });
     }
