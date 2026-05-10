@@ -46,7 +46,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const [dragIds, setDragIds]           = useState<Set<number>>(new Set())
   const [dragOverId, setDragOverId]     = useState<number | null | 'root'>(null)
   const [dragZone, setDragZone]         = useState<'above' | 'on'>('on')
-  const parentMapRef                    = useRef<Map<number, number | null>>(new Map())
+  const parentMapRef                    = useRef<Map<string, string | null>>(new Map())
   const tbodyRef                        = useRef<HTMLTableSectionElement>(null)
   const rootZoneRef                     = useRef<HTMLDivElement>(null)
   const pointerDragRef                  = useRef<{ id: number; idsToMove: number[]; active: boolean; zone: 'above' | 'on'; targetId: number | null } | null>(null)
@@ -365,7 +365,10 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
       const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null
       const rootZone = el?.closest('.struct-root-drop')
-      const fatherId = rootZone ? null : zone === 'on' ? targetId : (parentMapRef.current.get(targetId ?? -1) ?? null)
+      const fatherIdStr = rootZone ? null : zone === 'on'
+        ? (targetId != null ? String(targetId) : null)
+        : (parentMapRef.current.get(targetId != null ? String(targetId) : '-1') ?? null)
+      const fatherId = fatherIdStr != null ? Number(fatherIdStr) : null
       if (!rootZone && targetId === null) return
 
       // Sort items by current position in tree (preserve relative order)
@@ -373,9 +376,9 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       const ordered = items
         .map(iid => flatNodes.find(n => n.STRUCTURE_ID === iid))
         .filter((n): n is NonNullable<typeof n> => n != null)
-        .filter(n => !isDescendant(fatherId ?? -1, n.STRUCTURE_ID, parentMapRef.current))
-        .sort((a, b) => (a.SORT_ORDER ?? a.STRUCTURE_ID ?? 0) - (b.SORT_ORDER ?? b.STRUCTURE_ID ?? 0))
-        .map(n => n.STRUCTURE_ID)
+        .filter(n => !isDescendant(fatherIdStr ?? -1, n.STRUCTURE_ID, parentMapRef.current))
+        .sort((a, b) => (a.SORT_ORDER ?? 0) - (b.SORT_ORDER ?? 0))
+        .map(n => Number(n.STRUCTURE_ID))
 
       if (ordered.length === 0) return
 
@@ -409,9 +412,9 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
           }
         } else {
           // Sibling drop: chain after each other, starting before targetId
-          const siblings = flatNodes.filter(n => (parentMapRef.current.get(n.STRUCTURE_ID) ?? null) === fatherId)
+          const siblings = flatNodes.filter(n => (parentMapRef.current.get(String(n.STRUCTURE_ID)) ?? null) === fatherIdStr)
           const idx = siblings.findIndex(n => n.STRUCTURE_ID === targetId)
-          let sortAfterId: number | null | '__end__' = idx > 0 ? siblings[idx - 1].STRUCTURE_ID : null
+          let sortAfterId: number | null | '__end__' = idx > 0 ? Number(siblings[idx - 1].STRUCTURE_ID) : null
           for (const iid of ordered) {
             await moveStructureNode(iid, fatherId, sortAfterId)
             sortAfterId = iid
