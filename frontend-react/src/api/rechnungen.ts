@@ -30,6 +30,7 @@ export interface Invoice {
   AMOUNT_PAYED_GROSS:   number | null
   COMMENT:              string | null
   INVOICE_TYPE:         InvoiceType | null
+  CANCELS_INVOICE_ID:   number | null
 }
 
 export interface PartialPayment {
