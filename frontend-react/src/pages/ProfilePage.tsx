@@ -37,8 +37,7 @@ export function ProfilePage() {
       setNewPw('')
       setConfirmPw('')
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-      setError(msg || 'Passwort konnte nicht geändert werden.')
+      setError(err instanceof Error ? err.message : 'Passwort konnte nicht geändert werden.')
     } finally {
       setSaving(false)
     }
