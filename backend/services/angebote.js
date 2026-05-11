@@ -454,6 +454,8 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   const totalExtras  = leaves.reduce((s, r) => s + (Number(r.EXTRAS)   || 0), 0);
   const totalNet     = fmt2(totalRevenue + totalExtras);
 
+  const hasExtras = leaves.some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
+
   const sellerName = [company?.COMPANY_NAME_1, company?.COMPANY_NAME_2].filter(Boolean).join(' ');
 
   return {
@@ -494,6 +496,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
       total:      fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
       roleName:   n.ROLE_NAME_LONG  || n.ROLE_NAME_SHORT || '',
     })),
+    hasExtras,
     totals: {
       revenue:    fmt2(totalRevenue),
       extras:     fmt2(totalExtras),

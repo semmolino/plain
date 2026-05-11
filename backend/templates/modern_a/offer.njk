@@ -120,10 +120,76 @@ body {
   border-top: 1pt solid #1a1a1a;
 }
 
+/* ── Bestellblatt ────────────────────────────────────────── */
+.page-break { page-break-before: always; }
+
+.bestellblatt-title {
+  font-size: 14pt;
+  font-weight: 700;
+  margin-bottom: 2mm;
+  color: #111827;
+}
+.bestellblatt-subtitle {
+  font-size: 10pt;
+  color: #6b7280;
+  margin-bottom: 8mm;
+}
+
+.info-box {
+  border: 0.5pt solid #d1d5db;
+  border-radius: 2mm;
+  padding: 4mm 5mm;
+  margin-bottom: 7mm;
+  background: #f9fafb;
+}
+.info-box table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+.info-box td { padding: 1mm 0; vertical-align: top; }
+.info-box td.lbl { color: #6b7280; width: 50mm; }
+.info-box td.val { font-weight: 500; }
+.info-box td.val.total { font-weight: 700; font-size: 11pt; }
+
+.acceptance-text {
+  font-size: 10pt;
+  line-height: 1.6;
+  margin-bottom: 6mm;
+  color: #1a1a1a;
+}
+
+.order-subject {
+  font-size: 9.5pt;
+  margin-bottom: 10mm;
+  padding: 3mm 4mm;
+  border-left: 2pt solid #374151;
+  background: #f9fafb;
+  color: #374151;
+  font-style: italic;
+}
+
+.signature-section {
+  margin-top: 18mm;
+  display: flex;
+  gap: 20mm;
+}
+.signature-field { flex: 1; }
+.signature-line {
+  border-top: 0.5pt solid #1a1a1a;
+  padding-top: 2mm;
+  font-size: 8.5pt;
+  color: #6b7280;
+  margin-top: 12mm;
+}
+
+.buyer-block {
+  font-size: 9.5pt;
+  line-height: 1.6;
+  margin-bottom: 6mm;
+  color: #374151;
+}
 </style>
 </head>
 <body>
 
+{# ═══════════════════════════════════════ PAGE 1 – ANGEBOT ════════════════════════════════ #}
 <div class="page">
 
   {# Logo #}
@@ -197,7 +263,7 @@ body {
         <th style="width:18mm">Position</th>
         <th>Bezeichnung</th>
         <th class="r" style="width:26mm">Honorar</th>
-        <th class="r" style="width:18mm">Nebenkosten</th>
+        {% if hasExtras %}<th class="r" style="width:18mm">Nebenkosten</th>{% endif %}
         <th class="r" style="width:22mm">Gesamt</th>
       </tr>
     </thead>
@@ -212,9 +278,11 @@ body {
           {% endif %}
         </td>
         <td class="r">{{ row.revenue | money }}</td>
+        {% if hasExtras %}
         <td class="r">
           {% if row.extras > 0 %}{{ row.extras | money }}{% else %}&mdash;{% endif %}
         </td>
+        {% endif %}
         <td class="r">{{ row.total | money }}</td>
       </tr>
       {% endfor %}
@@ -228,7 +296,7 @@ body {
       <td class="label">Honorar (netto)</td>
       <td class="amount">{{ totals.revenue | money }}</td>
     </tr>
-    {% if totals.extras > 0 %}
+    {% if hasExtras %}
     <tr>
       <td class="label">zzgl. Nebenkosten</td>
       <td class="amount">{{ totals.extras | money }}</td>
@@ -244,6 +312,77 @@ body {
   {# Fußtext #}
   {% if text2 %}<div class="text-block">{{ text2 }}</div>{% endif %}
 
+</div>
+
+{# ═══════════════════════════════════════ PAGE 2 – BESTELLBLATT ══════════════════════════ #}
+<div class="page page-break">
+
+  {# Logo #}
+  <div class="logo-area">
+    {% if theme.header.showLogo and logoDataUri %}
+      <img src="{{ logoDataUri }}" alt="Logo">
+    {% endif %}
+  </div>
+
+  <div class="bestellblatt-title">Bestellblatt</div>
+  <div class="bestellblatt-subtitle">Bitte ausgefüllt und unterschrieben zurücksenden.</div>
+
+  {# Reference info box #}
+  <div class="info-box">
+    <table>
+      <tr>
+        <td class="lbl">Angebots-Nr.</td>
+        <td class="val">{{ offer.NAME_SHORT }}</td>
+      </tr>
+      <tr>
+        <td class="lbl">Angebotsdatum</td>
+        <td class="val">{{ (offer.OFFER_DATE or offer.CREATED_AT) | date_de }}</td>
+      </tr>
+      {% if offer.VALID_UNTIL %}
+      <tr>
+        <td class="lbl">Gültig bis</td>
+        <td class="val">{{ offer.VALID_UNTIL | date_de }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td class="lbl">Auftragnehmer</td>
+        <td class="val">{{ seller.name }}</td>
+      </tr>
+      <tr>
+        <td class="lbl" style="padding-top:2mm;">Angebotssumme (netto)</td>
+        <td class="val total" style="padding-top:2mm;">{{ totals.total | money }}</td>
+      </tr>
+    </table>
+  </div>
+
+  {# Acceptance statement #}
+  <div class="acceptance-text">
+    Hiermit erteilen wir den Auftrag gemäß Angebot Nr.&nbsp;<strong>{{ offer.NAME_SHORT }}</strong>
+    vom&nbsp;{{ (offer.OFFER_DATE or offer.CREATED_AT) | date_de }}
+    über&nbsp;<strong>{{ totals.total | money }}</strong>&nbsp;(netto)
+    an&nbsp;{{ seller.name }}.
+  </div>
+
+  {# Order subject #}
+  <div class="order-subject">{{ offer.NAME_LONG }}</div>
+
+  {# Buyer info #}
+  <div class="buyer-block">
+    <strong>{{ buyer.name }}</strong>{% if buyer.name2 %}<br>{{ buyer.name2 }}{% endif %}
+    {% if buyer.street %}<br>{{ buyer.street }}{% endif %}
+    <br>{{ buyer.postCode }} {{ buyer.city }}
+    {% if contact %}<br>{{ contact.FIRST_NAME }} {{ contact.LAST_NAME }}{% if contact.EMAIL %} &middot; {{ contact.EMAIL }}{% endif %}{% endif %}
+  </div>
+
+  {# Signature fields #}
+  <div class="signature-section">
+    <div class="signature-field">
+      <div class="signature-line">Ort, Datum</div>
+    </div>
+    <div class="signature-field" style="flex: 2;">
+      <div class="signature-line">Unterschrift, Firmenstempel (Auftraggeber)</div>
+    </div>
+  </div>
 
 </div>
 
