@@ -56,6 +56,7 @@ export interface OfferListItem {
   EMPLOYEE_NAME:   string | null
   ADDRESS_NAME:    string | null
   CONTACT_NAME:    string | null
+  PROJECT_ID:      number | null
 }
 
 export interface OfferStructureNode {

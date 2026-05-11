@@ -1,7 +1,11 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
-import { fetchOffers, deleteOffer, openOfferPdf, type OfferListItem } from '@/api/angebote'
+import {
+  fetchOffers, deleteOffer, openOfferPdf, fetchOfferStructure, convertOffer,
+  type OfferListItem, type ConvertOfferPayload,
+} from '@/api/angebote'
+import { BeauftragtModal } from './BeauftragtModal'
 
 const PAGE_SIZE = 25
 
@@ -21,15 +25,35 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
   const [page,   setPage]   = useState(1)
   const [msg, setMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
+  const [beauftragtRow, setBeauftragtRow] = useState<OfferListItem | null>(null)
+  const [convertErr,    setConvertErr]    = useState<string | null>(null)
+
   const { data, isLoading } = useQuery({
     queryKey: ['offers'],
     queryFn:  fetchOffers,
+  })
+
+  const { data: structData } = useQuery({
+    queryKey: ['offer-structure', beauftragtRow?.ID],
+    queryFn:  () => fetchOfferStructure(beauftragtRow!.ID),
+    enabled:  beauftragtRow !== null,
   })
 
   const deleteMut = useMutation({
     mutationFn: deleteOffer,
     onSuccess: () => { setMsg({ text: 'Angebot gelöscht ✅', type: 'success' }); void qc.invalidateQueries({ queryKey: ['offers'] }) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const convertMut = useMutation({
+    mutationFn: (body: ConvertOfferPayload) => convertOffer(beauftragtRow!.ID, body),
+    onSuccess: (res) => {
+      setBeauftragtRow(null)
+      setConvertErr(null)
+      void qc.invalidateQueries({ queryKey: ['offers'] })
+      setMsg({ text: `Projekt ${res.data.projectName} wurde angelegt ✅`, type: 'success' })
+    },
+    onError: (e: Error) => setConvertErr(e.message),
   })
 
   const rows = data?.data ?? []
@@ -56,6 +80,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
   }
 
   return (
+    <>
     <div>
       <div className="list-toolbar" style={{ marginTop: 10 }}>
         <input
@@ -103,6 +128,17 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                   <td className="doc-actions">
                     <button className="btn-small" onClick={() => onSelectOffer?.(r.ID)}>Bearbeiten</button>
                     <button className="btn-small" onClick={() => openOfferPdf(r.ID)}>PDF</button>
+                    {r.PROJECT_ID ? (
+                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>✅ Projekt #{r.PROJECT_ID}</span>
+                    ) : (
+                      <button
+                        className="btn-small"
+                        style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
+                        onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
+                      >
+                        Beauftragt
+                      </button>
+                    )}
                     <button className="btn-small btn-danger" disabled={deleteMut.isPending} onClick={() => handleDelete(r)}>Löschen</button>
                   </td>
                 </tr>
@@ -130,5 +166,18 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
         </div>
       )}
     </div>
+
+    {beauftragtRow && (
+      <BeauftragtModal
+        open={beauftragtRow !== null}
+        offerName={beauftragtRow.NAME_SHORT ?? beauftragtRow.NAME_LONG}
+        structNodes={structData?.data ?? []}
+        onConvert={body => convertMut.mutate(body)}
+        onClose={() => setBeauftragtRow(null)}
+        isPending={convertMut.isPending}
+        error={convertErr}
+      />
+    )}
+    </>
   )
 }

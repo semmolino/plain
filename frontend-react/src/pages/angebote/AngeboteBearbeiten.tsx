@@ -359,7 +359,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
               ) : (
                 <button
                   className="btn"
-                  style={{ background: '#f59e0b', color: '#fff', borderColor: '#f59e0b' }}
+                  style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
                   onClick={() => { setConvertErr(null); setShowBeauftragt(true) }}
                 >
                   Beauftragt

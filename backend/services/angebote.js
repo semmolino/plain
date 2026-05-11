@@ -60,7 +60,7 @@ async function createOfferStatus(supabase, { tenantId, name_short }) {
 async function listOffers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from('OFFER')
-    .select('ID, NAME_SHORT, NAME_LONG, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID')
+    .select('ID, NAME_SHORT, NAME_LONG, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID')
     .eq('TENANT_ID', tenantId)
     .order('ID', { ascending: false });
   if (error) throw error;
@@ -124,6 +124,7 @@ async function listOffers(supabase, { tenantId }) {
       CONTACT_NAME:    contact
         ? `${contact.FIRST_NAME ?? ''} ${contact.LAST_NAME ?? ''}`.trim()
         : null,
+      PROJECT_ID:      r.PROJECT_ID ?? null,
     };
   });
 }
@@ -602,22 +603,25 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
 
   // PROJECT_STRUCTURE — 2-pass to set FATHER_ID
   if (offerStruct.length) {
-    const insertRows = offerStruct.map(n => ({
+    const insertRows = offerStruct.map(n => {
+      const btId  = n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null;
+      const isBt1 = btId === 1;
+      return {
       NAME_SHORT:       String(n.NAME_SHORT || '').trim(),
       NAME_LONG:        String(n.NAME_LONG  || '').trim(),
       PROJECT_ID:       project.ID,
-      BILLING_TYPE_ID:  n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null,
+      BILLING_TYPE_ID:  btId,
       FATHER_ID:        null,
-      REVENUE:          fmt2(Number(n.REVENUE || 0)),
+      REVENUE:          isBt1 ? fmt2(Number(n.REVENUE || 0)) : 0,
       EXTRAS_PERCENT:   Number(n.EXTRAS_PERCENT || 0),
-      EXTRAS:           fmt2(Number(n.EXTRAS || 0)),
+      EXTRAS:           isBt1 ? fmt2(Number(n.EXTRAS  || 0)) : 0,
       COSTS:            0,
       REVENUE_COMPLETION_PERCENT: 0,
       EXTRAS_COMPLETION_PERCENT:  0,
       REVENUE_COMPLETION: 0,
       EXTRAS_COMPLETION:  0,
       TENANT_ID:        tenantId,
-    }));
+    }; });
 
     const { data: createdNodes, error: psErr } = await supabase
       .from('PROJECT_STRUCTURE')
@@ -641,17 +645,20 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
 
     // PROJECT_PROGRESS
     try {
-      const progressRows = (createdNodes || []).map((r, i) => ({
+      const progressRows = (createdNodes || []).map((r, i) => {
+        const n     = offerStruct[i];
+        const isBt1 = parseInt(String(n.BILLING_TYPE_ID || 0), 10) === 1;
+        return {
         STRUCTURE_ID:               r.ID,
         TENANT_ID:                  tenantId,
-        REVENUE:                    fmt2(Number(offerStruct[i].REVENUE || 0)),
-        EXTRAS_PERCENT:             Number(offerStruct[i].EXTRAS_PERCENT || 0),
-        EXTRAS:                     fmt2(Number(offerStruct[i].EXTRAS || 0)),
+        REVENUE:                    isBt1 ? fmt2(Number(n.REVENUE || 0)) : 0,
+        EXTRAS_PERCENT:             Number(n.EXTRAS_PERCENT || 0),
+        EXTRAS:                     isBt1 ? fmt2(Number(n.EXTRAS  || 0)) : 0,
         REVENUE_COMPLETION_PERCENT: 0,
         EXTRAS_COMPLETION_PERCENT:  0,
         REVENUE_COMPLETION:         0,
         EXTRAS_COMPLETION:          0,
-      }));
+        }; });
       if (progressRows.length) await supabase.from('PROJECT_PROGRESS').insert(progressRows);
     } catch (_) { /* ignore progress errors */ }
   }
