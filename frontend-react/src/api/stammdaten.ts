@@ -198,7 +198,7 @@ export const deleteRolle = (id: number) =>
 // ── Logo ──────────────────────────────────────────────────────────────────────
 
 export const fetchLogo = () =>
-  apiClient.get<{ data: { logo_asset_id: number | null } }>('/stammdaten/logo')
+  apiClient.get<{ data: { logo_asset_id: number | null; logo_data_uri: string | null } }>('/stammdaten/logo')
 
 export const putLogo = (logo_asset_id: number | null) =>
   apiClient.put<{ ok: boolean }>('/stammdaten/logo', { logo_asset_id })

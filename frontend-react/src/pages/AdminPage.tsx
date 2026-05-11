@@ -365,6 +365,7 @@ function LogoSection() {
 
   const { data: logoData } = useQuery({ queryKey: ['logo'], queryFn: fetchLogo })
   const logoAssetId = logoData?.data?.logo_asset_id ?? null
+  const logoDataUri = logoData?.data?.logo_data_uri ?? null
 
   const putLogoMut = useMutation({
     mutationFn: putLogo,
@@ -395,7 +396,7 @@ function LogoSection() {
       {logoAssetId ? (
         <div style={{ marginBottom: 10 }}>
           <img
-            src={`/api/v1/assets/${logoAssetId}`}
+            src={logoDataUri ?? `/api/v1/assets/${logoAssetId}`}
             alt="Logo"
             style={{ maxHeight: 60, maxWidth: 200, objectFit: 'contain', display: 'block', marginBottom: 8, border: '1px solid #e5e7eb', borderRadius: 4, padding: 4 }}
           />

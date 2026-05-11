@@ -851,10 +851,13 @@ async function deleteRolle(req, res, supabase) {
 // Stores the logo asset ID in TENANT_SETTINGS and propagates to all templates.
 
 async function getLogo(req, res, supabase) {
-  const { data } = await supabase.from("TENANT_SETTINGS").select("VALUE")
-    .eq("TENANT_ID", req.tenantId).eq("KEY", "logo_asset_id").maybeSingle();
-  const assetId = data?.VALUE ? parseInt(data.VALUE, 10) : null;
-  res.json({ data: { logo_asset_id: assetId } });
+  const [assetRow, uriRow] = await Promise.all([
+    supabase.from("TENANT_SETTINGS").select("VALUE").eq("TENANT_ID", req.tenantId).eq("KEY", "logo_asset_id").maybeSingle(),
+    supabase.from("TENANT_SETTINGS").select("VALUE").eq("TENANT_ID", req.tenantId).eq("KEY", "logo_data_uri").maybeSingle(),
+  ]);
+  const assetId = assetRow.data?.VALUE ? parseInt(assetRow.data.VALUE, 10) : null;
+  const dataUri = uriRow.data?.VALUE ?? null;
+  res.json({ data: { logo_asset_id: assetId, logo_data_uri: dataUri } });
 }
 
 async function putLogo(req, res, supabase) {
