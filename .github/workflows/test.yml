@@ -48,7 +48,7 @@ jobs:
         run: npm ci --prefix frontend-react
 
       - name: Type check
-        run: npx --prefix frontend-react tsc --noEmit
+        run: cd frontend-react && npx tsc -b
 
   frontend-e2e:
     name: Frontend E2E (Playwright)
@@ -67,10 +67,10 @@ jobs:
         run: npm ci --prefix frontend-react
 
       - name: Install Playwright Chromium
-        run: npx --prefix frontend-react playwright install --with-deps chromium
+        run: cd frontend-react && npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        run: npx --prefix frontend-react playwright test --project=desktop --project=mobile
+        run: cd frontend-react && npx playwright test --project=desktop --project=mobile
         env:
           CI: true
 
