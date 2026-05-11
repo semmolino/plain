@@ -8,7 +8,10 @@ const { createClient } = require("@supabase/supabase-js");
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  credentials: true,
+}));
 app.use(bodyParser.json());
 
 const supabase = createClient(
@@ -76,13 +79,4 @@ app.listen(port, () => {
   startDueDateChecker(supabase);
 });
 
-
-app.get("/test/genders", async (req, res) => {
-  const { data, error } = await supabase
-    .from("GENDER")
-    .select("ID, GENDER");
-
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
-});
 

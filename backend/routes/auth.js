@@ -17,7 +17,9 @@ function createMailer() {
 }
 
 function jwtSecret() {
-  return process.env.JWT_SECRET || "plain-dev-secret-change-me";
+  const s = process.env.JWT_SECRET;
+  if (!s) throw new Error("JWT_SECRET environment variable is required");
+  return s;
 }
 
 function issueToken(payload) {
@@ -26,15 +28,6 @@ function issueToken(payload) {
 
 module.exports = (supabase) => {
   const router = express.Router();
-
-  // ── Public config ─────────────────────────────────────────────────────────
-  // Returns the Supabase URL + anon key so SignupPage can call the signup API.
-  router.get("/config", (req, res) => {
-    res.json({
-      supabaseUrl:     process.env.SUPABASE_URL,
-      supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
-    });
-  });
 
   // ── Login ─────────────────────────────────────────────────────────────────
   // Validates EMPLOYEE.MAIL + EMPLOYEE.PASSWORD and issues a JWT.
@@ -54,12 +47,7 @@ module.exports = (supabase) => {
     if (!employee) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
 
     const stored = employee.PASSWORD || "";
-    let valid = false;
-    if (stored.startsWith("$2")) {
-      valid = await bcrypt.compare(password, stored);
-    } else {
-      valid = stored === password;
-    }
+    const valid = stored.startsWith("$2") && await bcrypt.compare(password, stored);
 
     if (!valid) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
 
@@ -162,12 +150,7 @@ module.exports = (supabase) => {
     if (!employee) return res.status(404).json({ error: "Benutzer nicht gefunden." });
 
     const stored = employee.PASSWORD || "";
-    let valid = false;
-    if (stored.startsWith("$2")) {
-      valid = await bcrypt.compare(current_password, stored);
-    } else {
-      valid = stored === current_password;
-    }
+    const valid = stored.startsWith("$2") && await bcrypt.compare(current_password, stored);
     if (!valid) return res.status(401).json({ error: "Aktuelles Passwort ist falsch." });
 
     const hashed = await bcrypt.hash(new_password, 10);
@@ -192,7 +175,7 @@ module.exports = (supabase) => {
       .maybeSingle();
 
     if (!employee) {
-      return res.status(404).json({ error: "Diese E-Mail-Adresse ist nicht registriert." });
+      return res.json({ success: true });
     }
 
     const resetToken = jwt.sign(

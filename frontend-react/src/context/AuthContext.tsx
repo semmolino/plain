@@ -2,30 +2,25 @@ import {
   createContext,
   useContext,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from 'react'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { fetchAuthConfig, fetchMe } from '@/api/auth'
+import { fetchMe } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
 
 export type UrlFlowType = 'invite' | 'recovery' | null
 
 interface AuthContextValue {
-  supabase: SupabaseClient | null
   urlFlowType: UrlFlowType
 }
 
 const AuthContext = createContext<AuthContextValue>({
-  supabase: null,
   urlFlowType: null,
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
   const [urlFlowType, setUrlFlowType] = useState<UrlFlowType>(null)
-  const supabaseRef = useRef<SupabaseClient | null>(null)
 
   const { token, setAuth, clearAuth, setLoading } = useAuthStore()
 
@@ -53,14 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false)
       }
 
-      // Provide Supabase client for invite/recovery password flows
-      try {
-        const config = await fetchAuthConfig()
-        supabaseRef.current = createClient(config.supabaseUrl, config.supabaseAnonKey)
-      } catch {
-        // non-fatal — recovery flow won't work but normal auth is unaffected
-      }
-
       setReady(true)
     }
 
@@ -78,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ supabase: supabaseRef.current, urlFlowType }}>
+    <AuthContext.Provider value={{ urlFlowType }}>
       {children}
     </AuthContext.Provider>
   )

@@ -1,6 +1,9 @@
 const jwt = require("jsonwebtoken");
 
 module.exports = (_supabase) => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET environment variable is required");
+
   return function authMiddleware(req, res, next) {
     const authHeader = req.headers.authorization || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
@@ -9,7 +12,6 @@ module.exports = (_supabase) => {
       return res.status(401).json({ error: "Nicht authentifiziert" });
     }
 
-    const secret = process.env.JWT_SECRET || "plain-dev-secret-change-me";
     try {
       const decoded = jwt.verify(token, secret);
       req.userId     = decoded.employee_id;

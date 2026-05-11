@@ -9,11 +9,6 @@ export interface ApiError {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-export interface AuthConfig {
-  supabaseUrl: string
-  supabaseAnonKey: string
-}
-
 export interface MeResponse {
   email: string
   companyName: string

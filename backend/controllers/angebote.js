@@ -109,7 +109,7 @@ async function deleteOfferStructureNode(req, res, supabase) {
   try {
     const nodeId = parseInt(req.params.nodeId, 10);
     if (!nodeId) return res.status(400).json({ error: 'Ungültige Node-ID' });
-    await svc.deleteOfferStructureNode(supabase, { nodeId });
+    await svc.deleteOfferStructureNode(supabase, { tenantId: req.tenantId, nodeId });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: e?.message || String(e) });

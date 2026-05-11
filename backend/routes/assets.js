@@ -41,7 +41,23 @@ module.exports = (supabase) => {
     },
   });
 
-  const upload = multer({ storage });
+  const ALLOWED_MIME = new Set([
+    "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ]);
+
+  const upload = multer({
+    storage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (ALLOWED_MIME.has(file.mimetype)) cb(null, true);
+      else cb(new Error(`Dateityp nicht erlaubt: ${file.mimetype}`));
+    },
+  });
 
   // POST /api/assets/upload
   // multipart/form-data: file, asset_type
@@ -96,7 +112,10 @@ module.exports = (supabase) => {
       const id = parseInt(req.params.id, 10);
       if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
 
-      const { data, error } = await supabase.from("ASSET").select("*").eq("ID", id).maybeSingle();
+      let companyId;
+      try { companyId = await resolveCompanyId(req.tenantId); } catch (e) { return res.status(500).json({ error: e.message }); }
+
+      const { data, error } = await supabase.from("ASSET").select("*").eq("ID", id).eq("COMPANY_ID", companyId).maybeSingle();
       if (error) {
         if (isTableMissingErr(error, "asset")) {
           return res.status(501).json({ error: "Missing table ASSET. Please run backend/sql/stageA_document_templates.sql" });

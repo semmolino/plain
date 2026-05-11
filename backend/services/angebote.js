@@ -302,6 +302,7 @@ async function getOfferStructure(supabase, { tenantId, offerId }) {
     .from('OFFER_STRUCTURE')
     .select('*')
     .eq('OFFER_ID', offerId)
+    .eq('TENANT_ID', tenantId)
     .order('SORT_ORDER', { ascending: true })
     .order('ID', { ascending: true });
   if (error) throw error;
@@ -392,16 +393,16 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
     .from('OFFER_STRUCTURE')
     .update(patch)
     .eq('ID', nodeId)
+    .eq('TENANT_ID', tenantId)
     .select('*')
     .single();
   if (error) throw error;
   return data;
 }
 
-async function deleteOfferStructureNode(supabase, { nodeId }) {
-  // Delete children first (one level — for deeper trees, caller should handle)
-  await supabase.from('OFFER_STRUCTURE').delete().eq('FATHER_ID', nodeId);
-  const { error } = await supabase.from('OFFER_STRUCTURE').delete().eq('ID', nodeId);
+async function deleteOfferStructureNode(supabase, { tenantId, nodeId }) {
+  await supabase.from('OFFER_STRUCTURE').delete().eq('FATHER_ID', nodeId).eq('TENANT_ID', tenantId);
+  const { error } = await supabase.from('OFFER_STRUCTURE').delete().eq('ID', nodeId).eq('TENANT_ID', tenantId);
   if (error) throw error;
 }
 

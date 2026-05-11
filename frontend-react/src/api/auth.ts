@@ -1,12 +1,4 @@
 import { apiClient } from './client'
-import type { AuthConfig } from '@/types/api'
-
-// Uses native fetch (no auth token) — called before session is established
-export async function fetchAuthConfig(): Promise<AuthConfig> {
-  const res = await fetch('/api/v1/auth/config')
-  if (!res.ok) throw new Error('Backend nicht erreichbar')
-  return res.json() as Promise<AuthConfig>
-}
 
 export interface LoginResponse {
   token:        string
