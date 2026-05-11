@@ -303,9 +303,15 @@ body {
     </tr>
     {% endif %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    {% if vatPercent > 0 %}
+    <tr>
+      <td class="label">zzgl. {{ vatPercent }}&thinsp;% Mehrwertsteuer</td>
+      <td class="amount">{{ vatAmount | money }}</td>
+    </tr>
+    {% endif %}
     <tr class="total-row">
-      <td class="label">Angebotssumme (netto)</td>
-      <td class="amount">{{ totals.total | money }}</td>
+      <td class="label">Angebotssumme {% if vatPercent > 0 %}(brutto){% else %}(netto){% endif %}</td>
+      <td class="amount">{{ (grossTotal if vatPercent > 0 else totals.total) | money }}</td>
     </tr>
   </table>
 
@@ -349,8 +355,8 @@ body {
         <td class="val">{{ seller.name }}</td>
       </tr>
       <tr>
-        <td class="lbl" style="padding-top:2mm;">Angebotssumme (netto)</td>
-        <td class="val total" style="padding-top:2mm;">{{ totals.total | money }}</td>
+        <td class="lbl" style="padding-top:2mm;">Angebotssumme {% if vatPercent > 0 %}(brutto){% else %}(netto){% endif %}</td>
+        <td class="val total" style="padding-top:2mm;">{{ (grossTotal if vatPercent > 0 else totals.total) | money }}</td>
       </tr>
     </table>
   </div>
@@ -359,7 +365,8 @@ body {
   <div class="acceptance-text">
     Hiermit erteilen wir den Auftrag gemäß Angebot Nr.&nbsp;<strong>{{ offer.NAME_SHORT }}</strong>
     vom&nbsp;{{ (offer.OFFER_DATE or offer.CREATED_AT) | date_de }}
-    über&nbsp;<strong>{{ totals.total | money }}</strong>&nbsp;(netto)
+    über&nbsp;<strong>{{ (grossTotal if vatPercent > 0 else totals.total) | money }}</strong>
+    {% if vatPercent > 0 %}(brutto, inkl. {{ vatPercent }}&thinsp;% MwSt.){% else %}(netto){% endif %}
     an&nbsp;{{ seller.name }}.
   </div>
 

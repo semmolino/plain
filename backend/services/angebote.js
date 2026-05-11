@@ -165,6 +165,14 @@ async function createOffer(supabase, { tenantId, body }) {
     throw { status: 500, message: 'Nummernkreis konnte nicht geladen werden: ' + (numErr?.message || 'kein Ergebnis') };
   }
 
+  // Resolve default VAT from tenant settings
+  const { data: settingsRows } = await supabase.from('TENANT_SETTINGS').select('KEY, VALUE').eq('TENANT_ID', tenantId);
+  const tenantDefaults = {};
+  for (const row of settingsRows || []) tenantDefaults[row.KEY] = row.VALUE;
+  const defaultVatId = b.vat_id
+    ? parseInt(String(b.vat_id), 10)
+    : (tenantDefaults.default_vat_id ? Number(tenantDefaults.default_vat_id) : null);
+
   const { data: offer, error: offerErr } = await supabase
     .from('OFFER')
     .insert([{
@@ -181,6 +189,7 @@ async function createOffer(supabase, { tenantId, body }) {
       TENANT_ID:       tenantId,
       OFFER_DATE:      b.offer_date   || new Date().toISOString().slice(0, 10),
       VALID_UNTIL:     b.valid_until  || null,
+      ...(defaultVatId ? { VAT_ID: defaultVatId } : {}),
     }])
     .select('*')
     .single();
@@ -456,6 +465,15 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
 
   const hasExtras = leaves.some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
 
+  // VAT
+  let vatPercent = 0;
+  if (offer.VAT_ID) {
+    const { data: vatRow } = await supabase.from('VAT').select('VAT_PERCENT').eq('ID', offer.VAT_ID).maybeSingle();
+    vatPercent = Number(vatRow?.VAT_PERCENT || 0);
+  }
+  const vatAmount  = fmt2(totalNet * vatPercent / 100);
+  const grossTotal = fmt2(totalNet * (100 + vatPercent) / 100);
+
   const sellerName = [company?.COMPANY_NAME_1, company?.COMPANY_NAME_2].filter(Boolean).join(' ');
 
   return {
@@ -497,6 +515,9 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
       roleName:   n.ROLE_NAME_LONG  || n.ROLE_NAME_SHORT || '',
     })),
     hasExtras,
+    vatPercent,
+    vatAmount,
+    grossTotal,
     totals: {
       revenue:    fmt2(totalRevenue),
       extras:     fmt2(totalExtras),
