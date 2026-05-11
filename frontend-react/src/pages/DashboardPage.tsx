@@ -271,18 +271,23 @@ export function DashboardPage() {
       {/* ── Header ── */}
       <div className="dash-header">
         <div className="dash-title">Übersicht</div>
-        {confirmLogout ? (
-          <span className="dash-logout-confirm">
-            Wirklich abmelden?&nbsp;
-            <button className="dash-logout-yes" onClick={() => { qc.clear(); clearAuth(); navigate('/login') }}>Ja</button>
-            &nbsp;
-            <button className="dash-logout-no" onClick={() => setConfirmLogout(false)}>Nein</button>
-          </span>
-        ) : (
-          <button className="dash-logout" onClick={() => setConfirmLogout(true)}>
-            Abmelden
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button className="dash-logout" onClick={() => navigate('/profil')}>
+            Profil
           </button>
-        )}
+          {confirmLogout ? (
+            <span className="dash-logout-confirm">
+              Wirklich abmelden?&nbsp;
+              <button className="dash-logout-yes" onClick={() => { qc.clear(); clearAuth(); navigate('/login') }}>Ja</button>
+              &nbsp;
+              <button className="dash-logout-no" onClick={() => setConfirmLogout(false)}>Nein</button>
+            </span>
+          ) : (
+            <button className="dash-logout" onClick={() => setConfirmLogout(true)}>
+              Abmelden
+            </button>
+          )}
+        </div>
       </div>
 
       <SetupChecklist />

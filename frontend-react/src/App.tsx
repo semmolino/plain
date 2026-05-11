@@ -22,6 +22,7 @@ const ProjektePage    = lazy(() => import('@/pages/ProjektePage').then(m => ({ d
 const RechnungenPage  = lazy(() => import('@/pages/RechnungenPage').then(m => ({ default: m.RechnungenPage })))
 const DatenPage       = lazy(() => import('@/pages/DatenPage').then(m => ({ default: m.DatenPage })))
 const AngebotePage    = lazy(() => import('@/pages/AngebotePage').then(m => ({ default: m.AngebotePage })))
+const ProfilePage     = lazy(() => import('@/pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,6 +66,7 @@ export default function App() {
               <Route path="/admin"       element={<Suspense fallback={<PageLoader />}><AdminPage /></Suspense>} />
               <Route path="/mitarbeiter" element={<Suspense fallback={<PageLoader />}><MitarbeiterPage /></Suspense>} />
               <Route path="/angebote"   element={<Suspense fallback={<PageLoader />}><AngebotePage /></Suspense>} />
+              <Route path="/profil"     element={<Suspense fallback={<PageLoader />}><ProfilePage /></Suspense>} />
             </Route>
 
             {/* Catch-all */}
