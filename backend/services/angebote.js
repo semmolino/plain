@@ -260,8 +260,9 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
   if (b.contact_id      !== undefined) patch.CONTACT_ID      = parseInt(String(b.contact_id), 10);
   if (b.offer_status_id !== undefined) patch.OFFER_STATUS_ID = parseInt(String(b.offer_status_id), 10);
   if (b.company_id      !== undefined) patch.COMPANY_ID      = parseInt(String(b.company_id), 10);
-  if (b.offer_date      !== undefined) patch.OFFER_DATE      = b.offer_date   || null;
-  if (b.valid_until     !== undefined) patch.VALID_UNTIL     = b.valid_until  || null;
+  if (b.offer_date      !== undefined) patch.OFFER_DATE      = b.offer_date    || null;
+  if (b.valid_until     !== undefined) patch.VALID_UNTIL     = b.valid_until   || null;
+  if (b.refusal_date    !== undefined) patch.REFUSAL_DATE    = b.refusal_date  || null;
 
   const { data, error } = await supabase
     .from('OFFER')

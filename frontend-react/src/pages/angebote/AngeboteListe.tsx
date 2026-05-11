@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
 import {
-  fetchOffers, deleteOffer, openOfferPdf, fetchOfferStructure, convertOffer,
+  fetchOffers, deleteOffer, openOfferPdf, fetchOfferStructure, convertOffer, updateOffer,
   type OfferListItem, type ConvertOfferPayload,
 } from '@/api/angebote'
 import { BeauftragtModal } from './BeauftragtModal'
@@ -19,19 +19,18 @@ function fmtDate(s: string | null | undefined) {
   return d.toLocaleDateString('de-DE')
 }
 
+const TODAY = new Date().toISOString().slice(0, 10)
+
 export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) => void }) {
   const qc = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [page,   setPage]   = useState(1)
-  const [msg, setMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-
+  const [search,      setSearch]      = useState('')
+  const [page,        setPage]        = useState(1)
+  const [onlyOpen,    setOnlyOpen]    = useState(false)
+  const [msg,         setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [beauftragtRow, setBeauftragtRow] = useState<OfferListItem | null>(null)
   const [convertErr,    setConvertErr]    = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['offers'],
-    queryFn:  fetchOffers,
-  })
+  const { data, isLoading } = useQuery({ queryKey: ['offers'], queryFn: fetchOffers })
 
   const { data: structData } = useQuery({
     queryKey: ['offer-structure', beauftragtRow?.ID],
@@ -42,6 +41,12 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
   const deleteMut = useMutation({
     mutationFn: deleteOffer,
     onSuccess: () => { setMsg({ text: 'Angebot gelöscht ✅', type: 'success' }); void qc.invalidateQueries({ queryKey: ['offers'] }) },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const rejectMut = useMutation({
+    mutationFn: (id: number) => updateOffer(id, { offer_status_id: 4, refusal_date: TODAY }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['offers'] }) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -59,16 +64,16 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
   const rows = data?.data ?? []
 
   const filtered = useMemo(() => {
+    let result = rows
+    if (onlyOpen) result = result.filter(r => r.PROJECT_ID === null)
     const q = search.trim().toLowerCase()
-    return q
-      ? rows.filter(r => `${r.NAME_SHORT} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q))
-      : rows
-  }, [rows, search])
+    if (q) result = result.filter(r =>
+      `${r.NAME_SHORT} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q)
+    )
+    return result
+  }, [rows, search, onlyOpen])
 
-  const totalSum = useMemo(
-    () => filtered.reduce((s, r) => s + (r.TOTAL_AMOUNT ?? 0), 0),
-    [filtered]
-  )
+  const totalSum = useMemo(() => filtered.reduce((s, r) => s + (r.TOTAL_AMOUNT ?? 0), 0), [filtered])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage   = Math.min(page, totalPages)
@@ -77,6 +82,11 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
   function handleDelete(r: OfferListItem) {
     if (!confirm(`Angebot "${r.NAME_SHORT ?? r.NAME_LONG}" wirklich löschen?`)) return
     deleteMut.mutate(r.ID)
+  }
+
+  function handleReject(r: OfferListItem) {
+    if (!confirm(`Angebot "${r.NAME_SHORT ?? r.NAME_LONG}" als abgelehnt markieren?`)) return
+    rejectMut.mutate(r.ID)
   }
 
   return (
@@ -89,6 +99,10 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1) }}
         />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={onlyOpen} onChange={e => { setOnlyOpen(e.target.checked); setPage(1) }} />
+          Offene Angebote
+        </label>
         <span className="list-info">{filtered.length} Einträge</span>
       </div>
 
@@ -129,15 +143,29 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                     <button className="btn-small" onClick={() => onSelectOffer?.(r.ID)}>Bearbeiten</button>
                     <button className="btn-small" onClick={() => openOfferPdf(r.ID)}>PDF</button>
                     {r.PROJECT_ID ? (
-                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>✅ {r.PROJECT_NAME ?? `Projekt #${r.PROJECT_ID}`}</span>
+                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        ✅ {r.PROJECT_NAME ?? `Projekt #${r.PROJECT_ID}`}
+                      </span>
                     ) : (
-                      <button
-                        className="btn-small"
-                        style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
-                        onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
-                      >
-                        Beauftragt
-                      </button>
+                      <>
+                        <button
+                          className="btn-small"
+                          style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
+                          onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
+                        >
+                          Beauftragt
+                        </button>
+                        {r.OFFER_STATUS_ID !== 4 && (
+                          <button
+                            className="btn-small"
+                            style={{ background: '#dc2626', color: '#fff', borderColor: '#dc2626' }}
+                            disabled={rejectMut.isPending}
+                            onClick={() => handleReject(r)}
+                          >
+                            Abgelehnt
+                          </button>
+                        )}
+                      </>
                     )}
                     <button className="btn-small btn-danger" disabled={deleteMut.isPending} onClick={() => handleDelete(r)}>Löschen</button>
                   </td>
