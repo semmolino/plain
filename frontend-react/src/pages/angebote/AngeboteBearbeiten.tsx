@@ -5,10 +5,11 @@ import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchOffers, fetchOffer, updateOffer, fetchOfferStructure,
-  addOfferStructureNode, deleteOfferStructureNode,
-  openOfferPdf, type Offer, type OfferStructureNode, type AddStructureNodePayload,
+  addOfferStructureNode, deleteOfferStructureNode, convertOffer,
+  openOfferPdf, type Offer, type OfferStructureNode, type AddStructureNodePayload, type ConvertOfferPayload,
 } from '@/api/angebote'
 import { fetchOfferStatuses } from '@/api/angebote'
+import { BeauftragtModal } from './BeauftragtModal'
 import { fetchProjectManagers, fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
@@ -76,6 +77,8 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   const [showAdd,    setShowAdd]    = useState(false)
   const [msg,        setMsg]        = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [structMsg,  setStructMsg]  = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [showBeauftragt, setShowBeauftragt] = useState(false)
+  const [convertErr,     setConvertErr]     = useState<string | null>(null)
 
   // Lookups
   const { data: offersData  } = useQuery({ queryKey: ['offers'],          queryFn: fetchOffers         })
@@ -153,6 +156,18 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   })
 
   useCtrlS(() => { if (!saveMut.isPending && form) saveMut.mutate(form) }, !!form)
+
+  const convertMut = useMutation({
+    mutationFn: (body: ConvertOfferPayload) => convertOffer(selectedId!, body),
+    onSuccess: (res) => {
+      setShowBeauftragt(false)
+      setConvertErr(null)
+      void qc.invalidateQueries({ queryKey: ['offer', selectedId] })
+      void qc.invalidateQueries({ queryKey: ['offers'] })
+      setMsg({ text: `Projekt ${res.data.projectName} wurde angelegt ✅`, type: 'success' })
+    },
+    onError: (e: Error) => setConvertErr(e.message),
+  })
 
   const addNodeMut = useMutation({
     mutationFn: (f: AddNodeForm) => {
@@ -235,6 +250,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   }
 
   return (
+    <>
     <div className="ls-wrap">
       {/* Offer selector */}
       <div className="ls-toolbar">
@@ -331,9 +347,25 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
 
             {msg && <div style={{ marginBottom: 8 }}><Message type={msg.type} text={msg.text} /></div>}
 
-            <button className="btn btn-primary" disabled={saveMut.isPending} onClick={() => { setMsg(null); saveMut.mutate(form) }}>
-              {saveMut.isPending ? 'Speichert …' : 'Änderungen speichern'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" disabled={saveMut.isPending} onClick={() => { setMsg(null); saveMut.mutate(form) }}>
+                {saveMut.isPending ? 'Speichert …' : 'Änderungen speichern'}
+              </button>
+
+              {offerData?.data?.PROJECT_ID ? (
+                <span style={{ color: '#16a34a', fontSize: 13, fontWeight: 500 }}>
+                  ✅ Beauftragt → Projekt #{offerData.data.PROJECT_ID}
+                </span>
+              ) : (
+                <button
+                  className="btn"
+                  style={{ background: '#f59e0b', color: '#fff', borderColor: '#f59e0b' }}
+                  onClick={() => { setConvertErr(null); setShowBeauftragt(true) }}
+                >
+                  Beauftragt
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ── Positionen ── */}
@@ -473,5 +505,19 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
         </>
       )}
     </div>
+
+    {selectedId && (
+      <BeauftragtModal
+        open={showBeauftragt}
+        offerId={selectedId}
+        offerName={offerData?.data?.NAME_SHORT ?? offerData?.data?.NAME_LONG ?? ''}
+        structNodes={structNodes}
+        onConvert={body => convertMut.mutate(body)}
+        onClose={() => setShowBeauftragt(false)}
+        isPending={convertMut.isPending}
+        error={convertErr}
+      />
+    )}
+    </>
   )
 }

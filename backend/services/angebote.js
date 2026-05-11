@@ -498,6 +498,197 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   };
 }
 
+// ── offer → project conversion ────────────────────────────────────────────────
+
+async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
+  const b = body || {};
+
+  if (!b.order_date)         throw { status: 400, message: 'Auftragsdatum ist erforderlich' };
+  if (!b.project_status_id)  throw { status: 400, message: 'Projektstatus ist erforderlich' };
+  if (!b.project_manager_id) throw { status: 400, message: 'Projektleiter ist erforderlich' };
+
+  // Fetch offer
+  const { data: offer, error: offerErr } = await supabase
+    .from('OFFER')
+    .select('*')
+    .eq('ID', offerId)
+    .eq('TENANT_ID', tenantId)
+    .maybeSingle();
+  if (offerErr) throw offerErr;
+  if (!offer) throw { status: 404, message: 'Angebot nicht gefunden' };
+
+  if (offer.PROJECT_ID) throw { status: 409, message: 'Angebot wurde bereits in ein Projekt konvertiert' };
+  if (!offer.ADDRESS_ID) throw { status: 400, message: 'Angebot hat keine Rechnungsadresse' };
+  if (!offer.CONTACT_ID) throw { status: 400, message: 'Angebot hat keinen Kontakt' };
+
+  // Fetch offer structure ordered by SORT_ORDER so hierarchy is preserved
+  const { data: offerStructRows, error: structErr } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('*')
+    .eq('OFFER_ID', offerId)
+    .order('SORT_ORDER', { ascending: true })
+    .order('ID', { ascending: true });
+  if (structErr) throw structErr;
+  const offerStruct = offerStructRows || [];
+
+  // Project number
+  const companyId = offer.COMPANY_ID ? parseInt(String(offer.COMPANY_ID), 10) : null;
+  if (!companyId) throw { status: 400, message: 'Angebot hat keine Firma' };
+
+  const { data: num, error: numErr } = await supabase.rpc('next_project_number', { p_company_id: companyId });
+  if (numErr || !num) {
+    throw { status: 500, message: 'Nummernkreis konnte nicht geladen werden: ' + (numErr?.message || 'kein Ergebnis') };
+  }
+
+  // Insert PROJECT
+  const projectRow = {
+    NAME_SHORT:         num,
+    NAME_LONG:          offer.NAME_LONG,
+    COMPANY_ID:         companyId,
+    PROJECT_STATUS_ID:  parseInt(String(b.project_status_id), 10),
+    PROJECT_TYPE_ID:    b.project_type_id  ? parseInt(String(b.project_type_id), 10)  : null,
+    DEPARTMENT_ID:      b.department_id    ? parseInt(String(b.department_id), 10)    : null,
+    PROJECT_MANAGER_ID: parseInt(String(b.project_manager_id), 10),
+    ADDRESS_ID:         offer.ADDRESS_ID,
+    CONTACT_ID:         offer.CONTACT_ID,
+    TENANT_ID:          tenantId,
+    OFFER_ID:           offerId,
+  };
+
+  let project = null;
+  {
+    const r = await supabase.from('PROJECT').insert([projectRow])
+      .select('ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
+      .single();
+    if (r.error) {
+      const msg = String(r.error.message || '');
+      // Retry without problematic columns if schema not yet updated
+      const row2 = { ...projectRow };
+      if (msg.includes('OFFER_ID'))   delete row2.OFFER_ID;
+      if (msg.includes('COMPANY_ID')) delete row2.COMPANY_ID;
+      const r2 = await supabase.from('PROJECT').insert([row2])
+        .select('ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
+        .single();
+      if (r2.error) throw { status: 500, message: r2.error.message };
+      project = r2.data;
+    } else {
+      project = r.data;
+    }
+  }
+
+  // EMPLOYEE2PROJECT — deduplicate by employee_id
+  if (Array.isArray(b.employee2project) && b.employee2project.length) {
+    const seen = new Set();
+    const e2pRows = [];
+    for (const r of b.employee2project) {
+      const empId = r.employee_id ? parseInt(String(r.employee_id), 10) : null;
+      if (!empId || seen.has(empId)) continue;
+      seen.add(empId);
+      e2pRows.push({
+        EMPLOYEE_ID:    empId,
+        PROJECT_ID:     project.ID,
+        ROLE_ID:        r.role_id ? parseInt(String(r.role_id), 10) : null,
+        ROLE_NAME_SHORT: r.role_name_short || '',
+        ROLE_NAME_LONG:  r.role_name_long  || '',
+        SP_RATE:        r.sp_rate != null && r.sp_rate !== '' ? Number(r.sp_rate) : null,
+        TENANT_ID:      tenantId,
+      });
+    }
+    if (e2pRows.length) {
+      const { error: e2pErr } = await supabase.from('EMPLOYEE2PROJECT').insert(e2pRows);
+      if (e2pErr) throw { status: 500, message: 'Mitarbeiter konnten nicht zugeordnet werden: ' + e2pErr.message };
+    }
+  }
+
+  // PROJECT_STRUCTURE — 2-pass to set FATHER_ID
+  if (offerStruct.length) {
+    const insertRows = offerStruct.map(n => ({
+      NAME_SHORT:       String(n.NAME_SHORT || '').trim(),
+      NAME_LONG:        String(n.NAME_LONG  || '').trim(),
+      PROJECT_ID:       project.ID,
+      BILLING_TYPE_ID:  n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null,
+      FATHER_ID:        null,
+      REVENUE:          fmt2(Number(n.REVENUE || 0)),
+      EXTRAS_PERCENT:   Number(n.EXTRAS_PERCENT || 0),
+      EXTRAS:           fmt2(Number(n.EXTRAS || 0)),
+      COSTS:            0,
+      REVENUE_COMPLETION_PERCENT: 0,
+      EXTRAS_COMPLETION_PERCENT:  0,
+      REVENUE_COMPLETION: 0,
+      EXTRAS_COMPLETION:  0,
+      TENANT_ID:        tenantId,
+    }));
+
+    const { data: createdNodes, error: psErr } = await supabase
+      .from('PROJECT_STRUCTURE')
+      .insert(insertRows)
+      .select('ID');
+    if (psErr) throw { status: 500, message: 'Projektstruktur konnte nicht angelegt werden: ' + psErr.message };
+
+    // Map old offer structure ID → new project structure ID
+    const offerIdToNew = new Map();
+    (createdNodes || []).forEach((row, i) => { offerIdToNew.set(offerStruct[i].ID, row.ID); });
+
+    // Set FATHER_ID
+    for (let i = 0; i < offerStruct.length; i++) {
+      const n = offerStruct[i];
+      if (!n.FATHER_ID) continue;
+      const childId  = offerIdToNew.get(n.ID);
+      const fatherId = offerIdToNew.get(n.FATHER_ID);
+      if (!childId || !fatherId) continue;
+      await supabase.from('PROJECT_STRUCTURE').update({ FATHER_ID: fatherId }).eq('ID', childId);
+    }
+
+    // PROJECT_PROGRESS
+    try {
+      const progressRows = (createdNodes || []).map((r, i) => ({
+        STRUCTURE_ID:               r.ID,
+        TENANT_ID:                  tenantId,
+        REVENUE:                    fmt2(Number(offerStruct[i].REVENUE || 0)),
+        EXTRAS_PERCENT:             Number(offerStruct[i].EXTRAS_PERCENT || 0),
+        EXTRAS:                     fmt2(Number(offerStruct[i].EXTRAS || 0)),
+        REVENUE_COMPLETION_PERCENT: 0,
+        EXTRAS_COMPLETION_PERCENT:  0,
+        REVENUE_COMPLETION:         0,
+        EXTRAS_COMPLETION:          0,
+      }));
+      if (progressRows.length) await supabase.from('PROJECT_PROGRESS').insert(progressRows);
+    } catch (_) { /* ignore progress errors */ }
+  }
+
+  // CONTRACT with tenant defaults
+  const { data: settingsRows } = await supabase
+    .from('TENANT_SETTINGS').select('KEY, VALUE').eq('TENANT_ID', tenantId);
+  const defaults = {};
+  for (const row of settingsRows || []) defaults[row.KEY] = row.VALUE;
+
+  const contractRow = {
+    NAME_SHORT:         project.NAME_SHORT,
+    NAME_LONG:          project.NAME_LONG,
+    PROJECT_ID:         project.ID,
+    INVOICE_ADDRESS_ID: project.ADDRESS_ID,
+    INVOICE_CONTACT_ID: project.CONTACT_ID,
+    TENANT_ID:          tenantId,
+    ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
+    ...(defaults.default_vat_id      ? { VAT_ID:      Number(defaults.default_vat_id)      } : {}),
+  };
+  {
+    const { error } = await supabase.from('CONTRACT').insert([contractRow]);
+    if (error) {
+      const { error: e2 } = await supabase.from('CONTRACTS').insert([contractRow]);
+      if (e2) throw { status: 500, message: 'Vertrag konnte nicht angelegt werden: ' + (e2.message || error.message) };
+    }
+  }
+
+  // Update OFFER — wrap in try/catch in case columns not yet migrated
+  try {
+    await supabase.from('OFFER').update({ PROJECT_ID: project.ID, ORDER_DATE: b.order_date })
+      .eq('ID', offerId);
+  } catch (_) { /* non-fatal */ }
+
+  return { project, projectName: project.NAME_SHORT };
+}
+
 // ── exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -513,4 +704,5 @@ module.exports = {
   updateOfferStructureNode,
   deleteOfferStructureNode,
   buildOfferPdfViewModel,
+  convertOfferToProject,
 };

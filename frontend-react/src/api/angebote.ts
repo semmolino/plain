@@ -23,6 +23,23 @@ export interface Offer {
   CREATED_AT:      string | null
   OFFER_DATE:      string | null
   VALID_UNTIL:     string | null
+  PROJECT_ID:      number | null
+  ORDER_DATE:      string | null
+}
+
+export interface ConvertOfferPayload {
+  order_date:         string
+  project_status_id:  number
+  project_manager_id: number
+  project_type_id?:   number | null
+  department_id?:     number | null
+  employee2project?:  Array<{
+    employee_id:      number
+    role_id?:         number | null
+    role_name_short?: string
+    role_name_long?:  string
+    sp_rate?:         number | null
+  }>
 }
 
 export interface OfferListItem {
@@ -168,3 +185,6 @@ export const deleteOfferStructureNode = (offerId: number, nodeId: number) =>
 
 export const openOfferPdf = (id: number) =>
   openPdfWithAuth(`/angebote/${id}/pdf`)
+
+export const convertOffer = (id: number, body: ConvertOfferPayload) =>
+  apiClient.post<{ data: { project: { ID: number; NAME_SHORT: string }; projectName: string } }>(`/angebote/${id}/convert`, body)

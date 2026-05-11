@@ -17,6 +17,7 @@ module.exports = (supabase) => {
   router.put('/:id/structure/:nodeId',      (req, res) => ctrl.updateOfferStructureNode(req, res, supabase));
   router.delete('/:id/structure/:nodeId',   (req, res) => ctrl.deleteOfferStructureNode(req, res, supabase));
   router.get('/:id/pdf',                    (req, res) => ctrl.getOfferPdf(req, res, supabase));
+  router.post('/:id/convert',              (req, res) => ctrl.convertOffer(req, res, supabase));
   router.get('/:id',                        (req, res) => ctrl.getOffer(req, res, supabase));
 
   return router;
