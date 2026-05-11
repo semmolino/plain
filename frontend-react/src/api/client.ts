@@ -22,19 +22,24 @@ export class ApiRequestError extends Error {
 async function request<T>(
   path: string,
   options: RequestInit = {},
+  rawBody?: FormData,
 ): Promise<T> {
   const token = useAuthStore.getState().token
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
+  }
+
+  if (!rawBody) {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
+  const body = rawBody ?? options.body
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, body })
 
   if (!res.ok) {
     let message = `HTTP ${res.status}`
@@ -114,7 +119,9 @@ export const apiClient = {
   get: <T>(path: string) => request<T>(path),
 
   post: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+    body instanceof FormData
+      ? request<T>(path, { method: 'POST' }, body)
+      : request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
 
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
