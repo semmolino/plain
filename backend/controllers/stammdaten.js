@@ -1,6 +1,8 @@
 "use strict";
 
-const svc = require("../services/stammdaten");
+const fs   = require("fs");
+const path = require("path");
+const svc  = require("../services/stammdaten");
 
 // ---------------------------------------------------------------------------
 // POST /api/stammdaten/status
@@ -859,12 +861,34 @@ async function putLogo(req, res, supabase) {
   const assetId = req.body?.logo_asset_id != null ? parseInt(String(req.body.logo_asset_id), 10) : null;
   const value = assetId ? String(assetId) : null;
 
-  // Persist in TENANT_SETTINGS
+  // Persist asset ID in TENANT_SETTINGS
   const { error: settErr } = await supabase.from("TENANT_SETTINGS").upsert(
     [{ TENANT_ID: req.tenantId, KEY: "logo_asset_id", VALUE: value }],
     { onConflict: "TENANT_ID,KEY" }
   );
   if (settErr) return res.status(500).json({ error: settErr.message });
+
+  // Cache logo as base64 data URI in DB so it survives server redeploys
+  let dataUri = null;
+  if (assetId) {
+    try {
+      const { data: asset } = await supabase.from("ASSET").select("STORAGE_KEY, MIME_TYPE").eq("ID", assetId).maybeSingle();
+      if (asset) {
+        const uploadRoot = path.join(__dirname, "..", "uploads");
+        const filePath   = path.join(uploadRoot, asset.STORAGE_KEY);
+        if (fs.existsSync(filePath)) {
+          const b64 = fs.readFileSync(filePath).toString("base64");
+          dataUri = `data:${asset.MIME_TYPE};base64,${b64}`;
+        }
+      }
+    } catch (e) {
+      console.error("[PUT_LOGO] base64 cache error:", e.message);
+    }
+  }
+  await supabase.from("TENANT_SETTINGS").upsert(
+    [{ TENANT_ID: req.tenantId, KEY: "logo_data_uri", VALUE: dataUri }],
+    { onConflict: "TENANT_ID,KEY" }
+  );
 
   // Propagate to all document templates for this tenant
   await supabase.from("DOCUMENT_TEMPLATE").update({ LOGO_ASSET_ID: assetId })

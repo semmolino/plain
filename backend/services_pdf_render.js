@@ -126,18 +126,30 @@ async function loadLogoDataUri({ supabase, logoAssetId }) {
 }
 
 async function resolveLogoDataUri({ supabase, tplLogoAssetId, tenantId }) {
-  if (tplLogoAssetId) {
-    return loadLogoDataUri({ supabase, logoAssetId: tplLogoAssetId });
+  if (!tenantId) {
+    return tplLogoAssetId ? loadLogoDataUri({ supabase, logoAssetId: tplLogoAssetId }) : null;
   }
-  if (!tenantId) return null;
-  const { data } = await supabase
+
+  // Prefer the DB-cached base64 URI — survives server redeploys on ephemeral filesystems
+  const { data: cached } = await supabase
     .from('TENANT_SETTINGS')
     .select('VALUE')
     .eq('TENANT_ID', tenantId)
-    .eq('KEY', 'logo_asset_id')
+    .eq('KEY', 'logo_data_uri')
     .maybeSingle();
-  const assetId = data?.VALUE ? parseInt(String(data.VALUE), 10) : null;
-  return loadLogoDataUri({ supabase, logoAssetId: assetId });
+  if (cached?.VALUE) return cached.VALUE;
+
+  // Fall back to reading asset file from disk (works on first deploy before redeploy)
+  const logoAssetId = tplLogoAssetId ?? await (async () => {
+    const { data } = await supabase
+      .from('TENANT_SETTINGS')
+      .select('VALUE')
+      .eq('TENANT_ID', tenantId)
+      .eq('KEY', 'logo_asset_id')
+      .maybeSingle();
+    return data?.VALUE ? parseInt(String(data.VALUE), 10) : null;
+  })();
+  return loadLogoDataUri({ supabase, logoAssetId });
 }
 
 async function loadTemplate({ supabase, companyId, docType, templateId }) {
