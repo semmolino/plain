@@ -509,7 +509,6 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
     {selectedId && (
       <BeauftragtModal
         open={showBeauftragt}
-        offerId={selectedId}
         offerName={offerData?.data?.NAME_SHORT ?? offerData?.data?.NAME_LONG ?? ''}
         structNodes={structNodes}
         onConvert={body => convertMut.mutate(body)}

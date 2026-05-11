@@ -8,7 +8,6 @@ import type { ConvertOfferPayload } from '@/api/angebote'
 
 interface Props {
   open:        boolean
-  offerId:     number
   offerName:   string
   structNodes: OfferStructureNode[]
   onConvert:   (body: ConvertOfferPayload) => void
@@ -17,7 +16,7 @@ interface Props {
   error:       string | null
 }
 
-export function BeauftragtModal({ open, offerId, offerName, structNodes, onConvert, onClose, isPending, error }: Props) {
+export function BeauftragtModal({ open, offerName, structNodes, onConvert, onClose, isPending, error }: Props) {
   const today = new Date().toISOString().slice(0, 10)
 
   const [orderDate,        setOrderDate]        = useState(today)
