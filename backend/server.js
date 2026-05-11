@@ -23,23 +23,6 @@ const supabase = createClient(
 const authRoutes    = require("./routes/auth")(supabase);
 const authMiddleware = require("./middleware/auth")(supabase);
 
-// Rate limiting on auth endpoints (inline, no external dependency)
-const _rlWindows = new Map();
-function authLimiter(req, res, next) {
-  const key = req.ip;
-  const now = Date.now();
-  const windowStart = now - 15 * 60 * 1000;
-  const hits = (_rlWindows.get(key) || []).filter(t => t > windowStart);
-  hits.push(now);
-  _rlWindows.set(key, hits);
-  if (hits.length > 20) {
-    return res.status(429).json({ error: "Zu viele Anfragen. Bitte in 15 Minuten erneut versuchen." });
-  }
-  next();
-}
-app.use("/api/v1/auth/login",         authLimiter);
-app.use("/api/v1/auth/reset-request", authLimiter);
-app.use("/api/v1/auth/signup",        authLimiter);
 
 // Public auth routes (no token required)
 app.use("/api/v1/auth", authRoutes);
