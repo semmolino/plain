@@ -47,7 +47,9 @@ module.exports = (supabase) => {
     if (!employee) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
 
     const stored = employee.PASSWORD || "";
-    const valid = stored.startsWith("$2") && await bcrypt.compare(password, stored);
+    const valid = stored.startsWith("$2")
+      ? await bcrypt.compare(password, stored)
+      : stored === password;
 
     if (!valid) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
 
