@@ -145,9 +145,43 @@ export const fetchOffers = () =>
 
 ---
 
+## UI/UX — responsive & mobile rules
+
+These rules apply to every feature. Playwright smoke tests in `frontend-react/tests/` enforce them automatically in CI.
+
+**Layout**
+- No horizontal scroll at any viewport width (test: `document.body.scrollWidth ≤ viewport.width + 2`)
+- Bottom nav (`.bottom-nav`) must always be visible and reachable — never obscured by modals or sticky headers
+- Page content must not be hidden behind the fixed bottom nav — keep `padding-bottom` ≥ 64px on all page roots
+
+**Touch targets**
+- Minimum 44 × 44 px for every interactive element (buttons, nav items, links, toggles)
+- `.bottom-nav-item` items are currently 58px — do not reduce
+- Prefer `gap` over reducing hit areas when space is tight
+
+**Inputs**
+- Always use the correct `type` attribute for mobile keyboards: `type="email"`, `type="number"` (numeric data), `type="tel"` (phone), `type="date"` (dates — avoids manual string parsing on mobile)
+- Do not use `type="number"` for fields with leading zeros or formatted strings (e.g. IBAN, postal code) — use `type="text"` with `inputmode="numeric"` instead
+
+**Modals**
+- Must be scrollable inside when content exceeds viewport height
+- Use `overflow-y: auto` on the modal body, not the backdrop
+- Do not use `position: fixed` with `height: 100vh` inside a modal — it breaks on mobile browsers with dynamic toolbars
+
+**Typography**
+- Minimum body text: 13px. Minimum meta/label text: 11px. Do not go smaller.
+- Use `white-space: pre-line` for free-text fields so line breaks render correctly
+
+**Viewports to test manually when in doubt**
+- Desktop: 1280 × 800
+- Tablet: 768 × 1024
+- Mobile: 390 × 844 (iPhone 14)
+
+---
+
 ## Development notes
 
-- **No test suite** — zero automated tests currently
+- **Test suite**: Jest (backend, 24 tests) + Playwright (frontend, smoke tests). Run with `npm test --prefix backend` and `npx playwright test` in `frontend-react/`.
 - TypeScript is strict in the frontend; `npx tsc --noEmit` must pass before committing
 - The backend is plain JS (no TypeScript)
 - Nunjucks templates use `| money` filter (→ `fmtMoney`) and `| date_de` filter
