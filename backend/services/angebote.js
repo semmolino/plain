@@ -72,19 +72,22 @@ async function listOffers(supabase, { tenantId }) {
   const empIds     = [...new Set(rows.map(r => r.EMPLOYEE_ID).filter(Boolean))];
   const addrIds    = [...new Set(rows.map(r => r.ADDRESS_ID).filter(Boolean))];
   const contactIds = [...new Set(rows.map(r => r.CONTACT_ID).filter(Boolean))];
+  const projectIds = [...new Set(rows.map(r => r.PROJECT_ID).filter(Boolean))];
 
-  const [statusRes, empRes, addrRes, contactRes, structRes] = await Promise.all([
+  const [statusRes, empRes, addrRes, contactRes, structRes, projectRes] = await Promise.all([
     statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, NAME_SHORT').in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
     contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
     supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
+    projectIds.length ? supabase.from('PROJECT').select('ID, NAME_SHORT').in('ID', projectIds) : Promise.resolve({ data: [] }),
   ]);
 
   const statusMap  = new Map((statusRes.data  || []).map(r => [r.ID, r]));
   const empMap     = new Map((empRes.data      || []).map(r => [r.ID, r]));
   const addrMap    = new Map((addrRes.data     || []).map(r => [r.ID, r]));
   const contactMap = new Map((contactRes.data  || []).map(r => [r.ID, r]));
+  const projectMap = new Map((projectRes.data  || []).map(r => [r.ID, r]));
 
   // Leaf-based totals per offer
   const totalMap = new Map();
@@ -124,7 +127,8 @@ async function listOffers(supabase, { tenantId }) {
       CONTACT_NAME:    contact
         ? `${contact.FIRST_NAME ?? ''} ${contact.LAST_NAME ?? ''}`.trim()
         : null,
-      PROJECT_ID:      r.PROJECT_ID ?? null,
+      PROJECT_ID:        r.PROJECT_ID ?? null,
+      PROJECT_NAME:      r.PROJECT_ID ? (projectMap.get(r.PROJECT_ID)?.NAME_SHORT ?? null) : null,
     };
   });
 }

@@ -354,7 +354,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
 
               {offerData?.data?.PROJECT_ID ? (
                 <span style={{ color: '#16a34a', fontSize: 13, fontWeight: 500 }}>
-                  ✅ Beauftragt → Projekt #{offerData.data.PROJECT_ID}
+                  ✅ Beauftragt → {offers.find(o => o.ID === selectedId)?.PROJECT_NAME ?? `Projekt #${offerData.data.PROJECT_ID}`}
                 </span>
               ) : (
                 <button

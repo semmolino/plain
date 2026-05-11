@@ -129,7 +129,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                     <button className="btn-small" onClick={() => onSelectOffer?.(r.ID)}>Bearbeiten</button>
                     <button className="btn-small" onClick={() => openOfferPdf(r.ID)}>PDF</button>
                     {r.PROJECT_ID ? (
-                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>✅ Projekt #{r.PROJECT_ID}</span>
+                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>✅ {r.PROJECT_NAME ?? `Projekt #${r.PROJECT_ID}`}</span>
                     ) : (
                       <button
                         className="btn-small"
