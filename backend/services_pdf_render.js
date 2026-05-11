@@ -125,6 +125,21 @@ async function loadLogoDataUri({ supabase, logoAssetId }) {
   return `data:${data.MIME_TYPE};base64,${b64}`;
 }
 
+async function resolveLogoDataUri({ supabase, tplLogoAssetId, tenantId }) {
+  if (tplLogoAssetId) {
+    return loadLogoDataUri({ supabase, logoAssetId: tplLogoAssetId });
+  }
+  if (!tenantId) return null;
+  const { data } = await supabase
+    .from('TENANT_SETTINGS')
+    .select('VALUE')
+    .eq('TENANT_ID', tenantId)
+    .eq('KEY', 'logo_asset_id')
+    .maybeSingle();
+  const assetId = data?.VALUE ? parseInt(String(data.VALUE), 10) : null;
+  return loadLogoDataUri({ supabase, logoAssetId: assetId });
+}
+
 async function loadTemplate({ supabase, companyId, docType, templateId }) {
   if (templateId) {
     const { data } = await supabase.from('DOCUMENT_TEMPLATE').select('*').eq('ID', templateId).maybeSingle();
@@ -368,13 +383,14 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
 
 async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
-  const { data: docMeta } = await supabase.from(table).select('COMPANY_ID').eq('ID', docId).maybeSingle();
+  const { data: docMeta } = await supabase.from(table).select('COMPANY_ID, TENANT_ID').eq('ID', docId).maybeSingle();
   const companyId = docMeta?.COMPANY_ID;
+  const tenantId  = docMeta?.TENANT_ID ?? null;
   if (!companyId) throw new Error('Company for document not found');
 
   const tpl         = await loadTemplate({ supabase, companyId, docType, templateId });
   const theme       = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
-  const logoDataUri = await loadLogoDataUri({ supabase, logoAssetId: tpl.LOGO_ASSET_ID });
+  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId });
 
   const vm = await buildPdfViewModel({ supabase, docType, docId });
   vm.theme       = theme;
@@ -417,7 +433,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   const companyId = vm.offer.COMPANY_ID;
   const tpl         = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
   const theme       = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
-  const logoDataUri = await loadLogoDataUri({ supabase, logoAssetId: tpl.LOGO_ASSET_ID });
+  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId });
 
   const context = { ...vm, theme, logoDataUri };
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
