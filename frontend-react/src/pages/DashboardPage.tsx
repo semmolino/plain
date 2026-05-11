@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { useQueries, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale, BarElement, ArcElement,
   Tooltip, Legend,
 } from 'chart.js'
 import { Bar, Doughnut } from 'react-chartjs-2'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { useSession } from '@/hooks/useSession'
 import {
@@ -19,6 +19,8 @@ import {
   type DashboardMonthly,
   type DashboardByStatus,
 } from '@/api/reports'
+import { fetchCompanies, fetchDefaults, fetchLogo } from '@/api/stammdaten'
+import { fetchNumberRanges } from '@/api/numberRanges'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
 
@@ -176,6 +178,66 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
   )
 }
 
+// ── Setup checklist ───────────────────────────────────────────────────────────
+
+const CURRENT_YEAR = new Date().getFullYear()
+
+function SetupChecklist() {
+  const { data: companiesData } = useQuery({ queryKey: ['companies'],     queryFn: fetchCompanies,                  staleTime: 60000 })
+  const { data: defaultsData  } = useQuery({ queryKey: ['defaults'],      queryFn: fetchDefaults,                   staleTime: 60000 })
+  const { data: logoData      } = useQuery({ queryKey: ['logo'],          queryFn: fetchLogo,                       staleTime: 60000 })
+  const { data: nrData        } = useQuery({ queryKey: ['number-ranges', CURRENT_YEAR], queryFn: () => fetchNumberRanges(CURRENT_YEAR), staleTime: 60000 })
+
+  const companies = companiesData?.data ?? []
+  const defaults  = defaultsData?.data  ?? {}
+  const logoId    = logoData?.data?.logo_asset_id ?? null
+
+  const hasCompany    = companies.some(c => c.COMPANY_NAME_1?.trim() && c.STREET?.trim() && c.CITY?.trim())
+  const hasLogo       = logoId !== null
+  const hasVat        = !!defaults.default_vat_id
+  const hasNr         = nrData != null
+
+  const items = [
+    { done: hasCompany, label: 'Firmendaten vervollständigen',   hint: 'Name, Adresse, Steuernummer', tab: 'unternehmen' },
+    { done: hasLogo,    label: 'Firmenlogo hochladen',           hint: 'Wird auf PDFs angezeigt',     tab: 'unternehmen' },
+    { done: hasVat,     label: 'Standard-MwSt. festlegen',       hint: 'Für neue Verträge & Angebote', tab: 'vorbelegungen' },
+    { done: hasNr,      label: 'Nummernkreise konfigurieren',    hint: 'Rechnungs-, Projekt-, Angebotsnummern', tab: 'nummernkreise' },
+  ]
+
+  const allDone = items.every(i => i.done)
+  if (allDone) return null
+
+  const doneCount = items.filter(i => i.done).length
+
+  return (
+    <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '14px 18px', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <strong style={{ fontSize: 13 }}>Einrichtung abschließen</strong>
+        <span style={{ fontSize: 12, color: '#92400e' }}>{doneCount}/{items.length} erledigt</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16, lineHeight: 1, color: item.done ? '#16a34a' : '#d97706' }}>
+              {item.done ? '✓' : '○'}
+            </span>
+            <div style={{ flex: 1 }}>
+              {item.done ? (
+                <span style={{ fontSize: 12, color: '#6b7280', textDecoration: 'line-through' }}>{item.label}</span>
+              ) : (
+                <Link to={`/admin?tab=${item.tab}`} style={{ fontSize: 12, color: '#1d4ed8', textDecoration: 'none', fontWeight: 500 }}>
+                  {item.label}
+                </Link>
+              )}
+              <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 6 }}>{item.hint}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
@@ -222,6 +284,8 @@ export function DashboardPage() {
           </button>
         )}
       </div>
+
+      <SetupChecklist />
 
       {isLoading && <div className="dash-loading">Laden …</div>}
 

@@ -174,3 +174,38 @@ export const fetchDefaults = () =>
 
 export const putDefault = (key: string, value: string | null) =>
   apiClient.put<{ ok: boolean }>('/stammdaten/defaults', { key, value })
+
+// ── Stammdaten lists + delete ─────────────────────────────────────────────────
+
+export interface StammdatenItem { ID: number; NAME_SHORT: string }
+export interface Rolle { ID: number; NAME_SHORT: string; NAME_LONG: string | null; SP_RATE: number | null }
+
+export const fetchDepartments = () =>
+  apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/departments')
+export const deleteDepartment = (id: number) =>
+  apiClient.delete<{ ok: boolean }>(`/stammdaten/department/${id}`)
+
+export const fetchTypen = () =>
+  apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/typen')
+export const deleteTyp = (id: number) =>
+  apiClient.delete<{ ok: boolean }>(`/stammdaten/typ/${id}`)
+
+export const fetchRollen = () =>
+  apiClient.get<{ data: Rolle[] }>('/stammdaten/rollen')
+export const deleteRolle = (id: number) =>
+  apiClient.delete<{ ok: boolean }>(`/stammdaten/rolle/${id}`)
+
+// ── Logo ──────────────────────────────────────────────────────────────────────
+
+export const fetchLogo = () =>
+  apiClient.get<{ data: { logo_asset_id: number | null } }>('/stammdaten/logo')
+
+export const putLogo = (logo_asset_id: number | null) =>
+  apiClient.put<{ ok: boolean }>('/stammdaten/logo', { logo_asset_id })
+
+export const uploadAsset = (file: File, assetType = 'LOGO') => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('asset_type', assetType)
+  return apiClient.post<{ data: { ID: number }; url: string }>('/assets/upload', form)
+}

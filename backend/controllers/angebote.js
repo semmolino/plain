@@ -145,9 +145,21 @@ async function getOfferPdf(req, res, supabase) {
   }
 }
 
+async function deleteOfferStatus(req, res, supabase) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'Ungültige ID' });
+    await svc.deleteOfferStatus(supabase, { tenantId: req.tenantId, id });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 module.exports = {
   getOfferStatuses,
   postOfferStatus,
+  deleteOfferStatus,
   listOffers,
   getOffer,
   createOffer,

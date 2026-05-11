@@ -798,6 +798,81 @@ async function postContact(req, res, supabase) {
   res.json({ data });
 }
 
+// ── Stammdaten list + delete ─────────────────────────────────────────────────
+
+async function getDepartments(req, res, supabase) {
+  const { data, error } = await supabase.from("DEPARTMENT").select("ID, NAME_SHORT")
+    .eq("TENANT_ID", req.tenantId).order("NAME_SHORT", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+}
+
+async function deleteDepartment(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { error } = await supabase.from("DEPARTMENT").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+}
+
+async function getTypen(req, res, supabase) {
+  const { data, error } = await supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT")
+    .eq("TENANT_ID", req.tenantId).order("NAME_SHORT", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+}
+
+async function deleteTyp(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { error } = await supabase.from("PROJECT_TYPE").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+}
+
+async function getRollen(req, res, supabase) {
+  const { data, error } = await supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, SP_RATE")
+    .eq("TENANT_ID", req.tenantId).order("NAME_SHORT", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+}
+
+async function deleteRolle(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { error } = await supabase.from("ROLE").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+}
+
+// ── Logo management ──────────────────────────────────────────────────────────
+// Stores the logo asset ID in TENANT_SETTINGS and propagates to all templates.
+
+async function getLogo(req, res, supabase) {
+  const { data } = await supabase.from("TENANT_SETTINGS").select("VALUE")
+    .eq("TENANT_ID", req.tenantId).eq("KEY", "logo_asset_id").maybeSingle();
+  const assetId = data?.VALUE ? parseInt(data.VALUE, 10) : null;
+  res.json({ data: { logo_asset_id: assetId } });
+}
+
+async function putLogo(req, res, supabase) {
+  const assetId = req.body?.logo_asset_id != null ? parseInt(String(req.body.logo_asset_id), 10) : null;
+  const value = assetId ? String(assetId) : null;
+
+  // Persist in TENANT_SETTINGS
+  const { error: settErr } = await supabase.from("TENANT_SETTINGS").upsert(
+    [{ TENANT_ID: req.tenantId, KEY: "logo_asset_id", VALUE: value }],
+    { onConflict: "TENANT_ID,KEY" }
+  );
+  if (settErr) return res.status(500).json({ error: settErr.message });
+
+  // Propagate to all document templates for this tenant
+  await supabase.from("DOCUMENT_TEMPLATE").update({ LOGO_ASSET_ID: assetId })
+    .eq("TENANT_ID", req.tenantId);
+
+  res.json({ ok: true, logo_asset_id: assetId });
+}
+
 module.exports = {
   postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
@@ -806,4 +881,6 @@ module.exports = {
   getSalutations, getGenders, searchAddresses, listAddresses, patchAddress,
   searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, searchPaymentMeans, postContact,
   getCurrencies, getVat, getDefaults, putDefault,
+  getDepartments, deleteDepartment, getTypen, deleteTyp, getRollen, deleteRolle,
+  getLogo, putLogo,
 };

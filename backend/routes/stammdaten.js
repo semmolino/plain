@@ -8,7 +8,11 @@ module.exports = (supabase) => {
 
   router.post("/status",                                             (req, res) => ctrl.postStatus(req, res, supabase));
   router.post("/typ",                                                (req, res) => ctrl.postTyp(req, res, supabase));
+  router.delete("/typ/:id",                                          (req, res) => ctrl.deleteTyp(req, res, supabase));
+  router.get("/typen",                                               (req, res) => ctrl.getTypen(req, res, supabase));
   router.post("/department",                                         (req, res) => ctrl.postDepartment(req, res, supabase));
+  router.get("/departments",                                         (req, res) => ctrl.getDepartments(req, res, supabase));
+  router.delete("/department/:id",                                   (req, res) => ctrl.deleteDepartment(req, res, supabase));
   router.get("/countries",                                           (req, res) => ctrl.getCountries(req, res, supabase));
   router.get("/billing-types",                                       (req, res) => ctrl.getBillingTypes(req, res, supabase));
   router.get("/fee-groups",                                          (req, res) => ctrl.getFeeGroups(req, res, supabase));
@@ -26,6 +30,10 @@ module.exports = (supabase) => {
   router.put("/company/:id",                                         (req, res) => ctrl.putCompany(req, res, supabase));
   router.post("/address",                                            (req, res) => ctrl.postAddress(req, res, supabase));
   router.post("/rollen",                                             (req, res) => ctrl.postRollen(req, res, supabase));
+  router.get("/rollen",                                              (req, res) => ctrl.getRollen(req, res, supabase));
+  router.delete("/rolle/:id",                                        (req, res) => ctrl.deleteRolle(req, res, supabase));
+  router.get("/logo",                                                (req, res) => ctrl.getLogo(req, res, supabase));
+  router.put("/logo",                                                (req, res) => ctrl.putLogo(req, res, supabase));
   router.get("/salutations",                                         (req, res) => ctrl.getSalutations(req, res, supabase));
   router.get("/genders",                                             (req, res) => ctrl.getGenders(req, res, supabase));
   router.get("/addresses/search",                                    (req, res) => ctrl.searchAddresses(req, res, supabase));

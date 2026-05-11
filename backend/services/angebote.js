@@ -55,6 +55,12 @@ async function createOfferStatus(supabase, { tenantId, name_short }) {
   return data;
 }
 
+async function deleteOfferStatus(supabase, { tenantId, id }) {
+  const { error } = await supabase.from('OFFER_STATUS').delete()
+    .eq('ID', id).eq('TENANT_ID', tenantId);
+  if (error) throw error;
+}
+
 // ── offers ────────────────────────────────────────────────────────────────────
 
 async function listOffers(supabase, { tenantId }) {
@@ -731,6 +737,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
 module.exports = {
   getOfferStatuses,
   createOfferStatus,
+  deleteOfferStatus,
   listOffers,
   getOffer,
   createOffer,

@@ -1,8 +1,9 @@
 require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
+const express   = require("express");
+const cors      = require("cors");
 const bodyParser = require("body-parser");
-const path = require("path");
+const path      = require("path");
+const rateLimit = require("express-rate-limit");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
@@ -22,6 +23,18 @@ const supabase = createClient(
 // Auth
 const authRoutes    = require("./routes/auth")(supabase);
 const authMiddleware = require("./middleware/auth")(supabase);
+
+// Rate limiting on auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Zu viele Anfragen. Bitte in 15 Minuten erneut versuchen." },
+});
+app.use("/api/v1/auth/login",         authLimiter);
+app.use("/api/v1/auth/reset-request", authLimiter);
+app.use("/api/v1/auth/signup",        authLimiter);
 
 // Public auth routes (no token required)
 app.use("/api/v1/auth", authRoutes);
