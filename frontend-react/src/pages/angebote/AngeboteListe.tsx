@@ -65,7 +65,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
 
   const filtered = useMemo(() => {
     let result = rows
-    if (onlyOpen) result = result.filter(r => r.PROJECT_ID === null)
+    if (onlyOpen) result = result.filter(r => r.PROJECT_ID === null && r.OFFER_STATUS_ID !== 4)
     const q = search.trim().toLowerCase()
     if (q) result = result.filter(r =>
       `${r.NAME_SHORT} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q)
@@ -146,7 +146,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                       <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>
                         ✅ {r.PROJECT_NAME ?? `Projekt #${r.PROJECT_ID}`}
                       </span>
-                    ) : (
+                    ) : r.OFFER_STATUS_ID === 4 ? null : (
                       <>
                         <button
                           className="btn-small"
@@ -155,16 +155,14 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                         >
                           Beauftragt
                         </button>
-                        {r.OFFER_STATUS_ID !== 4 && (
-                          <button
-                            className="btn-small"
-                            style={{ background: '#dc2626', color: '#fff', borderColor: '#dc2626' }}
-                            disabled={rejectMut.isPending}
-                            onClick={() => handleReject(r)}
-                          >
-                            Abgelehnt
-                          </button>
-                        )}
+                        <button
+                          className="btn-small"
+                          style={{ background: '#dc2626', color: '#fff', borderColor: '#dc2626' }}
+                          disabled={rejectMut.isPending}
+                          onClick={() => handleReject(r)}
+                        >
+                          Abgelehnt
+                        </button>
                       </>
                     )}
                     <button className="btn-small btn-danger" disabled={deleteMut.isPending} onClick={() => handleDelete(r)}>Löschen</button>
