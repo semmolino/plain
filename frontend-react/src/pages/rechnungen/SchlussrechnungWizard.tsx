@@ -216,7 +216,7 @@ export function SchlussrechnungWizard() {
       const d1 = showDiscounts ? (Number(d1Pct) || 0) : 0
       const d2 = showDiscounts ? (Number(d2Pct) || 0) : 0
       const d1Amt = Math.round(base * d1 / 100 * 100) / 100
-      const d2Amt = Math.round(d1Amt * d2 / 100 * 100) / 100
+      const d2Amt = Math.round((base - d1Amt) * d2 / 100 * 100) / 100
       const totalDiscounts = Math.round((d1Amt + d2Amt) * 100) / 100
       const cdPct  = showSkonto ? (Number(cashDiscPct) || 0) : 0
       const cdDays = showSkonto ? (Number(cashDiscDays) || 0) : 0
@@ -641,7 +641,7 @@ export function SchlussrechnungWizard() {
         const d1 = showDiscounts ? (Number(d1Pct) || 0) : 0
         const d2 = showDiscounts ? (Number(d2Pct) || 0) : 0
         const d1Amt = Math.round(base * d1 / 100 * 100) / 100
-        const d2Amt = Math.round(d1Amt * d2 / 100 * 100) / 100
+        const d2Amt = Math.round((base - d1Amt) * d2 / 100 * 100) / 100
         const totalDisc = Math.round((d1Amt + d2Amt) * 100) / 100
         const cdPct  = showSkonto ? (Number(cashDiscPct) || 0) : 0
         const cdAmt  = Math.round((base - totalDisc) * cdPct / 100 * 100) / 100

@@ -377,7 +377,7 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
   const d1Pct              = Number(rawDoc.DISCOUNT_1_PERCENT ?? 0);
   const d2Pct              = Number(rawDoc.DISCOUNT_2_PERCENT ?? 0);
   const d1Amount           = Math.round(totalAmountNet * d1Pct / 100 * 100) / 100;
-  const d2Amount           = Math.round(d1Amount * d2Pct / 100 * 100) / 100;
+  const d2Amount           = Math.round((totalAmountNet - d1Amount) * d2Pct / 100 * 100) / 100;
   const totalDiscounts     = Number(rawDoc.TOTAL_DISCOUNTS ?? 0) || Math.round((d1Amount + d2Amount) * 100) / 100;
   const cashDiscPct        = Number(rawDoc.CASH_DISCOUNT_PERCENT ?? 0);
   const cashDiscDays       = rawDoc.CASH_DISCOUNT_DAYS ?? null;
