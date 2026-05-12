@@ -358,12 +358,6 @@ body { padding-bottom: 28mm; }
       <td class="amount">&minus;&#8239;{{ discounts.d2Amount | money }}</td>
     </tr>
     {% endif %}
-    {% if discounts.cashDiscountPercent > 0 %}
-    <tr>
-      <td class="label">abzgl. Skonto ({{ discounts.cashDiscountPercent }}&#8239;%{% if discounts.cashDiscountDays %} / {{ discounts.cashDiscountDays }}&#8239;Tage{% endif %})</td>
-      <td class="amount">&minus;&#8239;{{ discounts.cashDiscountAmount | money }}</td>
-    </tr>
-    {% endif %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     <tr>
       <td class="label">Rechnungssumme netto</td>
@@ -421,12 +415,6 @@ body { padding-bottom: 28mm; }
       <td class="amount">&minus;&#8239;{{ discounts.d2Amount | money }}</td>
     </tr>
     {% endif %}
-    {% if discounts.cashDiscountPercent > 0 %}
-    <tr>
-      <td class="label">abzgl. Skonto ({{ discounts.cashDiscountPercent }}&#8239;%{% if discounts.cashDiscountDays %} / {{ discounts.cashDiscountDays }}&#8239;Tage{% endif %})</td>
-      <td class="amount">&minus;&#8239;{{ discounts.cashDiscountAmount | money }}</td>
-    </tr>
-    {% endif %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     <tr>
       <td class="label">Rechnungssumme netto</td>
@@ -471,6 +459,11 @@ body { padding-bottom: 28mm; }
     auf folgendes Konto:{% if inv.seller.iban %}<br>
     IBAN: <strong>{{ inv.seller.iban }}</strong>{% if inv.seller.bic %} &nbsp;&middot;&nbsp; BIC: <strong>{{ inv.seller.bic }}</strong>{% endif %}{% endif %}
   </div>
+  {% if discounts.hasSkonto %}
+  <div class="payment-note" style="margin-top:6px;">
+    Bei Zahlung innerhalb von <strong>{{ discounts.cashDiscountDays }}&#8239;Tagen</strong> gewähren wir <strong>{{ discounts.cashDiscountPercent }}&#8239;% Skonto</strong> — Sie können in diesem Fall <strong>{{ discounts.skontoPaymentAmount | money }}</strong> überweisen.
+  </div>
+  {% endif %}
   {% endif %}
 
 </div>{# end page 1 #}

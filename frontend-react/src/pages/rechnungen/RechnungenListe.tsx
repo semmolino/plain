@@ -58,11 +58,11 @@ function fromInvoice(inv: Invoice): UnifiedRow {
   else if (inv.STATUS_ID === 2) { statusLabel = 'Gebucht';         statusClass = 'booked' }
   else                          { statusLabel = 'Entwurf';         statusClass = 'draft' }
 
-  const gross = inv.TOTAL_AMOUNT_GROSS != null ? Number(inv.TOTAL_AMOUNT_GROSS) : null
   const paid  = inv.AMOUNT_PAYED_GROSS != null ? Number(inv.AMOUNT_PAYED_GROSS) : null
   const vatPct = inv.VAT_PERCENT != null ? Number(inv.VAT_PERCENT) : 0
-  const discountNet = Number(inv.TOTAL_DISCOUNTS ?? 0) + Number(inv.CASH_DISCOUNT ?? 0)
-  const discountGross = Math.round(discountNet * (1 + vatPct / 100) * 100) / 100
+  const discountNet = Number(inv.TOTAL_DISCOUNTS ?? 0)
+  const adjustedNet = inv.TOTAL_AMOUNT_NET != null ? Math.round((Number(inv.TOTAL_AMOUNT_NET) - discountNet) * 100) / 100 : null
+  const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
   return {
     key:         `inv-${inv.ID}`,
     source:      'invoice',
@@ -70,10 +70,10 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     typ:         capitalizeInvType(inv.INVOICE_TYPE),
     date:        inv.INVOICE_DATE ?? null,
     project:     inv.PROJECT ?? null,
-    net:         inv.TOTAL_AMOUNT_NET != null ? Number(inv.TOTAL_AMOUNT_NET) : null,
-    gross,
+    net:         adjustedNet,
+    gross:       adjustedGross,
     paid,
-    open:        gross != null ? Math.round((gross - discountGross - (paid ?? 0)) * 100) / 100 : null,
+    open:        adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null,
     statusLabel,
     statusClass,
     raw:         inv,
@@ -91,11 +91,11 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   else if (pp.STATUS_ID === 2)  { statusLabel = 'Gebucht';         statusClass = 'booked' }
   else                          { statusLabel = 'Entwurf';         statusClass = 'draft' }
 
-  const gross = pp.TOTAL_AMOUNT_GROSS != null ? Number(pp.TOTAL_AMOUNT_GROSS) : null
   const paid  = pp.AMOUNT_PAYED_GROSS != null ? Number(pp.AMOUNT_PAYED_GROSS) : null
   const vatPct = pp.VAT_PERCENT != null ? Number(pp.VAT_PERCENT) : 0
-  const discountNet = Number(pp.TOTAL_DISCOUNTS ?? 0) + Number(pp.CASH_DISCOUNT ?? 0)
-  const discountGross = Math.round(discountNet * (1 + vatPct / 100) * 100) / 100
+  const discountNet = Number(pp.TOTAL_DISCOUNTS ?? 0)
+  const adjustedNet = pp.TOTAL_AMOUNT_NET != null ? Math.round((Number(pp.TOTAL_AMOUNT_NET) - discountNet) * 100) / 100 : null
+  const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
   return {
     key:         `pp-${pp.ID}`,
     source:      'pp',
@@ -103,10 +103,10 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     typ:         'Abschlagsrechnung',
     date:        pp.PARTIAL_PAYMENT_DATE ?? null,
     project:     pp.PROJECT ?? null,
-    net:         pp.TOTAL_AMOUNT_NET != null ? Number(pp.TOTAL_AMOUNT_NET) : null,
-    gross,
+    net:         adjustedNet,
+    gross:       adjustedGross,
     paid,
-    open:        gross != null ? Math.round((gross - discountGross - (paid ?? 0)) * 100) / 100 : null,
+    open:        adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null,
     statusLabel,
     statusClass,
     raw:         pp,

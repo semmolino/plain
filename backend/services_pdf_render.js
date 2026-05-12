@@ -382,17 +382,19 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
   const cashDiscPct        = Number(rawDoc.CASH_DISCOUNT_PERCENT ?? 0);
   const cashDiscDays       = rawDoc.CASH_DISCOUNT_DAYS ?? null;
   const cashDiscAmount     = Number(rawDoc.CASH_DISCOUNT ?? 0) || Math.round((totalAmountNet - totalDiscounts) * cashDiscPct / 100 * 100) / 100;
-  const adjustedNet        = Math.round((totalAmountNet - totalDiscounts - cashDiscAmount) * 100) / 100;
+  const adjustedNet        = Math.round((totalAmountNet - totalDiscounts) * 100) / 100;
   const vatPct             = Number(rawDoc.VAT_PERCENT ?? 0);
   const adjustedVat        = Math.round(adjustedNet * vatPct / 100 * 100) / 100;
   const adjustedGross      = Math.round((adjustedNet + adjustedVat) * 100) / 100;
-  const hasDiscounts       = totalDiscounts > 0 || cashDiscAmount > 0;
+  const hasDiscounts       = totalDiscounts > 0;
+  const hasSkonto          = cashDiscPct > 0;
+  const skontoPaymentAmount = Math.round((adjustedNet - cashDiscAmount) * (1 + vatPct / 100) * 100) / 100;
 
   const discounts = {
     d1Percent: d1Pct, d2Percent: d2Pct,
     d1Amount, d2Amount, totalDiscounts,
     cashDiscountPercent: cashDiscPct, cashDiscountDays: cashDiscDays, cashDiscountAmount: cashDiscAmount,
-    adjustedNet, adjustedVat, adjustedGross, hasDiscounts,
+    adjustedNet, adjustedVat, adjustedGross, hasDiscounts, hasSkonto, skontoPaymentAmount,
   };
 
   return {
