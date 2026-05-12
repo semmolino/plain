@@ -69,7 +69,9 @@ export function RechnungWizard() {
   // Step 3: discounts
   const [showDiscounts,  setShowDiscounts]  = useState(false)
   const [d1Pct,          setD1Pct]          = useState('')
+  const [d1Reason,       setD1Reason]       = useState('')
   const [d2Pct,          setD2Pct]          = useState('')
+  const [d2Reason,       setD2Reason]       = useState('')
   const [showSkonto,     setShowSkonto]     = useState(false)
   const [cashDiscPct,    setCashDiscPct]    = useState('')
   const [cashDiscDays,   setCashDiscDays]   = useState('')
@@ -173,7 +175,9 @@ export function RechnungWizard() {
       const cdAmt  = Math.round((base - totalDiscounts) * cdPct / 100 * 100) / 100
       await patchInvoice(id, {
         discount_1_percent:   showDiscounts ? d1 : 0,
+        discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
         discount_2_percent:   showDiscounts ? d2 : 0,
+        discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
         total_discounts:      showDiscounts ? totalDiscounts : 0,
         cash_discount_percent: showSkonto ? cdPct : 0,
         cash_discount_days:    showSkonto ? cdDays : 0,
@@ -461,7 +465,9 @@ export function RechnungWizard() {
           if (!draftId) return
           await patchInvoice(draftId, {
             discount_1_percent:   showDiscounts ? d1 : 0,
+            discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
             discount_2_percent:   showDiscounts ? d2 : 0,
+            discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
             total_discounts:      showDiscounts ? totalDisc : 0,
             cash_discount_percent: showSkonto ? cdPct : 0,
             cash_discount_days:    showSkonto ? cdDays : 0,
@@ -484,9 +490,12 @@ export function RechnungWizard() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <label style={{ fontSize: 13, minWidth: 80 }}>Nachlass I (%)</label>
                     <input type="number" step="0.01" min="0" max="100" value={d1Pct}
-                      onChange={e => { setD1Pct(e.target.value); if (!e.target.value) setD2Pct('') }}
+                      onChange={e => { setD1Pct(e.target.value); if (!e.target.value) { setD2Pct(''); setD2Reason('') } }}
                       style={{ width: 90, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
                       placeholder="z. B. 3" />
+                    <input type="text" value={d1Reason} onChange={e => setD1Reason(e.target.value)}
+                      style={{ flex: 1, minWidth: 120, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      placeholder="Bezeichnung (optional)" />
                     {d1Pct && <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>= {fmtEur(d1Amt)}</span>}
                   </div>
                   {d1Pct && (
@@ -496,6 +505,9 @@ export function RechnungWizard() {
                         onChange={e => setD2Pct(e.target.value)}
                         style={{ width: 90, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
                         placeholder="optional" />
+                      <input type="text" value={d2Reason} onChange={e => setD2Reason(e.target.value)}
+                        style={{ flex: 1, minWidth: 120, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                        placeholder="Bezeichnung (optional)" />
                       {d2Pct && <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>= {fmtEur(d2Amt)}</span>}
                     </div>
                   )}

@@ -74,7 +74,9 @@ export function SchlussrechnungWizard() {
   // Step 4: discounts
   const [showDiscounts, setShowDiscounts] = useState(false)
   const [d1Pct,         setD1Pct]         = useState('')
+  const [d1Reason,      setD1Reason]      = useState('')
   const [d2Pct,         setD2Pct]         = useState('')
+  const [d2Reason,      setD2Reason]      = useState('')
   const [showSkonto,    setShowSkonto]    = useState(false)
   const [cashDiscPct,   setCashDiscPct]   = useState('')
   const [cashDiscDays,  setCashDiscDays]  = useState('')
@@ -223,7 +225,9 @@ export function SchlussrechnungWizard() {
       const cdAmt  = Math.round((base - totalDiscounts) * cdPct / 100 * 100) / 100
       await patchInvoice(id, {
         discount_1_percent:   showDiscounts ? d1 : 0,
+        discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
         discount_2_percent:   showDiscounts ? d2 : 0,
+        discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
         total_discounts:      showDiscounts ? totalDiscounts : 0,
         cash_discount_percent: showSkonto ? cdPct : 0,
         cash_discount_days:    showSkonto ? cdDays : 0,
@@ -651,7 +655,9 @@ export function SchlussrechnungWizard() {
           if (!draftId) return
           await patchInvoice(draftId, {
             discount_1_percent:   showDiscounts ? d1 : 0,
+            discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
             discount_2_percent:   showDiscounts ? d2 : 0,
+            discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
             total_discounts:      showDiscounts ? totalDisc : 0,
             cash_discount_percent: showSkonto ? cdPct : 0,
             cash_discount_days:    showSkonto ? cdDays : 0,
@@ -678,11 +684,23 @@ export function SchlussrechnungWizard() {
                     onChange={e => setD1Pct(e.target.value)}
                     style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
                 </div>
+                <div className="form-group" style={{ flex: '2 1 200px', minWidth: 160, marginBottom: 0 }}>
+                  <label style={{ fontSize: 12 }}>Bezeichnung Nachlass I (optional)</label>
+                  <input type="text" value={d1Reason} onChange={e => setD1Reason(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }}
+                    placeholder="z. B. Planungsrabatt" />
+                </div>
                 <div className="form-group" style={{ flex: '1 1 120px', minWidth: 120, marginBottom: 0 }}>
                   <label style={{ fontSize: 12 }}>Nachlass II (% auf N I)</label>
                   <input type="number" step="0.01" min="0" max="100" value={d2Pct}
                     onChange={e => setD2Pct(e.target.value)}
                     style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                </div>
+                <div className="form-group" style={{ flex: '2 1 200px', minWidth: 160, marginBottom: 0 }}>
+                  <label style={{ fontSize: 12 }}>Bezeichnung Nachlass II (optional)</label>
+                  <input type="text" value={d2Reason} onChange={e => setD2Reason(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }}
+                    placeholder="z. B. Treuerabatt" />
                 </div>
               </div>
             )}

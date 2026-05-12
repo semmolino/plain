@@ -33,6 +33,8 @@ export interface Invoice {
   CANCELS_INVOICE_ID:   number | null
   TOTAL_DISCOUNTS:      number | null
   CASH_DISCOUNT:        number | null
+  DISCOUNT_1_REASON:    string | null
+  DISCOUNT_2_REASON:    string | null
 }
 
 export interface PartialPayment {
@@ -56,6 +58,8 @@ export interface PartialPayment {
   CANCELS_PARTIAL_PAYMENT_ID:   number | null
   TOTAL_DISCOUNTS:              number | null
   CASH_DISCOUNT:                number | null
+  DISCOUNT_1_REASON:            string | null
+  DISCOUNT_2_REASON:            string | null
 }
 
 export interface BillingProposal {
@@ -147,6 +151,7 @@ export const patchInvoice = (id: number, body: Partial<{
   billing_period_start: string; billing_period_finish: string
   vat_id: number; payment_means_id: number; comment: string
   discount_1_percent: number; discount_2_percent: number; total_discounts: number
+  discount_1_reason: string | null; discount_2_reason: string | null
   cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
 }>) => apiClient.patch<{ ok: boolean }>(`/invoices/${id}`, body)
 
@@ -212,6 +217,7 @@ export const patchPartialPayment = (id: number, body: Partial<{
   amount_net: number; amount_extras_net: number
   vat_id: number; payment_means_id: number; comment: string
   discount_1_percent: number; discount_2_percent: number; total_discounts: number
+  discount_1_reason: string | null; discount_2_reason: string | null
   cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
 }>) => apiClient.patch<{ success: boolean }>(`/partial-payments/${id}`, body)
 

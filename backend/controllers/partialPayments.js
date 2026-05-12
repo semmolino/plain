@@ -92,6 +92,8 @@ async function patchPartialPayment(req, res, supabase) {
 
   if (b.discount_1_percent  !== undefined) payload.DISCOUNT_1_PERCENT  = b.discount_1_percent  != null ? toNum(b.discount_1_percent)  : null;
   if (b.discount_2_percent  !== undefined) payload.DISCOUNT_2_PERCENT  = b.discount_2_percent  != null ? toNum(b.discount_2_percent)  : null;
+  if (b.discount_1_reason   !== undefined) payload.DISCOUNT_1_REASON   = b.discount_1_reason   != null ? String(b.discount_1_reason).trim() || null : null;
+  if (b.discount_2_reason   !== undefined) payload.DISCOUNT_2_REASON   = b.discount_2_reason   != null ? String(b.discount_2_reason).trim() || null : null;
   if (b.total_discounts     !== undefined) payload.TOTAL_DISCOUNTS     = b.total_discounts     != null ? toNum(b.total_discounts)     : null;
   if (b.cash_discount_percent !== undefined) payload.CASH_DISCOUNT_PERCENT = b.cash_discount_percent != null ? toNum(b.cash_discount_percent) : null;
   if (b.cash_discount_days    !== undefined) payload.CASH_DISCOUNT_DAYS    = b.cash_discount_days    != null ? parseInt(String(b.cash_discount_days), 10) : null;
