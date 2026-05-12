@@ -86,6 +86,10 @@ function fromInvoice(inv: Invoice): UnifiedRow {
   const discountNet   = rawNet != null ? effectiveDiscounts(rawNet, inv.TOTAL_DISCOUNTS, Number(inv.DISCOUNT_1_PERCENT ?? 0), Number(inv.DISCOUNT_2_PERCENT ?? 0)) : 0
   const adjustedNet   = rawNet != null ? Math.round((rawNet - discountNet) * 100) / 100 : null
   const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
+  const cdPct         = Number(inv.CASH_DISCOUNT_PERCENT ?? 0)
+  const skontoGross   = cdPct > 0 && adjustedGross != null ? Math.round(adjustedGross * (1 - cdPct / 100) * 100) / 100 : null
+  const rawOpen       = adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null
+  const open          = skontoGross !== null && (paid ?? 0) >= skontoGross - 0.005 ? 0 : rawOpen
   return {
     key:         `inv-${inv.ID}`,
     source:      'invoice',
@@ -96,7 +100,7 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     net:         adjustedNet,
     gross:       adjustedGross,
     paid,
-    open:        adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null,
+    open,
     statusLabel,
     statusClass,
     raw:         inv,
@@ -120,6 +124,10 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   const discountNet   = rawNet != null ? effectiveDiscounts(rawNet, pp.TOTAL_DISCOUNTS, Number(pp.DISCOUNT_1_PERCENT ?? 0), Number(pp.DISCOUNT_2_PERCENT ?? 0)) : 0
   const adjustedNet   = rawNet != null ? Math.round((rawNet - discountNet) * 100) / 100 : null
   const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
+  const cdPct         = Number(pp.CASH_DISCOUNT_PERCENT ?? 0)
+  const skontoGross   = cdPct > 0 && adjustedGross != null ? Math.round(adjustedGross * (1 - cdPct / 100) * 100) / 100 : null
+  const rawOpen       = adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null
+  const open          = skontoGross !== null && (paid ?? 0) >= skontoGross - 0.005 ? 0 : rawOpen
   return {
     key:         `pp-${pp.ID}`,
     source:      'pp',
@@ -130,7 +138,7 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     net:         adjustedNet,
     gross:       adjustedGross,
     paid,
-    open:        adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null,
+    open,
     statusLabel,
     statusClass,
     raw:         pp,
@@ -155,11 +163,13 @@ function SortTh({ label, k, sortKey, dir, onClick, className }: {
 // ── Payment modal target ──────────────────────────────────────────────────────
 
 interface PaymentTarget {
-  source:     'invoice' | 'pp'
-  id:         number
-  label:      string
-  totalGross: number | null
-  paidGross:  number | null
+  source:           'invoice' | 'pp'
+  id:               number
+  label:            string
+  totalGross:       number | null
+  paidGross:        number | null
+  cashDiscountPct:  number
+  cashDiscountDays: number
 }
 
 function emptyPaymentForm() {
@@ -251,13 +261,16 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
     setPayMsg(null)
     setExistingPayments([])
     setDeletingPayId(null)
-    const id = (row.raw as Invoice).ID ?? (row.raw as PartialPayment).ID
+    const id  = (row.raw as Invoice).ID ?? (row.raw as PartialPayment).ID
+    const raw = row.raw as Invoice & PartialPayment
     setPayTarget({
-      source:     row.source,
+      source:           row.source,
       id,
-      label:      row.number ?? `#${id}`,
-      totalGross: row.gross,
-      paidGross:  row.paid,
+      label:            row.number ?? `#${id}`,
+      totalGross:       row.gross,
+      paidGross:        row.paid,
+      cashDiscountPct:  Number(raw.CASH_DISCOUNT_PERCENT ?? 0),
+      cashDiscountDays: Number(raw.CASH_DISCOUNT_DAYS ?? 0),
     })
     const params = row.source === 'invoice' ? { invoice_id: id } : { partial_payment_id: id }
     fetchPayments(params).then(r => setExistingPayments(r.data ?? [])).catch(() => {})
@@ -558,12 +571,12 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
           const d1Amt       = Math.round(rawNet * d1Pct / 100 * 100) / 100
           const d2Amt       = Math.round((rawNet - d1Amt) * d2Pct / 100 * 100) / 100
           const discNet     = effectiveDiscounts(rawNet, (inv ?? pp)?.TOTAL_DISCOUNTS ?? null, d1Pct, d2Pct)
-          const cdPct       = Number((inv ?? pp)?.CASH_DISCOUNT_PERCENT ?? 0)
-          const cdDays      = (inv ?? pp)?.CASH_DISCOUNT_DAYS ?? null
-          const adjNet      = detailRow.net ?? 0
-          const adjVat      = Math.round(adjNet * vatPct / 100 * 100) / 100
-          const adjGross    = detailRow.gross ?? 0
-          const cdAmt       = Math.round((adjNet * cdPct / 100) * 100) / 100
+          const cdPct        = Number((inv ?? pp)?.CASH_DISCOUNT_PERCENT ?? 0)
+          const cdDays       = (inv ?? pp)?.CASH_DISCOUNT_DAYS ?? null
+          const adjNet       = detailRow.net ?? 0
+          const adjVat       = Math.round(adjNet * vatPct / 100 * 100) / 100
+          const adjGross     = detailRow.gross ?? 0
+          const skontoPayAmt = cdPct > 0 ? Math.round(adjGross * (1 - cdPct / 100) * 100) / 100 : 0
           const bpStart     = (inv ?? pp)?.BILLING_PERIOD_START ?? null
           const bpFinish    = (inv ?? pp)?.BILLING_PERIOD_FINISH ?? null
           const comment     = (inv ?? pp)?.COMMENT ?? null
@@ -695,6 +708,25 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
                 </button>
               </div>
             )}
+            {payTarget.cashDiscountPct > 0 && payTarget.totalGross != null && (() => {
+              const skontoAmt = Math.round(payTarget.totalGross * (1 - payTarget.cashDiscountPct / 100) * 100) / 100
+              return (
+                <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(16,185,129,0.07)', borderRadius: 8, border: '1px solid rgba(16,185,129,0.25)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <span style={{ flex: 1, fontSize: 13, color: 'rgba(17,24,39,0.75)' }}>
+                    <strong>{payTarget.cashDiscountPct} % Skonto</strong> verfügbar
+                    {payTarget.cashDiscountDays > 0 && ` (innerhalb von ${payTarget.cashDiscountDays} Tagen)`}
+                    {' – '}Betrag abzgl. Skonto: <strong>{fmtEur(skontoAmt)}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-small btn-save"
+                    onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(skontoAmt) }))}
+                  >
+                    Zahlung abzgl. Skonto
+                  </button>
+                </div>
+              )
+            })()}
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="pay-amount">Betrag brutto (€)*</label>
