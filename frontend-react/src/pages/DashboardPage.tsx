@@ -183,10 +183,12 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
 const CURRENT_YEAR = new Date().getFullYear()
 
 function SetupChecklist() {
-  const { data: companiesData } = useQuery({ queryKey: ['companies'],     queryFn: fetchCompanies,                  staleTime: 60000 })
-  const { data: defaultsData  } = useQuery({ queryKey: ['defaults'],      queryFn: fetchDefaults,                   staleTime: 60000 })
-  const { data: logoData      } = useQuery({ queryKey: ['logo'],          queryFn: fetchLogo,                       staleTime: 60000 })
-  const { data: nrData        } = useQuery({ queryKey: ['number-ranges', CURRENT_YEAR], queryFn: () => fetchNumberRanges(CURRENT_YEAR), staleTime: 60000 })
+  const { data: companiesData, isLoading: l1 } = useQuery({ queryKey: ['companies'],     queryFn: fetchCompanies,                  staleTime: 60000 })
+  const { data: defaultsData,  isLoading: l2 } = useQuery({ queryKey: ['defaults'],      queryFn: fetchDefaults,                   staleTime: 60000 })
+  const { data: logoData,      isLoading: l3 } = useQuery({ queryKey: ['logo'],          queryFn: fetchLogo,                       staleTime: 60000 })
+  const { data: nrData,        isLoading: l4 } = useQuery({ queryKey: ['number-ranges', CURRENT_YEAR], queryFn: () => fetchNumberRanges(CURRENT_YEAR), staleTime: 60000 })
+
+  if (l1 || l2 || l3 || l4) return null
 
   const companies = companiesData?.data ?? []
   const defaults  = defaultsData?.data  ?? {}
