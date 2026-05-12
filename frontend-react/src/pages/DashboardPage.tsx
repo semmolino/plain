@@ -181,33 +181,40 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
 // ── Setup checklist ───────────────────────────────────────────────────────────
 
 const CURRENT_YEAR = new Date().getFullYear()
+const SETUP_DONE_KEY = 'plain_setup_checklist_done'
 
 function SetupChecklist() {
-  const { data: companiesData, isLoading: l1 } = useQuery({ queryKey: ['companies'],     queryFn: fetchCompanies,                  staleTime: 60000 })
-  const { data: defaultsData,  isLoading: l2 } = useQuery({ queryKey: ['defaults'],      queryFn: fetchDefaults,                   staleTime: 60000 })
-  const { data: logoData,      isLoading: l3 } = useQuery({ queryKey: ['logo'],          queryFn: fetchLogo,                       staleTime: 60000 })
-  const { data: nrData,        isLoading: l4 } = useQuery({ queryKey: ['number-ranges', CURRENT_YEAR], queryFn: () => fetchNumberRanges(CURRENT_YEAR), staleTime: 60000 })
+  const [dismissed] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === '1')
 
-  if (l1 || l2 || l3 || l4) return null
+  const { data: companiesData, isLoading: l1, isFetching: f1 } = useQuery({ queryKey: ['companies'],     queryFn: fetchCompanies,                  staleTime: 60000 })
+  const { data: defaultsData,  isLoading: l2, isFetching: f2 } = useQuery({ queryKey: ['defaults'],      queryFn: fetchDefaults,                   staleTime: 60000 })
+  const { data: logoData,      isLoading: l3, isFetching: f3 } = useQuery({ queryKey: ['logo'],          queryFn: fetchLogo,                       staleTime: 60000 })
+  const { data: nrData,        isLoading: l4, isFetching: f4 } = useQuery({ queryKey: ['number-ranges', CURRENT_YEAR], queryFn: () => fetchNumberRanges(CURRENT_YEAR), staleTime: 60000 })
+
+  if (dismissed) return null
+  if (l1 || l2 || l3 || l4 || f1 || f2 || f3 || f4) return null
 
   const companies = companiesData?.data ?? []
   const defaults  = defaultsData?.data  ?? {}
   const logoId    = logoData?.data?.logo_asset_id ?? null
 
-  const hasCompany    = companies.some(c => c.COMPANY_NAME_1?.trim() && c.STREET?.trim() && c.CITY?.trim())
-  const hasLogo       = logoId !== null
-  const hasVat        = !!defaults.default_vat_id
-  const hasNr         = nrData != null
+  const hasCompany = companies.some(c => c.COMPANY_NAME_1?.trim() && c.STREET?.trim() && c.CITY?.trim())
+  const hasLogo    = logoId !== null
+  const hasVat     = !!defaults.default_vat_id
+  const hasNr      = nrData != null
 
   const items = [
-    { done: hasCompany, label: 'Firmendaten vervollständigen',   hint: 'Name, Adresse, Steuernummer', tab: 'unternehmen' },
-    { done: hasLogo,    label: 'Firmenlogo hochladen',           hint: 'Wird auf PDFs angezeigt',     tab: 'unternehmen' },
-    { done: hasVat,     label: 'Standard-MwSt. festlegen',       hint: 'Für neue Verträge & Angebote', tab: 'vorbelegungen' },
+    { done: hasCompany, label: 'Firmendaten vervollständigen',   hint: 'Name, Adresse, Steuernummer',          tab: 'unternehmen'   },
+    { done: hasLogo,    label: 'Firmenlogo hochladen',           hint: 'Wird auf PDFs angezeigt',              tab: 'unternehmen'   },
+    { done: hasVat,     label: 'Standard-MwSt. festlegen',       hint: 'Für neue Verträge & Angebote',         tab: 'vorbelegungen' },
     { done: hasNr,      label: 'Nummernkreise konfigurieren',    hint: 'Rechnungs-, Projekt-, Angebotsnummern', tab: 'nummernkreise' },
   ]
 
   const allDone = items.every(i => i.done)
-  if (allDone) return null
+  if (allDone) {
+    localStorage.setItem(SETUP_DONE_KEY, '1')
+    return null
+  }
 
   const doneCount = items.filter(i => i.done).length
 
