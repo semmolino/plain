@@ -7,6 +7,14 @@ import { SchlussrechnungWizard } from '@/pages/rechnungen/SchlussrechnungWizard'
 
 type Tab = 'liste' | 'abschlag' | 'rechnung' | 'schluss'
 
+export interface DraftResume {
+  id:            number
+  projectId:     number | null
+  contractId:    number | null
+  projectLabel:  string
+  contractLabel: string
+}
+
 const TABS: { id: Tab; label: string }[] = [
   { id: 'liste',    label: 'Rechnungsliste' },
   { id: 'abschlag', label: 'Abschlagsrechnung' },
@@ -16,16 +24,32 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function RechnungenPage() {
   const [tab, setTab] = useState<Tab>('liste')
+  const [editDraft, setEditDraft] = useState<{ draft: DraftResume; type: Tab } | null>(null)
+
+  function handleEditDraft(d: { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; wizardType: 'abschlag' | 'rechnung' | 'schluss' }) {
+    const draft: DraftResume = { id: d.id, projectId: d.projectId, contractId: d.contractId, projectLabel: d.projectLabel, contractLabel: d.contractLabel }
+    const type = d.wizardType as Tab
+    setEditDraft({ draft, type })
+    setTab(type)
+  }
+
+  function handleTabChange(id: string) {
+    setTab(id as Tab)
+    setEditDraft(null)
+  }
+
+  const resumeFor = (t: Tab) =>
+    editDraft?.type === t ? editDraft.draft : undefined
 
   return (
     <div className="master-page">
       <h1 className="master-title">Rechnungen</h1>
-      <Tabs tabs={TABS} active={tab} onChange={id => setTab(id as Tab)} />
+      <Tabs tabs={TABS} active={tab} onChange={handleTabChange} />
       <div className="master-tab-content">
-        {tab === 'liste'    && <RechnungenListe />}
-        {tab === 'abschlag' && <AbschlagWizard />}
-        {tab === 'rechnung' && <RechnungWizard />}
-        {tab === 'schluss'  && <SchlussrechnungWizard />}
+        {tab === 'liste'    && <RechnungenListe onEditDraft={handleEditDraft} />}
+        {tab === 'abschlag' && <AbschlagWizard initialDraft={resumeFor('abschlag')} />}
+        {tab === 'rechnung' && <RechnungWizard initialDraft={resumeFor('rechnung')} />}
+        {tab === 'schluss'  && <SchlussrechnungWizard initialDraft={resumeFor('schluss')} />}
       </div>
     </div>
   )

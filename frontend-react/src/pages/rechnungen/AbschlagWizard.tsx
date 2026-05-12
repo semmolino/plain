@@ -36,11 +36,14 @@ function StepIndicator({ step, onStepClick }: { step: number; onStepClick: (i: n
   )
 }
 
-export function AbschlagWizard() {
+interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string }
+
+export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } = {}) {
   const qc = useQueryClient()
   const [step,   setStep]   = useState(0)
   const [draftId, setDraftId] = useState<number | null>(null)
   const [msg,    setMsg]    = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const isResumeRef = useRef(false)
 
   // Step 0 fields
   const [projectId,    setProjectId]    = useState<number | null>(null)
@@ -77,6 +80,21 @@ export function AbschlagWizard() {
 
   const draftIdRef = useRef<number | null>(null)
   useEffect(() => { draftIdRef.current = draftId }, [draftId])
+
+  // Resume existing draft passed from the invoice list
+  useEffect(() => {
+    if (!initialDraft) return
+    isResumeRef.current = true
+    setDraftId(initialDraft.id)
+    setProjectId(initialDraft.projectId)
+    setProjectLabel(initialDraft.projectLabel)
+    setContractId(initialDraft.contractId)
+    setContractLabel(initialDraft.contractLabel)
+    getPpBillingProposal(initialDraft.id)
+      .then(r => { setProposal(r.data); setStep(3) })
+      .catch(() => setStep(3))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Cache COMPANY_ID from project search results for lookup on select
   const projectResultsRef = useRef<Map<number, number | null>>(new Map())
@@ -209,9 +227,14 @@ export function AbschlagWizard() {
   }
 
   function handleCancel() {
-    if (!window.confirm('Entwurf wirklich löschen und Wizard abbrechen?')) return
-    if (draftId) deleteMut.mutate(draftId)
-    else resetAll()
+    if (isResumeRef.current) {
+      if (!window.confirm('Bearbeitung abbrechen?')) return
+      resetAll()
+    } else {
+      if (!window.confirm('Entwurf wirklich löschen und Wizard abbrechen?')) return
+      if (draftId) deleteMut.mutate(draftId)
+      else resetAll()
+    }
   }
 
   function goToStep(i: number) {

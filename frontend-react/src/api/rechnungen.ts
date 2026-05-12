@@ -31,10 +31,16 @@ export interface Invoice {
   COMMENT:              string | null
   INVOICE_TYPE:         InvoiceType | null
   CANCELS_INVOICE_ID:   number | null
-  TOTAL_DISCOUNTS:      number | null
-  CASH_DISCOUNT:        number | null
-  DISCOUNT_1_REASON:    string | null
-  DISCOUNT_2_REASON:    string | null
+  TOTAL_DISCOUNTS:        number | null
+  CASH_DISCOUNT:          number | null
+  DISCOUNT_1_PERCENT:     number | null
+  DISCOUNT_2_PERCENT:     number | null
+  DISCOUNT_1_REASON:      string | null
+  DISCOUNT_2_REASON:      string | null
+  CASH_DISCOUNT_PERCENT:  number | null
+  CASH_DISCOUNT_DAYS:     number | null
+  BILLING_PERIOD_START:   string | null
+  BILLING_PERIOD_FINISH:  string | null
 }
 
 export interface PartialPayment {
@@ -58,8 +64,14 @@ export interface PartialPayment {
   CANCELS_PARTIAL_PAYMENT_ID:   number | null
   TOTAL_DISCOUNTS:              number | null
   CASH_DISCOUNT:                number | null
+  DISCOUNT_1_PERCENT:           number | null
+  DISCOUNT_2_PERCENT:           number | null
   DISCOUNT_1_REASON:            string | null
   DISCOUNT_2_REASON:            string | null
+  CASH_DISCOUNT_PERCENT:        number | null
+  CASH_DISCOUNT_DAYS:           number | null
+  BILLING_PERIOD_START:         string | null
+  BILLING_PERIOD_FINISH:        string | null
 }
 
 export interface BillingProposal {

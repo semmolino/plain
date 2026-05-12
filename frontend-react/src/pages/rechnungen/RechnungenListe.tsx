@@ -12,6 +12,15 @@ import {
   type Invoice, type PartialPayment, type Payment,
 } from '@/api/rechnungen'
 
+interface EditDraftPayload {
+  id:            number
+  projectId:     number | null
+  contractId:    number | null
+  projectLabel:  string
+  contractLabel: string
+  wizardType:    'abschlag' | 'rechnung' | 'schluss'
+}
+
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtDate = (v: string | null | undefined) => v ? v.slice(0, 10) : '—'
@@ -144,7 +153,7 @@ function emptyPaymentForm() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function RechnungenListe() {
+export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPayload) => void } = {}) {
   const qc = useQueryClient()
 
   const [search,    setSearch]    = useState('')
@@ -152,6 +161,7 @@ export function RechnungenListe() {
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
+  const [detailRow,   setDetailRow]   = useState<UnifiedRow | null>(null)
   const [payTarget,   setPayTarget]   = useState<PaymentTarget | null>(null)
   const [payForm,     setPayForm]     = useState(emptyPaymentForm())
   const [payMsg,      setPayMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -371,6 +381,30 @@ export function RechnungenListe() {
     return (row.raw as PartialPayment).STATUS_ID === 1
   }
 
+  function canEdit(row: UnifiedRow) {
+    return row.statusClass === 'draft'
+  }
+
+  function wizardTypeOf(row: UnifiedRow): 'abschlag' | 'rechnung' | 'schluss' {
+    if (row.source === 'pp') return 'abschlag'
+    const inv = row.raw as Invoice
+    if (inv.INVOICE_TYPE === 'schlussrechnung' || inv.INVOICE_TYPE === 'teilschlussrechnung') return 'schluss'
+    return 'rechnung'
+  }
+
+  function handleEditDraftClick(row: UnifiedRow) {
+    setDetailRow(null)
+    const id = row.source === 'invoice' ? (row.raw as Invoice).ID : (row.raw as PartialPayment).ID
+    onEditDraft?.({
+      id,
+      projectId:     row.source === 'invoice' ? (row.raw as Invoice).PROJECT_ID : (row.raw as PartialPayment).PROJECT_ID,
+      contractId:    row.source === 'invoice' ? (row.raw as Invoice).CONTRACT_ID : (row.raw as PartialPayment).CONTRACT_ID,
+      projectLabel:  row.project ?? '',
+      contractLabel: row.source === 'invoice' ? ((row.raw as Invoice).CONTRACT ?? '') : ((row.raw as PartialPayment).CONTRACT ?? ''),
+      wizardType:    wizardTypeOf(row),
+    })
+  }
+
   function openPdf(row: UnifiedRow) {
     if (row.source === 'invoice') openInvoicePdf((row.raw as Invoice).ID)
     else openPpPdf((row.raw as PartialPayment).ID)
@@ -452,6 +486,7 @@ export function RechnungenListe() {
                   <td className="num">{fmtEur(row.open)}</td>
                   <td><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span></td>
                   <td className="doc-actions">
+                    <button className="btn-small" onClick={() => setDetailRow(row)}>Details</button>
                     <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
                     <button className="btn-small" onClick={() => openXRechnung(row)}>XRechnung</button>
                     <button className="btn-small" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
@@ -484,6 +519,106 @@ export function RechnungenListe() {
           </table>
         </div>
       )}
+
+      {/* Detail modal */}
+      <Modal open={detailRow !== null} onClose={() => setDetailRow(null)}
+        title={detailRow ? `${detailRow.typ} – ${detailRow.number ?? '(Entwurf)'}` : ''}>
+        {detailRow && (() => {
+          const isInv = detailRow.source === 'invoice'
+          const inv   = isInv ? (detailRow.raw as Invoice)        : null
+          const pp    = !isInv ? (detailRow.raw as PartialPayment) : null
+
+          const vatPct      = Number((inv ?? pp)?.VAT_PERCENT ?? 0)
+          const discNet     = Number((inv ?? pp)?.TOTAL_DISCOUNTS ?? 0)
+          const rawNet      = Number((inv ?? pp)?.TOTAL_AMOUNT_NET ?? 0)
+          const d1Pct       = Number((inv ?? pp)?.DISCOUNT_1_PERCENT ?? 0)
+          const d2Pct       = Number((inv ?? pp)?.DISCOUNT_2_PERCENT ?? 0)
+          const d1Reason    = (inv ?? pp)?.DISCOUNT_1_REASON ?? null
+          const d2Reason    = (inv ?? pp)?.DISCOUNT_2_REASON ?? null
+          const d1Amt       = Math.round(rawNet * d1Pct / 100 * 100) / 100
+          const d2Amt       = Math.round((rawNet - d1Amt) * d2Pct / 100 * 100) / 100
+          const cdPct       = Number((inv ?? pp)?.CASH_DISCOUNT_PERCENT ?? 0)
+          const cdDays      = (inv ?? pp)?.CASH_DISCOUNT_DAYS ?? null
+          const adjNet      = detailRow.net ?? 0
+          const adjVat      = Math.round(adjNet * vatPct / 100 * 100) / 100
+          const adjGross    = detailRow.gross ?? 0
+          const cdAmt       = Math.round((adjNet * cdPct / 100) * 100) / 100
+          const bpStart     = (inv ?? pp)?.BILLING_PERIOD_START ?? null
+          const bpFinish    = (inv ?? pp)?.BILLING_PERIOD_FINISH ?? null
+          const comment     = (inv ?? pp)?.COMMENT ?? null
+
+          const row2 = (label: string, value: React.ReactNode, dimmed = false) => (
+            <tr style={{ borderBottom: '1px solid rgba(17,24,39,0.06)' }}>
+              <td style={{ padding: '5px 12px 5px 0', fontSize: 13, color: 'rgba(17,24,39,0.5)', whiteSpace: 'nowrap' }}>{label}</td>
+              <td style={{ padding: '5px 0', fontSize: 13, color: dimmed ? 'rgba(17,24,39,0.45)' : undefined }}>{value}</td>
+            </tr>
+          )
+          const amtRow = (label: string, amt: number, bold = false, indent = false, minus = false) => (
+            <tr>
+              <td style={{ padding: '3px 12px 3px 0', fontSize: 13, color: bold ? undefined : 'rgba(17,24,39,0.6)', paddingLeft: indent ? 16 : 0 }}>{label}</td>
+              <td style={{ padding: '3px 0', fontSize: 13, fontWeight: bold ? 600 : undefined, textAlign: 'right' }}>
+                {minus ? '− ' : ''}{fmtEur(Math.abs(amt))}
+              </td>
+            </tr>
+          )
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {/* Header info */}
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  {row2('Status', <span className={`status-badge ${detailRow.statusClass}`}>{detailRow.statusLabel}</span>)}
+                  {row2('Datum', fmtDate(isInv ? inv!.INVOICE_DATE : pp!.PARTIAL_PAYMENT_DATE))}
+                  {(inv?.DUE_DATE ?? pp?.DUE_DATE) && row2('Fällig', fmtDate(inv?.DUE_DATE ?? pp?.DUE_DATE))}
+                  {detailRow.project && row2('Projekt', detailRow.project)}
+                  {(inv?.CONTRACT ?? pp?.CONTRACT) && row2('Vertrag', inv?.CONTRACT ?? pp?.CONTRACT)}
+                  {(inv?.CONTACT ?? pp?.CONTACT) && row2('Kontakt', inv?.CONTACT ?? pp?.CONTACT)}
+                  {(inv?.ADDRESS_NAME_1 ?? pp?.ADDRESS_NAME_1) && row2('Adresse', inv?.ADDRESS_NAME_1 ?? pp?.ADDRESS_NAME_1)}
+                  {bpStart && row2('Abrechnungszeitraum', `${fmtDate(bpStart)} – ${fmtDate(bpFinish)}`)}
+                  {comment && row2('Bemerkung', <span style={{ whiteSpace: 'pre-line' }}>{comment}</span>)}
+                </tbody>
+              </table>
+
+              {/* Amount breakdown */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(17,24,39,0.4)', marginBottom: 4 }}>Beträge</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <tbody>
+                    {pp && pp.AMOUNT_NET != null && amtRow('Honorar', Number(pp.AMOUNT_NET))}
+                    {pp && pp.AMOUNT_EXTRAS_NET != null && Number(pp.AMOUNT_EXTRAS_NET) !== 0 && amtRow('Nebenkosten', Number(pp.AMOUNT_EXTRAS_NET))}
+                    {amtRow('Rechnungssumme netto', rawNet)}
+                    {d1Pct > 0 && amtRow(`abzgl. ${d1Reason ?? 'Nachlass I'} (${d1Pct} %)`, d1Amt, false, true, true)}
+                    {d2Pct > 0 && amtRow(`abzgl. ${d2Reason ?? 'Nachlass II'} (${d2Pct} %)`, d2Amt, false, true, true)}
+                    {discNet > 0 && amtRow('Netto nach Nachlässen', adjNet, false, true)}
+                    {amtRow(`zzgl. ${vatPct} % MwSt`, adjVat)}
+                    {amtRow('Rechnungssumme brutto', adjGross, true)}
+                    {detailRow.paid != null && detailRow.paid > 0 && amtRow('Bezahlt', detailRow.paid, false, true, true)}
+                    {amtRow('Offene Posten', detailRow.open ?? adjGross, true)}
+                    {cdPct > 0 && (
+                      <tr>
+                        <td colSpan={2} style={{ paddingTop: 8, fontSize: 12, color: 'rgba(17,24,39,0.55)', fontStyle: 'italic' }}>
+                          Bei Zahlung innerhalb von {cdDays} Tagen: {cdPct} % Skonto = {fmtEur(adjGross - cdAmt)}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 4 }}>
+                <button className="btn-small" onClick={() => openPdf(detailRow)}>PDF anzeigen</button>
+                {canEdit(detailRow) && onEditDraft && (
+                  <button className="btn-small btn-save" onClick={() => handleEditDraftClick(detailRow)}>
+                    Bearbeiten / Buchen
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+      </Modal>
 
       {/* Payment modal */}
       <Modal open={payTarget !== null} onClose={() => setPayTarget(null)} title={`Zahlung erfassen – ${payTarget?.label ?? ''}`}>

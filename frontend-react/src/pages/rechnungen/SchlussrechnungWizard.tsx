@@ -38,11 +38,14 @@ function StepIndicator({ step, onStepClick }: { step: number; onStepClick: (i: n
   )
 }
 
-export function SchlussrechnungWizard() {
+interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string }
+
+export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftResume } = {}) {
   const qc = useQueryClient()
   const [step,    setStep]    = useState(0)
   const [draftId, setDraftId] = useState<number | null>(null)
   const [msg,     setMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const isResumeRef = useRef(false)
 
   // Step 0
   const [projectId,           setProjectId]           = useState<number | null>(null)
@@ -84,6 +87,19 @@ export function SchlussrechnungWizard() {
   const contractSkontoRef = useRef<Map<number, { pct: number | null; days: number | null }>>(new Map())
   const draftIdRef = useRef<number | null>(null)
   useEffect(() => { draftIdRef.current = draftId }, [draftId])
+
+  // Resume existing draft passed from the invoice list
+  useEffect(() => {
+    if (!initialDraft) return
+    isResumeRef.current = true
+    setDraftId(initialDraft.id)
+    setProjectId(initialDraft.projectId)
+    setProjectLabel(initialDraft.projectLabel)
+    setContractId(initialDraft.contractId)
+    setContractLabel(initialDraft.contractLabel)
+    setStep(1)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Warn on browser close and delete draft via keepalive
   useEffect(() => {
@@ -269,9 +285,14 @@ export function SchlussrechnungWizard() {
   }
 
   function handleCancel() {
-    if (!window.confirm('Entwurf wirklich löschen und Wizard abbrechen?')) return
-    if (draftId) deleteMut.mutate(draftId)
-    else resetAll()
+    if (isResumeRef.current) {
+      if (!window.confirm('Bearbeitung abbrechen?')) return
+      resetAll()
+    } else {
+      if (!window.confirm('Entwurf wirklich löschen und Wizard abbrechen?')) return
+      if (draftId) deleteMut.mutate(draftId)
+      else resetAll()
+    }
   }
 
   function goToStep(i: number) {
