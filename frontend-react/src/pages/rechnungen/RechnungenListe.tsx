@@ -632,7 +632,7 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
                     {cdPct > 0 && (
                       <tr>
                         <td colSpan={2} style={{ paddingTop: 8, fontSize: 12, color: 'rgba(17,24,39,0.55)', fontStyle: 'italic' }}>
-                          Bei Zahlung innerhalb von {cdDays} Tagen: {cdPct} % Skonto = {fmtEur(adjGross - cdAmt)}
+                          Bei Zahlung innerhalb von {cdDays} Tagen: {cdPct} % Skonto → zu zahlen {fmtEur(skontoPayAmt)}
                         </td>
                       </tr>
                     )}
