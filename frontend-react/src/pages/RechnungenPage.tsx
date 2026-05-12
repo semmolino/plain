@@ -13,6 +13,12 @@ export interface DraftResume {
   contractId:    number | null
   projectLabel:  string
   contractLabel: string
+  d1Pct:         number
+  d2Pct:         number
+  d1Reason:      string | null
+  d2Reason:      string | null
+  cashDiscPct:   number
+  cashDiscDays:  number
 }
 
 const TABS: { id: Tab; label: string }[] = [
@@ -26,8 +32,8 @@ export function RechnungenPage() {
   const [tab, setTab] = useState<Tab>('liste')
   const [editDraft, setEditDraft] = useState<{ draft: DraftResume; type: Tab } | null>(null)
 
-  function handleEditDraft(d: { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; wizardType: 'abschlag' | 'rechnung' | 'schluss' }) {
-    const draft: DraftResume = { id: d.id, projectId: d.projectId, contractId: d.contractId, projectLabel: d.projectLabel, contractLabel: d.contractLabel }
+  function handleEditDraft(d: { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; wizardType: 'abschlag' | 'rechnung' | 'schluss'; d1Pct: number; d2Pct: number; d1Reason: string | null; d2Reason: string | null; cashDiscPct: number; cashDiscDays: number }) {
+    const draft: DraftResume = { id: d.id, projectId: d.projectId, contractId: d.contractId, projectLabel: d.projectLabel, contractLabel: d.contractLabel, d1Pct: d.d1Pct, d2Pct: d.d2Pct, d1Reason: d.d1Reason, d2Reason: d.d2Reason, cashDiscPct: d.cashDiscPct, cashDiscDays: d.cashDiscDays }
     const type = d.wizardType as Tab
     setEditDraft({ draft, type })
     setTab(type)

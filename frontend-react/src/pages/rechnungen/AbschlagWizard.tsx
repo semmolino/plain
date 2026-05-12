@@ -36,7 +36,7 @@ function StepIndicator({ step, onStepClick }: { step: number; onStepClick: (i: n
   )
 }
 
-interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string }
+interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; d1Pct: number; d2Pct: number; d1Reason: string | null; d2Reason: string | null; cashDiscPct: number; cashDiscDays: number }
 
 export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } = {}) {
   const qc = useQueryClient()
@@ -90,6 +90,12 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
     setProjectLabel(initialDraft.projectLabel)
     setContractId(initialDraft.contractId)
     setContractLabel(initialDraft.contractLabel)
+    if (initialDraft.d1Pct > 0) { setShowDiscounts(true); setD1Pct(String(initialDraft.d1Pct)) }
+    if (initialDraft.d2Pct > 0) setD2Pct(String(initialDraft.d2Pct))
+    if (initialDraft.d1Reason) setD1Reason(initialDraft.d1Reason)
+    if (initialDraft.d2Reason) setD2Reason(initialDraft.d2Reason)
+    if (initialDraft.cashDiscPct > 0) { setShowSkonto(true); setCashDiscPct(String(initialDraft.cashDiscPct)) }
+    if (initialDraft.cashDiscDays > 0) setCashDiscDays(String(initialDraft.cashDiscDays))
     getPpBillingProposal(initialDraft.id)
       .then(r => { setProposal(r.data); setStep(3) })
       .catch(() => setStep(3))

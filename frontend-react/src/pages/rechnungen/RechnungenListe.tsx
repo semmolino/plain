@@ -19,6 +19,12 @@ interface EditDraftPayload {
   projectLabel:  string
   contractLabel: string
   wizardType:    'abschlag' | 'rechnung' | 'schluss'
+  d1Pct:         number
+  d2Pct:         number
+  d1Reason:      string | null
+  d2Reason:      string | null
+  cashDiscPct:   number
+  cashDiscDays:  number
 }
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
@@ -56,6 +62,13 @@ interface UnifiedRow {
   raw:        Invoice | PartialPayment
 }
 
+function effectiveDiscounts(rawNet: number, totalDiscounts: number | null, d1Pct: number, d2Pct: number): number {
+  if (totalDiscounts != null && totalDiscounts > 0) return totalDiscounts
+  const d1Amt = Math.round(rawNet * d1Pct / 100 * 100) / 100
+  const d2Amt = Math.round((rawNet - d1Amt) * d2Pct / 100 * 100) / 100
+  return Math.round((d1Amt + d2Amt) * 100) / 100
+}
+
 function fromInvoice(inv: Invoice): UnifiedRow {
   const isOrigCancelled = inv.STATUS_ID === 3
   const isStornoRow     = inv.INVOICE_TYPE === 'stornorechnung'
@@ -67,10 +80,11 @@ function fromInvoice(inv: Invoice): UnifiedRow {
   else if (inv.STATUS_ID === 2) { statusLabel = 'Gebucht';         statusClass = 'booked' }
   else                          { statusLabel = 'Entwurf';         statusClass = 'draft' }
 
-  const paid  = inv.AMOUNT_PAYED_GROSS != null ? Number(inv.AMOUNT_PAYED_GROSS) : null
-  const vatPct = inv.VAT_PERCENT != null ? Number(inv.VAT_PERCENT) : 0
-  const discountNet = Number(inv.TOTAL_DISCOUNTS ?? 0)
-  const adjustedNet = inv.TOTAL_AMOUNT_NET != null ? Math.round((Number(inv.TOTAL_AMOUNT_NET) - discountNet) * 100) / 100 : null
+  const paid    = inv.AMOUNT_PAYED_GROSS != null ? Number(inv.AMOUNT_PAYED_GROSS) : null
+  const vatPct  = inv.VAT_PERCENT != null ? Number(inv.VAT_PERCENT) : 0
+  const rawNet  = inv.TOTAL_AMOUNT_NET != null ? Number(inv.TOTAL_AMOUNT_NET) : null
+  const discountNet   = rawNet != null ? effectiveDiscounts(rawNet, inv.TOTAL_DISCOUNTS, Number(inv.DISCOUNT_1_PERCENT ?? 0), Number(inv.DISCOUNT_2_PERCENT ?? 0)) : 0
+  const adjustedNet   = rawNet != null ? Math.round((rawNet - discountNet) * 100) / 100 : null
   const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
   return {
     key:         `inv-${inv.ID}`,
@@ -100,10 +114,11 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   else if (pp.STATUS_ID === 2)  { statusLabel = 'Gebucht';         statusClass = 'booked' }
   else                          { statusLabel = 'Entwurf';         statusClass = 'draft' }
 
-  const paid  = pp.AMOUNT_PAYED_GROSS != null ? Number(pp.AMOUNT_PAYED_GROSS) : null
-  const vatPct = pp.VAT_PERCENT != null ? Number(pp.VAT_PERCENT) : 0
-  const discountNet = Number(pp.TOTAL_DISCOUNTS ?? 0)
-  const adjustedNet = pp.TOTAL_AMOUNT_NET != null ? Math.round((Number(pp.TOTAL_AMOUNT_NET) - discountNet) * 100) / 100 : null
+  const paid    = pp.AMOUNT_PAYED_GROSS != null ? Number(pp.AMOUNT_PAYED_GROSS) : null
+  const vatPct  = pp.VAT_PERCENT != null ? Number(pp.VAT_PERCENT) : 0
+  const rawNet  = pp.TOTAL_AMOUNT_NET != null ? Number(pp.TOTAL_AMOUNT_NET) : null
+  const discountNet   = rawNet != null ? effectiveDiscounts(rawNet, pp.TOTAL_DISCOUNTS, Number(pp.DISCOUNT_1_PERCENT ?? 0), Number(pp.DISCOUNT_2_PERCENT ?? 0)) : 0
+  const adjustedNet   = rawNet != null ? Math.round((rawNet - discountNet) * 100) / 100 : null
   const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
   return {
     key:         `pp-${pp.ID}`,
@@ -394,14 +409,20 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
 
   function handleEditDraftClick(row: UnifiedRow) {
     setDetailRow(null)
-    const id = row.source === 'invoice' ? (row.raw as Invoice).ID : (row.raw as PartialPayment).ID
+    const raw = row.raw as Invoice & PartialPayment
     onEditDraft?.({
-      id,
-      projectId:     row.source === 'invoice' ? (row.raw as Invoice).PROJECT_ID : (row.raw as PartialPayment).PROJECT_ID,
-      contractId:    row.source === 'invoice' ? (row.raw as Invoice).CONTRACT_ID : (row.raw as PartialPayment).CONTRACT_ID,
+      id:            raw.ID,
+      projectId:     raw.PROJECT_ID,
+      contractId:    raw.CONTRACT_ID,
       projectLabel:  row.project ?? '',
-      contractLabel: row.source === 'invoice' ? ((row.raw as Invoice).CONTRACT ?? '') : ((row.raw as PartialPayment).CONTRACT ?? ''),
+      contractLabel: raw.CONTRACT ?? '',
       wizardType:    wizardTypeOf(row),
+      d1Pct:         Number(raw.DISCOUNT_1_PERCENT ?? 0),
+      d2Pct:         Number(raw.DISCOUNT_2_PERCENT ?? 0),
+      d1Reason:      raw.DISCOUNT_1_REASON ?? null,
+      d2Reason:      raw.DISCOUNT_2_REASON ?? null,
+      cashDiscPct:   Number(raw.CASH_DISCOUNT_PERCENT ?? 0),
+      cashDiscDays:  Number(raw.CASH_DISCOUNT_DAYS ?? 0),
     })
   }
 
@@ -529,7 +550,6 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
           const pp    = !isInv ? (detailRow.raw as PartialPayment) : null
 
           const vatPct      = Number((inv ?? pp)?.VAT_PERCENT ?? 0)
-          const discNet     = Number((inv ?? pp)?.TOTAL_DISCOUNTS ?? 0)
           const rawNet      = Number((inv ?? pp)?.TOTAL_AMOUNT_NET ?? 0)
           const d1Pct       = Number((inv ?? pp)?.DISCOUNT_1_PERCENT ?? 0)
           const d2Pct       = Number((inv ?? pp)?.DISCOUNT_2_PERCENT ?? 0)
@@ -537,6 +557,7 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
           const d2Reason    = (inv ?? pp)?.DISCOUNT_2_REASON ?? null
           const d1Amt       = Math.round(rawNet * d1Pct / 100 * 100) / 100
           const d2Amt       = Math.round((rawNet - d1Amt) * d2Pct / 100 * 100) / 100
+          const discNet     = effectiveDiscounts(rawNet, (inv ?? pp)?.TOTAL_DISCOUNTS ?? null, d1Pct, d2Pct)
           const cdPct       = Number((inv ?? pp)?.CASH_DISCOUNT_PERCENT ?? 0)
           const cdDays      = (inv ?? pp)?.CASH_DISCOUNT_DAYS ?? null
           const adjNet      = detailRow.net ?? 0
