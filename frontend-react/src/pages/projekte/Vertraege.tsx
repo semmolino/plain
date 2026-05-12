@@ -138,8 +138,8 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
             />
           </div>
 
-          <div className="vtr-field" style={{ display: 'flex', gap: 12 }}>
-            <div style={{ flex: '1 1 120px' }}>
+          <div style={{ display: 'flex', flexDirection: 'row', gap: 12 }}>
+            <div className="vtr-field" style={{ flex: '1 1 120px' }}>
               <label className="vtr-label" htmlFor="vtr-skonto-pct">Skonto (%)</label>
               <input
                 id="vtr-skonto-pct"
@@ -151,7 +151,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
                 placeholder="z. B. 2"
               />
             </div>
-            <div style={{ flex: '1 1 120px' }}>
+            <div className="vtr-field" style={{ flex: '1 1 120px' }}>
               <label className="vtr-label" htmlFor="vtr-skonto-days">Skonto-Tage</label>
               <input
                 id="vtr-skonto-days"
