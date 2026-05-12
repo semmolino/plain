@@ -1131,7 +1131,7 @@ async function getContractByProject(supabase, { projectId }) {
   const query = (table) =>
     supabase
       .from(table)
-      .select("ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS")
       .eq("PROJECT_ID", projectId)
       .limit(1)
       .maybeSingle();
@@ -1149,6 +1149,12 @@ async function patchContract(supabase, { contractId, body }) {
   if (body.INVOICE_ADDRESS_ID !== undefined) {
     const v = body.INVOICE_ADDRESS_ID;
     allowed.INVOICE_ADDRESS_ID = v === null || v === "" ? null : parseInt(v, 10);
+  }
+  if (body.CASH_DISCOUNT_PERCENT !== undefined) {
+    allowed.CASH_DISCOUNT_PERCENT = body.CASH_DISCOUNT_PERCENT === null || body.CASH_DISCOUNT_PERCENT === "" ? null : parseFloat(body.CASH_DISCOUNT_PERCENT);
+  }
+  if (body.CASH_DISCOUNT_DAYS !== undefined) {
+    allowed.CASH_DISCOUNT_DAYS = body.CASH_DISCOUNT_DAYS === null || body.CASH_DISCOUNT_DAYS === "" ? null : parseInt(body.CASH_DISCOUNT_DAYS, 10);
   }
 
   if (!Object.keys(allowed).length) throw { status: 400, message: "Keine Felder zum Aktualisieren" };

@@ -167,6 +167,8 @@ export interface Contract {
   PROJECT_ID:           number
   INVOICE_ADDRESS_ID:   number | null
   INVOICE_CONTACT_ID:   number | null
+  CASH_DISCOUNT_PERCENT: number | null
+  CASH_DISCOUNT_DAYS:    number | null
 }
 
 export const fetchContractByProject = (projectId: number) =>
@@ -176,6 +178,8 @@ export const patchContract = (contractId: number, body: Partial<{
   NAME_SHORT: string
   NAME_LONG: string
   INVOICE_ADDRESS_ID: number | null
+  CASH_DISCOUNT_PERCENT: number | null
+  CASH_DISCOUNT_DAYS: number | null
 }>) => apiClient.patch<{ success: boolean }>(`/projekte/contract/${contractId}`, body)
 
 // ── Leistungsstände ───────────────────────────────────────────────────────────

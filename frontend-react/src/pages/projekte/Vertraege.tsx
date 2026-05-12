@@ -13,13 +13,15 @@ interface Props {
 
 export function Vertraege({ initialProjectId, onProjectChange }: Props) {
   const qc = useQueryClient()
-  const [pid,        setPid]        = useState<number | null>(initialProjectId ?? null)
-  const [nameShort,  setNameShort]  = useState('')
-  const [nameLong,   setNameLong]   = useState('')
-  const [addressId,  setAddressId]  = useState<number | null>(null)
-  const [addrText,   setAddrText]   = useState('')
-  const [dirty,      setDirty]      = useState(false)
-  const [msg,        setMsg]        = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
+  const [nameShort,    setNameShort]    = useState('')
+  const [nameLong,     setNameLong]     = useState('')
+  const [addressId,    setAddressId]    = useState<number | null>(null)
+  const [addrText,     setAddrText]     = useState('')
+  const [cashDiscPct,  setCashDiscPct]  = useState('')
+  const [cashDiscDays, setCashDiscDays] = useState('')
+  const [dirty,        setDirty]        = useState(false)
+  const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: addressesData } = useQuery({ queryKey: ['addresses-list'], queryFn: fetchAddressList })
@@ -37,9 +39,10 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
     setNameShort(c.NAME_SHORT ?? '')
     setNameLong(c.NAME_LONG ?? '')
     setAddressId(c.INVOICE_ADDRESS_ID ?? null)
-    // Look up address label for autocomplete display
     const addr = (addressesData?.data ?? []).find(a => a.ID === c.INVOICE_ADDRESS_ID)
     setAddrText(addr ? addr.ADDRESS_NAME_1 : (c.INVOICE_ADDRESS_ID ? String(c.INVOICE_ADDRESS_ID) : ''))
+    setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
+    setCashDiscDays(c.CASH_DISCOUNT_DAYS != null ? String(c.CASH_DISCOUNT_DAYS) : '')
     setDirty(false)
   }, [contractData?.data, addressesData?.data])
 
@@ -48,9 +51,11 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
       const contract = contractData?.data
       if (!contract) throw new Error('Kein Vertrag geladen')
       return patchContract(contract.ID, {
-        NAME_SHORT:         nameShort.trim(),
-        NAME_LONG:          nameLong.trim(),
-        INVOICE_ADDRESS_ID: addressId,
+        NAME_SHORT:            nameShort.trim(),
+        NAME_LONG:             nameLong.trim(),
+        INVOICE_ADDRESS_ID:    addressId,
+        CASH_DISCOUNT_PERCENT: cashDiscPct !== '' ? parseFloat(cashDiscPct) : null,
+        CASH_DISCOUNT_DAYS:    cashDiscDays !== '' ? parseInt(cashDiscDays, 10) : null,
       })
     },
     onSuccess: () => {
@@ -133,6 +138,33 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
             />
           </div>
 
+          <div className="vtr-field" style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: '1 1 120px' }}>
+              <label className="vtr-label" htmlFor="vtr-skonto-pct">Skonto (%)</label>
+              <input
+                id="vtr-skonto-pct"
+                className="vtr-input"
+                type="number"
+                min={0} max={100} step={0.01}
+                value={cashDiscPct}
+                onChange={e => { setCashDiscPct(e.target.value); touch() }}
+                placeholder="z. B. 2"
+              />
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <label className="vtr-label" htmlFor="vtr-skonto-days">Skonto-Tage</label>
+              <input
+                id="vtr-skonto-days"
+                className="vtr-input"
+                type="number"
+                min={0} step={1}
+                value={cashDiscDays}
+                onChange={e => { setCashDiscDays(e.target.value); touch() }}
+                placeholder="z. B. 14"
+              />
+            </div>
+          </div>
+
           <div className="vtr-field">
             <Autocomplete
               label="Rechnungsadresse"
@@ -160,6 +192,8 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
                 setAddressId(c.INVOICE_ADDRESS_ID ?? null)
                 const addr = (addressesData?.data ?? []).find(a => a.ID === c.INVOICE_ADDRESS_ID)
                 setAddrText(addr ? addr.ADDRESS_NAME_1 : '')
+                setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
+                setCashDiscDays(c.CASH_DISCOUNT_DAYS != null ? String(c.CASH_DISCOUNT_DAYS) : '')
                 setDirty(false)
                 setMsg(null)
               }}
