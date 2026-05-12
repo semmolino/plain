@@ -60,6 +60,8 @@ export interface PartialPayment {
   VAT_PERCENT:                  number | null
   PROJECT:                      string | null
   CONTRACT:                     string | null
+  CONTACT:                      string | null
+  ADDRESS_NAME_1:               string | null
   COMMENT:                      string | null
   CANCELS_PARTIAL_PAYMENT_ID:   number | null
   TOTAL_DISCOUNTS:              number | null
