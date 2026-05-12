@@ -405,7 +405,7 @@ async function searchContracts(supabase, { projectId, q }) {
   const query = (table) =>
     supabase
       .from(table)
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS")
       .eq("PROJECT_ID", projectId)
       .or(`NAME_SHORT.ilike.%${q}%,NAME_LONG.ilike.%${q}%`)
       .order("NAME_SHORT", { ascending: true })

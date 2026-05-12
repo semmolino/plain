@@ -43,15 +43,13 @@ module.exports = (supabase) => {
       .ilike("MAIL", email.trim())
       .maybeSingle();
 
-    if (empErr) { console.log("[LOGIN DEBUG] db error:", empErr.message); return res.status(500).json({ error: "Fehler beim Laden des Benutzers." }); }
-    if (!employee) { console.log("[LOGIN DEBUG] no employee found for email:", email); return res.status(401).json({ error: "E-Mail oder Passwort falsch." }); }
+    if (empErr) return res.status(500).json({ error: "Fehler beim Laden des Benutzers." });
+    if (!employee) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
 
-    console.log("[LOGIN DEBUG] found employee id:", employee.ID, "pw_start:", (employee.PASSWORD||"").slice(0,6));
     const stored = employee.PASSWORD || "";
     const valid = stored.startsWith("$2")
       ? await bcrypt.compare(password, stored)
       : stored === password;
-    console.log("[LOGIN DEBUG] valid:", valid);
 
     if (!valid) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
 

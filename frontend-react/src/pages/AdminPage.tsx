@@ -508,6 +508,8 @@ function VorbelegungenSection() {
   const [currencyId,     setCurrencyId]     = useState('')
   const [vatId,          setVatId]          = useState('')
   const [offerValidDays, setOfferValidDays] = useState('')
+  const [cashDiscPct,    setCashDiscPct]    = useState('')
+  const [cashDiscDays,   setCashDiscDays]   = useState('')
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -521,13 +523,17 @@ function VorbelegungenSection() {
     setCurrencyId(defData.data.default_currency_id ?? '')
     setVatId(defData.data.default_vat_id ?? '')
     setOfferValidDays(defData.data.offer_valid_days ?? '')
+    setCashDiscPct(defData.data.default_cash_discount_percent ?? '')
+    setCashDiscDays(defData.data.default_cash_discount_days ?? '')
   }, [defData?.data])
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      await putDefault('default_currency_id', currencyId    || null)
-      await putDefault('default_vat_id',      vatId         || null)
-      await putDefault('offer_valid_days',     offerValidDays || null)
+      await putDefault('default_currency_id',           currencyId     || null)
+      await putDefault('default_vat_id',                vatId          || null)
+      await putDefault('offer_valid_days',               offerValidDays || null)
+      await putDefault('default_cash_discount_percent', cashDiscPct    || null)
+      await putDefault('default_cash_discount_days',    cashDiscDays   || null)
     },
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -570,6 +576,30 @@ function VorbelegungenSection() {
               />
             </div>
             <p className="admin-section-hint">Tage, um die das Gültigkeitsdatum im Angebots-Wizard vorbelegt wird.</p>
+          </div>
+          <div className="admin-block">
+            <h3 className="admin-block-title">Skonto (Vorbelegung für neue Verträge)</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Skonto (%)</label>
+                <input
+                  type="number" min={0} max={100} step={0.01}
+                  value={cashDiscPct}
+                  onChange={e => setCashDiscPct(e.target.value)}
+                  placeholder="z. B. 2"
+                />
+              </div>
+              <div className="form-group">
+                <label>Skonto-Tage</label>
+                <input
+                  type="number" min={0} step={1}
+                  value={cashDiscDays}
+                  onChange={e => setCashDiscDays(e.target.value)}
+                  placeholder="z. B. 14"
+                />
+              </div>
+            </div>
+            <p className="admin-section-hint">Diese Werte werden beim Anlegen eines Vertrags vorbelegt und können pro Vertrag überschrieben werden.</p>
           </div>
           <Message text={msg?.text ?? null} type={msg?.type} />
           <button className="btn-primary" style={{ marginTop: 8 }} disabled={saveMut.isPending} onClick={() => { setMsg(null); saveMut.mutate() }} type="button">

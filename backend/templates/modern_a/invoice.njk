@@ -344,6 +344,41 @@ body { padding-bottom: 28mm; }
     </tr>
     {% endif %}
 
+    {% if discounts.hasDiscounts %}
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    {% if discounts.d1Percent > 0 %}
+    <tr>
+      <td class="label">abzgl. Nachlass I ({{ discounts.d1Percent }}&#8239;%)</td>
+      <td class="amount">&minus;&#8239;{{ discounts.d1Amount | money }}</td>
+    </tr>
+    {% endif %}
+    {% if discounts.d2Percent > 0 %}
+    <tr>
+      <td class="label">abzgl. Nachlass II ({{ discounts.d2Percent }}&#8239;%)</td>
+      <td class="amount">&minus;&#8239;{{ discounts.d2Amount | money }}</td>
+    </tr>
+    {% endif %}
+    {% if discounts.cashDiscountPercent > 0 %}
+    <tr>
+      <td class="label">abzgl. Skonto ({{ discounts.cashDiscountPercent }}&#8239;%{% if discounts.cashDiscountDays %} / {{ discounts.cashDiscountDays }}&#8239;Tage{% endif %})</td>
+      <td class="amount">&minus;&#8239;{{ discounts.cashDiscountAmount | money }}</td>
+    </tr>
+    {% endif %}
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">Rechnungssumme netto</td>
+      <td class="amount">{{ discounts.adjustedNet | money }}</td>
+    </tr>
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">zzgl. {{ inv.vatBreakdown[0].rate }}&#8239;% Mehrwertsteuer</td>
+      <td class="amount">{{ discounts.adjustedVat | money }}</td>
+    </tr>
+    <tr class="total-row">
+      <td class="label">Rechnungssumme brutto</td>
+      <td class="amount">{{ discounts.adjustedGross | money }}</td>
+    </tr>
+    {% else %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     {% for vat in inv.vatBreakdown %}
     <tr>
@@ -356,6 +391,7 @@ body { padding-bottom: 28mm; }
       <td class="label">Rechnungssumme brutto</td>
       <td class="amount">{{ inv.totals.grandTotal | money }}</td>
     </tr>
+    {% endif %}
 
     {% else %}
 
@@ -371,6 +407,41 @@ body { padding-bottom: 28mm; }
     </tr>
     {% endif %}
 
+    {% if discounts.hasDiscounts %}
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    {% if discounts.d1Percent > 0 %}
+    <tr>
+      <td class="label">abzgl. Nachlass I ({{ discounts.d1Percent }}&#8239;%)</td>
+      <td class="amount">&minus;&#8239;{{ discounts.d1Amount | money }}</td>
+    </tr>
+    {% endif %}
+    {% if discounts.d2Percent > 0 %}
+    <tr>
+      <td class="label">abzgl. Nachlass II ({{ discounts.d2Percent }}&#8239;%)</td>
+      <td class="amount">&minus;&#8239;{{ discounts.d2Amount | money }}</td>
+    </tr>
+    {% endif %}
+    {% if discounts.cashDiscountPercent > 0 %}
+    <tr>
+      <td class="label">abzgl. Skonto ({{ discounts.cashDiscountPercent }}&#8239;%{% if discounts.cashDiscountDays %} / {{ discounts.cashDiscountDays }}&#8239;Tage{% endif %})</td>
+      <td class="amount">&minus;&#8239;{{ discounts.cashDiscountAmount | money }}</td>
+    </tr>
+    {% endif %}
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">Rechnungssumme netto</td>
+      <td class="amount">{{ discounts.adjustedNet | money }}</td>
+    </tr>
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">zzgl. {{ inv.vatBreakdown[0].rate }}&#8239;% Mehrwertsteuer</td>
+      <td class="amount">{{ discounts.adjustedVat | money }}</td>
+    </tr>
+    <tr class="total-row">
+      <td class="label">Rechnungssumme</td>
+      <td class="amount">{{ discounts.adjustedGross | money }}</td>
+    </tr>
+    {% else %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     {% for vat in inv.vatBreakdown %}
     <tr>
@@ -378,11 +449,11 @@ body { padding-bottom: 28mm; }
       <td class="amount">{{ vat.amount | money }}</td>
     </tr>
     {% endfor %}
-
     <tr class="total-row">
       <td class="label">Rechnungssumme</td>
       <td class="amount">{{ inv.totals.grandTotal | money }}</td>
     </tr>
+    {% endif %}
 
     {% endif %}
 
@@ -394,7 +465,7 @@ body { padding-bottom: 28mm; }
   {% else %}
   <div class="payment-note">
     Bitte überweisen Sie
-    <strong>{{ inv.totals.grandTotal | money }}</strong>
+    {% if discounts.hasDiscounts %}<strong>{{ discounts.adjustedGross | money }}</strong>{% else %}<strong>{{ inv.totals.grandTotal | money }}</strong>{% endif %}
     unter Angabe der Rechnungsnummer <strong>{{ inv.number }}</strong>
     {% if inv.dueDate %}bis zum <strong>{{ inv.dueDate | date_de }}</strong>{% endif %}
     auf folgendes Konto:{% if inv.seller.iban %}<br>

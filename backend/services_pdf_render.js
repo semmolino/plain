@@ -372,6 +372,29 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     thisDocNet:    projectStructureRows.reduce((s, r) => s + r.thisDocNet,    0),
   };
 
+  // Discount / skonto fields
+  const totalAmountNet     = Number(rawDoc.TOTAL_AMOUNT_NET ?? 0);
+  const d1Pct              = Number(rawDoc.DISCOUNT_1_PERCENT ?? 0);
+  const d2Pct              = Number(rawDoc.DISCOUNT_2_PERCENT ?? 0);
+  const d1Amount           = Math.round(totalAmountNet * d1Pct / 100 * 100) / 100;
+  const d2Amount           = Math.round(d1Amount * d2Pct / 100 * 100) / 100;
+  const totalDiscounts     = Number(rawDoc.TOTAL_DISCOUNTS ?? 0) || Math.round((d1Amount + d2Amount) * 100) / 100;
+  const cashDiscPct        = Number(rawDoc.CASH_DISCOUNT_PERCENT ?? 0);
+  const cashDiscDays       = rawDoc.CASH_DISCOUNT_DAYS ?? null;
+  const cashDiscAmount     = Number(rawDoc.CASH_DISCOUNT_AMOUNT ?? 0) || Math.round((totalAmountNet - totalDiscounts) * cashDiscPct / 100 * 100) / 100;
+  const adjustedNet        = Math.round((totalAmountNet - totalDiscounts - cashDiscAmount) * 100) / 100;
+  const vatPct             = Number(rawDoc.VAT_PERCENT ?? 0);
+  const adjustedVat        = Math.round(adjustedNet * vatPct / 100 * 100) / 100;
+  const adjustedGross      = Math.round((adjustedNet + adjustedVat) * 100) / 100;
+  const hasDiscounts       = totalDiscounts > 0 || cashDiscAmount > 0;
+
+  const discounts = {
+    d1Percent: d1Pct, d2Percent: d2Pct,
+    d1Amount, d2Amount, totalDiscounts,
+    cashDiscountPercent: cashDiscPct, cashDiscountDays: cashDiscDays, cashDiscountAmount: cashDiscAmount,
+    adjustedNet, adjustedVat, adjustedGross, hasDiscounts,
+  };
+
   return {
     inv,
     docTitle:    DOC_TITLES[inv.invoiceType] || 'Rechnung',
@@ -388,6 +411,7 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     paymentTotals,
     tec,
     deductionTotals,
+    discounts,
   };
 }
 

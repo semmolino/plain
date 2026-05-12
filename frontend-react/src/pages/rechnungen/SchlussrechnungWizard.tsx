@@ -71,6 +71,15 @@ export function SchlussrechnungWizard() {
   const [dedTotals,     setDedTotals]     = useState<FinalTotals | null>(null)
   const [dedWarn,       setDedWarn]       = useState<string | null>(null)
 
+  // Step 4: discounts
+  const [showDiscounts, setShowDiscounts] = useState(false)
+  const [d1Pct,         setD1Pct]         = useState('')
+  const [d2Pct,         setD2Pct]         = useState('')
+  const [showSkonto,    setShowSkonto]    = useState(false)
+  const [cashDiscPct,   setCashDiscPct]   = useState('')
+  const [cashDiscDays,  setCashDiscDays]  = useState('')
+
+  const contractSkontoRef = useRef<Map<number, { pct: number | null; days: number | null }>>(new Map())
   const draftIdRef = useRef<number | null>(null)
   useEffect(() => { draftIdRef.current = draftId }, [draftId])
 
@@ -99,6 +108,9 @@ export function SchlussrechnungWizard() {
     searchContracts(projectId, '').then(res => {
       const list = res.data ?? []
       setContractsForProject(list)
+      list.forEach(c => {
+        contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null })
+      })
       if (list.length === 1) {
         setContractId(list[0].ID)
         setContractLabel(`${list[0].NAME_SHORT} – ${list[0].NAME_LONG}`)
@@ -199,7 +211,26 @@ export function SchlussrechnungWizard() {
   })
 
   const bookMut = useMutation({
-    mutationFn: bookFinalInvoice,
+    mutationFn: async (id: number) => {
+      const base = dedTotals?.totalNet ?? 0
+      const d1 = showDiscounts ? (Number(d1Pct) || 0) : 0
+      const d2 = showDiscounts ? (Number(d2Pct) || 0) : 0
+      const d1Amt = Math.round(base * d1 / 100 * 100) / 100
+      const d2Amt = Math.round(d1Amt * d2 / 100 * 100) / 100
+      const totalDiscounts = Math.round((d1Amt + d2Amt) * 100) / 100
+      const cdPct  = showSkonto ? (Number(cashDiscPct) || 0) : 0
+      const cdDays = showSkonto ? (Number(cashDiscDays) || 0) : 0
+      const cdAmt  = Math.round((base - totalDiscounts) * cdPct / 100 * 100) / 100
+      await patchInvoice(id, {
+        discount_1_percent:   showDiscounts ? d1 : 0,
+        discount_2_percent:   showDiscounts ? d2 : 0,
+        total_discounts:      showDiscounts ? totalDiscounts : 0,
+        cash_discount_percent: showSkonto ? cdPct : 0,
+        cash_discount_days:    showSkonto ? cdDays : 0,
+        cash_discount_amount:  showSkonto ? cdAmt : 0,
+      })
+      return bookFinalInvoice(id)
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['invoices'] })
       setMsg({ text: 'Schlussrechnung gebucht ✅', type: 'success' })
@@ -223,6 +254,7 @@ export function SchlussrechnungWizard() {
     setDetDate(todayIso()); setDueDate(''); setBpStart(''); setBpFinish(''); setComment('')
     setPhases([]); setPhaseChecked(new Set()); setPhaseTotals(null)
     setDeductions([]); setDeductAmounts({}); setDedSelected(new Set()); setDedTotals(null); setDedWarn(null)
+    setShowDiscounts(false); setD1Pct(''); setD2Pct(''); setShowSkonto(false); setCashDiscPct(''); setCashDiscDays('')
     setMsg(null)
   }
 
@@ -408,6 +440,9 @@ export function SchlussrechnungWizard() {
               search={async q => {
                 if (!projectId) return []
                 const res = await searchContracts(projectId, q)
+                res.data.forEach(c => {
+                  contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null })
+                })
                 return res.data.map(c => ({ id: c.ID, label: `${c.NAME_SHORT} – ${c.NAME_LONG}` }))
               }}
               placeholder={projectId ? 'Vertrag suchen …' : 'Erst Projekt wählen'}
@@ -601,9 +636,96 @@ export function SchlussrechnungWizard() {
       )}
 
       {/* Step 4: Book */}
-      {step === 4 && (
+      {step === 4 && (() => {
+        const base = dedTotals?.totalNet ?? 0
+        const d1 = showDiscounts ? (Number(d1Pct) || 0) : 0
+        const d2 = showDiscounts ? (Number(d2Pct) || 0) : 0
+        const d1Amt = Math.round(base * d1 / 100 * 100) / 100
+        const d2Amt = Math.round(d1Amt * d2 / 100 * 100) / 100
+        const totalDisc = Math.round((d1Amt + d2Amt) * 100) / 100
+        const cdPct  = showSkonto ? (Number(cashDiscPct) || 0) : 0
+        const cdAmt  = Math.round((base - totalDisc) * cdPct / 100 * 100) / 100
+        const netAfter = Math.round((base - totalDisc - cdAmt) * 100) / 100
+        return (
         <div className="wizard-step-content">
           <p className="wizard-step-title">Schlussrechnung buchen</p>
+
+          {/* Nachlässe und Skonto */}
+          <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+            <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Nachlässe und Skonto</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 6, cursor: 'pointer' }}>
+              <input type="checkbox" checked={showDiscounts} onChange={e => setShowDiscounts(e.target.checked)} />
+              Nachlässe angeben
+            </label>
+            {showDiscounts && (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, paddingLeft: 24 }}>
+                <div className="form-group" style={{ flex: '1 1 120px', minWidth: 120, marginBottom: 0 }}>
+                  <label style={{ fontSize: 12 }}>Nachlass I (%)</label>
+                  <input type="number" step="0.01" min="0" max="100" value={d1Pct}
+                    onChange={e => setD1Pct(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                </div>
+                <div className="form-group" style={{ flex: '1 1 120px', minWidth: 120, marginBottom: 0 }}>
+                  <label style={{ fontSize: 12 }}>Nachlass II (% auf N I)</label>
+                  <input type="number" step="0.01" min="0" max="100" value={d2Pct}
+                    onChange={e => setD2Pct(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                </div>
+              </div>
+            )}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 6, cursor: 'pointer' }}>
+              <input type="checkbox" checked={showSkonto} onChange={e => {
+                const checked = e.target.checked
+                setShowSkonto(checked)
+                if (checked && contractId) {
+                  const cached = contractSkontoRef.current.get(contractId)
+                  if (cached) {
+                    setCashDiscPct(String(cached.pct ?? ''))
+                    setCashDiscDays(String(cached.days ?? ''))
+                  }
+                }
+              }} />
+              Skonto angeben
+            </label>
+            {showSkonto && (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, paddingLeft: 24 }}>
+                <div className="form-group" style={{ flex: '1 1 120px', minWidth: 120, marginBottom: 0 }}>
+                  <label style={{ fontSize: 12 }}>Skonto (%)</label>
+                  <input type="number" step="0.01" min="0" max="100" value={cashDiscPct}
+                    onChange={e => setCashDiscPct(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                </div>
+                <div className="form-group" style={{ flex: '1 1 120px', minWidth: 120, marginBottom: 0 }}>
+                  <label style={{ fontSize: 12 }}>Skonto-Tage</label>
+                  <input type="number" step="1" min="0" value={cashDiscDays}
+                    onChange={e => setCashDiscDays(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                </div>
+              </div>
+            )}
+            {(showDiscounts || showSkonto) && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(17,24,39,0.08)', fontSize: 13 }}>
+                {showDiscounts && d1 > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(17,24,39,0.6)' }}>
+                    <span>Nachlass I ({d1} %)</span><span>– {fmtEur(d1Amt)}</span>
+                  </div>
+                )}
+                {showDiscounts && d2 > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(17,24,39,0.6)' }}>
+                    <span>Nachlass II ({d2} %)</span><span>– {fmtEur(d2Amt)}</span>
+                  </div>
+                )}
+                {showSkonto && cdPct > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(17,24,39,0.6)' }}>
+                    <span>Skonto ({cdPct} %)</span><span>– {fmtEur(cdAmt)}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, marginTop: 4, paddingTop: 4, borderTop: '1px solid rgba(17,24,39,0.08)' }}>
+                  <span>Netto nach Abzügen</span><span>{fmtEur(netAfter)}</span>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Invoice summary */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 14, marginBottom: 18, padding: '12px 16px', background: 'rgba(17,24,39,0.03)', borderRadius: 10 }}>
@@ -707,7 +829,8 @@ export function SchlussrechnungWizard() {
             </button>
           </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

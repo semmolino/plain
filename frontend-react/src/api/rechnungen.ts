@@ -5,7 +5,7 @@ import { apiClient, downloadWithAuth, openPdfWithAuth } from './client'
 export interface Company      { ID: number; COMPANY_NAME_1: string }
 export interface VatRate      { ID: number; VAT: string; VAT_PERCENT: number }
 export interface PaymentMeans { ID: number; NAME_SHORT: string; NAME_LONG: string }
-export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: string; PROJECT_ID: number }
+export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: string; PROJECT_ID: number; CASH_DISCOUNT_PERCENT?: number | null; CASH_DISCOUNT_DAYS?: number | null }
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
 
@@ -31,6 +31,8 @@ export interface Invoice {
   COMMENT:              string | null
   INVOICE_TYPE:         InvoiceType | null
   CANCELS_INVOICE_ID:   number | null
+  TOTAL_DISCOUNTS:      number | null
+  CASH_DISCOUNT_AMOUNT: number | null
 }
 
 export interface PartialPayment {
@@ -52,6 +54,8 @@ export interface PartialPayment {
   CONTRACT:                     string | null
   COMMENT:                      string | null
   CANCELS_PARTIAL_PAYMENT_ID:   number | null
+  TOTAL_DISCOUNTS:              number | null
+  CASH_DISCOUNT_AMOUNT:         number | null
 }
 
 export interface BillingProposal {
@@ -142,6 +146,8 @@ export const patchInvoice = (id: number, body: Partial<{
   invoice_number: string; invoice_date: string; due_date: string
   billing_period_start: string; billing_period_finish: string
   vat_id: number; payment_means_id: number; comment: string
+  discount_1_percent: number; discount_2_percent: number; total_discounts: number
+  cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
 }>) => apiClient.patch<{ ok: boolean }>(`/invoices/${id}`, body)
 
 export const getInvoiceBillingProposal = (id: number) =>
@@ -205,6 +211,8 @@ export const patchPartialPayment = (id: number, body: Partial<{
   billing_period_start: string; billing_period_finish: string
   amount_net: number; amount_extras_net: number
   vat_id: number; payment_means_id: number; comment: string
+  discount_1_percent: number; discount_2_percent: number; total_discounts: number
+  cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
 }>) => apiClient.patch<{ success: boolean }>(`/partial-payments/${id}`, body)
 
 export const getPpBillingProposal = (id: number) =>

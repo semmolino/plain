@@ -66,11 +66,20 @@ export function RechnungWizard() {
   const [selected,  setSelected]  = useState<Set<number>>(new Set())
   const [hasBt2,    setHasBt2]    = useState(false)
 
+  // Step 3: discounts
+  const [showDiscounts,  setShowDiscounts]  = useState(false)
+  const [d1Pct,          setD1Pct]          = useState('')
+  const [d2Pct,          setD2Pct]          = useState('')
+  const [showSkonto,     setShowSkonto]     = useState(false)
+  const [cashDiscPct,    setCashDiscPct]    = useState('')
+  const [cashDiscDays,   setCashDiscDays]   = useState('')
+
   const draftIdRef = useRef<number | null>(null)
   useEffect(() => { draftIdRef.current = draftId }, [draftId])
 
   // Cache COMPANY_ID from project search results for lookup on select
   const projectResultsRef = useRef<Map<number, number | null>>(new Map())
+  const contractSkontoRef = useRef<Map<number, { pct: number | null; days: number | null }>>(new Map())
 
   // Show browser "leave?" dialog and delete draft when user closes/reloads
   useEffect(() => {
@@ -97,6 +106,7 @@ export function RechnungWizard() {
     searchContracts(projectId, '').then(res => {
       const list = res.data ?? []
       setContractsForProject(list)
+      list.forEach(c => contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null }))
       if (list.length === 1) {
         setContractId(list[0].ID)
         setContractLabel(`${list[0].NAME_SHORT} – ${list[0].NAME_LONG}`)
@@ -151,7 +161,26 @@ export function RechnungWizard() {
   })
 
   const bookMut = useMutation({
-    mutationFn: bookInvoice,
+    mutationFn: async (id: number) => {
+      const d1 = Number(d1Pct) || 0
+      const d2 = Number(d2Pct) || 0
+      const base = proposal?.total_amount_net ?? 0
+      const d1Amt = Math.round(base * d1 / 100 * 100) / 100
+      const d2Amt = Math.round(d1Amt * d2 / 100 * 100) / 100
+      const totalDiscounts = Math.round((d1Amt + d2Amt) * 100) / 100
+      const cdPct  = Number(cashDiscPct) || 0
+      const cdDays = Number(cashDiscDays) || 0
+      const cdAmt  = Math.round((base - totalDiscounts) * cdPct / 100 * 100) / 100
+      await patchInvoice(id, {
+        discount_1_percent:   showDiscounts ? d1 : 0,
+        discount_2_percent:   showDiscounts ? d2 : 0,
+        total_discounts:      showDiscounts ? totalDiscounts : 0,
+        cash_discount_percent: showSkonto ? cdPct : 0,
+        cash_discount_days:    showSkonto ? cdDays : 0,
+        cash_discount_amount:  showSkonto ? cdAmt : 0,
+      })
+      return bookInvoice(id)
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['invoices'] })
       setMsg({ text: 'Rechnung gebucht ✅', type: 'success' })
@@ -174,6 +203,7 @@ export function RechnungWizard() {
     setEmployeeId('')
     setDetDate(todayIso()); setDueDate(''); setBpStart(''); setBpFinish(''); setComment('')
     setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set()); setHasBt2(false)
+    setShowDiscounts(false); setD1Pct(''); setD2Pct(''); setShowSkonto(false); setCashDiscPct(''); setCashDiscDays('')
     setMsg(null)
   }
 
@@ -297,6 +327,7 @@ export function RechnungWizard() {
               search={async q => {
                 if (!projectId) return []
                 const res = await searchContracts(projectId, q)
+                res.data.forEach(c => contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null }))
                 return res.data.map(c => ({ id: c.ID, label: `${c.NAME_SHORT} – ${c.NAME_LONG}` }))
               }}
               placeholder={projectId ? 'Vertrag suchen …' : 'Erst Projekt wählen'}
@@ -415,38 +446,114 @@ export function RechnungWizard() {
       })()}
 
       {/* Step 3: Book */}
-      {step === 3 && (
-        <div className="wizard-step-content">
-          <p className="wizard-step-title">Rechnung buchen</p>
-          {proposal && (
-            <div className="billing-proposal-box">
-              <div className="bp-row"><span>Leistungsbetrag Netto</span><strong>{fmtEur(proposal.performance_amount)}</strong></div>
-              <div className="bp-row"><span>Buchungen Netto</span><strong>{fmtEur(proposal.bookings_sum)}</strong></div>
-              <div className="bp-row"><span>Nebenkosten Netto</span><strong>{fmtEur(proposal.amount_extras_net)}</strong></div>
-              <div className="bp-row total"><span>Netto gesamt</span><strong>{fmtEur(proposal.total_amount_net)}</strong></div>
-              <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(proposal.total_amount_gross)}</strong></div>
+      {step === 3 && (() => {
+        const base = proposal?.total_amount_net ?? 0
+        const d1 = showDiscounts ? (Number(d1Pct) || 0) : 0
+        const d2 = showDiscounts ? (Number(d2Pct) || 0) : 0
+        const d1Amt = Math.round(base * d1 / 100 * 100) / 100
+        const d2Amt = Math.round(d1Amt * d2 / 100 * 100) / 100
+        const totalDisc = Math.round((d1Amt + d2Amt) * 100) / 100
+        const cdPct  = showSkonto ? (Number(cashDiscPct) || 0) : 0
+        const cdAmt  = Math.round((base - totalDisc) * cdPct / 100 * 100) / 100
+        const netAfter = Math.round((base - totalDisc - cdAmt) * 100) / 100
+        return (
+          <div className="wizard-step-content">
+            <p className="wizard-step-title">Rechnung buchen</p>
+
+            <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+              <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Nachlässe und Skonto</p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
+                <input type="checkbox" checked={showDiscounts} onChange={e => setShowDiscounts(e.target.checked)} />
+                Nachlässe angeben
+              </label>
+              {showDiscounts && (
+                <div style={{ paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <label style={{ fontSize: 13, minWidth: 80 }}>Nachlass I (%)</label>
+                    <input type="number" step="0.01" min="0" max="100" value={d1Pct}
+                      onChange={e => { setD1Pct(e.target.value); if (!e.target.value) setD2Pct('') }}
+                      style={{ width: 90, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      placeholder="z. B. 3" />
+                    {d1Pct && <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>= {fmtEur(d1Amt)}</span>}
+                  </div>
+                  {d1Pct && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <label style={{ fontSize: 13, minWidth: 80 }}>Nachlass II (%)</label>
+                      <input type="number" step="0.01" min="0" max="100" value={d2Pct}
+                        onChange={e => setD2Pct(e.target.value)}
+                        style={{ width: 90, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                        placeholder="optional" />
+                      {d2Pct && <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>= {fmtEur(d2Amt)}</span>}
+                    </div>
+                  )}
+                  {totalDisc > 0 && <div style={{ fontSize: 12, color: '#374151' }}>Gesamt-Nachlass: <strong>{fmtEur(totalDisc)}</strong></div>}
+                </div>
+              )}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
+                <input type="checkbox" checked={showSkonto} onChange={e => {
+                  setShowSkonto(e.target.checked)
+                  if (e.target.checked && contractId) {
+                    const s = contractSkontoRef.current.get(contractId)
+                    if (s?.pct != null) setCashDiscPct(String(s.pct))
+                    if (s?.days != null) setCashDiscDays(String(s.days))
+                  }
+                }} />
+                Skonto angeben
+              </label>
+              {showSkonto && (
+                <div style={{ paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <label style={{ fontSize: 13, minWidth: 80 }}>Skonto (%)</label>
+                    <input type="number" step="0.01" min="0" max="100" value={cashDiscPct}
+                      onChange={e => setCashDiscPct(e.target.value)}
+                      style={{ width: 90, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      placeholder="z. B. 2" />
+                    <label style={{ fontSize: 13, minWidth: 80 }}>Zahlungsziel (Tage)</label>
+                    <input type="number" step="1" min="0" value={cashDiscDays}
+                      onChange={e => setCashDiscDays(e.target.value)}
+                      style={{ width: 70, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      placeholder="z. B. 14" />
+                  </div>
+                  {cdAmt > 0 && <div style={{ fontSize: 12, color: '#374151' }}>Skonto-Abzug: <strong>{fmtEur(cdAmt)}</strong></div>}
+                </div>
+              )}
+              {(totalDisc > 0 || cdAmt > 0) && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(17,24,39,0.08)', fontSize: 13 }}>
+                  Rechnungssumme netto nach Abzügen: <strong>{fmtEur(netAfter)}</strong>
+                </div>
+              )}
             </div>
-          )}
-          {draftId && (
-            <div style={{ display: 'flex', gap: 8, margin: '12px 0 4px', flexWrap: 'wrap' }}>
-              <button className="btn-small" onClick={() => openInvoicePdf(draftId)}>PDF ansehen</button>
-              <button className="btn-small" onClick={() => void downloadInvoiceEinvoice(draftId, invType, null, 'ubl')}>XRechnung herunterladen</button>
-              <button className="btn-small" onClick={() => void downloadInvoiceEinvoice(draftId, invType, null, 'cii')}>ZUGFeRD herunterladen</button>
+
+            {proposal && (
+              <div className="billing-proposal-box">
+                <div className="bp-row"><span>Leistungsbetrag Netto</span><strong>{fmtEur(proposal.performance_amount)}</strong></div>
+                <div className="bp-row"><span>Buchungen Netto</span><strong>{fmtEur(proposal.bookings_sum)}</strong></div>
+                <div className="bp-row"><span>Nebenkosten Netto</span><strong>{fmtEur(proposal.amount_extras_net)}</strong></div>
+                <div className="bp-row total"><span>Netto gesamt</span><strong>{fmtEur(proposal.total_amount_net)}</strong></div>
+                <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(proposal.total_amount_gross)}</strong></div>
+              </div>
+            )}
+            {draftId && (
+              <div style={{ display: 'flex', gap: 8, margin: '12px 0 4px', flexWrap: 'wrap' }}>
+                <button className="btn-small" onClick={() => openInvoicePdf(draftId)}>PDF ansehen</button>
+                <button className="btn-small" onClick={() => void downloadInvoiceEinvoice(draftId, invType, null, 'ubl')}>XRechnung herunterladen</button>
+                <button className="btn-small" onClick={() => void downloadInvoiceEinvoice(draftId, invType, null, 'cii')}>ZUGFeRD herunterladen</button>
+              </div>
+            )}
+            <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', marginTop: 8 }}>
+              Nach dem Buchen ist die Rechnung unveränderlich.
+            </p>
+            <Message text={msg?.text ?? null} type={msg?.type} />
+            <div className="wizard-nav">
+              <button onClick={handleCancel}>Abbrechen</button>
+              <button onClick={() => setStep(2)}>← Zurück</button>
+              <button className="btn-primary" onClick={() => { if (draftId) bookMut.mutate(draftId) }} disabled={bookMut.isPending}>
+                {bookMut.isPending ? 'Bucht …' : 'Jetzt buchen ✓'}
+              </button>
             </div>
-          )}
-          <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', marginTop: 8 }}>
-            Nach dem Buchen ist die Rechnung unveränderlich.
-          </p>
-          <Message text={msg?.text ?? null} type={msg?.type} />
-          <div className="wizard-nav">
-            <button onClick={handleCancel}>Abbrechen</button>
-            <button onClick={() => setStep(2)}>← Zurück</button>
-            <button className="btn-primary" onClick={() => { if (draftId) bookMut.mutate(draftId) }} disabled={bookMut.isPending}>
-              {bookMut.isPending ? 'Bucht …' : 'Jetzt buchen ✓'}
-            </button>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

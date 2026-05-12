@@ -756,6 +756,13 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   if (body.billing_period_finish !== undefined) payload.BILLING_PERIOD_FINISH = body.billing_period_finish || null;
   if (body.comment !== undefined) payload.COMMENT = String(body.comment || "").trim() || null;
 
+  if (body.discount_1_percent  !== undefined) payload.DISCOUNT_1_PERCENT  = body.discount_1_percent  != null ? toNum(body.discount_1_percent)  : null;
+  if (body.discount_2_percent  !== undefined) payload.DISCOUNT_2_PERCENT  = body.discount_2_percent  != null ? toNum(body.discount_2_percent)  : null;
+  if (body.total_discounts     !== undefined) payload.TOTAL_DISCOUNTS     = body.total_discounts     != null ? toNum(body.total_discounts)     : null;
+  if (body.cash_discount_percent !== undefined) payload.CASH_DISCOUNT_PERCENT = body.cash_discount_percent != null ? toNum(body.cash_discount_percent) : null;
+  if (body.cash_discount_days    !== undefined) payload.CASH_DISCOUNT_DAYS    = body.cash_discount_days    != null ? parseInt(String(body.cash_discount_days), 10) : null;
+  if (body.cash_discount_amount  !== undefined) payload.CASH_DISCOUNT_AMOUNT  = body.cash_discount_amount  != null ? toNum(body.cash_discount_amount)  : null;
+
   if (body.vat_id !== undefined) {
     const vatId = body.vat_id;
     if (!vatId) throw { status: 400, message: "Mehrwertsteuersatz ist erforderlich" };

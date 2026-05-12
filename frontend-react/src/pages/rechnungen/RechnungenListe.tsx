@@ -60,6 +60,9 @@ function fromInvoice(inv: Invoice): UnifiedRow {
 
   const gross = inv.TOTAL_AMOUNT_GROSS != null ? Number(inv.TOTAL_AMOUNT_GROSS) : null
   const paid  = inv.AMOUNT_PAYED_GROSS != null ? Number(inv.AMOUNT_PAYED_GROSS) : null
+  const vatPct = inv.VAT_PERCENT != null ? Number(inv.VAT_PERCENT) : 0
+  const discountNet = Number(inv.TOTAL_DISCOUNTS ?? 0) + Number(inv.CASH_DISCOUNT_AMOUNT ?? 0)
+  const discountGross = Math.round(discountNet * (1 + vatPct / 100) * 100) / 100
   return {
     key:         `inv-${inv.ID}`,
     source:      'invoice',
@@ -70,7 +73,7 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     net:         inv.TOTAL_AMOUNT_NET != null ? Number(inv.TOTAL_AMOUNT_NET) : null,
     gross,
     paid,
-    open:        gross != null ? Math.round((gross - (paid ?? 0)) * 100) / 100 : null,
+    open:        gross != null ? Math.round((gross - discountGross - (paid ?? 0)) * 100) / 100 : null,
     statusLabel,
     statusClass,
     raw:         inv,
@@ -90,6 +93,9 @@ function fromPp(pp: PartialPayment): UnifiedRow {
 
   const gross = pp.TOTAL_AMOUNT_GROSS != null ? Number(pp.TOTAL_AMOUNT_GROSS) : null
   const paid  = pp.AMOUNT_PAYED_GROSS != null ? Number(pp.AMOUNT_PAYED_GROSS) : null
+  const vatPct = pp.VAT_PERCENT != null ? Number(pp.VAT_PERCENT) : 0
+  const discountNet = Number(pp.TOTAL_DISCOUNTS ?? 0) + Number(pp.CASH_DISCOUNT_AMOUNT ?? 0)
+  const discountGross = Math.round(discountNet * (1 + vatPct / 100) * 100) / 100
   return {
     key:         `pp-${pp.ID}`,
     source:      'pp',
@@ -100,7 +106,7 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     net:         pp.TOTAL_AMOUNT_NET != null ? Number(pp.TOTAL_AMOUNT_NET) : null,
     gross,
     paid,
-    open:        gross != null ? Math.round((gross - (paid ?? 0)) * 100) / 100 : null,
+    open:        gross != null ? Math.round((gross - discountGross - (paid ?? 0)) * 100) / 100 : null,
     statusLabel,
     statusClass,
     raw:         pp,
@@ -179,7 +185,7 @@ export function RechnungenListe() {
     if (onlyOpen) {
       filtered = filtered.filter(r =>
         r.statusClass === 'booked' &&
-        Math.round((r.gross ?? 0) * 100) !== Math.round((r.paid ?? 0) * 100)
+        (r.open ?? 0) > 0.005
       )
     }
     return [...filtered].sort((a, b) => {

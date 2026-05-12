@@ -90,6 +90,13 @@ async function patchPartialPayment(req, res, supabase) {
 
   if (b.comment !== undefined) payload.COMMENT = String(b.comment || "").trim() || null;
 
+  if (b.discount_1_percent  !== undefined) payload.DISCOUNT_1_PERCENT  = b.discount_1_percent  != null ? toNum(b.discount_1_percent)  : null;
+  if (b.discount_2_percent  !== undefined) payload.DISCOUNT_2_PERCENT  = b.discount_2_percent  != null ? toNum(b.discount_2_percent)  : null;
+  if (b.total_discounts     !== undefined) payload.TOTAL_DISCOUNTS     = b.total_discounts     != null ? toNum(b.total_discounts)     : null;
+  if (b.cash_discount_percent !== undefined) payload.CASH_DISCOUNT_PERCENT = b.cash_discount_percent != null ? toNum(b.cash_discount_percent) : null;
+  if (b.cash_discount_days    !== undefined) payload.CASH_DISCOUNT_DAYS    = b.cash_discount_days    != null ? parseInt(String(b.cash_discount_days), 10) : null;
+  if (b.cash_discount_amount  !== undefined) payload.CASH_DISCOUNT_AMOUNT  = b.cash_discount_amount  != null ? toNum(b.cash_discount_amount)  : null;
+
   if (b.vat_id !== undefined) {
     const vatId = b.vat_id;
     if (!vatId) return res.status(400).json({ error: "Mehrwertsteuersatz ist erforderlich" });
