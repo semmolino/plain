@@ -451,8 +451,21 @@ export function AbschlagWizard() {
         const d2Amt = Math.round((base - d1Amt) * d2 / 100 * 100) / 100
         const totalDisc = Math.round((d1Amt + d2Amt) * 100) / 100
         const cdPct  = showSkonto ? (Number(cashDiscPct) || 0) : 0
+        const cdDays = showSkonto ? (Number(cashDiscDays) || 0) : 0
         const cdAmt  = Math.round((base - totalDisc) * cdPct / 100 * 100) / 100
         const netAfter = Math.round((base - totalDisc - cdAmt) * 100) / 100
+        async function saveDiscountsAndPreview() {
+          if (!draftId) return
+          await patchPartialPayment(draftId, {
+            discount_1_percent:   showDiscounts ? d1 : 0,
+            discount_2_percent:   showDiscounts ? d2 : 0,
+            total_discounts:      showDiscounts ? totalDisc : 0,
+            cash_discount_percent: showSkonto ? cdPct : 0,
+            cash_discount_days:    showSkonto ? cdDays : 0,
+            cash_discount_amount:  showSkonto ? cdAmt : 0,
+          })
+          openPpPdf(draftId)
+        }
         return (
           <div className="wizard-step-content">
             <p className="wizard-step-title">Abschlagsrechnung buchen</p>
@@ -533,7 +546,7 @@ export function AbschlagWizard() {
             )}
             {draftId && (
               <div style={{ display: 'flex', gap: 8, margin: '12px 0 4px', flexWrap: 'wrap' }}>
-                <button className="btn-small" onClick={() => openPpPdf(draftId)}>PDF ansehen</button>
+                <button className="btn-small" onClick={() => void saveDiscountsAndPreview()}>PDF ansehen</button>
                 <button className="btn-small" onClick={() => void downloadPpEinvoice(draftId, null, 'ubl')}>XRechnung herunterladen</button>
                 <button className="btn-small" onClick={() => void downloadPpEinvoice(draftId, null, 'cii')}>ZUGFeRD herunterladen</button>
               </div>
