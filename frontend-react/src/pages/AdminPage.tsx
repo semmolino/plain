@@ -168,7 +168,7 @@ function StammdatenSection() {
               <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
                 <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
                 <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Bezeichnung</th>
-                <th style={{ textAlign: 'right', padding: '2px 0 4px 6px' }}>SP-Rate</th>
+                <th style={{ textAlign: 'right', padding: '2px 0 4px 6px' }}>Stundensatz</th>
                 <th></th>
               </tr>
             </thead>
@@ -199,7 +199,7 @@ function StammdatenSection() {
             <input value={rolleLong} onChange={e => setRolleLong(e.target.value)} placeholder="z. B. Projektleiter" />
           </div>
           <div className="form-group">
-            <label>SP-Rate</label>
+            <label>Stundensatz</label>
             <input type="number" step="0.01" min="0" value={rolleSpRate} onChange={e => setRolleSpRate(e.target.value)} placeholder="z. B. 95.00" />
           </div>
         </div>

@@ -309,7 +309,7 @@ export function ProjekteAnlegen() {
                     <th>Rolle (Vorlage)</th>
                     <th>Rollenkürzel</th>
                     <th>Rollenbezeichnung</th>
-                    <th>SP-Rate</th>
+                    <th>Stundensatz</th>
                   </tr>
                 </thead>
                 <tbody>
