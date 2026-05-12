@@ -232,7 +232,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
     ? flattenTree(buildStructureTree(mappedForTree as unknown as StructureNode[]))
     : []
 
-  const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+  const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   if (!selectedId) {
     return (

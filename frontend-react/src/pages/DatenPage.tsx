@@ -3,9 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchProjectsShort } from '@/api/projekte'
 import { fetchProjectReportHeader, fetchProjectReportStructure, type DateFilter, type FilterMode } from '@/api/reports'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-const FMT_H   = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
-const FMT_PCT = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
+const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtH    = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct  = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'

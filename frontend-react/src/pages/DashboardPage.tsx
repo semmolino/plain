@@ -27,7 +27,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Le
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', {
-  style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
+  style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2,
 })
 const FMT_NUM = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const MONTHS_DE = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
