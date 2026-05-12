@@ -381,7 +381,7 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
   const totalDiscounts     = Number(rawDoc.TOTAL_DISCOUNTS ?? 0) || Math.round((d1Amount + d2Amount) * 100) / 100;
   const cashDiscPct        = Number(rawDoc.CASH_DISCOUNT_PERCENT ?? 0);
   const cashDiscDays       = rawDoc.CASH_DISCOUNT_DAYS ?? null;
-  const cashDiscAmount     = Number(rawDoc.CASH_DISCOUNT_AMOUNT ?? 0) || Math.round((totalAmountNet - totalDiscounts) * cashDiscPct / 100 * 100) / 100;
+  const cashDiscAmount     = Number(rawDoc.CASH_DISCOUNT ?? 0) || Math.round((totalAmountNet - totalDiscounts) * cashDiscPct / 100 * 100) / 100;
   const adjustedNet        = Math.round((totalAmountNet - totalDiscounts - cashDiscAmount) * 100) / 100;
   const vatPct             = Number(rawDoc.VAT_PERCENT ?? 0);
   const adjustedVat        = Math.round(adjustedNet * vatPct / 100 * 100) / 100;

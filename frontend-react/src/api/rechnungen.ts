@@ -32,7 +32,7 @@ export interface Invoice {
   INVOICE_TYPE:         InvoiceType | null
   CANCELS_INVOICE_ID:   number | null
   TOTAL_DISCOUNTS:      number | null
-  CASH_DISCOUNT_AMOUNT: number | null
+  CASH_DISCOUNT:        number | null
 }
 
 export interface PartialPayment {
@@ -55,7 +55,7 @@ export interface PartialPayment {
   COMMENT:                      string | null
   CANCELS_PARTIAL_PAYMENT_ID:   number | null
   TOTAL_DISCOUNTS:              number | null
-  CASH_DISCOUNT_AMOUNT:         number | null
+  CASH_DISCOUNT:                number | null
 }
 
 export interface BillingProposal {

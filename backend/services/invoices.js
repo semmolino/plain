@@ -761,7 +761,7 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   if (body.total_discounts     !== undefined) payload.TOTAL_DISCOUNTS     = body.total_discounts     != null ? toNum(body.total_discounts)     : null;
   if (body.cash_discount_percent !== undefined) payload.CASH_DISCOUNT_PERCENT = body.cash_discount_percent != null ? toNum(body.cash_discount_percent) : null;
   if (body.cash_discount_days    !== undefined) payload.CASH_DISCOUNT_DAYS    = body.cash_discount_days    != null ? parseInt(String(body.cash_discount_days), 10) : null;
-  if (body.cash_discount_amount  !== undefined) payload.CASH_DISCOUNT_AMOUNT  = body.cash_discount_amount  != null ? toNum(body.cash_discount_amount)  : null;
+  if (body.cash_discount_amount  !== undefined) payload.CASH_DISCOUNT  = body.cash_discount_amount  != null ? toNum(body.cash_discount_amount)  : null;
 
   if (body.vat_id !== undefined) {
     const vatId = body.vat_id;
