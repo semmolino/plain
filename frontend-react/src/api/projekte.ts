@@ -239,8 +239,24 @@ export interface CreateBuchungPayload {
 export const fetchBuchungen = (projectId: number) =>
   apiClient.get<{ data: Buchung[] }>(`/buchungen/project/${projectId}`)
 
+export interface UpdateBuchungPayload {
+  EMPLOYEE_ID?:         number
+  STRUCTURE_ID?:        number | null
+  DATE_VOUCHER?:        string
+  TIME_START?:          string
+  TIME_FINISH?:         string
+  QUANTITY_INT?:        number
+  CP_RATE?:             number
+  QUANTITY_EXT?:        number
+  SP_RATE?:             number
+  POSTING_DESCRIPTION?: string
+}
+
 export const createBuchung = (body: CreateBuchungPayload) =>
   apiClient.post<{ success: boolean }>('/buchungen', body)
+
+export const updateBuchung = (id: number, body: UpdateBuchungPayload) =>
+  apiClient.patch<{ data: Buchung }>(`/buchungen/${id}`, body)
 
 export const deleteBuchung = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/buchungen/${id}`)

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }   from '@/components/ui/Message'
+import { Modal }     from '@/components/ui/Modal'
 import { FormField } from '@/components/ui/FormField'
 import {
-  fetchProjectsShort, fetchProjectStructure, fetchBuchungen, createBuchung, deleteBuchung,
+  fetchProjectsShort, fetchProjectStructure, fetchBuchungen, createBuchung, updateBuchung, deleteBuchung,
   fetchEmployee2ProjectPreset,
-  type Buchung,
+  type Buchung, type UpdateBuchungPayload,
 } from '@/api/projekte'
 import { fetchActiveEmployees } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
@@ -39,6 +40,21 @@ function emptyForm(): BuchungForm {
   }
 }
 
+function buchungToForm(b: Buchung): BuchungForm {
+  return {
+    EMPLOYEE_ID:         String(b.EMPLOYEE_ID),
+    STRUCTURE_ID:        b.STRUCTURE_ID != null ? String(b.STRUCTURE_ID) : '',
+    DATE_VOUCHER:        fmtDate(b.DATE_VOUCHER),
+    TIME_START:          b.TIME_START ?? '',
+    TIME_FINISH:         b.TIME_FINISH ?? '',
+    QUANTITY_INT:        String(b.QUANTITY_INT),
+    CP_RATE:             String(b.CP_RATE),
+    QUANTITY_EXT:        String(b.QUANTITY_EXT),
+    SP_RATE:             String(b.SP_RATE),
+    POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
+  }
+}
+
 type SortCol = 'date' | 'employee' | 'path' | 'description' | 'h_int' | 'h_ext' | 'cost' | 'revenue'
 type SortDir = 'asc' | 'desc'
 
@@ -55,6 +71,9 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const [search,       setSearch]       = useState('')
   const [sortCol,      setSortCol]      = useState<SortCol>('date')
   const [sortDir,      setSortDir]      = useState<SortDir>('asc')
+  const [editRow,      setEditRow]      = useState<Buchung | null>(null)
+  const [editForm,     setEditForm]     = useState<BuchungForm>(emptyForm)
+  const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success'|'error' } | null>(null)
 
   const { data: projectsData }  = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }       = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
@@ -91,7 +110,6 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     if (emp?.CP_RATE != null) setForm(f => ({ ...f, CP_RATE: String(emp.CP_RATE) }))
   }, [empId, employees])
 
-  // Reset filters when project changes
   useEffect(() => { setFilterStruct(''); setSearch('') }, [pid])
 
   const buchungen = buchData?.data   ?? []
@@ -100,7 +118,6 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const nodeById = useMemo(() => new Map(structure.map(n => [n.STRUCTURE_ID, n])), [structure])
   const parentIds = useMemo(() => new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID))), [structure])
 
-  // childrenMap for descendant lookup
   const childrenMap = useMemo(() => {
     const m = new Map<number, number[]>()
     for (const n of structure) {
@@ -124,7 +141,6 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     return result
   }
 
-  // Path builder: ancestors show NAME_SHORT only; leaf shows "NAME_SHORT: NAME_LONG"
   function structPath(id: number): string {
     const cur = nodeById.get(id)
     if (!cur) return ''
@@ -140,32 +156,27 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     return ancestors.length ? `${ancestors.join(' > ')} > ${leaf}` : leaf
   }
 
-  // All structure nodes sorted by path for dropdowns
   const allStructureSorted = useMemo(() =>
     [...structure].sort((a, b) => structPath(a.STRUCTURE_ID).localeCompare(structPath(b.STRUCTURE_ID), 'de', { numeric: true })),
     [structure, nodeById]
   )
 
-  // Leaf-only nodes for the booking form
   const leafStructure = useMemo(() =>
     allStructureSorted.filter(n => !parentIds.has(String(n.STRUCTURE_ID))),
     [allStructureSorted, parentIds]
   )
 
-  // Path cache for display
   const pathCache = useMemo(() => {
     const m = new Map<number, string>()
     for (const n of structure) m.set(n.STRUCTURE_ID, structPath(n.STRUCTURE_ID))
     return m
   }, [structure, nodeById])
 
-  // Descendant set for active filter
   const filterDescendants = useMemo(() => {
     if (!filterStruct) return null
     return getDescendantIds(Number(filterStruct))
   }, [filterStruct, childrenMap])
 
-  // Filtered + sorted buchungen
   const visibleBuchungen = useMemo(() => {
     let rows = buchungen
 
@@ -227,6 +238,16 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
+  const patchMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: UpdateBuchungPayload }) => updateBuchung(id, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
+      setMsg({ text: 'Buchung aktualisiert ✅', type: 'success' })
+      setEditRow(null)
+    },
+    onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
+  })
+
   const deleteMut = useMutation({
     mutationFn: deleteBuchung,
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['buchungen', pid] }),
@@ -256,9 +277,42 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     })
   }
 
+  function submitEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editRow) return
+    setEditMsg(null)
+    if (!editForm.EMPLOYEE_ID || !editForm.DATE_VOUCHER || !editForm.QUANTITY_INT || !editForm.CP_RATE || !editForm.QUANTITY_EXT || !editForm.SP_RATE || !editForm.POSTING_DESCRIPTION) {
+      setEditMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
+    }
+    patchMut.mutate({
+      id: editRow.ID,
+      body: {
+        EMPLOYEE_ID:         Number(editForm.EMPLOYEE_ID),
+        STRUCTURE_ID:        editForm.STRUCTURE_ID ? Number(editForm.STRUCTURE_ID) : null,
+        DATE_VOUCHER:        editForm.DATE_VOUCHER,
+        TIME_START:          editForm.TIME_START  || undefined,
+        TIME_FINISH:         editForm.TIME_FINISH || undefined,
+        QUANTITY_INT:        Number(editForm.QUANTITY_INT),
+        CP_RATE:             Number(editForm.CP_RATE),
+        QUANTITY_EXT:        Number(editForm.QUANTITY_EXT),
+        SP_RATE:             Number(editForm.SP_RATE),
+        POSTING_DESCRIPTION: editForm.POSTING_DESCRIPTION,
+      },
+    })
+  }
+
   const setF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const value = e.target.value
     setForm(f => ({ ...f, [k]: value, ...(k === 'EMPLOYEE_ID' ? { SP_RATE: '', CP_RATE: '' } : {}) }))
+  }
+
+  const setEF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setEditForm(f => ({ ...f, [k]: e.target.value }))
+
+  function openEdit(b: Buchung) {
+    setEditRow(b)
+    setEditForm(buchungToForm(b))
+    setEditMsg(null)
   }
 
   function confirmDelete(b: Buchung) {
@@ -282,7 +336,6 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
           {isLoading && <p className="empty-note">Laden …</p>}
           {!isLoading && (
             <>
-              {/* Filters row */}
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 10, flexWrap: 'wrap' }}>
                 <div className="form-group" style={{ flex: '1 1 260px', minWidth: 200, marginBottom: 0 }}>
                   <label>Strukturelement</label>
@@ -335,7 +388,10 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         <td className="num">{fmtN(b.QUANTITY_EXT)}</td>
                         <td className="num">{fmtN(b.CP_TOT)}</td>
                         <td className="num">{fmtN(b.SP_TOT)}</td>
-                        <td><button className="btn-small" onClick={() => confirmDelete(b)}>×</button></td>
+                        <td className="doc-actions">
+                          <button className="btn-small" onClick={() => openEdit(b)}>Bearbeiten</button>
+                          <button className="btn-small btn-danger" onClick={() => confirmDelete(b)}>×</button>
+                        </td>
                       </tr>
                     ))}
                     {!visibleBuchungen.length && <tr><td colSpan={9} className="empty-note">Keine Buchungen</td></tr>}
@@ -412,6 +468,53 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
           )}
         </>
       )}
+
+      {/* ── Edit modal ── */}
+      <Modal open={editRow !== null} onClose={() => setEditRow(null)} title="Buchung bearbeiten">
+        <form onSubmit={submitEdit} className="master-form">
+          <div className="form-group">
+            <label>Mitarbeiter*</label>
+            <select value={editForm.EMPLOYEE_ID} onChange={setEF('EMPLOYEE_ID')} required>
+              <option value="">Bitte wählen …</option>
+              {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Strukturelement</label>
+            <select value={editForm.STRUCTURE_ID} onChange={setEF('STRUCTURE_ID')}>
+              <option value="">—</option>
+              {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}
+            </select>
+          </div>
+          <div className="form-row">
+            <FormField label="Datum*"      id="eda" type="date"   value={editForm.DATE_VOUCHER}  onChange={setEF('DATE_VOUCHER')} required />
+            <FormField label="Von"         id="ets" type="time"   value={editForm.TIME_START}    onChange={setEF('TIME_START')} />
+            <FormField label="Bis"         id="etf" type="time"   value={editForm.TIME_FINISH}   onChange={setEF('TIME_FINISH')} />
+          </div>
+          <div className="form-row">
+            <FormField label="Stunden int.*" id="eqi" type="number" value={editForm.QUANTITY_INT}  onChange={setEF('QUANTITY_INT')} step="0.25" required />
+            <FormField label="Stunden ext.*" id="eqe" type="number" value={editForm.QUANTITY_EXT}  onChange={setEF('QUANTITY_EXT')} step="0.25" required />
+          </div>
+          <div className="form-row">
+            <FormField label="Kostensatz*"   id="ecr" type="number" value={editForm.CP_RATE}       onChange={setEF('CP_RATE')} step="0.01" required />
+            <FormField label="Stundensatz*"  id="esr" type="number" value={editForm.SP_RATE}       onChange={setEF('SP_RATE')} step="0.01" required />
+          </div>
+          <div className="form-group">
+            <label>Beschreibung*</label>
+            <textarea rows={2} value={editForm.POSTING_DESCRIPTION} onChange={setEF('POSTING_DESCRIPTION')} required
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+          </div>
+          <Message text={editMsg?.text ?? null} type={editMsg?.type} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button className="btn-primary" type="submit" disabled={patchMut.isPending}>
+              {patchMut.isPending ? 'Speichert …' : 'Speichern'}
+            </button>
+            <button type="button" className="btn-small" onClick={() => setEditRow(null)}>
+              Abbrechen
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }
