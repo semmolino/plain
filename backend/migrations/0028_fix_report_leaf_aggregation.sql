@@ -28,6 +28,9 @@ DROP VIEW IF EXISTS "REPORTING"."VW_REPORT_PROJECT_DETAIL";
 -- VW_PROJECT_PROGRESS_AGG renames REVENUE_COMPLETION_PERCENT_AVG → LEISTUNGSSTAND_PERCENT,
 -- so it must be dropped rather than replaced in-place.
 DROP VIEW IF EXISTS "REPORTING"."VW_PROJECT_PROGRESS_AGG";
+-- VW_REPORT_PROJECT_DETAIL_STRUCTURE inserts IS_LEAF before HOURS_TOTAL,
+-- which also requires a DROP rather than REPLACE.
+DROP VIEW IF EXISTS public."VW_REPORT_PROJECT_DETAIL_STRUCTURE";
 
 -- ── 1. Fix VW_PROJECT_PROGRESS_AGG ───────────────────────────────────────────
 -- Leaf nodes only + weighted LEISTUNGSSTAND_PERCENT (0-100 range)
