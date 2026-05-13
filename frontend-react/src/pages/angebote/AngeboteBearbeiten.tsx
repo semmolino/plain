@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
+import { Modal }        from '@/components/ui/Modal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchOffers, fetchOffer, updateOffer, fetchOfferStructure,
-  addOfferStructureNode, deleteOfferStructureNode, convertOffer,
+  addOfferStructureNode, updateOfferStructureNode, deleteOfferStructureNode, convertOffer,
   openOfferPdf, type Offer, type OfferStructureNode, type AddStructureNodePayload, type ConvertOfferPayload,
 } from '@/api/angebote'
 import { fetchOfferStatuses } from '@/api/angebote'
@@ -66,6 +67,35 @@ function emptyAddForm(): AddNodeForm {
   return { name_short: '', name_long: '', billing_type_id: '', extras_percent: '', revenue: '', quantity: '', sp_rate: '', role_id: '', role_name_short: '', role_name_long: '', father_id: '' }
 }
 
+interface EditNodeForm {
+  name_short:      string
+  name_long:       string
+  billing_type_id: string
+  extras_percent:  string
+  revenue:         string
+  quantity:        string
+  sp_rate:         string
+  role_id:         string
+  role_name_short: string
+  role_name_long:  string
+}
+
+function nodeToEditForm(n: OfferStructureNode): EditNodeForm {
+  const isHourly = Number(n.BILLING_TYPE_ID) === 2
+  return {
+    name_short:      n.NAME_SHORT ?? '',
+    name_long:       n.NAME_LONG  ?? '',
+    billing_type_id: n.BILLING_TYPE_ID != null ? String(n.BILLING_TYPE_ID) : '',
+    extras_percent:  n.EXTRAS_PERCENT  != null ? String(n.EXTRAS_PERCENT)  : '0',
+    revenue:         !isHourly && n.REVENUE != null ? String(n.REVENUE) : '',
+    quantity:        n.QUANTITY != null ? String(n.QUANTITY) : '',
+    sp_rate:         n.SP_RATE  != null ? String(n.SP_RATE)  : '',
+    role_id:         n.ROLE_ID  != null ? String(n.ROLE_ID)  : '',
+    role_name_short: n.ROLE_NAME_SHORT ?? '',
+    role_name_long:  n.ROLE_NAME_LONG  ?? '',
+  }
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number }) {
@@ -79,6 +109,9 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   const [structMsg,  setStructMsg]  = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [showBeauftragt, setShowBeauftragt] = useState(false)
   const [convertErr,     setConvertErr]     = useState<string | null>(null)
+  const [editNode,       setEditNode]       = useState<OfferStructureNode | null>(null)
+  const [editNodeForm,   setEditNodeForm]   = useState<EditNodeForm | null>(null)
+  const [editNodeMsg,    setEditNodeMsg]    = useState<{ text: string; type: 'success'|'error' } | null>(null)
 
   // Lookups
   const { data: offersData  } = useQuery({ queryKey: ['offers'],          queryFn: fetchOffers         })
@@ -206,6 +239,30 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
     onError: (e: Error) => setStructMsg({ text: e.message, type: 'error' }),
   })
 
+  const updateNodeMut = useMutation({
+    mutationFn: ({ nodeId, f }: { nodeId: number; f: EditNodeForm }) => {
+      const isHourly = f.billing_type_id === '2'
+      return updateOfferStructureNode(selectedId!, nodeId, {
+        name_short:      f.name_short,
+        name_long:       f.name_long,
+        billing_type_id: Number(f.billing_type_id),
+        extras_percent:  Number(f.extras_percent) || 0,
+        role_id:         f.role_id ? Number(f.role_id) : null,
+        role_name_short: f.role_name_short || undefined,
+        role_name_long:  f.role_name_long  || undefined,
+        ...(isHourly
+          ? { quantity: Number(f.quantity) || 0, sp_rate: Number(f.sp_rate) || 0 }
+          : { revenue:  Number(f.revenue)  || 0 }),
+      })
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offer-structure', selectedId] })
+      setStructMsg({ text: 'Position gespeichert ✅', type: 'success' })
+      setEditNode(null)
+    },
+    onError: (e: Error) => setEditNodeMsg({ text: e.message, type: 'error' }),
+  })
+
   const setF = (k: keyof EditForm) => (v: string) => setForm(f => f ? { ...f, [k]: v } : f)
   const setAF = (k: keyof AddNodeForm) => (v: string) => setAddForm(f => {
     const updated = { ...f, [k]: v }
@@ -224,6 +281,26 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
       role_name_long:  role?.NAME_LONG  ?? '',
       sp_rate:         role?.SP_RATE != null ? String(role.SP_RATE) : f.sp_rate,
     }))
+  }
+
+  const setENF = (k: keyof EditNodeForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setEditNodeForm(f => f ? { ...f, [k]: e.target.value } : f)
+
+  function applyRoleToEdit(roleId: string) {
+    const role = roles.find(r => String(r.ID) === roleId)
+    setEditNodeForm(f => f ? ({
+      ...f,
+      role_id:         roleId,
+      role_name_short: role?.NAME_SHORT ?? '',
+      role_name_long:  role?.NAME_LONG  ?? '',
+      sp_rate:         role?.SP_RATE != null ? String(role.SP_RATE) : f.sp_rate,
+    }) : f)
+  }
+
+  function openNodeEdit(n: OfferStructureNode) {
+    setEditNode(n)
+    setEditNodeForm(nodeToEditForm(n))
+    setEditNodeMsg(null)
   }
 
   // Map OFFER_STRUCTURE nodes to the STRUCTURE_ID shape expected by treeUtils
@@ -409,11 +486,12 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                           <td className="ls-td ls-right">{FMT_EUR.format(revenue)}</td>
                           <td className="ls-td ls-right">{FMT_EUR.format(extras)}</td>
                           <td className="ls-td ls-right">{FMT_EUR.format(revenue + extras)}</td>
-                          <td className="ls-td">
-                            <button className="btn-small" style={{ color: 'var(--color-danger, #ef4444)' }}
+                          <td className="ls-td doc-actions">
+                            <button className="btn-small" onClick={() => openNodeEdit(n)}>Bearbeiten</button>
+                            <button className="btn-small btn-danger"
                               disabled={deleteNodeMut.isPending}
                               onClick={() => { if (confirm('Position löschen?')) deleteNodeMut.mutate({ nodeId: n.ID }) }}>
-                              ✕
+                              ×
                             </button>
                           </td>
                         </tr>
@@ -517,6 +595,72 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
         error={convertErr}
       />
     )}
+
+    {/* ── Edit structure node modal ── */}
+    <Modal open={editNode !== null} onClose={() => setEditNode(null)} title="Position bearbeiten">
+      {editNodeForm && (
+        <div className="master-form">
+          <div className="form-row">
+            <div className="form-group">
+              <label>Position</label>
+              <input value={editNodeForm.name_short} onChange={setENF('name_short')} placeholder="z. B. 1.1" />
+            </div>
+            <div className="form-group" style={{ flex: 2 }}>
+              <label>Bezeichnung</label>
+              <input value={editNodeForm.name_long} onChange={setENF('name_long')} placeholder="Leistungsbeschreibung" />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Leistungsart*</label>
+              <select value={editNodeForm.billing_type_id} onChange={setENF('billing_type_id')}>
+                <option value="">Bitte wählen …</option>
+                {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>NK %</label>
+              <input type="number" min={0} max={100} step={0.1} value={editNodeForm.extras_percent} onChange={setENF('extras_percent')} placeholder="0" />
+            </div>
+          </div>
+
+          {editNodeForm.billing_type_id === '2' ? (
+            <div className="form-row">
+              <div className="form-group">
+                <label>Rolle</label>
+                <select value={editNodeForm.role_id} onChange={e => applyRoleToEdit(e.target.value)}>
+                  <option value="">—</option>
+                  {roles.map(r => <option key={r.ID} value={r.ID}>{r.NAME_SHORT}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Aufwand (h)</label>
+                <input type="number" min={0} step={0.5} value={editNodeForm.quantity} onChange={setENF('quantity')} placeholder="0" />
+              </div>
+              <div className="form-group">
+                <label>Stundensatz (€/h)</label>
+                <input type="number" min={0} step={0.01} value={editNodeForm.sp_rate} onChange={setENF('sp_rate')} placeholder="0" />
+              </div>
+            </div>
+          ) : editNodeForm.billing_type_id && editNodeForm.billing_type_id !== '2' ? (
+            <div className="form-group">
+              <label>Honorar (€)</label>
+              <input type="number" min={0} step={0.01} value={editNodeForm.revenue} onChange={setENF('revenue')} placeholder="0" />
+            </div>
+          ) : null}
+
+          <Message text={editNodeMsg?.text ?? null} type={editNodeMsg?.type} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button className="btn-primary" disabled={updateNodeMut.isPending || !editNodeForm.billing_type_id}
+              onClick={() => editNode && updateNodeMut.mutate({ nodeId: editNode.ID, f: editNodeForm })}>
+              {updateNodeMut.isPending ? 'Speichert …' : 'Speichern'}
+            </button>
+            <button type="button" className="btn-small" onClick={() => setEditNode(null)}>Abbrechen</button>
+          </div>
+        </div>
+      )}
+    </Modal>
     </>
   )
 }
