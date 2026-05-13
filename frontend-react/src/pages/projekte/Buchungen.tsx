@@ -389,11 +389,14 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         <td className="num">{fmtN(b.CP_TOT)}</td>
                         <td className="num">{fmtN(b.SP_TOT)}</td>
                         <td className="doc-actions">
-                          {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null
-                            ? <button className="btn-small" onClick={() => openEdit(b)}>Bearbeiten</button>
-                            : <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.4)', whiteSpace: 'nowrap' }}>abgerechnet</span>
-                          }
-                          <button className="btn-small btn-danger" onClick={() => confirmDelete(b)}>×</button>
+                          {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
+                            <>
+                              <button className="btn-small" onClick={() => openEdit(b)}>Bearbeiten</button>
+                              <button className="btn-small btn-danger" onClick={() => confirmDelete(b)}>×</button>
+                            </>
+                          ) : (
+                            <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.4)', whiteSpace: 'nowrap' }}>abgerechnet</span>
+                          )}
                         </td>
                       </tr>
                     ))}
