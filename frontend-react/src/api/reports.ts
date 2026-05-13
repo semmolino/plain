@@ -66,15 +66,18 @@ export interface ProjectReportHeader {
 }
 
 export interface ProjectReportStructure {
-  STRUCTURE_ID:        number
-  PARENT_STRUCTURE_ID: number | null
-  NAME_SHORT:          string
-  NAME_LONG:           string | null
-  HOURS_TOTAL:         number
-  COST_TOTAL:          number
-  EARNED_VALUE_NET:    number
-  HONORAR_NET:         number
-  REST_HONORAR:        number
+  STRUCTURE_ID:           number
+  PARENT_STRUCTURE_ID:    number | null
+  NAME_SHORT:             string
+  NAME_LONG:              string | null
+  IS_LEAF:                boolean
+  HOURS_TOTAL:            number
+  COST_TOTAL:             number
+  EARNED_VALUE_NET:       number
+  HONORAR_NET:            number
+  REST_HONORAR:           number
+  LEISTUNGSSTAND_PERCENT: number
+  KOSTENQUOTE:            number | null
 }
 
 export type FilterMode = 'now' | 'as_of' | 'period'

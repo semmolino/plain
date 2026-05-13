@@ -331,6 +331,9 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 .master-table tr:hover td { background: rgba(37,99,235,0.03); }
 .sortable-th { cursor: pointer; user-select: none; }
 .sortable-th:hover { color: #111827; }
+.master-table th.sortable { cursor: pointer; user-select: none; }
+.master-table th.sortable:hover { color: #111827; }
+.master-table th.sorted { color: #2563eb; }
 
 .btn-small {
   padding: 4px 10px; font-size: 11px; font-weight: 700;
