@@ -218,8 +218,10 @@ export interface Buchung {
   QUANTITY_EXT:        number
   SP_RATE:             number
   SP_TOT:              number
-  POSTING_DESCRIPTION: string
-  EMPLOYEE:            { SHORT_NAME: string } | null
+  POSTING_DESCRIPTION:  string
+  PARTIAL_PAYMENT_ID:   number | null
+  INVOICE_ID:           number | null
+  EMPLOYEE:             { SHORT_NAME: string } | null
 }
 
 export interface CreateBuchungPayload {
