@@ -94,7 +94,7 @@ export const createProject = (body: CreateProjectPayload) =>
 
 export const updateProject = (id: number, body: Partial<{
   name_short: string; name_long: string
-  project_status_id: number; project_type_id: number; project_manager_id: number
+  project_status_id: number; project_type_id: number | null; project_manager_id: number
 }>) => apiClient.patch<{ data: Project }>(`/projekte/${id}`, body)
 
 export const searchProjectsApi = (q: string) =>

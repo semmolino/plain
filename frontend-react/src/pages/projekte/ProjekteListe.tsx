@@ -100,7 +100,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
         name_short:         editForm.name_short,
         name_long:          editForm.name_long,
         project_status_id:  editForm.project_status_id  ? Number(editForm.project_status_id)  : undefined,
-        project_type_id:    editForm.project_type_id    ? Number(editForm.project_type_id)    : undefined,
+        project_type_id:    editForm.project_type_id    ? Number(editForm.project_type_id)    : null,
         project_manager_id: editForm.project_manager_id ? Number(editForm.project_manager_id) : undefined,
       },
     })
