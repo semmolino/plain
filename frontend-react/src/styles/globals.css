@@ -334,6 +334,7 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 .master-table th.sortable { cursor: pointer; user-select: none; }
 .master-table th.sortable:hover { color: #111827; }
 .master-table th.sorted { color: #2563eb; }
+.master-table tfoot .sum-row td { border-top: 2px solid #d1d5db; background: #f9fafb; }
 
 .btn-small {
   padding: 4px 10px; font-size: 11px; font-weight: 700;

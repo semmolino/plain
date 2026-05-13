@@ -272,6 +272,29 @@ export function DatenPage() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    {(() => {
+                      const totHonorar  = sorted.reduce((a, s) => a + s.HONORAR_NET, 0)
+                      const totEarned   = sorted.reduce((a, s) => a + s.EARNED_VALUE_NET, 0)
+                      const totRest     = sorted.reduce((a, s) => a + s.REST_HONORAR, 0)
+                      const totHours    = sorted.reduce((a, s) => a + s.HOURS_TOTAL, 0)
+                      const totCost     = sorted.reduce((a, s) => a + s.COST_TOTAL, 0)
+                      const totLstPct   = totHonorar > 0 ? (totEarned / totHonorar) * 100 : null
+                      const totKq       = totEarned > 0 ? (totCost / totEarned) * 100 : null
+                      return (
+                        <tr className="sum-row">
+                          <td><strong>Gesamt</strong></td>
+                          <td className="num"><strong>{fmtEur(totHonorar)}</strong></td>
+                          <td className="num"><strong>{fmtPct(totLstPct)}</strong></td>
+                          <td className="num"><strong>{fmtEur(totEarned)}</strong></td>
+                          <td className="num"><strong>{fmtEur(totRest)}</strong></td>
+                          <td className="num"><strong>{fmtH(totHours)}</strong></td>
+                          <td className="num"><strong>{fmtEur(totCost)}</strong></td>
+                          <td className="num"><strong>{totKq != null ? fmtPct(totKq) : '—'}</strong></td>
+                        </tr>
+                      )
+                    })()}
+                  </tfoot>
                 </table>
               </div>
             ) : (

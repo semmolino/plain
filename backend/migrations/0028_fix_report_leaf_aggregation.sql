@@ -35,42 +35,31 @@ SELECT
   ls."TENANT_ID",
   ls."PROJECT_ID",
 
-  -- Budget always from PROJECT_STRUCTURE (independent of snapshot existence)
-  SUM(COALESCE(ls."REVENUE", 0))                AS "REVENUE_BUDGET",
-  SUM(COALESCE(ls."EXTRAS",  0))                AS "EXTRAS_BUDGET",
+  -- Budget and completion always from PROJECT_STRUCTURE (current truth).
+  -- patchStructureCompletionPercents updates PROJECT_STRUCTURE directly without
+  -- inserting a snapshot, so VW_PROJECT_PROGRESS_LATEST can lag behind.
+  SUM(COALESCE(ps."REVENUE", 0))                   AS "REVENUE_BUDGET",
+  SUM(COALESCE(ps."EXTRAS",  0))                   AS "EXTRAS_BUDGET",
 
   -- Weighted Leistungsstand: sum(completion) / sum(budget), 0-100
   CASE
-    WHEN SUM(COALESCE(ls."REVENUE", 0)) + SUM(COALESCE(ls."EXTRAS", 0)) = 0 THEN NULL
+    WHEN SUM(COALESCE(ps."REVENUE", 0)) + SUM(COALESCE(ps."EXTRAS", 0)) = 0 THEN NULL
     ELSE 100.0
-       * ( SUM(COALESCE(ppl."REVENUE_COMPLETION", 0)) + SUM(COALESCE(ppl."EXTRAS_COMPLETION",  0)) )
-       / ( SUM(COALESCE(ls."REVENUE", 0))             + SUM(COALESCE(ls."EXTRAS",  0)) )
-  END                                            AS "LEISTUNGSSTAND_PERCENT",
+       * ( SUM(COALESCE(ps."REVENUE_COMPLETION", 0)) + SUM(COALESCE(ps."EXTRAS_COMPLETION",  0)) )
+       / ( SUM(COALESCE(ps."REVENUE", 0))            + SUM(COALESCE(ps."EXTRAS",  0)) )
+  END                                              AS "LEISTUNGSSTAND_PERCENT",
 
-  -- Completion from latest snapshot (0 when no snapshot for a node)
-  SUM(COALESCE(ppl."REVENUE_COMPLETION", 0))     AS "REVENUE_COMPLETION_VALUE",
-  SUM(COALESCE(ppl."EXTRAS_COMPLETION",  0))     AS "EXTRAS_COMPLETION_VALUE"
+  SUM(COALESCE(ps."REVENUE_COMPLETION", 0))        AS "REVENUE_COMPLETION_VALUE",
+  SUM(COALESCE(ps."EXTRAS_COMPLETION",  0))        AS "EXTRAS_COMPLETION_VALUE"
 
-FROM (
-  -- Leaf structure nodes (no children)
-  SELECT
-    ps."TENANT_ID",
-    ps."PROJECT_ID",
-    ps."ID"       AS "STRUCTURE_ID",
-    ps."REVENUE",
-    ps."EXTRAS"
-  FROM public."PROJECT_STRUCTURE" ps
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM   public."PROJECT_STRUCTURE" child
-    WHERE  child."TENANT_ID" = ps."TENANT_ID"
-      AND  child."FATHER_ID" = ps."ID"
-  )
-) ls
-LEFT JOIN "REPORTING"."VW_PROJECT_PROGRESS_LATEST" ppl
-  ON  ppl."TENANT_ID"    = ls."TENANT_ID"
- AND  ppl."STRUCTURE_ID" = ls."STRUCTURE_ID"
-GROUP BY ls."TENANT_ID", ls."PROJECT_ID";
+FROM public."PROJECT_STRUCTURE" ps
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM   public."PROJECT_STRUCTURE" child
+  WHERE  child."TENANT_ID" = ps."TENANT_ID"
+    AND  child."FATHER_ID" = ps."ID"
+)
+GROUP BY ps."TENANT_ID", ps."PROJECT_ID";
 
 -- ── 2. Recreate VW_REPORT_PROJECT_DETAIL in public schema ────────────────────
 
@@ -206,37 +195,34 @@ SELECT
   COALESCE(SUM(t."QUANTITY_INT"), 0)                                        AS "HOURS_TOTAL",
   COALESCE(SUM(t."CP_TOT"),       0)                                        AS "COST_TOTAL",
 
-  COALESCE(ppl."REVENUE_COMPLETION", 0) + COALESCE(ppl."EXTRAS_COMPLETION", 0)
+  -- Completion always from PROJECT_STRUCTURE (current truth, not snapshots)
+  COALESCE(ps."REVENUE_COMPLETION", 0) + COALESCE(ps."EXTRAS_COMPLETION", 0)
                                                                             AS "EARNED_VALUE_NET",
-  -- Budget from PROJECT_STRUCTURE directly (always correct)
   COALESCE(ps."REVENUE", 0) + COALESCE(ps."EXTRAS", 0)                     AS "HONORAR_NET",
 
   ( COALESCE(ps."REVENUE", 0) + COALESCE(ps."EXTRAS", 0) )
-  - ( COALESCE(ppl."REVENUE_COMPLETION", 0) + COALESCE(ppl."EXTRAS_COMPLETION", 0) )
+  - ( COALESCE(ps."REVENUE_COMPLETION", 0) + COALESCE(ps."EXTRAS_COMPLETION", 0) )
                                                                             AS "REST_HONORAR",
 
-  COALESCE(ppl."REVENUE_COMPLETION_PERCENT", 0)                             AS "LEISTUNGSSTAND_PERCENT",
+  COALESCE(ps."REVENUE_COMPLETION_PERCENT", 0)                              AS "LEISTUNGSSTAND_PERCENT",
 
   CASE
-    WHEN (COALESCE(ppl."REVENUE_COMPLETION", 0) + COALESCE(ppl."EXTRAS_COMPLETION", 0)) = 0 THEN NULL
+    WHEN (COALESCE(ps."REVENUE_COMPLETION", 0) + COALESCE(ps."EXTRAS_COMPLETION", 0)) = 0 THEN NULL
     ELSE COALESCE(SUM(t."CP_TOT"), 0)
-       / (COALESCE(ppl."REVENUE_COMPLETION", 0) + COALESCE(ppl."EXTRAS_COMPLETION", 0))
+       / (COALESCE(ps."REVENUE_COMPLETION", 0) + COALESCE(ps."EXTRAS_COMPLETION", 0))
   END                                                                       AS "KOSTENQUOTE"
 
 FROM public."PROJECT_STRUCTURE" ps
 LEFT JOIN public."TEC" t
   ON  t."TENANT_ID"    = ps."TENANT_ID"
  AND  t."STRUCTURE_ID" = ps."ID"
-LEFT JOIN "REPORTING"."VW_PROJECT_PROGRESS_LATEST" ppl
-  ON  ppl."TENANT_ID"    = ps."TENANT_ID"
- AND  ppl."STRUCTURE_ID" = ps."ID"
 GROUP BY
-  ps."TENANT_ID",   ps."PROJECT_ID",
-  ps."ID",          ps."FATHER_ID",
-  ps."NAME_SHORT",  ps."NAME_LONG",
-  ps."REVENUE",     ps."EXTRAS",
-  ppl."REVENUE_COMPLETION",   ppl."EXTRAS_COMPLETION",
-  ppl."REVENUE_COMPLETION_PERCENT";
+  ps."TENANT_ID",          ps."PROJECT_ID",
+  ps."ID",                 ps."FATHER_ID",
+  ps."NAME_SHORT",         ps."NAME_LONG",
+  ps."REVENUE",            ps."EXTRAS",
+  ps."REVENUE_COMPLETION", ps."EXTRAS_COMPLETION",
+  ps."REVENUE_COMPLETION_PERCENT";
 
 -- ── 5. Fix fn_project_report_header ──────────────────────────────────────────
 -- leaf_structs CTE provides budget from PROJECT_STRUCTURE.
