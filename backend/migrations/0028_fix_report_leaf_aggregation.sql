@@ -18,12 +18,16 @@
 --   6. fn_project_report_structure: add IS_LEAF, LEISTUNGSSTAND_PERCENT,
 --      KOSTENQUOTE, also select REVENUE_COMPLETION_PERCENT from prog CTE.
 
--- ── 0. Drop dependent views before modifying their dependencies ───────────────
+-- ── 0. Drop all dependent views (reverse dependency order) ───────────────────
+-- Must drop before any CREATE OR REPLACE that renames columns.
 
 DROP VIEW IF EXISTS public."VW_REPORT_PROJECT_LIST_ROOT";
 DROP VIEW IF EXISTS public."VW_REPORT_PROJECT_DETAIL";
 DROP VIEW IF EXISTS "REPORTING"."VW_REPORT_PROJECT_LIST_ROOT";
 DROP VIEW IF EXISTS "REPORTING"."VW_REPORT_PROJECT_DETAIL";
+-- VW_PROJECT_PROGRESS_AGG renames REVENUE_COMPLETION_PERCENT_AVG → LEISTUNGSSTAND_PERCENT,
+-- so it must be dropped rather than replaced in-place.
+DROP VIEW IF EXISTS "REPORTING"."VW_PROJECT_PROGRESS_AGG";
 
 -- ── 1. Fix VW_PROJECT_PROGRESS_AGG ───────────────────────────────────────────
 -- Leaf nodes only + weighted LEISTUNGSSTAND_PERCENT (0-100 range)
