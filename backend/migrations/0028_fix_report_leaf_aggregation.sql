@@ -31,6 +31,9 @@ DROP VIEW IF EXISTS "REPORTING"."VW_PROJECT_PROGRESS_AGG";
 -- VW_REPORT_PROJECT_DETAIL_STRUCTURE inserts IS_LEAF before HOURS_TOTAL,
 -- which also requires a DROP rather than REPLACE.
 DROP VIEW IF EXISTS public."VW_REPORT_PROJECT_DETAIL_STRUCTURE";
+-- RPCs change their return type (new columns), so they must be dropped first.
+DROP FUNCTION IF EXISTS public.fn_project_report_header(bigint, bigint, timestamptz, date, date);
+DROP FUNCTION IF EXISTS public.fn_project_report_structure(bigint, bigint, timestamptz, date, date);
 
 -- ── 1. Fix VW_PROJECT_PROGRESS_AGG ───────────────────────────────────────────
 -- Leaf nodes only + weighted LEISTUNGSSTAND_PERCENT (0-100 range)
