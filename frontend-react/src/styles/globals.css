@@ -336,6 +336,74 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 .master-table th.sorted { color: #2563eb; }
 .master-table tfoot .sum-row td { border-top: 2px solid #d1d5db; background: #f9fafb; }
 
+/* Clickable rows (Projektliste) */
+.clickable-row { cursor: pointer; }
+.clickable-row:hover td { background: rgba(37,99,235,0.05) !important; }
+.accent { color: #2563eb; font-weight: 600; }
+
+/* Projektliste toolbar */
+.pl-toolbar {
+  display: flex; align-items: flex-start; flex-wrap: wrap;
+  gap: 8px; margin-bottom: 12px;
+}
+.pl-search { flex: 0 0 200px; }
+.pl-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1; }
+.pl-clear-btn {
+  padding: 5px 12px; font-size: 12px; border-radius: 16px;
+  border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; cursor: pointer;
+}
+.pl-clear-btn:hover { background: #fee2e2; }
+.pl-col-wrap { position: relative; }
+.pl-col-btn {
+  padding: 5px 10px; font-size: 12px; border-radius: 6px;
+  border: 1px solid rgba(17,24,39,0.2); background: #fff; cursor: pointer; white-space: nowrap;
+}
+.pl-col-btn:hover { border-color: #2563eb; color: #2563eb; }
+.pl-col-panel {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 120;
+  background: #fff; border: 1px solid rgba(17,24,39,0.12); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1); min-width: 180px; padding: 6px 0;
+}
+.pl-col-panel-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: #6b7280; padding: 4px 14px 6px;
+}
+.pl-col-option {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 14px; cursor: pointer; font-size: 13px;
+}
+.pl-col-option:hover { background: #f0f4ff; }
+
+/* Filter chips */
+.filter-chip-wrap { position: relative; display: inline-flex; align-items: center; }
+.filter-chip-btn {
+  padding: 5px 10px; font-size: 12px; border-radius: 16px;
+  border: 1px solid rgba(17,24,39,0.2); background: #fff;
+  cursor: pointer; white-space: nowrap;
+  transition: border-color 0.12s, background 0.12s;
+}
+.filter-chip-btn:hover { border-color: #2563eb; color: #2563eb; }
+.filter-chip-btn.active { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; font-weight: 600; }
+.filter-chip-clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; margin-left: 2px; border: none; border-radius: 50%;
+  background: #dbeafe; color: #1d4ed8; cursor: pointer; font-size: 14px; line-height: 1; padding: 0;
+}
+.filter-chip-clear:hover { background: #bfdbfe; }
+.filter-chip-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 120;
+  background: #fff; border: 1px solid rgba(17,24,39,0.12); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  min-width: 200px; max-height: 260px; overflow-y: auto; padding: 4px 0;
+}
+.filter-chip-empty { padding: 8px 14px; font-size: 13px; color: #9ca3af; }
+.filter-chip-option {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; cursor: pointer; font-size: 13px;
+}
+.filter-chip-option:hover { background: #f0f4ff; }
+.filter-chip-option input[type="checkbox"] { cursor: pointer; accent-color: #2563eb; }
+
 .btn-small {
   padding: 4px 10px; font-size: 11px; font-weight: 700;
   border-radius: 8px; border: 1px solid rgba(17,24,39,0.12);

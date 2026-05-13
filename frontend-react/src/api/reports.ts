@@ -95,6 +95,43 @@ function buildDateParams(f: DateFilter): string {
   return ''
 }
 
+// ── Multi-project list ────────────────────────────────────────────────────────
+
+export interface ProjectListRow {
+  PROJECT_ID:                number
+  NAME_SHORT:                string
+  NAME_LONG:                 string | null
+  PROJECT_STATUS_ID:         number | null
+  PROJECT_STATUS_NAME_SHORT: string | null
+  PROJECT_TYPE_ID:           number | null
+  PROJECT_TYPE_NAME_SHORT:   string | null
+  PROJECT_MANAGER_ID:        number | null
+  PROJECT_MANAGER_DISPLAY:   string | null
+  ADDRESS_ID:                number | null
+  ADDRESS_NAME:              string | null
+  COMPANY_ID:                number | null
+  COMPANY_NAME:              string | null
+  DEPARTMENT_ID:             number | null
+  DEPARTMENT_NAME:           string | null
+  BUDGET_TOTAL_NET:          number
+  LEISTUNGSSTAND_PERCENT:    number | null
+  LEISTUNGSSTAND_VALUE:      number
+  HOURS_TOTAL:               number
+  COST_TOTAL:                number
+  COST_RATIO:                number | null
+  REMAINING_BUDGET_NET:      number
+  BILLED_NET_TOTAL:          number
+  OPEN_NET_TOTAL:            number
+  PAYED_NET_TOTAL:           number
+  SALES_TOTAL:               number
+  QTY_EXT_TOTAL:             number
+}
+
+export const fetchProjectList = (filter: DateFilter = { mode: 'now' }) => {
+  const qs = buildDateParams(filter)
+  return apiClient.get<{ data: ProjectListRow[] }>(`/reports/projects/list${qs ? `?${qs}` : ''}`)
+}
+
 export const fetchProjectReportHeader = (projectId: number, filter: DateFilter = { mode: 'now' }) => {
   const qs = buildDateParams(filter)
   return apiClient.get<{ data: ProjectReportHeader }>(`/reports/project/${projectId}/header${qs ? `?${qs}` : ''}`)

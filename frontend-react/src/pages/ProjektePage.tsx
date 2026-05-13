@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs }           from '@/components/ui/Tabs'
 import { ProjekteListe }  from '@/pages/projekte/ProjekteListe'
 import { ProjekteAnlegen } from '@/pages/projekte/ProjekteAnlegen'
@@ -21,8 +22,19 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 export function ProjektePage() {
-  const [tab, setTab] = useState<Tab>('liste')
-  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined)
+  const location = useLocation()
+  const navigate  = useNavigate()
+  const navState  = location.state as { tab?: Tab; projectId?: number } | null
+
+  const [tab, setTab] = useState<Tab>(navState?.tab ?? 'liste')
+  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(navState?.projectId)
+
+  // Clear navigation state so back/forward doesn't re-apply it
+  useEffect(() => {
+    if (location.state) {
+      navigate('/projekte', { replace: true, state: null })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openProject(id: number) {
     setSelectedProjectId(id)

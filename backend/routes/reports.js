@@ -122,6 +122,46 @@ module.exports = (supabase) => {
     res.json({ data: data || [] });
   });
 
+  // All projects with KPIs (multi-project list)
+  router.get("/projects/list", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const filter = parseDateFilter(req, res);
+    if (filter === null) return;
+
+    let data, error;
+
+    if (filter.useRpc) {
+      ({ data, error } = await supabase
+        .rpc("fn_project_list_report", {
+          p_tenant_id: parseInt(tenantId, 10),
+          ...filter.rpcParams,
+        }));
+    } else {
+      ({ data, error } = await supabase
+        .from("VW_REPORT_PROJECT_DETAIL")
+        .select([
+          "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+          "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
+          "PROJECT_TYPE_ID",   "PROJECT_TYPE_NAME_SHORT",
+          "PROJECT_MANAGER_ID","PROJECT_MANAGER_DISPLAY",
+          "ADDRESS_ID",        "ADDRESS_NAME",
+          "COMPANY_ID",        "COMPANY_NAME",
+          "DEPARTMENT_ID",     "DEPARTMENT_NAME",
+          "BUDGET_TOTAL_NET",  "LEISTUNGSSTAND_PERCENT", "LEISTUNGSSTAND_VALUE",
+          "HOURS_TOTAL",       "COST_TOTAL",             "COST_RATIO",
+          "REMAINING_BUDGET_NET", "BILLED_NET_TOTAL",    "OPEN_NET_TOTAL",
+          "PAYED_NET_TOTAL",   "SALES_TOTAL",            "QTY_EXT_TOTAL",
+        ].join(", "))
+        .eq("TENANT_ID", tenantId)
+        .order("NAME_SHORT", { ascending: true }));
+    }
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ data: data || [] });
+  });
+
   // ── Dashboard endpoints ──────────────────────────────────────────────────
 
   // KPI summary (single row)
