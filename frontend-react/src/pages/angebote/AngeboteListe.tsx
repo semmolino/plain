@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
 import {
   fetchOffers, deleteOffer, openOfferPdf, fetchOfferStructure, convertOffer, updateOffer,
+  fetchOfferStatuses,
   type OfferListItem, type ConvertOfferPayload,
 } from '@/api/angebote'
 import { BeauftragtModal } from './BeauftragtModal'
@@ -31,6 +32,8 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
   const [convertErr,    setConvertErr]    = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['offers'], queryFn: fetchOffers })
+  const { data: statusData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
+  const rejectedId = statusData?.data?.find(s => s.NAME_SHORT === 'Abgelehnt')?.ID ?? null
 
   const { data: structData } = useQuery({
     queryKey: ['offer-structure', beauftragtRow?.ID],
@@ -45,7 +48,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
   })
 
   const rejectMut = useMutation({
-    mutationFn: (id: number) => updateOffer(id, { offer_status_id: 4, refusal_date: TODAY }),
+    mutationFn: (id: number) => updateOffer(id, { offer_status_id: rejectedId!, refusal_date: TODAY }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['offers'] }) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
@@ -65,7 +68,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
 
   const filtered = useMemo(() => {
     let result = rows
-    if (onlyOpen) result = result.filter(r => r.PROJECT_ID === null && r.OFFER_STATUS_ID !== 4)
+    if (onlyOpen) result = result.filter(r => r.PROJECT_ID === null && (rejectedId === null || r.OFFER_STATUS_ID !== rejectedId))
     const q = search.trim().toLowerCase()
     if (q) result = result.filter(r =>
       `${r.NAME_SHORT} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q)
@@ -146,7 +149,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                       <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>
                         ✅ {r.PROJECT_NAME ?? `Projekt #${r.PROJECT_ID}`}
                       </span>
-                    ) : r.OFFER_STATUS_ID === 4 ? null : (
+                    ) : (rejectedId !== null && r.OFFER_STATUS_ID === rejectedId) ? null : (
                       <>
                         <button
                           className="btn-small"

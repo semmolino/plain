@@ -156,12 +156,6 @@ export interface UpdateStructureNodePayload {
 export const fetchOfferStatuses = () =>
   apiClient.get<{ data: OfferStatus[] }>('/angebote/statuses')
 
-export const createOfferStatus = (name_short: string) =>
-  apiClient.post<{ data: OfferStatus }>('/angebote/statuses', { name_short })
-
-export const deleteOfferStatus = (id: number) =>
-  apiClient.delete<{ ok: boolean }>(`/angebote/statuses/${id}`)
-
 export const fetchOffers = () =>
   apiClient.get<{ data: OfferListItem[] }>('/angebote')
 

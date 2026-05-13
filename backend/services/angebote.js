@@ -32,33 +32,13 @@ function flattenOfferStructure(rows) {
 
 // ── offer statuses ────────────────────────────────────────────────────────────
 
-async function getOfferStatuses(supabase, { tenantId }) {
+async function getOfferStatuses(supabase) {
   const { data, error } = await supabase
     .from('OFFER_STATUS')
     .select('ID, NAME_SHORT')
-    .or(`TENANT_ID.eq.${tenantId},TENANT_ID.is.null`)
     .order('ID', { ascending: true });
   if (error) throw error;
   return data || [];
-}
-
-async function createOfferStatus(supabase, { tenantId, name_short }) {
-  if (!name_short || typeof name_short !== 'string' || !name_short.trim()) {
-    throw { status: 400, message: 'name_short ist erforderlich' };
-  }
-  const { data, error } = await supabase
-    .from('OFFER_STATUS')
-    .insert([{ NAME_SHORT: name_short.trim(), TENANT_ID: tenantId }])
-    .select('ID, NAME_SHORT')
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-async function deleteOfferStatus(supabase, { tenantId, id }) {
-  const { error } = await supabase.from('OFFER_STATUS').delete()
-    .eq('ID', id).eq('TENANT_ID', tenantId);
-  if (error) throw error;
 }
 
 // ── offers ────────────────────────────────────────────────────────────────────
@@ -736,8 +716,6 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
 
 module.exports = {
   getOfferStatuses,
-  createOfferStatus,
-  deleteOfferStatus,
   listOffers,
   getOffer,
   createOffer,

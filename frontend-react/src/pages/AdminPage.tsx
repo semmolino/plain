@@ -11,7 +11,6 @@ import {
   fetchLogo, putLogo, uploadAsset,
   type Company, type StammdatenItem, type Rolle,
 } from '@/api/stammdaten'
-import { createOfferStatus, deleteOfferStatus, fetchOfferStatuses } from '@/api/angebote'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 
@@ -83,12 +82,9 @@ function StammdatenSection() {
   const { data: deptData  } = useQuery({ queryKey: ['departments'],   queryFn: fetchDepartments })
   const { data: typenData  } = useQuery({ queryKey: ['typen'],        queryFn: fetchTypen })
   const { data: rollenData } = useQuery({ queryKey: ['rollen'],       queryFn: fetchRollen })
-  const { data: statusData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
-
   const departments  = deptData?.data   ?? []
   const typen        = typenData?.data  ?? []
   const rollen       = rollenData?.data ?? []
-  const offerStatuses = statusData?.data ?? []
 
   function withMsg(mutFn: () => void) { setMsg(null); mutFn() }
 
@@ -126,17 +122,6 @@ function StammdatenSection() {
   const delRolleMut = useMutation({
     mutationFn: deleteRolle,
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['rollen'] }),
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-
-  const offerStatusMut = useMutation({
-    mutationFn: (name: string) => createOfferStatus(name),
-    onSuccess: () => { setMsg({ text: 'Angebotsstatus gespeichert ✅', type: 'success' }); void qc.invalidateQueries({ queryKey: ['offer-statuses'] }) },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-  const delOfferStatusMut = useMutation({
-    mutationFn: deleteOfferStatus,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['offer-statuses'] }),
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -211,20 +196,6 @@ function StammdatenSection() {
         >
           {rolleMut.isPending ? 'Speichert …' : 'Hinzufügen'}
         </button>
-      </div>
-
-      <div className="admin-block">
-        <h3 className="admin-block-title">Angebotsstatus</h3>
-        <TagList
-          items={offerStatuses.map(s => ({ ID: s.ID, label: s.NAME_SHORT }))}
-          onDelete={id => withMsg(() => delOfferStatusMut.mutate(id))}
-        />
-        <SingleInputMutation
-          label="Angebotsstatus"
-          placeholder="z. B. In Bearbeitung"
-          onSubmit={v => withMsg(() => offerStatusMut.mutate(v))}
-          isPending={offerStatusMut.isPending}
-        />
       </div>
 
       <Message text={msg?.text ?? null} type={msg?.type} />

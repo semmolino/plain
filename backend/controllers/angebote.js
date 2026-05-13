@@ -5,16 +5,7 @@ const { renderOfferPdf } = require('../services_pdf_render');
 
 async function getOfferStatuses(req, res, supabase) {
   try {
-    const data = await svc.getOfferStatuses(supabase, { tenantId: req.tenantId });
-    return res.json({ data });
-  } catch (e) {
-    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
-  }
-}
-
-async function postOfferStatus(req, res, supabase) {
-  try {
-    const data = await svc.createOfferStatus(supabase, { tenantId: req.tenantId, name_short: req.body?.name_short });
+    const data = await svc.getOfferStatuses(supabase);
     return res.json({ data });
   } catch (e) {
     return res.status(e?.status || 500).json({ error: e?.message || String(e) });
@@ -145,21 +136,8 @@ async function getOfferPdf(req, res, supabase) {
   }
 }
 
-async function deleteOfferStatus(req, res, supabase) {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (!id) return res.status(400).json({ error: 'Ungültige ID' });
-    await svc.deleteOfferStatus(supabase, { tenantId: req.tenantId, id });
-    return res.json({ ok: true });
-  } catch (e) {
-    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
-  }
-}
-
 module.exports = {
   getOfferStatuses,
-  postOfferStatus,
-  deleteOfferStatus,
   listOffers,
   getOffer,
   createOffer,

@@ -7,8 +7,6 @@ module.exports = (supabase) => {
   const router = express.Router();
 
   router.get('/statuses',                   (req, res) => ctrl.getOfferStatuses(req, res, supabase));
-  router.post('/statuses',                  (req, res) => ctrl.postOfferStatus(req, res, supabase));
-  router.delete('/statuses/:id',            (req, res) => ctrl.deleteOfferStatus(req, res, supabase));
   router.get('/',                           (req, res) => ctrl.listOffers(req, res, supabase));
   router.post('/',                          (req, res) => ctrl.createOffer(req, res, supabase));
   router.put('/:id',                        (req, res) => ctrl.updateOffer(req, res, supabase));
