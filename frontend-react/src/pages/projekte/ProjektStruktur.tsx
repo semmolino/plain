@@ -433,6 +433,12 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
     window.addEventListener('pointerup', onUp)
   }
 
+  // ── Root row totals ───────────────────────────────────────────────────────
+  const currentProject = projects.find(p => p.ID === selectedPid)
+  const rootRevenue = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.revenue ?? 0), 0)
+  const rootExtras  = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.extras  ?? 0), 0)
+  const rootStand   = structure.reduce((s, n) => s + (n.REVENUE_COMPLETION ?? 0), 0)
+
   // ── Select helpers ────────────────────────────────────────────────────────
 
   const allIds = structure.map(n => n.STRUCTURE_ID)
@@ -511,6 +517,20 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                       </tr>
                     </thead>
                     <tbody ref={tbodyRef}>
+                      {currentProject && (
+                        <tr style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)' }}>
+                          <td></td>
+                          <td></td>
+                          <td style={{ paddingLeft: 4, fontSize: 13 }}>{currentProject.NAME_SHORT}</td>
+                          <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.7)' }}>{currentProject.NAME_LONG}</td>
+                          <td><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
+                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
+                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
+                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
+                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootStand)}</span></td>
+                          <td></td>
+                        </tr>
+                      )}
                       {flatTree.map(({ node, depth }) => {
                         const edit      = edits[node.STRUCTURE_ID]
                         const nkVal     = edit?.nk     ?? String(node.EXTRAS_PERCENT ?? 0)
