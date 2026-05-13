@@ -321,14 +321,14 @@ export function ProjekteAnlegen() {
                       <tr key={empId}>
                         <td>{empLabel(emp)}</td>
                         <td>
-                          <select value={row.role_id} onChange={e => applyRolePreset(empId, e.target.value)} style={{ fontSize: 11 }}>
+                          <select className="tbl-select" value={row.role_id} onChange={e => applyRolePreset(empId, e.target.value)}>
                             <option value="">—</option>
                             {roles.map(r => <option key={r.ID} value={r.ID}>{r.NAME_SHORT}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
                           </select>
                         </td>
-                        <td><input style={{ width: 80 }} value={row.role_name_short} onChange={e => setE2pField(empId, 'role_name_short', e.target.value)} /></td>
-                        <td><input style={{ width: 140 }} value={row.role_name_long} onChange={e => setE2pField(empId, 'role_name_long', e.target.value)} /></td>
-                        <td><input style={{ width: 80 }} type="number" step="0.01" value={row.sp_rate} onChange={e => setE2pField(empId, 'sp_rate', e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 80 }} value={row.role_name_short} onChange={e => setE2pField(empId, 'role_name_short', e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 140 }} value={row.role_name_long} onChange={e => setE2pField(empId, 'role_name_long', e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 80 }} type="number" step="0.01" value={row.sp_rate} onChange={e => setE2pField(empId, 'sp_rate', e.target.value)} /></td>
                       </tr>
                     )
                   })}
@@ -355,16 +355,17 @@ export function ProjekteAnlegen() {
                   {structDraft.map((r, i) => (
                     <tr key={r.tmp_key}>
                       <td>{i + 1}</td>
-                      <td><input style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
-                      <td><input style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
+                      <td><input className="tbl-input" style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
+                      <td><input className="tbl-input" style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
                       <td>
-                        <select style={{ fontSize: 11 }} value={String(r.BILLING_TYPE_ID)} onChange={e => setStructField(r.tmp_key, 'BILLING_TYPE_ID', e.target.value)}>
+                        <select className="tbl-select" value={String(r.BILLING_TYPE_ID)} onChange={e => setStructField(r.tmp_key, 'BILLING_TYPE_ID', e.target.value)}>
                           <option value="">Bitte wählen …</option>
                           {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
                         </select>
                       </td>
                       <td>
                         <input
+                          className="tbl-input"
                           type="number" min={0} max={100} step={0.1}
                           style={{ width: 70 }}
                           value={String(r.EXTRAS_PERCENT)}
@@ -373,7 +374,7 @@ export function ProjekteAnlegen() {
                         />
                       </td>
                       <td>
-                        <select style={{ fontSize: 11 }} value={r.father_tmp_key} onChange={e => setStructField(r.tmp_key, 'father_tmp_key', e.target.value)}>
+                        <select className="tbl-select" value={r.father_tmp_key} onChange={e => setStructField(r.tmp_key, 'father_tmp_key', e.target.value)}>
                           <option value="">(Root)</option>
                           {structDraft.filter(x => x.tmp_key !== r.tmp_key).map(x => (
                             <option key={x.tmp_key} value={x.tmp_key}>

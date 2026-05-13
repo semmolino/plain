@@ -331,13 +331,13 @@ export function HonorarWizard() {
                     <td>{p.PHASE_LABEL}</td>
                     <td>{fmtN(p.FEE_PERCENT_BASE)}</td>
                     <td>
-                      <select value={p.KX || 'K0'} onChange={e => updatePhaseKx(p.ID, e.target.value)} style={{ fontSize: 11 }}>
+                      <select className="tbl-select" value={p.KX || 'K0'} onChange={e => updatePhaseKx(p.ID, e.target.value)}>
                         {KX_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
                       </select>
                     </td>
-                    <td><input readOnly style={{ width: 80 }} value={fmtN(p.REVENUE_BASE)} /></td>
-                    <td><input type="number" step="0.01" style={{ width: 80 }} value={fmtN(p.FEE_PERCENT)} onChange={e => updatePhasePct(p.ID, e.target.value)} /></td>
-                    <td><input readOnly style={{ width: 80 }} value={fmtN(p.PHASE_REVENUE)} /></td>
+                    <td><input className="tbl-input" readOnly style={{ width: 80 }} value={fmtN(p.REVENUE_BASE)} /></td>
+                    <td><input className="tbl-input" type="number" step="0.01" style={{ width: 80 }} value={fmtN(p.FEE_PERCENT)} onChange={e => updatePhasePct(p.ID, e.target.value)} /></td>
+                    <td><input className="tbl-input" readOnly style={{ width: 80 }} value={fmtN(p.PHASE_REVENUE)} /></td>
                   </tr>
                 ))}
               </tbody>

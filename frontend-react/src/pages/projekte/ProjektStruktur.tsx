@@ -546,6 +546,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             </td>
                             <td style={{ paddingLeft: 4 + depth * 16 }}>
                               <input
+                                className="tbl-input"
                                 style={{ width: 70, fontWeight: isParent ? 700 : undefined }}
                                 value={nameShort}
                                 onChange={e => setField(node.STRUCTURE_ID, 'nameShort', e.target.value)}
@@ -554,13 +555,14 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             </td>
                             <td>
                               <input
+                                className="tbl-input"
                                 style={{ width: 160 }}
                                 value={nameLong}
                                 onChange={e => setField(node.STRUCTURE_ID, 'nameLong', e.target.value)}
                               />
                             </td>
                             <td>
-                              <select style={{ fontSize: 11 }} value={btId}
+                              <select className="tbl-select" value={btId}
                                 onChange={e => setField(node.STRUCTURE_ID, 'billingTypeId', e.target.value)}>
                                 {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}</option>)}
                               </select>
@@ -571,14 +573,14 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                                   {fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.revenue : node.TEC_SP_TOT_SUM)}
                                 </span>
                               ) : (
-                                <input type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
+                                <input className="tbl-input" type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
                                   value={budgetVal}
                                   onChange={e => setField(node.STRUCTURE_ID, 'budget', e.target.value)} />
                               )}
                             </td>
                             <td className="num">
                               <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'flex-end' }}>
-                                <input type="number" min={0} max={100} step={0.1} style={{ width: 56 }}
+                                <input className="tbl-input" type="number" min={0} max={100} step={0.1} style={{ width: 56 }}
                                   value={nkVal}
                                   onChange={e => setField(node.STRUCTURE_ID, 'nk', e.target.value)} />
                                 {isParent && (
