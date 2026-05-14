@@ -307,6 +307,7 @@ export function ProjektlisteTab() {
         (r.NAME_LONG ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_STATUS_NAME_SHORT ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_MANAGER_DISPLAY ?? '').toLowerCase().includes(q) ||
+        (r.ADDRESS_NAME ?? '').toLowerCase().includes(q) ||
         (r.COMPANY_NAME ?? '').toLowerCase().includes(q)
       )
     }
