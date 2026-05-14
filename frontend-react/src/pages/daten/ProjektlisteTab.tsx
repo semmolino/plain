@@ -24,7 +24,7 @@ const emptyFilters = (): ActiveFilters =>
 
 type ColKey = 'status' | 'manager' | 'typ' | 'abteilung' | 'adresse'
   | 'honorar' | 'lstPct' | 'lstEur' | 'rest' | 'hoursInt' | 'cost'
-  | 'billed' | 'open' | 'payed' | 'salesEur' | 'hoursExt' | 'kq'
+  | 'billed' | 'open' | 'payed' | 'kq'
 
 type SortField = 'name' | ColKey
 
@@ -105,7 +105,7 @@ const COLUMNS: ColDef[] = [
     renderTotal: rs => fmtEur(sumRows(rs, r => r.REMAINING_BUDGET_NET)),
   },
   {
-    key: 'hoursInt', label: 'Std.int.', className: 'num', defaultVisible: false,
+    key: 'hoursInt', label: 'Std.int.', className: 'num', defaultVisible: true,
     render:      r  => fmtH(r.HOURS_TOTAL),
     sortValue:   r  => r.HOURS_TOTAL ?? 0,
     renderTotal: rs => fmtH(sumRows(rs, r => r.HOURS_TOTAL)),
@@ -133,18 +133,6 @@ const COLUMNS: ColDef[] = [
     render:      r  => fmtEur(r.PAYED_NET_TOTAL),
     sortValue:   r  => r.PAYED_NET_TOTAL ?? 0,
     renderTotal: rs => fmtEur(sumRows(rs, r => r.PAYED_NET_TOTAL)),
-  },
-  {
-    key: 'salesEur', label: 'Erlös ext.', className: 'num', defaultVisible: false,
-    render:      r  => fmtEur(r.SALES_TOTAL),
-    sortValue:   r  => r.SALES_TOTAL ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.SALES_TOTAL)),
-  },
-  {
-    key: 'hoursExt', label: 'Std.ext.', className: 'num', defaultVisible: false,
-    render:      r  => fmtH(r.QTY_EXT_TOTAL),
-    sortValue:   r  => r.QTY_EXT_TOTAL ?? 0,
-    renderTotal: rs => fmtH(sumRows(rs, r => r.QTY_EXT_TOTAL)),
   },
   {
     key: 'kq', label: 'Kostenquote', className: 'num', defaultVisible: false,
@@ -396,7 +384,7 @@ export function ProjektlisteTab() {
               placeholder="Suche …"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-search"
+              className="list-search"
             />
             <div className="pl-filter-chips">
               <FilterChip label="Status"        options={filterOptions.status}    active={activeFilters.status}    onChange={v => setDimFilter('status', v)}    />

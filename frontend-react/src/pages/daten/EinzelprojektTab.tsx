@@ -204,8 +204,6 @@ export function EinzelprojektTab() {
             <KpiTile label="Abgerechnet (Netto)"          value={fmtEur(header.BILLED_NET_TOTAL)} />
             <KpiTile label="ABRECHENBAR (Netto)"          value={fmtEur(header.OPEN_NET_TOTAL)} accent />
             <KpiTile label="Bezahlt (Netto)"              value={fmtEur(header.PAYED_NET_TOTAL)} />
-            <KpiTile label="Erlös (ext.)"                 value={fmtEur(header.SALES_TOTAL)} />
-            <KpiTile label="Stunden (ext.)"               value={fmtH(header.QTY_EXT_TOTAL)} />
             {header.COST_RATIO != null && (
               <KpiTile label="Kostenquote"                value={fmtPct((header.COST_RATIO ?? 0) * 100)} />
             )}
@@ -215,10 +213,10 @@ export function EinzelprojektTab() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
               <input
                 type="search"
-                placeholder="Suche …"
+                placeholder="Suchen …"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ flex: '0 0 260px' }}
+                className="list-search"
               />
               {search && filtered.length !== leafRows.length && (
                 <span className="empty-note" style={{ margin: 0 }}>
