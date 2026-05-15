@@ -2,6 +2,7 @@
 
 const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
+const { insertProgressSnapshot } = require("./projectProgress");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -509,7 +510,7 @@ async function bookFinalInvoice(supabase, { id, tenantId }) {
         INVOICED:     invoiced,
       }));
       if (finalProgressRows.length > 0) {
-        const { error: fpErr } = await supabase.from("PROJECT_PROGRESS").insert(finalProgressRows);
+        const { error: fpErr } = await insertProgressSnapshot(supabase, finalProgressRows);
         if (fpErr) console.error("[BOOK_FINAL][PROGRESS]", fpErr.message);
       }
     }

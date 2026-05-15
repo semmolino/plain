@@ -2,6 +2,7 @@
 
 const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
+const { insertProgressSnapshot } = require("./projectProgress");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -861,14 +862,14 @@ async function bookPartialPayment(supabase, { id, pp }) {
         const { error: psUpErr } = await supabase.from("PROJECT_STRUCTURE").upsert(updates, { onConflict: "ID" });
         if (psUpErr) throw new Error(psUpErr.message);
 
-        // PROJECT_PROGRESS: one row per structure with the PARTIAL_PAYMENTS delta
+        // PROJECT_PROGRESS: carry-forward snapshot + PARTIAL_PAYMENTS delta
         const ppProgressRows = structureIds.map((sid) => ({
           TENANT_ID:        pp.TENANT_ID ?? null,
           STRUCTURE_ID:     sid,
           PARTIAL_PAYMENTS: round2(addByStructure.get(String(sid)) || 0),
         }));
         if (ppProgressRows.length > 0) {
-          const { error: ppProgErr } = await supabase.from("PROJECT_PROGRESS").insert(ppProgressRows);
+          const { error: ppProgErr } = await insertProgressSnapshot(supabase, ppProgressRows);
           if (ppProgErr) console.error("[BOOK_PP][PROGRESS]", ppProgErr.message);
         }
       }
@@ -923,13 +924,11 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
       await supabase.from("PAYMENT").delete().eq("ID", payment.ID);
 
       if (psRows && psRows.length > 0) {
-        await supabase.from("PROJECT_PROGRESS").insert(
-          psRows.map(r => ({
-            TENANT_ID:    tenantId ?? null,
-            STRUCTURE_ID: r.STRUCTURE_ID,
-            PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
-          }))
-        );
+        await insertProgressSnapshot(supabase, psRows.map(r => ({
+          TENANT_ID:    tenantId ?? null,
+          STRUCTURE_ID: r.STRUCTURE_ID,
+          PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
+        })));
       }
     }
 

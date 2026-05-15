@@ -2,6 +2,7 @@
 
 const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
+const { insertProgressSnapshot } = require("./projectProgress");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -965,14 +966,14 @@ async function bookInvoice(supabase, { id, inv }) {
         const { error: psUpErr } = await supabase.from("PROJECT_STRUCTURE").upsert(updates, { onConflict: "ID" });
         if (psUpErr) throw new Error(psUpErr.message);
 
-        // PROJECT_PROGRESS: one row per structure with the INVOICED delta
+        // PROJECT_PROGRESS: carry-forward snapshot + INVOICED delta
         const invProgressRows = structureIds.map((sid) => ({
           TENANT_ID:    inv.TENANT_ID ?? null,
           STRUCTURE_ID: sid,
           INVOICED:     round2(addByStructure.get(String(sid)) || 0),
         }));
         if (invProgressRows.length > 0) {
-          const { error: invProgErr } = await supabase.from("PROJECT_PROGRESS").insert(invProgressRows);
+          const { error: invProgErr } = await insertProgressSnapshot(supabase, invProgressRows);
           if (invProgErr) console.error("[BOOK_INVOICE][PROGRESS]", invProgErr.message);
         }
       }
@@ -1032,15 +1033,13 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
       await supabase.from("PAYMENT_STRUCTURE").delete().eq("PAYMENT_ID", payment.ID);
       await supabase.from("PAYMENT").delete().eq("ID", payment.ID);
 
-      // Insert negative PROJECT_PROGRESS reversal rows
+      // Insert PROJECT_PROGRESS reversal rows with carry-forward
       if (psRows && psRows.length > 0) {
-        await supabase.from("PROJECT_PROGRESS").insert(
-          psRows.map(r => ({
-            TENANT_ID:    tenantId ?? null,
-            STRUCTURE_ID: r.STRUCTURE_ID,
-            PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
-          }))
-        );
+        await insertProgressSnapshot(supabase, psRows.map(r => ({
+          TENANT_ID:    tenantId ?? null,
+          STRUCTURE_ID: r.STRUCTURE_ID,
+          PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
+        })));
       }
     }
 

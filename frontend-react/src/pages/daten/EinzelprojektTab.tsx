@@ -198,7 +198,7 @@ export function EinzelprojektTab() {
             <KpiTile label="HONORAR inkl. Nebenkosten"  value={fmtEur(header.BUDGET_TOTAL_NET)} />
             <KpiTile label="Leistungsstand %"            value={fmtPct(header.LEISTUNGSSTAND_PERCENT)} />
             <KpiTile label="Leistungsstand (€)"          value={fmtEur(header.LEISTUNGSSTAND_VALUE)} />
-            <KpiTile label="Restbudget"                   value={fmtEur(header.REMAINING_BUDGET_NET)} />
+            <KpiTile label="Resthonorar"                  value={fmtEur(header.REMAINING_BUDGET_NET)} />
             <KpiTile label="Stunden (int.)"               value={fmtH(header.HOURS_TOTAL)} />
             <KpiTile label="Kosten (int.)"                value={fmtEur(header.COST_TOTAL)} />
             <KpiTile label="Abgerechnet (Netto)"          value={fmtEur(header.BILLED_NET_TOTAL)} />

@@ -1,4 +1,5 @@
 const express = require("express");
+const { insertProgressSnapshot } = require("../services/projectProgress");
 
 // Payment routes
 // Base path: /api/payments
@@ -237,7 +238,7 @@ module.exports = (supabase) => {
               STRUCTURE_ID: r.STRUCTURE_ID,
               PAYED:        r.AMOUNT_PAYED_NET,
             }));
-            const { error: ppErr } = await supabase.from("PROJECT_PROGRESS").insert(payProgressRows);
+            const { error: ppErr } = await insertProgressSnapshot(supabase, payProgressRows);
             if (ppErr) console.error("[PAYMENT][PROGRESS]", ppErr.message);
           }
         }
@@ -312,14 +313,14 @@ module.exports = (supabase) => {
         await propagatePayedUpwards(sid);
       }
 
-      // 6. Insert negative PROJECT_PROGRESS rows as reversal entries
+      // 6. Insert PROJECT_PROGRESS reversal rows with carry-forward
       if (structureRows.length > 0) {
         const reversalRows = structureRows.map(r => ({
           TENANT_ID:    req.tenantId ?? null,
           STRUCTURE_ID: r.STRUCTURE_ID,
           PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
         }));
-        const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert(reversalRows);
+        const { error: prErr } = await insertProgressSnapshot(supabase, reversalRows);
         if (prErr) console.error("[PAYMENT_DELETE][PROGRESS]", prErr.message);
       }
 
