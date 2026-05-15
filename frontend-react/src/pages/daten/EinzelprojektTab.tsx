@@ -9,6 +9,7 @@ import {
   Filler,
   Tooltip,
   Legend,
+  type ChartOptions,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { fetchProjectsShort } from '@/api/projekte'
@@ -176,13 +177,13 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
     ],
   }
 
-  const options = {
+  const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: { mode: 'index' as const, intersect: false },
+    interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: {
-        position: 'top' as const,
+        position: 'top',
         labels: {
           usePointStyle: true,
           pointStyle: 'circle',
@@ -198,9 +199,8 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         padding: 12,
         cornerRadius: 8,
         callbacks: {
-          title: (items: { label: string }[]) => items[0]?.label ?? '',
-          label: (ctx: { dataset: { label?: string }; parsed: { y: number } }) =>
-            `  ${ctx.dataset.label}: ${FMT_EUR.format(ctx.parsed.y)}`,
+          label: (ctx) =>
+            `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}`,
         },
       },
     },
@@ -219,7 +219,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         ticks: {
           font: { size: 11 },
           color: '#6b7280',
-          callback: (v: number | string) => FMT_EUR0.format(Number(v)),
+          callback: (v) => FMT_EUR0.format(Number(v)),
         },
       },
     },
