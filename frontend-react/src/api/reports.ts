@@ -153,7 +153,7 @@ export interface TimelinePoint {
   BEZAHLT_NET:          number
 }
 
-export const fetchProjectTimeline = (projectId: number, filter: DateFilter = { mode: 'now' }) => {
+function buildTimelineQs(filter: DateFilter): string {
   const params = new URLSearchParams()
   if (filter.mode === 'as_of' && filter.asOfDate) {
     params.set('date_to', filter.asOfDate)
@@ -161,6 +161,15 @@ export const fetchProjectTimeline = (projectId: number, filter: DateFilter = { m
     if (filter.dateFrom) params.set('date_from', filter.dateFrom)
     if (filter.dateTo)   params.set('date_to',   filter.dateTo)
   }
-  const qs = params.toString()
+  return params.toString()
+}
+
+export const fetchProjectTimeline = (projectId: number, filter: DateFilter = { mode: 'now' }) => {
+  const qs = buildTimelineQs(filter)
   return apiClient.get<{ data: TimelinePoint[] }>(`/reports/project/${projectId}/timeline${qs ? `?${qs}` : ''}`)
+}
+
+export const fetchProjectsTimeline = (filter: DateFilter = { mode: 'now' }) => {
+  const qs = buildTimelineQs(filter)
+  return apiClient.get<{ data: TimelinePoint[] }>(`/reports/projects/timeline${qs ? `?${qs}` : ''}`)
 }
