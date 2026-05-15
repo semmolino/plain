@@ -3,9 +3,11 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale, BarElement, ArcElement,
+  PointElement, LineElement, Filler,
   Tooltip, Legend,
+  type ChartOptions,
 } from 'chart.js'
-import { Bar, Doughnut } from 'react-chartjs-2'
+import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { useSession } from '@/hooks/useSession'
@@ -14,15 +16,17 @@ import {
   fetchDashboardProjects,
   fetchDashboardMonthly,
   fetchDashboardByStatus,
+  fetchProjectsTimeline,
   type DashboardKpis,
   type DashboardProject,
   type DashboardMonthly,
   type DashboardByStatus,
+  type TimelinePoint,
 } from '@/api/reports'
 import { fetchCompanies, fetchDefaults, fetchLogo } from '@/api/stammdaten'
 import { fetchNumberRanges } from '@/api/numberRanges'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -178,6 +182,146 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
   )
 }
 
+// ── Timeline chart (year-to-date) ────────────────────────────────────────────
+
+const FMT_EUR_TL  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const FMT_EUR0_TL = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+
+function fmtDateDE(iso: string) {
+  const d = new Date(iso + 'T00:00:00')
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function DashboardTimeline() {
+  const today     = new Date()
+  const dateFrom  = `${today.getFullYear()}-01-01`
+  const dateTo    = today.toISOString().substring(0, 10)
+  const filter    = { mode: 'period' as const, dateFrom, dateTo }
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['projects-timeline', filter],
+    queryFn:  () => fetchProjectsTimeline(filter),
+  })
+
+  const points: TimelinePoint[] = data?.data ?? []
+
+  if (isLoading) {
+    return (
+      <div className="timeline-wrap">
+        <p className="empty-note">Laden …</p>
+      </div>
+    )
+  }
+  if (points.length === 0) return null
+
+  const labels    = points.map(p => fmtDateDE(p.DATE))
+  const ptRadius  = points.length > 60 ? 0 : 3
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: 'Honorar inkl. NK',
+        data: points.map(p => p.HONORAR_NET),
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59,130,246,0.07)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: ptRadius,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+      {
+        label: 'Leistungsstand €',
+        data: points.map(p => p.LEISTUNGSSTAND_VALUE),
+        borderColor: '#10b981',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        pointRadius: ptRadius,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+      {
+        label: 'Kosten €',
+        data: points.map(p => p.KOSTEN_TOTAL),
+        borderColor: '#f59e0b',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        pointRadius: ptRadius,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+      {
+        label: 'Abgerechnet €',
+        data: points.map(p => p.ABGERECHNET_NET),
+        borderColor: '#8b5cf6',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        borderDash: [6, 3],
+        pointRadius: ptRadius,
+        pointHoverRadius: 6,
+        borderWidth: 1.5,
+      },
+      {
+        label: 'Bezahlt €',
+        data: points.map(p => p.BEZAHLT_NET),
+        borderColor: '#06b6d4',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        borderDash: [6, 3],
+        pointRadius: ptRadius,
+        pointHoverRadius: 6,
+        borderWidth: 1.5,
+      },
+    ],
+  }
+
+  const options: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, font: { size: 12 } },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(17,24,39,0.92)',
+        titleColor: '#f9fafb',
+        bodyColor: '#d1d5db',
+        padding: 12,
+        cornerRadius: 8,
+        callbacks: {
+          label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${FMT_EUR_TL.format(ctx.parsed.y ?? 0)}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(0,0,0,0.04)' },
+        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: '#6b7280' },
+      },
+      y: {
+        grid: { color: 'rgba(0,0,0,0.06)' },
+        ticks: { font: { size: 11 }, color: '#6b7280', callback: (v) => FMT_EUR0_TL.format(Number(v)) },
+      },
+    },
+  }
+
+  return (
+    <div className="timeline-wrap">
+      <h3 className="timeline-title">Gesamtverlauf {today.getFullYear()} (Jahr bis heute)</h3>
+      <div className="timeline-chart">
+        <Line data={chartData} options={options} />
+      </div>
+    </div>
+  )
+}
+
 // ── Setup checklist ───────────────────────────────────────────────────────────
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -322,6 +466,9 @@ export function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ── YTD timeline ── */}
+      <DashboardTimeline />
 
       {/* ── Project table + Donut side by side ── */}
       <div className="dash-two-col">
