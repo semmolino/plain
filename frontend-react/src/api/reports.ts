@@ -141,3 +141,26 @@ export const fetchProjectReportStructure = (projectId: number, filter: DateFilte
   const qs = buildDateParams(filter)
   return apiClient.get<{ data: ProjectReportStructure[] }>(`/reports/project/${projectId}/structure${qs ? `?${qs}` : ''}`)
 }
+
+// ── Project timeline (chart data) ─────────────────────────────────────────────
+
+export interface TimelinePoint {
+  DATE:                 string  // ISO date YYYY-MM-DD
+  HONORAR_NET:          number
+  LEISTUNGSSTAND_VALUE: number
+  KOSTEN_TOTAL:         number
+  ABGERECHNET_NET:      number
+  BEZAHLT_NET:          number
+}
+
+export const fetchProjectTimeline = (projectId: number, filter: DateFilter = { mode: 'now' }) => {
+  const params = new URLSearchParams()
+  if (filter.mode === 'as_of' && filter.asOfDate) {
+    params.set('date_to', filter.asOfDate)
+  } else if (filter.mode === 'period') {
+    if (filter.dateFrom) params.set('date_from', filter.dateFrom)
+    if (filter.dateTo)   params.set('date_to',   filter.dateTo)
+  }
+  const qs = params.toString()
+  return apiClient.get<{ data: TimelinePoint[] }>(`/reports/project/${projectId}/timeline${qs ? `?${qs}` : ''}`)
+}

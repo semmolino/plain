@@ -693,6 +693,31 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 }
 .daten-kpi-value.accent { color: #2563eb; }
 
+/* ── Project timeline chart ──────────────────────────────────────────────── */
+.timeline-wrap {
+  margin-top: 32px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid rgba(17,24,39,0.08);
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(17,24,39,0.04);
+}
+.timeline-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(17,24,39,0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 16px 0;
+}
+.timeline-chart {
+  position: relative;
+  height: 300px;
+}
+@media (max-width: 600px) {
+  .timeline-chart { height: 220px; }
+}
+
 /* ── App header ──────────────────────────────────────────────────────────── */
 .app-header {
   position: sticky;

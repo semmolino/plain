@@ -162,6 +162,171 @@ module.exports = (supabase) => {
     res.json({ data: data || [] });
   });
 
+  // Project progress timeline (for chart visualization)
+  // Query params:
+  //   date_from  ISO date — leftmost X-axis point (omit for full history)
+  //   date_to    ISO date — rightmost X-axis point (omit for today)
+  // Returns one row per event date with cumulative: honorar, leistungsstand, kosten, abgerechnet, bezahlt
+  router.get("/project/:projectId/timeline", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const projectId = parseInt(req.params.projectId, 10);
+    if (!Number.isFinite(projectId)) return res.status(400).json({ error: "Ungültige Projekt-ID." });
+
+    const dateFrom = req.query.date_from || null;
+    const dateTo   = req.query.date_to   || null;
+
+    try {
+      // 1. All structures for this project
+      const { data: structures, error: sErr } = await supabase
+        .from("PROJECT_STRUCTURE")
+        .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, created_at")
+        .eq("TENANT_ID", tenantId)
+        .eq("PROJECT_ID", projectId);
+      if (sErr) return res.status(500).json({ error: sErr.message });
+      if (!structures || structures.length === 0) return res.json({ data: [] });
+
+      const fatherIds = new Set(structures.map(s => s.FATHER_ID).filter(Boolean));
+      const leaves    = structures.filter(s => !fatherIds.has(s.ID));
+      const leafIds   = leaves.map(s => s.ID);
+
+      // 2. All PROJECT_PROGRESS rows for these leaves (full history — no date filter)
+      const { data: progressRows } = await supabase
+        .from("PROJECT_PROGRESS")
+        .select("STRUCTURE_ID, REVENUE, EXTRAS, REVENUE_COMPLETION, EXTRAS_COMPLETION, created_at")
+        .eq("TENANT_ID", tenantId)
+        .in("STRUCTURE_ID", leafIds)
+        .order("created_at", { ascending: true });
+
+      // 3. TEC rows (fetch up to dateTo for efficiency; full history needed for cumulative)
+      let tecQ = supabase
+        .from("TEC")
+        .select("STRUCTURE_ID, DATE_VOUCHER, CP_TOT, SP_TOT")
+        .eq("TENANT_ID", tenantId)
+        .in("STRUCTURE_ID", leafIds)
+        .order("DATE_VOUCHER", { ascending: true });
+      if (dateTo) tecQ = tecQ.lte("DATE_VOUCHER", dateTo);
+      const { data: tecRows } = await tecQ;
+
+      // 4. Partial payments
+      let ppQ = supabase
+        .from("PARTIAL_PAYMENT")
+        .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+        .eq("TENANT_ID", tenantId)
+        .eq("PROJECT_ID", projectId)
+        .eq("STATUS_ID", 2)
+        .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+      if (dateTo) ppQ = ppQ.lte("PARTIAL_PAYMENT_DATE", dateTo);
+      const { data: ppRows } = await ppQ;
+
+      // 5. Invoices (table may not exist in all tenants)
+      let invRows = [];
+      try {
+        let invQ = supabase
+          .from("INVOICE")
+          .select("INVOICE_DATE, TOTAL_AMOUNT_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("PROJECT_ID", projectId)
+          .eq("STATUS_ID", 2)
+          .order("INVOICE_DATE", { ascending: true });
+        if (dateTo) invQ = invQ.lte("INVOICE_DATE", dateTo);
+        const { data: inv } = await invQ;
+        invRows = inv || [];
+      } catch (_) {}
+
+      // 6. Payments
+      let payQ = supabase
+        .from("PAYMENT")
+        .select("PAYMENT_DATE, AMOUNT_PAYED_NET")
+        .eq("TENANT_ID", tenantId)
+        .eq("PROJECT_ID", projectId)
+        .order("PAYMENT_DATE", { ascending: true });
+      if (dateTo) payQ = payQ.lte("PAYMENT_DATE", dateTo);
+      const { data: payRows } = await payQ;
+
+      // 7. Collect distinct event dates, apply date range filter for X axis
+      const dateSet = new Set();
+      (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
+      (tecRows      || []).forEach(r => { if (r.DATE_VOUCHER) dateSet.add(r.DATE_VOUCHER); });
+      (ppRows       || []).forEach(r => { if (r.PARTIAL_PAYMENT_DATE) dateSet.add(r.PARTIAL_PAYMENT_DATE); });
+      invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
+      (payRows      || []).forEach(r => { if (r.PAYMENT_DATE) dateSet.add(r.PAYMENT_DATE); });
+
+      let sortedDates = [...dateSet].sort();
+      if (dateFrom) sortedDates = sortedDates.filter(d => d >= dateFrom);
+      if (dateTo)   sortedDates = sortedDates.filter(d => d <= dateTo);
+
+      if (sortedDates.length === 0) return res.json({ data: [] });
+
+      // 8. Compute cumulative values at each event date
+      const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+
+      const result = sortedDates.map(date => {
+        let honorar       = 0;
+        let leistungsstand = 0;
+
+        for (const leaf of leaves) {
+          const leafCreated = leaf.created_at ? leaf.created_at.substring(0, 10) : "9999-12-31";
+          const leafProg = (progressRows || []).filter(r =>
+            r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
+          );
+
+          // Budget: last PP row with non-null REVENUE ≤ date; fallback to current PS if it existed
+          const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
+          let rev = 0, ext = 0;
+          if (lastBudget) {
+            rev = +(lastBudget.REVENUE || 0);
+            ext = +(lastBudget.EXTRAS  || 0);
+          } else if (leafCreated <= date) {
+            rev = +(leaf.REVENUE || 0);
+            ext = +(leaf.EXTRAS  || 0);
+          }
+          honorar += rev + ext;
+
+          // Leistungsstand
+          if (leaf.BILLING_TYPE_ID === 2) {
+            const sp = (tecRows || [])
+              .filter(r => r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date)
+              .reduce((s, r) => s + +(r.SP_TOT || 0), 0);
+            leistungsstand += sp;
+          } else {
+            const lastCompl = [...leafProg].reverse().find(r => r.REVENUE_COMPLETION != null);
+            if (lastCompl) {
+              leistungsstand += +(lastCompl.REVENUE_COMPLETION || 0) + +(lastCompl.EXTRAS_COMPLETION || 0);
+            }
+          }
+        }
+
+        const kosten = (tecRows || [])
+          .filter(r => r.DATE_VOUCHER <= date)
+          .reduce((s, r) => s + +(r.CP_TOT || 0), 0);
+
+        const abgerechnet =
+          (ppRows || []).filter(r => r.PARTIAL_PAYMENT_DATE <= date)
+            .reduce((s, r) => s + +(r.AMOUNT_NET || 0) + +(r.AMOUNT_EXTRAS_NET || 0), 0) +
+          invRows.filter(r => r.INVOICE_DATE <= date)
+            .reduce((s, r) => s + +(r.TOTAL_AMOUNT_NET || 0), 0);
+
+        const bezahlt = (payRows || []).filter(r => r.PAYMENT_DATE <= date)
+          .reduce((s, r) => s + +(r.AMOUNT_PAYED_NET || 0), 0);
+
+        return {
+          DATE:                 date,
+          HONORAR_NET:          round2(honorar),
+          LEISTUNGSSTAND_VALUE: round2(leistungsstand),
+          KOSTEN_TOTAL:         round2(kosten),
+          ABGERECHNET_NET:      round2(abgerechnet),
+          BEZAHLT_NET:          round2(bezahlt),
+        };
+      });
+
+      res.json({ data: result });
+    } catch (e) {
+      res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
   // ── Dashboard endpoints ──────────────────────────────────────────────────
 
   // KPI summary (single row)

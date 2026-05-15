@@ -1,15 +1,31 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+} from 'chart.js'
+import { Line } from 'react-chartjs-2'
 import { fetchProjectsShort } from '@/api/projekte'
 import {
   fetchProjectReportHeader,
   fetchProjectReportStructure,
+  fetchProjectTimeline,
   type DateFilter,
   type FilterMode,
   type ProjectReportStructure,
+  type TimelinePoint,
 } from '@/api/reports'
 
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
+
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
@@ -54,6 +70,172 @@ function buildAncestorPath(
   const parent = buildAncestorPath(node.PARENT_STRUCTURE_ID, byId)
   return parent ? `${parent} › ${node.NAME_SHORT}` : node.NAME_SHORT
 }
+
+// ── Timeline chart ────────────────────────────────────────────────────────────
+
+const CHART_COLORS = {
+  honorar:       '#3b82f6',
+  leistungsstand:'#10b981',
+  kosten:        '#f59e0b',
+  abgerechnet:   '#8b5cf6',
+  bezahlt:       '#06b6d4',
+}
+
+function fmtDateDE(iso: string) {
+  const d = new Date(iso + 'T00:00:00')
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function ProjectTimeline({ projectId, filter }: { projectId: number; filter: DateFilter }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['project-timeline', projectId, filter],
+    queryFn:  () => fetchProjectTimeline(projectId, filter),
+    enabled:  projectId !== null,
+  })
+
+  const points: TimelinePoint[] = data?.data ?? []
+
+  if (isLoading) {
+    return (
+      <div className="timeline-wrap">
+        <p className="empty-note">Laden …</p>
+      </div>
+    )
+  }
+
+  if (points.length === 0) {
+    return (
+      <div className="timeline-wrap">
+        <p className="empty-note">Keine Zeitreihendaten vorhanden.</p>
+      </div>
+    )
+  }
+
+  const labels = points.map(p => fmtDateDE(p.DATE))
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: 'Honorar inkl. NK',
+        data: points.map(p => p.HONORAR_NET),
+        borderColor: CHART_COLORS.honorar,
+        backgroundColor: 'rgba(59,130,246,0.07)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: points.length > 60 ? 0 : 3,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+      {
+        label: 'Leistungsstand €',
+        data: points.map(p => p.LEISTUNGSSTAND_VALUE),
+        borderColor: CHART_COLORS.leistungsstand,
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        pointRadius: points.length > 60 ? 0 : 3,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+      {
+        label: 'Kosten €',
+        data: points.map(p => p.KOSTEN_TOTAL),
+        borderColor: CHART_COLORS.kosten,
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        pointRadius: points.length > 60 ? 0 : 3,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+      {
+        label: 'Abgerechnet €',
+        data: points.map(p => p.ABGERECHNET_NET),
+        borderColor: CHART_COLORS.abgerechnet,
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        borderDash: [6, 3],
+        pointRadius: points.length > 60 ? 0 : 3,
+        pointHoverRadius: 6,
+        borderWidth: 1.5,
+      },
+      {
+        label: 'Bezahlt €',
+        data: points.map(p => p.BEZAHLT_NET),
+        borderColor: CHART_COLORS.bezahlt,
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.35,
+        borderDash: [6, 3],
+        pointRadius: points.length > 60 ? 0 : 3,
+        pointHoverRadius: 6,
+        borderWidth: 1.5,
+      },
+    ],
+  }
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index' as const, intersect: false },
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: {
+          usePointStyle: true,
+          pointStyle: 'circle',
+          boxWidth: 8,
+          padding: 16,
+          font: { size: 12 },
+        },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(17,24,39,0.92)',
+        titleColor: '#f9fafb',
+        bodyColor: '#d1d5db',
+        padding: 12,
+        cornerRadius: 8,
+        callbacks: {
+          title: (items: { label: string }[]) => items[0]?.label ?? '',
+          label: (ctx: { dataset: { label?: string }; parsed: { y: number } }) =>
+            `  ${ctx.dataset.label}: ${FMT_EUR.format(ctx.parsed.y)}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(0,0,0,0.04)' },
+        ticks: {
+          maxRotation: 45,
+          maxTicksLimit: 12,
+          font: { size: 11 },
+          color: '#6b7280',
+        },
+      },
+      y: {
+        grid: { color: 'rgba(0,0,0,0.06)' },
+        ticks: {
+          font: { size: 11 },
+          color: '#6b7280',
+          callback: (v: number | string) => FMT_EUR0.format(Number(v)),
+        },
+      },
+    },
+  }
+
+  return (
+    <div className="timeline-wrap">
+      <h3 className="timeline-title">Projektverlauf</h3>
+      <div className="timeline-chart">
+        <Line data={chartData} options={options} />
+      </div>
+    </div>
+  )
+}
+
+// ── Main tab component ────────────────────────────────────────────────────────
 
 export function EinzelprojektTab() {
   const [pid,       setPid]      = useState<number | null>(null)
@@ -296,6 +478,11 @@ export function EinzelprojektTab() {
               )
             )}
           </div>
+
+          {/* Timeline chart — shown when a project is selected and filter is ready */}
+          {pid !== null && filterReady && (
+            <ProjectTimeline projectId={pid} filter={filter} />
+          )}
         </>
       )}
     </div>
