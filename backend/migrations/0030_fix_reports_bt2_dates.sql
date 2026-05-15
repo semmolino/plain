@@ -22,7 +22,10 @@
 -- Safe to re-run: all DROPs use IF EXISTS.
 
 -- ── Drop objects that change shape ───────────────────────────────────────────
+-- Drop in dependency order: dependent views first, then the base view.
 
+DROP VIEW IF EXISTS public."VW_REPORT_PROJECT_LIST_ROOT";
+DROP VIEW IF EXISTS public."VW_REPORT_PROJECT_DETAIL";
 DROP VIEW IF EXISTS public."VW_REPORT_PROJECT_DETAIL_STRUCTURE";
 DROP VIEW IF EXISTS "REPORTING"."VW_PROJECT_PROGRESS_AGG";
 DROP FUNCTION IF EXISTS public.fn_project_report_header(bigint, bigint, timestamptz, date, date);
@@ -838,3 +841,116 @@ LANGUAGE sql STABLE AS $$
   WHERE proj."TENANT_ID" = p_tenant_id
   ORDER BY proj."NAME_SHORT"
 $$;
+
+
+-- ── 6. Recreate VW_REPORT_PROJECT_DETAIL (depends on updated VW_PROJECT_PROGRESS_AGG) ──
+
+CREATE OR REPLACE VIEW public."VW_REPORT_PROJECT_DETAIL" AS
+SELECT
+  p."TENANT_ID",
+  p."ID"                AS "PROJECT_ID",
+  p."NAME_LONG",
+  p."NAME_SHORT",
+  p."PROJECT_STATUS_ID",
+  ps_lkp."NAME_SHORT"   AS "PROJECT_STATUS_NAME_SHORT",
+  p."PROJECT_TYPE_ID",
+  pt."NAME_SHORT"       AS "PROJECT_TYPE_NAME_SHORT",
+  p."PROJECT_MANAGER_ID",
+  (
+    e."SHORT_NAME" ||
+    CASE
+      WHEN e."FIRST_NAME" IS NOT NULL
+        THEN (': ' || e."FIRST_NAME" || ' ' || COALESCE(e."LAST_NAME", ''))
+      ELSE ''
+    END
+  )                     AS "PROJECT_MANAGER_DISPLAY",
+  p."ADDRESS_ID",
+  a."ADDRESS_NAME_1"    AS "ADDRESS_NAME",
+  p."COMPANY_ID",
+  c."COMPANY_NAME_1"    AS "COMPANY_NAME",
+  p."DEPARTMENT_ID",
+  d."NAME_SHORT"        AS "DEPARTMENT_NAME",
+  p."CONTACT_ID",
+  co."LAST_NAME"        AS "CONTACT_NAME",
+  p."created_at"        AS "PROJECT_created_at",
+
+  COALESCE(pa."REVENUE_BUDGET", 0) + COALESCE(pa."EXTRAS_BUDGET", 0)
+                                                AS "BUDGET_TOTAL_NET",
+  pa."LEISTUNGSSTAND_PERCENT"                   AS "LEISTUNGSSTAND_PERCENT",
+  COALESCE(pa."REVENUE_COMPLETION_VALUE", 0) + COALESCE(pa."EXTRAS_COMPLETION_VALUE", 0)
+                                                AS "LEISTUNGSSTAND_VALUE",
+  COALESCE(ta."HOURS_TOTAL", 0)                 AS "HOURS_TOTAL",
+  COALESCE(ta."COST_TOTAL",  0)                 AS "COST_TOTAL",
+  COALESCE(pa."REVENUE_COMPLETION_VALUE", 0) + COALESCE(pa."EXTRAS_COMPLETION_VALUE", 0)
+                                                AS "EARNED_VALUE_NET",
+
+  CASE
+    WHEN (COALESCE(pa."REVENUE_COMPLETION_VALUE", 0) + COALESCE(pa."EXTRAS_COMPLETION_VALUE", 0)) = 0 THEN NULL
+    ELSE COALESCE(ta."COST_TOTAL", 0)
+       / (COALESCE(pa."REVENUE_COMPLETION_VALUE", 0) + COALESCE(pa."EXTRAS_COMPLETION_VALUE", 0))
+  END                                           AS "COST_RATIO",
+
+  (COALESCE(pa."REVENUE_BUDGET", 0) + COALESCE(pa."EXTRAS_BUDGET", 0))
+  - (COALESCE(pa."REVENUE_COMPLETION_VALUE", 0) + COALESCE(pa."EXTRAS_COMPLETION_VALUE", 0))
+                                                AS "REMAINING_BUDGET_NET",
+
+  COALESCE(p."PARTIAL_PAYMENTS", 0)             AS "PARTIAL_PAYMENT_NET_TOTAL",
+  COALESCE(p."INVOICED",         0)             AS "INVOICE_NET_TOTAL",
+  COALESCE(ba."PAYED_NET_TOTAL", 0)             AS "PAYED_NET_TOTAL",
+  (COALESCE(p."PARTIAL_PAYMENTS", 0) + COALESCE(p."INVOICED", 0))
+                                                AS "BILLED_NET_TOTAL",
+  (COALESCE(pa."REVENUE_COMPLETION_VALUE", 0) + COALESCE(pa."EXTRAS_COMPLETION_VALUE", 0))
+  - (COALESCE(p."PARTIAL_PAYMENTS", 0) + COALESCE(p."INVOICED", 0))
+                                                AS "OPEN_NET_TOTAL",
+  COALESCE(ta."SALES_TOTAL",   0)               AS "SALES_TOTAL",
+  COALESCE(ta."QTY_EXT_TOTAL", 0)               AS "QTY_EXT_TOTAL"
+
+FROM public."PROJECT" p
+LEFT JOIN "REPORTING"."VW_PROJECT_PROGRESS_AGG" pa
+  ON  pa."TENANT_ID"  = p."TENANT_ID"
+ AND  pa."PROJECT_ID" = p."ID"
+LEFT JOIN "REPORTING"."VW_PROJECT_TIME_AGG" ta
+  ON  ta."TENANT_ID"  = p."TENANT_ID"
+ AND  ta."PROJECT_ID" = p."ID"
+LEFT JOIN "REPORTING"."VW_PROJECT_BILLING_AGG" ba
+  ON  ba."TENANT_ID"  = p."TENANT_ID"
+ AND  ba."PROJECT_ID" = p."ID"
+LEFT JOIN public."EMPLOYEE" e
+  ON  e."TENANT_ID" = p."TENANT_ID"
+ AND  e."ID"        = p."PROJECT_MANAGER_ID"
+LEFT JOIN public."PROJECT_STATUS" ps_lkp
+  ON  ps_lkp."ID" = p."PROJECT_STATUS_ID"
+LEFT JOIN public."PROJECT_TYPE" pt
+  ON  pt."ID" = p."PROJECT_TYPE_ID"
+LEFT JOIN public."ADDRESS" a
+  ON  a."TENANT_ID" = p."TENANT_ID"
+ AND  a."ID"        = p."ADDRESS_ID"
+LEFT JOIN public."COMPANY" c
+  ON  c."TENANT_ID" = p."TENANT_ID"
+ AND  c."ID"        = p."COMPANY_ID"
+LEFT JOIN public."DEPARTMENT" d
+  ON  d."ID" = p."DEPARTMENT_ID"
+LEFT JOIN public."CONTACTS" co
+  ON  co."TENANT_ID" = p."TENANT_ID"
+ AND  co."ID"        = p."CONTACT_ID";
+
+
+-- ── 7. Recreate VW_REPORT_PROJECT_LIST_ROOT (depends on VW_REPORT_PROJECT_DETAIL) ──
+
+CREATE OR REPLACE VIEW public."VW_REPORT_PROJECT_LIST_ROOT" AS
+SELECT
+  pd."TENANT_ID",        pd."PROJECT_ID",
+  pd."NAME_SHORT",       pd."NAME_LONG",
+  pd."PROJECT_STATUS_ID",   pd."PROJECT_STATUS_NAME_SHORT",
+  pd."PROJECT_TYPE_ID",     pd."PROJECT_TYPE_NAME_SHORT",
+  pd."PROJECT_MANAGER_ID",  pd."PROJECT_MANAGER_DISPLAY",
+  pd."ADDRESS_ID",          pd."ADDRESS_NAME",
+  pd."COMPANY_ID",          pd."COMPANY_NAME",
+  pd."DEPARTMENT_ID",       pd."DEPARTMENT_NAME",
+  pd."CONTACT_ID",          pd."CONTACT_NAME",
+  pd."BUDGET_TOTAL_NET",    pd."LEISTUNGSSTAND_PERCENT",
+  pd."LEISTUNGSSTAND_VALUE", pd."HOURS_TOTAL",  pd."COST_TOTAL",
+  pd."EARNED_VALUE_NET",    pd."COST_RATIO",    pd."REMAINING_BUDGET_NET",
+  pd."PARTIAL_PAYMENT_NET_TOTAL", pd."INVOICE_NET_TOTAL",
+  pd."PAYED_NET_TOTAL",     pd."BILLED_NET_TOTAL", pd."OPEN_NET_TOTAL"
+FROM public."VW_REPORT_PROJECT_DETAIL" pd;
