@@ -627,11 +627,15 @@ async function checkParentForChild(supabase, { parentId }) {
     .from("PROJECT_STRUCTURE").select("ID").eq("FATHER_ID", parentId).limit(1);
   const isAlreadyNode = Array.isArray(existingChildren) && existingChildren.length > 0;
 
-  if (!isAlreadyNode && (num(parent.PARTIAL_PAYMENTS) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICE_ID != null)) {
+  // Already a node (has children): new child just extends the aggregate — nothing to transfer or block.
+  if (isAlreadyNode) return { status: "ok" };
+
+  // Leaf element: block if it already has billing/payment data attached.
+  if (num(parent.PARTIAL_PAYMENTS) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICE_ID != null) {
     return { status: "blocked", reason: "Das übergeordnete Element enthält Rechnungs- oder Zahlungsdaten. Neue Unterelemente können daher nicht erstellt werden." };
   }
 
-  // Option 1: value/TEC data → needs transfer
+  // Leaf element with values/TEC: transfer them to the first child being created.
   const hasValues = num(parent.REVENUE) !== 0 || num(parent.EXTRAS) !== 0 || num(parent.REVENUE_COMPLETION) !== 0 || num(parent.EXTRAS_COMPLETION) !== 0 || num(parent.COSTS) !== 0;
   const { data: tecRows } = await supabase.from("TEC").select("ID").eq("STRUCTURE_ID", parentId).limit(1);
   const hasTec = Array.isArray(tecRows) && tecRows.length > 0;
