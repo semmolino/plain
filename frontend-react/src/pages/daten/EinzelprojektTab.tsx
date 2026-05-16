@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
@@ -237,8 +238,9 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
 
 // ── Main tab component ────────────────────────────────────────────────────────
 
-export function EinzelprojektTab() {
-  const [pid,       setPid]      = useState<number | null>(null)
+export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: number } = {}) {
+  const navigate = useNavigate()
+  const [pid,       setPid]      = useState<number | null>(initialProjectId ?? null)
   const [mode,      setMode]     = useState<FilterMode>('now')
   const [asOfDate,  setAsOfDate] = useState('')
   const [dateFrom,  setDateFrom] = useState('')
@@ -327,14 +329,23 @@ export function EinzelprojektTab() {
     else { setSortField(field); setSortDir('asc') }
   }
 
+  const currentProject = projects.find(p => p.ID === pid)
+
   return (
     <div>
-      <div className="form-group" style={{ maxWidth: 400, marginBottom: 16 }}>
-        <label>Projekt</label>
-        <select value={pid ?? ''} onChange={e => setPid(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">Bitte wählen …</option>
-          {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
-        </select>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div className="form-group" style={{ maxWidth: 400, marginBottom: 0 }}>
+          <label>Projekt</label>
+          <select value={pid ?? ''} onChange={e => setPid(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">Bitte wählen …</option>
+            {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
+          </select>
+        </div>
+        {pid !== null && (
+          <button className="btn-small" onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: pid } })}>
+            ← Projektstruktur
+          </button>
+        )}
       </div>
 
       <div className="daten-filter-bar">

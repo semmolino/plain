@@ -404,6 +404,17 @@ input::placeholder { color: rgba(17,24,39,0.45); }
 .filter-chip-option:hover { background: #f0f4ff; }
 .filter-chip-option input[type="checkbox"] { cursor: pointer; accent-color: #2563eb; }
 
+/* ── Project jump bar ────────────────────────────────────────────────────── */
+.proj-jump-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 12px; padding: 6px 0;
+  border-bottom: 1px solid rgba(17,24,39,0.08);
+}
+.proj-jump-label {
+  font-size: 12px; font-weight: 600; color: rgba(17,24,39,0.5);
+  margin-right: 4px;
+}
+
 .btn-small {
   padding: 4px 10px; font-size: 11px; font-weight: 700;
   border-radius: 8px; border: 1px solid rgba(17,24,39,0.12);

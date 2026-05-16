@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
 import {
@@ -40,6 +41,7 @@ function depthOf(id: string, parentMap: Map<string, string | null>): number {
 
 export function ProjektStruktur({ initialProjectId, onProjectChange }: { initialProjectId?: number; onProjectChange?: (id: number | null) => void }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [selectedPid, setSelectedPid]   = useState<number | null>(initialProjectId ?? null)
   const [edits, setEdits]               = useState<Record<number, RowEdit>>({})
   const [selectedIds, setSelectedIds]   = useState<Set<number>>(new Set())
@@ -467,6 +469,18 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
           {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
         </select>
       </div>
+
+      {selectedPid !== null && currentProject && (
+        <div className="proj-jump-bar">
+          <span className="proj-jump-label">{currentProject.NAME_SHORT}</span>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.NAME_SHORT, backProject: { id: selectedPid, name: currentProject.NAME_SHORT } } })}>
+            Rechnungen →
+          </button>
+          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: selectedPid } })}>
+            Projekt-Report →
+          </button>
+        </div>
+      )}
 
       {selectedPid !== null && (
         <>

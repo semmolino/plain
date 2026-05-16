@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal }   from '@/components/ui/Modal'
 import { Message } from '@/components/ui/Message'
@@ -53,6 +54,7 @@ interface UnifiedRow {
   typ:        string
   date:       string | null
   project:    string | null
+  projectId:  number | null
   net:        number | null
   gross:      number | null
   paid:       number | null
@@ -97,6 +99,7 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     typ:         capitalizeInvType(inv.INVOICE_TYPE),
     date:        inv.INVOICE_DATE ?? null,
     project:     inv.PROJECT ?? null,
+    projectId:   inv.PROJECT_ID ?? null,
     net:         adjustedNet,
     gross:       adjustedGross,
     paid,
@@ -135,6 +138,7 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     typ:         'Abschlagsrechnung',
     date:        pp.PARTIAL_PAYMENT_DATE ?? null,
     project:     pp.PROJECT ?? null,
+    projectId:   pp.PROJECT_ID ?? null,
     net:         adjustedNet,
     gross:       adjustedGross,
     paid,
@@ -178,11 +182,23 @@ function emptyPaymentForm() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPayload) => void } = {}) {
-  const qc = useQueryClient()
+interface RechnungenListeProps {
+  onEditDraft?:  (d: EditDraftPayload) => void
+  initialSearch?: string
+  backProject?:  { id: number; name: string }
+  onClearBack?:  () => void
+}
 
-  const [search,    setSearch]    = useState('')
+export function RechnungenListe({ onEditDraft, initialSearch, backProject, onClearBack }: RechnungenListeProps = {}) {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+
+  const [search,    setSearch]    = useState(initialSearch ?? '')
   const [onlyOpen,  setOnlyOpen]  = useState(false)
+
+  useEffect(() => {
+    if (initialSearch !== undefined) setSearch(initialSearch)
+  }, [initialSearch])
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
@@ -479,7 +495,14 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
 
   return (
     <div>
-      <div className="list-toolbar" style={{ marginTop: 10 }}>
+      {backProject && (
+        <div className="proj-jump-bar" style={{ marginTop: 10 }}>
+          <button className="btn-small" onClick={() => { onClearBack?.(); navigate('/projekte', { state: { tab: 'struktur', projectId: backProject.id } }) }}>
+            ← Projektstruktur ({backProject.name})
+          </button>
+        </div>
+      )}
+      <div className="list-toolbar" style={{ marginTop: backProject ? 0 : 10 }}>
         <input
           className="list-search"
           placeholder="Suchen …"
@@ -534,6 +557,11 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
                     <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
                     <button className="btn-small" onClick={() => openXRechnung(row)}>XRechnung</button>
                     <button className="btn-small" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
+                    {row.projectId !== null && (
+                      <button className="btn-small" title="Projektstruktur öffnen" onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>
+                        → Projekt
+                      </button>
+                    )}
                     {canPay(row) && (
                       <button className="btn-small btn-save" onClick={() => openPayment(row)}>Zahlung</button>
                     )}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchProjectsShort, fetchLeistungsstand, saveLeistungsstand,
@@ -21,6 +22,7 @@ interface Props {
 
 export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [pid,  setPid]  = useState<number | null>(initialProjectId ?? null)
   const [vals, setVals] = useState<Record<number, string>>({})
   const [msg,     setMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -121,6 +123,8 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
     setSnapMsg(null)
   }
 
+  const currentProject = projects.find(p => p.ID === pid)
+
   return (
     <div className="ls-wrap">
       <div className="ls-toolbar">
@@ -136,6 +140,18 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
           ))}
         </select>
       </div>
+
+      {pid !== null && currentProject && (
+        <div className="proj-jump-bar">
+          <span className="proj-jump-label">{currentProject.NAME_SHORT}</span>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.NAME_SHORT, backProject: { id: pid, name: currentProject.NAME_SHORT } } })}>
+            Rechnungen →
+          </button>
+          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
+            Projekt-Report →
+          </button>
+        </div>
+      )}
 
       {msg && (
         <div style={{ marginBottom: 12 }}>

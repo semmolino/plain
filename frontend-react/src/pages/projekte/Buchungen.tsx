@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }   from '@/components/ui/Message'
 import { Modal }     from '@/components/ui/Modal'
@@ -62,6 +63,7 @@ interface Props { initialProjectId?: number; onProjectChange?: (id: number | nul
 
 export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const formRef = useRef<HTMLFormElement>(null)
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
   const [showForm,     setShowForm]     = useState(false)
@@ -321,6 +323,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     deleteMut.mutate(b.ID)
   }
 
+  const currentProject = projects.find(p => p.ID === pid)
+
   return (
     <div>
       <div className="form-group" style={{ maxWidth: 400, marginBottom: 12 }}>
@@ -330,6 +334,18 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
           {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
         </select>
       </div>
+
+      {pid !== null && currentProject && (
+        <div className="proj-jump-bar">
+          <span className="proj-jump-label">{currentProject.NAME_SHORT}</span>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.NAME_SHORT, backProject: { id: pid, name: currentProject.NAME_SHORT } } })}>
+            Rechnungen →
+          </button>
+          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
+            Projekt-Report →
+          </button>
+        </div>
+      )}
 
       {pid !== null && (
         <>
