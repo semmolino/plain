@@ -55,6 +55,7 @@ interface UnifiedRow {
   date:       string | null
   project:    string | null
   projectId:  number | null
+  address:    string | null
   net:        number | null
   gross:      number | null
   paid:       number | null
@@ -100,6 +101,7 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     date:        inv.INVOICE_DATE ?? null,
     project:     inv.PROJECT ?? null,
     projectId:   inv.PROJECT_ID ?? null,
+    address:     inv.ADDRESS_NAME_1 ?? null,
     net:         adjustedNet,
     gross:       adjustedGross,
     paid,
@@ -139,6 +141,7 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     date:        pp.PARTIAL_PAYMENT_DATE ?? null,
     project:     pp.PROJECT ?? null,
     projectId:   pp.PROJECT_ID ?? null,
+    address:     pp.ADDRESS_NAME_1 ?? null,
     net:         adjustedNet,
     gross:       adjustedGross,
     paid,
@@ -190,23 +193,24 @@ function FilterChip({ label, options, active, onChange }: {
 
 // ── Column visibility ─────────────────────────────────────────────────────────
 
-type ColKey = 'typ' | 'date' | 'project' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
+type ColKey = 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
 
 interface ColDef { key: ColKey; label: string; className?: string; defaultVisible: boolean }
 const COLUMNS: ColDef[] = [
-  { key: 'typ',         label: 'Typ',            defaultVisible: true  },
-  { key: 'date',        label: 'Datum',          defaultVisible: true  },
-  { key: 'project',     label: 'Projekt',        defaultVisible: true  },
-  { key: 'net',         label: 'Netto €',        className: 'num', defaultVisible: true  },
-  { key: 'gross',       label: 'Brutto €',       className: 'num', defaultVisible: true  },
-  { key: 'paid',        label: 'Bezahlt €',      className: 'num', defaultVisible: false },
+  { key: 'typ',         label: 'Typ',             defaultVisible: true  },
+  { key: 'date',        label: 'Datum',           defaultVisible: true  },
+  { key: 'project',     label: 'Projekt',         defaultVisible: true  },
+  { key: 'address',     label: 'Adresse',         defaultVisible: false },
+  { key: 'net',         label: 'Netto €',         className: 'num', defaultVisible: true  },
+  { key: 'gross',       label: 'Brutto €',        className: 'num', defaultVisible: true  },
+  { key: 'paid',        label: 'Bezahlt €',       className: 'num', defaultVisible: false },
   { key: 'open',        label: 'Offene Posten €', className: 'num', defaultVisible: true  },
-  { key: 'statusLabel', label: 'Status',         defaultVisible: true  },
+  { key: 'statusLabel', label: 'Status',          defaultVisible: true  },
 ]
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-type SortKey = 'number' | 'typ' | 'date' | 'project' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
+type SortKey = 'number' | 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
 
 function SortTh({ label, k, sortKey, dir, onClick, className }: {
   label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'
@@ -642,6 +646,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                     if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
                     if (c.key === 'date')        return <td key={c.key}>{fmtDate(row.date)}</td>
                     if (c.key === 'project')     return <td key={c.key}>{row.project ?? '—'}</td>
+                    if (c.key === 'address')     return <td key={c.key}>{row.address ?? '—'}</td>
                     if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
                     if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
                     if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>
