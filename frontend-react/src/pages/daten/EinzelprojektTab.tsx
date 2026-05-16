@@ -329,8 +329,6 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
     else { setSortField(field); setSortDir('asc') }
   }
 
-  const currentProject = projects.find(p => p.ID === pid)
-
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
