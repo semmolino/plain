@@ -48,6 +48,31 @@ function fmtDateDE(input) {
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
 }
 
+// ── EPC / GiroCode QR ────────────────────────────────────────────────────────
+
+async function buildEpcQrDataUri({ bic, iban, name, amount, reference }) {
+  if (!iban || !name) return null;
+  const amtStr = amount != null && Number.isFinite(amount) && amount > 0
+    ? `EUR${amount.toFixed(2)}` : '';
+  const lines = [
+    'BCD', '002', '1', 'SCT',
+    (bic || '').trim().toUpperCase(),
+    name.trim().substring(0, 70),
+    iban.replace(/\s/g, '').toUpperCase(),
+    amtStr, '', '',
+    (reference || '').trim().substring(0, 140),
+  ];
+  const payload = lines.join('\n');
+  if (Buffer.byteLength(payload, 'utf8') > 331) return null;
+  try {
+    const QRCode = require('qrcode');
+    return await QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 1, width: 150 });
+  } catch (e) {
+    console.error('[EPC_QR]', e.message);
+    return null;
+  }
+}
+
 // ── Playwright ────────────────────────────────────────────────────────────────
 
 let _browserPromise = null;
@@ -436,6 +461,16 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   const vm = await buildPdfViewModel({ supabase, docType, docId });
   vm.theme       = theme;
   vm.logoDataUri = logoDataUri;
+
+  // EPC / GiroCode QR — only for payable documents (not storno)
+  const payAmount = vm.discounts.hasDiscounts ? vm.discounts.adjustedGross : vm.inv.totals.grandTotal;
+  vm.epcQrDataUri = await buildEpcQrDataUri({
+    bic:       vm.inv.seller.bic,
+    iban:      vm.inv.seller.iban,
+    name:      vm.inv.seller.name,
+    amount:    payAmount,
+    reference: vm.inv.number,
+  });
 
   // For Stornorechnung: load the original invoice for the reference line
   if (vm.inv.invoiceType === 'stornorechnung') {

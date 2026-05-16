@@ -131,10 +131,33 @@ body {
 }
 
 /* Payment note */
+.payment-note-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6mm;
+  margin-top: 5mm;
+}
+.payment-note-text { flex: 1; }
+.payment-qr {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.payment-qr img {
+  width: 28mm;
+  height: 28mm;
+  display: block;
+}
+.payment-qr-caption {
+  font-size: 7pt;
+  color: #6b7280;
+  margin-top: 1mm;
+  text-align: center;
+}
 .payment-note {
   font-size: 9.5pt;
   color: #374151;
-  margin-top: 5mm;
   line-height: 1.5;
 }
 .payment-note strong { color: #1a1a1a; }
@@ -451,19 +474,29 @@ body { padding-bottom: 28mm; }
   {% if text2 %}
   <div class="text-block">{{ text2 }}</div>
   {% else %}
-  <div class="payment-note">
-    Bitte überweisen Sie
-    {% if discounts.hasDiscounts %}<strong>{{ discounts.adjustedGross | money }}</strong>{% else %}<strong>{{ inv.totals.grandTotal | money }}</strong>{% endif %}
-    unter Angabe der Rechnungsnummer <strong>{{ inv.number }}</strong>
-    {% if inv.dueDate %}bis zum <strong>{{ inv.dueDate | date_de }}</strong>{% endif %}
-    auf folgendes Konto:{% if inv.seller.iban %}<br>
-    IBAN: <strong>{{ inv.seller.iban }}</strong>{% if inv.seller.bic %} &nbsp;&middot;&nbsp; BIC: <strong>{{ inv.seller.bic }}</strong>{% endif %}{% endif %}
+  <div class="payment-note-row">
+    <div class="payment-note-text">
+      <div class="payment-note">
+        Bitte überweisen Sie
+        {% if discounts.hasDiscounts %}<strong>{{ discounts.adjustedGross | money }}</strong>{% else %}<strong>{{ inv.totals.grandTotal | money }}</strong>{% endif %}
+        unter Angabe der Rechnungsnummer <strong>{{ inv.number }}</strong>
+        {% if inv.dueDate %}bis zum <strong>{{ inv.dueDate | date_de }}</strong>{% endif %}
+        auf folgendes Konto:{% if inv.seller.iban %}<br>
+        IBAN: <strong>{{ inv.seller.iban }}</strong>{% if inv.seller.bic %} &nbsp;&middot;&nbsp; BIC: <strong>{{ inv.seller.bic }}</strong>{% endif %}{% endif %}
+      </div>
+      {% if discounts.hasSkonto %}
+      <div class="payment-note" style="margin-top:6px;">
+        Bei Zahlung innerhalb von <strong>{{ discounts.cashDiscountDays }}&#8239;Tagen</strong> gewähren wir <strong>{{ discounts.cashDiscountPercent }}&#8239;% Skonto</strong> — Sie können in diesem Fall <strong>{{ discounts.skontoPaymentAmount | money }}</strong> überweisen.
+      </div>
+      {% endif %}
+    </div>
+    {% if epcQrDataUri %}
+    <div class="payment-qr">
+      <img src="{{ epcQrDataUri }}" alt="GiroCode">
+      <div class="payment-qr-caption">GiroCode</div>
+    </div>
+    {% endif %}
   </div>
-  {% if discounts.hasSkonto %}
-  <div class="payment-note" style="margin-top:6px;">
-    Bei Zahlung innerhalb von <strong>{{ discounts.cashDiscountDays }}&#8239;Tagen</strong> gewähren wir <strong>{{ discounts.cashDiscountPercent }}&#8239;% Skonto</strong> — Sie können in diesem Fall <strong>{{ discounts.skontoPaymentAmount | money }}</strong> überweisen.
-  </div>
-  {% endif %}
   {% endif %}
 
 </div>{# end page 1 #}

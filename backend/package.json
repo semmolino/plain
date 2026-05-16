@@ -24,6 +24,7 @@
     "nunjucks": "^3.2.4",
     "pg": "^8.20.0",
     "playwright-chromium": "^1.57.0",
+    "qrcode": "^1.5.4",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
