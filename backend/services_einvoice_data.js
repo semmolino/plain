@@ -3,13 +3,8 @@
 /**
  * services_einvoice_data.js
  *
- * Loads all data needed for e-invoice generation and normalises it into a
- * single InvoiceData object that both the CII (ZUGFeRD/Factur-X) and UBL
- * (XRechnung) renderers consume.
- *
- * Supports:
- *   docType = 'INVOICE'          → regular Rechnung or Schluss-/Teilschlussrechnung
- *   docType = 'PARTIAL_PAYMENT'  → Abschlagsrechnung
+ * Loads and normalises all invoice data into a single InvoiceData object
+ * consumed by both the CII (ZUGFeRD/Factur-X) and UBL (XRechnung) renderers.
  */
 
 class InvoiceDataError extends Error {
@@ -30,11 +25,10 @@ function asIsoDate(v) {
 }
 
 function fmt2(n) {
-  // Round to 2 decimal places, return as number (not string)
   return Math.round(toNum(n) * 100) / 100;
 }
 
-function isLikelyCountryCode(v) {
+function isCountryCode(v) {
   return /^[A-Z]{2}$/.test(String(v ?? '').trim());
 }
 
@@ -44,10 +38,6 @@ function normalizeVatId(raw, countryCode) {
   if (/^[A-Za-z]{2}/.test(v)) return v.toUpperCase();
   const cc = String(countryCode ?? '').trim().toUpperCase();
   return /^[A-Z]{2}$/.test(cc) ? `${cc}${v}` : v;
-}
-
-function normalizePhone(v) {
-  return String(v ?? '').trim();
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
@@ -63,74 +53,78 @@ async function one(supabase, table, id, tenantId) {
 async function lookupCountryCode(supabase, countryId) {
   if (!countryId) return 'DE';
   const { data } = await supabase.from('COUNTRY').select('NAME_SHORT').eq('ID', countryId).maybeSingle();
-  return isLikelyCountryCode(data?.NAME_SHORT) ? data.NAME_SHORT : 'DE';
+  return isCountryCode(data?.NAME_SHORT) ? data.NAME_SHORT : 'DE';
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-/**
- * Load and normalise all invoice data.
- *
- * @param {object}  supabase   Supabase client
- * @param {number}  docId      Document ID
- * @param {string}  docType    'INVOICE' | 'PARTIAL_PAYMENT'
- * @param {number}  tenantId
- * @returns {InvoiceData}
- */
 async function loadInvoiceData(supabase, docId, docType, tenantId) {
-  const table  = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
-  const doc    = await one(supabase, table, docId, tenantId);
+  const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
+  const doc   = await one(supabase, table, docId, tenantId);
   if (!doc) throw new InvoiceDataError(`${table} ${docId} not found.`);
 
-  // ── 1. Resolve document metadata ──────────────────────────────────────────
+  // ── 1. Document type & TypeCodes ──────────────────────────────────────────
 
-  const isInvoice = docType === 'INVOICE';
-  const invoiceType = isInvoice ? (doc.INVOICE_TYPE || 'rechnung') : 'partial_payment';
-  const isFinal = invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung';
+  const isInvoice  = docType === 'INVOICE';
+  const isStornoPP = docType === 'PARTIAL_PAYMENT' && !!doc.CANCELS_PARTIAL_PAYMENT_ID;
+  const invoiceType = isInvoice
+    ? (doc.INVOICE_TYPE || 'rechnung')
+    : (isStornoPP ? 'stornorechnung' : 'partial_payment');
 
-  const number   = isInvoice ? doc.INVOICE_NUMBER         : doc.PARTIAL_PAYMENT_NUMBER;
-  const docDate  = isInvoice ? doc.INVOICE_DATE           : doc.PARTIAL_PAYMENT_DATE;
-  const addressIdField = isInvoice ? 'INVOICE_ADDRESS_ID' : 'PARTIAL_PAYMENT_ADDRESS_ID';
-  const contactIdField = isInvoice ? 'INVOICE_CONTACT_ID' : 'PARTIAL_PAYMENT_CONTACT_ID';
+  const isFinal  = invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung';
+  const isStorno = invoiceType === 'stornorechnung';
+  const isGutschrift = invoiceType === 'gutschrift';
 
-  // type code: 326 = partial invoice, 380 = commercial invoice, 381 = credit note (Stornorechnung)
-  const typeCode = (docType === 'PARTIAL_PAYMENT') ? '326'
-    : invoiceType === 'stornorechnung' ? '381'
+  const number  = isInvoice ? doc.INVOICE_NUMBER        : doc.PARTIAL_PAYMENT_NUMBER;
+  const docDate = isInvoice ? doc.INVOICE_DATE          : doc.PARTIAL_PAYMENT_DATE;
+  const addressIdField = isInvoice ? 'INVOICE_ADDRESS_ID'      : 'PARTIAL_PAYMENT_ADDRESS_ID';
+
+  // CII type codes: EXTENDED allows 875/876/877; all profiles allow 380/381/384
+  const typeCodeCii =
+    docType === 'PARTIAL_PAYMENT'
+      ? (isStornoPP    ? '384' : '875')
+    : invoiceType === 'schlussrechnung'     ? '877'
+    : invoiceType === 'teilschlussrechnung' ? '876'
+    : isStorno                              ? '384'
+    : isGutschrift                          ? '381'
+    : '380';
+
+  // UBL type codes: 326=Abschlag, 380=Invoice/Schluss, 381=Gutschrift, 384=Storno
+  const typeCodeUbl =
+    docType === 'PARTIAL_PAYMENT'
+      ? (isStornoPP ? '384' : '326')
+    : isStorno    ? '384'
+    : isGutschrift ? '381'
     : '380';
 
   // ── 2. Seller (COMPANY) ───────────────────────────────────────────────────
 
   const company = await one(supabase, 'COMPANY', doc.COMPANY_ID, tenantId);
 
-  // Seller country: snapshot → live lookup
-  let sellerCountry = doc.SELLER_COUNTRY_ID || null;
-  if (!isLikelyCountryCode(sellerCountry) && company?.COUNTRY_ID) {
+  let sellerCountry = null;
+  if (company?.COUNTRY_ID) {
     sellerCountry = await lookupCountryCode(supabase, company.COUNTRY_ID);
   }
-  if (!isLikelyCountryCode(sellerCountry)) sellerCountry = 'DE';
+  if (!isCountryCode(sellerCountry)) sellerCountry = 'DE';
 
-  // VAT ID (VA scheme, e.g. DE123456789)
-  const sellerVatIdRaw = doc['COMPANY_VAT_ID'] ?? company?.VAT_ID ?? '';
-  const sellerVatId    = normalizeVatId(sellerVatIdRaw, sellerCountry);
+  // COMPANY_TAX-ID = Umsatzsteuer-ID (VA scheme, e.g. DE123456789)
+  const sellerVatId = normalizeVatId(doc['COMPANY_TAX-ID'] ?? '', sellerCountry);
+  // COMPANY_TAX_NUMBER = Steuernummer (FC scheme, e.g. 78910/12345)
+  const sellerTaxId = String(doc.COMPANY_TAX_NUMBER ?? '').trim();
 
-  // Tax registration number (FC scheme, e.g. 78910/12345)
-  const sellerTaxId = String(doc['COMPANY_TAX-ID'] ?? company?.['TAX-ID'] ?? '').trim();
-
-  const sellerIban        = String(doc.COMPANY_IBAN ?? company?.IBAN ?? '').trim();
-  const sellerBic         = String(doc.COMPANY_BIC  ?? company?.BIC  ?? '').trim();
-  const sellerCreditorId  = String(doc['COMPANY_CREDITOR-ID'] ?? company?.['CREDITOR-ID'] ?? '').trim();
-  const sellerPostOfficeBox = String(doc.COMPANY_POST_OFFICE_BOX ?? company?.POST_OFFICE_BOX ?? '').trim();
+  const sellerIban        = String(doc.COMPANY_IBAN         ?? company?.IBAN        ?? '').trim();
+  const sellerBic         = String(doc.COMPANY_BIC          ?? company?.BIC         ?? '').trim();
+  const sellerCreditorId  = String(doc['COMPANY_CREDITOR-ID']                        ?? '').trim();
+  const sellerPostOffBox  = String(doc.COMPANY_POST_OFFICE_BOX                       ?? '').trim();
 
   // ── 3. Seller contact (EMPLOYEE) ─────────────────────────────────────────
 
   const employee = await one(supabase, 'EMPLOYEE', doc.EMPLOYEE_ID, tenantId);
-
   const contactName  = String(doc.EMPLOYEE ?? '').trim()
     || [employee?.FIRST_NAME, employee?.LAST_NAME].filter(Boolean).join(' ')
     || String(employee?.SHORT_NAME ?? '').trim();
-  const contactPhone = normalizePhone(doc.EMPLOYEE_PHONE ?? employee?.MOBILE ?? employee?.PHONE ?? '');
-  const contactEmail = String(doc.EMPLOYEE_MAIL ?? employee?.MAIL ?? '').trim();
-  const sellerEmail  = contactEmail; // used as endpoint URI
+  const contactPhone = String(doc.EMPLOYEE_PHONE ?? employee?.MOBILE ?? employee?.PHONE ?? '').trim();
+  const contactEmail = String(doc.EMPLOYEE_MAIL  ?? employee?.MAIL   ?? '').trim();
 
   // ── 4. Buyer (ADDRESS) ────────────────────────────────────────────────────
 
@@ -139,20 +133,16 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const buyerName = String(
     doc.ADDRESS_NAME_1 ?? address?.ADDRESS_NAME_1 ?? doc.ADDRESS_NAME_2 ?? address?.ADDRESS_NAME_2 ?? ''
   ).trim();
-
-  if (!buyerName) {
-    throw new InvoiceDataError('Käufername (BT-44) fehlt. Bitte Rechnungsadresse prüfen.');
-  }
+  if (!buyerName) throw new InvoiceDataError('Käufername (BT-44) fehlt. Bitte Rechnungsadresse prüfen.');
 
   let buyerCountry = doc.ADDRESS_COUNTRY ?? null;
-  if (!isLikelyCountryCode(buyerCountry) && address?.COUNTRY_ID) {
+  if (!isCountryCode(buyerCountry) && address?.COUNTRY_ID) {
     buyerCountry = await lookupCountryCode(supabase, address.COUNTRY_ID);
   }
-  if (!isLikelyCountryCode(buyerCountry)) buyerCountry = 'DE';
+  if (!isCountryCode(buyerCountry)) buyerCountry = 'DE';
 
-  const buyerVatId = normalizeVatId(
-    doc.ADDRESS_VAT_ID ?? address?.VAT_ID ?? '', buyerCountry
-  );
+  const buyerVatId         = normalizeVatId(doc.ADDRESS_VAT_ID ?? address?.VAT_ID ?? '', buyerCountry);
+  const buyerDebitorNumber = String(doc.ADDRESS_DEBITOR_NUMBER ?? address?.DEBITOR_NUMBER ?? '').trim();
 
   // ── 5. Currency ───────────────────────────────────────────────────────────
 
@@ -164,15 +154,54 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   // ── 6. VAT ────────────────────────────────────────────────────────────────
 
-  const vatPercent = toNum(doc.VAT_PERCENT ?? 0);
+  const vatPercent  = toNum(doc.VAT_PERCENT ?? 0);
   const vatCategory = vatPercent > 0 ? 'S' : 'Z';
 
-  // ── 7. Line items ─────────────────────────────────────────────────────────
+  // ── 7. Document-level allowances (Skonto-unabhängige Nachlässe) ───────────
+
+  const allowances = [];
+  if (toNum(doc.DISCOUNT_1) > 0) {
+    allowances.push({
+      reason:  String(doc.DISCOUNT_1_REASON ?? 'Nachlass').trim() || 'Nachlass',
+      percent: toNum(doc.DISCOUNT_1_PERCENT),
+      amount:  fmt2(doc.DISCOUNT_1),
+    });
+  }
+  if (toNum(doc.DISCOUNT_2) > 0) {
+    allowances.push({
+      reason:  String(doc.DISCOUNT_2_REASON ?? 'Nachlass').trim() || 'Nachlass',
+      percent: toNum(doc.DISCOUNT_2_PERCENT),
+      amount:  fmt2(doc.DISCOUNT_2),
+    });
+  }
+
+  // ── 8. Cash discount (Skonto) ─────────────────────────────────────────────
+
+  const cashDiscount = toNum(doc.CASH_DISCOUNT_PERCENT) > 0 ? {
+    percent: toNum(doc.CASH_DISCOUNT_PERCENT),
+    days:    toNum(doc.CASH_DISCOUNT_DAYS),
+    amount:  fmt2(doc.CASH_DISCOUNT),
+  } : null;
+
+  // ── 9. Canceled document reference (Storno) ───────────────────────────────
+
+  let canceledDocNumber = null;
+  let canceledDocDate   = null;
+  if (isStorno && isInvoice && doc.CANCELS_INVOICE_ID) {
+    const orig = await one(supabase, 'INVOICE', doc.CANCELS_INVOICE_ID, tenantId);
+    canceledDocNumber = orig?.INVOICE_NUMBER ?? String(doc.CANCELS_INVOICE_ID);
+    canceledDocDate   = asIsoDate(orig?.INVOICE_DATE);
+  } else if (isStornoPP) {
+    const orig = await one(supabase, 'PARTIAL_PAYMENT', doc.CANCELS_PARTIAL_PAYMENT_ID, tenantId);
+    canceledDocNumber = orig?.PARTIAL_PAYMENT_NUMBER ?? String(doc.CANCELS_PARTIAL_PAYMENT_ID);
+    canceledDocDate   = asIsoDate(orig?.PARTIAL_PAYMENT_DATE);
+  }
+
+  // ── 10. Line items ────────────────────────────────────────────────────────
 
   let lines = [];
 
   if (isInvoice) {
-    // Load INVOICE_STRUCTURE rows joined with PROJECT_STRUCTURE for names
     const { data: invStructures } = await supabase
       .from('INVOICE_STRUCTURE')
       .select('STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET')
@@ -180,32 +209,26 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       .eq('TENANT_ID', tenantId);
 
     if (invStructures && invStructures.length > 0) {
-      // Load PROJECT_STRUCTURE names in one query
       const structIds = invStructures.map(r => r.STRUCTURE_ID);
       const { data: projStructures } = await supabase
         .from('PROJECT_STRUCTURE')
-        .select('ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID')
+        .select('ID, NAME_SHORT, NAME_LONG')
         .in('ID', structIds);
 
       const nameMap = Object.fromEntries((projStructures ?? []).map(r => [r.ID, r]));
 
       lines = invStructures.map((row, idx) => {
-        const ps = nameMap[row.STRUCTURE_ID] ?? {};
+        const ps           = nameMap[row.STRUCTURE_ID] ?? {};
         const amountNet    = fmt2(row.AMOUNT_NET ?? 0);
         const amountExtras = fmt2(row.AMOUNT_EXTRAS_NET ?? 0);
         const lineTotal    = fmt2(amountNet + amountExtras);
-
-        const nameParts = [ps.NAME_SHORT, ps.NAME_LONG].filter(Boolean);
-        const desc = nameParts.join(' – ') || `Position ${idx + 1}`;
-
-        // For BT1 (performance) lines note % completion would be ideal but
-        // isn't available here without a separate query — left to future enhancement.
+        const desc = [ps.NAME_SHORT, ps.NAME_LONG].filter(Boolean).join(' – ') || `Position ${idx + 1}`;
         return {
           id:          idx + 1,
           description: desc,
           note:        amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '',
           quantity:    1,
-          unitCode:    'LS',   // Lump Sum (pauschal) — appropriate for service billing
+          unitCode:    'LS',
           unitPrice:   lineTotal,
           lineTotal,
           vatRate:     vatPercent,
@@ -217,29 +240,22 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     }
   }
 
-  // Fallback: if no structure lines (Abschlagsrechnung or Invoice without lines), use document totals
   if (lines.length === 0) {
-    const amountNet    = fmt2(doc.AMOUNT_NET ?? doc.TOTAL_AMOUNT_NET ?? 0);
+    const amountNet    = fmt2(doc.AMOUNT_NET ?? 0);
     const amountExtras = fmt2(doc.AMOUNT_EXTRAS_NET ?? 0);
     const lineTotal    = fmt2(amountNet + amountExtras);
     const label = docType === 'PARTIAL_PAYMENT' ? 'Abschlagsrechnung' : 'Rechnung';
-
     lines.push({
-      id:          1,
-      description: label,
-      note:        amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '',
-      quantity:    1,
-      unitCode:    'LS',
-      unitPrice:   lineTotal,
-      lineTotal,
-      vatRate:     vatPercent,
-      vatCategory,
+      id: 1, description: label,
+      note:     amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '',
+      quantity: 1, unitCode: 'LS', unitPrice: lineTotal, lineTotal,
+      vatRate: vatPercent, vatCategory,
       billingPeriodStart: asIsoDate(doc.BILLING_PERIOD_START),
       billingPeriodEnd:   asIsoDate(doc.BILLING_PERIOD_FINISH),
     });
   }
 
-  // ── 8. Deductions (Schlussrechnung only) ──────────────────────────────────
+  // ── 11. Deductions (Schlussrechnung only) ─────────────────────────────────
 
   let deductions = [];
   if (isFinal) {
@@ -253,59 +269,67 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       const ppIds = dedRows.map(r => r.PARTIAL_PAYMENT_ID);
       const { data: partials } = await supabase
         .from('PARTIAL_PAYMENT')
-        .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET, VAT_PERCENT')
+        .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET')
         .in('ID', ppIds);
 
       const ppMap = Object.fromEntries((partials ?? []).map(p => [p.ID, p]));
-
       deductions = dedRows.map(d => {
-        const pp = ppMap[d.PARTIAL_PAYMENT_ID] ?? {};
+        const pp    = ppMap[d.PARTIAL_PAYMENT_ID] ?? {};
         const gross = fmt2(pp.TOTAL_AMOUNT_GROSS ?? 0);
         const net   = fmt2(d.DEDUCTION_AMOUNT_NET ?? pp.TOTAL_AMOUNT_NET ?? 0);
-        const vat   = fmt2(gross - net);
         return {
           number:      pp.PARTIAL_PAYMENT_NUMBER ?? String(d.PARTIAL_PAYMENT_ID),
           date:        asIsoDate(pp.PARTIAL_PAYMENT_DATE),
           netAmount:   net,
-          vatAmount:   vat,
+          vatAmount:   fmt2(gross - net),
           grossAmount: gross,
         };
       });
     }
   }
 
-  // ── 9. Monetary totals ────────────────────────────────────────────────────
+  // ── 12. Monetary totals ───────────────────────────────────────────────────
 
-  const lineTotal  = fmt2(lines.reduce((s, l) => s + l.lineTotal, 0));
+  const lineTotal      = fmt2(lines.reduce((s, l) => s + l.lineTotal, 0));
+  const allowanceTotal = fmt2(allowances.reduce((s, a) => s + a.amount, 0));
+  const chargeTotal    = 0;
 
-  // Prepaid amounts — net deduction shifts the VAT basis for Schlussrechnung
-  const prepaidNet    = fmt2(deductions.reduce((s, d) => s + d.netAmount,   0));
-  const prepaidAmount = fmt2(deductions.reduce((s, d) => s + d.grossAmount, 0));
+  // Use stored totals from the document (authoritative, handles all edge cases)
+  const taxBasis   = fmt2(toNum(doc.TOTAL_AMOUNT_NET) || fmt2(lineTotal - allowanceTotal));
+  const taxAmount  = fmt2(toNum(doc.TAX_AMOUNT_NET)   || fmt2(taxBasis * vatPercent / 100));
+  const grandTotal = fmt2(toNum(doc.TOTAL_AMOUNT_GROSS) || fmt2(taxBasis + taxAmount));
 
-  // For Schlussrechnung: deduct AR amounts (net) before computing VAT
-  const taxBasis   = isFinal ? fmt2(lineTotal - prepaidNet) : lineTotal;
-  const taxAmount  = isFinal
-    ? fmt2(taxBasis * vatPercent / 100)
-    : fmt2(doc.TAX_AMOUNT_NET ?? (taxBasis * vatPercent / 100));
-  const grandTotal = fmt2(taxBasis + taxAmount);
-  const duePayable = grandTotal; // kept for template compat
+  // Prepaid = gross already invoiced via prior ARs (Schlussrechnung only)
+  const prepaidGross = fmt2(deductions.reduce((s, d) => s + d.grossAmount, 0));
+  // DuePayable = what remains to be paid now
+  const duePayable   = fmt2(grandTotal - prepaidGross);
 
-  // VAT breakdown — single rate for now
   const vatBreakdown = [{
-    rate:     vatPercent,
-    basis:    taxBasis,
-    amount:   taxAmount,
-    category: vatCategory,
+    rate: vatPercent, basis: taxBasis, amount: taxAmount, category: vatCategory,
   }];
 
-  // ── 10. Assemble and return ───────────────────────────────────────────────
+  // ── 13. Project / Contract references ────────────────────────────────────
+
+  let projectNumber  = '';
+  let contractNumber = '';
+  if (doc.PROJECT_ID) {
+    const proj = await one(supabase, 'PROJECT', doc.PROJECT_ID, tenantId);
+    projectNumber = String(proj?.PROJECT_NUMBER ?? proj?.NAME_SHORT ?? '').trim();
+  }
+  if (doc.CONTRACT_ID) {
+    const contract = await one(supabase, 'CONTRACT', doc.CONTRACT_ID, tenantId);
+    contractNumber = String(contract?.CONTRACT_NUMBER ?? '').trim();
+  }
+
+  // ── 14. Assemble ─────────────────────────────────────────────────────────
 
   return {
-    // Document
     docType,
     invoiceType,
-    typeCode,
-    number:   number  || String(docId),
+    typeCodeCii,
+    typeCodeUbl,
+    typeCode: typeCodeUbl,  // legacy compat
+    number:   number || String(docId),
     date:     asIsoDate(docDate) || asIsoDate(new Date().toISOString()),
     dueDate:  asIsoDate(doc.DUE_DATE),
     currency,
@@ -314,54 +338,58 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     billingPeriodEnd:   asIsoDate(doc.BILLING_PERIOD_FINISH),
     buyerReference: String(doc.BUYER_REFERENCE ?? doc.ADDRESS_REFERENCE_NUMBER ?? '').trim(),
 
-    // Seller
     seller: {
-      name:         String(doc.COMPANY_NAME_1 ?? company?.COMPANY_NAME_1 ?? '').trim(),
-      street:       String(doc.COMPANY_STREET ?? company?.STREET ?? '').trim(),
-      city:         String(doc.COMPANY_CITY   ?? company?.CITY   ?? '').trim(),
-      postCode:     String(doc.COMPANY_POST_CODE ?? company?.POST_CODE ?? '').trim(),
-      countryId:    sellerCountry,
-      vatId:        sellerVatId,   // VA scheme (Umsatzsteuer-ID)
-      taxId:        sellerTaxId,   // FC scheme (Steuernummer)
+      name:          String(doc.COMPANY_NAME_1 ?? company?.COMPANY_NAME_1 ?? '').trim(),
+      street:        String(doc.COMPANY_STREET     ?? company?.STREET    ?? '').trim(),
+      city:          String(doc.COMPANY_CITY       ?? company?.CITY      ?? '').trim(),
+      postCode:      String(doc.COMPANY_POST_CODE  ?? company?.POST_CODE ?? '').trim(),
+      countryId:     sellerCountry,
+      vatId:         sellerVatId,
+      taxId:         sellerTaxId,
       iban:          sellerIban,
       bic:           sellerBic,
       creditorId:    sellerCreditorId,
-      postOfficeBox: sellerPostOfficeBox,
-      contactName:  contactName,
-      contactPhone: contactPhone,
-      contactEmail: contactEmail,
-      email:        sellerEmail,
+      postOfficeBox: sellerPostOffBox,
+      contactName:   contactName,
+      contactPhone:  contactPhone,
+      contactEmail:  contactEmail,
+      email:         contactEmail,
     },
 
-    // Buyer
     buyer: {
-      name:     buyerName,
-      street:   String(doc.ADDRESS_STREET   ?? address?.STREET   ?? '').trim(),
-      city:     String(doc.ADDRESS_CITY     ?? address?.CITY     ?? '').trim(),
-      postCode: String(doc.ADDRESS_POST_CODE ?? address?.POST_CODE ?? '').trim(),
-      countryId: buyerCountry,
-      vatId:    buyerVatId,
-      email:    String(doc.CONTACT_MAIL ?? '').trim(),
+      name:          buyerName,
+      street:        String(doc.ADDRESS_STREET    ?? address?.STREET    ?? '').trim(),
+      city:          String(doc.ADDRESS_CITY      ?? address?.CITY      ?? '').trim(),
+      postCode:      String(doc.ADDRESS_POST_CODE ?? address?.POST_CODE ?? '').trim(),
+      countryId:     buyerCountry,
+      vatId:         buyerVatId,
+      debitorNumber: buyerDebitorNumber,
+      email:         String(doc.CONTACT_MAIL ?? '').trim(),
     },
 
-    // Lines, totals, deductions
     lines,
     vatBreakdown,
     deductions,
+    allowances,
+    cashDiscount,
 
     totals: {
       lineTotal,
+      allowanceTotal,
+      chargeTotal,
       taxBasis,
       taxAmount,
       grandTotal,
-      prepaidAmount,
+      prepaidGross,
       duePayable,
+      prepaidAmount: prepaidGross,  // legacy compat
     },
 
-    // References
-    projectNumber:  String(doc.PROJECT_NUMBER  ?? '').trim(),
-    contractNumber: String(doc.CONTRACT_NUMBER ?? '').trim(),
-    orderNumber:    String(doc.ORDER_NUMBER    ?? '').trim(),
+    canceledDocNumber,
+    canceledDocDate,
+    projectNumber,
+    contractNumber,
+    orderNumber: '',
   };
 }
 

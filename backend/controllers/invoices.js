@@ -570,7 +570,7 @@ async function getEinvoiceCii(req, res, supabase) {
   const invoiceId = parseInt(String(req.params.id || ""), 10);
   if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
 
-  const profile  = String(req.query.profile  || "EN16931").toUpperCase();
+  const profile  = String(req.query.profile  || "EXTENDED").toUpperCase();
   const download = String(req.query.download || "") === "1";
   const preview  = String(req.query.preview  || "") === "1";
 
@@ -611,7 +611,7 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
   const invoiceId = parseInt(String(req.params.id || ""), 10);
   if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
 
-  const profile = String(req.query.profile || "EN16931").toUpperCase();
+  const profile = String(req.query.profile || "EXTENDED").toUpperCase();
 
   const { data: invRow, error: invRowErr } = await supabase
     .from("INVOICE")

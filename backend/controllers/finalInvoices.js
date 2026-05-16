@@ -173,7 +173,7 @@ async function postEinvoiceUblSnapshot(req, res, supabase) {
 // ---------------------------------------------------------------------------
 async function getEinvoiceCii(req, res, supabase) {
   const id       = parseInt(String(req.params.id || ""), 10);
-  const profile  = String(req.query.profile  || "EN16931").toUpperCase();
+  const profile  = String(req.query.profile  || "EXTENDED").toUpperCase();
   const download = String(req.query.download || "") === "1";
   const preview  = String(req.query.preview  || "") === "1";
 
@@ -205,7 +205,7 @@ async function getEinvoiceCii(req, res, supabase) {
 // ---------------------------------------------------------------------------
 async function postEinvoiceCiiSnapshot(req, res, supabase) {
   const id      = parseInt(String(req.params.id || ""), 10);
-  const profile = String(req.query.profile || "EN16931").toUpperCase();
+  const profile = String(req.query.profile || "EXTENDED").toUpperCase();
 
   let row;
   try { row = await loadFinalInvoiceRow(supabase, id); }

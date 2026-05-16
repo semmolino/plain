@@ -630,7 +630,7 @@ async function getEinvoiceCii(req, res, supabase) {
   const ppId = parseInt(String(req.params.id || ""), 10);
   if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
 
-  const profile  = String(req.query.profile  || "EN16931").toUpperCase();
+  const profile  = String(req.query.profile  || "EXTENDED").toUpperCase();
   const download = String(req.query.download || "") === "1";
   const preview  = String(req.query.preview  || "") === "1";
 
@@ -670,7 +670,7 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
   const ppId = parseInt(String(req.params.id || ""), 10);
   if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
 
-  const profile = String(req.query.profile || "EN16931").toUpperCase();
+  const profile = String(req.query.profile || "EXTENDED").toUpperCase();
 
   const { data: ppRow, error: ppRowErr } = await supabase
     .from("PARTIAL_PAYMENT")
