@@ -192,23 +192,30 @@ function buildAllowances(data) {
 
 function buildPaymentTerms(data, profile) {
   if (!profile.hasPaymentTerms) return '';
-  const hasDue   = !!data.dueDate;
+  const hasDue    = !!data.dueDate;
   const hasSkonto = !!data.cashDiscount;
-  if (!hasDue && !hasSkonto) return '';
 
+  // BR-CO-25: when DuePayable > 0, either BT-9 (due date) or BT-20 (payment terms text) must be present.
+  // Always emit SpecifiedTradePaymentTerms; use Description as fallback when no due date.
   let skontoBlock = '';
   if (hasSkonto) {
     const cd = data.cashDiscount;
-    skontoBlock = `
+    // CII-SR-408: ApplicableTradePaymentDiscountTerms must be accompanied by a due date;
+    // only emit Skonto when a due date is present to avoid the warning.
+    if (hasDue) {
+      skontoBlock = `
         <ram:ApplicableTradePaymentDiscountTerms>
           <ram:BasisPeriodMeasure unitCode="DAY">${Math.round(cd.days)}</ram:BasisPeriodMeasure>
           <ram:CalculationPercent>${n2(cd.percent)}</ram:CalculationPercent>
         </ram:ApplicableTradePaymentDiscountTerms>`;
+    }
   }
 
   return `
       <ram:SpecifiedTradePaymentTerms>
-        ${hasDue ? `<ram:DueDateDateTime>${dateElem(data.dueDate)}</ram:DueDateDateTime>` : ''}${skontoBlock}
+        ${hasDue
+          ? `<ram:DueDateDateTime>${dateElem(data.dueDate)}</ram:DueDateDateTime>`
+          : `<ram:Description>Zahlbar sofort netto</ram:Description>`}${skontoBlock}
       </ram:SpecifiedTradePaymentTerms>`;
 }
 
@@ -330,7 +337,7 @@ ${buildNotes(data)}
   <rsm:SupplyChainTradeTransaction>
 ${lineItems}
     <ram:ApplicableHeaderTradeAgreement>
-      ${data.buyerReference ? `<ram:BuyerReference>${x(data.buyerReference)}</ram:BuyerReference>` : ''}
+      <ram:BuyerReference>${x(data.buyerReference || '-')}</ram:BuyerReference>
 ${buildSeller(data, profile)}
 ${buildBuyer(data)}
       ${data.orderNumber    ? `<ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>${x(data.orderNumber)}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>` : ''}

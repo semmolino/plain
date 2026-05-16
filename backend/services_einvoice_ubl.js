@@ -141,11 +141,12 @@ function generateUblXml(data) {
   const lineItems = data.lines.map(l => buildLineItem(l, cur)).join('\n');
 
   // Skonto note: XRechnung machine-readable format
-  let paymentTermsNote = data.dueDate ? `Zahlbar bis ${x(data.dueDate)}` : '';
-  if (data.cashDiscount) {
+  // BR-CO-25: always emit payment terms (due date note or fallback text)
+  // Skonto only combined with due date (mirrors CII-SR-408 guidance)
+  let paymentTermsNote = data.dueDate ? `Zahlbar bis ${x(data.dueDate)}` : 'Zahlbar sofort netto';
+  if (data.cashDiscount && data.dueDate) {
     const cd = data.cashDiscount;
-    paymentTermsNote = `#SKONTO#TAGE=${Math.round(cd.days)}#PROZENT=${n2(cd.percent)}#` +
-      (paymentTermsNote ? `\n${paymentTermsNote}` : '');
+    paymentTermsNote = `#SKONTO#TAGE=${Math.round(cd.days)}#PROZENT=${n2(cd.percent)}#\n${paymentTermsNote}`;
   }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -161,7 +162,7 @@ function generateUblXml(data) {
   <cbc:InvoiceTypeCode>${x(typeCode)}</cbc:InvoiceTypeCode>
   ${data.comment ? `<cbc:Note>${x(data.comment)}</cbc:Note>` : ''}
   <cbc:DocumentCurrencyCode>${x(cur)}</cbc:DocumentCurrencyCode>
-  ${data.buyerReference ? `<cbc:BuyerReference>${x(data.buyerReference)}</cbc:BuyerReference>` : ''}
+  <cbc:BuyerReference>${x(data.buyerReference || '-')}</cbc:BuyerReference>
 
   ${data.billingPeriodStart || data.billingPeriodEnd ? `
   <cac:InvoicePeriod>
@@ -235,10 +236,9 @@ ${buildBillingReferences(data)}
     </cac:PayeeFinancialAccount>
   </cac:PaymentMeans>` : ''}
 
-  ${paymentTermsNote ? `
   <cac:PaymentTerms>
     <cbc:Note>${x(paymentTermsNote)}</cbc:Note>
-  </cac:PaymentTerms>` : ''}
+  </cac:PaymentTerms>
 
 ${buildAllowanceCharges(data)}
 
