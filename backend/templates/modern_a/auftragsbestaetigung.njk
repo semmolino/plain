@@ -362,6 +362,13 @@ body {
   </div>
   {% endif %}
 
+  {# Signature image #}
+  {% if signatureDataUri %}
+  <div style="margin-top: 6mm; margin-bottom: 2mm;">
+    <img src="{{ signatureDataUri }}" alt="Unterschrift" style="max-height: 20mm; max-width: 70mm; object-fit: contain; display: block;">
+  </div>
+  {% endif %}
+
   {# Signature — architect firm #}
   <div class="signature-section">
     <div class="signature-field">

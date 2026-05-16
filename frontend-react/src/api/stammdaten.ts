@@ -215,6 +215,24 @@ export const fetchLogo = () =>
 export const putLogo = (logo_asset_id: number | null) =>
   apiClient.put<{ ok: boolean }>('/stammdaten/logo', { logo_asset_id })
 
+// ── Per-company assets (logo + signature) ─────────────────────────────────────
+
+export interface CompanyAssets {
+  logo_asset_id: number | null
+  logo_data_uri: string | null
+  sig_asset_id:  number | null
+  sig_data_uri:  string | null
+}
+
+export const fetchCompanyAssets = (companyId: number) =>
+  apiClient.get<{ data: CompanyAssets }>(`/stammdaten/companies/${companyId}/assets`)
+
+export const putCompanyLogo = (companyId: number, asset_id: number | null) =>
+  apiClient.put<{ ok: boolean }>(`/stammdaten/companies/${companyId}/logo`, { asset_id })
+
+export const putCompanySignature = (companyId: number, asset_id: number | null) =>
+  apiClient.put<{ ok: boolean }>(`/stammdaten/companies/${companyId}/signature`, { asset_id })
+
 export const uploadAsset = (file: File, assetType = 'LOGO') => {
   const form = new FormData()
   form.append('file', file)

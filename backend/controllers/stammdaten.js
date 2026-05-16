@@ -950,6 +950,81 @@ async function putLogo(req, res, supabase) {
   res.json({ ok: true, logo_asset_id: assetId });
 }
 
+// ── Per-company asset management (logo + signature) ───────────────────────────
+
+async function _upsertCompanyAsset(supabase, tenantId, companyId, type, assetId) {
+  const idKey  = `co_${companyId}_${type}_asset_id`;
+  const uriKey = `co_${companyId}_${type}_data_uri`;
+  const idValue = assetId ? String(assetId) : null;
+
+  await supabase.from("TENANT_SETTINGS").upsert(
+    [{ TENANT_ID: tenantId, KEY: idKey, VALUE: idValue }],
+    { onConflict: "TENANT_ID,KEY" }
+  );
+
+  let dataUri = null;
+  if (assetId) {
+    try {
+      const { data: asset } = await supabase.from("ASSET").select("STORAGE_KEY, MIME_TYPE").eq("ID", assetId).maybeSingle();
+      if (asset) {
+        const filePath = path.join(__dirname, "..", "uploads", asset.STORAGE_KEY);
+        if (fs.existsSync(filePath)) {
+          const b64 = fs.readFileSync(filePath).toString("base64");
+          dataUri = `data:${asset.MIME_TYPE};base64,${b64}`;
+        }
+      }
+    } catch (e) {
+      console.error(`[COMPANY_ASSET] base64 cache error:`, e.message);
+    }
+  }
+  await supabase.from("TENANT_SETTINGS").upsert(
+    [{ TENANT_ID: tenantId, KEY: uriKey, VALUE: dataUri }],
+    { onConflict: "TENANT_ID,KEY" }
+  );
+}
+
+async function getCompanyAssets(req, res, supabase) {
+  const companyId = parseInt(req.params.id, 10);
+  if (!companyId) return res.status(400).json({ error: "Invalid company ID" });
+  const keys = [
+    `co_${companyId}_logo_asset_id`, `co_${companyId}_logo_data_uri`,
+    `co_${companyId}_sig_asset_id`,  `co_${companyId}_sig_data_uri`,
+  ];
+  const { data } = await supabase.from("TENANT_SETTINGS")
+    .select("KEY, VALUE").eq("TENANT_ID", req.tenantId).in("KEY", keys);
+  const map = Object.fromEntries((data || []).map(r => [r.KEY, r.VALUE]));
+  res.json({ data: {
+    logo_asset_id: map[keys[0]] ? parseInt(map[keys[0]], 10) : null,
+    logo_data_uri: map[keys[1]] || null,
+    sig_asset_id:  map[keys[2]] ? parseInt(map[keys[2]], 10) : null,
+    sig_data_uri:  map[keys[3]] || null,
+  }});
+}
+
+async function putCompanyLogo(req, res, supabase) {
+  const companyId = parseInt(req.params.id, 10);
+  if (!companyId) return res.status(400).json({ error: "Invalid company ID" });
+  const assetId = req.body?.asset_id != null ? parseInt(String(req.body.asset_id), 10) || null : null;
+  try {
+    await _upsertCompanyAsset(supabase, req.tenantId, companyId, "logo", assetId);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
+}
+
+async function putCompanySignature(req, res, supabase) {
+  const companyId = parseInt(req.params.id, 10);
+  if (!companyId) return res.status(400).json({ error: "Invalid company ID" });
+  const assetId = req.body?.asset_id != null ? parseInt(String(req.body.asset_id), 10) || null : null;
+  try {
+    await _upsertCompanyAsset(supabase, req.tenantId, companyId, "sig", assetId);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
+}
+
 module.exports = {
   postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
@@ -963,4 +1038,5 @@ module.exports = {
   getRollen, deleteRolle, patchRolle,
   deleteAddress, deleteContact,
   getLogo, putLogo,
+  getCompanyAssets, putCompanyLogo, putCompanySignature,
 };

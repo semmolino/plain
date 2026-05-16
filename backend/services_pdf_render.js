@@ -150,31 +150,41 @@ async function loadLogoDataUri({ supabase, logoAssetId }) {
   return `data:${data.MIME_TYPE};base64,${b64}`;
 }
 
-async function resolveLogoDataUri({ supabase, tplLogoAssetId, tenantId }) {
-  if (!tenantId) {
-    return tplLogoAssetId ? loadLogoDataUri({ supabase, logoAssetId: tplLogoAssetId }) : null;
+async function resolveLogoDataUri({ supabase, tplLogoAssetId, tenantId, companyId }) {
+  // 1. Per-company cached base64 logo (preferred)
+  if (companyId && tenantId) {
+    const { data: cached } = await supabase.from('TENANT_SETTINGS').select('VALUE')
+      .eq('TENANT_ID', tenantId).eq('KEY', `co_${companyId}_logo_data_uri`).maybeSingle();
+    if (cached?.VALUE) return cached.VALUE;
+    const { data: assetRow } = await supabase.from('TENANT_SETTINGS').select('VALUE')
+      .eq('TENANT_ID', tenantId).eq('KEY', `co_${companyId}_logo_asset_id`).maybeSingle();
+    if (assetRow?.VALUE) return loadLogoDataUri({ supabase, logoAssetId: parseInt(assetRow.VALUE, 10) });
   }
 
-  // Prefer the DB-cached base64 URI — survives server redeploys on ephemeral filesystems
-  const { data: cached } = await supabase
-    .from('TENANT_SETTINGS')
-    .select('VALUE')
-    .eq('TENANT_ID', tenantId)
-    .eq('KEY', 'logo_data_uri')
-    .maybeSingle();
-  if (cached?.VALUE) return cached.VALUE;
+  // 2. Tenant-level logo fallback (backward compatibility)
+  if (tenantId) {
+    const { data: cached } = await supabase.from('TENANT_SETTINGS').select('VALUE')
+      .eq('TENANT_ID', tenantId).eq('KEY', 'logo_data_uri').maybeSingle();
+    if (cached?.VALUE) return cached.VALUE;
+    const { data: assetRow } = await supabase.from('TENANT_SETTINGS').select('VALUE')
+      .eq('TENANT_ID', tenantId).eq('KEY', 'logo_asset_id').maybeSingle();
+    if (assetRow?.VALUE) return loadLogoDataUri({ supabase, logoAssetId: parseInt(assetRow.VALUE, 10) });
+  }
 
-  // Fall back to reading asset file from disk (works on first deploy before redeploy)
-  const logoAssetId = tplLogoAssetId ?? await (async () => {
-    const { data } = await supabase
-      .from('TENANT_SETTINGS')
-      .select('VALUE')
-      .eq('TENANT_ID', tenantId)
-      .eq('KEY', 'logo_asset_id')
-      .maybeSingle();
-    return data?.VALUE ? parseInt(String(data.VALUE), 10) : null;
-  })();
-  return loadLogoDataUri({ supabase, logoAssetId });
+  // 3. Template-level asset
+  if (tplLogoAssetId) return loadLogoDataUri({ supabase, logoAssetId: tplLogoAssetId });
+  return null;
+}
+
+async function resolveSignatureDataUri({ supabase, tenantId, companyId }) {
+  if (!companyId || !tenantId) return null;
+  const { data: cached } = await supabase.from('TENANT_SETTINGS').select('VALUE')
+    .eq('TENANT_ID', tenantId).eq('KEY', `co_${companyId}_sig_data_uri`).maybeSingle();
+  if (cached?.VALUE) return cached.VALUE;
+  const { data: assetRow } = await supabase.from('TENANT_SETTINGS').select('VALUE')
+    .eq('TENANT_ID', tenantId).eq('KEY', `co_${companyId}_sig_asset_id`).maybeSingle();
+  if (assetRow?.VALUE) return loadLogoDataUri({ supabase, logoAssetId: parseInt(assetRow.VALUE, 10) });
+  return null;
 }
 
 async function loadTemplate({ supabase, companyId, docType, templateId }) {
@@ -454,13 +464,17 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   const tenantId  = docMeta?.TENANT_ID ?? null;
   if (!companyId) throw new Error('Company for document not found');
 
-  const tpl         = await loadTemplate({ supabase, companyId, docType, templateId });
-  const theme       = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
-  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId });
+  const tpl = await loadTemplate({ supabase, companyId, docType, templateId });
+  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const [logoDataUri, signatureDataUri] = await Promise.all([
+    resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
+    resolveSignatureDataUri({ supabase, tenantId, companyId }),
+  ]);
 
   const vm = await buildPdfViewModel({ supabase, docType, docId });
-  vm.theme       = theme;
-  vm.logoDataUri = logoDataUri;
+  vm.theme             = theme;
+  vm.logoDataUri       = logoDataUri;
+  vm.signatureDataUri  = signatureDataUri;
 
   // EPC / GiroCode QR — only for payable documents (not storno)
   const payAmount = vm.discounts.hasDiscounts ? vm.discounts.adjustedGross : vm.inv.totals.grandTotal;
@@ -505,13 +519,15 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
 async function renderOfferPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
 
-  // Load company's document template (or default)
   const companyId = vm.offer.COMPANY_ID;
-  const tpl         = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
-  const theme       = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
-  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId });
+  const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
+  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const [logoDataUri, signatureDataUri] = await Promise.all([
+    resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
+    resolveSignatureDataUri({ supabase, tenantId, companyId }),
+  ]);
 
-  const context = { ...vm, theme, logoDataUri };
+  const context = { ...vm, theme, logoDataUri, signatureDataUri };
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
 
@@ -523,14 +539,18 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
 
   const companyId = vm.offer.COMPANY_ID;
-  const tpl         = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
-  const theme       = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
-  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId });
+  const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
+  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const [logoDataUri, signatureDataUri] = await Promise.all([
+    resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
+    resolveSignatureDataUri({ supabase, tenantId, companyId }),
+  ]);
 
   const context = {
     ...vm,
     theme,
     logoDataUri,
+    signatureDataUri,
     today: new Date().toISOString().slice(0, 10),
   };
 

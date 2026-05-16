@@ -10,7 +10,7 @@ import {
   fetchDepartments, deleteDepartment, updateDepartment,
   fetchTypen, deleteTyp, updateTyp,
   fetchRollen, deleteRolle, updateRolle,
-  fetchLogo, putLogo, uploadAsset,
+  fetchCompanyAssets, putCompanyLogo, putCompanySignature, uploadAsset,
   type Company, type StammdatenItem, type Rolle,
 } from '@/api/stammdaten'
 import { useCtrlS } from '@/hooks/useCtrlS'
@@ -407,31 +407,26 @@ function companyToForm(c: Company) {
   }
 }
 
-function LogoSection() {
-  const qc = useQueryClient()
-  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+function AssetUploadBlock({ label, hint, assetId, dataUri, onSave, onRemove, isPending, assetType }: {
+  label: string
+  hint?: string
+  assetId: number | null
+  dataUri: string | null
+  onSave: (id: number) => void
+  onRemove: () => void
+  isPending: boolean
+  assetType: string
+}) {
   const [uploading, setUploading] = useState(false)
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const { data: logoData } = useQuery({ queryKey: ['logo'], queryFn: fetchLogo })
-  const logoAssetId = logoData?.data?.logo_asset_id ?? null
-  const logoDataUri = logoData?.data?.logo_data_uri ?? null
-
-  const putLogoMut = useMutation({
-    mutationFn: putLogo,
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['logo'] }); setMsg({ text: 'Logo gespeichert ✅', type: 'success' }) },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setMsg(null)
-    setUploading(true)
+    const file = e.target.files?.[0]; if (!file) return
+    setMsg(null); setUploading(true)
     try {
-      const res = await uploadAsset(file, 'LOGO')
-      const assetId = res.data.ID
-      putLogoMut.mutate(assetId)
+      const res = await uploadAsset(file, assetType)
+      onSave(res.data.ID)
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : 'Upload fehlgeschlagen', type: 'error' })
     } finally {
@@ -442,29 +437,71 @@ function LogoSection() {
 
   return (
     <div className="admin-block">
-      <h3 className="admin-block-title">Firmenlogo (für PDF-Dokumente)</h3>
-      {logoAssetId ? (
+      <h3 className="admin-block-title">{label}</h3>
+      {assetId ? (
         <div style={{ marginBottom: 10 }}>
           <img
-            src={logoDataUri ?? `/api/v1/assets/${logoAssetId}`}
-            alt="Logo"
-            style={{ maxHeight: 60, maxWidth: 200, objectFit: 'contain', display: 'block', marginBottom: 8, border: '1px solid #e5e7eb', borderRadius: 4, padding: 4 }}
+            src={dataUri ?? `/api/v1/assets/${assetId}`}
+            alt={label}
+            style={{ maxHeight: 60, maxWidth: 220, objectFit: 'contain', display: 'block', marginBottom: 8, border: '1px solid #e5e7eb', borderRadius: 4, padding: 4, background: '#fafafa' }}
           />
-          <button type="button" className="btn-small btn-danger" onClick={() => putLogoMut.mutate(null)} disabled={putLogoMut.isPending}>
-            Logo entfernen
+          <button type="button" className="btn-small btn-danger" onClick={onRemove} disabled={isPending}>
+            Entfernen
           </button>
         </div>
       ) : (
-        <p className="empty-note" style={{ margin: '4px 0 10px' }}>Kein Logo gesetzt.</p>
+        <p className="empty-note" style={{ margin: '4px 0 10px' }}>Kein Bild gesetzt.</p>
       )}
       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
         <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/svg+xml,image/webp" style={{ display: 'none' }} onChange={e => void handleFile(e)} />
-        <button type="button" className="btn-small" onClick={() => inputRef.current?.click()} disabled={uploading || putLogoMut.isPending}>
-          {uploading ? 'Wird hochgeladen …' : logoAssetId ? 'Logo ersetzen' : 'Logo hochladen'}
+        <button type="button" className="btn-small" onClick={() => inputRef.current?.click()} disabled={uploading || isPending}>
+          {uploading ? 'Wird hochgeladen …' : assetId ? 'Ersetzen' : 'Hochladen'}
         </button>
-        <span style={{ fontSize: 11, color: '#6b7280' }}>PNG, JPG, SVG · max. 10 MB</span>
+        <span style={{ fontSize: 11, color: '#6b7280' }}>{hint ?? 'PNG, JPG, SVG · max. 10 MB'}</span>
       </label>
       <Message text={msg?.text ?? null} type={msg?.type} />
+    </div>
+  )
+}
+
+function CompanyAssetsSection({ companyId }: { companyId: number }) {
+  const qc = useQueryClient()
+  const queryKey = ['company-assets', companyId]
+  const { data } = useQuery({ queryKey, queryFn: () => fetchCompanyAssets(companyId) })
+  const assets = data?.data
+
+  const logoMut = useMutation({
+    mutationFn: (assetId: number | null) => putCompanyLogo(companyId, assetId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey }),
+    onError: (e: Error) => alert(e.message),
+  })
+  const sigMut = useMutation({
+    mutationFn: (assetId: number | null) => putCompanySignature(companyId, assetId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey }),
+    onError: (e: Error) => alert(e.message),
+  })
+
+  return (
+    <div style={{ marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
+      <AssetUploadBlock
+        label="Firmenlogo (für PDF-Dokumente)"
+        assetId={assets?.logo_asset_id ?? null}
+        dataUri={assets?.logo_data_uri ?? null}
+        onSave={id => logoMut.mutate(id)}
+        onRemove={() => logoMut.mutate(null)}
+        isPending={logoMut.isPending}
+        assetType="LOGO"
+      />
+      <AssetUploadBlock
+        label="Unterschrift (Angebot + Auftragsbestätigung)"
+        hint="PNG, JPG · Empfehlung: weißer oder transparenter Hintergrund"
+        assetId={assets?.sig_asset_id ?? null}
+        dataUri={assets?.sig_data_uri ?? null}
+        onSave={id => sigMut.mutate(id)}
+        onRemove={() => sigMut.mutate(null)}
+        isPending={sigMut.isPending}
+        assetType="SIGNATURE"
+      />
     </div>
   )
 }
@@ -508,9 +545,7 @@ function UnternehmenSection() {
 
   return (
     <div className="admin-section">
-      <LogoSection />
-
-      <div className="admin-company-selector" style={{ marginTop: 16 }}>
+      <div className="admin-company-selector">
         {companies.map(c => (
           <button key={c.ID} type="button" className={`admin-company-btn${selectedId === c.ID ? ' active' : ''}`} onClick={() => loadCompany(c)}>
             {c.COMPANY_NAME_1}
@@ -547,6 +582,8 @@ function UnternehmenSection() {
           {isPending ? 'Speichert …' : selectedId !== null ? 'Änderungen speichern' : 'Neu anlegen'}
         </button>
       </form>
+
+      {selectedId !== null && <CompanyAssetsSection companyId={selectedId} />}
     </div>
   )
 }

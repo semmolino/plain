@@ -30,6 +30,9 @@ module.exports = (supabase) => {
   router.get("/companies",                                           (req, res) => ctrl.getCompanies(req, res, supabase));
   router.post("/company",                                            (req, res) => ctrl.postCompany(req, res, supabase));
   router.put("/company/:id",                                         (req, res) => ctrl.putCompany(req, res, supabase));
+  router.get("/companies/:id/assets",                                (req, res) => ctrl.getCompanyAssets(req, res, supabase));
+  router.put("/companies/:id/logo",                                  (req, res) => ctrl.putCompanyLogo(req, res, supabase));
+  router.put("/companies/:id/signature",                             (req, res) => ctrl.putCompanySignature(req, res, supabase));
   router.post("/address",                                            (req, res) => ctrl.postAddress(req, res, supabase));
   router.post("/rollen",                                             (req, res) => ctrl.postRollen(req, res, supabase));
   router.get("/rollen",                                              (req, res) => ctrl.getRollen(req, res, supabase));

@@ -120,6 +120,17 @@ body {
   border-top: 1pt solid #1a1a1a;
 }
 
+/* ── Signature image ─────────────────────────────────────── */
+.signature-image {
+  margin-top: 8mm;
+}
+.signature-image img {
+  max-height: 22mm;
+  max-width: 75mm;
+  object-fit: contain;
+  display: block;
+}
+
 /* ── Bestellblatt ────────────────────────────────────────── */
 .page-break { page-break-before: always; }
 
@@ -317,6 +328,13 @@ body {
 
   {# Fußtext #}
   {% if text2 %}<div class="text-block">{{ text2 }}</div>{% endif %}
+
+  {# Signature image #}
+  {% if signatureDataUri %}
+  <div class="signature-image">
+    <img src="{{ signatureDataUri }}" alt="Unterschrift">
+  </div>
+  {% endif %}
 
 </div>
 
