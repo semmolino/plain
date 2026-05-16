@@ -17,9 +17,15 @@ export interface Project {
   PROJECT_STATUS_ID:   number | null
   PROJECT_TYPE_ID:     number | null
   PROJECT_MANAGER_ID:  number | null
+  DEPARTMENT_ID:       number | null
+  ADDRESS_ID:          number | null
+  CONTACT_ID:          number | null
   STATUS_NAME:         string
   TYPE_NAME:           string
   MANAGER_NAME:        string
+  ADDRESS_NAME:        string
+  CONTACT_NAME:        string
+  DEPARTMENT_NAME:     string
 }
 
 export interface StructureNode {
@@ -95,6 +101,7 @@ export const createProject = (body: CreateProjectPayload) =>
 export const updateProject = (id: number, body: Partial<{
   name_short: string; name_long: string
   project_status_id: number; project_type_id: number | null; project_manager_id: number
+  department_id: number | null; address_id: number | null; contact_id: number | null
 }>) => apiClient.patch<{ data: Project }>(`/projekte/${id}`, body)
 
 export const searchProjectsApi = (q: string) =>
@@ -178,6 +185,7 @@ export const patchContract = (contractId: number, body: Partial<{
   NAME_SHORT: string
   NAME_LONG: string
   INVOICE_ADDRESS_ID: number | null
+  INVOICE_CONTACT_ID: number | null
   CASH_DISCOUNT_PERCENT: number | null
   CASH_DISCOUNT_DAYS: number | null
 }>) => apiClient.patch<{ success: boolean }>(`/projekte/contract/${contractId}`, body)

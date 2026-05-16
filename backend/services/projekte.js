@@ -312,7 +312,7 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
 
   const { data: projects, error: pErr } = await supabase
     .from("PROJECT")
-    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID")
+    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID, DEPARTMENT_ID, ADDRESS_ID, CONTACT_ID")
     .eq("TENANT_ID", tenantId)
     .order("NAME_SHORT", { ascending: true })
     .limit(safeLimit);
@@ -320,24 +320,36 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
   if (pErr) throw pErr;
 
   const statusIds = [...new Set((projects || []).map((p) => p.PROJECT_STATUS_ID).filter(Boolean))];
-  const typeIds = [...new Set((projects || []).map((p) => p.PROJECT_TYPE_ID).filter(Boolean))];
-  const mgrIds = [...new Set((projects || []).map((p) => p.PROJECT_MANAGER_ID).filter(Boolean))];
+  const typeIds   = [...new Set((projects || []).map((p) => p.PROJECT_TYPE_ID).filter(Boolean))];
+  const mgrIds    = [...new Set((projects || []).map((p) => p.PROJECT_MANAGER_ID).filter(Boolean))];
+  const addrIds   = [...new Set((projects || []).map((p) => p.ADDRESS_ID).filter(Boolean))];
+  const ctctIds   = [...new Set((projects || []).map((p) => p.CONTACT_ID).filter(Boolean))];
+  const deptIds   = [...new Set((projects || []).map((p) => p.DEPARTMENT_ID).filter(Boolean))];
 
-  const [stRes, tyRes, mgRes] = await Promise.all([
+  const [stRes, tyRes, mgRes, addrRes, ctctRes, deptRes] = await Promise.all([
     statusIds.length ? supabase.from("PROJECT_STATUS").select("ID, NAME_SHORT").in("ID", statusIds) : Promise.resolve({ data: [] }),
-    typeIds.length ? supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT").in("ID", typeIds) : Promise.resolve({ data: [] }),
-    mgrIds.length ? supabase.from("EMPLOYEE").select("ID, SHORT_NAME").in("ID", mgrIds) : Promise.resolve({ data: [] }),
+    typeIds.length   ? supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT").in("ID", typeIds)     : Promise.resolve({ data: [] }),
+    mgrIds.length    ? supabase.from("EMPLOYEE").select("ID, SHORT_NAME").in("ID", mgrIds)          : Promise.resolve({ data: [] }),
+    addrIds.length   ? supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").in("ID", addrIds)      : Promise.resolve({ data: [] }),
+    ctctIds.length   ? supabase.from("CONTACTS").select("ID, FIRST_NAME, LAST_NAME").in("ID", ctctIds) : Promise.resolve({ data: [] }),
+    deptIds.length   ? supabase.from("DEPARTMENT").select("ID, NAME_SHORT").in("ID", deptIds)       : Promise.resolve({ data: [] }),
   ]);
 
-  const statusMap = new Map((stRes.data || []).map((x) => [String(x.ID), x.NAME_SHORT]));
-  const typeMap = new Map((tyRes.data || []).map((x) => [String(x.ID), x.NAME_SHORT]));
-  const mgrMap = new Map((mgRes.data || []).map((x) => [String(x.ID), x.SHORT_NAME]));
+  const statusMap  = new Map((stRes.data  || []).map((x) => [String(x.ID), x.NAME_SHORT]));
+  const typeMap    = new Map((tyRes.data  || []).map((x) => [String(x.ID), x.NAME_SHORT]));
+  const mgrMap     = new Map((mgRes.data  || []).map((x) => [String(x.ID), x.SHORT_NAME]));
+  const addressMap = new Map((addrRes.data || []).map((x) => [String(x.ID), x.ADDRESS_NAME_1]));
+  const contactMap = new Map((ctctRes.data || []).map((x) => [String(x.ID), `${x.FIRST_NAME || ""} ${x.LAST_NAME || ""}`.trim()]));
+  const deptMap    = new Map((deptRes.data || []).map((x) => [String(x.ID), x.NAME_SHORT]));
 
   return (projects || []).map((p) => ({
     ...p,
-    STATUS_NAME: statusMap.get(String(p.PROJECT_STATUS_ID)) || "",
-    TYPE_NAME: typeMap.get(String(p.PROJECT_TYPE_ID)) || "",
-    MANAGER_NAME: mgrMap.get(String(p.PROJECT_MANAGER_ID)) || "",
+    STATUS_NAME:     statusMap.get(String(p.PROJECT_STATUS_ID))  || "",
+    TYPE_NAME:       typeMap.get(String(p.PROJECT_TYPE_ID))       || "",
+    MANAGER_NAME:    mgrMap.get(String(p.PROJECT_MANAGER_ID))     || "",
+    ADDRESS_NAME:    addressMap.get(String(p.ADDRESS_ID))         || "",
+    CONTACT_NAME:    contactMap.get(String(p.CONTACT_ID))         || "",
+    DEPARTMENT_NAME: deptMap.get(String(p.DEPARTMENT_ID))         || "",
   }));
 }
 
@@ -355,6 +367,15 @@ async function patchProject(supabase, { id, body, tenantId }) {
   if (b.project_manager_id !== undefined) {
     upd.PROJECT_MANAGER_ID = b.project_manager_id ? parseInt(String(b.project_manager_id), 10) : null;
   }
+  if (b.department_id !== undefined) {
+    upd.DEPARTMENT_ID = b.department_id ? parseInt(String(b.department_id), 10) : null;
+  }
+  if (b.address_id !== undefined) {
+    upd.ADDRESS_ID = b.address_id ? parseInt(String(b.address_id), 10) : null;
+  }
+  if (b.contact_id !== undefined) {
+    upd.CONTACT_ID = b.contact_id ? parseInt(String(b.contact_id), 10) : null;
+  }
   if (upd.NAME_SHORT !== undefined && !upd.NAME_SHORT) {
     throw { status: 400, message: "NAME_SHORT ist erforderlich" };
   }
@@ -364,7 +385,7 @@ async function patchProject(supabase, { id, body, tenantId }) {
     .update(upd)
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
-    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID")
+    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID, DEPARTMENT_ID, ADDRESS_ID, CONTACT_ID")
     .single();
 
   if (uErr) throw uErr;
@@ -1153,6 +1174,10 @@ async function patchContract(supabase, { contractId, body }) {
   if (body.INVOICE_ADDRESS_ID !== undefined) {
     const v = body.INVOICE_ADDRESS_ID;
     allowed.INVOICE_ADDRESS_ID = v === null || v === "" ? null : parseInt(v, 10);
+  }
+  if (body.INVOICE_CONTACT_ID !== undefined) {
+    const v = body.INVOICE_CONTACT_ID;
+    allowed.INVOICE_CONTACT_ID = v === null || v === "" ? null : parseInt(v, 10);
   }
   if (body.CASH_DISCOUNT_PERCENT !== undefined) {
     allowed.CASH_DISCOUNT_PERCENT = body.CASH_DISCOUNT_PERCENT === null || body.CASH_DISCOUNT_PERCENT === "" ? null : parseFloat(body.CASH_DISCOUNT_PERCENT);
