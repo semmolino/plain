@@ -53,23 +53,10 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
     // Load address and its contacts
     const addrId = c.INVOICE_ADDRESS_ID ?? null
     setAddressId(addrId)
+    setAddrText(c.INVOICE_ADDRESS_NAME ?? (addrId ? String(addrId) : ''))
     if (addrId) {
-      // Fetch address name and contacts in parallel
-      Promise.all([
-        searchAddressesApi('').catch(() => ({ data: [] as { ID: number; ADDRESS_NAME_1: string }[] })),
-        fetchContactsByAddress(addrId).catch(() => ({ data: [] as ContactOpt[] })),
-      ]).then(([, ctcts]) => {
-        setContacts(ctcts.data ?? [])
-      })
-      // Also set address text by searching for a display name
-      searchAddressesApi('').then(r => {
-        const found = (r.data ?? []).find(a => a.ID === addrId)
-        setAddrText(found ? found.ADDRESS_NAME_1 : String(addrId))
-      }).catch(() => setAddrText(String(addrId)))
-      // Load contacts immediately
       fetchContactsByAddress(addrId).then(r => setContacts(r.data ?? [])).catch(() => {})
     } else {
-      setAddrText('')
       setContacts([])
     }
   }, [contractData?.data])

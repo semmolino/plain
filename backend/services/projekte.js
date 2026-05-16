@@ -1152,7 +1152,7 @@ async function moveStructure(supabase, { structureId, fatherRaw, sortAfterId }) 
   }
 }
 
-async function getContractByProject(supabase, { projectId }) {
+async function getContractByProject(supabase, { projectId, tenantId }) {
   const query = (table) =>
     supabase
       .from(table)
@@ -1164,7 +1164,23 @@ async function getContractByProject(supabase, { projectId }) {
   let { data, error } = await query("CONTRACT");
   if (error) ({ data, error } = await query("CONTRACTS"));
   if (error) throw error;
-  return data || null;
+  if (!data) return null;
+
+  // Enrich with address name and contact name
+  if (data.INVOICE_ADDRESS_ID) {
+    const tid = tenantId || data.TENANT_ID;
+    const { data: addr } = await supabase
+      .from("ADDRESS")
+      .select("ADDRESS_NAME_1")
+      .eq("ID", data.INVOICE_ADDRESS_ID)
+      .eq("TENANT_ID", tid)
+      .maybeSingle();
+    data.INVOICE_ADDRESS_NAME = addr?.ADDRESS_NAME_1 ?? null;
+  } else {
+    data.INVOICE_ADDRESS_NAME = null;
+  }
+
+  return data;
 }
 
 async function patchContract(supabase, { contractId, body }) {

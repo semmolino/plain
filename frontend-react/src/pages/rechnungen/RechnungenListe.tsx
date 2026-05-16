@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal }   from '@/components/ui/Modal'
@@ -149,6 +149,61 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   }
 }
 
+// ── Filter chips ──────────────────────────────────────────────────────────────
+
+type FilterDim = 'status' | 'typ'
+type ActiveFilters = Record<FilterDim, Set<string>>
+const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set() })
+
+function FilterChip({ label, options, active, onChange }: {
+  label: string; options: string[]; active: Set<string>; onChange: (v: Set<string>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  function toggle(val: string) { const s = new Set(active); s.has(val) ? s.delete(val) : s.add(val); onChange(s) }
+  const count = active.size
+  return (
+    <div ref={ref} className="filter-chip-wrap">
+      <button className={`filter-chip-btn${count > 0 ? ' active' : ''}`} onClick={() => setOpen(o => !o)}>
+        {label}{count > 0 ? ` (${count})` : ''} ▾
+      </button>
+      {count > 0 && <button className="filter-chip-clear" onClick={() => { onChange(new Set()); setOpen(false) }} title="Zurücksetzen">×</button>}
+      {open && (
+        <div className="filter-chip-dropdown">
+          {options.length === 0 ? <div className="filter-chip-empty">Keine Optionen</div> : options.map(opt => (
+            <label key={opt} className="filter-chip-option">
+              <input type="checkbox" checked={active.has(opt)} onChange={() => toggle(opt)} />
+              {opt || '(ohne)'}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Column visibility ─────────────────────────────────────────────────────────
+
+type ColKey = 'typ' | 'date' | 'project' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
+
+interface ColDef { key: ColKey; label: string; className?: string; defaultVisible: boolean }
+const COLUMNS: ColDef[] = [
+  { key: 'typ',         label: 'Typ',            defaultVisible: true  },
+  { key: 'date',        label: 'Datum',          defaultVisible: true  },
+  { key: 'project',     label: 'Projekt',        defaultVisible: true  },
+  { key: 'net',         label: 'Netto €',        className: 'num', defaultVisible: true  },
+  { key: 'gross',       label: 'Brutto €',       className: 'num', defaultVisible: true  },
+  { key: 'paid',        label: 'Bezahlt €',      className: 'num', defaultVisible: false },
+  { key: 'open',        label: 'Offene Posten €', className: 'num', defaultVisible: true  },
+  { key: 'statusLabel', label: 'Status',         defaultVisible: true  },
+]
+
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
 type SortKey = 'number' | 'typ' | 'date' | 'project' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
@@ -193,12 +248,29 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
   const qc = useQueryClient()
   const navigate = useNavigate()
 
-  const [search,    setSearch]    = useState(initialSearch ?? '')
-  const [onlyOpen,  setOnlyOpen]  = useState(false)
+  const [search,        setSearch]        = useState(initialSearch ?? '')
+  const [onlyOpen,      setOnlyOpen]      = useState(false)
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(emptyFilters())
+  const [hiddenCols,    setHiddenCols]    = useState<Set<ColKey>>(
+    new Set(COLUMNS.filter(c => !c.defaultVisible).map(c => c.key))
+  )
+  const [colPanelOpen,  setColPanelOpen]  = useState(false)
+  const colPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (initialSearch !== undefined) setSearch(initialSearch)
   }, [initialSearch])
+
+  useEffect(() => {
+    if (!colPanelOpen) return
+    const h = (e: MouseEvent) => { if (colPanelRef.current && !colPanelRef.current.contains(e.target as Node)) setColPanelOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [colPanelOpen])
+
+  function setDimFilter(dim: FilterDim, vals: Set<string>) { setActiveFilters(prev => ({ ...prev, [dim]: vals })) }
+  function toggleCol(key: ColKey) { setHiddenCols(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s }) }
+  const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key))
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
@@ -225,6 +297,15 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
     ...(ppData?.data  ?? []).map(fromPp),
   ], [invData, ppData])
 
+  const filterOptions = useMemo(() => {
+    const uniq = (fn: (r: UnifiedRow) => string) =>
+      [...new Set(allRows.map(fn).filter(v => v !== ''))].sort()
+    return {
+      status: uniq(r => r.statusLabel),
+      typ:    uniq(r => r.typ),
+    }
+  }, [allRows])
+
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
     let filtered = q
@@ -234,11 +315,10 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
         )
       : allRows
     if (onlyOpen) {
-      filtered = filtered.filter(r =>
-        r.statusClass === 'booked' &&
-        (r.open ?? 0) > 0.005
-      )
+      filtered = filtered.filter(r => r.statusClass === 'booked' && (r.open ?? 0) > 0.005)
     }
+    if (activeFilters.status.size > 0) filtered = filtered.filter(r => activeFilters.status.has(r.statusLabel))
+    if (activeFilters.typ.size    > 0) filtered = filtered.filter(r => activeFilters.typ.has(r.typ))
     return [...filtered].sort((a, b) => {
       const av = a[sortKey] ?? ''
       const bv = b[sortKey] ?? ''
@@ -247,7 +327,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
         : String(av).localeCompare(String(bv), 'de', { numeric: true })
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [allRows, search, onlyOpen, sortKey, sortDir])
+  }, [allRows, search, onlyOpen, sortKey, sortDir, activeFilters])
 
   const totals = useMemo(() => ({
     net:   rows.reduce((s, r) => s + (r.net   ?? 0), 0),
@@ -502,21 +582,40 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
           </button>
         </div>
       )}
-      <div className="list-toolbar" style={{ marginTop: backProject ? 0 : 10 }}>
+      <div className="pl-toolbar" style={{ marginTop: backProject ? 0 : 10 }}>
         <input
           className="list-search"
           placeholder="Suchen …"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-        <label className="list-checkbox-label">
-          <input
-            type="checkbox"
-            checked={onlyOpen}
-            onChange={e => setOnlyOpen(e.target.checked)}
-          />
-          nur offene Posten
-        </label>
+        <div className="pl-filter-chips">
+          <FilterChip label="Status" options={filterOptions.status} active={activeFilters.status} onChange={v => setDimFilter('status', v)} />
+          <FilterChip label="Typ"    options={filterOptions.typ}    active={activeFilters.typ}    onChange={v => setDimFilter('typ', v)}    />
+          <label className="list-checkbox-label" style={{ fontSize: 12 }}>
+            <input type="checkbox" checked={onlyOpen} onChange={e => setOnlyOpen(e.target.checked)} />
+            nur offen
+          </label>
+          {(activeFilters.status.size > 0 || activeFilters.typ.size > 0) && (
+            <button className="pl-clear-btn" onClick={() => setActiveFilters(emptyFilters())}>
+              Filter löschen
+            </button>
+          )}
+        </div>
+        <div ref={colPanelRef} className="pl-col-wrap">
+          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>⚙ Spalten</button>
+          {colPanelOpen && (
+            <div className="pl-col-panel">
+              <div className="pl-col-panel-title">Sichtbare Spalten</div>
+              {COLUMNS.map(c => (
+                <label key={c.key} className="pl-col-option">
+                  <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
+                  {c.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
         <span className="list-info">
           {rows.length}{rows.length !== allRows.length ? ` / ${allRows.length}` : ''} Einträge
         </span>
@@ -528,15 +627,10 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
           <table className="master-table">
             <thead>
               <tr>
-                <SortTh label="Nummer"    k="number"      {...sp} />
-                <SortTh label="Typ"       k="typ"         {...sp} />
-                <SortTh label="Datum"     k="date"        {...sp} />
-                <SortTh label="Projekt"   k="project"     {...sp} />
-                <SortTh label="Netto €"          k="net"         {...sp} className="num" />
-                <SortTh label="Brutto €"         k="gross"       {...sp} className="num" />
-                <SortTh label="Bezahlt €"        k="paid"        {...sp} className="num" />
-                <SortTh label="Offene Posten €"  k="open"        {...sp} className="num" />
-                <SortTh label="Status"           k="statusLabel" {...sp} />
+                <SortTh label="Nummer" k="number" {...sp} />
+                {visibleCols.map(c => (
+                  <SortTh key={c.key} label={c.label} k={c.key} {...sp} className={c.className} />
+                ))}
                 <th></th>
               </tr>
             </thead>
@@ -544,14 +638,17 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
               {rows.map(row => (
                 <tr key={row.key}>
                   <td>{row.number ?? '—'}</td>
-                  <td>{row.typ}</td>
-                  <td>{fmtDate(row.date)}</td>
-                  <td>{row.project ?? '—'}</td>
-                  <td className="num">{fmtEur(row.net)}</td>
-                  <td className="num">{fmtEur(row.gross)}</td>
-                  <td className="num">{fmtEur(row.paid)}</td>
-                  <td className="num">{fmtEur(row.open)}</td>
-                  <td><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span></td>
+                  {visibleCols.map(c => {
+                    if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
+                    if (c.key === 'date')        return <td key={c.key}>{fmtDate(row.date)}</td>
+                    if (c.key === 'project')     return <td key={c.key}>{row.project ?? '—'}</td>
+                    if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
+                    if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
+                    if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>
+                    if (c.key === 'open')        return <td key={c.key} className="num">{fmtEur(row.open)}</td>
+                    if (c.key === 'statusLabel') return <td key={c.key}><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span></td>
+                    return null
+                  })}
                   <td className="doc-actions">
                     <button className="btn-small" onClick={() => setDetailRow(row)}>Details</button>
                     <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
@@ -574,18 +671,21 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                   </td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={10} className="empty-note">Keine Einträge</td></tr>}
+              {!rows.length && <tr><td colSpan={2 + visibleCols.length} className="empty-note">Keine Einträge</td></tr>}
             </tbody>
             <tfoot>
               <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                <td colSpan={4} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
-                  {rows.length !== allRows.length ? `${rows.length} / ${allRows.length} Einträge` : `${allRows.length} Einträge`}
+                <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                  {rows.length !== allRows.length ? `${rows.length} / ${allRows.length}` : `${allRows.length}`}
                 </td>
-                <td className="num">{fmtEur(totals.net)}</td>
-                <td className="num">{fmtEur(totals.gross)}</td>
-                <td className="num">{fmtEur(totals.paid)}</td>
-                <td className="num">{fmtEur(totals.open)}</td>
-                <td colSpan={2}></td>
+                {visibleCols.map(c => {
+                  if (c.key === 'net')   return <td key={c.key} className="num"><strong>{fmtEur(totals.net)}</strong></td>
+                  if (c.key === 'gross') return <td key={c.key} className="num"><strong>{fmtEur(totals.gross)}</strong></td>
+                  if (c.key === 'paid')  return <td key={c.key} className="num"><strong>{fmtEur(totals.paid)}</strong></td>
+                  if (c.key === 'open')  return <td key={c.key} className="num"><strong>{fmtEur(totals.open)}</strong></td>
+                  return <td key={c.key}></td>
+                })}
+                <td></td>
               </tr>
             </tfoot>
           </table>

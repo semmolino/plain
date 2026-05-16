@@ -168,12 +168,13 @@ export const createProgressSnapshot = (projectId: number) =>
 // ── Verträge ──────────────────────────────────────────────────────────────────
 
 export interface Contract {
-  ID:                   number
-  NAME_SHORT:           string
-  NAME_LONG:            string
-  PROJECT_ID:           number
-  INVOICE_ADDRESS_ID:   number | null
-  INVOICE_CONTACT_ID:   number | null
+  ID:                    number
+  NAME_SHORT:            string
+  NAME_LONG:             string
+  PROJECT_ID:            number
+  INVOICE_ADDRESS_ID:    number | null
+  INVOICE_ADDRESS_NAME:  string | null
+  INVOICE_CONTACT_ID:    number | null
   CASH_DISCOUNT_PERCENT: number | null
   CASH_DISCOUNT_DAYS:    number | null
 }

@@ -268,7 +268,7 @@ async function getContractByProject(req, res, supabase) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
   try {
-    const data = await svc.getContractByProject(supabase, { projectId: id });
+    const data = await svc.getContractByProject(supabase, { projectId: id, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
