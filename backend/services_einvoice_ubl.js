@@ -106,9 +106,9 @@ function buildLineItem(line, cur) {
   return `
   <cac:InvoiceLine>
     <cbc:ID>${line.id}</cbc:ID>
+    ${line.note ? `<cbc:Note>${x(line.note)}</cbc:Note>` : ''}
     <cbc:InvoicedQuantity unitCode="${x(line.unitCode)}">${n2(line.quantity)}</cbc:InvoicedQuantity>
     <cbc:LineExtensionAmount currencyID="${x(cur)}">${n2(line.lineTotal)}</cbc:LineExtensionAmount>
-    ${line.note ? `<cbc:Note>${x(line.note)}</cbc:Note>` : ''}
     ${line.billingPeriodStart || line.billingPeriodEnd ? `
     <cac:InvoicePeriod>
       ${line.billingPeriodStart ? `<cbc:StartDate>${x(line.billingPeriodStart)}</cbc:StartDate>` : ''}
