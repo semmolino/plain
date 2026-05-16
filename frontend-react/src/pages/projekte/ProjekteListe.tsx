@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal }         from '@/components/ui/Modal'
 import { Message }       from '@/components/ui/Message'
@@ -74,7 +75,8 @@ type ContactOption = { ID: number; FIRST_NAME: string; LAST_NAME: string }
 type ContractConfirm = { contractId: number; addressId: number | null; contactId: number | null }
 
 export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: number) => void }) {
-  const qc = useQueryClient()
+  const qc       = useQueryClient()
+  const navigate = useNavigate()
 
   // list state
   const [search,        setSearch]        = useState('')
@@ -359,9 +361,12 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                     <td>{p.NAME_LONG}</td>
                     <td>{p.STATUS_NAME}</td>
                     <td>{p.MANAGER_NAME}</td>
-                    {visibleOptCols.map(c => (
-                      <td key={c.key}>{p[c.key] ?? '—'}</td>
-                    ))}
+                    {visibleOptCols.map(c => {
+                      if (c.key === 'ADDRESS_NAME' && p.ADDRESS_ID) {
+                        return <td key={c.key}><button className="link-cell" onClick={() => navigate('/adressen', { state: { openAddressId: p.ADDRESS_ID } })}>{p.ADDRESS_NAME ?? '—'}</button></td>
+                      }
+                      return <td key={c.key}>{p[c.key] ?? '—'}</td>
+                    })}
                     <td><button className="btn-small" onClick={() => openEdit(p)}>Bearbeiten</button></td>
                     {onSelectProject && (
                       <td><button className="btn-small btn-save" onClick={() => onSelectProject(p.ID)}>Öffnen</button></td>

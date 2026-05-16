@@ -314,7 +314,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
     const q = search.trim().toLowerCase()
     let filtered = q
       ? allRows.filter(r =>
-          `${r.number ?? ''} ${r.typ} ${r.date ?? ''} ${r.project ?? ''} ${r.statusLabel}`
+          `${r.number ?? ''} ${r.typ} ${r.date ?? ''} ${r.project ?? ''} ${r.address ?? ''} ${r.statusLabel}`
             .toLowerCase().includes(q)
         )
       : allRows
@@ -645,8 +645,8 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                   {visibleCols.map(c => {
                     if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
                     if (c.key === 'date')        return <td key={c.key}>{fmtDate(row.date)}</td>
-                    if (c.key === 'project')     return <td key={c.key}>{row.project ?? '—'}</td>
-                    if (c.key === 'address')     return <td key={c.key}>{row.address ?? '—'}</td>
+                    if (c.key === 'project')     return <td key={c.key}>{row.projectId !== null ? <button className="link-cell" onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : (row.project ?? '—')}</td>
+                    if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
                     if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
                     if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
                     if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>

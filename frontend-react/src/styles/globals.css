@@ -415,6 +415,13 @@ input::placeholder { color: rgba(17,24,39,0.45); }
   margin-right: 4px;
 }
 
+.link-cell {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: #2563eb; text-decoration: underline;
+  font: inherit; text-align: left;
+}
+.link-cell:hover { color: #1d4ed8; }
+
 .btn-small {
   padding: 4px 10px; font-size: 11px; font-weight: 700;
   border-radius: 8px; border: 1px solid rgba(17,24,39,0.12);
