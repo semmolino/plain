@@ -362,7 +362,11 @@ async function getEinvoiceUbl(req, res, supabase) {
   const fname = `XRechnung_${invRow.INVOICE_NUMBER || invRow.ID}.xml`;
 
   if (isBooked && !preview && invRow.DOCUMENT_XML_ASSET_ID) {
-    return svc.streamXmlAsset({ supabase, res, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    try {
+      return await svc.streamXmlAsset({ supabase, res, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    } catch (snapErr) {
+      console.warn("[EINVOICE_XRECHNUNG] snapshot missing on disk, regenerating live", { invoice_id: invRow.ID, asset_id: invRow.DOCUMENT_XML_ASSET_ID });
+    }
   }
 
   try {
@@ -581,7 +585,11 @@ async function getEinvoiceCii(req, res, supabase) {
 
   // Serve snapshot only if format matches
   if (!preview && String(invRow.STATUS_ID) === "2" && invRow.DOCUMENT_XML_ASSET_ID && invRow.DOCUMENT_XML_PROFILE === profileKey) {
-    return svc.streamXmlAsset({ supabase, res, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    try {
+      return await svc.streamXmlAsset({ supabase, res, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    } catch (snapErr) {
+      console.warn("[EINVOICE_CII_INV] snapshot missing on disk, regenerating live", { invoice_id: invRow.ID, asset_id: invRow.DOCUMENT_XML_ASSET_ID });
+    }
   }
 
   try {

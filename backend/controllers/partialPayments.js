@@ -468,7 +468,11 @@ async function getEinvoiceUbl(req, res, supabase) {
   const fname = `XRechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
 
   if (isBooked && !preview && ppRow.DOCUMENT_XML_ASSET_ID) {
-    return svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    try {
+      return await svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    } catch (snapErr) {
+      console.warn("[EINVOICE_XRECHNUNG_PP] snapshot missing on disk, regenerating live", { partial_payment_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
+    }
   }
 
   try {
@@ -640,7 +644,11 @@ async function getEinvoiceCii(req, res, supabase) {
   const profileKey = `zugferd-${profile.toLowerCase()}`;
 
   if (!preview && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_XML_ASSET_ID && ppRow.DOCUMENT_XML_PROFILE === profileKey) {
-    return svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    try {
+      return await svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    } catch (snapErr) {
+      console.warn("[EINVOICE_CII_PP] snapshot missing on disk, regenerating live", { partial_payment_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
+    }
   }
 
   try {
