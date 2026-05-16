@@ -444,23 +444,33 @@ export function RechnungenListe({ onEditDraft }: { onEditDraft?: (d: EditDraftPa
     else openPpPdf((row.raw as PartialPayment).ID)
   }
 
-  function openXRechnung(row: UnifiedRow) {
-    if (row.source === 'invoice') {
-      const inv = row.raw as Invoice
-      downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'ubl')
-    } else {
-      const pp = row.raw as PartialPayment
-      downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'ubl')
+  async function openXRechnung(row: UnifiedRow) {
+    try {
+      if (row.source === 'invoice') {
+        const inv = row.raw as Invoice
+        await downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'ubl')
+      } else {
+        const pp = row.raw as PartialPayment
+        await downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'ubl')
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`XRechnung konnte nicht geladen werden: ${msg}`)
     }
   }
 
-  function openZUGFeRD(row: UnifiedRow) {
-    if (row.source === 'invoice') {
-      const inv = row.raw as Invoice
-      downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'cii')
-    } else {
-      const pp = row.raw as PartialPayment
-      downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'cii')
+  async function openZUGFeRD(row: UnifiedRow) {
+    try {
+      if (row.source === 'invoice') {
+        const inv = row.raw as Invoice
+        await downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'cii')
+      } else {
+        const pp = row.raw as PartialPayment
+        await downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'cii')
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`ZUGFeRD konnte nicht geladen werden: ${msg}`)
     }
   }
 

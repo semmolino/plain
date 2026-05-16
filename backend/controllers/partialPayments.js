@@ -467,15 +467,7 @@ async function getEinvoiceUbl(req, res, supabase) {
   const isBooked = String(ppRow.STATUS_ID) === "2";
   const fname = `XRechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
 
-  if (isBooked && !preview) {
-    if (!ppRow.DOCUMENT_XML_ASSET_ID) {
-      console.warn("[EINVOICE_XRECHNUNG_PP]", logCtx({ step: "booked_snapshot_missing" }));
-      return res.status(409).json({
-        error: "BOOKED_XML_SNAPSHOT_MISSING",
-        message: "Partial payment is booked, but the XRechnung XML snapshot is missing. Regeneration is blocked to preserve immutability.",
-        partial_payment_id: ppRow.ID,
-      });
-    }
+  if (isBooked && !preview && ppRow.DOCUMENT_XML_ASSET_ID) {
     return svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
   }
 

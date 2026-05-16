@@ -361,15 +361,7 @@ async function getEinvoiceUbl(req, res, supabase) {
   const isBooked = String(invRow.STATUS_ID) === "2";
   const fname = `XRechnung_${invRow.INVOICE_NUMBER || invRow.ID}.xml`;
 
-  if (isBooked && !preview) {
-    if (!invRow.DOCUMENT_XML_ASSET_ID) {
-      console.warn("[EINVOICE_XRECHNUNG]", logCtx({ step: "booked_snapshot_missing" }));
-      return res.status(409).json({
-        error: "BOOKED_XML_SNAPSHOT_MISSING",
-        message: "Invoice is booked, but the XRechnung XML snapshot is missing. Regeneration is blocked to preserve immutability.",
-        invoice_id: invRow.ID,
-      });
-    }
+  if (isBooked && !preview && invRow.DOCUMENT_XML_ASSET_ID) {
     return svc.streamXmlAsset({ supabase, res, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
   }
 
