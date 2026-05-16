@@ -201,7 +201,7 @@ function buildPaymentTerms(data, profile) {
     const cd = data.cashDiscount;
     skontoBlock = `
         <ram:ApplicableTradePaymentDiscountTerms>
-          <ram:BasisPeriodMeasure unitMeasureTypeCode="DAY">${Math.round(cd.days)}</ram:BasisPeriodMeasure>
+          <ram:BasisPeriodMeasure unitCode="DAY">${Math.round(cd.days)}</ram:BasisPeriodMeasure>
           <ram:CalculationPercent>${n2(cd.percent)}</ram:CalculationPercent>
         </ram:ApplicableTradePaymentDiscountTerms>`;
   }
