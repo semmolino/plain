@@ -11,16 +11,18 @@ import {
   fetchTypen, deleteTyp, updateTyp,
   fetchRollen, deleteRolle, updateRolle,
   fetchCompanyAssets, putCompanyLogo, putCompanySignature, uploadAsset,
-  type Company, type StammdatenItem, type Rolle,
+  fetchMonatsabschluss, putMonatsabschluss, runMonatsabschlussNow, openMonatsabschlussPdf,
+  type Company, type StammdatenItem, type Rolle, type MonatsabschlussSettings,
 } from '@/api/stammdaten'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 
 const PAGE_TABS = [
-  { id: 'stammdaten',    label: 'Stammdaten'    },
-  { id: 'nummernkreise', label: 'Nummernkreise' },
-  { id: 'unternehmen',   label: 'Unternehmen'   },
-  { id: 'vorbelegungen', label: 'Vorbelegungen' },
+  { id: 'stammdaten',       label: 'Stammdaten'       },
+  { id: 'nummernkreise',    label: 'Nummernkreise'    },
+  { id: 'unternehmen',      label: 'Unternehmen'      },
+  { id: 'vorbelegungen',    label: 'Vorbelegungen'    },
+  { id: 'monatsabschluss',  label: 'Monatsabschluss'  },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -698,6 +700,145 @@ function VorbelegungenSection() {
   )
 }
 
+// ── Monatsabschluss ───────────────────────────────────────────────────────────
+
+function MonatsabschlussSection() {
+  const qc = useQueryClient()
+
+  const { data: settingsRes } = useQuery({ queryKey: ['monatsabschluss'], queryFn: fetchMonatsabschluss })
+  const { data: typenRes }    = useQuery({ queryKey: ['typen'],           queryFn: fetchTypen })
+
+  const settings: MonatsabschlussSettings | undefined = settingsRes?.data
+  const typen: StammdatenItem[] = typenRes?.data ?? []
+
+  const [enabled,       setEnabled]       = useState(false)
+  const [selectedTypes, setSelectedTypes] = useState<number[]>([])
+  const [runMsg,        setRunMsg]         = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!settings) return
+    setEnabled(settings.enabled)
+    setSelectedTypes(settings.projectTypes ?? [])
+  }, [settings])
+
+  const saveMut = useMutation({
+    mutationFn: () => putMonatsabschluss({ enabled, projectTypes: selectedTypes }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['monatsabschluss'] }),
+  })
+
+  const runMut = useMutation({
+    mutationFn: () => runMonatsabschlussNow(),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['monatsabschluss'] })
+      setRunMsg({ type: 'success', text: `Test abgeschlossen: ${res.data.snapshotCount} Projekt-Snapshot${res.data.snapshotCount !== 1 ? 's' : ''} erstellt.` })
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Fehler beim Ausführen'
+      setRunMsg({ type: 'error', text: msg })
+    },
+  })
+
+  function toggleType(id: number) {
+    setSelectedTypes(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const lastRunFormatted = settings?.lastRunDate
+    ? new Date(settings.lastRunDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null
+
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Monatsabschluss</h2>
+
+      <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 16, marginBottom: 20 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={e => setEnabled(e.target.checked)}
+            style={{ width: 16, height: 16, cursor: 'pointer' }}
+          />
+          <span style={{ fontWeight: 500 }}>Automatischer Monatsabschluss aktivieren</span>
+        </label>
+        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 0 }}>
+          Am letzten Tag jedes Monats wird automatisch ein Projekt-Snapshot für die gewählten Projekttypen erstellt
+          und eine Benachrichtigung versandt.
+        </p>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontWeight: 500, marginBottom: 8 }}>Projekttypen einschließen</div>
+        {typen.length === 0 && <p style={{ fontSize: 13, color: '#6b7280' }}>Keine Projekttypen vorhanden.</p>}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {typen.map((t: StammdatenItem) => (
+            <label key={t.ID} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, background: selectedTypes.includes(t.ID) ? '#eff6ff' : '#f3f4f6', border: `1px solid ${selectedTypes.includes(t.ID) ? '#93c5fd' : '#e5e7eb'}`, borderRadius: 4, padding: '4px 10px' }}>
+              <input
+                type="checkbox"
+                checked={selectedTypes.includes(t.ID)}
+                onChange={() => toggleType(t.ID)}
+                style={{ cursor: 'pointer' }}
+              />
+              {t.NAME_SHORT}
+            </label>
+          ))}
+        </div>
+        <p style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+          Keine Auswahl = alle Projekttypen einschließen.
+        </p>
+      </div>
+
+      <button
+        className="btn btn-primary"
+        disabled={saveMut.isPending}
+        onClick={() => saveMut.mutate()}
+        style={{ marginBottom: 24 }}
+      >
+        {saveMut.isPending ? 'Speichert …' : 'Einstellungen speichern'}
+      </button>
+
+      <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', marginBottom: 20 }} />
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 500, marginBottom: 4 }}>Letzter Abschluss</div>
+        {settings?.lastRunMonth ? (
+          <p style={{ fontSize: 13, color: '#374151' }}>
+            {settings.lastRunMonth} — {settings.lastRunCount} Projekt{settings.lastRunCount !== 1 ? 'e' : ''} &middot; {lastRunFormatted}
+          </p>
+        ) : (
+          <p style={{ fontSize: 13, color: '#6b7280' }}>Noch kein Abschluss durchgeführt.</p>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={runMut.isPending}
+          onClick={() => { setRunMsg(null); runMut.mutate() }}
+        >
+          {runMut.isPending ? 'Wird ausgeführt …' : 'Jetzt ausführen (Test)'}
+        </button>
+
+        {settings?.lastRunMonth && (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => openMonatsabschlussPdf()}
+          >
+            PDF herunterladen
+          </button>
+        )}
+      </div>
+
+      {runMsg && (
+        <Message type={runMsg.type} style={{ marginTop: 8 }}>{runMsg.text}</Message>
+      )}
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -712,10 +853,11 @@ export function AdminPage() {
       </div>
       <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
       <div className="master-section">
-        {tab === 'stammdaten'    && <StammdatenSection />}
-        {tab === 'nummernkreise' && <NummernkreiseSection />}
-        {tab === 'unternehmen'   && <UnternehmenSection />}
-        {tab === 'vorbelegungen' && <VorbelegungenSection />}
+        {tab === 'stammdaten'      && <StammdatenSection />}
+        {tab === 'nummernkreise'   && <NummernkreiseSection />}
+        {tab === 'unternehmen'     && <UnternehmenSection />}
+        {tab === 'vorbelegungen'   && <VorbelegungenSection />}
+        {tab === 'monatsabschluss' && <MonatsabschlussSection />}
       </div>
     </div>
   )

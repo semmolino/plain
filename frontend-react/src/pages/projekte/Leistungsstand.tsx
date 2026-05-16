@@ -274,7 +274,7 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
               disabled={snapMut.isPending}
               onClick={() => { setSnapMsg(null); snapMut.mutate() }}
             >
-              {snapMut.isPending ? 'Snapshot …' : 'Progress-Snapshot'}
+              {snapMut.isPending ? 'Snapshot …' : 'Projekt-Snapshot'}
             </button>
             <button
               className="btn btn-primary"

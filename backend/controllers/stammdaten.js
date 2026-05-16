@@ -1025,6 +1025,51 @@ async function putCompanySignature(req, res, supabase) {
   }
 }
 
+// ── Monatsabschluss ───────────────────────────────────────────────────────────
+
+const monatsabschlussSvc = require("../services/monatsabschluss");
+const { renderMonatsabschlussPdf } = require("../services_pdf_render");
+
+async function getMonatsabschluss(req, res, supabase) {
+  try {
+    const settings = await monatsabschlussSvc.getSettings(supabase, req.tenantId);
+    res.json({ data: settings });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function putMonatsabschluss(req, res, supabase) {
+  try {
+    const { enabled, projectTypes } = req.body || {};
+    await monatsabschlussSvc.saveSettings(supabase, req.tenantId, { enabled: !!enabled, projectTypes: projectTypes || [] });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function runMonatsabschlussNow(req, res, supabase) {
+  try {
+    const result = await monatsabschlussSvc.runMonatsabschluss(supabase, req.tenantId, { isTest: true });
+    res.json({ data: result });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function getMonatsabschlussPdf(req, res, supabase) {
+  try {
+    const { pdf, report } = await renderMonatsabschlussPdf({ supabase, tenantId: req.tenantId });
+    const label = (report?.monthLabel || "Monatsabschluss").replace(/\s+/g, "_");
+    res.set("Content-Type", "application/pdf");
+    res.set("Content-Disposition", `inline; filename="Monatsabschluss_${label}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 module.exports = {
   postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
@@ -1039,4 +1084,5 @@ module.exports = {
   deleteAddress, deleteContact,
   getLogo, putLogo,
   getCompanyAssets, putCompanyLogo, putCompanySignature,
+  getMonatsabschluss, putMonatsabschluss, runMonatsabschlussNow, getMonatsabschlussPdf,
 };

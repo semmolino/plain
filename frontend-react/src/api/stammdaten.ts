@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, openPdfWithAuth } from './client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -239,3 +239,27 @@ export const uploadAsset = (file: File, assetType = 'LOGO') => {
   form.append('asset_type', assetType)
   return apiClient.post<{ data: { ID: number }; url: string }>('/assets/upload', form)
 }
+
+// ── Monatsabschluss ───────────────────────────────────────────────────────────
+
+export interface MonatsabschlussSettings {
+  enabled:      boolean
+  projectTypes: number[]
+  lastRunMonth: string | null
+  lastRunDate:  string | null
+  lastRunCount: number | null
+}
+
+export const fetchMonatsabschluss = () =>
+  apiClient.get<{ data: MonatsabschlussSettings }>('/stammdaten/monatsabschluss')
+
+export const putMonatsabschluss = (body: { enabled: boolean; projectTypes: number[] }) =>
+  apiClient.put<{ ok: boolean }>('/stammdaten/monatsabschluss', body)
+
+export const runMonatsabschlussNow = () =>
+  apiClient.post<{ data: { monthKey: string; snapshotCount: number; projectCount: number } }>(
+    '/stammdaten/monatsabschluss/run', {}
+  )
+
+export const openMonatsabschlussPdf = () =>
+  openPdfWithAuth('/stammdaten/monatsabschluss/pdf')

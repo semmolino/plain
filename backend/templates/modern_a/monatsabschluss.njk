@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+.logo-area {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6mm;
+  min-height: 4mm;
+}
+.logo-area img {
+  max-height: 20mm;
+  max-width: 70mm;
+  object-fit: contain;
+}
+
+.header-block {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6mm;
+}
+.header-meta {
+  font-size: 9pt;
+  color: #6b7280;
+  text-align: right;
+}
+.header-meta .company {
+  font-size: 10pt;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 1mm;
+}
+
+.doc-title {
+  font-size: 16pt;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 1mm;
+}
+.doc-subtitle {
+  font-size: 10pt;
+  color: #6b7280;
+  margin-bottom: 1mm;
+}
+
+.divider {
+  border-top: 0.5pt solid #d1d5db;
+  margin: 4mm 0 6mm 0;
+}
+
+.test-badge {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  border: 0.5pt solid #fcd34d;
+  border-radius: 2mm;
+  padding: 1mm 3mm;
+  font-size: 8.5pt;
+  font-weight: 600;
+  margin-bottom: 4mm;
+}
+
+/* ── Project table ─────────────────────────────────────────── */
+.project-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+  margin-bottom: 8mm;
+}
+.project-table thead tr {
+  background: #f3f4f6;
+}
+.project-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  padding: 2mm 2.5mm;
+  border-bottom: 0.5pt solid #9ca3af;
+  border-top: 0.5pt solid #9ca3af;
+  white-space: nowrap;
+}
+.project-table th.r { text-align: right; }
+.project-table td {
+  padding: 1.8mm 2.5mm;
+  border-bottom: 0.3pt solid #e5e7eb;
+  vertical-align: top;
+}
+.project-table td.r {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.project-table tbody tr:nth-child(even) td {
+  background: #f9fafb;
+}
+.project-table .typ-chip {
+  display: inline-block;
+  font-size: 7.5pt;
+  color: #6b7280;
+  background: #e5e7eb;
+  border-radius: 1.5mm;
+  padding: 0.3mm 1.5mm;
+  margin-top: 0.5mm;
+}
+.pct-bar-wrap {
+  width: 20mm;
+  height: 2mm;
+  background: #e5e7eb;
+  border-radius: 1mm;
+  margin-top: 1mm;
+  overflow: hidden;
+}
+.pct-bar-fill {
+  height: 100%;
+  background: #6b7280;
+  border-radius: 1mm;
+}
+.pct-bar-fill.warn { background: #f59e0b; }
+.pct-bar-fill.ok   { background: #10b981; }
+
+/* ── Summary row ─────────────────────────────────────────────── */
+.summary-row td {
+  font-weight: 700;
+  border-top: 0.5pt solid #9ca3af;
+  background: #f3f4f6 !important;
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.report-footer {
+  margin-top: 10mm;
+  font-size: 8pt;
+  color: #9ca3af;
+  border-top: 0.3pt solid #e5e7eb;
+  padding-top: 2mm;
+  display: flex;
+  justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  {# Logo #}
+  <div class="logo-area">
+    {% if logoDataUri %}
+      <img src="{{ logoDataUri }}" alt="Logo">
+    {% endif %}
+  </div>
+
+  {# Header: title left, meta right #}
+  <div class="header-block">
+    <div>
+      <div class="doc-title">Monatsabschluss</div>
+      <div class="doc-subtitle">{{ monthLabel }}</div>
+    </div>
+    <div class="header-meta">
+      {% if seller %}
+      <div class="company">{{ seller.name }}</div>
+      {% endif %}
+      <div>Erstellt am {{ generatedAt | date_de }}</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  {% if isTest %}
+  <div class="test-badge">Test-Ausführung — kein echter Monatsabschluss</div>
+  {% endif %}
+
+  {# Project table #}
+  {% if projects and projects.length > 0 %}
+  <table class="project-table">
+    <thead>
+      <tr>
+        <th style="width:18mm">Nr.</th>
+        <th>Projekt</th>
+        <th class="r" style="width:24mm">Budget (netto)</th>
+        <th class="r" style="width:22mm">Leistungsstand</th>
+        <th class="r" style="width:22mm">Abgerechnet</th>
+        <th class="r" style="width:22mm">Bezahlt</th>
+        <th class="r" style="width:20mm">Offen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set totalBudget = 0 %}
+      {% set totalBilled = 0 %}
+      {% set totalPayed  = 0 %}
+      {% set totalOpen   = 0 %}
+      {% set totalLS     = 0 %}
+
+      {% for p in projects %}
+      {% set pct = (p.LEISTUNGSSTAND_PERCENT | float(0)) %}
+      {% set barClass = "ok" if pct >= 80 else ("warn" if pct >= 50 else "") %}
+
+      {# Accumulate for summary (Nunjucks doesn't support += so use set with math) #}
+      {% set totalBudget = totalBudget + (p.BUDGET_TOTAL_NET | float(0)) %}
+      {% set totalBilled = totalBilled + (p.BILLED_NET_TOTAL | float(0)) %}
+      {% set totalPayed  = totalPayed  + (p.PAYED_NET_TOTAL  | float(0)) %}
+      {% set totalOpen   = totalOpen   + (p.OPEN_NET_TOTAL   | float(0)) %}
+      {% set totalLS     = totalLS     + (p.LEISTUNGSSTAND_VALUE | float(0)) %}
+
+      <tr>
+        <td>{{ p.NAME_SHORT }}</td>
+        <td>
+          {{ p.NAME_LONG }}
+          {% if p.PROJECT_TYPE_NAME_SHORT %}
+          <br><span class="typ-chip">{{ p.PROJECT_TYPE_NAME_SHORT }}</span>
+          {% endif %}
+        </td>
+        <td class="r">{{ p.BUDGET_TOTAL_NET | money }}</td>
+        <td class="r">
+          {{ pct | round(1) }}&thinsp;%
+          <div class="pct-bar-wrap">
+            <div class="pct-bar-fill {{ barClass }}" style="width: {{ [pct, 100] | min }}%"></div>
+          </div>
+        </td>
+        <td class="r">{{ p.BILLED_NET_TOTAL | money }}</td>
+        <td class="r">{{ p.PAYED_NET_TOTAL  | money }}</td>
+        <td class="r">{{ p.OPEN_NET_TOTAL   | money }}</td>
+      </tr>
+      {% endfor %}
+
+      {# Summary row #}
+      <tr class="summary-row">
+        <td colspan="2">Gesamt ({{ projects.length }} Projekte)</td>
+        <td class="r">{{ totalBudget | money }}</td>
+        <td class="r">&mdash;</td>
+        <td class="r">{{ totalBilled | money }}</td>
+        <td class="r">{{ totalPayed  | money }}</td>
+        <td class="r">{{ totalOpen   | money }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#6b7280; font-size:10pt; margin-top:6mm;">
+    Keine Projekte für den ausgewählten Zeitraum und die gewählten Projekttypen gefunden.
+  </p>
+  {% endif %}
+
+  <div class="report-footer">
+    <span>{{ monthLabel }} &mdash; Monatsabschluss</span>
+    <span>{{ seller.name if seller }}</span>
+  </div>
+
+</div>
+
+</body>
+</html>

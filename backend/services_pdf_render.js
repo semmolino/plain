@@ -5,6 +5,7 @@ const fs   = require('fs');
 const nunjucks = require('nunjucks');
 const { loadInvoiceData } = require('./services_einvoice_data');
 const angeboteSvc = require('./services/angebote');
+const monatsabschlussSvc = require('./services/monatsabschluss');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -561,4 +562,39 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   return { pdf, offer: vm.offer };
 }
 
-module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf };
+async function renderMonatsabschlussPdf({ supabase, tenantId }) {
+  const report = await monatsabschlussSvc.getReportData(supabase, tenantId);
+  if (!report) throw { status: 404, message: 'Kein Monatsabschluss-Bericht vorhanden' };
+
+  // Resolve seller from the first company of this tenant (or use tenant name)
+  const { data: companies } = await supabase
+    .from('COMPANY')
+    .select('COMPANY_NAME_1, COMPANY_NAME_2')
+    .eq('TENANT_ID', tenantId)
+    .limit(1);
+  const co = companies?.[0];
+  const sellerName = co
+    ? [co.COMPANY_NAME_1, co.COMPANY_NAME_2].filter(Boolean).join(' ')
+    : '';
+
+  // Resolve logo (use first company's logo if available, fall back to tenant logo)
+  const { data: coRows } = await supabase
+    .from('COMPANY')
+    .select('ID')
+    .eq('TENANT_ID', tenantId)
+    .limit(1);
+  const companyId = coRows?.[0]?.ID ?? null;
+  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId });
+
+  const context = {
+    ...report,
+    seller: { name: sellerName },
+    logoDataUri,
+  };
+
+  const html = env().render(path.join('modern_a', 'monatsabschluss.njk'), context);
+  const pdf  = await renderPdf({ html });
+  return { pdf, report };
+}
+
+module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf };

@@ -59,5 +59,10 @@ module.exports = (supabase) => {
   router.get("/payment-means/search",                                (req, res) => ctrl.searchPaymentMeans(req, res, supabase));
   router.post("/contacts",                                           (req, res) => ctrl.postContact(req, res, supabase));
 
+  router.get("/monatsabschluss",                                     (req, res) => ctrl.getMonatsabschluss(req, res, supabase));
+  router.put("/monatsabschluss",                                     (req, res) => ctrl.putMonatsabschluss(req, res, supabase));
+  router.post("/monatsabschluss/run",                                (req, res) => ctrl.runMonatsabschlussNow(req, res, supabase));
+  router.get("/monatsabschluss/pdf",                                 (req, res) => ctrl.getMonatsabschlussPdf(req, res, supabase));
+
   return router;
 };

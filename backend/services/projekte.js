@@ -543,7 +543,7 @@ async function propagateUpwards(supabase, { structureId }) {
 async function progressSnapshot(supabase, { projectId }) {
   const { data: structures, error: sErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, TENANT_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT")
+    .select("ID, TENANT_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, PARTIAL_PAYMENTS, INVOICED, PAYED")
     .eq("PROJECT_ID", projectId);
 
   if (sErr) throw sErr;
@@ -593,6 +593,9 @@ async function progressSnapshot(supabase, { projectId }) {
       EXTRAS_COMPLETION_PERCENT: exPct,
       REVENUE_COMPLETION: revenueCompletion,
       EXTRAS_COMPLETION: extrasCompletion,
+      PARTIAL_PAYMENTS: Number(r.PARTIAL_PAYMENTS ?? 0) || 0,
+      INVOICED: Number(r.INVOICED ?? 0) || 0,
+      PAYED: Number(r.PAYED ?? 0) || 0,
     });
   }
 
