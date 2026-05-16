@@ -8,8 +8,9 @@ import { ProjektStruktur } from '@/pages/projekte/ProjektStruktur'
 import { Buchungen }      from '@/pages/projekte/Buchungen'
 import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
 import { Vertraege }      from '@/pages/projekte/Vertraege'
+import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
 
-type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand' | 'vertraege'
+type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand' | 'vertraege' | 'mitarbeiter'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'liste',           label: 'Liste' },
@@ -19,6 +20,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'buchungen',       label: 'Buchungen' },
   { id: 'leistungsstand',  label: 'Leistungsstände' },
   { id: 'vertraege',       label: 'Verträge' },
+  { id: 'mitarbeiter',     label: 'Mitarbeiter' },
 ]
 
 export function ProjektePage() {
@@ -61,6 +63,7 @@ export function ProjektePage() {
         {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'vertraege'      && <Vertraege      initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
+        {tab === 'mitarbeiter'    && <Mitarbeiter    initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
       </div>
     </div>
   )

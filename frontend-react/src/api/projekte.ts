@@ -284,3 +284,39 @@ export const fetchEmployee2ProjectPreset = (employeeId: number, projectId: numbe
   apiClient.get<Employee2ProjectPreset>(
     `/employee2project/preset?employee_id=${employeeId}&project_id=${projectId}`
   )
+
+// ── Employee2Project CRUD ─────────────────────────────────────────────────────
+
+export interface E2PEntry {
+  ID:                  number
+  EMPLOYEE_ID:         number
+  ROLE_ID:             number | null
+  ROLE_NAME_SHORT:     string
+  ROLE_NAME_LONG:      string
+  SP_RATE:             number | null
+  CP_RATE:             number | null
+  EMPLOYEE_SHORT_NAME: string | null
+  EMPLOYEE_FIRST_NAME: string | null
+  EMPLOYEE_LAST_NAME:  string | null
+}
+
+export const fetchE2PByProject = (projectId: number) =>
+  apiClient.get<{ data: E2PEntry[] }>(`/employee2project/project/${projectId}`)
+
+export const createE2P = (projectId: number, body: {
+  employee_id:      number
+  role_id?:         number | null
+  role_name_short?: string
+  role_name_long?:  string
+  sp_rate?:         number | null
+}) => apiClient.post<{ data: E2PEntry }>(`/employee2project/project/${projectId}`, body)
+
+export const updateE2P = (id: number, body: {
+  role_id?:         number | null
+  role_name_short?: string
+  role_name_long?:  string
+  sp_rate?:         number | null
+}) => apiClient.patch<{ success: boolean }>(`/employee2project/${id}`, body)
+
+export const deleteE2P = (id: number) =>
+  apiClient.delete<{ success: boolean }>(`/employee2project/${id}`)
