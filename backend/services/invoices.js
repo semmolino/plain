@@ -46,11 +46,11 @@ async function streamPdfAsset({ supabase, res, assetId, dispositionName, downloa
 
 async function streamXmlAsset({ supabase, res, assetId, dispositionName, download }) {
   const asset = await loadAssetRow({ supabase, assetId });
-  if (!asset) return res.status(404).json({ error: "XML asset not found" });
+  if (!asset) throw new Error("XML asset not found");
 
   const root = uploadRoot();
   const filePath = path.join(root, asset.STORAGE_KEY);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "XML file missing on disk" });
+  if (!fs.existsSync(filePath)) throw new Error("XML file missing on disk");
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
   const disp = download ? "attachment" : "inline";
