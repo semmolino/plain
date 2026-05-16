@@ -519,4 +519,26 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   return { pdf, offer: vm.offer };
 }
 
-module.exports = { renderDocumentPdf, renderOfferPdf };
+async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
+  const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
+
+  const companyId = vm.offer.COMPANY_ID;
+  const tpl         = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
+  const theme       = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId });
+
+  const context = {
+    ...vm,
+    theme,
+    logoDataUri,
+    today: new Date().toISOString().slice(0, 10),
+  };
+
+  const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
+  const html = env().render(path.join(layoutKey, 'auftragsbestaetigung.njk'), context);
+
+  const pdf = await renderPdf({ html });
+  return { pdf, offer: vm.offer };
+}
+
+module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf };

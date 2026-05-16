@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
 import {
-  fetchOffers, deleteOffer, openOfferPdf, fetchOfferStructure, convertOffer, updateOffer,
+  fetchOffers, deleteOffer, openOfferPdf, openAuftragsbestaetigungPdf, fetchOfferStructure, convertOffer, updateOffer,
   fetchOfferStatuses,
   type OfferListItem, type ConvertOfferPayload,
 } from '@/api/angebote'
@@ -146,9 +146,14 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                     <button className="btn-small" onClick={() => onSelectOffer?.(r.ID)}>Bearbeiten</button>
                     <button className="btn-small" onClick={() => openOfferPdf(r.ID)}>PDF</button>
                     {r.PROJECT_ID ? (
-                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                        ✅ {r.PROJECT_NAME ?? `Projekt #${r.PROJECT_ID}`}
-                      </span>
+                      <>
+                        <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                          ✅ {r.PROJECT_NAME ?? `Projekt #${r.PROJECT_ID}`}
+                        </span>
+                        <button className="btn-small" onClick={() => openAuftragsbestaetigungPdf(r.ID)}>
+                          Auftragsbestätigung
+                        </button>
+                      </>
                     ) : (rejectedId !== null && r.OFFER_STATUS_ID === rejectedId) ? null : (
                       <>
                         <button

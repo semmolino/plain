@@ -186,5 +186,8 @@ export const deleteOfferStructureNode = (offerId: number, nodeId: number) =>
 export const openOfferPdf = (id: number) =>
   openPdfWithAuth(`/angebote/${id}/pdf`)
 
+export const openAuftragsbestaetigungPdf = (id: number) =>
+  openPdfWithAuth(`/angebote/${id}/auftragsbestaetigung`)
+
 export const convertOffer = (id: number, body: ConvertOfferPayload) =>
   apiClient.post<{ data: { project: { ID: number; NAME_SHORT: string }; projectName: string } }>(`/angebote/${id}/convert`, body)

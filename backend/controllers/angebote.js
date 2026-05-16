@@ -1,7 +1,7 @@
 'use strict';
 
 const svc = require('../services/angebote');
-const { renderOfferPdf } = require('../services_pdf_render');
+const { renderOfferPdf, renderAuftragsbestaetigungPdf } = require('../services_pdf_render');
 
 async function getOfferStatuses(req, res, supabase) {
   try {
@@ -136,6 +136,24 @@ async function getOfferPdf(req, res, supabase) {
   }
 }
 
+async function getAuftragsbestaetigungPdf(req, res, supabase) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'Ungültige ID' });
+    const download = String(req.query.download || '') === '1';
+
+    const { pdf, offer } = await renderAuftragsbestaetigungPdf({ supabase, offerId: id, tenantId: req.tenantId });
+
+    const filename = `Auftragsbestaetigung_${offer.NAME_SHORT || id}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(pdf);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 module.exports = {
   getOfferStatuses,
   listOffers,
@@ -149,4 +167,5 @@ module.exports = {
   deleteOfferStructureNode,
   convertOffer,
   getOfferPdf,
+  getAuftragsbestaetigungPdf,
 };
