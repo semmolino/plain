@@ -125,6 +125,15 @@ router.get("/", async (req, res) => {
     res.json({ data: normalized });
   });
 
+  // DELETE /api/mitarbeiter/:id
+  router.delete("/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: "ID fehlt" });
+    const { error } = await supabase.from("EMPLOYEE").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  });
+
   // Update EMPLOYEE (for Mitarbeiterliste edit modal)
   // PATCH /api/mitarbeiter/:id
   router.patch("/:id", async (req, res) => {

@@ -339,6 +339,18 @@ async function transferFatherToChild(req, res, supabase) {
   }
 }
 
+async function deleteProject(req, res, supabase) {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: "ID fehlt" });
+    const { error } = await supabase.from("PROJECT").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+}
+
 module.exports = {
   getDepartments,
   getStatuses,
@@ -367,4 +379,5 @@ module.exports = {
   getContractByProject,
   patchContract,
   transferFatherToChild,
+  deleteProject,
 };

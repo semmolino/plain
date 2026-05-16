@@ -33,6 +33,7 @@ module.exports = (supabase) => {
   router.post("/:id/leistungsstand",                   (req, res) => ctrl.saveLeistungsstand(req, res, supabase));
   router.get("/:id/contract",                          (req, res) => ctrl.getContractByProject(req, res, supabase));
   router.patch("/contract/:id",                        (req, res) => ctrl.patchContract(req, res, supabase));
+  router.delete("/:id",                                (req, res) => ctrl.deleteProject(req, res, supabase));
 
   return router;
 };

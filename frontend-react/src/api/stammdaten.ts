@@ -184,16 +184,28 @@ export const fetchDepartments = () =>
   apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/departments')
 export const deleteDepartment = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/stammdaten/department/${id}`)
+export const updateDepartment = (id: number, name_short: string) =>
+  apiClient.patch<{ data: StammdatenItem }>(`/stammdaten/department/${id}`, { name_short })
 
 export const fetchTypen = () =>
   apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/typen')
 export const deleteTyp = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/stammdaten/typ/${id}`)
+export const updateTyp = (id: number, name_short: string) =>
+  apiClient.patch<{ data: StammdatenItem }>(`/stammdaten/typ/${id}`, { name_short })
 
 export const fetchRollen = () =>
   apiClient.get<{ data: Rolle[] }>('/stammdaten/rollen')
 export const deleteRolle = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/stammdaten/rolle/${id}`)
+export const updateRolle = (id: number, body: { name_short: string; name_long?: string; sp_rate?: string | number | null }) =>
+  apiClient.patch<{ data: Rolle }>(`/stammdaten/rolle/${id}`, body)
+
+export const deleteAddress = (id: number) =>
+  apiClient.delete<{ ok: boolean }>(`/stammdaten/addresses/${id}`)
+
+export const deleteContact = (id: number) =>
+  apiClient.delete<{ ok: boolean }>(`/stammdaten/contacts/${id}`)
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
 

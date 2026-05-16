@@ -7,7 +7,9 @@ import { FormField } from '@/components/ui/FormField'
 import {
   fetchCountries, fetchCompanies, createDepartment, createTyp, createRolle,
   createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchDefaults, putDefault,
-  fetchDepartments, deleteDepartment, fetchTypen, deleteTyp, fetchRollen, deleteRolle,
+  fetchDepartments, deleteDepartment, updateDepartment,
+  fetchTypen, deleteTyp, updateTyp,
+  fetchRollen, deleteRolle, updateRolle,
   fetchLogo, putLogo, uploadAsset,
   type Company, type StammdatenItem, type Rolle,
 } from '@/api/stammdaten'
@@ -23,19 +25,47 @@ const PAGE_TABS = [
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
-function TagList({ items, onDelete }: { items: { ID: number; label: string }[]; onDelete: (id: number) => void }) {
+function TagList({ items, onDelete, onEdit }: {
+  items: { ID: number; label: string }[]
+  onDelete: (id: number) => void
+  onEdit?: (id: number, newLabel: string) => void
+}) {
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editVal,   setEditVal]   = useState('')
+
+  function startEdit(it: { ID: number; label: string }) {
+    setEditingId(it.ID); setEditVal(it.label)
+  }
+  function saveEdit() {
+    if (editingId && editVal.trim()) onEdit?.(editingId, editVal.trim())
+    setEditingId(null)
+  }
+  function cancelEdit() { setEditingId(null) }
+
   if (!items.length) return <p className="empty-note" style={{ margin: '4px 0 8px' }}>Noch keine Einträge.</p>
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
       {items.map(it => (
         <span key={it.ID} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 4, padding: '2px 8px', fontSize: 12 }}>
-          {it.label}
-          <button
-            type="button"
-            onClick={() => onDelete(it.ID)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 14, lineHeight: 1, padding: 0 }}
-            title="Löschen"
-          >×</button>
+          {editingId === it.ID ? (
+            <>
+              <input
+                autoFocus
+                value={editVal}
+                onChange={e => setEditVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit() }}
+                style={{ fontSize: 12, border: '1px solid #d1d5db', borderRadius: 3, padding: '1px 4px', width: 120 }}
+              />
+              <button type="button" onClick={saveEdit}   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: 14, lineHeight: 1, padding: 0 }} title="Speichern">✓</button>
+              <button type="button" onClick={cancelEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 14, lineHeight: 1, padding: 0 }} title="Abbrechen">✗</button>
+            </>
+          ) : (
+            <>
+              {it.label}
+              {onEdit && <button type="button" onClick={() => startEdit(it)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 11, lineHeight: 1, padding: '0 0 0 2px' }} title="Bearbeiten">✎</button>}
+              <button type="button" onClick={() => onDelete(it.ID)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 14, lineHeight: 1, padding: 0 }} title="Löschen">×</button>
+            </>
+          )}
         </span>
       ))}
     </div>
@@ -79,6 +109,15 @@ function StammdatenSection() {
   const [rolleLong,  setRolleLong]  = useState('')
   const [rolleSpRate, setRolleSpRate] = useState('')
 
+  // Inline edit for Rollen
+  const [editingRolleId,   setEditingRolleId]   = useState<number | null>(null)
+  const [editingRolleForm, setEditingRolleForm] = useState({ short: '', long: '', spRate: '' })
+
+  function startEditRolle(r: Rolle) {
+    setEditingRolleId(r.ID)
+    setEditingRolleForm({ short: r.NAME_SHORT, long: r.NAME_LONG ?? '', spRate: r.SP_RATE != null ? String(r.SP_RATE) : '' })
+  }
+
   const { data: deptData  } = useQuery({ queryKey: ['departments'],   queryFn: fetchDepartments })
   const { data: typenData  } = useQuery({ queryKey: ['typen'],        queryFn: fetchTypen })
   const { data: rollenData } = useQuery({ queryKey: ['rollen'],       queryFn: fetchRollen })
@@ -98,6 +137,11 @@ function StammdatenSection() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['departments'] }),
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
+  const updDeptMut = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => updateDepartment(id, name),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['departments'] }),
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
 
   const typMut = useMutation({
     mutationFn: createTyp,
@@ -106,6 +150,11 @@ function StammdatenSection() {
   })
   const delTypMut = useMutation({
     mutationFn: deleteTyp,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['typen'] }),
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+  const updTypMut = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => updateTyp(id, name),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['typen'] }),
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
@@ -124,6 +173,11 @@ function StammdatenSection() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['rollen'] }),
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
+  const updRolleMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Parameters<typeof updateRolle>[1] }) => updateRolle(id, body),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['rollen'] }); setEditingRolleId(null) },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
 
   return (
     <div className="admin-section">
@@ -132,6 +186,7 @@ function StammdatenSection() {
         <TagList
           items={departments.map((d: StammdatenItem) => ({ ID: d.ID, label: d.NAME_SHORT }))}
           onDelete={id => withMsg(() => delDeptMut.mutate(id))}
+          onEdit={(id, name) => withMsg(() => updDeptMut.mutate({ id, name }))}
         />
         <SingleInputMutation label="Abteilung" onSubmit={v => withMsg(() => deptMut.mutate(v))} isPending={deptMut.isPending} />
       </div>
@@ -141,6 +196,7 @@ function StammdatenSection() {
         <TagList
           items={typen.map((t: StammdatenItem) => ({ ID: t.ID, label: t.NAME_SHORT }))}
           onDelete={id => withMsg(() => delTypMut.mutate(id))}
+          onEdit={(id, name) => withMsg(() => updTypMut.mutate({ id, name }))}
         />
         <SingleInputMutation label="Typ" onSubmit={v => withMsg(() => typMut.mutate(v))} isPending={typMut.isPending} />
       </div>
@@ -160,14 +216,37 @@ function StammdatenSection() {
             <tbody>
               {rollen.map((r: Rolle) => (
                 <tr key={r.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ padding: '3px 6px 3px 0', fontWeight: 600 }}>{r.NAME_SHORT}</td>
-                  <td style={{ padding: '3px 6px 3px 0', color: '#374151' }}>{r.NAME_LONG ?? '—'}</td>
-                  <td style={{ padding: '3px 0 3px 6px', textAlign: 'right', color: '#374151' }}>
-                    {r.SP_RATE != null ? `${r.SP_RATE} €/h` : '—'}
-                  </td>
-                  <td style={{ padding: '3px 0 3px 6px' }}>
-                    <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => withMsg(() => delRolleMut.mutate(r.ID))}>×</button>
-                  </td>
+                  {editingRolleId === r.ID ? (
+                    <>
+                      <td style={{ padding: '3px 6px 3px 0' }}>
+                        <input autoFocus className="tbl-input" style={{ width: 70 }} value={editingRolleForm.short} onChange={e => setEditingRolleForm(f => ({ ...f, short: e.target.value }))} />
+                      </td>
+                      <td style={{ padding: '3px 6px 3px 0' }}>
+                        <input className="tbl-input" style={{ width: 130 }} value={editingRolleForm.long} onChange={e => setEditingRolleForm(f => ({ ...f, long: e.target.value }))} />
+                      </td>
+                      <td style={{ padding: '3px 0 3px 6px', textAlign: 'right' }}>
+                        <input className="tbl-input num" type="number" step="0.01" min="0" style={{ width: 70 }} value={editingRolleForm.spRate} onChange={e => setEditingRolleForm(f => ({ ...f, spRate: e.target.value }))} placeholder="0.00" />
+                      </td>
+                      <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
+                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updRolleMut.isPending} onClick={() => updRolleMut.mutate({ id: r.ID, body: { name_short: editingRolleForm.short, name_long: editingRolleForm.long, sp_rate: editingRolleForm.spRate } })}>
+                          {updRolleMut.isPending ? '…' : '✓'}
+                        </button>
+                        <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginLeft: 2 }} onClick={() => setEditingRolleId(null)}>✗</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ padding: '3px 6px 3px 0', fontWeight: 600 }}>{r.NAME_SHORT}</td>
+                      <td style={{ padding: '3px 6px 3px 0', color: '#374151' }}>{r.NAME_LONG ?? '—'}</td>
+                      <td style={{ padding: '3px 0 3px 6px', textAlign: 'right', color: '#374151' }}>
+                        {r.SP_RATE != null ? `${r.SP_RATE} €/h` : '—'}
+                      </td>
+                      <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
+                        <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => startEditRolle(r)}>✎</button>
+                        <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => withMsg(() => delRolleMut.mutate(r.ID))}>×</button>
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

@@ -98,6 +98,9 @@ export const fetchProjectsShort = () =>
 export const createProject = (body: CreateProjectPayload) =>
   apiClient.post<{ data: Project }>('/projekte', body)
 
+export const deleteProject = (id: number) =>
+  apiClient.delete<{ success: boolean }>(`/projekte/${id}`)
+
 export const updateProject = (id: number, body: Partial<{
   name_short: string; name_long: string
   project_status_id: number; project_type_id: number | null; project_manager_id: number

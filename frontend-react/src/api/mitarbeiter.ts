@@ -53,3 +53,6 @@ export const createEmployee = (body: CreateEmployeePayload) =>
 
 export const updateEmployee = (id: number, body: UpdateEmployeePayload) =>
   apiClient.patch<{ data: Employee }>(`/mitarbeiter/${id}`, body)
+
+export const deleteEmployee = (id: number) =>
+  apiClient.delete<{ success: boolean }>(`/mitarbeiter/${id}`)

@@ -8,10 +8,12 @@ module.exports = (supabase) => {
 
   router.post("/status",                                             (req, res) => ctrl.postStatus(req, res, supabase));
   router.post("/typ",                                                (req, res) => ctrl.postTyp(req, res, supabase));
+  router.patch("/typ/:id",                                           (req, res) => ctrl.patchTyp(req, res, supabase));
   router.delete("/typ/:id",                                          (req, res) => ctrl.deleteTyp(req, res, supabase));
   router.get("/typen",                                               (req, res) => ctrl.getTypen(req, res, supabase));
   router.post("/department",                                         (req, res) => ctrl.postDepartment(req, res, supabase));
   router.get("/departments",                                         (req, res) => ctrl.getDepartments(req, res, supabase));
+  router.patch("/department/:id",                                    (req, res) => ctrl.patchDepartment(req, res, supabase));
   router.delete("/department/:id",                                   (req, res) => ctrl.deleteDepartment(req, res, supabase));
   router.get("/countries",                                           (req, res) => ctrl.getCountries(req, res, supabase));
   router.get("/billing-types",                                       (req, res) => ctrl.getBillingTypes(req, res, supabase));
@@ -31,6 +33,7 @@ module.exports = (supabase) => {
   router.post("/address",                                            (req, res) => ctrl.postAddress(req, res, supabase));
   router.post("/rollen",                                             (req, res) => ctrl.postRollen(req, res, supabase));
   router.get("/rollen",                                              (req, res) => ctrl.getRollen(req, res, supabase));
+  router.patch("/rolle/:id",                                         (req, res) => ctrl.patchRolle(req, res, supabase));
   router.delete("/rolle/:id",                                        (req, res) => ctrl.deleteRolle(req, res, supabase));
   router.get("/logo",                                                (req, res) => ctrl.getLogo(req, res, supabase));
   router.put("/logo",                                                (req, res) => ctrl.putLogo(req, res, supabase));
@@ -39,10 +42,12 @@ module.exports = (supabase) => {
   router.get("/addresses/search",                                    (req, res) => ctrl.searchAddresses(req, res, supabase));
   router.get("/addresses/list",                                      (req, res) => ctrl.listAddresses(req, res, supabase));
   router.patch("/addresses/:id",                                     (req, res) => ctrl.patchAddress(req, res, supabase));
+  router.delete("/addresses/:id",                                    (req, res) => ctrl.deleteAddress(req, res, supabase));
   router.get("/contacts/search",                                     (req, res) => ctrl.searchContacts(req, res, supabase));
   router.get("/contacts/by-address",                                 (req, res) => ctrl.getContactsByAddress(req, res, supabase));
   router.get("/contacts/list",                                       (req, res) => ctrl.listContacts(req, res, supabase));
   router.patch("/contacts/:id",                                      (req, res) => ctrl.patchContact(req, res, supabase));
+  router.delete("/contacts/:id",                                     (req, res) => ctrl.deleteContact(req, res, supabase));
   router.get("/vat/search",                                          (req, res) => ctrl.searchVat(req, res, supabase));
   router.get("/vat",                                                 (req, res) => ctrl.getVat(req, res, supabase));
   router.get("/currencies",                                          (req, res) => ctrl.getCurrencies(req, res, supabase));

@@ -9,8 +9,8 @@ import { Autocomplete } from '@/components/ui/Autocomplete'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import {
   fetchCountries, fetchSalutations, fetchGenders,
-  fetchAddressList, searchAddressesApi, createAddress, updateAddress,
-  fetchContactList, createContact, updateContact,
+  fetchAddressList, searchAddressesApi, createAddress, updateAddress, deleteAddress,
+  fetchContactList, createContact, updateContact, deleteContact,
   type Address, type Contact, type AddressPayload, type ContactPayload,
 } from '@/api/stammdaten'
 
@@ -303,6 +303,17 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
     onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
   })
 
+  const deleteMut = useMutation({
+    mutationFn: deleteAddress,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['addresses'] }),
+    onError: (e: Error) => alert(e.message),
+  })
+
+  async function handleDelete(a: Address) {
+    if (!window.confirm(`„${a.ADDRESS_NAME_1}" wirklich löschen?`)) return
+    deleteMut.mutate(a.ID)
+  }
+
   function openEdit(a: Address) {
     setEditForm({
       address_name_1:  a.ADDRESS_NAME_1  ?? '',
@@ -401,7 +412,10 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
                     <td>{a.COUNTRY}</td>
                     <td>{a.CUSTOMER_NUMBER}</td>
                     {visibleOptCols.map(c => <td key={c.key}>{(a[c.key as keyof Address] as string | null | undefined) ?? '—'}</td>)}
-                    <td><button className="btn-small" onClick={() => openEdit(a)}>Bearbeiten</button></td>
+                    <td className="doc-actions">
+                      <button className="btn-small" onClick={() => openEdit(a)}>Bearbeiten</button>
+                      <button className="btn-small btn-danger" onClick={() => handleDelete(a)}>Löschen</button>
+                    </td>
                   </tr>
                 ))}
                 {!filtered.length && <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">Keine Einträge</td></tr>}
@@ -538,6 +552,17 @@ function KontakteSection() {
     onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
   })
 
+  const deleteConMut = useMutation({
+    mutationFn: deleteContact,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['contacts'] }),
+    onError: (e: Error) => alert(e.message),
+  })
+
+  async function handleDeleteContact(c: Contact) {
+    if (!window.confirm(`${c.FIRST_NAME} ${c.LAST_NAME} wirklich löschen?`)) return
+    deleteConMut.mutate(c.ID)
+  }
+
   function openEdit(c: Contact) {
     setEditForm({
       title:         c.TITLE         ?? '',
@@ -639,7 +664,10 @@ function KontakteSection() {
                       </button>
                     ) : (c.ADDRESS ?? '—')}</td>
                     {visibleOptCols.map(col => <td key={col.key}>{(c[col.key as keyof Contact] as string | null | undefined) ?? '—'}</td>)}
-                    <td><button className="btn-small" onClick={() => openEdit(c)}>Bearbeiten</button></td>
+                    <td className="doc-actions">
+                      <button className="btn-small" onClick={() => openEdit(c)}>Bearbeiten</button>
+                      <button className="btn-small btn-danger" onClick={() => handleDeleteContact(c)}>Löschen</button>
+                    </td>
                   </tr>
                 ))}
                 {!filtered.length && <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">Keine Einträge</td></tr>}

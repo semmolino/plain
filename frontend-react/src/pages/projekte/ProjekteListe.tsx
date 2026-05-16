@@ -6,7 +6,7 @@ import { Message }       from '@/components/ui/Message'
 import { Autocomplete }  from '@/components/ui/Autocomplete'
 import { useCtrlS }      from '@/hooks/useCtrlS'
 import {
-  fetchProjectListFull, updateProject, fetchContractByProject, patchContract,
+  fetchProjectListFull, updateProject, deleteProject, fetchContractByProject, patchContract,
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers, fetchDepartments,
   type Project,
 } from '@/api/projekte'
@@ -176,6 +176,17 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
   }
 
   const visibleOptCols = OPT_COLS.filter(c => !hiddenCols.has(c.key))
+
+  const deleteMut = useMutation({
+    mutationFn: deleteProject,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['projects-full'] }),
+    onError: (e: Error) => alert(e.message),
+  })
+
+  async function handleDelete(p: Project) {
+    if (!window.confirm(`Projekt „${p.NAME_SHORT} – ${p.NAME_LONG}" wirklich löschen?`)) return
+    deleteMut.mutate(p.ID)
+  }
 
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof updateProject>[1] }) =>
@@ -367,7 +378,10 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                       }
                       return <td key={c.key}>{p[c.key] ?? '—'}</td>
                     })}
-                    <td><button className="btn-small" onClick={() => openEdit(p)}>Bearbeiten</button></td>
+                    <td className="doc-actions">
+                      <button className="btn-small" onClick={() => openEdit(p)}>Bearbeiten</button>
+                      <button className="btn-small btn-danger" onClick={() => handleDelete(p)}>Löschen</button>
+                    </td>
                     {onSelectProject && (
                       <td><button className="btn-small btn-save" onClick={() => onSelectProject(p.ID)}>Öffnen</button></td>
                     )}

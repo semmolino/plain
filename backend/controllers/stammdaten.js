@@ -847,6 +847,56 @@ async function deleteRolle(req, res, supabase) {
   res.json({ ok: true });
 }
 
+async function patchDepartment(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { name_short } = req.body || {};
+  if (!name_short) return res.status(400).json({ error: "name_short is required" });
+  const { data, error } = await supabase.from("DEPARTMENT").update({ NAME_SHORT: name_short.trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, NAME_SHORT").single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+}
+
+async function patchTyp(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { name_short } = req.body || {};
+  if (!name_short) return res.status(400).json({ error: "name_short is required" });
+  const { data, error } = await supabase.from("PROJECT_TYPE").update({ NAME_SHORT: name_short.trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, NAME_SHORT").single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+}
+
+async function patchRolle(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { name_short, name_long, sp_rate } = req.body || {};
+  if (!name_short) return res.status(400).json({ error: "name_short is required" });
+  const { data, error } = await supabase.from("ROLE").update({
+    NAME_SHORT: name_short.trim(),
+    NAME_LONG:  (name_long || "").trim() || null,
+    SP_RATE:    sp_rate !== undefined && sp_rate !== "" ? parseFloat(sp_rate) : null,
+  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, NAME_SHORT, NAME_LONG, SP_RATE").single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+}
+
+async function deleteAddress(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { error } = await supabase.from("ADDRESS").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+}
+
+async function deleteContact(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { error } = await supabase.from("CONTACTS").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+}
+
 // ── Logo management ──────────────────────────────────────────────────────────
 // Stores the logo asset ID in TENANT_SETTINGS and propagates to all templates.
 
@@ -908,6 +958,9 @@ module.exports = {
   getSalutations, getGenders, searchAddresses, listAddresses, patchAddress,
   searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, searchPaymentMeans, postContact,
   getCurrencies, getVat, getDefaults, putDefault,
-  getDepartments, deleteDepartment, getTypen, deleteTyp, getRollen, deleteRolle,
+  getDepartments, deleteDepartment, patchDepartment,
+  getTypen, deleteTyp, patchTyp,
+  getRollen, deleteRolle, patchRolle,
+  deleteAddress, deleteContact,
   getLogo, putLogo,
 };

@@ -6,7 +6,7 @@ import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import {
-  fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee,
+  fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
 } from '@/api/mitarbeiter'
 
@@ -117,6 +117,17 @@ export function MitarbeiterPage() {
     onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
   })
 
+  const deleteMut = useMutation({
+    mutationFn: deleteEmployee,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['employees'] }),
+    onError: (e: Error) => alert(e.message),
+  })
+
+  async function handleDelete(row: Employee) {
+    if (!window.confirm(`${row.SHORT_NAME}: ${row.FIRST_NAME} ${row.LAST_NAME} wirklich löschen?`)) return
+    deleteMut.mutate(row.ID)
+  }
+
   function openEdit(row: Employee) {
     setEditForm({
       short_name:       row.SHORT_NAME ?? '',
@@ -211,14 +222,17 @@ export function MitarbeiterPage() {
                         <td>{r.MOBILE}</td>
                         <td>{r.PERSONNEL_NUMBER}</td>
                         <td>{r.GENDER}</td>
-                        <td><button className="btn-small" onClick={() => openEdit(r)}>Bearbeiten</button></td>
+                        <td className="doc-actions">
+                          <button className="btn-small" onClick={() => openEdit(r)}>Bearbeiten</button>
+                          <button className="btn-small btn-danger" onClick={() => handleDelete(r)}>Löschen</button>
+                        </td>
                       </tr>
                     ))}
-                    {!pageRows.length && <tr><td colSpan={8} className="empty-note">Keine Einträge</td></tr>}
+                    {!pageRows.length && <tr><td colSpan={9} className="empty-note">Keine Einträge</td></tr>}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                      <td colSpan={8} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                      <td colSpan={9} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
                         {processed.length !== employees.length ? `${processed.length} / ${employees.length} Einträge` : `${employees.length} Einträge`}
                       </td>
                     </tr>
