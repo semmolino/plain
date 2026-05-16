@@ -215,6 +215,7 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
 
   // Filter + columns state
   const [activeLand,     setActiveLand]     = useState<Set<string>>(new Set())
+  const [activeStadt,    setActiveStadt]    = useState<Set<string>>(new Set())
   const [hiddenCols,     setHiddenCols]     = useState<Set<AddrOptColKey>>(new Set(ADDR_OPT_COLS.map(c => c.key)))
   const [colPanelOpen,   setColPanelOpen]   = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
@@ -249,7 +250,8 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
   }, [colPanelOpen])
 
   const filterOptions = useMemo(() => ({
-    land: [...new Set(addresses.map(a => a.COUNTRY).filter((v): v is string => v != null && v !== ''))].sort(),
+    land:  [...new Set(addresses.map(a => a.COUNTRY).filter((v): v is string => v != null && v !== ''))].sort(),
+    stadt: [...new Set(addresses.map(a => a.CITY).filter((v): v is string => v != null && v !== ''))].sort(),
   }), [addresses])
 
   function toggleSort(k: AddrSortKey) {
@@ -271,7 +273,8 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
             .toLowerCase().includes(q)
         )
       : addresses
-    if (activeLand.size > 0) rows = rows.filter(a => a.COUNTRY && activeLand.has(a.COUNTRY))
+    if (activeLand.size  > 0) rows = rows.filter(a => a.COUNTRY && activeLand.has(a.COUNTRY))
+    if (activeStadt.size > 0) rows = rows.filter(a => a.CITY    && activeStadt.has(a.CITY))
     return [...rows].sort((a, b) => {
       const av = String(sortKey === 'CITY' ? `${a.POST_CODE ?? ''} ${a.CITY ?? ''}` : (a[sortKey as keyof Address] ?? ''))
       const bv = String(sortKey === 'CITY' ? `${b.POST_CODE ?? ''} ${b.CITY ?? ''}` : (b[sortKey as keyof Address] ?? ''))
@@ -340,7 +343,7 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
   useCtrlS(() => createAddrFormRef.current?.requestSubmit(), tab === 'create')
   useCtrlS(() => editAddrFormRef.current?.requestSubmit(),   editAddr !== null)
 
-  const hasActiveFilter = activeLand.size > 0 || search.trim() !== ''
+  const hasActiveFilter = activeLand.size > 0 || activeStadt.size > 0 || search.trim() !== ''
 
   return (
     <>
@@ -351,9 +354,10 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
           <div className="pl-toolbar">
             <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
             <div className="pl-filter-chips">
-              <FilterChip label="Land" options={filterOptions.land} active={activeLand} onChange={setActiveLand} />
+              <FilterChip label="Land"  options={filterOptions.land}  active={activeLand}  onChange={setActiveLand}  />
+              <FilterChip label="Stadt" options={filterOptions.stadt} active={activeStadt} onChange={setActiveStadt} />
               {hasActiveFilter && (
-                <button className="pl-clear-btn" onClick={() => { setActiveLand(new Set()); setSearch('') }}>
+                <button className="pl-clear-btn" onClick={() => { setActiveLand(new Set()); setActiveStadt(new Set()); setSearch('') }}>
                   Filter löschen
                 </button>
               )}
@@ -456,8 +460,7 @@ function KontakteSection() {
   const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   // Filter + column state
-  const [activeAnrede,   setActiveAnrede]   = useState<Set<string>>(new Set())
-  const [activeGeschlecht, setActiveGeschlecht] = useState<Set<string>>(new Set())
+  const [activeAdresse,  setActiveAdresse]  = useState<Set<string>>(new Set())
   const [hiddenCols,     setHiddenCols]     = useState<Set<ConOptColKey>>(new Set(CON_OPT_COLS.map(c => c.key)))
   const [colPanelOpen,   setColPanelOpen]   = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
@@ -478,8 +481,7 @@ function KontakteSection() {
   }, [colPanelOpen])
 
   const filterOptions = useMemo(() => ({
-    anrede:      [...new Set(contacts.map(c => c.SALUTATION).filter((v): v is string => v != null && v !== ''))].sort(),
-    geschlecht:  [...new Set(contacts.map(c => c.GENDER).filter((v): v is string => v != null && v !== ''))].sort(),
+    adresse: [...new Set(contacts.map(c => c.ADDRESS).filter((v): v is string => v != null && v !== ''))].sort(),
   }), [contacts])
 
   function toggleSort(k: ConSortKey) {
@@ -501,8 +503,7 @@ function KontakteSection() {
             .toLowerCase().includes(q)
         )
       : contacts
-    if (activeAnrede.size    > 0) rows = rows.filter(c => c.SALUTATION && activeAnrede.has(c.SALUTATION))
-    if (activeGeschlecht.size > 0) rows = rows.filter(c => c.GENDER    && activeGeschlecht.has(c.GENDER))
+    if (activeAdresse.size > 0) rows = rows.filter(c => c.ADDRESS && activeAdresse.has(c.ADDRESS))
     return [...rows].sort((a, b) => {
       const av = String(sortKey === 'NAME' ? `${a.LAST_NAME ?? ''} ${a.FIRST_NAME ?? ''}` : (a[sortKey as keyof Contact] ?? ''))
       const bv = String(sortKey === 'NAME' ? `${b.LAST_NAME ?? ''} ${b.FIRST_NAME ?? ''}` : (b[sortKey as keyof Contact] ?? ''))
@@ -577,7 +578,7 @@ function KontakteSection() {
   useCtrlS(() => createConFormRef.current?.requestSubmit(), tab === 'create')
   useCtrlS(() => editConFormRef.current?.requestSubmit(),   editContact !== null)
 
-  const hasActiveFilter = activeAnrede.size > 0 || activeGeschlecht.size > 0 || search.trim() !== ''
+  const hasActiveFilter = activeAdresse.size > 0 || search.trim() !== ''
 
   return (
     <>
@@ -588,10 +589,9 @@ function KontakteSection() {
           <div className="pl-toolbar">
             <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
             <div className="pl-filter-chips">
-              <FilterChip label="Anrede"     options={filterOptions.anrede}     active={activeAnrede}     onChange={setActiveAnrede}     />
-              <FilterChip label="Geschlecht" options={filterOptions.geschlecht} active={activeGeschlecht} onChange={setActiveGeschlecht} />
+              <FilterChip label="Adresse" options={filterOptions.adresse} active={activeAdresse} onChange={setActiveAdresse} />
               {hasActiveFilter && (
-                <button className="pl-clear-btn" onClick={() => { setActiveAnrede(new Set()); setActiveGeschlecht(new Set()); setSearch('') }}>
+                <button className="pl-clear-btn" onClick={() => { setActiveAdresse(new Set()); setSearch('') }}>
                   Filter löschen
                 </button>
               )}
