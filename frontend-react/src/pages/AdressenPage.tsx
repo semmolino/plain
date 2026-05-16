@@ -510,7 +510,7 @@ function KontakteSection() {
       const cmp = av.localeCompare(bv, 'de', { sensitivity: 'base', numeric: true })
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [contacts, search, sortKey, sortDir, activeAnrede, activeGeschlecht])
+  }, [contacts, search, sortKey, sortDir, activeAdresse])
 
   const searchAddresses = useCallback(async (q: string) => {
     const res = await searchAddressesApi(q)
