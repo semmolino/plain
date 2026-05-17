@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTimerStore, elapsedSeconds, formatDuration, formatDurationHuman, quantityFromSeconds } from '@/store/timerStore'
 import type { TimerSession } from '@/store/timerStore'
 import { fetchActiveEmployees, fetchProjectsShort, fetchProjectStructure } from '@/api/projekte'
+import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
 import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraftDescription } from '@/api/timer'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
@@ -78,9 +79,17 @@ function StartModal({ onClose }: { onClose: () => void }) {
 
   const [employeeId,    setEmployeeId]    = useState<number | null>(() => useAuthStore.getState().employeeId)
   const [cpRate,        setCpRate]        = useState('0')
+  const [cpRateFound,   setCpRateFound]   = useState<boolean | null>(null)
   const [projectId,     setProjectId]     = useState<number | null>(null)
   const [structureId,   setStructureId]   = useState<number | null>(null)
   const [structureName, setStructureName] = useState('')
+
+  useEffect(() => {
+    if (!employeeId) { setCpRate('0'); setCpRateFound(null); return }
+    fetchEmployeeCpRateForDate(employeeId, nowDateIso())
+      .then(res => { setCpRate(String(res.data.rate)); setCpRateFound(res.data.found) })
+      .catch(() => {})
+  }, [employeeId])
 
   const projects = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const projectMap = Object.fromEntries((projects.data?.data ?? []).map(p => [p.ID, p.NAME_SHORT]))
@@ -131,9 +140,15 @@ function StartModal({ onClose }: { onClose: () => void }) {
               min={0}
               step={0.01}
               value={cpRate}
-              onChange={e => setCpRate(e.target.value)}
-              placeholder="z.B. 65"
+              readOnly
+              style={{ background: 'rgba(17,24,39,0.04)', cursor: 'not-allowed' }}
+              placeholder="Mitarbeiter wählen …"
             />
+            {cpRateFound === false && (
+              <span style={{ fontSize: 11, color: '#dc2626', marginTop: 2, display: 'block' }}>
+                ⚠ Kein Kostensatz für heute hinterlegt — Buchung wird mit 0 gespeichert.
+              </span>
+            )}
           </div>
 
           <LeafPicker

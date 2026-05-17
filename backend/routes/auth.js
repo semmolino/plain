@@ -33,8 +33,8 @@ module.exports = (supabase) => {
   // Validates EMPLOYEE.MAIL + EMPLOYEE.PASSWORD and issues a JWT.
   router.post("/login", async (req, res) => {
     const { email, password } = req.body || {};
-    if (!email || !password) {
-      return res.status(400).json({ error: "E-Mail und Passwort sind erforderlich." });
+    if (!email) {
+      return res.status(400).json({ error: "E-Mail ist erforderlich." });
     }
 
     const { data: employee, error: empErr } = await supabase
@@ -50,12 +50,14 @@ module.exports = (supabase) => {
       return res.status(403).json({ error: "Dieser Benutzer ist inaktiv. Bitte Administrator kontaktieren." });
     }
 
-    const stored = employee.PASSWORD || "";
-    const valid = stored.startsWith("$2")
-      ? await bcrypt.compare(password, stored)
-      : stored === password;
-
-    if (!valid) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
+    const stored = employee.PASSWORD || null;
+    if (stored) {
+      const valid = stored.startsWith("$2")
+        ? await bcrypt.compare(password || "", stored)
+        : stored === (password || "");
+      if (!valid) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
+    }
+    // If stored is null (no password set), login is allowed — employee should set a password after first login.
 
     const tenantId = employee.TENANT_ID;
     if (!tenantId) {

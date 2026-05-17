@@ -10,6 +10,7 @@ import {
   type Buchung, type UpdateBuchungPayload,
 } from '@/api/projekte'
 import { fetchActiveEmployees } from '@/api/projekte'
+import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
 import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
 
@@ -76,6 +77,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const [editRow,      setEditRow]      = useState<Buchung | null>(null)
   const [editForm,     setEditForm]     = useState<BuchungForm>(emptyForm)
   const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success'|'error' } | null>(null)
+  const [cpRateFound,  setCpRateFound]  = useState<boolean | null>(null)
 
   const { data: projectsData }  = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }       = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
@@ -106,7 +108,13 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     setForm(f => ({ ...f, SP_RATE: presetData.found && presetData.SP_RATE != null ? String(presetData.SP_RATE) : f.SP_RATE }))
   }, [presetData])
 
-  useEffect(() => { if (!empId) return }, [empId, employees])
+  useEffect(() => {
+    if (!empId || !form.DATE_VOUCHER) { setForm(f => ({ ...f, CP_RATE: '' })); setCpRateFound(null); return }
+    fetchEmployeeCpRateForDate(empId, form.DATE_VOUCHER)
+      .then(res => { setForm(f => ({ ...f, CP_RATE: String(res.data.rate) })); setCpRateFound(res.data.found) })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empId, form.DATE_VOUCHER])
 
   useEffect(() => { setFilterStruct(''); setSearch('') }, [pid])
 
@@ -462,8 +470,17 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <FormField label="Stunden ext.*" id="bqe" type="number" value={form.QUANTITY_EXT}  onChange={setF('QUANTITY_EXT')} step="0.25" required />
                   </div>
                   <div className="form-row">
-                    <FormField label="Kostensatz (€/h)" id="bcr" type="number" value={form.CP_RATE} onChange={setF('CP_RATE')} step="0.01"
-                      title="Wird automatisch aus dem Kostensatz-Verlauf des Mitarbeiters ermittelt" />
+                    <div className="form-group">
+                      <label htmlFor="bcr">Kostensatz (€/h)</label>
+                      <input id="bcr" type="number" step="0.01" value={form.CP_RATE} readOnly
+                        style={{ background: 'rgba(17,24,39,0.04)', cursor: 'not-allowed' }}
+                        title="Wird automatisch aus dem Kostensatz-Verlauf ermittelt" />
+                      {cpRateFound === false && (
+                        <span style={{ fontSize: 11, color: '#dc2626', display: 'block', marginTop: 2 }}>
+                          ⚠ Kein Kostensatz für dieses Datum hinterlegt — Buchung wird mit 0 gespeichert.
+                        </span>
+                      )}
+                    </div>
                     <FormField label="Stundensatz*"  id="bsr" type="number" value={form.SP_RATE}       onChange={setF('SP_RATE')} step="0.01" required
                       readOnly={presetData?.found === true && presetData.SP_RATE != null}
                       title={presetData?.found === true && presetData.SP_RATE != null ? 'Aus Mitarbeiter/Projekt-Zuordnung vorbelegt' : undefined}

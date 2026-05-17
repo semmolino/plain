@@ -305,6 +305,23 @@ router.delete("/:id/work-models/:wid", async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── CP-rate lookup for a specific date ────────────────────────────────────────
+// GET /mitarbeiter/:id/cp-rate?date=YYYY-MM-DD
+router.get("/:id/cp-rate", async (req, res) => {
+  const empId = Number(req.params.id);
+  const date  = String(req.query.date || new Date().toISOString().slice(0, 10));
+  const { data } = await supabase
+    .from("EMPLOYEE_CP_RATE")
+    .select("CP_RATE")
+    .eq("TENANT_ID", req.tenantId)
+    .eq("EMPLOYEE_ID", empId)
+    .lte("VALID_FROM", date)
+    .order("VALID_FROM", { ascending: false })
+    .limit(1);
+  const found = data && data.length > 0;
+  res.json({ data: { rate: found ? Number(data[0].CP_RATE) : 0, found: !!found } });
+});
+
 // ── CP-rate history ────────────────────────────────────────────────────────────
 
 router.get("/:id/cp-rates", async (req, res) => {

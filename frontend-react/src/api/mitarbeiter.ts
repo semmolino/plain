@@ -121,6 +121,9 @@ export const updateEmployeeWorkModel = (id: number, wid: number, body: { model_i
 export const deleteEmployeeWorkModel = (id: number, wid: number) =>
   apiClient.delete<{ ok: boolean }>(`/mitarbeiter/${id}/work-models/${wid}`)
 
+export const fetchEmployeeCpRateForDate = (id: number, date: string) =>
+  apiClient.get<{ data: { rate: number; found: boolean } }>(`/mitarbeiter/${id}/cp-rate?date=${date}`)
+
 export const fetchEmployeeCpRates = (id: number) =>
   apiClient.get<{ data: EmployeeCpRate[] }>(`/mitarbeiter/${id}/cp-rates`)
 
