@@ -22,8 +22,8 @@ export function LoginPage() {
   const [resetLoading, setResetLoading] = useState(false)
 
   async function handleLogin() {
-    if (!email || !password) {
-      setMsg({ text: 'Bitte E-Mail und Passwort eingeben.', type: 'error' })
+    if (!email) {
+      setMsg({ text: 'Bitte E-Mail eingeben.', type: 'error' })
       return
     }
 
