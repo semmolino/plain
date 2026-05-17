@@ -18,16 +18,28 @@ async function getHolidaySet(supabase, countryCode, stateCode, dateFrom, dateTo)
 }
 
 // Returns model assignments for an employee sorted by VALID_FROM ascending.
+// Uses a 2-step query because Supabase FK joins require explicit FK constraints.
 async function getWorkModelAssignments(supabase, tenantId, employeeId) {
-  const { data, error } = await supabase
+  const { data: assignments, error } = await supabase
     .from('EMPLOYEE_WORK_MODEL')
-    .select('ID, MODEL_ID, VALID_FROM, model:WORKING_TIME_MODEL(ID, NAME, COUNTRY_CODE, STATE_CODE, MON, TUE, WED, THU, FRI, SAT, SUN)')
+    .select('ID, MODEL_ID, VALID_FROM')
     .eq('TENANT_ID', tenantId)
     .eq('EMPLOYEE_ID', employeeId)
     .order('VALID_FROM', { ascending: true });
 
   if (error) throw { status: 500, message: error.message };
-  return data || [];
+  if (!assignments || !assignments.length) return [];
+
+  const modelIds = [...new Set(assignments.map(a => a.MODEL_ID))];
+  const { data: models, error: mErr } = await supabase
+    .from('WORKING_TIME_MODEL')
+    .select('ID, NAME, COUNTRY_CODE, STATE_CODE, MON, TUE, WED, THU, FRI, SAT, SUN')
+    .in('ID', modelIds);
+
+  if (mErr) throw { status: 500, message: mErr.message };
+  const modelMap = new Map((models || []).map(m => [m.ID, m]));
+
+  return assignments.map(a => ({ ...a, model: modelMap.get(a.MODEL_ID) ?? null }));
 }
 
 // Given a list of assignments sorted by VALID_FROM, find which model was active

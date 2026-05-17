@@ -48,7 +48,7 @@ async function listBuchungenByProject(req, res, supabase) {
 
 async function createTimerDraft(req, res, supabase) {
   try {
-    const data = await svc.createTimerDraft(supabase, { body: req.body });
+    const data = await svc.createTimerDraft(supabase, { body: req.body, tenantId: req.tenantId });
     res.json({ success: true, data });
   } catch (err) {
     const status = err.status || 500;

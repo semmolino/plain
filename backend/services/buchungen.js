@@ -4,6 +4,21 @@
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Looks up the effective CP_RATE for an employee on a specific date.
+// Returns the rate from EMPLOYEE_CP_RATE where VALID_FROM <= dateStr (most recent).
+// Returns null if no rate exists (caller should treat as 0 and warn).
+async function lookupCpRate(supabase, tenantId, employeeId, dateStr) {
+  const { data } = await supabase
+    .from("EMPLOYEE_CP_RATE")
+    .select("CP_RATE")
+    .eq("TENANT_ID", tenantId)
+    .eq("EMPLOYEE_ID", employeeId)
+    .lte("VALID_FROM", dateStr)
+    .order("VALID_FROM", { ascending: false })
+    .limit(1);
+  return data && data.length > 0 ? Number(data[0].CP_RATE) : null;
+}
+
 async function loadEmployee2Project(supabase, employeeId, projectId) {
   if (!employeeId || !projectId) return null;
   const { data, error } = await supabase
@@ -60,7 +75,7 @@ async function recomputeStructure(supabase, structureId) {
 // Service functions
 // ---------------------------------------------------------------------------
 
-async function createTimerDraft(supabase, { body }) {
+async function createTimerDraft(supabase, { body, tenantId }) {
   const b = body;
   if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || !b.STRUCTURE_ID || !b.PROJECT_ID) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
@@ -72,13 +87,17 @@ async function createTimerDraft(supabase, { body }) {
     .eq("ID", b.PROJECT_ID)
     .maybeSingle();
   if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
-  const resolvedTenantId = projRow?.TENANT_ID ?? null;
+  const resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
 
   const preset = await loadEmployee2Project(supabase, Number(b.EMPLOYEE_ID), Number(b.PROJECT_ID));
 
   const quantityInt = Number(b.QUANTITY_INT ?? 0);
   const quantityExt = quantityInt;
-  const cpRate = Number(b.CP_RATE ?? 0);
+
+  // Look up time-based CP rate; fall back to 0 if none defined yet
+  const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
+  const cpRate = lookedUpRate !== null ? lookedUpRate : 0;
+
   const spRate = preset?.SP_RATE != null ? Number(preset.SP_RATE) : 0;
 
   const { data: inserted, error: insErr } = await supabase.from("TEC").insert([{
@@ -186,7 +205,7 @@ async function patchDraftDescription(supabase, { id, description }) {
 async function createBuchung(supabase, { body, tenantId }) {
   const b = body;
 
-  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || !b.QUANTITY_INT || !b.CP_RATE ||
+  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || !b.QUANTITY_INT ||
       !b.QUANTITY_EXT || !b.SP_RATE || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
@@ -222,6 +241,10 @@ async function createBuchung(supabase, { body, tenantId }) {
   const roleNameShort = preset ? (preset.ROLE_NAME_SHORT ?? null) : null;
   const roleNameLong = preset ? (preset.ROLE_NAME_LONG ?? null) : null;
 
+  // Look up time-based CP rate; fall back to 0 if none defined yet
+  const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
+  const effectiveCpRate = lookedUpRate !== null ? lookedUpRate : 0;
+
   const { error: insertError } = await supabase.from("TEC").insert([{
     TENANT_ID: resolvedTenantId,
     EMPLOYEE_ID: b.EMPLOYEE_ID,
@@ -229,8 +252,8 @@ async function createBuchung(supabase, { body, tenantId }) {
     TIME_START: b.TIME_START || null,
     TIME_FINISH: b.TIME_FINISH || null,
     QUANTITY_INT: b.QUANTITY_INT,
-    CP_RATE: b.CP_RATE,
-    CP_TOT: b.QUANTITY_INT * b.CP_RATE,
+    CP_RATE: effectiveCpRate,
+    CP_TOT: b.QUANTITY_INT * effectiveCpRate,
     QUANTITY_EXT: b.QUANTITY_EXT,
     ROLE_ID: roleId,
     ROLE_NAME_SHORT: roleNameShort,
@@ -246,7 +269,7 @@ async function createBuchung(supabase, { body, tenantId }) {
 
   if (!b.STRUCTURE_ID) return;
 
-  const costAddition = b.QUANTITY_INT * b.CP_RATE;
+  const costAddition = b.QUANTITY_INT * effectiveCpRate;
   const { data: currentProjectElement, error: fetchError } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("COSTS, BILLING_TYPE_ID, EXTRAS_PERCENT")

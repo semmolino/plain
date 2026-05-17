@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Modal }     from '@/components/ui/Modal'
 import { Message }   from '@/components/ui/Message'
@@ -37,7 +37,45 @@ function fmtBalance(n: number) {
 }
 
 function emptyCreateForm(): CreateEmployeePayload {
-  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '', cp_rate: '' }
+  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '' }
+}
+
+// ── FilterChip ────────────────────────────────────────────────────────────────
+
+function FilterChip({ label, options, active, onChange }: {
+  label: string; options: string[]; active: Set<string>; onChange: (v: Set<string>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  function toggle(val: string) { const s = new Set(active); s.has(val) ? s.delete(val) : s.add(val); onChange(s) }
+  const count = active.size
+  return (
+    <div ref={ref} className="filter-chip-wrap">
+      <button className={`filter-chip-btn${count > 0 ? ' active' : ''}`} onClick={() => setOpen(o => !o)}>
+        {label}{count > 0 ? ` (${count})` : ''} ▾
+      </button>
+      {count > 0 && <button className="filter-chip-clear" onClick={() => { onChange(new Set()); setOpen(false) }} title="Zurücksetzen">×</button>}
+      {open && (
+        <div className="filter-chip-dropdown">
+          {options.length === 0 ? <div className="filter-chip-empty">Keine Optionen</div> : options.map(opt => (
+            <label key={opt} className="filter-chip-option">
+              <input type="checkbox" checked={active.has(opt)} onChange={() => toggle(opt)} />
+              {opt || '(ohne)'}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── SortTh ────────────────────────────────────────────────────────────────────
@@ -73,8 +111,8 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     mobile:           employee.MOBILE ?? '',
     personnel_number: employee.PERSONNEL_NUMBER ?? '',
     gender_id:        employee.GENDER_ID ?? 0,
-    cp_rate:          employee.CP_RATE ?? '',
     department_id:    employee.DEPARTMENT_ID ?? null,
+    active:           employee.ACTIVE ?? 1,
   })
   const [editMsg, setEditMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const editFormRef = useRef<HTMLFormElement>(null)
@@ -93,82 +131,96 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const [editWmForm,      setEditWmForm]      = useState({ model_id: '', valid_from: '' })
   const [wmMsg,           setWmMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
-  // Queries
-  const { data: cpRatesRes }   = useQuery({ queryKey: ['emp-cp-rates',    employee.ID], queryFn: () => fetchEmployeeCpRates(employee.ID)   })
-  const { data: workModelsRes} = useQuery({ queryKey: ['emp-work-models', employee.ID], queryFn: () => fetchEmployeeWorkModels(employee.ID) })
-  const cpRates:   EmployeeCpRate[]   = cpRatesRes?.data   ?? []
+  const { data: cpRatesRes }    = useQuery({ queryKey: ['emp-cp-rates',    employee.ID], queryFn: () => fetchEmployeeCpRates(employee.ID)   })
+  const { data: workModelsRes } = useQuery({ queryKey: ['emp-work-models', employee.ID], queryFn: () => fetchEmployeeWorkModels(employee.ID) })
+  const cpRates:   EmployeeCpRate[]    = cpRatesRes?.data   ?? []
   const empWmList: EmployeeWorkModel[] = workModelsRes?.data ?? []
 
-  // Stammdaten mutation
-  const updateMut = useMutation({
-    mutationFn: (body: UpdateEmployeePayload) => updateEmployee(employee.ID, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['employees'] })
-      setEditMsg({ text: 'Gespeichert ✅', type: 'success' })
-      setTimeout(() => onClose(), 700)
-    },
-    onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
-  })
+  const [saving, setSaving]   = useState(false)
+  const [cpSaving, setCpSaving] = useState(false)
+  const [wmSaving, setWmSaving] = useState(false)
 
-  function submitEdit(e: React.FormEvent) {
+  async function submitEdit(e: React.FormEvent) {
     e.preventDefault()
     setEditMsg(null)
     if (!editForm.short_name || !editForm.first_name || !editForm.last_name || !editForm.gender_id) {
       setEditMsg({ text: 'Pflichtfelder ausfüllen', type: 'error' }); return
     }
-    updateMut.mutate(editForm)
+    setSaving(true)
+    try {
+      await updateEmployee(employee.ID, editForm)
+      void qc.invalidateQueries({ queryKey: ['employees'] })
+      setEditMsg({ text: 'Gespeichert ✅', type: 'success' })
+      setTimeout(() => onClose(), 700)
+    } catch (e: unknown) {
+      setEditMsg({ text: (e as Error).message, type: 'error' })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const setE = (k: keyof UpdateEmployeePayload) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setEditForm(f => ({ ...f, [k]: k === 'gender_id' ? Number(e.target.value) : e.target.value }))
+    setEditForm(f => ({ ...f, [k]: k === 'gender_id' || k === 'active' ? Number(e.target.value) : e.target.value }))
 
   useCtrlS(() => editFormRef.current?.requestSubmit(), section === 'stammdaten')
 
-  // CP rate mutations
-  const addCpMut = useMutation({
-    mutationFn: () => createEmployeeCpRate(employee.ID, { cp_rate: parseFloat(newCpRate), valid_from: newCpValidFrom }),
-    onSuccess: () => {
+  async function addCpRate() {
+    setCpMsg(null)
+    if (!newCpRate || !newCpValidFrom) { setCpMsg({ text: 'Kostensatz und Datum erforderlich', type: 'error' }); return }
+    setCpSaving(true)
+    try {
+      await createEmployeeCpRate(employee.ID, { cp_rate: parseFloat(newCpRate), valid_from: newCpValidFrom })
       void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] })
       setNewCpRate(''); setNewCpValidFrom('')
-    },
-    onError: (e: Error) => setCpMsg({ text: e.message, type: 'error' }),
-  })
-  const updCpMut = useMutation({
-    mutationFn: (id: number) => updateEmployeeCpRate(employee.ID, id, { cp_rate: parseFloat(editCpForm.cp_rate), valid_from: editCpForm.valid_from }),
-    onSuccess: () => {
+    } catch (e: unknown) { setCpMsg({ text: (e as Error).message, type: 'error' }) }
+    finally { setCpSaving(false) }
+  }
+
+  async function saveCpRate(id: number) {
+    setCpSaving(true)
+    try {
+      await updateEmployeeCpRate(employee.ID, id, { cp_rate: parseFloat(editCpForm.cp_rate), valid_from: editCpForm.valid_from })
       void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] })
       setEditingCpId(null)
-    },
-    onError: (e: Error) => setCpMsg({ text: e.message, type: 'error' }),
-  })
-  const delCpMut = useMutation({
-    mutationFn: (id: number) => deleteEmployeeCpRate(employee.ID, id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] }),
-    onError: (e: Error) => setCpMsg({ text: e.message, type: 'error' }),
-  })
+    } catch (e: unknown) { setCpMsg({ text: (e as Error).message, type: 'error' }) }
+    finally { setCpSaving(false) }
+  }
 
-  // Work model mutations
-  const addWmMut = useMutation({
-    mutationFn: () => createEmployeeWorkModel(employee.ID, { model_id: Number(newWmModelId), valid_from: newWmValidFrom }),
-    onSuccess: () => {
+  async function deleteCpRate(id: number) {
+    try {
+      await deleteEmployeeCpRate(employee.ID, id)
+      void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] })
+    } catch (e: unknown) { setCpMsg({ text: (e as Error).message, type: 'error' }) }
+  }
+
+  async function addWorkModel() {
+    setWmMsg(null)
+    if (!newWmModelId || !newWmValidFrom) { setWmMsg({ text: 'Modell und Datum erforderlich', type: 'error' }); return }
+    setWmSaving(true)
+    try {
+      await createEmployeeWorkModel(employee.ID, { model_id: Number(newWmModelId), valid_from: newWmValidFrom })
       void qc.invalidateQueries({ queryKey: ['emp-work-models', employee.ID] })
       setNewWmModelId(''); setNewWmValidFrom('')
-    },
-    onError: (e: Error) => setWmMsg({ text: e.message, type: 'error' }),
-  })
-  const updWmMut = useMutation({
-    mutationFn: (id: number) => updateEmployeeWorkModel(employee.ID, id, { model_id: Number(editWmForm.model_id), valid_from: editWmForm.valid_from }),
-    onSuccess: () => {
+    } catch (e: unknown) { setWmMsg({ text: (e as Error).message, type: 'error' }) }
+    finally { setWmSaving(false) }
+  }
+
+  async function saveWorkModel(id: number) {
+    setWmSaving(true)
+    try {
+      await updateEmployeeWorkModel(employee.ID, id, { model_id: Number(editWmForm.model_id), valid_from: editWmForm.valid_from })
       void qc.invalidateQueries({ queryKey: ['emp-work-models', employee.ID] })
       setEditingWmId(null)
-    },
-    onError: (e: Error) => setWmMsg({ text: e.message, type: 'error' }),
-  })
-  const delWmMut = useMutation({
-    mutationFn: (id: number) => deleteEmployeeWorkModel(employee.ID, id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['emp-work-models', employee.ID] }),
-    onError: (e: Error) => setWmMsg({ text: e.message, type: 'error' }),
-  })
+    } catch (e: unknown) { setWmMsg({ text: (e as Error).message, type: 'error' }) }
+    finally { setWmSaving(false) }
+  }
+
+  async function deleteWorkModel(id: number) {
+    try {
+      await deleteEmployeeWorkModel(employee.ID, id)
+      void qc.invalidateQueries({ queryKey: ['emp-work-models', employee.ID] })
+    } catch (e: unknown) { setWmMsg({ text: (e as Error).message, type: 'error' }) }
+  }
 
   const sectionBtnStyle = (s: string) => ({
     padding: '4px 14px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
@@ -196,7 +248,6 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
           <FormField label="E-Mail"       id="eem" value={editForm.mail ?? ''}          onChange={setE('mail')} type="email" />
           <FormField label="Mobil"        id="emo" value={editForm.mobile ?? ''}        onChange={setE('mobile')} />
           <FormField label="Personalnr."  id="epn" value={editForm.personnel_number ?? ''} onChange={setE('personnel_number')} />
-          <FormField label="Kostensatz (€/h)" id="ecr" value={String(editForm.cp_rate ?? '')} onChange={setE('cp_rate')} type="number" step="0.01" />
           <div className="form-group">
             <label htmlFor="ege">Geschlecht*</label>
             <select id="ege" value={String(editForm.gender_id)} onChange={setE('gender_id')} required>
@@ -211,10 +262,17 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
               {departments.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
             </select>
           </div>
+          <div className="form-group">
+            <label htmlFor="eact">Status</label>
+            <select id="eact" value={String(editForm.active ?? 1)} onChange={setE('active')}>
+              <option value="1">Aktiv</option>
+              <option value="2">Inaktiv</option>
+            </select>
+          </div>
           <Message text={editMsg?.text ?? null} type={editMsg?.type} />
           <div className="modal-actions">
-            <button className="btn-primary" type="submit" disabled={updateMut.isPending}>
-              {updateMut.isPending ? 'Speichert …' : 'Speichern'}
+            <button className="btn-primary" type="submit" disabled={saving}>
+              {saving ? 'Speichert …' : 'Speichern'}
             </button>
             <button type="button" onClick={onClose}>Abbrechen</button>
           </div>
@@ -246,7 +304,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                         <input type="number" step="0.01" min="0" className="tbl-input num" style={{ width: 80 }} value={editCpForm.cp_rate} onChange={e => setEditCpForm(f => ({ ...f, cp_rate: e.target.value }))} />
                       </td>
                       <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updCpMut.isPending} onClick={() => updCpMut.mutate(r.ID)}>✓</button>
+                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={cpSaving} onClick={() => saveCpRate(r.ID)}>✓</button>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginLeft: 2 }} onClick={() => setEditingCpId(null)}>✗</button>
                       </td>
                     </>
@@ -258,7 +316,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                       </td>
                       <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => { setEditingCpId(r.ID); setEditCpForm({ cp_rate: String(r.CP_RATE), valid_from: r.VALID_FROM }) }}>✎</button>
-                        <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} disabled={delCpMut.isPending} onClick={() => delCpMut.mutate(r.ID)}>×</button>
+                        <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => deleteCpRate(r.ID)}>×</button>
                       </td>
                     </>
                   )}
@@ -278,7 +336,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
               <label style={{ fontSize: 12 }}>Kostensatz (€/h)</label>
               <input type="number" step="0.01" min="0" value={newCpRate} onChange={e => setNewCpRate(e.target.value)} placeholder="z. B. 85.00" />
             </div>
-            <button type="button" className="btn-small btn-save" disabled={!newCpRate || !newCpValidFrom || addCpMut.isPending} onClick={() => { setCpMsg(null); addCpMut.mutate() }}>
+            <button type="button" className="btn-small btn-save" disabled={!newCpRate || !newCpValidFrom || cpSaving} onClick={addCpRate}>
               Eintrag hinzufügen
             </button>
           </div>
@@ -314,7 +372,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                         </select>
                       </td>
                       <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updWmMut.isPending} onClick={() => updWmMut.mutate(wm.ID)}>✓</button>
+                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={wmSaving} onClick={() => saveWorkModel(wm.ID)}>✓</button>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginLeft: 2 }} onClick={() => setEditingWmId(null)}>✗</button>
                       </td>
                     </>
@@ -324,7 +382,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                       <td style={{ padding: '3px 0 3px 8px' }}>{wm.model?.NAME ?? `Modell ${wm.MODEL_ID}`}</td>
                       <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => { setEditingWmId(wm.ID); setEditWmForm({ model_id: String(wm.MODEL_ID), valid_from: wm.VALID_FROM }) }}>✎</button>
-                        <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} disabled={delWmMut.isPending} onClick={() => delWmMut.mutate(wm.ID)}>×</button>
+                        <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => deleteWorkModel(wm.ID)}>×</button>
                       </td>
                     </>
                   )}
@@ -347,7 +405,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                 {workModels.map(m => <option key={m.ID} value={m.ID}>{m.NAME}</option>)}
               </select>
             </div>
-            <button type="button" className="btn-small btn-save" disabled={!newWmModelId || !newWmValidFrom || addWmMut.isPending} onClick={() => { setWmMsg(null); addWmMut.mutate() }}>
+            <button type="button" className="btn-small btn-save" disabled={!newWmModelId || !newWmValidFrom || wmSaving} onClick={addWorkModel}>
               Zuweisung hinzufügen
             </button>
           </div>
@@ -374,7 +432,6 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
     if (month === 12) { setMonth(1); setYear(y => y + 1) }
     else               setMonth(m => m + 1)
   }
-
 
   const { data: monthRes, isLoading: loadingMonth } = useQuery({
     queryKey: ['emp-balance-month', empId, year, month],
@@ -430,7 +487,6 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
           {loadingMonth && <p className="empty-note">Laden …</p>}
           {monthData && (
             <>
-              {/* Summary */}
               <div style={{ display: 'flex', gap: 16, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Soll</div>
@@ -446,7 +502,6 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                 </div>
               </div>
 
-              {/* Day table */}
               {!monthData.days.length && (
                 <p className="empty-note">Kein Arbeitszeitmodell für diesen Zeitraum zugewiesen.</p>
               )}
@@ -469,10 +524,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                         color:      isWeekend ? '#9ca3af' : undefined,
                       }
                       return (
-                        <tr
-                          key={d.date}
-                          style={rowStyle}
-                        >
+                        <tr key={d.date} style={rowStyle}>
                           <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                             {d.isHoliday && <span title="Feiertag" style={{ marginRight: 4 }}>🏖</span>}
                             {d.date}
@@ -545,19 +597,25 @@ export function MitarbeiterPage() {
   const qc = useQueryClient()
   const [tab,       setTab]      = useState('list')
   const [search,    setSearch]   = useState('')
-  const [filterDept, setFilterDept] = useState<number | null>(null)
-  const [filterGender, setFilterGender] = useState<number | null>(null)
+  const [activeAbt,     setActiveAbt]     = useState<Set<string>>(new Set())
+  const [activeStatus,  setActiveStatus]  = useState<Set<string>>(new Set())
+  const [activeModel,   setActiveModel]   = useState<Set<string>>(new Set())
   const [sortKey,   setSortKey]  = useState<SortKey>('SHORT_NAME')
   const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>('asc')
   const [page,      setPage]     = useState(1)
   const [editRow,   setEditRow]  = useState<Employee | null>(null)
   const [form,      setForm]     = useState<CreateEmployeePayload>(emptyCreateForm)
+  const [createWmModelId,    setCreateWmModelId]    = useState('')
+  const [createWmValidFrom,  setCreateWmValidFrom]  = useState('')
+  const [createCpRate,       setCreateCpRate]       = useState('')
+  const [createCpValidFrom,  setCreateCpValidFrom]  = useState('')
   const [createMsg, setCreateMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [creating,  setCreating] = useState(false)
   const createFormRef = useRef<HTMLFormElement>(null)
 
-  const { data: listData,   isLoading } = useQuery({ queryKey: ['employees'],      queryFn: fetchEmployeeList      })
-  const { data: genData }               = useQuery({ queryKey: ['emp-genders'],    queryFn: fetchEmployeeGenders   })
-  const { data: deptData }              = useQuery({ queryKey: ['departments'],    queryFn: fetchDepartments       })
+  const { data: listData,   isLoading } = useQuery({ queryKey: ['employees'],           queryFn: fetchEmployeeList      })
+  const { data: genData }               = useQuery({ queryKey: ['emp-genders'],         queryFn: fetchEmployeeGenders   })
+  const { data: deptData }              = useQuery({ queryKey: ['departments'],         queryFn: fetchDepartments       })
   const { data: wtmData }               = useQuery({ queryKey: ['working-time-models'], queryFn: fetchWorkingTimeModels })
 
   const employees  = listData?.data  ?? []
@@ -565,17 +623,29 @@ export function MitarbeiterPage() {
   const departments = deptData?.data ?? []
   const workModels = wtmData?.data   ?? []
 
+  // Derive filter option lists from data
+  const filterOptions = useMemo(() => {
+    const abt    = [...new Set(employees.map(e => e.DEPARTMENT_NAME).filter(Boolean))].sort()
+    const status = ['Aktiv', 'Inaktiv']
+    const model  = [...new Set(employees.map(e => e.CURRENT_MODEL_NAME).filter(Boolean))].sort()
+    return { abt, status, model }
+  }, [employees])
+
   const processed = useMemo(() => {
     let rows = employees
     const q = search.trim().toLowerCase()
     if (q) {
       rows = rows.filter(r =>
-        [r.SHORT_NAME, r.FIRST_NAME, r.LAST_NAME, r.MAIL, r.MOBILE, r.PERSONNEL_NUMBER, r.GENDER, r.DEPARTMENT_NAME]
+        [r.SHORT_NAME, r.FIRST_NAME, r.LAST_NAME, r.MAIL, r.MOBILE, r.PERSONNEL_NUMBER, r.DEPARTMENT_NAME]
           .map(v => String(v ?? '')).join(' ').toLowerCase().includes(q)
       )
     }
-    if (filterDept   !== null) rows = rows.filter(r => r.DEPARTMENT_ID === filterDept)
-    if (filterGender !== null) rows = rows.filter(r => r.GENDER_ID === filterGender)
+    if (activeAbt.size > 0)    rows = rows.filter(r => activeAbt.has(r.DEPARTMENT_NAME))
+    if (activeStatus.size > 0) rows = rows.filter(r => {
+      const label = (r.ACTIVE === 2) ? 'Inaktiv' : 'Aktiv'
+      return activeStatus.has(label)
+    })
+    if (activeModel.size > 0)  rows = rows.filter(r => activeModel.has(r.CURRENT_MODEL_NAME))
     rows = [...rows].sort((a, b) => {
       const av = String(a[sortKey] ?? '')
       const bv = String(b[sortKey] ?? '')
@@ -584,7 +654,7 @@ export function MitarbeiterPage() {
         : bv.localeCompare(av, 'de', { sensitivity: 'base', numeric: true })
     })
     return rows
-  }, [employees, search, sortKey, sortDir, filterDept, filterGender])
+  }, [employees, search, sortKey, sortDir, activeAbt, activeStatus, activeModel])
 
   const totalPages = Math.max(1, Math.ceil(processed.length / PAGE_SIZE))
   const safePage   = Math.min(page, totalPages)
@@ -596,34 +666,42 @@ export function MitarbeiterPage() {
     setPage(1)
   }
 
-  const createMut = useMutation({
-    mutationFn: createEmployee,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['employees'] })
-      setCreateMsg({ text: 'Mitarbeiter gespeichert ✅', type: 'success' })
-      setForm(emptyCreateForm())
-    },
-    onError: (e: Error) => setCreateMsg({ text: e.message, type: 'error' }),
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: deleteEmployee,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['employees'] }),
-    onError: (e: Error) => alert(e.message),
-  })
-
   async function handleDelete(row: Employee) {
     if (!window.confirm(`${row.SHORT_NAME}: ${row.FIRST_NAME} ${row.LAST_NAME} wirklich löschen?`)) return
-    deleteMut.mutate(row.ID)
+    try {
+      await deleteEmployee(row.ID)
+      void qc.invalidateQueries({ queryKey: ['employees'] })
+    } catch (e: unknown) { alert((e as Error).message) }
   }
 
-  function submitCreate(e: React.FormEvent) {
+  async function submitCreate(e: React.FormEvent) {
     e.preventDefault()
     setCreateMsg(null)
     if (!form.short_name || !form.first_name || !form.last_name || !form.gender_id) {
       setCreateMsg({ text: 'Kürzel, Vorname, Nachname und Geschlecht sind Pflichtfelder', type: 'error' }); return
     }
-    createMut.mutate(form)
+    if (!createWmModelId || !createWmValidFrom) {
+      setCreateMsg({ text: 'Arbeitszeitmodell und Gültig-ab-Datum sind Pflichtfelder', type: 'error' }); return
+    }
+    if (!createCpRate || !createCpValidFrom) {
+      setCreateMsg({ text: 'Kostensatz und Gültig-ab-Datum sind Pflichtfelder', type: 'error' }); return
+    }
+    setCreating(true)
+    try {
+      const res = await createEmployee(form)
+      const empId = res.data.ID
+      await createEmployeeWorkModel(empId, { model_id: Number(createWmModelId), valid_from: createWmValidFrom })
+      await createEmployeeCpRate(empId, { cp_rate: parseFloat(createCpRate), valid_from: createCpValidFrom })
+      void qc.invalidateQueries({ queryKey: ['employees'] })
+      setCreateMsg({ text: 'Mitarbeiter gespeichert ✅', type: 'success' })
+      setForm(emptyCreateForm())
+      setCreateWmModelId(''); setCreateWmValidFrom('')
+      setCreateCpRate(''); setCreateCpValidFrom('')
+    } catch (e: unknown) {
+      setCreateMsg({ text: (e as Error).message, type: 'error' })
+    } finally {
+      setCreating(false)
+    }
   }
 
   useCtrlS(() => createFormRef.current?.requestSubmit(), tab === 'create')
@@ -633,14 +711,7 @@ export function MitarbeiterPage() {
 
   const sortProps = { current: sortKey, dir: sortDir, onClick: toggleSort }
 
-  // Filter chip style
-  const chipStyle = (active: boolean): React.CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    padding: '3px 10px', fontSize: 12, borderRadius: 12, cursor: 'pointer',
-    border: `1px solid ${active ? '#1d4ed8' : '#d1d5db'}`,
-    background: active ? '#eff6ff' : '#fff',
-    color: active ? '#1d4ed8' : '#374151',
-  })
+  const hasActiveFilter = activeAbt.size > 0 || activeStatus.size > 0 || activeModel.size > 0
 
   return (
     <div className="master-page">
@@ -664,22 +735,16 @@ export function MitarbeiterPage() {
               </span>
             </div>
 
-            {/* Filter chips */}
-            {(departments.length > 0 || genders.length > 0) && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                {departments.map(d => (
-                  <span key={d.ID} style={chipStyle(filterDept === d.ID)} onClick={() => { setFilterDept(filterDept === d.ID ? null : d.ID); setPage(1) }}>
-                    {d.NAME_SHORT} {filterDept === d.ID && '×'}
-                  </span>
-                ))}
-                {departments.length > 0 && genders.length > 0 && <span style={{ alignSelf: 'center', color: '#d1d5db', fontSize: 14 }}>|</span>}
-                {genders.map(g => (
-                  <span key={g.ID} style={chipStyle(filterGender === g.ID)} onClick={() => { setFilterGender(filterGender === g.ID ? null : g.ID); setPage(1) }}>
-                    {g.GENDER} {filterGender === g.ID && '×'}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="pl-filter-chips">
+              <FilterChip label="Abteilung" options={filterOptions.abt}    active={activeAbt}    onChange={v => { setActiveAbt(v);    setPage(1) }} />
+              <FilterChip label="Status"    options={filterOptions.status}  active={activeStatus}  onChange={v => { setActiveStatus(v); setPage(1) }} />
+              <FilterChip label="Modell"    options={filterOptions.model}   active={activeModel}   onChange={v => { setActiveModel(v);  setPage(1) }} />
+              {hasActiveFilter && (
+                <button className="pl-clear-btn" onClick={() => { setActiveAbt(new Set()); setActiveStatus(new Set()); setActiveModel(new Set()); setSearch('') }}>
+                  Filter löschen
+                </button>
+              )}
+            </div>
 
             {isLoading && <p className="empty-note">Laden …</p>}
             {!isLoading && (
@@ -692,7 +757,8 @@ export function MitarbeiterPage() {
                       <SortTh label="Nachname"  sortKey="LAST_NAME"  {...sortProps} />
                       <SortTh label="E-Mail"    sortKey="MAIL"       {...sortProps} />
                       <th>Abteilung</th>
-                      <th>Geschlecht</th>
+                      <th>Modell</th>
+                      <th>Status</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -704,18 +770,27 @@ export function MitarbeiterPage() {
                         <td>{r.LAST_NAME}</td>
                         <td>{r.MAIL}</td>
                         <td>{r.DEPARTMENT_NAME || <span style={{ color: '#d1d5db' }}>—</span>}</td>
-                        <td>{r.GENDER}</td>
+                        <td>{r.CURRENT_MODEL_NAME || <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                        <td>
+                          <span style={{
+                            fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 500,
+                            background: r.ACTIVE === 2 ? '#fee2e2' : '#dcfce7',
+                            color:      r.ACTIVE === 2 ? '#b91c1c' : '#166534',
+                          }}>
+                            {r.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}
+                          </span>
+                        </td>
                         <td className="doc-actions">
                           <button className="btn-small" onClick={() => setEditRow(r)}>Bearbeiten</button>
                           <button className="btn-small btn-danger" onClick={() => handleDelete(r)}>Löschen</button>
                         </td>
                       </tr>
                     ))}
-                    {!pageRows.length && <tr><td colSpan={7} className="empty-note">Keine Einträge</td></tr>}
+                    {!pageRows.length && <tr><td colSpan={8} className="empty-note">Keine Einträge</td></tr>}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                      <td colSpan={7} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                      <td colSpan={8} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
                         {processed.length !== employees.length ? `${processed.length} / ${employees.length} Einträge` : `${employees.length} Einträge`}
                       </td>
                     </tr>
@@ -732,17 +807,16 @@ export function MitarbeiterPage() {
 
         {tab === 'create' && (
           <form ref={createFormRef} onSubmit={submitCreate} className="master-form">
-            <FormField label="Kürzel*"           id="mku" value={form.short_name}          onChange={setF('short_name')} required />
-            <FormField label="Titel"             id="mti" value={form.title ?? ''}          onChange={setF('title')} />
+            <FormField label="Kürzel*"     id="mku" value={form.short_name}          onChange={setF('short_name')} required />
+            <FormField label="Titel"       id="mti" value={form.title ?? ''}          onChange={setF('title')} />
             <div className="form-row">
-              <FormField label="Vorname*"         id="mfn" value={form.first_name}          onChange={setF('first_name')} required />
-              <FormField label="Nachname*"        id="mln" value={form.last_name}           onChange={setF('last_name')} required />
+              <FormField label="Vorname*"  id="mfn" value={form.first_name}          onChange={setF('first_name')} required />
+              <FormField label="Nachname*" id="mln" value={form.last_name}           onChange={setF('last_name')} required />
             </div>
-            <FormField label="E-Mail"            id="mem" value={form.email ?? ''}          onChange={setF('email')} type="email" />
-            <FormField label="Mobil"             id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
-            <FormField label="Personalnr."       id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
-            <FormField label="Passwort"          id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" />
-            <FormField label="Kostensatz (€/h)"  id="mcr" value={String(form.cp_rate ?? '')} onChange={setF('cp_rate')} type="number" step="0.01" />
+            <FormField label="E-Mail"      id="mem" value={form.email ?? ''}          onChange={setF('email')} type="email" />
+            <FormField label="Mobil"       id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
+            <FormField label="Personalnr." id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
+            <FormField label="Passwort"    id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" />
             <div className="form-group">
               <label htmlFor="mge">Geschlecht*</label>
               <select id="mge" value={String(form.gender_id)} onChange={setF('gender_id')} required>
@@ -750,9 +824,39 @@ export function MitarbeiterPage() {
                 {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
               </select>
             </div>
+
+            <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Arbeitszeitmodell*</p>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="mwm">Modell*</label>
+                <select id="mwm" value={createWmModelId} onChange={e => setCreateWmModelId(e.target.value)} required>
+                  <option value="">Bitte wählen …</option>
+                  {workModels.map(m => <option key={m.ID} value={m.ID}>{m.NAME}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="mwmvf">Gültig ab*</label>
+                <input id="mwmvf" type="date" value={createWmValidFrom} onChange={e => setCreateWmValidFrom(e.target.value)} required />
+              </div>
+            </div>
+
+            <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Kostensatz*</p>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="mcr">Kostensatz (€/h)*</label>
+                <input id="mcr" type="number" step="0.01" min="0" value={createCpRate} onChange={e => setCreateCpRate(e.target.value)} placeholder="z. B. 85.00" required />
+              </div>
+              <div className="form-group">
+                <label htmlFor="mcrvf">Gültig ab*</label>
+                <input id="mcrvf" type="date" value={createCpValidFrom} onChange={e => setCreateCpValidFrom(e.target.value)} required />
+              </div>
+            </div>
+
             <Message text={createMsg?.text ?? null} type={createMsg?.type} />
-            <button className="btn-primary" type="submit" disabled={createMut.isPending}>
-              {createMut.isPending ? 'Speichert …' : 'Speichern'}
+            <button className="btn-primary" type="submit" disabled={creating}>
+              {creating ? 'Speichert …' : 'Speichern'}
             </button>
           </form>
         )}
@@ -762,7 +866,6 @@ export function MitarbeiterPage() {
         )}
       </div>
 
-      {/* Edit modal */}
       <Modal open={editRow !== null} onClose={() => setEditRow(null)} title={`${editRow?.SHORT_NAME ?? ''} – ${editRow?.FIRST_NAME ?? ''} ${editRow?.LAST_NAME ?? ''}`}>
         {editRow && (
           <EmployeeEditModal

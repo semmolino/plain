@@ -71,9 +71,11 @@ module.exports = (supabase) => {
         "MOBILE": body.mobile,
         "PERSONNEL_NUMBER": body.personnel_number,
         "GENDER_ID": body.gender_id,
-        "CP_RATE": body.cp_rate != null && body.cp_rate !== '' ? Number(body.cp_rate) : null,
+        "ACTIVE": 1,
         "TENANT_ID": req.tenantId ?? null,
-      }]);
+      }])
+      .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, MAIL, GENDER_ID, ACTIVE")
+      .single();
 
     if (error) {
       return res.status(500).json({ error: error.message });
@@ -102,16 +104,19 @@ router.get("/", async (req, res) => {
 
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, CP_RATE, DEPARTMENT_ID")
+      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, CP_RATE, DEPARTMENT_ID, ACTIVE")
       .eq("TENANT_ID", req.tenantId)
       .order("SHORT_NAME", { ascending: true })
       .limit(limit);
 
     if (empErr) return res.status(500).json({ error: empErr.message });
 
-    const [genderRes, deptRes] = await Promise.all([
+    const today = new Date().toISOString().slice(0, 10);
+    const [genderRes, deptRes, wmaRes] = await Promise.all([
       supabase.from("GENDER").select("ID, GENDER"),
       supabase.from("PROJECT_DEPARTMENT").select("ID, NAME_SHORT").eq("TENANT_ID", req.tenantId),
+      supabase.from("EMPLOYEE_WORK_MODEL").select("EMPLOYEE_ID, MODEL_ID, VALID_FROM")
+        .eq("TENANT_ID", req.tenantId).lte("VALID_FROM", today),
     ]);
 
     if (genderRes.error) return res.status(500).json({ error: genderRes.error.message });
@@ -119,11 +124,30 @@ router.get("/", async (req, res) => {
     const genMap  = new Map((genderRes.data  || []).map(g => [String(g.ID), g.GENDER]));
     const deptMap = new Map((deptRes.data    || []).map(d => [String(d.ID), d.NAME_SHORT]));
 
+    // Find most recent model per employee
+    const currentModelByEmp = new Map();
+    for (const wm of wmaRes.data || []) {
+      const existing = currentModelByEmp.get(wm.EMPLOYEE_ID);
+      if (!existing || wm.VALID_FROM > existing.VALID_FROM) {
+        currentModelByEmp.set(wm.EMPLOYEE_ID, wm);
+      }
+    }
+
+    // Fetch WTM names
+    const modelIds = [...new Set([...currentModelByEmp.values()].map(v => v.MODEL_ID))];
+    let wtmMap = new Map();
+    if (modelIds.length > 0) {
+      const { data: wtms } = await supabase.from("WORKING_TIME_MODEL").select("ID, NAME").in("ID", modelIds);
+      wtmMap = new Map((wtms || []).map(m => [m.ID, m.NAME]));
+    }
+
     const normalized = (employees || []).map(e => ({
       ...e,
-      GENDER:          genMap.get(String(e.GENDER_ID)) || "",
-      DEPARTMENT_NAME: deptMap.get(String(e.DEPARTMENT_ID)) || "",
-      NAME:            `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim(),
+      GENDER:              genMap.get(String(e.GENDER_ID)) || "",
+      DEPARTMENT_NAME:     deptMap.get(String(e.DEPARTMENT_ID)) || "",
+      NAME:                `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim(),
+      CURRENT_MODEL_ID:    currentModelByEmp.get(e.ID)?.MODEL_ID ?? null,
+      CURRENT_MODEL_NAME:  wtmMap.get(currentModelByEmp.get(e.ID)?.MODEL_ID) ?? "",
     }));
 
     res.json({ data: normalized });
@@ -166,8 +190,8 @@ router.get("/", async (req, res) => {
       MOBILE:           body.mobile || null,
       PERSONNEL_NUMBER: body.personnel_number || null,
       GENDER_ID:        body.gender_id,
-      CP_RATE:          body.cp_rate != null && body.cp_rate !== '' ? Number(body.cp_rate) : null,
       DEPARTMENT_ID:    body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
+      ACTIVE:           body.active != null ? Number(body.active) : undefined,
     };
 
     const { data: upd, error: updErr } = await supabase
@@ -216,14 +240,24 @@ router.get("/search", async (req, res) => {
 
 router.get("/:id/work-models", async (req, res) => {
   const empId = Number(req.params.id);
-  const { data, error } = await supabase
+  const { data: assignments, error } = await supabase
     .from("EMPLOYEE_WORK_MODEL")
-    .select("ID, MODEL_ID, VALID_FROM, model:WORKING_TIME_MODEL(ID, NAME, COUNTRY_CODE, STATE_CODE, MON, TUE, WED, THU, FRI, SAT, SUN)")
+    .select("ID, MODEL_ID, VALID_FROM")
     .eq("TENANT_ID", req.tenantId)
     .eq("EMPLOYEE_ID", empId)
     .order("VALID_FROM", { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data: data || [] });
+  if (!assignments || !assignments.length) return res.json({ data: [] });
+
+  const modelIds = [...new Set(assignments.map(a => a.MODEL_ID))];
+  const { data: models, error: mErr } = await supabase
+    .from("WORKING_TIME_MODEL")
+    .select("ID, NAME, COUNTRY_CODE, STATE_CODE, MON, TUE, WED, THU, FRI, SAT, SUN")
+    .in("ID", modelIds);
+  if (mErr) return res.status(500).json({ error: mErr.message });
+
+  const modelMap = new Map((models || []).map(m => [m.ID, m]));
+  res.json({ data: assignments.map(a => ({ ...a, model: modelMap.get(a.MODEL_ID) ?? null })) });
 });
 
 router.post("/:id/work-models", async (req, res) => {
