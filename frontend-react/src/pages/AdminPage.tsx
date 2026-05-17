@@ -833,7 +833,7 @@ function MonatsabschlussSection() {
       </div>
 
       {runMsg && (
-        <Message type={runMsg.type} text={runMsg.text} style={{ marginTop: 8 }} />
+        <Message type={runMsg.type} text={runMsg.text} />
       )}
     </div>
   )
