@@ -67,6 +67,14 @@ export interface EmployeeCpRate {
   VALID_FROM: string
 }
 
+export interface DayBooking {
+  id:          number
+  hours:       number
+  description: string
+  project:     string
+  structure:   string
+}
+
 export interface DayBalance {
   date:      string
   weekday:   number
@@ -74,6 +82,7 @@ export interface DayBalance {
   actual:    number
   balance:   number
   isHoliday: boolean
+  bookings:  DayBooking[]
 }
 
 export interface MonthBalance {
@@ -171,3 +180,6 @@ export const reopenMonth = (id: number, year: number, month: number) =>
 
 export const fetchMonthCloseOverview = () =>
   apiClient.get<{ data: MonthCloseOverviewEmployee[]; months: Array<{ year: number; month: number }> }>('/mitarbeiter/month-close-overview')
+
+export const setEmployeePassword = (id: number, new_password: string | null) =>
+  apiClient.patch<{ success: boolean }>(`/mitarbeiter/${id}/set-password`, { new_password })

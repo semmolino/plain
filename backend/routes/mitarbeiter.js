@@ -423,6 +423,32 @@ router.delete("/:id/cp-rates/:rid", async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Admin: set / clear employee password ─────────────────────────────────────
+// PATCH /mitarbeiter/:id/set-password
+// Body: { new_password: string } or { new_password: null } to clear
+router.patch("/:id/set-password", async (req, res) => {
+  const id = Number(req.params.id);
+  const { new_password } = req.body || {};
+
+  if (new_password !== null && new_password !== undefined && typeof new_password === 'string' && new_password.length > 0 && new_password.length < 8) {
+    return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen haben." });
+  }
+
+  let hashed = null;
+  if (new_password && typeof new_password === 'string' && new_password.length >= 8) {
+    hashed = await bcrypt.hash(new_password, 10);
+  }
+
+  const { error } = await supabase
+    .from("EMPLOYEE")
+    .update({ PASSWORD: hashed })
+    .eq("ID", id)
+    .eq("TENANT_ID", req.tenantId);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
 // ── Month-close per employee ───────────────────────────────────────────────────
 
 router.get("/:id/month-close/:year/:month", async (req, res) => {

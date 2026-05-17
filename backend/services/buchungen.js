@@ -75,11 +75,29 @@ async function recomputeStructure(supabase, structureId) {
 // Service functions
 // ---------------------------------------------------------------------------
 
+async function checkMonthNotClosed(supabase, tenantId, employeeId, dateStr) {
+  const year  = parseInt(dateStr.slice(0, 4), 10);
+  const month = parseInt(dateStr.slice(5, 7), 10);
+  const { data } = await supabase
+    .from("EMPLOYEE_MONTH_CLOSE")
+    .select("ID")
+    .eq("TENANT_ID", tenantId)
+    .eq("EMPLOYEE_ID", Number(employeeId))
+    .eq("YEAR", year)
+    .eq("MONTH", month)
+    .maybeSingle();
+  if (data) {
+    throw { status: 409, message: `${month}/${year} ist abgeschlossen. Keine neuen Buchungen möglich.` };
+  }
+}
+
 async function createTimerDraft(supabase, { body, tenantId }) {
   const b = body;
   if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || !b.STRUCTURE_ID || !b.PROJECT_ID) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
+
+  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
 
   const { data: projRow, error: projErr } = await supabase
     .from("PROJECT")
@@ -209,6 +227,8 @@ async function createBuchung(supabase, { body, tenantId }) {
       !b.QUANTITY_EXT || !b.SP_RATE || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
+
+  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
 
   if (b.STRUCTURE_ID) {
     const { data: childCheck } = await supabase

@@ -10,10 +10,10 @@ import {
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
   fetchEmployeeCpRates, createEmployeeCpRate, updateEmployeeCpRate, deleteEmployeeCpRate,
   fetchMonthBalance, fetchRunningBalance,
-  fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview,
+  fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
   type EmployeeWorkModel, type EmployeeCpRate, type MonthBalance, type RunningMonth,
-  type MonthCloseOverviewEmployee,
+  type MonthCloseOverviewEmployee, type DayBooking,
 } from '@/api/mitarbeiter'
 import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
 
@@ -104,7 +104,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   workModels:  WorkingTimeModel[]
 }) {
   const qc = useQueryClient()
-  const [section,  setSection]  = useState<'stammdaten' | 'kostensatz' | 'arbeitszeit'>('stammdaten')
+  const [section,  setSection]  = useState<'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'passwort'>('stammdaten')
   const [editForm, setEditForm] = useState<UpdateEmployeePayload>({
     short_name:       employee.SHORT_NAME ?? '',
     title:            employee.TITLE ?? '',
@@ -133,6 +133,11 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const [editingWmId,     setEditingWmId]     = useState<number | null>(null)
   const [editWmForm,      setEditWmForm]      = useState({ model_id: '', valid_from: '' })
   const [wmMsg,           setWmMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  // Password management state
+  const [newPw,      setNewPw]      = useState('')
+  const [pwMsg,      setPwMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [pwSaving,   setPwSaving]   = useState(false)
 
   const { data: cpRatesRes }    = useQuery({ queryKey: ['emp-cp-rates',    employee.ID], queryFn: () => fetchEmployeeCpRates(employee.ID)   })
   const { data: workModelsRes } = useQuery({ queryKey: ['emp-work-models', employee.ID], queryFn: () => fetchEmployeeWorkModels(employee.ID) })
@@ -234,10 +239,11 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 
   return (
     <>
-      <div style={{ display: 'flex', marginBottom: 16 }}>
+      <div style={{ display: 'flex', marginBottom: 16, flexWrap: 'wrap', gap: 4 }}>
         <button type="button" style={sectionBtnStyle('stammdaten')}  onClick={() => setSection('stammdaten')}>Stammdaten</button>
         <button type="button" style={sectionBtnStyle('kostensatz')}  onClick={() => setSection('kostensatz')}>Kostensatz</button>
         <button type="button" style={sectionBtnStyle('arbeitszeit')} onClick={() => setSection('arbeitszeit')}>Arbeitszeit</button>
+        <button type="button" style={sectionBtnStyle('passwort')}    onClick={() => setSection('passwort')}>Passwort</button>
       </div>
 
       {section === 'stammdaten' && (
@@ -415,6 +421,45 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
           <Message text={wmMsg?.text ?? null} type={wmMsg?.type} />
         </div>
       )}
+
+      {section === 'passwort' && (
+        <div>
+          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+            Hier können Sie das Passwort des Mitarbeiters setzen oder löschen (Passwort = leer → Mitarbeiter kann sich ohne Passwort anmelden).
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
+            <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
+              <label style={{ fontSize: 12 }}>Neues Passwort (mind. 8 Zeichen)</label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                placeholder="Leer lassen, um Passwort zu löschen"
+              />
+            </div>
+            <button
+              type="button"
+              className="btn-small btn-save"
+              disabled={pwSaving || (newPw.length > 0 && newPw.length < 8)}
+              onClick={async () => {
+                setPwMsg(null)
+                setPwSaving(true)
+                try {
+                  await setEmployeePassword(employee.ID, newPw || null)
+                  setPwMsg({ text: newPw ? 'Passwort gesetzt ✅' : 'Passwort gelöscht ✅', type: 'success' })
+                  setNewPw('')
+                } catch (e: unknown) {
+                  setPwMsg({ text: (e as Error).message, type: 'error' })
+                } finally { setPwSaving(false) }
+              }}
+            >
+              {pwSaving ? '…' : newPw ? 'Passwort setzen' : 'Passwort löschen'}
+            </button>
+          </div>
+          <Message text={pwMsg?.text ?? null} type={pwMsg?.type} />
+        </div>
+      )}
     </>
   )
 }
@@ -428,6 +473,15 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
   const [month,    setMonth]    = useState(new Date().getMonth() + 1)
   const [viewMode, setViewMode] = useState<'month' | 'running'>('month')
   const [closeLoading, setCloseLoading] = useState(false)
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+
+  function toggleDay(date: string) {
+    setExpandedDays(prev => {
+      const s = new Set(prev)
+      s.has(date) ? s.delete(date) : s.add(date)
+      return s
+    })
+  }
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(y => y - 1) }
@@ -549,6 +603,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                 <table className="master-table" style={{ fontSize: 12 }}>
                   <thead>
                     <tr>
+                      <th style={{ width: 18 }}></th>
                       <th style={{ width: 90 }}>Datum</th>
                       <th style={{ width: 28 }}>Tag</th>
                       <th style={{ textAlign: 'right', width: 64 }}>Soll</th>
@@ -559,27 +614,55 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                   <tbody>
                     {monthData.days.map(d => {
                       const isWeekend  = d.weekday === 0 || d.weekday === 6
+                      const isExpanded = expandedDays.has(d.date)
+                      const hasBookings = d.bookings && d.bookings.length > 0
                       const rowStyle: React.CSSProperties = {
                         background: isWeekend ? '#f9fafb' : undefined,
                         color:      isWeekend ? '#9ca3af' : undefined,
                       }
                       return (
-                        <tr key={d.date} style={rowStyle}>
-                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {d.isHoliday && <span title="Feiertag" style={{ marginRight: 4 }}>🏖</span>}
-                            {d.date}
-                          </td>
-                          <td style={{ color: '#6b7280' }}>{WEEKDAY_SHORT[d.weekday]}</td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                            {d.required > 0 ? fmtH(d.required) : <span style={{ color: '#d1d5db' }}>—</span>}
-                          </td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                            {d.actual > 0 ? fmtH(d.actual) : <span style={{ color: '#d1d5db' }}>—</span>}
-                          </td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: d.required > 0 ? balanceColor(d.balance) : '#d1d5db', fontWeight: d.required > 0 ? 600 : 400 }}>
-                            {d.required > 0 ? fmtBalance(d.balance) : '—'}
-                          </td>
-                        </tr>
+                        <>
+                          <tr key={d.date} style={rowStyle}>
+                            <td style={{ padding: '2px 0', textAlign: 'center' }}>
+                              {hasBookings && (
+                                <button
+                                  type="button"
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#6b7280', padding: 0 }}
+                                  onClick={() => toggleDay(d.date)}
+                                  title={isExpanded ? 'Buchungen ausblenden' : 'Buchungen anzeigen'}
+                                >
+                                  {isExpanded ? '▼' : '▶'}
+                                </button>
+                              )}
+                            </td>
+                            <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                              {d.isHoliday && <span title="Feiertag" style={{ marginRight: 4 }}>🏖</span>}
+                              {d.date}
+                            </td>
+                            <td style={{ color: '#6b7280' }}>{WEEKDAY_SHORT[d.weekday]}</td>
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                              {d.required > 0 ? fmtH(d.required) : <span style={{ color: '#d1d5db' }}>—</span>}
+                            </td>
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                              {d.actual > 0 ? fmtH(d.actual) : <span style={{ color: '#d1d5db' }}>—</span>}
+                            </td>
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: d.required > 0 ? balanceColor(d.balance) : '#d1d5db', fontWeight: d.required > 0 ? 600 : 400 }}>
+                              {d.required > 0 ? fmtBalance(d.balance) : '—'}
+                            </td>
+                          </tr>
+                          {isExpanded && (d.bookings as DayBooking[]).map(b => (
+                            <tr key={`bk-${b.id}`} style={{ background: '#f0f9ff' }}>
+                              <td></td>
+                              <td colSpan={2} style={{ color: '#0369a1', fontSize: 11, paddingLeft: 12 }}>
+                                {b.project}{b.structure ? ` / ${b.structure}` : ''}
+                              </td>
+                              <td colSpan={2} style={{ color: '#374151', fontSize: 11 }}>{b.description}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 11, color: '#374151' }}>
+                                {fmtH(b.hours)}
+                              </td>
+                            </tr>
+                          ))}
+                        </>
                       )
                     })}
                   </tbody>
@@ -929,7 +1012,7 @@ export function MitarbeiterPage() {
             <FormField label="E-Mail"      id="mem" value={form.email ?? ''}          onChange={setF('email')} type="email" />
             <FormField label="Mobil"       id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
             <FormField label="Personalnr." id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
-            <FormField label="Passwort"    id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" />
+            <FormField label="Passwort"    id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" autoComplete="new-password" />
             <div className="form-group">
               <label htmlFor="mge">Geschlecht*</label>
               <select id="mge" value={String(form.gender_id)} onChange={setF('gender_id')} required>

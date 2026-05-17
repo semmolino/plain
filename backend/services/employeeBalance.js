@@ -71,24 +71,40 @@ function addDays(d, n) {
   return r;
 }
 
-async function buildTecMap(supabase, tenantId, employeeId, dateFrom, dateTo) {
+async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
   const { data, error } = await supabase
     .from('TEC')
-    .select('DATE_VOUCHER, QUANTITY_INT')
+    .select(`
+      ID, DATE_VOUCHER, QUANTITY_INT, POSTING_DESCRIPTION,
+      PROJECT:PROJECT_ID(NAME_SHORT),
+      STRUCTURE:STRUCTURE_ID(NAME_SHORT)
+    `)
     .eq('TENANT_ID', tenantId)
     .eq('EMPLOYEE_ID', employeeId)
     .eq('STATUS', 'CONFIRMED')
     .gte('DATE_VOUCHER', dateFrom)
-    .lte('DATE_VOUCHER', dateTo);
+    .lte('DATE_VOUCHER', dateTo)
+    .order('DATE_VOUCHER', { ascending: true });
 
   if (error) throw { status: 500, message: error.message };
 
-  const map = new Map();
+  const sumMap      = new Map();
+  const bookingsMap = new Map();
+
   for (const row of data || []) {
     const d = row.DATE_VOUCHER;
-    map.set(d, (map.get(d) || 0) + Number(row.QUANTITY_INT || 0));
+    const h = Number(row.QUANTITY_INT || 0);
+    sumMap.set(d, (sumMap.get(d) || 0) + h);
+    if (!bookingsMap.has(d)) bookingsMap.set(d, []);
+    bookingsMap.get(d).push({
+      id:          row.ID,
+      hours:       h,
+      description: row.POSTING_DESCRIPTION || '',
+      project:     row.PROJECT?.NAME_SHORT  || '',
+      structure:   row.STRUCTURE?.NAME_SHORT || '',
+    });
   }
-  return map;
+  return { sumMap, bookingsMap };
 }
 
 /**
@@ -107,7 +123,7 @@ async function calculateMonthBalance(supabase, tenantId, employeeId, year, month
     return { year, month, required: 0, actual: 0, balance: 0, days: [] };
   }
 
-  const tecMap = await buildTecMap(supabase, tenantId, employeeId, dateFrom, dateTo);
+  const { sumMap: tecMap, bookingsMap } = await buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo);
 
   // Collect unique country/state combos used in this month to fetch holidays efficiently
   const combos = new Set();
@@ -147,10 +163,11 @@ async function calculateMonthBalance(supabase, tenantId, employeeId, year, month
       required     = isHoliday ? 0 : Number(model[WEEKDAY_COLS[weekday]] || 0);
     }
 
-    const actual  = getActualHours(tecMap, ds);
-    const balance = actual - required;
+    const actual   = getActualHours(tecMap, ds);
+    const balance  = actual - required;
+    const bookings = bookingsMap.get(ds) || [];
 
-    days.push({ date: ds, weekday, required, actual, balance, isHoliday });
+    days.push({ date: ds, weekday, required, actual, balance, isHoliday, bookings });
     totalRequired += required;
     totalActual   += actual;
     cursor = addDays(cursor, 1);
