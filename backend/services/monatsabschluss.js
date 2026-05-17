@@ -4,7 +4,7 @@ const { createNotification } = require("./notifications");
 const projekteSvc = require("./projekte");
 
 const KEY_ENABLED     = "monatsabschluss_enabled";
-const KEY_TYPES       = "monatsabschluss_project_types";
+const KEY_STATUSES    = "monatsabschluss_statuses";
 const KEY_LAST_MONTH  = "monatsabschluss_last_run_month";
 const KEY_LAST_DATE   = "monatsabschluss_last_run_date";
 const KEY_LAST_COUNT  = "monatsabschluss_last_run_count";
@@ -40,7 +40,7 @@ async function putSetting(supabase, tenantId, key, value) {
 }
 
 async function getSettings(supabase, tenantId) {
-  const keys = [KEY_ENABLED, KEY_TYPES, KEY_LAST_MONTH, KEY_LAST_DATE, KEY_LAST_COUNT];
+  const keys = [KEY_ENABLED, KEY_STATUSES, KEY_LAST_MONTH, KEY_LAST_DATE, KEY_LAST_COUNT];
   const { data } = await supabase
     .from("TENANT_SETTINGS")
     .select("KEY, VALUE")
@@ -49,18 +49,18 @@ async function getSettings(supabase, tenantId) {
   const map = Object.fromEntries((data || []).map(r => [r.KEY, r.VALUE]));
   return {
     enabled:      map[KEY_ENABLED] === "true",
-    projectTypes: map[KEY_TYPES] ? JSON.parse(map[KEY_TYPES]) : [],
+    statuses:     map[KEY_STATUSES] ? JSON.parse(map[KEY_STATUSES]) : [],
     lastRunMonth: map[KEY_LAST_MONTH] || null,
     lastRunDate:  map[KEY_LAST_DATE]  || null,
     lastRunCount: map[KEY_LAST_COUNT] != null ? parseInt(map[KEY_LAST_COUNT], 10) : null,
   };
 }
 
-async function saveSettings(supabase, tenantId, { enabled, projectTypes }) {
+async function saveSettings(supabase, tenantId, { enabled, statuses }) {
   const now = new Date().toISOString();
   const upserts = [
-    { TENANT_ID: tenantId, KEY: KEY_ENABLED, VALUE: enabled ? "true" : "false", UPDATED_AT: now },
-    { TENANT_ID: tenantId, KEY: KEY_TYPES,   VALUE: JSON.stringify(projectTypes || []), UPDATED_AT: now },
+    { TENANT_ID: tenantId, KEY: KEY_ENABLED,  VALUE: enabled ? "true" : "false", UPDATED_AT: now },
+    { TENANT_ID: tenantId, KEY: KEY_STATUSES, VALUE: JSON.stringify(statuses || []), UPDATED_AT: now },
   ];
   const { error } = await supabase.from("TENANT_SETTINGS").upsert(upserts, { onConflict: "TENANT_ID,KEY" });
   if (error) throw { status: 500, message: error.message };
@@ -75,22 +75,23 @@ async function runMonatsabschluss(supabase, tenantId, { year, month, isTest = fa
     .toLocaleDateString("de-DE", { month: "long", year: "numeric" });
 
   const settings = await getSettings(supabase, tenantId);
-  const projectTypeIds = (settings.projectTypes || []).map(Number).filter(Boolean);
+  const statusIds = (settings.statuses || []).map(Number).filter(Boolean);
 
   // Fetch matching projects from the live report view
   let query = supabase
     .from("VW_REPORT_PROJECT_DETAIL")
     .select([
       "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
-      "PROJECT_TYPE_ID", "PROJECT_TYPE_NAME_SHORT",
+      "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
+      "PROJECT_TYPE_ID",   "PROJECT_TYPE_NAME_SHORT",
       "BUDGET_TOTAL_NET", "LEISTUNGSSTAND_PERCENT", "LEISTUNGSSTAND_VALUE",
       "BILLED_NET_TOTAL", "OPEN_NET_TOTAL", "PAYED_NET_TOTAL",
     ].join(", "))
     .eq("TENANT_ID", tenantId)
     .order("NAME_SHORT", { ascending: true });
 
-  if (projectTypeIds.length > 0) {
-    query = query.in("PROJECT_TYPE_ID", projectTypeIds);
+  if (statusIds.length > 0) {
+    query = query.in("PROJECT_STATUS_ID", statusIds);
   }
 
   const { data: projects, error: pErr } = await query;

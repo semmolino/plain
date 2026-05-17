@@ -1041,8 +1041,8 @@ async function getMonatsabschluss(req, res, supabase) {
 
 async function putMonatsabschluss(req, res, supabase) {
   try {
-    const { enabled, projectTypes } = req.body || {};
-    await monatsabschlussSvc.saveSettings(supabase, req.tenantId, { enabled: !!enabled, projectTypes: projectTypes || [] });
+    const { enabled, statuses } = req.body || {};
+    await monatsabschlussSvc.saveSettings(supabase, req.tenantId, { enabled: !!enabled, statuses: statuses || [] });
     res.json({ ok: true });
   } catch (e) {
     res.status(e?.status || 500).json({ error: e?.message || String(e) });

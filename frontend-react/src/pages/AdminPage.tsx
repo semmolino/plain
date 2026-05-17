@@ -14,6 +14,7 @@ import {
   fetchMonatsabschluss, putMonatsabschluss, runMonatsabschlussNow, openMonatsabschlussPdf,
   type Company, type StammdatenItem, type Rolle, type MonatsabschlussSettings,
 } from '@/api/stammdaten'
+import { fetchProjectStatuses, type ProjectStatus } from '@/api/projekte'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 
@@ -705,24 +706,24 @@ function VorbelegungenSection() {
 function MonatsabschlussSection() {
   const qc = useQueryClient()
 
-  const { data: settingsRes } = useQuery({ queryKey: ['monatsabschluss'], queryFn: fetchMonatsabschluss })
-  const { data: typenRes }    = useQuery({ queryKey: ['typen'],           queryFn: fetchTypen })
+  const { data: settingsRes }  = useQuery({ queryKey: ['monatsabschluss'],    queryFn: fetchMonatsabschluss })
+  const { data: statusesRes }  = useQuery({ queryKey: ['project-statuses'],   queryFn: fetchProjectStatuses })
 
   const settings: MonatsabschlussSettings | undefined = settingsRes?.data
-  const typen: StammdatenItem[] = typenRes?.data ?? []
+  const statuses: ProjectStatus[] = statusesRes?.data ?? []
 
-  const [enabled,       setEnabled]       = useState(false)
-  const [selectedTypes, setSelectedTypes] = useState<number[]>([])
-  const [runMsg,        setRunMsg]         = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [enabled,          setEnabled]          = useState(false)
+  const [selectedStatuses, setSelectedStatuses] = useState<number[]>([])
+  const [runMsg,           setRunMsg]            = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     if (!settings) return
     setEnabled(settings.enabled)
-    setSelectedTypes(settings.projectTypes ?? [])
+    setSelectedStatuses(settings.statuses ?? [])
   }, [settings])
 
   const saveMut = useMutation({
-    mutationFn: () => putMonatsabschluss({ enabled, projectTypes: selectedTypes }),
+    mutationFn: () => putMonatsabschluss({ enabled, statuses: selectedStatuses }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['monatsabschluss'] }),
   })
 
@@ -738,10 +739,17 @@ function MonatsabschlussSection() {
     },
   })
 
-  function toggleType(id: number) {
-    setSelectedTypes(prev =>
+  function toggleStatus(id: number) {
+    setSelectedStatuses(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     )
+  }
+
+  function handlePdf() {
+    openMonatsabschlussPdf().catch((e: unknown) => {
+      const msg = (e as { message?: string })?.message ?? 'PDF konnte nicht geöffnet werden'
+      setRunMsg({ type: 'error', text: msg })
+    })
   }
 
   const lastRunFormatted = settings?.lastRunDate
@@ -763,29 +771,29 @@ function MonatsabschlussSection() {
           <span style={{ fontWeight: 500 }}>Automatischer Monatsabschluss aktivieren</span>
         </label>
         <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 0 }}>
-          Am letzten Tag jedes Monats wird automatisch ein Projekt-Snapshot für die gewählten Projekttypen erstellt
+          Am letzten Tag jedes Monats wird automatisch ein Projekt-Snapshot für die gewählten Projektstatus erstellt
           und eine Benachrichtigung versandt.
         </p>
       </div>
 
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontWeight: 500, marginBottom: 8 }}>Projekttypen einschließen</div>
-        {typen.length === 0 && <p style={{ fontSize: 13, color: '#6b7280' }}>Keine Projekttypen vorhanden.</p>}
+        <div style={{ fontWeight: 500, marginBottom: 8 }}>Projektstatus einschließen</div>
+        {statuses.length === 0 && <p style={{ fontSize: 13, color: '#6b7280' }}>Keine Projektstatus vorhanden.</p>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {typen.map((t: StammdatenItem) => (
-            <label key={t.ID} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, background: selectedTypes.includes(t.ID) ? '#eff6ff' : '#f3f4f6', border: `1px solid ${selectedTypes.includes(t.ID) ? '#93c5fd' : '#e5e7eb'}`, borderRadius: 4, padding: '4px 10px' }}>
+          {statuses.map((s: ProjectStatus) => (
+            <label key={s.ID} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, background: selectedStatuses.includes(s.ID) ? '#eff6ff' : '#f3f4f6', border: `1px solid ${selectedStatuses.includes(s.ID) ? '#93c5fd' : '#e5e7eb'}`, borderRadius: 4, padding: '4px 10px' }}>
               <input
                 type="checkbox"
-                checked={selectedTypes.includes(t.ID)}
-                onChange={() => toggleType(t.ID)}
+                checked={selectedStatuses.includes(s.ID)}
+                onChange={() => toggleStatus(s.ID)}
                 style={{ cursor: 'pointer' }}
               />
-              {t.NAME_SHORT}
+              {s.NAME_SHORT}
             </label>
           ))}
         </div>
         <p style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
-          Keine Auswahl = alle Projekttypen einschließen.
+          Keine Auswahl = alle Projektstatus einschließen.
         </p>
       </div>
 
@@ -825,9 +833,9 @@ function MonatsabschlussSection() {
           <button
             type="button"
             className="btn"
-            onClick={() => openMonatsabschlussPdf()}
+            onClick={handlePdf}
           >
-            PDF herunterladen
+            Bericht aufrufen
           </button>
         )}
       </div>

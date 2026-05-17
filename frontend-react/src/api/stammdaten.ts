@@ -244,7 +244,7 @@ export const uploadAsset = (file: File, assetType = 'LOGO') => {
 
 export interface MonatsabschlussSettings {
   enabled:      boolean
-  projectTypes: number[]
+  statuses:     number[]
   lastRunMonth: string | null
   lastRunDate:  string | null
   lastRunCount: number | null
@@ -253,7 +253,7 @@ export interface MonatsabschlussSettings {
 export const fetchMonatsabschluss = () =>
   apiClient.get<{ data: MonatsabschlussSettings }>('/stammdaten/monatsabschluss')
 
-export const putMonatsabschluss = (body: { enabled: boolean; projectTypes: number[] }) =>
+export const putMonatsabschluss = (body: { enabled: boolean; statuses: number[] }) =>
   apiClient.put<{ ok: boolean }>('/stammdaten/monatsabschluss', body)
 
 export const runMonatsabschlussNow = () =>
