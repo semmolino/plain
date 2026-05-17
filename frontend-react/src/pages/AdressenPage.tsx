@@ -199,9 +199,10 @@ function SortTh<K extends string>({ label, k, sortKey, dir, onClick }: {
 interface AdressenSectionProps {
   initialSearch?: string
   openAddressId?: number
+  onShowKontakte?: (addressName: string, addressId: number) => void
 }
 
-function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps) {
+function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: AdressenSectionProps) {
   const qc = useQueryClient()
   const [tab,      setTab]      = useState('list')
   const [search,   setSearch]   = useState(initialSearch ?? '')
@@ -223,11 +224,20 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
   // Auto-open tracking
   const [autoOpened, setAutoOpened] = useState<number | null>(null)
 
-  const { data: countriesData } = useQuery({ queryKey: ['countries'], queryFn: fetchCountries })
+  const { data: countriesData } = useQuery({ queryKey: ['countries'],  queryFn: fetchCountries })
   const { data: listData, isLoading } = useQuery({ queryKey: ['addresses'], queryFn: fetchAddressList })
+  const { data: contactsData } = useQuery({ queryKey: ['contacts'], queryFn: fetchContactList })
 
   const countries = countriesData?.data ?? []
   const addresses = listData?.data ?? []
+
+  const contactCountByAddr = useMemo(() => {
+    const map: Record<number, number> = {}
+    for (const c of contactsData?.data ?? []) {
+      if (c.ADDRESS_ID != null) map[c.ADDRESS_ID] = (map[c.ADDRESS_ID] ?? 0) + 1
+    }
+    return map
+  }, [contactsData?.data])
 
   useEffect(() => {
     if (initialSearch !== undefined) setSearch(initialSearch)
@@ -405,7 +415,9 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(a => (
+                {filtered.map(a => {
+                  const cnt = contactCountByAddr[a.ID] ?? 0
+                  return (
                   <tr key={a.ID}>
                     <td>{a.ADDRESS_NAME_1}</td>
                     <td>{[a.POST_CODE, a.CITY].filter(Boolean).join(' ')}</td>
@@ -413,11 +425,19 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
                     <td>{a.CUSTOMER_NUMBER}</td>
                     {visibleOptCols.map(c => <td key={c.key}>{(a[c.key as keyof Address] as string | null | undefined) ?? '—'}</td>)}
                     <td className="doc-actions">
+                      <button
+                        className="btn-small"
+                        onClick={() => onShowKontakte?.(a.ADDRESS_NAME_1, a.ID)}
+                        title="Kontakte dieser Adresse anzeigen"
+                      >
+                        Kontakte{cnt > 0 ? ` (${cnt})` : ''}
+                      </button>
                       <button className="btn-small" onClick={() => openEdit(a)}>Bearbeiten</button>
                       <button className="btn-small btn-danger" onClick={() => handleDelete(a)}>Löschen</button>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
                 {!filtered.length && <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">Keine Einträge</td></tr>}
               </tbody>
               <tfoot>
@@ -458,20 +478,37 @@ function AdressenSection({ initialSearch, openAddressId }: AdressenSectionProps)
 
 // ── Contacts section ──────────────────────────────────────────────────────────
 
-function KontakteSection() {
+interface KontakteSectionProps {
+  initialSearch?: string
+  initialAddressId?: number
+  initialAddressName?: string
+}
+
+function KontakteSection({ initialSearch, initialAddressId, initialAddressName }: KontakteSectionProps) {
   const qc       = useQueryClient()
   const navigate = useNavigate()
   const [tab,          setTab]          = useState('list')
-  const [search,       setSearch]       = useState('')
+  const [search,       setSearch]       = useState(initialSearch ?? '')
   const [sortKey,      setSortKey]      = useState<ConSortKey>('NAME')
   const [sortDir,      setSortDir]      = useState<'asc'|'desc'>('asc')
   const [editContact,  setEditContact]  = useState<Contact | null>(null)
-  const [form,         setForm]         = useState<ContactPayload>(emptyContact)
+  const [form,         setForm]         = useState<ContactPayload>(() => ({ ...emptyContact(), address_id: initialAddressId ?? '' }))
   const [editForm,     setEditForm]     = useState<ContactPayload>(emptyContact)
-  const [addrText,     setAddrText]     = useState('')
+  const [addrText,     setAddrText]     = useState(initialAddressName ?? '')
   const [editAddrText, setEditAddrText] = useState('')
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  useEffect(() => {
+    if (initialSearch !== undefined) setSearch(initialSearch)
+  }, [initialSearch])
+
+  useEffect(() => {
+    if (initialAddressId !== undefined) {
+      setForm(f => ({ ...f, address_id: initialAddressId }))
+      setAddrText(initialAddressName ?? '')
+    }
+  }, [initialAddressId, initialAddressName])
 
   // Filter + column state
   const [activeAdresse,  setActiveAdresse]  = useState<Set<string>>(new Set())
@@ -721,12 +758,15 @@ export function AdressenPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('adressen')
 
-  const [openAddressId,  setOpenAddressId]  = useState<number | undefined>(
+  const [openAddressId,    setOpenAddressId]    = useState<number | undefined>(
     (location.state as { openAddressId?: number } | null)?.openAddressId
   )
-  const [addrInitSearch, setAddrInitSearch] = useState<string | undefined>(
+  const [addrInitSearch,   setAddrInitSearch]   = useState<string | undefined>(
     (location.state as { searchAddress?: string } | null)?.searchAddress
   )
+  const [konSearch,        setKonSearch]        = useState<string | undefined>()
+  const [konAddressId,     setKonAddressId]     = useState<number | undefined>()
+  const [konAddressName,   setKonAddressName]   = useState<string | undefined>()
 
   useEffect(() => {
     const ns = location.state as { openAddressId?: number; searchAddress?: string } | null
@@ -739,6 +779,13 @@ export function AdressenPage() {
     }
   }, [location.state])
 
+  function handleShowKontakte(addressName: string, addressId: number) {
+    setKonSearch(addressName)
+    setKonAddressId(addressId)
+    setKonAddressName(addressName)
+    setTab('kontakte')
+  }
+
   return (
     <div className="master-page">
       <div className="master-page-header">
@@ -746,8 +793,20 @@ export function AdressenPage() {
       </div>
       <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
       <div className="master-section">
-        {tab === 'adressen' && <AdressenSection initialSearch={addrInitSearch} openAddressId={openAddressId} />}
-        {tab === 'kontakte' && <KontakteSection />}
+        {tab === 'adressen' && (
+          <AdressenSection
+            initialSearch={addrInitSearch}
+            openAddressId={openAddressId}
+            onShowKontakte={handleShowKontakte}
+          />
+        )}
+        {tab === 'kontakte' && (
+          <KontakteSection
+            initialSearch={konSearch}
+            initialAddressId={konAddressId}
+            initialAddressName={konAddressName}
+          />
+        )}
       </div>
     </div>
   )
