@@ -10,8 +10,10 @@ import {
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
   fetchEmployeeCpRates, createEmployeeCpRate, updateEmployeeCpRate, deleteEmployeeCpRate,
   fetchMonthBalance, fetchRunningBalance,
+  fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
   type EmployeeWorkModel, type EmployeeCpRate, type MonthBalance, type RunningMonth,
+  type MonthCloseOverviewEmployee,
 } from '@/api/mitarbeiter'
 import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
 
@@ -22,6 +24,7 @@ const TABS = [
   { id: 'list',      label: 'Mitarbeiterliste' },
   { id: 'create',    label: 'Anlegen'          },
   { id: 'reporting', label: 'Reporting'        },
+  { id: 'overview',  label: 'Monatsübersicht'  },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -419,10 +422,12 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 // ── Reporting Tab ─────────────────────────────────────────────────────────────
 
 function ReportingTab({ employees }: { employees: Employee[] }) {
+  const qc = useQueryClient()
   const [empId,    setEmpId]    = useState<number | null>(null)
   const [year,     setYear]     = useState(new Date().getFullYear())
   const [month,    setMonth]    = useState(new Date().getMonth() + 1)
   const [viewMode, setViewMode] = useState<'month' | 'running'>('month')
+  const [closeLoading, setCloseLoading] = useState(false)
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(y => y - 1) }
@@ -443,11 +448,35 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
     queryFn:  () => fetchRunningBalance(empId!),
     enabled:  empId !== null && viewMode === 'running',
   })
+  const { data: closeStatusRes, refetch: refetchClose } = useQuery({
+    queryKey: ['month-close-status', empId, year, month],
+    queryFn:  () => fetchMonthCloseStatus(empId!, year, month),
+    enabled:  empId !== null,
+  })
 
   const monthData: MonthBalance | undefined = monthRes?.data
   const runningData = runningRes?.data
+  const isClosed = closeStatusRes?.data != null
 
   const balanceColor = (n: number) => n > 0 ? '#059669' : n < 0 ? '#dc2626' : '#6b7280'
+
+  async function toggleMonthClose() {
+    if (!empId) return
+    setCloseLoading(true)
+    try {
+      if (isClosed) {
+        await reopenMonth(empId, year, month)
+      } else {
+        await closeMonth(empId, year, month)
+      }
+      await refetchClose()
+      void qc.invalidateQueries({ queryKey: ['month-close-overview'] })
+    } catch (e: unknown) {
+      alert((e as Error).message)
+    } finally {
+      setCloseLoading(false)
+    }
+  }
 
   return (
     <div style={{ maxWidth: 760 }}>
@@ -487,7 +516,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
           {loadingMonth && <p className="empty-note">Laden …</p>}
           {monthData && (
             <>
-              <div style={{ display: 'flex', gap: 16, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 16, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Soll</div>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtH(monthData.required)}</div>
@@ -499,6 +528,17 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Saldo</div>
                   <div style={{ fontWeight: 700, fontSize: 16, color: balanceColor(monthData.balance) }}>{fmtBalance(monthData.balance)}</div>
+                </div>
+                <div style={{ marginLeft: 'auto' }}>
+                  <button
+                    type="button"
+                    className={`btn-small${isClosed ? '' : ' btn-save'}`}
+                    style={{ whiteSpace: 'nowrap' }}
+                    disabled={closeLoading}
+                    onClick={toggleMonthClose}
+                  >
+                    {closeLoading ? '…' : isClosed ? '✓ Abgeschlossen – Öffnen' : 'Monat abschließen'}
+                  </button>
                 </div>
               </div>
 
@@ -587,6 +627,79 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+// ── Months Overview Tab ───────────────────────────────────────────────────────
+
+function MonthsOverviewTab() {
+  const qc = useQueryClient()
+  const { data: overviewRes, isLoading } = useQuery({
+    queryKey: ['month-close-overview'],
+    queryFn:  fetchMonthCloseOverview,
+  })
+
+  const rows:   MonthCloseOverviewEmployee[]                       = overviewRes?.data   ?? []
+  const months: Array<{ year: number; month: number }> = overviewRes?.months ?? []
+
+  async function toggle(emp: MonthCloseOverviewEmployee, year: number, month: number, closed: boolean) {
+    try {
+      if (closed) await reopenMonth(emp.ID, year, month)
+      else        await closeMonth(emp.ID, year, month)
+      void qc.invalidateQueries({ queryKey: ['month-close-overview'] })
+      void qc.invalidateQueries({ queryKey: ['month-close-status', emp.ID] })
+    } catch (e: unknown) {
+      alert((e as Error).message)
+    }
+  }
+
+  if (isLoading) return <p className="empty-note">Laden …</p>
+  if (!rows.length) return <p className="empty-note">Keine aktiven Mitarbeiter.</p>
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="master-table" style={{ fontSize: 12 }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', paddingRight: 16, whiteSpace: 'nowrap' }}>Mitarbeiter</th>
+            {months.map(m => (
+              <th key={`${m.year}-${m.month}`} style={{ textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 500, color: '#6b7280' }}>
+                {MONTH_NAMES[m.month - 1].slice(0, 3)}<br />{m.year}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(emp => (
+            <tr key={emp.ID}>
+              <td style={{ whiteSpace: 'nowrap', paddingRight: 16 }}>
+                <strong>{emp.SHORT_NAME}</strong> {emp.FIRST_NAME} {emp.LAST_NAME}
+              </td>
+              {emp.months.map(m => (
+                <td key={`${m.year}-${m.month}`} style={{ textAlign: 'center', padding: '4px 8px' }}>
+                  <button
+                    type="button"
+                    title={m.closed
+                      ? `Abgeschlossen am ${new Date(m.closed_at!).toLocaleDateString('de-DE')} – klicken zum Öffnen`
+                      : 'Offen – klicken zum Abschließen'}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer', fontSize: 16,
+                      color: m.closed ? '#059669' : '#d1d5db', lineHeight: 1,
+                    }}
+                    onClick={() => toggle(emp, m.year, m.month, m.closed)}
+                  >
+                    {m.closed ? '✓' : '○'}
+                  </button>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+        ✓ Abgeschlossen &nbsp;·&nbsp; ○ Offen &nbsp;·&nbsp; Klicken zum Umschalten
+      </p>
     </div>
   )
 }
@@ -863,6 +976,10 @@ export function MitarbeiterPage() {
 
         {tab === 'reporting' && (
           <ReportingTab employees={employees} />
+        )}
+
+        {tab === 'overview' && (
+          <MonthsOverviewTab />
         )}
       </div>
 

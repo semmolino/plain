@@ -141,3 +141,33 @@ export const fetchMonthBalance = (id: number, year: number, month: number) =>
 
 export const fetchRunningBalance = (id: number) =>
   apiClient.get<{ data: { months: RunningMonth[]; totalBalance: number } }>(`/mitarbeiter/${id}/balance/running`)
+
+// ── Month close ───────────────────────────────────────────────────────────────
+
+export interface MonthClose {
+  ID:        number
+  YEAR:      number
+  MONTH:     number
+  CLOSED_AT: string
+  CLOSED_BY: number
+}
+
+export interface MonthCloseOverviewEmployee {
+  ID:         number
+  SHORT_NAME: string
+  FIRST_NAME: string
+  LAST_NAME:  string
+  months:     Array<{ year: number; month: number; closed: boolean; closed_at: string | null }>
+}
+
+export const fetchMonthCloseStatus = (id: number, year: number, month: number) =>
+  apiClient.get<{ data: MonthClose | null }>(`/mitarbeiter/${id}/month-close/${year}/${month}`)
+
+export const closeMonth = (id: number, year: number, month: number) =>
+  apiClient.post<{ data: MonthClose }>(`/mitarbeiter/${id}/month-close`, { year, month })
+
+export const reopenMonth = (id: number, year: number, month: number) =>
+  apiClient.delete<{ ok: boolean }>(`/mitarbeiter/${id}/month-close/${year}/${month}`)
+
+export const fetchMonthCloseOverview = () =>
+  apiClient.get<{ data: MonthCloseOverviewEmployee[]; months: Array<{ year: number; month: number }> }>('/mitarbeiter/month-close-overview')

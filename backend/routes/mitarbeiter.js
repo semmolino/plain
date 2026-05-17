@@ -218,6 +218,48 @@ router.get("/", async (req, res) => {
   });
 
 
+// ── Month-close overview (must be before /:id routes) ─────────────────────────
+// GET /mitarbeiter/month-close-overview
+router.get("/month-close-overview", async (req, res) => {
+  const { data: employees, error: empErr } = await supabase
+    .from("EMPLOYEE")
+    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+    .eq("TENANT_ID", req.tenantId)
+    .neq("ACTIVE", 2)
+    .order("SHORT_NAME", { ascending: true });
+  if (empErr) return res.status(500).json({ error: empErr.message });
+
+  // Rolling last 6 months (oldest first)
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+  }
+
+  const { data: closes, error: closeErr } = await supabase
+    .from("EMPLOYEE_MONTH_CLOSE")
+    .select("EMPLOYEE_ID, YEAR, MONTH, CLOSED_AT")
+    .eq("TENANT_ID", req.tenantId);
+  if (closeErr) return res.status(500).json({ error: closeErr.message });
+
+  const closeMap = new Map();
+  for (const c of closes || []) {
+    closeMap.set(`${c.EMPLOYEE_ID}-${c.YEAR}-${c.MONTH}`, c.CLOSED_AT);
+  }
+
+  const data = (employees || []).map(e => ({
+    ...e,
+    months: months.map(m => ({
+      ...m,
+      closed:    closeMap.has(`${e.ID}-${m.year}-${m.month}`),
+      closed_at: closeMap.get(`${e.ID}-${m.year}-${m.month}`) ?? null,
+    })),
+  }));
+
+  res.json({ data, months });
+});
+
 // Search EMPLOYEE by SHORT_NAME / FIRST_NAME / LAST_NAME
 // GET /api/mitarbeiter/search?q=...
 router.get("/search", async (req, res) => {
@@ -377,6 +419,59 @@ router.delete("/:id/cp-rates/:rid", async (req, res) => {
     .eq("ID", rid)
     .eq("EMPLOYEE_ID", empId)
     .eq("TENANT_ID", req.tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ── Month-close per employee ───────────────────────────────────────────────────
+
+router.get("/:id/month-close/:year/:month", async (req, res) => {
+  const empId = Number(req.params.id);
+  const year  = Number(req.params.year);
+  const month = Number(req.params.month);
+  const { data, error } = await supabase
+    .from("EMPLOYEE_MONTH_CLOSE")
+    .select("ID, YEAR, MONTH, CLOSED_AT, CLOSED_BY")
+    .eq("TENANT_ID", req.tenantId)
+    .eq("EMPLOYEE_ID", empId)
+    .eq("YEAR", year)
+    .eq("MONTH", month)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data ?? null });
+});
+
+router.post("/:id/month-close", async (req, res) => {
+  const empId = Number(req.params.id);
+  const { year, month } = req.body || {};
+  if (!year || !month) return res.status(400).json({ error: "year und month sind Pflichtfelder" });
+  const { data, error } = await supabase
+    .from("EMPLOYEE_MONTH_CLOSE")
+    .upsert([{
+      TENANT_ID:   req.tenantId,
+      EMPLOYEE_ID: empId,
+      YEAR:        Number(year),
+      MONTH:       Number(month),
+      CLOSED_AT:   new Date().toISOString(),
+      CLOSED_BY:   req.employeeId,
+    }], { onConflict: "TENANT_ID,EMPLOYEE_ID,YEAR,MONTH" })
+    .select("ID, YEAR, MONTH, CLOSED_AT, CLOSED_BY")
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+});
+
+router.delete("/:id/month-close/:year/:month", async (req, res) => {
+  const empId = Number(req.params.id);
+  const year  = Number(req.params.year);
+  const month = Number(req.params.month);
+  const { error } = await supabase
+    .from("EMPLOYEE_MONTH_CLOSE")
+    .delete()
+    .eq("TENANT_ID", req.tenantId)
+    .eq("EMPLOYEE_ID", empId)
+    .eq("YEAR", year)
+    .eq("MONTH", month);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
