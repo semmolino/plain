@@ -365,7 +365,6 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
   const [year,     setYear]     = useState(new Date().getFullYear())
   const [month,    setMonth]    = useState(new Date().getMonth() + 1)
   const [viewMode, setViewMode] = useState<'month' | 'running'>('month')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(y => y - 1) }
@@ -375,13 +374,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
     if (month === 12) { setMonth(1); setYear(y => y + 1) }
     else               setMonth(m => m + 1)
   }
-  function toggleDay(date: string) {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      next.has(date) ? next.delete(date) : next.add(date)
-      return next
-    })
-  }
+
 
   const { data: monthRes, isLoading: loadingMonth } = useQuery({
     queryKey: ['emp-balance-month', empId, year, month],
@@ -478,8 +471,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                       return (
                         <tr
                           key={d.date}
-                          style={{ ...rowStyle, cursor: 'default' }}
-                          onClick={() => d.actual > 0 && toggleDay(d.date)}
+                          style={rowStyle}
                         >
                           <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                             {d.isHoliday && <span title="Feiertag" style={{ marginRight: 4 }}>🏖</span>}
