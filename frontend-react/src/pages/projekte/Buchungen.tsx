@@ -106,11 +106,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     setForm(f => ({ ...f, SP_RATE: presetData.found && presetData.SP_RATE != null ? String(presetData.SP_RATE) : f.SP_RATE }))
   }, [presetData])
 
-  useEffect(() => {
-    if (!empId) return
-    const emp = employees.find(e => e.ID === empId)
-    if (emp?.CP_RATE != null) setForm(f => ({ ...f, CP_RATE: String(emp.CP_RATE) }))
-  }, [empId, employees])
+  useEffect(() => { if (!empId) return }, [empId, employees])
 
   useEffect(() => { setFilterStruct(''); setSearch('') }, [pid])
 
@@ -261,7 +257,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   function submitForm(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
-    if (!pid || !form.EMPLOYEE_ID || !form.DATE_VOUCHER || !form.QUANTITY_INT || !form.CP_RATE || !form.QUANTITY_EXT || !form.SP_RATE || !form.POSTING_DESCRIPTION) {
+    if (!pid || !form.EMPLOYEE_ID || !form.DATE_VOUCHER || !form.QUANTITY_INT || !form.QUANTITY_EXT || !form.SP_RATE || !form.POSTING_DESCRIPTION) {
       setMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
     createMut.mutate({
@@ -466,9 +462,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <FormField label="Stunden ext.*" id="bqe" type="number" value={form.QUANTITY_EXT}  onChange={setF('QUANTITY_EXT')} step="0.25" required />
                   </div>
                   <div className="form-row">
-                    <FormField label="Kostensatz*"   id="bcr" type="number" value={form.CP_RATE}       onChange={setF('CP_RATE')} step="0.01" required
-                      readOnly={employees.find(e => e.ID === empId)?.CP_RATE != null}
-                      style={{ background: employees.find(e => e.ID === empId)?.CP_RATE != null ? 'rgba(17,24,39,0.04)' : undefined }} />
+                    <FormField label="Kostensatz (€/h)" id="bcr" type="number" value={form.CP_RATE} onChange={setF('CP_RATE')} step="0.01"
+                      title="Wird automatisch aus dem Kostensatz-Verlauf des Mitarbeiters ermittelt" />
                     <FormField label="Stundensatz*"  id="bsr" type="number" value={form.SP_RATE}       onChange={setF('SP_RATE')} step="0.01" required
                       readOnly={presetData?.found === true && presetData.SP_RATE != null}
                       title={presetData?.found === true && presetData.SP_RATE != null ? 'Aus Mitarbeiter/Projekt-Zuordnung vorbelegt' : undefined}

@@ -116,10 +116,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
           <div className="tbm-field-group">
             <label className="tbm-label">Mitarbeiter</label>
             <select className="tbm-select" value={employeeId ?? ''} onChange={e => {
-              const id = e.target.value ? Number(e.target.value) : null
-              setEmployeeId(id)
-              const emp = employees.find(x => x.ID === id)
-              if (emp?.CP_RATE != null) setCpRate(String(emp.CP_RATE))
+              setEmployeeId(e.target.value ? Number(e.target.value) : null)
             }}>
               <option value="">— Mitarbeiter wählen —</option>
               {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
@@ -135,8 +132,6 @@ function StartModal({ onClose }: { onClose: () => void }) {
               step={0.01}
               value={cpRate}
               onChange={e => setCpRate(e.target.value)}
-              readOnly={employees.find(x => x.ID === employeeId)?.CP_RATE != null}
-              style={employees.find(x => x.ID === employeeId)?.CP_RATE != null ? { background: 'rgba(17,24,39,0.04)' } : undefined}
               placeholder="z.B. 65"
             />
           </div>

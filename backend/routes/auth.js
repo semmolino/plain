@@ -39,12 +39,16 @@ module.exports = (supabase) => {
 
     const { data: employee, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, PASSWORD, TENANT_ID, MAIL")
+      .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, PASSWORD, TENANT_ID, MAIL, ACTIVE")
       .ilike("MAIL", email.trim())
       .maybeSingle();
 
     if (empErr) return res.status(500).json({ error: "Fehler beim Laden des Benutzers." });
     if (!employee) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
+
+    if (employee.ACTIVE === 2) {
+      return res.status(403).json({ error: "Dieser Benutzer ist inaktiv. Bitte Administrator kontaktieren." });
+    }
 
     const stored = employee.PASSWORD || "";
     const valid = stored.startsWith("$2")

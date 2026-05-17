@@ -6,7 +6,7 @@ export interface ProjectStatus     { ID: number; NAME_SHORT: string }
 export interface ProjectType       { ID: number; NAME_SHORT: string }
 export interface ProjectManager    { ID: number; SHORT_NAME: string }
 export interface Department        { ID: number; NAME_SHORT: string; NAME_LONG: string }
-export interface ActiveEmployee { ID: number; SHORT_NAME: string; FIRST_NAME: string; LAST_NAME: string; CP_RATE: number | null }
+export interface ActiveEmployee { ID: number; SHORT_NAME: string; FIRST_NAME: string; LAST_NAME: string }
 export interface ActiveRole     { ID: number; NAME_SHORT: string; NAME_LONG: string; SP_RATE: number | null }
 export interface BillingType    { ID: number; NAME_SHORT: string; NAME_LONG: string }
 
@@ -244,7 +244,7 @@ export interface CreateBuchungPayload {
   TIME_START?:         string
   TIME_FINISH?:        string
   QUANTITY_INT:        number
-  CP_RATE:             number
+  CP_RATE?:            number
   QUANTITY_EXT:        number
   SP_RATE:             number
   POSTING_DESCRIPTION: string
@@ -297,7 +297,6 @@ export interface E2PEntry {
   ROLE_NAME_SHORT:     string
   ROLE_NAME_LONG:      string
   SP_RATE:             number | null
-  CP_RATE:             number | null
   EMPLOYEE_SHORT_NAME: string | null
   EMPLOYEE_FIRST_NAME: string | null
   EMPLOYEE_LAST_NAME:  string | null

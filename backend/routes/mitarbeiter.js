@@ -104,7 +104,7 @@ router.get("/", async (req, res) => {
 
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, CP_RATE, DEPARTMENT_ID, ACTIVE")
+      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE")
       .eq("TENANT_ID", req.tenantId)
       .order("SHORT_NAME", { ascending: true })
       .limit(limit);

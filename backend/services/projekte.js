@@ -51,7 +51,7 @@ async function getManagers(supabase, { tenantId }) {
 async function getActiveEmployees(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from("EMPLOYEE")
-    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, CP_RATE, ACTIVE")
+    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, ACTIVE")
     .eq("TENANT_ID", tenantId)
     .or("ACTIVE.eq.1,ACTIVE.is.null");
   if (error) throw error;

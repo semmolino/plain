@@ -12,7 +12,6 @@ export interface Employee {
   GENDER_ID:           number | null
   GENDER:              string
   NAME:                string
-  CP_RATE:             number | null
   DEPARTMENT_ID:       number | null
   DEPARTMENT_NAME:     string
   ACTIVE:              number | null

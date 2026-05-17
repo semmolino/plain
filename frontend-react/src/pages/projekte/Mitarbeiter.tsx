@@ -218,7 +218,6 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
                 <th>Rollenkürzel</th>
                 <th>Rollenbezeichnung</th>
                 <th className="num">Stundensatz</th>
-                <th className="num">Kostensatz</th>
                 <th></th>
               </tr>
             </thead>
@@ -240,7 +239,6 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
                         <td><input className="tbl-input" style={{ width: 90 }} value={editForm.role_name_short} onChange={e => setEF('role_name_short')(e.target.value)} /></td>
                         <td><input className="tbl-input" style={{ width: 150 }} value={editForm.role_name_long} onChange={e => setEF('role_name_long')(e.target.value)} /></td>
                         <td><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" min="0" value={editForm.sp_rate} onChange={e => setEF('sp_rate')(e.target.value)} placeholder="0.00" /></td>
-                        <td className="num" style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtRate(row.CP_RATE)}</td>
                         <td className="doc-actions">
                           <button className="btn-small btn-save" disabled={updateMut.isPending} onClick={() => submitEdit(row.ID)}>
                             {updateMut.isPending ? '…' : 'Speichern'}
@@ -256,7 +254,6 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
                         <td>{row.ROLE_NAME_SHORT || '—'}</td>
                         <td>{row.ROLE_NAME_LONG  || '—'}</td>
                         <td className="num">{fmtRate(row.SP_RATE)}</td>
-                        <td className="num" style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtRate(row.CP_RATE)}</td>
                         <td className="doc-actions">
                           <button className="btn-small" onClick={() => startEdit(row)}>Bearbeiten</button>
                           <button className="btn-small btn-danger" onClick={() => handleDelete(row)}>Entfernen</button>
