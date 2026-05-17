@@ -1070,6 +1070,48 @@ async function getMonatsabschlussPdf(req, res, supabase) {
   }
 }
 
+const wtmSvc = require("../services/workingTimeModels");
+
+async function getCountryStates(req, res) {
+  res.json({ data: wtmSvc.getCountryStates() });
+}
+
+async function getWorkingTimeModels(req, res, supabase) {
+  try {
+    const data = await wtmSvc.listModels(supabase, req.tenantId);
+    res.json({ data });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function postWorkingTimeModel(req, res, supabase) {
+  try {
+    const data = await wtmSvc.createModel(supabase, req.tenantId, req.body);
+    res.json({ data });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function patchWorkingTimeModel(req, res, supabase) {
+  try {
+    const data = await wtmSvc.updateModel(supabase, req.tenantId, Number(req.params.id), req.body);
+    res.json({ data });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function deleteWorkingTimeModel(req, res, supabase) {
+  try {
+    await wtmSvc.deleteModel(supabase, req.tenantId, Number(req.params.id));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 module.exports = {
   postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
@@ -1085,4 +1127,5 @@ module.exports = {
   getLogo, putLogo,
   getCompanyAssets, putCompanyLogo, putCompanySignature,
   getMonatsabschluss, putMonatsabschluss, runMonatsabschlussNow, getMonatsabschlussPdf,
+  getCountryStates, getWorkingTimeModels, postWorkingTimeModel, patchWorkingTimeModel, deleteWorkingTimeModel,
 };

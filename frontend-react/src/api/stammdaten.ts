@@ -240,6 +240,40 @@ export const uploadAsset = (file: File, assetType = 'LOGO') => {
   return apiClient.post<{ data: { ID: number }; url: string }>('/assets/upload', form)
 }
 
+// ── Working-time models ───────────────────────────────────────────────────────
+
+export interface WorkingTimeModel {
+  ID:           number
+  NAME:         string
+  COUNTRY_CODE: string
+  STATE_CODE:   string | null
+  MON: number; TUE: number; WED: number; THU: number; FRI: number; SAT: number; SUN: number
+}
+
+export interface WorkingTimeModelPayload {
+  name:         string
+  country_code: string
+  state_code?:  string | null
+  mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number
+}
+
+export interface CountryState { code: string | null; label: string }
+
+export const fetchCountryStates = () =>
+  apiClient.get<{ data: Record<string, CountryState[]> }>('/stammdaten/working-time-models/country-states')
+
+export const fetchWorkingTimeModels = () =>
+  apiClient.get<{ data: WorkingTimeModel[] }>('/stammdaten/working-time-models')
+
+export const createWorkingTimeModel = (body: WorkingTimeModelPayload) =>
+  apiClient.post<{ data: WorkingTimeModel }>('/stammdaten/working-time-models', body)
+
+export const updateWorkingTimeModel = (id: number, body: WorkingTimeModelPayload) =>
+  apiClient.patch<{ data: WorkingTimeModel }>(`/stammdaten/working-time-models/${id}`, body)
+
+export const deleteWorkingTimeModel = (id: number) =>
+  apiClient.delete<{ ok: boolean }>(`/stammdaten/working-time-models/${id}`)
+
 // ── Monatsabschluss ───────────────────────────────────────────────────────────
 
 export interface MonatsabschlussSettings {

@@ -1,5 +1,6 @@
-const express = require("express");
-const bcrypt  = require("bcryptjs");
+const express      = require("express");
+const bcrypt       = require("bcryptjs");
+const balanceSvc   = require("../services/employeeBalance");
 
 // Returns an error message string if a duplicate is found, otherwise null.
 // excludeId: skip this employee ID (used on update to ignore self).
@@ -101,25 +102,28 @@ router.get("/", async (req, res) => {
 
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, CP_RATE")
+      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, CP_RATE, DEPARTMENT_ID")
       .eq("TENANT_ID", req.tenantId)
       .order("SHORT_NAME", { ascending: true })
       .limit(limit);
 
     if (empErr) return res.status(500).json({ error: empErr.message });
 
-    const { data: genders, error: genErr } = await supabase
-      .from("GENDER")
-      .select("ID, GENDER");
+    const [genderRes, deptRes] = await Promise.all([
+      supabase.from("GENDER").select("ID, GENDER"),
+      supabase.from("PROJECT_DEPARTMENT").select("ID, NAME_SHORT").eq("TENANT_ID", req.tenantId),
+    ]);
 
-    if (genErr) return res.status(500).json({ error: genErr.message });
+    if (genderRes.error) return res.status(500).json({ error: genderRes.error.message });
 
-    const genMap = new Map((genders || []).map(g => [String(g.ID), g.GENDER]));
+    const genMap  = new Map((genderRes.data  || []).map(g => [String(g.ID), g.GENDER]));
+    const deptMap = new Map((deptRes.data    || []).map(d => [String(d.ID), d.NAME_SHORT]));
 
     const normalized = (employees || []).map(e => ({
       ...e,
-      GENDER: genMap.get(String(e.GENDER_ID)) || "",
-      NAME: `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim(),
+      GENDER:          genMap.get(String(e.GENDER_ID)) || "",
+      DEPARTMENT_NAME: deptMap.get(String(e.DEPARTMENT_ID)) || "",
+      NAME:            `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim(),
     }));
 
     res.json({ data: normalized });
@@ -154,15 +158,16 @@ router.get("/", async (req, res) => {
 
 
     const updateObj = {
-      SHORT_NAME: body.short_name,
-      TITLE: body.title || null,
-      FIRST_NAME: body.first_name,
-      LAST_NAME: body.last_name,
-      MAIL: body.mail || null,
-      MOBILE: body.mobile || null,
+      SHORT_NAME:       body.short_name,
+      TITLE:            body.title || null,
+      FIRST_NAME:       body.first_name,
+      LAST_NAME:        body.last_name,
+      MAIL:             body.mail || null,
+      MOBILE:           body.mobile || null,
       PERSONNEL_NUMBER: body.personnel_number || null,
-      GENDER_ID: body.gender_id,
-      CP_RATE: body.cp_rate != null && body.cp_rate !== '' ? Number(body.cp_rate) : null,
+      GENDER_ID:        body.gender_id,
+      CP_RATE:          body.cp_rate != null && body.cp_rate !== '' ? Number(body.cp_rate) : null,
+      DEPARTMENT_ID:    body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
     };
 
     const { data: upd, error: updErr } = await supabase
@@ -197,7 +202,6 @@ router.get("/search", async (req, res) => {
 
   const { data, error } = await supabase
     .from("EMPLOYEE")
-    // Select only columns that exist in the EMPLOYEE table (avoid schema mismatches)
     .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
     .eq("TENANT_ID", req.tenantId)
     .or(`SHORT_NAME.ilike.%${q}%,FIRST_NAME.ilike.%${q}%,LAST_NAME.ilike.%${q}%`)
@@ -208,6 +212,147 @@ router.get("/search", async (req, res) => {
   res.json({ data });
 });
 
+// ── Work-model assignments ─────────────────────────────────────────────────────
+
+router.get("/:id/work-models", async (req, res) => {
+  const empId = Number(req.params.id);
+  const { data, error } = await supabase
+    .from("EMPLOYEE_WORK_MODEL")
+    .select("ID, MODEL_ID, VALID_FROM, model:WORKING_TIME_MODEL(ID, NAME, COUNTRY_CODE, STATE_CODE, MON, TUE, WED, THU, FRI, SAT, SUN)")
+    .eq("TENANT_ID", req.tenantId)
+    .eq("EMPLOYEE_ID", empId)
+    .order("VALID_FROM", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+});
+
+router.post("/:id/work-models", async (req, res) => {
+  const empId = Number(req.params.id);
+  const { model_id, valid_from } = req.body;
+  if (!model_id || !valid_from) return res.status(400).json({ error: 'model_id und valid_from sind Pflichtfelder' });
+  const { data, error } = await supabase
+    .from("EMPLOYEE_WORK_MODEL")
+    .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, MODEL_ID: Number(model_id), VALID_FROM: valid_from }])
+    .select("ID, MODEL_ID, VALID_FROM")
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+});
+
+router.patch("/:id/work-models/:wid", async (req, res) => {
+  const wid   = Number(req.params.wid);
+  const empId = Number(req.params.id);
+  const { model_id, valid_from } = req.body;
+  const update = {};
+  if (model_id)    update.MODEL_ID    = Number(model_id);
+  if (valid_from)  update.VALID_FROM  = valid_from;
+  const { data, error } = await supabase
+    .from("EMPLOYEE_WORK_MODEL")
+    .update(update)
+    .eq("ID", wid)
+    .eq("EMPLOYEE_ID", empId)
+    .eq("TENANT_ID", req.tenantId)
+    .select("ID, MODEL_ID, VALID_FROM")
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+});
+
+router.delete("/:id/work-models/:wid", async (req, res) => {
+  const wid   = Number(req.params.wid);
+  const empId = Number(req.params.id);
+  const { error } = await supabase
+    .from("EMPLOYEE_WORK_MODEL")
+    .delete()
+    .eq("ID", wid)
+    .eq("EMPLOYEE_ID", empId)
+    .eq("TENANT_ID", req.tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ── CP-rate history ────────────────────────────────────────────────────────────
+
+router.get("/:id/cp-rates", async (req, res) => {
+  const empId = Number(req.params.id);
+  const { data, error } = await supabase
+    .from("EMPLOYEE_CP_RATE")
+    .select("ID, CP_RATE, VALID_FROM")
+    .eq("TENANT_ID", req.tenantId)
+    .eq("EMPLOYEE_ID", empId)
+    .order("VALID_FROM", { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+});
+
+router.post("/:id/cp-rates", async (req, res) => {
+  const empId = Number(req.params.id);
+  const { cp_rate, valid_from } = req.body;
+  if (cp_rate == null || !valid_from) return res.status(400).json({ error: 'cp_rate und valid_from sind Pflichtfelder' });
+  const { data, error } = await supabase
+    .from("EMPLOYEE_CP_RATE")
+    .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, CP_RATE: Number(cp_rate), VALID_FROM: valid_from }])
+    .select("ID, CP_RATE, VALID_FROM")
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+});
+
+router.patch("/:id/cp-rates/:rid", async (req, res) => {
+  const rid   = Number(req.params.rid);
+  const empId = Number(req.params.id);
+  const { cp_rate, valid_from } = req.body;
+  const update = {};
+  if (cp_rate != null)  update.CP_RATE    = Number(cp_rate);
+  if (valid_from)       update.VALID_FROM = valid_from;
+  const { data, error } = await supabase
+    .from("EMPLOYEE_CP_RATE")
+    .update(update)
+    .eq("ID", rid)
+    .eq("EMPLOYEE_ID", empId)
+    .eq("TENANT_ID", req.tenantId)
+    .select("ID, CP_RATE, VALID_FROM")
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data });
+});
+
+router.delete("/:id/cp-rates/:rid", async (req, res) => {
+  const rid   = Number(req.params.rid);
+  const empId = Number(req.params.id);
+  const { error } = await supabase
+    .from("EMPLOYEE_CP_RATE")
+    .delete()
+    .eq("ID", rid)
+    .eq("EMPLOYEE_ID", empId)
+    .eq("TENANT_ID", req.tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ── Balance / Reporting ────────────────────────────────────────────────────────
+
+router.get("/:id/balance", async (req, res) => {
+  const empId = Number(req.params.id);
+  const year  = parseInt(req.query.year  || new Date().getFullYear(), 10);
+  const month = parseInt(req.query.month || (new Date().getMonth() + 1), 10);
+  try {
+    const result = await balanceSvc.calculateMonthBalance(supabase, req.tenantId, empId, year, month);
+    res.json({ data: result });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+});
+
+router.get("/:id/balance/running", async (req, res) => {
+  const empId = Number(req.params.id);
+  try {
+    const result = await balanceSvc.calculateRunningBalance(supabase, req.tenantId, empId);
+    res.json({ data: result });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+});
 
   return router;
 };

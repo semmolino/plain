@@ -64,5 +64,12 @@ module.exports = (supabase) => {
   router.post("/monatsabschluss/run",                                (req, res) => ctrl.runMonatsabschlussNow(req, res, supabase));
   router.get("/monatsabschluss/pdf",                                 (req, res) => ctrl.getMonatsabschlussPdf(req, res, supabase));
 
+  // Working-time models
+  router.get("/working-time-models/country-states",                  (req, res) => ctrl.getCountryStates(req, res, supabase));
+  router.get("/working-time-models",                                  (req, res) => ctrl.getWorkingTimeModels(req, res, supabase));
+  router.post("/working-time-models",                                 (req, res) => ctrl.postWorkingTimeModel(req, res, supabase));
+  router.patch("/working-time-models/:id",                            (req, res) => ctrl.patchWorkingTimeModel(req, res, supabase));
+  router.delete("/working-time-models/:id",                           (req, res) => ctrl.deleteWorkingTimeModel(req, res, supabase));
+
   return router;
 };

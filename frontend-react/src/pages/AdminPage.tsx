@@ -12,18 +12,22 @@ import {
   fetchRollen, deleteRolle, updateRolle,
   fetchCompanyAssets, putCompanyLogo, putCompanySignature, uploadAsset,
   fetchMonatsabschluss, putMonatsabschluss, runMonatsabschlussNow, openMonatsabschlussPdf,
+  fetchWorkingTimeModels, createWorkingTimeModel, updateWorkingTimeModel, deleteWorkingTimeModel,
+  fetchCountryStates,
   type Company, type StammdatenItem, type Rolle, type MonatsabschlussSettings,
+  type WorkingTimeModel, type WorkingTimeModelPayload, type CountryState,
 } from '@/api/stammdaten'
 import { fetchProjectStatuses, type ProjectStatus } from '@/api/projekte'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 
 const PAGE_TABS = [
-  { id: 'stammdaten',       label: 'Stammdaten'       },
-  { id: 'nummernkreise',    label: 'Nummernkreise'    },
-  { id: 'unternehmen',      label: 'Unternehmen'      },
-  { id: 'vorbelegungen',    label: 'Vorbelegungen'    },
-  { id: 'monatsabschluss',  label: 'Monatsabschluss'  },
+  { id: 'stammdaten',          label: 'Stammdaten'          },
+  { id: 'nummernkreise',       label: 'Nummernkreise'       },
+  { id: 'unternehmen',         label: 'Unternehmen'         },
+  { id: 'vorbelegungen',       label: 'Vorbelegungen'       },
+  { id: 'arbeitszeitmodelle',  label: 'Arbeitszeitmodelle'  },
+  { id: 'monatsabschluss',     label: 'Monatsabschluss'     },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -847,6 +851,229 @@ function MonatsabschlussSection() {
   )
 }
 
+// ── Arbeitszeitmodelle ────────────────────────────────────────────────────────
+
+const EMPTY_WTM_FORM: WorkingTimeModelPayload = {
+  name: '', country_code: 'DE', state_code: null,
+  mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0,
+}
+
+const WTM_TEMPLATES = [
+  { label: 'Vollzeit 40h (Mo–Fr)', values: { mon: 8, tue: 8, wed: 8, thu: 8, fri: 8, sat: 0, sun: 0 } },
+  { label: 'Teilzeit 20h (Mo–Fr)', values: { mon: 4, tue: 4, wed: 4, thu: 4, fri: 4, sat: 0, sun: 0 } },
+  { label: '4-Tage 32h (Mo–Do)',   values: { mon: 8, tue: 8, wed: 8, thu: 8, fri: 0, sat: 0, sun: 0 } },
+  { label: 'Teilzeit 30h (Mo–Fr)', values: { mon: 6, tue: 6, wed: 6, thu: 6, fri: 6, sat: 0, sun: 0 } },
+]
+
+function WtmHourRow({ form, onChange }: {
+  form: WorkingTimeModelPayload
+  onChange: (k: keyof WorkingTimeModelPayload, v: string | number | null) => void
+}) {
+  const days: Array<{ key: keyof WorkingTimeModelPayload; label: string }> = [
+    { key: 'mon', label: 'Mo' }, { key: 'tue', label: 'Di' },
+    { key: 'wed', label: 'Mi' }, { key: 'thu', label: 'Do' },
+    { key: 'fri', label: 'Fr' }, { key: 'sat', label: 'Sa' },
+    { key: 'sun', label: 'So' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {days.map(d => (
+        <div key={d.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <label style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>{d.label}</label>
+          <input
+            type="number" min={0} max={24} step={0.5}
+            style={{ width: 54, textAlign: 'center', fontSize: 13 }}
+            value={form[d.key] as number}
+            onChange={e => onChange(d.key, parseFloat(e.target.value) || 0)}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ArbeitszeitmodelleSection() {
+  const qc  = useQueryClient()
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [form, setForm] = useState<WorkingTimeModelPayload>({ ...EMPTY_WTM_FORM })
+
+  const { data: modelsRes }    = useQuery({ queryKey: ['working-time-models'],   queryFn: fetchWorkingTimeModels })
+  const { data: statesRes }    = useQuery({ queryKey: ['country-states'],        queryFn: fetchCountryStates })
+
+  const models: WorkingTimeModel[] = modelsRes?.data ?? []
+  const countryStates: Record<string, CountryState[]> = statesRes?.data ?? {}
+
+  const statesForCountry: CountryState[] = countryStates[form.country_code] ?? []
+
+  function setField(k: keyof WorkingTimeModelPayload, v: string | number | null) {
+    setForm(f => {
+      const next = { ...f, [k]: v }
+      if (k === 'country_code') next.state_code = null
+      return next
+    })
+  }
+
+  function applyTemplate(t: typeof WTM_TEMPLATES[0]) {
+    setForm(f => ({ ...f, ...t.values }))
+  }
+
+  function resetForm() {
+    setForm({ ...EMPTY_WTM_FORM }); setShowForm(false); setEditingId(null)
+  }
+
+  const createMut = useMutation({
+    mutationFn: () => createWorkingTimeModel(form),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['working-time-models'] })
+      setMsg({ text: 'Modell gespeichert ✅', type: 'success' }); resetForm()
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: () => updateWorkingTimeModel(editingId!, form),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['working-time-models'] })
+      setMsg({ text: 'Modell aktualisiert ✅', type: 'success' }); resetForm()
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => deleteWorkingTimeModel(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['working-time-models'] }),
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  function startEdit(m: WorkingTimeModel) {
+    setEditingId(m.ID)
+    setForm({ name: m.NAME, country_code: m.COUNTRY_CODE, state_code: m.STATE_CODE,
+      mon: m.MON, tue: m.TUE, wed: m.WED, thu: m.THU, fri: m.FRI, sat: m.SAT, sun: m.SUN })
+    setShowForm(true)
+  }
+
+  function getStateLabel(cc: string, sc: string | null) {
+    if (!sc) return cc
+    const states: CountryState[] = countryStates[cc] ?? []
+    return states.find(s => s.code === sc)?.label ?? sc
+  }
+
+  const isPending = createMut.isPending || updateMut.isPending
+
+  return (
+    <div className="admin-section">
+      <div className="admin-block">
+        <h3 className="admin-block-title">Arbeitszeitmodelle</h3>
+        <p className="admin-section-hint" style={{ marginBottom: 12 }}>
+          Definiert die tägliche Soll-Arbeitszeit pro Wochentag. Wird Mitarbeitern zugewiesen.
+        </p>
+
+        {models.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 14 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+                <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Name</th>
+                <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Bundesland</th>
+                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Mo</th>
+                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Di</th>
+                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Mi</th>
+                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Do</th>
+                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Fr</th>
+                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Sa</th>
+                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>So</th>
+                <th style={{ textAlign: 'right', padding: '2px 0 4px 4px' }}>h/Woche</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {models.map(m => {
+                const weekHours = m.MON + m.TUE + m.WED + m.THU + m.FRI + m.SAT + m.SUN
+                return (
+                  <tr key={m.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '3px 8px 3px 0', fontWeight: 600 }}>{m.NAME}</td>
+                    <td style={{ padding: '3px 8px 3px 0', color: '#374151' }}>{getStateLabel(m.COUNTRY_CODE, m.STATE_CODE)}</td>
+                    {[m.MON, m.TUE, m.WED, m.THU, m.FRI, m.SAT, m.SUN].map((h, i) => (
+                      <td key={i} style={{ textAlign: 'center', padding: '3px 4px', color: h === 0 ? '#d1d5db' : '#374151' }}>{h}</td>
+                    ))}
+                    <td style={{ textAlign: 'right', padding: '3px 0 3px 4px', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{weekHours}</td>
+                    <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
+                      <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => startEdit(m)}>✎</button>
+                      <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} disabled={deleteMut.isPending} onClick={() => { setMsg(null); deleteMut.mutate(m.ID) }}>×</button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+        {models.length === 0 && <p className="empty-note" style={{ margin: '4px 0 12px' }}>Noch keine Modelle.</p>}
+
+        {!showForm && (
+          <button type="button" className="btn-small btn-save" onClick={() => { resetForm(); setShowForm(true) }}>
+            + Neues Modell
+          </button>
+        )}
+
+        {showForm && (
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 14, marginTop: 12 }}>
+            <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 13 }}>
+              {editingId ? 'Modell bearbeiten' : 'Neues Modell'}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              {WTM_TEMPLATES.map(t => (
+                <button key={t.label} type="button" className="btn-small" style={{ fontSize: 11 }} onClick={() => applyTemplate(t)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="form-row" style={{ marginBottom: 10 }}>
+              <div className="form-group">
+                <label>Name*</label>
+                <input value={form.name} onChange={e => setField('name', e.target.value)} placeholder="z. B. Vollzeit BY" />
+              </div>
+              <div className="form-group">
+                <label>Land*</label>
+                <select value={form.country_code} onChange={e => setField('country_code', e.target.value)}>
+                  <option value="DE">Deutschland</option>
+                  <option value="AT">Österreich</option>
+                  <option value="CH">Schweiz</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Bundesland</label>
+                <select value={form.state_code ?? ''} onChange={e => setField('state_code', e.target.value || null)}>
+                  <option value="">— gesamtes Land —</option>
+                  {statesForCountry.filter(s => s.code !== null).map(s => (
+                    <option key={s.code!} value={s.code!}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Stunden pro Tag</div>
+              <WtmHourRow form={form} onChange={setField} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn-small btn-save" disabled={isPending || !form.name.trim()} onClick={() => { setMsg(null); editingId ? updateMut.mutate() : createMut.mutate() }}>
+                {isPending ? '…' : editingId ? 'Speichern' : 'Anlegen'}
+              </button>
+              <button type="button" className="btn-small" onClick={resetForm}>Abbrechen</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Message text={msg?.text ?? null} type={msg?.type} />
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -861,11 +1088,12 @@ export function AdminPage() {
       </div>
       <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
       <div className="master-section">
-        {tab === 'stammdaten'      && <StammdatenSection />}
-        {tab === 'nummernkreise'   && <NummernkreiseSection />}
-        {tab === 'unternehmen'     && <UnternehmenSection />}
-        {tab === 'vorbelegungen'   && <VorbelegungenSection />}
-        {tab === 'monatsabschluss' && <MonatsabschlussSection />}
+        {tab === 'stammdaten'         && <StammdatenSection />}
+        {tab === 'nummernkreise'      && <NummernkreiseSection />}
+        {tab === 'unternehmen'        && <UnternehmenSection />}
+        {tab === 'vorbelegungen'      && <VorbelegungenSection />}
+        {tab === 'arbeitszeitmodelle' && <ArbeitszeitmodelleSection />}
+        {tab === 'monatsabschluss'    && <MonatsabschlussSection />}
       </div>
     </div>
   )
