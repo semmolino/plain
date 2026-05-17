@@ -223,7 +223,7 @@ body {
         <td class="r">
           {{ pct | round(1) }}&thinsp;%
           <div class="pct-bar-wrap">
-            <div class="pct-bar-fill {{ barClass }}" style="width: {{ [pct, 100] | min }}%"></div>
+            <div class="pct-bar-fill {{ barClass }}" style="width: {{ (100 if pct > 100 else pct) }}%"></div>
           </div>
         </td>
         <td class="r">{{ p.BILLED_NET_TOTAL | money }}</td>
