@@ -1,9 +1,10 @@
 import { useRef, useState, useEffect } from 'react'
+import { useAuthStore } from '@/store/authStore'
 
 const THEMES = [
   { id: 'light',  label: 'Light',        swatch: '#2563eb' },
   { id: 'modern', label: 'Modern',       swatch: '#d4714e' },
-  { id: 'mossy',  label: 'Mossy',        swatch: '#174d38' },
+  { id: 'forest', label: 'Forest',       swatch: '#174d38' },
   { id: 'earth',  label: 'Earth',        swatch: '#464646' },
   { id: 'winter', label: 'Winter Chill', swatch: '#4f7c82' },
   { id: 'dark',   label: 'Dark',         swatch: '#7a7ac6' },
@@ -11,25 +12,29 @@ const THEMES = [
 
 type ThemeId = typeof THEMES[number]['id']
 
+function storageKey(employeeId: number | null) {
+  return employeeId ? `plain-theme-${employeeId}` : 'plain-theme'
+}
+
 function applyTheme(id: ThemeId) {
   if (id === 'light') {
     document.documentElement.removeAttribute('data-theme')
   } else {
     document.documentElement.setAttribute('data-theme', id)
   }
-  localStorage.setItem('plain-theme', id)
 }
 
 export function ThemeSwitcher() {
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState<ThemeId>('light')
   const wrapRef = useRef<HTMLDivElement>(null)
+  const employeeId = useAuthStore(s => s.employeeId)
 
   useEffect(() => {
-    const saved = (localStorage.getItem('plain-theme') ?? 'light') as ThemeId
+    const saved = (localStorage.getItem(storageKey(employeeId)) ?? 'light') as ThemeId
     setCurrent(saved)
     applyTheme(saved)
-  }, [])
+  }, [employeeId])
 
   useEffect(() => {
     if (!open) return
@@ -45,6 +50,7 @@ export function ThemeSwitcher() {
   function select(id: ThemeId) {
     applyTheme(id)
     setCurrent(id)
+    localStorage.setItem(storageKey(employeeId), id)
     setOpen(false)
   }
 
