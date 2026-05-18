@@ -604,6 +604,8 @@ function VorbelegungenSection() {
   const [offerValidDays, setOfferValidDays] = useState('')
   const [cashDiscPct,    setCashDiscPct]    = useState('')
   const [cashDiscDays,   setCashDiscDays]   = useState('')
+  const [offerText1,     setOfferText1]     = useState('')
+  const [offerText2,     setOfferText2]     = useState('')
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -619,6 +621,8 @@ function VorbelegungenSection() {
     setOfferValidDays(defData.data.offer_valid_days ?? '')
     setCashDiscPct(defData.data.default_cash_discount_percent ?? '')
     setCashDiscDays(defData.data.default_cash_discount_days ?? '')
+    setOfferText1(defData.data.offer_text_1 ?? '')
+    setOfferText2(defData.data.offer_text_2 ?? '')
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -628,6 +632,8 @@ function VorbelegungenSection() {
       await putDefault('offer_valid_days',               offerValidDays || null)
       await putDefault('default_cash_discount_percent', cashDiscPct    || null)
       await putDefault('default_cash_discount_days',    cashDiscDays   || null)
+      await putDefault('offer_text_1',                  offerText1     || null)
+      await putDefault('offer_text_2',                  offerText2     || null)
     },
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -670,6 +676,26 @@ function VorbelegungenSection() {
               />
             </div>
             <p className="admin-section-hint">Tage, um die das Gültigkeitsdatum im Angebots-Wizard vorbelegt wird.</p>
+            <div className="form-group" style={{ marginTop: 12 }}>
+              <label>Kopftext (Vorbelegung)</label>
+              <textarea
+                rows={4}
+                value={offerText1}
+                onChange={e => setOfferText1(e.target.value)}
+                placeholder="Einleitungstext, der bei jedem neuen Angebot vorbelegt wird …"
+                style={{ width: '100%', resize: 'vertical' }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Fußtext (Vorbelegung)</label>
+              <textarea
+                rows={4}
+                value={offerText2}
+                onChange={e => setOfferText2(e.target.value)}
+                placeholder="Abschlusstext, der bei jedem neuen Angebot vorbelegt wird …"
+                style={{ width: '100%', resize: 'vertical' }}
+              />
+            </div>
           </div>
           <div className="admin-block">
             <h3 className="admin-block-title">Skonto (Vorbelegung für neue Verträge)</h3>

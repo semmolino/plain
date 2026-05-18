@@ -92,6 +92,18 @@ export function AngeboteAnlegen() {
     setBasic(f => ({ ...f, valid_until: addDays(f.offer_date || todayIso(), days) }))
   }, [defData?.data?.offer_valid_days])
 
+  // Pre-fill Kopftext / Fußtext from saved defaults (only when field is still empty)
+  useEffect(() => {
+    const t1 = defData?.data?.offer_text_1 ?? ''
+    const t2 = defData?.data?.offer_text_2 ?? ''
+    if (!t1 && !t2) return
+    setBasic(f => ({
+      ...f,
+      ...(!f.offer_text_1 && t1 ? { offer_text_1: t1 } : {}),
+      ...(!f.offer_text_2 && t2 ? { offer_text_2: t2 } : {}),
+    }))
+  }, [defData?.data?.offer_text_1, defData?.data?.offer_text_2])
+
   const searchAddresses = useCallback(async (q: string) => {
     const res = await searchAddressesApi(q)
     return res.data.map(a => ({ id: a.ID, label: a.ADDRESS_NAME_1 }))

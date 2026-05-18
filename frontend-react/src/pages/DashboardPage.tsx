@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale, BarElement, ArcElement,
@@ -8,8 +8,7 @@ import {
   type ChartOptions,
 } from 'chart.js'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
-import { useNavigate, Link } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
+import { Link } from 'react-router-dom'
 import { useSession } from '@/hooks/useSession'
 import {
   fetchDashboardKpis,
@@ -394,11 +393,7 @@ function SetupChecklist() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
-  const navigate    = useNavigate()
-  const clearAuth   = useAuthStore(s => s.clearAuth)
   useSession()
-  const qc          = useQueryClient()
-  const [confirmLogout, setConfirmLogout] = useState(false)
 
   const now        = new Date()
   const monthLabel_ = `${MONTHS_DE[now.getMonth()]} ${now.getFullYear()}`
@@ -424,23 +419,6 @@ export function DashboardPage() {
       {/* ── Header ── */}
       <div className="dash-header">
         <div className="dash-title">Übersicht</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button className="dash-logout" onClick={() => navigate('/profil')}>
-            Profil
-          </button>
-          {confirmLogout ? (
-            <span className="dash-logout-confirm">
-              Wirklich abmelden?&nbsp;
-              <button className="dash-logout-yes" onClick={() => { qc.clear(); clearAuth(); navigate('/login') }}>Ja</button>
-              &nbsp;
-              <button className="dash-logout-no" onClick={() => setConfirmLogout(false)}>Nein</button>
-            </span>
-          ) : (
-            <button className="dash-logout" onClick={() => setConfirmLogout(true)}>
-              Abmelden
-            </button>
-          )}
-        </div>
       </div>
 
       <SetupChecklist />

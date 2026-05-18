@@ -1011,6 +1011,39 @@ input::placeholder { color: var(--text-4); }
 .app-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .app-main { padding-top: 0; }
 
+/* ── User menu ───────────────────────────────────────────────────────────── */
+.user-menu-wrap { position: relative; }
+.user-menu-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: none; border: none; cursor: pointer;
+  padding: 4px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 600; color: var(--chrome-text, var(--text-2));
+  min-height: 32px;
+}
+.user-menu-btn:hover { background: rgba(0,0,0,0.07); transform: none; box-shadow: none; }
+.user-menu-name { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu-panel {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  background: var(--surface); border: 1px solid var(--border-2);
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 4px; min-width: 140px; z-index: 200;
+}
+.user-menu-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; cursor: pointer;
+  padding: 7px 12px; border-radius: 5px;
+  font-size: 13px; color: var(--text-2);
+}
+.user-menu-item:hover { background: var(--dim); transform: none; box-shadow: none; }
+.user-menu-item.danger { color: #dc2626; }
+.user-menu-item.danger:hover { background: rgba(220,38,38,0.06); }
+.user-menu-confirm { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border-3); }
+.user-menu-confirm-text { font-size: 12px; color: var(--text-3); }
+.user-menu-confirm-btns { display: flex; gap: 5px; }
+.user-menu-confirm-yes { background: #ef4444; color: #fff; border: none; border-radius: 5px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: 600; }
+.user-menu-confirm-yes:hover { background: #dc2626; }
+.user-menu-confirm-no  { background: var(--dim); color: var(--text); border: none; border-radius: 5px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+
 /* ── Notification bell ───────────────────────────────────────────────────── */
 .notif-bell-wrap {
   position: relative;
