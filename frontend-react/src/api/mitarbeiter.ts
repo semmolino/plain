@@ -151,6 +151,38 @@ export const fetchMonthBalance = (id: number, year: number, month: number) =>
 export const fetchRunningBalance = (id: number) =>
   apiClient.get<{ data: { months: RunningMonth[]; totalBalance: number } }>(`/mitarbeiter/${id}/balance/running`)
 
+// ── Employee list report ──────────────────────────────────────────────────────
+
+export interface EmployeeReportRow {
+  EMPLOYEE_ID:     number
+  SHORT_NAME:      string
+  FIRST_NAME:      string
+  LAST_NAME:       string
+  DEPARTMENT_NAME: string
+  YEAR:            number
+  MONTH:           number
+  REQUIRED:        number
+  ACTUAL:          number
+  BALANCE:         number
+  HOURS_EXT:       number
+  COST:            number
+}
+
+export const fetchEmployeeReportList = (params: {
+  mode:         'now' | 'as_of' | 'period'
+  asOfDate?:    string
+  dateFrom?:    string
+  dateTo?:      string
+  employeeId?:  number
+}) => {
+  const p = new URLSearchParams({ mode: params.mode })
+  if (params.asOfDate)   p.set('as_of_date', params.asOfDate)
+  if (params.dateFrom)   p.set('date_from',  params.dateFrom)
+  if (params.dateTo)     p.set('date_to',    params.dateTo)
+  if (params.employeeId) p.set('employee_id', String(params.employeeId))
+  return apiClient.get<{ data: EmployeeReportRow[] }>(`/mitarbeiter/report-list?${p}`)
+}
+
 // ── Month close ───────────────────────────────────────────────────────────────
 
 export interface MonthClose {

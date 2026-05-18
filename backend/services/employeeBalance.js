@@ -222,4 +222,163 @@ async function calculateRunningBalance(supabase, tenantId, employeeId) {
   return { months, totalBalance: Math.round(cumulative * 100) / 100 };
 }
 
-module.exports = { calculateMonthBalance, calculateRunningBalance };
+/**
+ * Build a flat list of (employee × month) rows for the employee list report.
+ * mode: 'now' | 'as_of' | 'period'
+ * Returns [{ EMPLOYEE_ID, SHORT_NAME, FIRST_NAME, LAST_NAME, DEPARTMENT_NAME,
+ *            YEAR, MONTH, REQUIRED, ACTUAL, BALANCE, HOURS_EXT, COST }]
+ */
+async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dateFrom, dateTo, employeeId }) {
+  const today = isoDate(new Date());
+
+  // Determine month slots
+  const months = [];
+  if (mode === 'now') {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth() + 1;
+    months.push({ year: y, month: m, from: `${y}-${String(m).padStart(2,'0')}-01`, to: today });
+  } else if (mode === 'as_of') {
+    const d = new Date(asOfDate + 'T00:00:00');
+    const y = d.getFullYear(), m = d.getMonth() + 1;
+    months.push({ year: y, month: m, from: `${y}-${String(m).padStart(2,'0')}-01`, to: asOfDate });
+  } else {
+    let cur = new Date(dateFrom.slice(0, 7) + '-01T00:00:00');
+    const endM = new Date(dateTo.slice(0, 7) + '-01T00:00:00');
+    while (cur <= endM) {
+      const y = cur.getFullYear(), m = cur.getMonth() + 1;
+      const mFrom = `${y}-${String(m).padStart(2,'0')}-01`;
+      const mLast = isoDate(new Date(y, m, 0));
+      months.push({ year: y, month: m, from: mFrom, to: mLast < dateTo ? mLast : dateTo });
+      cur = new Date(y, m, 1);
+    }
+  }
+  if (!months.length) return [];
+
+  const allFrom = months[0].from;
+  const allTo   = months[months.length - 1].to;
+
+  // Fetch employees
+  let empQ = supabase
+    .from('EMPLOYEE')
+    .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME, DEPARTMENT_ID')
+    .eq('TENANT_ID', tenantId)
+    .neq('ACTIVE', 2)
+    .order('SHORT_NAME', { ascending: true });
+  if (employeeId) empQ = empQ.eq('ID', employeeId);
+  const { data: employees, error: empErr } = await empQ;
+  if (empErr) throw { status: 500, message: empErr.message };
+  if (!employees || !employees.length) return [];
+
+  const empIds = employees.map(e => e.ID);
+
+  const { data: depts } = await supabase.from('PROJECT_DEPARTMENT')
+    .select('ID, NAME_SHORT').eq('TENANT_ID', tenantId);
+  const deptMap = new Map((depts || []).map(d => [d.ID, d.NAME_SHORT]));
+
+  // Bulk TEC (CONFIRMED only)
+  const { data: tecRows, error: tecErr } = await supabase
+    .from('TEC')
+    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_TOT')
+    .eq('TENANT_ID', tenantId)
+    .in('EMPLOYEE_ID', empIds)
+    .eq('STATUS', 'CONFIRMED')
+    .gte('DATE_VOUCHER', allFrom)
+    .lte('DATE_VOUCHER', allTo);
+  if (tecErr) throw { status: 500, message: tecErr.message };
+
+  const tecIdx = new Map();
+  for (const row of tecRows || []) {
+    const y = parseInt(row.DATE_VOUCHER.slice(0, 4), 10);
+    const m = parseInt(row.DATE_VOUCHER.slice(5, 7), 10);
+    const k = `${row.EMPLOYEE_ID}-${y}-${m}`;
+    const a = tecIdx.get(k) || { hoursInt: 0, hoursExt: 0, cost: 0 };
+    a.hoursInt += Number(row.QUANTITY_INT) || 0;
+    a.hoursExt += Number(row.QUANTITY_EXT) || 0;
+    a.cost     += Number(row.CP_TOT)       || 0;
+    tecIdx.set(k, a);
+  }
+
+  // Bulk work model assignments
+  const { data: assigns, error: asErr } = await supabase
+    .from('EMPLOYEE_WORK_MODEL')
+    .select('EMPLOYEE_ID, MODEL_ID, VALID_FROM')
+    .eq('TENANT_ID', tenantId)
+    .in('EMPLOYEE_ID', empIds)
+    .lte('VALID_FROM', allTo)
+    .order('VALID_FROM', { ascending: true });
+  if (asErr) throw { status: 500, message: asErr.message };
+
+  const modelIds = [...new Set((assigns || []).map(a => a.MODEL_ID))];
+  let modelMap = new Map();
+  if (modelIds.length) {
+    const { data: models } = await supabase
+      .from('WORKING_TIME_MODEL')
+      .select('ID, COUNTRY_CODE, STATE_CODE, MON, TUE, WED, THU, FRI, SAT, SUN')
+      .in('ID', modelIds);
+    modelMap = new Map((models || []).map(m => [m.ID, m]));
+  }
+
+  const assignByEmp = new Map();
+  for (const a of assigns || []) {
+    if (!assignByEmp.has(a.EMPLOYEE_ID)) assignByEmp.set(a.EMPLOYEE_ID, []);
+    assignByEmp.get(a.EMPLOYEE_ID).push({ ...a, model: modelMap.get(a.MODEL_ID) ?? null });
+  }
+
+  // Bulk holidays for all country/state combos used
+  const csSet = new Set();
+  for (const m of modelMap.values()) csSet.add(`${m.COUNTRY_CODE}|${m.STATE_CODE || ''}`);
+  const holidayKey = new Set();
+  for (const cs of csSet) {
+    const [cc, sc] = cs.split('|');
+    const { data: hols } = await supabase
+      .from('PUBLIC_HOLIDAY')
+      .select('HOLIDAY_DATE')
+      .eq('COUNTRY_CODE', cc)
+      .or(sc ? `STATE_CODE.is.null,STATE_CODE.eq.${sc}` : 'STATE_CODE.is.null')
+      .gte('HOLIDAY_DATE', allFrom)
+      .lte('HOLIDAY_DATE', allTo);
+    for (const h of hols || []) holidayKey.add(`${cs}|${h.HOLIDAY_DATE}`);
+  }
+
+  // Build result rows
+  const result = [];
+  for (const emp of employees) {
+    const empAssigns = assignByEmp.get(emp.ID) || [];
+    for (const mo of months) {
+      const tec = tecIdx.get(`${emp.ID}-${mo.year}-${mo.month}`) || { hoursInt: 0, hoursExt: 0, cost: 0 };
+
+      let required = 0;
+      let cur = new Date(mo.from + 'T00:00:00');
+      const end = new Date(mo.to + 'T00:00:00');
+      while (cur <= end) {
+        const ds    = isoDate(cur);
+        const model = findActiveModel(empAssigns, ds);
+        if (model) {
+          const dayH = Number(model[WEEKDAY_COLS[cur.getDay()]]) || 0;
+          if (dayH > 0 && !holidayKey.has(`${model.COUNTRY_CODE}|${model.STATE_CODE || ''}|${ds}`)) {
+            required += dayH;
+          }
+        }
+        cur = addDays(cur, 1);
+      }
+
+      result.push({
+        EMPLOYEE_ID:     emp.ID,
+        SHORT_NAME:      emp.SHORT_NAME,
+        FIRST_NAME:      emp.FIRST_NAME,
+        LAST_NAME:       emp.LAST_NAME,
+        DEPARTMENT_NAME: deptMap.get(emp.DEPARTMENT_ID) || '',
+        YEAR:            mo.year,
+        MONTH:           mo.month,
+        REQUIRED:        Math.round(required      * 100) / 100,
+        ACTUAL:          Math.round(tec.hoursInt  * 100) / 100,
+        BALANCE:         Math.round((tec.hoursInt - required) * 100) / 100,
+        HOURS_EXT:       Math.round(tec.hoursExt  * 100) / 100,
+        COST:            Math.round(tec.cost       * 100) / 100,
+      });
+    }
+  }
+  return result;
+}
+
+module.exports = { calculateMonthBalance, calculateRunningBalance, buildEmployeeReportList };

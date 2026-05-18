@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Modal }     from '@/components/ui/Modal'
@@ -11,9 +11,10 @@ import {
   fetchEmployeeCpRates, createEmployeeCpRate, updateEmployeeCpRate, deleteEmployeeCpRate,
   fetchMonthBalance, fetchRunningBalance,
   fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword,
+  fetchEmployeeReportList,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
   type EmployeeWorkModel, type EmployeeCpRate, type MonthBalance, type RunningMonth,
-  type MonthCloseOverviewEmployee, type DayBooking,
+  type MonthCloseOverviewEmployee, type DayBooking, type EmployeeReportRow,
 } from '@/api/mitarbeiter'
 import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
 
@@ -464,10 +465,313 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   )
 }
 
+// ── Employee List Report ───────────────────────────────────────────────────────
+
+const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+type EmpRepMode = 'now' | 'as_of' | 'period'
+
+function EmployeeListReport({ employees }: { employees: Employee[] }) {
+  const [mode,        setMode]        = useState<EmpRepMode>('now')
+  const [asOfDate,    setAsOfDate]    = useState('')
+  const [dateFrom,    setDateFrom]    = useState('')
+  const [dateTo,      setDateTo]      = useState('')
+  const [filterEmpId, setFilterEmpId] = useState<number | null>(null)
+  const [search,      setSearch]      = useState('')
+  const [deptFilter,  setDeptFilter]  = useState<Set<string>>(new Set())
+  const [sortField,   setSortField]   = useState('name')
+  const [sortDir,     setSortDir]     = useState<'asc' | 'desc'>('asc')
+
+  const filterReady =
+    mode === 'now' ||
+    (mode === 'as_of'  && asOfDate !== '') ||
+    (mode === 'period' && dateFrom !== '' && dateTo !== '')
+
+  const qparams = filterReady ? {
+    mode,
+    asOfDate:   mode === 'as_of'  ? asOfDate : undefined,
+    dateFrom:   mode === 'period' ? dateFrom : undefined,
+    dateTo:     mode === 'period' ? dateTo   : undefined,
+    employeeId: filterEmpId ?? undefined,
+  } : null
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['emp-report-list', qparams],
+    queryFn:  () => fetchEmployeeReportList(qparams!),
+    enabled:  filterReady,
+  })
+
+  const allRows: EmployeeReportRow[] = data?.data ?? []
+
+  const deptOptions = useMemo(() =>
+    [...new Set(allRows.map(r => r.DEPARTMENT_NAME).filter(Boolean))].sort(),
+  [allRows])
+
+  const filtered = useMemo(() => {
+    let rows = allRows
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      rows = rows.filter(r =>
+        r.SHORT_NAME.toLowerCase().includes(q) ||
+        r.FIRST_NAME.toLowerCase().includes(q) ||
+        r.LAST_NAME.toLowerCase().includes(q) ||
+        (r.DEPARTMENT_NAME || '').toLowerCase().includes(q)
+      )
+    }
+    if (deptFilter.size > 0) rows = rows.filter(r => deptFilter.has(r.DEPARTMENT_NAME))
+    return rows
+  }, [allRows, search, deptFilter])
+
+  function toggleSort(field: string) {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+  function si(field: string) { return sortField === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '' }
+
+  const balanceColor = (n: number) => n > 0 ? '#059669' : n < 0 ? '#dc2626' : '#6b7280'
+
+  function sortFlat(rows: EmployeeReportRow[]) {
+    return [...rows].sort((a, b) => {
+      let va: string | number = 0, vb: string | number = 0
+      if (sortField === 'name')     { va = a.SHORT_NAME;      vb = b.SHORT_NAME      }
+      else if (sortField === 'dept')     { va = a.DEPARTMENT_NAME; vb = b.DEPARTMENT_NAME }
+      else if (sortField === 'required') { va = a.REQUIRED;        vb = b.REQUIRED        }
+      else if (sortField === 'actual')   { va = a.ACTUAL;          vb = b.ACTUAL          }
+      else if (sortField === 'balance')  { va = a.BALANCE;         vb = b.BALANCE         }
+      else if (sortField === 'ext')      { va = a.HOURS_EXT;       vb = b.HOURS_EXT       }
+      else if (sortField === 'cost')     { va = a.COST;            vb = b.COST            }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1
+      if (va > vb) return sortDir === 'asc' ?  1 : -1
+      return 0
+    })
+  }
+
+  const sumF = (rows: EmployeeReportRow[], fn: (r: EmployeeReportRow) => number) =>
+    Math.round(rows.reduce((s, r) => s + fn(r), 0) * 100) / 100
+
+  const hasFilter = search.trim() !== '' || deptFilter.size > 0
+  const isPeriod  = mode === 'period'
+
+  // Column headers shared between both table variants
+  function NumTh({ label, field }: { label: string; field: string }) {
+    return (
+      <th className="num sortable-th" onClick={() => toggleSort(field)} style={{ cursor: 'pointer' }}>
+        {label}{si(field)}
+      </th>
+    )
+  }
+
+  function TotalsRow({ rows, colSpan = 3 }: { rows: EmployeeReportRow[]; colSpan?: number }) {
+    const bal = sumF(rows, r => r.BALANCE)
+    return (
+      <tr className="sum-row">
+        <td colSpan={colSpan}></td>
+        <td className="num"><strong>{fmtH(sumF(rows, r => r.REQUIRED))}</strong></td>
+        <td className="num"><strong>{fmtH(sumF(rows, r => r.ACTUAL))}</strong></td>
+        <td className="num" style={{ color: balanceColor(bal) }}><strong>{fmtBalance(bal)}</strong></td>
+        <td className="num"><strong>{fmtH(sumF(rows, r => r.HOURS_EXT))}</strong></td>
+        <td className="num"><strong>{sumF(rows, r => r.COST) > 0 ? FMT_EUR.format(sumF(rows, r => r.COST)) : '—'}</strong></td>
+      </tr>
+    )
+  }
+
+  return (
+    <div>
+      {/* Date filter */}
+      <div className="daten-filter-bar">
+        <div className="daten-filter-modes">
+          {(['now', 'as_of', 'period'] as EmpRepMode[]).map(m => (
+            <label key={m} className={`daten-filter-mode-btn${mode === m ? ' active' : ''}`}>
+              <input type="radio" name="empRepMode" value={m} checked={mode === m} onChange={() => setMode(m)} />
+              {m === 'now' ? 'Aktuell' : m === 'as_of' ? 'Stichtag' : 'Zeitraum'}
+            </label>
+          ))}
+        </div>
+        {mode === 'as_of' && (
+          <div className="daten-filter-dates">
+            <label>Stichtag <input type="date" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} /></label>
+          </div>
+        )}
+        {mode === 'period' && (
+          <div className="daten-filter-dates">
+            <label>Von <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></label>
+            <label>Bis <input type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)} /></label>
+          </div>
+        )}
+      </div>
+
+      {/* Employee filter */}
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ fontSize: 12, fontWeight: 600, marginRight: 8, color: 'var(--text-3)' }}>Mitarbeiter</label>
+        <select
+          style={{ fontSize: 13, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)' }}
+          value={filterEmpId ?? ''}
+          onChange={e => setFilterEmpId(e.target.value ? Number(e.target.value) : null)}
+        >
+          <option value="">— Alle Mitarbeiter —</option>
+          {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+        </select>
+      </div>
+
+      {isLoading && <p className="empty-note">Laden …</p>}
+      {!isLoading && !filterReady && <p className="empty-note">Bitte Datumfilter ausfüllen.</p>}
+      {!isLoading && filterReady && allRows.length === 0 && <p className="empty-note">Keine Daten vorhanden.</p>}
+
+      {!isLoading && filterReady && allRows.length > 0 && (
+        <>
+          {/* Toolbar */}
+          <div className="pl-toolbar">
+            <input
+              type="search"
+              placeholder="Suche …"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="list-search"
+            />
+            <div className="pl-filter-chips">
+              <FilterChip label="Abteilung" options={deptOptions} active={deptFilter} onChange={setDeptFilter} />
+              {hasFilter && (
+                <button className="pl-clear-btn" onClick={() => { setSearch(''); setDeptFilter(new Set()) }}>
+                  Alle Filter löschen
+                </button>
+              )}
+            </div>
+          </div>
+
+          {hasFilter && (
+            <p className="empty-note" style={{ margin: '0 0 8px' }}>
+              {isPeriod
+                ? `${new Set(filtered.map(r => r.EMPLOYEE_ID)).size} von ${new Set(allRows.map(r => r.EMPLOYEE_ID)).size} Mitarbeitern`
+                : `${filtered.length} von ${allRows.length} Mitarbeitern`}
+            </p>
+          )}
+
+          {/* Flat table for now / as_of */}
+          {!isPeriod && (
+            <div className="list-section table-scroll">
+              <table className="master-table">
+                <thead>
+                  <tr>
+                    <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>Kürzel{si('name')}</th>
+                    <th>Name</th>
+                    <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('dept')}>Abteilung{si('dept')}</th>
+                    <NumTh label="Soll"    field="required" />
+                    <NumTh label="Ist"     field="actual"   />
+                    <NumTh label="Saldo"   field="balance"  />
+                    <NumTh label="Std.ext" field="ext"      />
+                    <NumTh label="Kosten"  field="cost"     />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortFlat(filtered).map(r => (
+                    <tr key={r.EMPLOYEE_ID}>
+                      <td><strong>{r.SHORT_NAME}</strong></td>
+                      <td>{r.FIRST_NAME} {r.LAST_NAME}</td>
+                      <td>{r.DEPARTMENT_NAME || '—'}</td>
+                      <td className="num">{fmtH(r.REQUIRED)}</td>
+                      <td className="num">{fmtH(r.ACTUAL)}</td>
+                      <td className="num" style={{ color: balanceColor(r.BALANCE), fontWeight: 600 }}>{fmtBalance(r.BALANCE)}</td>
+                      <td className="num">{fmtH(r.HOURS_EXT)}</td>
+                      <td className="num">{r.COST > 0 ? FMT_EUR.format(r.COST) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {filtered.length > 1 && (
+                  <tfoot>
+                    <TotalsRow rows={filtered} colSpan={3} />
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+
+          {/* Grouped table for period mode */}
+          {isPeriod && (() => {
+            const byEmp = new Map<number, EmployeeReportRow[]>()
+            for (const row of filtered) {
+              if (!byEmp.has(row.EMPLOYEE_ID)) byEmp.set(row.EMPLOYEE_ID, [])
+              byEmp.get(row.EMPLOYEE_ID)!.push(row)
+            }
+            const groups = [...byEmp.entries()].sort((a, b) =>
+              (a[1][0]?.SHORT_NAME ?? '').localeCompare(b[1][0]?.SHORT_NAME ?? '')
+            )
+            return (
+              <div className="list-section table-scroll">
+                <table className="master-table">
+                  <thead>
+                    <tr>
+                      <th>Mitarbeiter</th>
+                      <th>Abteilung</th>
+                      <th>Monat</th>
+                      <NumTh label="Soll"    field="required" />
+                      <NumTh label="Ist"     field="actual"   />
+                      <NumTh label="Saldo"   field="balance"  />
+                      <NumTh label="Std.ext" field="ext"      />
+                      <NumTh label="Kosten"  field="cost"     />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groups.map(([empId, rows]) => {
+                      const sorted = [...rows].sort((a, b) =>
+                        a.YEAR !== b.YEAR ? a.YEAR - b.YEAR : a.MONTH - b.MONTH
+                      )
+                      return (
+                        <Fragment key={empId}>
+                          {sorted.map((r, i) => (
+                            <tr key={`${r.YEAR}-${r.MONTH}`}>
+                              {i === 0 && (
+                                <td rowSpan={sorted.length} style={{ verticalAlign: 'top', paddingTop: 8 }}>
+                                  <strong>{r.SHORT_NAME}</strong>
+                                  <br /><span style={{ fontSize: 11, color: 'var(--text-4)', fontWeight: 400 }}>{r.FIRST_NAME} {r.LAST_NAME}</span>
+                                </td>
+                              )}
+                              {i === 0 && (
+                                <td rowSpan={sorted.length} style={{ verticalAlign: 'top', paddingTop: 8 }}>
+                                  {r.DEPARTMENT_NAME || '—'}
+                                </td>
+                              )}
+                              <td>{MONTH_NAMES[r.MONTH - 1]} {r.YEAR}</td>
+                              <td className="num">{fmtH(r.REQUIRED)}</td>
+                              <td className="num">{fmtH(r.ACTUAL)}</td>
+                              <td className="num" style={{ color: balanceColor(r.BALANCE), fontWeight: r.BALANCE !== 0 ? 600 : 400 }}>{fmtBalance(r.BALANCE)}</td>
+                              <td className="num">{fmtH(r.HOURS_EXT)}</td>
+                              <td className="num">{r.COST > 0 ? FMT_EUR.format(r.COST) : '—'}</td>
+                            </tr>
+                          ))}
+                          <TotalsRow rows={rows} colSpan={3} />
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                  {groups.length > 1 && (
+                    <tfoot>
+                      <tr className="sum-row" style={{ borderTop: '2px solid var(--border)' }}>
+                        <td colSpan={3}><strong>Gesamt ({groups.length} Mitarbeiter)</strong></td>
+                        <td className="num"><strong>{fmtH(sumF(filtered, r => r.REQUIRED))}</strong></td>
+                        <td className="num"><strong>{fmtH(sumF(filtered, r => r.ACTUAL))}</strong></td>
+                        <td className="num" style={{ color: balanceColor(sumF(filtered, r => r.BALANCE)) }}>
+                          <strong>{fmtBalance(sumF(filtered, r => r.BALANCE))}</strong>
+                        </td>
+                        <td className="num"><strong>{fmtH(sumF(filtered, r => r.HOURS_EXT))}</strong></td>
+                        <td className="num"><strong>{sumF(filtered, r => r.COST) > 0 ? FMT_EUR.format(sumF(filtered, r => r.COST)) : '—'}</strong></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            )
+          })()}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Reporting Tab ─────────────────────────────────────────────────────────────
 
 function ReportingTab({ employees }: { employees: Employee[] }) {
   const qc = useQueryClient()
+  const [subTab,   setSubTab]   = useState<'list' | 'single'>('list')
   const [empId,    setEmpId]    = useState<number | null>(null)
   const [year,     setYear]     = useState(new Date().getFullYear())
   const [month,    setMonth]    = useState(new Date().getMonth() + 1)
@@ -533,7 +837,16 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
   }
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
+      <div className="daten-filter-modes" style={{ marginBottom: 20 }}>
+        <button className={`daten-filter-mode-btn${subTab === 'list'   ? ' active' : ''}`} onClick={() => setSubTab('list')}>Alle Mitarbeiter</button>
+        <button className={`daten-filter-mode-btn${subTab === 'single' ? ' active' : ''}`} onClick={() => setSubTab('single')}>Mitarbeiter</button>
+      </div>
+
+      {subTab === 'list' && <EmployeeListReport employees={employees} />}
+
+      {subTab === 'single' && (
+      <div style={{ maxWidth: 760 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 20 }}>
         <div className="form-group" style={{ marginBottom: 0, minWidth: 220 }}>
           <label style={{ fontSize: 12 }}>Mitarbeiter</label>
@@ -709,6 +1022,8 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
             </>
           )}
         </>
+      )}
+      </div>
       )}
     </div>
   )

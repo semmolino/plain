@@ -502,6 +502,22 @@ router.delete("/:id/month-close/:year/:month", async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Employee list report ───────────────────────────────────────────────────────
+// GET /mitarbeiter/report-list?mode=now|as_of|period&as_of_date=&date_from=&date_to=&employee_id=
+router.get("/report-list", async (req, res) => {
+  const mode       = req.query.mode       || 'now';
+  const asOfDate   = req.query.as_of_date || null;
+  const dateFrom   = req.query.date_from  || null;
+  const dateTo     = req.query.date_to    || null;
+  const employeeId = req.query.employee_id ? Number(req.query.employee_id) : null;
+  try {
+    const rows = await balanceSvc.buildEmployeeReportList(supabase, req.tenantId, { mode, asOfDate, dateFrom, dateTo, employeeId });
+    res.json({ data: rows });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+});
+
 // ── Balance / Reporting ────────────────────────────────────────────────────────
 
 router.get("/:id/balance", async (req, res) => {
