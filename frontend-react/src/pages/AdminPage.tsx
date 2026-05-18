@@ -1180,15 +1180,32 @@ function KostensatzSection() {
   }
 
   // Overhead helpers
-  function addOverheadRow() {
-    if (!newName.trim()) return
-    setOverheadItems(prev => [...prev, { category: newCat, item_name: newName.trim(), amount: parseFloat(newAmt) || 0 }])
-    setNewName(''); setNewAmt('')
+  async function persistOverhead(items: OverheadItem[]) {
+    try {
+      await saveOverhead(selYear, items)
+      await refetchOverhead()
+    } catch (e: unknown) { setOverheadMsg({ text: (e as Error).message, type: 'error' }) }
   }
-  function removeOverhead(i: number) { setOverheadItems(prev => prev.filter((_, idx) => idx !== i)) }
+
+  async function addOverheadRow() {
+    if (!newName.trim()) return
+    const newItem: OverheadItem = { category: newCat, item_name: newName.trim(), amount: parseFloat(newAmt) || 0 }
+    const next = [...overheadItems, newItem]
+    setOverheadItems(next)
+    setNewName(''); setNewAmt('')
+    await persistOverhead(next)
+  }
+
+  async function removeOverhead(i: number) {
+    const next = overheadItems.filter((_, idx) => idx !== i)
+    setOverheadItems(next)
+    await persistOverhead(next)
+  }
+
   function updateOverhead(i: number, field: keyof OverheadItem, val: string) {
     setOverheadItems(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: field === 'amount' ? parseFloat(val) || 0 : val } : item))
   }
+
   const totalOverhead = overheadItems.reduce((s, i) => s + (Number(i.amount) || 0), 0)
 
   async function saveOverheadClick() {
@@ -1277,14 +1294,9 @@ function KostensatzSection() {
       <div className="master-section-block" style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Gemeinkosten {selYear}</h3>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn-small" onClick={copyFromPrevYear}>
-              Aus {selYear - 1} kopieren
-            </button>
-            <button type="button" className="btn-small btn-save" onClick={saveOverheadClick}>
-              Speichern
-            </button>
-          </div>
+          <button type="button" className="btn-small" onClick={copyFromPrevYear}>
+            Aus {selYear - 1} kopieren
+          </button>
         </div>
         {overheadMsg && <Message text={overheadMsg.text} type={overheadMsg.type} />}
 
@@ -1346,6 +1358,7 @@ function KostensatzSection() {
             <input type="number" value={newAmt} onChange={e => setNewAmt(e.target.value)} placeholder="0" style={{ fontSize: 13, padding: '4px 8px', border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)', width: 120, textAlign: 'right' }} />
           </div>
           <button type="button" className="btn-small btn-save" onClick={addOverheadRow} style={{ alignSelf: 'flex-end' }}>+ Hinzufügen</button>
+          <button type="button" className="btn-small" onClick={saveOverheadClick} style={{ alignSelf: 'flex-end' }} title="Änderungen an bestehenden Positionen speichern">Speichern</button>
         </div>
       </div>
 

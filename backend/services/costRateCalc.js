@@ -63,7 +63,12 @@ async function getOverheadItems(supabase, tenantId, year) {
     .order('CATEGORY')
     .order('ITEM_NAME');
   if (error) throw { status: 500, message: error.message };
-  return data || [];
+  return (data || []).map(r => ({
+    id:        r.ID,
+    category:  r.CATEGORY,
+    item_name: r.ITEM_NAME,
+    amount:    Number(r.AMOUNT),
+  }));
 }
 
 async function saveOverheadItems(supabase, tenantId, year, items) {
