@@ -1,4 +1,10 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
+}
+function lsPut(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)) } catch {} }
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -37,6 +43,21 @@ type FilterDimension = 'status' | 'manager' | 'typ' | 'abteilung' | 'adresse'
 type ActiveFilters   = Record<FilterDimension, Set<string>>
 const emptyFilters = (): ActiveFilters =>
   ({ status: new Set(), manager: new Set(), typ: new Set(), abteilung: new Set(), adresse: new Set() })
+
+const PL_KEY = 'plain:filt:proj-list'
+
+function serializeFilters(f: ActiveFilters): Record<string, string[]> {
+  const r: Record<string, string[]> = {}
+  for (const [k, v] of Object.entries(f)) r[k] = [...v]
+  return r
+}
+function deserializeFilters(raw: Record<string, string[]>): ActiveFilters {
+  const base = emptyFilters()
+  for (const k of Object.keys(base)) {
+    if (Array.isArray(raw[k])) (base as Record<string, Set<string>>)[k] = new Set(raw[k])
+  }
+  return base
+}
 
 type ColKey = 'status' | 'manager' | 'typ' | 'abteilung' | 'adresse'
   | 'honorar' | 'lstPct' | 'lstEur' | 'rest' | 'hoursInt' | 'cost'
@@ -401,9 +422,11 @@ export function ProjektlisteTab() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo,   setDateTo]   = useState('')
   const [search,   setSearch]   = useState('')
-  const [sortField, setSortField] = useState<SortField>('name')
-  const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>('asc')
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(emptyFilters())
+  const [sortField, setSortField] = useState<SortField>(() => lsGet<SortField>(`${PL_KEY}:sortField`, 'name'))
+  const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>(() => lsGet<'asc'|'desc'>(`${PL_KEY}:sortDir`, 'asc'))
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(() =>
+    deserializeFilters(lsGet<Record<string, string[]>>(`${PL_KEY}:filters`, {}))
+  )
   const [hiddenCols,    setHiddenCols]    = useState<Set<ColKey>>(
     new Set(COLUMNS.filter(c => !c.defaultVisible).map(c => c.key))
   )
@@ -418,6 +441,10 @@ export function ProjektlisteTab() {
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [colPanelOpen])
+
+  useEffect(() => { lsPut(`${PL_KEY}:sortField`, sortField)                   }, [sortField])
+  useEffect(() => { lsPut(`${PL_KEY}:sortDir`,   sortDir)                     }, [sortDir])
+  useEffect(() => { lsPut(`${PL_KEY}:filters`,   serializeFilters(activeFilters)) }, [activeFilters])
 
   const filter: DateFilter = { mode, asOfDate, dateFrom, dateTo }
   const filterReady =

@@ -469,7 +469,15 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
+}
+function lsPut(key: string, val: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(val)) } catch {} }
+
 type EmpRepMode = 'now' | 'as_of' | 'period'
+
+const ERP = 'plain:filt:emp-rep'
 
 function EmployeeListReport({ employees }: { employees: Employee[] }) {
   const [mode,        setMode]        = useState<EmpRepMode>('now')
@@ -478,9 +486,23 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
   const [dateTo,      setDateTo]      = useState('')
   const [filterEmpId, setFilterEmpId] = useState<number | null>(null)
   const [search,      setSearch]      = useState('')
-  const [deptFilter,  setDeptFilter]  = useState<Set<string>>(new Set())
-  const [sortField,   setSortField]   = useState('name')
-  const [sortDir,     setSortDir]     = useState<'asc' | 'desc'>('asc')
+  const [deptFilter,  setDeptFilter]  = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ERP}:dept`,   [])))
+  const [statusFilter,setStatusFilter]= useState<Set<string>>(() => new Set(lsGet<string[]>(`${ERP}:status`,[])))
+  const [modelFilter, setModelFilter] = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ERP}:model`, [])))
+  const [sortField,   setSortField]   = useState<string>(() => lsGet(`${ERP}:sortField`, 'name'))
+  const [sortDir,     setSortDir]     = useState<'asc' | 'desc'>(() => lsGet<'asc'|'desc'>(`${ERP}:sortDir`, 'asc'))
+
+  useEffect(() => { lsPut(`${ERP}:dept`,      [...deptFilter])   }, [deptFilter])
+  useEffect(() => { lsPut(`${ERP}:status`,    [...statusFilter]) }, [statusFilter])
+  useEffect(() => { lsPut(`${ERP}:model`,     [...modelFilter])  }, [modelFilter])
+  useEffect(() => { lsPut(`${ERP}:sortField`, sortField)         }, [sortField])
+  useEffect(() => { lsPut(`${ERP}:sortDir`,   sortDir)           }, [sortDir])
+
+  const empMap = useMemo(() => new Map(employees.map(e => [e.ID, e])), [employees])
+  const statusOptions = ['Aktiv', 'Inaktiv']
+  const modelOptions  = useMemo(() =>
+    [...new Set(employees.map(e => e.CURRENT_MODEL_NAME).filter(Boolean))].sort(),
+  [employees])
 
   const filterReady =
     mode === 'now' ||
@@ -518,9 +540,17 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
         (r.DEPARTMENT_NAME || '').toLowerCase().includes(q)
       )
     }
-    if (deptFilter.size > 0) rows = rows.filter(r => deptFilter.has(r.DEPARTMENT_NAME))
+    if (deptFilter.size > 0)   rows = rows.filter(r => deptFilter.has(r.DEPARTMENT_NAME))
+    if (statusFilter.size > 0) rows = rows.filter(r => {
+      const emp = empMap.get(r.EMPLOYEE_ID)
+      return statusFilter.has(emp?.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv')
+    })
+    if (modelFilter.size > 0) rows = rows.filter(r => {
+      const emp = empMap.get(r.EMPLOYEE_ID)
+      return modelFilter.has(emp?.CURRENT_MODEL_NAME ?? '')
+    })
     return rows
-  }, [allRows, search, deptFilter])
+  }, [allRows, search, deptFilter, statusFilter, modelFilter, empMap])
 
   function toggleSort(field: string) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -533,12 +563,11 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
   function sortFlat(rows: EmployeeReportRow[]) {
     return [...rows].sort((a, b) => {
       let va: string | number = 0, vb: string | number = 0
-      if (sortField === 'name')     { va = a.SHORT_NAME;      vb = b.SHORT_NAME      }
+      if      (sortField === 'name')     { va = a.SHORT_NAME;      vb = b.SHORT_NAME      }
       else if (sortField === 'dept')     { va = a.DEPARTMENT_NAME; vb = b.DEPARTMENT_NAME }
       else if (sortField === 'required') { va = a.REQUIRED;        vb = b.REQUIRED        }
       else if (sortField === 'actual')   { va = a.ACTUAL;          vb = b.ACTUAL          }
       else if (sortField === 'balance')  { va = a.BALANCE;         vb = b.BALANCE         }
-      else if (sortField === 'ext')      { va = a.HOURS_EXT;       vb = b.HOURS_EXT       }
       else if (sortField === 'cost')     { va = a.COST;            vb = b.COST            }
       if (va < vb) return sortDir === 'asc' ? -1 : 1
       if (va > vb) return sortDir === 'asc' ?  1 : -1
@@ -549,10 +578,13 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
   const sumF = (rows: EmployeeReportRow[], fn: (r: EmployeeReportRow) => number) =>
     Math.round(rows.reduce((s, r) => s + fn(r), 0) * 100) / 100
 
-  const hasFilter = search.trim() !== '' || deptFilter.size > 0
+  const hasFilter = search.trim() !== '' || deptFilter.size > 0 || statusFilter.size > 0 || modelFilter.size > 0
   const isPeriod  = mode === 'period'
 
-  // Column headers shared between both table variants
+  function clearFilters() {
+    setSearch(''); setDeptFilter(new Set()); setStatusFilter(new Set()); setModelFilter(new Set())
+  }
+
   function NumTh({ label, field }: { label: string; field: string }) {
     return (
       <th className="num sortable-th" onClick={() => toggleSort(field)} style={{ cursor: 'pointer' }}>
@@ -561,7 +593,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
     )
   }
 
-  function TotalsRow({ rows, colSpan = 3 }: { rows: EmployeeReportRow[]; colSpan?: number }) {
+  function TotalsRow({ rows, colSpan = 3, showCumulative = false }: { rows: EmployeeReportRow[]; colSpan?: number; showCumulative?: boolean }) {
     const bal = sumF(rows, r => r.BALANCE)
     return (
       <tr className="sum-row">
@@ -569,7 +601,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
         <td className="num"><strong>{fmtH(sumF(rows, r => r.REQUIRED))}</strong></td>
         <td className="num"><strong>{fmtH(sumF(rows, r => r.ACTUAL))}</strong></td>
         <td className="num" style={{ color: balanceColor(bal) }}><strong>{fmtBalance(bal)}</strong></td>
-        <td className="num"><strong>{fmtH(sumF(rows, r => r.HOURS_EXT))}</strong></td>
+        {showCumulative && <td className="num">—</td>}
         <td className="num"><strong>{sumF(rows, r => r.COST) > 0 ? FMT_EUR.format(sumF(rows, r => r.COST)) : '—'}</strong></td>
       </tr>
     )
@@ -583,7 +615,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
           {(['now', 'as_of', 'period'] as EmpRepMode[]).map(m => (
             <label key={m} className={`daten-filter-mode-btn${mode === m ? ' active' : ''}`}>
               <input type="radio" name="empRepMode" value={m} checked={mode === m} onChange={() => setMode(m)} />
-              {m === 'now' ? 'Aktuell' : m === 'as_of' ? 'Stichtag' : 'Zeitraum'}
+              {m === 'now' ? 'Aktueller Monat' : m === 'as_of' ? 'Stichtag' : 'Zeitraum'}
             </label>
           ))}
         </div>
@@ -629,12 +661,10 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
               className="list-search"
             />
             <div className="pl-filter-chips">
-              <FilterChip label="Abteilung" options={deptOptions} active={deptFilter} onChange={setDeptFilter} />
-              {hasFilter && (
-                <button className="pl-clear-btn" onClick={() => { setSearch(''); setDeptFilter(new Set()) }}>
-                  Alle Filter löschen
-                </button>
-              )}
+              <FilterChip label="Abteilung" options={deptOptions}    active={deptFilter}   onChange={setDeptFilter}   />
+              <FilterChip label="Status"    options={statusOptions}  active={statusFilter} onChange={setStatusFilter} />
+              <FilterChip label="Modell"    options={modelOptions}   active={modelFilter}  onChange={setModelFilter}  />
+              {hasFilter && <button className="pl-clear-btn" onClick={clearFilters}>Alle Filter löschen</button>}
             </div>
           </div>
 
@@ -655,11 +685,10 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                     <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>Kürzel{si('name')}</th>
                     <th>Name</th>
                     <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('dept')}>Abteilung{si('dept')}</th>
-                    <NumTh label="Soll"    field="required" />
-                    <NumTh label="Ist"     field="actual"   />
-                    <NumTh label="Saldo"   field="balance"  />
-                    <NumTh label="Std.ext" field="ext"      />
-                    <NumTh label="Kosten"  field="cost"     />
+                    <NumTh label="Soll"        field="required" />
+                    <NumTh label="Ist"         field="actual"   />
+                    <NumTh label="Monatssaldo" field="balance"  />
+                    <NumTh label="Kosten"      field="cost"     />
                   </tr>
                 </thead>
                 <tbody>
@@ -671,7 +700,6 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                       <td className="num">{fmtH(r.REQUIRED)}</td>
                       <td className="num">{fmtH(r.ACTUAL)}</td>
                       <td className="num" style={{ color: balanceColor(r.BALANCE), fontWeight: 600 }}>{fmtBalance(r.BALANCE)}</td>
-                      <td className="num">{fmtH(r.HOURS_EXT)}</td>
                       <td className="num">{r.COST > 0 ? FMT_EUR.format(r.COST) : '—'}</td>
                     </tr>
                   ))}
@@ -703,11 +731,11 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                       <th>Mitarbeiter</th>
                       <th>Abteilung</th>
                       <th>Monat</th>
-                      <NumTh label="Soll"    field="required" />
-                      <NumTh label="Ist"     field="actual"   />
-                      <NumTh label="Saldo"   field="balance"  />
-                      <NumTh label="Std.ext" field="ext"      />
-                      <NumTh label="Kosten"  field="cost"     />
+                      <NumTh label="Soll"          field="required" />
+                      <NumTh label="Ist"           field="actual"   />
+                      <NumTh label="Monatssaldo"   field="balance"  />
+                      <th className="num">Laufender Saldo</th>
+                      <NumTh label="Kosten"        field="cost"     />
                     </tr>
                   </thead>
                   <tbody>
@@ -715,9 +743,14 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                       const sorted = [...rows].sort((a, b) =>
                         a.YEAR !== b.YEAR ? a.YEAR - b.YEAR : a.MONTH - b.MONTH
                       )
+                      let cum = 0
+                      const withCum = sorted.map(r => {
+                        cum = Math.round((cum + r.BALANCE) * 100) / 100
+                        return { ...r, CUMULATIVE: cum }
+                      })
                       return (
                         <Fragment key={empId}>
-                          {sorted.map((r, i) => (
+                          {withCum.map((r, i) => (
                             <tr key={`${r.YEAR}-${r.MONTH}`}>
                               {i === 0 && (
                                 <td rowSpan={sorted.length} style={{ verticalAlign: 'top', paddingTop: 8 }}>
@@ -734,11 +767,11 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                               <td className="num">{fmtH(r.REQUIRED)}</td>
                               <td className="num">{fmtH(r.ACTUAL)}</td>
                               <td className="num" style={{ color: balanceColor(r.BALANCE), fontWeight: r.BALANCE !== 0 ? 600 : 400 }}>{fmtBalance(r.BALANCE)}</td>
-                              <td className="num">{fmtH(r.HOURS_EXT)}</td>
+                              <td className="num" style={{ color: balanceColor(r.CUMULATIVE), fontWeight: 600 }}>{fmtBalance(r.CUMULATIVE)}</td>
                               <td className="num">{r.COST > 0 ? FMT_EUR.format(r.COST) : '—'}</td>
                             </tr>
                           ))}
-                          <TotalsRow rows={rows} colSpan={3} />
+                          <TotalsRow rows={rows} colSpan={3} showCumulative />
                         </Fragment>
                       )
                     })}
@@ -752,7 +785,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                         <td className="num" style={{ color: balanceColor(sumF(filtered, r => r.BALANCE)) }}>
                           <strong>{fmtBalance(sumF(filtered, r => r.BALANCE))}</strong>
                         </td>
-                        <td className="num"><strong>{fmtH(sumF(filtered, r => r.HOURS_EXT))}</strong></td>
+                        <td className="num">—</td>
                         <td className="num"><strong>{sumF(filtered, r => r.COST) > 0 ? FMT_EUR.format(sumF(filtered, r => r.COST)) : '—'}</strong></td>
                       </tr>
                     </tfoot>
@@ -1004,7 +1037,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                     <th style={{ textAlign: 'right' }}>Soll</th>
                     <th style={{ textAlign: 'right' }}>Ist</th>
                     <th style={{ textAlign: 'right' }}>Saldo</th>
-                    <th style={{ textAlign: 'right' }}>Kumuliert</th>
+                    <th style={{ textAlign: 'right' }}>Laufender Saldo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1106,13 +1139,14 @@ function MonthsOverviewTab() {
 
 export function MitarbeiterPage() {
   const qc = useQueryClient()
+  const ML = 'plain:filt:mitarb-list'
   const [tab,       setTab]      = useState('list')
   const [search,    setSearch]   = useState('')
-  const [activeAbt,     setActiveAbt]     = useState<Set<string>>(new Set())
-  const [activeStatus,  setActiveStatus]  = useState<Set<string>>(new Set())
-  const [activeModel,   setActiveModel]   = useState<Set<string>>(new Set())
-  const [sortKey,   setSortKey]  = useState<SortKey>('SHORT_NAME')
-  const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>('asc')
+  const [activeAbt,    setActiveAbt]    = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:dept`,   [])))
+  const [activeStatus, setActiveStatus] = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:status`,[])))
+  const [activeModel,  setActiveModel]  = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:model`, [])))
+  const [sortKey,   setSortKey]  = useState<SortKey>(() => lsGet<SortKey>(`${ML}:sortKey`, 'SHORT_NAME'))
+  const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>(() => lsGet<'asc'|'desc'>(`${ML}:sortDir`, 'asc'))
   const [page,      setPage]     = useState(1)
   const [editRow,   setEditRow]  = useState<Employee | null>(null)
   const [form,      setForm]     = useState<CreateEmployeePayload>(emptyCreateForm)
@@ -1141,6 +1175,12 @@ export function MitarbeiterPage() {
     const model  = [...new Set(employees.map(e => e.CURRENT_MODEL_NAME).filter(Boolean))].sort()
     return { abt, status, model }
   }, [employees])
+
+  useEffect(() => { lsPut(`${ML}:dept`,    [...activeAbt])    }, [activeAbt])
+  useEffect(() => { lsPut(`${ML}:status`,  [...activeStatus]) }, [activeStatus])
+  useEffect(() => { lsPut(`${ML}:model`,   [...activeModel])  }, [activeModel])
+  useEffect(() => { lsPut(`${ML}:sortKey`, sortKey)           }, [sortKey])
+  useEffect(() => { lsPut(`${ML}:sortDir`, sortDir)           }, [sortDir])
 
   const processed = useMemo(() => {
     let rows = employees
