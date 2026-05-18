@@ -1370,7 +1370,7 @@ function KostensatzSection() {
         </div>
         {paramsMsg && <Message text={paramsMsg.text} type={paramsMsg.type} />}
         <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10, marginTop: 0 }}>
-          AG-Sozialabgaben (D): KV ~7,3% · RV 9,3% · AV 1,5% · PV ~1,8% · UV ~1% ≈ 21% gesamt
+          AG-Sozialabgaben (D): KV (Krankenversicherung) ~7,3% · RV (Rentenversicherung) 9,3% · AV (Arbeitslosenversicherung) 1,5% · PV (Pflegeversicherung) ~1,8% · UV (Unfallversicherung) ~1% ≈ 21% gesamt
         </p>
         <div className="table-scroll">
           <table className="master-table" style={{ fontSize: 12 }}>
@@ -1421,7 +1421,7 @@ function KostensatzSection() {
 
       {/* Panel 3: Kalkulation */}
       <div className="master-section-block">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Kalkulation & Ergebnis</h3>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <label style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1437,6 +1437,20 @@ function KostensatzSection() {
             </button>
           </div>
         </div>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12, marginTop: 0, lineHeight: 1.6 }}>
+          <strong>Formel:</strong>{' '}
+          Arbeitstage = 365 − 104 (Wochenenden) − Feiertage − Urlaubstage − Krankheitstage − Weiterbildungstage
+          {' · '}
+          Nettostunden = Arbeitstage × (Wochenstd. / 5) × Produktivität%
+          {' · '}
+          Direktkosten/h = Jahresgehalt × (1 + AG-SV%) ÷ Nettostunden
+          {' · '}
+          Gemeinkosten/h = (Gesamtgemeinkosten × Nettostunden-Anteil) ÷ Nettostunden
+          {' · '}
+          <strong>Vollkostensatz = Direktkosten/h + Gemeinkosten/h</strong>
+          {' · '}
+          Importrate = Vollkostensatz × (1 + Gewinnaufschlag%)
+        </p>
         {calcMsg && <Message text={calcMsg.text} type={calcMsg.type} />}
 
         {calcResults.length > 0 && (
