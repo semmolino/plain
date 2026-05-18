@@ -223,6 +223,95 @@ async function calculateRunningBalance(supabase, tenantId, employeeId) {
 }
 
 /**
+ * Compute the total cumulative working-time balance for each employee in empIds,
+ * from their first EMPLOYEE_WORK_MODEL assignment up to (and including) upToDate.
+ * Returns Map<employeeId, balance>.
+ */
+async function buildRunningBalances(supabase, tenantId, empIds, upToDate) {
+  if (!empIds.length) return new Map();
+
+  const { data: assigns, error: asErr } = await supabase
+    .from('EMPLOYEE_WORK_MODEL')
+    .select('EMPLOYEE_ID, MODEL_ID, VALID_FROM')
+    .eq('TENANT_ID', tenantId)
+    .in('EMPLOYEE_ID', empIds)
+    .lte('VALID_FROM', upToDate)
+    .order('VALID_FROM', { ascending: true });
+  if (asErr) throw { status: 500, message: asErr.message };
+  if (!assigns || !assigns.length) return new Map(empIds.map(id => [id, 0]));
+
+  const modelIds = [...new Set(assigns.map(a => a.MODEL_ID))];
+  const { data: models } = await supabase
+    .from('WORKING_TIME_MODEL')
+    .select('ID, COUNTRY_CODE, STATE_CODE, MON, TUE, WED, THU, FRI, SAT, SUN')
+    .in('ID', modelIds);
+  const modelMap = new Map((models || []).map(m => [m.ID, m]));
+
+  const assignByEmp = new Map();
+  for (const a of assigns) {
+    if (!assignByEmp.has(a.EMPLOYEE_ID)) assignByEmp.set(a.EMPLOYEE_ID, []);
+    assignByEmp.get(a.EMPLOYEE_ID).push({ ...a, model: modelMap.get(a.MODEL_ID) ?? null });
+  }
+
+  const globalStart = assigns[0].VALID_FROM; // earliest across all employees (sorted asc)
+
+  const { data: tecRows } = await supabase
+    .from('TEC')
+    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT')
+    .eq('TENANT_ID', tenantId)
+    .in('EMPLOYEE_ID', empIds)
+    .eq('STATUS', 'CONFIRMED')
+    .gte('DATE_VOUCHER', globalStart)
+    .lte('DATE_VOUCHER', upToDate);
+
+  const actualByEmp = new Map();
+  for (const row of tecRows || []) {
+    const id = row.EMPLOYEE_ID;
+    actualByEmp.set(id, (actualByEmp.get(id) || 0) + Number(row.QUANTITY_INT || 0));
+  }
+
+  const csSet = new Set();
+  for (const m of modelMap.values()) csSet.add(`${m.COUNTRY_CODE}|${m.STATE_CODE || ''}`);
+  const holidayKey = new Set();
+  for (const cs of csSet) {
+    const [cc, sc] = cs.split('|');
+    const { data: hols } = await supabase
+      .from('PUBLIC_HOLIDAY')
+      .select('HOLIDAY_DATE')
+      .eq('COUNTRY_CODE', cc)
+      .or(sc ? `STATE_CODE.is.null,STATE_CODE.eq.${sc}` : 'STATE_CODE.is.null')
+      .gte('HOLIDAY_DATE', globalStart)
+      .lte('HOLIDAY_DATE', upToDate);
+    for (const h of hols || []) holidayKey.add(`${cs}|${h.HOLIDAY_DATE}`);
+  }
+
+  const result = new Map();
+  for (const [empId, empAssigns] of assignByEmp.entries()) {
+    const firstDate = empAssigns[0].VALID_FROM;
+    let required = 0;
+    let cur = new Date(firstDate + 'T00:00:00');
+    const end = new Date(upToDate + 'T00:00:00');
+    while (cur <= end) {
+      const ds    = isoDate(cur);
+      const model = findActiveModel(empAssigns, ds);
+      if (model) {
+        const dayH = Number(model[WEEKDAY_COLS[cur.getDay()]]) || 0;
+        if (dayH > 0 && !holidayKey.has(`${model.COUNTRY_CODE}|${model.STATE_CODE || ''}|${ds}`)) {
+          required += dayH;
+        }
+      }
+      cur = addDays(cur, 1);
+    }
+    const actual = actualByEmp.get(empId) || 0;
+    result.set(empId, Math.round((actual - required) * 100) / 100);
+  }
+  for (const id of empIds) {
+    if (!result.has(id)) result.set(id, 0);
+  }
+  return result;
+}
+
+/**
  * Build a flat list of (employee × month) rows for the employee list report.
  * mode: 'now' | 'as_of' | 'period'
  * Returns [{ EMPLOYEE_ID, SHORT_NAME, FIRST_NAME, LAST_NAME, DEPARTMENT_NAME,
@@ -378,6 +467,16 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
       });
     }
   }
+
+  // For flat modes (now / as_of) add per-employee cumulative running balance
+  if (mode !== 'period' && empIds.length > 0) {
+    const runUp   = mode === 'as_of' ? asOfDate : today;
+    const runBals = await buildRunningBalances(supabase, tenantId, empIds, runUp);
+    for (const row of result) {
+      row.RUNNING_BALANCE = runBals.get(row.EMPLOYEE_ID) ?? 0;
+    }
+  }
+
   return result;
 }
 

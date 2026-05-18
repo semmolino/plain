@@ -593,14 +593,16 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
     )
   }
 
-  function TotalsRow({ rows, colSpan = 3, showCumulative = false }: { rows: EmployeeReportRow[]; colSpan?: number; showCumulative?: boolean }) {
+  function TotalsRow({ rows, colSpan = 3, showCumulative = false, showRunning = false }: { rows: EmployeeReportRow[]; colSpan?: number; showCumulative?: boolean; showRunning?: boolean }) {
     const bal = sumF(rows, r => r.BALANCE)
+    const run = showRunning ? sumF(rows, r => r.RUNNING_BALANCE ?? 0) : 0
     return (
       <tr className="sum-row">
         <td colSpan={colSpan}></td>
         <td className="num"><strong>{fmtH(sumF(rows, r => r.REQUIRED))}</strong></td>
         <td className="num"><strong>{fmtH(sumF(rows, r => r.ACTUAL))}</strong></td>
         <td className="num" style={{ color: balanceColor(bal) }}><strong>{fmtBalance(bal)}</strong></td>
+        {showRunning    && <td className="num" style={{ color: balanceColor(run) }}><strong>{fmtBalance(run)}</strong></td>}
         {showCumulative && <td className="num">—</td>}
         <td className="num"><strong>{sumF(rows, r => r.COST) > 0 ? FMT_EUR.format(sumF(rows, r => r.COST)) : '—'}</strong></td>
       </tr>
@@ -685,10 +687,11 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                     <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>Kürzel{si('name')}</th>
                     <th>Name</th>
                     <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('dept')}>Abteilung{si('dept')}</th>
-                    <NumTh label="Soll"        field="required" />
-                    <NumTh label="Ist"         field="actual"   />
-                    <NumTh label="Monatssaldo" field="balance"  />
-                    <NumTh label="Kosten"      field="cost"     />
+                    <NumTh label="Soll"            field="required" />
+                    <NumTh label="Ist"             field="actual"   />
+                    <NumTh label="Monatssaldo"     field="balance"  />
+                    <th className="num">Laufender Saldo</th>
+                    <NumTh label="Kosten"          field="cost"     />
                   </tr>
                 </thead>
                 <tbody>
@@ -700,13 +703,16 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                       <td className="num">{fmtH(r.REQUIRED)}</td>
                       <td className="num">{fmtH(r.ACTUAL)}</td>
                       <td className="num" style={{ color: balanceColor(r.BALANCE), fontWeight: 600 }}>{fmtBalance(r.BALANCE)}</td>
+                      <td className="num" style={{ color: balanceColor(r.RUNNING_BALANCE ?? 0), fontWeight: 600 }}>
+                        {r.RUNNING_BALANCE != null ? fmtBalance(r.RUNNING_BALANCE) : '…'}
+                      </td>
                       <td className="num">{r.COST > 0 ? FMT_EUR.format(r.COST) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
                 {filtered.length > 1 && (
                   <tfoot>
-                    <TotalsRow rows={filtered} colSpan={3} />
+                    <TotalsRow rows={filtered} colSpan={3} showRunning />
                   </tfoot>
                 )}
               </table>

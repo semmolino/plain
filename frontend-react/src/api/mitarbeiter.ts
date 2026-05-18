@@ -154,18 +154,19 @@ export const fetchRunningBalance = (id: number) =>
 // ── Employee list report ──────────────────────────────────────────────────────
 
 export interface EmployeeReportRow {
-  EMPLOYEE_ID:     number
-  SHORT_NAME:      string
-  FIRST_NAME:      string
-  LAST_NAME:       string
-  DEPARTMENT_NAME: string
-  YEAR:            number
-  MONTH:           number
-  REQUIRED:        number
-  ACTUAL:          number
-  BALANCE:         number
-  HOURS_EXT:       number
-  COST:            number
+  EMPLOYEE_ID:      number
+  SHORT_NAME:       string
+  FIRST_NAME:       string
+  LAST_NAME:        string
+  DEPARTMENT_NAME:  string
+  YEAR:             number
+  MONTH:            number
+  REQUIRED:         number
+  ACTUAL:           number
+  BALANCE:          number
+  HOURS_EXT:        number
+  COST:             number
+  RUNNING_BALANCE?: number
 }
 
 export const fetchEmployeeReportList = (params: {
