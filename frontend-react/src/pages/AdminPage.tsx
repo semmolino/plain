@@ -1284,7 +1284,7 @@ function KostensatzSection() {
             </button>
           </div>
         </div>
-        {overheadMsg && <Message text={overheadMsg.text} type={overheadMsg.type} onClose={() => setOverheadMsg(null)} />}
+        {overheadMsg && <Message text={overheadMsg.text} type={overheadMsg.type} />}
 
         <table className="master-table" style={{ fontSize: 13, marginBottom: 10 }}>
           <thead>
@@ -1353,7 +1353,7 @@ function KostensatzSection() {
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Mitarbeiter-Parameter {selYear}</h3>
           <button type="button" className="btn-small btn-save" onClick={saveAllParams}>Alle speichern</button>
         </div>
-        {paramsMsg && <Message text={paramsMsg.text} type={paramsMsg.type} onClose={() => setParamsMsg(null)} />}
+        {paramsMsg && <Message text={paramsMsg.text} type={paramsMsg.type} />}
         <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10, marginTop: 0 }}>
           AG-Sozialabgaben (D): KV ~7,3% · RV 9,3% · AV 1,5% · PV ~1,8% · UV ~1% ≈ 21% gesamt
         </p>
@@ -1422,7 +1422,7 @@ function KostensatzSection() {
             </button>
           </div>
         </div>
-        {calcMsg && <Message text={calcMsg.text} type={calcMsg.type} onClose={() => setCalcMsg(null)} />}
+        {calcMsg && <Message text={calcMsg.text} type={calcMsg.type} />}
 
         {calcResults.length > 0 && (
           <>
