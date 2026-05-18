@@ -448,7 +448,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 </table>
               </div>
 
-              <button className="btn-small btn-save" style={{ marginTop: 10 }} onClick={() => { setShowForm(v => { if (!v) { setForm(emptyForm()); setExtTouched(false) } return !v }); setMsg(null) }}>
+              <button className="btn-small btn-save" style={{ marginTop: 10 }} onClick={() => { if (!showForm) setExtTouched(false); setShowForm(v => !v); setMsg(null) }}>
                 {showForm ? 'Formular schließen' : '+ Neue Buchung'}
               </button>
 
