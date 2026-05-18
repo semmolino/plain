@@ -195,7 +195,7 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
   // Fetch employees
   let empQ = supabase
     .from('EMPLOYEE')
-    .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME, CP_RATE')
+    .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME')
     .eq('TENANT_ID', tenantId)
     .neq('ACTIVE', 2)
     .order('SHORT_NAME');
@@ -203,6 +203,24 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
   const { data: employees, error: empErr } = await empQ;
   if (empErr) throw { status: 500, message: empErr.message };
   if (!employees || !employees.length) return [];
+
+  // Fetch current CP_RATE for each employee from EMPLOYEE_CP_RATE (latest entry ≤ today)
+  const today = new Date().toISOString().slice(0, 10);
+  const empIds = employees.map(e => e.ID);
+  const { data: rateRows } = await supabase
+    .from('EMPLOYEE_CP_RATE')
+    .select('EMPLOYEE_ID, CP_RATE, VALID_FROM')
+    .eq('TENANT_ID', tenantId)
+    .in('EMPLOYEE_ID', empIds)
+    .lte('VALID_FROM', today)
+    .order('VALID_FROM', { ascending: false });
+  // Pick latest rate per employee
+  const currentRateMap = new Map();
+  for (const row of (rateRows || [])) {
+    if (!currentRateMap.has(row.EMPLOYEE_ID)) {
+      currentRateMap.set(row.EMPLOYEE_ID, Number(row.CP_RATE));
+    }
+  }
 
   // Fetch overhead total for year
   const overheadItems = await getOverheadItems(supabase, tenantId, year);
@@ -242,7 +260,7 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
       short_name:       emp.SHORT_NAME,
       first_name:       emp.FIRST_NAME,
       last_name:        emp.LAST_NAME,
-      current_cp_rate:  emp.CP_RATE != null ? Number(emp.CP_RATE) : null,
+      current_cp_rate:  currentRateMap.has(emp.ID) ? currentRateMap.get(emp.ID) : null,
       country_code:     countryCode,
       state_code:       stateCode,
       params,
@@ -267,8 +285,10 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
 
 // ── Import to EMPLOYEE_CP_RATE ────────────────────────────────────────────────
 
-async function importCostRates(supabase, tenantId, rates, validFrom) {
+async function importCostRates(supabase, tenantId, rates, validFrom, recalcBookings = false) {
   if (!rates || !rates.length) return;
+
+  // Insert new rate entries
   const rows = rates.map(r => ({
     TENANT_ID:   tenantId,
     EMPLOYEE_ID: r.employee_id,
@@ -277,6 +297,30 @@ async function importCostRates(supabase, tenantId, rates, validFrom) {
   }));
   const { error } = await supabase.from('EMPLOYEE_CP_RATE').insert(rows);
   if (error) throw { status: 500, message: error.message };
+
+  if (!recalcBookings) return;
+
+  // Recalculate CP_RATE + CP_TOT on TEC bookings dated >= validFrom
+  for (const r of rates) {
+    const { data: tecRows, error: fetchErr } = await supabase
+      .from('TEC')
+      .select('ID, QUANTITY_INT')
+      .eq('TENANT_ID', tenantId)
+      .eq('EMPLOYEE_ID', r.employee_id)
+      .gte('DATE_VOUCHER', validFrom);
+    if (fetchErr) throw { status: 500, message: fetchErr.message };
+    if (!tecRows || !tecRows.length) continue;
+
+    const updates = tecRows.map(row => ({
+      ID:       row.ID,
+      CP_RATE:  r.rate,
+      CP_TOT:   Math.round(Number(row.QUANTITY_INT) * r.rate * 100) / 100,
+    }));
+    const { error: updErr } = await supabase
+      .from('TEC')
+      .upsert(updates, { onConflict: 'ID' });
+    if (updErr) throw { status: 500, message: updErr.message };
+  }
 }
 
 module.exports = {

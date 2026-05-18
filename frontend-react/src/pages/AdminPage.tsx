@@ -1140,9 +1140,10 @@ function KostensatzSection() {
   const [calcMsg,       setCalcMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [expanded,      setExpanded]      = useState<Set<number>>(new Set())
   const [selected,      setSelected]      = useState<Set<number>>(new Set())
-  const [importDate,    setImportDate]    = useState('')
-  const [importLoading, setImportLoading] = useState(false)
-  const [showImport,    setShowImport]    = useState(false)
+  const [importDate,      setImportDate]      = useState('')
+  const [importLoading,   setImportLoading]   = useState(false)
+  const [showImport,      setShowImport]      = useState(false)
+  const [recalcBookings,  setRecalcBookings]  = useState(false)
 
   const { data: empListData } = useQuery({ queryKey: ['employees'], queryFn: fetchEmployeeList })
   const employees = empListData?.data?.filter(e => e.ACTIVE !== 2) ?? []
@@ -1241,11 +1242,12 @@ function KostensatzSection() {
       const rates = calcResults
         .filter(r => selected.has(r.employee_id))
         .map(r => ({ employee_id: r.employee_id, rate: r.breakdown.import_rate }))
-      await importRates(rates, importDate)
+      await importRates(rates, importDate, recalcBookings)
       void qc.invalidateQueries({ queryKey: ['employees'] })
       void qc.invalidateQueries({ queryKey: ['emp-cp-rates'] })
-      setCalcMsg({ text: `${rates.length} Kostensätze übernommen (gültig ab ${importDate})`, type: 'success' })
-      setShowImport(false); setImportDate(''); setSelected(new Set())
+      const recalcNote = recalcBookings ? ' · Buchungen neu berechnet' : ''
+      setCalcMsg({ text: `${rates.length} Kostensätze übernommen (gültig ab ${importDate})${recalcNote}`, type: 'success' })
+      setShowImport(false); setImportDate(''); setSelected(new Set()); setRecalcBookings(false)
     } catch (e: unknown) { setCalcMsg({ text: (e as Error).message, type: 'error' }) }
     finally { setImportLoading(false) }
   }
@@ -1498,21 +1500,42 @@ function KostensatzSection() {
               </table>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
-              <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{selected.size} von {calcResults.length} ausgewählt</span>
-              {showImport ? (
-                <>
-                  <input type="date" value={importDate} onChange={e => setImportDate(e.target.value)}
-                    style={{ fontSize: 13, padding: '4px 8px', border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)' }} />
-                  <button type="button" className="btn-small btn-save" onClick={doImport} disabled={!importDate || importLoading || !selected.size}>
-                    {importLoading ? 'Speichere…' : `${selected.size} Kostensätze übernehmen`}
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{selected.size} von {calcResults.length} ausgewählt</span>
+                {!showImport && (
+                  <button type="button" className="btn-small btn-save" onClick={() => setShowImport(true)} disabled={!selected.size}>
+                    Ausgewählte als Kostensatz übernehmen …
                   </button>
-                  <button type="button" className="btn-small" onClick={() => setShowImport(false)}>Abbrechen</button>
-                </>
-              ) : (
-                <button type="button" className="btn-small btn-save" onClick={() => setShowImport(true)} disabled={!selected.size}>
-                  Ausgewählte als Kostensatz übernehmen …
-                </button>
+                )}
+              </div>
+              {showImport && (
+                <div style={{ marginTop: 12, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border-2)', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ color: 'var(--text-2)' }}>Gültig ab</span>
+                      <input type="date" value={importDate} onChange={e => setImportDate(e.target.value)}
+                        style={{ fontSize: 13, padding: '4px 8px', border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)' }} />
+                    </label>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 14 }}>
+                    <input type="checkbox" checked={recalcBookings} onChange={e => setRecalcBookings(e.target.checked)}
+                      style={{ marginTop: 2, width: 15, height: 15, flexShrink: 0 }} />
+                    <span>
+                      <strong>Bestehende Buchungen (TEC) neu berechnen</strong>
+                      <span style={{ color: 'var(--text-3)', display: 'block', fontSize: 12, marginTop: 2 }}>
+                        Alle Buchungen ab dem gewählten Datum werden mit dem neuen Kostensatz (CP_RATE) und dem
+                        daraus resultierenden CP_TOT neu berechnet. Buchungen vor diesem Datum bleiben unverändert.
+                      </span>
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button type="button" className="btn-small btn-save" onClick={doImport} disabled={!importDate || importLoading || !selected.size}>
+                      {importLoading ? 'Speichere…' : `${selected.size} Kostensätze${recalcBookings ? ' + Buchungen' : ''} übernehmen`}
+                    </button>
+                    <button type="button" className="btn-small" onClick={() => { setShowImport(false); setRecalcBookings(false) }}>Abbrechen</button>
+                  </div>
+                </div>
               )}
             </div>
           </>

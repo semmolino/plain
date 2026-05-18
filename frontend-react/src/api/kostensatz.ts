@@ -66,5 +66,5 @@ export const saveEmployeeParamsBulk = (year: number, params: Array<{ employee_id
 export const calculateRates = (body: { year: number; employee_ids?: number[]; profit_markup_pct?: number }) =>
   apiClient.post<{ data: CalcResult[] }>('/kostensatz/calculate', body)
 
-export const importRates = (rates: Array<{ employee_id: number; rate: number }>, valid_from: string) =>
-  apiClient.post<{ ok: boolean }>('/kostensatz/import', { rates, valid_from })
+export const importRates = (rates: Array<{ employee_id: number; rate: number }>, valid_from: string, recalc_bookings: boolean) =>
+  apiClient.post<{ ok: boolean }>('/kostensatz/import', { rates, valid_from, recalc_bookings })

@@ -80,13 +80,13 @@ module.exports = (supabase) => {
     } catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }) }
   });
 
-  // POST /kostensatz/import  { rates: [{employee_id, rate}], valid_from }
+  // POST /kostensatz/import  { rates: [{employee_id, rate}], valid_from, recalc_bookings? }
   router.post('/import', async (req, res) => {
-    const { rates, valid_from } = req.body;
+    const { rates, valid_from, recalc_bookings } = req.body;
     if (!valid_from || !Array.isArray(rates) || !rates.length)
       return res.status(400).json({ error: 'valid_from and rates[] required' });
     try {
-      await svc.importCostRates(supabase, req.tenantId, rates, valid_from);
+      await svc.importCostRates(supabase, req.tenantId, rates, valid_from, !!recalc_bookings);
       res.json({ ok: true });
     } catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }) }
   });
