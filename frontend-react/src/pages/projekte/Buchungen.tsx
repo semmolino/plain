@@ -78,6 +78,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const [editForm,     setEditForm]     = useState<BuchungForm>(emptyForm)
   const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [cpRateFound,  setCpRateFound]  = useState<boolean | null>(null)
+  const [extTouched,   setExtTouched]   = useState(false)
 
   const { data: projectsData }  = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }       = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
@@ -239,6 +240,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
       void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
       setMsg({ text: 'Buchung gespeichert ✅', type: 'success' })
       setForm(emptyForm())
+      setExtTouched(false)
       setShowForm(false)
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -309,7 +311,13 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
 
   const setF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const value = e.target.value
-    setForm(f => ({ ...f, [k]: value, ...(k === 'EMPLOYEE_ID' ? { SP_RATE: '', CP_RATE: '' } : {}) }))
+    if (k === 'QUANTITY_EXT') { setExtTouched(true) }
+    setForm(f => ({
+      ...f,
+      [k]: value,
+      ...(k === 'EMPLOYEE_ID' ? { SP_RATE: '', CP_RATE: '' } : {}),
+      ...(k === 'QUANTITY_INT' && !extTouched ? { QUANTITY_EXT: value } : {}),
+    }))
   }
 
   const setEF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -440,7 +448,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 </table>
               </div>
 
-              <button className="btn-small btn-save" style={{ marginTop: 10 }} onClick={() => { setShowForm(!showForm); setMsg(null) }}>
+              <button className="btn-small btn-save" style={{ marginTop: 10 }} onClick={() => { setShowForm(v => { if (!v) { setForm(emptyForm()); setExtTouched(false) } return !v }); setMsg(null) }}>
                 {showForm ? 'Formular schließen' : '+ Neue Buchung'}
               </button>
 
