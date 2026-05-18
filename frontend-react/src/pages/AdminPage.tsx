@@ -1457,7 +1457,7 @@ function KostensatzSection() {
                     const isExp = expanded.has(r.employee_id)
                     return (
                       <Fragment key={r.employee_id}>
-                        <tr style={{ cursor: 'pointer' }} onClick={() => toggleExpand(r.employee_id)}> style={{ cursor: 'pointer' }} onClick={() => toggleExpand(r.employee_id)}>
+                        <tr style={{ cursor: 'pointer' }} onClick={() => toggleExpand(r.employee_id)}>
                           <td style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: 10 }}>{isExp ? '▼' : '▶'}</td>
                           <td><strong>{r.short_name}</strong> <span style={{ color: 'var(--text-4)', fontWeight: 400 }}>{r.first_name} {r.last_name}</span></td>
                           <td style={{ textAlign: 'right' }}>{FMT_H_KS(bd.productive_hours)}</td>
