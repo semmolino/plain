@@ -207,16 +207,22 @@ async function deleteDraft(supabase, { id }) {
   if (error) throw error;
 }
 
-async function patchDraftDescription(supabase, { id, description }) {
+async function patchDraftDescription(supabase, { id, description, time_start, time_finish, quantity_int }) {
   const { data: row, error: fetchErr } = await supabase
     .from("TEC").select("ID, STATUS").eq("ID", id).maybeSingle();
   if (fetchErr) throw fetchErr;
   if (!row) throw { status: 404, message: "Eintrag nicht gefunden" };
   if (row.STATUS !== "DRAFT") throw { status: 400, message: "Nur Entwürfe können bearbeitet werden" };
 
-  const { error } = await supabase.from("TEC")
-    .update({ POSTING_DESCRIPTION: description })
-    .eq("ID", id);
+  const updates = {};
+  if (description  !== undefined) updates.POSTING_DESCRIPTION = description;
+  if (time_start   !== undefined) updates.TIME_START           = time_start;
+  if (time_finish  !== undefined) updates.TIME_FINISH          = time_finish;
+  if (quantity_int !== undefined) updates.QUANTITY_INT         = quantity_int;
+
+  if (!Object.keys(updates).length) return;
+
+  const { error } = await supabase.from("TEC").update(updates).eq("ID", id);
   if (error) throw error;
 }
 

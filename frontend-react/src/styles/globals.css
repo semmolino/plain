@@ -1310,6 +1310,13 @@ input::placeholder { color: var(--text-4); }
 .tbm-icon-btn.tbm-save { color: #16a34a; }
 .tbm-inline-edit { display: flex; align-items: center; gap: 4px; }
 .tbm-inline-edit .tbm-input { height: 28px; flex: 1; }
+.tbm-row-editing td { background: var(--dim); }
+.tbm-row-editing .tbm-input { height: 28px; padding: 2px 6px; font-size: 12px; }
+.tbm-edit-time { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.tbm-input-time { width: 80px; }
+.tbm-input-qty  { width: 60px; }
+.tbm-time-sep   { color: var(--text-4); font-size: 12px; }
+.tbm-row-actions { white-space: nowrap; }
 
 /* ── Verträge ─────────────────────────────────────────────────────────────── */
 .vtr-wrap    { display: flex; flex-direction: column; gap: 20px; max-width: 560px; }

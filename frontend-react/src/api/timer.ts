@@ -46,3 +46,11 @@ export const deleteTimerDraft = (id: number) =>
 
 export const patchDraftDescription = (id: number, description: string) =>
   apiClient.patch<{ success: boolean }>(`/buchungen/timer/draft/${id}`, { description })
+
+export const patchDraft = (id: number, body: {
+  description?:  string
+  time_start?:   string
+  time_finish?:  string
+  quantity_int?: number
+}) =>
+  apiClient.patch<{ success: boolean }>(`/buchungen/timer/draft/${id}`, body)

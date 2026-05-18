@@ -4,7 +4,7 @@ import { useTimerStore, elapsedSeconds, formatDuration, formatDurationHuman, qua
 import type { TimerSession } from '@/store/timerStore'
 import { fetchActiveEmployees, fetchProjectsShort, fetchProjectStructure } from '@/api/projekte'
 import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
-import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraftDescription } from '@/api/timer'
+import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraft } from '@/api/timer'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
@@ -350,12 +350,19 @@ function FinishModal({ onClose }: { onClose: () => void }) {
 
 const FMT_H = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
 
+interface EditingRow {
+  id:          number
+  timeStart:   string
+  timeFinish:  string
+  quantityInt: string
+  description: string
+}
+
 function DayReviewModal({ onClose }: { onClose: () => void }) {
   const { session, endSession } = useTimerStore()
   const qc = useQueryClient()
   const employeeId = session?.employeeId
-  const [editingId,  setEditingId]  = useState<number | null>(null)
-  const [editVal,    setEditVal]    = useState('')
+  const [editRow,    setEditRow]    = useState<EditingRow | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [error,      setError]      = useState<string | null>(null)
 
@@ -377,13 +384,50 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
   })
 
   const patchMut = useMutation({
-    mutationFn: ({ id, description }: { id: number; description: string }) =>
-      patchDraftDescription(id, description),
+    mutationFn: ({ id, body }: { id: number; body: Parameters<typeof patchDraft>[1] }) =>
+      patchDraft(id, body),
     onSuccess: () => {
-      setEditingId(null)
+      setEditRow(null)
       void qc.invalidateQueries({ queryKey: ['timer-drafts'] })
     },
   })
+
+  function startEdit(d: { ID: number; TIME_START: string | null; TIME_FINISH: string | null; QUANTITY_INT: number; POSTING_DESCRIPTION: string }) {
+    setEditRow({
+      id:          d.ID,
+      timeStart:   d.TIME_START?.slice(0, 5) ?? '',
+      timeFinish:  d.TIME_FINISH?.slice(0, 5) ?? '',
+      quantityInt: String(d.QUANTITY_INT ?? ''),
+      description: d.POSTING_DESCRIPTION,
+    })
+  }
+
+  function onTimeChange(field: 'timeStart' | 'timeFinish', val: string) {
+    if (!editRow) return
+    const next = { ...editRow, [field]: val }
+    const start  = field === 'timeStart'  ? val : next.timeStart
+    const finish = field === 'timeFinish' ? val : next.timeFinish
+    if (start && finish) {
+      const [sh, sm] = start.split(':').map(Number)
+      const [fh, fm] = finish.split(':').map(Number)
+      const diffMin = Math.max(0, fh * 60 + fm - (sh * 60 + sm))
+      next.quantityInt = String(Math.round(diffMin / 60 * 100) / 100)
+    }
+    setEditRow(next)
+  }
+
+  function saveEdit() {
+    if (!editRow) return
+    patchMut.mutate({
+      id: editRow.id,
+      body: {
+        description:  editRow.description,
+        time_start:   editRow.timeStart  ? editRow.timeStart  + ':00' : undefined,
+        time_finish:  editRow.timeFinish ? editRow.timeFinish + ':00' : undefined,
+        quantity_int: editRow.quantityInt ? Number(editRow.quantityInt) : undefined,
+      },
+    })
+  }
 
   async function handleConfirm() {
     if (!drafts.length) return
@@ -427,50 +471,86 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
                 </tr>
               </thead>
               <tbody>
-                {drafts.map(d => (
-                  <tr key={d.ID}>
-                    <td>
-                      <span className="tbm-review-proj">{d.PROJECT?.NAME_SHORT}</span>
-                      <span className="tbm-review-struct">{d.STRUCTURE?.NAME_SHORT}</span>
-                    </td>
-                    <td className="tbm-mono">
-                      {d.TIME_START?.slice(0, 5)} – {d.TIME_FINISH?.slice(0, 5)}
-                    </td>
-                    <td className="tbm-mono">{FMT_H.format(Number(d.QUANTITY_INT))}</td>
-                    <td>
-                      {editingId === d.ID ? (
-                        <div className="tbm-inline-edit">
-                          <input
-                            className="tbm-input"
-                            value={editVal}
-                            onChange={e => setEditVal(e.target.value)}
-                            autoFocus
-                          />
-                          <button
-                            className="tbm-icon-btn tbm-save"
-                            onClick={() => patchMut.mutate({ id: d.ID, description: editVal })}
-                          >✓</button>
-                          <button className="tbm-icon-btn" onClick={() => setEditingId(null)}>✕</button>
-                        </div>
+                {drafts.map(d => {
+                  const isEditing = editRow?.id === d.ID
+                  return (
+                    <tr key={d.ID} className={isEditing ? 'tbm-row-editing' : ''}>
+                      <td>
+                        <span className="tbm-review-proj">{d.PROJECT?.NAME_SHORT}</span>
+                        <span className="tbm-review-struct">{d.STRUCTURE?.NAME_SHORT}</span>
+                      </td>
+                      {isEditing ? (
+                        <>
+                          <td className="tbm-edit-time">
+                            <input
+                              type="time"
+                              className="tbm-input tbm-input-time"
+                              value={editRow.timeStart}
+                              onChange={e => onTimeChange('timeStart', e.target.value)}
+                            />
+                            <span className="tbm-time-sep">–</span>
+                            <input
+                              type="time"
+                              className="tbm-input tbm-input-time"
+                              value={editRow.timeFinish}
+                              onChange={e => onTimeChange('timeFinish', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              className="tbm-input tbm-input-qty"
+                              min={0}
+                              step={0.25}
+                              value={editRow.quantityInt}
+                              onChange={e => setEditRow({ ...editRow, quantityInt: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="tbm-input"
+                              value={editRow.description}
+                              onChange={e => setEditRow({ ...editRow, description: e.target.value })}
+                              autoFocus
+                            />
+                          </td>
+                          <td className="tbm-row-actions">
+                            <button
+                              className="tbm-icon-btn tbm-save"
+                              onClick={saveEdit}
+                              disabled={patchMut.isPending}
+                            >✓</button>
+                            <button className="tbm-icon-btn" onClick={() => setEditRow(null)}>✕</button>
+                          </td>
+                        </>
                       ) : (
-                        <span
-                          className="tbm-review-desc"
-                          onClick={() => { setEditingId(d.ID); setEditVal(d.POSTING_DESCRIPTION) }}
-                          title="Klicken zum Bearbeiten"
-                        >
-                          {d.POSTING_DESCRIPTION || <em className="tbm-muted">Keine Beschreibung</em>}
-                        </span>
+                        <>
+                          <td className="tbm-mono">
+                            {d.TIME_START?.slice(0, 5)} – {d.TIME_FINISH?.slice(0, 5)}
+                          </td>
+                          <td className="tbm-mono">{FMT_H.format(Number(d.QUANTITY_INT))}</td>
+                          <td>
+                            <span className="tbm-review-desc">
+                              {d.POSTING_DESCRIPTION || <em className="tbm-muted">Keine Beschreibung</em>}
+                            </span>
+                          </td>
+                          <td className="tbm-row-actions">
+                            <button
+                              className="tbm-icon-btn"
+                              title="Eintrag bearbeiten"
+                              onClick={() => startEdit(d)}
+                            >✎</button>
+                            <button
+                              className="tbm-icon-btn tbm-danger"
+                              title="Eintrag löschen"
+                              onClick={() => deleteMut.mutate(d.ID)}
+                            >🗑</button>
+                          </td>
+                        </>
                       )}
-                    </td>
-                    <td>
-                      <button
-                        className="tbm-icon-btn tbm-danger"
-                        title="Eintrag löschen"
-                        onClick={() => deleteMut.mutate(d.ID)}
-                      >🗑</button>
-                    </td>
-                  </tr>
-                ))}
+                    </tr>
+                  )
+                })}
               </tbody>
               <tfoot>
                 <tr>

@@ -92,9 +92,9 @@ async function deleteDraft(req, res, supabase) {
 async function patchDraftDescription(req, res, supabase) {
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "ID fehlt" });
-  const { description } = req.body || {};
+  const { description, time_start, time_finish, quantity_int } = req.body || {};
   try {
-    await svc.patchDraftDescription(supabase, { id, description: description ?? "" });
+    await svc.patchDraftDescription(supabase, { id, description, time_start, time_finish, quantity_int });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;
