@@ -1571,11 +1571,8 @@ function KostensatzSection() {
           </>
         )}
 
-        {!calcLoading && calcResults.length === 0 && (
-          {!hasCalculated
-            ? <p className="empty-note">Gemeinkosten und Mitarbeiter-Parameter eingeben, dann „Berechnen" klicken.</p>
-            : null
-          }
+        {!calcLoading && calcResults.length === 0 && !hasCalculated && (
+          <p className="empty-note">Gemeinkosten und Mitarbeiter-Parameter eingeben, dann „Berechnen" klicken.</p>
         )}
       </div>
     </div>
