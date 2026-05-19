@@ -273,26 +273,24 @@ module.exports = (supabase) => {
           const leafProg = (progressRows || []).filter(r =>
             r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
           );
+          const leafTec = (tecRows || []).filter(r =>
+            r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date
+          );
 
-          // Budget: last PP row with non-null REVENUE ≤ date; fallback to structure's REVENUE/EXTRAS
-          const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
-          let rev = 0, ext = 0;
-          if (lastBudget) {
-            rev = +(lastBudget.REVENUE || 0);
-            ext = +(lastBudget.EXTRAS  || 0);
-          } else {
-            rev = +(leaf.REVENUE || 0);
-            ext = +(leaf.EXTRAS  || 0);
-          }
-          honorar += rev + ext;
-
-          // Leistungsstand
           if (leaf.BILLING_TYPE_ID === 2) {
-            const sp = (tecRows || [])
-              .filter(r => r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date)
-              .reduce((s, r) => s + +(r.SP_TOT || 0), 0);
+            // Hourly: honorar = cumulative SP_TOT (earned revenue = billed selling price)
+            const sp = leafTec.reduce((s, r) => s + +(r.SP_TOT || 0), 0);
+            honorar       += sp;
             leistungsstand += sp;
           } else {
+            // Fixed-fee: honorar = REVENUE + EXTRAS from last budget update or structure
+            const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
+            if (lastBudget) {
+              honorar += +(lastBudget.REVENUE || 0) + +(lastBudget.EXTRAS || 0);
+            } else {
+              honorar += +(leaf.REVENUE || 0) + +(leaf.EXTRAS || 0);
+            }
+            // Leistungsstand for fixed-fee: from progress completion value
             const lastCompl = [...leafProg].reverse().find(r => r.REVENUE_COMPLETION != null);
             if (lastCompl) {
               leistungsstand += +(lastCompl.REVENUE_COMPLETION || 0) + +(lastCompl.EXTRAS_COMPLETION || 0);
@@ -430,25 +428,21 @@ module.exports = (supabase) => {
           const leafProg = (progressRows || []).filter(r =>
             r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
           );
-
-          // Budget: last PP row with non-null REVENUE ≤ date; fallback to structure's REVENUE/EXTRAS
-          const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
-          let rev = 0, ext = 0;
-          if (lastBudget) {
-            rev = +(lastBudget.REVENUE || 0);
-            ext = +(lastBudget.EXTRAS  || 0);
-          } else {
-            rev = +(leaf.REVENUE || 0);
-            ext = +(leaf.EXTRAS  || 0);
-          }
-          honorar += rev + ext;
+          const leafTec = (tecRows || []).filter(r =>
+            r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date
+          );
 
           if (leaf.BILLING_TYPE_ID === 2) {
-            const sp = (tecRows || [])
-              .filter(r => r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date)
-              .reduce((s, r) => s + +(r.SP_TOT || 0), 0);
+            const sp = leafTec.reduce((s, r) => s + +(r.SP_TOT || 0), 0);
+            honorar        += sp;
             leistungsstand += sp;
           } else {
+            const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
+            if (lastBudget) {
+              honorar += +(lastBudget.REVENUE || 0) + +(lastBudget.EXTRAS || 0);
+            } else {
+              honorar += +(leaf.REVENUE || 0) + +(leaf.EXTRAS || 0);
+            }
             const lastCompl = [...leafProg].reverse().find(r => r.REVENUE_COMPLETION != null);
             if (lastCompl) {
               leistungsstand += +(lastCompl.REVENUE_COMPLETION || 0) + +(lastCompl.EXTRAS_COMPLETION || 0);
