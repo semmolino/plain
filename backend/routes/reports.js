@@ -270,18 +270,17 @@ module.exports = (supabase) => {
         let leistungsstand = 0;
 
         for (const leaf of leaves) {
-          const leafCreated = leaf.created_at ? leaf.created_at.substring(0, 10) : "9999-12-31";
           const leafProg = (progressRows || []).filter(r =>
             r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
           );
 
-          // Budget: last PP row with non-null REVENUE ≤ date; fallback to current PS if it existed
+          // Budget: last PP row with non-null REVENUE ≤ date; fallback to structure's REVENUE/EXTRAS
           const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
           let rev = 0, ext = 0;
           if (lastBudget) {
             rev = +(lastBudget.REVENUE || 0);
             ext = +(lastBudget.EXTRAS  || 0);
-          } else if (leafCreated <= date) {
+          } else {
             rev = +(leaf.REVENUE || 0);
             ext = +(leaf.EXTRAS  || 0);
           }
@@ -428,17 +427,17 @@ module.exports = (supabase) => {
         let leistungsstand = 0;
 
         for (const leaf of leaves) {
-          const leafCreated = leaf.created_at ? leaf.created_at.substring(0, 10) : "9999-12-31";
           const leafProg = (progressRows || []).filter(r =>
             r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
           );
 
+          // Budget: last PP row with non-null REVENUE ≤ date; fallback to structure's REVENUE/EXTRAS
           const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
           let rev = 0, ext = 0;
           if (lastBudget) {
             rev = +(lastBudget.REVENUE || 0);
             ext = +(lastBudget.EXTRAS  || 0);
-          } else if (leafCreated <= date) {
+          } else {
             rev = +(leaf.REVENUE || 0);
             ext = +(leaf.EXTRAS  || 0);
           }
