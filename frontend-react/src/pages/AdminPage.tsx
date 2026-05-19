@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
@@ -20,6 +20,12 @@ import {
 import { fetchProjectStatuses, type ProjectStatus } from '@/api/projekte'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
+import {
+  fetchOverhead, saveOverhead, copyOverheadFromYear,
+  fetchEmployeeParams, saveEmployeeParamsBulk, calculateRates, importRates,
+  type OverheadItem, type EmployeeCalcParams, type CalcResult,
+} from '@/api/kostensatz'
+import { fetchEmployeeList } from '@/api/mitarbeiter'
 
 const PAGE_TABS = [
   { id: 'stammdaten',          label: 'Stammdaten'          },
@@ -28,6 +34,7 @@ const PAGE_TABS = [
   { id: 'vorbelegungen',       label: 'Vorbelegungen'       },
   { id: 'arbeitszeitmodelle',  label: 'Arbeitszeitmodelle'  },
   { id: 'monatsabschluss',     label: 'Monatsabschluss'     },
+  { id: 'kostensatz',          label: 'Kostensatz-Rechner'  },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -1100,6 +1107,478 @@ function ArbeitszeitmodelleSection() {
   )
 }
 
+// ── Kostensatz-Rechner ────────────────────────────────────────────────────────
+
+const FMT_EUR_KS = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
+const FMT_H_KS   = (n: number) => n.toFixed(2).replace('.', ',') + ' h'
+const FMT_PCT_KS = (n: number) => n.toFixed(1).replace('.', ',') + ' %'
+
+const OVERHEAD_CATEGORIES = [
+  'Miete/Nebenkosten', 'IT/Software', 'Versicherungen', 'Kfz-Kosten',
+  'Werbung/Marketing', 'Büromaterial', 'AfA/Abschreibungen', 'Buchhaltung/Recht', 'Sonstiges',
+]
+
+const EMPTY_PARAMS: EmployeeCalcParams = {
+  annual_salary: 0, weekly_hours: 40, vacation_days: 30,
+  sick_days_est: 7, training_days: 5, social_contrib_pct: 21, productivity_pct: 85,
+}
+
+function KostensatzSection() {
+  const qc   = useQueryClient()
+  const year = new Date().getFullYear()
+  const [selYear,       setSelYear]       = useState(year)
+  const [overheadItems, setOverheadItems] = useState<OverheadItem[]>([])
+  const [newCat,        setNewCat]        = useState(OVERHEAD_CATEGORIES[0])
+  const [newName,       setNewName]       = useState('')
+  const [newAmt,        setNewAmt]        = useState('')
+  const [overheadMsg,   setOverheadMsg]   = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [empParams,     setEmpParams]     = useState<Record<number, EmployeeCalcParams & { dirty: boolean }>>({})
+  const [paramsMsg,     setParamsMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [markup,        setMarkup]        = useState('0')
+  const [calcResults,   setCalcResults]   = useState<CalcResult[]>([])
+  const [calcLoading,   setCalcLoading]   = useState(false)
+  const [calcMsg,       setCalcMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [hasCalculated, setHasCalculated] = useState(false)
+  const [expanded,      setExpanded]      = useState<Set<number>>(new Set())
+  const [selected,      setSelected]      = useState<Set<number>>(new Set())
+  const [importDate,      setImportDate]      = useState('')
+  const [importLoading,   setImportLoading]   = useState(false)
+  const [showImport,      setShowImport]      = useState(false)
+  const [recalcBookings,  setRecalcBookings]  = useState(false)
+
+  const { data: empListData } = useQuery({ queryKey: ['employees'], queryFn: fetchEmployeeList })
+  const employees = empListData?.data?.filter(e => e.ACTIVE !== 2) ?? []
+
+  // Load overhead
+  const { data: overheadData, refetch: refetchOverhead } = useQuery({
+    queryKey: ['kostensatz-overhead', selYear],
+    queryFn:  () => fetchOverhead(selYear),
+  })
+  useEffect(() => {
+    setOverheadItems(overheadData?.data ?? [])
+  }, [overheadData?.data])
+
+  // Load employee params when year or employee list changes
+  useEffect(() => {
+    if (!employees.length) return
+    const init: Record<number, EmployeeCalcParams & { dirty: boolean }> = {}
+    Promise.all(employees.map(async emp => {
+      try {
+        const res = await fetchEmployeeParams(emp.ID, selYear)
+        init[emp.ID] = { ...res.data, dirty: false }
+      } catch {
+        init[emp.ID] = { ...EMPTY_PARAMS, dirty: false }
+      }
+    })).then(() => setEmpParams(init))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selYear, employees.length])
+
+  function updateParam(empId: number, field: keyof EmployeeCalcParams, value: string) {
+    setEmpParams(prev => ({
+      ...prev,
+      [empId]: { ...prev[empId], [field]: Number(value) || 0, dirty: true },
+    }))
+  }
+
+  // Overhead helpers
+  async function persistOverhead(items: OverheadItem[]) {
+    try {
+      await saveOverhead(selYear, items)
+      await refetchOverhead()
+    } catch (e: unknown) { setOverheadMsg({ text: (e as Error).message, type: 'error' }) }
+  }
+
+  async function addOverheadRow() {
+    if (!newName.trim()) return
+    const newItem: OverheadItem = { category: newCat, item_name: newName.trim(), amount: parseFloat(newAmt) || 0 }
+    const next = [...overheadItems, newItem]
+    setOverheadItems(next)
+    setNewName(''); setNewAmt('')
+    await persistOverhead(next)
+  }
+
+  async function removeOverhead(i: number) {
+    const next = overheadItems.filter((_, idx) => idx !== i)
+    setOverheadItems(next)
+    await persistOverhead(next)
+  }
+
+  function updateOverhead(i: number, field: keyof OverheadItem, val: string) {
+    setOverheadItems(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: field === 'amount' ? parseFloat(val) || 0 : val } : item))
+  }
+
+  const totalOverhead = overheadItems.reduce((s, i) => s + (Number(i.amount) || 0), 0)
+
+  async function saveOverheadClick() {
+    setOverheadMsg(null)
+    try {
+      await saveOverhead(selYear, overheadItems)
+      await refetchOverhead()
+      setOverheadMsg({ text: 'Gemeinkosten gespeichert', type: 'success' })
+    } catch (e: unknown) { setOverheadMsg({ text: (e as Error).message, type: 'error' }) }
+  }
+
+  async function copyFromPrevYear() {
+    try {
+      await copyOverheadFromYear(selYear - 1, selYear)
+      await refetchOverhead()
+      setOverheadMsg({ text: `Aus ${selYear - 1} kopiert`, type: 'success' })
+    } catch (e: unknown) { setOverheadMsg({ text: (e as Error).message, type: 'error' }) }
+  }
+
+  async function saveAllParams() {
+    setParamsMsg(null)
+    const dirty = employees
+      .filter(e => empParams[e.ID]?.dirty)
+      .map(e => ({ employee_id: e.ID, ...empParams[e.ID] }))
+    if (!dirty.length) { setParamsMsg({ text: 'Keine Änderungen', type: 'success' }); return }
+    try {
+      await saveEmployeeParamsBulk(selYear, dirty)
+      setEmpParams(prev => {
+        const next = { ...prev }
+        dirty.forEach(d => { if (next[d.employee_id]) next[d.employee_id].dirty = false })
+        return next
+      })
+      setParamsMsg({ text: `${dirty.length} Mitarbeiter gespeichert`, type: 'success' })
+    } catch (e: unknown) { setParamsMsg({ text: (e as Error).message, type: 'error' }) }
+  }
+
+  async function runCalculation() {
+    setCalcMsg(null); setCalcLoading(true); setCalcResults([]); setHasCalculated(false)
+    try {
+      const res = await calculateRates({ year: selYear, profit_markup_pct: parseFloat(markup) || 0 })
+      setCalcResults(res.data)
+      setHasCalculated(true)
+      setSelected(new Set(res.data.map(r => r.employee_id)))
+      if (!res.data.length) setCalcMsg({ text: 'Keine aktiven Mitarbeiter für dieses Jahr gefunden.', type: 'error' })
+    } catch (e: unknown) { setCalcMsg({ text: (e as Error).message, type: 'error' }); setHasCalculated(true) }
+    finally { setCalcLoading(false) }
+  }
+
+  async function doImport() {
+    if (!importDate) return
+    setImportLoading(true)
+    try {
+      const rates = calcResults
+        .filter(r => selected.has(r.employee_id))
+        .map(r => ({ employee_id: r.employee_id, rate: r.breakdown.import_rate }))
+      await importRates(rates, importDate, recalcBookings)
+      void qc.invalidateQueries({ queryKey: ['employees'] })
+      void qc.invalidateQueries({ queryKey: ['emp-cp-rates'] })
+      const recalcNote = recalcBookings ? ' · Buchungen neu berechnet' : ''
+      setCalcMsg({ text: `${rates.length} Kostensätze übernommen (gültig ab ${importDate})${recalcNote}`, type: 'success' })
+      setShowImport(false); setImportDate(''); setSelected(new Set()); setRecalcBookings(false)
+    } catch (e: unknown) { setCalcMsg({ text: (e as Error).message, type: 'error' }) }
+    finally { setImportLoading(false) }
+  }
+
+  function toggleExpand(id: number) { setExpanded(p => { const s = new Set(p); s.has(id) ? s.delete(id) : s.add(id); return s }) }
+  function toggleSelect(id: number) { setSelected(p => { const s = new Set(p); s.has(id) ? s.delete(id) : s.add(id); return s }) }
+
+  const diffColor = (cur: number | null, calc: number) => {
+    if (cur == null || cur === 0) return '#6b7280'
+    const pct = (calc - cur) / cur * 100
+    if (pct > 10) return '#dc2626'
+    if (pct > 0)  return '#d97706'
+    return '#059669'
+  }
+
+  return (
+    <div>
+      {/* Year selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+        <span style={{ fontWeight: 600, fontSize: 14 }}>Kalkulationsjahr</span>
+        <select value={selYear} onChange={e => setSelYear(Number(e.target.value))} style={{ fontSize: 14, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-2)', background: 'var(--surface)' }}>
+          {[year - 1, year, year + 1].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      {/* Panel 1: Gemeinkosten */}
+      <div className="master-section-block" style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Gemeinkosten {selYear}</h3>
+          <button type="button" className="btn-small" onClick={copyFromPrevYear}>
+            Aus {selYear - 1} kopieren
+          </button>
+        </div>
+        {overheadMsg && <Message text={overheadMsg.text} type={overheadMsg.type} />}
+
+        <table className="master-table" style={{ fontSize: 13, marginBottom: 10 }}>
+          <thead>
+            <tr>
+              <th>Kategorie</th>
+              <th>Bezeichnung</th>
+              <th style={{ textAlign: 'right' }}>Betrag/Jahr</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {overheadItems.length === 0 && (
+              <tr><td colSpan={4} className="empty-note" style={{ padding: '8px 0' }}>Noch keine Positionen — füge unten welche hinzu.</td></tr>
+            )}
+            {overheadItems.map((item, i) => (
+              <tr key={i}>
+                <td>
+                  <select value={item.category} onChange={e => updateOverhead(i, 'category', e.target.value)} style={{ fontSize: 12, padding: '2px 4px', border: '1px solid var(--border-2)', borderRadius: 4, background: 'var(--surface)' }}>
+                    {OVERHEAD_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </td>
+                <td>
+                  <input value={item.item_name} onChange={e => updateOverhead(i, 'item_name', e.target.value)} style={{ fontSize: 12, padding: '2px 6px', border: '1px solid var(--border-2)', borderRadius: 4, background: 'var(--surface)', width: '100%' }} />
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <input type="number" value={item.amount} onChange={e => updateOverhead(i, 'amount', e.target.value)} style={{ fontSize: 12, padding: '2px 6px', border: '1px solid var(--border-2)', borderRadius: 4, background: 'var(--surface)', width: 110, textAlign: 'right' }} />
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <button type="button" className="btn-icon-danger" onClick={() => removeOverhead(i)} title="Löschen">×</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="sum-row">
+              <td colSpan={2}><strong>Gesamt</strong></td>
+              <td style={{ textAlign: 'right' }}><strong>{FMT_EUR_KS.format(totalOverhead)}</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {/* Add row */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 2 }}>Kategorie</label>
+            <select value={newCat} onChange={e => setNewCat(e.target.value)} style={{ fontSize: 13, padding: '4px 6px', border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)' }}>
+              {OVERHEAD_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 2 }}>Bezeichnung</label>
+            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="z.B. Serverkosten" style={{ fontSize: 13, padding: '4px 8px', border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)', width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 2 }}>Betrag €/Jahr</label>
+            <input type="number" value={newAmt} onChange={e => setNewAmt(e.target.value)} placeholder="0" style={{ fontSize: 13, padding: '4px 8px', border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)', width: 120, textAlign: 'right' }} />
+          </div>
+          <button type="button" className="btn-small btn-save" onClick={addOverheadRow} style={{ alignSelf: 'flex-end' }}>+ Hinzufügen</button>
+          <button type="button" className="btn-small" onClick={saveOverheadClick} style={{ alignSelf: 'flex-end' }} title="Änderungen an bestehenden Positionen speichern">Speichern</button>
+        </div>
+      </div>
+
+      {/* Panel 2: Mitarbeiter-Parameter */}
+      <div className="master-section-block" style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Mitarbeiter-Parameter {selYear}</h3>
+          <button type="button" className="btn-small btn-save" onClick={saveAllParams}>Alle speichern</button>
+        </div>
+        {paramsMsg && <Message text={paramsMsg.text} type={paramsMsg.type} />}
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10, marginTop: 0 }}>
+          AG-Sozialabgaben (D): KV (Krankenversicherung) ~7,3% · RV (Rentenversicherung) 9,3% · AV (Arbeitslosenversicherung) 1,5% · PV (Pflegeversicherung) ~1,8% · UV (Unfallversicherung) ~1% ≈ 21% gesamt
+        </p>
+        <div className="table-scroll">
+          <table className="master-table" style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th>Kürzel</th>
+                <th>Jahresgehalt (brutto)</th>
+                <th style={{ textAlign: 'right' }}>Wochenstd.</th>
+                <th style={{ textAlign: 'right' }}>Urlaub</th>
+                <th style={{ textAlign: 'right' }}>Krank</th>
+                <th style={{ textAlign: 'right' }}>Weiterbild.</th>
+                <th style={{ textAlign: 'right' }}>AG-SV %</th>
+                <th style={{ textAlign: 'right' }}>Produktiv %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map(emp => {
+                const p = empParams[emp.ID]
+                if (!p) return <tr key={emp.ID}><td colSpan={8} style={{ color: 'var(--text-4)', fontSize: 11 }}>Laden…</td></tr>
+                const inp = (field: keyof EmployeeCalcParams, w = 70) => (
+                  <input
+                    type="number"
+                    value={p[field]}
+                    onChange={e => updateParam(emp.ID, field, e.target.value)}
+                    style={{ width: w, padding: '2px 4px', fontSize: 12, border: '1px solid var(--border-2)', borderRadius: 4, background: 'var(--surface)', textAlign: 'right' }}
+                  />
+                )
+                return (
+                  <tr key={emp.ID} style={{ background: p.dirty ? 'var(--dim)' : undefined }}>
+                    <td><strong>{emp.SHORT_NAME}</strong></td>
+                    <td>{inp('annual_salary', 110)}</td>
+                    <td style={{ textAlign: 'right' }}>{inp('weekly_hours', 60)}</td>
+                    <td style={{ textAlign: 'right' }}>{inp('vacation_days', 55)}</td>
+                    <td style={{ textAlign: 'right' }}>{inp('sick_days_est', 55)}</td>
+                    <td style={{ textAlign: 'right' }}>{inp('training_days', 55)}</td>
+                    <td style={{ textAlign: 'right' }}>{inp('social_contrib_pct', 60)}</td>
+                    <td style={{ textAlign: 'right' }}>{inp('productivity_pct', 60)}</td>
+                  </tr>
+                )
+              })}
+              {employees.length === 0 && (
+                <tr><td colSpan={8} className="empty-note">Keine aktiven Mitarbeiter.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Panel 3: Kalkulation */}
+      <div className="master-section-block">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Kalkulation & Ergebnis</h3>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <label style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              Gewinnaufschlag
+              <input
+                type="number" value={markup} onChange={e => setMarkup(e.target.value)} min={0} max={100} step={0.5}
+                style={{ width: 60, padding: '4px 6px', fontSize: 13, border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)', textAlign: 'right' }}
+              />
+              %
+            </label>
+            <button type="button" className="btn-small btn-save" onClick={runCalculation} disabled={calcLoading}>
+              {calcLoading ? 'Berechne…' : 'Berechnen'}
+            </button>
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12, marginTop: 0, lineHeight: 1.6 }}>
+          <strong>Formel:</strong>{' '}
+          Arbeitstage = 365 − 104 (Wochenenden) − Feiertage − Urlaubstage − Krankheitstage − Weiterbildungstage
+          {' · '}
+          Nettostunden = Arbeitstage × (Wochenstd. / 5) × Produktivität%
+          {' · '}
+          Direktkosten/h = Jahresgehalt × (1 + AG-SV%) ÷ Nettostunden
+          {' · '}
+          Gemeinkosten/h = (Gesamtgemeinkosten × Nettostunden-Anteil) ÷ Nettostunden
+          {' · '}
+          <strong>Vollkostensatz = Direktkosten/h + Gemeinkosten/h</strong>
+          {' · '}
+          Importrate = Vollkostensatz × (1 + Gewinnaufschlag%)
+        </p>
+        {calcMsg && <Message text={calcMsg.text} type={calcMsg.type} />}
+
+        {calcResults.length > 0 && (
+          <>
+            <div className="table-scroll">
+              <table className="master-table" style={{ fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 24 }}></th>
+                    <th>Mitarbeiter</th>
+                    <th style={{ textAlign: 'right' }}>Nettostunden</th>
+                    <th style={{ textAlign: 'right' }}>Direktkosten/h</th>
+                    <th style={{ textAlign: 'right' }}>Gemeinkosten/h</th>
+                    <th style={{ textAlign: 'right' }}>Vollkostensatz</th>
+                    {parseFloat(markup) > 0 && <th style={{ textAlign: 'right' }}>Importrate</th>}
+                    <th style={{ textAlign: 'right' }}>Aktueller Satz</th>
+                    <th style={{ textAlign: 'right' }}>Diff.</th>
+                    <th style={{ width: 32, textAlign: 'center' }}>
+                      <input type="checkbox"
+                        checked={selected.size === calcResults.length}
+                        onChange={e => setSelected(e.target.checked ? new Set(calcResults.map(r => r.employee_id)) : new Set())}
+                      />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calcResults.map(r => {
+                    const bd   = r.breakdown
+                    const imp  = parseFloat(markup) > 0
+                    const rate = imp ? bd.import_rate : bd.vollkostensatz
+                    const diff = r.current_cp_rate != null && r.current_cp_rate > 0
+                      ? ((rate - r.current_cp_rate) / r.current_cp_rate * 100) : null
+                    const isExp = expanded.has(r.employee_id)
+                    return (
+                      <Fragment key={r.employee_id}>
+                        <tr style={{ cursor: 'pointer' }} onClick={() => toggleExpand(r.employee_id)}>
+                          <td style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: 10 }}>{isExp ? '▼' : '▶'}</td>
+                          <td><strong>{r.short_name}</strong> <span style={{ color: 'var(--text-4)', fontWeight: 400 }}>{r.first_name} {r.last_name}</span></td>
+                          <td style={{ textAlign: 'right' }}>{FMT_H_KS(bd.productive_hours)}</td>
+                          <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.direct_cost_per_h)}</td>
+                          <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.overhead_per_h)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{FMT_EUR_KS.format(bd.vollkostensatz)}</td>
+                          {imp && <td style={{ textAlign: 'right', fontWeight: 700, color: '#1d4ed8' }}>{FMT_EUR_KS.format(bd.import_rate)}</td>}
+                          <td style={{ textAlign: 'right', color: 'var(--text-3)' }}>{r.current_cp_rate != null ? FMT_EUR_KS.format(r.current_cp_rate) : '—'}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: diffColor(r.current_cp_rate, rate) }}>
+                            {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(1).replace('.', ',')} %` : '—'}
+                          </td>
+                          <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                            <input type="checkbox" checked={selected.has(r.employee_id)} onChange={() => toggleSelect(r.employee_id)} />
+                          </td>
+                        </tr>
+                        {isExp && (
+                          <tr key={`${r.employee_id}-detail`} style={{ background: 'var(--dim)' }}>
+                            <td></td>
+                            <td colSpan={9}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '6px 24px', padding: '8px 0', fontSize: 12, color: 'var(--text-2)' }}>
+                                <span>📅 Arbeitstage: <strong>{bd.working_days}</strong></span>
+                                <span>🏖 Feiertage: <strong>{bd.public_holidays}</strong></span>
+                                <span>⏱ Nettostunden: <strong>{FMT_H_KS(bd.productive_hours)}</strong></span>
+                                <span>💶 Bruttogehalt: <strong>{FMT_EUR_KS.format(bd.annual_salary)}</strong></span>
+                                <span>🔒 AG-Sozialabgaben: <strong>{FMT_EUR_KS.format(bd.social_contrib_eur)}</strong></span>
+                                <span>= Direktkosten/Jahr: <strong>{FMT_EUR_KS.format(bd.direct_cost_total)}</strong></span>
+                                <span>🏢 Gesamtgemeinkosten: <strong>{FMT_EUR_KS.format(bd.overhead_total)}</strong></span>
+                                <span>📊 Anteil: <strong>{FMT_PCT_KS(bd.overhead_share_pct)}</strong></span>
+                                <span>= Gemeinkosten zugeteilt: <strong>{FMT_EUR_KS.format(bd.overhead_allocated)}</strong></span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{selected.size} von {calcResults.length} ausgewählt</span>
+                {!showImport && (
+                  <button type="button" className="btn-small btn-save" onClick={() => setShowImport(true)} disabled={!selected.size}>
+                    Ausgewählte als Kostensatz übernehmen …
+                  </button>
+                )}
+              </div>
+              {showImport && (
+                <div style={{ marginTop: 12, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border-2)', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ color: 'var(--text-2)' }}>Gültig ab</span>
+                      <input type="date" value={importDate} onChange={e => setImportDate(e.target.value)}
+                        style={{ fontSize: 13, padding: '4px 8px', border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)' }} />
+                    </label>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 14 }}>
+                    <input type="checkbox" checked={recalcBookings} onChange={e => setRecalcBookings(e.target.checked)}
+                      style={{ marginTop: 2, width: 15, height: 15, flexShrink: 0 }} />
+                    <span>
+                      <strong>Bestehende Buchungen (TEC) neu berechnen</strong>
+                      <span style={{ color: 'var(--text-3)', display: 'block', fontSize: 12, marginTop: 2 }}>
+                        Alle Buchungen ab dem gewählten Datum werden mit dem neuen Kostensatz (CP_RATE) und dem
+                        daraus resultierenden CP_TOT neu berechnet. Buchungen vor diesem Datum bleiben unverändert.
+                      </span>
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button type="button" className="btn-small btn-save" onClick={doImport} disabled={!importDate || importLoading || !selected.size}>
+                      {importLoading ? 'Speichere…' : `${selected.size} Kostensätze${recalcBookings ? ' + Buchungen' : ''} übernehmen`}
+                    </button>
+                    <button type="button" className="btn-small" onClick={() => { setShowImport(false); setRecalcBookings(false) }}>Abbrechen</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {!calcLoading && calcResults.length === 0 && !hasCalculated && (
+          <p className="empty-note">Gemeinkosten und Mitarbeiter-Parameter eingeben, dann „Berechnen" klicken.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -1120,6 +1599,7 @@ export function AdminPage() {
         {tab === 'vorbelegungen'      && <VorbelegungenSection />}
         {tab === 'arbeitszeitmodelle' && <ArbeitszeitmodelleSection />}
         {tab === 'monatsabschluss'    && <MonatsabschlussSection />}
+        {tab === 'kostensatz'         && <KostensatzSection />}
       </div>
     </div>
   )
