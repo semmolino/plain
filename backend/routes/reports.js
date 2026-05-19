@@ -526,5 +526,99 @@ module.exports = (supabase) => {
     res.json({ data: data || [] });
   });
 
+  // Alert conditions for the dashboard alert strip
+  router.get("/dashboard/alerts", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const alerts = [];
+
+    const { count: overdueCount } = await supabase
+      .from("INVOICE")
+      .select("ID", { count: "exact", head: true })
+      .eq("TENANT_ID", tenantId)
+      .eq("STATUS_ID", 2)
+      .not("DUE_DATE", "is", null)
+      .lt("DUE_DATE", today)
+      .neq("INVOICE_TYPE", "stornorechnung");
+    if (overdueCount > 0) alerts.push({
+      severity: "red",
+      type: "overdue_invoices",
+      message: `${overdueCount} Rechnung${overdueCount > 1 ? "en" : ""} überfällig`,
+      count: overdueCount,
+      action_url: "/rechnungen",
+    });
+
+    const { data: projectList } = await supabase
+      .from("VW_REPORT_PROJECT_LIST_ROOT")
+      .select("PROJECT_ID, COST_TOTAL, BUDGET_TOTAL_NET")
+      .eq("TENANT_ID", tenantId);
+    const atRisk = (projectList || []).filter(p =>
+      Number(p.BUDGET_TOTAL_NET) > 0 &&
+      Number(p.COST_TOTAL) / Number(p.BUDGET_TOTAL_NET) > 0.9
+    );
+    if (atRisk.length > 0) alerts.push({
+      severity: "amber",
+      type: "budget_critical",
+      message: `${atRisk.length} Projekt${atRisk.length > 1 ? "e" : ""} über 90% Budget`,
+      count: atRisk.length,
+      action_url: "/projekte",
+    });
+
+    res.json({ data: alerts });
+  });
+
+  // List of overdue invoices for Controller view
+  router.get("/dashboard/overdue-invoices", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await supabase
+      .from("INVOICE")
+      .select("ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_NET, PROJECT_ID")
+      .eq("TENANT_ID", tenantId)
+      .eq("STATUS_ID", 2)
+      .not("DUE_DATE", "is", null)
+      .lt("DUE_DATE", today)
+      .neq("INVOICE_TYPE", "stornorechnung")
+      .order("DUE_DATE", { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    const result = (data || []).map(r => ({
+      ...r,
+      days_overdue: Math.floor((new Date(today) - new Date(r.DUE_DATE)) / 86400000),
+    }));
+    res.json({ data: result });
+  });
+
+  // Hours booked per employee over last 28 days (Bereichsleiter view)
+  router.get("/dashboard/team-utilization", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const today = new Date();
+    const from  = new Date(today);
+    from.setDate(from.getDate() - 28);
+    const fromStr = from.toISOString().slice(0, 10);
+    const toStr   = today.toISOString().slice(0, 10);
+
+    const [{ data: tec }, { data: employees }] = await Promise.all([
+      supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT")
+        .eq("TENANT_ID", tenantId).eq("STATUS", "CONFIRMED")
+        .gte("DATE_VOUCHER", fromStr).lte("DATE_VOUCHER", toStr),
+      supabase.from("EMPLOYEE").select("ID, SHORT_NAME")
+        .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
+    ]);
+
+    const byEmployee = {};
+    for (const r of (tec || [])) {
+      byEmployee[r.EMPLOYEE_ID] = (byEmployee[r.EMPLOYEE_ID] || 0) + Number(r.QUANTITY_INT || 0);
+    }
+    const result = (employees || []).map(e => ({
+      employee_id:  e.ID,
+      short_name:   e.SHORT_NAME,
+      hours_4weeks: Math.round((byEmployee[e.ID] || 0) * 100) / 100,
+    }));
+    res.json({ data: result });
+  });
+
   return router;
 };

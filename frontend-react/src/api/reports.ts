@@ -173,3 +173,38 @@ export const fetchProjectsTimeline = (filter: DateFilter = { mode: 'now' }) => {
   const qs = buildTimelineQs(filter)
   return apiClient.get<{ data: TimelinePoint[] }>(`/reports/projects/timeline${qs ? `?${qs}` : ''}`)
 }
+
+// ── Dashboard alerts & role-specific data ─────────────────────────────────────
+
+export interface DashboardAlert {
+  severity:   'red' | 'amber' | 'blue'
+  type:       string
+  message:    string
+  count?:     number
+  action_url: string
+}
+
+export interface OverdueInvoice {
+  ID:               number
+  INVOICE_NUMBER:   string
+  INVOICE_DATE:     string | null
+  DUE_DATE:         string
+  TOTAL_AMOUNT_NET: number
+  PROJECT_ID:       number | null
+  days_overdue:     number
+}
+
+export interface TeamMemberUtilization {
+  employee_id:  number
+  short_name:   string
+  hours_4weeks: number
+}
+
+export const fetchDashboardAlerts = () =>
+  apiClient.get<{ data: DashboardAlert[] }>('/reports/dashboard/alerts')
+
+export const fetchOverdueInvoices = () =>
+  apiClient.get<{ data: OverdueInvoice[] }>('/reports/dashboard/overdue-invoices')
+
+export const fetchTeamUtilization = () =>
+  apiClient.get<{ data: TeamMemberUtilization[] }>('/reports/dashboard/team-utilization')
