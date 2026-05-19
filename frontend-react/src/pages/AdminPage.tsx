@@ -1138,6 +1138,7 @@ function KostensatzSection() {
   const [calcResults,   setCalcResults]   = useState<CalcResult[]>([])
   const [calcLoading,   setCalcLoading]   = useState(false)
   const [calcMsg,       setCalcMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [hasCalculated, setHasCalculated] = useState(false)
   const [expanded,      setExpanded]      = useState<Set<number>>(new Set())
   const [selected,      setSelected]      = useState<Set<number>>(new Set())
   const [importDate,      setImportDate]      = useState('')
@@ -1243,12 +1244,14 @@ function KostensatzSection() {
   }
 
   async function runCalculation() {
-    setCalcMsg(null); setCalcLoading(true); setCalcResults([])
+    setCalcMsg(null); setCalcLoading(true); setCalcResults([]); setHasCalculated(false)
     try {
       const res = await calculateRates({ year: selYear, profit_markup_pct: parseFloat(markup) || 0 })
       setCalcResults(res.data)
+      setHasCalculated(true)
       setSelected(new Set(res.data.map(r => r.employee_id)))
-    } catch (e: unknown) { setCalcMsg({ text: (e as Error).message, type: 'error' }) }
+      if (!res.data.length) setCalcMsg({ text: 'Keine aktiven Mitarbeiter für dieses Jahr gefunden.', type: 'error' })
+    } catch (e: unknown) { setCalcMsg({ text: (e as Error).message, type: 'error' }); setHasCalculated(true) }
     finally { setCalcLoading(false) }
   }
 
@@ -1569,7 +1572,10 @@ function KostensatzSection() {
         )}
 
         {!calcLoading && calcResults.length === 0 && (
-          <p className="empty-note">Gemeinkosten und Mitarbeiter-Parameter eingeben, dann „Berechnen" klicken.</p>
+          {!hasCalculated
+            ? <p className="empty-note">Gemeinkosten und Mitarbeiter-Parameter eingeben, dann „Berechnen" klicken.</p>
+            : null
+          }
         )}
       </div>
     </div>

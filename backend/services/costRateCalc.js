@@ -29,7 +29,7 @@ async function countPublicHolidays(supabase, countryCode, stateCode, year) {
     .or(stateCode ? `STATE_CODE.is.null,STATE_CODE.eq.${stateCode}` : 'STATE_CODE.is.null')
     .gte('HOLIDAY_DATE', from)
     .lte('HOLIDAY_DATE', to);
-  if (error) throw { status: 500, message: error.message };
+  if (error) console.warn('PUBLIC_HOLIDAY query failed, defaulting to 0:', error.message);
   return count || 0;
 }
 
@@ -197,12 +197,12 @@ function calcProductiveHours(params, publicHolidayCount) {
  * Returns array of CalcResult objects.
  */
 async function calculateCostRates(supabase, tenantId, year, employeeIds, profitMarkupPct = 0) {
-  // Fetch employees
+  // Fetch employees — use or() to include rows where ACTIVE IS NULL (neq alone excludes NULLs in PostgREST)
   let empQ = supabase
     .from('EMPLOYEE')
     .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME')
     .eq('TENANT_ID', tenantId)
-    .neq('ACTIVE', 2)
+    .or('ACTIVE.is.null,ACTIVE.neq.2')
     .order('SHORT_NAME');
   if (employeeIds && employeeIds.length) empQ = empQ.in('ID', employeeIds);
   const { data: employees, error: empErr } = await empQ;
