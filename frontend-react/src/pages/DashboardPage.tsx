@@ -7,7 +7,7 @@ import {
   Tooltip, Legend,
   type ChartOptions,
 } from 'chart.js'
-import { Bar, Doughnut, Line } from 'react-chartjs-2'
+import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSession } from '@/hooks/useSession'
 import {
@@ -632,13 +632,14 @@ function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
   const cumul    = months.map(m => Math.round(m.cumulative * 10) / 10)
   return (
     <div style={{ height: 220 }}>
-      <Bar
+      <Chart
+        type='bar'
         data={{
           labels,
           datasets: [
-            { label: 'Soll (h)',  data: required, backgroundColor: 'rgba(156,163,175,0.45)', borderRadius: 4, yAxisID: 'yH' },
-            { label: 'Ist (h)',   data: actual,   backgroundColor: 'rgba(59,130,246,0.65)',  borderRadius: 4, yAxisID: 'yH' },
-            { label: 'Saldo kum. (h)', data: cumul, type: 'line' as const, borderColor: '#f59e0b', backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
+            { type: 'bar',  label: 'Soll (h)',        data: required, backgroundColor: 'rgba(156,163,175,0.45)', borderRadius: 4, yAxisID: 'yH' },
+            { type: 'bar',  label: 'Ist (h)',          data: actual,   backgroundColor: 'rgba(59,130,246,0.65)',  borderRadius: 4, yAxisID: 'yH' },
+            { type: 'line', label: 'Saldo kum. (h)',   data: cumul,    borderColor: '#f59e0b', backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
           ],
         }}
         options={{
