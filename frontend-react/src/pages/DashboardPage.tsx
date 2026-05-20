@@ -124,11 +124,20 @@ function DonutChart({ kpis }: { kpis: DashboardKpis }) {
   )
 }
 
+function budgetHealthClass(cost: number | null, budget: number | null): string {
+  if (!budget || budget <= 0) return ''
+  const ratio = Number(cost || 0) / Number(budget)
+  if (ratio >= 0.9) return 'budget-red'
+  if (ratio >= 0.8) return 'budget-amber'
+  return 'budget-green'
+}
+
 function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; maxRows?: number }) {
+  const navigate = useNavigate()
   const rows = maxRows ? projects.slice(0, maxRows) : projects
   if (!rows.length) return <p className="empty-note">Keine Projekte gefunden.</p>
   return (
-    <table className="dash-table">
+    <table className="dash-table dash-table-clickable">
       <thead>
         <tr>
           <th>Projekt</th>
@@ -136,18 +145,41 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
           <th className="num">Leistungsstand</th>
           <th className="num">Stunden</th>
           <th className="num">Kosten</th>
+          <th className="col-hide-mobile" style={{ width: 80 }}>Budget %</th>
         </tr>
       </thead>
       <tbody>
-        {rows.map((p, i) => (
-          <tr key={i}>
-            <td>{p.NAME_SHORT || p.NAME_LONG || '—'}</td>
-            <td className="num">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
-            <td className="num">{fmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
-            <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
-            <td className="num">{fmtEur(p.COST_TOTAL)}</td>
-          </tr>
-        ))}
+        {rows.map((p, i) => {
+          const healthCls = budgetHealthClass(p.COST_TOTAL, p.BUDGET_TOTAL_NET)
+          const budgetRatio = (Number(p.BUDGET_TOTAL_NET) > 0)
+            ? Math.min(Number(p.COST_TOTAL || 0) / Number(p.BUDGET_TOTAL_NET), 1)
+            : 0
+          const barColor = budgetRatio >= 0.9 ? 'var(--danger,#c0392b)' : budgetRatio >= 0.8 ? '#b45309' : 'var(--success,#2e7d32)'
+          return (
+            <tr
+              key={i}
+              className={`${healthCls} ${p.PROJECT_ID ? 'clickable-row' : ''}`.trim()}
+              onClick={() => p.PROJECT_ID && navigate('/daten', { state: { tab: 'einzelprojekt', projectId: p.PROJECT_ID } })}
+              title={p.PROJECT_ID ? 'Projektbericht öffnen' : undefined}
+            >
+              <td>{p.NAME_SHORT || p.NAME_LONG || '—'}</td>
+              <td className="num">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
+              <td className="num">{fmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
+              <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
+              <td className="num">{fmtEur(p.COST_TOTAL)}</td>
+              <td className="col-hide-mobile">
+                {Number(p.BUDGET_TOTAL_NET) > 0 ? (
+                  <div className="budget-bar-wrap">
+                    <div className="budget-bar-track">
+                      <div className="budget-bar-fill" style={{ width: `${Math.round(budgetRatio * 100)}%`, background: barColor }} />
+                    </div>
+                    <span className="budget-bar-pct">{Math.round(budgetRatio * 100)}%</span>
+                  </div>
+                ) : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span>}
+              </td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )
@@ -183,11 +215,11 @@ function DashboardTimeline() {
   const today    = new Date()
   const dateFrom = `${today.getFullYear()}-01-01`
   const dateTo   = today.toISOString().substring(0, 10)
-  const filter   = { mode: 'period' as const, dateFrom, dateTo }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['projects-timeline', filter],
-    queryFn:  () => fetchProjectsTimeline(filter),
+    queryKey: ['projects-timeline', dateFrom, dateTo],
+    queryFn:  () => fetchProjectsTimeline({ mode: 'period', dateFrom, dateTo }),
+    staleTime: 300000,
   })
 
   const points: TimelinePoint[] = data?.data ?? []
@@ -333,6 +365,7 @@ function TeamUtilizationChart({ data }: { data: TeamMemberUtilization[] }) {
 // ── Overdue invoices table ────────────────────────────────────────────────────
 
 function OverdueInvoicesTable({ invoices }: { invoices: OverdueInvoice[] }) {
+  const navigate = useNavigate()
   if (!invoices.length) {
     return (
       <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
@@ -341,7 +374,7 @@ function OverdueInvoicesTable({ invoices }: { invoices: OverdueInvoice[] }) {
     )
   }
   return (
-    <table className="dash-table">
+    <table className="dash-table dash-table-clickable">
       <thead>
         <tr>
           <th>Nr.</th>
@@ -354,8 +387,14 @@ function OverdueInvoicesTable({ invoices }: { invoices: OverdueInvoice[] }) {
       <tbody>
         {invoices.map(inv => {
           const dClass = inv.days_overdue > 30 ? 'overdue-red' : inv.days_overdue > 14 ? 'overdue-amber' : ''
+          const invoiceNum = inv.INVOICE_NUMBER || String(inv.ID)
           return (
-            <tr key={inv.ID}>
+            <tr
+              key={inv.ID}
+              className="clickable-row"
+              onClick={() => navigate('/rechnungen', { state: { projectSearch: invoiceNum } })}
+              title="Rechnung in der Rechnungsliste öffnen"
+            >
               <td>{inv.INVOICE_NUMBER || `#${inv.ID}`}</td>
               <td>{inv.INVOICE_DATE ? fmtDateDE(inv.INVOICE_DATE) : '—'}</td>
               <td>{fmtDateDE(inv.DUE_DATE)}</td>

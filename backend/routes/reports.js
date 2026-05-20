@@ -498,7 +498,7 @@ module.exports = (supabase) => {
     if (!tenantId) return;
     const { data, error } = await supabase
       .from("VW_REPORT_PROJECT_LIST_ROOT")
-      .select("NAME_SHORT, NAME_LONG, BUDGET_TOTAL_NET, LEISTUNGSSTAND_VALUE, HOURS_TOTAL, COST_TOTAL, PARTIAL_PAYMENT_NET_TOTAL, INVOICE_NET_TOTAL")
+      .select("PROJECT_ID, NAME_SHORT, NAME_LONG, BUDGET_TOTAL_NET, LEISTUNGSSTAND_VALUE, HOURS_TOTAL, COST_TOTAL, PARTIAL_PAYMENT_NET_TOTAL, INVOICE_NET_TOTAL")
       .eq("TENANT_ID", tenantId)
       .order("BUDGET_TOTAL_NET", { ascending: false })
       .limit(10);

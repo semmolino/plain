@@ -53,6 +53,8 @@ interface UnifiedRow {
   number:     string | null
   typ:        string
   date:       string | null
+  dueDate:    string | null
+  isOverdue:  boolean
   project:    string | null
   projectId:  number | null
   address:    string | null
@@ -93,12 +95,17 @@ function fromInvoice(inv: Invoice): UnifiedRow {
   const skontoGross   = cdPct > 0 && adjustedGross != null ? Math.round(adjustedGross * (1 - cdPct / 100) * 100) / 100 : null
   const rawOpen       = adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null
   const open          = skontoGross !== null && (paid ?? 0) >= skontoGross - 0.005 ? 0 : rawOpen
+  const today = new Date().toISOString().slice(0, 10)
+  const dueDate   = inv.DUE_DATE ?? null
+  const isOverdue = statusClass === 'booked' && dueDate !== null && dueDate < today && (open ?? 0) > 0.005
   return {
     key:         `inv-${inv.ID}`,
     source:      'invoice',
     number:      inv.INVOICE_NUMBER ?? null,
     typ:         capitalizeInvType(inv.INVOICE_TYPE),
     date:        inv.INVOICE_DATE ?? null,
+    dueDate,
+    isOverdue,
     project:     inv.PROJECT ?? null,
     projectId:   inv.PROJECT_ID ?? null,
     address:     inv.ADDRESS_NAME_1 ?? null,
@@ -133,12 +140,17 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   const skontoGross   = cdPct > 0 && adjustedGross != null ? Math.round(adjustedGross * (1 - cdPct / 100) * 100) / 100 : null
   const rawOpen       = adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null
   const open          = skontoGross !== null && (paid ?? 0) >= skontoGross - 0.005 ? 0 : rawOpen
+  const today2   = new Date().toISOString().slice(0, 10)
+  const dueDate2  = pp.DUE_DATE ?? null
+  const isOverdue2 = statusClass === 'booked' && dueDate2 !== null && dueDate2 < today2 && (open ?? 0) > 0.005
   return {
     key:         `pp-${pp.ID}`,
     source:      'pp',
     number:      pp.PARTIAL_PAYMENT_NUMBER ?? null,
     typ:         'Abschlagsrechnung',
     date:        pp.PARTIAL_PAYMENT_DATE ?? null,
+    dueDate:     dueDate2,
+    isOverdue:   isOverdue2,
     project:     pp.PROJECT ?? null,
     projectId:   pp.PROJECT_ID ?? null,
     address:     pp.ADDRESS_NAME_1 ?? null,
@@ -651,7 +663,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                     if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
                     if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>
                     if (c.key === 'open')        return <td key={c.key} className="num">{fmtEur(row.open)}</td>
-                    if (c.key === 'statusLabel') return <td key={c.key}><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span></td>
+                    if (c.key === 'statusLabel') return <td key={c.key}><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span>{row.isOverdue && <span className="status-badge overdue" title={`Fällig: ${row.dueDate}`}>Überfällig</span>}</td>
                     return null
                   })}
                   <td className="doc-actions">

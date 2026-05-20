@@ -641,7 +641,8 @@ export function ProjektlisteTab() {
                   <tr
                     key={r.PROJECT_ID}
                     className="clickable-row"
-                    onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}
+                    title="Projektbericht öffnen"
+                    onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: r.PROJECT_ID } })}
                   >
                     <td>
                       <strong>{r.NAME_SHORT}</strong>
