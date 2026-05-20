@@ -511,9 +511,10 @@ input::placeholder { color: var(--text-4); }
 .dash-table-clickable tbody tr { cursor: default; }
 .dash-table-clickable tbody tr.clickable-row { cursor: pointer; }
 .dash-table-clickable tbody tr.clickable-row:hover td { background: var(--accent-tint); }
-.budget-bar-wrap { position: relative; height: 16px; background: var(--border-3, #e5e7eb); border-radius: 3px; overflow: hidden; }
-.budget-bar-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; transition: width 0.3s; }
-.budget-bar-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #fff; mix-blend-mode: difference; }
+.budget-bar-wrap { display: flex; align-items: center; gap: 5px; }
+.budget-bar-track { flex: 1; height: 6px; background: var(--border-3, #e5e7eb); border-radius: 3px; overflow: hidden; }
+.budget-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.budget-bar-pct { font-size: 10px; font-weight: 600; color: var(--text-3, #6b7280); min-width: 28px; text-align: right; }
 
 /* Donut */
 .donut-wrap { display: flex; flex-direction: column; gap: 12px; }

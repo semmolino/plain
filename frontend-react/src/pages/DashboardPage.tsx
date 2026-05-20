@@ -170,7 +170,9 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
               <td>
                 {Number(p.BUDGET_TOTAL_NET) > 0 ? (
                   <div className="budget-bar-wrap">
-                    <div className="budget-bar-fill" style={{ width: `${Math.round(budgetRatio * 100)}%`, background: barColor }} />
+                    <div className="budget-bar-track">
+                      <div className="budget-bar-fill" style={{ width: `${Math.round(budgetRatio * 100)}%`, background: barColor }} />
+                    </div>
                     <span className="budget-bar-pct">{Math.round(budgetRatio * 100)}%</span>
                   </div>
                 ) : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span>}
