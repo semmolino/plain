@@ -145,7 +145,7 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
           <th className="num">Leistungsstand</th>
           <th className="num">Stunden</th>
           <th className="num">Kosten</th>
-          <th style={{ width: 80 }}>Budget %</th>
+          <th className="col-hide-mobile" style={{ width: 80 }}>Budget %</th>
         </tr>
       </thead>
       <tbody>
@@ -167,7 +167,7 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
               <td className="num">{fmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
               <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
               <td className="num">{fmtEur(p.COST_TOTAL)}</td>
-              <td>
+              <td className="col-hide-mobile">
                 {Number(p.BUDGET_TOTAL_NET) > 0 ? (
                   <div className="budget-bar-wrap">
                     <div className="budget-bar-track">

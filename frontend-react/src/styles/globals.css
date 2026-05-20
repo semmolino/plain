@@ -1128,6 +1128,7 @@ input::placeholder { color: var(--text-4); }
 }
 @media (max-width: 600px) {
   .timeline-chart { height: 220px; }
+  .col-hide-mobile { display: none; }
 }
 
 /* ── App header ──────────────────────────────────────────────────────────── */
