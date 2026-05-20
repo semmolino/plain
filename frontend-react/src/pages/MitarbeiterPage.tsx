@@ -280,6 +280,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
               <option value="geschaeftsleitung">Geschäftsleitung</option>
               <option value="controller">Controller / Buchhaltung</option>
               <option value="bereichsleiter">Bereichsleiter</option>
+              <option value="mitarbeiter">Mitarbeiter</option>
             </select>
           </div>
           <div className="form-group">
@@ -1349,7 +1350,7 @@ export function MitarbeiterPage() {
                           </span>
                         </td>
                         <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
-                          {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
+                          {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
                         </td>
                         <td className="doc-actions">
                           <button className="btn-small" onClick={() => setEditRow(r)}>Bearbeiten</button>

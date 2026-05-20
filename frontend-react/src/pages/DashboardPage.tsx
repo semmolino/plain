@@ -7,7 +7,7 @@ import {
   Tooltip, Legend,
   type ChartOptions,
 } from 'chart.js'
-import { Bar, Doughnut, Line } from 'react-chartjs-2'
+import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSession } from '@/hooks/useSession'
 import {
@@ -30,6 +30,10 @@ import {
 } from '@/api/reports'
 import { fetchCompanies, fetchDefaults, fetchLogo } from '@/api/stammdaten'
 import { fetchNumberRanges } from '@/api/numberRanges'
+import {
+  fetchMonthBalance, fetchRunningBalance,
+  type DayBooking, type RunningMonth,
+} from '@/api/mitarbeiter'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -42,9 +46,14 @@ const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: '
 const FMT_NUM  = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const MONTHS_DE = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
 
-function fmtEur(v: number | null | undefined) { return v == null ? '—' : FMT_EUR.format(v) }
-function fmtH(v: number | null | undefined)   { return v == null ? '—' : FMT_NUM.format(v) + ' h' }
-function fmtPct(v: number) { return FMT_NUM.format(v) + ' %' }
+function fmtEur(v: number | null | undefined)   { return v == null ? '—' : FMT_EUR.format(v) }
+function fmtH(v: number | null | undefined)     { return v == null ? '—' : FMT_NUM.format(v) + ' h' }
+function fmtPct(v: number)                      { return FMT_NUM.format(v) + ' %' }
+function fmtSaldo(v: number | null | undefined) {
+  if (v == null) return '—'
+  const abs = FMT_NUM.format(Math.abs(v)) + ' h'
+  return v >= 0 ? `+${abs}` : `−${abs}`
+}
 function monthLabel(yyyymm: string) {
   const m = parseInt(yyyymm.split('-')[1], 10)
   return MONTHS_DE[m - 1] ?? yyyymm
@@ -435,6 +444,12 @@ const ROLES = [
     title: 'Bereichsleiter',
     desc:  'Projektportfolio, Team-Auslastung, Budget-Gesundheit und Ressourcensteuerung.',
   },
+  {
+    id:    'mitarbeiter',
+    icon:  '🕐',
+    title: 'Mitarbeiter',
+    desc:  'Eigene Stunden, Zeitkonto-Saldo, heutige Buchungen und Monatsverlauf.',
+  },
 ]
 
 function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
@@ -607,20 +622,164 @@ function BereichsleiterView({
   )
 }
 
+// ── Mitarbeiter view ─────────────────────────────────────────────────────────
+
+function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
+  if (!months.length) return null
+  const labels   = months.map(m => `${MONTHS_DE[m.month - 1]} ${m.year}`)
+  const required = months.map(m => Math.round(m.required * 10) / 10)
+  const actual   = months.map(m => Math.round(m.actual   * 10) / 10)
+  const cumul    = months.map(m => Math.round(m.cumulative * 10) / 10)
+  return (
+    <div style={{ height: 220 }}>
+      <Chart
+        type='bar'
+        data={{
+          labels,
+          datasets: [
+            { type: 'bar',  label: 'Soll (h)',        data: required, backgroundColor: 'rgba(156,163,175,0.45)', borderRadius: 4, yAxisID: 'yH' },
+            { type: 'bar',  label: 'Ist (h)',          data: actual,   backgroundColor: 'rgba(59,130,246,0.65)',  borderRadius: 4, yAxisID: 'yH' },
+            { type: 'line', label: 'Saldo kum. (h)',   data: cumul,    borderColor: '#f59e0b', backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
+          ],
+        }}
+        options={{
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 10 } } },
+          scales: {
+            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+            yS: { type: 'linear', position: 'right', ticks: { font: { size: 10 }, callback: v => `${Number(v) >= 0 ? '+' : ''}${v} h` }, grid: { display: false } },
+            x:  { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+          },
+        }}
+      />
+    </div>
+  )
+}
+
+function BookingsTable({ bookings }: { bookings: DayBooking[] }) {
+  return (
+    <table className="dash-table">
+      <thead>
+        <tr>
+          <th>Projekt</th>
+          <th>Leistungsposition</th>
+          <th className="num">Stunden</th>
+          <th>Notiz</th>
+        </tr>
+      </thead>
+      <tbody>
+        {bookings.map(b => (
+          <tr key={b.id}>
+            <td>{b.project || '—'}</td>
+            <td style={{ color: 'var(--text-3)', fontSize: 12 }}>{b.structure || '—'}</td>
+            <td className="num">{fmtH(b.hours)}</td>
+            <td style={{ color: 'var(--text-3)', fontSize: 12, whiteSpace: 'pre-line' }}>{b.description || '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function MitarbeiterView({ employeeId }: { employeeId: number }) {
+  const now   = new Date()
+  const year  = now.getFullYear()
+  const month = now.getMonth() + 1
+  const today = now.toISOString().slice(0, 10)
+
+  const { data: monthRes,   isLoading: l1 } = useQuery({
+    queryKey: ['emp-balance', employeeId, year, month],
+    queryFn:  () => fetchMonthBalance(employeeId, year, month),
+    staleTime: 60000,
+  })
+  const { data: runningRes, isLoading: l2 } = useQuery({
+    queryKey: ['emp-running', employeeId],
+    queryFn:  () => fetchRunningBalance(employeeId),
+    staleTime: 120000,
+  })
+
+  if (l1 || l2) return <div className="dash-loading">Laden …</div>
+
+  const monthBal   = monthRes?.data
+  const runningData = runningRes?.data
+  const months     = runningData?.months ?? []
+  const totalSaldo = runningData?.totalBalance ?? 0
+
+  const todayDay   = monthBal?.days.find(d => d.date === today)
+  const todayH     = todayDay?.actual ?? 0
+  const todayBkgs  = todayDay?.bookings ?? []
+
+  const recentDays = (monthBal?.days ?? [])
+    .filter(d => d.date < today && d.bookings.length > 0)
+    .slice(-7)
+
+  const monthActual  = monthBal?.actual   ?? 0
+  const monthReq     = monthBal?.required ?? 0
+  const monthSaldo   = monthBal?.balance  ?? 0
+  const saldoStatus  = totalSaldo >= 0 ? 'im Plus' : 'im Minus'
+
+  return (
+    <>
+      <div className="kpi-grid">
+        <KpiCard label="Stunden diesen Monat" value={fmtH(monthActual)} meta={`von ${fmtH(monthReq)} Soll`} />
+        <KpiCard label="Saldo diesen Monat"   value={fmtSaldo(monthSaldo)} accent={monthSaldo < -8} />
+        <KpiCard label="Laufender Saldo"       value={fmtSaldo(totalSaldo)} accent={totalSaldo < -8} />
+        <KpiCard label="Stunden heute"         value={fmtH(todayH)} />
+      </div>
+
+      <NarrativeBlock>
+        Diesen Monat: <strong>{fmtH(monthActual)}</strong> von <strong>{fmtH(monthReq)}</strong> Soll-Stunden gebucht
+        {monthReq > 0 ? ` (${fmtPct((monthActual / monthReq) * 100)})` : ''}.{' '}
+        Monatssaldo: <strong>{fmtSaldo(monthSaldo)}</strong>.{' '}
+        Laufendes Zeitkonto: <strong>{fmtSaldo(totalSaldo)}</strong> — {saldoStatus}.
+      </NarrativeBlock>
+
+      <div className="dash-card">
+        <div className="dash-card-title">Monatsverlauf Stunden &amp; Saldo</div>
+        <MitarbeiterBalanceChart months={months} />
+      </div>
+
+      <div className="dash-card">
+        <div className="dash-card-title">Buchungen heute</div>
+        {todayBkgs.length > 0
+          ? <BookingsTable bookings={todayBkgs} />
+          : <p className="empty-note">Noch keine Buchungen für heute erfasst.</p>
+        }
+      </div>
+
+      {recentDays.length > 0 && (
+        <div className="dash-card">
+          <div className="dash-card-title">Letzte Buchungen dieses Monats</div>
+          {recentDays.map(d => (
+            <div key={d.date} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
+                {fmtDateDE(d.date)} — {fmtH(d.actual)}
+              </div>
+              <BookingsTable bookings={d.bookings} />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
-  const { dashboardRole, setDashboardRole } = useSession()
+  const { dashboardRole, setDashboardRole, employeeId } = useSession()
+
+  const isMitarbeiter = dashboardRole === 'mitarbeiter'
 
   const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ] = useQueries({
     queries: [
-      { queryKey: ['dashboard', 'kpis'],             queryFn: fetchDashboardKpis,      staleTime: 300000 },
-      { queryKey: ['dashboard', 'projects'],          queryFn: fetchDashboardProjects,  staleTime: 300000 },
-      { queryKey: ['dashboard', 'monthly'],           queryFn: fetchDashboardMonthly,   staleTime: 300000 },
-      { queryKey: ['dashboard', 'by-status'],         queryFn: fetchDashboardByStatus,  staleTime: 300000 },
-      { queryKey: ['dashboard', 'alerts'],            queryFn: fetchDashboardAlerts,    staleTime: 120000 },
-      { queryKey: ['dashboard', 'overdue-invoices'],  queryFn: fetchOverdueInvoices,    staleTime: 120000 },
-      { queryKey: ['dashboard', 'team-utilization'],  queryFn: fetchTeamUtilization,    staleTime: 300000 },
+      { queryKey: ['dashboard', 'kpis'],             queryFn: fetchDashboardKpis,      staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'projects'],          queryFn: fetchDashboardProjects,  staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'monthly'],           queryFn: fetchDashboardMonthly,   staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'by-status'],         queryFn: fetchDashboardByStatus,  staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'alerts'],            queryFn: fetchDashboardAlerts,    staleTime: 120000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'overdue-invoices'],  queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'team-utilization'],  queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
     ],
   })
 
@@ -669,6 +828,10 @@ export function DashboardPage() {
 
       {!isLoading && kpis && dashboardRole === 'bereichsleiter' && (
         <BereichsleiterView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} teamUtil={teamUtil} />
+      )}
+
+      {isMitarbeiter && employeeId !== null && (
+        <MitarbeiterView employeeId={employeeId} />
       )}
     </div>
   )
