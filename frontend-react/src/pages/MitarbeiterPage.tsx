@@ -1326,6 +1326,7 @@ export function MitarbeiterPage() {
                       <th>Abteilung</th>
                       <th>Modell</th>
                       <th>Status</th>
+                      <th>Dashboard-Rolle</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -1347,17 +1348,20 @@ export function MitarbeiterPage() {
                             {r.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}
                           </span>
                         </td>
+                        <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
+                          {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
+                        </td>
                         <td className="doc-actions">
                           <button className="btn-small" onClick={() => setEditRow(r)}>Bearbeiten</button>
                           <button className="btn-small btn-danger" onClick={() => handleDelete(r)}>Löschen</button>
                         </td>
                       </tr>
                     ))}
-                    {!pageRows.length && <tr><td colSpan={8} className="empty-note">Keine Einträge</td></tr>}
+                    {!pageRows.length && <tr><td colSpan={9} className="empty-note">Keine Einträge</td></tr>}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                      <td colSpan={8} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                      <td colSpan={9} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
                         {processed.length !== employees.length ? `${processed.length} / ${employees.length} Einträge` : `${employees.length} Einträge`}
                       </td>
                     </tr>
