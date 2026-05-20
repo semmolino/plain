@@ -124,11 +124,20 @@ function DonutChart({ kpis }: { kpis: DashboardKpis }) {
   )
 }
 
+function budgetHealthClass(cost: number | null, budget: number | null): string {
+  if (!budget || budget <= 0) return ''
+  const ratio = Number(cost || 0) / Number(budget)
+  if (ratio >= 0.9) return 'budget-red'
+  if (ratio >= 0.8) return 'budget-amber'
+  return 'budget-green'
+}
+
 function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; maxRows?: number }) {
+  const navigate = useNavigate()
   const rows = maxRows ? projects.slice(0, maxRows) : projects
   if (!rows.length) return <p className="empty-note">Keine Projekte gefunden.</p>
   return (
-    <table className="dash-table">
+    <table className="dash-table dash-table-clickable">
       <thead>
         <tr>
           <th>Projekt</th>
@@ -139,15 +148,23 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
         </tr>
       </thead>
       <tbody>
-        {rows.map((p, i) => (
-          <tr key={i}>
-            <td>{p.NAME_SHORT || p.NAME_LONG || '—'}</td>
-            <td className="num">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
-            <td className="num">{fmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
-            <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
-            <td className="num">{fmtEur(p.COST_TOTAL)}</td>
-          </tr>
-        ))}
+        {rows.map((p, i) => {
+          const healthCls = budgetHealthClass(p.COST_TOTAL, p.BUDGET_TOTAL_NET)
+          return (
+            <tr
+              key={i}
+              className={`${healthCls} ${p.PROJECT_ID ? 'clickable-row' : ''}`.trim()}
+              onClick={() => p.PROJECT_ID && navigate(`/projekte/${p.PROJECT_ID}`)}
+              title={p.PROJECT_ID ? 'Zum Projektbericht' : undefined}
+            >
+              <td>{p.NAME_SHORT || p.NAME_LONG || '—'}</td>
+              <td className="num">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
+              <td className="num">{fmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
+              <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
+              <td className="num">{fmtEur(p.COST_TOTAL)}</td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )

@@ -508,6 +508,12 @@ input::placeholder { color: var(--text-4); }
 .dash-table th.num, .dash-table td.num { text-align: right; }
 .dash-table td { padding: 6px 4px; border-bottom: 1px solid var(--border-4); color: var(--text); }
 .dash-table tr:last-child td { border-bottom: none; }
+.dash-table-clickable tbody tr { cursor: default; }
+.dash-table-clickable tbody tr.clickable-row { cursor: pointer; }
+.dash-table-clickable tbody tr.clickable-row:hover td { background: var(--accent-tint); }
+.budget-green td:last-child { color: var(--success, #2e7d32); font-weight: 600; }
+.budget-amber td:last-child { color: #b45309; font-weight: 600; }
+.budget-red td:last-child { color: var(--danger, #c0392b); font-weight: 600; }
 
 /* Donut */
 .donut-wrap { display: flex; flex-direction: column; gap: 12px; }

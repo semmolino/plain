@@ -10,6 +10,7 @@ export interface DashboardKpis {
 }
 
 export interface DashboardProject {
+  PROJECT_ID:          number | null
   NAME_SHORT:          string | null
   NAME_LONG:           string | null
   BUDGET_TOTAL_NET:    number | null
