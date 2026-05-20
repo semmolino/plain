@@ -14,12 +14,13 @@ export interface AuthState {
 
 interface AuthStore extends AuthState {
   setAuth: (data: {
-    token:       string
-    employeeId:  number
-    tenantId:    number
-    shortName:   string
-    email:       string
-    companyName: string | null
+    token:          string
+    employeeId:     number
+    tenantId:       number
+    shortName:      string
+    email:          string
+    companyName:    string | null
+    dashboardRole?: string | null
   }) => void
   clearAuth:        () => void
   setLoading:       (loading: boolean) => void
@@ -39,15 +40,19 @@ export const useAuthStore = create<AuthStore>()(
       isLoading:     true,
 
       setAuth: (data) =>
-        set({
-          token:       data.token,
-          employeeId:  data.employeeId,
-          tenantId:    data.tenantId,
-          shortName:   data.shortName,
-          email:       data.email,
-          companyName: data.companyName,
-          isLoading:   false,
-        }),
+        set((state) => ({
+          token:         data.token,
+          employeeId:    data.employeeId,
+          tenantId:      data.tenantId,
+          shortName:     data.shortName,
+          email:         data.email,
+          companyName:   data.companyName,
+          // Server role takes priority; fall back to existing client preference
+          dashboardRole: data.dashboardRole !== undefined
+            ? data.dashboardRole
+            : state.dashboardRole,
+          isLoading:     false,
+        })),
 
       clearAuth: () =>
         set({

@@ -17,6 +17,7 @@ export interface Employee {
   ACTIVE:              number | null
   CURRENT_MODEL_ID:    number | null
   CURRENT_MODEL_NAME:  string
+  DASHBOARD_ROLE:      string | null
 }
 
 export interface EmpGender { ID: number; GENDER: string }
@@ -44,6 +45,7 @@ export interface UpdateEmployeePayload {
   gender_id:         number
   department_id?:    number | null
   active?:           number
+  dashboard_role?:   string | null
 }
 
 // ── Work-model assignments ────────────────────────────────────────────────────

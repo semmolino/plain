@@ -104,7 +104,7 @@ router.get("/", async (req, res) => {
 
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE")
+      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE, DASHBOARD_ROLE")
       .eq("TENANT_ID", req.tenantId)
       .order("SHORT_NAME", { ascending: true })
       .limit(limit);
@@ -190,8 +190,9 @@ router.get("/", async (req, res) => {
       MOBILE:           body.mobile || null,
       PERSONNEL_NUMBER: body.personnel_number || null,
       GENDER_ID:        body.gender_id,
-      DEPARTMENT_ID:    body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
-      ACTIVE:           body.active != null ? Number(body.active) : undefined,
+      DEPARTMENT_ID:  body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
+      ACTIVE:         body.active != null ? Number(body.active) : undefined,
+      DASHBOARD_ROLE: body.dashboard_role !== undefined ? (body.dashboard_role || null) : undefined,
     };
 
     const { data: upd, error: updErr } = await supabase
@@ -199,7 +200,7 @@ router.get("/", async (req, res) => {
       .update(updateObj)
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID")
+      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DASHBOARD_ROLE")
       .single();
 
     if (updErr) return res.status(500).json({ error: updErr.message });

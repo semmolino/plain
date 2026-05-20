@@ -117,6 +117,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     gender_id:        employee.GENDER_ID ?? 0,
     department_id:    employee.DEPARTMENT_ID ?? null,
     active:           employee.ACTIVE ?? 1,
+    dashboard_role:   employee.DASHBOARD_ROLE ?? null,
   })
   const [editMsg, setEditMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const editFormRef = useRef<HTMLFormElement>(null)
@@ -270,6 +271,15 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             <select id="edept" value={editForm.department_id ?? ''} onChange={e => setEditForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}>
               <option value="">— keine —</option>
               {departments.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="edashrole">Dashboard-Rolle</label>
+            <select id="edashrole" value={editForm.dashboard_role ?? ''} onChange={e => setEditForm(f => ({ ...f, dashboard_role: e.target.value || null }))}>
+              <option value="">— Standard (Nutzer wählt selbst) —</option>
+              <option value="geschaeftsleitung">Geschäftsleitung</option>
+              <option value="controller">Controller / Buchhaltung</option>
+              <option value="bereichsleiter">Bereichsleiter</option>
             </select>
           </div>
           <div className="form-group">
@@ -1316,6 +1326,7 @@ export function MitarbeiterPage() {
                       <th>Abteilung</th>
                       <th>Modell</th>
                       <th>Status</th>
+                      <th>Dashboard-Rolle</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -1337,17 +1348,20 @@ export function MitarbeiterPage() {
                             {r.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}
                           </span>
                         </td>
+                        <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
+                          {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
+                        </td>
                         <td className="doc-actions">
                           <button className="btn-small" onClick={() => setEditRow(r)}>Bearbeiten</button>
                           <button className="btn-small btn-danger" onClick={() => handleDelete(r)}>Löschen</button>
                         </td>
                       </tr>
                     ))}
-                    {!pageRows.length && <tr><td colSpan={8} className="empty-note">Keine Einträge</td></tr>}
+                    {!pageRows.length && <tr><td colSpan={9} className="empty-note">Keine Einträge</td></tr>}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                      <td colSpan={8} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                      <td colSpan={9} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
                         {processed.length !== employees.length ? `${processed.length} / ${employees.length} Einträge` : `${employees.length} Einträge`}
                       </td>
                     </tr>
