@@ -1033,6 +1033,7 @@ input::placeholder { color: var(--text-4); }
 .status-badge.booked    { background: rgba(22,163,74,0.12); color: #16a34a; }
 .status-badge.draft     { background: rgba(234,179,8,0.12); color: #b45309; }
 .status-badge.cancelled { background: rgba(220,38,38,0.10); color: #dc2626; }
+.status-badge.overdue   { background: rgba(220,38,38,0.10); color: #dc2626; margin-left: 4px; }
 
 .billing-proposal-box {
   background: var(--surface); border-radius: 12px;
@@ -1558,6 +1559,7 @@ input::placeholder { color: var(--text-4); }
 [data-theme="dark"] .status-badge.booked    { background: rgba(22,163,74,0.14);  color: #4ade80; border: 1px solid rgba(22,163,74,0.30); }
 [data-theme="dark"] .status-badge.draft     { background: rgba(122,122,198,0.12); color: #a5a5e0; border: 1px solid rgba(122,122,198,0.30); }
 [data-theme="dark"] .status-badge.cancelled { background: rgba(220,38,38,0.14);  color: #f87171; border: 1px solid rgba(220,38,38,0.30); }
+[data-theme="dark"] .status-badge.overdue   { background: rgba(220,38,38,0.14);  color: #f87171; border: 1px solid rgba(220,38,38,0.30); }
 
 /* Dark theme message overrides */
 [data-theme="dark"] .message.success { background: rgba(22,163,74,0.18);   color: #4ade80; border: 1px solid rgba(22,163,74,0.30); }

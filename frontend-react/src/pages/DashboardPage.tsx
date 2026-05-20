@@ -215,11 +215,11 @@ function DashboardTimeline() {
   const today    = new Date()
   const dateFrom = `${today.getFullYear()}-01-01`
   const dateTo   = today.toISOString().substring(0, 10)
-  const filter   = { mode: 'period' as const, dateFrom, dateTo }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['projects-timeline', filter],
-    queryFn:  () => fetchProjectsTimeline(filter),
+    queryKey: ['projects-timeline', dateFrom, dateTo],
+    queryFn:  () => fetchProjectsTimeline({ mode: 'period', dateFrom, dateTo }),
+    staleTime: 300000,
   })
 
   const points: TimelinePoint[] = data?.data ?? []
