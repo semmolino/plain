@@ -154,8 +154,8 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
             <tr
               key={i}
               className={`${healthCls} ${p.PROJECT_ID ? 'clickable-row' : ''}`.trim()}
-              onClick={() => p.PROJECT_ID && navigate(`/projekte/${p.PROJECT_ID}`)}
-              title={p.PROJECT_ID ? 'Zum Projektbericht' : undefined}
+              onClick={() => p.PROJECT_ID && navigate('/projekte', { state: { tab: 'struktur', projectId: p.PROJECT_ID } })}
+              title={p.PROJECT_ID ? 'Zum Projekt öffnen' : undefined}
             >
               <td>{p.NAME_SHORT || p.NAME_LONG || '—'}</td>
               <td className="num">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
