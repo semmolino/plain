@@ -229,8 +229,8 @@ async function patchDraftDescription(supabase, { id, description, time_start, ti
 async function createBuchung(supabase, { body, tenantId }) {
   const b = body;
 
-  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || !b.QUANTITY_INT ||
-      !b.QUANTITY_EXT || !b.SP_RATE || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
+  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || b.QUANTITY_INT == null ||
+      b.QUANTITY_EXT == null || !b.SP_RATE || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
 
