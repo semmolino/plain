@@ -39,7 +39,7 @@ module.exports = (supabase) => {
 
     const { data: employee, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, PASSWORD, TENANT_ID, MAIL, ACTIVE")
+      .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, PASSWORD, TENANT_ID, MAIL, ACTIVE, DASHBOARD_ROLE")
       .ilike("MAIL", email.trim())
       .maybeSingle();
 
@@ -82,11 +82,12 @@ module.exports = (supabase) => {
 
     return res.json({
       token,
-      employee_id:  employee.ID,
-      tenant_id:    tenantId,
-      email:        employee.MAIL,
-      short_name:   employee.SHORT_NAME,
-      company_name: companyName,
+      employee_id:    employee.ID,
+      tenant_id:      tenantId,
+      email:          employee.MAIL,
+      short_name:     employee.SHORT_NAME,
+      company_name:   companyName,
+      dashboard_role: employee.DASHBOARD_ROLE ?? null,
     });
   });
 

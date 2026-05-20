@@ -34,12 +34,13 @@ export function LoginPage() {
       const res = await loginEmployee(email, password)
       qc.clear()
       setAuth({
-        token:       res.token,
-        employeeId:  res.employee_id,
-        tenantId:    res.tenant_id,
-        shortName:   res.short_name,
-        email:       res.email,
-        companyName: res.company_name,
+        token:         res.token,
+        employeeId:    res.employee_id,
+        tenantId:      res.tenant_id,
+        shortName:     res.short_name,
+        email:         res.email,
+        companyName:   res.company_name,
+        dashboardRole: res.dashboard_role ?? null,
       })
       navigate('/')
     } catch (err) {

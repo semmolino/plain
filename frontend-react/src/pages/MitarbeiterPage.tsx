@@ -117,6 +117,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     gender_id:        employee.GENDER_ID ?? 0,
     department_id:    employee.DEPARTMENT_ID ?? null,
     active:           employee.ACTIVE ?? 1,
+    dashboard_role:   employee.DASHBOARD_ROLE ?? null,
   })
   const [editMsg, setEditMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const editFormRef = useRef<HTMLFormElement>(null)
@@ -270,6 +271,15 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             <select id="edept" value={editForm.department_id ?? ''} onChange={e => setEditForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}>
               <option value="">— keine —</option>
               {departments.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="edashrole">Dashboard-Rolle</label>
+            <select id="edashrole" value={editForm.dashboard_role ?? ''} onChange={e => setEditForm(f => ({ ...f, dashboard_role: e.target.value || null }))}>
+              <option value="">— Standard (Nutzer wählt selbst) —</option>
+              <option value="geschaeftsleitung">Geschäftsleitung</option>
+              <option value="controller">Controller / Buchhaltung</option>
+              <option value="bereichsleiter">Bereichsleiter</option>
             </select>
           </div>
           <div className="form-group">

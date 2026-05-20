@@ -1,12 +1,13 @@
 import { apiClient } from './client'
 
 export interface LoginResponse {
-  token:        string
-  employee_id:  number
-  tenant_id:    number
-  email:        string
-  short_name:   string
-  company_name: string | null
+  token:          string
+  employee_id:    number
+  tenant_id:      number
+  email:          string
+  short_name:     string
+  company_name:   string | null
+  dashboard_role: string | null
 }
 
 export async function loginEmployee(email: string, password: string): Promise<LoginResponse> {
