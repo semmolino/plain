@@ -342,7 +342,6 @@ function AlertStrip({ alerts }: { alerts: DashboardAlert[] }) {
 function TeamUtilizationChart({ data }: { data: TeamMemberUtilization[] }) {
   if (!data.length) return <p className="empty-note">Keine Buchungen in den letzten 28 Tagen.</p>
   const sorted = [...data].sort((a, b) => b.hours_4weeks - a.hours_4weeks)
-  const labels = sorted.map(e => e.short_name)
   const values = sorted.map(e => e.hours_4weeks)
   const maxH   = Math.max(...values, 1)
   return (
@@ -612,9 +611,6 @@ function BereichsleiterView({
 
 export function DashboardPage() {
   const { dashboardRole, setDashboardRole } = useSession()
-
-  const now         = new Date()
-  const monthLbl    = `${MONTHS_DE[now.getMonth()]} ${now.getFullYear()}`
 
   const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ] = useQueries({
     queries: [
