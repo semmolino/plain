@@ -27,3 +27,4 @@ build/
 logs/
 backend/uploads/
 .claude/
+frontend-react/test-results/
