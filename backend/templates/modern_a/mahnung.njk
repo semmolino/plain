@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  color: #1a1a1a;
+  line-height: 1.4;
+  padding-bottom: 28mm;
+}
+
+.logo-area {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6mm;
+  min-height: 4mm;
+}
+.logo-area img {
+  max-height: {{ (theme.header.logoMaxHeightMm or 20) }}mm;
+  max-width: 70mm;
+  object-fit: contain;
+}
+
+.sender-line {
+  font-size: 7.5pt;
+  color: #6b7280;
+  border-bottom: 0.3pt solid #d1d5db;
+  padding-bottom: 1mm;
+  margin-bottom: 5mm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.letter-header {
+  display: flex;
+  gap: 10mm;
+  margin-bottom: 8mm;
+  align-items: flex-start;
+}
+.address-col {
+  width: 85mm;
+  flex-shrink: 0;
+}
+.address-block {
+  font-size: 10pt;
+  line-height: 1.5;
+  min-height: 35mm;
+}
+.address-block .name1 { font-weight: 600; }
+
+.meta-col { flex: 1; }
+
+.meta-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.meta-table td { padding: 0.8mm 0; vertical-align: top; }
+.meta-table td.ml { color: #6b7280; width: 32mm; padding-right: 2mm; }
+.meta-table td.mv { font-weight: 500; }
+.meta-table td.mv.bold { font-weight: 700; }
+.meta-sep { border-top: 0.3pt solid #d1d5db; padding-top: 1.5mm; height: 3mm; }
+
+.doc-title {
+  font-size: 14pt;
+  font-weight: 700;
+  margin-bottom: 5mm;
+  color: #111827;
+}
+
+.text-block {
+  font-size: 10pt;
+  margin-bottom: 5mm;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+/* Betreff line */
+.subject-line {
+  font-size: 10pt;
+  font-weight: 600;
+  margin-bottom: 5mm;
+}
+
+/* Invoice detail table */
+.inv-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0 6mm 0;
+}
+.inv-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 9pt;
+  color: #374151;
+  border-bottom: 0.5pt solid #9ca3af;
+  padding: 1.5mm 2mm 1.5mm 0;
+}
+.inv-table th.r, .inv-table td.r {
+  text-align: right;
+  padding-left: 3mm;
+}
+.inv-table td {
+  padding: 1.5mm 2mm 1.5mm 0;
+  border-bottom: 0.3pt solid #e5e7eb;
+  font-size: 9.5pt;
+}
+
+/* Totals section */
+.totals-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0;
+}
+.totals-table td {
+  padding: 1.5mm 0;
+  font-size: 10pt;
+}
+.totals-table td.lbl { color: #374151; }
+.totals-table td.amt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 6mm; }
+.totals-table tr.fee-row td { font-size: 9.5pt; color: #6b7280; }
+.totals-table tr.sep td { padding: 0; height: 2mm; }
+.totals-table tr.sep td.line { border-top: 0.5pt solid #9ca3af; }
+.totals-table tr.total-row td { font-weight: 700; font-size: 11pt; border-top: 1pt solid #1a1a1a; padding-top: 2mm; }
+
+.doc-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding-top: 2.5mm;
+  border-top: 0.5pt solid #d1d5db;
+  display: flex;
+  gap: 5mm;
+  font-size: 7pt;
+  color: #6b7280;
+  line-height: 1.55;
+}
+.doc-footer-col { flex: 1; }
+.doc-footer-col strong { color: #374151; font-weight: 600; display: block; margin-bottom: 0.5mm; font-size: 7.5pt; }
+</style>
+</head>
+<body>
+
+  {# Logo #}
+  <div class="logo-area">
+    {% if theme.header.showLogo and logoDataUri %}
+      <img src="{{ logoDataUri }}" alt="Logo">
+    {% endif %}
+  </div>
+
+  {# Sender line #}
+  <div class="sender-line">
+    {{ seller.name }}{% if seller.street %} &middot; {{ seller.street }}{% endif %}{% if seller.postCode or seller.city %} &middot; {{ seller.postCode }} {{ seller.city }}{% endif %}
+  </div>
+
+  {# Two-column: buyer address | meta #}
+  <div class="letter-header">
+
+    <div class="address-col">
+      <div class="address-block">
+        <div class="name1">{{ buyer.name1 }}</div>
+        {% if buyer.name2 %}<div>{{ buyer.name2 }}</div>{% endif %}
+        {% if buyer.street %}<div>{{ buyer.street }}</div>{% endif %}
+        {% if buyer.postCode or buyer.city %}<div>{{ buyer.postCode }} {{ buyer.city }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="meta-col">
+      <table class="meta-table">
+        {% if seller.contactName %}
+        <tr><td class="ml">Kontakt</td><td class="mv">{{ seller.contactName }}</td></tr>
+        {% endif %}
+        {% if seller.contactPhone %}
+        <tr><td class="ml">Telefon</td><td class="mv">{{ seller.contactPhone }}</td></tr>
+        {% endif %}
+        {% if seller.contactEmail %}
+        <tr><td class="ml">E-Mail</td><td class="mv">{{ seller.contactEmail }}</td></tr>
+        {% endif %}
+        <tr><td class="meta-sep" colspan="2"></td></tr>
+        <tr><td class="ml">Datum</td><td class="mv">{{ docDate | date_de }}</td></tr>
+        <tr><td class="ml">Rechnungs-Nr.</td><td class="mv bold">{{ invoiceNumber }}</td></tr>
+        {% if dueDate %}
+        <tr><td class="ml">Zahlungsziel war</td><td class="mv">{{ dueDate | date_de }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {# Document title #}
+  <div class="doc-title">{{ mahnstufeLabel }}</div>
+
+  {# Subject line #}
+  <div class="subject-line">Betreff: {{ mahnstufeLabel }} zu Rechnung {{ invoiceNumber }}</div>
+
+  {# Header text (from settings) #}
+  {% if headerText %}<div class="text-block">{{ headerText }}</div>{% endif %}
+
+  {# Invoice reference table #}
+  <table class="inv-table">
+    <thead>
+      <tr>
+        <th>Rechnungsnr.</th>
+        <th>Rechnungsdatum</th>
+        <th class="r">Rechnungsbetrag</th>
+        <th>Zahlungsziel</th>
+        <th class="r">Tage überfällig</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>{{ invoiceNumber }}</td>
+        <td>{{ invoiceDate | date_de }}</td>
+        <td class="r">{{ totalGross | money }}</td>
+        <td>{{ dueDate | date_de }}</td>
+        <td class="r">{{ daysOverdue }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {# Totals #}
+  <table class="totals-table">
+    <tbody>
+      <tr>
+        <td class="lbl">Offener Betrag</td>
+        <td class="amt">{{ totalGross | money }}</td>
+      </tr>
+      {% if feeAmount and feeAmount > 0 %}
+      <tr class="fee-row">
+        <td class="lbl">Mahnkostenpauschale ({{ mahnstufeLabel }})</td>
+        <td class="amt">{{ feeAmount | money }}</td>
+      </tr>
+      {% endif %}
+      <tr class="sep"><td class="line" colspan="2"></td></tr>
+      <tr class="total-row">
+        <td class="lbl">Gesamtbetrag jetzt fällig</td>
+        <td class="amt">{{ totalDue | money }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {# Footer text (from settings) #}
+  {% if footerText %}<div class="text-block">{{ footerText }}</div>{% endif %}
+
+{# ── Document footer (fixed, all pages) ── #}
+<div class="doc-footer">
+  <div class="doc-footer-col">
+    <strong>{{ seller.name }}</strong>
+    {% if seller.street %}{{ seller.street }}<br>{% endif %}
+    {% if seller.postOfficeBox %}Postfach {{ seller.postOfficeBox }}<br>{% endif %}
+    {% if seller.postCode or seller.city %}{{ seller.postCode }} {{ seller.city }}{% endif %}
+  </div>
+  <div class="doc-footer-col">
+    <strong>Bankverbindung</strong>
+    {% if seller.iban %}IBAN: {{ seller.iban }}<br>{% endif %}
+    {% if seller.bic %}BIC: {{ seller.bic }}{% endif %}
+  </div>
+  <div class="doc-footer-col">
+    <strong>Steuer</strong>
+    {% if seller.taxId %}Steuernummer: {{ seller.taxId }}<br>{% endif %}
+    {% if seller.vatId %}USt-IdNr.: {{ seller.vatId }}{% endif %}
+  </div>
+  {% if seller.creditorId %}
+  <div class="doc-footer-col">
+    <strong>Sonstiges</strong>
+    Gläubiger-ID: {{ seller.creditorId }}
+  </div>
+  {% endif %}
+</div>
+
+</body>
+</html>

@@ -5,8 +5,9 @@ import { RechnungenListe }       from '@/pages/rechnungen/RechnungenListe'
 import { AbschlagWizard }        from '@/pages/rechnungen/AbschlagWizard'
 import { RechnungWizard }        from '@/pages/rechnungen/RechnungWizard'
 import { SchlussrechnungWizard } from '@/pages/rechnungen/SchlussrechnungWizard'
+import { MahnungenListe }        from '@/pages/rechnungen/MahnungenListe'
 
-type Tab = 'liste' | 'abschlag' | 'rechnung' | 'schluss'
+type Tab = 'liste' | 'abschlag' | 'rechnung' | 'schluss' | 'mahnungen'
 
 export interface DraftResume {
   id:            number
@@ -23,10 +24,11 @@ export interface DraftResume {
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'liste',    label: 'Rechnungsliste' },
-  { id: 'abschlag', label: 'Abschlagsrechnung' },
-  { id: 'rechnung', label: 'Rechnung' },
-  { id: 'schluss',  label: 'Teilschluss-/Schlussrechnung' },
+  { id: 'liste',     label: 'Rechnungsliste' },
+  { id: 'abschlag',  label: 'Abschlagsrechnung' },
+  { id: 'rechnung',  label: 'Rechnung' },
+  { id: 'schluss',   label: 'Teilschluss-/Schlussrechnung' },
+  { id: 'mahnungen', label: 'Mahnungen' },
 ]
 
 export function RechnungenPage() {
@@ -65,10 +67,11 @@ export function RechnungenPage() {
       <h1 className="master-title">Rechnungen</h1>
       <Tabs tabs={TABS} active={tab} onChange={handleTabChange} />
       <div className="master-tab-content">
-        {tab === 'liste'    && <RechnungenListe onEditDraft={handleEditDraft} initialSearch={initSearch} backProject={backProject} onClearBack={() => { setInitSearch(undefined); setBackProject(undefined) }} />}
-        {tab === 'abschlag' && <AbschlagWizard initialDraft={resumeFor('abschlag')} />}
-        {tab === 'rechnung' && <RechnungWizard initialDraft={resumeFor('rechnung')} />}
-        {tab === 'schluss'  && <SchlussrechnungWizard initialDraft={resumeFor('schluss')} />}
+        {tab === 'liste'     && <RechnungenListe onEditDraft={handleEditDraft} initialSearch={initSearch} backProject={backProject} onClearBack={() => { setInitSearch(undefined); setBackProject(undefined) }} />}
+        {tab === 'abschlag'  && <AbschlagWizard initialDraft={resumeFor('abschlag')} />}
+        {tab === 'rechnung'  && <RechnungWizard initialDraft={resumeFor('rechnung')} />}
+        {tab === 'schluss'   && <SchlussrechnungWizard initialDraft={resumeFor('schluss')} />}
+        {tab === 'mahnungen' && <MahnungenListe />}
       </div>
     </div>
   )

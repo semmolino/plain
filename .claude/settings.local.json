@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"c:/Users/simon/Desktop/plain_2603/plain\" show HEAD)",
+      "Bash(wc -l \"c:/Users/simon/Desktop/plain_2603/plain/frontend/js/\"*.js)",
+      "Bash(grep -l export c:/Users/simon/Desktop/plain_2603/plain/frontend/js/*.js)",
+      "Bash(grep -rn ^import c:/Users/simon/Desktop/plain_2603/plain/frontend/js/*.js)",
+      "Bash(head -5 grep -n \"initPartialPaymentWizard\\\\|initFinalInvoiceWizard\" \"c:/Users/simon/Desktop/plain_2603/plain/frontend/js/invoices.js\")",
+      "Bash(head -20 grep -n \"loadMitarbeiterListe\\\\|initPartialPaymentWizard\\\\|initFinalInvoiceWizard\\\\|getBuchungEditId\" \"c:/Users/simon/Desktop/plain_2603/plain/frontend/js/mitarbeiter.js\")",
+      "Bash(/dev/null grep:*)",
+      "Bash(npm install:*)",
+      "Bash(npm test:*)",
+      "Read(//c/Users/simon/.claude/projects/c--Users-simon-Desktop-plain-2603-plain/memory/**)",
+      "Bash(curl -s http://localhost:3000/api/v1/auth/config)",
+      "Bash(curl -sv http://localhost:3000/api/v1/auth/config)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(taskkill /PID 11616 /F)",
+      "Bash(cmd //c \"taskkill /PID 11616 /F\")",
+      "Bash(grep -E 3000.*LISTEN)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(npm create:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:5173/api/v1/auth/config)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(node -e \"console.log\\(require\\(''./frontend-react/node_modules/zustand/package.json''\\).version\\)\")",
+      "Bash(grep -E \"\\\\.\\(js|ts\\)$\")",
+      "Bash(ls -la /c/Users/simon/Desktop/plain_2603/plain/backend/*.js)",
+      "Bash(grep -E \"\\\\.sql$\")",
+      "Read(//c/Users/simon/.claude/projects/c--Users-simon-Desktop-plain-2603-plain/55adc101-e0eb-45bb-8a29-2a4e17cc281a/tool-results/**)",
+      "Bash(find /c/Users/simon/Desktop/plain_2603/plain/ZF24_DE/Schema -type f -name *.xsd -o -name *.xml -o -name *.txt)",
+      "Bash(grep -l \"getEinvoiceUbl\\\\|postEinvoiceUblSnapshot\" /c/Users/simon/Desktop/plain_2603/plain/backend/controllers/*.js)",
+      "Bash(cat \"c:/Users/simon/Desktop/plain_2603/plain/ZF24_DE/Beispiele/3. EN16931/Bau Teil- & Schlussrechnungen mit Steuerzusammenstellung/Bau Teil- & Schlussrechnungen mit Steuerzusammenstellung.xml\")",
+      "Bash(ls \"c:/Users/simon/Desktop/plain_2603/plain/ZF24_DE/Beispiele/3. EN16931/Bau Teil- & Schlussrechnungen mit Steuerzusammenstellung/\")",
+      "Bash(node -e \"const p=require\\(''''./server.js''''\\)\")",
+      "Bash(echo \"exit: $?\")"
+    ]
+  }
+}
