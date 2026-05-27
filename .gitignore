@@ -25,3 +25,5 @@ build/
 # Logs
 *.log
 logs/
+backend/uploads/
+.claude/
