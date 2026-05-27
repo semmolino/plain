@@ -61,9 +61,9 @@ export function MahnungenListe() {
   const navigate     = useNavigate()
   const qc           = useQueryClient()
 
-  const { data: rawData, isLoading, error } = useQuery({ queryKey: ['mahnungen'], queryFn: () => fetchMahnungen().then(r => r.data.data) })
-  const { data: settingsData } = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data.data) })
-  const { data: employees }    = useQuery({ queryKey: ['employees'], queryFn: () => fetchEmployeeList().then(r => r.data.data) })
+  const { data: rawData, isLoading, error } = useQuery({ queryKey: ['mahnungen'], queryFn: () => fetchMahnungen().then(r => r.data) })
+  const { data: settingsData } = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data) })
+  const { data: employees }    = useQuery({ queryKey: ['employees'], queryFn: () => fetchEmployeeList().then(r => r.data) })
 
   const settingsByLevel = useMemo(() => {
     const m: Record<number, MahnungSettingsLevel> = {}

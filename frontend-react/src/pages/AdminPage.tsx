@@ -1590,7 +1590,7 @@ function KostensatzSection() {
 
 function MahnungsEinstellungenSection() {
   const qc = useQueryClient()
-  const { data: raw, isLoading } = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data.data) })
+  const { data: raw, isLoading } = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data) })
 
   const [levels, setLevels] = useState<MahnungSettingsLevel[]>([])
   const [msg,    setMsg]    = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -1662,7 +1662,7 @@ function MahnungsEinstellungenSection() {
 
 function TextVorlagenSection() {
   const qc = useQueryClient()
-  const { data: raw, isLoading } = useQuery({ queryKey: ['text-templates'], queryFn: () => fetchTextTemplates().then(r => r.data.data) })
+  const { data: raw, isLoading } = useQuery({ queryKey: ['text-templates'], queryFn: () => fetchTextTemplates().then(r => r.data) })
 
   const types = Object.keys(TEXT_TEMPLATE_LABELS) as TextTemplateType[]
   const [activeType, setActiveType] = useState<TextTemplateType>('invoice_abschlags')
