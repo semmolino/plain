@@ -1,7 +1,9 @@
 "use strict";
 
 const express = require("express");
-const ctrl = require("../controllers/partialPayments");
+const ctrl    = require("../controllers/partialPayments");
+const { renderDocumentPdf } = require("../services_pdf_render");
+const { sendMail }    = require("../services/emailService");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -21,6 +23,39 @@ module.exports = (supabase) => {
   router.post("/:id/cancel",                   (req, res) => ctrl.cancelPartialPayment(req, res, supabase));
   router.delete("/:id",                        (req, res) => ctrl.deletePartialPayment(req, res, supabase));
   router.get("/:id/pdf",                       (req, res) => ctrl.getPdf(req, res, supabase));
+
+  // POST /partial-payments/:id/email  — send partial payment PDF via SMTP
+  router.post("/:id/email", async (req, res) => {
+    try {
+      const ppId     = Number(req.params.id);
+      const tenantId = req.tenantId;
+      const { emailTo, emailSubject, emailBody } = req.body || {};
+      if (!emailTo) return res.status(400).json({ error: "emailTo erforderlich" });
+
+      const { data: pp } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("PARTIAL_PAYMENT_NUMBER")
+        .eq("ID", ppId)
+        .eq("TENANT_ID", tenantId)
+        .maybeSingle();
+      if (!pp) return res.status(404).json({ error: "Anzahlung nicht gefunden" });
+
+      const { pdf } = await renderDocumentPdf({ supabase, docType: "PARTIAL_PAYMENT", docId: ppId });
+      const pdfBuffer = Buffer.from(pdf);
+      const safeName  = (pp.PARTIAL_PAYMENT_NUMBER || `Anzahlung_${ppId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
+      await sendMail({
+        to:          emailTo,
+        subject:     emailSubject || `Abschlagsrechnung ${pp.PARTIAL_PAYMENT_NUMBER}`,
+        html:        emailBody ? `<pre style="font-family:inherit;white-space:pre-wrap">${emailBody}</pre>` : undefined,
+        text:        emailBody,
+        attachments: [{ filename: `${safeName}.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
+      });
+      return res.json({ sent: true });
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   router.get("/:id",                           (req, res) => ctrl.getPartialPayment(req, res, supabase));
 
   return router;

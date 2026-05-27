@@ -12,6 +12,9 @@ export interface MahnungRow {
   totalGross:            number
   projectId:             number | null
   contractId:            number | null
+  projectNumber:         string | null
+  projectName:           string | null
+  contractName:          string | null
   addressName1:          string | null
   contact:               string | null
   // Mahnung state (all null = no MAHNUNG record yet)
@@ -25,6 +28,13 @@ export interface MahnungRow {
   inKlaerung:            boolean
   notes:                 string | null
   history:               MahnungHistoryEntry[]
+}
+
+export interface MahnungStats {
+  totalOpen:           number
+  totalClosed:         number
+  byStufe:             Record<number, number>
+  overdueActionsCount: number
 }
 
 export interface MahnungHistoryEntry {
@@ -107,3 +117,6 @@ export const saveTextTemplate = (
   documentType: string,
   payload: { headerText: string | null; footerText: string | null }
 ) => apiClient.put<{ ok: boolean }>(`/mahnungen/text-templates/${documentType}`, payload)
+
+export const fetchMahnungStats = () =>
+  apiClient.get<{ data: MahnungStats }>('/mahnungen/stats')

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate }    from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal }          from '@/components/ui/Modal'
@@ -37,12 +37,60 @@ function daysClass(days: number) {
   return ''
 }
 
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+// ── Sorting ───────────────────────────────────────────────────────────────────
+
+type SortKey = 'number' | 'invoiceDate' | 'dueDate' | 'daysOverdue' | 'mahnstufe'
+             | 'lastMahnungDate' | 'nextMahnungDate' | 'addressName1' | 'projectName' | 'totalGross'
+
+function SortTh({ label, k, sortKey, dir, onClick, className }: {
+  label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'
+  onClick: (k: SortKey) => void; className?: string
+}) {
+  return (
+    <th className={`sortable-th${className ? ' '+className : ''}`} onClick={() => onClick(k)}>
+      {label}{sortKey === k ? (dir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  )
+}
+
+// ── Optional columns ──────────────────────────────────────────────────────────
+
+type OptColKey = 'invoiceDate' | 'totalGross' | 'contractName' | 'contact'
+
+interface OptColDef { key: OptColKey; label: string; defaultVisible: boolean }
+const OPT_COLS: OptColDef[] = [
+  { key: 'invoiceDate',  label: 'Rech.-Datum',  defaultVisible: true  },
+  { key: 'totalGross',   label: 'Betrag',        defaultVisible: true  },
+  { key: 'contractName', label: 'Vertrag',       defaultVisible: false },
+  { key: 'contact',      label: 'Ansprechpart.', defaultVisible: false },
+]
+
 // ── Filter persistence ────────────────────────────────────────────────────────
 
-interface FilterState { mahnstufe: string; adresse: string; showClosed: boolean }
+interface FilterState {
+  stichtag:   string
+  mahnstufe:  string
+  projekt:    string
+  vertrag:    string
+  adresse:    string
+  showClosed: boolean
+}
 
-const LS_KEY = 'mahnungen-filters'
-const defaultFilters = (): FilterState => ({ mahnstufe: '', adresse: '', showClosed: false })
+const LS_KEY = 'mahnungen-filters-v2'
+const defaultFilters = (): FilterState => ({
+  stichtag:   '',
+  mahnstufe:  '',
+  projekt:    '',
+  vertrag:    '',
+  adresse:    '',
+  showClosed: false,
+})
 
 function loadFilters(): FilterState {
   try {
@@ -58,44 +106,108 @@ function saveFilters(f: FilterState) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function MahnungenListe() {
-  const navigate     = useNavigate()
-  const qc           = useQueryClient()
+  const navigate = useNavigate()
+  const qc       = useQueryClient()
 
-  const { data: rawData, isLoading, error } = useQuery({ queryKey: ['mahnungen'], queryFn: () => fetchMahnungen().then(r => r.data) })
-  const { data: settingsData } = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data) })
-  const { data: employees }    = useQuery({ queryKey: ['employees'], queryFn: () => fetchEmployeeList().then(r => r.data) })
+  const rows$     = useQuery({ queryKey: ['mahnungen'],       queryFn: () => fetchMahnungen().then(r => r.data) })
+  const settings$ = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data) })
+  const emp$      = useQuery({ queryKey: ['employees'],        queryFn: () => fetchEmployeeList().then(r => r.data) })
+
+  const rawData      = rows$.data       ?? []
+  const settingsData = settings$.data   ?? []
+  const employees    = emp$.data        ?? []
 
   const settingsByLevel = useMemo(() => {
     const m: Record<number, MahnungSettingsLevel> = {}
-    for (const s of (settingsData || [])) m[s.mahnstufe] = s
+    for (const s of settingsData) m[s.mahnstufe] = s
     return m
   }, [settingsData])
 
-  const allLevels: MahnungSettingsLevel[] = useMemo(() => [1,2,3,4].map(n => settingsByLevel[n] ?? {
-    mahnstufe: n, label: STUFEN_LABELS[n] ?? `Stufe ${n}`,
-    daysAfterDue: 7, daysAfterPrev: 14, fee: 0, headerText: null, footerText: null,
-  }), [settingsByLevel])
+  const allLevels: MahnungSettingsLevel[] = useMemo(() =>
+    [1,2,3,4].map(n => settingsByLevel[n] ?? {
+      mahnstufe: n, label: STUFEN_LABELS[n] ?? `Stufe ${n}`,
+      daysAfterDue: 7, daysAfterPrev: 14, fee: 0, headerText: null, footerText: null,
+    }), [settingsByLevel])
 
   const empById = useMemo(() => {
     const m: Record<number, Employee> = {}
-    for (const e of (employees || [])) m[e.ID] = e
+    for (const e of employees) m[e.ID] = e
     return m
   }, [employees])
 
-  // ── Filter state ────────────────────────────────────────────────────────────
-  const [filters, setFilters] = useState<FilterState>(loadFilters)
+  // ── Filter + sort state ──────────────────────────────────────────────────────
+  const [filters,  setFilters]  = useState<FilterState>(loadFilters)
+  const [sortKey,  setSortKey]  = useState<SortKey>('dueDate')
+  const [sortDir,  setSortDir]  = useState<'asc'|'desc'>('asc')
+  const [hiddenCols, setHiddenCols] = useState<Set<OptColKey>>(
+    new Set(OPT_COLS.filter(c => !c.defaultVisible).map(c => c.key))
+  )
+  const [colPanelOpen, setColPanelOpen] = useState(false)
+  const colPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { saveFilters(filters) }, [filters])
 
+  useEffect(() => {
+    if (!colPanelOpen) return
+    const h = (e: MouseEvent) => {
+      if (colPanelRef.current && !colPanelRef.current.contains(e.target as Node)) setColPanelOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [colPanelOpen])
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('asc') }
+  }
+  function toggleCol(key: OptColKey) {
+    setHiddenCols(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s })
+  }
+
   const rows = useMemo(() => {
-    if (!rawData) return []
-    return rawData.filter(r => {
-      if (!filters.showClosed && r.isClosed) return false
-      if (filters.mahnstufe !== '' && String(r.mahnstufe) !== filters.mahnstufe) return false
-      if (filters.adresse && !(r.addressName1 || '').toLowerCase().includes(filters.adresse.toLowerCase())) return false
+    let r = rawData.filter(row => {
+      if (!filters.showClosed && row.isClosed) return false
+      if (filters.stichtag && row.dueDate > filters.stichtag) return false
+      if (filters.mahnstufe !== '' && String(row.mahnstufe) !== filters.mahnstufe) return false
+      if (filters.projekt) {
+        const q = filters.projekt.toLowerCase()
+        const proj = `${row.projectNumber ?? ''} ${row.projectName ?? ''}`.toLowerCase()
+        if (!proj.includes(q)) return false
+      }
+      if (filters.vertrag) {
+        const q = filters.vertrag.toLowerCase()
+        if (!(row.contractName ?? '').toLowerCase().includes(q)) return false
+      }
+      if (filters.adresse) {
+        const q = filters.adresse.toLowerCase()
+        if (!(row.addressName1 ?? '').toLowerCase().includes(q)) return false
+      }
       return true
     })
-  }, [rawData, filters])
+
+    r = [...r].sort((a, b) => {
+      let av: string | number = ''
+      let bv: string | number = ''
+      switch (sortKey) {
+        case 'number':         av = a.number ?? '';           bv = b.number ?? '';           break
+        case 'invoiceDate':    av = a.invoiceDate ?? '';      bv = b.invoiceDate ?? '';      break
+        case 'dueDate':        av = a.dueDate;                bv = b.dueDate;                break
+        case 'daysOverdue':    av = a.daysOverdue;            bv = b.daysOverdue;            break
+        case 'mahnstufe':      av = a.mahnstufe;              bv = b.mahnstufe;              break
+        case 'lastMahnungDate': av = a.lastMahnungDate ?? ''; bv = b.lastMahnungDate ?? ''; break
+        case 'nextMahnungDate': av = a.nextMahnungDate ?? ''; bv = b.nextMahnungDate ?? ''; break
+        case 'addressName1':   av = a.addressName1 ?? '';     bv = b.addressName1 ?? '';     break
+        case 'projectName':    av = a.projectName ?? '';      bv = b.projectName ?? '';      break
+        case 'totalGross':     av = a.totalGross ?? 0;        bv = b.totalGross ?? 0;        break
+      }
+      const cmp = typeof av === 'number'
+        ? av - (bv as number)
+        : String(av).localeCompare(String(bv), 'de', { sensitivity: 'base', numeric: true })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+
+    return r
+  }, [rawData, filters, sortKey, sortDir])
 
   // ── Selection ────────────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -107,7 +219,6 @@ export function MahnungenListe() {
     if (allSelected) setSelected(new Set())
     else setSelected(new Set(rows.map(rowKey)))
   }
-
   function toggleRow(r: MahnungRow) {
     const k = rowKey(r)
     const s = new Set(selected)
@@ -115,10 +226,52 @@ export function MahnungenListe() {
     setSelected(s)
   }
 
+  const selectedWithMahnung = rows.filter(r => selected.has(rowKey(r)) && r.mahnungId !== null).length
+
+  function openSelectedPdfs() {
+    const selRows = rows.filter(r => selected.has(rowKey(r)) && r.mahnungId !== null)
+    selRows.forEach((r, i) => setTimeout(() => openMahnungPdf(r.mahnungId!), i * 300))
+  }
+
+  // ── Inline save mutation ──────────────────────────────────────────────────────
+  const inlineMut = useMutation({
+    mutationFn: upsertMahnung,
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['mahnungen'] }),
+  })
+
+  function saveInlineField(r: MahnungRow, patch: Parameters<typeof upsertMahnung>[0]) {
+    inlineMut.mutate({
+      ...(r.sourceType === 'invoice' ? { invoice_id: r.sourceId } : { pp_id: r.sourceId }),
+      ...patch,
+    })
+  }
+
+  function handleLastMahnungChange(r: MahnungRow, date: string) {
+    const stufe = r.mahnstufe || 1
+    const level = settingsByLevel[stufe]
+    const daysInterval = (level?.daysAfterPrev && level.daysAfterPrev > 0)
+      ? level.daysAfterPrev
+      : (level?.daysAfterDue || 14)
+    const nextDate = date ? addDays(date, daysInterval) : null
+    saveInlineField(r, {
+      last_mahnung_date: date || null,
+      next_mahnung_date: nextDate,
+    })
+  }
+
+  // ── Closed toggle (inline) ────────────────────────────────────────────────────
+  const closedMut = useMutation({
+    mutationFn: (r: MahnungRow) => upsertMahnung({
+      ...(r.sourceType === 'invoice' ? { invoice_id: r.sourceId } : { pp_id: r.sourceId }),
+      is_closed: !r.isClosed,
+    }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mahnungen'] }),
+  })
+
   // ── Detail modal ─────────────────────────────────────────────────────────────
   const [detailRow, setDetailRow] = useState<MahnungRow | null>(null)
-  const [draft, setDraft]         = useState<Partial<MahnungRow>>({})
-  const [saveMsg, setSaveMsg]     = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [draft,     setDraft]     = useState<Partial<MahnungRow>>({})
+  const [saveMsg,   setSaveMsg]   = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   function openDetail(r: MahnungRow) {
     setDetailRow(r)
@@ -134,7 +287,6 @@ export function MahnungenListe() {
     })
     setSaveMsg(null)
   }
-
   function closeDetail() { setDetailRow(null); setDraft({}) }
 
   const upsertMut = useMutation({
@@ -158,31 +310,32 @@ export function MahnungenListe() {
     })
   }
 
-  // Inline isClosed toggle
-  const closedMut = useMutation({
-    mutationFn: (r: MahnungRow) => upsertMahnung({
-      ...(r.sourceType === 'invoice' ? { invoice_id: r.sourceId } : { pp_id: r.sourceId }),
-      is_closed: !r.isClosed,
-    }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['mahnungen'] }),
-  })
+  // Auto-fill nächste Mahnung in the detail modal
+  function handleDraftLastMahnungChange(date: string) {
+    const stufe = draft.mahnstufe ?? 1
+    const level = settingsByLevel[stufe]
+    const daysInterval = (level?.daysAfterPrev && level.daysAfterPrev > 0)
+      ? level.daysAfterPrev
+      : (level?.daysAfterDue || 14)
+    const nextDate = date ? addDays(date, daysInterval) : null
+    setDraft(d => ({ ...d, lastMahnungDate: date || null, nextMahnungDate: nextDate }))
+  }
 
   // ── Email modal ──────────────────────────────────────────────────────────────
-  const [emailOpen, setEmailOpen]     = useState(false)
-  const [emailTo, setEmailTo]         = useState('')
+  const [emailRow,     setEmailRow]     = useState<MahnungRow | null>(null)
+  const [emailTo,      setEmailTo]      = useState('')
   const [emailSubject, setEmailSubject] = useState('')
-  const [emailBody, setEmailBody]     = useState('')
-  const [emailMsg, setEmailMsg]       = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [emailBody,    setEmailBody]    = useState('')
+  const [emailMsg,     setEmailMsg]     = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-  function openEmailModal() {
-    if (!detailRow) return
-    const stufe = draft.mahnstufe ?? 0
+  function openEmailFor(r: MahnungRow) {
+    const stufe = r.mahnstufe || 0
     const lv    = settingsByLevel[stufe]
+    setEmailRow(r)
     setEmailTo('')
-    setEmailSubject(`${lv?.label ?? STUFEN_LABELS[stufe] ?? 'Mahnung'} zu ${detailRow.number}`)
+    setEmailSubject(`${lv?.label ?? STUFEN_LABELS[stufe] ?? 'Mahnung'} zu ${r.number}`)
     setEmailBody(lv?.headerText ?? '')
     setEmailMsg(null)
-    setEmailOpen(true)
   }
 
   const sendMut = useMutation({
@@ -196,33 +349,39 @@ export function MahnungenListe() {
   })
 
   function sendEmail() {
-    if (!detailRow?.mahnungId) {
-      setEmailMsg({ type: 'err', text: 'Bitte zuerst Mahnstufe speichern, um eine Mahnung zu erstellen.' })
+    if (!emailRow?.mahnungId) {
+      setEmailMsg({ type: 'err', text: 'Bitte zuerst Mahnstufe speichern.' })
       return
     }
-    sendMut.mutate({ id: detailRow.mahnungId, to: emailTo, subject: emailSubject, body: emailBody })
+    sendMut.mutate({ id: emailRow.mahnungId, to: emailTo, subject: emailSubject, body: emailBody })
   }
-
-  // ── Selected PDF open ─────────────────────────────────────────────────────────
-  function openSelectedPdfs() {
-    const selRows = rows.filter(r => selected.has(rowKey(r)) && r.mahnungId !== null)
-    for (const r of selRows) openMahnungPdf(r.mahnungId!)
-  }
-
-  const selectedWithMahnung = rows.filter(r => selected.has(rowKey(r)) && r.mahnungId !== null).length
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  if (isLoading) return <p className="empty-note">Lade Mahnungsdaten…</p>
-  if (error)     return <p className="empty-note" style={{ color: 'var(--red)' }}>Fehler beim Laden.</p>
+  if (rows$.isLoading) return <p className="empty-note">Lade Mahnungsdaten…</p>
+  if (rows$.error)     return <p className="empty-note" style={{ color: 'var(--red)' }}>Fehler beim Laden.</p>
 
   return (
     <div>
 
-      {/* Filter bar */}
-      <div className="filter-bar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-          Mahnstufe
+      {/* ── Filter bar ── */}
+      <div className="filter-bar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+          Fällig bis
+          <input
+            type="date"
+            value={filters.stichtag}
+            onChange={e => setFilters(f => ({ ...f, stichtag: e.target.value }))}
+            style={{ fontSize: 13, padding: '3px 6px' }}
+          />
+          {filters.stichtag && (
+            <button className="filter-chip-clear" onClick={() => setFilters(f => ({ ...f, stichtag: '' }))} title="Zurücksetzen">×</button>
+          )}
+        </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+          Stufe
           <select value={filters.mahnstufe} onChange={e => setFilters(f => ({ ...f, mahnstufe: e.target.value }))} style={{ fontSize: 13, padding: '3px 6px' }}>
             <option value="">Alle</option>
             <option value="0">Keine</option>
@@ -230,43 +389,68 @@ export function MahnungenListe() {
           </select>
         </label>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-          Adresse
-          <input
-            type="text"
-            value={filters.adresse}
-            onChange={e => setFilters(f => ({ ...f, adresse: e.target.value }))}
-            placeholder="Filtern…"
-            style={{ fontSize: 13, padding: '3px 6px', width: 160 }}
-          />
+        <input
+          type="text"
+          placeholder="Projekt…"
+          value={filters.projekt}
+          onChange={e => setFilters(f => ({ ...f, projekt: e.target.value }))}
+          style={{ fontSize: 13, padding: '3px 8px', width: 130, borderRadius: 4, border: '1px solid var(--border)' }}
+        />
+
+        <input
+          type="text"
+          placeholder="Vertrag…"
+          value={filters.vertrag}
+          onChange={e => setFilters(f => ({ ...f, vertrag: e.target.value }))}
+          style={{ fontSize: 13, padding: '3px 8px', width: 130, borderRadius: 4, border: '1px solid var(--border)' }}
+        />
+
+        <input
+          type="text"
+          placeholder="Adresse…"
+          value={filters.adresse}
+          onChange={e => setFilters(f => ({ ...f, adresse: e.target.value }))}
+          style={{ fontSize: 13, padding: '3px 8px', width: 130, borderRadius: 4, border: '1px solid var(--border)' }}
+        />
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+          <input type="checkbox" checked={filters.showClosed} onChange={e => setFilters(f => ({ ...f, showClosed: e.target.checked }))} />
+          Abgeschlossene
         </label>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-          <input type="checkbox" checked={filters.showClosed} onChange={e => setFilters(f => ({ ...f, showClosed: e.target.checked }))} />
-          Abgeschlossene zeigen
-        </label>
+        {/* Column chooser */}
+        <div ref={colPanelRef} style={{ marginLeft: 'auto', position: 'relative' }}>
+          <button className="btn btn-sm" onClick={() => setColPanelOpen(o => !o)}>Spalten ▾</button>
+          {colPanelOpen && (
+            <div style={{ position: 'absolute', right: 0, top: '110%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', zIndex: 100, minWidth: 160, boxShadow: '0 4px 12px rgba(0,0,0,.12)' }}>
+              {OPT_COLS.map(col => (
+                <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  <input type="checkbox" checked={!hiddenCols.has(col.key)} onChange={() => toggleCol(col.key)} />
+                  {col.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+      {/* ── Toolbar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
           <input type="checkbox" checked={allSelected} onChange={toggleAll} />
           Alle
         </label>
         {selected.size > 0 && (
-          <button
-            className="btn btn-sm"
-            onClick={openSelectedPdfs}
-            disabled={selectedWithMahnung === 0}
-            title={selectedWithMahnung === 0 ? 'Keine der gewählten Zeilen hat eine gespeicherte Mahnstufe' : undefined}
-          >
-            Ausgewählte PDFs öffnen ({selectedWithMahnung})
+          <button className="btn btn-sm" onClick={openSelectedPdfs} disabled={selectedWithMahnung === 0}>
+            PDFs öffnen ({selectedWithMahnung})
           </button>
         )}
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>{rows.length} Einträge</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
+          {rows.length} Einträge
+        </span>
       </div>
 
-      {/* Table */}
+      {/* ── Table ── */}
       {rows.length === 0
         ? <p className="empty-note">Keine überfälligen Rechnungen gefunden.</p>
         : (
@@ -275,51 +459,109 @@ export function MahnungenListe() {
               <thead>
                 <tr>
                   <th style={{ width: 32 }}></th>
-                  <th>Typ</th>
-                  <th>Nummer</th>
-                  <th>Datum</th>
-                  <th>Fällig</th>
-                  <th className="num">Tage</th>
-                  <th>Letzte Mahnung</th>
-                  <th>Stufe</th>
-                  <th>Nächste Mahnung</th>
-                  <th>Verantw.</th>
-                  <th>Adresse</th>
-                  <th style={{ width: 48, textAlign: 'center' }}>Abg.</th>
+                  <th style={{ width: 80 }}>Typ</th>
+                  <SortTh label="Nummer"         k="number"          sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  {!hiddenCols.has('invoiceDate') && <SortTh label="Rech.-Datum" k="invoiceDate" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />}
+                  <SortTh label="Fällig"          k="dueDate"         sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Tage"            k="daysOverdue"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} className="num" />
+                  <SortTh label="Letzte Mahnung"  k="lastMahnungDate" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Stufe"           k="mahnstufe"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Nächste Mahnung" k="nextMahnungDate" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Projekt"         k="projectName"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortTh label="Adresse"         k="addressName1"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                  {!hiddenCols.has('contractName') && <th>Vertrag</th>}
+                  {!hiddenCols.has('contact')      && <th>Ansprechpart.</th>}
+                  {!hiddenCols.has('totalGross')   && <SortTh label="Betrag" k="totalGross" sortKey={sortKey} dir={sortDir} onClick={toggleSort} className="num" />}
+                  <th style={{ width: 40, textAlign: 'center' }}>Abg.</th>
+                  <th style={{ width: 110 }}>Aktionen</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map(r => {
                   const k   = rowKey(r)
                   const emp = r.responsibleEmployeeId ? empById[r.responsibleEmployeeId] : null
+                  const projLabel = r.projectNumber && r.projectName
+                    ? `${r.projectNumber}: ${r.projectName}`
+                    : (r.projectName || r.projectNumber || '–')
                   return (
                     <tr
                       key={k}
                       className={`clickable-row${r.isClosed ? ' row-muted' : ''}`}
-                      onDoubleClick={() => openDetail(r)}
-                      style={{ opacity: r.isClosed ? 0.55 : 1 }}
+                      onClick={() => openDetail(r)}
+                      style={{ opacity: r.isClosed ? 0.6 : 1 }}
                     >
+                      {/* Checkbox */}
                       <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={selected.has(k)} onChange={() => toggleRow(r)} />
                       </td>
-                      <td>
+
+                      {/* Typ badge */}
+                      <td onClick={e => e.stopPropagation()}>
                         <span style={{ fontSize: 11, background: r.sourceType === 'invoice' ? '#e0f2fe' : '#fce7f3', color: r.sourceType === 'invoice' ? '#0369a1' : '#9d174d', borderRadius: 4, padding: '1px 6px' }}>
                           {r.sourceType === 'invoice' ? 'Rechnung' : 'Anzahlung'}
                         </span>
                       </td>
+
                       <td style={{ fontWeight: 600 }}>{r.number}</td>
-                      <td>{fmtDate(r.invoiceDate)}</td>
+                      {!hiddenCols.has('invoiceDate') && <td>{fmtDate(r.invoiceDate)}</td>}
                       <td>{fmtDate(r.dueDate)}</td>
                       <td className={`num ${daysClass(r.daysOverdue)}`}>{r.daysOverdue}</td>
-                      <td>{fmtDate(r.lastMahnungDate)}</td>
-                      <td>
-                        <span className={`mahnstufe-badge ms-${r.mahnstufe}`}>
-                          {settingsByLevel[r.mahnstufe]?.label ?? STUFEN_LABELS[r.mahnstufe] ?? '–'}
-                        </span>
+
+                      {/* Inline: letzte Mahnung date */}
+                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 120 }}>
+                        <input
+                          type="date"
+                          className="inline-date-input"
+                          value={r.lastMahnungDate?.slice(0,10) ?? ''}
+                          onBlur={e => handleLastMahnungChange(r, e.target.value)}
+                          onChange={() => {/* controlled by onBlur */}}
+                          onClick={e => e.stopPropagation()}
+                        />
                       </td>
-                      <td>{fmtDate(r.nextMahnungDate)}</td>
-                      <td style={{ fontSize: 12 }}>{emp ? emp.SHORT_NAME : '–'}</td>
+
+                      {/* Inline: Mahnstufe select */}
+                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 130 }}>
+                        <select
+                          className="inline-select"
+                          value={r.mahnstufe}
+                          onChange={e => saveInlineField(r, { mahnstufe: Number(e.target.value) })}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <option value={0}>– Keine –</option>
+                          {allLevels.map(lv => (
+                            <option key={lv.mahnstufe} value={lv.mahnstufe}>{lv.label}</option>
+                          ))}
+                        </select>
+                      </td>
+
+                      {/* Inline: nächste Mahnung date */}
+                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 120 }}>
+                        <input
+                          type="date"
+                          className="inline-date-input"
+                          value={r.nextMahnungDate?.slice(0,10) ?? ''}
+                          onBlur={e => saveInlineField(r, { next_mahnung_date: e.target.value || null })}
+                          onChange={() => {}}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </td>
+
+                      {/* Projekt */}
+                      <td style={{ fontSize: 12 }}>
+                        {r.projectId
+                          ? <button className="link-btn" style={{ fontSize: 12 }} onClick={e => { e.stopPropagation(); navigate('/projekte', { state: { search: r.projectNumber ?? r.projectName } }) }}>
+                              {projLabel}
+                            </button>
+                          : '–'
+                        }
+                      </td>
+
                       <td style={{ fontSize: 12 }}>{r.addressName1 ?? '–'}</td>
+                      {!hiddenCols.has('contractName') && <td style={{ fontSize: 12 }}>{r.contractName ?? '–'}</td>}
+                      {!hiddenCols.has('contact')      && <td style={{ fontSize: 12 }}>{r.contact ?? '–'}</td>}
+                      {!hiddenCols.has('totalGross')   && <td className="num">{fmtMoney(r.totalGross)}</td>}
+
+                      {/* Abgeschlossen checkbox */}
                       <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
@@ -327,6 +569,28 @@ export function MahnungenListe() {
                           title={r.isClosed ? 'Abgeschlossen' : 'Als abgeschlossen markieren'}
                           onChange={() => closedMut.mutate(r)}
                         />
+                      </td>
+
+                      {/* Inline action buttons */}
+                      <td onClick={e => e.stopPropagation()} className="row-actions">
+                        <button
+                          className="row-action-btn"
+                          title="PDF öffnen"
+                          disabled={!r.mahnungId}
+                          onClick={() => r.mahnungId && openMahnungPdf(r.mahnungId)}
+                        >📄</button>
+                        <button
+                          className="row-action-btn"
+                          title="E-Mail senden"
+                          disabled={!r.mahnungId}
+                          onClick={() => r.mahnungId && openEmailFor(r)}
+                        >✉</button>
+                        <button
+                          className="row-action-btn"
+                          title="→ Rechnung"
+                          onClick={() => navigate('/rechnungen', { state: { projectSearch: r.number } })}
+                        >🧾</button>
+                        {emp && <span title={`Verantw.: ${emp.SHORT_NAME}`} style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 2px' }}>{emp.SHORT_NAME}</span>}
                       </td>
                     </tr>
                   )
@@ -337,7 +601,7 @@ export function MahnungenListe() {
         )
       }
 
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Doppelklick auf eine Zeile für Details und Bearbeitung.</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Klick auf eine Zeile für Details und Notizen.</p>
 
       {/* ── Detail Modal ── */}
       {detailRow && (
@@ -352,33 +616,25 @@ export function MahnungenListe() {
             <div>
               <div className="form-group">
                 <label className="form-label">Mahnstufe</label>
-                <select
-                  className="form-control"
-                  value={draft.mahnstufe ?? 0}
-                  onChange={e => setDraft(d => ({ ...d, mahnstufe: Number(e.target.value) }))}
-                >
+                <select className="form-control" value={draft.mahnstufe ?? 0} onChange={e => setDraft(d => ({ ...d, mahnstufe: Number(e.target.value) }))}>
                   <option value={0}>– Keine –</option>
-                  {allLevels.map(lv => (
-                    <option key={lv.mahnstufe} value={lv.mahnstufe}>{lv.label}</option>
-                  ))}
+                  {allLevels.map(lv => <option key={lv.mahnstufe} value={lv.mahnstufe}>{lv.label}</option>)}
                 </select>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Datum letzte Mahnung</label>
                 <input
-                  type="date"
-                  className="form-control"
+                  type="date" className="form-control"
                   value={draft.lastMahnungDate ?? ''}
-                  onChange={e => setDraft(d => ({ ...d, lastMahnungDate: e.target.value || null }))}
+                  onChange={e => handleDraftLastMahnungChange(e.target.value)}
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Datum nächste Mahnung</label>
+                <label className="form-label">Datum nächste Mahnung <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(wird auto-berechnet)</span></label>
                 <input
-                  type="date"
-                  className="form-control"
+                  type="date" className="form-control"
                   value={draft.nextMahnungDate ?? ''}
                   onChange={e => setDraft(d => ({ ...d, nextMahnungDate: e.target.value || null }))}
                 />
@@ -386,13 +642,9 @@ export function MahnungenListe() {
 
               <div className="form-group">
                 <label className="form-label">Verantwortlicher (intern)</label>
-                <select
-                  className="form-control"
-                  value={draft.responsibleEmployeeId ?? ''}
-                  onChange={e => setDraft(d => ({ ...d, responsibleEmployeeId: e.target.value ? Number(e.target.value) : null }))}
-                >
+                <select className="form-control" value={draft.responsibleEmployeeId ?? ''} onChange={e => setDraft(d => ({ ...d, responsibleEmployeeId: e.target.value ? Number(e.target.value) : null }))}>
                   <option value="">– Kein –</option>
-                  {(employees || []).filter(e => e.ACTIVE !== 2).map(e => (
+                  {employees.filter(e => e.ACTIVE !== 2).map(e => (
                     <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>
                   ))}
                 </select>
@@ -400,19 +652,11 @@ export function MahnungenListe() {
 
               <div className="form-group" style={{ display: 'flex', gap: 16 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={draft.inKlaerung ?? false}
-                    onChange={e => setDraft(d => ({ ...d, inKlaerung: e.target.checked }))}
-                  />
+                  <input type="checkbox" checked={draft.inKlaerung ?? false} onChange={e => setDraft(d => ({ ...d, inKlaerung: e.target.checked }))} />
                   In Klärung
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={draft.isClosed ?? false}
-                    onChange={e => setDraft(d => ({ ...d, isClosed: e.target.checked }))}
-                  />
+                  <input type="checkbox" checked={draft.isClosed ?? false} onChange={e => setDraft(d => ({ ...d, isClosed: e.target.checked }))} />
                   Abgeschlossen
                 </label>
               </div>
@@ -420,165 +664,103 @@ export function MahnungenListe() {
               {draft.isClosed && (
                 <div className="form-group">
                   <label className="form-label">Grund (optional)</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={draft.closeReason ?? ''}
-                    placeholder="z.B. Betrag eingegangen, Einigung…"
-                    onChange={e => setDraft(d => ({ ...d, closeReason: e.target.value || null }))}
-                  />
+                  <input type="text" className="form-control" value={draft.closeReason ?? ''} placeholder="z.B. Betrag eingegangen…" onChange={e => setDraft(d => ({ ...d, closeReason: e.target.value || null }))} />
                 </div>
               )}
 
               <div className="form-group">
                 <label className="form-label">Notizen</label>
-                <textarea
-                  className="form-control"
-                  rows={3}
-                  value={draft.notes ?? ''}
-                  onChange={e => setDraft(d => ({ ...d, notes: e.target.value || null }))}
-                />
+                <textarea className="form-control" rows={3} value={draft.notes ?? ''} onChange={e => setDraft(d => ({ ...d, notes: e.target.value || null }))} />
               </div>
 
               {saveMsg && <Message type={saveMsg.type === 'ok' ? 'success' : 'error'} text={saveMsg.text} />}
 
-              {/* Action buttons */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                 <button className="btn btn-primary" onClick={saveDraft} disabled={upsertMut.isPending}>
                   {upsertMut.isPending ? 'Speichern…' : 'Speichern'}
                 </button>
-                <button
-                  className="btn"
-                  onClick={() => detailRow.mahnungId && openMahnungPdf(detailRow.mahnungId)}
-                  disabled={!detailRow.mahnungId}
-                  title={!detailRow.mahnungId ? 'Zuerst speichern' : undefined}
-                >
+                <button className="btn" onClick={() => detailRow.mahnungId && openMahnungPdf(detailRow.mahnungId)} disabled={!detailRow.mahnungId} title={!detailRow.mahnungId ? 'Zuerst speichern' : undefined}>
                   PDF öffnen
                 </button>
-                <button className="btn" onClick={openEmailModal} disabled={!detailRow.mahnungId} title={!detailRow.mahnungId ? 'Zuerst speichern' : undefined}>
+                <button className="btn" onClick={() => detailRow.mahnungId && openEmailFor(detailRow)} disabled={!detailRow.mahnungId} title={!detailRow.mahnungId ? 'Zuerst speichern' : undefined}>
                   E-Mail senden
                 </button>
               </div>
 
-              {/* Navigation links */}
               <div style={{ display: 'flex', gap: 12, marginTop: 12, fontSize: 13 }}>
-                <button
-                  className="link-btn"
-                  onClick={() => { closeDetail(); navigate('/rechnungen', { state: { projectSearch: detailRow.number } }) }}
-                >
+                <button className="link-btn" onClick={() => { closeDetail(); navigate('/rechnungen', { state: { projectSearch: detailRow.number } }) }}>
                   → Rechnung öffnen
                 </button>
                 {detailRow.projectId && (
-                  <button
-                    className="link-btn"
-                    onClick={() => { closeDetail(); navigate('/daten', { state: { tab: 'einzelprojekt', projectId: detailRow.projectId } }) }}
-                  >
+                  <button className="link-btn" onClick={() => { closeDetail(); navigate('/projekte', { state: { search: detailRow.projectNumber ?? detailRow.projectName } }) }}>
                     → Projekt öffnen
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Right — mahnstufe info + history */}
+            {/* Right — level info + history */}
             <div>
-              {/* Settings info for current level */}
               {(draft.mahnstufe ?? 0) > 0 && settingsByLevel[draft.mahnstufe!] && (
-                <div className="narrative-block" style={{ marginBottom: 12 }}>
-                  <strong>{settingsByLevel[draft.mahnstufe!].label}</strong>
-                  <div style={{ marginTop: 4, fontSize: 12 }}>
-                    {settingsByLevel[draft.mahnstufe!].fee > 0 && (
-                      <div>Mahngebühr: <strong>{fmtMoney(settingsByLevel[draft.mahnstufe!].fee)}</strong></div>
-                    )}
-                    {settingsByLevel[draft.mahnstufe!].headerText && (
-                      <div style={{ marginTop: 6, fontStyle: 'italic', whiteSpace: 'pre-line' }}>
-                        {settingsByLevel[draft.mahnstufe!].headerText}
-                      </div>
-                    )}
+                <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                    <span className={`mahnstufe-badge ms-${draft.mahnstufe}`}>{settingsByLevel[draft.mahnstufe!].label}</span>
                   </div>
+                  <div>Gebühr: <strong>{fmtMoney(settingsByLevel[draft.mahnstufe!].fee)}</strong></div>
+                  {settingsByLevel[draft.mahnstufe!].headerText && (
+                    <div style={{ marginTop: 8, whiteSpace: 'pre-line', color: 'var(--text-2)' }}>{settingsByLevel[draft.mahnstufe!].headerText}</div>
+                  )}
                 </div>
               )}
 
-              {/* Invoice summary */}
-              <div className="narrative-block" style={{ marginBottom: 12, fontSize: 12 }}>
-                <div>Rechnungsbetrag: <strong>{fmtMoney(detailRow.totalGross)}</strong></div>
-                <div>Fällig seit: <strong>{fmtDate(detailRow.dueDate)}</strong> ({detailRow.daysOverdue} Tage)</div>
-                {detailRow.addressName1 && <div>Adresse: {detailRow.addressName1}</div>}
-              </div>
-
-              {/* History */}
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Mahnungshistorie</div>
-                {detailRow.history.length === 0
-                  ? <p className="empty-note" style={{ fontSize: 12 }}>Noch keine Aktionen.</p>
-                  : (
-                    <ul className="mahnung-history-list">
-                      {detailRow.history.map((h, i) => (
-                        <li key={i}>
-                          <span style={{ color: 'var(--text-muted)', minWidth: 85, fontSize: 11 }}>
-                            {fmtDate(h.dateAction.slice(0, 10))}
-                          </span>
-                          <span className={`mahnstufe-badge ms-${h.mahnstufe}`} style={{ fontSize: 10 }}>
-                            {settingsByLevel[h.mahnstufe]?.label ?? STUFEN_LABELS[h.mahnstufe]}
-                          </span>
-                          {h.emailSent && <span style={{ fontSize: 11, color: '#16a34a' }}>✉ {h.emailTo}</span>}
-                          {h.feeAmount > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtMoney(h.feeAmount)}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  )
-                }
-              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Verlauf</div>
+              {detailRow.history.length === 0
+                ? <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Noch keine Aktionen.</p>
+                : (
+                  <ul className="mahnung-history-list">
+                    {detailRow.history.map((h, i) => (
+                      <li key={i}>
+                        <span className={`mahnstufe-badge ms-${h.mahnstufe}`}>{STUFEN_LABELS[h.mahnstufe] ?? `Stufe ${h.mahnstufe}`}</span>
+                        <div style={{ flex: 1 }}>
+                          <div>{new Date(h.dateAction).toLocaleDateString('de-DE')}{h.emailSent ? ' · ✉ ' + (h.emailTo ?? '') : ''}</div>
+                          {h.feeAmount > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Gebühr: {fmtMoney(h.feeAmount)}</div>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              }
             </div>
-
           </div>
         </Modal>
       )}
 
       {/* ── Email Modal ── */}
-      {emailOpen && detailRow && (
-        <Modal open={emailOpen} onClose={() => setEmailOpen(false)} title="Mahnung per E-Mail senden">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {emailRow && (
+        <Modal open={emailRow !== null} onClose={() => setEmailRow(null)} title={`E-Mail senden — ${emailRow.number}`}>
+          <div style={{ minWidth: 420 }}>
             <div className="form-group">
-              <label className="form-label">An *</label>
-              <input
-                type="email"
-                className="form-control"
-                value={emailTo}
-                onChange={e => setEmailTo(e.target.value)}
-                placeholder="empfaenger@beispiel.de"
-              />
+              <label className="form-label">An</label>
+              <input type="email" className="form-control" value={emailTo} onChange={e => setEmailTo(e.target.value)} placeholder="empfaenger@beispiel.de" />
             </div>
             <div className="form-group">
-              <label className="form-label">Betreff *</label>
-              <input
-                type="text"
-                className="form-control"
-                value={emailSubject}
-                onChange={e => setEmailSubject(e.target.value)}
-              />
+              <label className="form-label">Betreff</label>
+              <input type="text" className="form-control" value={emailSubject} onChange={e => setEmailSubject(e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Nachricht</label>
-              <textarea
-                className="form-control"
-                rows={6}
-                value={emailBody}
-                onChange={e => setEmailBody(e.target.value)}
-                placeholder="Optionaler Begleittext…"
-              />
+              <textarea className="form-control" rows={6} value={emailBody} onChange={e => setEmailBody(e.target.value)} />
             </div>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Die Mahnung wird als PDF-Anhang beigefügt.</p>
             {emailMsg && <Message type={emailMsg.type === 'ok' ? 'success' : 'error'} text={emailMsg.text} />}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-primary" onClick={sendEmail} disabled={!emailTo || !emailSubject || sendMut.isPending}>
-                {sendMut.isPending ? 'Sende…' : 'Senden'}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn" onClick={() => setEmailRow(null)}>Abbrechen</button>
+              <button className="btn btn-primary" onClick={sendEmail} disabled={sendMut.isPending || !emailTo}>
+                {sendMut.isPending ? 'Senden…' : 'Senden'}
               </button>
-              <button className="btn" onClick={() => setEmailOpen(false)}>Abbrechen</button>
             </div>
           </div>
         </Modal>
       )}
-
     </div>
   )
 }

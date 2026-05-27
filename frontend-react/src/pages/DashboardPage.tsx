@@ -34,6 +34,7 @@ import {
   fetchMonthBalance, fetchRunningBalance,
   type DayBooking, type RunningMonth,
 } from '@/api/mitarbeiter'
+import { fetchMahnungStats, type MahnungStats } from '@/api/mahnungen'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -522,10 +523,57 @@ function GeschaeftsleitungView({
   )
 }
 
+const STUFEN_LABELS_DASH: Record<number, string> = {
+  0: '–', 1: 'Zahlungserinnerung', 2: '1. Mahnung', 3: '2. Mahnung', 4: '3. Mahnung',
+}
+
+function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
+  const navigate = useNavigate()
+  const stufen = [0, 1, 2, 3, 4].filter(s => (stats.byStufe[s] ?? 0) > 0)
+  return (
+    <div className="dash-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/rechnungen', { state: { tab: 'mahnungen' } })}>
+      <div className="dash-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Mahnungsstatus</span>
+        {stats.overdueActionsCount > 0 && (
+          <span style={{ fontSize: 11, background: '#fecaca', color: '#7f1d1d', borderRadius: 10, padding: '2px 8px', fontWeight: 600 }}>
+            {stats.overdueActionsCount} Aktion{stats.overdueActionsCount !== 1 ? 'en' : ''} fällig
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+        <div style={{ fontSize: 13 }}>
+          <strong style={{ fontSize: 20 }}>{stats.totalOpen}</strong>
+          <span style={{ color: 'var(--text-4)', marginLeft: 4 }}>offene</span>
+        </div>
+        {stats.totalClosed > 0 && (
+          <div style={{ fontSize: 13, color: 'var(--text-4)' }}>
+            <strong>{stats.totalClosed}</strong> abgeschlossen
+          </div>
+        )}
+      </div>
+      {stufen.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {stufen.map(s => (
+            <div key={s} className="mahnung-stufe-row">
+              <span className={`mahnstufe-badge ms-${s}`}>{STUFEN_LABELS_DASH[s] ?? `Stufe ${s}`}</span>
+              <span className="count">{stats.byStufe[s]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {stats.totalOpen === 0 && (
+        <p style={{ fontSize: 13, color: 'var(--text-4)', margin: 0 }}>Keine offenen Mahnvorgänge.</p>
+      )}
+      <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>→ Mahnungen öffnen</div>
+    </div>
+  )
+}
+
 function ControllerView({
-  kpis, monthly, alerts, overdueInvoices,
+  kpis, monthly, alerts, overdueInvoices, mahnStats,
 }: {
-  kpis: DashboardKpis; monthly: DashboardMonthly[]; alerts: DashboardAlert[]; overdueInvoices: OverdueInvoice[];
+  kpis: DashboardKpis; monthly: DashboardMonthly[]; alerts: DashboardAlert[];
+  overdueInvoices: OverdueInvoice[]; mahnStats: MahnungStats | null;
 }) {
   const overdueTotal = overdueInvoices.reduce((s, inv) => s + Number(inv.TOTAL_AMOUNT_NET || 0), 0)
   const avgMonthlyCost = monthly.length
@@ -545,7 +593,15 @@ function ControllerView({
           meta={overdueInvoices.length > 0 ? fmtEur(overdueTotal) : undefined}
           accent={overdueInvoices.length > 0}
         />
-        <KpiCard label="Offene Leistung" value={fmtEur(kpis.OFFENE_LEISTUNG)} />
+        {mahnStats && (
+          <KpiCard
+            label="Mahnvorgänge offen"
+            value={String(mahnStats.totalOpen)}
+            meta={mahnStats.overdueActionsCount > 0 ? `${mahnStats.overdueActionsCount} Aktion(en) fällig` : undefined}
+            accent={mahnStats.overdueActionsCount > 0}
+          />
+        )}
+        {!mahnStats && <KpiCard label="Offene Leistung" value={fmtEur(kpis.OFFENE_LEISTUNG)} />}
       </div>
 
       <NarrativeBlock>
@@ -557,12 +613,19 @@ function ControllerView({
           : 'Keine überfälligen Rechnungen. '}
         Monatliche Kosten Ø (letzte {monthly.length} Monate): <strong>{fmtEur(avgMonthlyCost)}</strong>.
         Zu fakturierende Leistung: <strong>{fmtEur(kpis.OFFENE_LEISTUNG)}</strong>.
+        {mahnStats && mahnStats.totalOpen > 0 && (
+          <> {mahnStats.totalOpen} offene Mahnung{mahnStats.totalOpen !== 1 ? 'svorgänge' : 'svorgang'}
+          {mahnStats.overdueActionsCount > 0 ? `, davon ${mahnStats.overdueActionsCount} mit fälliger Aktion` : ''}.
+          </>
+        )}
       </NarrativeBlock>
 
       <div className="dash-card">
         <div className="dash-card-title">Überfällige Rechnungen</div>
         <OverdueInvoicesTable invoices={overdueInvoices} />
       </div>
+
+      {mahnStats && <MahnungsStatusCard stats={mahnStats} />}
 
       <div className="dash-card">
         <div className="dash-card-title">Stunden &amp; Kosten (letzte Monate)</div>
@@ -771,7 +834,9 @@ export function DashboardPage() {
 
   const isMitarbeiter = dashboardRole === 'mitarbeiter'
 
-  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ] = useQueries({
+  const isController = dashboardRole === 'controller'
+
+  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ] = useQueries({
     queries: [
       { queryKey: ['dashboard', 'kpis'],             queryFn: fetchDashboardKpis,      staleTime: 300000, enabled: !isMitarbeiter },
       { queryKey: ['dashboard', 'projects'],          queryFn: fetchDashboardProjects,  staleTime: 300000, enabled: !isMitarbeiter },
@@ -780,16 +845,18 @@ export function DashboardPage() {
       { queryKey: ['dashboard', 'alerts'],            queryFn: fetchDashboardAlerts,    staleTime: 120000, enabled: !isMitarbeiter },
       { queryKey: ['dashboard', 'overdue-invoices'],  queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
       { queryKey: ['dashboard', 'team-utilization'],  queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'mahnung-stats'],     queryFn: fetchMahnungStats,       staleTime: 120000, enabled: isController },
     ],
   })
 
-  const kpis     = kpisQ.data?.data
-  const projects = projectsQ.data?.data  ?? []
-  const monthly  = monthlyQ.data?.data   ?? []
-  const byStatus = byStatusQ.data?.data  ?? []
-  const alerts   = alertsQ.data?.data    ?? []
-  const overdue  = overdueQ.data?.data   ?? []
-  const teamUtil = teamQ.data?.data      ?? []
+  const kpis       = kpisQ.data?.data
+  const projects   = projectsQ.data?.data  ?? []
+  const monthly    = monthlyQ.data?.data   ?? []
+  const byStatus   = byStatusQ.data?.data  ?? []
+  const alerts     = alertsQ.data?.data    ?? []
+  const overdue    = overdueQ.data?.data   ?? []
+  const teamUtil   = teamQ.data?.data      ?? []
+  const mahnStats  = mahnungenQ.data?.data ?? null
 
   const isLoading = kpisQ.isLoading || projectsQ.isLoading
 
@@ -823,7 +890,7 @@ export function DashboardPage() {
       )}
 
       {!isLoading && kpis && dashboardRole === 'controller' && (
-        <ControllerView kpis={kpis} monthly={monthly} alerts={alerts} overdueInvoices={overdue} />
+        <ControllerView kpis={kpis} monthly={monthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} />
       )}
 
       {!isLoading && kpis && dashboardRole === 'bereichsleiter' && (

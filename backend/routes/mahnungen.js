@@ -55,7 +55,16 @@ module.exports = (supabase) => {
     }
   });
 
-  // GET /mahnungen/upsert (no-op guard — real upsert is PUT)
+  // GET /mahnungen/stats
+  router.get("/stats", async (req, res) => {
+    try {
+      const data = await svc.getMahnungStats(supabase, { tenantId: tid(req) });
+      res.json({ data });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   // GET /mahnungen — list
   router.get("/", async (req, res) => {
     try {
@@ -115,12 +124,12 @@ module.exports = (supabase) => {
   // GET /mahnungen/:id/pdf
   router.get("/:id/pdf", async (req, res) => {
     try {
-      // id here is the mahnungId
+      const tenantId = tid(req);
       const { data: mahnung, error } = await supabase
         .from("MAHNUNG")
         .select("*")
         .eq("ID", Number(req.params.id))
-        .eq("TENANT_ID", tid(req))
+        .eq("TENANT_ID", tenantId)
         .single();
       if (error || !mahnung) return res.status(404).json({ error: "Mahnung nicht gefunden" });
 
@@ -128,11 +137,26 @@ module.exports = (supabase) => {
         invoiceId: mahnung.INVOICE_ID || null,
         ppId:      mahnung.PP_ID || null,
         mahnstufe: mahnung.MAHNSTUFE,
-        tenantId:  tid(req),
+        tenantId,
       });
 
+      // Build filename: {Rechnungsnummer}_{YYYY-MM-DD}_{StufeLabel}
+      const today = new Date().toISOString().slice(0, 10);
+      let docNumber = `Mahnung_${req.params.id}`;
+      if (mahnung.INVOICE_ID) {
+        const { data: inv } = await supabase.from("INVOICE").select("INVOICE_NUMBER").eq("ID", mahnung.INVOICE_ID).maybeSingle();
+        if (inv?.INVOICE_NUMBER) docNumber = inv.INVOICE_NUMBER;
+      } else if (mahnung.PP_ID) {
+        const { data: pp } = await supabase.from("PARTIAL_PAYMENT").select("PARTIAL_PAYMENT_NUMBER").eq("ID", mahnung.PP_ID).maybeSingle();
+        if (pp?.PARTIAL_PAYMENT_NUMBER) docNumber = pp.PARTIAL_PAYMENT_NUMBER;
+      }
+      const stufeLabels = ['Keine', 'Zahlungserinnerung', '1_Mahnung', '2_Mahnung', '3_Mahnung'];
+      const stufeLabel  = stufeLabels[mahnung.MAHNSTUFE] || `Stufe_${mahnung.MAHNSTUFE}`;
+      const safeName    = docNumber.replace(/[/\\?%*:|"<>\s]/g, '-');
+      const filename    = `${safeName}_${today}_${stufeLabel}.pdf`;
+
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="mahnung_${req.params.id}.pdf"`);
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
       res.send(pdfBuffer);
     } catch (e) {
       res.status(e?.status || 500).json({ error: e?.message || String(e) });

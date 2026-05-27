@@ -1602,6 +1602,22 @@ input::placeholder { color: var(--text-4); }
 /* Muted row for closed Mahnungen */
 .row-muted td { color: var(--text-muted) !important; }
 
+/* Inline table inputs (MahnungenListe) */
+.inline-date-input { width: 100%; min-width: 110px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text); font-size: 12px; padding: 2px 4px; }
+.inline-date-input:focus { outline: none; border-color: var(--accent); }
+.inline-select { width: 100%; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text); font-size: 12px; padding: 2px 4px; }
+.inline-select:focus { outline: none; border-color: var(--accent); }
+
+/* Row action buttons (MahnungenListe + RechnungenListe) */
+.row-actions     { white-space: nowrap; padding: 0 4px; }
+.row-action-btn  { background: none; border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: 14px; padding: 4px 6px; min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; transition: background 0.1s; }
+.row-action-btn:hover:not(:disabled) { background: var(--hover-bg, rgba(0,0,0,0.06)); border-color: var(--border); }
+.row-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Mahnungen stats widget */
+.mahnung-stufe-row        { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; }
+.mahnung-stufe-row .count { font-weight: 600; margin-left: auto; color: var(--text); }
+
 /* Dark mode badge overrides */
 [data-theme="dark"] .mahnstufe-badge.ms-1 { background: rgba(29,78,216,0.2);  color: #93c5fd; }
 [data-theme="dark"] .mahnstufe-badge.ms-2 { background: rgba(180,83,9,0.2);   color: #fcd34d; }

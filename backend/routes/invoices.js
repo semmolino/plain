@@ -1,7 +1,9 @@
 "use strict";
 
 const express = require("express");
-const ctrl = require("../controllers/invoices");
+const ctrl    = require("../controllers/invoices");
+const { renderDocumentPdf } = require("../services_pdf_render");
+const { sendMail }          = require("../services/emailService");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -21,6 +23,39 @@ module.exports = (supabase) => {
   router.post("/:id/cancel",                   (req, res) => ctrl.cancelInvoice(req, res, supabase));
   router.delete("/:id",                        (req, res) => ctrl.deleteInvoice(req, res, supabase));
   router.get("/:id/pdf",                       (req, res) => ctrl.getPdf(req, res, supabase));
+
+  // POST /invoices/:id/email  — send invoice PDF via SMTP
+  router.post("/:id/email", async (req, res) => {
+    try {
+      const invoiceId = Number(req.params.id);
+      const tenantId  = req.tenantId;
+      const { emailTo, emailSubject, emailBody } = req.body || {};
+      if (!emailTo) return res.status(400).json({ error: "emailTo erforderlich" });
+
+      const { data: inv } = await supabase
+        .from("INVOICE")
+        .select("INVOICE_NUMBER")
+        .eq("ID", invoiceId)
+        .eq("TENANT_ID", tenantId)
+        .maybeSingle();
+      if (!inv) return res.status(404).json({ error: "Rechnung nicht gefunden" });
+
+      const { pdf } = await renderDocumentPdf({ supabase, docType: "INVOICE", docId: invoiceId });
+      const safeName = (inv.INVOICE_NUMBER || `Rechnung_${invoiceId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
+      const pdfBuffer = Buffer.from(pdf);
+      await sendMail({
+        to:          emailTo,
+        subject:     emailSubject || `Rechnung ${inv.INVOICE_NUMBER}`,
+        html:        emailBody ? `<pre style="font-family:inherit;white-space:pre-wrap">${emailBody}</pre>` : undefined,
+        text:        emailBody,
+        attachments: [{ filename: `${safeName}.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
+      });
+      return res.json({ sent: true });
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   router.get("/:id",                           (req, res) => ctrl.getInvoice(req, res, supabase));
 
   return router;

@@ -48,6 +48,7 @@ const kostensatzRoutes       = require("./routes/kostensatz")(supabase);
 const mahnungenRoutes        = require("./routes/mahnungen")(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
 const { startMonatsabschlussChecker } = require("./services/monatsabschluss");
+const { startMahnungChecker } = require("./services/mahnungChecker");
 
 app.use("/api/v1/stammdaten",        authMiddleware, stammdatenRoutes);
 app.use("/api/v1/mitarbeiter",       authMiddleware, mitarbeiterRoutes);
@@ -84,6 +85,7 @@ app.listen(port, () => {
   console.log(`✅ Backend läuft auf http://localhost:${port}`);
   startDueDateChecker(supabase);
   startMonatsabschlussChecker(supabase);
+  startMahnungChecker(supabase);
 });
 
 

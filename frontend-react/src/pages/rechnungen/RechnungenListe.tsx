@@ -10,6 +10,7 @@ import {
   cancelInvoice, cancelPartialPayment,
   deleteInvoice, deletePartialPayment,
   fetchPayments, createPayment, deletePayment,
+  sendInvoiceEmail, sendPpEmail,
   type Invoice, type PartialPayment, type Payment,
 } from '@/api/rechnungen'
 
@@ -297,6 +298,36 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
   const [existingPayments, setExistingPayments] = useState<Payment[]>([])
   const [deletingPayId, setDeletingPayId] = useState<number | null>(null)
 
+  // ── Multi-select + Email modal state ─────────────────────────────────────────
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  // ── Email modal ───────────────────────────────────────────────────────────────
+  const [emailRow,     setEmailRow]     = useState<UnifiedRow | null>(null)
+  const [emailTo,      setEmailTo]      = useState('')
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody,    setEmailBody]    = useState('')
+  const [emailMsg,     setEmailMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  function openEmailFor(row: UnifiedRow) {
+    setEmailRow(row)
+    setEmailTo('')
+    setEmailSubject(row.source === 'invoice'
+      ? `Rechnung ${row.number ?? ''}`
+      : `Abschlagsrechnung ${row.number ?? ''}`)
+    setEmailBody('')
+    setEmailMsg(null)
+  }
+
+  const sendEmailMut = useMutation({
+    mutationFn: ({ row, to, subject, body }: { row: UnifiedRow; to: string; subject: string; body: string }) => {
+      const id = (row.raw as Invoice & PartialPayment).ID
+      if (row.source === 'invoice') return sendInvoiceEmail(id, { emailTo: to, emailSubject: subject, emailBody: body })
+      return sendPpEmail(id, { emailTo: to, emailSubject: subject, emailBody: body })
+    },
+    onSuccess: () => setEmailMsg({ text: 'E-Mail erfolgreich gesendet.', type: 'success' }),
+    onError:   (e: Error) => setEmailMsg({ text: e.message, type: 'error' }),
+  })
+
   const { data: invData, isLoading: invLoading } = useQuery({
     queryKey: ['invoices'],
     queryFn:  () => fetchInvoices(''),
@@ -355,6 +386,15 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(k); setSortDir('asc') }
+  }
+
+  // ── Batch selection helpers (depend on rows) ──────────────────────────────────
+  const allSelected = rows.length > 0 && rows.every(r => selected.has(r.key))
+  function toggleAll() { setSelected(allSelected ? new Set() : new Set(rows.map(r => r.key))) }
+  function toggleRowSel(key: string) { setSelected(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s }) }
+  function openSelectedPdfs() {
+    rows.filter(r => selected.has(r.key))
+      .forEach((row, i) => setTimeout(() => openPdf(row), i * 300))
   }
 
   const payMut = useMutation({
@@ -637,12 +677,28 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
         </span>
       </div>
 
+      {/* Batch toolbar */}
+      {selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13 }}>
+          <span style={{ color: 'var(--text-muted)' }}>{selected.size} ausgewählt</span>
+          <button className="btn btn-sm" onClick={openSelectedPdfs}>
+            PDFs öffnen ({selected.size})
+          </button>
+          <button className="btn btn-sm" style={{ color: 'var(--text-muted)' }} onClick={() => setSelected(new Set())}>
+            Auswahl aufheben
+          </button>
+        </div>
+      )}
+
       {isLoading && <p className="empty-note">Laden …</p>}
       {!isLoading && (
         <div className="list-section table-scroll">
           <table className="master-table">
             <thead>
               <tr>
+                <th style={{ width: 32, padding: '6px 4px' }}>
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+                </th>
                 <SortTh label="Nummer" k="number" {...sp} />
                 {visibleCols.map(c => (
                   <SortTh key={c.key} label={c.label} k={c.key} {...sp} className={c.className} />
@@ -653,6 +709,9 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
             <tbody>
               {rows.map(row => (
                 <tr key={row.key}>
+                  <td style={{ padding: '4px', textAlign: 'center' }}>
+                    <input type="checkbox" checked={selected.has(row.key)} onChange={() => toggleRowSel(row.key)} />
+                  </td>
                   <td>{row.number ?? '—'}</td>
                   {visibleCols.map(c => {
                     if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
@@ -669,6 +728,9 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                   <td className="doc-actions">
                     <button className="btn-small" onClick={() => setDetailRow(row)}>Details</button>
                     <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
+                    {row.statusClass === 'booked' && (
+                      <button className="btn-small" title="Per E-Mail senden" onClick={() => openEmailFor(row)}>✉ Mail</button>
+                    )}
                     <button className="btn-small" onClick={() => openXRechnung(row)}>XRechnung</button>
                     <button className="btn-small" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
                     {row.projectId !== null && (
@@ -688,10 +750,11 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                   </td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={2 + visibleCols.length} className="empty-note">Keine Einträge</td></tr>}
+              {!rows.length && <tr><td colSpan={3 + visibleCols.length} className="empty-note">Keine Einträge</td></tr>}
             </tbody>
             <tfoot>
               <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                <td></td>
                 <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
                   {rows.length !== allRows.length ? `${rows.length} / ${allRows.length}` : `${allRows.length}`}
                 </td>
@@ -798,6 +861,9 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
               {/* Actions */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 4 }}>
                 <button className="btn-small" onClick={() => openPdf(detailRow)}>PDF anzeigen</button>
+                {detailRow.statusClass === 'booked' && (
+                  <button className="btn-small" onClick={() => { setDetailRow(null); openEmailFor(detailRow) }}>✉ Per E-Mail senden</button>
+                )}
                 {canEdit(detailRow) && onEditDraft && (
                   <button className="btn-small btn-save" onClick={() => handleEditDraftClick(detailRow)}>
                     Bearbeiten / Buchen
@@ -922,6 +988,65 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
               <button type="button" onClick={() => setPayTarget(null)}>Abbrechen</button>
             </div>
           </form>
+        )}
+      </Modal>
+
+      {/* Email modal */}
+      <Modal
+        open={emailRow !== null}
+        onClose={() => { setEmailRow(null); setEmailMsg(null) }}
+        title={emailRow ? `E-Mail senden – ${emailRow.number ?? ''}` : ''}
+      >
+        {emailRow && (
+          <div style={{ minWidth: 400 }}>
+            <div className="form-group">
+              <label className="form-label">An</label>
+              <input
+                type="email"
+                className="form-control"
+                value={emailTo}
+                onChange={e => setEmailTo(e.target.value)}
+                placeholder="empfaenger@beispiel.de"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Betreff</label>
+              <input
+                type="text"
+                className="form-control"
+                value={emailSubject}
+                onChange={e => setEmailSubject(e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Nachricht (optional)</label>
+              <textarea
+                className="form-control"
+                rows={5}
+                value={emailBody}
+                onChange={e => setEmailBody(e.target.value)}
+                placeholder="Sehr geehrte Damen und Herren,&#10;im Anhang finden Sie …"
+              />
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              📎 PDF wird automatisch angehängt.
+            </div>
+            {emailMsg && (
+              <Message text={emailMsg.text} type={emailMsg.type} />
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => { setEmailRow(null); setEmailMsg(null) }}>
+                Abbrechen
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={sendEmailMut.isPending || !emailTo}
+                onClick={() => sendEmailMut.mutate({ row: emailRow, to: emailTo, subject: emailSubject, body: emailBody })}
+              >
+                {sendEmailMut.isPending ? 'Senden…' : 'Senden'}
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

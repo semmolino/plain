@@ -52,6 +52,38 @@ async function listMahnungen(supabase, { tenantId }) {
       .order("DATE_ACTION", { ascending: false }),
   ]);
 
+  // Batch-fetch project names
+  const allDocs = [...(invoices || []), ...(pps || [])];
+  const projectIds  = [...new Set(allDocs.map(d => d.PROJECT_ID).filter(Boolean))];
+  const contractIds = [...new Set(allDocs.map(d => d.CONTRACT_ID).filter(Boolean))];
+
+  const projectsMap  = {};
+  const contractsMap = {};
+
+  if (projectIds.length > 0) {
+    const { data: projects } = await supabase
+      .from("PROJECT")
+      .select("ID, NAME_SHORT, NAME_LONG")
+      .in("ID", projectIds);
+    for (const p of (projects || [])) {
+      projectsMap[p.ID] = { number: p.NAME_SHORT, name: p.NAME_LONG };
+    }
+  }
+
+  if (contractIds.length > 0) {
+    // Try CONTRACT first, then CONTRACTS (legacy table name)
+    const { data: c1, error: c1Err } = await supabase
+      .from("CONTRACT")
+      .select("ID, NAME_SHORT, NAME_LONG")
+      .in("ID", contractIds);
+    const contractList = c1Err
+      ? (await supabase.from("CONTRACTS").select("ID, NAME_SHORT, NAME_LONG").in("ID", contractIds)).data
+      : c1;
+    for (const c of (contractList || [])) {
+      contractsMap[c.ID] = c.NAME_LONG || c.NAME_SHORT || null;
+    }
+  }
+
   // Index: mahnungId → list of history entries
   const historyByMahnung = {};
   for (const h of (history || [])) {
@@ -70,35 +102,73 @@ async function listMahnungen(supabase, { tenantId }) {
   const rows = [];
 
   for (const inv of (invoices || [])) {
-    const m = mahnungByInvoice[inv.ID] || null;
+    const m   = mahnungByInvoice[inv.ID] || null;
+    const prj = inv.PROJECT_ID  ? projectsMap[inv.PROJECT_ID]   : null;
+    const ctr = inv.CONTRACT_ID ? contractsMap[inv.CONTRACT_ID] : null;
     rows.push(buildRow("invoice", inv.ID, {
-      number:      inv.INVOICE_NUMBER,
-      invoiceDate: inv.INVOICE_DATE,
-      dueDate:     inv.DUE_DATE,
-      totalGross:  inv.TOTAL_AMOUNT_GROSS,
-      projectId:   inv.PROJECT_ID,
-      contractId:  inv.CONTRACT_ID,
+      number:       inv.INVOICE_NUMBER,
+      invoiceDate:  inv.INVOICE_DATE,
+      dueDate:      inv.DUE_DATE,
+      totalGross:   inv.TOTAL_AMOUNT_GROSS,
+      projectId:    inv.PROJECT_ID,
+      contractId:   inv.CONTRACT_ID,
       addressName1: inv.ADDRESS_NAME_1,
-      contact:     inv.CONTACT,
+      contact:      inv.CONTACT,
+      projectNumber: prj?.number ?? null,
+      projectName:   prj?.name   ?? null,
+      contractName:  ctr         ?? null,
     }, m, historyByMahnung, today));
   }
 
   for (const pp of (pps || [])) {
-    const m = mahnungByPp[pp.ID] || null;
+    const m   = mahnungByPp[pp.ID] || null;
+    const prj = pp.PROJECT_ID  ? projectsMap[pp.PROJECT_ID]   : null;
+    const ctr = pp.CONTRACT_ID ? contractsMap[pp.CONTRACT_ID] : null;
     rows.push(buildRow("pp", pp.ID, {
-      number:      pp.PARTIAL_PAYMENT_NUMBER,
-      invoiceDate: pp.PARTIAL_PAYMENT_DATE,
-      dueDate:     pp.DUE_DATE,
-      totalGross:  pp.TOTAL_AMOUNT_GROSS,
-      projectId:   pp.PROJECT_ID,
-      contractId:  pp.CONTRACT_ID,
+      number:       pp.PARTIAL_PAYMENT_NUMBER,
+      invoiceDate:  pp.PARTIAL_PAYMENT_DATE,
+      dueDate:      pp.DUE_DATE,
+      totalGross:   pp.TOTAL_AMOUNT_GROSS,
+      projectId:    pp.PROJECT_ID,
+      contractId:   pp.CONTRACT_ID,
       addressName1: pp.ADDRESS_NAME_1,
-      contact:     pp.CONTACT,
+      contact:      pp.CONTACT,
+      projectNumber: prj?.number ?? null,
+      projectName:   prj?.name   ?? null,
+      contractName:  ctr         ?? null,
     }, m, historyByMahnung, today));
   }
 
   rows.sort((a, b) => a.dueDate < b.dueDate ? -1 : 1);
   return rows;
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+async function getMahnungStats(supabase, { tenantId }) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: mahnungen } = await supabase
+    .from("MAHNUNG")
+    .select("ID, MAHNSTUFE, NEXT_MAHNUNG_DATE, IS_CLOSED")
+    .eq("TENANT_ID", tenantId);
+
+  const open   = (mahnungen || []).filter(m => !m.IS_CLOSED);
+  const closed = (mahnungen || []).filter(m => m.IS_CLOSED);
+
+  const byStufe = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+  let overdueActions = 0;
+  for (const m of open) {
+    byStufe[m.MAHNSTUFE] = (byStufe[m.MAHNSTUFE] || 0) + 1;
+    if (m.NEXT_MAHNUNG_DATE && m.NEXT_MAHNUNG_DATE <= today) overdueActions++;
+  }
+
+  return {
+    totalOpen:          open.length,
+    totalClosed:        closed.length,
+    byStufe,
+    overdueActionsCount: overdueActions,
+  };
 }
 
 function buildRow(sourceType, sourceId, src, m, historyByMahnung, today) {
@@ -107,15 +177,18 @@ function buildRow(sourceType, sourceId, src, m, historyByMahnung, today) {
   return {
     sourceType,
     sourceId,
-    number:      src.number,
-    invoiceDate: src.invoiceDate,
-    dueDate:     src.dueDate,
+    number:        src.number,
+    invoiceDate:   src.invoiceDate,
+    dueDate:       src.dueDate,
     daysOverdue,
-    totalGross:  src.totalGross,
-    projectId:   src.projectId,
-    contractId:  src.contractId,
-    addressName1: src.addressName1,
-    contact:     src.contact,
+    totalGross:    src.totalGross,
+    projectId:     src.projectId,
+    contractId:    src.contractId,
+    addressName1:  src.addressName1,
+    contact:       src.contact,
+    projectNumber: src.projectNumber ?? null,
+    projectName:   src.projectName   ?? null,
+    contractName:  src.contractName  ?? null,
     // Mahnung state
     mahnungId:              m ? m.ID : null,
     mahnstufe:              m ? m.MAHNSTUFE : 0,
@@ -384,4 +457,5 @@ module.exports = {
   getTextTemplates,
   saveTextTemplate,
   getMahnungHistory,
+  getMahnungStats,
 };

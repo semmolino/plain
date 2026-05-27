@@ -318,3 +318,15 @@ export const createPayment = (body: {
 
 export const deletePayment = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/payments/${id}`)
+
+// ── Email ─────────────────────────────────────────────────────────────────────
+
+export const sendInvoiceEmail = (
+  id: number,
+  payload: { emailTo: string; emailSubject: string; emailBody: string }
+) => apiClient.post<{ sent: boolean }>(`/invoices/${id}/email`, payload)
+
+export const sendPpEmail = (
+  id: number,
+  payload: { emailTo: string; emailSubject: string; emailBody: string }
+) => apiClient.post<{ sent: boolean }>(`/partial-payments/${id}/email`, payload)
