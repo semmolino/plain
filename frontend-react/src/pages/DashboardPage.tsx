@@ -534,8 +534,8 @@ function SuggestionRow({ s, navigate }: { s: MahnungSuggestion; navigate: Return
   return (
     <div
       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, cursor: 'pointer', background: isActionDue ? 'rgba(220,38,38,0.05)' : 'transparent', border: isActionDue ? '1px solid rgba(220,38,38,0.15)' : '1px solid transparent', marginBottom: 3 }}
-      onClick={() => navigate('/rechnungen?tab=mahnungen')}
-      title="In Mahnungsliste öffnen"
+      onClick={() => navigate('/rechnungen', { state: { tab: 'mahnungen', openMahnung: { sourceType: s.sourceType, sourceId: s.sourceId } } })}
+      title="Mahnung direkt öffnen"
     >
       <span className={`mahnstufe-badge ms-${s.mahnstufe}`} style={{ flexShrink: 0 }}>{STUFEN_LABELS_DASH[s.mahnstufe]}</span>
       <div style={{ flex: 1, minWidth: 0 }}>

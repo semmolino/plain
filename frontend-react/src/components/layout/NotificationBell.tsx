@@ -54,7 +54,13 @@ export function NotificationBell() {
       qc.invalidateQueries({ queryKey: ['notifications'] })
     }
     setOpen(false)
-    if (n.LINK) navigate(n.LINK)
+    if (n.LINK) {
+      // Upgrade old mahnung_due notifications that still link to /rechnungen without tab param
+      const link = (n.TYPE === 'mahnung_due' && n.LINK === '/rechnungen')
+        ? '/rechnungen?tab=mahnungen'
+        : n.LINK
+      navigate(link)
+    }
   }
 
   async function handleMarkAllRead() {

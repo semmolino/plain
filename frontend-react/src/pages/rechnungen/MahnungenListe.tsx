@@ -158,24 +158,57 @@ const OPT_COLS: OptColDef[] = [
   { key: 'contact',      label: 'Ansprechpart.',   defaultVisible: false },
 ]
 
+// ── FilterChip (multi-select dropdown, same style as Rechnungsliste) ───────────
+
+function FilterChip({ label, options, active, onChange }: {
+  label: string; options: string[]; active: Set<string>; onChange: (v: Set<string>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  function toggle(val: string) { const s = new Set(active); s.has(val) ? s.delete(val) : s.add(val); onChange(s) }
+  const count = active.size
+  return (
+    <div ref={ref} className="filter-chip-wrap">
+      <button className={`filter-chip-btn${count > 0 ? ' active' : ''}`} onClick={() => setOpen(o => !o)}>
+        {label}{count > 0 ? ` (${count})` : ''} ▾
+      </button>
+      {count > 0 && <button className="filter-chip-clear" onClick={() => { onChange(new Set()); setOpen(false) }} title="Zurücksetzen">×</button>}
+      {open && (
+        <div className="filter-chip-dropdown">
+          {options.map(opt => (
+            <label key={opt} className="filter-chip-option">
+              <input type="checkbox" checked={active.has(opt)} onChange={() => toggle(opt)} />
+              {opt || '(ohne)'}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Filter persistence ────────────────────────────────────────────────────────
 
 interface FilterState {
   stichtag:   string
-  mahnstufe:  string
-  projekt:    string
-  vertrag:    string
-  adresse:    string
+  mahnstufen: string[]   // multi-select stufe values
+  search:     string     // unified text search
+  onlyOpen:   boolean    // nur offene Posten
   showClosed: boolean
 }
 
-const LS_KEY = 'mahnungen-filters-v2'
+const LS_KEY = 'mahnungen-filters-v3'
 const defaultFilters = (): FilterState => ({
   stichtag:   '',
-  mahnstufe:  '',
-  projekt:    '',
-  vertrag:    '',
-  adresse:    '',
+  mahnstufen: [],
+  search:     '',
+  onlyOpen:   false,
   showClosed: false,
 })
 
@@ -192,9 +225,10 @@ function saveFilters(f: FilterState) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function MahnungenListe() {
+export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: string; sourceId: number } | null }) {
   const navigate = useNavigate()
   const qc       = useQueryClient()
+  const openMahnungHandled = useRef(false)
 
   const rows$     = useQuery({ queryKey: ['mahnungen'],       queryFn: () => fetchMahnungen().then(r => r.data) })
   const settings$ = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data) })
@@ -251,23 +285,32 @@ export function MahnungenListe() {
     setHiddenCols(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s })
   }
 
+  // Derive stufe options for the FilterChip from available data
+  const stufeOptions = useMemo(() => {
+    const used = new Set(rawData.map(r => String(r.mahnstufe)))
+    return ['0', '1', '2', '3', '4'].filter(s => used.has(s))
+  }, [rawData])
+
+  const stufeLabels: Record<string, string> = {
+    '0': '– Keine Mahnung',
+    '1': 'Zahlungserinnerung',
+    '2': '1. Mahnung',
+    '3': '2. Mahnung',
+    '4': '3. Mahnung',
+  }
+
   const rows = useMemo(() => {
+    const activeStufen = new Set(filters.mahnstufen)
     let r = rawData.filter(row => {
       if (!filters.showClosed && row.isClosed) return false
       if (filters.stichtag && row.dueDate > filters.stichtag) return false
-      if (filters.mahnstufe !== '' && String(row.mahnstufe) !== filters.mahnstufe) return false
-      if (filters.projekt) {
-        const q = filters.projekt.toLowerCase()
-        const proj = `${row.projectNumber ?? ''} ${row.projectName ?? ''}`.toLowerCase()
-        if (!proj.includes(q)) return false
-      }
-      if (filters.vertrag) {
-        const q = filters.vertrag.toLowerCase()
-        if (!(row.contractName ?? '').toLowerCase().includes(q)) return false
-      }
-      if (filters.adresse) {
-        const q = filters.adresse.toLowerCase()
-        if (!(row.addressName1 ?? '').toLowerCase().includes(q)) return false
+      if (activeStufen.size > 0 && !activeStufen.has(String(row.mahnstufe))) return false
+      if (filters.onlyOpen && row.openAmount <= 0) return false
+      if (filters.search) {
+        const q = filters.search.toLowerCase()
+        const hay = `${row.number} ${row.addressName1 ?? ''} ${row.projectNumber ?? ''} ${row.projectName ?? ''} ${row.contractName ?? ''} ${row.contact ?? ''}`
+          .toLowerCase()
+        if (!hay.includes(q)) return false
       }
       return true
     })
@@ -296,6 +339,16 @@ export function MahnungenListe() {
 
     return r
   }, [rawData, filters, sortKey, sortDir])
+
+  // Open detail modal when navigated from dashboard suggestion
+  useEffect(() => {
+    if (!openMahnung || openMahnungHandled.current || rawData.length === 0) return
+    const target = rawData.find(r => r.sourceType === openMahnung.sourceType && r.sourceId === openMahnung.sourceId)
+    if (target) {
+      openMahnungHandled.current = true
+      openDetail(target)
+    }
+  }, [rawData, openMahnung]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Selection ────────────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -445,23 +498,34 @@ export function MahnungenListe() {
   }
 
   // ── Payment modal ─────────────────────────────────────────────────────────────
-  interface PayTarget { sourceType: 'invoice' | 'pp'; sourceId: number; label: string; totalGross: number; paidGross: number }
+  interface PayTarget {
+    sourceType:       'invoice' | 'pp'
+    sourceId:         number
+    label:            string
+    totalGross:       number | null
+    paidGross:        number | null
+    cashDiscountPct:  number
+    cashDiscountDays: number
+  }
+  function emptyPayForm() { return { amount_payed_gross: '', payment_date: new Date().toISOString().slice(0, 10), purpose_of_payment: '', comment: '' } }
+
   const [payTarget,         setPayTarget]         = useState<PayTarget | null>(null)
   const [existingPayments,  setExistingPayments]  = useState<Payment[]>([])
   const [deletingPayId,     setDeletingPayId]     = useState<number | null>(null)
-  const [payAmount,         setPayAmount]         = useState('')
-  const [payDate,           setPayDate]           = useState('')
-  const [payPurpose,        setPayPurpose]        = useState('')
+  const [payForm,           setPayForm]           = useState(emptyPayForm())
   const [payMsg,            setPayMsg]            = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   function openPaymentFor(r: MahnungRow) {
-    setPayAmount('')
-    setPayDate(new Date().toISOString().slice(0, 10))
-    setPayPurpose('')
+    setPayForm(emptyPayForm())
     setPayMsg(null)
     setExistingPayments([])
     setDeletingPayId(null)
-    setPayTarget({ sourceType: r.sourceType, sourceId: r.sourceId, label: r.number, totalGross: r.totalGross, paidGross: r.amountPaidGross })
+    setPayTarget({
+      sourceType: r.sourceType, sourceId: r.sourceId,
+      label: r.number,
+      totalGross: r.totalGross, paidGross: r.amountPaidGross,
+      cashDiscountPct: 0, cashDiscountDays: 0,
+    })
     const params = r.sourceType === 'invoice' ? { invoice_id: r.sourceId } : { partial_payment_id: r.sourceId }
     fetchPayments(params).then(res => setExistingPayments(res.data ?? [])).catch(() => {})
   }
@@ -470,8 +534,8 @@ export function MahnungenListe() {
     mutationFn: createPayment,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['mahnungen'] })
-      setPayMsg({ type: 'ok', text: 'Zahlung gespeichert.' })
-      setTimeout(() => { setPayTarget(null); setPayAmount(''); setPayMsg(null) }, 900)
+      setPayMsg({ type: 'ok', text: 'Zahlung gespeichert ✅' })
+      setTimeout(() => { setPayTarget(null); setPayForm(emptyPayForm()); setPayMsg(null) }, 900)
     },
     onError: (e: Error) => setPayMsg({ type: 'err', text: e.message }),
   })
@@ -479,20 +543,21 @@ export function MahnungenListe() {
   function submitPayment(e: React.FormEvent) {
     e.preventDefault()
     if (!payTarget) return
-    const gross = parseFloat(payAmount)
-    if (!payAmount || !Number.isFinite(gross) || gross <= 0) {
+    const gross = parseFloat(payForm.amount_payed_gross)
+    if (!payForm.amount_payed_gross || !Number.isFinite(gross) || gross <= 0) {
       setPayMsg({ type: 'err', text: 'Betrag (Brutto) ist erforderlich' }); return
     }
-    if (!payDate) {
+    if (!payForm.payment_date) {
       setPayMsg({ type: 'err', text: 'Datum ist erforderlich' }); return
     }
     payMut.mutate({
       ...(payTarget.sourceType === 'invoice'
         ? { invoice_id: payTarget.sourceId }
         : { partial_payment_id: payTarget.sourceId }),
-      amount_payed_gross: gross,
-      payment_date: payDate,
-      purpose_of_payment: payPurpose || undefined,
+      amount_payed_gross:  gross,
+      payment_date:        payForm.payment_date,
+      purpose_of_payment:  payForm.purpose_of_payment || undefined,
+      comment:             payForm.comment || undefined,
     })
   }
 
@@ -522,67 +587,58 @@ export function MahnungenListe() {
   return (
     <div>
 
-      {/* ── Filter bar ── */}
-      <div className="filter-bar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-          Fällig bis
-          <input
-            type="date"
-            value={filters.stichtag}
-            onChange={e => setFilters(f => ({ ...f, stichtag: e.target.value }))}
-            style={{ fontSize: 13, padding: '3px 6px' }}
+      {/* ── Toolbar (search + filter chips) ── */}
+      <div className="pl-toolbar" style={{ marginTop: 10 }}>
+        <input
+          className="list-search"
+          placeholder="Suchen … (Nummer, Adresse, Projekt, Vertrag)"
+          value={filters.search}
+          onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+        />
+        <div className="pl-filter-chips">
+          <FilterChip
+            label="Stufe"
+            options={stufeOptions.map(s => stufeLabels[s] ?? `Stufe ${s}`)}
+            active={new Set(Array.from(new Set(filters.mahnstufen)).map(s => stufeLabels[s] ?? `Stufe ${s}`))}
+            onChange={labels => setFilters(f => ({
+              ...f,
+              mahnstufen: Array.from(labels).map(l => {
+                const entry = Object.entries(stufeLabels).find(([, v]) => v === l)
+                return entry ? entry[0] : l
+              }),
+            }))}
           />
-          {filters.stichtag && (
-            <button className="filter-chip-clear" onClick={() => setFilters(f => ({ ...f, stichtag: '' }))} title="Zurücksetzen">×</button>
+          <label className="list-checkbox-label" style={{ fontSize: 12 }}>
+            <input type="checkbox" checked={filters.onlyOpen} onChange={e => setFilters(f => ({ ...f, onlyOpen: e.target.checked }))} />
+            nur offen
+          </label>
+          <label className="list-checkbox-label" style={{ fontSize: 12 }}>
+            <input type="checkbox" checked={filters.showClosed} onChange={e => setFilters(f => ({ ...f, showClosed: e.target.checked }))} />
+            Abgeschlossene
+          </label>
+          {/* Fällig bis */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
+            Fällig bis
+            <input type="date" value={filters.stichtag}
+              onChange={e => setFilters(f => ({ ...f, stichtag: e.target.value }))}
+              style={{ fontSize: 12, padding: '2px 5px' }}
+            />
+            {filters.stichtag && <button className="filter-chip-clear" onClick={() => setFilters(f => ({ ...f, stichtag: '' }))} title="Zurücksetzen">×</button>}
+          </label>
+          {(filters.mahnstufen.length > 0 || filters.onlyOpen || filters.stichtag || filters.search) && (
+            <button className="pl-clear-btn" onClick={() => setFilters(f => ({ ...defaultFilters(), showClosed: f.showClosed }))}>
+              Filter löschen
+            </button>
           )}
-        </label>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-          Stufe
-          <select value={filters.mahnstufe} onChange={e => setFilters(f => ({ ...f, mahnstufe: e.target.value }))} style={{ fontSize: 13, padding: '3px 6px' }}>
-            <option value="">Alle</option>
-            <option value="0">Keine</option>
-            {allLevels.map(lv => <option key={lv.mahnstufe} value={String(lv.mahnstufe)}>{lv.label}</option>)}
-          </select>
-        </label>
-
-        <input
-          type="text"
-          placeholder="Projekt…"
-          value={filters.projekt}
-          onChange={e => setFilters(f => ({ ...f, projekt: e.target.value }))}
-          style={{ fontSize: 13, padding: '3px 8px', width: 130, borderRadius: 4, border: '1px solid var(--border)' }}
-        />
-
-        <input
-          type="text"
-          placeholder="Vertrag…"
-          value={filters.vertrag}
-          onChange={e => setFilters(f => ({ ...f, vertrag: e.target.value }))}
-          style={{ fontSize: 13, padding: '3px 8px', width: 130, borderRadius: 4, border: '1px solid var(--border)' }}
-        />
-
-        <input
-          type="text"
-          placeholder="Adresse…"
-          value={filters.adresse}
-          onChange={e => setFilters(f => ({ ...f, adresse: e.target.value }))}
-          style={{ fontSize: 13, padding: '3px 8px', width: 130, borderRadius: 4, border: '1px solid var(--border)' }}
-        />
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
-          <input type="checkbox" checked={filters.showClosed} onChange={e => setFilters(f => ({ ...f, showClosed: e.target.checked }))} />
-          Abgeschlossene
-        </label>
-
+        </div>
         {/* Column chooser */}
-        <div ref={colPanelRef} style={{ marginLeft: 'auto', position: 'relative' }}>
-          <button className="btn btn-sm" onClick={() => setColPanelOpen(o => !o)}>Spalten ▾</button>
+        <div ref={colPanelRef} className="pl-col-wrap">
+          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>⚙ Spalten</button>
           {colPanelOpen && (
-            <div style={{ position: 'absolute', right: 0, top: '110%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', zIndex: 100, minWidth: 160, boxShadow: '0 4px 12px rgba(0,0,0,.12)' }}>
+            <div className="pl-col-panel">
+              <div className="pl-col-panel-title">Sichtbare Spalten</div>
               {OPT_COLS.map(col => (
-                <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <label key={col.key} className="pl-col-option">
                   <input type="checkbox" checked={!hiddenCols.has(col.key)} onChange={() => toggleCol(col.key)} />
                   {col.label}
                 </label>
@@ -590,23 +646,21 @@ export function MahnungenListe() {
             </div>
           )}
         </div>
+        <span className="list-info">{rows.length}{rows.length !== rawData.length ? ` / ${rawData.length}` : ''} Einträge</span>
       </div>
 
-      {/* ── Toolbar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
-          <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-          Alle
-        </label>
-        {selected.size > 0 && (
+      {/* ── Batch toolbar ── */}
+      {selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13 }}>
+          <span style={{ color: 'var(--text-muted)' }}>{selected.size} ausgewählt</span>
           <button className="btn btn-sm" onClick={openSelectedPdfs} disabled={selectedWithMahnung === 0}>
             PDFs öffnen ({selectedWithMahnung})
           </button>
-        )}
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
-          {rows.length} Einträge
-        </span>
-      </div>
+          <button className="btn btn-sm" style={{ color: 'var(--text-muted)' }} onClick={() => setSelected(new Set())}>
+            Auswahl aufheben
+          </button>
+        </div>
+      )}
 
       {/* ── Table ── */}
       {rows.length === 0
@@ -616,7 +670,7 @@ export function MahnungenListe() {
             <table className="master-table">
               <thead>
                 <tr>
-                  <th style={{ width: 32 }}></th>
+                  <th style={{ width: 32, padding: '6px 4px' }}><input type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
                   <th style={{ width: 80 }}>Typ</th>
                   <SortTh label="Nummer"         k="number"          sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                   {!hiddenCols.has('invoiceDate') && <SortTh label="Rech.-Datum" k="invoiceDate" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />}
@@ -915,58 +969,102 @@ export function MahnungenListe() {
       )}
 
       {/* ── Payment Modal ── */}
-      {payTarget && (
-        <Modal open={payTarget !== null} onClose={() => setPayTarget(null)} title={`Zahlung — ${payTarget.label}`}>
-          <div style={{ minWidth: 360 }}>
-            <div style={{ marginBottom: 12, fontSize: 13, display: 'flex', gap: 16, color: 'var(--text-2)' }}>
-              <span>Brutto: <strong>{fmtMoney(payTarget.totalGross)}</strong></span>
-              <span>Bezahlt: <strong>{fmtMoney(payTarget.paidGross)}</strong></span>
-              <span>Offen: <strong style={{ color: 'var(--red, #dc2626)' }}>{fmtMoney(Math.max(0, payTarget.totalGross - payTarget.paidGross))}</strong></span>
-            </div>
+      <Modal open={payTarget !== null} onClose={() => setPayTarget(null)} title={`Zahlung erfassen – ${payTarget?.label ?? ''}`}>
+        {payTarget && (
+          <form onSubmit={submitPayment} className="master-form">
 
+            {/* Existing payments */}
             {existingPayments.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-4)' }}>Bisherige Zahlungen</div>
-                {existingPayments.map(p => (
-                  <div key={p.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
-                    <span>{p.PAYMENT_DATE?.slice(0, 10) ?? '–'}</span>
-                    <span style={{ fontWeight: 600 }}>{fmtMoney(p.AMOUNT_PAYED_GROSS)}</span>
-                    {p.PURPOSE_OF_PAYMENT && <span style={{ color: 'var(--text-4)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT}</span>}
-                    <button
-                      className="btn-small btn-danger"
-                      disabled={deletingPayId === p.ID}
-                      onClick={() => handleDeletePayment(p.ID)}
-                    >{deletingPayId === p.ID ? '…' : '×'}</button>
-                  </div>
-                ))}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(17,24,39,0.5)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Bisherige Zahlungen
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {existingPayments.map(p => (
+                      <tr key={p.ID} style={{ borderBottom: '1px solid rgba(17,24,39,0.08)' }}>
+                        <td style={{ padding: '4px 0', color: 'rgba(17,24,39,0.55)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
+                        <td style={{ padding: '4px 6px', fontWeight: 500 }}>{fmtMoney(p.AMOUNT_PAYED_GROSS)}</td>
+                        <td style={{ padding: '4px 0', color: 'rgba(17,24,39,0.45)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
+                        <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            title="Zahlung löschen"
+                            disabled={deletingPayId === p.ID}
+                            onClick={() => handleDeletePayment(p.ID)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 16, lineHeight: 1, padding: '0 2px' }}
+                          >×</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
 
-            <form onSubmit={submitPayment}>
+            {/* Amount summary */}
+            {payTarget.totalGross != null && (
+              <div style={{ marginBottom: 12, fontSize: 14, color: 'rgba(17,24,39,0.6)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span>
+                  Rechnungsbetrag: <strong>{fmtMoney(payTarget.totalGross)}</strong>
+                  {(payTarget.paidGross ?? 0) > 0 && (
+                    <> · bereits bezahlt: <strong>{fmtMoney(payTarget.paidGross)}</strong>
+                    · offen: <strong>{fmtMoney(Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100)}</strong></>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="btn-small"
+                  onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100) }))}
+                >wie gefordert</button>
+              </div>
+            )}
+
+            {/* Form fields */}
+            <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Betrag Brutto *</label>
-                <input type="number" className="form-control" step="0.01" min="0.01"
-                  value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0.00" />
+                <label htmlFor="pay-amount">Betrag brutto (€)*</label>
+                <input
+                  id="pay-amount" type="number" step="0.01" min="0.01" required
+                  value={payForm.amount_payed_gross}
+                  onChange={e => setPayForm(f => ({ ...f, amount_payed_gross: e.target.value }))}
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">Datum *</label>
-                <input type="date" className="form-control" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                <label htmlFor="pay-date">Datum*</label>
+                <input
+                  id="pay-date" type="date" required
+                  value={payForm.payment_date}
+                  onChange={e => setPayForm(f => ({ ...f, payment_date: e.target.value }))}
+                />
               </div>
-              <div className="form-group">
-                <label className="form-label">Verwendungszweck</label>
-                <input type="text" className="form-control" value={payPurpose} onChange={e => setPayPurpose(e.target.value)} placeholder="Optional" />
-              </div>
-              {payMsg && <Message type={payMsg.type === 'ok' ? 'success' : 'error'} text={payMsg.text} />}
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button type="button" className="btn" onClick={() => setPayTarget(null)}>Schließen</button>
-                <button type="submit" className="btn btn-primary" disabled={payMut.isPending}>
-                  {payMut.isPending ? 'Speichern…' : 'Zahlung speichern'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </Modal>
-      )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="pay-purpose">Verwendungszweck</label>
+              <input id="pay-purpose" type="text"
+                value={payForm.purpose_of_payment}
+                onChange={e => setPayForm(f => ({ ...f, purpose_of_payment: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="pay-comment">Kommentar</label>
+              <input id="pay-comment" type="text"
+                value={payForm.comment}
+                onChange={e => setPayForm(f => ({ ...f, comment: e.target.value }))}
+              />
+            </div>
+
+            <Message text={payMsg?.type === 'ok' ? payMsg.text : null} type="success" />
+            <Message text={payMsg?.type === 'err' ? payMsg.text : null} type="error" />
+            <div className="modal-actions">
+              <button className="btn-primary" type="submit" disabled={payMut.isPending}>
+                {payMut.isPending ? 'Speichert …' : 'Zahlung speichern'}
+              </button>
+              <button type="button" onClick={() => setPayTarget(null)}>Abbrechen</button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   )
 }
