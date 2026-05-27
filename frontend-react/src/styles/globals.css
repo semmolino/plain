@@ -1570,3 +1570,40 @@ input::placeholder { color: var(--text-4); }
 [data-theme="dark"] .ls-delta-pos { color: #4ade80; }
 [data-theme="dark"] .ls-delta-neg { color: #f87171; }
 [data-theme="dark"] .tbm-prev-duration { color: #4ade80; }
+
+/* ── Mahnungswesen ──────────────────────────────────────────────────────────── */
+
+/* Mahnstufe colored badges */
+.mahnstufe-badge        { display: inline-block; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.mahnstufe-badge.ms-0   { background: #e5e7eb; color: #6b7280; }
+.mahnstufe-badge.ms-1   { background: #dbeafe; color: #1d4ed8; }
+.mahnstufe-badge.ms-2   { background: #fef3c7; color: #92400e; }
+.mahnstufe-badge.ms-3   { background: #fed7aa; color: #9a3412; }
+.mahnstufe-badge.ms-4   { background: #fecaca; color: #7f1d1d; }
+
+/* Days overdue coloring */
+.days-warn { color: #92400e; font-weight: 600; }
+.days-crit { color: #b91c1c; font-weight: 700; }
+
+/* Detail modal 2-column grid */
+.mahnung-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-width: 0; }
+@media (max-width: 700px) { .mahnung-detail-grid { grid-template-columns: 1fr; } }
+
+/* Mahnung history timeline */
+.mahnung-history-list    { list-style: none; padding: 0; margin: 0; font-size: 12px; }
+.mahnung-history-list li { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+
+/* Text template type selector buttons */
+.text-template-types { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.text-template-type-btn        { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 13px; background: transparent; color: var(--text); transition: background 0.15s; }
+.text-template-type-btn:hover  { background: var(--hover-bg, rgba(0,0,0,0.04)); }
+.text-template-type-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Muted row for closed Mahnungen */
+.row-muted td { color: var(--text-muted) !important; }
+
+/* Dark mode badge overrides */
+[data-theme="dark"] .mahnstufe-badge.ms-1 { background: rgba(29,78,216,0.2);  color: #93c5fd; }
+[data-theme="dark"] .mahnstufe-badge.ms-2 { background: rgba(180,83,9,0.2);   color: #fcd34d; }
+[data-theme="dark"] .mahnstufe-badge.ms-3 { background: rgba(154,52,18,0.2);  color: #fb923c; }
+[data-theme="dark"] .mahnstufe-badge.ms-4 { background: rgba(127,29,29,0.2);  color: #fca5a5; }

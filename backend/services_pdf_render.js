@@ -477,6 +477,9 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   vm.logoDataUri       = logoDataUri;
   vm.signatureDataUri  = signatureDataUri;
 
+  // Inject text template (header/footer) if invoice has no manual texts
+  await injectTextTemplate(supabase, vm, tenantId);
+
   // EPC / GiroCode QR — only for payable documents (not storno)
   const payAmount = vm.discounts.hasDiscounts ? vm.discounts.adjustedGross : vm.inv.totals.grandTotal;
   vm.epcQrDataUri = await buildEpcQrDataUri({
@@ -562,6 +565,125 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   return { pdf, offer: vm.offer };
 }
 
+// ── Text Template injection ───────────────────────────────────────────────────
+
+/** Map INVOICE_TYPE value → TEXT_TEMPLATE.DOCUMENT_TYPE key */
+function textTemplateTypeForDoc(invoiceType) {
+  switch (invoiceType) {
+    case 'partial_payment':     return 'invoice_abschlags';
+    case 'rechnung':            return 'invoice_rechnung';
+    case 'schlussrechnung':
+    case 'teilschlussrechnung': return 'invoice_schluss';
+    case 'stornorechnung':      return 'invoice_storno';
+    default:                    return null;
+  }
+}
+
+async function injectTextTemplate(supabase, vm, tenantId) {
+  const docType = textTemplateTypeForDoc(vm.inv?.invoiceType);
+  if (!docType || !tenantId) return;
+  try {
+    const { data } = await supabase
+      .from('TEXT_TEMPLATE')
+      .select('HEADER_TEXT, FOOTER_TEXT')
+      .eq('TENANT_ID', tenantId)
+      .eq('DOCUMENT_TYPE', docType)
+      .maybeSingle();
+    if (!data) return;
+    if (!vm.text1 && data.HEADER_TEXT) vm.text1 = data.HEADER_TEXT;
+    if (!vm.text2 && data.FOOTER_TEXT) vm.text2 = data.FOOTER_TEXT;
+  } catch (e) {
+    // TEXT_TEMPLATE table may not exist yet (before migration) — silent fail
+    if (!isTableMissingErr(e, 'text_template')) console.warn('[TEXT_TEMPLATE]', e.message);
+  }
+}
+
+// ── Mahnung PDF ───────────────────────────────────────────────────────────────
+
+async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId }) {
+  const docType = invoiceId ? 'INVOICE' : 'PARTIAL_PAYMENT';
+  const docId   = invoiceId || ppId;
+
+  if (!docId) throw { status: 400, message: 'invoiceId oder ppId erforderlich' };
+
+  // Load base document data (reuses all existing seller/buyer resolvers)
+  const vm = await buildPdfViewModel({ supabase, docType, docId });
+
+  // Load company template for theme + logo
+  const { data: docMeta } = await supabase
+    .from(docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT')
+    .select('COMPANY_ID')
+    .eq('ID', docId)
+    .maybeSingle();
+  const companyId = docMeta?.COMPANY_ID;
+
+  const [tpl, logoDataUri] = await Promise.all([
+    companyId ? loadTemplate({ supabase, companyId, docType, templateId: null }) : Promise.resolve({ THEME_JSON: {}, LOGO_ASSET_ID: null, LAYOUT_KEY: 'modern_a' }),
+    resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId }),
+  ]);
+  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+
+  // Load Mahnung settings for this level
+  let mahnstufeLabel = ['', 'Zahlungserinnerung', '1. Mahnung', '2. Mahnung', '3. Mahnung'][mahnstufe] || 'Mahnung';
+  let feeAmount = 0;
+  let headerText = null;
+  let footerText = null;
+
+  try {
+    const { data: settings } = await supabase
+      .from('MAHNUNG_SETTINGS')
+      .select('LABEL, FEE, HEADER_TEXT, FOOTER_TEXT')
+      .eq('TENANT_ID', tenantId)
+      .eq('MAHNSTUFE', mahnstufe)
+      .maybeSingle();
+    if (settings) {
+      mahnstufeLabel = settings.LABEL || mahnstufeLabel;
+      feeAmount      = Number(settings.FEE || 0);
+      headerText     = settings.HEADER_TEXT || null;
+      footerText     = settings.FOOTER_TEXT || null;
+    }
+  } catch (e) {
+    if (!isTableMissingErr(e, 'mahnung_settings')) console.warn('[MAHNUNG_SETTINGS]', e.message);
+  }
+
+  // Invoice details for the table
+  const today = new Date().toISOString().slice(0, 10);
+  const dueDate    = vm.inv.dueDate || '';
+  const totalGross = Number(vm.inv.totals?.grandTotal ?? 0);
+  const daysOverdue = dueDate
+    ? Math.max(0, Math.floor((new Date(today) - new Date(dueDate)) / 86400000))
+    : 0;
+  const totalDue = Math.round((totalGross + feeAmount) * 100) / 100;
+
+  // Build mahnung-specific context
+  const context = {
+    seller:         vm.inv.seller,
+    buyer: {
+      name1:    vm.inv.buyer.name,
+      name2:    '',
+      street:   vm.inv.buyer.street,
+      postCode: vm.inv.buyer.postCode,
+      city:     vm.inv.buyer.city,
+    },
+    mahnstufeLabel,
+    invoiceNumber: vm.inv.number,
+    invoiceDate:   vm.inv.date,
+    dueDate,
+    daysOverdue,
+    totalGross,
+    feeAmount,
+    totalDue,
+    headerText,
+    footerText,
+    docDate: today,
+    theme,
+    logoDataUri,
+  };
+
+  const html = env().render(path.join('modern_a', 'mahnung.njk'), context);
+  return renderPdf({ html });
+}
+
 async function renderMonatsabschlussPdf({ supabase, tenantId }) {
   const report = await monatsabschlussSvc.getReportData(supabase, tenantId);
   if (!report) throw { status: 404, message: 'Kein Monatsabschluss-Bericht vorhanden' };
@@ -597,4 +719,4 @@ async function renderMonatsabschlussPdf({ supabase, tenantId }) {
   return { pdf, report };
 }
 
-module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf };
+module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderMahnungPdf };

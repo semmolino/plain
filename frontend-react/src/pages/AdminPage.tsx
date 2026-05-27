@@ -21,6 +21,11 @@ import { fetchProjectStatuses, type ProjectStatus } from '@/api/projekte'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
 import {
+  fetchMahnungSettings, saveMahnungSettings, fetchTextTemplates, saveTextTemplate,
+  TEXT_TEMPLATE_LABELS,
+  type MahnungSettingsLevel, type TextTemplate, type TextTemplateType,
+} from '@/api/mahnungen'
+import {
   fetchOverhead, saveOverhead, copyOverheadFromYear,
   fetchEmployeeParams, saveEmployeeParamsBulk, calculateRates, importRates,
   type OverheadItem, type EmployeeCalcParams, type CalcResult,
@@ -28,13 +33,15 @@ import {
 import { fetchEmployeeList } from '@/api/mitarbeiter'
 
 const PAGE_TABS = [
-  { id: 'stammdaten',          label: 'Stammdaten'          },
-  { id: 'nummernkreise',       label: 'Nummernkreise'       },
-  { id: 'unternehmen',         label: 'Unternehmen'         },
-  { id: 'vorbelegungen',       label: 'Vorbelegungen'       },
-  { id: 'arbeitszeitmodelle',  label: 'Arbeitszeitmodelle'  },
-  { id: 'monatsabschluss',     label: 'Monatsabschluss'     },
-  { id: 'kostensatz',          label: 'Kostensatz-Rechner'  },
+  { id: 'stammdaten',              label: 'Stammdaten'              },
+  { id: 'nummernkreise',           label: 'Nummernkreise'           },
+  { id: 'unternehmen',             label: 'Unternehmen'             },
+  { id: 'vorbelegungen',           label: 'Vorbelegungen'           },
+  { id: 'arbeitszeitmodelle',      label: 'Arbeitszeitmodelle'      },
+  { id: 'monatsabschluss',         label: 'Monatsabschluss'         },
+  { id: 'kostensatz',              label: 'Kostensatz-Rechner'      },
+  { id: 'mahnungseinstellungen',   label: 'Mahnungseinstellungen'   },
+  { id: 'textvorlagen',            label: 'Textvorlagen'            },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -1579,6 +1586,166 @@ function KostensatzSection() {
   )
 }
 
+// ── Mahnungseinstellungen ─────────────────────────────────────────────────────
+
+function MahnungsEinstellungenSection() {
+  const qc = useQueryClient()
+  const { data: raw, isLoading } = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data.data) })
+
+  const [levels, setLevels] = useState<MahnungSettingsLevel[]>([])
+  const [msg,    setMsg]    = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
+  useEffect(() => { if (raw) setLevels(raw) }, [raw])
+
+  const saveMut = useMutation({
+    mutationFn: () => saveMahnungSettings(levels),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['mahnung-settings'] }); setMsg({ type: 'ok', text: 'Einstellungen gespeichert.' }) },
+    onError:    (e: Error) => setMsg({ type: 'err', text: e.message }),
+  })
+
+  useCtrlS(() => saveMut.mutate(), true)
+
+  function update(i: number, field: keyof MahnungSettingsLevel, value: string | number | null) {
+    setLevels(lv => lv.map((l, idx) => idx === i ? { ...l, [field]: value } : l))
+    setMsg(null)
+  }
+
+  if (isLoading) return <p className="empty-note">Lade…</p>
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        Konfigurieren Sie Bezeichnungen, Gebühren und Texte für jede Mahnstufe. Diese Einstellungen gelten für alle Mahnungs-PDFs.
+      </p>
+
+      {levels.map((lv, i) => (
+        <div key={lv.mahnstufe} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: 'var(--accent)' }}>
+            Stufe {lv.mahnstufe}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', marginBottom: 10 }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Bezeichnung</label>
+              <input type="text" className="form-control" value={lv.label} onChange={e => update(i, 'label', e.target.value)} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Mahngebühr (€)</label>
+              <input type="number" className="form-control" value={lv.fee} min={0} step={0.01} onChange={e => update(i, 'fee', parseFloat(e.target.value) || 0)} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">{lv.mahnstufe === 1 ? 'Tage nach Fälligkeit' : 'Tage nach vorheriger Mahnung'}</label>
+              <input type="number" className="form-control" value={lv.mahnstufe === 1 ? lv.daysAfterDue : lv.daysAfterPrev} min={0}
+                onChange={e => update(i, lv.mahnstufe === 1 ? 'daysAfterDue' : 'daysAfterPrev', parseInt(e.target.value) || 0)} />
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: '0 0 8px' }}>
+            <label className="form-label">Kopftext (erscheint vor der Rechnungstabelle)</label>
+            <textarea className="form-control" rows={3} value={lv.headerText ?? ''} onChange={e => update(i, 'headerText', e.target.value || null)} placeholder="Optional…" />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Fußtext (erscheint nach der Rechnungstabelle)</label>
+            <textarea className="form-control" rows={3} value={lv.footerText ?? ''} onChange={e => update(i, 'footerText', e.target.value || null)} placeholder="Optional…" />
+          </div>
+        </div>
+      ))}
+
+      {msg && <Message type={msg.type === 'ok' ? 'success' : 'error'} text={msg.text} />}
+      <button className="btn btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} style={{ marginTop: 8 }}>
+        {saveMut.isPending ? 'Speichern…' : 'Einstellungen speichern'}
+      </button>
+      <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>oder Strg+S</span>
+    </div>
+  )
+}
+
+// ── Textvorlagen ──────────────────────────────────────────────────────────────
+
+function TextVorlagenSection() {
+  const qc = useQueryClient()
+  const { data: raw, isLoading } = useQuery({ queryKey: ['text-templates'], queryFn: () => fetchTextTemplates().then(r => r.data.data) })
+
+  const types = Object.keys(TEXT_TEMPLATE_LABELS) as TextTemplateType[]
+  const [activeType, setActiveType] = useState<TextTemplateType>('invoice_abschlags')
+  const [drafts, setDrafts]         = useState<Record<string, TextTemplate>>({})
+  const [msg, setMsg]               = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!raw) return
+    const m: Record<string, TextTemplate> = {}
+    for (const t of raw) m[t.documentType] = t
+    setDrafts(m)
+  }, [raw])
+
+  const saveMut = useMutation({
+    mutationFn: () => saveTextTemplate(activeType, {
+      headerText: drafts[activeType]?.headerText ?? null,
+      footerText: drafts[activeType]?.footerText ?? null,
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['text-templates'] }); setMsg({ type: 'ok', text: 'Gespeichert.' }) },
+    onError:   (e: Error) => setMsg({ type: 'err', text: e.message }),
+  })
+
+  useCtrlS(() => saveMut.mutate(), true)
+
+  function updateDraft(field: 'headerText' | 'footerText', value: string) {
+    setDrafts(d => ({ ...d, [activeType]: { ...d[activeType], documentType: activeType, [field]: value || null } }))
+    setMsg(null)
+  }
+
+  const current = drafts[activeType] ?? { documentType: activeType, headerText: null, footerText: null }
+
+  if (isLoading) return <p className="empty-note">Lade…</p>
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        Hinterlegen Sie Standardtexte für Rechnungs-PDFs. Diese erscheinen als Kopf- und Fußtext auf dem Dokument,
+        sofern beim Erstellen der Rechnung kein eigener Text eingetragen wurde.
+      </p>
+
+      {/* Type selector */}
+      <div className="text-template-types">
+        {types.map(t => (
+          <button
+            key={t}
+            className={`text-template-type-btn${activeType === t ? ' active' : ''}`}
+            onClick={() => { setActiveType(t); setMsg(null) }}
+          >
+            {TEXT_TEMPLATE_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Kopftext (text1 — erscheint vor der Positionstabelle)</label>
+        <textarea
+          className="form-control"
+          rows={5}
+          value={current.headerText ?? ''}
+          onChange={e => updateDraft('headerText', e.target.value)}
+          placeholder="Optional. z.B. Anrede, Hinweistext…"
+        />
+      </div>
+      <div className="form-group">
+        <label className="form-label">Fußtext (text2 — erscheint nach der Positionstabelle)</label>
+        <textarea
+          className="form-control"
+          rows={5}
+          value={current.footerText ?? ''}
+          onChange={e => updateDraft('footerText', e.target.value)}
+          placeholder="Optional. z.B. Zahlungshinweis, Bankdaten, Grußformel…"
+        />
+      </div>
+
+      {msg && <Message type={msg.type === 'ok' ? 'success' : 'error'} text={msg.text} />}
+      <button className="btn btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+        {saveMut.isPending ? 'Speichern…' : 'Textvorlage speichern'}
+      </button>
+      <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>oder Strg+S</span>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -1593,13 +1760,15 @@ export function AdminPage() {
       </div>
       <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
       <div className="master-section">
-        {tab === 'stammdaten'         && <StammdatenSection />}
-        {tab === 'nummernkreise'      && <NummernkreiseSection />}
-        {tab === 'unternehmen'        && <UnternehmenSection />}
-        {tab === 'vorbelegungen'      && <VorbelegungenSection />}
-        {tab === 'arbeitszeitmodelle' && <ArbeitszeitmodelleSection />}
-        {tab === 'monatsabschluss'    && <MonatsabschlussSection />}
-        {tab === 'kostensatz'         && <KostensatzSection />}
+        {tab === 'stammdaten'            && <StammdatenSection />}
+        {tab === 'nummernkreise'         && <NummernkreiseSection />}
+        {tab === 'unternehmen'           && <UnternehmenSection />}
+        {tab === 'vorbelegungen'         && <VorbelegungenSection />}
+        {tab === 'arbeitszeitmodelle'    && <ArbeitszeitmodelleSection />}
+        {tab === 'monatsabschluss'       && <MonatsabschlussSection />}
+        {tab === 'kostensatz'            && <KostensatzSection />}
+        {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}
+        {tab === 'textvorlagen'          && <TextVorlagenSection />}
       </div>
     </div>
   )
