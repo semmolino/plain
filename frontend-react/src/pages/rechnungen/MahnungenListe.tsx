@@ -9,6 +9,10 @@ import {
   type MahnungRow, type MahnungSettingsLevel,
 } from '@/api/mahnungen'
 import { fetchEmployeeList, type Employee } from '@/api/mitarbeiter'
+import {
+  fetchPayments, createPayment, deletePayment,
+  type Payment,
+} from '@/api/rechnungen'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -128,7 +132,7 @@ function ClickToEditDate({ value, onSave, stopProp = true }: {
 // ── Sorting ───────────────────────────────────────────────────────────────────
 
 type SortKey = 'number' | 'invoiceDate' | 'dueDate' | 'daysOverdue' | 'mahnstufe'
-             | 'lastMahnungDate' | 'nextMahnungDate' | 'addressName1' | 'projectName' | 'totalGross'
+             | 'lastMahnungDate' | 'nextMahnungDate' | 'addressName1' | 'projectName' | 'totalGross' | 'openAmount'
 
 function SortTh({ label, k, sortKey, dir, onClick, className }: {
   label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'
@@ -143,14 +147,15 @@ function SortTh({ label, k, sortKey, dir, onClick, className }: {
 
 // ── Optional columns ──────────────────────────────────────────────────────────
 
-type OptColKey = 'invoiceDate' | 'totalGross' | 'contractName' | 'contact'
+type OptColKey = 'invoiceDate' | 'totalGross' | 'openAmount' | 'contractName' | 'contact'
 
 interface OptColDef { key: OptColKey; label: string; defaultVisible: boolean }
 const OPT_COLS: OptColDef[] = [
-  { key: 'invoiceDate',  label: 'Rech.-Datum',  defaultVisible: true  },
-  { key: 'totalGross',   label: 'Betrag',        defaultVisible: true  },
-  { key: 'contractName', label: 'Vertrag',       defaultVisible: false },
-  { key: 'contact',      label: 'Ansprechpart.', defaultVisible: false },
+  { key: 'invoiceDate',  label: 'Rech.-Datum',    defaultVisible: true  },
+  { key: 'totalGross',   label: 'Betrag',          defaultVisible: false },
+  { key: 'openAmount',   label: 'Offene Posten €', defaultVisible: true  },
+  { key: 'contractName', label: 'Vertrag',         defaultVisible: false },
+  { key: 'contact',      label: 'Ansprechpart.',   defaultVisible: false },
 ]
 
 // ── Filter persistence ────────────────────────────────────────────────────────
@@ -281,6 +286,7 @@ export function MahnungenListe() {
         case 'addressName1':   av = a.addressName1 ?? '';     bv = b.addressName1 ?? '';     break
         case 'projectName':    av = a.projectName ?? '';      bv = b.projectName ?? '';      break
         case 'totalGross':     av = a.totalGross ?? 0;        bv = b.totalGross ?? 0;        break
+        case 'openAmount':     av = a.openAmount ?? 0;        bv = b.openAmount ?? 0;        break
       }
       const cmp = typeof av === 'number'
         ? av - (bv as number)
@@ -438,6 +444,76 @@ export function MahnungenListe() {
     sendMut.mutate({ id: emailRow.mahnungId, to: emailTo, subject: emailSubject, body: emailBody })
   }
 
+  // ── Payment modal ─────────────────────────────────────────────────────────────
+  interface PayTarget { sourceType: 'invoice' | 'pp'; sourceId: number; label: string; totalGross: number; paidGross: number }
+  const [payTarget,         setPayTarget]         = useState<PayTarget | null>(null)
+  const [existingPayments,  setExistingPayments]  = useState<Payment[]>([])
+  const [deletingPayId,     setDeletingPayId]     = useState<number | null>(null)
+  const [payAmount,         setPayAmount]         = useState('')
+  const [payDate,           setPayDate]           = useState('')
+  const [payPurpose,        setPayPurpose]        = useState('')
+  const [payMsg,            setPayMsg]            = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
+  function openPaymentFor(r: MahnungRow) {
+    setPayAmount('')
+    setPayDate(new Date().toISOString().slice(0, 10))
+    setPayPurpose('')
+    setPayMsg(null)
+    setExistingPayments([])
+    setDeletingPayId(null)
+    setPayTarget({ sourceType: r.sourceType, sourceId: r.sourceId, label: r.number, totalGross: r.totalGross, paidGross: r.amountPaidGross })
+    const params = r.sourceType === 'invoice' ? { invoice_id: r.sourceId } : { partial_payment_id: r.sourceId }
+    fetchPayments(params).then(res => setExistingPayments(res.data ?? [])).catch(() => {})
+  }
+
+  const payMut = useMutation({
+    mutationFn: createPayment,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mahnungen'] })
+      setPayMsg({ type: 'ok', text: 'Zahlung gespeichert.' })
+      setTimeout(() => { setPayTarget(null); setPayAmount(''); setPayMsg(null) }, 900)
+    },
+    onError: (e: Error) => setPayMsg({ type: 'err', text: e.message }),
+  })
+
+  function submitPayment(e: React.FormEvent) {
+    e.preventDefault()
+    if (!payTarget) return
+    const gross = parseFloat(payAmount)
+    if (!payAmount || !Number.isFinite(gross) || gross <= 0) {
+      setPayMsg({ type: 'err', text: 'Betrag (Brutto) ist erforderlich' }); return
+    }
+    if (!payDate) {
+      setPayMsg({ type: 'err', text: 'Datum ist erforderlich' }); return
+    }
+    payMut.mutate({
+      ...(payTarget.sourceType === 'invoice'
+        ? { invoice_id: payTarget.sourceId }
+        : { partial_payment_id: payTarget.sourceId }),
+      amount_payed_gross: gross,
+      payment_date: payDate,
+      purpose_of_payment: payPurpose || undefined,
+    })
+  }
+
+  async function handleDeletePayment(payId: number) {
+    if (!window.confirm('Zahlung wirklich löschen?')) return
+    setDeletingPayId(payId)
+    try {
+      await deletePayment(payId)
+      setExistingPayments(prev => prev.filter(p => p.ID !== payId))
+      qc.invalidateQueries({ queryKey: ['mahnungen'] })
+      setPayTarget(prev => {
+        if (!prev) return prev
+        const removed = existingPayments.find(p => p.ID === payId)
+        if (!removed) return prev
+        return { ...prev, paidGross: (prev.paidGross ?? 0) - removed.AMOUNT_PAYED_GROSS }
+      })
+    } catch { /* ignore */ } finally {
+      setDeletingPayId(null)
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   if (rows$.isLoading) return <p className="empty-note">Lade Mahnungsdaten…</p>
@@ -553,9 +629,10 @@ export function MahnungenListe() {
                   <SortTh label="Adresse"         k="addressName1"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                   {!hiddenCols.has('contractName') && <th>Vertrag</th>}
                   {!hiddenCols.has('contact')      && <th>Ansprechpart.</th>}
-                  {!hiddenCols.has('totalGross')   && <SortTh label="Betrag" k="totalGross" sortKey={sortKey} dir={sortDir} onClick={toggleSort} className="num" />}
+                  {!hiddenCols.has('totalGross')   && <SortTh label="Betrag"          k="totalGross" sortKey={sortKey} dir={sortDir} onClick={toggleSort} className="num" />}
+                  {!hiddenCols.has('openAmount')   && <SortTh label="Offene Posten €" k="openAmount" sortKey={sortKey} dir={sortDir} onClick={toggleSort} className="num" />}
                   <th style={{ width: 40, textAlign: 'center' }}>Abg.</th>
-                  <th style={{ width: 110 }}>Aktionen</th>
+                  <th style={{ width: 120 }}>Aktionen</th>
                 </tr>
               </thead>
               <tbody>
@@ -629,6 +706,7 @@ export function MahnungenListe() {
                       {!hiddenCols.has('contractName') && <td style={{ fontSize: 12 }}>{r.contractName ?? '–'}</td>}
                       {!hiddenCols.has('contact')      && <td style={{ fontSize: 12 }}>{r.contact ?? '–'}</td>}
                       {!hiddenCols.has('totalGross')   && <td className="num">{fmtMoney(r.totalGross)}</td>}
+                      {!hiddenCols.has('openAmount')   && <td className="num" style={{ fontWeight: r.openAmount > 0 ? 600 : undefined, color: r.openAmount > 0 ? 'var(--red, #dc2626)' : undefined }}>{fmtMoney(r.openAmount)}</td>}
 
                       {/* Abgeschlossen checkbox */}
                       <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
@@ -654,6 +732,11 @@ export function MahnungenListe() {
                           disabled={!r.mahnungId}
                           onClick={() => r.mahnungId && openEmailFor(r)}
                         >✉</button>
+                        <button
+                          className="row-action-btn"
+                          title="Zahlung erfassen"
+                          onClick={() => openPaymentFor(r)}
+                        >💶</button>
                         <button
                           className="row-action-btn"
                           title="→ Rechnung"
@@ -827,6 +910,60 @@ export function MahnungenListe() {
                 {sendMut.isPending ? 'Senden…' : 'Senden'}
               </button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Payment Modal ── */}
+      {payTarget && (
+        <Modal open={payTarget !== null} onClose={() => setPayTarget(null)} title={`Zahlung — ${payTarget.label}`}>
+          <div style={{ minWidth: 360 }}>
+            <div style={{ marginBottom: 12, fontSize: 13, display: 'flex', gap: 16, color: 'var(--text-2)' }}>
+              <span>Brutto: <strong>{fmtMoney(payTarget.totalGross)}</strong></span>
+              <span>Bezahlt: <strong>{fmtMoney(payTarget.paidGross)}</strong></span>
+              <span>Offen: <strong style={{ color: 'var(--red, #dc2626)' }}>{fmtMoney(Math.max(0, payTarget.totalGross - payTarget.paidGross))}</strong></span>
+            </div>
+
+            {existingPayments.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-4)' }}>Bisherige Zahlungen</div>
+                {existingPayments.map(p => (
+                  <div key={p.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                    <span>{p.PAYMENT_DATE?.slice(0, 10) ?? '–'}</span>
+                    <span style={{ fontWeight: 600 }}>{fmtMoney(p.AMOUNT_PAYED_GROSS)}</span>
+                    {p.PURPOSE_OF_PAYMENT && <span style={{ color: 'var(--text-4)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT}</span>}
+                    <button
+                      className="btn-small btn-danger"
+                      disabled={deletingPayId === p.ID}
+                      onClick={() => handleDeletePayment(p.ID)}
+                    >{deletingPayId === p.ID ? '…' : '×'}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={submitPayment}>
+              <div className="form-group">
+                <label className="form-label">Betrag Brutto *</label>
+                <input type="number" className="form-control" step="0.01" min="0.01"
+                  value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0.00" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Datum *</label>
+                <input type="date" className="form-control" value={payDate} onChange={e => setPayDate(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Verwendungszweck</label>
+                <input type="text" className="form-control" value={payPurpose} onChange={e => setPayPurpose(e.target.value)} placeholder="Optional" />
+              </div>
+              {payMsg && <Message type={payMsg.type === 'ok' ? 'success' : 'error'} text={payMsg.text} />}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button type="button" className="btn" onClick={() => setPayTarget(null)}>Schließen</button>
+                <button type="submit" className="btn btn-primary" disabled={payMut.isPending}>
+                  {payMut.isPending ? 'Speichern…' : 'Zahlung speichern'}
+                </button>
+              </div>
+            </form>
           </div>
         </Modal>
       )}

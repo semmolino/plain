@@ -34,7 +34,7 @@ import {
   fetchMonthBalance, fetchRunningBalance,
   type DayBooking, type RunningMonth,
 } from '@/api/mitarbeiter'
-import { fetchMahnungStats, type MahnungStats } from '@/api/mahnungen'
+import { fetchMahnungStats, type MahnungStats, type MahnungSuggestion } from '@/api/mahnungen'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -524,62 +524,96 @@ function GeschaeftsleitungView({
 }
 
 const STUFEN_LABELS_DASH: Record<number, string> = {
-  0: '–', 1: 'Zahlungserinnerung', 2: '1. Mahnung', 3: '2. Mahnung', 4: '3. Mahnung',
+  0: 'Keine', 1: 'Zahlungserinnerung', 2: '1. Mahnung', 3: '2. Mahnung', 4: '3. Mahnung',
+}
+
+const FMT_EUR_DASH = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+
+function SuggestionRow({ s, navigate }: { s: MahnungSuggestion; navigate: ReturnType<typeof useNavigate> }) {
+  const isActionDue = s.reason === 'action_due'
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, cursor: 'pointer', background: isActionDue ? 'rgba(220,38,38,0.05)' : 'transparent', border: isActionDue ? '1px solid rgba(220,38,38,0.15)' : '1px solid transparent', marginBottom: 3 }}
+      onClick={() => navigate('/rechnungen?tab=mahnungen')}
+      title="In Mahnungsliste öffnen"
+    >
+      <span className={`mahnstufe-badge ms-${s.mahnstufe}`} style={{ flexShrink: 0 }}>{STUFEN_LABELS_DASH[s.mahnstufe]}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {s.number}{s.addressName1 ? ` · ${s.addressName1}` : ''}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-4)' }}>
+          {s.daysOverdue}d überfällig
+          {isActionDue ? ' · Aktion fällig!' : ' · noch keine Mahnung'}
+        </div>
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 600, color: '#dc2626', flexShrink: 0 }}>{FMT_EUR_DASH.format(s.openAmount)}</span>
+    </div>
+  )
 }
 
 function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
   const navigate = useNavigate()
   const stufen   = [1, 2, 3, 4].filter(s => (stats.byStufe[s] ?? 0) > 0)
-  const noMahnung = (stats.byStufe[0] ?? 0)  // open invoices not yet dunned
-
-  function goToMahnungen() {
-    navigate('/rechnungen?tab=mahnungen')
-  }
 
   return (
     <div className="dash-card">
       <div className="dash-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>Offene Mahnvorgänge</span>
-        <button
-          className="btn btn-sm"
-          style={{ fontSize: 11 }}
-          onClick={() => goToMahnungen()}
-        >
+        <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => navigate('/rechnungen?tab=mahnungen')}>
           → Mahnungen öffnen
         </button>
       </div>
 
-      {/* Primary metric: urgent actions */}
+      {/* Primary alert: urgent count */}
       {stats.overdueActionsCount > 0 ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca', cursor: 'pointer' }} onClick={() => goToMahnungen()}>
-          <span style={{ fontSize: 22, lineHeight: 1 }}>⚠️</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca', cursor: 'pointer' }}
+          onClick={() => navigate('/rechnungen?tab=mahnungen')}>
+          <span style={{ fontSize: 20, lineHeight: 1 }}>⚠️</span>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#991b1b' }}>
               {stats.overdueActionsCount} Aktion{stats.overdueActionsCount !== 1 ? 'en' : ''} fällig
             </div>
             <div style={{ fontSize: 12, color: '#b91c1c' }}>
-              Nächste Mahnung überfällig – jetzt handeln
+              {stats.noDunningCount > 0 ? `${stats.noDunningCount} noch ungemahnt` : 'Nächste Mahnung überfällig'}
             </div>
           </div>
         </div>
-      ) : (
+      ) : stats.totalOverdue === 0 ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 12px', background: 'rgba(34,197,94,0.07)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.25)' }}>
           <span style={{ color: '#16a34a', fontSize: 14 }}>✓</span>
-          <span style={{ fontSize: 13, color: '#15803d' }}>Keine Aktionen fällig</span>
+          <span style={{ fontSize: 13, color: '#15803d' }}>Keine überfälligen Rechnungen</span>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 12px', background: 'rgba(234,179,8,0.07)', borderRadius: 8, border: '1px solid rgba(234,179,8,0.3)' }}>
+          <span style={{ color: '#b45309', fontSize: 14 }}>ℹ</span>
+          <span style={{ fontSize: 13, color: '#92400e' }}>{stats.totalOverdue} überfällig, alle in Bearbeitung</span>
+        </div>
+      )}
+
+      {/* Suggestions */}
+      {(stats.suggestions ?? []).length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-4)', marginBottom: 6 }}>
+            Vorschläge für nächste Aktionen
+          </div>
+          {stats.suggestions.map((s, i) => (
+            <SuggestionRow key={i} s={s} navigate={navigate} />
+          ))}
         </div>
       )}
 
       {/* Breakdown by stufe */}
-      {stats.totalOpen > 0 ? (
+      {(stats.byStufe[0] ?? 0) + stufen.reduce((a, s) => a + (stats.byStufe[s] ?? 0), 0) > 0 && (
         <div>
           <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-4)', marginBottom: 6 }}>
             {stats.totalOpen} offene Vorgänge nach Stufe
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {noMahnung > 0 && (
+            {(stats.byStufe[0] ?? 0) > 0 && (
               <div className="mahnung-stufe-row">
                 <span className="mahnstufe-badge ms-0">Noch keine Mahnung</span>
-                <span className="count">{noMahnung}</span>
+                <span className="count">{stats.byStufe[0]}</span>
               </div>
             )}
             {stufen.map(s => (
@@ -595,8 +629,10 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
             </div>
           )}
         </div>
-      ) : (
-        <p style={{ fontSize: 13, color: 'var(--text-4)', margin: 0 }}>Alle Mahnvorgänge abgeschlossen oder keine überfälligen Rechnungen.</p>
+      )}
+
+      {stats.totalOverdue === 0 && (stats.suggestions ?? []).length === 0 && (
+        <p style={{ fontSize: 13, color: 'var(--text-4)', margin: 0 }}>Keine überfälligen Rechnungen.</p>
       )}
     </div>
   )
@@ -628,9 +664,9 @@ function ControllerView({
         />
         {mahnStats && (
           <KpiCard
-            label="Mahnvorgänge offen"
-            value={String(mahnStats.totalOpen)}
-            meta={mahnStats.overdueActionsCount > 0 ? `${mahnStats.overdueActionsCount} Aktion(en) fällig` : undefined}
+            label="Überfällige Rechnungen"
+            value={String(mahnStats.totalOverdue)}
+            meta={mahnStats.overdueActionsCount > 0 ? `${mahnStats.overdueActionsCount} Aktion(en) fällig` : mahnStats.noDunningCount > 0 ? `${mahnStats.noDunningCount} ungemahnt` : undefined}
             accent={mahnStats.overdueActionsCount > 0}
           />
         )}
@@ -646,9 +682,10 @@ function ControllerView({
           : 'Keine überfälligen Rechnungen. '}
         Monatliche Kosten Ø (letzte {monthly.length} Monate): <strong>{fmtEur(avgMonthlyCost)}</strong>.
         Zu fakturierende Leistung: <strong>{fmtEur(kpis.OFFENE_LEISTUNG)}</strong>.
-        {mahnStats && mahnStats.totalOpen > 0 && (
-          <> {mahnStats.totalOpen} offene Mahnung{mahnStats.totalOpen !== 1 ? 'svorgänge' : 'svorgang'}
-          {mahnStats.overdueActionsCount > 0 ? `, davon ${mahnStats.overdueActionsCount} mit fälliger Aktion` : ''}.
+        {mahnStats && mahnStats.totalOverdue > 0 && (
+          <> {mahnStats.totalOverdue} überfällige Rechnung{mahnStats.totalOverdue !== 1 ? 'en' : ''}
+          {mahnStats.noDunningCount > 0 ? `, davon ${mahnStats.noDunningCount} noch ungemahnt` : ''}
+          {mahnStats.overdueActionsCount > 0 ? `, ${mahnStats.overdueActionsCount} mit fälliger Mahnaktion` : ''}.
           </>
         )}
       </NarrativeBlock>

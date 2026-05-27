@@ -45,15 +45,23 @@ export function RechnungenPage() {
   const [initSearch,  setInitSearch]  = useState<string | undefined>(navState?.projectSearch)
   const [backProject, setBackProject] = useState<{ id: number; name: string } | undefined>(navState?.backProject ?? undefined)
 
+  // Initial mount: clear location.state and apply initial URL tab
   useEffect(() => {
     if (location.state) {
       navigate('/rechnungen', { replace: true, state: null })
     }
-    // Clear the ?tab param from URL once applied
     if (tabFromUrl) {
       setSearchParams({}, { replace: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // React to URL tab changes when already mounted (e.g. notification links clicked while on this page)
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== tab) {
+      setTab(tabFromUrl)
+      setSearchParams({}, { replace: true })
+    }
+  }, [tabFromUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleEditDraft(d: { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; wizardType: 'abschlag' | 'rechnung' | 'schluss'; d1Pct: number; d2Pct: number; d1Reason: string | null; d2Reason: string | null; cashDiscPct: number; cashDiscDays: number }) {
     const draft: DraftResume = { id: d.id, projectId: d.projectId, contractId: d.contractId, projectLabel: d.projectLabel, contractLabel: d.contractLabel, d1Pct: d.d1Pct, d2Pct: d.d2Pct, d1Reason: d.d1Reason, d2Reason: d.d2Reason, cashDiscPct: d.cashDiscPct, cashDiscDays: d.cashDiscDays }

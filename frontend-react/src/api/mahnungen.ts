@@ -10,6 +10,8 @@ export interface MahnungRow {
   dueDate:               string
   daysOverdue:           number
   totalGross:            number
+  amountPaidGross:       number
+  openAmount:            number
   projectId:             number | null
   contractId:            number | null
   projectNumber:         string | null
@@ -31,11 +33,25 @@ export interface MahnungRow {
   history:               MahnungHistoryEntry[]
 }
 
+export interface MahnungSuggestion {
+  sourceType:   'invoice' | 'pp'
+  sourceId:     number
+  number:       string
+  daysOverdue:  number
+  openAmount:   number
+  addressName1: string | null
+  mahnstufe:    number
+  reason:       'action_due' | 'no_dunning'
+}
+
 export interface MahnungStats {
   totalOpen:           number
   totalClosed:         number
-  byStufe:             Record<number, number>
+  totalOverdue:        number
+  noDunningCount:      number
   overdueActionsCount: number
+  byStufe:             Record<number, number>
+  suggestions:         MahnungSuggestion[]
 }
 
 export interface MahnungHistoryEntry {

@@ -718,7 +718,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                   {visibleCols.map(c => {
                     if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
                     if (c.key === 'date')        return <td key={c.key}>{fmtDate(row.date)}</td>
-                    if (c.key === 'project')     return <td key={c.key}>{row.projectId !== null ? <button className="link-cell" onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : (row.project ?? '—')}</td>
+                    if (c.key === 'project')     return <td key={c.key}>{row.projectId !== null ? <button className="link-btn" style={{ fontSize: 13 }} onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : (row.project ?? '—')}</td>
                     if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
                     if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
                     if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
@@ -735,9 +735,9 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                     )}
                     <button className="btn-small" onClick={() => openXRechnung(row)}>XRechnung</button>
                     <button className="btn-small" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
-                    {row.projectId !== null && (
-                      <button className="btn-small" title="Projektstruktur öffnen" onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>
-                        → Projekt
+                    {row.statusClass === 'booked' && (
+                      <button className="btn-small" title="Zur Mahnung navigieren" onClick={() => navigate('/rechnungen?tab=mahnungen')}>
+                        → Mahnung
                       </button>
                     )}
                     {canPay(row) && (

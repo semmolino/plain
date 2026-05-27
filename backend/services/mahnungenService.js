@@ -52,6 +52,26 @@ async function listMahnungen(supabase, { tenantId }) {
       .order("DATE_ACTION", { ascending: false }),
   ]);
 
+  // Batch-fetch payments to compute open amounts
+  const allInvIds = (invoices || []).map(d => d.ID);
+  const allPpIds  = (pps     || []).map(d => d.ID);
+  const invPayMap = {};
+  const ppPayMap  = {};
+  if (allInvIds.length > 0) {
+    const { data: pays } = await supabase.from("PAYMENT").select("INVOICE_ID, AMOUNT_PAYED_GROSS").in("INVOICE_ID", allInvIds);
+    for (const p of (pays || [])) {
+      const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
+      invPayMap[p.INVOICE_ID] = (invPayMap[p.INVOICE_ID] || 0) + (Number.isFinite(v) ? v : 0);
+    }
+  }
+  if (allPpIds.length > 0) {
+    const { data: pays } = await supabase.from("PAYMENT").select("PARTIAL_PAYMENT_ID, AMOUNT_PAYED_GROSS").in("PARTIAL_PAYMENT_ID", allPpIds);
+    for (const p of (pays || [])) {
+      const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
+      ppPayMap[p.PARTIAL_PAYMENT_ID] = (ppPayMap[p.PARTIAL_PAYMENT_ID] || 0) + (Number.isFinite(v) ? v : 0);
+    }
+  }
+
   // Batch-fetch project names
   const allDocs = [...(invoices || []), ...(pps || [])];
   const projectIds  = [...new Set(allDocs.map(d => d.PROJECT_ID).filter(Boolean))];
@@ -109,7 +129,8 @@ async function listMahnungen(supabase, { tenantId }) {
       number:       inv.INVOICE_NUMBER,
       invoiceDate:  inv.INVOICE_DATE,
       dueDate:      inv.DUE_DATE,
-      totalGross:   inv.TOTAL_AMOUNT_GROSS,
+      totalGross:      inv.TOTAL_AMOUNT_GROSS,
+      amountPaidGross: invPayMap[inv.ID] ?? 0,
       projectId:    inv.PROJECT_ID,
       contractId:   inv.CONTRACT_ID,
       addressName1: inv.ADDRESS_NAME_1,
@@ -129,7 +150,8 @@ async function listMahnungen(supabase, { tenantId }) {
       number:       pp.PARTIAL_PAYMENT_NUMBER,
       invoiceDate:  pp.PARTIAL_PAYMENT_DATE,
       dueDate:      pp.DUE_DATE,
-      totalGross:   pp.TOTAL_AMOUNT_GROSS,
+      totalGross:      pp.TOTAL_AMOUNT_GROSS,
+      amountPaidGross: ppPayMap[pp.ID] ?? 0,
       projectId:    pp.PROJECT_ID,
       contractId:   pp.CONTRACT_ID,
       addressName1: pp.ADDRESS_NAME_1,
@@ -150,40 +172,168 @@ async function listMahnungen(supabase, { tenantId }) {
 async function getMahnungStats(supabase, { tenantId }) {
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: mahnungen } = await supabase
-    .from("MAHNUNG")
-    .select("ID, MAHNSTUFE, NEXT_MAHNUNG_DATE, IS_CLOSED")
-    .eq("TENANT_ID", tenantId);
+  // Fetch all overdue invoices + PPs (same criteria as listMahnungen)
+  const [
+    { data: invoices },
+    { data: pps },
+    { data: mahnungen },
+  ] = await Promise.all([
+    supabase
+      .from("INVOICE")
+      .select("ID, INVOICE_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1")
+      .eq("TENANT_ID", tenantId)
+      .eq("STATUS_ID", 2)
+      .not("DUE_DATE", "is", null)
+      .lt("DUE_DATE", today)
+      .neq("INVOICE_TYPE", "stornorechnung"),
 
-  const open   = (mahnungen || []).filter(m => !m.IS_CLOSED);
-  const closed = (mahnungen || []).filter(m => m.IS_CLOSED);
+    supabase
+      .from("PARTIAL_PAYMENT")
+      .select("ID, PARTIAL_PAYMENT_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1")
+      .eq("TENANT_ID", tenantId)
+      .eq("STATUS_ID", 2)
+      .not("DUE_DATE", "is", null)
+      .lt("DUE_DATE", today)
+      .is("CANCELS_PARTIAL_PAYMENT_ID", null),
 
+    supabase
+      .from("MAHNUNG")
+      .select("ID, INVOICE_ID, PP_ID, MAHNSTUFE, NEXT_MAHNUNG_DATE, IS_CLOSED")
+      .eq("TENANT_ID", tenantId),
+  ]);
+
+  // Batch-fetch payments for open amount
+  const allInvIds = (invoices || []).map(d => d.ID);
+  const allPpIds  = (pps     || []).map(d => d.ID);
+  const invPayMap = {};
+  const ppPayMap  = {};
+  if (allInvIds.length > 0) {
+    const { data: pays } = await supabase.from("PAYMENT").select("INVOICE_ID, AMOUNT_PAYED_GROSS").in("INVOICE_ID", allInvIds);
+    for (const p of (pays || [])) {
+      const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
+      invPayMap[p.INVOICE_ID] = (invPayMap[p.INVOICE_ID] || 0) + (Number.isFinite(v) ? v : 0);
+    }
+  }
+  if (allPpIds.length > 0) {
+    const { data: pays } = await supabase.from("PAYMENT").select("PARTIAL_PAYMENT_ID, AMOUNT_PAYED_GROSS").in("PARTIAL_PAYMENT_ID", allPpIds);
+    for (const p of (pays || [])) {
+      const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
+      ppPayMap[p.PARTIAL_PAYMENT_ID] = (ppPayMap[p.PARTIAL_PAYMENT_ID] || 0) + (Number.isFinite(v) ? v : 0);
+    }
+  }
+
+  // Index MAHNUNG by source
+  const mahnungByInvoice = {};
+  const mahnungByPp      = {};
+  for (const m of (mahnungen || [])) {
+    if (m.INVOICE_ID) mahnungByInvoice[m.INVOICE_ID] = m;
+    if (m.PP_ID)      mahnungByPp[m.PP_ID]           = m;
+  }
+
+  // Build unified list of all overdue items
+  const items = [];
+  for (const inv of (invoices || [])) {
+    const m = mahnungByInvoice[inv.ID] || null;
+    const daysOverdue = Math.floor((new Date(today) - new Date(inv.DUE_DATE)) / 86400000);
+    const totalGross  = parseFloat(inv.TOTAL_AMOUNT_GROSS ?? 0);
+    const openAmount  = Math.max(0, totalGross - (invPayMap[inv.ID] || 0));
+    items.push({ sourceType: "invoice", sourceId: inv.ID, number: inv.INVOICE_NUMBER, daysOverdue, openAmount, addressName1: inv.ADDRESS_NAME_1, mahnung: m });
+  }
+  for (const pp of (pps || [])) {
+    const m = mahnungByPp[pp.ID] || null;
+    const daysOverdue = Math.floor((new Date(today) - new Date(pp.DUE_DATE)) / 86400000);
+    const totalGross  = parseFloat(pp.TOTAL_AMOUNT_GROSS ?? 0);
+    const openAmount  = Math.max(0, totalGross - (ppPayMap[pp.ID] || 0));
+    items.push({ sourceType: "pp", sourceId: pp.ID, number: pp.PARTIAL_PAYMENT_NUMBER, daysOverdue, openAmount, addressName1: pp.ADDRESS_NAME_1, mahnung: m });
+  }
+
+  // Compute byStufe for open (not closed) mahnungen
   const byStufe = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
-  let overdueActions = 0;
-  for (const m of open) {
-    byStufe[m.MAHNSTUFE] = (byStufe[m.MAHNSTUFE] || 0) + 1;
-    if (m.NEXT_MAHNUNG_DATE && m.NEXT_MAHNUNG_DATE <= today) overdueActions++;
+  let overdueActionsCount = 0;
+
+  // Items with NO mahnung record or mahnstufe=0 count as "stufe 0"
+  for (const item of items) {
+    const m = item.mahnung;
+    if (!m || m.IS_CLOSED) continue;
+    const stufe = m.MAHNSTUFE || 0;
+    byStufe[stufe] = (byStufe[stufe] || 0) + 1;
+    if (m.NEXT_MAHNUNG_DATE && m.NEXT_MAHNUNG_DATE <= today) overdueActionsCount++;
+  }
+  // Also count items with no mahnung record at all in stufe 0
+  const noDunningItems = items.filter(it => !it.mahnung);
+  for (const _ of noDunningItems) {
+    byStufe[0] = (byStufe[0] || 0) + 1;
+    overdueActionsCount++; // every un-dunned overdue item needs action
+  }
+
+  const totalOpen   = items.filter(it => !it.mahnung || !it.mahnung.IS_CLOSED).length;
+  const totalClosed = items.filter(it => it.mahnung && it.mahnung.IS_CLOSED).length;
+  const noDunningCount = noDunningItems.length + items.filter(it => it.mahnung && !it.mahnung.IS_CLOSED && it.mahnung.MAHNSTUFE === 0).length;
+
+  // Build suggestions: up to 5 most urgent items
+  // Priority: 1) action_due (NEXT_MAHNUNG_DATE <= today), 2) no_dunning by daysOverdue desc, 3) highest open amounts
+  const actionDue = items
+    .filter(it => it.mahnung && !it.mahnung.IS_CLOSED && it.mahnung.NEXT_MAHNUNG_DATE && it.mahnung.NEXT_MAHNUNG_DATE <= today)
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+  const noDunning = items
+    .filter(it => !it.mahnung || (it.mahnung && !it.mahnung.IS_CLOSED && it.mahnung.MAHNSTUFE === 0))
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+  const highAmount = items
+    .filter(it => !it.mahnung || !it.mahnung.IS_CLOSED)
+    .sort((a, b) => b.openAmount - a.openAmount);
+
+  // Combine & deduplicate (action_due first, then longest overdue, then highest amount)
+  const seenIds = new Set();
+  const suggestions = [];
+  for (const item of [...actionDue, ...noDunning, ...highAmount]) {
+    const key = `${item.sourceType}:${item.sourceId}`;
+    if (seenIds.has(key)) continue;
+    seenIds.add(key);
+    const reason = (item.mahnung && item.mahnung.NEXT_MAHNUNG_DATE && item.mahnung.NEXT_MAHNUNG_DATE <= today)
+      ? "action_due"
+      : "no_dunning";
+    suggestions.push({
+      sourceType:   item.sourceType,
+      sourceId:     item.sourceId,
+      number:       item.number,
+      daysOverdue:  item.daysOverdue,
+      openAmount:   item.openAmount,
+      addressName1: item.addressName1,
+      mahnstufe:    item.mahnung ? item.mahnung.MAHNSTUFE : 0,
+      reason,
+    });
+    if (suggestions.length >= 5) break;
   }
 
   return {
-    totalOpen:          open.length,
-    totalClosed:        closed.length,
+    totalOpen,
+    totalClosed,
+    totalOverdue: items.length,
+    noDunningCount,
+    overdueActionsCount,
     byStufe,
-    overdueActionsCount: overdueActions,
+    suggestions,
   };
 }
 
 function buildRow(sourceType, sourceId, src, m, historyByMahnung, today) {
-  const daysOverdue = Math.floor((new Date(today) - new Date(src.dueDate)) / 86400000);
+  const daysOverdue     = Math.floor((new Date(today) - new Date(src.dueDate)) / 86400000);
+  const totalGross      = parseFloat(src.totalGross ?? 0);
+  const amountPaidGross = parseFloat(src.amountPaidGross ?? 0);
+  const openAmount      = Math.max(0, totalGross - amountPaidGross);
   const hist = m ? (historyByMahnung[m.ID] || []) : [];
   return {
     sourceType,
     sourceId,
-    number:        src.number,
-    invoiceDate:   src.invoiceDate,
-    dueDate:       src.dueDate,
+    number:           src.number,
+    invoiceDate:      src.invoiceDate,
+    dueDate:          src.dueDate,
     daysOverdue,
-    totalGross:    src.totalGross,
+    totalGross,
+    amountPaidGross,
+    openAmount,
     projectId:     src.projectId,
     contractId:    src.contractId,
     addressName1:  src.addressName1,
