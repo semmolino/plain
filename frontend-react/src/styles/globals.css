@@ -1602,11 +1602,12 @@ input::placeholder { color: var(--text-4); }
 /* Muted row for closed Mahnungen */
 .row-muted td { color: var(--text-muted) !important; }
 
-/* Inline table inputs (MahnungenListe) */
-.inline-date-input { width: 100%; min-width: 110px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text); font-size: 12px; padding: 2px 4px; }
-.inline-date-input:focus { outline: none; border-color: var(--accent); }
-.inline-select { width: 100%; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text); font-size: 12px; padding: 2px 4px; }
-.inline-select:focus { outline: none; border-color: var(--accent); }
+/* Click-to-edit date (MahnungenListe) */
+.cte-date        { display: inline-block; font-size: 13px; cursor: pointer; padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
+.cte-date:hover  { background: var(--hover-bg, rgba(0,0,0,0.05)); }
+.cte-date-empty  { color: var(--text-muted); font-size: 12px; }
+.inline-date-input { width: 130px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 12px; padding: 3px 6px; }
+.inline-date-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(var(--accent-rgb,59,130,246),0.15); }
 
 /* Row action buttons (MahnungenListe + RechnungenListe) */
 .row-actions     { white-space: nowrap; padding: 0 4px; }

@@ -43,6 +43,88 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+// ── Mahnstufe badge-select ────────────────────────────────────────────────────
+
+const STUFE_COLORS: Record<number, { bg: string; color: string }> = {
+  0: { bg: '#e5e7eb', color: '#6b7280' },
+  1: { bg: '#dbeafe', color: '#1d4ed8' },
+  2: { bg: '#fef3c7', color: '#92400e' },
+  3: { bg: '#fed7aa', color: '#9a3412' },
+  4: { bg: '#fecaca', color: '#7f1d1d' },
+}
+
+function MahnstufeSelect({ value, levels, onChange, onClick }: {
+  value: number
+  levels: MahnungSettingsLevel[]
+  onChange: (v: number) => void
+  onClick?: (e: React.MouseEvent) => void
+}) {
+  const col = STUFE_COLORS[value] ?? STUFE_COLORS[0]
+  return (
+    <select
+      style={{
+        background:    col.bg,
+        color:         col.color,
+        border:        'none',
+        borderRadius:  10,
+        padding:       '2px 6px',
+        fontSize:      11,
+        fontWeight:    600,
+        cursor:        'pointer',
+        minWidth:      100,
+        maxWidth:      160,
+      }}
+      value={value}
+      onChange={e => onChange(Number(e.target.value))}
+      onClick={onClick}
+    >
+      <option value={0}>– Keine –</option>
+      {levels.map(lv => (
+        <option key={lv.mahnstufe} value={lv.mahnstufe}>{lv.label}</option>
+      ))}
+    </select>
+  )
+}
+
+// ── Click-to-edit date ────────────────────────────────────────────────────────
+
+function ClickToEditDate({ value, onSave, stopProp = true }: {
+  value: string | null
+  onSave: (v: string) => void
+  stopProp?: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+
+  function handleClick(e: React.MouseEvent) {
+    if (stopProp) e.stopPropagation()
+    setEditing(true)
+  }
+
+  if (!editing) {
+    return (
+      <span
+        className="cte-date"
+        onClick={handleClick}
+        title="Klicken zum Bearbeiten"
+      >
+        {value ? fmtDate(value) : <span className="cte-date-empty">— setzen</span>}
+      </span>
+    )
+  }
+
+  return (
+    <input
+      type="date"
+      className="inline-date-input"
+      defaultValue={value?.slice(0, 10) ?? ''}
+      autoFocus
+      onClick={e => e.stopPropagation()}
+      onBlur={e => { onSave(e.target.value); setEditing(false) }}
+      onKeyDown={e => { if (e.key === 'Escape') setEditing(false) }}
+    />
+  )
+}
+
 // ── Sorting ───────────────────────────────────────────────────────────────────
 
 type SortKey = 'number' | 'invoiceDate' | 'dueDate' | 'daysOverdue' | 'mahnstufe'
@@ -332,7 +414,7 @@ export function MahnungenListe() {
     const stufe = r.mahnstufe || 0
     const lv    = settingsByLevel[stufe]
     setEmailRow(r)
-    setEmailTo('')
+    setEmailTo(r.contactMail ?? '')
     setEmailSubject(`${lv?.label ?? STUFEN_LABELS[stufe] ?? 'Mahnung'} zu ${r.number}`)
     setEmailBody(lv?.headerText ?? '')
     setEmailMsg(null)
@@ -508,41 +590,28 @@ export function MahnungenListe() {
                       <td className={`num ${daysClass(r.daysOverdue)}`}>{r.daysOverdue}</td>
 
                       {/* Inline: letzte Mahnung date */}
-                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 120 }}>
-                        <input
-                          type="date"
-                          className="inline-date-input"
-                          value={r.lastMahnungDate?.slice(0,10) ?? ''}
-                          onBlur={e => handleLastMahnungChange(r, e.target.value)}
-                          onChange={() => {/* controlled by onBlur */}}
+                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 110 }}>
+                        <ClickToEditDate
+                          value={r.lastMahnungDate}
+                          onSave={date => handleLastMahnungChange(r, date)}
+                        />
+                      </td>
+
+                      {/* Inline: Mahnstufe — badge-styled select */}
+                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 110 }}>
+                        <MahnstufeSelect
+                          value={r.mahnstufe}
+                          levels={allLevels}
+                          onChange={v => saveInlineField(r, { mahnstufe: v })}
                           onClick={e => e.stopPropagation()}
                         />
                       </td>
 
-                      {/* Inline: Mahnstufe select */}
-                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 130 }}>
-                        <select
-                          className="inline-select"
-                          value={r.mahnstufe}
-                          onChange={e => saveInlineField(r, { mahnstufe: Number(e.target.value) })}
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <option value={0}>– Keine –</option>
-                          {allLevels.map(lv => (
-                            <option key={lv.mahnstufe} value={lv.mahnstufe}>{lv.label}</option>
-                          ))}
-                        </select>
-                      </td>
-
                       {/* Inline: nächste Mahnung date */}
-                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 120 }}>
-                        <input
-                          type="date"
-                          className="inline-date-input"
-                          value={r.nextMahnungDate?.slice(0,10) ?? ''}
-                          onBlur={e => saveInlineField(r, { next_mahnung_date: e.target.value || null })}
-                          onChange={() => {}}
-                          onClick={e => e.stopPropagation()}
+                      <td onClick={e => e.stopPropagation()} style={{ minWidth: 110 }}>
+                        <ClickToEditDate
+                          value={r.nextMahnungDate}
+                          onSave={date => saveInlineField(r, { next_mahnung_date: date || null })}
                         />
                       </td>
 

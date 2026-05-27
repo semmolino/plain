@@ -309,8 +309,10 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
   const [emailMsg,     setEmailMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   function openEmailFor(row: UnifiedRow) {
+    const raw         = row.raw as Invoice & PartialPayment
+    const contactMail = raw.CONTACT_MAIL ?? ''
     setEmailRow(row)
-    setEmailTo('')
+    setEmailTo(contactMail)
     setEmailSubject(row.source === 'invoice'
       ? `Rechnung ${row.number ?? ''}`
       : `Abschlagsrechnung ${row.number ?? ''}`)

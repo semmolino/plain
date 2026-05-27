@@ -26,6 +26,7 @@ export interface Invoice {
   PROJECT:              string | null
   CONTRACT:             string | null
   CONTACT:              string | null
+  CONTACT_MAIL:         string | null
   ADDRESS_NAME_1:       string | null
   AMOUNT_PAYED_GROSS:   number | null
   COMMENT:              string | null
@@ -61,6 +62,7 @@ export interface PartialPayment {
   PROJECT:                      string | null
   CONTRACT:                     string | null
   CONTACT:                      string | null
+  CONTACT_MAIL:                 string | null
   ADDRESS_NAME_1:               string | null
   COMMENT:                      string | null
   CANCELS_PARTIAL_PAYMENT_ID:   number | null

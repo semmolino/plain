@@ -529,42 +529,75 @@ const STUFEN_LABELS_DASH: Record<number, string> = {
 
 function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
   const navigate = useNavigate()
-  const stufen = [0, 1, 2, 3, 4].filter(s => (stats.byStufe[s] ?? 0) > 0)
+  const stufen   = [1, 2, 3, 4].filter(s => (stats.byStufe[s] ?? 0) > 0)
+  const noMahnung = (stats.byStufe[0] ?? 0)  // open invoices not yet dunned
+
+  function goToMahnungen() {
+    navigate('/rechnungen?tab=mahnungen')
+  }
+
   return (
-    <div className="dash-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/rechnungen', { state: { tab: 'mahnungen' } })}>
+    <div className="dash-card">
       <div className="dash-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>Mahnungsstatus</span>
-        {stats.overdueActionsCount > 0 && (
-          <span style={{ fontSize: 11, background: '#fecaca', color: '#7f1d1d', borderRadius: 10, padding: '2px 8px', fontWeight: 600 }}>
-            {stats.overdueActionsCount} Aktion{stats.overdueActionsCount !== 1 ? 'en' : ''} fällig
-          </span>
-        )}
+        <span>Offene Mahnvorgänge</span>
+        <button
+          className="btn btn-sm"
+          style={{ fontSize: 11 }}
+          onClick={() => goToMahnungen()}
+        >
+          → Mahnungen öffnen
+        </button>
       </div>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-        <div style={{ fontSize: 13 }}>
-          <strong style={{ fontSize: 20 }}>{stats.totalOpen}</strong>
-          <span style={{ color: 'var(--text-4)', marginLeft: 4 }}>offene</span>
-        </div>
-        {stats.totalClosed > 0 && (
-          <div style={{ fontSize: 13, color: 'var(--text-4)' }}>
-            <strong>{stats.totalClosed}</strong> abgeschlossen
-          </div>
-        )}
-      </div>
-      {stufen.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {stufen.map(s => (
-            <div key={s} className="mahnung-stufe-row">
-              <span className={`mahnstufe-badge ms-${s}`}>{STUFEN_LABELS_DASH[s] ?? `Stufe ${s}`}</span>
-              <span className="count">{stats.byStufe[s]}</span>
+
+      {/* Primary metric: urgent actions */}
+      {stats.overdueActionsCount > 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca', cursor: 'pointer' }} onClick={() => goToMahnungen()}>
+          <span style={{ fontSize: 22, lineHeight: 1 }}>⚠️</span>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#991b1b' }}>
+              {stats.overdueActionsCount} Aktion{stats.overdueActionsCount !== 1 ? 'en' : ''} fällig
             </div>
-          ))}
+            <div style={{ fontSize: 12, color: '#b91c1c' }}>
+              Nächste Mahnung überfällig – jetzt handeln
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 12px', background: 'rgba(34,197,94,0.07)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.25)' }}>
+          <span style={{ color: '#16a34a', fontSize: 14 }}>✓</span>
+          <span style={{ fontSize: 13, color: '#15803d' }}>Keine Aktionen fällig</span>
         </div>
       )}
-      {stats.totalOpen === 0 && (
-        <p style={{ fontSize: 13, color: 'var(--text-4)', margin: 0 }}>Keine offenen Mahnvorgänge.</p>
+
+      {/* Breakdown by stufe */}
+      {stats.totalOpen > 0 ? (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-4)', marginBottom: 6 }}>
+            {stats.totalOpen} offene Vorgänge nach Stufe
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {noMahnung > 0 && (
+              <div className="mahnung-stufe-row">
+                <span className="mahnstufe-badge ms-0">Noch keine Mahnung</span>
+                <span className="count">{noMahnung}</span>
+              </div>
+            )}
+            {stufen.map(s => (
+              <div key={s} className="mahnung-stufe-row">
+                <span className={`mahnstufe-badge ms-${s}`}>{STUFEN_LABELS_DASH[s]}</span>
+                <span className="count">{stats.byStufe[s]}</span>
+              </div>
+            ))}
+          </div>
+          {stats.totalClosed > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--text-4)', marginTop: 8 }}>
+              {stats.totalClosed} abgeschlossen
+            </div>
+          )}
+        </div>
+      ) : (
+        <p style={{ fontSize: 13, color: 'var(--text-4)', margin: 0 }}>Alle Mahnvorgänge abgeschlossen oder keine überfälligen Rechnungen.</p>
       )}
-      <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>→ Mahnungen öffnen</div>
     </div>
   )
 }
@@ -834,7 +867,7 @@ export function DashboardPage() {
 
   const isMitarbeiter = dashboardRole === 'mitarbeiter'
 
-  const isController = dashboardRole === 'controller'
+  const isController  = dashboardRole === 'controller'
 
   const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ] = useQueries({
     queries: [

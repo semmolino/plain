@@ -24,7 +24,7 @@ async function listMahnungen(supabase, { tenantId }) {
   ] = await Promise.all([
     supabase
       .from("INVOICE")
-      .select("ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, EMPLOYEE_ID, INVOICE_TYPE")
+      .select("ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL, EMPLOYEE_ID, INVOICE_TYPE")
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
@@ -33,7 +33,7 @@ async function listMahnungen(supabase, { tenantId }) {
 
     supabase
       .from("PARTIAL_PAYMENT")
-      .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, EMPLOYEE_ID")
+      .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL, EMPLOYEE_ID")
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
@@ -114,6 +114,7 @@ async function listMahnungen(supabase, { tenantId }) {
       contractId:   inv.CONTRACT_ID,
       addressName1: inv.ADDRESS_NAME_1,
       contact:      inv.CONTACT,
+      contactMail:  inv.CONTACT_MAIL ?? null,
       projectNumber: prj?.number ?? null,
       projectName:   prj?.name   ?? null,
       contractName:  ctr         ?? null,
@@ -133,6 +134,7 @@ async function listMahnungen(supabase, { tenantId }) {
       contractId:   pp.CONTRACT_ID,
       addressName1: pp.ADDRESS_NAME_1,
       contact:      pp.CONTACT,
+      contactMail:  pp.CONTACT_MAIL ?? null,
       projectNumber: prj?.number ?? null,
       projectName:   prj?.name   ?? null,
       contractName:  ctr         ?? null,
@@ -189,6 +191,7 @@ function buildRow(sourceType, sourceId, src, m, historyByMahnung, today) {
     projectNumber: src.projectNumber ?? null,
     projectName:   src.projectName   ?? null,
     contractName:  src.contractName  ?? null,
+    contactMail:   src.contactMail   ?? null,
     // Mahnung state
     mahnungId:              m ? m.ID : null,
     mahnstufe:              m ? m.MAHNSTUFE : 0,

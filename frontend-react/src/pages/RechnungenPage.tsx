@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Tabs }                  from '@/components/ui/Tabs'
 import { RechnungenListe }       from '@/pages/rechnungen/RechnungenListe'
 import { AbschlagWizard }        from '@/pages/rechnungen/AbschlagWizard'
@@ -32,11 +32,15 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 export function RechnungenPage() {
-  const location = useLocation()
-  const navigate  = useNavigate()
-  const navState  = location.state as { projectSearch?: string; backProject?: { id: number; name: string } } | null
+  const location     = useLocation()
+  const navigate     = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navState     = location.state as { projectSearch?: string; backProject?: { id: number; name: string } } | null
 
-  const [tab,         setTab]         = useState<Tab>('liste')
+  // Honour ?tab=mahnungen (or other tab) from query string (e.g. notification links)
+  const tabFromUrl   = searchParams.get('tab') as Tab | null
+
+  const [tab,         setTab]         = useState<Tab>(tabFromUrl ?? 'liste')
   const [editDraft,   setEditDraft]   = useState<{ draft: DraftResume; type: Tab } | null>(null)
   const [initSearch,  setInitSearch]  = useState<string | undefined>(navState?.projectSearch)
   const [backProject, setBackProject] = useState<{ id: number; name: string } | undefined>(navState?.backProject ?? undefined)
@@ -44,6 +48,10 @@ export function RechnungenPage() {
   useEffect(() => {
     if (location.state) {
       navigate('/rechnungen', { replace: true, state: null })
+    }
+    // Clear the ?tab param from URL once applied
+    if (tabFromUrl) {
+      setSearchParams({}, { replace: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -65,7 +65,7 @@ async function checkMahnungen(supabase) {
         type:     notifType,
         title:    `Mahnung fällig: ${docNumber}`,
         body:     `${stufeLabel} – Nächste Aktion war fällig am ${m.NEXT_MAHNUNG_DATE}`,
-        link:     "/rechnungen",
+        link:     "/rechnungen?tab=mahnungen",
         metadata: { mahnung_id: mahnungIdStr, ref_date: m.NEXT_MAHNUNG_DATE },
       });
       created++;

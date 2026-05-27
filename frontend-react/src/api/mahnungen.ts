@@ -17,6 +17,7 @@ export interface MahnungRow {
   contractName:          string | null
   addressName1:          string | null
   contact:               string | null
+  contactMail:           string | null
   // Mahnung state (all null = no MAHNUNG record yet)
   mahnungId:             number | null
   mahnstufe:             number          // 0 = no dunning initiated
