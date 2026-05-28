@@ -1070,6 +1070,167 @@ async function getMonatsabschlussPdf(req, res, supabase) {
   }
 }
 
+// ── HOAI Calculation list / detail ───────────────────────────────────────────
+
+async function listFeeCalcMasters(req, res, supabase) {
+  try {
+    const projectIdRaw = (req.query.project_id || "").toString().trim();
+    const projectId = projectIdRaw ? Number.parseInt(projectIdRaw, 10) : null;
+
+    let query = supabase.from("FEE_CALCULATION_MASTER")
+      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, TENANT_ID")
+      .eq("TENANT_ID", req.tenantId)
+      .order("ID", { ascending: false });
+    if (projectId) query = query.eq("PROJECT_ID", projectId);
+
+    const { data: masters, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    if (!masters || !masters.length) return res.json({ data: [] });
+
+    const masterIds = masters.map(m => m.ID);
+    const [{ data: phases }, { data: surcharges }, { data: projects }] = await Promise.all([
+      supabase.from("FEE_CALCULATION_PHASE").select("FEE_MASTER_ID, PHASE_REVENUE").in("FEE_MASTER_ID", masterIds),
+      supabase.from("FEE_CALCULATION_SURCHARGES").select("FEE_CALC_MASTER_ID, AMOUNT").in("FEE_CALC_MASTER_ID", masterIds),
+      supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG").eq("TENANT_ID", req.tenantId),
+    ]);
+
+    const phaseSum = {};
+    for (const r of (phases || [])) phaseSum[r.FEE_MASTER_ID] = (phaseSum[r.FEE_MASTER_ID] || 0) + (Number(r.PHASE_REVENUE) || 0);
+    const surchargeSum = {};
+    for (const r of (surcharges || [])) surchargeSum[r.FEE_CALC_MASTER_ID] = (surchargeSum[r.FEE_CALC_MASTER_ID] || 0) + (Number(r.AMOUNT) || 0);
+    const projectMap = new Map((projects || []).map(p => [p.ID, p]));
+
+    const result = masters.map(m => {
+      const proj = projectMap.get(m.PROJECT_ID);
+      return {
+        ...m,
+        projectLabel: proj ? `${proj.NAME_SHORT || ""} – ${proj.NAME_LONG || ""}`.replace(/ – $/, "") : null,
+        grundhonorar:   phaseSum[m.ID] || 0,
+        zuschlaegeSum:  surchargeSum[m.ID] || 0,
+        gesamthonorar:  (phaseSum[m.ID] || 0) + (surchargeSum[m.ID] || 0),
+      };
+    });
+    res.json({ data: result });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function getFeeCalcMasterDetail(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+  try {
+    const { data, error } = await supabase.from("FEE_CALCULATION_MASTER")
+      .select("*").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
+    if (error) return res.status(404).json({ error: error.message });
+    res.json({ data });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ── HOAI Surcharges (global master data) ─────────────────────────────────────
+
+async function listFeeSurchargesGlobal(req, res, supabase) {
+  const feeMasterIdRaw = (req.query.fee_master_id || "").toString().trim();
+  const feeMasterId = feeMasterIdRaw ? Number.parseInt(feeMasterIdRaw, 10) : null;
+  try {
+    if (feeMasterId) {
+      // Return only surcharges linked to this fee master via FEE_SURCHARGES2MASTER
+      const { data: links, error: linkErr } = await supabase.from("FEE_SURCHARGES2MASTER")
+        .select("FEE_SURCHARGE_ID").eq("FEE_MASTER_ID", feeMasterId);
+      if (linkErr) return res.json({ data: [] }); // table may not exist
+      const ids = (links || []).map(r => r.FEE_SURCHARGE_ID).filter(Boolean);
+      if (!ids.length) return res.json({ data: [] });
+      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, NAME_SHORT, NAME_LONG, SURCHARGE_TYPE").in("ID", ids);
+      if (error) return res.json({ data: [] });
+      return res.json({ data: data || [] });
+    } else {
+      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, NAME_SHORT, NAME_LONG, SURCHARGE_TYPE").order("ID");
+      if (error) return res.json({ data: [] });
+      return res.json({ data: data || [] });
+    }
+  } catch (e) {
+    return res.json({ data: [] }); // soft-fail – table may not be seeded yet
+  }
+}
+
+// ── HOAI Surcharges (per calculation) ────────────────────────────────────────
+
+async function listFeeCalcSurcharges(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+  const { data, error } = await supabase.from("FEE_CALCULATION_SURCHARGES")
+    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER")
+    .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+    .order("SORT_ORDER", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+}
+
+async function saveFeeCalcSurcharges(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+
+  try {
+    // Verify ownership
+    const { data: master, error: masterErr } = await supabase.from("FEE_CALCULATION_MASTER")
+      .select("ID").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
+    if (masterErr || !master) return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
+
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+
+    // Delete all existing surcharges for this calc, then re-insert
+    const { error: delErr } = await supabase.from("FEE_CALCULATION_SURCHARGES")
+      .delete().eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
+    if (delErr) return res.status(500).json({ error: delErr.message });
+
+    if (rows.length) {
+      const insertRows = rows.map((r, idx) => {
+        const pct = Number(r.PERCENT) || 0;
+        const base = Number(r.BASE_AMOUNT) || 0;
+        return {
+          TENANT_ID:          req.tenantId,
+          FEE_CALC_MASTER_ID: id,
+          FEE_SURCHARGE_ID:   r.FEE_SURCHARGE_ID ?? null,
+          NAME_SHORT:         r.NAME_SHORT ?? null,
+          NAME_LONG:          r.NAME_LONG ?? null,
+          PERCENT:            pct,
+          BASE_AMOUNT:        base,
+          AMOUNT:             Math.round((pct / 100) * base * 100) / 100,
+          SORT_ORDER:         r.SORT_ORDER ?? idx,
+        };
+      });
+      const { error: insErr } = await supabase.from("FEE_CALCULATION_SURCHARGES").insert(insertRows);
+      if (insErr) return res.status(500).json({ error: insErr.message });
+    }
+
+    const { data: saved } = await supabase.from("FEE_CALCULATION_SURCHARGES")
+      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+      .order("SORT_ORDER", { ascending: true });
+    res.json({ data: saved || [] });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ── HOAI PDF ──────────────────────────────────────────────────────────────────
+
+async function getHonorarPdf(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+  try {
+    const { renderHonorarPdf } = require("../services_pdf_render");
+    const pdf = await renderHonorarPdf(supabase, { calcMasterId: id, tenantId: req.tenantId });
+    res.set("Content-Type", "application/pdf");
+    res.set("Content-Disposition", `inline; filename="Honorarberechnung_${id}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 const wtmSvc = require("../services/workingTimeModels");
 
 async function getCountryStates(req, res) {
@@ -1128,4 +1289,8 @@ module.exports = {
   getCompanyAssets, putCompanyLogo, putCompanySignature,
   getMonatsabschluss, putMonatsabschluss, runMonatsabschlussNow, getMonatsabschlussPdf,
   getCountryStates, getWorkingTimeModels, postWorkingTimeModel, patchWorkingTimeModel, deleteWorkingTimeModel,
+  listFeeCalcMasters, getFeeCalcMasterDetail,
+  listFeeSurchargesGlobal,
+  listFeeCalcSurcharges, saveFeeCalcSurcharges,
+  getHonorarPdf,
 };

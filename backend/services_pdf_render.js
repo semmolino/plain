@@ -719,4 +719,105 @@ async function renderMonatsabschlussPdf({ supabase, tenantId }) {
   return { pdf, report };
 }
 
-module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderMahnungPdf };
+// ── Honorar PDF ───────────────────────────────────────────────────────────────
+
+async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
+  // Load calc master (tenant-scoped)
+  const { data: calc, error: calcErr } = await supabase
+    .from('FEE_CALCULATION_MASTER')
+    .select('*')
+    .eq('ID', calcMasterId)
+    .eq('TENANT_ID', tenantId)
+    .single();
+  if (calcErr || !calc) throw { status: 404, message: 'Honorarberechnung nicht gefunden' };
+
+  // Load phases with labels
+  const { loadPhaseRowsWithLabels } = require('./services/stammdaten');
+  const phaseRows = await loadPhaseRowsWithLabels(supabase, calcMasterId);
+
+  // Load surcharges
+  const { data: surchargeRows } = await supabase
+    .from('FEE_CALCULATION_SURCHARGES')
+    .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT')
+    .eq('FEE_CALC_MASTER_ID', calcMasterId)
+    .eq('TENANT_ID', tenantId)
+    .order('SORT_ORDER', { ascending: true });
+
+  // Load zone name
+  let zoneName = null;
+  if (calc.ZONE_ID) {
+    const { data: zone } = await supabase.from('FEE_ZONES').select('NAME_SHORT').eq('ID', calc.ZONE_ID).maybeSingle();
+    zoneName = zone?.NAME_SHORT ?? null;
+  }
+
+  // Load project label
+  let projectLabel = null;
+  if (calc.PROJECT_ID) {
+    const { data: proj } = await supabase.from('PROJECT').select('NAME_SHORT, NAME_LONG').eq('ID', calc.PROJECT_ID).maybeSingle();
+    if (proj) projectLabel = [proj.NAME_SHORT, proj.NAME_LONG].filter(Boolean).join(' – ');
+  }
+
+  // Load company (seller) data + logo
+  const { data: coRows } = await supabase.from('COMPANY').select('ID, COMPANY_NAME_1, STREET, POST_CODE, CITY, IBAN, BIC, TAX_NUMBER, "TAX-ID"').eq('TENANT_ID', tenantId).limit(1);
+  const co = coRows?.[0] ?? {};
+  const companyId = co.ID ?? null;
+  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId });
+
+  const grundhonorar = phaseRows.reduce((s, r) => s + (Number(r.PHASE_REVENUE) || 0), 0);
+  const zuschlaegeSum = (surchargeRows || []).reduce((s, r) => s + (Number(r.AMOUNT) || 0), 0);
+
+  const context = {
+    docDate: new Date(),
+    logoDataUri,
+    seller: {
+      name:       co.COMPANY_NAME_1 || '',
+      street:     co.STREET || '',
+      postCode:   co.POST_CODE || '',
+      city:       co.CITY || '',
+      iban:       co.IBAN || '',
+      bic:        co.BIC || '',
+      taxId:      co['TAX-ID'] || '',
+      taxNumber:  co.TAX_NUMBER || '',
+    },
+    calc: {
+      nameShort:          calc.NAME_SHORT || '',
+      nameLong:           calc.NAME_LONG || '',
+      zoneName,
+      zonePercent:        calc.ZONE_PERCENT ?? '',
+      constructionCostsK0: calc.CONSTRUCTION_COSTS_K0 ?? null,
+      constructionCostsK1: calc.CONSTRUCTION_COSTS_K1 ?? null,
+      constructionCostsK2: calc.CONSTRUCTION_COSTS_K2 ?? null,
+      constructionCostsK3: calc.CONSTRUCTION_COSTS_K3 ?? null,
+      constructionCostsK4: calc.CONSTRUCTION_COSTS_K4 ?? null,
+      revenueK0: calc.REVENUE_K0 ?? null,
+      revenueK1: calc.REVENUE_K1 ?? null,
+      revenueK2: calc.REVENUE_K2 ?? null,
+      revenueK3: calc.REVENUE_K3 ?? null,
+      revenueK4: calc.REVENUE_K4 ?? null,
+    },
+    projectLabel,
+    phases: phaseRows.map(r => ({
+      phaseLabel:     r.PHASE_LABEL || '',
+      kx:             r.KX || 'K0',
+      feePercentBase: r.FEE_PERCENT_BASE ?? '',
+      feePercent:     r.FEE_PERCENT ?? '',
+      revenueBase:    r.REVENUE_BASE ?? null,
+      phaseRevenue:   r.PHASE_REVENUE ?? null,
+    })),
+    surcharges: (surchargeRows || []).map(r => ({
+      nameShort:   r.NAME_SHORT || '',
+      nameLong:    r.NAME_LONG || '',
+      percent:     r.PERCENT ?? '',
+      baseAmount:  r.BASE_AMOUNT ?? null,
+      amount:      r.AMOUNT ?? null,
+    })),
+    grundhonorar,
+    zuschlaegeSum,
+    gesamthonorar: grundhonorar + zuschlaegeSum,
+  };
+
+  const html = env().render(path.join('modern_a', 'honorar.njk'), context);
+  return renderPdf({ html });
+}
+
+module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderMahnungPdf, renderHonorarPdf };

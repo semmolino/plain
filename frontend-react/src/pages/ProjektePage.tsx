@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs }           from '@/components/ui/Tabs'
 import { ProjekteListe }  from '@/pages/projekte/ProjekteListe'
 import { ProjekteAnlegen } from '@/pages/projekte/ProjekteAnlegen'
-import { HonorarWizard }  from '@/pages/projekte/HonorarWizard'
+import { HonorarTab }     from '@/pages/projekte/HonorarWizard'
 import { ProjektStruktur } from '@/pages/projekte/ProjektStruktur'
 import { Buchungen }      from '@/pages/projekte/Buchungen'
 import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
@@ -58,7 +58,7 @@ export function ProjektePage() {
       <div className="master-tab-content">
         {tab === 'liste'          && <ProjekteListe onSelectProject={openProject} />}
         {tab === 'anlegen'        && <ProjekteAnlegen />}
-        {tab === 'honorar'        && <HonorarWizard />}
+        {tab === 'honorar'        && <HonorarTab />}
         {tab === 'struktur'       && <ProjektStruktur initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}

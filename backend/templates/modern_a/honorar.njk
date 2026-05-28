@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  color: #1a1a1a;
+  line-height: 1.4;
+  padding-bottom: 28mm;
+}
+
+.logo-area {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6mm;
+  min-height: 4mm;
+}
+.logo-area img { max-height: 20mm; max-width: 70mm; object-fit: contain; }
+
+.sender-line {
+  font-size: 7.5pt;
+  color: #6b7280;
+  border-bottom: 0.3pt solid #d1d5db;
+  padding-bottom: 1mm;
+  margin-bottom: 8mm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-title {
+  font-size: 14pt;
+  font-weight: 700;
+  margin-bottom: 1mm;
+}
+.doc-meta {
+  font-size: 9pt;
+  color: #6b7280;
+  margin-bottom: 8mm;
+}
+
+.section-title {
+  font-size: 9pt;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2mm;
+  margin-top: 6mm;
+  padding-bottom: 1mm;
+  border-bottom: 0.5pt solid #d1d5db;
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+table.data-table th {
+  text-align: left;
+  padding: 2mm 2mm;
+  background: #f3f4f6;
+  border-bottom: 0.8pt solid #d1d5db;
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.data-table td {
+  padding: 1.5mm 2mm;
+  border-bottom: 0.3pt solid #e5e7eb;
+  vertical-align: top;
+}
+table.data-table .num { text-align: right; white-space: nowrap; }
+table.data-table tfoot td {
+  border-top: 1pt solid #374151;
+  border-bottom: none;
+  font-weight: 600;
+  padding-top: 2mm;
+}
+table.data-table tfoot tr.grand-total td {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #111827;
+  padding-top: 2mm;
+}
+
+.basis-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3mm;
+  margin-bottom: 2mm;
+}
+.basis-cell { padding: 2mm 3mm; background: #f9fafb; border: 0.3pt solid #e5e7eb; border-radius: 2pt; }
+.basis-cell .bc-label { font-size: 7.5pt; color: #6b7280; margin-bottom: 0.5mm; }
+.basis-cell .bc-val   { font-size: 9.5pt; font-weight: 600; }
+
+.summary-block {
+  margin-top: 8mm;
+  padding: 4mm 5mm;
+  background: #f0f9ff;
+  border: 0.5pt solid #bae6fd;
+  border-radius: 3pt;
+}
+.summary-block table { width: 100%; border-collapse: collapse; }
+.summary-block td { padding: 1.2mm 0; font-size: 9.5pt; }
+.summary-block td.sl { color: #374151; }
+.summary-block td.sv { text-align: right; font-weight: 600; white-space: nowrap; }
+.summary-block tr.gesamthonorar td { font-size: 12pt; font-weight: 700; border-top: 1pt solid #0284c7; padding-top: 2mm; }
+
+.doc-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24mm;
+  display: flex;
+  gap: 5mm;
+  padding: 3mm 20mm 3mm 25mm;
+  border-top: 0.3pt solid #d1d5db;
+  background: #fff;
+  font-size: 7pt;
+  color: #6b7280;
+  line-height: 1.55;
+}
+.doc-footer-col { flex: 1; }
+.doc-footer-col strong { color: #374151; font-weight: 600; display: block; margin-bottom: 0.5mm; font-size: 7.5pt; }
+</style>
+</head>
+<body>
+
+{# Logo #}
+<div class="logo-area">
+  {% if logoDataUri %}
+    <img src="{{ logoDataUri }}" alt="Logo">
+  {% endif %}
+</div>
+
+{# Sender line #}
+<div class="sender-line">
+  {{ seller.name }}{% if seller.street %} &middot; {{ seller.street }}{% endif %}{% if seller.postCode or seller.city %} &middot; {{ seller.postCode }} {{ seller.city }}{% endif %}
+</div>
+
+{# Document title #}
+<div class="doc-title">Honorarberechnung</div>
+<div class="doc-meta">
+  {{ calc.nameLong or calc.nameShort or "HOAI-Kalkulation" }}
+  {% if projectLabel %} &middot; Projekt: {{ projectLabel }}{% endif %}
+  &middot; Stand: {{ docDate | date_de }}
+</div>
+
+{# Basisdaten #}
+<div class="section-title">Grundlagen</div>
+<div class="basis-grid">
+  <div class="basis-cell">
+    <div class="bc-label">Honorarordnung</div>
+    <div class="bc-val">{{ calc.nameShort }}</div>
+  </div>
+  <div class="basis-cell">
+    <div class="bc-label">Honorarzone</div>
+    <div class="bc-val">{{ calc.zoneName or "—" }}</div>
+  </div>
+  <div class="basis-cell">
+    <div class="bc-label">Zonenanteil</div>
+    <div class="bc-val">{{ calc.zonePercent or "—" }} %</div>
+  </div>
+  {% for k in ['K0','K1','K2','K3','K4'] %}
+  {% if calc['constructionCosts' + k] %}
+  <div class="basis-cell">
+    <div class="bc-label">Baukosten {{ k }}</div>
+    <div class="bc-val">{{ calc['constructionCosts' + k] | money }}</div>
+  </div>
+  <div class="basis-cell">
+    <div class="bc-label">Grundhonorar {{ k }}</div>
+    <div class="bc-val">{{ calc['revenue' + k] | money }}</div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+
+{# Leistungsphasen #}
+{% if phases and phases.length %}
+<div class="section-title">Leistungsphasen</div>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th style="width:45%">Leistungsphase</th>
+      <th>Kx</th>
+      <th class="num">Basis%</th>
+      <th class="num">Honorar%</th>
+      <th class="num">Basis €</th>
+      <th class="num">Honorar €</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in phases %}
+    <tr>
+      <td>{{ p.phaseLabel }}</td>
+      <td>{{ p.kx }}</td>
+      <td class="num">{{ p.feePercentBase }}</td>
+      <td class="num">{{ p.feePercent }}</td>
+      <td class="num">{{ p.revenueBase | money }}</td>
+      <td class="num">{{ p.phaseRevenue | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="4">Grundhonorar</td>
+      <td></td>
+      <td class="num">{{ grundhonorar | money }}</td>
+    </tr>
+  </tfoot>
+</table>
+{% endif %}
+
+{# Zuschläge / Nachlässe #}
+{% if surcharges and surcharges.length %}
+<div class="section-title">Zuschläge &amp; Nachlässe</div>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th style="width:50%">Bezeichnung</th>
+      <th class="num">%</th>
+      <th class="num">Basis €</th>
+      <th class="num">Betrag €</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in surcharges %}
+    <tr>
+      <td>{{ s.nameLong or s.nameShort or "—" }}</td>
+      <td class="num">{{ s.percent }}</td>
+      <td class="num">{{ s.baseAmount | money }}</td>
+      <td class="num">{{ s.amount | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="3">Summe Zuschläge / Nachlässe</td>
+      <td class="num">{{ zuschlaegeSum | money }}</td>
+    </tr>
+  </tfoot>
+</table>
+{% endif %}
+
+{# Summary #}
+<div class="summary-block">
+  <table>
+    <tr>
+      <td class="sl">Grundhonorar (Summe Leistungsphasen)</td>
+      <td class="sv">{{ grundhonorar | money }}</td>
+    </tr>
+    {% if surcharges and surcharges.length %}
+    <tr>
+      <td class="sl">Zuschläge / Nachlässe</td>
+      <td class="sv">{{ zuschlaegeSum | money }}</td>
+    </tr>
+    {% endif %}
+    <tr class="gesamthonorar">
+      <td class="sl">Gesamthonorar (netto)</td>
+      <td class="sv">{{ gesamthonorar | money }}</td>
+    </tr>
+  </table>
+</div>
+
+{# Fixed footer #}
+<div class="doc-footer">
+  {% if seller.name %}
+  <div class="doc-footer-col">
+    <strong>{{ seller.name }}</strong>
+    {% if seller.street %}<span>{{ seller.street }}</span><br>{% endif %}
+    {% if seller.postCode or seller.city %}<span>{{ seller.postCode }} {{ seller.city }}</span>{% endif %}
+  </div>
+  {% endif %}
+  {% if seller.iban or seller.bic %}
+  <div class="doc-footer-col">
+    <strong>Bankverbindung</strong>
+    {% if seller.iban %}<span>IBAN: {{ seller.iban }}</span><br>{% endif %}
+    {% if seller.bic %}<span>BIC: {{ seller.bic }}</span>{% endif %}
+  </div>
+  {% endif %}
+  {% if seller.taxId or seller.taxNumber %}
+  <div class="doc-footer-col">
+    <strong>Steuer</strong>
+    {% if seller.taxId %}<span>USt-IdNr.: {{ seller.taxId }}</span><br>{% endif %}
+    {% if seller.taxNumber %}<span>Steuernr.: {{ seller.taxNumber }}</span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+</body>
+</html>
