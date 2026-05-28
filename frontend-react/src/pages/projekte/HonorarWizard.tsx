@@ -80,8 +80,7 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
   const isEdit = !!existingId
 
   // In create mode: steps 1-5. In edit mode: steps 2-4 (no fee-master select, no structure attach)
-  const firstStep = isEdit ? 2 : 1
-  const lastStep  = isEdit ? 4 : 5
+  const firstStep  = isEdit ? 2 : 1
   const totalSteps = isEdit ? 3 : 5  // dots in StepIndicator
   // Map internal step → display dot number
   function dotFor(s: number) { return isEdit ? s - 1 : s }
