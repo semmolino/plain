@@ -715,7 +715,6 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                     const computed = blComputedAmounts[idx] ?? 0
                     const isFixed = !b.AMOUNT_TYPE || b.AMOUNT_TYPE === 'fixed'
                     const needsKx = b.AMOUNT_TYPE === 'pct_basis' || b.AMOUNT_TYPE === 'pct_baukosten'
-                    const needsLph = b.AMOUNT_TYPE === 'pct_lph'
                     const updateBl = (patch: Partial<FeeCalcBl>) =>
                       setBlItems(prev => prev.map((x, i) => i === idx ? { ...x, ...patch } : x))
                     return (
