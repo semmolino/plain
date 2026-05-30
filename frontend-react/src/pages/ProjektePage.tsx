@@ -26,17 +26,23 @@ const TABS: { id: Tab; label: string }[] = [
 export function ProjektePage() {
   const location = useLocation()
   const navigate  = useNavigate()
-  const navState  = location.state as { tab?: Tab; projectId?: number } | null
+  const [tab, setTab] = useState<Tab>(() => {
+    const s = location.state as { tab?: Tab } | null
+    return s?.tab ?? 'liste'
+  })
+  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(() => {
+    const s = location.state as { projectId?: number } | null
+    return s?.projectId
+  })
 
-  const [tab, setTab] = useState<Tab>(navState?.tab ?? 'liste')
-  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(navState?.projectId)
-
-  // Clear navigation state so back/forward doesn't re-apply it
+  // Apply navigation state (handles both initial mount and subsequent same-route navigations)
   useEffect(() => {
-    if (location.state) {
-      navigate('/projekte', { replace: true, state: null })
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    const state = location.state as { tab?: Tab; projectId?: number } | null
+    if (!state) return
+    if (state.tab) setTab(state.tab)
+    if (state.projectId != null) setSelectedProjectId(state.projectId)
+    navigate('/projekte', { replace: true, state: null })
+  }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openProject(id: number) {
     setSelectedProjectId(id)

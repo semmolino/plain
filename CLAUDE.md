@@ -179,6 +179,40 @@ These rules apply to every feature. Playwright smoke tests in `frontend-react/te
 
 ---
 
+## List UI standards (ALL list pages must follow these rules)
+
+Every list/table view must use the same toolbar and search/filter pattern. Deviations require an explicit decision.
+
+**Toolbar structure**
+```tsx
+<div className="list-toolbar">
+  <input type="search" className="list-search" placeholder="Suchen …" value={search} onChange={…} />
+  {/* FilterChips go here, one per filterable dimension */}
+  <FilterChip label="Dimension" options={allValues} selected={filterSet} onChange={setFilterSet} />
+  {/* Primary action button last, pushed right */}
+  <button className="btn-primary" style={{ marginLeft: 'auto' }}>+ Neu</button>
+</div>
+```
+
+**CSS classes (already in globals.css)**
+- `.list-toolbar` — `display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap`
+- `.list-search` — flex:1; min-width:180px; styled search input (rounded, border, correct font-size)
+- `.filter-chip-wrap` / `.filter-chip-btn` / `.filter-chip-dropdown` / `.filter-chip-option` — multi-select dropdown filter chip
+
+**FilterChip component**
+- Local component defined per-page (copy pattern from `HonorarWizard.tsx` → `FilterChip`)
+- Uses `Set<string>` for selected values; null/empty set means "all"
+- Click-outside closes via `useRef` + `mousedown` listener
+- Shows count badge when active: `§ (2) ▾`
+- "Zurücksetzen" button shown when filter is active
+- Filter values are derived from the loaded data (no hardcoded lists)
+- **Filtering is always client-side** (never add server-side query params for chip filters)
+
+**Which filters to add per list**
+Choose dimensions meaningful to the data — typical examples: Projekt, Mitarbeiter, Status, §-Paragraph, Typ. Always include a free-text search. Pre-select filters from `initialProjectId` / nav state when applicable.
+
+---
+
 ## Development notes
 
 - **Test suite**: Jest (backend, 24 tests) + Playwright (frontend, smoke tests). Run with `npm test --prefix backend` and `npx playwright test` in `frontend-react/`.

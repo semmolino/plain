@@ -10,7 +10,6 @@ body {
   font-size: 10pt;
   color: #1a1a1a;
   line-height: 1.4;
-  padding-bottom: 28mm;
 }
 
 .logo-area {
@@ -80,6 +79,8 @@ table.data-table tfoot td {
   font-weight: 600;
   padding-top: 2mm;
 }
+table.data-table { page-break-inside: auto; }
+table.data-table tbody tr { page-break-inside: avoid; }
 table.data-table tfoot tr.grand-total td {
   font-size: 11pt;
   font-weight: 700;
@@ -128,16 +129,11 @@ table.data-table tfoot tr.grand-total td {
 .summary-block tr.gesamthonorar td { font-size: 12pt; font-weight: 700; border-top: 1pt solid #0284c7; padding-top: 2mm; }
 
 .doc-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 24mm;
+  margin-top: 10mm;
   display: flex;
   gap: 5mm;
-  padding: 3mm 20mm 3mm 25mm;
+  padding-top: 3mm;
   border-top: 0.3pt solid #d1d5db;
-  background: #fff;
   font-size: 7pt;
   color: #6b7280;
   line-height: 1.55;
@@ -169,7 +165,7 @@ table.data-table tfoot tr.grand-total td {
 </div>
 
 {# Basisdaten #}
-<div class="section-title">Grundlagen</div>
+<div class="section-title">Basisdaten</div>
 <div class="basis-grid">
   <div class="basis-cell">
     <div class="bc-label">Honorarordnung</div>

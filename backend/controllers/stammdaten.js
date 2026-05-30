@@ -1252,6 +1252,11 @@ async function syncFeeCalcToStructure(req, res, supabase) {
     const { data: phases } = await supabase.from("FEE_CALCULATION_PHASE")
       .select("ID, PHASE_REVENUE, FEE_PERCENT").eq("FEE_MASTER_ID", id);
 
+    const { data: surchargeRows } = await supabase.from("FEE_CALCULATION_SURCHARGES")
+      .select("AMOUNT, LPH_FILTER")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+      .order("SORT_ORDER", { ascending: true });
+
     const { data: structRows } = await supabase.from("PROJECT_STRUCTURE")
       .select("ID, EXTRAS_PERCENT, FEE_CALC_PHASE_ID")
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
@@ -1260,12 +1265,35 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       return res.json({ synced: 0, projectId: master.PROJECT_ID, message: "Keine verknüpften Projektelemente gefunden." });
     }
 
+    // Distribute each surcharge proportionally to the phases in its LPH_FILTER
+    const allPhaseIds = (phases || []).map(p => p.ID);
+    const surchargeAllocations = {};
+    for (const s of (surchargeRows || [])) {
+      const amount = Number(s.AMOUNT) || 0;
+      if (amount === 0) continue;
+      let selectedIds;
+      if (s.LPH_FILTER) {
+        try { selectedIds = JSON.parse(s.LPH_FILTER); } catch { selectedIds = allPhaseIds; }
+      } else {
+        selectedIds = allPhaseIds;
+      }
+      const selectedPhases = (phases || []).filter(p => selectedIds.includes(p.ID));
+      const filterBase = selectedPhases.reduce((sum, p) => sum + (Number(p.PHASE_REVENUE) || 0), 0);
+      if (filterBase === 0) continue;
+      for (const p of selectedPhases) {
+        const share = (Number(p.PHASE_REVENUE) || 0) / filterBase * amount;
+        surchargeAllocations[p.ID] = (surchargeAllocations[p.ID] || 0) + share;
+      }
+    }
+
     const phaseMap = new Map((phases || []).map(p => [p.ID, p]));
     let synced = 0;
     for (const row of structRows) {
       const phase = phaseMap.get(row.FEE_CALC_PHASE_ID);
       if (!phase) continue;
-      const revenue = Number(phase.PHASE_REVENUE ?? 0) || 0;
+      const baseRevenue = Number(phase.PHASE_REVENUE ?? 0) || 0;
+      const surchargeShare = surchargeAllocations[phase.ID] || 0;
+      const revenue = Math.round((baseRevenue + surchargeShare) * 100) / 100;
       const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
       const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
       const { error } = await supabase.from("PROJECT_STRUCTURE")

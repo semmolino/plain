@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Message } from '@/components/ui/Message'
@@ -560,11 +560,11 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                           {KX_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
                         </select>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <input className="tbl-input" readOnly style={{ width: 90 }} value={fmtN(p.REVENUE_BASE)} />
+                      <td style={{ textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
+                        {p.REVENUE_BASE != null ? fmtEur(p.REVENUE_BASE) : '—'}
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <input className="tbl-input" readOnly style={{ width: 70 }} value={fmtN(p.FEE_PERCENT_BASE)} />
+                      <td style={{ textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
+                        {fmtN(p.FEE_PERCENT_BASE) || '—'}
                       </td>
                       <td style={{ textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
                         {basisHonorar != null ? fmtEur(basisHonorar) : '—'}
@@ -636,10 +636,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                     const selectedIds: number[] = r.LPH_FILTER
                       ? (JSON.parse(r.LPH_FILTER) as number[])
                       : phases.map(p => p.ID)
-                    const allSelected = selectedIds.length === phases.length
                     const isExpanded = expandedSurchargeIdx === idx
-                    const modeLabel = (r.CALC_MODE ?? 'parallel') === 'cumulative' ? 'Kumulativ' : 'Parallel'
-                    const lphSummary = allSelected ? 'Alle' : `${selectedIds.length}/${phases.length}`
                     return (
                       <>
                         <tr key={idx}>
@@ -666,7 +663,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                             <button type="button" className="btn-small" title="LPH-Filter und Modus bearbeiten"
                               style={{ fontSize: 11, padding: '2px 6px', background: isExpanded ? '#dbeafe' : undefined }}
                               onClick={() => setExpandedSurchargeIdx(isExpanded ? null : idx)}>
-                              {lphSummary} {modeLabel === 'Kumulativ' ? '(K)' : '(P)'}
+                              {isExpanded ? 'Schließe Details' : 'Öffne Details'}
                             </button>
                           </td>
                           <td>
@@ -690,9 +687,9 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                                   Kumulativ
                                 </button>
                                 <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 8 }}>
-                                  {r.CALC_MODE === 'cumulative'
-                                    ? '(Basis + Summe vorheriger Zuschläge)'
-                                    : '(nur ausgewählte LPH-Summe)'}
+                                  {r.CALC_MODE === 'cumulative' && idx > 0
+                                    ? 'Zuschlag auf Honorarbasis + Summe vorheriger Zuschläge'
+                                    : 'Zuschlag auf Honorarbasis'}
                                 </span>
                               </div>
                               <div>
@@ -783,6 +780,11 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
 
       {!showSyncDialog && (
         <div className="wizard-nav">
+          {calcMaster && step >= 2 && (
+            <button type="button" className="btn-small" onClick={() => openHonorarPdf(calcMaster.ID)}>
+              Übersicht
+            </button>
+          )}
           {step > firstStep && (
             <button type="button" onClick={cancelAndDelete} disabled={loading}>
               {isEdit ? 'Abbrechen' : 'Abbrechen & Löschen'}
@@ -822,26 +824,102 @@ function fmtEurShort(v: number | null | undefined) {
   return v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 }
 
+function FilterChip({ label, options, selected, onChange }: {
+  label: string
+  options: string[]
+  selected: Set<string>
+  onChange: (next: Set<string>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function toggle(v: string) {
+    const next = new Set(selected)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    onChange(next)
+  }
+
+  const hasFilter = selected.size > 0
+  return (
+    <div className="filter-chip-wrap" ref={ref}>
+      <button
+        type="button"
+        className={`filter-chip-btn${hasFilter ? ' active' : ''}`}
+        onClick={() => setOpen(o => !o)}
+      >
+        {label}{hasFilter ? ` (${selected.size})` : ''} ▾
+      </button>
+      {open && (
+        <div className="filter-chip-dropdown">
+          {options.map(v => (
+            <label key={v} className="filter-chip-option">
+              <input type="checkbox" checked={selected.has(v)} onChange={() => toggle(v)} />
+              {v}
+            </label>
+          ))}
+          {options.length === 0 && (
+            <span style={{ padding: '6px 10px', fontSize: 12, color: '#9ca3af', display: 'block' }}>Keine Optionen</span>
+          )}
+          {hasFilter && (
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
+              <button type="button" className="filter-chip-option" style={{ color: '#dc2626', width: '100%', textAlign: 'left' }}
+                onClick={() => { onChange(new Set()); setOpen(false) }}>
+                Zurücksetzen
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface HonorarTabProps {
   initialProjectId?: number
 }
 
 export function HonorarTab({ initialProjectId }: HonorarTabProps) {
   const navigate = useNavigate()
-  const [wizardMode, setWizardMode] = useState<WizardMode>(null)
-  const [search, setSearch]         = useState('')
-  const [sort, setSort]             = useState<{ col: SortCol; dir: 'asc' | 'desc' }>({ col: 'grundhonorar', dir: 'desc' })
-  const [projectFilter, setProjectFilter] = useState<number | null>(initialProjectId ?? null)
+  const [wizardMode, setWizardMode]     = useState<WizardMode>(null)
+  const [search, setSearch]             = useState('')
+  const [sort, setSort]                 = useState<{ col: SortCol; dir: 'asc' | 'desc' }>({ col: 'grundhonorar', dir: 'desc' })
+  const [paraFilter, setParaFilter]     = useState<Set<string>>(new Set())
+  const [projektFilter, setProjektFilter] = useState<Set<string>>(new Set())
+  const [didInitFilter, setDidInitFilter] = useState(false)
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['fee-calc-masters', projectFilter],
-    queryFn:  () => fetchFeeCalcMasters(projectFilter ? { project_id: projectFilter } : undefined),
+    queryKey: ['fee-calc-masters'],
+    queryFn:  () => fetchFeeCalcMasters(),
   })
   const allRows = data?.data ?? []
 
-  // Client-side search + sort
+  // Pre-select project filter when initialProjectId is provided
+  useEffect(() => {
+    if (didInitFilter || !initialProjectId || allRows.length === 0) return
+    const label = allRows.find(r => r.PROJECT_ID === initialProjectId)?.projectLabel
+    if (label) {
+      setProjektFilter(new Set([label]))
+      setDidInitFilter(true)
+    }
+  }, [allRows, initialProjectId, didInitFilter])
+
+  const allParas    = Array.from(new Set(allRows.map(r => r.NAME_SHORT).filter((s): s is string => !!s))).sort()
+  const allProjekte = Array.from(new Set(allRows.map(r => r.projectLabel).filter((s): s is string => !!s))).sort()
+
+  // Client-side search + filter
   const q = search.trim().toLowerCase()
   const filtered = allRows.filter(r => {
+    if (paraFilter.size > 0 && !(r.NAME_SHORT && paraFilter.has(r.NAME_SHORT))) return false
+    if (projektFilter.size > 0 && !(r.projectLabel && projektFilter.has(r.projectLabel))) return false
     if (!q) return true
     return (
       (r.NAME_SHORT ?? '').toLowerCase().includes(q) ||
@@ -898,20 +976,17 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
 
   return (
     <div>
-      {/* Filter / toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+      {/* Toolbar */}
+      <div className="list-toolbar">
         <input
           type="search"
+          className="list-search"
           placeholder="Suchen (§, Bezeichnung, Projekt) …"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ flex: '1 1 220px', minWidth: 180, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }}
         />
-        {projectFilter && (
-          <button type="button" className="btn-small" onClick={() => setProjectFilter(null)}>
-            Alle Projekte anzeigen ×
-          </button>
-        )}
+        <FilterChip label="§" options={allParas} selected={paraFilter} onChange={setParaFilter} />
+        <FilterChip label="Projekt" options={allProjekte} selected={projektFilter} onChange={setProjektFilter} />
         <button className="btn-primary" type="button" style={{ marginLeft: 'auto' }} onClick={() => setWizardMode({ mode: 'create' })}>
           + Neue Honorarberechnung
         </button>
@@ -957,7 +1032,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                       </button>
                       <button type="button" className="btn-small"
                         onClick={() => openHonorarPdf(r.ID)}>
-                        PDF
+                        Übersicht
                       </button>
                       {r.PROJECT_ID != null && (
                         <button type="button" className="btn-small" title="Zur Projektstruktur"
