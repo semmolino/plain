@@ -735,10 +735,10 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   const { loadPhaseRowsWithLabels } = require('./services/stammdaten');
   const phaseRows = await loadPhaseRowsWithLabels(supabase, calcMasterId);
 
-  // Load surcharges
+  // Load surcharges (including LPH filter info and calc mode)
   const { data: surchargeRows } = await supabase
     .from('FEE_CALCULATION_SURCHARGES')
-    .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT')
+    .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, CALC_MODE')
     .eq('FEE_CALC_MASTER_ID', calcMasterId)
     .eq('TENANT_ID', tenantId)
     .order('SORT_ORDER', { ascending: true });
@@ -796,21 +796,43 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
       revenueK4: calc.REVENUE_K4 ?? null,
     },
     projectLabel,
-    phases: phaseRows.map(r => ({
-      phaseLabel:     r.PHASE_LABEL || '',
-      kx:             r.KX || 'K0',
-      feePercentBase: r.FEE_PERCENT_BASE ?? '',
-      feePercent:     r.FEE_PERCENT ?? '',
-      revenueBase:    r.REVENUE_BASE ?? null,
-      phaseRevenue:   r.PHASE_REVENUE ?? null,
-    })),
-    surcharges: (surchargeRows || []).map(r => ({
-      nameShort:   r.NAME_SHORT || '',
-      nameLong:    r.NAME_LONG || '',
-      percent:     r.PERCENT ?? '',
-      baseAmount:  r.BASE_AMOUNT ?? null,
-      amount:      r.AMOUNT ?? null,
-    })),
+    phases: phaseRows.map(r => {
+      const base = Number(r.REVENUE_BASE) || 0;
+      const pctBase = Number(r.FEE_PERCENT_BASE) || 0;
+      return {
+        phaseLabel:     r.PHASE_LABEL || '',
+        kx:             r.KX || 'K0',
+        revenueBase:    r.REVENUE_BASE ?? null,
+        feePercentBase: r.FEE_PERCENT_BASE ?? '',
+        basisHonorar:   Math.round((pctBase * base / 100) * 100) / 100,
+        feePercent:     r.FEE_PERCENT ?? '',
+        phaseRevenue:   r.PHASE_REVENUE ?? null,
+      };
+    }),
+    surcharges: (surchargeRows || []).map(r => {
+      // Build a human-readable LPH detail string for the PDF
+      let lphDetail = null;
+      if (r.LPH_FILTER) {
+        try {
+          const ids = JSON.parse(r.LPH_FILTER);
+          const labels = phaseRows
+            .filter(p => ids.includes(p.ID))
+            .map(p => p.PHASE_LABEL || `LPH ${p.FEE_PHASE_ID}`);
+          if (labels.length && labels.length < phaseRows.length) {
+            lphDetail = labels.join(', ');
+          }
+        } catch { /* ignore */ }
+      }
+      return {
+        nameShort:   r.NAME_SHORT || '',
+        nameLong:    r.NAME_LONG || '',
+        percent:     r.PERCENT ?? '',
+        baseAmount:  r.BASE_AMOUNT ?? null,
+        amount:      r.AMOUNT ?? null,
+        calcMode:    r.CALC_MODE || 'parallel',
+        lphDetail,
+      };
+    }),
     grundhonorar,
     zuschlaegeSum,
     gesamthonorar: grundhonorar + zuschlaegeSum,

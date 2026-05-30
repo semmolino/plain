@@ -97,6 +97,23 @@ table.data-table tfoot tr.grand-total td {
 .basis-cell .bc-label { font-size: 7.5pt; color: #6b7280; margin-bottom: 0.5mm; }
 .basis-cell .bc-val   { font-size: 9.5pt; font-weight: 600; }
 
+.surcharge-detail {
+  font-size: 7.5pt;
+  color: #6b7280;
+  margin-top: 0.5mm;
+}
+.surcharge-mode-badge {
+  display: inline-block;
+  font-size: 6.5pt;
+  padding: 0 2mm;
+  border-radius: 2pt;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-weight: 600;
+  margin-left: 1mm;
+  vertical-align: middle;
+}
+
 .summary-block {
   margin-top: 8mm;
   padding: 4mm 5mm;
@@ -186,11 +203,12 @@ table.data-table tfoot tr.grand-total td {
 <table class="data-table">
   <thead>
     <tr>
-      <th style="width:45%">Leistungsphase</th>
+      <th style="width:38%">Leistungsphase</th>
       <th>Kx</th>
-      <th class="num">Basis%</th>
-      <th class="num">Honorar%</th>
       <th class="num">Basis €</th>
+      <th class="num">Basis %</th>
+      <th class="num">Basis-Honorar €</th>
+      <th class="num">Honorar %</th>
       <th class="num">Honorar €</th>
     </tr>
   </thead>
@@ -199,16 +217,17 @@ table.data-table tfoot tr.grand-total td {
     <tr>
       <td>{{ p.phaseLabel }}</td>
       <td>{{ p.kx }}</td>
-      <td class="num">{{ p.feePercentBase }}</td>
-      <td class="num">{{ p.feePercent }}</td>
       <td class="num">{{ p.revenueBase | money }}</td>
+      <td class="num">{{ p.feePercentBase }}</td>
+      <td class="num">{{ p.basisHonorar | money }}</td>
+      <td class="num">{{ p.feePercent }}</td>
       <td class="num">{{ p.phaseRevenue | money }}</td>
     </tr>
     {% endfor %}
   </tbody>
   <tfoot>
     <tr>
-      <td colspan="4">Grundhonorar</td>
+      <td colspan="5">Grundhonorar</td>
       <td></td>
       <td class="num">{{ grundhonorar | money }}</td>
     </tr>
@@ -222,7 +241,7 @@ table.data-table tfoot tr.grand-total td {
 <table class="data-table">
   <thead>
     <tr>
-      <th style="width:50%">Bezeichnung</th>
+      <th style="width:45%">Bezeichnung</th>
       <th class="num">%</th>
       <th class="num">Basis €</th>
       <th class="num">Betrag €</th>
@@ -231,7 +250,13 @@ table.data-table tfoot tr.grand-total td {
   <tbody>
     {% for s in surcharges %}
     <tr>
-      <td>{{ s.nameLong or s.nameShort or "—" }}</td>
+      <td>
+        {{ s.nameLong or s.nameShort or "—" }}
+        {% if s.calcMode == 'cumulative' %}<span class="surcharge-mode-badge">Kumulativ</span>{% endif %}
+        {% if s.lphDetail %}
+        <div class="surcharge-detail">Basis: {{ s.lphDetail }}</div>
+        {% endif %}
+      </td>
       <td class="num">{{ s.percent }}</td>
       <td class="num">{{ s.baseAmount | money }}</td>
       <td class="num">{{ s.amount | money }}</td>

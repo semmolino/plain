@@ -33,6 +33,7 @@ module.exports = (supabase) => {
   router.post("/fee-calculation-masters/:id/phases/save",             (req, res) => ctrl.postFeeCalcPhasesSave(req, res, supabase));
   router.delete("/fee-calculation-masters/:id",                       (req, res) => ctrl.deleteFeeCalcMaster(req, res, supabase));
   router.post("/fee-calculation-masters/:id/add-to-project-structure", (req, res) => ctrl.postFeeCalcAddToStructure(req, res, supabase));
+  router.post("/fee-calculation-masters/:id/sync-to-structure",        (req, res) => ctrl.syncFeeCalcToStructure(req, res, supabase));
   router.get("/companies",                                           (req, res) => ctrl.getCompanies(req, res, supabase));
   router.post("/company",                                            (req, res) => ctrl.postCompany(req, res, supabase));
   router.put("/company/:id",                                         (req, res) => ctrl.putCompany(req, res, supabase));

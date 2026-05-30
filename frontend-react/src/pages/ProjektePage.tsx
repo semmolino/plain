@@ -58,7 +58,7 @@ export function ProjektePage() {
       <div className="master-tab-content">
         {tab === 'liste'          && <ProjekteListe onSelectProject={openProject} />}
         {tab === 'anlegen'        && <ProjekteAnlegen />}
-        {tab === 'honorar'        && <HonorarTab />}
+        {tab === 'honorar'        && <HonorarTab initialProjectId={selectedProjectId} />}
         {tab === 'struktur'       && <ProjektStruktur initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}

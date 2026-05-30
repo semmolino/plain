@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, openPdfWithAuth } from './client'
 
 export interface FeeGroup  { ID: number; NAME_SHORT: string; NAME_LONG: string }
 export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string }
@@ -56,6 +56,8 @@ export interface FeeCalcSurcharge {
   BASE_AMOUNT:        number | null
   AMOUNT:             number | null
   SORT_ORDER:         number
+  LPH_FILTER:         string | null  // JSON array of FEE_CALCULATION_PHASE IDs; null = all phases
+  CALC_MODE:          string | null  // 'parallel' | 'cumulative'; null treated as 'parallel'
 }
 
 export const fetchFeeGroups = () =>
@@ -103,10 +105,10 @@ export const saveFeeCalcSurcharges = (calcMasterId: number, rows: FeeCalcSurchar
   apiClient.post<{ data: FeeCalcSurcharge[] }>(`/stammdaten/fee-calculation-masters/${calcMasterId}/surcharges/save`, { rows })
 
 export function openHonorarPdf(id: number) {
-  const token = localStorage.getItem('token') ?? ''
-  const apiBase = (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? '/api/v1'
-  const url = `${apiBase}/stammdaten/fee-calculation-masters/${id}/pdf`
-  fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    .then(r => r.blob())
-    .then(blob => { window.open(URL.createObjectURL(blob), '_blank') })
+  void openPdfWithAuth(`/stammdaten/fee-calculation-masters/${id}/pdf`)
 }
+
+export const syncFeeCalcToStructure = (id: number) =>
+  apiClient.post<{ synced: number; projectId: number | null; message: string }>(
+    `/stammdaten/fee-calculation-masters/${id}/sync-to-structure`, {}
+  )

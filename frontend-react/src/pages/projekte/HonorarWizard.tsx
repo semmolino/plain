@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { Message } from '@/components/ui/Message'
 import {
   fetchFeeGroups, fetchFeeMasters, fetchFeeZones,
@@ -7,7 +8,7 @@ import {
   initFeeCalcMaster, saveFeeCalcBasis, initFeePhases, saveFeePhases,
   deleteFeeCalcMaster, attachFeeToStructure,
   fetchFeeSurchargesGlobal, fetchFeeCalcSurcharges, saveFeeCalcSurcharges,
-  openHonorarPdf,
+  openHonorarPdf, syncFeeCalcToStructure,
   type FeeCalcMaster, type FeePhaseRow, type FeeCalcSurcharge, type FeeSurchargeGlobal,
 } from '@/api/fee'
 import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from '@/api/projekte'
@@ -47,11 +48,33 @@ function phaseRevenue(base: number | null, pct: number | null): number | null {
   return (pct * base) / 100
 }
 
+/** Compute effective base and amount for each surcharge row, honouring LPH filter + calc mode */
+function computeSurchargeEffects(
+  phases: FeePhaseRow[],
+  surcharges: FeeCalcSurcharge[],
+): { effectiveBase: number; amount: number }[] {
+  const results: { effectiveBase: number; amount: number }[] = []
+  let runningTotal = 0
+  for (const r of surcharges) {
+    const selectedIds: number[] = r.LPH_FILTER
+      ? (JSON.parse(r.LPH_FILTER) as number[])
+      : phases.map(p => p.ID)
+    const base = phases
+      .filter(p => selectedIds.includes(p.ID))
+      .reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
+    const effectiveBase = r.CALC_MODE === 'cumulative' ? base + runningTotal : base
+    const amount = ((r.PERCENT ?? 0) / 100) * effectiveBase
+    results.push({ effectiveBase, amount })
+    runningTotal += amount
+  }
+  return results
+}
+
 function newSurchargeRow(calcMasterId: number, sortOrder: number): FeeCalcSurcharge {
   return {
     FEE_CALC_MASTER_ID: calcMasterId, FEE_SURCHARGE_ID: null,
     NAME_SHORT: '', NAME_LONG: '', PERCENT: null, BASE_AMOUNT: null, AMOUNT: null,
-    SORT_ORDER: sortOrder,
+    SORT_ORDER: sortOrder, LPH_FILTER: null, CALC_MODE: 'parallel',
   }
 }
 
@@ -70,24 +93,24 @@ function StepIndicator({ step, totalSteps }: { step: number; totalSteps: number 
 // ── Wizard component ──────────────────────────────────────────────────────────
 
 interface WizardProps {
-  /** When provided, wizard starts in edit mode loading the existing calc */
   existingId?: number | null
+  /** Pre-select this project in step 2 when creating new */
+  initialProjectId?: number | null
   onDone?: () => void
 }
 
-export function HonorarWizard({ existingId, onDone }: WizardProps) {
+export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardProps) {
   const qc = useQueryClient()
   const isEdit = !!existingId
 
-  // In create mode: steps 1-5. In edit mode: steps 2-4 (no fee-master select, no structure attach)
   const firstStep  = isEdit ? 2 : 1
-  const totalSteps = isEdit ? 3 : 5  // dots in StepIndicator
-  // Map internal step → display dot number
+  const totalSteps = isEdit ? 3 : 5
   function dotFor(s: number) { return isEdit ? s - 1 : s }
 
   const [step, setStep]       = useState(firstStep)
   const [msg, setMsg]         = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showSyncDialog, setShowSyncDialog] = useState(false)
 
   // Step 1 state (create only)
   const [feeGroupId,  setFeeGroupId]  = useState('')
@@ -101,17 +124,18 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
     NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '',
     K0: '', K1: '', K2: '', K3: '', K4: '',
   })
-  const [projectId, setProjectId]           = useState('')
+  const [projectId, setProjectId]           = useState(initialProjectId ? String(initialProjectId) : '')
   const [structureNodes, setStructureNodes] = useState<Awaited<ReturnType<typeof fetchProjectStructure>>['data']>([])
 
   // Step 3 state (phases)
   const [phases, setPhases]   = useState<FeePhaseRow[]>([])
 
   // Step 4 state (surcharges)
-  const [surcharges, setSurcharges]                 = useState<FeeCalcSurcharge[]>([])
-  const [globalSurcharges, setGlobalSurcharges]     = useState<FeeSurchargeGlobal[]>([])
+  const [surcharges, setSurcharges]             = useState<FeeCalcSurcharge[]>([])
+  const [globalSurcharges, setGlobalSurcharges] = useState<FeeSurchargeGlobal[]>([])
+  const [expandedSurchargeIdx, setExpandedSurchargeIdx] = useState<number | null>(null)
 
-  // Step 5 (attach to structure)
+  // Step 5
   const [fatherId, setFatherId] = useState('')
 
   const { data: groupsData }   = useQuery({ queryKey: ['fee-groups'],     queryFn: fetchFeeGroups })
@@ -121,7 +145,10 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
   const projects = projectsData?.data ?? []
 
   const totalPhaseRev = phases.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
-  const totalSurchargeAmt = surcharges.reduce((s, r) => s + (((r.PERCENT ?? 0) / 100) * totalPhaseRev), 0)
+
+  // Compute surcharge effects (LPH filter + cumulative mode)
+  const surchargeEffects = computeSurchargeEffects(phases, surcharges)
+  const totalSurchargeAmt = surchargeEffects.reduce((s, e) => s + e.amount, 0)
 
   // Load structure nodes when project changes
   useEffect(() => {
@@ -191,14 +218,15 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
     setBasis({
       NAME_SHORT:   row.NAME_SHORT ?? '',
       NAME_LONG:    row.NAME_LONG  ?? '',
-      PROJECT_ID:   row.PROJECT_ID != null ? String(row.PROJECT_ID) : '',
+      PROJECT_ID:   row.PROJECT_ID != null ? String(row.PROJECT_ID) : (initialProjectId ? String(initialProjectId) : ''),
       ZONE_ID:      row.ZONE_ID    != null ? String(row.ZONE_ID) : '',
       ZONE_PERCENT: fmtN(row.ZONE_PERCENT),
       K0: fmtN(row.CONSTRUCTION_COSTS_K0), K1: fmtN(row.CONSTRUCTION_COSTS_K1),
       K2: fmtN(row.CONSTRUCTION_COSTS_K2), K3: fmtN(row.CONSTRUCTION_COSTS_K3),
       K4: fmtN(row.CONSTRUCTION_COSTS_K4),
     })
-    setProjectId(row.PROJECT_ID != null ? String(row.PROJECT_ID) : '')
+    const pid = row.PROJECT_ID != null ? String(row.PROJECT_ID) : (initialProjectId ? String(initialProjectId) : '')
+    setProjectId(pid)
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -252,16 +280,19 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
       })))
       const synced = syncPhases(calcMaster, saved.data ?? [])
       setPhases(synced)
-      // Load surcharges for step 4
       setMsg({ text: 'Lade Zuschläge …', type: 'info' })
       const [surRes, globalRes] = await Promise.all([
         fetchFeeCalcSurcharges(calcMaster.ID),
         calcMaster.FEE_MASTER_ID ? fetchFeeSurchargesGlobal(calcMaster.FEE_MASTER_ID) : Promise.resolve({ data: [] as FeeSurchargeGlobal[] }),
       ])
       setGlobalSurcharges(globalRes.data ?? [])
-      // Pre-populate BASE_AMOUNT on existing surcharge rows
       const grundhonorar = synced.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
-      setSurcharges((surRes.data ?? []).map(r => ({ ...r, BASE_AMOUNT: r.BASE_AMOUNT ?? grundhonorar })))
+      setSurcharges((surRes.data ?? []).map(r => ({
+        ...r,
+        BASE_AMOUNT: r.BASE_AMOUNT ?? grundhonorar,
+        LPH_FILTER: r.LPH_FILTER ?? null,
+        CALC_MODE: r.CALC_MODE ?? 'parallel',
+      })))
       setMsg(null); setStep(4)
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
@@ -272,17 +303,41 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
     if (!calcMaster) return
     setLoading(true); setMsg({ text: 'Speichere Zuschläge …', type: 'info' })
     try {
-      await saveFeeCalcSurcharges(calcMaster.ID, surcharges.map((r, i) => ({ ...r, SORT_ORDER: i, BASE_AMOUNT: totalPhaseRev })))
+      const effects = computeSurchargeEffects(phases, surcharges)
+      const rowsToSave = surcharges.map((r, i) => ({
+        ...r,
+        SORT_ORDER: i,
+        BASE_AMOUNT: effects[i]?.effectiveBase ?? totalPhaseRev,
+        LPH_FILTER: r.LPH_FILTER ?? null,
+        CALC_MODE: r.CALC_MODE ?? 'parallel',
+      }))
+      await saveFeeCalcSurcharges(calcMaster.ID, rowsToSave)
+      void qc.invalidateQueries({ queryKey: ['fee-calc-masters'] })
       setMsg(null)
       if (isEdit) {
-        void qc.invalidateQueries({ queryKey: ['fee-calc-masters'] })
-        onDone?.()
+        setShowSyncDialog(true)
       } else {
         setStep(5)
       }
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
     } finally { setLoading(false) }
+  }
+
+  async function doSyncToStructure() {
+    if (!calcMaster) { setShowSyncDialog(false); onDone?.(); return }
+    setLoading(true)
+    try {
+      const res = await syncFeeCalcToStructure(calcMaster.ID)
+      setMsg({ text: res.message, type: 'success' })
+      if (res.projectId) void qc.invalidateQueries({ queryKey: ['structure', res.projectId] })
+    } catch {
+      setMsg({ text: 'Fehler beim Aktualisieren der Projektstruktur.', type: 'error' })
+    } finally {
+      setLoading(false)
+      setShowSyncDialog(false)
+      setTimeout(() => onDone?.(), 1500)
+    }
   }
 
   async function finish() {
@@ -300,7 +355,7 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
         if (!confirm(confirmMsg)) return
       }
     } catch (e: unknown) {
-      setMsg({ text: (e as Error).message ?? 'Fehler beim Prüfen des übergeordneten Elements', type: 'error' }); return
+      setMsg({ text: (e as Error).message ?? 'Fehler beim Prüfen', type: 'error' }); return
     }
     setLoading(true); setMsg({ text: 'Erzeuge Projektstruktur …', type: 'info' })
     try {
@@ -320,7 +375,7 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
     setStep(firstStep); setCalcMaster(null); setPhases([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
     setBasis({ NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '', K0: '', K1: '', K2: '', K3: '', K4: '' })
-    setFatherId(''); setMsg(null)
+    setFatherId(''); setMsg(null); setShowSyncDialog(false)
     onDone?.()
   }
 
@@ -330,7 +385,7 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
     }
     setStep(firstStep); setCalcMaster(null); setPhases([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
-    setMsg(null)
+    setMsg(null); setShowSyncDialog(false)
     onDone?.()
   }
 
@@ -344,7 +399,7 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
         FEE_CALC_MASTER_ID: calcMaster.ID, FEE_SURCHARGE_ID: g.ID,
         NAME_SHORT: g.NAME_SHORT, NAME_LONG: g.NAME_LONG ?? '',
         PERCENT: null, BASE_AMOUNT: totalPhaseRev, AMOUNT: null,
-        SORT_ORDER: prev.length,
+        SORT_ORDER: prev.length, LPH_FILTER: null, CALC_MODE: 'parallel',
       },
     ])
   }
@@ -360,6 +415,26 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
 
   function removeSurcharge(idx: number) {
     setSurcharges(prev => prev.filter((_, i) => i !== idx))
+    if (expandedSurchargeIdx === idx) setExpandedSurchargeIdx(null)
+    else if (expandedSurchargeIdx != null && expandedSurchargeIdx > idx) setExpandedSurchargeIdx(expandedSurchargeIdx - 1)
+  }
+
+  function toggleSurchargeLph(surchargeIdx: number, phaseId: number) {
+    setSurcharges(prev => prev.map((r, i) => {
+      if (i !== surchargeIdx) return r
+      const current: number[] = r.LPH_FILTER ? (JSON.parse(r.LPH_FILTER) as number[]) : phases.map(p => p.ID)
+      const next = current.includes(phaseId)
+        ? current.filter(id => id !== phaseId)
+        : [...current, phaseId]
+      const isAll = next.length === phases.length
+      return { ...r, LPH_FILTER: isAll ? null : JSON.stringify(next) }
+    }))
+  }
+
+  function setSurchargeAllLph(surchargeIdx: number, all: boolean) {
+    setSurcharges(prev => prev.map((r, i) =>
+      i !== surchargeIdx ? r : { ...r, LPH_FILTER: all ? null : JSON.stringify([]) }
+    ))
   }
 
   // ── Phase row helpers ────────────────────────────────────────────────────────
@@ -462,29 +537,54 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
           <div className="table-scroll">
             <table className="master-table">
               <thead>
-                <tr><th>Phase</th><th>Basis%</th><th>Kx</th><th>Basis €</th><th>Honorar %</th><th>Honorar €</th></tr>
+                <tr>
+                  <th>Phase</th>
+                  <th>Kx</th>
+                  <th style={{ textAlign: 'right' }}>Basis €</th>
+                  <th style={{ textAlign: 'right' }}>Basis %</th>
+                  <th style={{ textAlign: 'right' }}>Basis-Honorar €</th>
+                  <th style={{ textAlign: 'right' }}>Honorar %</th>
+                  <th style={{ textAlign: 'right' }}>Honorar €</th>
+                </tr>
               </thead>
               <tbody>
-                {phases.map(p => (
-                  <tr key={p.ID}>
-                    <td>{p.PHASE_LABEL}</td>
-                    <td>{fmtN(p.FEE_PERCENT_BASE)}</td>
-                    <td>
-                      <select className="tbl-select" value={p.KX || 'K0'} onChange={e => updatePhaseKx(p.ID, e.target.value)}>
-                        {KX_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
-                      </select>
-                    </td>
-                    <td><input className="tbl-input" readOnly style={{ width: 90 }} value={fmtN(p.REVENUE_BASE)} /></td>
-                    <td><input className="tbl-input" type="number" step="0.01" style={{ width: 80 }} value={fmtN(p.FEE_PERCENT)} onChange={e => updatePhasePct(p.ID, e.target.value)} /></td>
-                    <td><input className="tbl-input" readOnly style={{ width: 90 }} value={fmtN(p.PHASE_REVENUE)} /></td>
-                  </tr>
-                ))}
+                {phases.map(p => {
+                  const baseEur = p.REVENUE_BASE ?? 0
+                  const basePct = p.FEE_PERCENT_BASE ?? 0
+                  const basisHonorar = basePct && baseEur ? (basePct * baseEur) / 100 : null
+                  return (
+                    <tr key={p.ID}>
+                      <td>{p.PHASE_LABEL}</td>
+                      <td>
+                        <select className="tbl-select" value={p.KX || 'K0'} onChange={e => updatePhaseKx(p.ID, e.target.value)}>
+                          {KX_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input className="tbl-input" readOnly style={{ width: 90 }} value={fmtN(p.REVENUE_BASE)} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input className="tbl-input" readOnly style={{ width: 70 }} value={fmtN(p.FEE_PERCENT_BASE)} />
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
+                        {basisHonorar != null ? fmtEur(basisHonorar) : '—'}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input className="tbl-input" type="number" step="0.01" style={{ width: 80 }}
+                          value={fmtN(p.FEE_PERCENT)} onChange={e => updatePhasePct(p.ID, e.target.value)} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input className="tbl-input" readOnly style={{ width: 90 }} value={fmtN(p.PHASE_REVENUE)} />
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
               <tfoot>
                 <tr>
-                  <th colSpan={4}>Grundhonorar</th>
-                  <th>{fmtN(totalPhasePct)}</th>
-                  <th>{fmtN(totalPhaseRev)}</th>
+                  <th colSpan={5}>Grundhonorar</th>
+                  <th style={{ textAlign: 'right' }}>{fmtN(totalPhasePct)}</th>
+                  <th style={{ textAlign: 'right' }}>{fmtN(totalPhaseRev)}</th>
                 </tr>
               </tfoot>
             </table>
@@ -521,60 +621,136 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '30%' }}>Kurzbezeichnung</th>
-                    <th style={{ width: '30%' }}>Langbezeichnung</th>
+                    <th style={{ width: '25%' }}>Kurzbezeichnung</th>
+                    <th style={{ width: '25%' }}>Langbezeichnung</th>
                     <th style={{ width: 80 }}>% (neg. = Nachlass)</th>
-                    <th style={{ width: 110 }}>Betrag €</th>
-                    <th style={{ width: 36 }}></th>
+                    <th style={{ width: 100 }}>Berechnungsbasis €</th>
+                    <th style={{ width: 100 }}>Betrag €</th>
+                    <th style={{ width: 60 }}>LPH / Modus</th>
+                    <th style={{ width: 30 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {surcharges.map((r, idx) => {
-                    const amt = ((r.PERCENT ?? 0) / 100) * totalPhaseRev
+                    const effect = surchargeEffects[idx]
+                    const selectedIds: number[] = r.LPH_FILTER
+                      ? (JSON.parse(r.LPH_FILTER) as number[])
+                      : phases.map(p => p.ID)
+                    const allSelected = selectedIds.length === phases.length
+                    const isExpanded = expandedSurchargeIdx === idx
+                    const modeLabel = (r.CALC_MODE ?? 'parallel') === 'cumulative' ? 'Kumulativ' : 'Parallel'
+                    const lphSummary = allSelected ? 'Alle' : `${selectedIds.length}/${phases.length}`
                     return (
-                      <tr key={idx}>
-                        <td>
-                          <input className="tbl-input" style={{ width: '100%' }} value={r.NAME_SHORT ?? ''}
-                            onChange={e => updateSurcharge(idx, 'NAME_SHORT', e.target.value)} />
-                        </td>
-                        <td>
-                          <input className="tbl-input" style={{ width: '100%' }} value={r.NAME_LONG ?? ''}
-                            onChange={e => updateSurcharge(idx, 'NAME_LONG', e.target.value)} />
-                        </td>
-                        <td>
-                          <input className="tbl-input" type="number" step="0.01" style={{ width: 80 }}
-                            value={r.PERCENT != null ? String(r.PERCENT) : ''}
-                            onChange={e => updateSurcharge(idx, 'PERCENT', toNum(e.target.value))} />
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, color: amt >= 0 ? '#166534' : '#991b1b' }}>
-                          {fmtEur(amt)}
-                        </td>
-                        <td>
-                          <button type="button" className="btn-small" title="Entfernen"
-                            onClick={() => removeSurcharge(idx)}>×</button>
-                        </td>
-                      </tr>
+                      <>
+                        <tr key={idx}>
+                          <td>
+                            <input className="tbl-input" style={{ width: '100%' }} value={r.NAME_SHORT ?? ''}
+                              onChange={e => updateSurcharge(idx, 'NAME_SHORT', e.target.value)} />
+                          </td>
+                          <td>
+                            <input className="tbl-input" style={{ width: '100%' }} value={r.NAME_LONG ?? ''}
+                              onChange={e => updateSurcharge(idx, 'NAME_LONG', e.target.value)} />
+                          </td>
+                          <td>
+                            <input className="tbl-input" type="number" step="0.01" style={{ width: 80 }}
+                              value={r.PERCENT != null ? String(r.PERCENT) : ''}
+                              onChange={e => updateSurcharge(idx, 'PERCENT', toNum(e.target.value))} />
+                          </td>
+                          <td style={{ textAlign: 'right', fontSize: 12, color: '#6b7280' }}>
+                            {fmtEur(effect?.effectiveBase)}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: (effect?.amount ?? 0) >= 0 ? '#166534' : '#991b1b' }}>
+                            {fmtEur(effect?.amount)}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button type="button" className="btn-small" title="LPH-Filter und Modus bearbeiten"
+                              style={{ fontSize: 11, padding: '2px 6px', background: isExpanded ? '#dbeafe' : undefined }}
+                              onClick={() => setExpandedSurchargeIdx(isExpanded ? null : idx)}>
+                              {lphSummary} {modeLabel === 'Kumulativ' ? '(K)' : '(P)'}
+                            </button>
+                          </td>
+                          <td>
+                            <button type="button" className="btn-small" title="Entfernen"
+                              onClick={() => removeSurcharge(idx)}>×</button>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr key={`${idx}-detail`}>
+                            <td colSpan={7} style={{ background: '#f8faff', padding: '10px 12px', borderBottom: '1px solid #e5e7eb' }}>
+                              <div style={{ marginBottom: 8 }}>
+                                <strong style={{ fontSize: 12, color: '#374151', marginRight: 8 }}>Berechnungsmodus:</strong>
+                                <button type="button" className="btn-small"
+                                  style={{ marginRight: 4, background: (r.CALC_MODE ?? 'parallel') === 'parallel' ? 'var(--accent)' : undefined, color: (r.CALC_MODE ?? 'parallel') === 'parallel' ? '#fff' : undefined }}
+                                  onClick={() => updateSurcharge(idx, 'CALC_MODE', 'parallel')}>
+                                  Parallel
+                                </button>
+                                <button type="button" className="btn-small"
+                                  style={{ background: r.CALC_MODE === 'cumulative' ? 'var(--accent)' : undefined, color: r.CALC_MODE === 'cumulative' ? '#fff' : undefined }}
+                                  onClick={() => updateSurcharge(idx, 'CALC_MODE', 'cumulative')}>
+                                  Kumulativ
+                                </button>
+                                <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 8 }}>
+                                  {r.CALC_MODE === 'cumulative'
+                                    ? '(Basis + Summe vorheriger Zuschläge)'
+                                    : '(nur ausgewählte LPH-Summe)'}
+                                </span>
+                              </div>
+                              <div>
+                                <strong style={{ fontSize: 12, color: '#374151' }}>Betroffene Leistungsphasen:</strong>
+                                <button type="button" className="btn-small" style={{ marginLeft: 8, marginRight: 4 }}
+                                  onClick={() => setSurchargeAllLph(idx, true)}>Alle</button>
+                                <button type="button" className="btn-small"
+                                  onClick={() => setSurchargeAllLph(idx, false)}>Keine</button>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 6 }}>
+                                  {phases.map(p => (
+                                    <label key={p.ID} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+                                      <input type="checkbox" checked={selectedIds.includes(p.ID)}
+                                        onChange={() => toggleSurchargeLph(idx, p.ID)} />
+                                      {p.PHASE_LABEL}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     )
                   })}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <th colSpan={3}>Summe Zuschläge / Nachlässe</th>
+                    <th colSpan={4}>Summe Zuschläge / Nachlässe</th>
                     <th style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? '#166534' : '#991b1b' }}>
                       {fmtEur(totalSurchargeAmt)}
                     </th>
-                    <th></th>
+                    <th colSpan={2}></th>
                   </tr>
                   <tr>
-                    <th colSpan={3}>Gesamthonorar</th>
+                    <th colSpan={4}>Gesamthonorar</th>
                     <th style={{ textAlign: 'right', fontSize: 14 }}>{fmtEur(totalPhaseRev + totalSurchargeAmt)}</th>
-                    <th></th>
+                    <th colSpan={2}></th>
                   </tr>
                 </tfoot>
               </table>
             </div>
           )}
           <button type="button" className="btn-small" onClick={addCustomSurcharge}>+ Zuschlag / Nachlass hinzufügen</button>
+
+          {/* Sync-to-structure confirmation */}
+          {showSyncDialog && (
+            <div className="admin-block" style={{ marginTop: 16, background: '#fef9c3', border: '1px solid #fbbf24', padding: 14 }}>
+              <p style={{ marginBottom: 10, fontWeight: 500, fontSize: 13 }}>
+                Sollen die verknüpften Projektelemente mit den aktualisierten Honorarwerten überschrieben werden?
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn-primary" onClick={() => void doSyncToStructure()} disabled={loading}>
+                  Ja, Projektstruktur aktualisieren
+                </button>
+                <button type="button" onClick={() => { setShowSyncDialog(false); onDone?.() }}>Nein</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -605,30 +781,32 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
 
       <Message text={msg?.text ?? null} type={msg?.type} />
 
-      <div className="wizard-nav">
-        {step > firstStep && (
-          <button type="button" onClick={cancelAndDelete} disabled={loading}>
-            {isEdit ? 'Abbrechen' : 'Abbrechen & Löschen'}
-          </button>
-        )}
-        {step === 1 && (
-          <button className="btn-primary" type="button" onClick={goNext1} disabled={loading || !feeMasterId}>Weiter →</button>
-        )}
-        {step === 2 && (
-          <button className="btn-primary" type="button" onClick={saveBasisAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
-        )}
-        {step === 3 && (
-          <button className="btn-primary" type="button" onClick={savePhasesAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
-        )}
-        {step === 4 && (
-          <button className="btn-primary" type="button" onClick={saveSurchargesAndGo} disabled={loading}>
-            {isEdit ? 'Speichern & Fertig' : 'Weiter →'}
-          </button>
-        )}
-        {step === 5 && (
-          <button className="btn-primary" type="button" onClick={finish} disabled={loading || !fatherId}>Projektstruktur anlegen</button>
-        )}
-      </div>
+      {!showSyncDialog && (
+        <div className="wizard-nav">
+          {step > firstStep && (
+            <button type="button" onClick={cancelAndDelete} disabled={loading}>
+              {isEdit ? 'Abbrechen' : 'Abbrechen & Löschen'}
+            </button>
+          )}
+          {step === 1 && (
+            <button className="btn-primary" type="button" onClick={goNext1} disabled={loading || !feeMasterId}>Weiter →</button>
+          )}
+          {step === 2 && (
+            <button className="btn-primary" type="button" onClick={saveBasisAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
+          )}
+          {step === 3 && (
+            <button className="btn-primary" type="button" onClick={savePhasesAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
+          )}
+          {step === 4 && (
+            <button className="btn-primary" type="button" onClick={saveSurchargesAndGo} disabled={loading}>
+              {isEdit ? 'Speichern & Fertig' : 'Weiter →'}
+            </button>
+          )}
+          {step === 5 && (
+            <button className="btn-primary" type="button" onClick={finish} disabled={loading || !fatherId}>Projektstruktur anlegen</button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -637,19 +815,66 @@ export function HonorarWizard({ existingId, onDone }: WizardProps) {
 
 type WizardMode = null | { mode: 'create' } | { mode: 'edit'; id: number }
 
+type SortCol = 'nameShort' | 'nameLong' | 'project' | 'grundhonorar' | 'gesamthonorar'
+
 function fmtEurShort(v: number | null | undefined) {
   if (v == null) return '—'
   return v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 }
 
-export function HonorarTab() {
+interface HonorarTabProps {
+  initialProjectId?: number
+}
+
+export function HonorarTab({ initialProjectId }: HonorarTabProps) {
+  const navigate = useNavigate()
   const [wizardMode, setWizardMode] = useState<WizardMode>(null)
+  const [search, setSearch]         = useState('')
+  const [sort, setSort]             = useState<{ col: SortCol; dir: 'asc' | 'desc' }>({ col: 'grundhonorar', dir: 'desc' })
+  const [projectFilter, setProjectFilter] = useState<number | null>(initialProjectId ?? null)
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['fee-calc-masters'],
-    queryFn:  () => fetchFeeCalcMasters(),
+    queryKey: ['fee-calc-masters', projectFilter],
+    queryFn:  () => fetchFeeCalcMasters(projectFilter ? { project_id: projectFilter } : undefined),
   })
-  const rows = data?.data ?? []
+  const allRows = data?.data ?? []
+
+  // Client-side search + sort
+  const q = search.trim().toLowerCase()
+  const filtered = allRows.filter(r => {
+    if (!q) return true
+    return (
+      (r.NAME_SHORT ?? '').toLowerCase().includes(q) ||
+      (r.NAME_LONG  ?? '').toLowerCase().includes(q) ||
+      (r.projectLabel ?? '').toLowerCase().includes(q)
+    )
+  })
+
+  const sorted = [...filtered].sort((a, b) => {
+    let va: string | number = 0
+    let vb: string | number = 0
+    if (sort.col === 'nameShort')    { va = a.NAME_SHORT ?? ''; vb = b.NAME_SHORT ?? '' }
+    if (sort.col === 'nameLong')     { va = a.NAME_LONG  ?? ''; vb = b.NAME_LONG  ?? '' }
+    if (sort.col === 'project')      { va = a.projectLabel ?? ''; vb = b.projectLabel ?? '' }
+    if (sort.col === 'grundhonorar') { va = a.grundhonorar  ?? 0; vb = b.grundhonorar  ?? 0 }
+    if (sort.col === 'gesamthonorar'){ va = a.gesamthonorar ?? 0; vb = b.gesamthonorar ?? 0 }
+    if (typeof va === 'string') return sort.dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va)
+    return sort.dir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number)
+  })
+
+  function toggleSort(col: SortCol) {
+    setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+
+  function SortTh({ col, children, right }: { col: SortCol; children: React.ReactNode; right?: boolean }) {
+    const active = sort.col === col
+    return (
+      <th style={{ cursor: 'pointer', textAlign: right ? 'right' : undefined, userSelect: 'none' }}
+        onClick={() => toggleSort(col)}>
+        {children} {active ? (sort.dir === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.3 }}>↕</span>}
+      </th>
+    )
+  }
 
   function handleDone() {
     setWizardMode(null)
@@ -664,6 +889,7 @@ export function HonorarTab() {
         </button>
         <HonorarWizard
           existingId={wizardMode.mode === 'edit' ? wizardMode.id : null}
+          initialProjectId={initialProjectId}
           onDone={handleDone}
         />
       </div>
@@ -672,39 +898,54 @@ export function HonorarTab() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <button className="btn-primary" type="button" onClick={() => setWizardMode({ mode: 'create' })}>
+      {/* Filter / toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <input
+          type="search"
+          placeholder="Suchen (§, Bezeichnung, Projekt) …"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ flex: '1 1 220px', minWidth: 180, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13 }}
+        />
+        {projectFilter && (
+          <button type="button" className="btn-small" onClick={() => setProjectFilter(null)}>
+            Alle Projekte anzeigen ×
+          </button>
+        )}
+        <button className="btn-primary" type="button" style={{ marginLeft: 'auto' }} onClick={() => setWizardMode({ mode: 'create' })}>
           + Neue Honorarberechnung
         </button>
       </div>
 
       {isLoading && <p className="empty-note">Lade …</p>}
-      {!isLoading && rows.length === 0 && (
-        <p className="empty-note">Noch keine Honorarberechnungen vorhanden.</p>
+      {!isLoading && sorted.length === 0 && (
+        <p className="empty-note">
+          {q ? 'Keine Treffer.' : 'Noch keine Honorarberechnungen vorhanden.'}
+        </p>
       )}
 
-      {rows.length > 0 && (
+      {sorted.length > 0 && (
         <div className="table-scroll">
           <table className="master-table">
             <thead>
               <tr>
-                <th>§</th>
-                <th>Bezeichnung</th>
-                <th>Projekt</th>
-                <th style={{ textAlign: 'right' }}>Grundhonorar</th>
+                <SortTh col="nameShort">§</SortTh>
+                <SortTh col="nameLong">Bezeichnung</SortTh>
+                <SortTh col="project">Projekt</SortTh>
+                <SortTh col="grundhonorar" right>Grundhonorar</SortTh>
                 <th style={{ textAlign: 'right' }}>Zuschläge</th>
-                <th style={{ textAlign: 'right' }}>Gesamthonorar</th>
+                <SortTh col="gesamthonorar" right>Gesamthonorar</SortTh>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {sorted.map(r => (
                 <tr key={r.ID}>
                   <td>{r.NAME_SHORT || '—'}</td>
                   <td>{r.NAME_LONG || '—'}</td>
                   <td>{r.projectLabel || '—'}</td>
                   <td style={{ textAlign: 'right' }}>{fmtEurShort(r.grundhonorar)}</td>
-                  <td style={{ textAlign: 'right', color: (r.zuschlaegeSum ?? 0) !== 0 ? (r.zuschlaegeSum ?? 0) >= 0 ? '#166534' : '#991b1b' : undefined }}>
+                  <td style={{ textAlign: 'right', color: (r.zuschlaegeSum ?? 0) !== 0 ? ((r.zuschlaegeSum ?? 0) >= 0 ? '#166534' : '#991b1b') : undefined }}>
                     {(r.zuschlaegeSum ?? 0) !== 0 ? fmtEurShort(r.zuschlaegeSum) : '—'}
                   </td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtEurShort(r.gesamthonorar)}</td>
@@ -718,6 +959,12 @@ export function HonorarTab() {
                         onClick={() => openHonorarPdf(r.ID)}>
                         PDF
                       </button>
+                      {r.PROJECT_ID != null && (
+                        <button type="button" className="btn-small" title="Zur Projektstruktur"
+                          onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}>
+                          → Struktur
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

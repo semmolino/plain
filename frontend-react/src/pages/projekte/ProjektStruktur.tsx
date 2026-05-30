@@ -479,6 +479,9 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: selectedPid } })}>
             Projekt-Report →
           </button>
+          <button className="btn-small" onClick={() => navigate('/projekte', { state: { tab: 'honorar', projectId: selectedPid } })}>
+            HOAI →
+          </button>
         </div>
       )}
 

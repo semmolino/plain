@@ -371,13 +371,17 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     if (calcPhasesErr) return res.status(500).json({ error: calcPhasesErr.message });
     if (!Array.isArray(calcPhases) || calcPhases.length === 0) return res.status(400).json({ error: "Es sind keine Leistungsphasen zum Übertragen vorhanden." });
 
-    const phaseIds = Array.from(new Set(calcPhases.map((row) => row.FEE_PHASE_ID).filter(Boolean)));
+    // Skip phases with 0% and 0 € — they carry no value and clutter the structure
+    const activePhases = calcPhases.filter(row => (Number(row.PHASE_REVENUE) || 0) !== 0 || (Number(row.FEE_PERCENT) || 0) !== 0);
+    if (activePhases.length === 0) return res.status(400).json({ error: "Alle Leistungsphasen haben 0 % und 0 € — bitte Honorarwerte eintragen." });
+
+    const phaseIds = Array.from(new Set(activePhases.map((row) => row.FEE_PHASE_ID).filter(Boolean)));
     const { data: phaseDefs, error: phaseDefsErr } = await supabase.from("FEE_PHASE").select("ID, NAME_SHORT, NAME_LONG").in("ID", phaseIds);
     if (phaseDefsErr) return res.status(500).json({ error: phaseDefsErr.message });
     const phaseMap = new Map((phaseDefs || []).map((row) => [row.ID, row]));
 
     const extrasPercent = Number(father.EXTRAS_PERCENT ?? 0) || 0;
-    const insertRows = calcPhases.map((row) => {
+    const insertRows = activePhases.map((row) => {
       const phaseDef = phaseMap.get(row.FEE_PHASE_ID) || {};
       const revenue = Number(row.PHASE_REVENUE ?? 0) || 0;
       const extras = (revenue * extrasPercent) / 100;
@@ -390,6 +394,8 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
         TENANT_ID: project.TENANT_ID,
         REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
         REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+        FEE_CALC_MASTER_ID: id,
+        FEE_CALC_PHASE_ID:  row.ID,
       };
     });
 
@@ -1161,7 +1167,7 @@ async function listFeeCalcSurcharges(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "id is required" });
   const { data, error } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER")
+    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE")
     .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
     .order("SORT_ORDER", { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
@@ -1199,6 +1205,8 @@ async function saveFeeCalcSurcharges(req, res, supabase) {
           BASE_AMOUNT:        base,
           AMOUNT:             Math.round((pct / 100) * base * 100) / 100,
           SORT_ORDER:         r.SORT_ORDER ?? idx,
+          LPH_FILTER:         r.LPH_FILTER ?? null,
+          CALC_MODE:          r.CALC_MODE ?? 'parallel',
         };
       });
       const { error: insErr } = await supabase.from("FEE_CALCULATION_SURCHARGES").insert(insertRows);
@@ -1206,7 +1214,7 @@ async function saveFeeCalcSurcharges(req, res, supabase) {
     }
 
     const { data: saved } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER")
+      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE")
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
     res.json({ data: saved || [] });
@@ -1228,6 +1236,52 @@ async function getHonorarPdf(req, res, supabase) {
     res.send(pdf);
   } catch (e) {
     res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ── HOAI → Projektstruktur sync ───────────────────────────────────────────────
+
+async function syncFeeCalcToStructure(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+  try {
+    const { data: master } = await supabase.from("FEE_CALCULATION_MASTER")
+      .select("ID, PROJECT_ID").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
+    if (!master) return res.status(404).json({ error: "Honorarberechnung nicht gefunden" });
+
+    const { data: phases } = await supabase.from("FEE_CALCULATION_PHASE")
+      .select("ID, PHASE_REVENUE, FEE_PERCENT").eq("FEE_MASTER_ID", id);
+
+    const { data: structRows } = await supabase.from("PROJECT_STRUCTURE")
+      .select("ID, EXTRAS_PERCENT, FEE_CALC_PHASE_ID")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
+
+    if (!structRows || !structRows.length) {
+      return res.json({ synced: 0, projectId: master.PROJECT_ID, message: "Keine verknüpften Projektelemente gefunden." });
+    }
+
+    const phaseMap = new Map((phases || []).map(p => [p.ID, p]));
+    let synced = 0;
+    for (const row of structRows) {
+      const phase = phaseMap.get(row.FEE_CALC_PHASE_ID);
+      if (!phase) continue;
+      const revenue = Number(phase.PHASE_REVENUE ?? 0) || 0;
+      const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
+      const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
+      const { error } = await supabase.from("PROJECT_STRUCTURE")
+        .update({ REVENUE: revenue, EXTRAS: extras })
+        .eq("ID", row.ID).eq("TENANT_ID", req.tenantId);
+      if (!error) synced++;
+    }
+    return res.json({
+      synced,
+      projectId: master.PROJECT_ID,
+      message: synced > 0
+        ? `${synced} Projektelement${synced !== 1 ? "e" : ""} wurden aktualisiert.`
+        : "Keine Elemente aktualisiert.",
+    });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
   }
 }
 
@@ -1276,7 +1330,7 @@ async function deleteWorkingTimeModel(req, res, supabase) {
 module.exports = {
   postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
-  postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure,
+  postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure, syncFeeCalcToStructure,
   getCompanies, postCompany, putCompany, postAddress, postRollen,
   getSalutations, getGenders, searchAddresses, listAddresses, patchAddress,
   searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, searchPaymentMeans, postContact,
