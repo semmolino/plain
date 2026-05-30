@@ -402,6 +402,38 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     const { data: createdRows, error: createErr } = await supabase.from("PROJECT_STRUCTURE").insert(insertRows).select("*");
     if (createErr) return res.status(500).json({ error: createErr.message });
 
+    // Insert BL items as PROJECT_STRUCTURE rows at same FATHER_ID level
+    const { data: blItems } = await supabase.from("FEE_CALCULATION_BL")
+      .select("ID, NAME_SHORT, NAME, AMOUNT")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+      .order("SORT_ORDER", { ascending: true });
+    if (blItems && blItems.length) {
+      const blInsertRows = blItems.map((bl) => {
+        const revenue = Number(bl.AMOUNT ?? 0) || 0;
+        const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
+        return {
+          NAME_SHORT: bl.NAME_SHORT || null,
+          NAME_LONG: bl.NAME || null,
+          REVENUE: revenue, EXTRAS: extras, COSTS: 0,
+          PROJECT_ID: calcMaster.PROJECT_ID, FATHER_ID: fatherId,
+          EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,
+          TENANT_ID: project.TENANT_ID,
+          REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
+          REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+          FEE_CALC_MASTER_ID: id,
+          FEE_CALC_BL_ID: bl.ID,
+        };
+      });
+      const { data: createdBlRows, error: blCreateErr } = await supabase.from("PROJECT_STRUCTURE").insert(blInsertRows).select("*");
+      if (blCreateErr) return res.status(500).json({ error: blCreateErr.message });
+      try {
+        const blProgressRows = (createdBlRows || []).map(svc.buildProjectProgressRow);
+        if (blProgressRows.length) {
+          await supabase.from("PROJECT_PROGRESS").insert(blProgressRows);
+        }
+      } catch { /* non-fatal */ }
+    }
+
     try {
       const progressRows = (createdRows || []).map(svc.buildProjectProgressRow);
       if (progressRows.length) {
@@ -1231,7 +1263,7 @@ async function listFeeCalcBl(req, res, supabase) {
   if (!id) return res.status(400).json({ error: "id is required" });
   try {
     const { data, error } = await supabase.from("FEE_CALCULATION_BL")
-      .select("ID, NAME, LPH_REF, AMOUNT, SORT_ORDER")
+      .select("ID, NAME_SHORT, NAME, LPH_REF, LPH_PHASE_ID, AMOUNT_TYPE, PERCENT, KX_REF, AMOUNT, SORT_ORDER")
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
     if (error) return res.status(500).json({ error: error.message });
@@ -1259,8 +1291,13 @@ async function saveFeeCalcBl(req, res, supabase) {
       const insertRows = rows.map((r, idx) => ({
         TENANT_ID:          req.tenantId,
         FEE_CALC_MASTER_ID: id,
+        NAME_SHORT:         r.NAME_SHORT ? String(r.NAME_SHORT).trim() || null : null,
         NAME:               String(r.NAME || '').trim() || '—',
         LPH_REF:            r.LPH_REF ?? null,
+        LPH_PHASE_ID:       r.LPH_PHASE_ID ? Number(r.LPH_PHASE_ID) : null,
+        AMOUNT_TYPE:        r.AMOUNT_TYPE || 'fixed',
+        PERCENT:            r.PERCENT != null ? Number(r.PERCENT) : null,
+        KX_REF:             r.KX_REF ?? null,
         AMOUNT:             Number(r.AMOUNT) || 0,
         SORT_ORDER:         r.SORT_ORDER ?? idx,
       }));
@@ -1269,7 +1306,7 @@ async function saveFeeCalcBl(req, res, supabase) {
     }
 
     const { data: saved } = await supabase.from("FEE_CALCULATION_BL")
-      .select("ID, NAME, LPH_REF, AMOUNT, SORT_ORDER")
+      .select("ID, NAME_SHORT, NAME, LPH_REF, LPH_PHASE_ID, AMOUNT_TYPE, PERCENT, KX_REF, AMOUNT, SORT_ORDER")
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
     res.json({ data: saved || [] });
@@ -1312,11 +1349,17 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
 
-    const { data: structRows } = await supabase.from("PROJECT_STRUCTURE")
-      .select("ID, EXTRAS_PERCENT, FEE_CALC_PHASE_ID")
-      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
+    const [
+      { data: structRows },
+      { data: blStructRows },
+      { data: blItems },
+    ] = await Promise.all([
+      supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FEE_CALC_PHASE_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId),
+      supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FEE_CALC_BL_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
+      supabase.from("FEE_CALCULATION_BL").select("ID, AMOUNT").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId),
+    ]);
 
-    if (!structRows || !structRows.length) {
+    if ((!structRows || !structRows.length) && (!blStructRows || !blStructRows.length)) {
       return res.json({ synced: 0, projectId: master.PROJECT_ID, message: "Keine verknüpften Projektelemente gefunden." });
     }
 
@@ -1342,8 +1385,11 @@ async function syncFeeCalcToStructure(req, res, supabase) {
     }
 
     const phaseMap = new Map((phases || []).map(p => [p.ID, p]));
+    const blMap = new Map((blItems || []).map(b => [b.ID, b]));
     let synced = 0;
-    for (const row of structRows) {
+
+    // Sync LPH structure rows
+    for (const row of (structRows || [])) {
       const phase = phaseMap.get(row.FEE_CALC_PHASE_ID);
       if (!phase) continue;
       const baseRevenue = Number(phase.PHASE_REVENUE ?? 0) || 0;
@@ -1356,6 +1402,20 @@ async function syncFeeCalcToStructure(req, res, supabase) {
         .eq("ID", row.ID).eq("TENANT_ID", req.tenantId);
       if (!error) synced++;
     }
+
+    // Sync BL structure rows
+    for (const row of (blStructRows || [])) {
+      const bl = blMap.get(row.FEE_CALC_BL_ID);
+      if (!bl) continue;
+      const revenue = Math.round((Number(bl.AMOUNT) || 0) * 100) / 100;
+      const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
+      const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
+      const { error } = await supabase.from("PROJECT_STRUCTURE")
+        .update({ REVENUE: revenue, EXTRAS: extras })
+        .eq("ID", row.ID).eq("TENANT_ID", req.tenantId);
+      if (!error) synced++;
+    }
+
     return res.json({
       synced,
       projectId: master.PROJECT_ID,

@@ -10,7 +10,7 @@ import {
   fetchFeeSurchargesGlobal, fetchFeeCalcSurcharges, saveFeeCalcSurcharges,
   fetchFeeCalcBl, saveFeeCalcBl,
   openHonorarPdf, syncFeeCalcToStructure,
-  type FeeCalcMaster, type FeePhaseRow, type FeeCalcSurcharge, type FeeSurchargeGlobal, type FeeCalcBl,
+  type FeeCalcMaster, type FeePhaseRow, type FeeCalcSurcharge, type FeeSurchargeGlobal, type FeeCalcBl, type BlAmountType,
 } from '@/api/fee'
 import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from '@/api/projekte'
 
@@ -72,6 +72,54 @@ function computeSurchargeEffects(
     runningTotal += amount
   }
   return results
+}
+
+const BL_AMOUNT_TYPE_LABELS: Record<BlAmountType, string> = {
+  fixed:            'Pauschalbetrag €',
+  pct_lph:          '% auf LPH-Honorar',
+  pct_basis:        '% auf Basis-Honorar (Kx)',
+  pct_grundhonorar: '% auf Grundhonorar (Summe LPH)',
+  pct_gesamthonorar:'% auf Gesamthonorar inkl. Zuschläge',
+  pct_baukosten:    '% auf Baukosten (Kx)',
+}
+
+function constructionCostByKx(row: FeeCalcMaster, kx: KX): number | null {
+  const map: Record<KX, number | null> = {
+    K0: row.CONSTRUCTION_COSTS_K0, K1: row.CONSTRUCTION_COSTS_K1,
+    K2: row.CONSTRUCTION_COSTS_K2, K3: row.CONSTRUCTION_COSTS_K3,
+    K4: row.CONSTRUCTION_COSTS_K4,
+  }
+  return map[kx]
+}
+
+function computeBlItemAmount(
+  bl: FeeCalcBl,
+  phases: FeePhaseRow[],
+  calcMaster: FeeCalcMaster | null,
+  grundhonorar: number,
+  surchargeTotal: number,
+): number {
+  const pct = (Number(bl.PERCENT ?? 0) || 0) / 100
+  switch (bl.AMOUNT_TYPE) {
+    case 'pct_lph': {
+      const phase = phases.find(p => p.ID === bl.LPH_PHASE_ID)
+      return pct * (phase?.PHASE_REVENUE ?? 0)
+    }
+    case 'pct_basis': {
+      if (!calcMaster || !bl.KX_REF) return 0
+      return pct * (revenueByKx(calcMaster, bl.KX_REF as KX) ?? 0)
+    }
+    case 'pct_grundhonorar':
+      return pct * grundhonorar
+    case 'pct_gesamthonorar':
+      return pct * (grundhonorar + surchargeTotal)
+    case 'pct_baukosten': {
+      if (!calcMaster || !bl.KX_REF) return 0
+      return pct * (constructionCostByKx(calcMaster, bl.KX_REF as KX) ?? 0)
+    }
+    default:
+      return Number(bl.AMOUNT) || 0
+  }
 }
 
 function newSurchargeRow(calcMasterId: number, sortOrder: number): FeeCalcSurcharge {
@@ -152,9 +200,16 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   const projects = projectsData?.data ?? []
 
   const totalPhaseRev = phases.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
-  const blTotal = blItems.reduce((s, b) => s + (Number(b.AMOUNT) || 0), 0)
 
-  // Compute surcharge effects (LPH filter + cumulative mode + optional BL inclusion)
+  // Compute surcharges without BL first (for pct_gesamthonorar BL base)
+  const surchargeEffectsNoBl = computeSurchargeEffects(phases, surcharges, 0)
+  const surchargeNoBlTotal = surchargeEffectsNoBl.reduce((s, e) => s + e.amount, 0)
+
+  // Compute each BL item's effective amount (may depend on surcharges above)
+  const blComputedAmounts = blItems.map(b => computeBlItemAmount(b, phases, calcMaster, totalPhaseRev, surchargeNoBlTotal))
+  const blTotal = blComputedAmounts.reduce((s, a) => s + a, 0)
+
+  // Compute surcharge effects with final BL total
   const surchargeEffects = computeSurchargeEffects(phases, surcharges, blTotal)
   const totalSurchargeAmt = surchargeEffects.reduce((s, e) => s + e.amount, 0)
 
@@ -301,9 +356,15 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     if (!calcMaster) return
     setLoading(true); setMsg({ text: 'Speichere Besondere Leistungen …', type: 'info' })
     try {
-      await saveFeeCalcBl(calcMaster.ID, blItems.map((b, i) => ({ ...b, SORT_ORDER: i })))
+      // For pct_* types, store the computed AMOUNT so backend/PDF can use it directly
+      const blToSave = blItems.map((b, i) => ({
+        ...b,
+        SORT_ORDER: i,
+        AMOUNT: computeBlItemAmount(b, phases, calcMaster, totalPhaseRev, surchargeNoBlTotal),
+      }))
+      await saveFeeCalcBl(calcMaster.ID, blToSave)
       setMsg({ text: 'Lade Zuschläge …', type: 'info' })
-      const blSum = blItems.reduce((s, b) => s + (Number(b.AMOUNT) || 0), 0)
+      const blSum = blToSave.reduce((s, b) => s + (b.AMOUNT || 0), 0)
       const [surRes, globalRes] = await Promise.all([
         fetchFeeCalcSurcharges(calcMaster.ID),
         calcMaster.FEE_MASTER_ID ? fetchFeeSurchargesGlobal(calcMaster.FEE_MASTER_ID) : Promise.resolve({ data: [] as FeeSurchargeGlobal[] }),
@@ -632,44 +693,101 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
           <h3 className="wizard-step-title">{isEdit ? 'Schritt 3' : 'Schritt 4'}: Besondere Leistungen</h3>
           <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
             Optionale Zusatzleistungen über die HOAI-Grundleistungen hinaus (§ 3 Abs. 3).
-            Werden separat im Gesamthonorar ausgewiesen.
+            Werden separat im Gesamthonorar ausgewiesen und als eigene Elemente in der Projektstruktur angelegt.
           </p>
           {blItems.length > 0 && (
             <div className="table-scroll" style={{ marginBottom: 8 }}>
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '50%' }}>Bezeichnung</th>
-                    <th style={{ width: '20%' }}>LP-Bezug</th>
-                    <th style={{ textAlign: 'right', width: '20%' }}>Betrag €</th>
+                    <th style={{ width: 80 }}>Kürzel</th>
+                    <th style={{ width: '22%' }}>Bezeichnung</th>
+                    <th style={{ width: 120 }}>LPH-Bezug</th>
+                    <th style={{ width: 160 }}>Berechnungsart</th>
+                    <th style={{ width: 70, textAlign: 'right' }}>%</th>
+                    <th style={{ width: 80 }}>Kx</th>
+                    <th style={{ width: 110, textAlign: 'right' }}>Betrag €</th>
                     <th style={{ width: 30 }}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {blItems.map((b, idx) => (
-                    <tr key={idx}>
-                      <td>
-                        <input className="tbl-input" style={{ width: '100%' }} value={b.NAME}
-                          onChange={e => setBlItems(prev => prev.map((x, i) => i === idx ? { ...x, NAME: e.target.value } : x))} />
-                      </td>
-                      <td>
-                        <input className="tbl-input" style={{ width: '100%' }} placeholder="z.B. LP 1" value={b.LPH_REF ?? ''}
-                          onChange={e => setBlItems(prev => prev.map((x, i) => i === idx ? { ...x, LPH_REF: e.target.value || null } : x))} />
-                      </td>
-                      <td>
-                        <input className="tbl-input" type="number" step="0.01" style={{ width: 120, textAlign: 'right' }}
-                          value={b.AMOUNT !== 0 ? String(b.AMOUNT) : ''}
-                          onChange={e => setBlItems(prev => prev.map((x, i) => i === idx ? { ...x, AMOUNT: toNum(e.target.value) ?? 0 } : x))} />
-                      </td>
-                      <td>
-                        <button type="button" className="btn-small" onClick={() => setBlItems(prev => prev.filter((_, i) => i !== idx))}>×</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {blItems.map((b, idx) => {
+                    const computed = blComputedAmounts[idx] ?? 0
+                    const isFixed = !b.AMOUNT_TYPE || b.AMOUNT_TYPE === 'fixed'
+                    const needsKx = b.AMOUNT_TYPE === 'pct_basis' || b.AMOUNT_TYPE === 'pct_baukosten'
+                    const needsLph = b.AMOUNT_TYPE === 'pct_lph'
+                    const updateBl = (patch: Partial<FeeCalcBl>) =>
+                      setBlItems(prev => prev.map((x, i) => i === idx ? { ...x, ...patch } : x))
+                    return (
+                      <tr key={idx}>
+                        <td>
+                          <input className="tbl-input" style={{ width: '100%' }} placeholder="Kürzel"
+                            value={b.NAME_SHORT ?? ''}
+                            onChange={e => updateBl({ NAME_SHORT: e.target.value || null })} />
+                        </td>
+                        <td>
+                          <input className="tbl-input" style={{ width: '100%' }} placeholder="Bezeichnung"
+                            value={b.NAME}
+                            onChange={e => updateBl({ NAME: e.target.value })} />
+                        </td>
+                        <td>
+                          <select className="tbl-select" style={{ width: '100%' }}
+                            value={b.LPH_PHASE_ID != null ? String(b.LPH_PHASE_ID) : ''}
+                            onChange={e => updateBl({ LPH_PHASE_ID: e.target.value ? Number(e.target.value) : null })}>
+                            <option value="">— keine —</option>
+                            {phases.map(p => (
+                              <option key={p.ID} value={String(p.ID)}>{p.PHASE_LABEL}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <select className="tbl-select" style={{ width: '100%' }}
+                            value={b.AMOUNT_TYPE || 'fixed'}
+                            onChange={e => updateBl({ AMOUNT_TYPE: e.target.value as BlAmountType, PERCENT: null, KX_REF: null })}>
+                            {(Object.entries(BL_AMOUNT_TYPE_LABELS) as [BlAmountType, string][]).map(([k, v]) => (
+                              <option key={k} value={k}>{v}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {!isFixed && (
+                            <input className="tbl-input" type="number" step="0.01" style={{ width: 70, textAlign: 'right' }}
+                              value={b.PERCENT != null ? String(b.PERCENT) : ''}
+                              onChange={e => updateBl({ PERCENT: toNum(e.target.value) })} />
+                          )}
+                        </td>
+                        <td>
+                          {needsKx && (
+                            <select className="tbl-select" style={{ width: '100%' }}
+                              value={b.KX_REF || ''}
+                              onChange={e => updateBl({ KX_REF: e.target.value || null })}>
+                              <option value="">— Kx —</option>
+                              {KX_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                            </select>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {isFixed ? (
+                            <input className="tbl-input" type="number" step="0.01" style={{ width: 110, textAlign: 'right' }}
+                              value={b.AMOUNT !== 0 ? String(b.AMOUNT) : ''}
+                              onChange={e => updateBl({ AMOUNT: toNum(e.target.value) ?? 0 })} />
+                          ) : (
+                            <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>
+                              {fmtEur(computed)}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <button type="button" className="btn-small"
+                            onClick={() => setBlItems(prev => prev.filter((_, i) => i !== idx))}>×</button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <th colSpan={2}>Summe Besondere Leistungen</th>
+                    <th colSpan={6}>Summe Besondere Leistungen</th>
                     <th style={{ textAlign: 'right' }}>{fmtEur(blTotal)}</th>
                     <th></th>
                   </tr>
@@ -679,7 +797,12 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
           )}
           <button type="button" className="btn-small" onClick={() => {
             if (!calcMaster) return
-            setBlItems(prev => [...prev, { FEE_CALC_MASTER_ID: calcMaster.ID, NAME: '', LPH_REF: null, AMOUNT: 0, SORT_ORDER: prev.length }])
+            setBlItems(prev => [...prev, {
+              FEE_CALC_MASTER_ID: calcMaster.ID,
+              NAME_SHORT: null, NAME: '', LPH_REF: null, LPH_PHASE_ID: null,
+              AMOUNT_TYPE: 'fixed', PERCENT: null, KX_REF: null,
+              AMOUNT: 0, SORT_ORDER: prev.length,
+            }])
           }}>+ Besondere Leistung hinzufügen</button>
           {blItems.length === 0 && (
             <p className="empty-note" style={{ marginTop: 8 }}>Keine Besonderen Leistungen — Schritt überspringen ist möglich.</p>

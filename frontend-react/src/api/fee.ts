@@ -61,12 +61,19 @@ export interface FeeCalcSurcharge {
   INCLUDE_BL:         boolean        // whether BL total is added to the surcharge base
 }
 
+export type BlAmountType = 'fixed' | 'pct_lph' | 'pct_basis' | 'pct_grundhonorar' | 'pct_gesamthonorar' | 'pct_baukosten'
+
 export interface FeeCalcBl {
   ID?:                number
   FEE_CALC_MASTER_ID: number
-  NAME:               string
-  LPH_REF:            string | null
-  AMOUNT:             number
+  NAME_SHORT:         string | null
+  NAME:               string           // NAME_LONG
+  LPH_REF:            string | null    // legacy text label, kept for compat
+  LPH_PHASE_ID:       number | null    // FK to FEE_CALCULATION_PHASE
+  AMOUNT_TYPE:        BlAmountType
+  PERCENT:            number | null    // set for pct_* types
+  KX_REF:             string | null    // 'K0'..'K4' for pct_basis / pct_baukosten
+  AMOUNT:             number           // always stored; computed for pct_* types
   SORT_ORDER:         number
 }
 

@@ -748,7 +748,7 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   try {
     const { data: blData } = await supabase
       .from('FEE_CALCULATION_BL')
-      .select('NAME, LPH_REF, AMOUNT, SORT_ORDER')
+      .select('NAME_SHORT, NAME, LPH_REF, LPH_PHASE_ID, AMOUNT, SORT_ORDER')
       .eq('FEE_CALC_MASTER_ID', calcMasterId)
       .eq('TENANT_ID', tenantId)
       .order('SORT_ORDER', { ascending: true });
@@ -824,11 +824,16 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
         phaseRevenue:   r.PHASE_REVENUE ?? null,
       };
     }),
-    blItems: blRows.map(r => ({
-      name:   r.NAME || '',
-      lphRef: r.LPH_REF || null,
-      amount: r.AMOUNT ?? null,
-    })),
+    blItems: blRows.map(r => {
+      const lphPhase = r.LPH_PHASE_ID ? phaseRows.find(p => p.ID === r.LPH_PHASE_ID) : null;
+      return {
+        nameShort: r.NAME_SHORT || null,
+        name:      r.NAME || '',
+        lphRef:    r.LPH_REF || null,
+        lphLabel:  lphPhase ? (lphPhase.PHASE_LABEL || null) : null,
+        amount:    r.AMOUNT ?? null,
+      };
+    }),
     blTotal,
     surcharges: (surchargeRows || []).map(r => {
       // Build a human-readable LPH detail string for the PDF

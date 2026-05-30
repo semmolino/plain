@@ -243,6 +243,37 @@ table.data-table tfoot tr.grand-total td {
 </table>
 {% endif %}
 
+{# Besondere Leistungen — appears before surcharges, same order as wizard #}
+{% if blItems and blItems.length %}
+<div class="section-title">Besondere Leistungen</div>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th style="width:12%">Kürzel</th>
+      <th style="width:45%">Bezeichnung</th>
+      <th>LPH-Bezug</th>
+      <th class="num">Betrag €</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for b in blItems %}
+    <tr>
+      <td>{{ b.nameShort or "—" }}</td>
+      <td>{{ b.name }}</td>
+      <td>{{ b.lphLabel or b.lphRef or "—" }}</td>
+      <td class="num">{{ b.amount | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="3">Summe Besondere Leistungen</td>
+      <td class="num">{{ blTotal | money }}</td>
+    </tr>
+  </tfoot>
+</table>
+{% endif %}
+
 {# Zuschläge / Nachlässe #}
 {% if surcharges and surcharges.length %}
 <div class="section-title">Zuschläge &amp; Nachlässe</div>
@@ -275,35 +306,6 @@ table.data-table tfoot tr.grand-total td {
     <tr>
       <td colspan="3">Summe Zuschläge / Nachlässe</td>
       <td class="num">{{ zuschlaegeSum | money }}</td>
-    </tr>
-  </tfoot>
-</table>
-{% endif %}
-
-{# Besondere Leistungen #}
-{% if blItems and blItems.length %}
-<div class="section-title">Besondere Leistungen</div>
-<table class="data-table">
-  <thead>
-    <tr>
-      <th style="width:55%">Bezeichnung</th>
-      <th>LP-Bezug</th>
-      <th class="num">Betrag €</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for b in blItems %}
-    <tr>
-      <td>{{ b.name }}</td>
-      <td>{{ b.lphRef or "—" }}</td>
-      <td class="num">{{ b.amount | money }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-  <tfoot>
-    <tr>
-      <td colspan="2">Summe Besondere Leistungen</td>
-      <td class="num">{{ blTotal | money }}</td>
     </tr>
   </tfoot>
 </table>
