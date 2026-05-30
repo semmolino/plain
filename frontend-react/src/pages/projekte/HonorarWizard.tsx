@@ -8,8 +8,9 @@ import {
   initFeeCalcMaster, saveFeeCalcBasis, initFeePhases, saveFeePhases,
   deleteFeeCalcMaster, attachFeeToStructure,
   fetchFeeSurchargesGlobal, fetchFeeCalcSurcharges, saveFeeCalcSurcharges,
+  fetchFeeCalcBl, saveFeeCalcBl,
   openHonorarPdf, syncFeeCalcToStructure,
-  type FeeCalcMaster, type FeePhaseRow, type FeeCalcSurcharge, type FeeSurchargeGlobal,
+  type FeeCalcMaster, type FeePhaseRow, type FeeCalcSurcharge, type FeeSurchargeGlobal, type FeeCalcBl,
 } from '@/api/fee'
 import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from '@/api/projekte'
 
@@ -48,10 +49,11 @@ function phaseRevenue(base: number | null, pct: number | null): number | null {
   return (pct * base) / 100
 }
 
-/** Compute effective base and amount for each surcharge row, honouring LPH filter + calc mode */
+/** Compute effective base and amount for each surcharge row, honouring LPH filter + calc mode + BL inclusion */
 function computeSurchargeEffects(
   phases: FeePhaseRow[],
   surcharges: FeeCalcSurcharge[],
+  blTotal = 0,
 ): { effectiveBase: number; amount: number }[] {
   const results: { effectiveBase: number; amount: number }[] = []
   let runningTotal = 0
@@ -59,9 +61,11 @@ function computeSurchargeEffects(
     const selectedIds: number[] = r.LPH_FILTER
       ? (JSON.parse(r.LPH_FILTER) as number[])
       : phases.map(p => p.ID)
-    const base = phases
+    const phaseBase = phases
       .filter(p => selectedIds.includes(p.ID))
       .reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
+    const blContrib = r.INCLUDE_BL ? blTotal : 0
+    const base = phaseBase + blContrib
     const effectiveBase = r.CALC_MODE === 'cumulative' ? base + runningTotal : base
     const amount = ((r.PERCENT ?? 0) / 100) * effectiveBase
     results.push({ effectiveBase, amount })
@@ -74,7 +78,7 @@ function newSurchargeRow(calcMasterId: number, sortOrder: number): FeeCalcSurcha
   return {
     FEE_CALC_MASTER_ID: calcMasterId, FEE_SURCHARGE_ID: null,
     NAME_SHORT: '', NAME_LONG: '', PERCENT: null, BASE_AMOUNT: null, AMOUNT: null,
-    SORT_ORDER: sortOrder, LPH_FILTER: null, CALC_MODE: 'parallel',
+    SORT_ORDER: sortOrder, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false,
   }
 }
 
@@ -104,7 +108,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   const isEdit = !!existingId
 
   const firstStep  = isEdit ? 2 : 1
-  const totalSteps = isEdit ? 3 : 5
+  const totalSteps = isEdit ? 4 : 6
   function dotFor(s: number) { return isEdit ? s - 1 : s }
 
   const [step, setStep]       = useState(firstStep)
@@ -130,12 +134,15 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   // Step 3 state (phases)
   const [phases, setPhases]   = useState<FeePhaseRow[]>([])
 
-  // Step 4 state (surcharges)
+  // Step 4 state (Besondere Leistungen)
+  const [blItems, setBlItems] = useState<FeeCalcBl[]>([])
+
+  // Step 5 state (surcharges)
   const [surcharges, setSurcharges]             = useState<FeeCalcSurcharge[]>([])
   const [globalSurcharges, setGlobalSurcharges] = useState<FeeSurchargeGlobal[]>([])
   const [expandedSurchargeIdx, setExpandedSurchargeIdx] = useState<number | null>(null)
 
-  // Step 5
+  // Step 6
   const [fatherId, setFatherId] = useState('')
 
   const { data: groupsData }   = useQuery({ queryKey: ['fee-groups'],     queryFn: fetchFeeGroups })
@@ -145,9 +152,10 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   const projects = projectsData?.data ?? []
 
   const totalPhaseRev = phases.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
+  const blTotal = blItems.reduce((s, b) => s + (Number(b.AMOUNT) || 0), 0)
 
-  // Compute surcharge effects (LPH filter + cumulative mode)
-  const surchargeEffects = computeSurchargeEffects(phases, surcharges)
+  // Compute surcharge effects (LPH filter + cumulative mode + optional BL inclusion)
+  const surchargeEffects = computeSurchargeEffects(phases, surcharges, blTotal)
   const totalSurchargeAmt = surchargeEffects.reduce((s, e) => s + e.amount, 0)
 
   // Load structure nodes when project changes
@@ -280,20 +288,35 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
       })))
       const synced = syncPhases(calcMaster, saved.data ?? [])
       setPhases(synced)
+      setMsg({ text: 'Lade Besondere Leistungen …', type: 'info' })
+      const blRes = await fetchFeeCalcBl(calcMaster.ID)
+      setBlItems(blRes.data ?? [])
+      setMsg(null); setStep(4)
+    } catch (e: unknown) {
+      setMsg({ text: (e as Error).message, type: 'error' })
+    } finally { setLoading(false) }
+  }
+
+  async function saveBLAndGo() {
+    if (!calcMaster) return
+    setLoading(true); setMsg({ text: 'Speichere Besondere Leistungen …', type: 'info' })
+    try {
+      await saveFeeCalcBl(calcMaster.ID, blItems.map((b, i) => ({ ...b, SORT_ORDER: i })))
       setMsg({ text: 'Lade Zuschläge …', type: 'info' })
+      const blSum = blItems.reduce((s, b) => s + (Number(b.AMOUNT) || 0), 0)
       const [surRes, globalRes] = await Promise.all([
         fetchFeeCalcSurcharges(calcMaster.ID),
         calcMaster.FEE_MASTER_ID ? fetchFeeSurchargesGlobal(calcMaster.FEE_MASTER_ID) : Promise.resolve({ data: [] as FeeSurchargeGlobal[] }),
       ])
       setGlobalSurcharges(globalRes.data ?? [])
-      const grundhonorar = synced.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
       setSurcharges((surRes.data ?? []).map(r => ({
         ...r,
-        BASE_AMOUNT: r.BASE_AMOUNT ?? grundhonorar,
+        BASE_AMOUNT: r.BASE_AMOUNT ?? totalPhaseRev + blSum,
         LPH_FILTER: r.LPH_FILTER ?? null,
         CALC_MODE: r.CALC_MODE ?? 'parallel',
+        INCLUDE_BL: r.INCLUDE_BL ?? false,
       })))
-      setMsg(null); setStep(4)
+      setMsg(null); setStep(5)
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
     } finally { setLoading(false) }
@@ -317,7 +340,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
       if (isEdit) {
         setShowSyncDialog(true)
       } else {
-        setStep(5)
+        setStep(6)
       }
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
@@ -376,7 +399,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   }
 
   function resetWizard() {
-    setStep(firstStep); setCalcMaster(null); setPhases([]); setSurcharges([])
+    setStep(firstStep); setCalcMaster(null); setPhases([]); setBlItems([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
     setBasis({ NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '', K0: '', K1: '', K2: '', K3: '', K4: '' })
     setFatherId(''); setMsg(null); setShowSyncDialog(false)
@@ -387,7 +410,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     if (!isEdit && calcMaster) {
       try { await deleteFeeCalcMaster(calcMaster.ID) } catch { /* ignore */ }
     }
-    setStep(firstStep); setCalcMaster(null); setPhases([]); setSurcharges([])
+    setStep(firstStep); setCalcMaster(null); setPhases([]); setBlItems([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
     setMsg(null); setShowSyncDialog(false)
     onDone?.()
@@ -402,8 +425,8 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
       {
         FEE_CALC_MASTER_ID: calcMaster.ID, FEE_SURCHARGE_ID: g.ID,
         NAME_SHORT: g.NAME_SHORT, NAME_LONG: g.NAME_LONG ?? '',
-        PERCENT: null, BASE_AMOUNT: totalPhaseRev, AMOUNT: null,
-        SORT_ORDER: prev.length, LPH_FILTER: null, CALC_MODE: 'parallel',
+        PERCENT: null, BASE_AMOUNT: totalPhaseRev + blTotal, AMOUNT: null,
+        SORT_ORDER: prev.length, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false,
       },
     ])
   }
@@ -413,7 +436,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     setSurcharges(prev => [...prev, newSurchargeRow(calcMaster.ID, prev.length)])
   }
 
-  function updateSurcharge(idx: number, field: keyof FeeCalcSurcharge, value: string | number | null) {
+  function updateSurcharge(idx: number, field: keyof FeeCalcSurcharge, value: string | number | boolean | null) {
     setSurcharges(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
   }
 
@@ -603,14 +626,80 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
         </div>
       )}
 
-      {/* ── Step 4: Zuschläge & Nachlässe ────────────────────────────────────── */}
+      {/* ── Step 4: Besondere Leistungen ─────────────────────────────────────── */}
       {step === 4 && (
         <div className="wizard-step-content">
-          <h3 className="wizard-step-title">{isEdit ? 'Schritt 3' : 'Schritt 4'}: Zuschläge &amp; Nachlässe</h3>
+          <h3 className="wizard-step-title">{isEdit ? 'Schritt 3' : 'Schritt 4'}: Besondere Leistungen</h3>
+          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+            Optionale Zusatzleistungen über die HOAI-Grundleistungen hinaus (§ 3 Abs. 3).
+            Werden separat im Gesamthonorar ausgewiesen.
+          </p>
+          {blItems.length > 0 && (
+            <div className="table-scroll" style={{ marginBottom: 8 }}>
+              <table className="master-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '50%' }}>Bezeichnung</th>
+                    <th style={{ width: '20%' }}>LP-Bezug</th>
+                    <th style={{ textAlign: 'right', width: '20%' }}>Betrag €</th>
+                    <th style={{ width: 30 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {blItems.map((b, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        <input className="tbl-input" style={{ width: '100%' }} value={b.NAME}
+                          onChange={e => setBlItems(prev => prev.map((x, i) => i === idx ? { ...x, NAME: e.target.value } : x))} />
+                      </td>
+                      <td>
+                        <input className="tbl-input" style={{ width: '100%' }} placeholder="z.B. LP 1" value={b.LPH_REF ?? ''}
+                          onChange={e => setBlItems(prev => prev.map((x, i) => i === idx ? { ...x, LPH_REF: e.target.value || null } : x))} />
+                      </td>
+                      <td>
+                        <input className="tbl-input" type="number" step="0.01" style={{ width: 120, textAlign: 'right' }}
+                          value={b.AMOUNT !== 0 ? String(b.AMOUNT) : ''}
+                          onChange={e => setBlItems(prev => prev.map((x, i) => i === idx ? { ...x, AMOUNT: toNum(e.target.value) ?? 0 } : x))} />
+                      </td>
+                      <td>
+                        <button type="button" className="btn-small" onClick={() => setBlItems(prev => prev.filter((_, i) => i !== idx))}>×</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th colSpan={2}>Summe Besondere Leistungen</th>
+                    <th style={{ textAlign: 'right' }}>{fmtEur(blTotal)}</th>
+                    <th></th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+          <button type="button" className="btn-small" onClick={() => {
+            if (!calcMaster) return
+            setBlItems(prev => [...prev, { FEE_CALC_MASTER_ID: calcMaster.ID, NAME: '', LPH_REF: null, AMOUNT: 0, SORT_ORDER: prev.length }])
+          }}>+ Besondere Leistung hinzufügen</button>
+          {blItems.length === 0 && (
+            <p className="empty-note" style={{ marginTop: 8 }}>Keine Besonderen Leistungen — Schritt überspringen ist möglich.</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Step 5: Zuschläge & Nachlässe ────────────────────────────────────── */}
+      {step === 5 && (
+        <div className="wizard-step-content">
+          <h3 className="wizard-step-title">{isEdit ? 'Schritt 4' : 'Schritt 5'}: Zuschläge &amp; Nachlässe</h3>
 
           <div className="admin-block" style={{ marginBottom: 12 }}>
             <span style={{ fontSize: 13, color: '#374151' }}>Grundhonorar (Summe LPH): </span>
             <strong style={{ fontSize: 14 }}>{fmtEur(totalPhaseRev)}</strong>
+            {blTotal > 0 && (
+              <span style={{ marginLeft: 16, fontSize: 13, color: '#374151' }}>
+                + Besondere Leistungen: <strong>{fmtEur(blTotal)}</strong>
+              </span>
+            )}
           </div>
 
           {/* Global suggestions */}
@@ -703,6 +792,18 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                                     : 'Zuschlag auf Honorarbasis'}
                                 </span>
                               </div>
+                              {blItems.length > 0 && (
+                                <div style={{ marginBottom: 8 }}>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                                    <input type="checkbox" checked={r.INCLUDE_BL ?? false}
+                                      onChange={e => updateSurcharge(idx, 'INCLUDE_BL', e.target.checked)} />
+                                    <span>Auch auf Besondere Leistungen anwenden</span>
+                                    <span style={{ color: '#6b7280', fontSize: 11 }}>
+                                      (+{fmtEur(blTotal)} im Berechnungsbasis)
+                                    </span>
+                                  </label>
+                                </div>
+                              )}
                               <div>
                                 <strong style={{ fontSize: 12, color: '#374151' }}>Betroffene Leistungsphasen:</strong>
                                 <button type="button" className="btn-small" style={{ marginLeft: 8, marginRight: 4 }}
@@ -736,7 +837,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                   </tr>
                   <tr>
                     <th colSpan={4}>Gesamthonorar</th>
-                    <th style={{ textAlign: 'right', fontSize: 14 }}>{fmtEur(totalPhaseRev + totalSurchargeAmt)}</th>
+                    <th style={{ textAlign: 'right', fontSize: 14 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</th>
                     <th colSpan={2}></th>
                   </tr>
                 </tfoot>
@@ -762,15 +863,16 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
         </div>
       )}
 
-      {/* ── Step 5: Übersicht + Zuordnen (create only) ────────────────────────── */}
-      {step === 5 && (
+      {/* ── Step 6: Übersicht + Zuordnen (create only) ────────────────────────── */}
+      {step === 6 && (
         <div className="wizard-step-content">
-          <h3 className="wizard-step-title">Schritt 5: Übersicht &amp; Zuordnen</h3>
+          <h3 className="wizard-step-title">Schritt 6: Übersicht &amp; Zuordnen</h3>
           <div className="admin-block">
             <p><strong>Leistungsbild:</strong> {calcMaster?.NAME_SHORT} {calcMaster?.NAME_LONG && '– ' + calcMaster.NAME_LONG}</p>
             <p><strong>Grundhonorar:</strong> {fmtEur(totalPhaseRev)}</p>
+            {blItems.length > 0 && <p><strong>Besondere Leistungen:</strong> {fmtEur(blTotal)}</p>}
             {surcharges.length > 0 && <p><strong>Zuschläge / Nachlässe:</strong> {fmtEur(totalSurchargeAmt)}</p>}
-            <p><strong>Gesamthonorar:</strong> {fmtEur(totalPhaseRev + totalSurchargeAmt)}</p>
+            <p><strong>Gesamthonorar:</strong> {fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</p>
           </div>
           <div className="form-group" style={{ marginTop: 12 }}>
             <label>Übergeordnetes Strukturelement*</label>
@@ -811,11 +913,14 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
             <button className="btn-primary" type="button" onClick={savePhasesAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
           )}
           {step === 4 && (
+            <button className="btn-primary" type="button" onClick={saveBLAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
+          )}
+          {step === 5 && (
             <button className="btn-primary" type="button" onClick={saveSurchargesAndGo} disabled={loading}>
               {isEdit ? 'Speichern & Fertig' : 'Weiter →'}
             </button>
           )}
-          {step === 5 && (
+          {step === 6 && (
             <button className="btn-primary" type="button" onClick={finish} disabled={loading || !fatherId}>Projektstruktur anlegen</button>
           )}
         </div>

@@ -1167,7 +1167,7 @@ async function listFeeCalcSurcharges(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "id is required" });
   const { data, error } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE")
+    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL")
     .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
     .order("SORT_ORDER", { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
@@ -1207,6 +1207,7 @@ async function saveFeeCalcSurcharges(req, res, supabase) {
           SORT_ORDER:         r.SORT_ORDER ?? idx,
           LPH_FILTER:         r.LPH_FILTER ?? null,
           CALC_MODE:          r.CALC_MODE ?? 'parallel',
+          INCLUDE_BL:         r.INCLUDE_BL ?? false,
         };
       });
       const { error: insErr } = await supabase.from("FEE_CALCULATION_SURCHARGES").insert(insertRows);
@@ -1214,7 +1215,61 @@ async function saveFeeCalcSurcharges(req, res, supabase) {
     }
 
     const { data: saved } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE")
+      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+      .order("SORT_ORDER", { ascending: true });
+    res.json({ data: saved || [] });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ── HOAI Besondere Leistungen ─────────────────────────────────────────────────
+
+async function listFeeCalcBl(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+  try {
+    const { data, error } = await supabase.from("FEE_CALCULATION_BL")
+      .select("ID, NAME, LPH_REF, AMOUNT, SORT_ORDER")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+      .order("SORT_ORDER", { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ data: data || [] });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function saveFeeCalcBl(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+  try {
+    const { data: master } = await supabase.from("FEE_CALCULATION_MASTER")
+      .select("ID").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
+    if (!master) return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
+
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+
+    const { error: delErr } = await supabase.from("FEE_CALCULATION_BL")
+      .delete().eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
+    if (delErr) return res.status(500).json({ error: delErr.message });
+
+    if (rows.length) {
+      const insertRows = rows.map((r, idx) => ({
+        TENANT_ID:          req.tenantId,
+        FEE_CALC_MASTER_ID: id,
+        NAME:               String(r.NAME || '').trim() || '—',
+        LPH_REF:            r.LPH_REF ?? null,
+        AMOUNT:             Number(r.AMOUNT) || 0,
+        SORT_ORDER:         r.SORT_ORDER ?? idx,
+      }));
+      const { error: insErr } = await supabase.from("FEE_CALCULATION_BL").insert(insertRows);
+      if (insErr) return res.status(500).json({ error: insErr.message });
+    }
+
+    const { data: saved } = await supabase.from("FEE_CALCULATION_BL")
+      .select("ID, NAME, LPH_REF, AMOUNT, SORT_ORDER")
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
     res.json({ data: saved || [] });
@@ -1374,5 +1429,6 @@ module.exports = {
   listFeeCalcMasters, getFeeCalcMasterDetail,
   listFeeSurchargesGlobal,
   listFeeCalcSurcharges, saveFeeCalcSurcharges,
+  listFeeCalcBl, saveFeeCalcBl,
   getHonorarPdf,
 };

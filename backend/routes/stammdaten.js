@@ -25,6 +25,8 @@ module.exports = (supabase) => {
   router.get("/fee-surcharges-global",                                (req, res) => ctrl.listFeeSurchargesGlobal(req, res, supabase));
   router.get("/fee-calculation-masters/:id/surcharges",               (req, res) => ctrl.listFeeCalcSurcharges(req, res, supabase));
   router.post("/fee-calculation-masters/:id/surcharges/save",         (req, res) => ctrl.saveFeeCalcSurcharges(req, res, supabase));
+  router.get("/fee-calculation-masters/:id/bl",                       (req, res) => ctrl.listFeeCalcBl(req, res, supabase));
+  router.post("/fee-calculation-masters/:id/bl/save",                 (req, res) => ctrl.saveFeeCalcBl(req, res, supabase));
   router.get("/fee-calculation-masters/:id/pdf",                      (req, res) => ctrl.getHonorarPdf(req, res, supabase));
   router.get("/fee-calculation-masters/:id",                          (req, res) => ctrl.getFeeCalcMasterDetail(req, res, supabase));
   router.patch("/fee-calculation-masters/:id/basis",                  (req, res) => ctrl.patchFeeCalcMasterBasis(req, res, supabase));

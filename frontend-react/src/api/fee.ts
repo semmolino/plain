@@ -58,6 +58,16 @@ export interface FeeCalcSurcharge {
   SORT_ORDER:         number
   LPH_FILTER:         string | null  // JSON array of FEE_CALCULATION_PHASE IDs; null = all phases
   CALC_MODE:          string | null  // 'parallel' | 'cumulative'; null treated as 'parallel'
+  INCLUDE_BL:         boolean        // whether BL total is added to the surcharge base
+}
+
+export interface FeeCalcBl {
+  ID?:                number
+  FEE_CALC_MASTER_ID: number
+  NAME:               string
+  LPH_REF:            string | null
+  AMOUNT:             number
+  SORT_ORDER:         number
 }
 
 export const fetchFeeGroups = () =>
@@ -103,6 +113,12 @@ export const fetchFeeCalcSurcharges = (calcMasterId: number) =>
 
 export const saveFeeCalcSurcharges = (calcMasterId: number, rows: FeeCalcSurcharge[]) =>
   apiClient.post<{ data: FeeCalcSurcharge[] }>(`/stammdaten/fee-calculation-masters/${calcMasterId}/surcharges/save`, { rows })
+
+export const fetchFeeCalcBl = (calcMasterId: number) =>
+  apiClient.get<{ data: FeeCalcBl[] }>(`/stammdaten/fee-calculation-masters/${calcMasterId}/bl`)
+
+export const saveFeeCalcBl = (calcMasterId: number, rows: FeeCalcBl[]) =>
+  apiClient.post<{ data: FeeCalcBl[] }>(`/stammdaten/fee-calculation-masters/${calcMasterId}/bl/save`, { rows })
 
 export function openHonorarPdf(id: number) {
   void openPdfWithAuth(`/stammdaten/fee-calculation-masters/${id}/pdf`)

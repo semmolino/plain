@@ -738,10 +738,24 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   // Load surcharges (including LPH filter info and calc mode)
   const { data: surchargeRows } = await supabase
     .from('FEE_CALCULATION_SURCHARGES')
-    .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, CALC_MODE')
+    .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, CALC_MODE, INCLUDE_BL')
     .eq('FEE_CALC_MASTER_ID', calcMasterId)
     .eq('TENANT_ID', tenantId)
     .order('SORT_ORDER', { ascending: true });
+
+  // Load Besondere Leistungen (soft-fail if table not yet migrated)
+  let blRows = [];
+  try {
+    const { data: blData } = await supabase
+      .from('FEE_CALCULATION_BL')
+      .select('NAME, LPH_REF, AMOUNT, SORT_ORDER')
+      .eq('FEE_CALC_MASTER_ID', calcMasterId)
+      .eq('TENANT_ID', tenantId)
+      .order('SORT_ORDER', { ascending: true });
+    blRows = blData || [];
+  } catch (e) {
+    if (!isTableMissingErr(e, 'FEE_CALCULATION_BL')) console.warn('[FEE_CALCULATION_BL]', e.message);
+  }
 
   // Load zone name
   let zoneName = null;
@@ -764,6 +778,7 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId });
 
   const grundhonorar = phaseRows.reduce((s, r) => s + (Number(r.PHASE_REVENUE) || 0), 0);
+  const blTotal = blRows.reduce((s, r) => s + (Number(r.AMOUNT) || 0), 0);
   const zuschlaegeSum = (surchargeRows || []).reduce((s, r) => s + (Number(r.AMOUNT) || 0), 0);
 
   const context = {
@@ -809,6 +824,12 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
         phaseRevenue:   r.PHASE_REVENUE ?? null,
       };
     }),
+    blItems: blRows.map(r => ({
+      name:   r.NAME || '',
+      lphRef: r.LPH_REF || null,
+      amount: r.AMOUNT ?? null,
+    })),
+    blTotal,
     surcharges: (surchargeRows || []).map(r => {
       // Build a human-readable LPH detail string for the PDF
       let lphDetail = null;
@@ -835,7 +856,7 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
     }),
     grundhonorar,
     zuschlaegeSum,
-    gesamthonorar: grundhonorar + zuschlaegeSum,
+    gesamthonorar: grundhonorar + blTotal + zuschlaegeSum,
   };
 
   const html = env().render(path.join('modern_a', 'honorar.njk'), context);

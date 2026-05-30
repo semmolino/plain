@@ -280,6 +280,35 @@ table.data-table tfoot tr.grand-total td {
 </table>
 {% endif %}
 
+{# Besondere Leistungen #}
+{% if blItems and blItems.length %}
+<div class="section-title">Besondere Leistungen</div>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th style="width:55%">Bezeichnung</th>
+      <th>LP-Bezug</th>
+      <th class="num">Betrag €</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for b in blItems %}
+    <tr>
+      <td>{{ b.name }}</td>
+      <td>{{ b.lphRef or "—" }}</td>
+      <td class="num">{{ b.amount | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="2">Summe Besondere Leistungen</td>
+      <td class="num">{{ blTotal | money }}</td>
+    </tr>
+  </tfoot>
+</table>
+{% endif %}
+
 {# Summary #}
 <div class="summary-block">
   <table>
@@ -287,6 +316,12 @@ table.data-table tfoot tr.grand-total td {
       <td class="sl">Grundhonorar (Summe Leistungsphasen)</td>
       <td class="sv">{{ grundhonorar | money }}</td>
     </tr>
+    {% if blItems and blItems.length %}
+    <tr>
+      <td class="sl">Besondere Leistungen</td>
+      <td class="sv">{{ blTotal | money }}</td>
+    </tr>
+    {% endif %}
     {% if surcharges and surcharges.length %}
     <tr>
       <td class="sl">Zuschläge / Nachlässe</td>
