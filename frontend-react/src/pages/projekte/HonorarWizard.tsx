@@ -371,6 +371,10 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     } finally { setLoading(false) }
   }
 
+  function goBack() {
+    setStep(s => Math.max(firstStep, s - 1))
+  }
+
   function resetWizard() {
     setStep(firstStep); setCalcMaster(null); setPhases([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
@@ -463,6 +467,13 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
 
   return (
     <div className="wizard-wrap">
+      {calcMaster && step >= 2 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button type="button" className="btn-small" onClick={() => openHonorarPdf(calcMaster.ID)}>
+            Übersicht (PDF)
+          </button>
+        </div>
+      )}
       <StepIndicator step={dotFor(step)} totalSteps={totalSteps} />
 
       {/* ── Step 1: Honorarordnung (create only) ─────────────────────────────── */}
@@ -780,14 +791,14 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
 
       {!showSyncDialog && (
         <div className="wizard-nav">
-          {calcMaster && step >= 2 && (
-            <button type="button" className="btn-small" onClick={() => openHonorarPdf(calcMaster.ID)}>
-              Übersicht
+          {step > firstStep && (
+            <button type="button" className="btn-small" onClick={goBack} disabled={loading}>
+              ← Zurück
             </button>
           )}
-          {step > firstStep && (
+          {step >= firstStep && (
             <button type="button" onClick={cancelAndDelete} disabled={loading}>
-              {isEdit ? 'Abbrechen' : 'Abbrechen & Löschen'}
+              {isEdit ? 'Abbrechen' : step === 1 ? 'Abbrechen' : 'Abbrechen & Löschen'}
             </button>
           )}
           {step === 1 && (
@@ -981,9 +992,10 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
         <input
           type="search"
           className="list-search"
-          placeholder="Suchen (§, Bezeichnung, Projekt) …"
+          placeholder="Suchen …"
           value={search}
           onChange={e => setSearch(e.target.value)}
+          style={{ flex: '0 1 220px', minWidth: 120 }}
         />
         <FilterChip label="§" options={allParas} selected={paraFilter} onChange={setParaFilter} />
         <FilterChip label="Projekt" options={allProjekte} selected={projektFilter} onChange={setProjektFilter} />

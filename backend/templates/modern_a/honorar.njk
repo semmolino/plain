@@ -179,19 +179,31 @@ table.data-table tfoot tr.grand-total td {
     <div class="bc-label">Zonenanteil</div>
     <div class="bc-val">{{ calc.zonePercent or "—" }} %</div>
   </div>
-  {% for k in ['K0','K1','K2','K3','K4'] %}
-  {% if calc['constructionCosts' + k] %}
-  <div class="basis-cell">
-    <div class="bc-label">Baukosten {{ k }}</div>
-    <div class="bc-val">{{ calc['constructionCosts' + k] | money }}</div>
-  </div>
-  <div class="basis-cell">
-    <div class="bc-label">Grundhonorar {{ k }}</div>
-    <div class="bc-val">{{ calc['revenue' + k] | money }}</div>
-  </div>
-  {% endif %}
-  {% endfor %}
 </div>
+
+{% set hasKx = calc.constructionCostsK0 or calc.constructionCostsK1 or calc.constructionCostsK2 or calc.constructionCostsK3 or calc.constructionCostsK4 %}
+{% if hasKx %}
+<table class="data-table" style="margin-top:3mm">
+  <thead>
+    <tr>
+      <th style="width:12%">Kx</th>
+      <th class="num">Baukosten €</th>
+      <th class="num">Grundhonorar €</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for k in ['K0','K1','K2','K3','K4'] %}
+    {% if calc['constructionCosts' + k] %}
+    <tr>
+      <td>{{ k }}</td>
+      <td class="num">{{ calc['constructionCosts' + k] | money }}</td>
+      <td class="num">{{ calc['revenue' + k] | money }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 
 {# Leistungsphasen #}
 {% if phases and phases.length %}
