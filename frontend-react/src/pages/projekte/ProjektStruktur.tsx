@@ -539,7 +539,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th className="num">NK %</th>
                         <th className="num">Nebenkosten €</th>
                         <th className="num">Stand €</th>
-                        <th style={{ textAlign: 'center', fontSize: 10, color: '#9ca3af' }}>INT</th>
+                        <th style={{ textAlign: 'center', fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>Interne Pos.</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -645,14 +645,14 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             <td className="num">{fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
                             <td className="num">{fmtEur(node.REVENUE_COMPLETION)}</td>
                             <td style={{ textAlign: 'center' }}>
-                              <button
-                                type="button"
-                                className="btn-small"
-                                title={node.IS_INTERNAL ? 'Intern — klicken zum Aufheben' : 'Als intern markieren'}
-                                style={node.IS_INTERNAL ? { background: '#e5e7eb', color: '#6b7280', borderColor: '#d1d5db' } : { color: '#6b7280' }}
+                              <input
+                                type="checkbox"
+                                checked={node.IS_INTERNAL ?? false}
+                                title={node.IS_INTERNAL ? 'Interne Position — klicken zum Aufheben' : 'Als interne Position markieren'}
                                 disabled={internalMut.isPending}
-                                onClick={() => internalMut.mutate({ id: node.STRUCTURE_ID, val: !node.IS_INTERNAL })}
-                              >INT</button>
+                                onChange={() => internalMut.mutate({ id: node.STRUCTURE_ID, val: !node.IS_INTERNAL })}
+                                style={{ width: 16, height: 16, cursor: 'pointer' }}
+                              />
                             </td>
                             <td>
                               <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c' }}

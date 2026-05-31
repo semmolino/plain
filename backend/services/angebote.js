@@ -577,8 +577,14 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
       FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_PHASE_ID: r.ID,
     };
   });
-  const { data: created, error } = await supabase.from('PROJECT_STRUCTURE').insert(insertRows).select('ID');
-  if (error) throw error;
+  let { data: created, error } = await supabase.from('PROJECT_STRUCTURE').insert(insertRows).select('ID');
+  if (error) {
+    // Retry without FEE_CALC_* columns if they don't exist (migrations not yet run)
+    const fallback = insertRows.map(({ FEE_CALC_MASTER_ID, FEE_CALC_PHASE_ID, ...rest }) => rest);
+    const { data: created2, error: err2 } = await supabase.from('PROJECT_STRUCTURE').insert(fallback).select('ID');
+    if (err2) throw err2;
+    created = created2;
+  }
 
   // PROJECT_PROGRESS for LPH rows
   if (created && created.length) {
@@ -602,15 +608,22 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
         FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_BL_ID: b.ID,
       };
     });
-    await supabase.from('PROJECT_STRUCTURE').insert(blInsert).select('ID')
-      .then(({ data: blCreated }) => {
-        if (blCreated && blCreated.length) {
-          supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
-            STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
-            REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-          }))).catch(() => {});
-        }
-      }).catch(() => {}); // soft-fail (FEE_CALC_BL_ID column may not be migrated yet)
+    let blCreated = null;
+    const { data: blRes, error: blErr } = await supabase.from('PROJECT_STRUCTURE').insert(blInsert).select('ID');
+    if (blErr) {
+      // Retry without FEE_CALC_BL_ID if column doesn't exist yet
+      const blFallback = blInsert.map(({ FEE_CALC_MASTER_ID, FEE_CALC_BL_ID, ...rest }) => rest);
+      const { data: blRes2 } = await supabase.from('PROJECT_STRUCTURE').insert(blFallback).select('ID');
+      blCreated = blRes2;
+    } else {
+      blCreated = blRes;
+    }
+    if (blCreated && blCreated.length) {
+      await supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
+        STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
+        REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+      }))).catch(() => {});
+    }
   }
 }
 

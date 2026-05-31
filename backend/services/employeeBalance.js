@@ -367,7 +367,7 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
   // Bulk TEC (CONFIRMED only)
   const { data: tecRows, error: tecErr } = await supabase
     .from('TEC')
-    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_TOT')
+    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_TOT, STRUCTURE_ID')
     .eq('TENANT_ID', tenantId)
     .in('EMPLOYEE_ID', empIds)
     .eq('STATUS', 'CONFIRMED')
@@ -375,15 +375,52 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
     .lte('DATE_VOUCHER', allTo);
   if (tecErr) throw { status: 500, message: tecErr.message };
 
+  // Build sets of internal structure IDs and internal project IDs for Produktivität
+  const internalStructureIds = new Set();
+  const internalProjectIds   = new Set();
+  const structureToProject   = new Map();
+  try {
+    const allStructIds = [...new Set((tecRows || []).map(r => r.STRUCTURE_ID).filter(Boolean))];
+    if (allStructIds.length > 0) {
+      const { data: structs } = await supabase
+        .from('PROJECT_STRUCTURE')
+        .select('ID, IS_INTERNAL, PROJECT_ID')
+        .in('ID', allStructIds)
+        .eq('TENANT_ID', tenantId);
+      for (const s of structs || []) {
+        structureToProject.set(s.ID, s.PROJECT_ID);
+        if (s.IS_INTERNAL) internalStructureIds.add(s.ID);
+      }
+      const projIds = [...new Set((structs || []).map(s => s.PROJECT_ID).filter(Boolean))];
+      if (projIds.length > 0) {
+        const { data: projs } = await supabase
+          .from('PROJECT')
+          .select('ID, IS_INTERNAL')
+          .in('ID', projIds)
+          .eq('TENANT_ID', tenantId);
+        for (const p of projs || []) {
+          if (p.IS_INTERNAL) internalProjectIds.add(p.ID);
+        }
+      }
+    }
+  } catch (_) { /* soft-fail: Produktivität will show as null */ }
+
   const tecIdx = new Map();
   for (const row of tecRows || []) {
     const y = parseInt(row.DATE_VOUCHER.slice(0, 4), 10);
     const m = parseInt(row.DATE_VOUCHER.slice(5, 7), 10);
     const k = `${row.EMPLOYEE_ID}-${y}-${m}`;
-    const a = tecIdx.get(k) || { hoursInt: 0, hoursExt: 0, cost: 0 };
+    const a = tecIdx.get(k) || { hoursInt: 0, hoursExt: 0, cost: 0, hoursExtNonInternal: 0 };
     a.hoursInt += Number(row.QUANTITY_INT) || 0;
     a.hoursExt += Number(row.QUANTITY_EXT) || 0;
     a.cost     += Number(row.CP_TOT)       || 0;
+    // Count external hours only if neither the structure position nor its project is internal
+    const sid = row.STRUCTURE_ID;
+    const pid = sid ? structureToProject.get(sid) : null;
+    const isInternalRow = (sid && internalStructureIds.has(sid)) || (pid && internalProjectIds.has(pid));
+    if (!isInternalRow) {
+      a.hoursExtNonInternal += Number(row.QUANTITY_EXT) || 0;
+    }
     tecIdx.set(k, a);
   }
 
@@ -451,6 +488,9 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
         cur = addDays(cur, 1);
       }
 
+      const totalHours = tec.hoursInt || 0;
+      const productiveHours = tec.hoursExtNonInternal || 0;
+      const productivityPct = totalHours > 0 ? Math.round((productiveHours / totalHours) * 1000) / 10 : null;
       result.push({
         EMPLOYEE_ID:     emp.ID,
         SHORT_NAME:      emp.SHORT_NAME,
@@ -464,6 +504,7 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
         BALANCE:         Math.round((tec.hoursInt - required) * 100) / 100,
         HOURS_EXT:       Math.round(tec.hoursExt  * 100) / 100,
         COST:            Math.round(tec.cost       * 100) / 100,
+        PRODUCTIVITY_PCT: productivityPct,
       });
     }
   }

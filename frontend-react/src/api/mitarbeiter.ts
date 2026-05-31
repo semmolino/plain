@@ -169,6 +169,7 @@ export interface EmployeeReportRow {
   HOURS_EXT:        number
   COST:             number
   RUNNING_BALANCE?: number
+  PRODUCTIVITY_PCT: number | null
 }
 
 export const fetchEmployeeReportList = (params: {

@@ -350,6 +350,12 @@ table.data-table tfoot tr.grand-total td {
     {% endif %}
     {% endfor %}
   </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="3">Summe Zuschläge / Nachlässe</td>
+      <td class="num">{{ zuschlaegeSum | money }}</td>
+    </tr>
+  </tfoot>
 </table>
 {% endif %}
 

@@ -115,6 +115,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   const [editNodeForm,      setEditNodeForm]      = useState<EditNodeForm | null>(null)
   const [editNodeMsg,       setEditNodeMsg]       = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [showHonorarWizard, setShowHonorarWizard] = useState(false)
+  const [editCalcId, setEditCalcId] = useState<number | null>(null)
 
   // Lookups
   const { data: offersData  } = useQuery({ queryKey: ['offers'],          queryFn: fetchOffers         })
@@ -482,7 +483,8 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                         <td className="ls-td" style={{ textAlign: 'right', fontWeight: 600 }}>
                           {c.gesamthonorar != null ? c.gesamthonorar.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—'}
                         </td>
-                        <td className="ls-td">
+                        <td className="ls-td doc-actions">
+                          <button type="button" className="btn-small" onClick={() => setEditCalcId(c.ID)}>Bearbeiten</button>
                           <button type="button" className="btn-small" onClick={() => openHonorarPdf(c.ID)}>PDF</button>
                         </td>
                       </tr>
@@ -554,7 +556,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
             {!showAdd && (
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn-small btn-save" type="button" onClick={() => setShowAdd(true)}>+ Position hinzufügen</button>
-                <button className="btn-small" type="button" onClick={() => setShowHonorarWizard(true)}>+ HOAI-Kalkulation</button>
+                <button className="btn-small btn-save" type="button" onClick={() => setShowHonorarWizard(true)}>+ HOAI-Kalkulation</button>
               </div>
             )}
 
@@ -636,11 +638,24 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
     </div>
 
     {selectedId && showHonorarWizard && (
-      <Modal open={showHonorarWizard} onClose={() => setShowHonorarWizard(false)} title="HOAI-Kalkulation hinzufügen" className="modal-wide">
+      <Modal open={showHonorarWizard} onClose={() => setShowHonorarWizard(false)} title="HOAI-Kalkulation hinzufügen" className="modal-xl">
         <HonorarWizard
           offerId={selectedId}
           onDone={() => {
             setShowHonorarWizard(false)
+            void refetchFeeCalcs()
+          }}
+        />
+      </Modal>
+    )}
+
+    {selectedId && editCalcId !== null && (
+      <Modal open={editCalcId !== null} onClose={() => setEditCalcId(null)} title="HOAI-Kalkulation bearbeiten" className="modal-xl">
+        <HonorarWizard
+          existingId={editCalcId}
+          offerId={selectedId}
+          onDone={() => {
+            setEditCalcId(null)
             void refetchFeeCalcs()
           }}
         />

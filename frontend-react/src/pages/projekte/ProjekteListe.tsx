@@ -28,6 +28,9 @@ type FilterDim = 'status' | 'typ' | 'manager'
 type ActiveFilters = Record<FilterDim, Set<string>>
 const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set(), manager: new Set() })
 
+// null = all, true = only internal, false = only external
+type InternalFilter = null | boolean
+
 function FilterChip({ label, options, active, onChange }: {
   label: string; options: string[]; active: Set<string>; onChange: (v: Set<string>) => void
 }) {
@@ -87,7 +90,8 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
   const [hiddenCols,    setHiddenCols]    = useState<Set<OptColKey>>(
     new Set(OPT_COLS.filter(c => !c.defaultVisible).map(c => c.key))
   )
-  const [colPanelOpen, setColPanelOpen] = useState(false)
+  const [colPanelOpen,    setColPanelOpen]    = useState(false)
+  const [internalFilter,  setInternalFilter]  = useState<InternalFilter>(null)
   const colPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -144,6 +148,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
     if (activeFilters.status.size > 0) rows = rows.filter(p => p.STATUS_NAME && activeFilters.status.has(p.STATUS_NAME))
     if (activeFilters.typ.size    > 0) rows = rows.filter(p => p.TYPE_NAME    && activeFilters.typ.has(p.TYPE_NAME))
     if (activeFilters.manager.size > 0) rows = rows.filter(p => p.MANAGER_NAME && activeFilters.manager.has(p.MANAGER_NAME))
+    if (internalFilter !== null) rows = rows.filter(p => (p.IS_INTERNAL ?? false) === internalFilter)
 
     rows = [...rows].sort((a, b) => {
       const av = String(a[sortKey] ?? '')
@@ -159,7 +164,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
   const safePage   = Math.min(page, totalPages)
   const pageRows   = processed.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  const hasActiveFilter = Object.values(activeFilters).some(s => s.size > 0) || search.trim() !== ''
+  const hasActiveFilter = Object.values(activeFilters).some(s => s.size > 0) || search.trim() !== '' || internalFilter !== null
 
   function setDimFilter(dim: FilterDim, vals: Set<string>) {
     setActiveFilters(prev => ({ ...prev, [dim]: vals }))
@@ -222,6 +227,11 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
       setTimeout(() => closeEdit(), 800)
     },
     onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
+  })
+
+  const internalMut = useMutation({
+    mutationFn: ({ id, val }: { id: number; val: boolean }) => updateProject(id, { is_internal: val }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['projects-full'] }),
   })
 
   async function applyToContract(confirm: ContractConfirm) {
@@ -325,8 +335,18 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
           <FilterChip label="Status"   options={filterOptions.status}  active={activeFilters.status}  onChange={v => setDimFilter('status', v)}  />
           <FilterChip label="Typ"      options={filterOptions.typ}     active={activeFilters.typ}     onChange={v => setDimFilter('typ', v)}     />
           <FilterChip label="Leitung"  options={filterOptions.manager} active={activeFilters.manager} onChange={v => setDimFilter('manager', v)} />
+          <button
+            className={`filter-chip-btn${internalFilter !== null ? ' active' : ''}`}
+            title="Filter: Internes Projekt"
+            onClick={() => {
+              setInternalFilter(f => f === null ? true : f === true ? false : null)
+              setPage(1)
+            }}
+          >
+            Intern{internalFilter === true ? ': Ja' : internalFilter === false ? ': Nein' : ''} ▾
+          </button>
           {hasActiveFilter && (
-            <button className="pl-clear-btn" onClick={() => { setActiveFilters(emptyFilters()); setSearch(''); setPage(1) }}>
+            <button className="pl-clear-btn" onClick={() => { setActiveFilters(emptyFilters()); setSearch(''); setInternalFilter(null); setPage(1) }}>
               Alle Filter löschen
             </button>
           )}
@@ -364,6 +384,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                   {visibleOptCols.map(c => (
                     <SortTh key={c.key} label={c.label} k={c.key} {...sortProps} />
                   ))}
+                  <th style={{ textAlign: 'center', fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>Intern</th>
                   <th></th>
                   {onSelectProject && <th></th>}
                 </tr>
@@ -384,6 +405,16 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                       }
                       return <td key={c.key}>{p[c.key] ?? '—'}</td>
                     })}
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={p.IS_INTERNAL ?? false}
+                        title="Internes Projekt"
+                        disabled={internalMut.isPending}
+                        onChange={e => internalMut.mutate({ id: p.ID, val: e.target.checked })}
+                        style={{ width: 16, height: 16, cursor: 'pointer' }}
+                      />
+                    </td>
                     <td className="doc-actions">
                       <button className="btn-small" onClick={() => openEdit(p)}>Bearbeiten</button>
                       <button className="btn-small btn-danger" onClick={() => handleDelete(p)}>Löschen</button>
@@ -393,11 +424,11 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                     )}
                   </tr>
                 ))}
-                {!pageRows.length && <tr><td colSpan={4 + visibleOptCols.length + actionColSpan} className="empty-note">Keine Einträge</td></tr>}
+                {!pageRows.length && <tr><td colSpan={5 + visibleOptCols.length + actionColSpan} className="empty-note">Keine Einträge</td></tr>}
               </tbody>
               <tfoot>
                 <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                  <td colSpan={4 + visibleOptCols.length + actionColSpan} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                  <td colSpan={5 + visibleOptCols.length + actionColSpan} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
                     {processed.length !== projects.length ? `${processed.length} / ${projects.length} Einträge` : `${projects.length} Einträge`}
                   </td>
                 </tr>

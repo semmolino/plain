@@ -616,6 +616,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
         {showRunning    && <td className="num" style={{ color: balanceColor(run) }}><strong>{fmtBalance(run)}</strong></td>}
         {showCumulative && <td className="num">—</td>}
         <td className="num"><strong>{sumF(rows, r => r.COST) > 0 ? FMT_EUR.format(sumF(rows, r => r.COST)) : '—'}</strong></td>
+        <td className="num">—</td>
       </tr>
     )
   }
@@ -698,11 +699,12 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                     <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>Kürzel{si('name')}</th>
                     <th>Name</th>
                     <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('dept')}>Abteilung{si('dept')}</th>
-                    <NumTh label="Soll"            field="required" />
-                    <NumTh label="Ist"             field="actual"   />
-                    <NumTh label="Monatssaldo"     field="balance"  />
+                    <NumTh label="Soll"            field="required"     />
+                    <NumTh label="Ist"             field="actual"       />
+                    <NumTh label="Monatssaldo"     field="balance"      />
                     <th className="num">Laufender Saldo</th>
-                    <NumTh label="Kosten"          field="cost"     />
+                    <NumTh label="Kosten"          field="cost"         />
+                    <th className="num" title="Projektstunden (ohne interne) / Alle gebuchten Stunden">Produktivität</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -718,6 +720,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                         {r.RUNNING_BALANCE != null ? fmtBalance(r.RUNNING_BALANCE) : '…'}
                       </td>
                       <td className="num">{r.COST > 0 ? FMT_EUR.format(r.COST) : '—'}</td>
+                      <td className="num">{r.PRODUCTIVITY_PCT != null ? `${r.PRODUCTIVITY_PCT.toFixed(1)} %` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -748,11 +751,12 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                       <th>Mitarbeiter</th>
                       <th>Abteilung</th>
                       <th>Monat</th>
-                      <NumTh label="Soll"          field="required" />
-                      <NumTh label="Ist"           field="actual"   />
-                      <NumTh label="Monatssaldo"   field="balance"  />
+                      <NumTh label="Soll"          field="required"     />
+                      <NumTh label="Ist"           field="actual"       />
+                      <NumTh label="Monatssaldo"   field="balance"      />
                       <th className="num">Laufender Saldo</th>
-                      <NumTh label="Kosten"        field="cost"     />
+                      <NumTh label="Kosten"        field="cost"         />
+                      <th className="num" title="Projektstunden (ohne interne) / Alle gebuchten Stunden">Produktivität</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -786,6 +790,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                               <td className="num" style={{ color: balanceColor(r.BALANCE), fontWeight: r.BALANCE !== 0 ? 600 : 400 }}>{fmtBalance(r.BALANCE)}</td>
                               <td className="num" style={{ color: balanceColor(r.CUMULATIVE), fontWeight: 600 }}>{fmtBalance(r.CUMULATIVE)}</td>
                               <td className="num">{r.COST > 0 ? FMT_EUR.format(r.COST) : '—'}</td>
+                              <td className="num">{r.PRODUCTIVITY_PCT != null ? `${r.PRODUCTIVITY_PCT.toFixed(1)} %` : '—'}</td>
                             </tr>
                           ))}
                           <TotalsRow rows={rows} colSpan={3} showCumulative />
@@ -804,6 +809,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                         </td>
                         <td className="num">—</td>
                         <td className="num"><strong>{sumF(filtered, r => r.COST) > 0 ? FMT_EUR.format(sumF(filtered, r => r.COST)) : '—'}</strong></td>
+                        <td className="num">—</td>
                       </tr>
                     </tfoot>
                   )}

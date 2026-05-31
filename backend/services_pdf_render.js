@@ -570,7 +570,8 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
     console.warn('[HONORAR_CALCS_OFFER]', e.message);
   }
 
-  const context = { ...vm, theme, logoDataUri, signatureDataUri, honorarCalcs };
+  const honorarTotalSum = honorarCalcs.reduce((sum, hc) => sum + (hc.gesamthonorar || 0), 0);
+  const context = { ...vm, theme, logoDataUri, signatureDataUri, honorarCalcs, honorarTotalSum };
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
 
