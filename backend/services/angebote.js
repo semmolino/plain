@@ -551,11 +551,12 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
   const phaseRows = await loadPhaseRowsWithLabels(supabase, calcMasterId);
   const activePhases = phaseRows.filter(r => (Number(r.PHASE_REVENUE) || 0) !== 0 || (Number(r.FEE_PERCENT) || 0) !== 0);
 
-  // Step 1: Load BL items BEFORE early-return so BL-only calcs are handled correctly
+  // Step 1: Load BL items BEFORE early-return so BL-only calcs are handled correctly.
+  // No TENANT_ID filter — FEE_CALC_MASTER_ID already scopes to the right calc (verified by caller).
   let blItems = [];
   const blQueryRes = await supabase.from('FEE_CALCULATION_BL')
-    .select('ID, NAME, AMOUNT')   // NAME_SHORT derived from NAME to avoid migration-0043 dependency
-    .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId)
+    .select('ID, NAME, AMOUNT')
+    .eq('FEE_CALC_MASTER_ID', calcMasterId)
     .order('SORT_ORDER', { ascending: true });
   if (blQueryRes.error) {
     console.error('[attachFeeCalc] BL query error (calcMasterId=%d):', calcMasterId, blQueryRes.error.message);
@@ -930,6 +931,48 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
 
         if (fatherId) {
           await attachFeeCalcToProjectStructure(supabase, { calcMasterId: calc.ID, fatherId, projectId: project.ID, tenantId });
+
+          // Direct BL failsafe: query BL items independently (no TENANT_ID filter) and create
+          // any that are missing from PROJECT_STRUCTURE. Handles the case where
+          // attachFeeCalcToProjectStructure's BL step silently returned empty.
+          const { data: blAll } = await supabase.from('FEE_CALCULATION_BL')
+            .select('ID, NAME, AMOUNT').eq('FEE_CALC_MASTER_ID', calc.ID);
+          if (blAll && blAll.length) {
+            // Check which BL items already have a PROJECT_STRUCTURE row for this project.
+            // If FEE_CALC_BL_ID column doesn't exist (migration 0043 not run), data is null → empty set.
+            const blStructRes = await supabase.from('PROJECT_STRUCTURE')
+              .select('FEE_CALC_BL_ID').eq('PROJECT_ID', project.ID)
+              .not('FEE_CALC_BL_ID', 'is', null);
+            const existingBlStructs = blStructRes.data;
+            const existingBlIds = new Set((existingBlStructs || []).map(r => r.FEE_CALC_BL_ID));
+            const missingBls = blAll.filter(b => !existingBlIds.has(b.ID));
+            if (missingBls.length) {
+              console.log('[convertOffer] creating %d missing BL structure rows for calcMasterId=%d', missingBls.length, calc.ID);
+              const blRows = missingBls.map(b => ({
+                NAME_SHORT: b.NAME || 'BL', NAME_LONG: b.NAME || null,
+                REVENUE: Number(b.AMOUNT) || 0, EXTRAS: 0, COSTS: 0,
+                PROJECT_ID: project.ID, FATHER_ID: fatherId, EXTRAS_PERCENT: 0,
+                BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
+                REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
+                REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+              }));
+              // Try with FEE_CALC_BL_ID first (migration 0043)
+              const blWithId = blRows.map((r, i) => ({ ...r, FEE_CALC_BL_ID: missingBls[i].ID }));
+              let { data: blCreated, error: blInsErr } = await supabase.from('PROJECT_STRUCTURE').insert(blWithId).select('ID');
+              if (blInsErr) {
+                console.warn('[convertOffer] BL insert with FEE_CALC_BL_ID failed, retrying without:', blInsErr.message);
+                const { data: blCreated2, error: blInsErr2 } = await supabase.from('PROJECT_STRUCTURE').insert(blRows).select('ID');
+                if (blInsErr2) console.error('[convertOffer] BL fallback insert error:', blInsErr2.message);
+                else blCreated = blCreated2;
+              }
+              if (blCreated?.length) {
+                await supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
+                  STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: 0,
+                  REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+                }))).catch(() => {});
+              }
+            }
+          }
         }
       }
     }

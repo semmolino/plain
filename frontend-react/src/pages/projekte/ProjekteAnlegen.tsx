@@ -103,7 +103,7 @@ export function ProjekteAnlegen() {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
       setMsg({ text: `Projekt "${res.data.NAME_SHORT}" wurde angelegt.`, type: 'success' })
       setNewProjectId(res.data.ID)
-      // Stay on step 4 — post-creation HOAI section appears inline
+      setStep(4)  // advance to HOAI step
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
@@ -179,6 +179,10 @@ export function ProjekteAnlegen() {
   function goNext() {
     if (step === 1 && !validateStep1()) return
     setMsg(null)
+    if (step === 3) {
+      submit()  // creates project → onSuccess advances to step 4
+      return
+    }
     setStep(s => s + 1)
   }
 
@@ -347,73 +351,14 @@ export function ProjekteAnlegen() {
         </div>
       )}
 
-      {/* ── Step 4: Projektstruktur + HOAI ── */}
+      {/* ── Step 4: HOAI-Kalkulation ── */}
       {step === 4 && (
         <div className="wizard-step-content">
-          <h3 className="wizard-step-title">Schritt 4: Projektstruktur</h3>
-          <p className="admin-section-hint">Optional — Strukturelemente können später ergänzt werden.</p>
-          {!newProjectId && (
-            <>
-              <button className="btn-small btn-save" type="button" onClick={addStructRow} style={{ marginBottom: 8 }}>+ Zeile hinzufügen</button>
-              {structDraft.length > 0 && (
-                <div className="table-scroll">
-                  <table className="master-table">
-                    <thead>
-                      <tr><th>#</th><th>Kürzel</th><th>Bezeichnung</th><th>Abrechnungsart*</th><th>NK %</th><th>Übergeordnet</th><th></th></tr>
-                    </thead>
-                    <tbody>
-                      {structDraft.map((r, i) => (
-                        <tr key={r.tmp_key}>
-                          <td>{i + 1}</td>
-                          <td><input className="tbl-input" style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
-                          <td><input className="tbl-input" style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
-                          <td>
-                            <select className="tbl-select" value={String(r.BILLING_TYPE_ID)} onChange={e => setStructField(r.tmp_key, 'BILLING_TYPE_ID', e.target.value)}>
-                              <option value="">Bitte wählen …</option>
-                              {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              className="tbl-input"
-                              type="number" min={0} max={100} step={0.1}
-                              style={{ width: 70 }}
-                              value={String(r.EXTRAS_PERCENT)}
-                              placeholder="0"
-                              onChange={e => setStructField(r.tmp_key, 'EXTRAS_PERCENT', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <select className="tbl-select" value={r.father_tmp_key} onChange={e => setStructField(r.tmp_key, 'father_tmp_key', e.target.value)}>
-                              <option value="">(Root)</option>
-                              {structDraft.filter(x => x.tmp_key !== r.tmp_key).map(x => (
-                                <option key={x.tmp_key} value={x.tmp_key}>
-                                  {(`${x.NAME_SHORT} ${x.NAME_LONG}`).trim() || `Zeile ${structDraft.indexOf(x) + 1}`}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td><button className="btn-small" type="button" onClick={() => removeStructRow(r.tmp_key)}>Entfernen</button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* HOAI section — always visible on step 4 */}
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-            <h3 className="wizard-step-title" style={{ marginBottom: 8 }}>HOAI-Kalkulation (optional)</h3>
-            {!newProjectId ? (
-              <p className="admin-section-hint" style={{ paddingTop: 4 }}>
-                Nach dem Anlegen des Projekts können Sie hier eine HOAI-Kalkulation hinzufügen.
-              </p>
-            ) : (
-              <HonorarWizard initialProjectId={newProjectId} onDone={handleFinish} />
-            )}
-          </div>
+          <h3 className="wizard-step-title">Schritt 4: HOAI-Kalkulation (optional)</h3>
+          {newProjectId
+            ? <HonorarWizard initialProjectId={newProjectId} onDone={handleFinish} />
+            : <p className="admin-section-hint">Projekt wird angelegt…</p>
+          }
         </div>
       )}
 
@@ -421,14 +366,18 @@ export function ProjekteAnlegen() {
 
       {/* Navigation */}
       <div className="wizard-nav">
-        {step > 1 && !newProjectId && <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>}
-        {step < 4 && <button className="btn-primary" type="button" onClick={goNext}>Weiter →</button>}
-        {step === 4 && !newProjectId && (
-          <button className="btn-primary" type="button" disabled={createMut.isPending} onClick={submit}>
-            {createMut.isPending ? 'Speichert …' : 'Projekt anlegen'}
+        {step > 1 && step < 4 && (
+          <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>
+        )}
+        {step < 3 && (
+          <button className="btn-primary" type="button" onClick={goNext}>Weiter →</button>
+        )}
+        {step === 3 && (
+          <button className="btn-primary" type="button" disabled={createMut.isPending} onClick={goNext}>
+            {createMut.isPending ? 'Speichert …' : 'Projekt anlegen →'}
           </button>
         )}
-        {step === 4 && newProjectId && (
+        {step === 4 && (
           <button type="button" onClick={handleFinish}>Fertig / Überspringen</button>
         )}
       </div>
