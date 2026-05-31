@@ -787,21 +787,39 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
     const selectedLphIds = r.LPH_FILTER
       ? (() => { try { return JSON.parse(r.LPH_FILTER); } catch { return phaseIdsForSurcharge; } })()
       : phaseIdsForSurcharge;
-    const phaseBase = phaseRows
-      .filter(p => selectedLphIds.includes(p.ID))
-      .reduce((s, p) => s + (Number(p.PHASE_REVENUE) || 0), 0);
+    const selectedPhaseRows = phaseRows.filter(p => selectedLphIds.includes(p.ID));
+    const phaseBase = selectedPhaseRows.reduce((s, p) => s + (Number(p.PHASE_REVENUE) || 0), 0);
+
     let blContrib = 0;
+    let selectedBlRows = [];
     if (r.BL_FILTER) {
       try {
         const selectedBlIds = JSON.parse(r.BL_FILTER);
-        blContrib = blRows.reduce((s, b) => selectedBlIds.includes(b.ID) ? s + (Number(b.AMOUNT) || 0) : s, 0);
+        selectedBlRows = blRows.filter(b => selectedBlIds.includes(b.ID));
+        blContrib = selectedBlRows.reduce((s, b) => s + (Number(b.AMOUNT) || 0), 0);
       } catch { /* ignore */ }
     }
+
     const base = phaseBase + blContrib;
     const effectiveBase = r.CALC_MODE === 'cumulative' ? base + runningTotal : base;
     const amount = ((Number(r.PERCENT) || 0) / 100) * effectiveBase;
     runningTotal += amount;
-    return { r, effectiveBase: Math.round(effectiveBase * 100) / 100, amount: Math.round(amount * 100) / 100 };
+
+    // Per-component breakdown for the detailed PDF table
+    const lphItems = selectedPhaseRows
+      .filter(p => (Number(p.PHASE_REVENUE) || 0) !== 0)
+      .map(p => ({ label: p.PHASE_LABEL || '', amount: Number(p.PHASE_REVENUE) || 0 }));
+    const surchargeBls = selectedBlRows
+      .filter(b => (Number(b.AMOUNT) || 0) !== 0)
+      .map(b => ({ name: [b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || 'BL', amount: Number(b.AMOUNT) || 0 }));
+
+    return {
+      r,
+      effectiveBase: Math.round(effectiveBase * 100) / 100,
+      amount: Math.round(amount * 100) / 100,
+      lphItems,
+      surchargeBls,
+    };
   });
   const zuschlaegeSum = computedSurcharges.reduce((s, e) => s + e.amount, 0);
 
@@ -859,8 +877,8 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
       };
     }),
     blTotal,
-    surcharges: computedSurcharges.map(({ r, effectiveBase, amount }) => {
-      // Build a human-readable LPH detail string for the PDF
+    surcharges: computedSurcharges.map(({ r, effectiveBase, amount, lphItems, surchargeBls }) => {
+      // Build a human-readable LPH detail string for the summary line
       let lphDetail = null;
       if (r.LPH_FILTER) {
         try {
@@ -874,13 +892,15 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
         } catch { /* ignore */ }
       }
       return {
-        nameShort:   r.NAME_SHORT || '',
-        nameLong:    r.NAME_LONG || '',
-        percent:     r.PERCENT ?? '',
-        baseAmount:  effectiveBase,
+        nameShort:    r.NAME_SHORT || '',
+        nameLong:     r.NAME_LONG || '',
+        percent:      r.PERCENT ?? '',
+        baseAmount:   effectiveBase,
         amount,
-        calcMode:    r.CALC_MODE || 'parallel',
+        calcMode:     r.CALC_MODE || 'parallel',
         lphDetail,
+        lphItems,      // [{label, amount}] for detailed breakdown
+        surchargeBls,  // [{name, amount}] for detailed breakdown
       };
     }),
     grundhonorar,

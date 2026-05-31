@@ -103,6 +103,20 @@ table.data-table tfoot tr.grand-total td {
   color: #6b7280;
   margin-top: 0.5mm;
 }
+.breakdown-row td {
+  background: #fafafa;
+  border-bottom: 0.3pt solid #e5e7eb;
+  padding: 1mm 2mm 1.5mm 8mm;
+}
+.breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7.5pt;
+}
+.breakdown-table td { padding: 0.4mm 1mm; }
+.breakdown-table td.bd-num { text-align: right; white-space: nowrap; width: 28%; }
+.breakdown-table tr.bd-lph td { color: #374151; }
+.breakdown-table tr.bd-bl td  { color: #059669; }
 .surcharge-mode-badge {
   display: inline-block;
   font-size: 6.5pt;
@@ -300,6 +314,29 @@ table.data-table tfoot tr.grand-total td {
       <td class="num">{{ s.baseAmount | money }}</td>
       <td class="num">{{ s.amount | money }}</td>
     </tr>
+    {% set hasDetail = (s.lphItems and s.lphItems.length > 0) or (s.surchargeBls and s.surchargeBls.length > 0) %}
+    {% if hasDetail %}
+    <tr class="breakdown-row">
+      <td colspan="4">
+        <table class="breakdown-table">
+          <tbody>
+            {% for item in s.lphItems %}
+            <tr class="bd-lph">
+              <td>{{ item.label }}</td>
+              <td class="bd-num">{{ item.amount | money }}</td>
+            </tr>
+            {% endfor %}
+            {% for item in s.surchargeBls %}
+            <tr class="bd-bl">
+              <td>{{ item.name }}</td>
+              <td class="bd-num">{{ item.amount | money }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </td>
+    </tr>
+    {% endif %}
     {% endfor %}
   </tbody>
   <tfoot>

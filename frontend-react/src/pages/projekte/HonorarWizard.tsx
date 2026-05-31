@@ -165,7 +165,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   const isEdit = !!existingId
 
   const firstStep  = isEdit ? 2 : 1
-  const totalSteps = isEdit ? 4 : 6
+  const totalSteps = isEdit ? 5 : 6
   function dotFor(s: number) { return isEdit ? s - 1 : s }
 
   const [step, setStep]       = useState(firstStep)
@@ -409,11 +409,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
       await saveFeeCalcSurcharges(calcMaster.ID, rowsToSave)
       void qc.invalidateQueries({ queryKey: ['fee-calc-masters'] })
       setMsg(null)
-      if (isEdit) {
-        setShowSyncDialog(true)
-      } else {
-        setStep(6)
-      }
+      setStep(6)
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
     } finally { setLoading(false) }
@@ -1018,32 +1014,24 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
             </div>
           )}
           <button type="button" className="btn-small" onClick={addCustomSurcharge}>+ Zuschlag / Nachlass hinzufügen</button>
-
-          {/* Sync-to-structure confirmation */}
-          {showSyncDialog && (
-            <div className="admin-block" style={{ marginTop: 16, background: '#fef9c3', border: '1px solid #fbbf24', padding: 14 }}>
-              <p style={{ marginBottom: 10, fontWeight: 500, fontSize: 13 }}>
-                Sollen die verknüpften Projektelemente mit den aktualisierten Honorarwerten überschrieben werden?
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" className="btn-primary" onClick={() => void doSyncToStructure()} disabled={loading}>
-                  Ja, Projektstruktur aktualisieren
-                </button>
-                <button type="button" onClick={() => { setShowSyncDialog(false); onDone?.() }}>Nein</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* ── Step 6: Zusammenfassung + Zuordnen (create only) ────────────────── */}
+      {/* ── Step 6: Zusammenfassung (both create + edit) ─────────────────────── */}
       {step === 6 && (
         <div className="wizard-step-content">
-          <h3 className="wizard-step-title">Schritt 6: Zusammenfassung &amp; Zuordnen</h3>
+          <h3 className="wizard-step-title">
+            {isEdit ? 'Schritt 5' : 'Schritt 6'}: Zusammenfassung
+            {!isEdit && ' & Zuordnen'}
+          </h3>
           <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
             {calcMaster?.NAME_SHORT}{calcMaster?.NAME_LONG ? ' – ' + calcMaster.NAME_LONG : ''}
-            {' · '}Folgende Elemente werden in der Projektstruktur angelegt:
+            {isEdit
+              ? ' · Übersicht über die aktualisierten Werte:'
+              : ' · Folgende Elemente werden in der Projektstruktur angelegt:'}
           </p>
+
+          {/* Overview table: LPH + BL rows */}
           <div className="table-scroll" style={{ marginBottom: 12 }}>
             <table className="master-table">
               <thead>
@@ -1061,7 +1049,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                     <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(p.PHASE_REVENUE)}</td>
                   </tr>
                 ))}
-                {blItems.filter(b => (blComputedAmounts[blItems.indexOf(b)] ?? 0) !== 0).map((b, i) => (
+                {blItems.map((b, i) => blComputedAmounts[i] !== 0 && (
                   <tr key={i} style={{ background: '#f0fdf4' }}>
                     <td style={{ fontSize: 13 }}>{[b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || `BL ${i + 1}`}</td>
                     <td style={{ fontSize: 11, color: '#166534' }}>Besondere Leistung</td>
@@ -1098,57 +1086,72 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
               Zuschläge werden proportional auf Grundleistungen und Besondere Leistungen verteilt.
             </p>
           )}
-          <div className="form-group">
-            <label>Übergeordnetes Strukturelement*</label>
-            <select value={fatherId} onChange={e => setFatherId(e.target.value)}>
-              <option value="">Bitte wählen …</option>
-              {structureNodes.map(s => (
-                <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>
-                  {s.NAME_SHORT} – {s.NAME_LONG}
-                </option>
-              ))}
-            </select>
-            {!basis.PROJECT_ID && <p className="empty-note">Erst Projekt in Schritt 2 wählen, um Strukturelemente zu laden.</p>}
-          </div>
+
+          {/* Edit mode: sync choice */}
+          {isEdit && (
+            <div className="admin-block" style={{ background: '#fef9c3', border: '1px solid #fbbf24', padding: 14 }}>
+              <p style={{ marginBottom: 10, fontWeight: 500, fontSize: 13 }}>
+                Sollen die verknüpften Projektelemente mit den aktualisierten Honorarwerten überschrieben werden?
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn-primary" onClick={() => void doSyncToStructure()} disabled={loading}>
+                  Ja, Projektstruktur aktualisieren
+                </button>
+                <button type="button" onClick={() => onDone?.()}>Nein, nur speichern</button>
+              </div>
+            </div>
+          )}
+
+          {/* Create mode: structure selector */}
+          {!isEdit && (
+            <div className="form-group">
+              <label>Übergeordnetes Strukturelement*</label>
+              <select value={fatherId} onChange={e => setFatherId(e.target.value)}>
+                <option value="">Bitte wählen …</option>
+                {structureNodes.map(s => (
+                  <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>
+                    {s.NAME_SHORT} – {s.NAME_LONG}
+                  </option>
+                ))}
+              </select>
+              {!basis.PROJECT_ID && <p className="empty-note">Erst Projekt in Schritt 2 wählen, um Strukturelemente zu laden.</p>}
+            </div>
+          )}
         </div>
       )}
 
       <Message text={msg?.text ?? null} type={msg?.type} />
 
-      {!showSyncDialog && (
-        <div className="wizard-nav">
-          {step > firstStep && (
-            <button type="button" className="btn-small" onClick={goBack} disabled={loading}>
-              ← Zurück
-            </button>
-          )}
-          {step >= firstStep && (
-            <button type="button" onClick={cancelAndDelete} disabled={loading}>
-              {isEdit ? 'Abbrechen' : step === 1 ? 'Abbrechen' : 'Abbrechen & Löschen'}
-            </button>
-          )}
-          {step === 1 && (
-            <button className="btn-primary" type="button" onClick={goNext1} disabled={loading || !feeMasterId}>Weiter →</button>
-          )}
-          {step === 2 && (
-            <button className="btn-primary" type="button" onClick={saveBasisAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
-          )}
-          {step === 3 && (
-            <button className="btn-primary" type="button" onClick={savePhasesAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
-          )}
-          {step === 4 && (
-            <button className="btn-primary" type="button" onClick={saveBLAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
-          )}
-          {step === 5 && (
-            <button className="btn-primary" type="button" onClick={saveSurchargesAndGo} disabled={loading}>
-              {isEdit ? 'Speichern & Fertig' : 'Weiter →'}
-            </button>
-          )}
-          {step === 6 && (
-            <button className="btn-primary" type="button" onClick={finish} disabled={loading || !fatherId}>Projektstruktur anlegen</button>
-          )}
-        </div>
-      )}
+      <div className="wizard-nav">
+        {step > firstStep && (
+          <button type="button" className="btn-small" onClick={goBack} disabled={loading}>
+            ← Zurück
+          </button>
+        )}
+        {step >= firstStep && (
+          <button type="button" onClick={cancelAndDelete} disabled={loading}>
+            {isEdit ? 'Abbrechen' : step === 1 ? 'Abbrechen' : 'Abbrechen & Löschen'}
+          </button>
+        )}
+        {step === 1 && (
+          <button className="btn-primary" type="button" onClick={goNext1} disabled={loading || !feeMasterId}>Weiter →</button>
+        )}
+        {step === 2 && (
+          <button className="btn-primary" type="button" onClick={saveBasisAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
+        )}
+        {step === 3 && (
+          <button className="btn-primary" type="button" onClick={savePhasesAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
+        )}
+        {step === 4 && (
+          <button className="btn-primary" type="button" onClick={saveBLAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
+        )}
+        {step === 5 && (
+          <button className="btn-primary" type="button" onClick={saveSurchargesAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
+        )}
+        {step === 6 && !isEdit && (
+          <button className="btn-primary" type="button" onClick={finish} disabled={loading || !fatherId}>Projektstruktur anlegen</button>
+        )}
+      </div>
     </div>
   )
 }
