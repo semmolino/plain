@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
-import { Modal }        from '@/components/ui/Modal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers,
@@ -62,7 +61,6 @@ export function ProjekteAnlegen() {
   const [structDraft, setStructDraft] = useState<StructureDraftRow[]>([])
   const [msg, setMsg]             = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
   const [newProjectId, setNewProjectId]   = useState<number | null>(null)
-  const [showHonorarModal, setShowHonorarModal] = useState(false)
 
   const { data: deptData    } = useQuery({ queryKey: ['departments'],        queryFn: fetchDepartments      })
   const { data: statusData  } = useQuery({ queryKey: ['project-statuses'],  queryFn: fetchProjectStatuses  })
@@ -405,15 +403,14 @@ export function ProjekteAnlegen() {
 
       <Message text={msg?.text ?? null} type={msg?.type} />
 
-      {/* ── Post-creation HOAI section (inline on step 4) ── */}
+      {/* ── Post-creation: HOAI wizard inline on step 4 ── */}
       {step === 4 && newProjectId && (
-        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-          <p className="admin-section-hint" style={{ marginBottom: 8 }}>
-            Optional — HOAI-Kalkulation für dieses Projekt hinzufügen:
-          </p>
-          <button className="btn-small btn-save" type="button" onClick={() => setShowHonorarModal(true)}>
-            + HOAI-Kalkulation hinzufügen
-          </button>
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <h3 className="wizard-step-title" style={{ marginBottom: 8 }}>HOAI-Kalkulation (optional)</h3>
+          <HonorarWizard
+            initialProjectId={newProjectId}
+            onDone={handleFinish}
+          />
         </div>
       )}
 
@@ -427,18 +424,9 @@ export function ProjekteAnlegen() {
           </button>
         )}
         {step === 4 && newProjectId && (
-          <button className="btn-primary" type="button" onClick={handleFinish}>Fertig</button>
+          <button type="button" onClick={handleFinish}>Überspringen</button>
         )}
       </div>
-
-      {showHonorarModal && newProjectId && (
-        <Modal open={showHonorarModal} onClose={() => setShowHonorarModal(false)} title="HOAI-Kalkulation hinzufügen" className="modal-xl">
-          <HonorarWizard
-            initialProjectId={newProjectId}
-            onDone={() => setShowHonorarModal(false)}
-          />
-        </Modal>
-      )}
     </div>
   )
 }
