@@ -167,6 +167,15 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       setTimeout(() => setSaveMsg(null), 3000)
     },
     onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
+
+  })
+
+  const internalMut = useMutation({
+    mutationFn: ({ id, val }: { id: number; val: boolean }) => patchStructureNode(id, { IS_INTERNAL: val }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['structure', selectedPid] })
+    },
+    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
   })
 
   const addMut = useMutation({
@@ -530,6 +539,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th className="num">NK %</th>
                         <th className="num">Nebenkosten €</th>
                         <th className="num">Stand €</th>
+                        <th style={{ textAlign: 'center', fontSize: 10, color: '#9ca3af' }}>INT</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -569,6 +579,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               isDragOver && dragZone === 'above' ? 'ps-drop-above' : '',
                               dragIds.has(node.STRUCTURE_ID) ? 'ps-dragging' : '',
                             ].filter(Boolean).join(' ')}
+                            style={node.IS_INTERNAL ? { opacity: 0.6 } : undefined}
                           >
                             <td>
                               <input type="checkbox" checked={selectedIds.has(node.STRUCTURE_ID)}
@@ -633,6 +644,16 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             </td>
                             <td className="num">{fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
                             <td className="num">{fmtEur(node.REVENUE_COMPLETION)}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                className="btn-small"
+                                title={node.IS_INTERNAL ? 'Intern — klicken zum Aufheben' : 'Als intern markieren'}
+                                style={node.IS_INTERNAL ? { background: '#e5e7eb', color: '#6b7280', borderColor: '#d1d5db' } : { color: '#6b7280' }}
+                                disabled={internalMut.isPending}
+                                onClick={() => internalMut.mutate({ id: node.STRUCTURE_ID, val: !node.IS_INTERNAL })}
+                              >INT</button>
+                            </td>
                             <td>
                               <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c' }}
                                 disabled={deleteMut.isPending}

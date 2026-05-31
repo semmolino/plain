@@ -312,7 +312,7 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
 
   const { data: projects, error: pErr } = await supabase
     .from("PROJECT")
-    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID, DEPARTMENT_ID, ADDRESS_ID, CONTACT_ID")
+    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID, DEPARTMENT_ID, ADDRESS_ID, CONTACT_ID, IS_INTERNAL")
     .eq("TENANT_ID", tenantId)
     .order("NAME_SHORT", { ascending: true })
     .limit(safeLimit);
@@ -376,6 +376,9 @@ async function patchProject(supabase, { id, body, tenantId }) {
   if (b.contact_id !== undefined) {
     upd.CONTACT_ID = b.contact_id ? parseInt(String(b.contact_id), 10) : null;
   }
+  if (b.is_internal !== undefined) {
+    upd.IS_INTERNAL = !!b.is_internal;
+  }
   if (upd.NAME_SHORT !== undefined && !upd.NAME_SHORT) {
     throw { status: 400, message: "NAME_SHORT ist erforderlich" };
   }
@@ -385,7 +388,7 @@ async function patchProject(supabase, { id, body, tenantId }) {
     .update(upd)
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
-    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID, DEPARTMENT_ID, ADDRESS_ID, CONTACT_ID")
+    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_STATUS_ID, PROJECT_TYPE_ID, PROJECT_MANAGER_ID, DEPARTMENT_ID, ADDRESS_ID, CONTACT_ID, IS_INTERNAL")
     .single();
 
   if (uErr) throw uErr;
@@ -918,6 +921,7 @@ async function patchStructure(supabase, { structureId, update }) {
     EXTRAS: extras,
     REVENUE_COMPLETION: revenueCompletion,
     EXTRAS_COMPLETION: extrasCompletion,
+    ...(update.IS_INTERNAL !== undefined ? { IS_INTERNAL: !!update.IS_INTERNAL } : {}),
   };
 
   const { error: updateError } = await supabase.from("PROJECT_STRUCTURE").update(updatePayload).eq("ID", structureId);

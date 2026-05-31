@@ -204,7 +204,8 @@ async function loadProjectStructuresForContext(supabase, { contractId, projectId
     const { data: byContract, error: byContractErr } = await supabase
       .from("PROJECT_STRUCTURE")
       .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
-      .eq("CONTRACT_ID", contractId);
+      .eq("CONTRACT_ID", contractId)
+      .eq("IS_INTERNAL", false);
 
     if (!byContractErr && Array.isArray(byContract) && byContract.length > 0) return leafOnly(byContract);
   }
@@ -212,7 +213,8 @@ async function loadProjectStructuresForContext(supabase, { contractId, projectId
   const { data: byProject, error: byProjectErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT")
-    .eq("PROJECT_ID", projectId);
+    .eq("PROJECT_ID", projectId)
+    .eq("IS_INTERNAL", false);
 
   if (byProjectErr) throw new Error(byProjectErr.message);
   return leafOnly(byProject);

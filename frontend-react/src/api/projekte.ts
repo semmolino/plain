@@ -20,6 +20,7 @@ export interface Project {
   DEPARTMENT_ID:       number | null
   ADDRESS_ID:          number | null
   CONTACT_ID:          number | null
+  IS_INTERNAL:         boolean
   STATUS_NAME:         string
   TYPE_NAME:           string
   MANAGER_NAME:        string
@@ -44,6 +45,7 @@ export interface StructureNode {
   REVENUE_COMPLETION:          number
   EXTRAS_COMPLETION:           number
   TEC_SP_TOT_SUM:              number
+  IS_INTERNAL:                 boolean
   children?:                   StructureNode[]
 }
 
@@ -105,6 +107,7 @@ export const updateProject = (id: number, body: Partial<{
   name_short: string; name_long: string
   project_status_id: number; project_type_id: number | null; project_manager_id: number
   department_id: number | null; address_id: number | null; contact_id: number | null
+  is_internal: boolean
 }>) => apiClient.patch<{ data: Project }>(`/projekte/${id}`, body)
 
 export const searchProjectsApi = (q: string) =>
@@ -129,6 +132,7 @@ export const patchStructureNode = (structureId: number, body: Partial<{
   NAME_SHORT: string; NAME_LONG: string
   BILLING_TYPE_ID: number; REVENUE: number; EXTRAS_PERCENT: number
   REVENUE_COMPLETION_PERCENT: number; EXTRAS_COMPLETION_PERCENT: number
+  IS_INTERNAL: boolean
 }>) => apiClient.patch<{ data: StructureNode }>(`/projekte/structure/${structureId}`, body)
 
 export const inheritStructureExtras = (structureId: number, extrasPercent: number) =>

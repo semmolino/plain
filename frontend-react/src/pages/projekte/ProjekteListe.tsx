@@ -105,6 +105,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
     department_id: '',
     address_id: '', address_text: '',
     contact_id: '',
+    is_internal: false,
   })
   const [contacts, setContacts] = useState<ContactOption[]>([])
   const [contractConfirm, setContractConfirm] = useState<ContractConfirm | null>(null)
@@ -255,6 +256,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
       address_id:         String(p.ADDRESS_ID         ?? ''),
       address_text:       p.ADDRESS_NAME              ?? '',
       contact_id:         String(p.CONTACT_ID         ?? ''),
+      is_internal:        p.IS_INTERNAL ?? false,
     })
     setContacts([])
     setContractConfirm(null)
@@ -282,6 +284,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
         department_id:      editForm.department_id      ? Number(editForm.department_id)      : null,
         address_id:         editForm.address_id         ? Number(editForm.address_id)         : null,
         contact_id:         editForm.contact_id         ? Number(editForm.contact_id)         : null,
+        is_internal:        editForm.is_internal,
       },
     })
   }
@@ -367,8 +370,11 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
               </thead>
               <tbody>
                 {pageRows.map(p => (
-                  <tr key={p.ID}>
-                    <td>{p.NAME_SHORT}</td>
+                  <tr key={p.ID} style={p.IS_INTERNAL ? { opacity: 0.7 } : undefined}>
+                    <td>
+                      {p.NAME_SHORT}
+                      {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6, fontSize: 10 }}>intern</span>}
+                    </td>
                     <td>{p.NAME_LONG}</td>
                     <td>{p.STATUS_NAME}</td>
                     <td>{p.MANAGER_NAME}</td>
@@ -480,6 +486,17 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="form-group" style={{ marginTop: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={editForm.is_internal}
+                  onChange={e => setEditForm(f => ({ ...f, is_internal: e.target.checked }))}
+                />
+                <span>Internes Projekt</span>
+                <span style={{ fontSize: 11, color: '#6b7280' }}>(nicht Teil von Verträgen / Rechnungen)</span>
+              </label>
             </div>
             <Message text={editMsg?.text ?? null} type={editMsg?.type} />
             <div className="modal-actions">
