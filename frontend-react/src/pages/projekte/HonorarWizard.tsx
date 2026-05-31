@@ -771,9 +771,11 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                           <select className="tbl-select" style={{ width: '100%' }}
                             value={b.AMOUNT_TYPE || 'fixed'}
                             onChange={e => updateBl({ AMOUNT_TYPE: e.target.value as BlAmountType, PERCENT: null, KX_REF: null })}>
-                            {(Object.entries(BL_AMOUNT_TYPE_LABELS) as [BlAmountType, string][]).map(([k, v]) => (
-                              <option key={k} value={k}>{v}</option>
-                            ))}
+                            {(Object.entries(BL_AMOUNT_TYPE_LABELS) as [BlAmountType, string][])
+                              .filter(([k]) => k !== 'pct_gesamthonorar')
+                              .map(([k, v]) => (
+                                <option key={k} value={k}>{v}</option>
+                              ))}
                           </select>
                         </td>
                         <td style={{ textAlign: 'right' }}>
@@ -968,7 +970,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                                         <label key={b.ID ?? b.SORT_ORDER} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
                                           <input type="checkbox" checked={checked}
                                             onChange={() => { if (b.ID != null) toggleSurchargeBl(idx, b.ID) }} />
-                                          {b.NAME_SHORT || b.NAME || `BL ${b.SORT_ORDER + 1}`}
+                                          {b.NAME_SHORT ? `${b.NAME_SHORT} — ${b.NAME || ''}` : (b.NAME || `BL ${b.SORT_ORDER + 1}`)}
                                         </label>
                                       )
                                     })}
@@ -1034,18 +1036,69 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
         </div>
       )}
 
-      {/* ── Step 6: Übersicht + Zuordnen (create only) ────────────────────────── */}
+      {/* ── Step 6: Zusammenfassung + Zuordnen (create only) ────────────────── */}
       {step === 6 && (
         <div className="wizard-step-content">
-          <h3 className="wizard-step-title">Schritt 6: Übersicht &amp; Zuordnen</h3>
-          <div className="admin-block">
-            <p><strong>Leistungsbild:</strong> {calcMaster?.NAME_SHORT} {calcMaster?.NAME_LONG && '– ' + calcMaster.NAME_LONG}</p>
-            <p><strong>Grundhonorar:</strong> {fmtEur(totalPhaseRev)}</p>
-            {blItems.length > 0 && <p><strong>Besondere Leistungen:</strong> {fmtEur(blTotal)}</p>}
-            {surcharges.length > 0 && <p><strong>Zuschläge / Nachlässe:</strong> {fmtEur(totalSurchargeAmt)}</p>}
-            <p><strong>Gesamthonorar:</strong> {fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</p>
+          <h3 className="wizard-step-title">Schritt 6: Zusammenfassung &amp; Zuordnen</h3>
+          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+            {calcMaster?.NAME_SHORT}{calcMaster?.NAME_LONG ? ' – ' + calcMaster.NAME_LONG : ''}
+            {' · '}Folgende Elemente werden in der Projektstruktur angelegt:
+          </p>
+          <div className="table-scroll" style={{ marginBottom: 12 }}>
+            <table className="master-table">
+              <thead>
+                <tr>
+                  <th>Bezeichnung</th>
+                  <th style={{ width: 120, color: '#6b7280', fontWeight: 400 }}>Typ</th>
+                  <th style={{ width: 140, textAlign: 'right' }}>Honorar (netto) €</th>
+                </tr>
+              </thead>
+              <tbody>
+                {phases.filter(p => (p.PHASE_REVENUE ?? 0) !== 0).map(p => (
+                  <tr key={p.ID}>
+                    <td style={{ fontSize: 13 }}>{p.PHASE_LABEL}</td>
+                    <td style={{ fontSize: 11, color: '#6b7280' }}>Grundleistung</td>
+                    <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(p.PHASE_REVENUE)}</td>
+                  </tr>
+                ))}
+                {blItems.filter(b => (blComputedAmounts[blItems.indexOf(b)] ?? 0) !== 0).map((b, i) => (
+                  <tr key={i} style={{ background: '#f0fdf4' }}>
+                    <td style={{ fontSize: 13 }}>{[b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || `BL ${i + 1}`}</td>
+                    <td style={{ fontSize: 11, color: '#166534' }}>Besondere Leistung</td>
+                    <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(blComputedAmounts[i])}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th colSpan={2}>Grundhonorar</th>
+                  <th style={{ textAlign: 'right' }}>{fmtEur(totalPhaseRev)}</th>
+                </tr>
+                {blTotal !== 0 && (
+                  <tr>
+                    <th colSpan={2}>+ Besondere Leistungen</th>
+                    <th style={{ textAlign: 'right' }}>{fmtEur(blTotal)}</th>
+                  </tr>
+                )}
+                {totalSurchargeAmt !== 0 && (
+                  <tr>
+                    <th colSpan={2}>+ Zuschläge / Nachlässe</th>
+                    <th style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? '#166534' : '#991b1b' }}>{fmtEur(totalSurchargeAmt)}</th>
+                  </tr>
+                )}
+                <tr>
+                  <th colSpan={2}>Gesamthonorar</th>
+                  <th style={{ textAlign: 'right', fontSize: 14 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</th>
+                </tr>
+              </tfoot>
+            </table>
           </div>
-          <div className="form-group" style={{ marginTop: 12 }}>
+          {totalSurchargeAmt !== 0 && (
+            <p style={{ fontSize: 11, color: '#6b7280', marginBottom: 12 }}>
+              Zuschläge werden proportional auf Grundleistungen und Besondere Leistungen verteilt.
+            </p>
+          )}
+          <div className="form-group">
             <label>Übergeordnetes Strukturelement*</label>
             <select value={fatherId} onChange={e => setFatherId(e.target.value)}>
               <option value="">Bitte wählen …</option>

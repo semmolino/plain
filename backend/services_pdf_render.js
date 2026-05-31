@@ -735,10 +735,10 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   const { loadPhaseRowsWithLabels } = require('./services/stammdaten');
   const phaseRows = await loadPhaseRowsWithLabels(supabase, calcMasterId);
 
-  // Load surcharges (including LPH filter info and calc mode)
+  // Load surcharges (including LPH filter and BL filter for recomputation)
   const { data: surchargeRows } = await supabase
     .from('FEE_CALCULATION_SURCHARGES')
-    .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, CALC_MODE, INCLUDE_BL')
+    .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, BL_FILTER, CALC_MODE, INCLUDE_BL')
     .eq('FEE_CALC_MASTER_ID', calcMasterId)
     .eq('TENANT_ID', tenantId)
     .order('SORT_ORDER', { ascending: true });
@@ -748,7 +748,7 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   try {
     const { data: blData } = await supabase
       .from('FEE_CALCULATION_BL')
-      .select('NAME_SHORT, NAME, LPH_REF, LPH_PHASE_ID, AMOUNT, SORT_ORDER')
+      .select('ID, NAME_SHORT, NAME, LPH_REF, LPH_PHASE_ID, AMOUNT, SORT_ORDER')
       .eq('FEE_CALC_MASTER_ID', calcMasterId)
       .eq('TENANT_ID', tenantId)
       .order('SORT_ORDER', { ascending: true });
@@ -779,7 +779,31 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
 
   const grundhonorar = phaseRows.reduce((s, r) => s + (Number(r.PHASE_REVENUE) || 0), 0);
   const blTotal = blRows.reduce((s, r) => s + (Number(r.AMOUNT) || 0), 0);
-  const zuschlaegeSum = (surchargeRows || []).reduce((s, r) => s + (Number(r.AMOUNT) || 0), 0);
+
+  // Recompute surcharge amounts from PERCENT + BL_FILTER (stored AMOUNT may be stale)
+  const phaseIdsForSurcharge = phaseRows.map(r => r.ID);
+  let runningTotal = 0;
+  const computedSurcharges = (surchargeRows || []).map(r => {
+    const selectedLphIds = r.LPH_FILTER
+      ? (() => { try { return JSON.parse(r.LPH_FILTER); } catch { return phaseIdsForSurcharge; } })()
+      : phaseIdsForSurcharge;
+    const phaseBase = phaseRows
+      .filter(p => selectedLphIds.includes(p.ID))
+      .reduce((s, p) => s + (Number(p.PHASE_REVENUE) || 0), 0);
+    let blContrib = 0;
+    if (r.BL_FILTER) {
+      try {
+        const selectedBlIds = JSON.parse(r.BL_FILTER);
+        blContrib = blRows.reduce((s, b) => selectedBlIds.includes(b.ID) ? s + (Number(b.AMOUNT) || 0) : s, 0);
+      } catch { /* ignore */ }
+    }
+    const base = phaseBase + blContrib;
+    const effectiveBase = r.CALC_MODE === 'cumulative' ? base + runningTotal : base;
+    const amount = ((Number(r.PERCENT) || 0) / 100) * effectiveBase;
+    runningTotal += amount;
+    return { r, effectiveBase: Math.round(effectiveBase * 100) / 100, amount: Math.round(amount * 100) / 100 };
+  });
+  const zuschlaegeSum = computedSurcharges.reduce((s, e) => s + e.amount, 0);
 
   const context = {
     docDate: new Date(),
@@ -835,7 +859,7 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
       };
     }),
     blTotal,
-    surcharges: (surchargeRows || []).map(r => {
+    surcharges: computedSurcharges.map(({ r, effectiveBase, amount }) => {
       // Build a human-readable LPH detail string for the PDF
       let lphDetail = null;
       if (r.LPH_FILTER) {
@@ -853,8 +877,8 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
         nameShort:   r.NAME_SHORT || '',
         nameLong:    r.NAME_LONG || '',
         percent:     r.PERCENT ?? '',
-        baseAmount:  r.BASE_AMOUNT ?? null,
-        amount:      r.AMOUNT ?? null,
+        baseAmount:  effectiveBase,
+        amount,
         calcMode:    r.CALC_MODE || 'parallel',
         lphDetail,
       };

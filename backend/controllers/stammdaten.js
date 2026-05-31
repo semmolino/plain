@@ -381,10 +381,36 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     const phaseMap = new Map((phaseDefs || []).map((row) => [row.ID, row]));
 
     const extrasPercent = Number(father.EXTRAS_PERCENT ?? 0) || 0;
+
+    // Load surcharges + BL items to compute per-phase and per-BL allocation (soft-fail)
+    let lphAlloc = {}, blAlloc = {};
+    let blItemsForStructure = [];
+    let existingBlStructMap = new Map();
+    try {
+      const [blItemsRes, surchargeRowsRes, existingBlStructRes] = await Promise.all([
+        supabase.from("FEE_CALCULATION_BL").select("ID, NAME_SHORT, NAME, AMOUNT")
+          .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("SORT_ORDER", { ascending: true }),
+        supabase.from("FEE_CALCULATION_SURCHARGES").select("AMOUNT, LPH_FILTER, BL_FILTER")
+          .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("SORT_ORDER", { ascending: true }),
+        supabase.from("PROJECT_STRUCTURE").select("ID, FEE_CALC_BL_ID")
+          .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
+      ]);
+      blItemsForStructure = blItemsRes.data || [];
+      existingBlStructMap = new Map((existingBlStructRes.data || []).map(r => [r.FEE_CALC_BL_ID, r.ID]));
+      const allocs = computeSurchargeAllocations(activePhases, surchargeRowsRes.data || [], blItemsForStructure);
+      lphAlloc = allocs.lphAlloc;
+      blAlloc  = allocs.blAlloc;
+    } catch (allocErr) {
+      console.warn('[Surcharge alloc] Soft-fail (migration may not be run):', allocErr?.message);
+    }
+
+    // Build LPH structure rows (base revenue + surcharge share for this phase)
     const insertRows = activePhases.map((row) => {
       const phaseDef = phaseMap.get(row.FEE_PHASE_ID) || {};
-      const revenue = Number(row.PHASE_REVENUE ?? 0) || 0;
-      const extras = (revenue * extrasPercent) / 100;
+      const baseRevenue = Number(row.PHASE_REVENUE ?? 0) || 0;
+      const surchargeShare = lphAlloc[row.ID] || 0;
+      const revenue = Math.round((baseRevenue + surchargeShare) * 100) / 100;
+      const extras  = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
       return {
         NAME_SHORT: phaseDef.NAME_SHORT || `LPH ${row.FEE_PHASE_ID}`,
         NAME_LONG: phaseDef.NAME_LONG || null,
@@ -402,36 +428,41 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     const { data: createdRows, error: createErr } = await supabase.from("PROJECT_STRUCTURE").insert(insertRows).select("*");
     if (createErr) return res.status(500).json({ error: createErr.message });
 
-    // Insert BL items as PROJECT_STRUCTURE rows at same FATHER_ID level (soft-fail if migration 0043 not yet run)
+    // Upsert BL items as PROJECT_STRUCTURE rows (update existing, insert missing — avoids duplicates on re-finalize)
     try {
-      const { data: blItems } = await supabase.from("FEE_CALCULATION_BL")
-        .select("ID, NAME_SHORT, NAME, AMOUNT")
-        .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
-        .order("SORT_ORDER", { ascending: true });
-      if (blItems && blItems.length) {
-        const blInsertRows = blItems.map((bl) => {
-          const revenue = Number(bl.AMOUNT ?? 0) || 0;
-          const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
-          return {
-            NAME_SHORT: bl.NAME_SHORT || null,
-            NAME_LONG: bl.NAME || null,
-            REVENUE: revenue, EXTRAS: extras, COSTS: 0,
-            PROJECT_ID: calcMaster.PROJECT_ID, FATHER_ID: fatherId,
-            EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,
-            TENANT_ID: project.TENANT_ID,
-            REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
-            REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-            FEE_CALC_MASTER_ID: id,
-            FEE_CALC_BL_ID: bl.ID,
-          };
-        });
-        const { data: createdBlRows, error: blCreateErr } = await supabase.from("PROJECT_STRUCTURE").insert(blInsertRows).select("*");
-        if (blCreateErr) {
-          console.warn('[BL structure] Insert failed (migration 0043 may not be run):', blCreateErr.message);
-        } else {
-          const blProgressRows = (createdBlRows || []).map(svc.buildProjectProgressRow);
-          if (blProgressRows.length) {
-            await supabase.from("PROJECT_PROGRESS").insert(blProgressRows).catch(() => {});
+      if (blItemsForStructure.length) {
+        const blToInsert = [];
+        for (const bl of blItemsForStructure) {
+          const blSurchargeShare = blAlloc[bl.ID] || 0;
+          const blRevenue = Math.round(((Number(bl.AMOUNT) || 0) + blSurchargeShare) * 100) / 100;
+          const extras    = Math.round((blRevenue * extrasPercent) / 100 * 100) / 100;
+          if (existingBlStructMap.has(bl.ID)) {
+            const existingId = existingBlStructMap.get(bl.ID);
+            await supabase.from("PROJECT_STRUCTURE")
+              .update({ REVENUE: blRevenue, EXTRAS: extras, NAME_SHORT: bl.NAME_SHORT || null, NAME_LONG: bl.NAME || null })
+              .eq("ID", existingId).eq("TENANT_ID", project.TENANT_ID);
+          } else {
+            blToInsert.push({
+              NAME_SHORT: bl.NAME_SHORT || null,
+              NAME_LONG: bl.NAME || null,
+              REVENUE: blRevenue, EXTRAS: extras, COSTS: 0,
+              PROJECT_ID: calcMaster.PROJECT_ID, FATHER_ID: fatherId,
+              EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,
+              TENANT_ID: project.TENANT_ID,
+              REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
+              REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+              FEE_CALC_MASTER_ID: id,
+              FEE_CALC_BL_ID: bl.ID,
+            });
+          }
+        }
+        if (blToInsert.length) {
+          const { data: createdBlRows, error: blCreateErr } = await supabase.from("PROJECT_STRUCTURE").insert(blToInsert).select("*");
+          if (blCreateErr) {
+            console.warn('[BL structure] Insert failed (migration 0043 may not be run):', blCreateErr.message);
+          } else {
+            const blProgressRows = (createdBlRows || []).map(svc.buildProjectProgressRow);
+            if (blProgressRows.length) await supabase.from("PROJECT_PROGRESS").insert(blProgressRows).catch(() => {});
           }
         }
       }
@@ -1289,12 +1320,39 @@ async function saveFeeCalcBl(req, res, supabase) {
 
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
 
-    const { error: delErr } = await supabase.from("FEE_CALCULATION_BL")
+    // Upsert pattern: preserve IDs for existing rows so BL_FILTER references stay valid
+    const toUpdate = rows.filter(r => r.ID);
+    const toInsert = rows.filter(r => !r.ID);
+    const keepIds  = toUpdate.map(r => r.ID);
+
+    // Delete rows no longer in the list (preserving kept IDs)
+    let delQuery = supabase.from("FEE_CALCULATION_BL")
       .delete().eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
+    if (keepIds.length > 0) {
+      delQuery = delQuery.not("ID", "in", `(${keepIds.join(",")})`);
+    }
+    const { error: delErr } = await delQuery;
     if (delErr) return res.status(500).json({ error: delErr.message });
 
-    if (rows.length) {
-      const insertRows = rows.map((r, idx) => ({
+    // Update existing rows (keep their IDs)
+    for (const r of toUpdate) {
+      const { error: updErr } = await supabase.from("FEE_CALCULATION_BL").update({
+        NAME_SHORT:   r.NAME_SHORT ? String(r.NAME_SHORT).trim() || null : null,
+        NAME:         String(r.NAME || '').trim() || '—',
+        LPH_REF:      r.LPH_REF ?? null,
+        LPH_PHASE_ID: r.LPH_PHASE_ID ? Number(r.LPH_PHASE_ID) : null,
+        AMOUNT_TYPE:  r.AMOUNT_TYPE || 'fixed',
+        PERCENT:      r.PERCENT != null ? Number(r.PERCENT) : null,
+        KX_REF:       r.KX_REF ?? null,
+        AMOUNT:       Number(r.AMOUNT) || 0,
+        SORT_ORDER:   r.SORT_ORDER ?? 0,
+      }).eq("ID", r.ID).eq("TENANT_ID", req.tenantId);
+      if (updErr) return res.status(500).json({ error: updErr.message });
+    }
+
+    // Insert new rows (no existing ID)
+    if (toInsert.length) {
+      const insertRows = toInsert.map((r, idx) => ({
         TENANT_ID:          req.tenantId,
         FEE_CALC_MASTER_ID: id,
         NAME_SHORT:         r.NAME_SHORT ? String(r.NAME_SHORT).trim() || null : null,
@@ -1305,7 +1363,7 @@ async function saveFeeCalcBl(req, res, supabase) {
         PERCENT:            r.PERCENT != null ? Number(r.PERCENT) : null,
         KX_REF:             r.KX_REF ?? null,
         AMOUNT:             Number(r.AMOUNT) || 0,
-        SORT_ORDER:         r.SORT_ORDER ?? idx,
+        SORT_ORDER:         r.SORT_ORDER ?? (toUpdate.length + idx),
       }));
       const { error: insErr } = await supabase.from("FEE_CALCULATION_BL").insert(insertRows);
       if (insErr) return res.status(500).json({ error: insErr.message });
@@ -1339,6 +1397,63 @@ async function getHonorarPdf(req, res, supabase) {
 
 // ── HOAI → Projektstruktur sync ───────────────────────────────────────────────
 
+/**
+ * Splits each surcharge's stored AMOUNT proportionally between the LPH phases it
+ * targets (via LPH_FILTER) and the BL items it targets (via BL_FILTER).
+ * Returns two plain objects: lphAlloc {phaseId → share} and blAlloc {blId → share}.
+ */
+function computeSurchargeAllocations(phases, surchargeRows, blItems) {
+  const allPhaseIds = (phases || []).map(p => p.ID);
+  const lphAlloc = {};
+  const blAlloc  = {};
+
+  for (const s of (surchargeRows || [])) {
+    const amount = Number(s.AMOUNT) || 0;
+    if (amount === 0) continue;
+
+    let selectedLphIds;
+    if (s.LPH_FILTER) {
+      try { selectedLphIds = JSON.parse(s.LPH_FILTER); } catch { selectedLphIds = allPhaseIds; }
+    } else {
+      selectedLphIds = allPhaseIds;
+    }
+    const selectedPhases = (phases || []).filter(p => selectedLphIds.includes(p.ID));
+    const lphBase = selectedPhases.reduce((sum, p) => sum + (Number(p.PHASE_REVENUE) || 0), 0);
+
+    let selectedBlItems = [], blBase = 0;
+    if (s.BL_FILTER && (blItems || []).length > 0) {
+      try {
+        const selectedBlIds = JSON.parse(s.BL_FILTER);
+        selectedBlItems = (blItems || []).filter(b => b.ID && selectedBlIds.includes(b.ID));
+        blBase = selectedBlItems.reduce((sum, b) => sum + (Number(b.AMOUNT) || 0), 0);
+      } catch { /* ignore */ }
+    }
+
+    const totalBase = lphBase + blBase;
+    if (totalBase === 0) continue;
+
+    if (lphBase > 0) {
+      const lphAmt = amount * (lphBase / totalBase);
+      for (const p of selectedPhases) {
+        const pRev = Number(p.PHASE_REVENUE) || 0;
+        if (pRev === 0) continue;
+        lphAlloc[p.ID] = (lphAlloc[p.ID] || 0) + (pRev / lphBase) * lphAmt;
+      }
+    }
+
+    if (blBase > 0) {
+      const blAmt = amount * (blBase / totalBase);
+      for (const b of selectedBlItems) {
+        const bAmt = Number(b.AMOUNT) || 0;
+        if (bAmt === 0) continue;
+        blAlloc[b.ID] = (blAlloc[b.ID] || 0) + (bAmt / blBase) * blAmt;
+      }
+    }
+  }
+
+  return { lphAlloc, blAlloc };
+}
+
 async function syncFeeCalcToStructure(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "id is required" });
@@ -1351,7 +1466,7 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       .select("ID, PHASE_REVENUE, FEE_PERCENT").eq("FEE_MASTER_ID", id);
 
     const { data: surchargeRows } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-      .select("AMOUNT, LPH_FILTER")
+      .select("AMOUNT, LPH_FILTER, BL_FILTER")
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
 
@@ -1376,26 +1491,8 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       return res.json({ synced: 0, projectId: master.PROJECT_ID, message: "Keine verknüpften Projektelemente gefunden." });
     }
 
-    // Distribute each surcharge proportionally to the phases in its LPH_FILTER
-    const allPhaseIds = (phases || []).map(p => p.ID);
-    const surchargeAllocations = {};
-    for (const s of (surchargeRows || [])) {
-      const amount = Number(s.AMOUNT) || 0;
-      if (amount === 0) continue;
-      let selectedIds;
-      if (s.LPH_FILTER) {
-        try { selectedIds = JSON.parse(s.LPH_FILTER); } catch { selectedIds = allPhaseIds; }
-      } else {
-        selectedIds = allPhaseIds;
-      }
-      const selectedPhases = (phases || []).filter(p => selectedIds.includes(p.ID));
-      const filterBase = selectedPhases.reduce((sum, p) => sum + (Number(p.PHASE_REVENUE) || 0), 0);
-      if (filterBase === 0) continue;
-      for (const p of selectedPhases) {
-        const share = (Number(p.PHASE_REVENUE) || 0) / filterBase * amount;
-        surchargeAllocations[p.ID] = (surchargeAllocations[p.ID] || 0) + share;
-      }
-    }
+    // Distribute surcharges between LPH phases and BL items (split by respective bases)
+    const { lphAlloc, blAlloc } = computeSurchargeAllocations(phases, surchargeRows, blItems);
 
     const phaseMap = new Map((phases || []).map(p => [p.ID, p]));
     const blMap = new Map((blItems || []).map(b => [b.ID, b]));
@@ -1406,7 +1503,7 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       const phase = phaseMap.get(row.FEE_CALC_PHASE_ID);
       if (!phase) continue;
       const baseRevenue = Number(phase.PHASE_REVENUE ?? 0) || 0;
-      const surchargeShare = surchargeAllocations[phase.ID] || 0;
+      const surchargeShare = lphAlloc[phase.ID] || 0;
       const revenue = Math.round((baseRevenue + surchargeShare) * 100) / 100;
       const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
       const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
@@ -1416,11 +1513,12 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       if (!error) synced++;
     }
 
-    // Sync existing BL structure rows
+    // Sync existing BL structure rows (base AMOUNT + surcharge share for this BL)
     for (const row of (blStructRows || [])) {
       const bl = blMap.get(row.FEE_CALC_BL_ID);
       if (!bl) continue;
-      const revenue = Math.round((Number(bl.AMOUNT) || 0) * 100) / 100;
+      const blSurchargeShare = blAlloc[bl.ID] || 0;
+      const revenue = Math.round(((Number(bl.AMOUNT) || 0) + blSurchargeShare) * 100) / 100;
       const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
       const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
       const { error } = await supabase.from("PROJECT_STRUCTURE")
@@ -1441,7 +1539,8 @@ async function syncFeeCalcToStructure(req, res, supabase) {
         const extrasPercent = Number(fatherRow?.EXTRAS_PERCENT ?? 0) || 0;
 
         const blInsertRows = missingBlItems.map(bl => {
-          const revenue = Math.round((Number(bl.AMOUNT) || 0) * 100) / 100;
+          const blSurchargeShare = blAlloc[bl.ID] || 0;
+          const revenue = Math.round(((Number(bl.AMOUNT) || 0) + blSurchargeShare) * 100) / 100;
           const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
           return {
             NAME_SHORT: bl.NAME_SHORT || null,
