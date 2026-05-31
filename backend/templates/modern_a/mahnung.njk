@@ -10,7 +10,7 @@ body {
   font-size: 10pt;
   color: #1a1a1a;
   line-height: 1.4;
-  padding-bottom: 28mm;
+  padding-bottom: 4mm;
 }
 
 .logo-area {
@@ -124,21 +124,7 @@ body {
 .totals-table tr.sep td.line { border-top: 0.5pt solid #9ca3af; }
 .totals-table tr.total-row td { font-weight: 700; font-size: 11pt; border-top: 1pt solid #1a1a1a; padding-top: 2mm; }
 
-.doc-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding-top: 2.5mm;
-  border-top: 0.5pt solid #d1d5db;
-  display: flex;
-  gap: 5mm;
-  font-size: 7pt;
-  color: #6b7280;
-  line-height: 1.55;
-}
-.doc-footer-col { flex: 1; }
-.doc-footer-col strong { color: #374151; font-weight: 600; display: block; margin-bottom: 0.5mm; font-size: 7.5pt; }
+/* Footer is rendered by Playwright footerTemplate */
 </style>
 </head>
 <body>
@@ -243,31 +229,6 @@ body {
   {# Footer text (from settings) #}
   {% if footerText %}<div class="text-block">{{ footerText }}</div>{% endif %}
 
-{# ── Document footer (fixed, all pages) ── #}
-<div class="doc-footer">
-  <div class="doc-footer-col">
-    <strong>{{ seller.name }}</strong>
-    {% if seller.street %}{{ seller.street }}<br>{% endif %}
-    {% if seller.postOfficeBox %}Postfach {{ seller.postOfficeBox }}<br>{% endif %}
-    {% if seller.postCode or seller.city %}{{ seller.postCode }} {{ seller.city }}{% endif %}
-  </div>
-  <div class="doc-footer-col">
-    <strong>Bankverbindung</strong>
-    {% if seller.iban %}IBAN: {{ seller.iban }}<br>{% endif %}
-    {% if seller.bic %}BIC: {{ seller.bic }}{% endif %}
-  </div>
-  <div class="doc-footer-col">
-    <strong>Steuer</strong>
-    {% if seller.taxId %}Steuernummer: {{ seller.taxId }}<br>{% endif %}
-    {% if seller.vatId %}USt-IdNr.: {{ seller.vatId }}{% endif %}
-  </div>
-  {% if seller.creditorId %}
-  <div class="doc-footer-col">
-    <strong>Sonstiges</strong>
-    Gläubiger-ID: {{ seller.creditorId }}
-  </div>
-  {% endif %}
-</div>
 
 </body>
 </html>

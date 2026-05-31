@@ -5,6 +5,13 @@ const bodyParser = require("body-parser");
 const path      = require("path");
 const { createClient } = require("@supabase/supabase-js");
 
+// ── Startup safety checks ────────────────────────────────────────────────────
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "plain-dev-secret-change-me") {
+  console.error("FATAL: JWT_SECRET is not set or is using the insecure default. Refusing to start.");
+  console.error("Set JWT_SECRET to a long random string in your Railway environment variables.");
+  process.exit(1);
+}
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -26,6 +33,10 @@ const authMiddleware = require("./middleware/auth")(supabase);
 
 // Public auth routes (no token required)
 app.use("/api/v1/auth", authRoutes);
+
+// Public webhook routes (signature-verified, no JWT)
+const webhookRoutes = require("./routes/webhooks");
+app.use("/api/v1/webhooks", webhookRoutes);
 
 // All other API routes require a valid session
 const stammdatenRoutes       = require("./routes/stammdaten")(supabase);
@@ -82,10 +93,5 @@ app.get(/^(?!\/api\/).*/, (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`✅ Backend läuft auf http://localhost:${port}`);
-  startDueDateChecker(supabase);
-  startMonatsabschlussChecker(supabase);
-  startMahnungChecker(supabase);
+  console.log(`✅ Backend läuft auf Port ${port}`);
 });
-
-

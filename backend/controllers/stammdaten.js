@@ -135,7 +135,7 @@ async function patchFeeCalcMasterBasis(req, res, supabase) {
   try {
     const { data: existing, error: existingErr } = await supabase
       .from("FEE_CALCULATION_MASTER")
-      .select("ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT")
+      .select("ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
       .single();
@@ -143,29 +143,38 @@ async function patchFeeCalcMasterBasis(req, res, supabase) {
     if (!existing) return res.status(404).json({ error: "FEE_CALCULATION_MASTER not found" });
 
     const body = req.body || {};
+
+    // Fall back to existing values for any cost/zone fields not in the request body
     const costsByKey = {
-      CONSTRUCTION_COSTS_K0: body.CONSTRUCTION_COSTS_K0 ?? null,
-      CONSTRUCTION_COSTS_K1: body.CONSTRUCTION_COSTS_K1 ?? null,
-      CONSTRUCTION_COSTS_K2: body.CONSTRUCTION_COSTS_K2 ?? null,
-      CONSTRUCTION_COSTS_K3: body.CONSTRUCTION_COSTS_K3 ?? null,
-      CONSTRUCTION_COSTS_K4: body.CONSTRUCTION_COSTS_K4 ?? null,
+      CONSTRUCTION_COSTS_K0: 'CONSTRUCTION_COSTS_K0' in body ? (body.CONSTRUCTION_COSTS_K0 ?? null) : existing.CONSTRUCTION_COSTS_K0,
+      CONSTRUCTION_COSTS_K1: 'CONSTRUCTION_COSTS_K1' in body ? (body.CONSTRUCTION_COSTS_K1 ?? null) : existing.CONSTRUCTION_COSTS_K1,
+      CONSTRUCTION_COSTS_K2: 'CONSTRUCTION_COSTS_K2' in body ? (body.CONSTRUCTION_COSTS_K2 ?? null) : existing.CONSTRUCTION_COSTS_K2,
+      CONSTRUCTION_COSTS_K3: 'CONSTRUCTION_COSTS_K3' in body ? (body.CONSTRUCTION_COSTS_K3 ?? null) : existing.CONSTRUCTION_COSTS_K3,
+      CONSTRUCTION_COSTS_K4: 'CONSTRUCTION_COSTS_K4' in body ? (body.CONSTRUCTION_COSTS_K4 ?? null) : existing.CONSTRUCTION_COSTS_K4,
     };
 
-    const effectiveZoneId = body.ZONE_ID ?? existing.ZONE_ID ?? null;
-    const effectiveZonePercent = body.ZONE_PERCENT ?? existing.ZONE_PERCENT ?? null;
+    const effectiveZoneId = 'ZONE_ID' in body ? body.ZONE_ID : existing.ZONE_ID;
+    const effectiveZonePercent = 'ZONE_PERCENT' in body ? body.ZONE_PERCENT : existing.ZONE_PERCENT;
     const revenueFields = await svc.calculateRevenueFields(supabase, { feeMasterId: existing.FEE_MASTER_ID, zoneId: effectiveZoneId, zonePercent: effectiveZonePercent, costsByKey });
+
+    // Only include fields that were explicitly provided in the request body
+    const costUpdates = Object.fromEntries(
+      ['CONSTRUCTION_COSTS_K0','CONSTRUCTION_COSTS_K1','CONSTRUCTION_COSTS_K2','CONSTRUCTION_COSTS_K3','CONSTRUCTION_COSTS_K4']
+        .filter(k => k in body)
+        .map(k => [k, costsByKey[k]])
+    );
 
     const { data, error } = await supabase
       .from("FEE_CALCULATION_MASTER")
       .update({
-        NAME_SHORT:                   body.NAME_SHORT ?? null,
-        NAME_LONG:                    body.NAME_LONG  ?? null,
-        ...('PROJECT_ID' in body ? { PROJECT_ID: body.PROJECT_ID ?? null } : {}),
-        ...('OFFER_ID'   in body ? { OFFER_ID:   body.OFFER_ID   ?? null } : {}),
-        ATTACH_TO_OFFER_STRUCTURE_ID: body.ATTACH_TO_OFFER_STRUCTURE_ID ?? null,
-        ZONE_ID:      body.ZONE_ID      ?? null,
-        ZONE_PERCENT: body.ZONE_PERCENT ?? null,
-        ...costsByKey,
+        ...('NAME_SHORT'                   in body ? { NAME_SHORT:                   body.NAME_SHORT                   ?? null } : {}),
+        ...('NAME_LONG'                    in body ? { NAME_LONG:                    body.NAME_LONG                    ?? null } : {}),
+        ...('PROJECT_ID'                   in body ? { PROJECT_ID:                   body.PROJECT_ID                   ?? null } : {}),
+        ...('OFFER_ID'                     in body ? { OFFER_ID:                     body.OFFER_ID                     ?? null } : {}),
+        ...('ATTACH_TO_OFFER_STRUCTURE_ID' in body ? { ATTACH_TO_OFFER_STRUCTURE_ID: body.ATTACH_TO_OFFER_STRUCTURE_ID ?? null } : {}),
+        ...('ZONE_ID'                      in body ? { ZONE_ID:                      body.ZONE_ID                      ?? null } : {}),
+        ...('ZONE_PERCENT'                 in body ? { ZONE_PERCENT:                 body.ZONE_PERCENT                 ?? null } : {}),
+        ...costUpdates,
         ...revenueFields,
       })
       .eq("ID", id)

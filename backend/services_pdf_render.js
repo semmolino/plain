@@ -91,20 +91,74 @@ async function getBrowser() {
   return _browserPromise;
 }
 
-async function renderPdf({ html }) {
+function buildFooterTemplate(footerCols) {
+  if (!footerCols || !Array.isArray(footerCols) || footerCols.length === 0) {
+    return {
+      template: `
+        <div style="font-size:7.5px;width:100%;padding:0 20mm 0 25mm;color:#9ca3af;display:flex;justify-content:flex-end;align-items:center;">
+          <div style="white-space:nowrap;">Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>
+        </div>`,
+      marginBottom: '16mm',
+    };
+  }
+  const colsHtml = footerCols.map(col => {
+    const rowsHtml = (col.rows || []).map(r => {
+      const text = String(r.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return r.bold
+        ? `<strong style="display:block;font-size:7.5px;font-weight:700;color:#374151;">${text}</strong>`
+        : `<span style="color:#6b7280;">${text}</span><br>`;
+    }).join('');
+    return `<div style="flex:1;min-width:0;">${rowsHtml}</div>`;
+  }).join('');
+  return {
+    template: `
+      <div style="width:100%;padding:2mm 20mm 0 25mm;border-top:0.5pt solid #d1d5db;display:flex;gap:5mm;font-size:7px;line-height:1.55;box-sizing:border-box;">
+        ${colsHtml}
+        <div style="white-space:nowrap;color:#9ca3af;font-size:7px;text-align:right;flex-shrink:0;padding-top:0.5mm;">
+          Seite <span class="pageNumber"></span>&nbsp;/&nbsp;<span class="totalPages"></span>
+        </div>
+      </div>`,
+    marginBottom: '22mm',
+  };
+}
+
+function buildSellerFooterCols(seller) {
+  const s = seller || {};
+  return [
+    { rows: [
+      { bold: true, text: s.name || '' },
+      ...(s.street        ? [{ text: s.street }] : []),
+      ...(s.postOfficeBox ? [{ text: 'Postfach ' + s.postOfficeBox }] : []),
+      ...((s.postCode || s.city) ? [{ text: (s.postCode || '') + ' ' + (s.city || '') }] : []),
+    ]},
+    { rows: [
+      { bold: true, text: 'Bankverbindung' },
+      ...(s.iban ? [{ text: 'IBAN: ' + s.iban }] : []),
+      ...(s.bic  ? [{ text: 'BIC: '  + s.bic  }] : []),
+    ]},
+    { rows: [
+      { bold: true, text: 'Steuer' },
+      ...(s.taxId ? [{ text: 'Steuernummer: ' + s.taxId }] : []),
+      ...(s.vatId ? [{ text: 'USt-IdNr.: '   + s.vatId }] : []),
+    ]},
+    ...(s.creditorId ? [{ rows: [
+      { bold: true, text: 'Sonstiges' },
+      { text: 'Gläubiger-ID: ' + s.creditorId },
+    ]}] : []),
+  ];
+}
+
+async function renderPdf({ html, footerCols }) {
   const browser = await getBrowser();
   const page    = await browser.newPage();
   await page.setContent(html, { waitUntil: 'load' });
 
-  const footerTemplate = `
-    <div style="font-size:7.5px;width:100%;padding:0 20mm 0 25mm;color:#9ca3af;display:flex;justify-content:flex-end;align-items:center;">
-      <div style="white-space:nowrap;">Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>
-    </div>`;
+  const { template: footerTemplate, marginBottom } = buildFooterTemplate(footerCols);
 
   const pdf = await page.pdf({
     format: 'A4',
     printBackground: true,
-    margin: { top: '14mm', right: '20mm', bottom: '16mm', left: '25mm' },
+    margin: { top: '14mm', right: '20mm', bottom: marginBottom, left: '25mm' },
     displayHeaderFooter: true,
     headerTemplate: `<div></div>`,
     footerTemplate,
@@ -535,7 +589,8 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   const template  = isStorno ? 'storno.njk' : 'invoice.njk';
   const html = env().render(path.join(layoutKey, template), vm);
 
-  const pdf = await renderPdf({ html });
+  const footerCols = buildSellerFooterCols(vm.inv.seller);
+  const pdf = await renderPdf({ html, footerCols });
   return { pdf, template: tpl, theme };
 }
 
@@ -721,7 +776,7 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
   };
 
   const html = env().render(path.join('modern_a', 'mahnung.njk'), context);
-  return renderPdf({ html });
+  return renderPdf({ html, footerCols: buildSellerFooterCols(context.seller) });
 }
 
 async function renderMonatsabschlussPdf({ supabase, tenantId }) {

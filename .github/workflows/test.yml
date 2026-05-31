@@ -50,6 +50,25 @@ jobs:
       - name: Type check
         run: cd frontend-react && npx tsc -b
 
+  frontend-unit:
+    name: Frontend Unit (Vitest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend-react/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix frontend-react
+
+      - name: Run unit tests
+        run: cd frontend-react && npx vitest run
+
   frontend-e2e:
     name: Frontend E2E (Playwright)
     runs-on: ubuntu-latest

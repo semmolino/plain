@@ -955,7 +955,7 @@ input::placeholder { color: var(--text-4); }
 }
 
 /* Wizard layout */
-.wizard-wrap { max-width: 680px; }
+.wizard-wrap { max-width: 100%; }
 .wizard-steps {
   display: flex; gap: 0; margin-bottom: 24px;
   border-radius: 12px; overflow: hidden;

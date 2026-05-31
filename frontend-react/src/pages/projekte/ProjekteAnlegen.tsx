@@ -105,7 +105,7 @@ export function ProjekteAnlegen() {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
       setMsg({ text: `Projekt "${res.data.NAME_SHORT}" wurde angelegt.`, type: 'success' })
       setNewProjectId(res.data.ID)
-      setStep(5)
+      // Stay on step 4 — post-creation HOAI section appears inline
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
@@ -164,6 +164,7 @@ export function ProjekteAnlegen() {
 
   function validateStep1() {
     const missing: string[] = []
+    if (companies.length > 1 && !basic.company_id) missing.push('Firma')
     if (!basic.name_long)          missing.push('Projektname')
     if (!basic.project_status_id)  missing.push('Status')
     if (!basic.project_manager_id) missing.push('Projektleitung')
@@ -212,7 +213,7 @@ export function ProjekteAnlegen() {
 
   return (
     <div className="wizard-wrap">
-      <StepIndicator step={step} total={5} />
+      <StepIndicator step={step} total={4} />
 
       {/* ── Step 1: Basisdaten ── */}
       {step === 1 && (
@@ -402,13 +403,13 @@ export function ProjekteAnlegen() {
         </div>
       )}
 
-      {/* ── Step 5: HOAI (optional) ── */}
-      {step === 5 && (
-        <div className="wizard-step-content">
-          <h3 className="wizard-step-title">Schritt 5: HOAI-Kalkulation</h3>
-          <Message text={msg?.text ?? null} type={msg?.type} />
-          <p className="admin-section-hint" style={{ marginBottom: 16 }}>
-            Optional — Sie können jetzt eine HOAI-Kalkulation für dieses Projekt erstellen.
+      <Message text={msg?.text ?? null} type={msg?.type} />
+
+      {/* ── Post-creation HOAI section (inline on step 4) ── */}
+      {step === 4 && newProjectId && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <p className="admin-section-hint" style={{ marginBottom: 8 }}>
+            Optional — HOAI-Kalkulation für dieses Projekt hinzufügen:
           </p>
           <button className="btn-small btn-save" type="button" onClick={() => setShowHonorarModal(true)}>
             + HOAI-Kalkulation hinzufügen
@@ -416,18 +417,16 @@ export function ProjekteAnlegen() {
         </div>
       )}
 
-      {step !== 5 && <Message text={msg?.text ?? null} type={msg?.type} />}
-
       {/* Navigation */}
       <div className="wizard-nav">
-        {step > 1 && step < 5 && <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>}
+        {step > 1 && !newProjectId && <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>}
         {step < 4 && <button className="btn-primary" type="button" onClick={goNext}>Weiter →</button>}
-        {step === 4 && (
+        {step === 4 && !newProjectId && (
           <button className="btn-primary" type="button" disabled={createMut.isPending} onClick={submit}>
             {createMut.isPending ? 'Speichert …' : 'Projekt anlegen'}
           </button>
         )}
-        {step === 5 && (
+        {step === 4 && newProjectId && (
           <button className="btn-primary" type="button" onClick={handleFinish}>Fertig</button>
         )}
       </div>
