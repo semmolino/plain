@@ -171,8 +171,6 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   const [step, setStep]       = useState(firstStep)
   const [msg, setMsg]         = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
   const [loading, setLoading] = useState(false)
-  const [showSyncDialog, setShowSyncDialog] = useState(false)
-
   // Step 1 state (create only)
   const [feeGroupId,  setFeeGroupId]  = useState('')
   const [feeMasterId, setFeeMasterId] = useState('')
@@ -416,7 +414,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   }
 
   async function doSyncToStructure() {
-    if (!calcMaster) { setShowSyncDialog(false); onDone?.(); return }
+    if (!calcMaster) { onDone?.(); return }
     setLoading(true)
     try {
       const res = await syncFeeCalcToStructure(calcMaster.ID)
@@ -426,7 +424,6 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
       setMsg({ text: 'Fehler beim Aktualisieren der Projektstruktur.', type: 'error' })
     } finally {
       setLoading(false)
-      setShowSyncDialog(false)
       setTimeout(() => onDone?.(), 1500)
     }
   }
@@ -470,7 +467,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     setStep(firstStep); setCalcMaster(null); setPhases([]); setBlItems([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
     setBasis({ NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '', K0: '', K1: '', K2: '', K3: '', K4: '' })
-    setFatherId(''); setMsg(null); setShowSyncDialog(false)
+    setFatherId(''); setMsg(null)
     onDone?.()
   }
 
@@ -480,7 +477,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     }
     setStep(firstStep); setCalcMaster(null); setPhases([]); setBlItems([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
-    setMsg(null); setShowSyncDialog(false)
+    setMsg(null)
     onDone?.()
   }
 
