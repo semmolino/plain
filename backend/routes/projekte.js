@@ -16,6 +16,7 @@ module.exports = (supabase) => {
   router.get("/",                                      (req, res) => ctrl.listProjects(req, res, supabase));
   router.get("/list",                                  (req, res) => ctrl.listProjectsFull(req, res, supabase));
   router.patch("/:id",                                 (req, res) => ctrl.patchProject(req, res, supabase));
+  router.patch("/:id/internal-cascade",               (req, res) => ctrl.patchProjectInternalCascade(req, res, supabase));
   router.get("/search",                                (req, res) => ctrl.searchProjects(req, res, supabase));
   router.get("/contracts/search",                      (req, res) => ctrl.searchContracts(req, res, supabase));
   router.get("/:id/structure",                         (req, res) => ctrl.getProjectStructure(req, res, supabase));
@@ -33,6 +34,7 @@ module.exports = (supabase) => {
   router.post("/:id/leistungsstand",                   (req, res) => ctrl.saveLeistungsstand(req, res, supabase));
   router.get("/:id/contract",                          (req, res) => ctrl.getContractByProject(req, res, supabase));
   router.patch("/contract/:id",                        (req, res) => ctrl.patchContract(req, res, supabase));
+  router.post("/:id/copy",                             (req, res) => ctrl.copyProject(req, res, supabase));
   router.delete("/:id",                                (req, res) => ctrl.deleteProject(req, res, supabase));
 
   return router;

@@ -103,6 +103,12 @@ export const createProject = (body: CreateProjectPayload) =>
 export const deleteProject = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/projekte/${id}`)
 
+export const cascadeProjectInternal = (projectId: number, isInternal: boolean) =>
+  apiClient.patch<{ data: { updated: boolean } }>(`/projekte/${projectId}/internal-cascade`, { is_internal: isInternal })
+
+export const copyProject = (id: number) =>
+  apiClient.post<{ data: { project: { ID: number; NAME_SHORT: string }; projectName: string } }>(`/projekte/${id}/copy`, {})
+
 export const updateProject = (id: number, body: Partial<{
   name_short: string; name_long: string
   project_status_id: number; project_type_id: number | null; project_manager_id: number

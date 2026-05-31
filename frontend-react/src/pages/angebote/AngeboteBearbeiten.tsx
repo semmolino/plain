@@ -6,13 +6,13 @@ import { Modal }        from '@/components/ui/Modal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchOffers, fetchOffer, updateOffer, fetchOfferStructure,
-  addOfferStructureNode, updateOfferStructureNode, deleteOfferStructureNode, convertOffer,
+  addOfferStructureNode, updateOfferStructureNode, deleteOfferStructureNode, convertOffer, copyOffer,
   openOfferPdf, type Offer, type OfferStructureNode, type AddStructureNodePayload, type ConvertOfferPayload,
 } from '@/api/angebote'
 import { fetchOfferStatuses } from '@/api/angebote'
 import { BeauftragtModal } from './BeauftragtModal'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
-import { fetchFeeCalcMasters, openHonorarPdf } from '@/api/fee'
+import { fetchFeeCalcMasters, openHonorarPdf, deleteFeeCalcMaster } from '@/api/fee'
 import { fetchProjectManagers, fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
@@ -202,6 +202,15 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
 
   useCtrlS(() => { if (!saveMut.isPending && form) saveMut.mutate(form) }, !!form)
 
+  const copyMut = useMutation({
+    mutationFn: () => copyOffer(selectedId!),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ['offers'] })
+      setMsg({ text: `Angebot kopiert: ${res.data.NAME_SHORT}`, type: 'success' })
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
   const convertMut = useMutation({
     mutationFn: (body: ConvertOfferPayload) => convertOffer(selectedId!, body),
     onSuccess: (res) => {
@@ -249,6 +258,12 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
       void qc.invalidateQueries({ queryKey: ['offer-structure', selectedId] })
     },
     onError: (e: Error) => setStructMsg({ text: e.message, type: 'error' }),
+  })
+
+  const deleteCalcMut = useMutation({
+    mutationFn: (calcId: number) => deleteFeeCalcMaster(calcId),
+    onSuccess: () => void refetchFeeCalcs(),
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
   const updateNodeMut = useMutation({
@@ -349,7 +364,12 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
           {offers.map(o => <option key={o.ID} value={o.ID}>{o.NAME_SHORT} – {o.NAME_LONG}</option>)}
         </select>
         {selectedId && (
-          <button className="btn-small" onClick={() => openOfferPdf(selectedId)} style={{ marginLeft: 8 }}>PDF</button>
+          <>
+            <button className="btn-small" onClick={() => openOfferPdf(selectedId)} style={{ marginLeft: 8 }}>PDF</button>
+            <button className="btn-small" onClick={() => { if (confirm('Angebot kopieren?')) copyMut.mutate() }} disabled={copyMut.isPending} style={{ marginLeft: 4 }}>
+              {copyMut.isPending ? '…' : 'Kopieren'}
+            </button>
+          </>
         )}
       </div>
 
@@ -486,6 +506,12 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                         <td className="ls-td doc-actions">
                           <button type="button" className="btn-small" onClick={() => setEditCalcId(c.ID)}>Bearbeiten</button>
                           <button type="button" className="btn-small" onClick={() => openHonorarPdf(c.ID)}>PDF</button>
+                          <button
+                            type="button"
+                            className="btn-small btn-danger"
+                            disabled={deleteCalcMut.isPending}
+                            onClick={() => { if (confirm(`HOAI-Kalkulation „${c.NAME_SHORT || c.NAME_LONG || 'Kalkulation'}" und alle zugehörigen Daten löschen?`)) deleteCalcMut.mutate(c.ID) }}
+                          >×</button>
                         </td>
                       </tr>
                     ))}

@@ -18,6 +18,7 @@ module.exports = (supabase) => {
   router.get('/:id/pdf',                          (req, res) => ctrl.getOfferPdf(req, res, supabase));
   router.get('/:id/auftragsbestaetigung',         (req, res) => ctrl.getAuftragsbestaetigungPdf(req, res, supabase));
   router.post('/:id/convert',                     (req, res) => ctrl.convertOffer(req, res, supabase));
+  router.post('/:id/copy',                        (req, res) => ctrl.copyOffer(req, res, supabase));
   router.get('/:id',                        (req, res) => ctrl.getOffer(req, res, supabase));
 
   return router;

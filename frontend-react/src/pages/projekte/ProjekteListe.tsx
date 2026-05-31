@@ -8,6 +8,7 @@ import { useCtrlS }      from '@/hooks/useCtrlS'
 import {
   fetchProjectListFull, updateProject, deleteProject, fetchContractByProject, patchContract,
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers, fetchDepartments,
+  cascadeProjectInternal, copyProject,
   type Project,
 } from '@/api/projekte'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
@@ -229,9 +230,27 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
     onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
   })
 
+  const cascadeMut = useMutation({
+    mutationFn: ({ id, val }: { id: number; val: boolean }) => cascadeProjectInternal(id, val),
+  })
+
   const internalMut = useMutation({
     mutationFn: ({ id, val }: { id: number; val: boolean }) => updateProject(id, { is_internal: val }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['projects-full'] }),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: ['projects-full'] })
+      if (window.confirm('Sollen alle Strukturpositionen dieses Projekts ebenfalls entsprechend markiert werden?')) {
+        cascadeMut.mutate({ id: variables.id, val: variables.val })
+      }
+    },
+  })
+
+  const copyMut = useMutation({
+    mutationFn: (id: number) => copyProject(id),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ['projects-full'] })
+      alert(`Projekt kopiert: ${res.data.projectName}`)
+    },
+    onError: (e: Error) => alert(e.message),
   })
 
   async function applyToContract(confirm: ContractConfirm) {
@@ -417,6 +436,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                     </td>
                     <td className="doc-actions">
                       <button className="btn-small" onClick={() => openEdit(p)}>Bearbeiten</button>
+                      <button className="btn-small" onClick={() => copyMut.mutate(p.ID)} disabled={copyMut.isPending}>Kopieren</button>
                       <button className="btn-small btn-danger" onClick={() => handleDelete(p)}>Löschen</button>
                     </td>
                     {onSelectProject && (

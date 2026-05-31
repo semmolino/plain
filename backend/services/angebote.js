@@ -730,6 +730,8 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   }
 
   // PROJECT_STRUCTURE — 2-pass to set FATHER_ID
+  // Declared here so it's also accessible in the HOAI attachment block below
+  const offerIdToNew = new Map();
   if (offerStruct.length) {
     const insertRows = offerStruct.map(n => {
       const btId  = n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null;
@@ -758,7 +760,6 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     if (psErr) throw { status: 500, message: 'Projektstruktur konnte nicht angelegt werden: ' + psErr.message };
 
     // Map old offer structure ID → new project structure ID
-    const offerIdToNew = new Map();
     (createdNodes || []).forEach((row, i) => { offerIdToNew.set(offerStruct[i].ID, row.ID); });
 
     // Set FATHER_ID
@@ -853,6 +854,103 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   return { project, projectName: project.NAME_SHORT };
 }
 
+// ── copy offer ────────────────────────────────────────────────────────────────
+
+async function copyOffer(supabase, { offerId, tenantId }) {
+  const { data: src, error: srcErr } = await supabase
+    .from('OFFER').select('*').eq('ID', offerId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (srcErr) throw srcErr;
+  if (!src) throw { status: 404, message: 'Angebot nicht gefunden' };
+
+  const { data: newNum, error: numErr } = await supabase.rpc('next_offer_number', { p_company_id: src.COMPANY_ID });
+  if (numErr || !newNum) throw { status: 500, message: 'Nummernkreis Fehler: ' + (numErr?.message || '') };
+
+  // eslint-disable-next-line no-unused-vars
+  const { ID: _id, CREATED_AT: _ca, UPDATED_AT: _ua, NAME_SHORT: _ns, PROJECT_ID: _pid, ...offerRest } = src;
+  const { data: newOffer, error: offerInsErr } = await supabase
+    .from('OFFER')
+    .insert([{ ...offerRest, NAME_SHORT: newNum, PROJECT_ID: null, TENANT_ID: tenantId }])
+    .select('*').single();
+  if (offerInsErr) throw offerInsErr;
+
+  // Copy OFFER_STRUCTURE (2-pass for FATHER_ID)
+  const { data: srcStruct } = await supabase
+    .from('OFFER_STRUCTURE').select('*').eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId)
+    .order('SORT_ORDER').order('ID');
+  const oldToNewStructId = new Map();
+  if (srcStruct?.length) {
+    const insRows = srcStruct.map(({ ID: _sid, OFFER_ID: _oid, FATHER_ID: _fid, CREATED_AT: _ca2, UPDATED_AT: _ua2, ...rest }) => ({
+      ...rest, OFFER_ID: newOffer.ID, FATHER_ID: null, TENANT_ID: tenantId,
+    }));
+    const { data: created, error: structInsErr } = await supabase.from('OFFER_STRUCTURE').insert(insRows).select('ID');
+    if (structInsErr) throw structInsErr;
+    srcStruct.forEach((row, i) => oldToNewStructId.set(row.ID, created[i].ID));
+    for (const row of srcStruct) {
+      if (!row.FATHER_ID) continue;
+      const newId = oldToNewStructId.get(row.ID);
+      const newFatherId = oldToNewStructId.get(row.FATHER_ID);
+      if (newId && newFatherId) await supabase.from('OFFER_STRUCTURE').update({ FATHER_ID: newFatherId }).eq('ID', newId);
+    }
+  }
+
+  // Copy FEE_CALCULATION_MASTER + phases + BL + surcharges
+  const { data: feeCalcs } = await supabase
+    .from('FEE_CALCULATION_MASTER')
+    .select('ID, NAME_SHORT, NAME_LONG, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, ATTACH_TO_OFFER_STRUCTURE_ID')
+    .eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId);
+
+  for (const calc of (feeCalcs || [])) {
+    const newAttachId = calc.ATTACH_TO_OFFER_STRUCTURE_ID
+      ? (oldToNewStructId.get(calc.ATTACH_TO_OFFER_STRUCTURE_ID) ?? null) : null;
+    const { data: newCalc, error: calcInsErr } = await supabase
+      .from('FEE_CALCULATION_MASTER')
+      .insert([{
+        NAME_SHORT: calc.NAME_SHORT, NAME_LONG: calc.NAME_LONG,
+        FEE_MASTER_ID: calc.FEE_MASTER_ID, ZONE_ID: calc.ZONE_ID, ZONE_PERCENT: calc.ZONE_PERCENT,
+        CONSTRUCTION_COSTS_K0: calc.CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1: calc.CONSTRUCTION_COSTS_K1,
+        CONSTRUCTION_COSTS_K2: calc.CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3: calc.CONSTRUCTION_COSTS_K3,
+        CONSTRUCTION_COSTS_K4: calc.CONSTRUCTION_COSTS_K4,
+        REVENUE_K0: calc.REVENUE_K0, REVENUE_K1: calc.REVENUE_K1, REVENUE_K2: calc.REVENUE_K2,
+        REVENUE_K3: calc.REVENUE_K3, REVENUE_K4: calc.REVENUE_K4,
+        OFFER_ID: newOffer.ID, PROJECT_ID: null,
+        ATTACH_TO_OFFER_STRUCTURE_ID: newAttachId, TENANT_ID: tenantId,
+      }])
+      .select('ID').single();
+    if (calcInsErr) { console.warn('FEE_CALC_MASTER copy:', calcInsErr.message); continue; }
+
+    const { data: phases } = await supabase.from('FEE_CALCULATION_PHASE')
+      .select('FEE_PHASE_ID, FEE_PERCENT_BASE, KX, REVENUE_BASE, FEE_PERCENT, PHASE_REVENUE')
+      .eq('FEE_MASTER_ID', calc.ID);
+    if (phases?.length) await supabase.from('FEE_CALCULATION_PHASE').insert(phases.map(p => ({ ...p, FEE_MASTER_ID: newCalc.ID })));
+
+    const { data: blItems } = await supabase.from('FEE_CALCULATION_BL')
+      .select('ID, NAME, LPH_REF, AMOUNT, SORT_ORDER')
+      .eq('FEE_CALC_MASTER_ID', calc.ID).eq('TENANT_ID', tenantId);
+    const oldToNewBlId = new Map();
+    if (blItems?.length) {
+      const blInsRows = blItems.map(({ ID: _blId, ...blRest }) => ({ ...blRest, FEE_CALC_MASTER_ID: newCalc.ID, TENANT_ID: tenantId }));
+      const { data: createdBl } = await supabase.from('FEE_CALCULATION_BL').insert(blInsRows).select('ID');
+      blItems.forEach((row, i) => { if (createdBl?.[i]) oldToNewBlId.set(row.ID, createdBl[i].ID); });
+    }
+
+    const { data: surcharges } = await supabase.from('FEE_CALCULATION_SURCHARGES')
+      .select('FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, INCLUDE_BL, LPH_FILTER, BL_FILTER')
+      .eq('FEE_CALC_MASTER_ID', calc.ID).eq('TENANT_ID', tenantId);
+    if (surcharges?.length) {
+      const surRows = surcharges.map(s => {
+        let blFilter = s.BL_FILTER;
+        if (blFilter && oldToNewBlId.size) {
+          try { const ids = JSON.parse(blFilter); blFilter = JSON.stringify(ids.map(id => oldToNewBlId.get(id) ?? id)); } catch { /* keep */ }
+        }
+        return { ...s, BL_FILTER: blFilter, FEE_CALC_MASTER_ID: newCalc.ID, TENANT_ID: tenantId };
+      });
+      await supabase.from('FEE_CALCULATION_SURCHARGES').insert(surRows);
+    }
+  }
+
+  return newOffer;
+}
+
 // ── exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -868,4 +966,5 @@ module.exports = {
   deleteOfferStructureNode,
   buildOfferPdfViewModel,
   convertOfferToProject,
+  copyOffer,
 };

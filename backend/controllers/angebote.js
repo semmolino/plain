@@ -118,6 +118,17 @@ async function convertOffer(req, res, supabase) {
   }
 }
 
+async function copyOffer(req, res, supabase) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'Ungültige ID' });
+    const data = await svc.copyOffer(supabase, { offerId: id, tenantId: req.tenantId });
+    return res.json({ data });
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 async function getOfferPdf(req, res, supabase) {
   try {
     const id = parseInt(req.params.id, 10);
@@ -166,6 +177,7 @@ module.exports = {
   updateOfferStructureNode,
   deleteOfferStructureNode,
   convertOffer,
+  copyOffer,
   getOfferPdf,
   getAuftragsbestaetigungPdf,
 };

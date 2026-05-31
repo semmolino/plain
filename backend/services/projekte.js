@@ -1464,6 +1464,137 @@ async function transferFatherToChild(supabase, { fatherId, childId }) {
   return { success: true };
 }
 
+async function copyProject(supabase, { projectId, tenantId }) {
+  const { data: src, error: srcErr } = await supabase
+    .from("PROJECT").select("*").eq("ID", projectId).eq("TENANT_ID", tenantId).maybeSingle();
+  if (srcErr) throw srcErr;
+  if (!src) throw { status: 404, message: "Projekt nicht gefunden" };
+
+  const companyId = src.COMPANY_ID;
+  const { data: num, error: numErr } = await supabase.rpc("next_project_number", { p_company_id: companyId });
+  if (numErr || !num) throw { status: 500, message: "Nummernkreis Fehler: " + (numErr?.message || "") };
+
+  // Insert new project
+  // eslint-disable-next-line no-unused-vars
+  const { ID: _id, CREATED_AT: _ca, UPDATED_AT: _ua, NAME_SHORT: _ns, OFFER_ID: _oid, ...projRest } = src;
+  let newProject = null;
+  {
+    const r = await supabase.from("PROJECT")
+      .insert([{ ...projRest, NAME_SHORT: num, OFFER_ID: null, TENANT_ID: tenantId }])
+      .select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID").single();
+    if (r.error) {
+      const { OFFER_ID: _o2, ...row2 } = { ...projRest, NAME_SHORT: num, TENANT_ID: tenantId };
+      const r2 = await supabase.from("PROJECT")
+        .insert([row2])
+        .select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID").single();
+      if (r2.error) throw { status: 500, message: r2.error.message };
+      newProject = r2.data;
+    } else {
+      newProject = r.data;
+    }
+  }
+
+  // Copy EMPLOYEE2PROJECT
+  try {
+    const { data: e2pRows } = await supabase.from("EMPLOYEE2PROJECT")
+      .select("EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
+      .eq("PROJECT_ID", projectId).eq("TENANT_ID", tenantId);
+    if (e2pRows?.length) {
+      await supabase.from("EMPLOYEE2PROJECT").insert(e2pRows.map(r => ({ ...r, PROJECT_ID: newProject.ID, TENANT_ID: tenantId })));
+    }
+  } catch (_) { /* non-fatal */ }
+
+  // Copy CONTRACT
+  try {
+    const { data: contract } = await supabase.from("CONTRACT")
+      .select("NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CURRENCY_ID, VAT_ID")
+      .eq("PROJECT_ID", projectId).eq("TENANT_ID", tenantId).maybeSingle();
+    if (contract) {
+      const cRow = { ...contract, PROJECT_ID: newProject.ID, TENANT_ID: tenantId };
+      const { error: cErr } = await supabase.from("CONTRACT").insert([cRow]);
+      if (cErr) await supabase.from("CONTRACTS").insert([cRow]);
+    }
+  } catch (_) { /* non-fatal */ }
+
+  // Copy PROJECT_STRUCTURE (2-pass, null out fee calc links)
+  const { data: srcStruct } = await supabase.from("PROJECT_STRUCTURE")
+    .select("ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, FATHER_ID, REVENUE, EXTRAS_PERCENT, EXTRAS, COSTS, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION, IS_INTERNAL, SORT_ORDER")
+    .eq("PROJECT_ID", projectId).eq("TENANT_ID", tenantId).order("ID");
+  const oldToNewStructId = new Map();
+  if (srcStruct?.length) {
+    const insRows = srcStruct.map(({ ID: _sid, FATHER_ID: _fid, ...rest }) => ({
+      ...rest, PROJECT_ID: newProject.ID, FATHER_ID: null,
+      FEE_CALC_MASTER_ID: null, FEE_CALC_PHASE_ID: null, TENANT_ID: tenantId,
+    }));
+    const { data: created, error: structInsErr } = await supabase.from("PROJECT_STRUCTURE").insert(insRows).select("ID");
+    if (!structInsErr && created) {
+      srcStruct.forEach((row, i) => oldToNewStructId.set(row.ID, created[i].ID));
+      for (const row of srcStruct) {
+        if (!row.FATHER_ID) continue;
+        const newId = oldToNewStructId.get(row.ID);
+        const newFatherId = oldToNewStructId.get(row.FATHER_ID);
+        if (newId && newFatherId) await supabase.from("PROJECT_STRUCTURE").update({ FATHER_ID: newFatherId }).eq("ID", newId);
+      }
+    }
+  }
+
+  // Copy FEE_CALCULATION_MASTER + phases + BL + surcharges
+  try {
+    const { data: feeCalcs } = await supabase.from("FEE_CALCULATION_MASTER")
+      .select("ID, NAME_SHORT, NAME_LONG, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4")
+      .eq("PROJECT_ID", projectId).eq("TENANT_ID", tenantId);
+
+    for (const calc of (feeCalcs || [])) {
+      const { data: newCalc, error: calcInsErr } = await supabase.from("FEE_CALCULATION_MASTER")
+        .insert([{
+          NAME_SHORT: calc.NAME_SHORT, NAME_LONG: calc.NAME_LONG,
+          FEE_MASTER_ID: calc.FEE_MASTER_ID, ZONE_ID: calc.ZONE_ID, ZONE_PERCENT: calc.ZONE_PERCENT,
+          CONSTRUCTION_COSTS_K0: calc.CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1: calc.CONSTRUCTION_COSTS_K1,
+          CONSTRUCTION_COSTS_K2: calc.CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3: calc.CONSTRUCTION_COSTS_K3,
+          CONSTRUCTION_COSTS_K4: calc.CONSTRUCTION_COSTS_K4,
+          REVENUE_K0: calc.REVENUE_K0, REVENUE_K1: calc.REVENUE_K1, REVENUE_K2: calc.REVENUE_K2,
+          REVENUE_K3: calc.REVENUE_K3, REVENUE_K4: calc.REVENUE_K4,
+          PROJECT_ID: newProject.ID, OFFER_ID: null, TENANT_ID: tenantId,
+        }])
+        .select("ID").single();
+      if (calcInsErr) { console.warn("copyProject FEE_CALC_MASTER:", calcInsErr.message); continue; }
+
+      const { data: phases } = await supabase.from("FEE_CALCULATION_PHASE")
+        .select("FEE_PHASE_ID, FEE_PERCENT_BASE, KX, REVENUE_BASE, FEE_PERCENT, PHASE_REVENUE")
+        .eq("FEE_MASTER_ID", calc.ID);
+      if (phases?.length) await supabase.from("FEE_CALCULATION_PHASE").insert(phases.map(p => ({ ...p, FEE_MASTER_ID: newCalc.ID })));
+
+      const { data: blItems } = await supabase.from("FEE_CALCULATION_BL")
+        .select("ID, NAME, LPH_REF, AMOUNT, SORT_ORDER")
+        .eq("FEE_CALC_MASTER_ID", calc.ID).eq("TENANT_ID", tenantId);
+      const oldToNewBlId = new Map();
+      if (blItems?.length) {
+        const blInsRows = blItems.map(({ ID: _blId, ...blRest }) => ({ ...blRest, FEE_CALC_MASTER_ID: newCalc.ID, TENANT_ID: tenantId }));
+        const { data: createdBl } = await supabase.from("FEE_CALCULATION_BL").insert(blInsRows).select("ID");
+        blItems.forEach((row, i) => { if (createdBl?.[i]) oldToNewBlId.set(row.ID, createdBl[i].ID); });
+      }
+
+      const { data: surcharges } = await supabase.from("FEE_CALCULATION_SURCHARGES")
+        .select("FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, INCLUDE_BL, LPH_FILTER, BL_FILTER")
+        .eq("FEE_CALC_MASTER_ID", calc.ID).eq("TENANT_ID", tenantId);
+      if (surcharges?.length) {
+        const surRows = surcharges.map(s => {
+          let blFilter = s.BL_FILTER;
+          if (blFilter && oldToNewBlId.size) {
+            try { const ids = JSON.parse(blFilter); blFilter = JSON.stringify(ids.map(id => oldToNewBlId.get(id) ?? id)); } catch { /* keep */ }
+          }
+          return { ...s, BL_FILTER: blFilter, FEE_CALC_MASTER_ID: newCalc.ID, TENANT_ID: tenantId };
+        });
+        await supabase.from("FEE_CALCULATION_SURCHARGES").insert(surRows);
+      }
+    }
+  } catch (feeErr) {
+    console.warn("[copyProject] fee calc soft-fail:", feeErr?.message || feeErr);
+  }
+
+  return { project: newProject, projectName: newProject.NAME_SHORT };
+}
+
 module.exports = {
   getDepartments,
   getStatuses,
@@ -1492,4 +1623,5 @@ module.exports = {
   getContractByProject,
   patchContract,
   transferFatherToChild,
+  copyProject,
 };

@@ -96,6 +96,24 @@ async function patchProject(req, res, supabase) {
   }
 }
 
+async function patchProjectInternalCascade(req, res, supabase) {
+  const id = parseInt(String(req.params.id || ''), 10);
+  if (!id) return res.status(400).json({ error: 'Projekt-ID fehlt' });
+  const val = req.body.is_internal;
+  if (typeof val !== 'boolean') return res.status(400).json({ error: 'is_internal fehlt' });
+  try {
+    const { error } = await supabase
+      .from('PROJECT_STRUCTURE')
+      .update({ IS_INTERNAL: val })
+      .eq('PROJECT_ID', id)
+      .eq('TENANT_ID', req.tenantId);
+    if (error) throw { status: 500, message: error.message };
+    res.json({ data: { updated: true } });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || err });
+  }
+}
+
 async function searchProjects(req, res, supabase) {
   const q = (req.query.q || "").toString().trim();
   if (!q || q.length < 2) return res.json({ data: [] });
@@ -339,6 +357,18 @@ async function transferFatherToChild(req, res, supabase) {
   }
 }
 
+async function copyProject(req, res, supabase) {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID fehlt' });
+    const result = await svc.copyProject(supabase, { projectId: id, tenantId: req.tenantId });
+    res.json({ data: result });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || err });
+  }
+}
+
 async function deleteProject(req, res, supabase) {
   try {
     const id = Number(req.params.id);
@@ -380,4 +410,6 @@ module.exports = {
   patchContract,
   transferFatherToChild,
   deleteProject,
+  patchProjectInternalCascade,
+  copyProject,
 };

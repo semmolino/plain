@@ -191,3 +191,6 @@ export const openAuftragsbestaetigungPdf = (id: number) =>
 
 export const convertOffer = (id: number, body: ConvertOfferPayload) =>
   apiClient.post<{ data: { project: { ID: number; NAME_SHORT: string }; projectName: string } }>(`/angebote/${id}/convert`, body)
+
+export const copyOffer = (id: number) =>
+  apiClient.post<{ data: Offer }>(`/angebote/${id}/copy`, {})
