@@ -5,28 +5,31 @@ export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string }
 export interface FeeZone   { ID: number; NAME_SHORT: string; NAME_LONG: string }
 
 export interface FeeCalcMaster {
-  ID:                    number
-  NAME_SHORT:            string | null
-  NAME_LONG:             string | null
-  PROJECT_ID:            number | null
-  FEE_MASTER_ID:         number | null
-  ZONE_ID:               number | null
-  ZONE_PERCENT:          number | null
-  CONSTRUCTION_COSTS_K0: number | null
-  CONSTRUCTION_COSTS_K1: number | null
-  CONSTRUCTION_COSTS_K2: number | null
-  CONSTRUCTION_COSTS_K3: number | null
-  CONSTRUCTION_COSTS_K4: number | null
-  REVENUE_K0:            number | null
-  REVENUE_K1:            number | null
-  REVENUE_K2:            number | null
-  REVENUE_K3:            number | null
-  REVENUE_K4:            number | null
+  ID:                          number
+  NAME_SHORT:                  string | null
+  NAME_LONG:                   string | null
+  PROJECT_ID:                  number | null
+  OFFER_ID:                    number | null
+  ATTACH_TO_OFFER_STRUCTURE_ID: number | null
+  FEE_MASTER_ID:               number | null
+  ZONE_ID:                     number | null
+  ZONE_PERCENT:                number | null
+  CONSTRUCTION_COSTS_K0:       number | null
+  CONSTRUCTION_COSTS_K1:       number | null
+  CONSTRUCTION_COSTS_K2:       number | null
+  CONSTRUCTION_COSTS_K3:       number | null
+  CONSTRUCTION_COSTS_K4:       number | null
+  REVENUE_K0:                  number | null
+  REVENUE_K1:                  number | null
+  REVENUE_K2:                  number | null
+  REVENUE_K3:                  number | null
+  REVENUE_K4:                  number | null
   // enriched fields from listFeeCalcMasters
-  projectLabel?:   string | null
-  grundhonorar?:   number
-  zuschlaegeSum?:  number
-  gesamthonorar?:  number
+  projectLabel?: string | null
+  offerLabel?:   string | null
+  grundhonorar?: number
+  zuschlaegeSum?: number
+  gesamthonorar?: number
 }
 
 export interface FeePhaseRow {
@@ -87,16 +90,23 @@ export const fetchFeeMasters = (feeGroupId: number | string) =>
 export const fetchFeeZones = (feeMasterId: number | string) =>
   apiClient.get<{ data: FeeZone[] }>(`/stammdaten/fee-zones?fee_master_id=${feeMasterId}`)
 
-export const fetchFeeCalcMasters = (params?: { project_id?: number }) => {
-  const qs = params?.project_id ? `?project_id=${params.project_id}` : ''
+export const fetchFeeCalcMasters = (params?: { project_id?: number; offer_id?: number }) => {
+  const sp = new URLSearchParams()
+  if (params?.project_id) sp.set('project_id', String(params.project_id))
+  if (params?.offer_id)   sp.set('offer_id',   String(params.offer_id))
+  const qs = sp.toString() ? `?${sp.toString()}` : ''
   return apiClient.get<{ data: FeeCalcMaster[] }>(`/stammdaten/fee-calculation-masters${qs}`)
 }
 
 export const fetchFeeCalcMaster = (id: number) =>
   apiClient.get<{ data: FeeCalcMaster }>(`/stammdaten/fee-calculation-masters/${id}`)
 
-export const initFeeCalcMaster = (fee_master_id: number) =>
-  apiClient.post<{ data: FeeCalcMaster }>('/stammdaten/fee-calculation-masters/init', { fee_master_id })
+export const initFeeCalcMaster = (fee_master_id: number, opts?: { project_id?: number; offer_id?: number }) =>
+  apiClient.post<{ data: FeeCalcMaster }>('/stammdaten/fee-calculation-masters/init', {
+    fee_master_id,
+    ...(opts?.project_id ? { project_id: opts.project_id } : {}),
+    ...(opts?.offer_id   ? { offer_id:   opts.offer_id   } : {}),
+  })
 
 export const saveFeeCalcBasis = (id: number, body: Partial<FeeCalcMaster>) =>
   apiClient.patch<{ data: FeeCalcMaster }>(`/stammdaten/fee-calculation-masters/${id}/basis`, body)

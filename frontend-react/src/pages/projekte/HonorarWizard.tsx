@@ -13,6 +13,7 @@ import {
   type FeeCalcMaster, type FeePhaseRow, type FeeCalcSurcharge, type FeeSurchargeGlobal, type FeeCalcBl, type BlAmountType,
 } from '@/api/fee'
 import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from '@/api/projekte'
+import { fetchOfferStructure, type OfferStructureNode } from '@/api/angebote'
 
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
@@ -157,12 +158,15 @@ interface WizardProps {
   existingId?: number | null
   /** Pre-select this project in step 2 when creating new */
   initialProjectId?: number | null
+  /** When set, calc is linked to an offer instead of a project */
+  offerId?: number | null
   onDone?: () => void
 }
 
-export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardProps) {
+export function HonorarWizard({ existingId, initialProjectId, offerId, onDone }: WizardProps) {
   const qc = useQueryClient()
-  const isEdit = !!existingId
+  const isEdit      = !!existingId
+  const isOfferMode = !!offerId
 
   const firstStep  = isEdit ? 2 : 1
   const totalSteps = isEdit ? 5 : 6
@@ -183,8 +187,9 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '',
     K0: '', K1: '', K2: '', K3: '', K4: '',
   })
-  const [projectId, setProjectId]           = useState(initialProjectId ? String(initialProjectId) : '')
-  const [structureNodes, setStructureNodes] = useState<Awaited<ReturnType<typeof fetchProjectStructure>>['data']>([])
+  const [projectId, setProjectId]             = useState(initialProjectId ? String(initialProjectId) : '')
+  const [structureNodes, setStructureNodes]   = useState<Awaited<ReturnType<typeof fetchProjectStructure>>['data']>([])
+  const [offerStructureNodes, setOfferStructureNodes] = useState<OfferStructureNode[]>([])
 
   // Step 3 state (phases)
   const [phases, setPhases]   = useState<FeePhaseRow[]>([])
@@ -220,13 +225,21 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   const surchargeEffects = computeSurchargeEffects(phases, surcharges, blItems, blComputedAmounts)
   const totalSurchargeAmt = surchargeEffects.reduce((s, e) => s + e.amount, 0)
 
-  // Load structure nodes when project changes
+  // Load project structure nodes when project changes
   useEffect(() => {
     if (!projectId) { setStructureNodes([]); return }
     fetchProjectStructure(Number(projectId))
       .then(r => setStructureNodes(r.data ?? []))
       .catch(() => setStructureNodes([]))
   }, [projectId])
+
+  // Load offer structure nodes when in offer mode
+  useEffect(() => {
+    if (!offerId) { setOfferStructureNodes([]); return }
+    fetchOfferStructure(offerId)
+      .then(r => setOfferStructureNodes(r.data ?? []))
+      .catch(() => setOfferStructureNodes([]))
+  }, [offerId])
 
   // In edit mode: load existing calc on mount
   useEffect(() => {
@@ -305,7 +318,8 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     if (!feeMasterId) { setMsg({ text: 'Bitte Leistungsbild wählen', type: 'error' }); return }
     setLoading(true); setMsg({ text: 'Anlegen der Honorarberechnung …', type: 'info' })
     try {
-      const row = await initFeeCalcMaster(Number(feeMasterId))
+      const opts = offerId ? { offer_id: offerId } : undefined
+      const row = await initFeeCalcMaster(Number(feeMasterId), opts)
       const zonesRes = await fetchFeeZones(feeMasterId)
       setZones(zonesRes.data ?? [])
       populateBasis(row.data)
@@ -322,7 +336,8 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
       const updated = await saveFeeCalcBasis(calcMaster.ID, {
         NAME_SHORT:            basis.NAME_SHORT || null,
         NAME_LONG:             basis.NAME_LONG  || null,
-        PROJECT_ID:            basis.PROJECT_ID ? Number(basis.PROJECT_ID) : null,
+        PROJECT_ID:            isOfferMode ? null : (basis.PROJECT_ID ? Number(basis.PROJECT_ID) : null),
+        OFFER_ID:              isOfferMode ? offerId : null,
         ZONE_ID:               basis.ZONE_ID    ? Number(basis.ZONE_ID) : null,
         ZONE_PERCENT:          toNum(basis.ZONE_PERCENT),
         CONSTRUCTION_COSTS_K0: toNum(basis.K0),
@@ -454,6 +469,21 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
       }
       void qc.invalidateQueries({ queryKey: ['fee-calc-masters'] })
       resetWizard()
+    } catch (e: unknown) {
+      setMsg({ text: (e as Error).message, type: 'error' })
+    } finally { setLoading(false) }
+  }
+
+  async function finishOffer() {
+    if (!calcMaster) return
+    setLoading(true); setMsg({ text: 'Speichere Zuordnung …', type: 'info' })
+    try {
+      await saveFeeCalcBasis(calcMaster.ID, {
+        ATTACH_TO_OFFER_STRUCTURE_ID: fatherId ? Number(fatherId) : null,
+      })
+      void qc.invalidateQueries({ queryKey: ['fee-calc-masters'] })
+      setMsg({ text: 'Kalkulation gespeichert ✅', type: 'success' })
+      setTimeout(() => resetWizard(), 800)
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
     } finally { setLoading(false) }
@@ -616,13 +646,20 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
               <input value={basis.NAME_LONG} onChange={e => setBasis(b => ({ ...b, NAME_LONG: e.target.value }))} />
             </div>
           </div>
-          <div className="form-group">
-            <label>Projekt</label>
-            <select value={basis.PROJECT_ID} onChange={e => { setBasis(b => ({ ...b, PROJECT_ID: e.target.value })); setProjectId(e.target.value) }}>
-              <option value="">—</option>
-              {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
-            </select>
-          </div>
+          {isOfferMode ? (
+            <div className="form-group">
+              <label>Angebot</label>
+              <input readOnly value={`Angebot #${offerId ?? '?'} (festgelegt)`} style={{ background: '#f9fafb', color: '#6b7280' }} />
+            </div>
+          ) : (
+            <div className="form-group">
+              <label>Projekt</label>
+              <select value={basis.PROJECT_ID} onChange={e => { setBasis(b => ({ ...b, PROJECT_ID: e.target.value })); setProjectId(e.target.value) }}>
+                <option value="">—</option>
+                {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
+              </select>
+            </div>
+          )}
           <div className="form-group">
             <label>Honorarzone</label>
             <select value={basis.ZONE_ID} onChange={e => setBasis(b => ({ ...b, ZONE_ID: e.target.value }))}>
@@ -1097,8 +1134,8 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
             </div>
           )}
 
-          {/* Create mode: structure selector */}
-          {!isEdit && (
+          {/* Create mode (project): structure selector */}
+          {!isEdit && !isOfferMode && (
             <div className="form-group">
               <label>Übergeordnetes Strukturelement*</label>
               <select value={fatherId} onChange={e => setFatherId(e.target.value)}>
@@ -1110,6 +1147,24 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                 ))}
               </select>
               {!basis.PROJECT_ID && <p className="empty-note">Erst Projekt in Schritt 2 wählen, um Strukturelemente zu laden.</p>}
+            </div>
+          )}
+
+          {/* Create mode (offer): offer structure selector (optional) */}
+          {!isEdit && isOfferMode && (
+            <div className="form-group">
+              <label>Angebotsposition zuordnen (optional)</label>
+              <select value={fatherId} onChange={e => setFatherId(e.target.value)}>
+                <option value="">— Keine Zuordnung —</option>
+                {offerStructureNodes.map(s => (
+                  <option key={s.ID} value={s.ID}>
+                    {s.NAME_SHORT ? `${s.NAME_SHORT} – ` : ''}{s.NAME_LONG ?? `Position ${s.ID}`}
+                  </option>
+                ))}
+              </select>
+              <p className="empty-note" style={{ marginTop: 4 }}>
+                Wird beim Annehmen des Angebots als Unterposition in der Projektstruktur angelegt.
+              </p>
             </div>
           )}
         </div>
@@ -1143,8 +1198,11 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
         {step === 5 && (
           <button className="btn-primary" type="button" onClick={saveSurchargesAndGo} disabled={loading}>Speichern &amp; Weiter →</button>
         )}
-        {step === 6 && !isEdit && (
+        {step === 6 && !isEdit && !isOfferMode && (
           <button className="btn-primary" type="button" onClick={finish} disabled={loading || !fatherId}>Projektstruktur anlegen</button>
+        )}
+        {step === 6 && !isEdit && isOfferMode && (
+          <button className="btn-primary" type="button" onClick={() => void finishOffer()} disabled={loading}>Fertig ✓</button>
         )}
       </div>
     </div>
@@ -1233,6 +1291,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
   const [paraFilter, setParaFilter]     = useState<Set<string>>(new Set())
   const [projektFilter, setProjektFilter] = useState<Set<string>>(new Set())
   const [didInitFilter, setDidInitFilter] = useState(false)
+  const [showOfferCalcs, setShowOfferCalcs] = useState(false)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['fee-calc-masters'],
@@ -1250,19 +1309,25 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
     }
   }, [allRows, initialProjectId, didInitFilter])
 
-  const allParas    = Array.from(new Set(allRows.map(r => r.NAME_SHORT).filter((s): s is string => !!s))).sort()
-  const allProjekte = Array.from(new Set(allRows.map(r => r.projectLabel).filter((s): s is string => !!s))).sort()
+  // By default hide offer-only calcs (PROJECT_ID null, OFFER_ID set); user can toggle
+  const visibleRows = showOfferCalcs
+    ? allRows
+    : allRows.filter(r => r.PROJECT_ID != null || r.OFFER_ID == null)
+
+  const allParas    = Array.from(new Set(visibleRows.map(r => r.NAME_SHORT).filter((s): s is string => !!s))).sort()
+  const allProjekte = Array.from(new Set(visibleRows.map(r => r.projectLabel ?? r.offerLabel).filter((s): s is string => !!s))).sort()
 
   // Client-side search + filter
   const q = search.trim().toLowerCase()
-  const filtered = allRows.filter(r => {
+  const filtered = visibleRows.filter(r => {
+    const label = r.projectLabel ?? r.offerLabel ?? ''
     if (paraFilter.size > 0 && !(r.NAME_SHORT && paraFilter.has(r.NAME_SHORT))) return false
-    if (projektFilter.size > 0 && !(r.projectLabel && projektFilter.has(r.projectLabel))) return false
+    if (projektFilter.size > 0 && !projektFilter.has(label)) return false
     if (!q) return true
     return (
       (r.NAME_SHORT ?? '').toLowerCase().includes(q) ||
       (r.NAME_LONG  ?? '').toLowerCase().includes(q) ||
-      (r.projectLabel ?? '').toLowerCase().includes(q)
+      label.toLowerCase().includes(q)
     )
   })
 
@@ -1271,7 +1336,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
     let vb: string | number = 0
     if (sort.col === 'nameShort')    { va = a.NAME_SHORT ?? ''; vb = b.NAME_SHORT ?? '' }
     if (sort.col === 'nameLong')     { va = a.NAME_LONG  ?? ''; vb = b.NAME_LONG  ?? '' }
-    if (sort.col === 'project')      { va = a.projectLabel ?? ''; vb = b.projectLabel ?? '' }
+    if (sort.col === 'project')      { va = (a.projectLabel ?? a.offerLabel) ?? ''; vb = (b.projectLabel ?? b.offerLabel) ?? '' }
     if (sort.col === 'grundhonorar') { va = a.grundhonorar  ?? 0; vb = b.grundhonorar  ?? 0 }
     if (sort.col === 'gesamthonorar'){ va = a.gesamthonorar ?? 0; vb = b.gesamthonorar ?? 0 }
     if (typeof va === 'string') return sort.dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va)
@@ -1326,6 +1391,10 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
         />
         <FilterChip label="§" options={allParas} selected={paraFilter} onChange={setParaFilter} />
         <FilterChip label="Projekt" options={allProjekte} selected={projektFilter} onChange={setProjektFilter} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <input type="checkbox" checked={showOfferCalcs} onChange={e => setShowOfferCalcs(e.target.checked)} />
+          Angebots-Kalkulationen
+        </label>
         <button className="btn-primary" type="button" style={{ marginLeft: 'auto' }} onClick={() => setWizardMode({ mode: 'create' })}>
           + Neue Honorarberechnung
         </button>
@@ -1357,7 +1426,13 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                 <tr key={r.ID}>
                   <td>{r.NAME_SHORT || '—'}</td>
                   <td>{r.NAME_LONG || '—'}</td>
-                  <td>{r.projectLabel || '—'}</td>
+                  <td>
+                    {r.projectLabel
+                      ? r.projectLabel
+                      : r.offerLabel
+                        ? <span style={{ color: '#7c3aed' }}>{r.offerLabel}</span>
+                        : '—'}
+                  </td>
                   <td style={{ textAlign: 'right' }}>{fmtEurShort(r.grundhonorar)}</td>
                   <td style={{ textAlign: 'right', color: (r.zuschlaegeSum ?? 0) !== 0 ? ((r.zuschlaegeSum ?? 0) >= 0 ? '#166534' : '#991b1b') : undefined }}>
                     {(r.zuschlaegeSum ?? 0) !== 0 ? fmtEurShort(r.zuschlaegeSum) : '—'}
@@ -1377,6 +1452,12 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                         <button type="button" className="btn-small" title="Zur Projektstruktur"
                           onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}>
                           → Struktur
+                        </button>
+                      )}
+                      {r.OFFER_ID != null && r.PROJECT_ID == null && (
+                        <button type="button" className="btn-small" title="Zum Angebot"
+                          onClick={() => navigate('/angebote', { state: { offerId: r.OFFER_ID } })}>
+                          → Angebot
                         </button>
                       )}
                     </div>

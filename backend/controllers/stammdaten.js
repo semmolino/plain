@@ -106,9 +106,18 @@ async function postFeeCalcMasterInit(req, res, supabase) {
   if (fmErr) return res.status(500).json({ error: fmErr.message });
   if (!feeMaster) return res.status(404).json({ error: "FEE_MASTER not found" });
 
+  const offerIdRaw = (req.body?.offer_id ?? "").toString().trim();
+  const offerId = offerIdRaw ? Number.parseInt(offerIdRaw, 10) : null;
+
   const { data, error } = await supabase
     .from("FEE_CALCULATION_MASTER")
-    .insert([{ FEE_MASTER_ID: feeMasterId, NAME_SHORT: feeMaster.NAME_SHORT || null, NAME_LONG: feeMaster.NAME_LONG || null, TENANT_ID: req.tenantId ?? null }])
+    .insert([{
+      FEE_MASTER_ID: feeMasterId,
+      NAME_SHORT:    feeMaster.NAME_SHORT || null,
+      NAME_LONG:     feeMaster.NAME_LONG  || null,
+      TENANT_ID:     req.tenantId ?? null,
+      ...(offerId ? { OFFER_ID: offerId } : {}),
+    }])
     .select("*")
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -149,10 +158,12 @@ async function patchFeeCalcMasterBasis(req, res, supabase) {
     const { data, error } = await supabase
       .from("FEE_CALCULATION_MASTER")
       .update({
-        NAME_SHORT: body.NAME_SHORT ?? null,
-        NAME_LONG: body.NAME_LONG ?? null,
-        PROJECT_ID: body.PROJECT_ID ?? null,
-        ZONE_ID: body.ZONE_ID ?? null,
+        NAME_SHORT:                   body.NAME_SHORT ?? null,
+        NAME_LONG:                    body.NAME_LONG  ?? null,
+        PROJECT_ID:                   body.PROJECT_ID ?? null,
+        OFFER_ID:                     body.OFFER_ID   ?? null,
+        ATTACH_TO_OFFER_STRUCTURE_ID: body.ATTACH_TO_OFFER_STRUCTURE_ID ?? null,
+        ZONE_ID:      body.ZONE_ID      ?? null,
         ZONE_PERCENT: body.ZONE_PERCENT ?? null,
         ...costsByKey,
         ...revenueFields,
@@ -1149,23 +1160,27 @@ async function getMonatsabschlussPdf(req, res, supabase) {
 async function listFeeCalcMasters(req, res, supabase) {
   try {
     const projectIdRaw = (req.query.project_id || "").toString().trim();
-    const projectId = projectIdRaw ? Number.parseInt(projectIdRaw, 10) : null;
+    const projectId    = projectIdRaw ? Number.parseInt(projectIdRaw, 10) : null;
+    const offerIdRaw   = (req.query.offer_id   || "").toString().trim();
+    const offerId      = offerIdRaw  ? Number.parseInt(offerIdRaw,   10) : null;
 
     let query = supabase.from("FEE_CALCULATION_MASTER")
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, TENANT_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, OFFER_ID, ATTACH_TO_OFFER_STRUCTURE_ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, TENANT_ID")
       .eq("TENANT_ID", req.tenantId)
       .order("ID", { ascending: false });
     if (projectId) query = query.eq("PROJECT_ID", projectId);
+    if (offerId)   query = query.eq("OFFER_ID",   offerId);
 
     const { data: masters, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
     if (!masters || !masters.length) return res.json({ data: [] });
 
     const masterIds = masters.map(m => m.ID);
-    const [{ data: phases }, { data: surcharges }, { data: projects }] = await Promise.all([
+    const [{ data: phases }, { data: surcharges }, { data: projects }, { data: offers }] = await Promise.all([
       supabase.from("FEE_CALCULATION_PHASE").select("FEE_MASTER_ID, PHASE_REVENUE").in("FEE_MASTER_ID", masterIds),
       supabase.from("FEE_CALCULATION_SURCHARGES").select("FEE_CALC_MASTER_ID, AMOUNT").in("FEE_CALC_MASTER_ID", masterIds),
       supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG").eq("TENANT_ID", req.tenantId),
+      supabase.from("OFFER").select("ID, NAME_SHORT, NAME_LONG").eq("TENANT_ID", req.tenantId),
     ]);
 
     const phaseSum = {};
@@ -1173,15 +1188,18 @@ async function listFeeCalcMasters(req, res, supabase) {
     const surchargeSum = {};
     for (const r of (surcharges || [])) surchargeSum[r.FEE_CALC_MASTER_ID] = (surchargeSum[r.FEE_CALC_MASTER_ID] || 0) + (Number(r.AMOUNT) || 0);
     const projectMap = new Map((projects || []).map(p => [p.ID, p]));
+    const offerMap   = new Map((offers   || []).map(o => [o.ID, o]));
 
     const result = masters.map(m => {
-      const proj = projectMap.get(m.PROJECT_ID);
+      const proj  = m.PROJECT_ID ? projectMap.get(m.PROJECT_ID) : null;
+      const offer = m.OFFER_ID   ? offerMap.get(m.OFFER_ID)     : null;
       return {
         ...m,
-        projectLabel: proj ? `${proj.NAME_SHORT || ""} – ${proj.NAME_LONG || ""}`.replace(/ – $/, "") : null,
-        grundhonorar:   phaseSum[m.ID] || 0,
-        zuschlaegeSum:  surchargeSum[m.ID] || 0,
-        gesamthonorar:  (phaseSum[m.ID] || 0) + (surchargeSum[m.ID] || 0),
+        projectLabel: proj  ? `${proj.NAME_SHORT  || ""} – ${proj.NAME_LONG  || ""}`.replace(/ – $/, "") : null,
+        offerLabel:   offer ? `${offer.NAME_SHORT || ""} – ${offer.NAME_LONG || ""}`.replace(/ – $/, "") : null,
+        grundhonorar:  phaseSum[m.ID]     || 0,
+        zuschlaegeSum: surchargeSum[m.ID] || 0,
+        gesamthonorar: (phaseSum[m.ID] || 0) + (surchargeSum[m.ID] || 0),
       };
     });
     res.json({ data: result });

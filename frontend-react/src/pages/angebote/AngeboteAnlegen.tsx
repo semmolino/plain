@@ -6,6 +6,7 @@ import { fetchOfferStatuses, createOffer, openOfferPdf, type OfferStructureDraft
 import { fetchProjectManagers, fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress, fetchDefaults } from '@/api/stammdaten'
+import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ function newStructRow(): OfferStructureDraftRow {
 function StepIndicator({ step }: { step: number }) {
   return (
     <div className="wizard-steps">
-      {[1, 2].map(s => (
+      {[1, 2, 3].map(s => (
         <span key={s} className={`wizard-step${s === step ? ' active' : s < step ? ' done' : ''}`}>{s}</span>
       ))}
     </div>
@@ -116,10 +117,15 @@ export function AngeboteAnlegen() {
       void qc.invalidateQueries({ queryKey: ['number-ranges'] })
       setCreatedOfferId(res.data.ID)
       setMsg({ text: `Angebot "${res.data.NAME_SHORT}" wurde angelegt ✅`, type: 'success' })
-      setStep(1); setBasic(emptyBasic()); setAddrText(''); setStructDraft([])
+      setStep(3)
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
+
+  function resetAll() {
+    setStep(1); setBasic(emptyBasic()); setAddrText(''); setStructDraft([])
+    setCreatedOfferId(null); setMsg(null)
+  }
 
   const setB = (k: keyof BasicForm) => (v: string) => setBasic(f => ({ ...f, [k]: v }))
 
@@ -366,18 +372,29 @@ export function AngeboteAnlegen() {
         </div>
       )}
 
-      <Message text={msg?.text ?? null} type={msg?.type} />
-
-      {createdOfferId && msg?.type === 'success' && (
-        <div style={{ marginTop: 8 }}>
-          <button className="btn-small btn-save" onClick={() => openOfferPdf(createdOfferId)}>
-            PDF öffnen
-          </button>
+      {/* ── Step 3: HOAI-Kalkulationen ── */}
+      {step === 3 && createdOfferId && (
+        <div className="wizard-step-content">
+          <h3 className="wizard-step-title">Schritt 3: HOAI-Kalkulationen (optional)</h3>
+          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+            Das Angebot wurde angelegt. Fügen Sie optional HOAI-Kalkulationen hinzu oder überspringen Sie diesen Schritt.
+          </p>
+          <div style={{ marginBottom: 8 }}>
+            <button className="btn-small" type="button" onClick={() => openOfferPdf(createdOfferId)}>
+              PDF öffnen
+            </button>
+          </div>
+          <HonorarWizard
+            offerId={createdOfferId}
+            onDone={resetAll}
+          />
         </div>
       )}
 
+      <Message text={msg?.text ?? null} type={msg?.type} />
+
       <div className="wizard-nav">
-        {step > 1 && <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>}
+        {step > 1 && step < 3 && <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>}
         {step < 2 && (
           <button className="btn-primary" type="button" onClick={() => { if (validateStep1()) setStep(2) }}>Weiter →</button>
         )}
@@ -385,6 +402,9 @@ export function AngeboteAnlegen() {
           <button className="btn-primary" type="button" disabled={createMut.isPending} onClick={submit}>
             {createMut.isPending ? 'Speichert …' : 'Angebot anlegen'}
           </button>
+        )}
+        {step === 3 && (
+          <button type="button" onClick={resetAll}>Überspringen &amp; Fertig</button>
         )}
       </div>
     </div>

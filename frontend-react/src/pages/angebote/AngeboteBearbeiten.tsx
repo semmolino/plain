@@ -11,6 +11,8 @@ import {
 } from '@/api/angebote'
 import { fetchOfferStatuses } from '@/api/angebote'
 import { BeauftragtModal } from './BeauftragtModal'
+import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
+import { fetchFeeCalcMasters, openHonorarPdf } from '@/api/fee'
 import { fetchProjectManagers, fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
@@ -109,9 +111,10 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   const [structMsg,  setStructMsg]  = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [showBeauftragt, setShowBeauftragt] = useState(false)
   const [convertErr,     setConvertErr]     = useState<string | null>(null)
-  const [editNode,       setEditNode]       = useState<OfferStructureNode | null>(null)
-  const [editNodeForm,   setEditNodeForm]   = useState<EditNodeForm | null>(null)
-  const [editNodeMsg,    setEditNodeMsg]    = useState<{ text: string; type: 'success'|'error' } | null>(null)
+  const [editNode,          setEditNode]          = useState<OfferStructureNode | null>(null)
+  const [editNodeForm,      setEditNodeForm]      = useState<EditNodeForm | null>(null)
+  const [editNodeMsg,       setEditNodeMsg]       = useState<{ text: string; type: 'success'|'error' } | null>(null)
+  const [showHonorarWizard, setShowHonorarWizard] = useState(false)
 
   // Lookups
   const { data: offersData  } = useQuery({ queryKey: ['offers'],          queryFn: fetchOffers         })
@@ -140,6 +143,13 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
     enabled:  !!addressId,
   })
 
+  // HOAI calculations linked to this offer
+  const { data: feeCalcData, refetch: refetchFeeCalcs } = useQuery({
+    queryKey: ['fee-calc-masters-offer', selectedId],
+    queryFn:  () => fetchFeeCalcMasters({ offer_id: selectedId! }),
+    enabled:  selectedId !== null,
+  })
+
   const offers   = offersData?.data  ?? []
   const statuses = statusData?.data  ?? []
   const managers = mgrData?.data     ?? []
@@ -148,6 +158,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   const companies = companyData?.data ?? []
   const contacts = contactData?.data ?? []
   const structNodes = structData?.data ?? []
+  const feeCalcs = feeCalcData?.data ?? []
 
   // Populate form when offer loads
   useEffect(() => {
@@ -445,6 +456,50 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
             </div>
           </div>
 
+          {/* ── HOAI-Kalkulationen ── */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <h3 className="wizard-step-title" style={{ margin: 0 }}>HOAI-Kalkulationen</h3>
+              <button type="button" className="btn-small" onClick={() => setShowHonorarWizard(true)}>
+                + Kalkulation hinzufügen
+              </button>
+            </div>
+            {feeCalcs.length === 0 ? (
+              <p className="empty-note">Noch keine HOAI-Kalkulationen für dieses Angebot.</p>
+            ) : (
+              <div className="table-scroll">
+                <table className="ls-table">
+                  <thead>
+                    <tr>
+                      <th className="ls-th">§</th>
+                      <th className="ls-th">Bezeichnung</th>
+                      <th className="ls-th ls-col-num">Grundhonorar</th>
+                      <th className="ls-th ls-col-num">Gesamthonorar</th>
+                      <th className="ls-th"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feeCalcs.map(c => (
+                      <tr key={c.ID} className="ls-row">
+                        <td className="ls-td">{c.NAME_SHORT || '—'}</td>
+                        <td className="ls-td">{c.NAME_LONG || '—'}</td>
+                        <td className="ls-td" style={{ textAlign: 'right' }}>
+                          {c.grundhonorar != null ? c.grundhonorar.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—'}
+                        </td>
+                        <td className="ls-td" style={{ textAlign: 'right', fontWeight: 600 }}>
+                          {c.gesamthonorar != null ? c.gesamthonorar.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—'}
+                        </td>
+                        <td className="ls-td">
+                          <button type="button" className="btn-small" onClick={() => openHonorarPdf(c.ID)}>PDF</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* ── Positionen ── */}
           <div>
             <h3 className="wizard-step-title" style={{ marginBottom: 12 }}>Positionen</h3>
@@ -583,6 +638,18 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
         </>
       )}
     </div>
+
+    {selectedId && showHonorarWizard && (
+      <Modal open={showHonorarWizard} onClose={() => setShowHonorarWizard(false)} title="HOAI-Kalkulation hinzufügen">
+        <HonorarWizard
+          offerId={selectedId}
+          onDone={() => {
+            setShowHonorarWizard(false)
+            void refetchFeeCalcs()
+          }}
+        />
+      </Modal>
+    )}
 
     {selectedId && (
       <BeauftragtModal

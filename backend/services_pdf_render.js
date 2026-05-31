@@ -578,7 +578,31 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
   ]);
 
-  const context = { ...vm, theme, logoDataUri, signatureDataUri };
+  // Load HOAI calculations linked to this offer
+  let honorarCalcs = [];
+  try {
+    const { data: calcMasters } = await supabase
+      .from('FEE_CALCULATION_MASTER')
+      .select('ID, NAME_SHORT, NAME_LONG')
+      .eq('OFFER_ID', offerId)
+      .eq('TENANT_ID', tenantId)
+      .order('ID', { ascending: true });
+
+    if (calcMasters && calcMasters.length > 0) {
+      honorarCalcs = await Promise.all(calcMasters.map(async cm => {
+        const d = await buildHonorarCalcData(supabase, cm.ID, tenantId);
+        return {
+          nameShort: cm.NAME_SHORT,
+          nameLong: cm.NAME_LONG,
+          ...d,
+        };
+      }));
+    }
+  } catch (e) {
+    console.warn('[HONORAR_CALCS_OFFER]', e.message);
+  }
+
+  const context = { ...vm, theme, logoDataUri, signatureDataUri, honorarCalcs };
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
 
