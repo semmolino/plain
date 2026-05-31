@@ -560,17 +560,23 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
   const { data: father } = await supabase.from('PROJECT_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).single();
   const extrasPercent = Number(father?.EXTRAS_PERCENT ?? 0) || 0;
 
-  // Load BL items + surcharges for allocation
-  let lphAlloc = {}, blAlloc = {}, blItems = [];
+  // Step 1: Load BL items (independent try/catch so BL insert is not skipped due to allocation errors)
+  let blItems = [];
+  const blQueryRes = await supabase.from('FEE_CALCULATION_BL')
+    .select('ID, NAME_SHORT, NAME, AMOUNT')
+    .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId)
+    .order('SORT_ORDER', { ascending: true });
+  if (blQueryRes.error) {
+    console.error('[attachFeeCalc] BL query error:', blQueryRes.error.message);
+  } else {
+    blItems = blQueryRes.data || [];
+  }
+
+  // Step 2: Compute surcharge allocations (soft-fail — BL items are still created without alloc)
+  let lphAlloc = {}, blAlloc = {};
   try {
-    const [blRes, surRes] = await Promise.all([
-      supabase.from('FEE_CALCULATION_BL').select('ID, NAME, LPH_REF, AMOUNT, SORT_ORDER')
-        .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER'),
-      supabase.from('FEE_CALCULATION_SURCHARGES').select('AMOUNT, LPH_FILTER, BL_FILTER')
-        .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER'),
-    ]);
-    blItems = blRes.data || [];
-    // Compute proportional surcharge allocation per LPH and BL
+    const surRes = await supabase.from('FEE_CALCULATION_SURCHARGES').select('AMOUNT, LPH_FILTER, BL_FILTER')
+      .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER');
     const allPhaseIds = activePhases.map(p => p.ID);
     for (const s of (surRes.data || [])) {
       const amount = Number(s.AMOUNT) || 0;
@@ -589,9 +595,11 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
       const blAmt  = amount * (blBase  / base);
       for (const b of selBls)  { const bAmt = Number(b.AMOUNT) || 0; if (bAmt) blAlloc[b.ID]  = (blAlloc[b.ID]  || 0) + (bAmt  / blBase)  * blAmt;  }
     }
-  } catch (_) { /* soft-fail */ }
+  } catch (surErr) {
+    console.warn('[attachFeeCalc] Surcharge allocation soft-fail:', surErr?.message);
+  }
 
-  // Insert LPH structure rows
+  // Step 3: Insert LPH structure rows
   const insertRows = activePhases.map(r => {
     const def = phaseMap.get(r.FEE_PHASE_ID) || {};
     const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
@@ -623,12 +631,13 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
     }))).catch(() => {});
   }
 
-  // Insert BL structure rows
+  // Step 4: Insert BL structure rows
   if (blItems.length) {
     const blInsert = blItems.map(b => {
       const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
       return {
-        NAME_SHORT: b.NAME || 'BL', NAME_LONG: b.NAME || null,
+        NAME_SHORT: b.NAME_SHORT || b.NAME || 'BL',
+        NAME_LONG:  b.NAME || null,
         REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
         PROJECT_ID: projectId, FATHER_ID: fatherId,
         EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
@@ -637,17 +646,21 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
         FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_BL_ID: b.ID,
       };
     });
-    let blCreated = null;
-    const { data: blRes, error: blErr } = await supabase.from('PROJECT_STRUCTURE').insert(blInsert).select('ID');
+    const { data: blCreated, error: blErr } = await supabase.from('PROJECT_STRUCTURE').insert(blInsert).select('ID');
     if (blErr) {
-      // Retry without FEE_CALC_BL_ID if column doesn't exist yet
+      console.error('[attachFeeCalc] BL insert error (trying fallback):', blErr.message);
+      // Retry without migration-0043 columns
       const blFallback = blInsert.map(({ FEE_CALC_MASTER_ID, FEE_CALC_BL_ID, ...rest }) => rest);
-      const { data: blRes2 } = await supabase.from('PROJECT_STRUCTURE').insert(blFallback).select('ID');
-      blCreated = blRes2;
-    } else {
-      blCreated = blRes;
-    }
-    if (blCreated && blCreated.length) {
+      const { data: blCreated2, error: blErr2 } = await supabase.from('PROJECT_STRUCTURE').insert(blFallback).select('ID');
+      if (blErr2) {
+        console.error('[attachFeeCalc] BL fallback insert error:', blErr2.message);
+      } else if (blCreated2 && blCreated2.length) {
+        await supabase.from('PROJECT_PROGRESS').insert(blCreated2.map(r => ({
+          STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
+          REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+        }))).catch(() => {});
+      }
+    } else if (blCreated && blCreated.length) {
       await supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
         STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
         REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
@@ -657,7 +670,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
 
   // Update parent node REVENUE = sum of all children (LPH + BL) revenues
   const lphTotal = insertRows.reduce((sum, r) => sum + (Number(r.REVENUE) || 0), 0);
-  const blTotal  = blItems.reduce((b2, b) => b2 + fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0)), 0);
+  const blTotal  = blItems.reduce((acc, b) => acc + fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0)), 0);
   const parentRev = fmt2(lphTotal + blTotal);
   if (parentRev > 0) {
     await supabase.from('PROJECT_STRUCTURE').update({
