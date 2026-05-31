@@ -653,6 +653,91 @@ body { padding-bottom: 28mm; }
 </div>
 {% endif %}
 
+{# ──────────────────────────────────────────────────────────────────────── #}
+{# HOAI-Honorarübersicht (one page per Kalkulation, only if project linked) #}
+{# ──────────────────────────────────────────────────────────────────────── #}
+{% if honorarCalcs and honorarCalcs.length > 0 %}
+{% for hc in honorarCalcs %}
+<div class="page">
+
+  <div class="appendix-header">
+    {% if theme.header.showLogo and logoDataUri %}
+      <img src="{{ logoDataUri }}" alt="Logo">
+    {% endif %}
+  </div>
+
+  <div class="appendix-title">HOAI-Honorarübersicht</div>
+  <div class="appendix-subtitle">
+    {{ hc.nameShort }}{% if hc.nameLong %} – {{ hc.nameLong }}{% endif %}
+    &middot; {{ projectName }} &middot; Stand: {{ inv.date | date_de }}
+  </div>
+
+  <table class="data-table" style="margin-top:3mm">
+    <thead>
+      <tr>
+        <th style="width:58%">Leistung</th>
+        <th style="width:14%">% LPH</th>
+        <th class="r">Honorar netto €</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in hc.phases %}
+      {% if p.phaseRevenue %}
+      <tr>
+        <td>{{ p.phaseLabel }}</td>
+        <td style="color:#6b7280;font-size:8.5pt;">{{ p.feePercent }}&#8239;%</td>
+        <td class="r">{{ p.phaseRevenue | money }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+
+      <tr class="sum-row">
+        <td colspan="2">Grundhonorar</td>
+        <td class="r">{{ hc.grundhonorar | money }}</td>
+      </tr>
+
+      {% if hc.blItems and hc.blItems.length > 0 %}
+      {% for b in hc.blItems %}
+      {% if b.amount %}
+      <tr>
+        <td>{{ b.nameShort or "" }}{% if b.nameShort and b.name %}: {% endif %}{{ b.name }}</td>
+        <td style="color:#6b7280;font-size:8.5pt;">Bes. Leistung</td>
+        <td class="r">{{ b.amount | money }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+      <tr class="sum-row">
+        <td colspan="2">+ Besondere Leistungen</td>
+        <td class="r">{{ hc.blTotal | money }}</td>
+      </tr>
+      {% endif %}
+
+      {% if hc.surcharges and hc.surcharges.length > 0 %}
+      {% for s in hc.surcharges %}
+      <tr>
+        <td>{{ s.nameLong or s.nameShort or "Zuschlag" }}</td>
+        <td style="color:#6b7280;font-size:8.5pt;">{{ s.percent }}&#8239;%</td>
+        <td class="r">{{ s.amount | money }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="sum-row">
+        <td colspan="2">+ Zuschläge / Nachlässe</td>
+        <td class="r">{{ hc.zuschlaegeSum | money }}</td>
+      </tr>
+      {% endif %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2" style="font-size:11pt;font-weight:700;border-top:1pt solid #374151;padding-top:2mm;">Gesamthonorar (netto)</td>
+        <td class="r" style="font-size:11pt;font-weight:700;border-top:1pt solid #374151;padding-top:2mm;">{{ hc.gesamthonorar | money }}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+</div>
+{% endfor %}
+{% endif %}
+
 {# ── Document footer (fixed, all pages) ── #}
 <div class="doc-footer">
   <div class="doc-footer-col">

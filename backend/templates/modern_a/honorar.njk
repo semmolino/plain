@@ -113,10 +113,12 @@ table.data-table tfoot tr.grand-total td {
   border-collapse: collapse;
   font-size: 7.5pt;
 }
+.breakdown-table th { font-size: 6.5pt; color: #9ca3af; font-weight: 600; padding: 0 1mm 0.5mm; text-align: right; }
+.breakdown-table th:first-child { text-align: left; }
 .breakdown-table td { padding: 0.4mm 1mm; }
-.breakdown-table td.bd-num { text-align: right; white-space: nowrap; width: 28%; }
+.breakdown-table td.bd-num { text-align: right; white-space: nowrap; width: 22%; }
 .breakdown-table tr.bd-lph td { color: #374151; }
-.breakdown-table tr.bd-bl td  { color: #059669; }
+.breakdown-table tr.bd-bl td  { color: #374151; }
 .surcharge-mode-badge {
   display: inline-block;
   font-size: 6.5pt;
@@ -319,17 +321,26 @@ table.data-table tfoot tr.grand-total td {
     <tr class="breakdown-row">
       <td colspan="4">
         <table class="breakdown-table">
+          <thead>
+            <tr>
+              <th>Komponente</th>
+              <th>Basis €</th>
+              <th>Zuschlag €</th>
+            </tr>
+          </thead>
           <tbody>
             {% for item in s.lphItems %}
             <tr class="bd-lph">
               <td>{{ item.label }}</td>
-              <td class="bd-num">{{ item.amount | money }}</td>
+              <td class="bd-num">{{ item.baseAmount | money }}</td>
+              <td class="bd-num">{{ item.surchargeAmount | money }}</td>
             </tr>
             {% endfor %}
             {% for item in s.surchargeBls %}
             <tr class="bd-bl">
               <td>{{ item.name }}</td>
-              <td class="bd-num">{{ item.amount | money }}</td>
+              <td class="bd-num">{{ item.baseAmount | money }}</td>
+              <td class="bd-num">{{ item.surchargeAmount | money }}</td>
             </tr>
             {% endfor %}
           </tbody>

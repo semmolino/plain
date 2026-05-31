@@ -436,6 +436,52 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     adjustedNet, adjustedVat, adjustedGross, hasDiscounts, hasSkonto, skontoPaymentAmount,
   };
 
+  // HOAI Kalkulationen für das Projekt laden (soft-fail)
+  let honorarCalcs = [];
+  if (rawDoc.PROJECT_ID && tenantId) {
+    try {
+      const { data: calcMasters } = await supabase
+        .from('FEE_CALCULATION_MASTER')
+        .select('ID, NAME_SHORT, NAME_LONG')
+        .eq('PROJECT_ID', rawDoc.PROJECT_ID)
+        .eq('TENANT_ID', tenantId)
+        .order('ID', { ascending: true });
+
+      if (calcMasters && calcMasters.length > 0) {
+        honorarCalcs = await Promise.all(calcMasters.map(async cm => {
+          const d = await buildHonorarCalcData(supabase, cm.ID, tenantId);
+          return {
+            nameShort: cm.NAME_SHORT || '',
+            nameLong:  cm.NAME_LONG  || '',
+            phases: d.phaseRows.map(r => ({
+              phaseLabel:  r.PHASE_LABEL || '',
+              feePercent:  r.FEE_PERCENT ?? '',
+              phaseRevenue: r.PHASE_REVENUE ?? null,
+            })),
+            blItems: d.blRows.map(r => ({
+              nameShort: r.NAME_SHORT || null,
+              name:      r.NAME || '',
+              amount:    r.AMOUNT ?? null,
+            })),
+            blTotal: d.blTotal,
+            surcharges: d.computedSurcharges.map(({ r, effectiveBase, amount }) => ({
+              nameShort:  r.NAME_SHORT || '',
+              nameLong:   r.NAME_LONG  || '',
+              percent:    r.PERCENT ?? '',
+              baseAmount: effectiveBase,
+              amount,
+            })),
+            grundhonorar:  d.grundhonorar,
+            zuschlaegeSum: d.zuschlaegeSum,
+            gesamthonorar: d.gesamthonorar,
+          };
+        }));
+      }
+    } catch (e) {
+      console.warn('[HONORAR_CALCS_INVOICE]', e.message);
+    }
+  }
+
   return {
     inv,
     docTitle:    DOC_TITLES[inv.invoiceType] || 'Rechnung',
@@ -453,6 +499,7 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     tec,
     deductionTotals,
     discounts,
+    honorarCalcs,
   };
 }
 
@@ -719,23 +766,12 @@ async function renderMonatsabschlussPdf({ supabase, tenantId }) {
   return { pdf, report };
 }
 
-// ── Honorar PDF ───────────────────────────────────────────────────────────────
+// ── Honorar data helper (shared by honorar PDF and invoice PDF) ───────────────
 
-async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
-  // Load calc master (tenant-scoped)
-  const { data: calc, error: calcErr } = await supabase
-    .from('FEE_CALCULATION_MASTER')
-    .select('*')
-    .eq('ID', calcMasterId)
-    .eq('TENANT_ID', tenantId)
-    .single();
-  if (calcErr || !calc) throw { status: 404, message: 'Honorarberechnung nicht gefunden' };
-
-  // Load phases with labels
+async function buildHonorarCalcData(supabase, calcMasterId, tenantId) {
   const { loadPhaseRowsWithLabels } = require('./services/stammdaten');
   const phaseRows = await loadPhaseRowsWithLabels(supabase, calcMasterId);
 
-  // Load surcharges (including LPH filter and BL filter for recomputation)
   const { data: surchargeRows } = await supabase
     .from('FEE_CALCULATION_SURCHARGES')
     .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, BL_FILTER, CALC_MODE, INCLUDE_BL')
@@ -743,7 +779,6 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
     .eq('TENANT_ID', tenantId)
     .order('SORT_ORDER', { ascending: true });
 
-  // Load Besondere Leistungen (soft-fail if table not yet migrated)
   let blRows = [];
   try {
     const { data: blData } = await supabase
@@ -756,6 +791,81 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   } catch (e) {
     if (!isTableMissingErr(e, 'FEE_CALCULATION_BL')) console.warn('[FEE_CALCULATION_BL]', e.message);
   }
+
+  const grundhonorar = phaseRows.reduce((s, r) => s + (Number(r.PHASE_REVENUE) || 0), 0);
+  const blTotal      = blRows.reduce((s, r) => s + (Number(r.AMOUNT) || 0), 0);
+
+  const phaseIdsAll = phaseRows.map(r => r.ID);
+  let runningTotal  = 0;
+  const computedSurcharges = (surchargeRows || []).map(r => {
+    const selectedLphIds = r.LPH_FILTER
+      ? (() => { try { return JSON.parse(r.LPH_FILTER); } catch { return phaseIdsAll; } })()
+      : phaseIdsAll;
+    const selectedPhaseRows = phaseRows.filter(p => selectedLphIds.includes(p.ID));
+    const phaseBase = selectedPhaseRows.reduce((s, p) => s + (Number(p.PHASE_REVENUE) || 0), 0);
+
+    let blContrib = 0, selectedBlRows = [];
+    if (r.BL_FILTER) {
+      try {
+        const selectedBlIds = JSON.parse(r.BL_FILTER);
+        selectedBlRows = blRows.filter(b => selectedBlIds.includes(b.ID));
+        blContrib = selectedBlRows.reduce((s, b) => s + (Number(b.AMOUNT) || 0), 0);
+      } catch { /* ignore */ }
+    }
+
+    const base        = phaseBase + blContrib;
+    const effectiveBase = r.CALC_MODE === 'cumulative' ? base + runningTotal : base;
+    const amount      = ((Number(r.PERCENT) || 0) / 100) * effectiveBase;
+    runningTotal += amount;
+
+    // Breakdown per component: show both the base value and the proportional surcharge share
+    const lphItems = selectedPhaseRows
+      .filter(p => (Number(p.PHASE_REVENUE) || 0) !== 0)
+      .map(p => {
+        const pBase = Number(p.PHASE_REVENUE) || 0;
+        return {
+          label:         p.PHASE_LABEL || '',
+          baseAmount:    pBase,
+          surchargeAmount: base > 0 ? Math.round(amount * (pBase / base) * 100) / 100 : 0,
+        };
+      });
+    const surchargeBls = selectedBlRows
+      .filter(b => (Number(b.AMOUNT) || 0) !== 0)
+      .map(b => {
+        const bBase = Number(b.AMOUNT) || 0;
+        return {
+          name:          [b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || 'BL',
+          baseAmount:    bBase,
+          surchargeAmount: base > 0 ? Math.round(amount * (bBase / base) * 100) / 100 : 0,
+        };
+      });
+
+    return {
+      r,
+      effectiveBase: Math.round(effectiveBase * 100) / 100,
+      amount:        Math.round(amount * 100) / 100,
+      lphItems,
+      surchargeBls,
+    };
+  });
+  const zuschlaegeSum = computedSurcharges.reduce((s, e) => s + e.amount, 0);
+
+  return { phaseRows, blRows, blTotal, computedSurcharges, grundhonorar, zuschlaegeSum, gesamthonorar: grundhonorar + blTotal + zuschlaegeSum };
+}
+
+// ── Honorar PDF ───────────────────────────────────────────────────────────────
+
+async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
+  const { data: calc, error: calcErr } = await supabase
+    .from('FEE_CALCULATION_MASTER')
+    .select('*')
+    .eq('ID', calcMasterId)
+    .eq('TENANT_ID', tenantId)
+    .single();
+  if (calcErr || !calc) throw { status: 404, message: 'Honorarberechnung nicht gefunden' };
+
+  const { phaseRows, blRows, blTotal, computedSurcharges, grundhonorar, zuschlaegeSum, gesamthonorar }
+    = await buildHonorarCalcData(supabase, calcMasterId, tenantId);
 
   // Load zone name
   let zoneName = null;
@@ -777,70 +887,24 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   const companyId = co.ID ?? null;
   const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId });
 
-  const grundhonorar = phaseRows.reduce((s, r) => s + (Number(r.PHASE_REVENUE) || 0), 0);
-  const blTotal = blRows.reduce((s, r) => s + (Number(r.AMOUNT) || 0), 0);
-
-  // Recompute surcharge amounts from PERCENT + BL_FILTER (stored AMOUNT may be stale)
-  const phaseIdsForSurcharge = phaseRows.map(r => r.ID);
-  let runningTotal = 0;
-  const computedSurcharges = (surchargeRows || []).map(r => {
-    const selectedLphIds = r.LPH_FILTER
-      ? (() => { try { return JSON.parse(r.LPH_FILTER); } catch { return phaseIdsForSurcharge; } })()
-      : phaseIdsForSurcharge;
-    const selectedPhaseRows = phaseRows.filter(p => selectedLphIds.includes(p.ID));
-    const phaseBase = selectedPhaseRows.reduce((s, p) => s + (Number(p.PHASE_REVENUE) || 0), 0);
-
-    let blContrib = 0;
-    let selectedBlRows = [];
-    if (r.BL_FILTER) {
-      try {
-        const selectedBlIds = JSON.parse(r.BL_FILTER);
-        selectedBlRows = blRows.filter(b => selectedBlIds.includes(b.ID));
-        blContrib = selectedBlRows.reduce((s, b) => s + (Number(b.AMOUNT) || 0), 0);
-      } catch { /* ignore */ }
-    }
-
-    const base = phaseBase + blContrib;
-    const effectiveBase = r.CALC_MODE === 'cumulative' ? base + runningTotal : base;
-    const amount = ((Number(r.PERCENT) || 0) / 100) * effectiveBase;
-    runningTotal += amount;
-
-    // Per-component breakdown for the detailed PDF table
-    const lphItems = selectedPhaseRows
-      .filter(p => (Number(p.PHASE_REVENUE) || 0) !== 0)
-      .map(p => ({ label: p.PHASE_LABEL || '', amount: Number(p.PHASE_REVENUE) || 0 }));
-    const surchargeBls = selectedBlRows
-      .filter(b => (Number(b.AMOUNT) || 0) !== 0)
-      .map(b => ({ name: [b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || 'BL', amount: Number(b.AMOUNT) || 0 }));
-
-    return {
-      r,
-      effectiveBase: Math.round(effectiveBase * 100) / 100,
-      amount: Math.round(amount * 100) / 100,
-      lphItems,
-      surchargeBls,
-    };
-  });
-  const zuschlaegeSum = computedSurcharges.reduce((s, e) => s + e.amount, 0);
-
   const context = {
     docDate: new Date(),
     logoDataUri,
     seller: {
-      name:       co.COMPANY_NAME_1 || '',
-      street:     co.STREET || '',
-      postCode:   co.POST_CODE || '',
-      city:       co.CITY || '',
-      iban:       co.IBAN || '',
-      bic:        co.BIC || '',
-      taxId:      co['TAX-ID'] || '',
-      taxNumber:  co.TAX_NUMBER || '',
+      name:      co.COMPANY_NAME_1 || '',
+      street:    co.STREET || '',
+      postCode:  co.POST_CODE || '',
+      city:      co.CITY || '',
+      iban:      co.IBAN || '',
+      bic:       co.BIC || '',
+      taxId:     co['TAX-ID'] || '',
+      taxNumber: co.TAX_NUMBER || '',
     },
     calc: {
-      nameShort:          calc.NAME_SHORT || '',
-      nameLong:           calc.NAME_LONG || '',
+      nameShort:           calc.NAME_SHORT || '',
+      nameLong:            calc.NAME_LONG || '',
       zoneName,
-      zonePercent:        calc.ZONE_PERCENT ?? '',
+      zonePercent:         calc.ZONE_PERCENT ?? '',
       constructionCostsK0: calc.CONSTRUCTION_COSTS_K0 ?? null,
       constructionCostsK1: calc.CONSTRUCTION_COSTS_K1 ?? null,
       constructionCostsK2: calc.CONSTRUCTION_COSTS_K2 ?? null,
@@ -854,7 +918,7 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
     },
     projectLabel,
     phases: phaseRows.map(r => {
-      const base = Number(r.REVENUE_BASE) || 0;
+      const base    = Number(r.REVENUE_BASE) || 0;
       const pctBase = Number(r.FEE_PERCENT_BASE) || 0;
       return {
         phaseLabel:     r.PHASE_LABEL || '',
@@ -878,34 +942,31 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
     }),
     blTotal,
     surcharges: computedSurcharges.map(({ r, effectiveBase, amount, lphItems, surchargeBls }) => {
-      // Build a human-readable LPH detail string for the summary line
       let lphDetail = null;
       if (r.LPH_FILTER) {
         try {
-          const ids = JSON.parse(r.LPH_FILTER);
+          const ids    = JSON.parse(r.LPH_FILTER);
           const labels = phaseRows
             .filter(p => ids.includes(p.ID))
             .map(p => p.PHASE_LABEL || `LPH ${p.FEE_PHASE_ID}`);
-          if (labels.length && labels.length < phaseRows.length) {
-            lphDetail = labels.join(', ');
-          }
+          if (labels.length && labels.length < phaseRows.length) lphDetail = labels.join(', ');
         } catch { /* ignore */ }
       }
       return {
-        nameShort:    r.NAME_SHORT || '',
-        nameLong:     r.NAME_LONG || '',
-        percent:      r.PERCENT ?? '',
-        baseAmount:   effectiveBase,
+        nameShort:   r.NAME_SHORT || '',
+        nameLong:    r.NAME_LONG || '',
+        percent:     r.PERCENT ?? '',
+        baseAmount:  effectiveBase,
         amount,
-        calcMode:     r.CALC_MODE || 'parallel',
+        calcMode:    r.CALC_MODE || 'parallel',
         lphDetail,
-        lphItems,      // [{label, amount}] for detailed breakdown
-        surchargeBls,  // [{name, amount}] for detailed breakdown
+        lphItems,
+        surchargeBls,
       };
     }),
     grundhonorar,
     zuschlaegeSum,
-    gesamthonorar: grundhonorar + blTotal + zuschlaegeSum,
+    gesamthonorar,
   };
 
   const html = env().render(path.join('modern_a', 'honorar.njk'), context);

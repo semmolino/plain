@@ -1039,6 +1039,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                 </tr>
               </thead>
               <tbody>
+                {/* LPH phase rows */}
                 {phases.filter(p => (p.PHASE_REVENUE ?? 0) !== 0).map(p => (
                   <tr key={p.ID}>
                     <td style={{ fontSize: 13 }}>{p.PHASE_LABEL}</td>
@@ -1046,44 +1047,41 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                     <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(p.PHASE_REVENUE)}</td>
                   </tr>
                 ))}
-                {blItems.map((b, i) => blComputedAmounts[i] !== 0 && (
-                  <tr key={i} style={{ background: '#f0fdf4' }}>
+                {/* Grundhonorar summary */}
+                <tr style={{ borderTop: '2px solid #d1d5db', background: '#f9fafb' }}>
+                  <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>Grundhonorar</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(totalPhaseRev)}</td>
+                </tr>
+                {/* BL rows */}
+                {blTotal !== 0 && blItems.map((b, i) => blComputedAmounts[i] !== 0 && (
+                  <tr key={`bl-${i}`}>
                     <td style={{ fontSize: 13 }}>{[b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || `BL ${i + 1}`}</td>
-                    <td style={{ fontSize: 11, color: '#166534' }}>Besondere Leistung</td>
+                    <td style={{ fontSize: 11, color: '#6b7280' }}>Besondere Leistung</td>
                     <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(blComputedAmounts[i])}</td>
                   </tr>
                 ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th colSpan={2}>Grundhonorar</th>
-                  <th style={{ textAlign: 'right' }}>{fmtEur(totalPhaseRev)}</th>
-                </tr>
+                {/* BL sum */}
                 {blTotal !== 0 && (
-                  <tr>
-                    <th colSpan={2}>+ Besondere Leistungen</th>
-                    <th style={{ textAlign: 'right' }}>{fmtEur(blTotal)}</th>
+                  <tr style={{ borderTop: '1px solid #d1d5db', background: '#f9fafb' }}>
+                    <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>+ Besondere Leistungen</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(blTotal)}</td>
                   </tr>
                 )}
+                {/* Zuschläge sum */}
                 {totalSurchargeAmt !== 0 && (
-                  <tr>
-                    <th colSpan={2}>+ Zuschläge / Nachlässe</th>
-                    <th style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? '#166534' : '#991b1b' }}>{fmtEur(totalSurchargeAmt)}</th>
+                  <tr style={{ borderTop: '1px solid #d1d5db', background: '#f9fafb' }}>
+                    <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>+ Zuschläge / Nachlässe</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(totalSurchargeAmt)}</td>
                   </tr>
                 )}
-                <tr>
-                  <th colSpan={2}>Gesamthonorar</th>
-                  <th style={{ textAlign: 'right', fontSize: 14 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</th>
+                {/* Gesamthonorar */}
+                <tr style={{ borderTop: '2px solid #374151' }}>
+                  <td colSpan={2} style={{ fontWeight: 700, fontSize: 15, padding: '8px 8px' }}>Gesamthonorar</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 15, padding: '8px 8px' }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</td>
                 </tr>
-              </tfoot>
+              </tbody>
             </table>
           </div>
-          {totalSurchargeAmt !== 0 && (
-            <p style={{ fontSize: 11, color: '#6b7280', marginBottom: 12 }}>
-              Zuschläge werden proportional auf Grundleistungen und Besondere Leistungen verteilt.
-            </p>
-          )}
-
           {/* Edit mode: sync choice */}
           {isEdit && (
             <div className="admin-block" style={{ background: '#fef9c3', border: '1px solid #fbbf24', padding: 14 }}>
