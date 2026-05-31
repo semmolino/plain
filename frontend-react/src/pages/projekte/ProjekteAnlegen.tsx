@@ -4,8 +4,8 @@ import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers,
-  fetchActiveEmployees, fetchActiveRoles, fetchBillingTypes, fetchDepartments,
-  createProject, type E2PRow, type StructureDraftRow,
+  fetchActiveEmployees, fetchActiveRoles, fetchDepartments,
+  createProject, type E2PRow,
 } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
@@ -32,11 +32,6 @@ function emptyBasic(): BasicForm {
   return { name_long: '', company_id: '', project_status_id: '', project_type_id: '', department_id: '', project_manager_id: '', address_id: '', contact_id: '' }
 }
 
-function newStructRow(): StructureDraftRow {
-  const tmp = 't' + Date.now().toString(36) + Math.floor(Math.random() * 1000)
-  return { tmp_key: tmp, father_tmp_key: '', NAME_SHORT: '', NAME_LONG: '', BILLING_TYPE_ID: '', EXTRAS_PERCENT: '' }
-}
-
 // ── Sub-wizard components ─────────────────────────────────────────────────────
 
 function StepIndicator({ step, total }: { step: number; total: number }) {
@@ -58,7 +53,6 @@ export function ProjekteAnlegen() {
   const [addrText, setAddrText]   = useState('')
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<number>>(new Set())
   const [e2p, setE2p]             = useState<E2PState>({})
-  const [structDraft, setStructDraft] = useState<StructureDraftRow[]>([])
   const [msg, setMsg]             = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
   const [newProjectId, setNewProjectId]   = useState<number | null>(null)
 
@@ -68,7 +62,6 @@ export function ProjekteAnlegen() {
   const { data: mgrData     } = useQuery({ queryKey: ['project-managers'],  queryFn: fetchProjectManagers  })
   const { data: empData     } = useQuery({ queryKey: ['active-employees'],  queryFn: fetchActiveEmployees  })
   const { data: roleData    } = useQuery({ queryKey: ['active-roles'],      queryFn: fetchActiveRoles      })
-  const { data: btData      } = useQuery({ queryKey: ['billing-types'],     queryFn: fetchBillingTypes     })
   const { data: companyData } = useQuery({ queryKey: ['companies'],         queryFn: fetchCompanies        })
   const addressId = basic.address_id ? Number(basic.address_id) : null
   const { data: contactData } = useQuery({
@@ -83,7 +76,6 @@ export function ProjekteAnlegen() {
   const managers    = mgrData?.data     ?? []
   const employees = empData?.data     ?? []
   const roles     = roleData?.data    ?? []
-  const btypes    = btData?.data      ?? []
   const contacts  = contactData?.data ?? []
   const companies = companyData?.data ?? []
 
@@ -110,7 +102,7 @@ export function ProjekteAnlegen() {
 
   function handleFinish() {
     setStep(1); setBasic(emptyBasic()); setAddrText('')
-    setSelectedEmpIds(new Set()); setE2p({}); setStructDraft([])
+    setSelectedEmpIds(new Set()); setE2p({})
     setNewProjectId(null); setMsg(null)
   }
 
@@ -144,20 +136,6 @@ export function ProjekteAnlegen() {
         sp_rate:         role?.SP_RATE != null ? String(role.SP_RATE) : (prev[empId]?.sp_rate ?? ''),
       },
     }))
-  }
-
-  function addStructRow() {
-    setStructDraft(d => [...d, newStructRow()])
-  }
-
-  function removeStructRow(tmpKey: string) {
-    setStructDraft(d => d.filter(r => r.tmp_key !== tmpKey).map(r => ({
-      ...r, father_tmp_key: r.father_tmp_key === tmpKey ? '' : r.father_tmp_key,
-    })))
-  }
-
-  function setStructField(tmpKey: string, field: keyof StructureDraftRow, value: string) {
-    setStructDraft(d => d.map(r => r.tmp_key === tmpKey ? { ...r, [field]: value } : r))
   }
 
   function validateStep1() {
@@ -206,7 +184,6 @@ export function ProjekteAnlegen() {
       address_id:         Number(basic.address_id),
       contact_id:         Number(basic.contact_id),
       employee2project:   e2pRows.length ? e2pRows : undefined,
-      project_structure:  structDraft.length ? structDraft : undefined,
     })
   }
 
