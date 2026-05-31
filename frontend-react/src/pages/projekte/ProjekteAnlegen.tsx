@@ -347,72 +347,77 @@ export function ProjekteAnlegen() {
         </div>
       )}
 
-      {/* ── Step 4: Projektstruktur ── */}
+      {/* ── Step 4: Projektstruktur + HOAI ── */}
       {step === 4 && (
         <div className="wizard-step-content">
           <h3 className="wizard-step-title">Schritt 4: Projektstruktur</h3>
           <p className="admin-section-hint">Optional — Strukturelemente können später ergänzt werden.</p>
-          <button className="btn-small btn-save" type="button" onClick={addStructRow} style={{ marginBottom: 8 }}>+ Zeile hinzufügen</button>
-          {structDraft.length > 0 && (
-            <div className="table-scroll">
-              <table className="master-table">
-                <thead>
-                  <tr><th>#</th><th>Kürzel</th><th>Bezeichnung</th><th>Abrechnungsart*</th><th>NK %</th><th>Übergeordnet</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {structDraft.map((r, i) => (
-                    <tr key={r.tmp_key}>
-                      <td>{i + 1}</td>
-                      <td><input className="tbl-input" style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
-                      <td><input className="tbl-input" style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
-                      <td>
-                        <select className="tbl-select" value={String(r.BILLING_TYPE_ID)} onChange={e => setStructField(r.tmp_key, 'BILLING_TYPE_ID', e.target.value)}>
-                          <option value="">Bitte wählen …</option>
-                          {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          className="tbl-input"
-                          type="number" min={0} max={100} step={0.1}
-                          style={{ width: 70 }}
-                          value={String(r.EXTRAS_PERCENT)}
-                          placeholder="0"
-                          onChange={e => setStructField(r.tmp_key, 'EXTRAS_PERCENT', e.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <select className="tbl-select" value={r.father_tmp_key} onChange={e => setStructField(r.tmp_key, 'father_tmp_key', e.target.value)}>
-                          <option value="">(Root)</option>
-                          {structDraft.filter(x => x.tmp_key !== r.tmp_key).map(x => (
-                            <option key={x.tmp_key} value={x.tmp_key}>
-                              {(`${x.NAME_SHORT} ${x.NAME_LONG}`).trim() || `Zeile ${structDraft.indexOf(x) + 1}`}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td><button className="btn-small" type="button" onClick={() => removeStructRow(r.tmp_key)}>Entfernen</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {!newProjectId && (
+            <>
+              <button className="btn-small btn-save" type="button" onClick={addStructRow} style={{ marginBottom: 8 }}>+ Zeile hinzufügen</button>
+              {structDraft.length > 0 && (
+                <div className="table-scroll">
+                  <table className="master-table">
+                    <thead>
+                      <tr><th>#</th><th>Kürzel</th><th>Bezeichnung</th><th>Abrechnungsart*</th><th>NK %</th><th>Übergeordnet</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {structDraft.map((r, i) => (
+                        <tr key={r.tmp_key}>
+                          <td>{i + 1}</td>
+                          <td><input className="tbl-input" style={{ width: 70 }} value={r.NAME_SHORT} onChange={e => setStructField(r.tmp_key, 'NAME_SHORT', e.target.value)} /></td>
+                          <td><input className="tbl-input" style={{ width: 140 }} value={r.NAME_LONG} onChange={e => setStructField(r.tmp_key, 'NAME_LONG', e.target.value)} /></td>
+                          <td>
+                            <select className="tbl-select" value={String(r.BILLING_TYPE_ID)} onChange={e => setStructField(r.tmp_key, 'BILLING_TYPE_ID', e.target.value)}>
+                              <option value="">Bitte wählen …</option>
+                              {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              className="tbl-input"
+                              type="number" min={0} max={100} step={0.1}
+                              style={{ width: 70 }}
+                              value={String(r.EXTRAS_PERCENT)}
+                              placeholder="0"
+                              onChange={e => setStructField(r.tmp_key, 'EXTRAS_PERCENT', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <select className="tbl-select" value={r.father_tmp_key} onChange={e => setStructField(r.tmp_key, 'father_tmp_key', e.target.value)}>
+                              <option value="">(Root)</option>
+                              {structDraft.filter(x => x.tmp_key !== r.tmp_key).map(x => (
+                                <option key={x.tmp_key} value={x.tmp_key}>
+                                  {(`${x.NAME_SHORT} ${x.NAME_LONG}`).trim() || `Zeile ${structDraft.indexOf(x) + 1}`}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td><button className="btn-small" type="button" onClick={() => removeStructRow(r.tmp_key)}>Entfernen</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
+
+          {/* HOAI section — always visible on step 4 */}
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+            <h3 className="wizard-step-title" style={{ marginBottom: 8 }}>HOAI-Kalkulation (optional)</h3>
+            {!newProjectId ? (
+              <p className="admin-section-hint" style={{ paddingTop: 4 }}>
+                Nach dem Anlegen des Projekts können Sie hier eine HOAI-Kalkulation hinzufügen.
+              </p>
+            ) : (
+              <HonorarWizard initialProjectId={newProjectId} onDone={handleFinish} />
+            )}
+          </div>
         </div>
       )}
 
       <Message text={msg?.text ?? null} type={msg?.type} />
-
-      {/* ── Post-creation: HOAI wizard inline on step 4 ── */}
-      {step === 4 && newProjectId && (
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-          <h3 className="wizard-step-title" style={{ marginBottom: 8 }}>HOAI-Kalkulation (optional)</h3>
-          <HonorarWizard
-            initialProjectId={newProjectId}
-            onDone={handleFinish}
-          />
-        </div>
-      )}
 
       {/* Navigation */}
       <div className="wizard-nav">
@@ -424,7 +429,7 @@ export function ProjekteAnlegen() {
           </button>
         )}
         {step === 4 && newProjectId && (
-          <button type="button" onClick={handleFinish}>Überspringen</button>
+          <button type="button" onClick={handleFinish}>Fertig / Überspringen</button>
         )}
       </div>
     </div>

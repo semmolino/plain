@@ -1567,7 +1567,7 @@ async function copyProject(supabase, { projectId, tenantId }) {
       if (phases?.length) await supabase.from("FEE_CALCULATION_PHASE").insert(phases.map(p => ({ ...p, FEE_MASTER_ID: newCalc.ID })));
 
       const { data: blItems } = await supabase.from("FEE_CALCULATION_BL")
-        .select("ID, NAME, LPH_REF, AMOUNT, SORT_ORDER")
+        .select("ID, NAME, NAME_SHORT, LPH_REF, LPH_PHASE_ID, AMOUNT_TYPE, PERCENT, KX_REF, AMOUNT, SORT_ORDER")
         .eq("FEE_CALC_MASTER_ID", calc.ID).eq("TENANT_ID", tenantId);
       const oldToNewBlId = new Map();
       if (blItems?.length) {

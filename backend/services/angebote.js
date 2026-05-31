@@ -547,32 +547,43 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
 // ── HOAI attachment helper (called during conversion) ────────────────────────
 
 async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherId, projectId, tenantId }) {
-  // Load phases with labels
   const { loadPhaseRowsWithLabels } = require('./stammdaten');
   const phaseRows = await loadPhaseRowsWithLabels(supabase, calcMasterId);
   const activePhases = phaseRows.filter(r => (Number(r.PHASE_REVENUE) || 0) !== 0 || (Number(r.FEE_PERCENT) || 0) !== 0);
-  if (!activePhases.length) return;
 
-  const phaseIds  = [...new Set(activePhases.map(r => r.FEE_PHASE_ID).filter(Boolean))];
-  const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, NAME_SHORT, NAME_LONG').in('ID', phaseIds);
-  const phaseMap = new Map((phaseDefs || []).map(r => [r.ID, r]));
-
-  const { data: father } = await supabase.from('PROJECT_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).single();
-  const extrasPercent = Number(father?.EXTRAS_PERCENT ?? 0) || 0;
-
-  // Step 1: Load BL items (independent try/catch so BL insert is not skipped due to allocation errors)
+  // Step 1: Load BL items BEFORE early-return so BL-only calcs are handled correctly
   let blItems = [];
   const blQueryRes = await supabase.from('FEE_CALCULATION_BL')
-    .select('ID, NAME_SHORT, NAME, AMOUNT')
+    .select('ID, NAME, AMOUNT')   // NAME_SHORT derived from NAME to avoid migration-0043 dependency
     .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId)
     .order('SORT_ORDER', { ascending: true });
   if (blQueryRes.error) {
-    console.error('[attachFeeCalc] BL query error:', blQueryRes.error.message);
+    console.error('[attachFeeCalc] BL query error (calcMasterId=%d):', calcMasterId, blQueryRes.error.message);
   } else {
     blItems = blQueryRes.data || [];
   }
+  console.log('[attachFeeCalc] calcMasterId=%d fatherId=%s activePhases=%d blItems=%d', calcMasterId, fatherId, activePhases.length, blItems.length);
 
-  // Step 2: Compute surcharge allocations (soft-fail — BL items are still created without alloc)
+  if (!activePhases.length && !blItems.length) return; // nothing to create
+
+  // Phase label map (only needed when there are active phases)
+  let phaseMap = new Map();
+  if (activePhases.length) {
+    const phaseIds = [...new Set(activePhases.map(r => r.FEE_PHASE_ID).filter(Boolean))];
+    if (phaseIds.length) {
+      const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, NAME_SHORT, NAME_LONG').in('ID', phaseIds);
+      phaseMap = new Map((phaseDefs || []).map(r => [r.ID, r]));
+    }
+  }
+
+  // EXTRAS_PERCENT from parent node (0 if no parent)
+  let extrasPercent = 0;
+  if (fatherId) {
+    const { data: father } = await supabase.from('PROJECT_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).single();
+    extrasPercent = Number(father?.EXTRAS_PERCENT ?? 0) || 0;
+  }
+
+  // Step 2: Compute surcharge allocations (soft-fail)
   let lphAlloc = {}, blAlloc = {};
   try {
     const surRes = await supabase.from('FEE_CALCULATION_SURCHARGES').select('AMOUNT, LPH_FILTER, BL_FILTER')
@@ -592,7 +603,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
       if (!base) continue;
       const lphAmt = amount * (lphBase / base);
       for (const p of selPhases) { const pRev = Number(p.PHASE_REVENUE) || 0; if (pRev) lphAlloc[p.ID] = (lphAlloc[p.ID] || 0) + (pRev / lphBase) * lphAmt; }
-      const blAmt  = amount * (blBase  / base);
+      const blAmt  = amount * (blBase / base);
       for (const b of selBls)  { const bAmt = Number(b.AMOUNT) || 0; if (bAmt) blAlloc[b.ID]  = (blAlloc[b.ID]  || 0) + (bAmt  / blBase)  * blAmt;  }
     }
   } catch (surErr) {
@@ -600,35 +611,35 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
   }
 
   // Step 3: Insert LPH structure rows
-  const insertRows = activePhases.map(r => {
-    const def = phaseMap.get(r.FEE_PHASE_ID) || {};
-    const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
-    return {
-      NAME_SHORT: def.NAME_SHORT || `LPH ${r.FEE_PHASE_ID}`,
-      NAME_LONG:  def.NAME_LONG  || null,
-      REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
-      PROJECT_ID: projectId, FATHER_ID: fatherId,
-      EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
-      REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
-      REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-      FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_PHASE_ID: r.ID,
-    };
-  });
-  let { data: created, error } = await supabase.from('PROJECT_STRUCTURE').insert(insertRows).select('ID');
-  if (error) {
-    // Retry without FEE_CALC_* columns if they don't exist (migrations not yet run)
-    const fallback = insertRows.map(({ FEE_CALC_MASTER_ID, FEE_CALC_PHASE_ID, ...rest }) => rest);
-    const { data: created2, error: err2 } = await supabase.from('PROJECT_STRUCTURE').insert(fallback).select('ID');
-    if (err2) throw err2;
-    created = created2;
-  }
-
-  // PROJECT_PROGRESS for LPH rows
-  if (created && created.length) {
-    await supabase.from('PROJECT_PROGRESS').insert(created.map(r => ({
-      STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
-      REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-    }))).catch(() => {});
+  let insertRows = [];
+  if (activePhases.length) {
+    insertRows = activePhases.map(r => {
+      const def = phaseMap.get(r.FEE_PHASE_ID) || {};
+      const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
+      return {
+        NAME_SHORT: def.NAME_SHORT || `LPH ${r.FEE_PHASE_ID}`,
+        NAME_LONG:  def.NAME_LONG  || null,
+        REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
+        PROJECT_ID: projectId, FATHER_ID: fatherId,
+        EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
+        REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
+        REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+        FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_PHASE_ID: r.ID,
+      };
+    });
+    let { data: created, error } = await supabase.from('PROJECT_STRUCTURE').insert(insertRows).select('ID');
+    if (error) {
+      const fallback = insertRows.map(({ FEE_CALC_MASTER_ID, FEE_CALC_PHASE_ID, ...rest }) => rest);
+      const { data: created2, error: err2 } = await supabase.from('PROJECT_STRUCTURE').insert(fallback).select('ID');
+      if (err2) throw err2;
+      created = created2;
+    }
+    if (created && created.length) {
+      await supabase.from('PROJECT_PROGRESS').insert(created.map(r => ({
+        STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
+        REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+      }))).catch(() => {});
+    }
   }
 
   // Step 4: Insert BL structure rows
@@ -636,7 +647,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
     const blInsert = blItems.map(b => {
       const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
       return {
-        NAME_SHORT: b.NAME_SHORT || b.NAME || 'BL',
+        NAME_SHORT: b.NAME || 'BL',
         NAME_LONG:  b.NAME || null,
         REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
         PROJECT_ID: projectId, FATHER_ID: fatherId,
@@ -646,21 +657,21 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
         FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_BL_ID: b.ID,
       };
     });
-    const { data: blCreated, error: blErr } = await supabase.from('PROJECT_STRUCTURE').insert(blInsert).select('ID');
+    let blCreated = null;
+    const { data: blData, error: blErr } = await supabase.from('PROJECT_STRUCTURE').insert(blInsert).select('ID');
     if (blErr) {
-      console.error('[attachFeeCalc] BL insert error (trying fallback):', blErr.message);
-      // Retry without migration-0043 columns
+      console.error('[attachFeeCalc] BL insert error (trying fallback without FEE_CALC cols):', blErr.message);
       const blFallback = blInsert.map(({ FEE_CALC_MASTER_ID, FEE_CALC_BL_ID, ...rest }) => rest);
-      const { data: blCreated2, error: blErr2 } = await supabase.from('PROJECT_STRUCTURE').insert(blFallback).select('ID');
+      const { data: blData2, error: blErr2 } = await supabase.from('PROJECT_STRUCTURE').insert(blFallback).select('ID');
       if (blErr2) {
         console.error('[attachFeeCalc] BL fallback insert error:', blErr2.message);
-      } else if (blCreated2 && blCreated2.length) {
-        await supabase.from('PROJECT_PROGRESS').insert(blCreated2.map(r => ({
-          STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
-          REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-        }))).catch(() => {});
+      } else {
+        blCreated = blData2;
       }
-    } else if (blCreated && blCreated.length) {
+    } else {
+      blCreated = blData;
+    }
+    if (blCreated && blCreated.length) {
       await supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
         STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
         REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
@@ -668,15 +679,17 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
     }
   }
 
-  // Update parent node REVENUE = sum of all children (LPH + BL) revenues
-  const lphTotal = insertRows.reduce((sum, r) => sum + (Number(r.REVENUE) || 0), 0);
-  const blTotal  = blItems.reduce((acc, b) => acc + fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0)), 0);
-  const parentRev = fmt2(lphTotal + blTotal);
-  if (parentRev > 0) {
-    await supabase.from('PROJECT_STRUCTURE').update({
-      REVENUE: parentRev,
-      EXTRAS:  fmt2(parentRev * extrasPercent / 100),
-    }).eq('ID', fatherId).catch(() => {});
+  // Update parent node REVENUE = sum of children (LPH + BL) revenues
+  if (fatherId) {
+    const lphTotal = insertRows.reduce((sum, r) => sum + (Number(r.REVENUE) || 0), 0);
+    const blTotal  = blItems.reduce((acc, b) => acc + fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0)), 0);
+    const parentRev = fmt2(lphTotal + blTotal);
+    if (parentRev > 0) {
+      await supabase.from('PROJECT_STRUCTURE').update({
+        REVENUE: parentRev,
+        EXTRAS:  fmt2(parentRev * extrasPercent / 100),
+      }).eq('ID', fatherId).catch(() => {});
+    }
   }
 }
 
@@ -879,21 +892,41 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   try {
     const { data: feeCalcs } = await supabase
       .from('FEE_CALCULATION_MASTER')
-      .select('ID, ATTACH_TO_OFFER_STRUCTURE_ID')
+      .select('ID, NAME_SHORT, NAME_LONG, ATTACH_TO_OFFER_STRUCTURE_ID')
       .eq('OFFER_ID', offerId)
       .eq('TENANT_ID', tenantId);
 
     if (feeCalcs && feeCalcs.length > 0) {
       for (const calc of feeCalcs) {
-        // Set PROJECT_ID and clear OFFER_ID now that the project exists
+        // Move calculation from offer to project
         await supabase.from('FEE_CALCULATION_MASTER')
           .update({ PROJECT_ID: project.ID })
           .eq('ID', calc.ID).eq('TENANT_ID', tenantId);
 
-        // If user picked a parent offer-structure node, map it to the new project-structure node
-        const fatherId = calc.ATTACH_TO_OFFER_STRUCTURE_ID
+        // Resolve parent project-structure node
+        let fatherId = calc.ATTACH_TO_OFFER_STRUCTURE_ID
           ? (offerIdToNew.get(calc.ATTACH_TO_OFFER_STRUCTURE_ID) || null)
-          : (offerIdToNew.size > 0 ? offerIdToNew.values().next().value : null); // root fallback
+          : (offerIdToNew.size > 0 ? offerIdToNew.values().next().value : null);
+
+        // No matching parent found — create a root node for this HOAI calculation
+        if (!fatherId) {
+          const { data: rootNode } = await supabase.from('PROJECT_STRUCTURE').insert([{
+            NAME_SHORT:        calc.NAME_SHORT || 'Honorar',
+            NAME_LONG:         calc.NAME_LONG  || null,
+            PROJECT_ID:        project.ID, BILLING_TYPE_ID: 1, FATHER_ID: null,
+            REVENUE: 0, EXTRAS: 0, COSTS: 0, EXTRAS_PERCENT: 0,
+            REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
+            REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+            TENANT_ID: tenantId,
+          }]).select('ID').single();
+          if (rootNode) {
+            fatherId = rootNode.ID;
+            await supabase.from('PROJECT_PROGRESS').insert([{
+              STRUCTURE_ID: rootNode.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: 0,
+              REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+            }]).catch(() => {});
+          }
+        }
 
         if (fatherId) {
           await attachFeeCalcToProjectStructure(supabase, { calcMasterId: calc.ID, fatherId, projectId: project.ID, tenantId });
@@ -977,7 +1010,7 @@ async function copyOffer(supabase, { offerId, tenantId }) {
     if (phases?.length) await supabase.from('FEE_CALCULATION_PHASE').insert(phases.map(p => ({ ...p, FEE_MASTER_ID: newCalc.ID })));
 
     const { data: blItems } = await supabase.from('FEE_CALCULATION_BL')
-      .select('ID, NAME, LPH_REF, AMOUNT, SORT_ORDER')
+      .select('ID, NAME, NAME_SHORT, LPH_REF, LPH_PHASE_ID, AMOUNT_TYPE, PERCENT, KX_REF, AMOUNT, SORT_ORDER')
       .eq('FEE_CALC_MASTER_ID', calc.ID).eq('TENANT_ID', tenantId);
     const oldToNewBlId = new Map();
     if (blItems?.length) {
