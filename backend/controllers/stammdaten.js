@@ -409,7 +409,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     try {
       const [blItemsRes, surchargeRowsRes, existingBlStructRes] = await Promise.all([
         supabase.from("FEE_CALCULATION_BL").select("ID, NAME_SHORT, NAME, AMOUNT")
-          .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("SORT_ORDER", { ascending: true }),
+          .eq("FEE_CALC_MASTER_ID", id).order("SORT_ORDER", { ascending: true }),
         supabase.from("FEE_CALCULATION_SURCHARGES").select("AMOUNT, LPH_FILTER, BL_FILTER")
           .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("SORT_ORDER", { ascending: true }),
         supabase.from("PROJECT_STRUCTURE").select("ID, FEE_CALC_BL_ID")
@@ -1506,7 +1506,7 @@ async function syncFeeCalcToStructure(req, res, supabase) {
     try {
       const [blStructRes, blItemsRes] = await Promise.all([
         supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FEE_CALC_BL_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
-        supabase.from("FEE_CALCULATION_BL").select("ID, NAME_SHORT, NAME, AMOUNT").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("SORT_ORDER", { ascending: true }),
+        supabase.from("FEE_CALCULATION_BL").select("ID, NAME_SHORT, NAME, AMOUNT").eq("FEE_CALC_MASTER_ID", id).order("SORT_ORDER", { ascending: true }),
       ]);
       blStructRows = blStructRes.data || [];
       blItems = blItemsRes.data || [];
