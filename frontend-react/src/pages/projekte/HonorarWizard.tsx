@@ -49,11 +49,12 @@ function phaseRevenue(base: number | null, pct: number | null): number | null {
   return (pct * base) / 100
 }
 
-/** Compute effective base and amount for each surcharge row, honouring LPH filter + calc mode + BL inclusion */
+/** Compute effective base and amount for each surcharge row, honouring LPH filter + calc mode + BL filter */
 function computeSurchargeEffects(
   phases: FeePhaseRow[],
   surcharges: FeeCalcSurcharge[],
-  blTotal = 0,
+  blItems: FeeCalcBl[] = [],
+  blComputedAmounts: number[] = [],
 ): { effectiveBase: number; amount: number }[] {
   const results: { effectiveBase: number; amount: number }[] = []
   let runningTotal = 0
@@ -64,7 +65,15 @@ function computeSurchargeEffects(
     const phaseBase = phases
       .filter(p => selectedIds.includes(p.ID))
       .reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
-    const blContrib = r.INCLUDE_BL ? blTotal : 0
+    let blContrib = 0
+    if (r.BL_FILTER) {
+      try {
+        const selectedBlIds = JSON.parse(r.BL_FILTER) as number[]
+        blContrib = blItems.reduce((s, b, i) => {
+          return (b.ID != null && selectedBlIds.includes(b.ID)) ? s + (blComputedAmounts[i] ?? 0) : s
+        }, 0)
+      } catch { /* ignore parse error */ }
+    }
     const base = phaseBase + blContrib
     const effectiveBase = r.CALC_MODE === 'cumulative' ? base + runningTotal : base
     const amount = ((r.PERCENT ?? 0) / 100) * effectiveBase
@@ -126,7 +135,7 @@ function newSurchargeRow(calcMasterId: number, sortOrder: number): FeeCalcSurcha
   return {
     FEE_CALC_MASTER_ID: calcMasterId, FEE_SURCHARGE_ID: null,
     NAME_SHORT: '', NAME_LONG: '', PERCENT: null, BASE_AMOUNT: null, AMOUNT: null,
-    SORT_ORDER: sortOrder, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false,
+    SORT_ORDER: sortOrder, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false, BL_FILTER: null,
   }
 }
 
@@ -202,15 +211,15 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
   const totalPhaseRev = phases.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
 
   // Compute surcharges without BL first (for pct_gesamthonorar BL base)
-  const surchargeEffectsNoBl = computeSurchargeEffects(phases, surcharges, 0)
+  const surchargeEffectsNoBl = computeSurchargeEffects(phases, surcharges, [], [])
   const surchargeNoBlTotal = surchargeEffectsNoBl.reduce((s, e) => s + e.amount, 0)
 
   // Compute each BL item's effective amount (may depend on surcharges above)
   const blComputedAmounts = blItems.map(b => computeBlItemAmount(b, phases, calcMaster, totalPhaseRev, surchargeNoBlTotal))
   const blTotal = blComputedAmounts.reduce((s, a) => s + a, 0)
 
-  // Compute surcharge effects with final BL total
-  const surchargeEffects = computeSurchargeEffects(phases, surcharges, blTotal)
+  // Compute final surcharge effects with per-BL-item filter applied
+  const surchargeEffects = computeSurchargeEffects(phases, surcharges, blItems, blComputedAmounts)
   const totalSurchargeAmt = surchargeEffects.reduce((s, e) => s + e.amount, 0)
 
   // Load structure nodes when project changes
@@ -362,9 +371,11 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
         SORT_ORDER: i,
         AMOUNT: computeBlItemAmount(b, phases, calcMaster, totalPhaseRev, surchargeNoBlTotal),
       }))
-      await saveFeeCalcBl(calcMaster.ID, blToSave)
+      const savedBl = await saveFeeCalcBl(calcMaster.ID, blToSave)
+      // Update state with DB-assigned IDs (needed for BL_FILTER in surcharges)
+      setBlItems(savedBl.data ?? blToSave)
       setMsg({ text: 'Lade Zuschläge …', type: 'info' })
-      const blSum = blToSave.reduce((s, b) => s + (b.AMOUNT || 0), 0)
+      const blSum = (savedBl.data ?? blToSave).reduce((s, b) => s + (Number(b.AMOUNT) || 0), 0)
       const [surRes, globalRes] = await Promise.all([
         fetchFeeCalcSurcharges(calcMaster.ID),
         calcMaster.FEE_MASTER_ID ? fetchFeeSurchargesGlobal(calcMaster.FEE_MASTER_ID) : Promise.resolve({ data: [] as FeeSurchargeGlobal[] }),
@@ -387,7 +398,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     if (!calcMaster) return
     setLoading(true); setMsg({ text: 'Speichere Zuschläge …', type: 'info' })
     try {
-      const effects = computeSurchargeEffects(phases, surcharges)
+      const effects = computeSurchargeEffects(phases, surcharges, blItems, blComputedAmounts)
       const rowsToSave = surcharges.map((r, i) => ({
         ...r,
         SORT_ORDER: i,
@@ -487,7 +498,7 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
         FEE_CALC_MASTER_ID: calcMaster.ID, FEE_SURCHARGE_ID: g.ID,
         NAME_SHORT: g.NAME_SHORT, NAME_LONG: g.NAME_LONG ?? '',
         PERCENT: null, BASE_AMOUNT: totalPhaseRev + blTotal, AMOUNT: null,
-        SORT_ORDER: prev.length, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false,
+        SORT_ORDER: prev.length, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false, BL_FILTER: null,
       },
     ])
   }
@@ -523,6 +534,23 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
     setSurcharges(prev => prev.map((r, i) =>
       i !== surchargeIdx ? r : { ...r, LPH_FILTER: all ? null : JSON.stringify([]) }
     ))
+  }
+
+  function toggleSurchargeBl(surchargeIdx: number, blId: number) {
+    setSurcharges(prev => prev.map((r, i) => {
+      if (i !== surchargeIdx) return r
+      const current: number[] = r.BL_FILTER ? (JSON.parse(r.BL_FILTER) as number[]) : []
+      const next = current.includes(blId) ? current.filter(id => id !== blId) : [...current, blId]
+      return { ...r, BL_FILTER: next.length > 0 ? JSON.stringify(next) : null }
+    }))
+  }
+
+  function setSurchargeAllBl(surchargeIdx: number, all: boolean) {
+    setSurcharges(prev => prev.map((r, i) => {
+      if (i !== surchargeIdx) return r
+      const allIds = blItems.map(b => b.ID).filter((id): id is number => id != null)
+      return { ...r, BL_FILTER: all && allIds.length > 0 ? JSON.stringify(allIds) : null }
+    }))
   }
 
   // ── Phase row helpers ────────────────────────────────────────────────────────
@@ -814,14 +842,25 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
         <div className="wizard-step-content">
           <h3 className="wizard-step-title">{isEdit ? 'Schritt 4' : 'Schritt 5'}: Zuschläge &amp; Nachlässe</h3>
 
-          <div className="admin-block" style={{ marginBottom: 12 }}>
-            <span style={{ fontSize: 13, color: '#374151' }}>Grundhonorar (Summe LPH): </span>
-            <strong style={{ fontSize: 14 }}>{fmtEur(totalPhaseRev)}</strong>
-            {blTotal > 0 && (
-              <span style={{ marginLeft: 16, fontSize: 13, color: '#374151' }}>
-                + Besondere Leistungen: <strong>{fmtEur(blTotal)}</strong>
-              </span>
+          <div className="admin-block" style={{ marginBottom: 12, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div>
+              <span style={{ fontSize: 12, color: '#6b7280' }}>Grundhonorar: </span>
+              <strong>{fmtEur(totalPhaseRev)}</strong>
+            </div>
+            {blTotal !== 0 && (
+              <div>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>+ BL: </span>
+                <strong>{fmtEur(blTotal)}</strong>
+              </div>
             )}
+            <div>
+              <span style={{ fontSize: 12, color: '#6b7280' }}>+ Zuschläge: </span>
+              <strong>{fmtEur(totalSurchargeAmt)}</strong>
+            </div>
+            <div style={{ borderLeft: '2px solid #e5e7eb', paddingLeft: 16 }}>
+              <span style={{ fontSize: 12, color: '#6b7280' }}>Gesamt: </span>
+              <strong style={{ fontSize: 15 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</strong>
+            </div>
           </div>
 
           {/* Global suggestions */}
@@ -916,14 +955,24 @@ export function HonorarWizard({ existingId, initialProjectId, onDone }: WizardPr
                               </div>
                               {blItems.length > 0 && (
                                 <div style={{ marginBottom: 8 }}>
-                                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                                    <input type="checkbox" checked={r.INCLUDE_BL ?? false}
-                                      onChange={e => updateSurcharge(idx, 'INCLUDE_BL', e.target.checked)} />
-                                    <span>Auch auf Besondere Leistungen anwenden</span>
-                                    <span style={{ color: '#6b7280', fontSize: 11 }}>
-                                      (+{fmtEur(blTotal)} im Berechnungsbasis)
-                                    </span>
-                                  </label>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                    <strong style={{ fontSize: 12, color: '#374151' }}>Betroffene Besondere Leistungen:</strong>
+                                    <button type="button" className="btn-small" onClick={() => setSurchargeAllBl(idx, true)}>Alle</button>
+                                    <button type="button" className="btn-small" onClick={() => setSurchargeAllBl(idx, false)}>Keine</button>
+                                  </div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
+                                    {blItems.map(b => {
+                                      const selectedBlIds: number[] = r.BL_FILTER ? (JSON.parse(r.BL_FILTER) as number[]) : []
+                                      const checked = b.ID != null && selectedBlIds.includes(b.ID)
+                                      return (
+                                        <label key={b.ID ?? b.SORT_ORDER} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+                                          <input type="checkbox" checked={checked}
+                                            onChange={() => { if (b.ID != null) toggleSurchargeBl(idx, b.ID) }} />
+                                          {b.NAME_SHORT || b.NAME || `BL ${b.SORT_ORDER + 1}`}
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
                                 </div>
                               )}
                               <div>

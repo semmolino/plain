@@ -402,36 +402,41 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     const { data: createdRows, error: createErr } = await supabase.from("PROJECT_STRUCTURE").insert(insertRows).select("*");
     if (createErr) return res.status(500).json({ error: createErr.message });
 
-    // Insert BL items as PROJECT_STRUCTURE rows at same FATHER_ID level
-    const { data: blItems } = await supabase.from("FEE_CALCULATION_BL")
-      .select("ID, NAME_SHORT, NAME, AMOUNT")
-      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
-      .order("SORT_ORDER", { ascending: true });
-    if (blItems && blItems.length) {
-      const blInsertRows = blItems.map((bl) => {
-        const revenue = Number(bl.AMOUNT ?? 0) || 0;
-        const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
-        return {
-          NAME_SHORT: bl.NAME_SHORT || null,
-          NAME_LONG: bl.NAME || null,
-          REVENUE: revenue, EXTRAS: extras, COSTS: 0,
-          PROJECT_ID: calcMaster.PROJECT_ID, FATHER_ID: fatherId,
-          EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,
-          TENANT_ID: project.TENANT_ID,
-          REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
-          REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-          FEE_CALC_MASTER_ID: id,
-          FEE_CALC_BL_ID: bl.ID,
-        };
-      });
-      const { data: createdBlRows, error: blCreateErr } = await supabase.from("PROJECT_STRUCTURE").insert(blInsertRows).select("*");
-      if (blCreateErr) return res.status(500).json({ error: blCreateErr.message });
-      try {
-        const blProgressRows = (createdBlRows || []).map(svc.buildProjectProgressRow);
-        if (blProgressRows.length) {
-          await supabase.from("PROJECT_PROGRESS").insert(blProgressRows);
+    // Insert BL items as PROJECT_STRUCTURE rows at same FATHER_ID level (soft-fail if migration 0043 not yet run)
+    try {
+      const { data: blItems } = await supabase.from("FEE_CALCULATION_BL")
+        .select("ID, NAME_SHORT, NAME, AMOUNT")
+        .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+        .order("SORT_ORDER", { ascending: true });
+      if (blItems && blItems.length) {
+        const blInsertRows = blItems.map((bl) => {
+          const revenue = Number(bl.AMOUNT ?? 0) || 0;
+          const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
+          return {
+            NAME_SHORT: bl.NAME_SHORT || null,
+            NAME_LONG: bl.NAME || null,
+            REVENUE: revenue, EXTRAS: extras, COSTS: 0,
+            PROJECT_ID: calcMaster.PROJECT_ID, FATHER_ID: fatherId,
+            EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,
+            TENANT_ID: project.TENANT_ID,
+            REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
+            REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+            FEE_CALC_MASTER_ID: id,
+            FEE_CALC_BL_ID: bl.ID,
+          };
+        });
+        const { data: createdBlRows, error: blCreateErr } = await supabase.from("PROJECT_STRUCTURE").insert(blInsertRows).select("*");
+        if (blCreateErr) {
+          console.warn('[BL structure] Insert failed (migration 0043 may not be run):', blCreateErr.message);
+        } else {
+          const blProgressRows = (createdBlRows || []).map(svc.buildProjectProgressRow);
+          if (blProgressRows.length) {
+            await supabase.from("PROJECT_PROGRESS").insert(blProgressRows).catch(() => {});
+          }
         }
-      } catch { /* non-fatal */ }
+      }
+    } catch (blErr) {
+      console.warn('[BL structure] Soft-fail:', blErr?.message || String(blErr));
     }
 
     try {
@@ -1199,7 +1204,7 @@ async function listFeeCalcSurcharges(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "id is required" });
   const { data, error } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL")
+    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL, BL_FILTER")
     .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
     .order("SORT_ORDER", { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
@@ -1240,6 +1245,7 @@ async function saveFeeCalcSurcharges(req, res, supabase) {
           LPH_FILTER:         r.LPH_FILTER ?? null,
           CALC_MODE:          r.CALC_MODE ?? 'parallel',
           INCLUDE_BL:         r.INCLUDE_BL ?? false,
+          BL_FILTER:          r.BL_FILTER ?? null,
         };
       });
       const { error: insErr } = await supabase.from("FEE_CALCULATION_SURCHARGES").insert(insertRows);
@@ -1247,7 +1253,7 @@ async function saveFeeCalcSurcharges(req, res, supabase) {
     }
 
     const { data: saved } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL")
+      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL, BL_FILTER")
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
     res.json({ data: saved || [] });
@@ -1349,17 +1355,24 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
 
-    const [
-      { data: structRows },
-      { data: blStructRows },
-      { data: blItems },
-    ] = await Promise.all([
-      supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FEE_CALC_PHASE_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId),
-      supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FEE_CALC_BL_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
-      supabase.from("FEE_CALCULATION_BL").select("ID, AMOUNT").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId),
-    ]);
+    const { data: structRows } = await supabase.from("PROJECT_STRUCTURE")
+      .select("ID, EXTRAS_PERCENT, FATHER_ID, FEE_CALC_PHASE_ID")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
 
-    if ((!structRows || !structRows.length) && (!blStructRows || !blStructRows.length)) {
+    // Soft-fail BL queries if migration 0043 not yet run
+    let blStructRows = [], blItems = [];
+    try {
+      const [blStructRes, blItemsRes] = await Promise.all([
+        supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FEE_CALC_BL_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
+        supabase.from("FEE_CALCULATION_BL").select("ID, NAME_SHORT, NAME, AMOUNT").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("SORT_ORDER", { ascending: true }),
+      ]);
+      blStructRows = blStructRes.data || [];
+      blItems = blItemsRes.data || [];
+    } catch (blQueryErr) {
+      console.warn('[sync BL] Migration 0043 may not be run yet:', blQueryErr?.message);
+    }
+
+    if ((!structRows || !structRows.length) && !blItems.length) {
       return res.json({ synced: 0, projectId: master.PROJECT_ID, message: "Keine verknüpften Projektelemente gefunden." });
     }
 
@@ -1403,7 +1416,7 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       if (!error) synced++;
     }
 
-    // Sync BL structure rows
+    // Sync existing BL structure rows
     for (const row of (blStructRows || [])) {
       const bl = blMap.get(row.FEE_CALC_BL_ID);
       if (!bl) continue;
@@ -1414,6 +1427,47 @@ async function syncFeeCalcToStructure(req, res, supabase) {
         .update({ REVENUE: revenue, EXTRAS: extras })
         .eq("ID", row.ID).eq("TENANT_ID", req.tenantId);
       if (!error) synced++;
+    }
+
+    // Create PROJECT_STRUCTURE rows for BL items that don't have one yet
+    const existingBlStructIds = new Set((blStructRows || []).map(r => r.FEE_CALC_BL_ID));
+    const missingBlItems = (blItems || []).filter(b => b.ID && !existingBlStructIds.has(b.ID));
+    const fatherIdForBl = (structRows || []).length > 0 ? structRows[0].FATHER_ID : null;
+
+    if (missingBlItems.length > 0 && fatherIdForBl && master.PROJECT_ID) {
+      try {
+        const { data: fatherRow } = await supabase.from("PROJECT_STRUCTURE")
+          .select("EXTRAS_PERCENT").eq("ID", fatherIdForBl).single();
+        const extrasPercent = Number(fatherRow?.EXTRAS_PERCENT ?? 0) || 0;
+
+        const blInsertRows = missingBlItems.map(bl => {
+          const revenue = Math.round((Number(bl.AMOUNT) || 0) * 100) / 100;
+          const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
+          return {
+            NAME_SHORT: bl.NAME_SHORT || null,
+            NAME_LONG: bl.NAME || null,
+            REVENUE: revenue, EXTRAS: extras, COSTS: 0,
+            PROJECT_ID: master.PROJECT_ID, FATHER_ID: fatherIdForBl,
+            EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,
+            TENANT_ID: req.tenantId,
+            REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
+            REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+            FEE_CALC_MASTER_ID: id,
+            FEE_CALC_BL_ID: bl.ID,
+          };
+        });
+
+        const { data: createdBlRows, error: blErr } = await supabase.from("PROJECT_STRUCTURE").insert(blInsertRows).select("*");
+        if (!blErr && createdBlRows?.length) {
+          synced += createdBlRows.length;
+          const progressRows = createdBlRows.map(svc.buildProjectProgressRow);
+          if (progressRows.length) await supabase.from("PROJECT_PROGRESS").insert(progressRows).catch(() => {});
+        } else if (blErr) {
+          console.warn('[sync BL create] Failed:', blErr.message);
+        }
+      } catch (blCreateErr) {
+        console.warn('[sync BL create] Soft-fail:', blCreateErr?.message);
+      }
     }
 
     return res.json({

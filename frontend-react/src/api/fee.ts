@@ -58,7 +58,8 @@ export interface FeeCalcSurcharge {
   SORT_ORDER:         number
   LPH_FILTER:         string | null  // JSON array of FEE_CALCULATION_PHASE IDs; null = all phases
   CALC_MODE:          string | null  // 'parallel' | 'cumulative'; null treated as 'parallel'
-  INCLUDE_BL:         boolean        // whether BL total is added to the surcharge base
+  INCLUDE_BL:         boolean        // legacy bulk toggle — superseded by BL_FILTER
+  BL_FILTER:          string | null  // JSON array of FEE_CALCULATION_BL IDs; null = no BL items
 }
 
 export type BlAmountType = 'fixed' | 'pct_lph' | 'pct_basis' | 'pct_grundhonorar' | 'pct_gesamthonorar' | 'pct_baukosten'

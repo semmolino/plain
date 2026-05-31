@@ -1,0 +1,3 @@
+-- Migration 0044: Per-BL-item selection for surcharges (replaces bulk INCLUDE_BL)
+ALTER TABLE "FEE_CALCULATION_SURCHARGES"
+  ADD COLUMN IF NOT EXISTS "BL_FILTER" TEXT DEFAULT NULL;
