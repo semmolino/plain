@@ -457,16 +457,9 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
           </div>
 
           {/* ── HOAI-Kalkulationen ── */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <h3 className="wizard-step-title" style={{ margin: 0 }}>HOAI-Kalkulationen</h3>
-              <button type="button" className="btn-small" onClick={() => setShowHonorarWizard(true)}>
-                + Kalkulation hinzufügen
-              </button>
-            </div>
-            {feeCalcs.length === 0 ? (
-              <p className="empty-note">Noch keine HOAI-Kalkulationen für dieses Angebot.</p>
-            ) : (
+          {feeCalcs.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <h3 className="wizard-step-title" style={{ marginBottom: 12 }}>HOAI-Kalkulationen</h3>
               <div className="table-scroll">
                 <table className="ls-table">
                   <thead>
@@ -497,8 +490,8 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* ── Positionen ── */}
           <div>
@@ -559,7 +552,10 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
 
             {/* Add node form */}
             {!showAdd && (
-              <button className="btn-small btn-save" type="button" onClick={() => setShowAdd(true)}>+ Position hinzufügen</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn-small btn-save" type="button" onClick={() => setShowAdd(true)}>+ Position hinzufügen</button>
+                <button className="btn-small" type="button" onClick={() => setShowHonorarWizard(true)}>+ HOAI-Kalkulation</button>
+              </div>
             )}
 
             {showAdd && (
@@ -640,7 +636,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
     </div>
 
     {selectedId && showHonorarWizard && (
-      <Modal open={showHonorarWizard} onClose={() => setShowHonorarWizard(false)} title="HOAI-Kalkulation hinzufügen">
+      <Modal open={showHonorarWizard} onClose={() => setShowHonorarWizard(false)} title="HOAI-Kalkulation hinzufügen" className="modal-wide">
         <HonorarWizard
           offerId={selectedId}
           onDone={() => {

@@ -160,8 +160,8 @@ async function patchFeeCalcMasterBasis(req, res, supabase) {
       .update({
         NAME_SHORT:                   body.NAME_SHORT ?? null,
         NAME_LONG:                    body.NAME_LONG  ?? null,
-        PROJECT_ID:                   body.PROJECT_ID ?? null,
-        OFFER_ID:                     body.OFFER_ID   ?? null,
+        ...('PROJECT_ID' in body ? { PROJECT_ID: body.PROJECT_ID ?? null } : {}),
+        ...('OFFER_ID'   in body ? { OFFER_ID:   body.OFFER_ID   ?? null } : {}),
         ATTACH_TO_OFFER_STRUCTURE_ID: body.ATTACH_TO_OFFER_STRUCTURE_ID ?? null,
         ZONE_ID:      body.ZONE_ID      ?? null,
         ZONE_PERCENT: body.ZONE_PERCENT ?? null,

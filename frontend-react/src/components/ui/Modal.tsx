@@ -1,17 +1,18 @@
 import { type ReactNode } from 'react'
 
 interface Props {
-  open:     boolean
-  onClose:  () => void
-  title:    string
-  children: ReactNode
+  open:       boolean
+  onClose:    () => void
+  title:      string
+  children:   ReactNode
+  className?: string
 }
 
-export function Modal({ open, onClose, title, children }: Props) {
+export function Modal({ open, onClose, title, children, className }: Props) {
   if (!open) return null
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={e => e.stopPropagation()}>
+      <div className={`modal-card${className ? ` ${className}` : ''}`} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{title}</span>
           <button className="modal-close" onClick={onClose} aria-label="Schließen">✕</button>

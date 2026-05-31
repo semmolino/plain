@@ -211,9 +211,37 @@ body {
 .data-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 3mm; }
 .data-table th { text-align: left; padding: 1.5mm 2mm; border-bottom: 1pt solid #374151; font-size: 9pt; color: #374151; }
 .data-table th.r, .data-table td.r { text-align: right; }
+.data-table th.num, .data-table td.num { text-align: right; white-space: nowrap; }
 .data-table td { padding: 1.5mm 2mm; border-bottom: 0.3pt solid #e5e7eb; vertical-align: top; }
 .data-table .sum-row td { font-weight: 600; background: #f9fafb; border-top: 1pt solid #d1d5db; border-bottom: 0.5pt solid #d1d5db; }
-.data-table tfoot td { font-size: 11pt; font-weight: 700; border-top: 1pt solid #374151; padding-top: 2mm; }
+.data-table tfoot td { font-size: 11pt; font-weight: 700; border-top: 1pt solid #374151; padding-top: 2mm; border-bottom: none; }
+.data-table tfoot tr.grand-total td { font-size: 11pt; font-weight: 700; color: #111827; padding-top: 2mm; }
+
+/* HOAI appendix – shared styles */
+.basis-grid { display: grid; grid-template-columns: repeat(3,1fr); gap:3mm; margin-bottom:2mm; }
+.basis-cell { padding:2mm 3mm; background:#f9fafb; border:0.3pt solid #e5e7eb; border-radius:2pt; }
+.basis-cell .bc-label { font-size:7.5pt; color:#6b7280; margin-bottom:0.5mm; }
+.basis-cell .bc-val   { font-size:9.5pt; font-weight:600; }
+.section-title-h { font-size:9pt; font-weight:700; color:#374151; text-transform:uppercase;
+  letter-spacing:0.03em; margin:6mm 0 2mm; padding-bottom:1mm; border-bottom:0.5pt solid #d1d5db; }
+.surcharge-detail { font-size:7.5pt; color:#6b7280; margin-top:0.5mm; }
+.breakdown-row td { background:#fafafa; border-bottom:0.3pt solid #e5e7eb; padding:1mm 2mm 1.5mm 8mm; }
+.breakdown-table { width:100%; border-collapse:collapse; font-size:7.5pt; }
+.breakdown-table th { font-size:6.5pt; color:#9ca3af; font-weight:600; padding:0 1mm 0.5mm; text-align:right; }
+.breakdown-table th:first-child { text-align:left; }
+.breakdown-table td { padding:0.4mm 1mm; }
+.breakdown-table td.bd-num { text-align:right; white-space:nowrap; width:22%; }
+.breakdown-table tr.bd-lph td, .breakdown-table tr.bd-bl td { color:#374151; }
+.surcharge-mode-badge { display:inline-block; font-size:6.5pt; padding:0 2mm; border-radius:2pt;
+  background:#e0f2fe; color:#0369a1; font-weight:600; margin-left:1mm; vertical-align:middle; }
+.honorar-summary { margin-top:8mm; padding:4mm 5mm; background:#f0f9ff;
+  border:0.5pt solid #bae6fd; border-radius:3pt; }
+.honorar-summary table { width:100%; border-collapse:collapse; }
+.honorar-summary td { padding:1.2mm 0; font-size:9.5pt; }
+.honorar-summary td.sl { color:#374151; }
+.honorar-summary td.sv { text-align:right; font-weight:600; white-space:nowrap; }
+.honorar-summary tr.gesamthonorar td { font-size:12pt; font-weight:700;
+  border-top:1pt solid #0284c7; padding-top:2mm; }
 </style>
 </head>
 <body>
@@ -356,7 +384,7 @@ body {
 
 </div>
 
-{# ═══════════════════════════════════════ HOAI-HONORARÜBERSICHT (one page per calc) ═══════ #}
+{# ═══════════════════════════════════════ HOAI-HONORARÜBERSICHT (matches honorar.njk) ═══ #}
 {% if honorarCalcs and honorarCalcs.length > 0 %}
 {% for hc in honorarCalcs %}
 <div class="page page-break">
@@ -374,67 +402,152 @@ body {
     &middot; Stand: {{ (offer.OFFER_DATE or offer.CREATED_AT) | date_de }}
   </div>
 
+  {# Basisdaten #}
+  <div class="section-title-h">Basisdaten</div>
+  <div class="basis-grid">
+    <div class="basis-cell"><div class="bc-label">Honorarordnung</div><div class="bc-val">{{ hc.calc.nameShort }}</div></div>
+    <div class="basis-cell"><div class="bc-label">Honorarzone</div><div class="bc-val">{{ hc.calc.zoneName or "—" }}</div></div>
+    <div class="basis-cell"><div class="bc-label">Zonenanteil</div><div class="bc-val">{{ hc.calc.zonePercent or "—" }} %</div></div>
+  </div>
+
+  {% set hasKx = hc.calc.constructionCostsK0 or hc.calc.constructionCostsK1 or hc.calc.constructionCostsK2 or hc.calc.constructionCostsK3 or hc.calc.constructionCostsK4 %}
+  {% if hasKx %}
+  <table class="data-table" style="margin-top:3mm">
+    <thead><tr><th style="width:12%">Kx</th><th class="num">Baukosten €</th><th class="num">Grundhonorar €</th></tr></thead>
+    <tbody>
+      {% for k in ['K0','K1','K2','K3','K4'] %}
+      {% if hc.calc['constructionCosts' + k] %}
+      <tr>
+        <td>{{ k }}</td>
+        <td class="num">{{ hc.calc['constructionCosts' + k] | money }}</td>
+        <td class="num">{{ hc.calc['revenue' + k] | money }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Leistungsphasen #}
+  {% if hc.phases and hc.phases.length %}
+  <div class="section-title-h">Leistungsphasen</div>
   <table class="data-table">
     <thead>
       <tr>
-        <th style="width:58%">Leistung</th>
-        <th style="width:14%">% LPH</th>
-        <th class="r">Honorar netto €</th>
+        <th style="width:38%">Leistungsphase</th>
+        <th>Kx</th>
+        <th class="num">Basis €</th>
+        <th class="num">Basis %</th>
+        <th class="num">Basis-Honorar €</th>
+        <th class="num">Honorar %</th>
+        <th class="num">Honorar €</th>
       </tr>
     </thead>
     <tbody>
       {% for p in hc.phases %}
-      {% if p.phaseRevenue %}
       <tr>
         <td>{{ p.phaseLabel }}</td>
-        <td style="color:#6b7280;font-size:8.5pt;">{{ p.feePercent }}&#8239;%</td>
-        <td class="r">{{ p.phaseRevenue | money }}</td>
-      </tr>
-      {% endif %}
-      {% endfor %}
-
-      <tr class="sum-row">
-        <td colspan="2">Grundhonorar</td>
-        <td class="r">{{ hc.grundhonorar | money }}</td>
-      </tr>
-
-      {% if hc.blItems and hc.blItems.length > 0 %}
-      {% for b in hc.blItems %}
-      {% if b.amount %}
-      <tr>
-        <td>{{ b.nameShort or "" }}{% if b.nameShort and b.name %}: {% endif %}{{ b.name }}</td>
-        <td style="color:#6b7280;font-size:8.5pt;">Bes. Leistung</td>
-        <td class="r">{{ b.amount | money }}</td>
-      </tr>
-      {% endif %}
-      {% endfor %}
-      <tr class="sum-row">
-        <td colspan="2">+ Besondere Leistungen</td>
-        <td class="r">{{ hc.blTotal | money }}</td>
-      </tr>
-      {% endif %}
-
-      {% if hc.surcharges and hc.surcharges.length > 0 %}
-      {% for s in hc.surcharges %}
-      <tr>
-        <td>{{ s.nameLong or s.nameShort or "Zuschlag" }}</td>
-        <td style="color:#6b7280;font-size:8.5pt;">{{ s.percent }}&#8239;%</td>
-        <td class="r">{{ s.amount | money }}</td>
+        <td>{{ p.kx }}</td>
+        <td class="num">{{ p.revenueBase | money }}</td>
+        <td class="num">{{ p.feePercentBase }}</td>
+        <td class="num">{{ p.basisHonorar | money }}</td>
+        <td class="num">{{ p.feePercent }}</td>
+        <td class="num">{{ p.phaseRevenue | money }}</td>
       </tr>
       {% endfor %}
-      <tr class="sum-row">
-        <td colspan="2">+ Zuschläge / Nachlässe</td>
-        <td class="r">{{ hc.zuschlaegeSum | money }}</td>
-      </tr>
-      {% endif %}
     </tbody>
     <tfoot>
-      <tr>
-        <td colspan="2">Gesamthonorar (netto)</td>
-        <td class="r">{{ hc.gesamthonorar | money }}</td>
-      </tr>
+      <tr><td colspan="5">Grundhonorar</td><td></td><td class="num">{{ hc.grundhonorar | money }}</td></tr>
     </tfoot>
   </table>
+  {% endif %}
+
+  {# Besondere Leistungen #}
+  {% if hc.blItems and hc.blItems.length %}
+  <div class="section-title-h">Besondere Leistungen</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width:12%">Kürzel</th>
+        <th style="width:45%">Bezeichnung</th>
+        <th>LPH-Bezug</th>
+        <th class="num">Betrag €</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in hc.blItems %}
+      <tr>
+        <td>{{ b.nameShort or "—" }}</td>
+        <td>{{ b.name }}</td>
+        <td>{{ b.lphLabel or b.lphRef or "—" }}</td>
+        <td class="num">{{ b.amount | money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="3">Summe Besondere Leistungen</td><td class="num">{{ hc.blTotal | money }}</td></tr></tfoot>
+  </table>
+  {% endif %}
+
+  {# Zuschläge / Nachlässe #}
+  {% if hc.surcharges and hc.surcharges.length %}
+  <div class="section-title-h">Zuschläge &amp; Nachlässe</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width:45%">Bezeichnung</th>
+        <th class="num">%</th>
+        <th class="num">Basis €</th>
+        <th class="num">Betrag €</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in hc.surcharges %}
+      <tr>
+        <td>
+          {{ s.nameLong or s.nameShort or "—" }}
+          {% if s.calcMode == 'cumulative' %}<span class="surcharge-mode-badge">Kumulativ</span>{% endif %}
+          {% if s.lphDetail %}<div class="surcharge-detail">Basis: {{ s.lphDetail }}</div>{% endif %}
+        </td>
+        <td class="num">{{ s.percent }}</td>
+        <td class="num">{{ s.baseAmount | money }}</td>
+        <td class="num">{{ s.amount | money }}</td>
+      </tr>
+      {% set hasDetail = (s.lphItems and s.lphItems.length > 0) or (s.surchargeBls and s.surchargeBls.length > 0) %}
+      {% if hasDetail %}
+      <tr class="breakdown-row">
+        <td colspan="4">
+          <table class="breakdown-table">
+            <thead><tr>
+              <th>Komponente</th>
+              <th style="text-align:right">Basis €</th>
+              <th style="text-align:right">Zuschlag €</th>
+            </tr></thead>
+            <tbody>
+              {% for item in s.lphItems %}
+              <tr class="bd-lph"><td>{{ item.label }}</td><td class="bd-num">{{ item.baseAmount | money }}</td><td class="bd-num">{{ item.surchargeAmount | money }}</td></tr>
+              {% endfor %}
+              {% for item in s.surchargeBls %}
+              <tr class="bd-bl"><td>{{ item.name }}</td><td class="bd-num">{{ item.baseAmount | money }}</td><td class="bd-num">{{ item.surchargeAmount | money }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Zusammenfassung #}
+  <div class="honorar-summary">
+    <table>
+      <tr><td class="sl">Grundhonorar (Summe Leistungsphasen)</td><td class="sv">{{ hc.grundhonorar | money }}</td></tr>
+      {% if hc.blItems and hc.blItems.length %}<tr><td class="sl">Besondere Leistungen</td><td class="sv">{{ hc.blTotal | money }}</td></tr>{% endif %}
+      {% if hc.surcharges and hc.surcharges.length %}<tr><td class="sl">Zuschläge / Nachlässe</td><td class="sv">{{ hc.zuschlaegeSum | money }}</td></tr>{% endif %}
+      <tr class="gesamthonorar"><td class="sl">Gesamthonorar (netto)</td><td class="sv">{{ hc.gesamthonorar | money }}</td></tr>
+    </table>
+  </div>
 
 </div>
 {% endfor %}

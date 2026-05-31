@@ -1104,6 +1104,21 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, onDone }:
                     <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(blTotal)}</td>
                   </tr>
                 )}
+                {/* Individual Zuschlag rows */}
+                {surcharges.map((r, idx) => {
+                  const eff = surchargeEffects[idx]
+                  if (!eff || eff.amount === 0) return null
+                  const label = [r.NAME_SHORT, r.NAME_LONG].filter(Boolean).join(': ') || `Zuschlag ${idx + 1}`
+                  return (
+                    <tr key={`s-${idx}`}>
+                      <td style={{ fontSize: 13 }}>{label}</td>
+                      <td style={{ fontSize: 11, color: '#6b7280' }}>
+                        {(r.PERCENT ?? 0) >= 0 ? 'Zuschlag' : 'Nachlass'} {r.PERCENT ?? 0}&nbsp;%
+                      </td>
+                      <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(eff.amount)}</td>
+                    </tr>
+                  )
+                })}
                 {/* Zuschläge sum */}
                 {totalSurchargeAmt !== 0 && (
                   <tr style={{ borderTop: '1px solid #d1d5db', background: '#f9fafb' }}>

@@ -448,34 +448,8 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
         .order('ID', { ascending: true });
 
       if (calcMasters && calcMasters.length > 0) {
-        honorarCalcs = await Promise.all(calcMasters.map(async cm => {
-          const d = await buildHonorarCalcData(supabase, cm.ID, tenantId);
-          return {
-            nameShort: cm.NAME_SHORT || '',
-            nameLong:  cm.NAME_LONG  || '',
-            phases: d.phaseRows.map(r => ({
-              phaseLabel:  r.PHASE_LABEL || '',
-              feePercent:  r.FEE_PERCENT ?? '',
-              phaseRevenue: r.PHASE_REVENUE ?? null,
-            })),
-            blItems: d.blRows.map(r => ({
-              nameShort: r.NAME_SHORT || null,
-              name:      r.NAME || '',
-              amount:    r.AMOUNT ?? null,
-            })),
-            blTotal: d.blTotal,
-            surcharges: d.computedSurcharges.map(({ r, effectiveBase, amount }) => ({
-              nameShort:  r.NAME_SHORT || '',
-              nameLong:   r.NAME_LONG  || '',
-              percent:    r.PERCENT ?? '',
-              baseAmount: effectiveBase,
-              amount,
-            })),
-            grundhonorar:  d.grundhonorar,
-            zuschlaegeSum: d.zuschlaegeSum,
-            gesamthonorar: d.gesamthonorar,
-          };
-        }));
+        const ctxs = await Promise.all(calcMasters.map(cm => buildHonorarCalcContext(supabase, cm.ID, tenantId)));
+        honorarCalcs = ctxs.filter(Boolean);
       }
     } catch (e) {
       console.warn('[HONORAR_CALCS_INVOICE]', e.message);
@@ -589,14 +563,8 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
       .order('ID', { ascending: true });
 
     if (calcMasters && calcMasters.length > 0) {
-      honorarCalcs = await Promise.all(calcMasters.map(async cm => {
-        const d = await buildHonorarCalcData(supabase, cm.ID, tenantId);
-        return {
-          nameShort: cm.NAME_SHORT,
-          nameLong: cm.NAME_LONG,
-          ...d,
-        };
-      }));
+      const ctxs = await Promise.all(calcMasters.map(cm => buildHonorarCalcContext(supabase, cm.ID, tenantId)));
+      honorarCalcs = ctxs.filter(Boolean);
     }
   } catch (e) {
     console.warn('[HONORAR_CALCS_OFFER]', e.message);
@@ -877,56 +845,55 @@ async function buildHonorarCalcData(supabase, calcMasterId, tenantId) {
   return { phaseRows, blRows, blTotal, computedSurcharges, grundhonorar, zuschlaegeSum, gesamthonorar: grundhonorar + blTotal + zuschlaegeSum };
 }
 
-// ── Honorar PDF ───────────────────────────────────────────────────────────────
+// ── buildHonorarCalcContext: full context object for one calc (reused in standalone + appendix) ──
 
-async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
-  const { data: calc, error: calcErr } = await supabase
+async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
+  const { data: calc } = await supabase
     .from('FEE_CALCULATION_MASTER')
     .select('*')
     .eq('ID', calcMasterId)
     .eq('TENANT_ID', tenantId)
     .single();
-  if (calcErr || !calc) throw { status: 404, message: 'Honorarberechnung nicht gefunden' };
+  if (!calc) return null;
 
-  const { phaseRows, blRows, blTotal, computedSurcharges, grundhonorar, zuschlaegeSum, gesamthonorar }
-    = await buildHonorarCalcData(supabase, calcMasterId, tenantId);
+  const d = await buildHonorarCalcData(supabase, calcMasterId, tenantId);
 
-  // Load zone name
   let zoneName = null;
   if (calc.ZONE_ID) {
     const { data: zone } = await supabase.from('FEE_ZONES').select('NAME_SHORT').eq('ID', calc.ZONE_ID).maybeSingle();
     zoneName = zone?.NAME_SHORT ?? null;
   }
 
-  // Load project label
-  let projectLabel = null;
-  if (calc.PROJECT_ID) {
-    const { data: proj } = await supabase.from('PROJECT').select('NAME_SHORT, NAME_LONG').eq('ID', calc.PROJECT_ID).maybeSingle();
-    if (proj) projectLabel = [proj.NAME_SHORT, proj.NAME_LONG].filter(Boolean).join(' – ');
-  }
+  const buildSurchargeCtx = ({ r, effectiveBase, amount, lphItems, surchargeBls }) => {
+    let lphDetail = null;
+    if (r.LPH_FILTER) {
+      try {
+        const ids    = JSON.parse(r.LPH_FILTER);
+        const labels = d.phaseRows
+          .filter(p => ids.includes(p.ID))
+          .map(p => p.PHASE_LABEL || `LPH ${p.FEE_PHASE_ID}`);
+        if (labels.length && labels.length < d.phaseRows.length) lphDetail = labels.join(', ');
+      } catch { /* ignore */ }
+    }
+    return {
+      nameShort:   r.NAME_SHORT || '',
+      nameLong:    r.NAME_LONG  || '',
+      percent:     r.PERCENT ?? '',
+      baseAmount:  effectiveBase,
+      amount,
+      calcMode:    r.CALC_MODE || 'parallel',
+      lphDetail,
+      lphItems,
+      surchargeBls,
+    };
+  };
 
-  // Load company (seller) data + logo
-  const { data: coRows } = await supabase.from('COMPANY').select('ID, COMPANY_NAME_1, STREET, POST_CODE, CITY, IBAN, BIC, TAX_NUMBER, "TAX-ID"').eq('TENANT_ID', tenantId).limit(1);
-  const co = coRows?.[0] ?? {};
-  const companyId = co.ID ?? null;
-  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId });
-
-  const context = {
-    docDate: new Date(),
-    logoDataUri,
-    seller: {
-      name:      co.COMPANY_NAME_1 || '',
-      street:    co.STREET || '',
-      postCode:  co.POST_CODE || '',
-      city:      co.CITY || '',
-      iban:      co.IBAN || '',
-      bic:       co.BIC || '',
-      taxId:     co['TAX-ID'] || '',
-      taxNumber: co.TAX_NUMBER || '',
-    },
+  return {
+    nameShort: calc.NAME_SHORT || '',
+    nameLong:  calc.NAME_LONG  || '',
     calc: {
       nameShort:           calc.NAME_SHORT || '',
-      nameLong:            calc.NAME_LONG || '',
+      nameLong:            calc.NAME_LONG  || '',
       zoneName,
       zonePercent:         calc.ZONE_PERCENT ?? '',
       constructionCostsK0: calc.CONSTRUCTION_COSTS_K0 ?? null,
@@ -940,8 +907,7 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
       revenueK3: calc.REVENUE_K3 ?? null,
       revenueK4: calc.REVENUE_K4 ?? null,
     },
-    projectLabel,
-    phases: phaseRows.map(r => {
+    phases: d.phaseRows.map(r => {
       const base    = Number(r.REVENUE_BASE) || 0;
       const pctBase = Number(r.FEE_PERCENT_BASE) || 0;
       return {
@@ -954,8 +920,8 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
         phaseRevenue:   r.PHASE_REVENUE ?? null,
       };
     }),
-    blItems: blRows.map(r => {
-      const lphPhase = r.LPH_PHASE_ID ? phaseRows.find(p => p.ID === r.LPH_PHASE_ID) : null;
+    blItems: d.blRows.map(r => {
+      const lphPhase = r.LPH_PHASE_ID ? d.phaseRows.find(p => p.ID === r.LPH_PHASE_ID) : null;
       return {
         nameShort: r.NAME_SHORT || null,
         name:      r.NAME || '',
@@ -964,33 +930,53 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
         amount:    r.AMOUNT ?? null,
       };
     }),
-    blTotal,
-    surcharges: computedSurcharges.map(({ r, effectiveBase, amount, lphItems, surchargeBls }) => {
-      let lphDetail = null;
-      if (r.LPH_FILTER) {
-        try {
-          const ids    = JSON.parse(r.LPH_FILTER);
-          const labels = phaseRows
-            .filter(p => ids.includes(p.ID))
-            .map(p => p.PHASE_LABEL || `LPH ${p.FEE_PHASE_ID}`);
-          if (labels.length && labels.length < phaseRows.length) lphDetail = labels.join(', ');
-        } catch { /* ignore */ }
-      }
-      return {
-        nameShort:   r.NAME_SHORT || '',
-        nameLong:    r.NAME_LONG || '',
-        percent:     r.PERCENT ?? '',
-        baseAmount:  effectiveBase,
-        amount,
-        calcMode:    r.CALC_MODE || 'parallel',
-        lphDetail,
-        lphItems,
-        surchargeBls,
-      };
-    }),
-    grundhonorar,
-    zuschlaegeSum,
-    gesamthonorar,
+    blTotal:      d.blTotal,
+    surcharges:   d.computedSurcharges.map(buildSurchargeCtx),
+    grundhonorar: d.grundhonorar,
+    zuschlaegeSum: d.zuschlaegeSum,
+    gesamthonorar: d.gesamthonorar,
+  };
+}
+
+// ── Honorar PDF ───────────────────────────────────────────────────────────────
+
+async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
+  const calcCtx = await buildHonorarCalcContext(supabase, calcMasterId, tenantId);
+  if (!calcCtx) throw { status: 404, message: 'Honorarberechnung nicht gefunden' };
+
+  // Load project label (standalone PDF only)
+  const { data: calcMeta } = await supabase
+    .from('FEE_CALCULATION_MASTER')
+    .select('PROJECT_ID')
+    .eq('ID', calcMasterId)
+    .single();
+  let projectLabel = null;
+  if (calcMeta?.PROJECT_ID) {
+    const { data: proj } = await supabase.from('PROJECT').select('NAME_SHORT, NAME_LONG').eq('ID', calcMeta.PROJECT_ID).maybeSingle();
+    if (proj) projectLabel = [proj.NAME_SHORT, proj.NAME_LONG].filter(Boolean).join(' – ');
+  }
+
+  // Load company (seller) data + logo
+  const { data: coRows } = await supabase.from('COMPANY').select('ID, COMPANY_NAME_1, STREET, POST_CODE, CITY, IBAN, BIC, TAX_NUMBER, "TAX-ID"').eq('TENANT_ID', tenantId).limit(1);
+  const co = coRows?.[0] ?? {};
+  const companyId = co.ID ?? null;
+  const logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId });
+
+  const context = {
+    ...calcCtx,
+    projectLabel,
+    docDate: new Date(),
+    logoDataUri,
+    seller: {
+      name:      co.COMPANY_NAME_1 || '',
+      street:    co.STREET || '',
+      postCode:  co.POST_CODE || '',
+      city:      co.CITY || '',
+      iban:      co.IBAN || '',
+      bic:       co.BIC || '',
+      taxId:     co['TAX-ID'] || '',
+      taxNumber: co.TAX_NUMBER || '',
+    },
   };
 
   const html = env().render(path.join('modern_a', 'honorar.njk'), context);
