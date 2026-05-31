@@ -60,13 +60,14 @@ async function listOffers(supabase, { tenantId }) {
   const contactIds = [...new Set(rows.map(r => r.CONTACT_ID).filter(Boolean))];
   const projectIds = [...new Set(rows.map(r => r.PROJECT_ID).filter(Boolean))];
 
-  const [statusRes, empRes, addrRes, contactRes, structRes, projectRes] = await Promise.all([
+  const [statusRes, empRes, addrRes, contactRes, structRes, projectRes, feeCalcMasterRes] = await Promise.all([
     statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, NAME_SHORT').in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
     contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
     supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
     projectIds.length ? supabase.from('PROJECT').select('ID, NAME_SHORT').in('ID', projectIds) : Promise.resolve({ data: [] }),
+    supabase.from('FEE_CALCULATION_MASTER').select('ID, OFFER_ID').in('OFFER_ID', offerIds).eq('TENANT_ID', tenantId),
   ]);
 
   const statusMap  = new Map((statusRes.data  || []).map(r => [r.ID, r]));
@@ -89,6 +90,34 @@ async function listOffers(supabase, { tenantId }) {
       const rev  = leaves.reduce((s, r) => s + (Number(r.REVENUE) || 0), 0);
       const ext  = leaves.reduce((s, r) => s + (Number(r.EXTRAS)  || 0), 0);
       totalMap.set(oId, fmt2(rev + ext));
+    }
+  }
+
+  // Add HOAI fee-calculation totals (phases + BL + surcharges) per offer
+  const feeCalcMasters = feeCalcMasterRes.data || [];
+  if (feeCalcMasters.length) {
+    const masterIds = feeCalcMasters.map(m => m.ID);
+    const masterToOffer = new Map(feeCalcMasters.map(m => [m.ID, m.OFFER_ID]));
+    const [phaseRes, hoaiBLRes, surRes] = await Promise.all([
+      supabase.from('FEE_CALCULATION_PHASE').select('FEE_MASTER_ID, PHASE_REVENUE').in('FEE_MASTER_ID', masterIds),
+      supabase.from('FEE_CALCULATION_BL').select('FEE_CALC_MASTER_ID, AMOUNT').in('FEE_CALC_MASTER_ID', masterIds).eq('TENANT_ID', tenantId),
+      supabase.from('FEE_CALCULATION_SURCHARGES').select('FEE_CALC_MASTER_ID, AMOUNT').in('FEE_CALC_MASTER_ID', masterIds).eq('TENANT_ID', tenantId),
+    ]);
+    const hoaiTotal = new Map();
+    for (const p of (phaseRes.data || [])) {
+      const oId = masterToOffer.get(p.FEE_MASTER_ID);
+      if (oId) hoaiTotal.set(oId, (hoaiTotal.get(oId) || 0) + (Number(p.PHASE_REVENUE) || 0));
+    }
+    for (const b of (hoaiBLRes.data || [])) {
+      const oId = masterToOffer.get(b.FEE_CALC_MASTER_ID);
+      if (oId) hoaiTotal.set(oId, (hoaiTotal.get(oId) || 0) + (Number(b.AMOUNT) || 0));
+    }
+    for (const s of (surRes.data || [])) {
+      const oId = masterToOffer.get(s.FEE_CALC_MASTER_ID);
+      if (oId) hoaiTotal.set(oId, (hoaiTotal.get(oId) || 0) + (Number(s.AMOUNT) || 0));
+    }
+    for (const [oId, total] of hoaiTotal) {
+      totalMap.set(oId, fmt2((totalMap.get(oId) || 0) + total));
     }
   }
 
@@ -535,7 +564,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
   let lphAlloc = {}, blAlloc = {}, blItems = [];
   try {
     const [blRes, surRes] = await Promise.all([
-      supabase.from('FEE_CALCULATION_BL').select('ID, NAME_SHORT, NAME, AMOUNT')
+      supabase.from('FEE_CALCULATION_BL').select('ID, NAME, LPH_REF, AMOUNT, SORT_ORDER')
         .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER'),
       supabase.from('FEE_CALCULATION_SURCHARGES').select('AMOUNT, LPH_FILTER, BL_FILTER')
         .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER'),
@@ -599,7 +628,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
     const blInsert = blItems.map(b => {
       const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
       return {
-        NAME_SHORT: b.NAME_SHORT || null, NAME_LONG: b.NAME || null,
+        NAME_SHORT: b.NAME || 'BL', NAME_LONG: b.NAME || null,
         REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
         PROJECT_ID: projectId, FATHER_ID: fatherId,
         EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
@@ -624,6 +653,17 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
         REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
       }))).catch(() => {});
     }
+  }
+
+  // Update parent node REVENUE = sum of all children (LPH + BL) revenues
+  const lphTotal = insertRows.reduce((sum, r) => sum + (Number(r.REVENUE) || 0), 0);
+  const blTotal  = blItems.reduce((b2, b) => b2 + fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0)), 0);
+  const parentRev = fmt2(lphTotal + blTotal);
+  if (parentRev > 0) {
+    await supabase.from('PROJECT_STRUCTURE').update({
+      REVENUE: parentRev,
+      EXTRAS:  fmt2(parentRev * extrasPercent / 100),
+    }).eq('ID', fatherId).catch(() => {});
   }
 }
 

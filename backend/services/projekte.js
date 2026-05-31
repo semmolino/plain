@@ -1525,6 +1525,8 @@ async function copyProject(supabase, { projectId, tenantId }) {
     const insRows = srcStruct.map(({ ID: _sid, FATHER_ID: _fid, ...rest }) => ({
       ...rest, PROJECT_ID: newProject.ID, FATHER_ID: null,
       FEE_CALC_MASTER_ID: null, FEE_CALC_PHASE_ID: null, TENANT_ID: tenantId,
+      REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
+      REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
     }));
     const { data: created, error: structInsErr } = await supabase.from("PROJECT_STRUCTURE").insert(insRows).select("ID");
     if (!structInsErr && created) {

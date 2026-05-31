@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
+import { Modal }        from '@/components/ui/Modal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers,
@@ -9,6 +10,7 @@ import {
 } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
+import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 
 // ── Wizard state ──────────────────────────────────────────────────────────────
 
@@ -59,6 +61,8 @@ export function ProjekteAnlegen() {
   const [e2p, setE2p]             = useState<E2PState>({})
   const [structDraft, setStructDraft] = useState<StructureDraftRow[]>([])
   const [msg, setMsg]             = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
+  const [newProjectId, setNewProjectId]   = useState<number | null>(null)
+  const [showHonorarModal, setShowHonorarModal] = useState(false)
 
   const { data: deptData    } = useQuery({ queryKey: ['departments'],        queryFn: fetchDepartments      })
   const { data: statusData  } = useQuery({ queryKey: ['project-statuses'],  queryFn: fetchProjectStatuses  })
@@ -99,13 +103,18 @@ export function ProjekteAnlegen() {
     mutationFn: createProject,
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
-      setMsg({ text: `Projekt "${res.data.NAME_SHORT}" wurde angelegt ✅`, type: 'success' })
-      // reset
-      setStep(1); setBasic(emptyBasic()); setAddrText('')
-      setSelectedEmpIds(new Set()); setE2p({}); setStructDraft([])
+      setMsg({ text: `Projekt "${res.data.NAME_SHORT}" wurde angelegt.`, type: 'success' })
+      setNewProjectId(res.data.ID)
+      setStep(5)
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
+
+  function handleFinish() {
+    setStep(1); setBasic(emptyBasic()); setAddrText('')
+    setSelectedEmpIds(new Set()); setE2p({}); setStructDraft([])
+    setNewProjectId(null); setMsg(null)
+  }
 
   const setB = (k: keyof BasicForm) => (v: string) => setBasic(f => ({ ...f, [k]: v }))
 
@@ -203,7 +212,7 @@ export function ProjekteAnlegen() {
 
   return (
     <div className="wizard-wrap">
-      <StepIndicator step={step} total={4} />
+      <StepIndicator step={step} total={5} />
 
       {/* ── Step 1: Basisdaten ── */}
       {step === 1 && (
@@ -393,18 +402,44 @@ export function ProjekteAnlegen() {
         </div>
       )}
 
-      <Message text={msg?.text ?? null} type={msg?.type} />
+      {/* ── Step 5: HOAI (optional) ── */}
+      {step === 5 && (
+        <div className="wizard-step-content">
+          <h3 className="wizard-step-title">Schritt 5: HOAI-Kalkulation</h3>
+          <Message text={msg?.text ?? null} type={msg?.type} />
+          <p className="admin-section-hint" style={{ marginBottom: 16 }}>
+            Optional — Sie können jetzt eine HOAI-Kalkulation für dieses Projekt erstellen.
+          </p>
+          <button className="btn-small btn-save" type="button" onClick={() => setShowHonorarModal(true)}>
+            + HOAI-Kalkulation hinzufügen
+          </button>
+        </div>
+      )}
+
+      {step !== 5 && <Message text={msg?.text ?? null} type={msg?.type} />}
 
       {/* Navigation */}
       <div className="wizard-nav">
-        {step > 1 && <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>}
+        {step > 1 && step < 5 && <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>}
         {step < 4 && <button className="btn-primary" type="button" onClick={goNext}>Weiter →</button>}
         {step === 4 && (
           <button className="btn-primary" type="button" disabled={createMut.isPending} onClick={submit}>
             {createMut.isPending ? 'Speichert …' : 'Projekt anlegen'}
           </button>
         )}
+        {step === 5 && (
+          <button className="btn-primary" type="button" onClick={handleFinish}>Fertig</button>
+        )}
       </div>
+
+      {showHonorarModal && newProjectId && (
+        <Modal open={showHonorarModal} onClose={() => setShowHonorarModal(false)} title="HOAI-Kalkulation hinzufügen" className="modal-xl">
+          <HonorarWizard
+            initialProjectId={newProjectId}
+            onDone={() => setShowHonorarModal(false)}
+          />
+        </Modal>
+      )}
     </div>
   )
 }
