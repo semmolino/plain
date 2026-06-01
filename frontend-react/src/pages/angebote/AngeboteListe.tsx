@@ -25,8 +25,8 @@ const TODAY = new Date().toISOString().slice(0, 10)
 
 // ── Row overflow menu ──────────────────────────────────────────────────────────
 
-function RowMenu({ id, open, onOpen, onClose, children }: {
-  id: number; open: boolean; onOpen: () => void; onClose: () => void; children: React.ReactNode
+function RowMenu({ open, onOpen, onClose, children }: {
+  open: boolean; onOpen: () => void; onClose: () => void; children: React.ReactNode
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -191,7 +191,6 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
                       </span>
                     )}
                     <RowMenu
-                      id={r.ID}
                       open={menuOpenId === r.ID}
                       onOpen={() => setMenuOpenId(r.ID)}
                       onClose={() => setMenuOpenId(null)}

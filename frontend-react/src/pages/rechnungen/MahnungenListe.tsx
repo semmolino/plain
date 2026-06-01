@@ -50,8 +50,8 @@ function addDays(dateStr: string, days: number): string {
 
 // ── Row overflow menu ─────────────────────────────────────────────────────────
 
-function RowMenu({ id, open, onOpen, onClose, children }: {
-  id: string; open: boolean; onOpen: () => void; onClose: () => void; children: React.ReactNode
+function RowMenu({ open, onOpen, onClose, children }: {
+  open: boolean; onOpen: () => void; onClose: () => void; children: React.ReactNode
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -818,7 +818,6 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                           onClick={() => openPaymentFor(r)}
                         >💶</button>
                         <RowMenu
-                          id={rowKey(r)}
                           open={menuOpenId === rowKey(r)}
                           onOpen={() => setMenuOpenId(rowKey(r))}
                           onClose={() => setMenuOpenId(null)}

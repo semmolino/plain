@@ -4,7 +4,7 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 export function useSaveState() {
   const [state, setState] = useState<SaveState>('idle')
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   function mark(s: SaveState) {
     setState(s)
