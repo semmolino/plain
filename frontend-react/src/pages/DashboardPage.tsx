@@ -141,14 +141,11 @@ function MonthlyChart({ data }: { data: DashboardMonthly[] }) {
   )
 }
 
-function DonutChart({ kpis }: { kpis: DashboardKpis }) {
-  const abschl  = Number(kpis.ABSCHLAGSRECHNUNGEN) || 0
-  const schluss = Number(kpis.SCHLUSSGERECHNET)   || 0
-  const offen   = Math.max(0, Number(kpis.OFFENE_LEISTUNG) || 0)
-  const total   = abschl + schluss + offen
-  const colors  = ['rgba(59,130,246,0.75)', 'rgba(34,197,94,0.75)', 'rgba(156,163,175,0.55)']
-  const labels  = ['Abschlagsrechnungen', 'Schlussgerechnet', 'Offene Leistung']
-  const values  = [abschl, schluss, offen]
+function DonutChart({ billed, open, remaining }: { billed: number; open: number; remaining: number }) {
+  const total   = billed + open + remaining
+  const colors  = ['rgba(34,197,94,0.75)', 'rgba(59,130,246,0.75)', 'rgba(156,163,175,0.45)']
+  const labels  = ['Abgerechnet', 'Offene Leistung', 'Noch zu erbringen']
+  const values  = [billed, open, remaining]
   return (
     <div className="donut-wrap">
       <div className="donut-canvas-wrap">
@@ -563,7 +560,11 @@ function GeschaeftsleitungView({
           </div>
           <div className="dash-card">
             <div className="dash-card-title">Leistungsverteilung</div>
-            <DonutChart kpis={kpis} />
+            <DonutChart
+              billed={projects.reduce((s, p) => s + Number(p.BILLED_NET_TOTAL || 0), 0)}
+              open={offeneLeist}
+              remaining={Math.max(0, honorar - leistung)}
+            />
             <div className="dash-card-title" style={{ marginTop: 20 }}>Projekte nach Status</div>
             <StatusList items={byStatus} />
           </div>
