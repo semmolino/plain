@@ -1654,4 +1654,48 @@ input::placeholder { color: var(--text-4); }
 
 .projekt-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-width: 0; }
 @media (max-width: 700px) { .projekt-detail-grid { grid-template-columns: 1fr; } }
+
+/* ── Toast notifications ─────────────────────────────────────────────────── */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast { display: flex; align-items: center; gap: 10px; min-width: 260px; max-width: 380px; padding: 11px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; box-shadow: 0 4px 16px rgba(0,0,0,0.14); animation: toast-in 0.2s ease; pointer-events: all; }
+.toast-success { background: #166534; color: #fff; }
+.toast-error   { background: #991b1b; color: #fff; }
+.toast-info    { background: #1e40af; color: #fff; }
+.toast-message { flex: 1; }
+.toast-close   { background: none; border: none; color: inherit; opacity: 0.7; cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1; min-width: 20px; min-height: 20px; }
+.toast-close:hover { opacity: 1; }
+
+/* ── Row overflow menu (Rechnungen, etc.) ────────────────────────────────── */
+.row-menu-wrap { position: relative; display: inline-block; }
+.row-menu-dropdown { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); min-width: 160px; z-index: 200; overflow: hidden; }
+.row-menu-item { display: block; width: 100%; text-align: left; padding: 9px 14px; font-size: 13px; background: none; border: none; cursor: pointer; color: var(--text); white-space: nowrap; }
+.row-menu-item:hover { background: var(--surface-2); }
+.row-menu-item.danger { color: #b91c1c; }
+.row-menu-item.danger:hover { background: #fef2f2; }
+
+/* ── Project context strip ───────────────────────────────────────────────── */
+.project-context-strip { display: flex; align-items: center; gap: 12px; padding: 8px 0 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+.project-context-back { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.project-context-back:hover { background: var(--surface-2); color: var(--text); }
+.project-context-name { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* ── Mahnstufe badges ────────────────────────────────────────────────────── */
+.mahnstufe-badge { display: inline-block; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.mahnstufe-badge.ms-0 { background: #e5e7eb; color: #6b7280; }
+.mahnstufe-badge.ms-1 { background: #dbeafe; color: #1d4ed8; }
+.mahnstufe-badge.ms-2 { background: #fef3c7; color: #92400e; }
+.mahnstufe-badge.ms-3 { background: #fed7aa; color: #9a3412; }
+.mahnstufe-badge.ms-4 { background: #fecaca; color: #7f1d1d; }
+.mahnung-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-width: 0; }
+@media (max-width: 700px) { .mahnung-detail-grid { grid-template-columns: 1fr; } }
+.mahnung-history-list { list-style: none; padding: 0; margin: 0; font-size: 12px; }
+.mahnung-history-list li { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
+.days-warn { color: #92400e; }
+.days-crit { color: #b91c1c; font-weight: 600; }
+.text-template-type-btn { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 13px; background: transparent; }
+.text-template-type-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 [data-theme="dark"] .mahnstufe-badge.ms-4 { background: rgba(127,29,29,0.2);  color: #fca5a5; }

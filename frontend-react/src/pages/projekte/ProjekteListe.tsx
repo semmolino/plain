@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal }         from '@/components/ui/Modal'
 import { Message }       from '@/components/ui/Message'
+import { ConfirmModal }  from '@/components/ui/ConfirmModal'
+import { useToast }      from '@/store/toastStore'
 import { Autocomplete }  from '@/components/ui/Autocomplete'
 import { useCtrlS }      from '@/hooks/useCtrlS'
 import {
@@ -81,6 +83,9 @@ type ContractConfirm = { contractId: number; addressId: number | null; contactId
 export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: number) => void }) {
   const qc       = useQueryClient()
   const navigate = useNavigate()
+  const toast    = useToast()
+
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   // list state
   const [search,        setSearch]        = useState('')
@@ -187,12 +192,15 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
   const deleteMut = useMutation({
     mutationFn: deleteProject,
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['projects-full'] }),
-    onError: (e: Error) => alert(e.message),
+    onError: (e: Error) => toast.error(e.message),
   })
 
-  async function handleDelete(p: Project) {
-    if (!window.confirm(`Projekt „${p.NAME_SHORT} – ${p.NAME_LONG}" wirklich löschen?`)) return
-    deleteMut.mutate(p.ID)
+  function handleDelete(p: Project) {
+    setConfirmState({
+      title: 'Projekt löschen',
+      message: `Projekt „${p.NAME_SHORT} – ${p.NAME_LONG}" wirklich löschen?`,
+      onConfirm: () => deleteMut.mutate(p.ID),
+    })
   }
 
   const updateMut = useMutation({
@@ -248,9 +256,9 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
     mutationFn: (id: number) => copyProject(id),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
-      alert(`Projekt kopiert: ${res.data.projectName}`)
+      toast.success(`Projekt kopiert: ${res.data.projectName}`)
     },
-    onError: (e: Error) => alert(e.message),
+    onError: (e: Error) => toast.error(e.message),
   })
 
   async function applyToContract(confirm: ContractConfirm) {
@@ -461,6 +469,14 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
           </div>
         </>
       )}
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        onConfirm={() => confirmState?.onConfirm()}
+        onCancel={() => setConfirmState(null)}
+      />
 
       <Modal open={editRow !== null} onClose={closeEdit} title="Projekt bearbeiten">
         {contractConfirm ? (

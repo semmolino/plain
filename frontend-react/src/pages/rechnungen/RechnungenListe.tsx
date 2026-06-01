@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Modal }   from '@/components/ui/Modal'
-import { Message } from '@/components/ui/Message'
+import { Modal }        from '@/components/ui/Modal'
+import { Message }      from '@/components/ui/Message'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
   fetchInvoices, fetchPartialPayments,
   openInvoicePdf, openPpPdf,
@@ -252,6 +253,29 @@ function emptyPaymentForm() {
   return { amount_payed_gross: '', payment_date: todayIso(), purpose_of_payment: '', comment: '' }
 }
 
+// ── Row overflow menu ─────────────────────────────────────────────────────────
+
+function RowMenu({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  return (
+    <div ref={ref} className="row-menu-wrap">
+      <button className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen">⋯</button>
+      {open && (
+        <div className="row-menu-dropdown" onClick={() => setOpen(false)}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface RechnungenListeProps {
@@ -291,8 +315,9 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
-  const [detailRow,   setDetailRow]   = useState<UnifiedRow | null>(null)
-  const [payTarget,   setPayTarget]   = useState<PaymentTarget | null>(null)
+  const [detailRow,     setDetailRow]     = useState<UnifiedRow | null>(null)
+  const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const [payTarget,     setPayTarget]     = useState<PaymentTarget | null>(null)
   const [payForm,     setPayForm]     = useState(emptyPaymentForm())
   const [payMsg,      setPayMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [existingPayments, setExistingPayments] = useState<Payment[]>([])
@@ -532,8 +557,15 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
     }
   }
 
-  async function handleDelete(row: UnifiedRow) {
-    if (!window.confirm(`Entwurf löschen?`)) return
+  function handleDelete(row: UnifiedRow) {
+    setConfirmState({
+      title: 'Entwurf löschen',
+      message: 'Diesen Entwurf wirklich löschen?',
+      onConfirm: () => actuallyDelete(row),
+    })
+  }
+
+  async function actuallyDelete(row: UnifiedRow) {
     try {
       if (row.source === 'invoice') {
         await deleteInvoice((row.raw as Invoice).ID)
@@ -727,28 +759,28 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                     if (c.key === 'statusLabel') return <td key={c.key}><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span>{row.isOverdue && <span className="status-badge overdue" title={`Fällig: ${row.dueDate}`}>Überfällig</span>}</td>
                     return null
                   })}
-                  <td className="doc-actions">
+                  <td className="doc-actions" style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn-small" onClick={() => setDetailRow(row)}>Details</button>
                     <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
                     {row.statusClass === 'booked' && (
                       <button className="btn-small" title="Per E-Mail senden" onClick={() => openEmailFor(row)}>✉ Mail</button>
                     )}
-                    <button className="btn-small" onClick={() => openXRechnung(row)}>XRechnung</button>
-                    <button className="btn-small" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
-                    {row.statusClass === 'booked' && (
-                      <button className="btn-small" title="Zur Mahnung navigieren" onClick={() => navigate('/rechnungen?tab=mahnungen')}>
-                        → Mahnung
-                      </button>
-                    )}
                     {canPay(row) && (
                       <button className="btn-small btn-save" onClick={() => openPayment(row)}>Zahlung</button>
                     )}
-                    {canCancel(row) && (
-                      <button className="btn-small btn-danger" onClick={() => handleCancel(row)}>Storno</button>
-                    )}
-                    {canDelete(row) && (
-                      <button className="btn-small btn-danger" onClick={() => handleDelete(row)}>Löschen</button>
-                    )}
+                    <RowMenu>
+                      <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
+                      <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
+                      {row.statusClass === 'booked' && (
+                        <button className="row-menu-item" onClick={() => navigate('/rechnungen?tab=mahnungen')}>→ Mahnung</button>
+                      )}
+                      {canCancel(row) && (
+                        <button className="row-menu-item danger" onClick={() => handleCancel(row)}>Storno</button>
+                      )}
+                      {canDelete(row) && (
+                        <button className="row-menu-item danger" onClick={() => handleDelete(row)}>Löschen</button>
+                      )}
+                    </RowMenu>
                   </td>
                 </tr>
               ))}
@@ -773,6 +805,14 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
           </table>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        onConfirm={() => confirmState?.onConfirm()}
+        onCancel={() => setConfirmState(null)}
+      />
 
       {/* Detail modal */}
       <Modal open={detailRow !== null} onClose={() => setDetailRow(null)}

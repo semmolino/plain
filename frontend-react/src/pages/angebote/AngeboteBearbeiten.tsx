@@ -3,6 +3,7 @@ import { useCtrlS } from '@/hooks/useCtrlS'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
 import { Modal }        from '@/components/ui/Modal'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import {
   fetchOffers, fetchOffer, updateOffer, fetchOfferStructure,
@@ -116,6 +117,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   const [editNodeMsg,       setEditNodeMsg]       = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [showHonorarWizard, setShowHonorarWizard] = useState(false)
   const [editCalcId, setEditCalcId] = useState<number | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   // Lookups
   const { data: offersData  } = useQuery({ queryKey: ['offers'],          queryFn: fetchOffers         })
@@ -366,7 +368,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
         {selectedId && (
           <>
             <button className="btn-small" onClick={() => openOfferPdf(selectedId)} style={{ marginLeft: 8 }}>PDF</button>
-            <button className="btn-small" onClick={() => { if (confirm('Angebot kopieren?')) copyMut.mutate() }} disabled={copyMut.isPending} style={{ marginLeft: 4 }}>
+            <button className="btn-small" onClick={() => copyMut.mutate()} disabled={copyMut.isPending} style={{ marginLeft: 4 }}>
               {copyMut.isPending ? '…' : 'Kopieren'}
             </button>
           </>
@@ -510,7 +512,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                             type="button"
                             className="btn-small btn-danger"
                             disabled={deleteCalcMut.isPending}
-                            onClick={() => { if (confirm(`HOAI-Kalkulation „${c.NAME_SHORT || c.NAME_LONG || 'Kalkulation'}" und alle zugehörigen Daten löschen?`)) deleteCalcMut.mutate(c.ID) }}
+                            onClick={() => setConfirmState({ title: 'Kalkulation löschen', message: `HOAI-Kalkulation „${c.NAME_SHORT || c.NAME_LONG || 'Kalkulation'}" und alle zugehörigen Daten löschen?`, onConfirm: () => deleteCalcMut.mutate(c.ID) })}
                           >×</button>
                         </td>
                       </tr>
@@ -566,7 +568,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                             <button className="btn-small" onClick={() => openNodeEdit(n)}>Bearbeiten</button>
                             <button className="btn-small btn-danger"
                               disabled={deleteNodeMut.isPending}
-                              onClick={() => { if (confirm('Position löschen?')) deleteNodeMut.mutate({ nodeId: n.ID }) }}>
+                              onClick={() => setConfirmState({ title: 'Position löschen', message: `Position „${n.NAME_SHORT}" löschen?`, onConfirm: () => deleteNodeMut.mutate({ nodeId: n.ID }) })}>
                               ×
                             </button>
                           </td>
@@ -687,6 +689,14 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
         />
       </Modal>
     )}
+
+    <ConfirmModal
+      open={confirmState !== null}
+      title={confirmState?.title ?? ''}
+      message={confirmState?.message ?? ''}
+      onConfirm={() => confirmState?.onConfirm()}
+      onCancel={() => setConfirmState(null)}
+    />
 
     {selectedId && (
       <BeauftragtModal

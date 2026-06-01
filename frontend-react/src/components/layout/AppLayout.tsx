@@ -6,6 +6,7 @@ import { BottomNav } from './BottomNav'
 import { NotificationBell } from './NotificationBell'
 import { TimerBar } from './TimerBar'
 import { ThemeSwitcher } from './ThemeSwitcher'
+import { ToastContainer } from '@/components/ui/Toast'
 
 function UserMenu() {
   const [open,       setOpen]       = useState(false)
@@ -86,6 +87,7 @@ export function AppLayout() {
         </div>
       </header>
       <main className="app-main">
+        <ToastContainer />
         <Outlet />
       </main>
       <BottomNav />

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useQuery }       from '@tanstack/react-query'
 import { Tabs }           from '@/components/ui/Tabs'
 import { ProjekteListe }  from '@/pages/projekte/ProjekteListe'
 import { ProjekteAnlegen } from '@/pages/projekte/ProjekteAnlegen'
@@ -9,6 +10,7 @@ import { Buchungen }      from '@/pages/projekte/Buchungen'
 import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
 import { Vertraege }      from '@/pages/projekte/Vertraege'
 import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
+import { fetchProjectReportHeader } from '@/api/reports'
 
 type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand' | 'vertraege' | 'mitarbeiter'
 
@@ -44,6 +46,12 @@ export function ProjektePage() {
     navigate('/projekte', { replace: true, state: null })
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const { data: projectHeader } = useQuery({
+    queryKey: ['project-header-name', selectedProjectId],
+    queryFn:  () => fetchProjectReportHeader(selectedProjectId!),
+    enabled:  selectedProjectId != null && tab !== 'liste',
+  })
+
   function openProject(id: number) {
     setSelectedProjectId(id)
     setTab('struktur')
@@ -61,6 +69,16 @@ export function ProjektePage() {
         active={tab}
         onChange={id => setTab(id as Tab)}
       />
+      {selectedProjectId && tab !== 'liste' && (
+        <div className="project-context-strip">
+          <button className="project-context-back" onClick={() => { setTab('liste'); setSelectedProjectId(undefined) }}>
+            ← Alle Projekte
+          </button>
+          <span className="project-context-name">
+            {projectHeader?.data?.NAME_SHORT ?? `#${selectedProjectId}`}
+          </span>
+        </div>
+      )}
       <div className="master-tab-content">
         {tab === 'liste'          && <ProjekteListe onSelectProject={openProject} />}
         {tab === 'anlegen'        && <ProjekteAnlegen />}
