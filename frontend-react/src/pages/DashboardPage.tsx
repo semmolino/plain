@@ -543,12 +543,14 @@ function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
 
 function GeschaeftsleitungView({
   projects, byStatus, alerts, riskProjects, billingSummary, teamHours, dateFrom, dateTo,
+  subPage, onSubPageChange,
 }: {
   projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   riskProjects: RiskProject[]; billingSummary: BillingSummaryData | null; teamHours: TeamHoursData | null;
   dateFrom: string; dateTo: string;
+  subPage: 'uebersicht' | 'risiko' | 'abrechnung' | 'personal';
+  onSubPageChange: (id: string) => void;
 }) {
-  const [subPage, setSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
   const honorar     = projects.reduce((s, p) => s + Number(p.BUDGET_TOTAL_NET    || 0), 0)
   const leistung    = projects.reduce((s, p) => s + Number(p.LEISTUNGSSTAND_VALUE || 0), 0)
   const offeneLeist = projects.reduce((s, p) => s + Number(p.OPEN_NET_TOTAL      || 0), 0)
@@ -567,7 +569,7 @@ function GeschaeftsleitungView({
           { id: 'personal',    label: 'Personal'       },
         ]}
         active={subPage}
-        onChange={id => setSubPage(id as typeof subPage)}
+        onChange={onSubPageChange}
       />
 
       {subPage === 'uebersicht' && (<>
@@ -801,12 +803,14 @@ function ControllerView({
 
 function BereichsleiterView({
   projects, byStatus, alerts, teamUtil, riskProjects, teamHours, monthly, dateFrom, dateTo,
+  subPage, onSubPageChange,
 }: {
   projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   teamUtil: TeamMemberUtilization[]; riskProjects: RiskProject[]; teamHours: TeamHoursData | null;
   monthly: DashboardMonthly[]; dateFrom: string; dateTo: string;
+  subPage: 'uebersicht' | 'risiko' | 'personal';
+  onSubPageChange: (id: string) => void;
 }) {
-  const [subPage, setSubPage]  = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
   const budgetHealthy = projects.filter(p =>
     Number(p.BUDGET_TOTAL_NET) > 0 &&
     Number(p.COST_TOTAL) / Number(p.BUDGET_TOTAL_NET) < 0.8
@@ -825,7 +829,7 @@ function BereichsleiterView({
           { id: 'personal',   label: 'Personal'       },
         ]}
         active={subPage}
-        onChange={id => setSubPage(id as typeof subPage)}
+        onChange={onSubPageChange}
       />
 
       {subPage === 'uebersicht' && (<>
@@ -1486,6 +1490,8 @@ function DashboardFilterBar({
 export function DashboardPage() {
   const { dashboardRole, setDashboardRole, employeeId } = useSession()
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
+  const [glSubPage, setGlSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
+  const [blSubPage, setBlSubPage] = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
 
   const isMitarbeiter = dashboardRole === 'mitarbeiter'
   const isController  = dashboardRole === 'controller'
@@ -1590,6 +1596,7 @@ export function DashboardPage() {
           projects={filteredProjects} byStatus={byStatus} alerts={alerts}
           riskProjects={derivedRiskProjects} billingSummary={billingSummary} teamHours={teamHours}
           dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
+          subPage={glSubPage} onSubPageChange={id => setGlSubPage(id as typeof glSubPage)}
         />
       )}
 
@@ -1602,6 +1609,7 @@ export function DashboardPage() {
           projects={filteredProjects} byStatus={byStatus} alerts={alerts}
           teamUtil={teamUtil} riskProjects={derivedRiskProjects} teamHours={teamHours}
           monthly={monthly} dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
+          subPage={blSubPage} onSubPageChange={id => setBlSubPage(id as typeof blSubPage)}
         />
       )}
 
