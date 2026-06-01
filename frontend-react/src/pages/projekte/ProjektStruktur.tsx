@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, Percent } from 'lucide-react'
@@ -68,6 +68,11 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
   const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
+  const [projectSearch, setProjectSearch]   = useState('')
+  const [elementSearch, setElementSearch]   = useState('')
+  const [contextMenu, setContextMenu]       = useState<{ x: number; y: number; nodeId: number } | null>(null)
+  const contextMenuRef                      = useRef<HTMLDivElement>(null)
+  const longPressRef                        = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: structData, isLoading } = useQuery({
@@ -87,6 +92,41 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const flatTree = structure.length ? flattenTree(buildStructureTree(structure)) : []
   // Use String keys throughout to avoid bigint vs number type mismatches at runtime
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
+
+  const filteredProjects = useMemo(() => {
+    const q = projectSearch.toLowerCase()
+    return q ? projects.filter(p =>
+      p.NAME_SHORT.toLowerCase().includes(q) || (p.NAME_LONG?.toLowerCase().includes(q))
+    ) : projects
+  }, [projects, projectSearch])
+
+  const filteredFlatTree = useMemo(() => {
+    if (!elementSearch) return flatTree
+    const q = elementSearch.toLowerCase()
+    const matchIds = new Set(
+      flatTree
+        .filter(({ node }) =>
+          node.NAME_SHORT.toLowerCase().includes(q) ||
+          (node.NAME_LONG?.toLowerCase().includes(q))
+        )
+        .map(({ node }) => node.STRUCTURE_ID)
+    )
+    for (const id of [...matchIds]) {
+      let cursor = parentMap.get(String(id))
+      while (cursor != null) { matchIds.add(Number(cursor)); cursor = parentMap.get(cursor) }
+    }
+    return flatTree.filter(({ node }) => matchIds.has(node.STRUCTURE_ID))
+  }, [flatTree, elementSearch])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function onDown(e: MouseEvent) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node))
+        setContextMenu(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [contextMenu])
   const parentMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
 
   // Aggregate sums for parent nodes (computed bottom-up, client-side)
@@ -534,12 +574,19 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
   return (
     <div>
-      <div className="form-group" style={{ maxWidth: 400, marginBottom: 12 }}>
+      <div className="form-group" style={{ maxWidth: 440, marginBottom: 12 }}>
         <label>Projekt</label>
-        <select value={selectedPid ?? ''} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setSelectedPid(id); onProjectChange?.(id) }}>
-          <option value="">Bitte wählen …</option>
-          {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
-        </select>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input
+            type="search" className="list-search" placeholder="Projekt suchen …"
+            style={{ flex: '0 0 160px', fontSize: 13 }}
+            value={projectSearch} onChange={e => setProjectSearch(e.target.value)}
+          />
+          <select style={{ flex: 1 }} value={selectedPid ?? ''} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setSelectedPid(id); onProjectChange?.(id) }}>
+            <option value="">Bitte wählen …</option>
+            {filteredProjects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
+          </select>
+        </div>
       </div>
 
       {selectedPid !== null && currentProject && (
@@ -587,6 +634,12 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
               {flatTree.length > 0 && (
                 <div className="list-section">
+                  <div style={{ marginBottom: 8 }}>
+                    <input type="search" className="list-search" placeholder="Elemente filtern …"
+                      style={{ maxWidth: 260, fontSize: 13 }}
+                      value={elementSearch} onChange={e => setElementSearch(e.target.value)}
+                    />
+                  </div>
                   <table className="master-table structure-table">
                     <thead>
                       <tr>
@@ -599,6 +652,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th>Bezeichnung</th>
                         <th>Abrechnung</th>
                         <th className="num">Honorar €</th>
+                        <th className="num" style={{ fontSize: 10, color: '#9ca3af' }}>davon Zuschläge</th>
                         <th className="num">NK %</th>
                         <th className="num">Nebenkosten €</th>
                         <th className="num">Stand €</th>
@@ -616,15 +670,17 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                           <td><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
+                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootStand)}</span></td>
                           <td></td>
                         </tr>
                       )}
-                      {flatTree.map(({ node, depth }) => {
+                      {filteredFlatTree.map(({ node, depth }) => {
                         const edit      = edits[node.STRUCTURE_ID]
                         const nkVal     = edit?.nk     ?? String(node.EXTRAS_PERCENT ?? 0)
-                        const budgetVal = edit?.budget ?? String(node.REVENUE ?? 0)
+                        // Editable "Honorar" shows REVENUE_BASIS (the base before surcharges)
+                        const budgetVal = edit?.budget ?? String(node.REVENUE_BASIS ?? node.REVENUE ?? 0)
                         const nameShort = edit?.nameShort     ?? (node.NAME_SHORT ?? '')
                         const nameLong  = edit?.nameLong      ?? (node.NAME_LONG  ?? '')
                         const btId      = edit?.billingTypeId ?? String(node.BILLING_TYPE_ID ?? '')
@@ -633,9 +689,10 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         const isDragOver = dragOverId === node.STRUCTURE_ID
 
                         const sEdit = surchargeEdits[node.STRUCTURE_ID] ?? surchargeDefault(node)
-                        const surchargeBase = (isParent
-                          ? (aggMap.get(String(node.STRUCTURE_ID))?.revenue ?? 0) + (aggMap.get(String(node.STRUCTURE_ID))?.extras ?? 0)
-                          : ((isTec ? node.TEC_SP_TOT_SUM : node.REVENUE) ?? 0) + (node.EXTRAS ?? 0))
+                        // Surcharge base = REVENUE_BASIS only (for leaf) or sum of children's REVENUE (for parent)
+                        const surchargeBase = isParent
+                          ? (aggMap.get(String(node.STRUCTURE_ID))?.revenue ?? 0)
+                          : (isTec ? (node.TEC_SP_TOT_SUM ?? 0) : (node.REVENUE_BASIS ?? node.REVENUE ?? 0))
                         const computed = computeSurcharges(surchargeBase, sEdit)
                         const hasSurcharges = (node.SURCHARGES_TOTAL ?? 0) !== 0
 
@@ -649,6 +706,10 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               isDragOver && dragZone === 'above' ? 'ps-drop-above' : '',
                               dragIds.has(node.STRUCTURE_ID) ? 'ps-dragging' : '',
                             ].filter(Boolean).join(' ')}
+                            onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.STRUCTURE_ID }) }}
+                            onTouchStart={() => { longPressRef.current = setTimeout(() => setContextMenu({ x: 0, y: 0, nodeId: node.STRUCTURE_ID }), 600) }}
+                            onTouchEnd={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null } }}
+                            onTouchMove={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null } }}
                             style={node.IS_INTERNAL ? { opacity: 0.6 } : undefined}
                           >
                             <td>
@@ -688,12 +749,19 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             <td className="num">
                               {isParent || isTec ? (
                                 <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>
-                                  {fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.revenue : node.TEC_SP_TOT_SUM)}
+                                  {fmtEur(isParent ? node.REVENUE : node.TEC_SP_TOT_SUM)}
                                 </span>
                               ) : (
                                 <input className="tbl-input" type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
                                   value={budgetVal}
                                   onChange={e => setField(node.STRUCTURE_ID, 'budget', e.target.value)} />
+                              )}
+                            </td>
+                            <td className="num">
+                              {hasSurcharges || (node.SURCHARGES_TOTAL ?? 0) > 0 ? (
+                                <span style={{ color: '#2563eb', fontSize: 12 }}>{fmtEur(node.SURCHARGES_TOTAL)}</span>
+                              ) : (
+                                <span style={{ color: 'rgba(17,24,39,0.25)', fontSize: 12 }}>—</span>
                               )}
                             </td>
                             <td className="num">
@@ -746,10 +814,10 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                           </tr>
                           {surchargePanel === node.STRUCTURE_ID && (
                             <tr className="surcharge-panel-row">
-                              <td colSpan={11}>
+                              <td colSpan={12}>
                                 <div className="surcharge-panel">
                                   <div className="surcharge-panel-basis">
-                                    Basis (Honorar + NK): <strong>{fmtEur(surchargeBase)}</strong>
+                                    Basis (Honorar): <strong>{fmtEur(surchargeBase)}</strong>
                                   </div>
                                   <div className="surcharge-grid">
                                     <div className="surcharge-grid-header">
@@ -910,6 +978,35 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />
+    {contextMenu && (() => {
+      const cmNode = structure.find(n => n.STRUCTURE_ID === contextMenu.nodeId)
+      const cmName = cmNode?.NAME_SHORT ?? ''
+      // On mobile (x=0), centre the menu; otherwise position at cursor
+      const style: React.CSSProperties = contextMenu.x === 0
+        ? { position: 'fixed', top: '40%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 1500 }
+        : { position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 1500 }
+      return (
+        <div className="struct-context-menu" ref={contextMenuRef} style={style}>
+          <button onClick={() => {
+            setAddForm({ ...emptyAdd(), FATHER_ID: String(contextMenu.nodeId) })
+            setContextMenu(null)
+          }}>Element anlegen</button>
+          <button disabled style={{ opacity: 0.4 }}>Vorlage anlegen</button>
+          <button onClick={() => { setSurchargePanel(contextMenu.nodeId); setContextMenu(null) }}>
+            Zuschlag hinzufügen
+          </button>
+          <div className="struct-context-divider" />
+          <button className="struct-context-danger" onClick={() => {
+            if (cmNode) setConfirmState({
+              title: 'Element löschen',
+              message: `Element „${cmName}" und alle Kind-Elemente löschen?`,
+              onConfirm: () => deleteMut.mutate(cmNode.STRUCTURE_ID),
+            })
+            setContextMenu(null)
+          }}>Element löschen</button>
+        </div>
+      )
+    })()}
     </div>
   )
 }

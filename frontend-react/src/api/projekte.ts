@@ -46,6 +46,7 @@ export interface StructureNode {
   EXTRAS_COMPLETION:           number
   TEC_SP_TOT_SUM:              number
   IS_INTERNAL:                 boolean
+  REVENUE_BASIS:               number | null
   SURCHARGE_1_LABEL:           string | null
   SURCHARGE_1_PCT:             number | null
   SURCHARGE_1_EUR:             number | null

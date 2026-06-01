@@ -489,6 +489,41 @@ async function patchStructureCompletionPercents(supabase, { structureId, revPct,
 }
 
 // ---------------------------------------------------------------------------
+// Surcharge helper (shared by patchStructure and recalcParent)
+// ---------------------------------------------------------------------------
+
+function computeSurchargesNode(revenueBasis, settings) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const s1Label = settings?.SURCHARGE_1_LABEL ?? null;
+  const s1Pct   = Number(settings?.SURCHARGE_1_PCT ?? 0);
+  const s1Cumul = !!(settings?.SURCHARGE_1_CUMUL ?? true);
+  const s2Label = settings?.SURCHARGE_2_LABEL ?? null;
+  const s2Pct   = Number(settings?.SURCHARGE_2_PCT ?? 0);
+  const s2Cumul = !!(settings?.SURCHARGE_2_CUMUL ?? true);
+  const s3Label = settings?.SURCHARGE_3_LABEL ?? null;
+  const s3Pct   = Number(settings?.SURCHARGE_3_PCT ?? 0);
+  const s3Cumul = !!(settings?.SURCHARGE_3_CUMUL ?? true);
+
+  const s1Active = s1Label !== null && s1Label !== "" && s1Pct !== 0;
+  const s1Eur    = s1Active ? r2(revenueBasis * s1Pct / 100) : 0;
+  const s1Sub    = revenueBasis + s1Eur;
+
+  const s2Base   = s2Cumul ? s1Sub : revenueBasis;
+  const s2Active = s2Label !== null && s2Label !== "" && s2Pct !== 0;
+  const s2Eur    = s2Active ? r2(s2Base * s2Pct / 100) : 0;
+  const s2Sub    = s1Sub + s2Eur;
+
+  const s3Base   = s3Cumul ? s2Sub : revenueBasis;
+  const s3Active = s3Label !== null && s3Label !== "" && s3Pct !== 0;
+  const s3Eur    = s3Active ? r2(s3Base * s3Pct / 100) : 0;
+
+  return {
+    s1Eur, s2Eur, s3Eur,
+    surchargesTotal: r2(s1Eur + s2Eur + s3Eur),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Parent aggregation helpers
 // ---------------------------------------------------------------------------
 
@@ -501,7 +536,8 @@ async function recalcParent(supabase, { parentId }) {
   if (!children || children.length === 0) return;
 
   const s = (field) => children.reduce((acc, c) => acc + Number(c[field] ?? 0), 0);
-  const revenue          = s("REVENUE");
+  // Children's REVENUE already includes their own surcharges; this sum is the parent's basis
+  const revenueBasis     = s("REVENUE");
   const extras           = s("EXTRAS");
   const costs            = s("COSTS");
   const revenueCompletion = s("REVENUE_COMPLETION");
@@ -509,13 +545,25 @@ async function recalcParent(supabase, { parentId }) {
   const partialPayments  = s("PARTIAL_PAYMENTS");
   const invoiced         = s("INVOICED");
   const payed            = s("PAYED");
+
+  // Apply parent's own surcharges on top of the aggregated basis
+  const { data: parentSettings } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
+    .eq("ID", parentId)
+    .maybeSingle();
+
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesNode(revenueBasis, parentSettings);
+  const revenue = r2(revenueBasis + surchargesTotal);
+
   const revenuePct = revenue > 0 ? (revenueCompletion / revenue) * 100 : 0;
   const extrasPct  = extras  > 0 ? (extrasCompletion  / extras)  * 100 : 0;
-  const extrasPercent = revenue > 0 ? (extras / revenue) * 100 : 0;
 
   const { error: uErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .update({
+      REVENUE_BASIS: revenueBasis,
       REVENUE: revenue,
       EXTRAS: extras,
       COSTS: costs,
@@ -527,6 +575,10 @@ async function recalcParent(supabase, { parentId }) {
       PARTIAL_PAYMENTS: partialPayments,
       INVOICED: invoiced,
       PAYED: payed,
+      SURCHARGES_TOTAL:  surchargesTotal,
+      SURCHARGE_1_EUR:   r2(s1Eur),
+      SURCHARGE_2_EUR:   r2(s2Eur),
+      SURCHARGE_3_EUR:   r2(s3Eur),
     })
     .eq("ID", parentId);
   if (uErr) throw uErr;
@@ -855,7 +907,7 @@ async function createStructureNode(supabase, { projectId, node, transferParentVa
 async function patchStructure(supabase, { structureId, update }) {
   const { data: current, error: currentErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
+    .select("NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, REVENUE_BASIS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
     .eq("ID", structureId)
     .maybeSingle();
 
@@ -889,10 +941,11 @@ async function patchStructure(supabase, { structureId, update }) {
       ? Number(update.EXTRAS_PERCENT)
       : Number(current.EXTRAS_PERCENT ?? 0);
 
-  let revenue =
+  // REVENUE sent from frontend = the user's entered base (REVENUE_BASIS); BT=2 overrides from TEC
+  let revenueBasis =
     update.REVENUE !== undefined && update.REVENUE !== null && String(update.REVENUE) !== ""
       ? Number(update.REVENUE)
-      : Number(current.REVENUE ?? 0);
+      : Number(current.REVENUE_BASIS ?? current.REVENUE ?? 0);
 
   if (Number(billingTypeId) === 2) {
     const { data: tecRows, error: tecError } = await supabase
@@ -900,17 +953,13 @@ async function patchStructure(supabase, { structureId, update }) {
       .select("SP_TOT")
       .eq("STRUCTURE_ID", structureId);
     if (tecError) throw tecError;
-    revenue = (tecRows || []).reduce((acc, r) => {
+    revenueBasis = (tecRows || []).reduce((acc, r) => {
       const v = Number(r.SP_TOT ?? 0);
       return acc + (Number.isFinite(v) ? v : 0);
     }, 0);
   }
 
-  const extras = (revenue * extrasPercent) / 100;
-  const revenueCompletion = (revenuePct * revenue) / 100;
-  const extrasCompletion = (extrasPct * extras) / 100;
-
-  // Surcharge computation
+  // Surcharge computation (base = REVENUE_BASIS only, extras applied after)
   const pick = (field, fallback) =>
     update[field] !== undefined ? update[field] : (current[field] ?? fallback);
 
@@ -924,27 +973,28 @@ async function patchStructure(supabase, { structureId, update }) {
   const s3Pct   = Number(pick("SURCHARGE_3_PCT", 0));
   const s3Cumul = !!pick("SURCHARGE_3_CUMUL", true);
 
-  const surchargeBase = revenue + extras;
-  const s1Active = s1Label !== null && s1Label !== "" && s1Pct !== 0;
-  const s1Eur   = s1Active ? (surchargeBase * s1Pct) / 100 : 0;
-  const s1Sub   = surchargeBase + s1Eur;
-
-  const s2Base   = s2Cumul ? s1Sub : surchargeBase;
-  const s2Active = s2Label !== null && s2Label !== "" && s2Pct !== 0;
-  const s2Eur    = s2Active ? (s2Base * s2Pct) / 100 : 0;
-  const s2Sub    = s1Sub + s2Eur;
-
-  const s3Base   = s3Cumul ? s2Sub : surchargeBase;
-  const s3Active = s3Label !== null && s3Label !== "" && s3Pct !== 0;
-  const s3Eur    = s3Active ? (s3Base * s3Pct) / 100 : 0;
-
   const r2 = (n) => Math.round(n * 100) / 100;
-  const surchargesTotal = r2(s1Eur + s2Eur + s3Eur);
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesNode(revenueBasis, {
+    SURCHARGE_1_LABEL: s1Label, SURCHARGE_1_PCT: s1Pct, SURCHARGE_1_CUMUL: s1Cumul,
+    SURCHARGE_2_LABEL: s2Label, SURCHARGE_2_PCT: s2Pct, SURCHARGE_2_CUMUL: s2Cumul,
+    SURCHARGE_3_LABEL: s3Label, SURCHARGE_3_PCT: s3Pct, SURCHARGE_3_CUMUL: s3Cumul,
+  });
+
+  const s1Active = s1Label !== null && s1Label !== "" && s1Pct !== 0;
+  const s2Active = s2Label !== null && s2Label !== "" && s2Pct !== 0;
+  const s3Active = s3Label !== null && s3Label !== "" && s3Pct !== 0;
+
+  // Final REVENUE = REVENUE_BASIS + surcharges; EXTRAS computed on surcharged REVENUE
+  const revenue = r2(revenueBasis + surchargesTotal);
+  const extras = (revenue * extrasPercent) / 100;
+  const revenueCompletion = (revenuePct * revenue) / 100;
+  const extrasCompletion = (extrasPct * extras) / 100;
 
   const updatePayload = {
     NAME_SHORT: nameShort,
     NAME_LONG: nameLong,
     BILLING_TYPE_ID: billingTypeId,
+    REVENUE_BASIS: revenueBasis,
     REVENUE: revenue,
     EXTRAS_PERCENT: extrasPercent,
     REVENUE_COMPLETION_PERCENT: revenuePct,

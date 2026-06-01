@@ -1079,6 +1079,36 @@ input::placeholder { color: var(--text-4); }
   display: flex; gap: 8px; margin-top: 10px;
 }
 
+/* ── Structure context menu ─────────────────────────────────────────────── */
+.struct-context-menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(17,24,39,0.14);
+  padding: 4px;
+  min-width: 180px;
+  display: flex; flex-direction: column; gap: 2px;
+  animation: ctx-in 0.1s ease;
+}
+@keyframes ctx-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.struct-context-menu button {
+  all: unset;
+  display: block; width: 100%;
+  padding: 7px 12px;
+  font-size: 13px; border-radius: 5px; cursor: pointer;
+  color: var(--text);
+  transition: background 0.1s;
+  box-sizing: border-box;
+}
+.struct-context-menu button:hover:not(:disabled) { background: var(--surface-2); }
+.struct-context-menu button:disabled { color: var(--text-4); cursor: default; }
+.struct-context-danger { color: #e74c3c !important; }
+.struct-context-danger:hover:not(:disabled) { background: #fef2f2 !important; }
+.struct-context-divider { height: 1px; background: var(--border); margin: 3px 4px; }
+
 /* Wizard layout */
 .wizard-wrap { max-width: 100%; }
 .wizard-steps {
