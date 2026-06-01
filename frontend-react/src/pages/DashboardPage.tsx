@@ -1495,7 +1495,7 @@ export function DashboardPage() {
   // dateRange computed before useQueries so it can drive query keys + fns
   const dateRange = useMemo(() => computeDateRange(filters.zeitraum), [filters.zeitraum])
 
-  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ, riskQ, billingQ, teamHoursQ] = useQueries({
+  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ, , billingQ, teamHoursQ] = useQueries({
     queries: [
       { queryKey: ['dashboard', 'kpis'],                                       queryFn: fetchDashboardKpis,       staleTime: 300000, enabled: isController },
       { queryKey: ['dashboard', 'projects', dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchDashboardProjects(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: !isMitarbeiter },
