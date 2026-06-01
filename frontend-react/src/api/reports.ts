@@ -10,13 +10,27 @@ export interface DashboardKpis {
 }
 
 export interface DashboardProject {
-  PROJECT_ID:          number | null
-  NAME_SHORT:          string | null
-  NAME_LONG:           string | null
-  BUDGET_TOTAL_NET:    number | null
-  LEISTUNGSSTAND_VALUE: number | null
-  HOURS_TOTAL:         number | null
-  COST_TOTAL:          number | null
+  PROJECT_ID:                number | null
+  NAME_SHORT:                string | null
+  NAME_LONG:                 string | null
+  PROJECT_STATUS_ID:         number | null
+  PROJECT_STATUS_NAME_SHORT: string | null
+  PROJECT_MANAGER_ID:        number | null
+  PROJECT_MANAGER_DISPLAY:   string | null
+  DEPARTMENT_ID:             number | null
+  DEPARTMENT_NAME:           string | null
+  BUDGET_TOTAL_NET:          number | null
+  LEISTUNGSSTAND_PERCENT:    number | null
+  LEISTUNGSSTAND_VALUE:      number | null
+  HOURS_TOTAL:               number | null
+  COST_TOTAL:                number | null
+  COST_RATIO:                number | null
+  REMAINING_BUDGET_NET:      number | null
+  BILLED_NET_TOTAL:          number | null
+  OPEN_NET_TOTAL:            number | null
+  PAYED_NET_TOTAL:           number | null
+  SALES_TOTAL:               number | null
+  QTY_EXT_TOTAL:             number | null
 }
 
 export interface DashboardMonthly {
@@ -33,11 +47,15 @@ export interface DashboardByStatus {
 export const fetchDashboardKpis = () =>
   apiClient.get<{ data: DashboardKpis }>('/reports/dashboard/kpis')
 
-export const fetchDashboardProjects = () =>
-  apiClient.get<{ data: DashboardProject[] }>('/reports/dashboard/projects')
+export const fetchDashboardProjects = (dateFrom?: string, dateTo?: string) => {
+  const qs = dateFrom && dateTo ? `?date_from=${dateFrom}&date_to=${dateTo}` : ''
+  return apiClient.get<{ data: DashboardProject[] }>(`/reports/dashboard/projects${qs}`)
+}
 
-export const fetchDashboardMonthly = () =>
-  apiClient.get<{ data: DashboardMonthly[] }>('/reports/dashboard/monthly')
+export const fetchDashboardMonthly = (dateFrom?: string, dateTo?: string) => {
+  const qs = dateFrom && dateTo ? `?date_from=${dateFrom}&date_to=${dateTo}` : ''
+  return apiClient.get<{ data: DashboardMonthly[] }>(`/reports/dashboard/monthly${qs}`)
+}
 
 export const fetchDashboardByStatus = () =>
   apiClient.get<{ data: DashboardByStatus[] }>('/reports/dashboard/by-status')

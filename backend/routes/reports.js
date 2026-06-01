@@ -492,24 +492,71 @@ module.exports = (supabase) => {
     res.json({ data: data || {} });
   });
 
-  // Top-10 projects by budget
+  // Projects — all root projects with full fields; date-filtered via fn_project_list_report when params present
   router.get("/dashboard/projects", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
-    const { data, error } = await supabase
-      .from("VW_REPORT_PROJECT_LIST_ROOT")
-      .select("PROJECT_ID, NAME_SHORT, NAME_LONG, BUDGET_TOTAL_NET, LEISTUNGSSTAND_VALUE, HOURS_TOTAL, COST_TOTAL, PARTIAL_PAYMENT_NET_TOTAL, INVOICE_NET_TOTAL")
-      .eq("TENANT_ID", tenantId)
-      .order("BUDGET_TOTAL_NET", { ascending: false })
-      .limit(10);
+
+    const dateFrom = req.query.date_from;
+    const dateTo   = req.query.date_to;
+
+    let data, error;
+
+    if (dateFrom && dateTo) {
+      ({ data, error } = await supabase.rpc("fn_project_list_report", {
+        p_tenant_id: parseInt(tenantId, 10),
+        p_as_of:     null,
+        p_date_from: dateFrom,
+        p_date_to:   dateTo + "T23:59:59",
+      }));
+    } else {
+      ({ data, error } = await supabase
+        .from("VW_REPORT_PROJECT_DETAIL")
+        .select([
+          "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+          "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
+          "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
+          "DEPARTMENT_ID", "DEPARTMENT_NAME",
+          "BUDGET_TOTAL_NET", "LEISTUNGSSTAND_PERCENT", "LEISTUNGSSTAND_VALUE",
+          "HOURS_TOTAL", "COST_TOTAL", "COST_RATIO",
+          "REMAINING_BUDGET_NET", "BILLED_NET_TOTAL", "OPEN_NET_TOTAL",
+          "PAYED_NET_TOTAL", "SALES_TOTAL", "QTY_EXT_TOTAL",
+        ].join(", "))
+        .eq("TENANT_ID", tenantId)
+        .order("BUDGET_TOTAL_NET", { ascending: false }));
+    }
+
     if (error) return res.status(500).json({ error: error.message });
     res.json({ data: data || [] });
   });
 
-  // Hours + costs per month (last 6 months)
+  // Hours + costs per month — date-filtered by querying TEC directly when params present
   router.get("/dashboard/monthly", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
+
+    const dateFrom = req.query.date_from;
+    const dateTo   = req.query.date_to;
+
+    if (dateFrom && dateTo) {
+      const { data, error } = await supabase
+        .from("TEC")
+        .select("DATE_VOUCHER, QUANTITY_INT, CP_TOT")
+        .eq("TENANT_ID", tenantId)
+        .gte("DATE_VOUCHER", dateFrom)
+        .lte("DATE_VOUCHER", dateTo);
+      if (error) return res.status(500).json({ error: error.message });
+
+      const byMonth = {};
+      for (const row of (data || [])) {
+        const m = String(row.DATE_VOUCHER).substring(0, 7);
+        if (!byMonth[m]) byMonth[m] = { MONTH: m, HOURS_TOTAL: 0, COST_TOTAL: 0 };
+        byMonth[m].HOURS_TOTAL = Math.round((byMonth[m].HOURS_TOTAL + Number(row.QUANTITY_INT || 0)) * 100) / 100;
+        byMonth[m].COST_TOTAL  = Math.round((byMonth[m].COST_TOTAL  + Number(row.CP_TOT || 0)) * 100) / 100;
+      }
+      return res.json({ data: Object.values(byMonth).sort((a, b) => a.MONTH.localeCompare(b.MONTH)) });
+    }
+
     const { data, error } = await supabase
       .rpc("fn_dashboard_monthly", { p_tenant_id: parseInt(tenantId, 10) });
     if (error) return res.status(500).json({ error: error.message });

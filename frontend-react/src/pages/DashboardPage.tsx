@@ -508,17 +508,17 @@ function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
 // ── Role views ────────────────────────────────────────────────────────────────
 
 function GeschaeftsleitungView({
-  kpis, projects, byStatus, alerts, riskProjects, billingSummary, teamHours, dateFrom, dateTo,
+  projects, byStatus, alerts, riskProjects, billingSummary, teamHours, dateFrom, dateTo,
 }: {
-  kpis: DashboardKpis; projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
+  projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   riskProjects: RiskProject[]; billingSummary: BillingSummaryData | null; teamHours: TeamHoursData | null;
   dateFrom: string; dateTo: string;
 }) {
   const [subPage, setSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
-  const honorar      = Number(kpis.HONORAR_GESAMT)       || 0
-  const leistung     = Number(kpis.LEISTUNGSSTAND_VALUE) || 0
-  const offeneLeist  = Number(kpis.OFFENE_LEISTUNG)      || 0
-  const leistPct     = honorar > 0 ? (leistung / honorar) * 100 : 0
+  const honorar     = projects.reduce((s, p) => s + Number(p.BUDGET_TOTAL_NET    || 0), 0)
+  const leistung    = projects.reduce((s, p) => s + Number(p.LEISTUNGSSTAND_VALUE || 0), 0)
+  const offeneLeist = projects.reduce((s, p) => s + Number(p.OPEN_NET_TOTAL      || 0), 0)
+  const leistPct    = honorar > 0 ? (leistung / honorar) * 100 : 0
   const budgetAlerts = alerts.filter(a => a.type === 'budget_critical')
   const atRiskCount  = budgetAlerts[0]?.count ?? 0
   const activeCount  = projects.length
@@ -540,10 +540,10 @@ function GeschaeftsleitungView({
         <AlertStrip alerts={alerts} />
 
         <div className="kpi-grid">
-          <KpiCard label="Honorar gesamt"   value={fmtEur(kpis.HONORAR_GESAMT)}       />
-          <KpiCard label="Offene Leistung"  value={fmtEur(kpis.OFFENE_LEISTUNG)}      />
-          <KpiCard label="Leistungsstand"   value={fmtEur(kpis.LEISTUNGSSTAND_VALUE)} meta={`${fmtPct(leistPct)} des Honorars`} />
-          <KpiCard label="Aktive Projekte"  value={String(activeCount)}               />
+          <KpiCard label="Honorar gesamt"   value={fmtEur(honorar)}    />
+          <KpiCard label="Offene Leistung"  value={fmtEur(offeneLeist)} />
+          <KpiCard label="Leistungsstand"   value={fmtEur(leistung)}   meta={`${fmtPct(leistPct)} des Honorars`} />
+          <KpiCard label="Aktive Projekte"  value={String(activeCount)} />
         </div>
 
         <NarrativeBlock>
@@ -762,10 +762,11 @@ function ControllerView({
 }
 
 function BereichsleiterView({
-  kpis, projects, byStatus, alerts, teamUtil, riskProjects, teamHours,
+  projects, byStatus, alerts, teamUtil, riskProjects, teamHours, monthly,
 }: {
-  kpis: DashboardKpis; projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
+  projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   teamUtil: TeamMemberUtilization[]; riskProjects: RiskProject[]; teamHours: TeamHoursData | null;
+  monthly: DashboardMonthly[];
 }) {
   const [subPage, setSubPage]  = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
   const budgetHealthy = projects.filter(p =>
@@ -774,6 +775,8 @@ function BereichsleiterView({
   ).length
   const budgetHealthPct = projects.length > 0 ? Math.round((budgetHealthy / projects.length) * 100) : 0
   const totalHours4w    = teamUtil.reduce((s, e) => s + e.hours_4weeks, 0)
+  const offeneLeist     = projects.reduce((s, p) => s + Number(p.OPEN_NET_TOTAL || 0), 0)
+  const stundenZeitraum = monthly.reduce((s, m) => s + Number(m.HOURS_TOTAL || 0), 0)
 
   return (
     <>
@@ -791,10 +794,10 @@ function BereichsleiterView({
         <AlertStrip alerts={alerts} />
 
         <div className="kpi-grid">
-          <KpiCard label="Aktive Projekte"    value={String(projects.length)}             />
-          <KpiCard label="Stunden (Monat)"    value={fmtH(kpis.STUNDEN_MONAT)}           />
-          <KpiCard label="Budget-Gesundheit"  value={fmtPct(budgetHealthPct)}             meta={`${budgetHealthy} von ${projects.length} im grünen Bereich`} />
-          <KpiCard label="Offene Leistung"    value={fmtEur(kpis.OFFENE_LEISTUNG)}       />
+          <KpiCard label="Aktive Projekte"    value={String(projects.length)}              />
+          <KpiCard label="Stunden (Zeitraum)" value={fmtH(stundenZeitraum)}               />
+          <KpiCard label="Budget-Gesundheit"  value={fmtPct(budgetHealthPct)}              meta={`${budgetHealthy} von ${projects.length} im grünen Bereich`} />
+          <KpiCard label="Offene Leistung"    value={fmtEur(offeneLeist)}                 />
         </div>
 
         <NarrativeBlock>
@@ -1448,19 +1451,22 @@ export function DashboardPage() {
   const isGl          = dashboardRole === 'geschaeftsleitung'
   const isBl          = dashboardRole === 'bereichsleiter'
 
+  // dateRange computed before useQueries so it can drive query keys + fns
+  const dateRange = useMemo(() => computeDateRange(filters.zeitraum), [filters.zeitraum])
+
   const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ, riskQ, billingQ, teamHoursQ] = useQueries({
     queries: [
-      { queryKey: ['dashboard', 'kpis'],             queryFn: fetchDashboardKpis,      staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'projects'],          queryFn: fetchDashboardProjects,  staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'monthly'],           queryFn: fetchDashboardMonthly,   staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'by-status'],         queryFn: fetchDashboardByStatus,  staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'alerts'],            queryFn: fetchDashboardAlerts,    staleTime: 120000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'overdue-invoices'],  queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'team-utilization'],  queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'mahnung-stats'],     queryFn: fetchMahnungStats,       staleTime: 120000, enabled: isController },
-      { queryKey: ['dashboard', 'risk-projects'],     queryFn: fetchRiskProjects,       staleTime: 300000, enabled: isGl || isBl },
-      { queryKey: ['dashboard', 'billing-summary'],   queryFn: fetchBillingSummary,     staleTime: 300000, enabled: isGl },
-      { queryKey: ['dashboard', 'team-hours'],        queryFn: fetchTeamHours,          staleTime: 300000, enabled: isGl || isBl },
+      { queryKey: ['dashboard', 'kpis'],                                       queryFn: fetchDashboardKpis,       staleTime: 300000, enabled: isController },
+      { queryKey: ['dashboard', 'projects', dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchDashboardProjects(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'monthly',  dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchDashboardMonthly(dateRange.dateFrom, dateRange.dateTo),  staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'by-status'],                                  queryFn: fetchDashboardByStatus,  staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'alerts'],                                     queryFn: fetchDashboardAlerts,    staleTime: 120000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'overdue-invoices'],                           queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'team-utilization'],                           queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'mahnung-stats'],                              queryFn: fetchMahnungStats,       staleTime: 120000, enabled: isController },
+      { queryKey: ['dashboard', 'risk-projects'],                              queryFn: fetchRiskProjects,       staleTime: 300000, enabled: isGl || isBl },
+      { queryKey: ['dashboard', 'billing-summary'],                            queryFn: fetchBillingSummary,     staleTime: 300000, enabled: isGl },
+      { queryKey: ['dashboard', 'team-hours'],                                 queryFn: fetchTeamHours,          staleTime: 300000, enabled: isGl || isBl },
     ],
   })
 
@@ -1476,46 +1482,36 @@ export function DashboardPage() {
   const billingSummary = billingQ.data?.data     ?? null
   const teamHours      = teamHoursQ.data?.data  ?? null
 
-  const isLoading = kpisQ.isLoading || projectsQ.isLoading
+  const isLoading = projectsQ.isLoading || monthlyQ.isLoading || (isController && kpisQ.isLoading)
 
   // ── Filter computations ──
-  const dateRange = useMemo(() => computeDateRange(filters.zeitraum), [filters.zeitraum])
 
+  // Dimension filter options from date-filtered projects (now has all dimension fields)
   const abteilungen = useMemo(() =>
-    [...new Set(riskProjects.map(p => p.DEPARTMENT_NAME).filter(Boolean))].sort() as string[],
-    [riskProjects])
+    [...new Set(projects.map(p => p.DEPARTMENT_NAME).filter(Boolean))].sort() as string[],
+    [projects])
   const plOptions = useMemo(() =>
-    [...new Set(riskProjects.map(p => p.PROJECT_MANAGER_DISPLAY).filter(Boolean))].sort() as string[],
-    [riskProjects])
+    [...new Set(projects.map(p => p.PROJECT_MANAGER_DISPLAY).filter(Boolean))].sort() as string[],
+    [projects])
   const statusOptions = useMemo(() =>
-    [...new Set(riskProjects.map(p => p.PROJECT_STATUS_NAME_SHORT).filter(Boolean))].sort() as string[],
-    [riskProjects])
+    [...new Set(projects.map(p => p.PROJECT_STATUS_NAME_SHORT).filter(Boolean))].sort() as string[],
+    [projects])
 
+  // Client-side dimension filter on server-time-filtered project list
+  const filteredProjects = useMemo(() =>
+    projects
+      .filter(p => !filters.abteilung     || p.DEPARTMENT_NAME          === filters.abteilung)
+      .filter(p => !filters.projektleiter || p.PROJECT_MANAGER_DISPLAY  === filters.projektleiter)
+      .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
+    [projects, filters.abteilung, filters.projektleiter, filters.status])
+
+  // Risk projects: always current-state snapshot; apply dimension filters only
   const filteredRiskProjects = useMemo(() =>
     riskProjects
       .filter(p => !filters.abteilung     || p.DEPARTMENT_NAME          === filters.abteilung)
       .filter(p => !filters.projektleiter || p.PROJECT_MANAGER_DISPLAY  === filters.projektleiter)
       .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
     [riskProjects, filters.abteilung, filters.projektleiter, filters.status])
-
-  const filteredProjectIds = useMemo(() =>
-    new Set(filteredRiskProjects.map(p => p.PROJECT_ID)), [filteredRiskProjects])
-
-  const filteredProjects = useMemo(() =>
-    (filters.abteilung || filters.projektleiter || filters.status)
-      ? projects.filter(p => p.PROJECT_ID != null && filteredProjectIds.has(p.PROJECT_ID))
-      : projects,
-    [projects, filteredProjectIds, filters.abteilung, filters.projektleiter, filters.status])
-
-  const filteredMonthly = useMemo(() => {
-    if (!monthly.length) return monthly
-    const { dateFrom, dateTo } = dateRange
-    const from = dateFrom.substring(0, 7)
-    const to   = dateTo.substring(0, 7)
-    return [...monthly]
-      .filter(m => String(m.MONTH) >= from && String(m.MONTH) <= to)
-      .sort((a, b) => String(a.MONTH).localeCompare(String(b.MONTH)))
-  }, [monthly, dateRange])
 
   const roleLabel = ROLES.find(r => r.id === dashboardRole)?.title ?? ''
 
@@ -1553,22 +1549,23 @@ export function DashboardPage() {
 
       {isLoading && dashboardRole && <div className="dash-loading">Laden …</div>}
 
-      {!isLoading && kpis && dashboardRole === 'geschaeftsleitung' && (
+      {!isLoading && dashboardRole === 'geschaeftsleitung' && (
         <GeschaeftsleitungView
-          kpis={kpis} projects={filteredProjects} byStatus={byStatus} alerts={alerts}
+          projects={filteredProjects} byStatus={byStatus} alerts={alerts}
           riskProjects={filteredRiskProjects} billingSummary={billingSummary} teamHours={teamHours}
           dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
         />
       )}
 
       {!isLoading && kpis && dashboardRole === 'controller' && (
-        <ControllerView kpis={kpis} monthly={filteredMonthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} />
+        <ControllerView kpis={kpis} monthly={monthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} />
       )}
 
-      {!isLoading && kpis && dashboardRole === 'bereichsleiter' && (
+      {!isLoading && dashboardRole === 'bereichsleiter' && (
         <BereichsleiterView
-          kpis={kpis} projects={filteredProjects} byStatus={byStatus} alerts={alerts}
+          projects={filteredProjects} byStatus={byStatus} alerts={alerts}
           teamUtil={teamUtil} riskProjects={filteredRiskProjects} teamHours={teamHours}
+          monthly={monthly}
         />
       )}
 
