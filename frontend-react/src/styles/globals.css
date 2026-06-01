@@ -412,6 +412,39 @@ input::placeholder { color: var(--text-4); }
 .bn-icon  { font-size: 18px; line-height: 1; }
 .bn-label { font-size: 9px; font-weight: 700; letter-spacing: 0.02em; }
 
+/* ── Side navigation (desktop ≥ 1024 px) ─────────────────────────────────── */
+.side-nav { display: none; }
+
+.app-body { display: flex; flex: 1; min-height: 0; }
+.app-body .app-main { flex: 1; min-width: 0; }
+
+@media (min-width: 1024px) {
+  .side-nav {
+    display: flex; flex-direction: column;
+    width: 200px; flex-shrink: 0;
+    background: var(--chrome);
+    border-right: 1px solid var(--chrome-border);
+    padding: 8px 0;
+    overflow-y: auto;
+  }
+  .side-nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px;
+    color: var(--nav-inactive);
+    text-decoration: none; font-size: 13px; font-weight: 600;
+    border-left: 3px solid transparent;
+    transition: color 0.13s, background 0.13s;
+    white-space: nowrap;
+  }
+  .side-nav-item:hover  { background: var(--surface-2); color: var(--chrome-text); }
+  .side-nav-item.active { color: var(--nav-active); border-left-color: var(--nav-active); background: var(--accent-tint); }
+  .sn-icon  { font-size: 16px; flex-shrink: 0; }
+  .sn-label { font-size: 13px; }
+  /* Hide bottom nav + remove bottom padding on desktop */
+  .bottom-nav  { display: none; }
+  .app-main    { padding-bottom: 16px; }
+}
+
 /* ── Dashboard page ──────────────────────────────────────────────────────── */
 .dash-page { padding: 16px 16px 0; }
 
@@ -722,6 +755,7 @@ input::placeholder { color: var(--text-4); }
   text-align: left; padding: 7px 8px; font-weight: 700;
   color: var(--text-3); border-bottom: 2px solid var(--border-2);
   white-space: nowrap;
+  position: sticky; top: 48px; z-index: 5; background: var(--surface);
 }
 .master-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-4); }
 .master-table tr:last-child td { border-bottom: none; }
@@ -1687,6 +1721,27 @@ input::placeholder { color: var(--text-4); }
 .row-menu-item:hover { background: var(--surface-2); }
 .row-menu-item.danger { color: #b91c1c; }
 .row-menu-item.danger:hover { background: #fef2f2; }
+
+/* ── Progressive disclosure toggle ──────────────────────────────────────── */
+.advanced-toggle { background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 12px; padding: 6px 0; display: flex; align-items: center; gap: 4px; }
+.advanced-toggle:hover { color: var(--accent); }
+
+/* ── Filter summary strip ────────────────────────────────────────────────── */
+.filter-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; margin-bottom: 6px; color: var(--text-2); }
+.filter-summary-count { font-weight: 600; color: var(--text); }
+.filter-summary-chip { background: var(--accent-tint); color: var(--accent); border-radius: 10px; padding: 1px 8px; font-size: 11px; }
+.filter-summary-clear { background: none; border: none; color: var(--text-2); cursor: pointer; padding: 0 2px; font-size: 11px; text-decoration: underline; }
+.filter-summary-clear:hover { color: var(--accent); }
+
+/* ── Inline save badge ───────────────────────────────────────────────────── */
+.save-badge { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 10px; animation: save-badge-in 0.15s ease; }
+.save-badge-saving { background: #f3f4f6; color: #6b7280; }
+.save-badge-saved  { background: #dcfce7; color: #16a34a; }
+.save-badge-error  { background: #fee2e2; color: #dc2626; }
+@keyframes save-badge-in { from { opacity: 0; transform: translateY(-3px) } to { opacity: 1; transform: none } }
+[data-theme="dark"] .save-badge-saving { background: #374151; color: #9ca3af; }
+[data-theme="dark"] .save-badge-saved  { background: #14532d; color: #86efac; }
+[data-theme="dark"] .save-badge-error  { background: #450a0a; color: #fca5a5; }
 
 /* ── Project context strip ───────────────────────────────────────────────── */
 .project-context-strip { display: flex; align-items: center; gap: 12px; padding: 8px 0 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }

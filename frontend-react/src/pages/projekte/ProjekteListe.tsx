@@ -397,6 +397,21 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
         </span>
       </div>
 
+      {hasActiveFilter && (() => {
+        const chips: string[] = []
+        if (search.trim()) chips.push(`"${search.trim()}"`)
+        if (internalFilter === true) chips.push('Intern: Ja')
+        if (internalFilter === false) chips.push('Intern: Nein')
+        Object.entries(activeFilters).forEach(([, s]) => s.forEach((v: string) => chips.push(v)))
+        return (
+          <div className="filter-summary">
+            <span className="filter-summary-count">{processed.length} von {projects.length}</span>
+            {chips.map(c => <span key={c} className="filter-summary-chip">{c}</span>)}
+            <button className="filter-summary-clear" onClick={() => { setSearch(''); setInternalFilter(null); setActiveFilters(emptyFilters()) }}>× Alle löschen</button>
+          </div>
+        )
+      })()}
+
       {isLoading && <p className="empty-note">Laden …</p>}
       {!isLoading && (
         <>

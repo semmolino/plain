@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useCtrlS } from '@/hooks/useCtrlS'
+import { useSaveState } from '@/hooks/useSaveState'
+import { SaveBadge } from '@/components/ui/SaveBadge'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
 import { Modal }        from '@/components/ui/Modal'
@@ -109,6 +111,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   const [addForm,    setAddForm]    = useState<AddNodeForm>(emptyAddForm)
   const [showAdd,    setShowAdd]    = useState(false)
   const [msg,        setMsg]        = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const saveState = useSaveState()
   const [structMsg,  setStructMsg]  = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [showBeauftragt, setShowBeauftragt] = useState(false)
   const [convertErr,     setConvertErr]     = useState<string | null>(null)
@@ -195,11 +198,12 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
       valid_until:      f.valid_until  || null,
     }),
     onSuccess: () => {
-      setMsg({ text: 'Angebot gespeichert ✅', type: 'success' })
+      saveState.mark('saved')
+      setMsg(null)
       void qc.invalidateQueries({ queryKey: ['offers'] })
       void qc.invalidateQueries({ queryKey: ['offer', selectedId] })
     },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+    onError: (e: Error) => { saveState.mark('error'); setMsg({ text: e.message, type: 'error' }) },
   })
 
   useCtrlS(() => { if (!saveMut.isPending && form) saveMut.mutate(form) }, !!form)
@@ -459,9 +463,10 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
             {msg && <div style={{ marginBottom: 8 }}><Message type={msg.type} text={msg.text} /></div>}
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button className="btn btn-primary" disabled={saveMut.isPending} onClick={() => { setMsg(null); saveMut.mutate(form) }}>
+              <button className="btn btn-primary" disabled={saveMut.isPending} onClick={() => { setMsg(null); saveState.mark('saving'); saveMut.mutate(form) }}>
                 {saveMut.isPending ? 'Speichert …' : 'Änderungen speichern'}
               </button>
+              <SaveBadge state={saveState.state} />
 
               {offerData?.data?.PROJECT_ID ? (
                 <span style={{ color: '#16a34a', fontSize: 13, fontWeight: 500 }}>

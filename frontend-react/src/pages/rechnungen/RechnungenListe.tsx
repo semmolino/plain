@@ -711,6 +711,21 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
         </span>
       </div>
 
+      {rows.length < allRows.length && (() => {
+        const chips: string[] = []
+        if (search.trim()) chips.push(`"${search.trim()}"`)
+        if (onlyOpen) chips.push('nur offen')
+        activeFilters.status.forEach(v => chips.push(v))
+        activeFilters.typ.forEach(v => chips.push(v))
+        return (
+          <div className="filter-summary">
+            <span className="filter-summary-count">{rows.length} von {allRows.length}</span>
+            {chips.map(c => <span key={c} className="filter-summary-chip">{c}</span>)}
+            <button className="filter-summary-clear" onClick={() => { setSearch(''); setOnlyOpen(false); setActiveFilters(emptyFilters()) }}>× Alle löschen</button>
+          </div>
+        )
+      })()}
+
       {/* Batch toolbar */}
       {selected.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13 }}>

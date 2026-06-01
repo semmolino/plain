@@ -565,6 +565,20 @@ module.exports = (supabase) => {
       action_url: "/projekte",
     });
 
+    const today2 = new Date().toISOString().slice(0, 10);
+    const { count: mahnCount } = await supabase
+      .from("MAHNUNG")
+      .select("ID", { count: "exact", head: true })
+      .eq("TENANT_ID", tenantId)
+      .eq("IS_CLOSED", false);
+    if ((mahnCount ?? 0) > 0) alerts.push({
+      severity: "amber",
+      type: "open_mahnungen",
+      message: `${mahnCount} offene Mahnung${mahnCount > 1 ? "en" : ""}`,
+      count: mahnCount,
+      action_url: "/rechnungen?tab=mahnungen",
+    });
+
     res.json({ data: alerts });
   });
 

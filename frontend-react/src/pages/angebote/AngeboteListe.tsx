@@ -22,7 +22,7 @@ function fmtDate(s: string | null | undefined) {
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
-export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) => void }) {
+export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, name: string) => void }) {
   const qc = useQueryClient()
   const [search,      setSearch]      = useState('')
   const [page,        setPage]        = useState(1)
@@ -143,7 +143,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.OFFER_DATE ?? r.CREATED_AT)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.VALID_UNTIL)}</td>
                   <td className="doc-actions">
-                    <button className="btn-small" onClick={() => onSelectOffer?.(r.ID)}>Bearbeiten</button>
+                    <button className="btn-small" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')}>Bearbeiten</button>
                     <button className="btn-small" onClick={() => openOfferPdf(r.ID)}>PDF</button>
                     {r.PROJECT_ID ? (
                       <>
