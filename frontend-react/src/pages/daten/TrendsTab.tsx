@@ -162,7 +162,7 @@ export function TrendsTab() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['trends', groupBy, dateFrom, dateTo],
-    queryFn:  () => fetchTrends(groupBy, dateFrom, dateTo).then(r => r.data.data),
+    queryFn:  () => fetchTrends(groupBy, dateFrom, dateTo).then(r => r.data),
     staleTime: 300_000,
   })
 
