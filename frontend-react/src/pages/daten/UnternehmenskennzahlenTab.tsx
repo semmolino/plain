@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, Users, Clock, CalendarRange, BarChart3, AlertCircle } from 'lucide-react'
-import { fetchCompanyKpis, type CompanyKpiResult } from '@/api/reports'
+import { fetchCompanyKpis } from '@/api/reports'
 
 const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_EURK = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
