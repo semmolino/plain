@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate }    from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { FileText, Banknote, Mail, Receipt, Folder, MoreHorizontal, SlidersHorizontal } from 'lucide-react'
 import { Modal }          from '@/components/ui/Modal'
 import { Message }        from '@/components/ui/Message'
 import { ConfirmModal }   from '@/components/ui/ConfirmModal'
@@ -64,7 +65,7 @@ function RowMenu({ open, onOpen, onClose, children }: {
   }, [open, onClose])
   return (
     <div ref={wrapRef} className="row-menu-wrap" style={{ display: 'inline-block', position: 'relative' }}>
-      <button className="row-action-btn" onClick={open ? onClose : onOpen} title="Weitere Aktionen">⋯</button>
+      <button className="row-action-btn" onClick={open ? onClose : onOpen} title="Weitere Aktionen"><MoreHorizontal size={15} strokeWidth={1.75} /></button>
       {open && <div className="row-menu-dropdown">{children}</div>}
     </div>
   )
@@ -665,7 +666,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
         </div>
         {/* Column chooser */}
         <div ref={colPanelRef} className="pl-col-wrap">
-          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>⚙ Spalten</button>
+          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
           {colPanelOpen && (
             <div className="pl-col-panel">
               <div className="pl-col-panel-title">Sichtbare Spalten</div>
@@ -811,12 +812,12 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                           title="PDF öffnen"
                           disabled={!r.mahnungId}
                           onClick={() => r.mahnungId && openMahnungPdf(r.mahnungId)}
-                        >📄</button>
+                        ><FileText size={14} strokeWidth={1.75} /></button>
                         <button
                           className="row-action-btn"
                           title="Zahlung erfassen"
                           onClick={() => openPaymentFor(r)}
-                        >💶</button>
+                        ><Banknote size={14} strokeWidth={1.75} /></button>
                         <RowMenu
                           open={menuOpenId === rowKey(r)}
                           onOpen={() => setMenuOpenId(rowKey(r))}
@@ -826,16 +827,16 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                             className="row-menu-item"
                             disabled={!r.mahnungId}
                             onClick={() => { setMenuOpenId(null); r.mahnungId && openEmailFor(r) }}
-                          >✉ E-Mail senden</button>
+                          ><Mail size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />E-Mail senden</button>
                           <button
                             className="row-menu-item"
                             onClick={() => { setMenuOpenId(null); navigate('/rechnungen', { state: { projectSearch: r.number } }) }}
-                          >🧾 → Rechnung</button>
+                          ><Receipt size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />→ Rechnung</button>
                           {r.projectId && (
                             <button
                               className="row-menu-item"
                               onClick={() => { setMenuOpenId(null); navigate('/projekte', { state: { search: r.projectNumber ?? r.projectName } }) }}
-                            >📁 → Projekt</button>
+                            ><Folder size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />→ Projekt</button>
                           )}
                         </RowMenu>
                         {emp && <span title={`Verantw.: ${emp.SHORT_NAME}`} style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 2px' }}>{emp.SHORT_NAME}</span>}

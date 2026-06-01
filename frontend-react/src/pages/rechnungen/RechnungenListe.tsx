@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { MoreHorizontal, Mail } from 'lucide-react'
 import { Modal }        from '@/components/ui/Modal'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -267,7 +268,7 @@ function RowMenu({ children }: { children: React.ReactNode }) {
   }, [open])
   return (
     <div ref={ref} className="row-menu-wrap">
-      <button className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen">⋯</button>
+      <button className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen" style={{ display: 'inline-flex', alignItems: 'center' }}><MoreHorizontal size={15} strokeWidth={1.75} /></button>
       {open && (
         <div className="row-menu-dropdown" onClick={() => setOpen(false)}>
           {children}
@@ -758,7 +759,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                     <button className="btn-small" onClick={() => setDetailRow(row)}>Details</button>
                     <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
                     {row.statusClass === 'booked' && (
-                      <button className="btn-small" title="Per E-Mail senden" onClick={() => openEmailFor(row)}>✉ Mail</button>
+                      <button className="btn-small" title="Per E-Mail senden" onClick={() => openEmailFor(row)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={13} strokeWidth={1.75} />Mail</button>
                     )}
                     {canPay(row) && (
                       <button className="btn-small btn-save" onClick={() => openPayment(row)}>Zahlung</button>
@@ -931,7 +932,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 4 }}>
                 <button className="btn-small" onClick={() => openPdf(detailRow)}>PDF anzeigen</button>
                 {detailRow.statusClass === 'booked' && (
-                  <button className="btn-small" onClick={() => { setDetailRow(null); openEmailFor(detailRow) }}>✉ Per E-Mail senden</button>
+                  <button className="btn-small" onClick={() => { setDetailRow(null); openEmailFor(detailRow) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={13} strokeWidth={1.75} />Per E-Mail senden</button>
                 )}
                 {canEdit(detailRow) && onEditDraft && (
                   <button className="btn-small btn-save" onClick={() => handleEditDraftClick(detailRow)}>

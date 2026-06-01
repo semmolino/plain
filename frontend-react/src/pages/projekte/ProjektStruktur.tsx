@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Message } from '@/components/ui/Message'
+import { X } from 'lucide-react'
+import { Message }       from '@/components/ui/Message'
+import { ConfirmModal }  from '@/components/ui/ConfirmModal'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
   inheritStructureExtras, patchStructureNode,
@@ -56,6 +58,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const selectedIdsRef                  = useRef<Set<number>>(new Set())
   const [saveMsg, setSaveMsg]           = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [addForm, setAddForm]           = useState<AddForm | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: structData, isLoading } = useQuery({
@@ -655,13 +658,15 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               />
                             </td>
                             <td>
-                              <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c' }}
+                              <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c', display: 'inline-flex', alignItems: 'center' }}
                                 disabled={deleteMut.isPending}
                                 title="Element löschen"
-                                onClick={() => {
-                                  if (confirm(`Element „${nameShort}" und alle Kind-Elemente löschen?`))
-                                    deleteMut.mutate(node.STRUCTURE_ID)
-                                }}>✕</button>
+                                onClick={() => setConfirmState({
+                                  title: 'Element löschen',
+                                  message: `Element „${nameShort}" und alle Kind-Elemente löschen?`,
+                                  onConfirm: () => deleteMut.mutate(node.STRUCTURE_ID),
+                                })}
+                              ><X size={12} strokeWidth={2.5} /></button>
                             </td>
                           </tr>
                         )
@@ -756,6 +761,15 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
           )}
         </>
       )}
+    <ConfirmModal
+      open={confirmState !== null}
+      title={confirmState?.title ?? ''}
+      message={confirmState?.message ?? ''}
+      confirmLabel="Löschen"
+      confirmClass="danger"
+      onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+      onCancel={() => setConfirmState(null)}
+    />
     </div>
   )
 }

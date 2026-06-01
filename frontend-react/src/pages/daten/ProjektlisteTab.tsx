@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+import { SlidersHorizontal } from 'lucide-react'
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
@@ -598,8 +599,8 @@ export function ProjektlisteTab() {
 
             {/* Column visibility */}
             <div ref={colPanelRef} className="pl-col-wrap">
-              <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>
-                ⚙ Spalten
+              <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <SlidersHorizontal size={13} strokeWidth={2} />Spalten
               </button>
               {colPanelOpen && (
                 <div className="pl-col-panel">

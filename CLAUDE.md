@@ -145,6 +145,51 @@ export const fetchOffers = () =>
 
 ---
 
+## Icon system (Lucide React)
+
+`lucide-react` is the only icon library used in this project. **Never use emoji or Unicode characters as UI icons** — they render inconsistently across platforms and break the visual language.
+
+**Import pattern:**
+```tsx
+import { Pencil, FileText, MoreHorizontal } from 'lucide-react'
+// <Pencil size={14} strokeWidth={2} />
+```
+
+**Standard sizes and contexts:**
+| Context | `size` | `strokeWidth` |
+|---|---|---|
+| Side nav / bottom nav | 18–20 | 1.75 |
+| Row action buttons (`.row-action-btn`) | 14 | 1.75–2 |
+| Overflow menu trigger (⋯) | 15 | 1.75 |
+| Row menu items (inline with text) | 13 | 1.75 |
+| Column chooser / small toolbar buttons | 13 | 2 |
+| Delete/close/remove buttons | 12 | 2.5 |
+
+**Canonical nav icon mapping (must match BottomNav.tsx and SideNav.tsx):**
+- Übersicht → `LayoutDashboard`
+- Adressen → `BookUser`
+- Projekte → `FolderOpen`
+- Daten → `BarChart3`
+- Rechnungen → `Receipt`
+- Angebote → `FileSignature`
+- Mitarbeiter → `Users`
+- Admin → `Settings`
+
+**Common action icons:**
+- Edit/open → `Pencil`
+- PDF → `FileText`
+- Email → `Mail`
+- Payment → `Banknote`
+- Overflow menu → `MoreHorizontal`
+- Close/remove → `X`
+- Column chooser → `SlidersHorizontal`
+- Invoice link → `Receipt`
+- Project link → `Folder`
+
+**CSS:** `.row-action-btn` already uses `display: inline-flex; align-items: center; justify-content: center;` — no extra wrapper needed. For buttons with icon + text, add `gap: 4–6px` via inline style.
+
+---
+
 ## UI/UX — responsive & mobile rules
 
 These rules apply to every feature. Playwright smoke tests in `frontend-react/tests/` enforce them automatically in CI.
@@ -153,15 +198,21 @@ These rules apply to every feature. Playwright smoke tests in `frontend-react/te
 - No horizontal scroll at any viewport width (test: `document.body.scrollWidth ≤ viewport.width + 2`)
 - Bottom nav (`.bottom-nav`) must always be visible and reachable — never obscured by modals or sticky headers
 - Page content must not be hidden behind the fixed bottom nav — keep `padding-bottom` ≥ 64px on all page roots
+- Sticky table headers (`position: sticky`) are **desktop only** — disabled via `@media (max-width: 1023px)` in globals.css to prevent layout issues on small viewports
 
 **Touch targets**
 - Minimum 44 × 44 px for every interactive element (buttons, nav items, links, toggles)
 - `.bottom-nav-item` items are currently 58px — do not reduce
 - Prefer `gap` over reducing hit areas when space is tight
 
+**Navigation (sidebar / bottom nav)**
+- Focus-visible styles are defined in globals.css (`:focus-visible` with `outline`) — always test keyboard navigation
+- Use `var(--chrome-hover-bg)` for hover state on sidebar items (not a flat `var(--surface-2)` which may not contrast on dark chrome)
+
 **Inputs**
 - Always use the correct `type` attribute for mobile keyboards: `type="email"`, `type="number"` (numeric data), `type="tel"` (phone), `type="date"` (dates — avoids manual string parsing on mobile)
 - Do not use `type="number"` for fields with leading zeros or formatted strings (e.g. IBAN, postal code) — use `type="text"` with `inputmode="numeric"` instead
+- All filter-bar inputs and selects must use the styled classes: `className="list-search"` for text search, `className="inline-date-input"` for date filters (height 36px in filter bars via `.pl-filter-chips .inline-date-input`)
 
 **Modals**
 - Must be scrollable inside when content exceeds viewport height

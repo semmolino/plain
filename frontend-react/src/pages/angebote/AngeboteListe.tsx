@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Pencil, FileText, MoreHorizontal } from 'lucide-react'
 import { Message } from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
@@ -39,7 +40,7 @@ function RowMenu({ open, onOpen, onClose, children }: {
   }, [open, onClose])
   return (
     <div ref={wrapRef} className="row-menu-wrap" style={{ display: 'inline-block', position: 'relative' }}>
-      <button className="row-action-btn" onClick={open ? onClose : onOpen} title="Weitere Aktionen">⋯</button>
+      <button className="row-action-btn" onClick={open ? onClose : onOpen} title="Weitere Aktionen"><MoreHorizontal size={15} strokeWidth={1.75} /></button>
       {open && <div className="row-menu-dropdown">{children}</div>}
     </div>
   )
@@ -183,8 +184,8 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.OFFER_DATE ?? r.CREATED_AT)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.VALID_UNTIL)}</td>
                   <td className="doc-actions" onClick={e => e.stopPropagation()}>
-                    <button className="row-action-btn" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Bearbeiten">✏️</button>
-                    <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">📄</button>
+                    <button className="row-action-btn" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Bearbeiten"><Pencil size={14} strokeWidth={2} /></button>
+                    <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF"><FileText size={14} strokeWidth={1.75} /></button>
                     {r.PROJECT_ID && (
                       <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, padding: '0 4px', whiteSpace: 'nowrap' }}>
                         ✅ {r.PROJECT_NAME ?? `#${r.PROJECT_ID}`}

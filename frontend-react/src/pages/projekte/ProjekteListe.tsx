@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { SlidersHorizontal } from 'lucide-react'
 import { Modal }         from '@/components/ui/Modal'
 import { Message }       from '@/components/ui/Message'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
@@ -381,7 +382,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
           )}
         </div>
         <div ref={colPanelRef} className="pl-col-wrap">
-          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>⚙ Spalten</button>
+          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
           {colPanelOpen && (
             <div className="pl-col-panel">
               <div className="pl-col-panel-title">Optionale Spalten</div>

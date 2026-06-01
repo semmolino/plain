@@ -231,6 +231,60 @@ test.describe('Bottom nav navigation', () => {
   })
 })
 
+// ── Mobile viewport (390 × 844 — iPhone 14) ──────────────────────────────────
+
+test.describe('Mobile layout (390 × 844)', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test.beforeEach(async ({ page }) => {
+    await mockLoggedIn(page)
+  })
+
+  test('no horizontal overflow on dashboard', async ({ page }) => {
+    await gotoPage(page, '/')
+    const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(392)
+  })
+
+  test('bottom nav is visible on mobile', async ({ page }) => {
+    await gotoPage(page, '/')
+    await expect(page.locator('.bottom-nav')).toBeVisible()
+  })
+
+  test('bottom nav items have sufficient touch target (height ≥ 44px)', async ({ page }) => {
+    await gotoPage(page, '/')
+    const items = page.locator('.bottom-nav-item')
+    const count = await items.count()
+    for (let i = 0; i < count; i++) {
+      const box = await items.nth(i).boundingBox()
+      if (box) expect(box.height).toBeGreaterThanOrEqual(44)
+    }
+  })
+
+  test('no horizontal overflow on Rechnungen', async ({ page }) => {
+    await gotoPage(page, '/rechnungen')
+    const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(392)
+  })
+
+  test('no horizontal overflow on Projekte', async ({ page }) => {
+    await gotoPage(page, '/projekte')
+    const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
+    expect(scrollWidth).toBeLessThanOrEqual(392)
+  })
+
+  test('side nav is hidden on mobile', async ({ page }) => {
+    await gotoPage(page, '/')
+    const sideNav = page.locator('.side-nav')
+    // Side nav should either not exist or be hidden (display:none)
+    const count = await sideNav.count()
+    if (count > 0) {
+      const isVisible = await sideNav.isVisible()
+      expect(isVisible).toBe(false)
+    }
+  })
+})
+
 // ── Auth guard ────────────────────────────────────────────────────────────────
 
 test.describe('Auth guard', () => {

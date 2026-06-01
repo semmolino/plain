@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { SlidersHorizontal } from 'lucide-react'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
 import { Message }     from '@/components/ui/Message'
@@ -391,7 +392,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
               )}
             </div>
             <div ref={colPanelRef} className="pl-col-wrap">
-              <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>⚙ Spalten</button>
+              <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
               {colPanelOpen && (
                 <div className="pl-col-panel">
                   <div className="pl-col-panel-title">Optionale Spalten</div>
@@ -681,7 +682,7 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
               )}
             </div>
             <div ref={colPanelRef} className="pl-col-wrap">
-              <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>⚙ Spalten</button>
+              <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
               {colPanelOpen && (
                 <div className="pl-col-panel">
                   <div className="pl-col-panel-title">Optionale Spalten</div>
