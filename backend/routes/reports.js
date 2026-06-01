@@ -940,5 +940,192 @@ module.exports = (supabase) => {
     }
   });
 
+  // ── Periodic Trends report ───────────────────────────────────────────────
+  // GET /reports/trends?group_by=month|quarter|year&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+  router.get("/trends", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const groupBy = (req.query.group_by || "month");
+    const today   = new Date();
+
+    let dateFrom = req.query.date_from;
+    let dateTo   = req.query.date_to;
+
+    if (!dateFrom || !dateTo) {
+      if (groupBy === "year") {
+        const startYear = today.getFullYear() - 4;
+        dateFrom = `${startYear}-01-01`;
+        dateTo   = `${today.getFullYear()}-12-31`;
+      } else if (groupBy === "quarter") {
+        const startYear = today.getFullYear() - 2;
+        dateFrom = `${startYear}-01-01`;
+        dateTo   = today.toISOString().slice(0, 10);
+      } else {
+        const start = new Date(today.getFullYear(), today.getMonth() - 17, 1);
+        dateFrom = start.toISOString().slice(0, 10);
+        dateTo   = today.toISOString().slice(0, 10);
+      }
+    }
+
+    // Build periods
+    const periods = [];
+    if (groupBy === "year") {
+      const sy = parseInt(dateFrom.slice(0, 4));
+      const ey = parseInt(dateTo.slice(0, 4));
+      for (let y = sy; y <= ey; y++) {
+        periods.push({ period: String(y), label: String(y), start: `${y}-01-01`, end: `${y}-12-31` });
+      }
+    } else if (groupBy === "quarter") {
+      const cur = new Date(dateFrom + "T00:00:00");
+      const end = new Date(dateTo   + "T00:00:00");
+      while (cur <= end) {
+        const y  = cur.getFullYear();
+        const q  = Math.ceil((cur.getMonth() + 1) / 3);
+        const sm = (q - 1) * 3 + 1;
+        const em = sm + 2;
+        const lastDay = new Date(y, em, 0).getDate();
+        periods.push({
+          period: `${y}-Q${q}`,
+          label:  `Q${q} ${y}`,
+          start:  `${y}-${String(sm).padStart(2, "0")}-01`,
+          end:    `${y}-${String(em).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+        });
+        cur.setMonth(cur.getMonth() + 3);
+      }
+    } else {
+      const cur = new Date(dateFrom + "T00:00:00");
+      const end = new Date(dateTo   + "T00:00:00");
+      cur.setDate(1);
+      while (cur <= end) {
+        const y = cur.getFullYear();
+        const m = cur.getMonth() + 1;
+        const lastDay = new Date(y, m, 0).getDate();
+        const ms = String(m).padStart(2, "0");
+        periods.push({
+          period: `${y}-${ms}`,
+          label:  `${ms}/${y}`,
+          start:  `${y}-${ms}-01`,
+          end:    `${y}-${ms}-${String(lastDay).padStart(2, "0")}`,
+        });
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+
+    if (periods.length === 0) return res.json({ data: [] });
+
+    const overallEnd = periods[periods.length - 1].end;
+
+    try {
+      const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+
+      // Fetch all data in parallel; some need all-time data for running totals
+      const [tecRes, invRes, ppRes, payRes, projectsRes, allInvRes, allPpRes] = await Promise.all([
+        supabase.from("TEC")
+          .select("DATE_VOUCHER, QUANTITY_INT, CP_TOT")
+          .eq("TENANT_ID", tenantId)
+          .gte("DATE_VOUCHER", dateFrom)
+          .lte("DATE_VOUCHER", overallEnd),
+        supabase.from("INVOICE")
+          .select("INVOICE_DATE, TOTAL_AMOUNT_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .neq("INVOICE_TYPE", "stornorechnung")
+          .neq("INVOICE_TYPE", "storno_partial")
+          .gte("INVOICE_DATE", dateFrom)
+          .lte("INVOICE_DATE", overallEnd),
+        supabase.from("PARTIAL_PAYMENT")
+          .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .is("CANCELS_PARTIAL_PAYMENT_ID", null)
+          .gte("PARTIAL_PAYMENT_DATE", dateFrom)
+          .lte("PARTIAL_PAYMENT_DATE", overallEnd),
+        supabase.from("PAYMENT")
+          .select("PAYMENT_DATE, AMOUNT_PAYED_NET")
+          .eq("TENANT_ID", tenantId)
+          .gte("PAYMENT_DATE", dateFrom)
+          .lte("PAYMENT_DATE", overallEnd),
+        supabase.from("PROJECT")
+          .select("ID, BUDGET_TOTAL_NET, created_at")
+          .eq("TENANT_ID", tenantId)
+          .not("BUDGET_TOTAL_NET", "is", null),
+        // All-time invoices for running backlog calculation
+        supabase.from("INVOICE")
+          .select("INVOICE_DATE, TOTAL_AMOUNT_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .neq("INVOICE_TYPE", "stornorechnung")
+          .neq("INVOICE_TYPE", "storno_partial")
+          .lte("INVOICE_DATE", overallEnd),
+        supabase.from("PARTIAL_PAYMENT")
+          .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .is("CANCELS_PARTIAL_PAYMENT_ID", null)
+          .lte("PARTIAL_PAYMENT_DATE", overallEnd),
+      ]);
+
+      const tec      = tecRes.data      || [];
+      const invoices = invRes.data      || [];
+      const pps      = ppRes.data       || [];
+      const payments = payRes.data      || [];
+      const projects = projectsRes.data || [];
+      const allInv   = allInvRes.data   || [];
+      const allPp    = allPpRes.data    || [];
+
+      const result = periods.map(p => {
+        const periodTec = tec.filter(r => r.DATE_VOUCHER >= p.start && r.DATE_VOUCHER <= p.end);
+        const stunden   = round2(periodTec.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0));
+        const kosten    = round2(periodTec.reduce((s, r) => s + Number(r.CP_TOT || 0), 0));
+
+        const periodInv = invoices.filter(r => r.INVOICE_DATE >= p.start && r.INVOICE_DATE <= p.end);
+        const periodPp  = pps.filter(r => r.PARTIAL_PAYMENT_DATE >= p.start && r.PARTIAL_PAYMENT_DATE <= p.end);
+        const fakturiert = round2(
+          periodInv.reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0) +
+          periodPp.reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0)
+        );
+
+        const periodPay = payments.filter(r => r.PAYMENT_DATE >= p.start && r.PAYMENT_DATE <= p.end);
+        const bezahlt   = round2(periodPay.reduce((s, r) => s + Number(r.AMOUNT_PAYED_NET || 0), 0));
+
+        const db      = round2(fakturiert - kosten);
+        const dbMarge = fakturiert > 0 ? round2((db / fakturiert) * 100) : null;
+        const avgStundensatz = stunden > 0 ? round2(kosten / stunden) : null;
+
+        // Auftragsbestand: sum of project budgets created up to period end, minus total billed up to period end
+        const contractedUpTo = projects
+          .filter(pr => pr.created_at && pr.created_at.slice(0, 10) <= p.end)
+          .reduce((s, pr) => s + Number(pr.BUDGET_TOTAL_NET || 0), 0);
+        const billedUpTo = round2(
+          allInv.filter(r => r.INVOICE_DATE <= p.end)
+            .reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0) +
+          allPp.filter(r => r.PARTIAL_PAYMENT_DATE <= p.end)
+            .reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0)
+        );
+        const auftragsbestand = round2(Math.max(0, contractedUpTo - billedUpTo));
+
+        return {
+          period:          p.period,
+          period_label:    p.label,
+          period_start:    p.start,
+          period_end:      p.end,
+          stunden,
+          kosten,
+          avg_stundensatz: avgStundensatz,
+          fakturiert,
+          bezahlt,
+          db,
+          db_marge:        dbMarge,
+          auftragsbestand,
+        };
+      });
+
+      res.json({ data: result });
+    } catch (e) {
+      res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
   return router;
 };

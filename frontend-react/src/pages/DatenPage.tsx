@@ -4,13 +4,15 @@ import { Tabs }                        from '@/components/ui/Tabs'
 import { ProjektlisteTab }             from '@/pages/daten/ProjektlisteTab'
 import { EinzelprojektTab }            from '@/pages/daten/EinzelprojektTab'
 import { UnternehmenskennzahlenTab }   from '@/pages/daten/UnternehmenskennzahlenTab'
+import { TrendsTab }                   from '@/pages/daten/TrendsTab'
 
-type Tab = 'projektliste' | 'einzelprojekt' | 'kennzahlen'
+type Tab = 'projektliste' | 'einzelprojekt' | 'kennzahlen' | 'trends'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'projektliste',  label: 'Alle Projekte'          },
   { id: 'einzelprojekt', label: 'Projekt'                },
   { id: 'kennzahlen',    label: 'Unternehmenskennzahlen' },
+  { id: 'trends',        label: 'Trends'                 },
 ]
 
 export function DatenPage() {
@@ -40,6 +42,7 @@ export function DatenPage() {
         {tab === 'projektliste'  && <ProjektlisteTab />}
         {tab === 'einzelprojekt' && <EinzelprojektTab initialProjectId={initProjId} />}
         {tab === 'kennzahlen'    && <UnternehmenskennzahlenTab />}
+        {tab === 'trends'        && <TrendsTab />}
       </div>
     </div>
   )

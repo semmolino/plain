@@ -1889,3 +1889,85 @@ input::placeholder { color: var(--text-4); }
 /* Inline select (for year picker etc.) */
 .inline-select { border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 13px; background: var(--surface); color: var(--text); outline: none; cursor: pointer; }
 .inline-select:focus { border-color: var(--accent); }
+
+/* ── Trends Tab ───────────────────────────────────────────────────────────── */
+
+.trends-root { padding-bottom: 40px; }
+
+.trends-controls {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 14px 0 16px; border-bottom: 1px solid var(--border); margin-bottom: 24px;
+}
+.trends-daterange { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.trends-range-label { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+
+.trends-sections { display: flex; flex-direction: column; gap: 40px; }
+
+.trends-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+.trends-section-header { padding: 18px 20px 0; }
+.trends-section-title { font-size: 15px; font-weight: 700; color: var(--text); margin: 0 0 4px; }
+.trends-section-subtitle { font-size: 12px; color: var(--text-3); margin: 0 0 14px; }
+
+.trends-chart-box { height: 280px; padding: 0 20px 16px; }
+
+/* Table — horizontally scrollable; label column sticky */
+.trends-table-wrap {
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+}
+.trends-table {
+  width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto;
+}
+.trends-table thead tr { background: var(--surface-2); }
+.trends-th-label {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--surface-2); font-weight: 700; color: var(--text-3);
+  text-align: left; padding: 8px 14px; white-space: nowrap;
+  border-right: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.trends-th-period {
+  font-weight: 600; color: var(--text-2); text-align: right;
+  padding: 8px 10px; white-space: nowrap; border-right: 1px solid var(--border-3);
+  min-width: 72px;
+}
+.trends-th-avg, .trends-th-total {
+  font-weight: 700; color: var(--text-2); text-align: right;
+  padding: 8px 14px; white-space: nowrap; min-width: 80px;
+}
+.trends-th-avg { border-left: 2px solid var(--border); background: var(--accent-tint); }
+.trends-th-total { background: var(--accent-tint2); }
+
+.trends-td-label {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--surface); font-weight: 600; color: var(--text);
+  padding: 7px 14px; white-space: nowrap;
+  border-right: 1px solid var(--border); font-size: 12px;
+}
+.trends-td-value {
+  text-align: right; padding: 7px 10px; color: var(--text); white-space: nowrap;
+  border-right: 1px solid var(--border-3);
+}
+.trends-td-avg {
+  text-align: right; padding: 7px 14px; font-weight: 600; white-space: nowrap;
+  border-left: 2px solid var(--border); background: var(--accent-tint);
+}
+.trends-td-total {
+  text-align: right; padding: 7px 14px; font-weight: 700; white-space: nowrap;
+  background: var(--accent-tint2);
+}
+
+/* Row variants */
+.trends-table tbody tr:nth-child(even) .trends-td-label,
+.trends-table tbody tr:nth-child(even) .trends-td-value { background: var(--surface-3); }
+.trends-table tbody tr:nth-child(even) .trends-td-label { background: var(--surface-3); }
+
+.trends-tr-bold .trends-td-label,
+.trends-tr-bold .trends-td-value { font-weight: 700; }
+
+.trends-tr-pct .trends-td-label { color: var(--text-2); font-weight: 400; }
+.trends-tr-pct .trends-td-value { color: var(--text-3); font-size: 11px; }
+.trends-tr-pct .trends-td-avg, .trends-tr-pct .trends-td-total { font-size: 11px; }
+
+.trends-tr-delta .trends-td-label { color: var(--text-3); font-weight: 400; font-size: 11px; }
+.trends-tr-delta .trends-td-value { color: var(--text-3); font-size: 11px; }

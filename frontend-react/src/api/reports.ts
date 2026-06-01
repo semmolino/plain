@@ -338,3 +338,29 @@ export const fetchTeamHours = (dateFrom?: string, dateTo?: string) => {
   const qs = dateFrom && dateTo ? `?date_from=${dateFrom}&date_to=${dateTo}` : ''
   return apiClient.get<{ data: TeamHoursData }>(`/reports/dashboard/team-hours${qs}`)
 }
+
+// ── Periodic Trends ───────────────────────────────────────────────────────────
+
+export interface TrendPeriod {
+  period:          string        // "2026-05" | "2026-Q2" | "2026"
+  period_label:    string        // "05/2026" | "Q2 2026" | "2026"
+  period_start:    string
+  period_end:      string
+  stunden:         number
+  kosten:          number
+  avg_stundensatz: number | null
+  fakturiert:      number
+  bezahlt:         number
+  db:              number        // Deckungsbeitrag = fakturiert − kosten
+  db_marge:        number | null // db / fakturiert × 100
+  auftragsbestand: number
+}
+
+export type TrendsGroupBy = 'month' | 'quarter' | 'year'
+
+export const fetchTrends = (groupBy: TrendsGroupBy, dateFrom?: string, dateTo?: string) => {
+  const qs = new URLSearchParams({ group_by: groupBy })
+  if (dateFrom) qs.set('date_from', dateFrom)
+  if (dateTo)   qs.set('date_to',   dateTo)
+  return apiClient.get<{ data: TrendPeriod[] }>(`/reports/trends?${qs}`)
+}
