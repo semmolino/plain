@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
 import {
@@ -40,9 +41,10 @@ interface DraftResume { id: number; projectId: number | null; contractId: number
 
 export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } = {}) {
   const qc = useQueryClient()
-  const [step,   setStep]   = useState(0)
-  const [draftId, setDraftId] = useState<number | null>(null)
-  const [msg,    setMsg]    = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [step,         setStep]         = useState(0)
+  const [draftId,      setDraftId]      = useState<number | null>(null)
+  const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const isResumeRef = useRef(false)
 
   // Step 0 fields
@@ -234,12 +236,13 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
 
   function handleCancel() {
     if (isResumeRef.current) {
-      if (!window.confirm('Bearbeitung abbrechen?')) return
-      resetAll()
+      setConfirmState({ title: 'Wizard abbrechen', message: 'Bearbeitung abbrechen?', onConfirm: resetAll })
     } else {
-      if (!window.confirm('Entwurf wirklich löschen und Wizard abbrechen?')) return
-      if (draftId) deleteMut.mutate(draftId)
-      else resetAll()
+      setConfirmState({
+        title: 'Entwurf löschen',
+        message: 'Entwurf wirklich löschen und Wizard abbrechen?',
+        onConfirm: () => { if (draftId) deleteMut.mutate(draftId); else resetAll() },
+      })
     }
   }
 
@@ -606,6 +609,15 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
           </div>
         )
       })()}
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel="Bestätigen"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+        onCancel={() => setConfirmState(null)}
+      />
     </div>
   )
 }

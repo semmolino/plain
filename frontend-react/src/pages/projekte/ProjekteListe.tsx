@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { SlidersHorizontal } from 'lucide-react'
 import { Modal }         from '@/components/ui/Modal'
 import { Message }       from '@/components/ui/Message'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
@@ -246,9 +247,11 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
     mutationFn: ({ id, val }: { id: number; val: boolean }) => updateProject(id, { is_internal: val }),
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
-      if (window.confirm('Sollen alle Strukturpositionen dieses Projekts ebenfalls entsprechend markiert werden?')) {
-        cascadeMut.mutate({ id: variables.id, val: variables.val })
-      }
+      setConfirmState({
+        title: 'Strukturpositionen aktualisieren',
+        message: 'Sollen alle Strukturpositionen dieses Projekts ebenfalls entsprechend markiert werden?',
+        onConfirm: () => cascadeMut.mutate({ id: variables.id, val: variables.val }),
+      })
     },
   })
 
@@ -379,7 +382,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
           )}
         </div>
         <div ref={colPanelRef} className="pl-col-wrap">
-          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>⚙ Spalten</button>
+          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
           {colPanelOpen && (
             <div className="pl-col-panel">
               <div className="pl-col-panel-title">Optionale Spalten</div>
@@ -396,6 +399,21 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
           {processed.length}{processed.length !== projects.length ? ` / ${projects.length}` : ''} Projekte · Seite {safePage}/{totalPages}
         </span>
       </div>
+
+      {hasActiveFilter && (() => {
+        const chips: string[] = []
+        if (search.trim()) chips.push(`"${search.trim()}"`)
+        if (internalFilter === true) chips.push('Intern: Ja')
+        if (internalFilter === false) chips.push('Intern: Nein')
+        Object.entries(activeFilters).forEach(([, s]) => s.forEach((v: string) => chips.push(v)))
+        return (
+          <div className="filter-summary">
+            <span className="filter-summary-count">{processed.length} von {projects.length}</span>
+            {chips.map(c => <span key={c} className="filter-summary-chip">{c}</span>)}
+            <button className="filter-summary-clear" onClick={() => { setSearch(''); setInternalFilter(null); setActiveFilters(emptyFilters()) }}>× Alle löschen</button>
+          </div>
+        )
+      })()}
 
       {isLoading && <p className="empty-note">Laden …</p>}
       {!isLoading && (

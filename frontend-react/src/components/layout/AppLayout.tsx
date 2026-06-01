@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import { BottomNav } from './BottomNav'
+import { SideNav }   from './SideNav'
 import { NotificationBell } from './NotificationBell'
 import { TimerBar } from './TimerBar'
 import { ThemeSwitcher } from './ThemeSwitcher'
@@ -86,10 +87,13 @@ export function AppLayout() {
           <UserMenu />
         </div>
       </header>
-      <main className="app-main">
-        <ToastContainer />
-        <Outlet />
-      </main>
+      <div className="app-body">
+        <SideNav />
+        <main className="app-main">
+          <ToastContainer />
+          <Outlet />
+        </main>
+      </div>
       <BottomNav />
     </div>
   )

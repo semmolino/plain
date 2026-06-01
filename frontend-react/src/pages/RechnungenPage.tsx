@@ -92,10 +92,19 @@ export function RechnungenPage() {
   const resumeFor = (t: Tab) =>
     editDraft?.type === t ? editDraft.draft : undefined
 
+  const wizardTabs: Tab[] = ['abschlag', 'rechnung', 'schluss']
+  const showContext = wizardTabs.includes(tab) && editDraft != null
+
   return (
     <div className="master-page">
       <h1 className="master-title">Rechnungen</h1>
       <Tabs tabs={TABS} active={tab} onChange={handleTabChange} />
+      {showContext && (
+        <div className="project-context-strip">
+          <button className="project-context-back" onClick={() => handleTabChange('liste')}>← Rechnungsliste</button>
+          <span className="project-context-name">{editDraft!.draft.projectLabel}{editDraft!.draft.contractLabel ? ` / ${editDraft!.draft.contractLabel}` : ''}</span>
+        </div>
+      )}
       <div className="master-tab-content">
         {tab === 'liste'     && <RechnungenListe onEditDraft={handleEditDraft} initialSearch={initSearch} backProject={backProject} onClearBack={() => { setInitSearch(undefined); setBackProject(undefined) }} />}
         {tab === 'abschlag'  && <AbschlagWizard initialDraft={resumeFor('abschlag')} />}

@@ -61,6 +61,7 @@ export function AngeboteAnlegen() {
   const [structDraft, setStructDraft] = useState<OfferStructureDraftRow[]>([])
   const [msg, setMsg]             = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [createdOfferId, setCreatedOfferId] = useState<number | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const { data: statusData  } = useQuery({ queryKey: ['offer-statuses'],  queryFn: fetchOfferStatuses  })
   const { data: mgrData     } = useQuery({ queryKey: ['project-managers'],queryFn: fetchProjectManagers })
@@ -251,11 +252,6 @@ export function AngeboteAnlegen() {
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Wahrscheinlichkeit (%)</label>
-            <input type="number" min={0} max={100} step={1} value={basic.probability} onChange={e => setB('probability')(e.target.value)} placeholder="z. B. 50" />
-          </div>
-
           <Autocomplete label="Adresse / Empfänger*" htmlId="offer-addr"
             value={addrText}
             onChange={t => { setAddrText(t); if (!t) { setB('address_id')(''); setB('contact_id')('') } }}
@@ -272,15 +268,28 @@ export function AngeboteAnlegen() {
             </select>
           </div>
 
-          <div className="form-group">
-            <label>Kopftext</label>
-            <textarea rows={4} value={basic.offer_text_1} onChange={e => setB('offer_text_1')(e.target.value)} placeholder="Einleitungstext …" style={{ width: '100%', resize: 'vertical' }} />
-          </div>
+          <button type="button" className="advanced-toggle" onClick={() => setShowAdvanced(v => !v)}>
+            {showAdvanced ? '▾' : '▸'} Erweiterte Optionen
+          </button>
 
-          <div className="form-group">
-            <label>Fußtext</label>
-            <textarea rows={4} value={basic.offer_text_2} onChange={e => setB('offer_text_2')(e.target.value)} placeholder="Abschlusstext …" style={{ width: '100%', resize: 'vertical' }} />
-          </div>
+          {showAdvanced && (
+            <>
+              <div className="form-group">
+                <label>Wahrscheinlichkeit (%)</label>
+                <input type="number" min={0} max={100} step={1} value={basic.probability} onChange={e => setB('probability')(e.target.value)} placeholder="z. B. 50" />
+              </div>
+
+              <div className="form-group">
+                <label>Kopftext</label>
+                <textarea rows={4} value={basic.offer_text_1} onChange={e => setB('offer_text_1')(e.target.value)} placeholder="Einleitungstext …" style={{ width: '100%', resize: 'vertical' }} />
+              </div>
+
+              <div className="form-group">
+                <label>Fußtext</label>
+                <textarea rows={4} value={basic.offer_text_2} onChange={e => setB('offer_text_2')(e.target.value)} placeholder="Abschlusstext …" style={{ width: '100%', resize: 'vertical' }} />
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
@@ -10,6 +10,7 @@ import {
 import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSession } from '@/hooks/useSession'
+import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import {
   fetchDashboardKpis,
   fetchDashboardProjects,
@@ -71,6 +72,37 @@ function fmtDateDE(iso: string) {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+// ── Dashboard filter types ────────────────────────────────────────────────────
+
+type ZeitraumKey = 'last12m' | 'last6m' | 'last3m' | 'thisYear' | 'lastYear'
+
+interface DashboardFilters {
+  zeitraum:      ZeitraumKey
+  abteilung:     string
+  projektleiter: string
+  status:        string
+}
+
+const DEFAULT_FILTERS: DashboardFilters = { zeitraum: 'last12m', abteilung: '', projektleiter: '', status: '' }
+
+const ZEITRAUM_OPTIONS: { value: ZeitraumKey; label: string }[] = [
+  { value: 'last12m',  label: 'Letzte 12 Monate' },
+  { value: 'last6m',   label: 'Letzte 6 Monate'  },
+  { value: 'last3m',   label: 'Letzte 3 Monate'  },
+  { value: 'thisYear', label: 'Dieses Jahr'       },
+  { value: 'lastYear', label: 'Letztes Jahr'      },
+]
+
+function computeDateRange(z: ZeitraumKey): { dateFrom: string; dateTo: string } {
+  const today = new Date()
+  const dateTo = today.toISOString().substring(0, 10)
+  if (z === 'last3m')    { const d = new Date(today); d.setMonth(d.getMonth() - 3);  return { dateFrom: d.toISOString().substring(0, 10), dateTo } }
+  if (z === 'last6m')    { const d = new Date(today); d.setMonth(d.getMonth() - 6);  return { dateFrom: d.toISOString().substring(0, 10), dateTo } }
+  if (z === 'thisYear')  return { dateFrom: `${today.getFullYear()}-01-01`, dateTo }
+  if (z === 'lastYear')  { const y = today.getFullYear() - 1; return { dateFrom: `${y}-01-01`, dateTo: `${y}-12-31` } }
+  const d = new Date(today); d.setMonth(d.getMonth() - 12); return { dateFrom: d.toISOString().substring(0, 10), dateTo }
+}
+
 // ── Shared sub-components ────────────────────────────────────────────────────
 
 function KpiCard({ label, value, meta, accent }: { label: string; value: string; meta?: string; accent?: boolean }) {
@@ -110,14 +142,11 @@ function MonthlyChart({ data }: { data: DashboardMonthly[] }) {
   )
 }
 
-function DonutChart({ kpis }: { kpis: DashboardKpis }) {
-  const abschl  = Number(kpis.ABSCHLAGSRECHNUNGEN) || 0
-  const schluss = Number(kpis.SCHLUSSGERECHNET)   || 0
-  const offen   = Math.max(0, Number(kpis.OFFENE_LEISTUNG) || 0)
-  const total   = abschl + schluss + offen
-  const colors  = ['rgba(59,130,246,0.75)', 'rgba(34,197,94,0.75)', 'rgba(156,163,175,0.55)']
-  const labels  = ['Abschlagsrechnungen', 'Schlussgerechnet', 'Offene Leistung']
-  const values  = [abschl, schluss, offen]
+function DonutChart({ billed, open, remaining }: { billed: number; open: number; remaining: number }) {
+  const total   = billed + open + remaining
+  const colors  = ['rgba(34,197,94,0.75)', 'rgba(59,130,246,0.75)', 'rgba(156,163,175,0.45)']
+  const labels  = ['Abgerechnet', 'Offene Leistung', 'Noch zu erbringen']
+  const values  = [billed, open, remaining]
   return (
     <div className="donut-wrap">
       <div className="donut-canvas-wrap">
@@ -141,6 +170,45 @@ function DonutChart({ kpis }: { kpis: DashboardKpis }) {
   )
 }
 
+function deriveRiskFromProject(p: DashboardProject): RiskProject {
+  const budget    = Number(p.BUDGET_TOTAL_NET    || 0)
+  const costs     = Number(p.COST_TOTAL          || 0)
+  const leistung  = Number(p.LEISTUNGSSTAND_VALUE || 0)
+  const openNet   = Number(p.OPEN_NET_TOTAL       || 0)
+  const costRatio = budget > 0 ? costs / budget : 0
+  const db        = leistung - costs
+  const cpi = costs > 100 && leistung > 0 ? leistung / costs : null
+  const flags: string[] = []
+  if (budget > 0 && costRatio >= 0.9)                     flags.push('budget_kritisch')
+  if (db < 0 && (costs > 500 || leistung > 500))          flags.push('db_negativ')
+  if (budget > 0 && costRatio >= 0.75 && costRatio < 0.9) flags.push('budget_warn')
+  if (openNet > 5000)                                      flags.push('abrechnung_potential')
+  if (cpi != null && cpi < 0.80 && !flags.includes('budget_kritisch')) flags.push('cpi_warn')
+  let ampel: 'rot' | 'orange' | 'gelb' | 'gruen' = 'gruen'
+  if (flags.includes('budget_kritisch') || flags.includes('db_negativ')) ampel = 'rot'
+  else if (flags.includes('budget_warn'))                                 ampel = 'orange'
+  else if (flags.includes('abrechnung_potential'))                        ampel = 'gelb'
+  return {
+    PROJECT_ID:                Number(p.PROJECT_ID || 0),
+    NAME_SHORT:                p.NAME_SHORT ?? '',
+    NAME_LONG:                 p.NAME_LONG,
+    PROJECT_STATUS_ID:         p.PROJECT_STATUS_ID,
+    PROJECT_STATUS_NAME_SHORT: p.PROJECT_STATUS_NAME_SHORT,
+    PROJECT_MANAGER_ID:        p.PROJECT_MANAGER_ID,
+    PROJECT_MANAGER_DISPLAY:   p.PROJECT_MANAGER_DISPLAY,
+    DEPARTMENT_ID:             p.DEPARTMENT_ID,
+    DEPARTMENT_NAME:           p.DEPARTMENT_NAME,
+    BUDGET_TOTAL_NET:          budget,
+    LEISTUNGSSTAND_PERCENT:    p.LEISTUNGSSTAND_PERCENT,
+    LEISTUNGSSTAND_VALUE:      leistung,
+    COST_TOTAL:                costs,
+    COST_RATIO:                costRatio,
+    BILLED_NET_TOTAL:          Number(p.BILLED_NET_TOTAL || 0),
+    OPEN_NET_TOTAL:            openNet,
+    ampel, flags, db,
+  }
+}
+
 function budgetHealthClass(cost: number | null, budget: number | null): string {
   if (!budget || budget <= 0) return ''
   const ratio = Number(cost || 0) / Number(budget)
@@ -162,6 +230,7 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
           <th className="num">Leistungsstand</th>
           <th className="num">Stunden</th>
           <th className="num">Kosten</th>
+          <th className="num col-hide-mobile" style={{ width: 56 }} title="Cost Performance Index">CPI</th>
           <th className="col-hide-mobile" style={{ width: 80 }}>Budget %</th>
         </tr>
       </thead>
@@ -184,6 +253,14 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
               <td className="num">{fmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
               <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
               <td className="num">{fmtEur(p.COST_TOTAL)}</td>
+              <td className="num col-hide-mobile">
+                {(() => {
+                  const evm = computeEvm(p)
+                  if (evm.cpi == null) return <span style={{ color: 'var(--text-4)' }}>–</span>
+                  const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+                  return <span style={{ color, fontWeight: 600, fontSize: 12 }}>{fmtCpi(evm.cpi)}</span>
+                })()}
+              </td>
               <td className="col-hide-mobile">
                 {Number(p.BUDGET_TOTAL_NET) > 0 ? (
                   <div className="budget-bar-wrap">
@@ -228,11 +305,7 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
 
 // ── Timeline chart ────────────────────────────────────────────────────────────
 
-function DashboardTimeline() {
-  const today    = new Date()
-  const dateFrom = `${today.getFullYear()}-01-01`
-  const dateTo   = today.toISOString().substring(0, 10)
-
+function DashboardTimeline({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ['projects-timeline', dateFrom, dateTo],
     queryFn:  () => fetchProjectsTimeline({ mode: 'period', dateFrom, dateTo }),
@@ -276,7 +349,7 @@ function DashboardTimeline() {
 
   return (
     <div className="timeline-wrap">
-      <h3 className="timeline-title">Gesamtverlauf {today.getFullYear()} (Jahr bis heute)</h3>
+      <h3 className="timeline-title">Projektverlauf {dateFrom.substring(0, 4)}{dateFrom.substring(0, 4) !== dateTo.substring(0, 4) ? `–${dateTo.substring(0, 4)}` : ''}</h3>
       <div className="timeline-chart"><Line data={chartData} options={options} /></div>
     </div>
   )
@@ -481,16 +554,19 @@ function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
 // ── Role views ────────────────────────────────────────────────────────────────
 
 function GeschaeftsleitungView({
-  kpis, projects, byStatus, alerts, riskProjects, billingSummary, teamHours,
+  projects, byStatus, alerts, riskProjects, billingSummary, teamHours, dateFrom, dateTo,
+  subPage, onSubPageChange,
 }: {
-  kpis: DashboardKpis; projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
+  projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   riskProjects: RiskProject[]; billingSummary: BillingSummaryData | null; teamHours: TeamHoursData | null;
+  dateFrom: string; dateTo: string;
+  subPage: 'uebersicht' | 'risiko' | 'abrechnung' | 'personal';
+  onSubPageChange: (id: string) => void;
 }) {
-  const [subPage, setSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
-  const honorar      = Number(kpis.HONORAR_GESAMT)       || 0
-  const leistung     = Number(kpis.LEISTUNGSSTAND_VALUE) || 0
-  const offeneLeist  = Number(kpis.OFFENE_LEISTUNG)      || 0
-  const leistPct     = honorar > 0 ? (leistung / honorar) * 100 : 0
+  const honorar     = projects.reduce((s, p) => s + Number(p.BUDGET_TOTAL_NET    || 0), 0)
+  const leistung    = projects.reduce((s, p) => s + Number(p.LEISTUNGSSTAND_VALUE || 0), 0)
+  const offeneLeist = projects.reduce((s, p) => s + Number(p.OPEN_NET_TOTAL      || 0), 0)
+  const leistPct    = honorar > 0 ? (leistung / honorar) * 100 : 0
   const budgetAlerts = alerts.filter(a => a.type === 'budget_critical')
   const atRiskCount  = budgetAlerts[0]?.count ?? 0
   const activeCount  = projects.length
@@ -500,22 +576,30 @@ function GeschaeftsleitungView({
       <SubNav
         options={[
           { id: 'uebersicht',  label: 'Übersicht'     },
-          { id: 'risiko',      label: 'Risiko-Cockpit' },
+          { id: 'risiko',      label: 'Projekte'       },
           { id: 'abrechnung',  label: 'Abrechnung'     },
           { id: 'personal',    label: 'Personal'       },
         ]}
         active={subPage}
-        onChange={id => setSubPage(id as typeof subPage)}
+        onChange={onSubPageChange}
       />
 
       {subPage === 'uebersicht' && (<>
         <AlertStrip alerts={alerts} />
 
         <div className="kpi-grid">
-          <KpiCard label="Honorar gesamt"   value={fmtEur(kpis.HONORAR_GESAMT)}       />
-          <KpiCard label="Offene Leistung"  value={fmtEur(kpis.OFFENE_LEISTUNG)}      />
-          <KpiCard label="Leistungsstand"   value={fmtEur(kpis.LEISTUNGSSTAND_VALUE)} meta={`${fmtPct(leistPct)} des Honorars`} />
-          <KpiCard label="Aktive Projekte"  value={String(activeCount)}               />
+          <KpiCard label="Honorar gesamt"   value={fmtEur(honorar)}    />
+          <KpiCard label="Offene Leistung"  value={fmtEur(offeneLeist)} />
+          <KpiCard label="Leistungsstand"   value={fmtEur(leistung)}   meta={`${fmtPct(leistPct)} des Honorars`} />
+          <KpiCard label="Aktive Projekte"  value={String(activeCount)} />
+          {(() => {
+            const cpi = portfolioCpi(projects)
+            const vacTotal = projects.reduce((s, p) => { const v = computeEvm(p).vac; return s + (v ?? 0) }, 0)
+            return <>
+              <KpiCard label="Portfolio-CPI" value={fmtCpi(cpi)} meta={cpi == null ? undefined : cpi >= 0.95 ? 'Effizient' : cpi >= 0.80 ? 'Leicht überbudget' : 'Überbudget'} accent={cpi != null && cpi < 0.80} />
+              <KpiCard label="Prognose-Ergebnis (VAC)" value={fmtEur(vacTotal)} meta={vacTotal >= 0 ? 'Projekte im Plan' : 'Progn. Überschreitung'} accent={vacTotal < 0} />
+            </>
+          })()}
         </div>
 
         <NarrativeBlock>
@@ -526,7 +610,7 @@ function GeschaeftsleitungView({
           {' '}Offene Leistung zu fakturieren: <strong>{fmtEur(offeneLeist)}</strong>.
         </NarrativeBlock>
 
-        <DashboardTimeline />
+        <DashboardTimeline dateFrom={dateFrom} dateTo={dateTo} />
 
         <div className="dash-two-col">
           <div className="dash-card">
@@ -535,7 +619,11 @@ function GeschaeftsleitungView({
           </div>
           <div className="dash-card">
             <div className="dash-card-title">Leistungsverteilung</div>
-            <DonutChart kpis={kpis} />
+            <DonutChart
+              billed={projects.reduce((s, p) => s + Number(p.BILLED_NET_TOTAL || 0), 0)}
+              open={offeneLeist}
+              remaining={Math.max(0, honorar - leistung)}
+            />
             <div className="dash-card-title" style={{ marginTop: 20 }}>Projekte nach Status</div>
             <StatusList items={byStatus} />
           </div>
@@ -544,7 +632,7 @@ function GeschaeftsleitungView({
 
       {subPage === 'risiko'     && <RisikoView projects={riskProjects} />}
       {subPage === 'abrechnung' && <AbrechnungView billing={billingSummary} />}
-      {subPage === 'personal'   && <PersonalView teamHours={teamHours} />}
+      {subPage === 'personal'   && <PersonalView teamHours={teamHours} dateFrom={dateFrom} dateTo={dateTo} />}
     </>
   )
 }
@@ -734,39 +822,44 @@ function ControllerView({
 }
 
 function BereichsleiterView({
-  kpis, projects, byStatus, alerts, teamUtil, riskProjects, teamHours,
+  projects, byStatus, alerts, teamUtil, riskProjects, teamHours, monthly, dateFrom, dateTo,
+  subPage, onSubPageChange,
 }: {
-  kpis: DashboardKpis; projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
+  projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   teamUtil: TeamMemberUtilization[]; riskProjects: RiskProject[]; teamHours: TeamHoursData | null;
+  monthly: DashboardMonthly[]; dateFrom: string; dateTo: string;
+  subPage: 'uebersicht' | 'risiko' | 'personal';
+  onSubPageChange: (id: string) => void;
 }) {
-  const [subPage, setSubPage]  = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
   const budgetHealthy = projects.filter(p =>
     Number(p.BUDGET_TOTAL_NET) > 0 &&
     Number(p.COST_TOTAL) / Number(p.BUDGET_TOTAL_NET) < 0.8
   ).length
   const budgetHealthPct = projects.length > 0 ? Math.round((budgetHealthy / projects.length) * 100) : 0
   const totalHours4w    = teamUtil.reduce((s, e) => s + e.hours_4weeks, 0)
+  const offeneLeist     = projects.reduce((s, p) => s + Number(p.OPEN_NET_TOTAL || 0), 0)
+  const stundenZeitraum = monthly.reduce((s, m) => s + Number(m.HOURS_TOTAL || 0), 0)
 
   return (
     <>
       <SubNav
         options={[
           { id: 'uebersicht', label: 'Übersicht'     },
-          { id: 'risiko',     label: 'Risiko-Cockpit' },
+          { id: 'risiko',     label: 'Projekte'       },
           { id: 'personal',   label: 'Personal'       },
         ]}
         active={subPage}
-        onChange={id => setSubPage(id as typeof subPage)}
+        onChange={onSubPageChange}
       />
 
       {subPage === 'uebersicht' && (<>
         <AlertStrip alerts={alerts} />
 
         <div className="kpi-grid">
-          <KpiCard label="Aktive Projekte"    value={String(projects.length)}             />
-          <KpiCard label="Stunden (Monat)"    value={fmtH(kpis.STUNDEN_MONAT)}           />
-          <KpiCard label="Budget-Gesundheit"  value={fmtPct(budgetHealthPct)}             meta={`${budgetHealthy} von ${projects.length} im grünen Bereich`} />
-          <KpiCard label="Offene Leistung"    value={fmtEur(kpis.OFFENE_LEISTUNG)}       />
+          <KpiCard label="Aktive Projekte"    value={String(projects.length)}              />
+          <KpiCard label="Stunden (Zeitraum)" value={fmtH(stundenZeitraum)}               />
+          <KpiCard label="Budget-Gesundheit"  value={fmtPct(budgetHealthPct)}              meta={`${budgetHealthy} von ${projects.length} im grünen Bereich`} />
+          <KpiCard label="Offene Leistung"    value={fmtEur(offeneLeist)}                 />
         </div>
 
         <NarrativeBlock>
@@ -793,7 +886,7 @@ function BereichsleiterView({
       </>)}
 
       {subPage === 'risiko'   && <RisikoView projects={riskProjects} />}
-      {subPage === 'personal' && <PersonalView teamHours={teamHours} />}
+      {subPage === 'personal' && <PersonalView teamHours={teamHours} dateFrom={dateFrom} dateTo={dateTo} />}
     </>
   )
 }
@@ -946,6 +1039,7 @@ const FLAG_LABELS: Record<string, { label: string; sev: 'rot' | 'orange' | 'gelb
   budget_kritisch:      { label: 'Budget >90%',         sev: 'rot'    },
   db_negativ:           { label: 'Kosten > Leistung',   sev: 'rot'    },
   budget_warn:          { label: 'Budget 75–90%',        sev: 'orange' },
+  cpi_warn:             { label: 'CPI < 0.80',           sev: 'orange' },
   abrechnung_potential: { label: 'Abrechnungspotenzial', sev: 'gelb'   },
 }
 
@@ -953,6 +1047,7 @@ const ACTION_MAP: Record<string, string> = {
   budget_kritisch:      'Zusatzleistungen beauftragen oder Kosten reduzieren.',
   db_negativ:           'Kosten übersteigen Leistungsstand — Budgetgespräch führen.',
   budget_warn:          'Fortschritt und verbleibende Leistungen prüfen.',
+  cpi_warn:             'Kosteneffizienz unter 0.80 — Prognose zeigt mögliche Überschreitung.',
   abrechnung_potential: 'Offene Leistungen können jetzt fakturiert werden.',
 }
 
@@ -1026,6 +1121,17 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
               </tr>
               <tr><td>Abgerechnet</td><td>{fmtEur(project.BILLED_NET_TOTAL)}</td></tr>
               <tr><td>Zu fakturieren</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? '#1d4ed8' : undefined }}>{fmtEur(project.OPEN_NET_TOTAL)}</td></tr>
+              {(() => {
+                const evm = computeEvm(project)
+                if (evm.cpi == null) return null
+                const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+                return (<>
+                  <tr><td colSpan={2}><div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} /></td></tr>
+                  <tr><td>CPI (Effizienz)</td><td style={{ color: cpiColor, fontWeight: 700 }}>{fmtCpi(evm.cpi)}</td></tr>
+                  <tr><td>EAC (Progn. Kosten)</td><td>{fmtEur(evm.eac)}</td></tr>
+                  <tr><td>VAC (Abweichung)</td><td style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 700 }}>{fmtEur(evm.vac)}</td></tr>
+                </>)
+              })()}
             </tbody>
           </table>
           <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1131,6 +1237,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                   <th className="num col-hide-mobile">Honorar</th>
                   <th className="num">Kosten</th>
                   <th className="num col-hide-mobile">Budget %</th>
+                  <th className="num col-hide-mobile" title="Cost Performance Index">CPI</th>
                   <th className="num col-hide-mobile">Offen</th>
                   <th>Flags</th>
                 </tr>
@@ -1154,6 +1261,14 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                     <td className="num">{fmtEur(p.COST_TOTAL)}</td>
                     <td className="num col-hide-mobile">
                       {Number(p.BUDGET_TOTAL_NET) > 0 ? fmtPct(Number(p.COST_RATIO || 0) * 100) : '—'}
+                    </td>
+                    <td className="num col-hide-mobile">
+                      {(() => {
+                        const evm = computeEvm(p)
+                        if (evm.cpi == null) return <span style={{ color: 'var(--text-4)' }}>–</span>
+                        const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+                        return <span style={{ color, fontWeight: 600 }}>{fmtCpi(evm.cpi)}</span>
+                      })()}
                     </td>
                     <td className="num col-hide-mobile">
                       {Number(p.OPEN_NET_TOTAL) > 0 ? fmtEur(p.OPEN_NET_TOTAL) : '—'}
@@ -1260,10 +1375,13 @@ function AbrechnungView({ billing }: { billing: BillingSummaryData | null }) {
 
 // ── Personal / HR analytics view ──────────────────────────────────────────────
 
-function PersonalView({ teamHours }: { teamHours: TeamHoursData | null }) {
+function PersonalView({ teamHours, dateFrom, dateTo }: { teamHours: TeamHoursData | null; dateFrom: string; dateTo: string }) {
   if (!teamHours) return <p className="empty-note">Laden …</p>
   const { employees, months } = teamHours
-  if (employees.length === 0) return <p className="empty-note">Keine Buchungen in den letzten 6 Monaten.</p>
+  const periodLabel = months.length > 0
+    ? `${MONTHS_DE[parseInt(months[0].split('-')[1], 10) - 1]} ${months[0].split('-')[0]} – ${MONTHS_DE[parseInt(months[months.length - 1].split('-')[1], 10) - 1]} ${months[months.length - 1].split('-')[0]}`
+    : `${dateFrom.substring(0, 7)} – ${dateTo.substring(0, 7)}`
+  if (employees.length === 0) return <p className="empty-note">Keine Buchungen im Zeitraum {periodLabel}.</p>
 
   const totalHours = employees.reduce((s, e) => s + e.total, 0)
   const avgHours   = employees.length > 0 ? totalHours / employees.length : 0
@@ -1290,13 +1408,13 @@ function PersonalView({ teamHours }: { teamHours: TeamHoursData | null }) {
   return (
     <>
       <div className="kpi-grid">
-        <KpiCard label="Gesamtstunden (6 Monate)" value={fmtH(totalHours)}          />
-        <KpiCard label="Ø pro Mitarbeiter"        value={fmtH(avgHours)}            />
-        <KpiCard label="Aktive Mitarbeiter"       value={String(employees.length)}  />
+        <KpiCard label={`Gesamtstunden (${months.length} Mon.)`} value={fmtH(totalHours)}         />
+        <KpiCard label="Ø pro Mitarbeiter"                       value={fmtH(avgHours)}           />
+        <KpiCard label="Aktive Mitarbeiter"                      value={String(employees.length)} />
       </div>
 
       <div className="dash-card">
-        <div className="dash-card-title">Stunden nach Mitarbeiter (letzte 6 Monate)</div>
+        <div className="dash-card-title">Stunden nach Mitarbeiter ({periodLabel})</div>
         <div className="chart-wrap">
           <Bar
             data={{ labels, datasets }}
@@ -1346,27 +1464,98 @@ function PersonalView({ teamHours }: { teamHours: TeamHoursData | null }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+// ── Dashboard filter bar ──────────────────────────────────────────────────────
+
+function DashboardFilterBar({
+  filters, onChange, abteilungen, plOptions, statusOptions, showDimensions,
+}: {
+  filters:        DashboardFilters
+  onChange:       (patch: Partial<DashboardFilters>) => void
+  abteilungen:    string[]
+  plOptions:      string[]
+  statusOptions:  string[]
+  showDimensions: boolean
+}) {
+  const isActive = filters.zeitraum !== 'last12m' || !!filters.abteilung || !!filters.projektleiter || !!filters.status
+  return (
+    <div className="dash-filter-bar">
+      <div className="dash-filter-group">
+        <span className="dash-filter-label">Zeitraum</span>
+        <select className="inline-select" value={filters.zeitraum}
+          onChange={e => onChange({ zeitraum: e.target.value as ZeitraumKey })}>
+          {ZEITRAUM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+
+      {showDimensions && abteilungen.length > 1 && (
+        <div className="dash-filter-group">
+          <span className="dash-filter-label">Abteilung</span>
+          <select className="inline-select" value={filters.abteilung}
+            onChange={e => onChange({ abteilung: e.target.value })}>
+            <option value="">Alle</option>
+            {abteilungen.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+      )}
+
+      {showDimensions && plOptions.length > 1 && (
+        <div className="dash-filter-group">
+          <span className="dash-filter-label">Projektleiter</span>
+          <select className="inline-select" value={filters.projektleiter}
+            onChange={e => onChange({ projektleiter: e.target.value })}>
+            <option value="">Alle</option>
+            {plOptions.map(pl => <option key={pl} value={pl}>{pl}</option>)}
+          </select>
+        </div>
+      )}
+
+      {showDimensions && statusOptions.length > 1 && (
+        <div className="dash-filter-group">
+          <span className="dash-filter-label">Status</span>
+          <select className="inline-select" value={filters.status}
+            onChange={e => onChange({ status: e.target.value })}>
+            <option value="">Alle</option>
+            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      )}
+
+      {isActive && (
+        <button className="dash-filter-reset" onClick={() => onChange(DEFAULT_FILTERS)}>
+          Zurücksetzen
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const { dashboardRole, setDashboardRole, employeeId } = useSession()
+  const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
+  const [glSubPage, setGlSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
+  const [blSubPage, setBlSubPage] = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
 
   const isMitarbeiter = dashboardRole === 'mitarbeiter'
   const isController  = dashboardRole === 'controller'
   const isGl          = dashboardRole === 'geschaeftsleitung'
   const isBl          = dashboardRole === 'bereichsleiter'
 
-  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ, riskQ, billingQ, teamHoursQ] = useQueries({
+  // dateRange computed before useQueries so it can drive query keys + fns
+  const dateRange = useMemo(() => computeDateRange(filters.zeitraum), [filters.zeitraum])
+
+  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ, , billingQ, teamHoursQ] = useQueries({
     queries: [
-      { queryKey: ['dashboard', 'kpis'],             queryFn: fetchDashboardKpis,      staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'projects'],          queryFn: fetchDashboardProjects,  staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'monthly'],           queryFn: fetchDashboardMonthly,   staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'by-status'],         queryFn: fetchDashboardByStatus,  staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'alerts'],            queryFn: fetchDashboardAlerts,    staleTime: 120000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'overdue-invoices'],  queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'team-utilization'],  queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'mahnung-stats'],     queryFn: fetchMahnungStats,       staleTime: 120000, enabled: isController },
-      { queryKey: ['dashboard', 'risk-projects'],     queryFn: fetchRiskProjects,       staleTime: 300000, enabled: isGl || isBl },
-      { queryKey: ['dashboard', 'billing-summary'],   queryFn: fetchBillingSummary,     staleTime: 300000, enabled: isGl },
-      { queryKey: ['dashboard', 'team-hours'],        queryFn: fetchTeamHours,          staleTime: 300000, enabled: isGl || isBl },
+      { queryKey: ['dashboard', 'kpis'],                                       queryFn: fetchDashboardKpis,       staleTime: 300000, enabled: isController },
+      { queryKey: ['dashboard', 'projects', dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchDashboardProjects(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'monthly',  dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchDashboardMonthly(dateRange.dateFrom, dateRange.dateTo),  staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'by-status'],                                  queryFn: fetchDashboardByStatus,  staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'alerts'],                                     queryFn: fetchDashboardAlerts,    staleTime: 120000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'overdue-invoices'],                           queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'team-utilization'],                           queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
+      { queryKey: ['dashboard', 'mahnung-stats'],                              queryFn: fetchMahnungStats,       staleTime: 120000, enabled: isController },
+      { queryKey: ['dashboard', 'risk-projects'],                              queryFn: fetchRiskProjects,       staleTime: 300000, enabled: false },
+      { queryKey: ['dashboard', 'billing-summary'],                            queryFn: fetchBillingSummary,     staleTime: 300000, enabled: isGl },
+      { queryKey: ['dashboard', 'team-hours', dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchTeamHours(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: isGl || isBl },
     ],
   })
 
@@ -1378,11 +1567,35 @@ export function DashboardPage() {
   const overdue        = overdueQ.data?.data    ?? []
   const teamUtil       = teamQ.data?.data       ?? []
   const mahnStats      = mahnungenQ.data?.data  ?? null
-  const riskProjects   = riskQ.data?.data       ?? []
+
   const billingSummary = billingQ.data?.data     ?? null
   const teamHours      = teamHoursQ.data?.data  ?? null
 
-  const isLoading = kpisQ.isLoading || projectsQ.isLoading
+  const isLoading = projectsQ.isLoading || monthlyQ.isLoading || (isController && kpisQ.isLoading)
+
+  // ── Filter computations ──
+
+  // Dimension filter options from date-filtered projects (now has all dimension fields)
+  const abteilungen = useMemo(() =>
+    [...new Set(projects.map(p => p.DEPARTMENT_NAME).filter(Boolean))].sort() as string[],
+    [projects])
+  const plOptions = useMemo(() =>
+    [...new Set(projects.map(p => p.PROJECT_MANAGER_DISPLAY).filter(Boolean))].sort() as string[],
+    [projects])
+  const statusOptions = useMemo(() =>
+    [...new Set(projects.map(p => p.PROJECT_STATUS_NAME_SHORT).filter(Boolean))].sort() as string[],
+    [projects])
+
+  // Client-side dimension filter on server-time-filtered project list
+  const filteredProjects = useMemo(() =>
+    projects
+      .filter(p => !filters.abteilung     || p.DEPARTMENT_NAME          === filters.abteilung)
+      .filter(p => !filters.projektleiter || p.PROJECT_MANAGER_DISPLAY  === filters.projektleiter)
+      .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
+    [projects, filters.abteilung, filters.projektleiter, filters.status])
+
+  // Derive risk flags from the already time+dimension-filtered projects (no separate endpoint needed)
+  const derivedRiskProjects = useMemo(() => filteredProjects.map(deriveRiskFromProject), [filteredProjects])
 
   const roleLabel = ROLES.find(r => r.id === dashboardRole)?.title ?? ''
 
@@ -1405,20 +1618,41 @@ export function DashboardPage() {
 
       <SetupChecklist />
 
+      {dashboardRole && !isMitarbeiter && (
+        <DashboardFilterBar
+          filters={filters}
+          onChange={patch => setFilters(f => ({ ...f, ...patch }))}
+          abteilungen={abteilungen}
+          plOptions={plOptions}
+          statusOptions={statusOptions}
+          showDimensions={isGl || isBl}
+        />
+      )}
+
       {!dashboardRole && <RoleSelector onSelect={setDashboardRole} />}
 
       {isLoading && dashboardRole && <div className="dash-loading">Laden …</div>}
 
-      {!isLoading && kpis && dashboardRole === 'geschaeftsleitung' && (
-        <GeschaeftsleitungView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} riskProjects={riskProjects} billingSummary={billingSummary} teamHours={teamHours} />
+      {!isLoading && dashboardRole === 'geschaeftsleitung' && (
+        <GeschaeftsleitungView
+          projects={filteredProjects} byStatus={byStatus} alerts={alerts}
+          riskProjects={derivedRiskProjects} billingSummary={billingSummary} teamHours={teamHours}
+          dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
+          subPage={glSubPage} onSubPageChange={id => setGlSubPage(id as typeof glSubPage)}
+        />
       )}
 
       {!isLoading && kpis && dashboardRole === 'controller' && (
         <ControllerView kpis={kpis} monthly={monthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} />
       )}
 
-      {!isLoading && kpis && dashboardRole === 'bereichsleiter' && (
-        <BereichsleiterView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} teamUtil={teamUtil} riskProjects={riskProjects} teamHours={teamHours} />
+      {!isLoading && dashboardRole === 'bereichsleiter' && (
+        <BereichsleiterView
+          projects={filteredProjects} byStatus={byStatus} alerts={alerts}
+          teamUtil={teamUtil} riskProjects={derivedRiskProjects} teamHours={teamHours}
+          monthly={monthly} dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
+          subPage={blSubPage} onSubPageChange={id => setBlSubPage(id as typeof blSubPage)}
+        />
       )}
 
       {isMitarbeiter && employeeId !== null && (

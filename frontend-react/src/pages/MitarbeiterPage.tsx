@@ -1,10 +1,12 @@
 import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Tabs }      from '@/components/ui/Tabs'
-import { Modal }     from '@/components/ui/Modal'
-import { Message }   from '@/components/ui/Message'
-import { FormField } from '@/components/ui/FormField'
-import { useCtrlS }  from '@/hooks/useCtrlS'
+import { Tabs }        from '@/components/ui/Tabs'
+import { Modal }       from '@/components/ui/Modal'
+import { Message }     from '@/components/ui/Message'
+import { FormField }   from '@/components/ui/FormField'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { useCtrlS }    from '@/hooks/useCtrlS'
+import { useToast }    from '@/store/toastStore'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
@@ -827,6 +829,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
 
 function ReportingTab({ employees }: { employees: Employee[] }) {
   const qc = useQueryClient()
+  const toast = useToast()
   const [subTab,   setSubTab]   = useState<'list' | 'single'>('list')
   const [empId,    setEmpId]    = useState<number | null>(null)
   const [year,     setYear]     = useState(new Date().getFullYear())
@@ -886,7 +889,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
       await refetchClose()
       void qc.invalidateQueries({ queryKey: ['month-close-overview'] })
     } catch (e: unknown) {
-      alert((e as Error).message)
+      toast.error((e as Error).message)
     } finally {
       setCloseLoading(false)
     }
@@ -1089,6 +1092,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
 
 function MonthsOverviewTab() {
   const qc = useQueryClient()
+  const toast = useToast()
   const { data: overviewRes, isLoading } = useQuery({
     queryKey: ['month-close-overview'],
     queryFn:  fetchMonthCloseOverview,
@@ -1104,7 +1108,7 @@ function MonthsOverviewTab() {
       void qc.invalidateQueries({ queryKey: ['month-close-overview'] })
       void qc.invalidateQueries({ queryKey: ['month-close-status', emp.ID] })
     } catch (e: unknown) {
-      alert((e as Error).message)
+      toast.error((e as Error).message)
     }
   }
 
@@ -1177,8 +1181,10 @@ export function MitarbeiterPage() {
   const [createWmValidFrom,  setCreateWmValidFrom]  = useState('')
   const [createCpRate,       setCreateCpRate]       = useState('')
   const [createCpValidFrom,  setCreateCpValidFrom]  = useState('')
-  const [createMsg, setCreateMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [creating,  setCreating] = useState(false)
+  const [createMsg,    setCreateMsg]    = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [creating,     setCreating]     = useState(false)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const toast = useToast()
   const createFormRef = useRef<HTMLFormElement>(null)
 
   const { data: listData,   isLoading } = useQuery({ queryKey: ['employees'],           queryFn: fetchEmployeeList      })
@@ -1240,12 +1246,17 @@ export function MitarbeiterPage() {
     setPage(1)
   }
 
-  async function handleDelete(row: Employee) {
-    if (!window.confirm(`${row.SHORT_NAME}: ${row.FIRST_NAME} ${row.LAST_NAME} wirklich löschen?`)) return
-    try {
-      await deleteEmployee(row.ID)
-      void qc.invalidateQueries({ queryKey: ['employees'] })
-    } catch (e: unknown) { alert((e as Error).message) }
+  function handleDelete(row: Employee) {
+    setConfirmState({
+      title: 'Mitarbeiter löschen',
+      message: `${row.SHORT_NAME}: ${row.FIRST_NAME} ${row.LAST_NAME} wirklich löschen?`,
+      onConfirm: async () => {
+        try {
+          await deleteEmployee(row.ID)
+          void qc.invalidateQueries({ queryKey: ['employees'] })
+        } catch (e: unknown) { toast.error((e as Error).message) }
+      },
+    })
   }
 
   async function submitCreate(e: React.FormEvent) {
@@ -1459,6 +1470,16 @@ export function MitarbeiterPage() {
           />
         )}
       </Modal>
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel="Löschen"
+        confirmClass="danger"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+        onCancel={() => setConfirmState(null)}
+      />
     </div>
   )
 }

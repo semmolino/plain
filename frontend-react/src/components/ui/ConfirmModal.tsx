@@ -1,4 +1,4 @@
-import { Modal } from './Modal'
+import { createPortal } from 'react-dom'
 
 interface Props {
   open:          boolean
@@ -12,19 +12,29 @@ interface Props {
 
 export function ConfirmModal({
   open, title, message,
-  confirmLabel = 'Löschen',
+  confirmLabel = 'Bestätigen',
   confirmClass = 'btn-danger',
   onConfirm, onCancel,
 }: Props) {
-  return (
-    <Modal open={open} onClose={onCancel} title={title}>
-      <p style={{ marginBottom: 20, fontSize: 14, color: 'var(--text-2)', lineHeight: 1.5 }}>{message}</p>
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-        <button type="button" onClick={onCancel}>Abbrechen</button>
-        <button type="button" className={confirmClass} onClick={() => { onConfirm(); onCancel() }}>
-          {confirmLabel}
-        </button>
+  if (!open) return null
+  return createPortal(
+    <div className="modal-backdrop modal-backdrop--confirm" onClick={onCancel}>
+      <div className="modal-card" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">{title}</span>
+          <button className="modal-close" onClick={onCancel} aria-label="Schließen">✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ marginBottom: 20, fontSize: 14, color: 'var(--text-2)', lineHeight: 1.5 }}>{message}</p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onCancel}>Abbrechen</button>
+            <button type="button" className={confirmClass} onClick={() => { onConfirm(); onCancel() }}>
+              {confirmLabel}
+            </button>
+          </div>
+        </div>
       </div>
-    </Modal>
+    </div>,
+    document.body,
   )
 }

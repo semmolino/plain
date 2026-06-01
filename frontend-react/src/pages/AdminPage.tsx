@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
+import { useToast }  from '@/store/toastStore'
 import {
   fetchCountries, fetchCompanies, createDepartment, createTyp, createRolle,
   createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchDefaults, putDefault,
@@ -487,6 +488,7 @@ function AssetUploadBlock({ label, hint, assetId, dataUri, onSave, onRemove, isP
 
 function CompanyAssetsSection({ companyId }: { companyId: number }) {
   const qc = useQueryClient()
+  const toast = useToast()
   const queryKey = ['company-assets', companyId]
   const { data } = useQuery({ queryKey, queryFn: () => fetchCompanyAssets(companyId) })
   const assets = data?.data
@@ -494,12 +496,12 @@ function CompanyAssetsSection({ companyId }: { companyId: number }) {
   const logoMut = useMutation({
     mutationFn: (assetId: number | null) => putCompanyLogo(companyId, assetId),
     onSuccess: () => void qc.invalidateQueries({ queryKey }),
-    onError: (e: Error) => alert(e.message),
+    onError: (e: Error) => toast.error(e.message),
   })
   const sigMut = useMutation({
     mutationFn: (assetId: number | null) => putCompanySignature(companyId, assetId),
     onSuccess: () => void qc.invalidateQueries({ queryKey }),
-    onError: (e: Error) => alert(e.message),
+    onError: (e: Error) => toast.error(e.message),
   })
 
   return (

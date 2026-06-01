@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Message } from '@/components/ui/Message'
+import { Message }     from '@/components/ui/Message'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
   fetchProjectsShort, fetchActiveEmployees, fetchActiveRoles,
   fetchE2PByProject, createE2P, updateE2P, deleteE2P,
@@ -48,8 +49,9 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
   const [pid,       setPid]       = useState<number | null>(initialProjectId ?? null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm,  setEditForm]  = useState<EditState>({ role_id: '', role_name_short: '', role_name_long: '', sp_rate: '' })
-  const [addForm,   setAddForm]   = useState(emptyAdd())
-  const [msg,       setMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [addForm,      setAddForm]      = useState(emptyAdd())
+  const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }      = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
@@ -164,9 +166,12 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
     })
   }
 
-  async function handleDelete(row: E2PEntry) {
-    if (!window.confirm(`${empName(row)} aus dem Projekt entfernen?`)) return
-    deleteMut.mutate(row.ID)
+  function handleDelete(row: E2PEntry) {
+    setConfirmState({
+      title: 'Mitarbeiter entfernen',
+      message: `${empName(row)} aus dem Projekt entfernen?`,
+      onConfirm: () => deleteMut.mutate(row.ID),
+    })
   }
 
   const setEF = (k: keyof EditState) => (v: string) => setEditForm(f => ({ ...f, [k]: v }))
@@ -314,6 +319,16 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
           </table>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel="Entfernen"
+        confirmClass="danger"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+        onCancel={() => setConfirmState(null)}
+      />
     </div>
   )
 }

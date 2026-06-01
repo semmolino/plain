@@ -492,24 +492,71 @@ module.exports = (supabase) => {
     res.json({ data: data || {} });
   });
 
-  // Top-10 projects by budget
+  // Projects — all root projects with full fields; date-filtered via fn_project_list_report when params present
   router.get("/dashboard/projects", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
-    const { data, error } = await supabase
-      .from("VW_REPORT_PROJECT_LIST_ROOT")
-      .select("PROJECT_ID, NAME_SHORT, NAME_LONG, BUDGET_TOTAL_NET, LEISTUNGSSTAND_VALUE, HOURS_TOTAL, COST_TOTAL, PARTIAL_PAYMENT_NET_TOTAL, INVOICE_NET_TOTAL")
-      .eq("TENANT_ID", tenantId)
-      .order("BUDGET_TOTAL_NET", { ascending: false })
-      .limit(10);
+
+    const dateFrom = req.query.date_from;
+    const dateTo   = req.query.date_to;
+
+    let data, error;
+
+    if (dateFrom && dateTo) {
+      ({ data, error } = await supabase.rpc("fn_project_list_report", {
+        p_tenant_id: parseInt(tenantId, 10),
+        p_as_of:     null,
+        p_date_from: dateFrom,
+        p_date_to:   dateTo + "T23:59:59",
+      }));
+    } else {
+      ({ data, error } = await supabase
+        .from("VW_REPORT_PROJECT_DETAIL")
+        .select([
+          "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+          "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
+          "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
+          "DEPARTMENT_ID", "DEPARTMENT_NAME",
+          "BUDGET_TOTAL_NET", "LEISTUNGSSTAND_PERCENT", "LEISTUNGSSTAND_VALUE",
+          "HOURS_TOTAL", "COST_TOTAL", "COST_RATIO",
+          "REMAINING_BUDGET_NET", "BILLED_NET_TOTAL", "OPEN_NET_TOTAL",
+          "PAYED_NET_TOTAL", "SALES_TOTAL", "QTY_EXT_TOTAL",
+        ].join(", "))
+        .eq("TENANT_ID", tenantId)
+        .order("BUDGET_TOTAL_NET", { ascending: false }));
+    }
+
     if (error) return res.status(500).json({ error: error.message });
     res.json({ data: data || [] });
   });
 
-  // Hours + costs per month (last 6 months)
+  // Hours + costs per month — date-filtered by querying TEC directly when params present
   router.get("/dashboard/monthly", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
+
+    const dateFrom = req.query.date_from;
+    const dateTo   = req.query.date_to;
+
+    if (dateFrom && dateTo) {
+      const { data, error } = await supabase
+        .from("TEC")
+        .select("DATE_VOUCHER, QUANTITY_INT, CP_TOT")
+        .eq("TENANT_ID", tenantId)
+        .gte("DATE_VOUCHER", dateFrom)
+        .lte("DATE_VOUCHER", dateTo);
+      if (error) return res.status(500).json({ error: error.message });
+
+      const byMonth = {};
+      for (const row of (data || [])) {
+        const m = String(row.DATE_VOUCHER).substring(0, 7);
+        if (!byMonth[m]) byMonth[m] = { MONTH: m, HOURS_TOTAL: 0, COST_TOTAL: 0 };
+        byMonth[m].HOURS_TOTAL = Math.round((byMonth[m].HOURS_TOTAL + Number(row.QUANTITY_INT || 0)) * 100) / 100;
+        byMonth[m].COST_TOTAL  = Math.round((byMonth[m].COST_TOTAL  + Number(row.CP_TOT || 0)) * 100) / 100;
+      }
+      return res.json({ data: Object.values(byMonth).sort((a, b) => a.MONTH.localeCompare(b.MONTH)) });
+    }
+
     const { data, error } = await supabase
       .rpc("fn_dashboard_monthly", { p_tenant_id: parseInt(tenantId, 10) });
     if (error) return res.status(500).json({ error: error.message });
@@ -563,6 +610,20 @@ module.exports = (supabase) => {
       message: `${atRisk.length} Projekt${atRisk.length > 1 ? "e" : ""} über 90% Budget`,
       count: atRisk.length,
       action_url: "/projekte",
+    });
+
+    const today2 = new Date().toISOString().slice(0, 10);
+    const { count: mahnCount } = await supabase
+      .from("MAHNUNG")
+      .select("ID", { count: "exact", head: true })
+      .eq("TENANT_ID", tenantId)
+      .eq("IS_CLOSED", false);
+    if ((mahnCount ?? 0) > 0) alerts.push({
+      severity: "amber",
+      type: "open_mahnungen",
+      message: `${mahnCount} offene Mahnung${mahnCount > 1 ? "en" : ""}`,
+      count: mahnCount,
+      action_url: "/rechnungen?tab=mahnungen",
     });
 
     res.json({ data: alerts });
@@ -656,14 +717,21 @@ module.exports = (supabase) => {
     res.json({ data: { projects, byPl } });
   });
 
-  // Team hours: TEC confirmed hours per employee per month (last 6 months)
+  // Team hours: TEC confirmed hours per employee per month (date-range aware)
   router.get("/dashboard/team-hours", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
-    const today   = new Date();
-    const from    = new Date(today.getFullYear(), today.getMonth() - 5, 1);
-    const fromStr = from.toISOString().slice(0, 10);
-    const toStr   = today.toISOString().slice(0, 10);
+
+    let fromStr, toStr;
+    if (req.query.date_from && req.query.date_to) {
+      fromStr = req.query.date_from;
+      toStr   = req.query.date_to;
+    } else {
+      const today = new Date();
+      const from  = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+      fromStr = from.toISOString().slice(0, 10);
+      toStr   = today.toISOString().slice(0, 10);
+    }
 
     const [{ data: tec }, { data: employees }] = await Promise.all([
       supabase.from("TEC").select("EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT")
@@ -673,10 +741,14 @@ module.exports = (supabase) => {
         .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
     ]);
 
+    // Build months array dynamically from the actual date range
     const months = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    const cur = new Date(fromStr + "T00:00:00");
+    const end = new Date(toStr   + "T00:00:00");
+    cur.setDate(1);
+    while (cur <= end) {
+      months.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`);
+      cur.setMonth(cur.getMonth() + 1);
     }
 
     const byEmpMonth = {};
@@ -738,6 +810,321 @@ module.exports = (supabase) => {
       hours_4weeks: Math.round((byEmployee[e.ID] || 0) * 100) / 100,
     }));
     res.json({ data: result });
+  });
+
+  // ── Company-level KPIs (Unternehmenskennzahlen) ───────────────────────────
+  // GET /reports/company-kpis?period_type=year&year=2026
+  // GET /reports/company-kpis?period_type=quarter&year=2026&quarter=2
+  // GET /reports/company-kpis?period_type=month&year=2026&month=5
+  router.get("/company-kpis", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const year = parseInt(req.query.year || new Date().getFullYear(), 10);
+    if (isNaN(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ error: "Ungültiges Jahr" });
+    }
+
+    const periodType = req.query.period_type || 'year';
+    let periodStart, periodEnd, periodMonths;
+
+    if (periodType === 'quarter') {
+      const q = Math.max(1, Math.min(4, parseInt(req.query.quarter || 1, 10)));
+      const sm = (q - 1) * 3 + 1;
+      const em = sm + 2;
+      periodStart = `${year}-${String(sm).padStart(2, '0')}-01`;
+      periodEnd   = `${year}-${String(em).padStart(2, '0')}-${String(new Date(year, em, 0).getDate()).padStart(2, '0')}`;
+      periodMonths = 3;
+    } else if (periodType === 'month') {
+      const m = Math.max(1, Math.min(12, parseInt(req.query.month || 1, 10)));
+      periodStart = `${year}-${String(m).padStart(2, '0')}-01`;
+      periodEnd   = `${year}-${String(m).padStart(2, '0')}-${String(new Date(year, m, 0).getDate()).padStart(2, '0')}`;
+      periodMonths = 1;
+    } else {
+      periodStart  = `${year}-01-01`;
+      periodEnd    = `${year}-12-31`;
+      periodMonths = 12;
+    }
+
+    try {
+      const [invoiceRes, ppRes, tecRes, empRes, backlogRes] = await Promise.all([
+        // Revenue: booked invoices in year (no storno)
+        supabase.from("INVOICE")
+          .select("TOTAL_AMOUNT_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .gte("INVOICE_DATE", periodStart)
+          .lte("INVOICE_DATE", periodEnd)
+          .neq("INVOICE_TYPE", "stornorechnung")
+          .neq("INVOICE_TYPE", "storno_partial"),
+
+        // Revenue: confirmed partial payments in year
+        supabase.from("PARTIAL_PAYMENT")
+          .select("AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .gte("PARTIAL_PAYMENT_DATE", periodStart)
+          .lte("PARTIAL_PAYMENT_DATE", periodEnd)
+          .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+
+        // TEC: all entries in year (employee_id, hours, costs)
+        supabase.from("TEC")
+          .select("EMPLOYEE_ID, QUANTITY_INT, CP_TOT")
+          .eq("TENANT_ID", tenantId)
+          .gte("DATE_VOUCHER", periodStart)
+          .lte("DATE_VOUCHER", periodEnd),
+
+        // Active employees
+        supabase.from("EMPLOYEE")
+          .select("ID")
+          .eq("TENANT_ID", tenantId)
+          .or("ACTIVE.is.null,ACTIVE.neq.2"),
+
+        // Project backlog: remaining billable per project (budget - billed, capped at 0)
+        supabase.from("VW_REPORT_PROJECT_LIST_ROOT")
+          .select("BUDGET_TOTAL_NET, BILLED_NET_TOTAL")
+          .eq("TENANT_ID", tenantId),
+      ]);
+
+      for (const r of [invoiceRes, ppRes, tecRes, empRes, backlogRes]) {
+        if (r.error) throw r.error;
+      }
+
+      // Revenue
+      const invoiceRevenue = (invoiceRes.data || []).reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0);
+      const ppRevenue      = (ppRes.data || []).reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0);
+      const revenue        = Math.round((invoiceRevenue + ppRevenue) * 100) / 100;
+
+      // TEC metrics
+      const tecRows      = tecRes.data || [];
+      const totalHours   = Math.round(tecRows.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0) * 100) / 100;
+      const directCosts  = Math.round(tecRows.reduce((s, r) => s + Number(r.CP_TOT || 0), 0) * 100) / 100;
+      const uniqueEmpIds = new Set(tecRows.map(r => r.EMPLOYEE_ID));
+      const projectEmployeeCount = uniqueEmpIds.size;
+
+      // Employee count
+      const employeeCount = (empRes.data || []).length;
+
+      // Backlog: sum of max(0, BUDGET - BILLED) across all projects
+      const backlog = (backlogRes.data || []).reduce((s, r) => {
+        const remaining = Number(r.BUDGET_TOTAL_NET || 0) - Number(r.BILLED_NET_TOTAL || 0);
+        return s + Math.max(0, remaining);
+      }, 0);
+      const backlogRounded = Math.round(backlog * 100) / 100;
+
+      // Computed KPIs (null when denominator is 0)
+      const monthlyRevenue        = revenue / periodMonths;
+      const umsatzProMitarbeiter  = employeeCount > 0 ? Math.round(revenue / employeeCount) : null;
+      const anteilProjektmitarb   = employeeCount > 0 ? Math.round((projectEmployeeCount / employeeCount) * 1000) / 10 : null;
+      const mittlererStundensatz  = totalHours > 0 ? Math.round((directCosts / totalHours) * 100) / 100 : null;
+      const auftragsreichweite    = monthlyRevenue > 0 ? Math.round((backlogRounded / monthlyRevenue) * 10) / 10 : null;
+      const dbMarge               = revenue > 0 ? Math.round(((revenue - directCosts) / revenue) * 1000) / 10 : null;
+
+      res.json({
+        data: {
+          year,
+          periodType,
+          periodMonths,
+          raw: { revenue, directCosts, totalHours, employeeCount, projectEmployeeCount, backlog: backlogRounded },
+          kpis: {
+            umsatzProMitarbeiter,
+            anteilProjektmitarbeiter: anteilProjektmitarb,
+            mittlererStundensatz,
+            auftragsreichweite,
+            deckungsbeitragMarge: dbMarge,
+          },
+        },
+      });
+    } catch (e) {
+      res.status(500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  // ── Periodic Trends report ───────────────────────────────────────────────
+  // GET /reports/trends?group_by=month|quarter|year&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+  router.get("/trends", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const groupBy = (req.query.group_by || "month");
+    const today   = new Date();
+
+    let dateFrom = req.query.date_from;
+    let dateTo   = req.query.date_to;
+
+    if (!dateFrom || !dateTo) {
+      if (groupBy === "year") {
+        const startYear = today.getFullYear() - 4;
+        dateFrom = `${startYear}-01-01`;
+        dateTo   = `${today.getFullYear()}-12-31`;
+      } else if (groupBy === "quarter") {
+        const startYear = today.getFullYear() - 2;
+        dateFrom = `${startYear}-01-01`;
+        dateTo   = today.toISOString().slice(0, 10);
+      } else {
+        const start = new Date(today.getFullYear(), today.getMonth() - 17, 1);
+        dateFrom = start.toISOString().slice(0, 10);
+        dateTo   = today.toISOString().slice(0, 10);
+      }
+    }
+
+    // Build periods
+    const periods = [];
+    if (groupBy === "year") {
+      const sy = parseInt(dateFrom.slice(0, 4));
+      const ey = parseInt(dateTo.slice(0, 4));
+      for (let y = sy; y <= ey; y++) {
+        periods.push({ period: String(y), label: String(y), start: `${y}-01-01`, end: `${y}-12-31` });
+      }
+    } else if (groupBy === "quarter") {
+      const cur = new Date(dateFrom + "T00:00:00");
+      const end = new Date(dateTo   + "T00:00:00");
+      while (cur <= end) {
+        const y  = cur.getFullYear();
+        const q  = Math.ceil((cur.getMonth() + 1) / 3);
+        const sm = (q - 1) * 3 + 1;
+        const em = sm + 2;
+        const lastDay = new Date(y, em, 0).getDate();
+        periods.push({
+          period: `${y}-Q${q}`,
+          label:  `Q${q} ${y}`,
+          start:  `${y}-${String(sm).padStart(2, "0")}-01`,
+          end:    `${y}-${String(em).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+        });
+        cur.setMonth(cur.getMonth() + 3);
+      }
+    } else {
+      const cur = new Date(dateFrom + "T00:00:00");
+      const end = new Date(dateTo   + "T00:00:00");
+      cur.setDate(1);
+      while (cur <= end) {
+        const y = cur.getFullYear();
+        const m = cur.getMonth() + 1;
+        const lastDay = new Date(y, m, 0).getDate();
+        const ms = String(m).padStart(2, "0");
+        periods.push({
+          period: `${y}-${ms}`,
+          label:  `${ms}/${y}`,
+          start:  `${y}-${ms}-01`,
+          end:    `${y}-${ms}-${String(lastDay).padStart(2, "0")}`,
+        });
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+
+    if (periods.length === 0) return res.json({ data: [] });
+
+    const overallEnd = periods[periods.length - 1].end;
+
+    try {
+      const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+
+      // Fetch all data in parallel; some need all-time data for running totals
+      const [tecRes, invRes, ppRes, payRes, projectsRes, allInvRes, allPpRes] = await Promise.all([
+        supabase.from("TEC")
+          .select("DATE_VOUCHER, QUANTITY_INT, CP_TOT")
+          .eq("TENANT_ID", tenantId)
+          .gte("DATE_VOUCHER", dateFrom)
+          .lte("DATE_VOUCHER", overallEnd),
+        supabase.from("INVOICE")
+          .select("INVOICE_DATE, TOTAL_AMOUNT_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .neq("INVOICE_TYPE", "stornorechnung")
+          .neq("INVOICE_TYPE", "storno_partial")
+          .gte("INVOICE_DATE", dateFrom)
+          .lte("INVOICE_DATE", overallEnd),
+        supabase.from("PARTIAL_PAYMENT")
+          .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .is("CANCELS_PARTIAL_PAYMENT_ID", null)
+          .gte("PARTIAL_PAYMENT_DATE", dateFrom)
+          .lte("PARTIAL_PAYMENT_DATE", overallEnd),
+        supabase.from("PAYMENT")
+          .select("PAYMENT_DATE, AMOUNT_PAYED_NET")
+          .eq("TENANT_ID", tenantId)
+          .gte("PAYMENT_DATE", dateFrom)
+          .lte("PAYMENT_DATE", overallEnd),
+        supabase.from("PROJECT")
+          .select("ID, BUDGET_TOTAL_NET, created_at")
+          .eq("TENANT_ID", tenantId)
+          .not("BUDGET_TOTAL_NET", "is", null),
+        // All-time invoices for running backlog calculation
+        supabase.from("INVOICE")
+          .select("INVOICE_DATE, TOTAL_AMOUNT_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .neq("INVOICE_TYPE", "stornorechnung")
+          .neq("INVOICE_TYPE", "storno_partial")
+          .lte("INVOICE_DATE", overallEnd),
+        supabase.from("PARTIAL_PAYMENT")
+          .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .is("CANCELS_PARTIAL_PAYMENT_ID", null)
+          .lte("PARTIAL_PAYMENT_DATE", overallEnd),
+      ]);
+
+      const tec      = tecRes.data      || [];
+      const invoices = invRes.data      || [];
+      const pps      = ppRes.data       || [];
+      const payments = payRes.data      || [];
+      const projects = projectsRes.data || [];
+      const allInv   = allInvRes.data   || [];
+      const allPp    = allPpRes.data    || [];
+
+      const result = periods.map(p => {
+        const periodTec = tec.filter(r => r.DATE_VOUCHER >= p.start && r.DATE_VOUCHER <= p.end);
+        const stunden   = round2(periodTec.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0));
+        const kosten    = round2(periodTec.reduce((s, r) => s + Number(r.CP_TOT || 0), 0));
+
+        const periodInv = invoices.filter(r => r.INVOICE_DATE >= p.start && r.INVOICE_DATE <= p.end);
+        const periodPp  = pps.filter(r => r.PARTIAL_PAYMENT_DATE >= p.start && r.PARTIAL_PAYMENT_DATE <= p.end);
+        const fakturiert = round2(
+          periodInv.reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0) +
+          periodPp.reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0)
+        );
+
+        const periodPay = payments.filter(r => r.PAYMENT_DATE >= p.start && r.PAYMENT_DATE <= p.end);
+        const bezahlt   = round2(periodPay.reduce((s, r) => s + Number(r.AMOUNT_PAYED_NET || 0), 0));
+
+        const db      = round2(fakturiert - kosten);
+        const dbMarge = fakturiert > 0 ? round2((db / fakturiert) * 100) : null;
+        const avgStundensatz = stunden > 0 ? round2(kosten / stunden) : null;
+
+        // Auftragsbestand: sum of project budgets created up to period end, minus total billed up to period end
+        const contractedUpTo = projects
+          .filter(pr => pr.created_at && pr.created_at.slice(0, 10) <= p.end)
+          .reduce((s, pr) => s + Number(pr.BUDGET_TOTAL_NET || 0), 0);
+        const billedUpTo = round2(
+          allInv.filter(r => r.INVOICE_DATE <= p.end)
+            .reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0) +
+          allPp.filter(r => r.PARTIAL_PAYMENT_DATE <= p.end)
+            .reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0)
+        );
+        const auftragsbestand = round2(Math.max(0, contractedUpTo - billedUpTo));
+
+        return {
+          period:          p.period,
+          period_label:    p.label,
+          period_start:    p.start,
+          period_end:      p.end,
+          stunden,
+          kosten,
+          avg_stundensatz: avgStundensatz,
+          fakturiert,
+          bezahlt,
+          db,
+          db_marge:        dbMarge,
+          auftragsbestand,
+        };
+      });
+
+      res.json({ data: result });
+    } catch (e) {
+      res.status(500).json({ error: e.message || String(e) });
+    }
   });
 
   return router;

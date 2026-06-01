@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Message }   from '@/components/ui/Message'
-import { Modal }     from '@/components/ui/Modal'
-import { FormField } from '@/components/ui/FormField'
+import { Message }     from '@/components/ui/Message'
+import { Modal }       from '@/components/ui/Modal'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { FormField }   from '@/components/ui/FormField'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBuchungen, createBuchung, updateBuchung, deleteBuchung,
   fetchEmployee2ProjectPreset,
@@ -79,6 +80,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [cpRateFound,  setCpRateFound]  = useState<boolean | null>(null)
   const [extTouched,   setExtTouched]   = useState(false)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   const { data: projectsData }  = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }       = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
@@ -330,9 +332,11 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   }
 
   function confirmDelete(b: Buchung) {
-    if (!window.confirm(`Buchung vom ${fmtDate(b.DATE_VOUCHER)} löschen?`)) return
-    setMsg(null)
-    deleteMut.mutate(b.ID)
+    setConfirmState({
+      title: 'Buchung löschen',
+      message: `Buchung vom ${fmtDate(b.DATE_VOUCHER)} löschen?`,
+      onConfirm: () => { setMsg(null); deleteMut.mutate(b.ID) },
+    })
   }
 
   const currentProject = projects.find(p => p.ID === pid)
@@ -557,6 +561,16 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
           </div>
         </form>
       </Modal>
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel="Löschen"
+        confirmClass="danger"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+        onCancel={() => setConfirmState(null)}
+      />
     </div>
   )
 }

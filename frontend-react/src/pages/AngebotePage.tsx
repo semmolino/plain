@@ -15,9 +15,11 @@ const TABS: { id: Tab; label: string }[] = [
 export function AngebotePage() {
   const [tab, setTab]             = useState<Tab>('liste')
   const [selectedOfferId, setSelectedOfferId] = useState<number | undefined>(undefined)
+  const [selectedOfferName, setSelectedOfferName] = useState<string>('')
 
-  function openOffer(id: number) {
+  function openOffer(id: number, name: string) {
     setSelectedOfferId(id)
+    setSelectedOfferName(name)
     setTab('bearbeiten')
   }
 
@@ -25,6 +27,12 @@ export function AngebotePage() {
     <div className="master-page">
       <h1 className="master-title">Angebote</h1>
       <Tabs tabs={TABS} active={tab} onChange={id => setTab(id as Tab)} />
+      {tab === 'bearbeiten' && selectedOfferId && (
+        <div className="project-context-strip">
+          <button className="project-context-back" onClick={() => setTab('liste')}>← Angebotsliste</button>
+          <span className="project-context-name">{selectedOfferName || `Angebot #${selectedOfferId}`}</span>
+        </div>
+      )}
       <div className="master-tab-content">
         {tab === 'liste'      && <AngeboteListe onSelectOffer={openOffer} />}
         {tab === 'anlegen'    && <AngeboteAnlegen />}
