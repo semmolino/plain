@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useSaveState } from '@/hooks/useSaveState'
 import { SaveBadge } from '@/components/ui/SaveBadge'
@@ -7,9 +7,11 @@ import { Message }      from '@/components/ui/Message'
 import { Modal }        from '@/components/ui/Modal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
+import { Percent } from 'lucide-react'
 import {
   fetchOffers, fetchOffer, updateOffer, fetchOfferStructure,
   addOfferStructureNode, updateOfferStructureNode, deleteOfferStructureNode, convertOffer, copyOffer,
+  updateOfferStructureSurcharges,
   openOfferPdf, type Offer, type OfferStructureNode, type AddStructureNodePayload, type ConvertOfferPayload,
 } from '@/api/angebote'
 import { fetchOfferStatuses } from '@/api/angebote'
@@ -85,6 +87,12 @@ interface EditNodeForm {
   role_name_long:  string
 }
 
+type SurchargeEdit = {
+  s1Label: string; s1Pct: string; s1Cumul: boolean
+  s2Label: string; s2Pct: string; s2Cumul: boolean
+  s3Label: string; s3Pct: string; s3Cumul: boolean
+}
+
 function nodeToEditForm(n: OfferStructureNode): EditNodeForm {
   const isHourly = Number(n.BILLING_TYPE_ID) === 2
   return {
@@ -92,7 +100,7 @@ function nodeToEditForm(n: OfferStructureNode): EditNodeForm {
     name_long:       n.NAME_LONG  ?? '',
     billing_type_id: n.BILLING_TYPE_ID != null ? String(n.BILLING_TYPE_ID) : '',
     extras_percent:  n.EXTRAS_PERCENT  != null ? String(n.EXTRAS_PERCENT)  : '0',
-    revenue:         !isHourly && n.REVENUE != null ? String(n.REVENUE) : '',
+    revenue:         !isHourly ? String(n.REVENUE_BASIS ?? n.REVENUE ?? 0) : '',
     quantity:        n.QUANTITY != null ? String(n.QUANTITY) : '',
     sp_rate:         n.SP_RATE  != null ? String(n.SP_RATE)  : '',
     role_id:         n.ROLE_ID  != null ? String(n.ROLE_ID)  : '',
@@ -121,6 +129,8 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
   const [showHonorarWizard, setShowHonorarWizard] = useState(false)
   const [editCalcId, setEditCalcId] = useState<number | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
+  const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
 
   // Lookups
   const { data: offersData  } = useQuery({ queryKey: ['offers'],          queryFn: fetchOffers         })
@@ -336,11 +346,89 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
     setEditNodeMsg(null)
   }
 
+  function surchargeDefault(n: OfferStructureNode): SurchargeEdit {
+    return {
+      s1Label: n.SURCHARGE_1_LABEL ?? '', s1Pct: n.SURCHARGE_1_PCT != null ? String(n.SURCHARGE_1_PCT) : '', s1Cumul: n.SURCHARGE_1_CUMUL ?? true,
+      s2Label: n.SURCHARGE_2_LABEL ?? '', s2Pct: n.SURCHARGE_2_PCT != null ? String(n.SURCHARGE_2_PCT) : '', s2Cumul: n.SURCHARGE_2_CUMUL ?? true,
+      s3Label: n.SURCHARGE_3_LABEL ?? '', s3Pct: n.SURCHARGE_3_PCT != null ? String(n.SURCHARGE_3_PCT) : '', s3Cumul: n.SURCHARGE_3_CUMUL ?? true,
+    }
+  }
+
+  function computeSurchargesDisplay(base: number, s: SurchargeEdit) {
+    const r2 = (n: number) => Math.round(n * 100) / 100
+    const s1Active = !!s.s1Label && s.s1Pct !== '' && Number(s.s1Pct) !== 0
+    const s1Eur    = s1Active ? r2(base * Number(s.s1Pct) / 100) : 0
+    const s1Sub    = base + s1Eur
+    const s2Base   = s.s2Cumul ? s1Sub : base
+    const s2Active = !!s.s2Label && s.s2Pct !== '' && Number(s.s2Pct) !== 0
+    const s2Eur    = s2Active ? r2(s2Base * Number(s.s2Pct) / 100) : 0
+    const s2Sub    = s1Sub + s2Eur
+    const s3Base   = s.s3Cumul ? s2Sub : base
+    const s3Active = !!s.s3Label && s.s3Pct !== '' && Number(s.s3Pct) !== 0
+    const s3Eur    = s3Active ? r2(s3Base * Number(s.s3Pct) / 100) : 0
+    return { s1Eur, s2Eur, s3Eur, total: r2(s1Eur + s2Eur + s3Eur) }
+  }
+
+  const surchargeMut = useMutation({
+    mutationFn: ({ id, s }: { id: number; s: SurchargeEdit }) =>
+      updateOfferStructureSurcharges(selectedId!, id, {
+        SURCHARGE_1_LABEL: s.s1Label || null, SURCHARGE_1_PCT: s.s1Pct !== '' ? Number(s.s1Pct) : null, SURCHARGE_1_CUMUL: s.s1Cumul,
+        SURCHARGE_2_LABEL: s.s2Label || null, SURCHARGE_2_PCT: s.s2Pct !== '' ? Number(s.s2Pct) : null, SURCHARGE_2_CUMUL: s.s2Cumul,
+        SURCHARGE_3_LABEL: s.s3Label || null, SURCHARGE_3_PCT: s.s3Pct !== '' ? Number(s.s3Pct) : null, SURCHARGE_3_CUMUL: s.s3Cumul,
+      }),
+    onSuccess: (_, { id }) => {
+      void qc.invalidateQueries({ queryKey: ['offer-structure', selectedId] })
+      setSurchargeEdits(prev => { const n = { ...prev }; delete n[id]; return n })
+      setStructMsg({ text: 'Zuschläge gespeichert ✅', type: 'success' })
+    },
+    onError: (e: Error) => setStructMsg({ text: e.message, type: 'error' }),
+  })
+
+  function closeSurchargePanel(nodeId: number) {
+    const pending = surchargeEdits[nodeId]
+    if (pending) surchargeMut.mutate({ id: nodeId, s: pending })
+    setSurchargePanel(null)
+  }
+
   // Map OFFER_STRUCTURE nodes to the STRUCTURE_ID shape expected by treeUtils
   const mappedForTree = structNodes.map(n => ({ ...n, STRUCTURE_ID: n.ID }))
   const flatNodes = mappedForTree.length
     ? flattenTree(buildStructureTree(mappedForTree as unknown as StructureNode[]))
     : []
+
+  const parentIds = new Set(structNodes.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
+
+  const aggMap = useMemo(() => {
+    const childrenOf = new Map<string, string[]>()
+    for (const n of structNodes) {
+      if (n.FATHER_ID != null) {
+        const fid = String(n.FATHER_ID)
+        const arr = childrenOf.get(fid) ?? []
+        arr.push(String(n.ID))
+        childrenOf.set(fid, arr)
+      }
+    }
+    const nodeMap = new Map(structNodes.map(n => [String(n.ID), n]))
+    const cache = new Map<string, { surcharges: number; revenueBasis: number }>()
+    function agg(id: string): { surcharges: number; revenueBasis: number } {
+      if (cache.has(id)) return cache.get(id)!
+      const children = childrenOf.get(id) ?? []
+      if (children.length === 0) {
+        const node = nodeMap.get(id)!
+        const rb = node?.REVENUE_BASIS != null
+          ? Number(node.REVENUE_BASIS)
+          : Math.max(0, Number(node?.REVENUE ?? 0) - Number(node?.SURCHARGES_TOTAL ?? 0))
+        const r = { surcharges: Number(node?.SURCHARGES_TOTAL ?? 0), revenueBasis: rb }
+        cache.set(id, r); return r
+      }
+      let surcharges = 0, revenueBasis = 0
+      for (const cid of children) { const c = agg(cid); surcharges += c.surcharges; revenueBasis += c.revenueBasis }
+      surcharges += Number(nodeMap.get(id)?.SURCHARGES_TOTAL ?? 0)
+      cache.set(id, { surcharges, revenueBasis }); return { surcharges, revenueBasis }
+    }
+    for (const n of structNodes) agg(String(n.ID))
+    return cache
+  }, [structNodes])
 
   const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -542,7 +630,9 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                       <th className="ls-th">Position</th>
                       <th className="ls-th">Bezeichnung</th>
                       <th className="ls-th">Art</th>
-                      <th className="ls-th ls-col-num">Honorar</th>
+                      <th className="ls-th ls-col-num">Honorar €</th>
+                      <th className="ls-th ls-col-num">Zuschläge €</th>
+                      <th className="ls-th ls-col-num" style={{ color: '#2563eb' }}>Honorar + Zuschl. €</th>
                       <th className="ls-th ls-col-num">NK</th>
                       <th className="ls-th ls-col-num">Gesamt</th>
                       <th className="ls-th"></th>
@@ -550,12 +640,24 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                   </thead>
                   <tbody>
                     {flatNodes.map(({ node, depth }) => {
-                      const n = node as unknown as OfferStructureNode
-                      const revenue = Number(n.REVENUE || 0)
-                      const extras  = Number(n.EXTRAS  || 0)
-                      const bt = btypes.find(b => b.ID === n.BILLING_TYPE_ID)
+                      const n        = node as unknown as OfferStructureNode
+                      const revenue  = Number(n.REVENUE || 0)
+                      const extras   = Number(n.EXTRAS  || 0)
+                      const bt       = btypes.find(b => b.ID === n.BILLING_TYPE_ID)
+                      const isParent = parentIds.has(String(n.ID))
+                      const hasSurcharges = (n.SURCHARGES_TOTAL ?? 0) > 0
+                      const displayRevenueBasis = isParent
+                        ? (aggMap.get(String(n.ID))?.revenueBasis ?? (n.REVENUE_BASIS ?? revenue))
+                        : (n.REVENUE_BASIS != null ? Number(n.REVENUE_BASIS) : revenue)
+                      const displaySurcharges = isParent
+                        ? (aggMap.get(String(n.ID))?.surcharges ?? (n.SURCHARGES_TOTAL ?? 0))
+                        : (n.SURCHARGES_TOTAL ?? 0)
+                      const sEdit        = surchargeEdits[n.ID] ?? surchargeDefault(n)
+                      const surchargeBase = n.REVENUE_BASIS != null ? Number(n.REVENUE_BASIS) : revenue
+                      const computed     = computeSurchargesDisplay(surchargeBase, sEdit)
                       return (
-                        <tr key={n.ID} className="ls-row ls-row-leaf">
+                        <Fragment key={n.ID}>
+                        <tr className={`ls-row ${isParent ? 'ls-row-parent' : 'ls-row-leaf'}`}>
                           <td className="ls-td"><span style={{ paddingLeft: depth * 16 }}>{n.NAME_SHORT}</span></td>
                           <td className="ls-td">
                             {n.NAME_LONG}
@@ -566,10 +668,32 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                             )}
                           </td>
                           <td className="ls-td">{bt?.NAME_SHORT ?? '—'}</td>
-                          <td className="ls-td ls-right">{FMT_EUR.format(revenue)}</td>
+                          <td className="ls-td ls-right">
+                            <span style={{ color: isParent ? 'rgba(17,24,39,0.45)' : undefined, fontSize: isParent ? 12 : undefined }}>
+                              {FMT_EUR.format(displayRevenueBasis)}
+                            </span>
+                          </td>
+                          <td className="ls-td ls-right">
+                            {displaySurcharges > 0 ? (
+                              <span style={{ color: '#2563eb', fontSize: 12 }}>{FMT_EUR.format(displaySurcharges)}</span>
+                            ) : (
+                              <span className="ls-muted">—</span>
+                            )}
+                          </td>
+                          <td className="ls-td ls-right">
+                            <span style={{ color: '#2563eb', fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
+                              {FMT_EUR.format(revenue)}
+                            </span>
+                          </td>
                           <td className="ls-td ls-right">{FMT_EUR.format(extras)}</td>
                           <td className="ls-td ls-right">{FMT_EUR.format(revenue + extras)}</td>
                           <td className="ls-td doc-actions">
+                            <button
+                              className="row-action-btn"
+                              title={hasSurcharges ? `Zuschläge (${FMT_EUR.format(n.SURCHARGES_TOTAL ?? 0)})` : 'Zuschläge bearbeiten'}
+                              style={hasSurcharges ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
+                              onClick={() => { if (surchargePanel === n.ID) closeSurchargePanel(n.ID); else setSurchargePanel(n.ID) }}
+                            ><Percent size={13} strokeWidth={2} /></button>
                             <button className="btn-small" onClick={() => openNodeEdit(n)}>Bearbeiten</button>
                             <button className="btn-small btn-danger"
                               disabled={deleteNodeMut.isPending}
@@ -578,6 +702,68 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                             </button>
                           </td>
                         </tr>
+                        {surchargePanel === n.ID && (
+                          <tr className="surcharge-panel-row">
+                            <td colSpan={9}>
+                              <div className="surcharge-panel">
+                                <div className="surcharge-panel-basis">
+                                  Basis (Honorar): <strong>{FMT_EUR.format(surchargeBase)}</strong>
+                                </div>
+                                <div className="surcharge-grid">
+                                  <div className="surcharge-grid-header">
+                                    <span>Kumul.</span>
+                                    <span>Bezeichnung</span>
+                                    <span style={{ textAlign: 'right' }}>%</span>
+                                    <span style={{ textAlign: 'right' }}>Betrag</span>
+                                  </div>
+                                  {([
+                                    {
+                                      label: sEdit.s1Label, pct: sEdit.s1Pct, cumul: sEdit.s1Cumul, eur: computed.s1Eur,
+                                      disableCumul: true, placeholder: 'z.B. GP-Zuschlag',
+                                      onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [n.ID]: { ...(prev[n.ID] ?? surchargeDefault(n)), ...f } })),
+                                      labelKey: 's1Label' as const, pctKey: 's1Pct' as const, cumulKey: 's1Cumul' as const,
+                                    },
+                                    {
+                                      label: sEdit.s2Label, pct: sEdit.s2Pct, cumul: sEdit.s2Cumul, eur: computed.s2Eur,
+                                      disableCumul: false, placeholder: '(leer = inaktiv)',
+                                      onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [n.ID]: { ...(prev[n.ID] ?? surchargeDefault(n)), ...f } })),
+                                      labelKey: 's2Label' as const, pctKey: 's2Pct' as const, cumulKey: 's2Cumul' as const,
+                                    },
+                                    {
+                                      label: sEdit.s3Label, pct: sEdit.s3Pct, cumul: sEdit.s3Cumul, eur: computed.s3Eur,
+                                      disableCumul: false, placeholder: '(leer = inaktiv)',
+                                      onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [n.ID]: { ...(prev[n.ID] ?? surchargeDefault(n)), ...f } })),
+                                      labelKey: 's3Label' as const, pctKey: 's3Pct' as const, cumulKey: 's3Cumul' as const,
+                                    },
+                                  ] as const).map((row, i) => (
+                                    <div className="surcharge-grid-row" key={i}>
+                                      <input type="checkbox" checked={row.cumul} disabled={row.disableCumul}
+                                        title={row.disableCumul ? 'Erster Zuschlag bezieht sich immer auf die Basis' : 'Kumulativ (auf laufende Zwischensumme)'}
+                                        onChange={e => row.onChange({ [row.cumulKey]: e.target.checked })} />
+                                      <input className="tbl-input" placeholder={row.placeholder}
+                                        value={row.label}
+                                        onChange={e => row.onChange({ [row.labelKey]: e.target.value })} />
+                                      <input className="tbl-input" type="number" min={-100} max={500} step={0.1}
+                                        style={{ width: 64, textAlign: 'right' }}
+                                        value={row.pct}
+                                        onChange={e => row.onChange({ [row.pctKey]: e.target.value })} />
+                                      <span className="surcharge-eur">{row.label || row.pct ? FMT_EUR.format(row.eur) : '—'}</span>
+                                    </div>
+                                  ))}
+                                  <div className="surcharge-grid-total">
+                                    Gesamt Zuschläge: <strong>{FMT_EUR.format(computed.total)}</strong>
+                                  </div>
+                                </div>
+                                <div className="surcharge-panel-actions">
+                                  <button className="btn-small" onClick={() => closeSurchargePanel(n.ID)}>
+                                    {surchargeMut.isPending ? 'Speichert …' : 'Schließen (speichert automatisch)'}
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       )
                     })}
                   </tbody>

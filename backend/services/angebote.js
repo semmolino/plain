@@ -6,6 +6,34 @@ function fmt2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+function computeSurchargesOffer(revenueBasis, settings) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const s1Label = settings?.SURCHARGE_1_LABEL ?? null;
+  const s1Pct   = Number(settings?.SURCHARGE_1_PCT ?? 0);
+  const s1Cumul = !!(settings?.SURCHARGE_1_CUMUL ?? true);
+  const s2Label = settings?.SURCHARGE_2_LABEL ?? null;
+  const s2Pct   = Number(settings?.SURCHARGE_2_PCT ?? 0);
+  const s2Cumul = !!(settings?.SURCHARGE_2_CUMUL ?? true);
+  const s3Label = settings?.SURCHARGE_3_LABEL ?? null;
+  const s3Pct   = Number(settings?.SURCHARGE_3_PCT ?? 0);
+  const s3Cumul = !!(settings?.SURCHARGE_3_CUMUL ?? true);
+
+  const s1Active = s1Label !== null && s1Label !== '' && s1Pct !== 0;
+  const s1Eur    = s1Active ? r2(revenueBasis * s1Pct / 100) : 0;
+  const s1Sub    = revenueBasis + s1Eur;
+
+  const s2Base   = s2Cumul ? s1Sub : revenueBasis;
+  const s2Active = s2Label !== null && s2Label !== '' && s2Pct !== 0;
+  const s2Eur    = s2Active ? r2(s2Base * s2Pct / 100) : 0;
+  const s2Sub    = s1Sub + s2Eur;
+
+  const s3Base   = s3Cumul ? s2Sub : revenueBasis;
+  const s3Active = s3Label !== null && s3Label !== '' && s3Pct !== 0;
+  const s3Eur    = s3Active ? r2(s3Base * s3Pct / 100) : 0;
+
+  return { s1Eur, s2Eur, s3Eur, surchargesTotal: r2(s1Eur + s2Eur + s3Eur) };
+}
+
 // Build flat ordered list from OFFER_STRUCTURE rows (respects FATHER_ID tree)
 function flattenOfferStructure(rows) {
   const byId     = new Map(rows.map(r => [r.ID, r]));
@@ -354,7 +382,9 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
       OFFER_ID:        offerId,
       BILLING_TYPE_ID: btId,
       FATHER_ID:       fatherId,
+      REVENUE_BASIS:   revenue,
       REVENUE:         revenue,
+      SURCHARGES_TOTAL: 0,
       EXTRAS_PERCENT:  extPct,
       EXTRAS:          extras,
       SORT_ORDER:      maxSort + 10,
@@ -368,40 +398,86 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
     .select('*')
     .single();
   if (error) throw error;
+  if (fatherId !== null) await recalcOfferParent(supabase, { parentId: fatherId });
   return data;
 }
 
 async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
-  const b       = body || {};
-  const btId    = b.billing_type_id != null ? parseInt(String(b.billing_type_id), 10) : undefined;
+  const b        = body || {};
+  const r2       = (n) => Math.round(n * 100) / 100;
+  const btId     = b.billing_type_id != null ? parseInt(String(b.billing_type_id), 10) : undefined;
   const isHourly = btId === 2;
-  const patch   = {};
+  const patch    = {};
 
-  if (b.name_short    !== undefined) patch.NAME_SHORT    = String(b.name_short).trim();
-  if (b.name_long     !== undefined) patch.NAME_LONG     = String(b.name_long).trim();
-  if (btId            !== undefined) patch.BILLING_TYPE_ID = btId;
-  if (b.extras_percent !== undefined) patch.EXTRAS_PERCENT = Number(b.extras_percent) || 0;
+  if (b.name_short      !== undefined) patch.NAME_SHORT      = String(b.name_short).trim();
+  if (b.name_long       !== undefined) patch.NAME_LONG       = String(b.name_long).trim();
+  if (btId              !== undefined) patch.BILLING_TYPE_ID = btId;
+  if (b.extras_percent  !== undefined) patch.EXTRAS_PERCENT  = Number(b.extras_percent) || 0;
   if (b.role_name_short !== undefined) patch.ROLE_NAME_SHORT = b.role_name_short || null;
   if (b.role_name_long  !== undefined) patch.ROLE_NAME_LONG  = b.role_name_long  || null;
-  if (b.role_id         !== undefined) patch.ROLE_ID = b.role_id ? parseInt(String(b.role_id), 10) : null;
+  if (b.role_id         !== undefined) patch.ROLE_ID         = b.role_id ? parseInt(String(b.role_id), 10) : null;
 
-  // Recalculate revenue and extras
-  if (isHourly || (btId === undefined && b.quantity !== undefined)) {
-    const q = Number(b.quantity  ?? 0);
-    const r = Number(b.sp_rate   ?? 0);
-    patch.QUANTITY = q;
-    patch.SP_RATE  = r;
-    patch.REVENUE  = fmt2(q * r);
-  } else if (b.revenue !== undefined) {
-    patch.REVENUE = fmt2(Number(b.revenue));
-  }
+  // Surcharge settings
+  if (b.SURCHARGE_1_LABEL !== undefined) patch.SURCHARGE_1_LABEL = b.SURCHARGE_1_LABEL;
+  if (b.SURCHARGE_1_PCT   !== undefined) patch.SURCHARGE_1_PCT   = b.SURCHARGE_1_PCT != null ? Number(b.SURCHARGE_1_PCT) : null;
+  if (b.SURCHARGE_1_CUMUL !== undefined) patch.SURCHARGE_1_CUMUL = !!b.SURCHARGE_1_CUMUL;
+  if (b.SURCHARGE_2_LABEL !== undefined) patch.SURCHARGE_2_LABEL = b.SURCHARGE_2_LABEL;
+  if (b.SURCHARGE_2_PCT   !== undefined) patch.SURCHARGE_2_PCT   = b.SURCHARGE_2_PCT != null ? Number(b.SURCHARGE_2_PCT) : null;
+  if (b.SURCHARGE_2_CUMUL !== undefined) patch.SURCHARGE_2_CUMUL = !!b.SURCHARGE_2_CUMUL;
+  if (b.SURCHARGE_3_LABEL !== undefined) patch.SURCHARGE_3_LABEL = b.SURCHARGE_3_LABEL;
+  if (b.SURCHARGE_3_PCT   !== undefined) patch.SURCHARGE_3_PCT   = b.SURCHARGE_3_PCT != null ? Number(b.SURCHARGE_3_PCT) : null;
+  if (b.SURCHARGE_3_CUMUL !== undefined) patch.SURCHARGE_3_CUMUL = !!b.SURCHARGE_3_CUMUL;
 
-  // Recalculate extras from current or new values
-  if (patch.REVENUE !== undefined || patch.EXTRAS_PERCENT !== undefined) {
-    const { data: current } = await supabase.from('OFFER_STRUCTURE').select('REVENUE, EXTRAS_PERCENT').eq('ID', nodeId).maybeSingle();
-    const rev  = patch.REVENUE        ?? Number(current?.REVENUE || 0);
-    const pct  = patch.EXTRAS_PERCENT ?? Number(current?.EXTRAS_PERCENT || 0);
-    patch.EXTRAS = fmt2(rev * pct / 100);
+  const hasSurchargeChange = b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined ||
+    b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined ||
+    b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined;
+  const hasRevenueChange = isHourly || b.quantity !== undefined || b.revenue !== undefined;
+
+  if (hasRevenueChange || hasSurchargeChange || patch.EXTRAS_PERCENT !== undefined) {
+    const { data: cur } = await supabase
+      .from('OFFER_STRUCTURE')
+      .select('REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, SP_RATE, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+      .eq('ID', nodeId)
+      .maybeSingle();
+
+    let revenueBasis;
+    if (isHourly || b.quantity !== undefined || b.sp_rate !== undefined) {
+      const q = Number(b.quantity ?? cur?.QUANTITY ?? 0);
+      const s = Number(b.sp_rate  ?? cur?.SP_RATE  ?? 0);
+      if (b.quantity !== undefined) patch.QUANTITY = q;
+      if (b.sp_rate  !== undefined) patch.SP_RATE  = s;
+      revenueBasis = r2(q * s);
+    } else if (b.revenue !== undefined) {
+      revenueBasis = r2(Number(b.revenue));
+    } else {
+      revenueBasis = Number(cur?.REVENUE_BASIS ?? cur?.REVENUE ?? 0);
+    }
+
+    const settings = {
+      SURCHARGE_1_LABEL: patch.SURCHARGE_1_LABEL !== undefined ? patch.SURCHARGE_1_LABEL : cur?.SURCHARGE_1_LABEL,
+      SURCHARGE_1_PCT:   patch.SURCHARGE_1_PCT   !== undefined ? patch.SURCHARGE_1_PCT   : cur?.SURCHARGE_1_PCT,
+      SURCHARGE_1_CUMUL: patch.SURCHARGE_1_CUMUL !== undefined ? patch.SURCHARGE_1_CUMUL : cur?.SURCHARGE_1_CUMUL,
+      SURCHARGE_2_LABEL: patch.SURCHARGE_2_LABEL !== undefined ? patch.SURCHARGE_2_LABEL : cur?.SURCHARGE_2_LABEL,
+      SURCHARGE_2_PCT:   patch.SURCHARGE_2_PCT   !== undefined ? patch.SURCHARGE_2_PCT   : cur?.SURCHARGE_2_PCT,
+      SURCHARGE_2_CUMUL: patch.SURCHARGE_2_CUMUL !== undefined ? patch.SURCHARGE_2_CUMUL : cur?.SURCHARGE_2_CUMUL,
+      SURCHARGE_3_LABEL: patch.SURCHARGE_3_LABEL !== undefined ? patch.SURCHARGE_3_LABEL : cur?.SURCHARGE_3_LABEL,
+      SURCHARGE_3_PCT:   patch.SURCHARGE_3_PCT   !== undefined ? patch.SURCHARGE_3_PCT   : cur?.SURCHARGE_3_PCT,
+      SURCHARGE_3_CUMUL: patch.SURCHARGE_3_CUMUL !== undefined ? patch.SURCHARGE_3_CUMUL : cur?.SURCHARGE_3_CUMUL,
+    };
+    const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesOffer(revenueBasis, settings);
+
+    patch.REVENUE_BASIS   = revenueBasis;
+    patch.SURCHARGES_TOTAL = surchargesTotal;
+    patch.SURCHARGE_1_EUR  = r2(s1Eur);
+    patch.SURCHARGE_2_EUR  = r2(s2Eur);
+    patch.SURCHARGE_3_EUR  = r2(s3Eur);
+    patch.REVENUE          = r2(revenueBasis + surchargesTotal);
+
+    const extrasPct = patch.EXTRAS_PERCENT !== undefined ? patch.EXTRAS_PERCENT : Number(cur?.EXTRAS_PERCENT || 0);
+    patch.EXTRAS = r2(patch.REVENUE * extrasPct / 100);
+  } else if (patch.EXTRAS_PERCENT !== undefined) {
+    const { data: cur2 } = await supabase.from('OFFER_STRUCTURE').select('REVENUE').eq('ID', nodeId).maybeSingle();
+    patch.EXTRAS = r2(Number(cur2?.REVENUE || 0) * patch.EXTRAS_PERCENT / 100);
   }
 
   const { data, error } = await supabase
@@ -412,13 +488,66 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
     .select('*')
     .single();
   if (error) throw error;
+
+  await propagateUpwardsOffer(supabase, { structureId: nodeId });
   return data;
 }
 
 async function deleteOfferStructureNode(supabase, { tenantId, nodeId }) {
+  const { data: nd } = await supabase.from('OFFER_STRUCTURE').select('FATHER_ID').eq('ID', nodeId).eq('TENANT_ID', tenantId).maybeSingle();
+  const fatherId = nd?.FATHER_ID ?? null;
   await supabase.from('OFFER_STRUCTURE').delete().eq('FATHER_ID', nodeId).eq('TENANT_ID', tenantId);
   const { error } = await supabase.from('OFFER_STRUCTURE').delete().eq('ID', nodeId).eq('TENANT_ID', tenantId);
   if (error) throw error;
+  if (fatherId != null) await recalcOfferParent(supabase, { parentId: fatherId });
+}
+
+async function recalcOfferParent(supabase, { parentId }) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { data: children, error } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('REVENUE, EXTRAS')
+    .eq('FATHER_ID', parentId);
+  if (error) throw error;
+  if (!children || children.length === 0) return;
+
+  const revenueBasis = children.reduce((s, c) => s + Number(c.REVENUE || 0), 0);
+
+  const { data: parent } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('EXTRAS_PERCENT, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+    .eq('ID', parentId)
+    .maybeSingle();
+
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesOffer(revenueBasis, parent);
+  const revenue   = r2(revenueBasis + surchargesTotal);
+  const extrasPct = Number(parent?.EXTRAS_PERCENT || 0);
+  const extras    = r2(revenue * extrasPct / 100);
+
+  const { error: uErr } = await supabase
+    .from('OFFER_STRUCTURE')
+    .update({
+      REVENUE_BASIS:    revenueBasis,
+      REVENUE:          revenue,
+      EXTRAS:           extras,
+      SURCHARGES_TOTAL: surchargesTotal,
+      SURCHARGE_1_EUR:  r2(s1Eur),
+      SURCHARGE_2_EUR:  r2(s2Eur),
+      SURCHARGE_3_EUR:  r2(s3Eur),
+    })
+    .eq('ID', parentId);
+  if (uErr) throw uErr;
+}
+
+async function propagateUpwardsOffer(supabase, { structureId }) {
+  const { data: node } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('FATHER_ID')
+    .eq('ID', structureId)
+    .maybeSingle();
+  if (!node || node.FATHER_ID == null) return;
+  await recalcOfferParent(supabase, { parentId: node.FATHER_ID });
+  await propagateUpwardsOffer(supabase, { structureId: node.FATHER_ID });
 }
 
 // ── PDF view model ────────────────────────────────────────────────────────────

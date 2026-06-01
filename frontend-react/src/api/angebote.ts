@@ -65,6 +65,7 @@ export interface OfferStructureNode {
   NAME_SHORT:      string | null
   NAME_LONG:       string | null
   OFFER_ID:        number
+  REVENUE_BASIS:   number | null
   REVENUE:         number
   EXTRAS_PERCENT:  number
   EXTRAS:          number
@@ -77,6 +78,19 @@ export interface OfferStructureNode {
   ROLE_NAME_LONG:  string | null
   ROLE_ID:         number | null
   TENANT_ID:       number | null
+  SURCHARGE_1_LABEL: string | null
+  SURCHARGE_1_PCT:   number | null
+  SURCHARGE_1_EUR:   number | null
+  SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null
+  SURCHARGE_2_PCT:   number | null
+  SURCHARGE_2_EUR:   number | null
+  SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null
+  SURCHARGE_3_PCT:   number | null
+  SURCHARGE_3_EUR:   number | null
+  SURCHARGE_3_CUMUL: boolean
+  SURCHARGES_TOTAL:  number
 }
 
 export interface OfferStructureDraftRow {
@@ -182,6 +196,15 @@ export const updateOfferStructureNode = (offerId: number, nodeId: number, body: 
 
 export const deleteOfferStructureNode = (offerId: number, nodeId: number) =>
   apiClient.delete<{ ok: boolean }>(`/angebote/${offerId}/structure/${nodeId}`)
+
+export interface UpdateOfferSurchargesPayload {
+  SURCHARGE_1_LABEL: string | null; SURCHARGE_1_PCT: number | null; SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null; SURCHARGE_2_PCT: number | null; SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null; SURCHARGE_3_PCT: number | null; SURCHARGE_3_CUMUL: boolean
+}
+
+export const updateOfferStructureSurcharges = (offerId: number, nodeId: number, body: UpdateOfferSurchargesPayload) =>
+  apiClient.put<{ data: OfferStructureNode }>(`/angebote/${offerId}/structure/${nodeId}`, body)
 
 export const openOfferPdf = (id: number) =>
   openPdfWithAuth(`/angebote/${id}/pdf`)
