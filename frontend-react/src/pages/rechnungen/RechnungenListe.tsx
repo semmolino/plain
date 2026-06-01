@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal }        from '@/components/ui/Modal'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { useToast }     from '@/store/toastStore'
 import {
   fetchInvoices, fetchPartialPayments,
   openInvoicePdf, openPpPdf,
@@ -315,8 +316,10 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
+  const toast = useToast()
   const [detailRow,     setDetailRow]     = useState<UnifiedRow | null>(null)
   const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const [stornoState,   setStornoState]   = useState<{ label: string; hasPayments: boolean; payCount: number; payTotal: number; onStorno: (del: boolean) => Promise<void> } | null>(null)
   const [payTarget,     setPayTarget]     = useState<PaymentTarget | null>(null)
   const [payForm,     setPayForm]     = useState(emptyPaymentForm())
   const [payMsg,      setPayMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -455,15 +458,21 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
     fetchPayments(params).then(r => setExistingPayments(r.data ?? [])).catch(() => {})
   }
 
-  async function handleDeletePayment(payId: number) {
-    if (!window.confirm('Zahlung wirklich löschen?')) return
+  function handleDeletePayment(payId: number) {
+    setConfirmState({
+      title: 'Zahlung löschen',
+      message: 'Diese Zahlung wirklich löschen?',
+      onConfirm: () => actuallyDeletePayment(payId),
+    })
+  }
+
+  async function actuallyDeletePayment(payId: number) {
     setDeletingPayId(payId)
     try {
       await deletePayment(payId)
       setExistingPayments(prev => prev.filter(p => p.ID !== payId))
       void qc.invalidateQueries({ queryKey: ['invoices'] })
       void qc.invalidateQueries({ queryKey: ['partial-payments'] })
-      // Update the displayed paidGross in the modal header
       setPayTarget(prev => {
         if (!prev) return prev
         const removed = existingPayments.find(p => p.ID === payId)
@@ -501,60 +510,31 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
 
   async function handleCancel(row: UnifiedRow) {
     const label = row.number ?? `#${(row.raw as Invoice).ID}`
+    let pays: Payment[] = []
+    try {
+      const paysRes = row.source === 'invoice'
+        ? await fetchPayments({ invoice_id: (row.raw as Invoice).ID })
+        : await fetchPayments({ partial_payment_id: (row.raw as PartialPayment).ID })
+      pays = paysRes.data ?? []
+    } catch { /* proceed without payment info */ }
+    const payTotal = pays.reduce((s, p) => s + (p.AMOUNT_PAYED_GROSS ?? 0), 0)
 
-    if (row.source === 'invoice') {
-      const inv = row.raw as Invoice
-      // Check for existing payments before cancelling
-      let deletePayments = false
+    async function doStorno(deletePayments: boolean) {
       try {
-        const paysRes = await fetchPayments({ invoice_id: inv.ID })
-        const pays = paysRes.data ?? []
-        if (pays.length > 0) {
-          const totalPaid = pays.reduce((s, p) => s + (p.AMOUNT_PAYED_GROSS ?? 0), 0)
-          const choice = window.confirm(
-            `Für Rechnung ${label} existieren ${pays.length} Zahlung(en) über ${FMT_EUR.format(totalPaid)}.\n\n` +
-            `OK = Zahlung(en) ebenfalls löschen\nAbbrechen = nur Rechnung stornieren`
-          )
-          deletePayments = choice
+        if (row.source === 'invoice') {
+          await cancelInvoice((row.raw as Invoice).ID, { delete_payments: deletePayments })
+          void qc.invalidateQueries({ queryKey: ['invoices'] })
+          void qc.invalidateQueries({ queryKey: ['partial-payments'] })
         } else {
-          if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
+          await cancelPartialPayment((row.raw as PartialPayment).ID, { delete_payments: deletePayments })
+          void qc.invalidateQueries({ queryKey: ['partial-payments'] })
         }
-      } catch {
-        if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
-      }
-      try {
-        await cancelInvoice(inv.ID, { delete_payments: deletePayments })
-        void qc.invalidateQueries({ queryKey: ['invoices'] })
-        void qc.invalidateQueries({ queryKey: ['partial-payments'] })
       } catch (e: unknown) {
-        alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
-      }
-    } else {
-      const pp = row.raw as PartialPayment
-      let deletePayments = false
-      try {
-        const paysRes = await fetchPayments({ partial_payment_id: pp.ID })
-        const pays = paysRes.data ?? []
-        if (pays.length > 0) {
-          const totalPaid = pays.reduce((s, p) => s + (p.AMOUNT_PAYED_GROSS ?? 0), 0)
-          const choice = window.confirm(
-            `Für Abschlagsrechnung ${label} existieren ${pays.length} Zahlung(en) über ${FMT_EUR.format(totalPaid)}.\n\n` +
-            `OK = Zahlung(en) ebenfalls löschen\nAbbrechen = nur Abschlagsrechnung stornieren`
-          )
-          deletePayments = choice
-        } else {
-          if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
-        }
-      } catch {
-        if (!window.confirm(`Stornorechnung für ${label} erstellen?`)) return
-      }
-      try {
-        await cancelPartialPayment(pp.ID, { delete_payments: deletePayments })
-        void qc.invalidateQueries({ queryKey: ['partial-payments'] })
-      } catch (e: unknown) {
-        alert((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
+        toast.error((e as { message?: string })?.message ?? 'Fehler beim Stornieren')
       }
     }
+
+    setStornoState({ label, hasPayments: pays.length > 0, payCount: pays.length, payTotal, onStorno: doStorno })
   }
 
   function handleDelete(row: UnifiedRow) {
@@ -575,7 +555,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
         void qc.invalidateQueries({ queryKey: ['partial-payments'] })
       }
     } catch (e: unknown) {
-      alert((e as { message?: string })?.message ?? 'Fehler beim Löschen')
+      toast.error((e as { message?: string })?.message ?? 'Fehler beim Löschen')
     }
   }
 
@@ -641,7 +621,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      alert(`XRechnung konnte nicht geladen werden: ${msg}`)
+      toast.error(`XRechnung konnte nicht geladen werden: ${msg}`)
     }
   }
 
@@ -656,7 +636,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      alert(`ZUGFeRD konnte nicht geladen werden: ${msg}`)
+      toast.error(`ZUGFeRD konnte nicht geladen werden: ${msg}`)
     }
   }
 
@@ -831,9 +811,35 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
         open={confirmState !== null}
         title={confirmState?.title ?? ''}
         message={confirmState?.message ?? ''}
-        onConfirm={() => confirmState?.onConfirm()}
+        confirmLabel="Löschen"
+        confirmClass="danger"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />
+
+      {/* Storno confirmation modal */}
+      {stornoState && (
+        <Modal open title={`Storno – ${stornoState.label}`} onClose={() => setStornoState(null)}>
+          <div style={{ padding: '4px 0 16px' }}>
+            {stornoState.hasPayments ? (
+              <p>Für <strong>{stornoState.label}</strong> existieren {stornoState.payCount} Zahlung(en) über {FMT_EUR.format(stornoState.payTotal)}.<br />Wie soll storniert werden?</p>
+            ) : (
+              <p>Stornorechnung für <strong>{stornoState.label}</strong> erstellen?</p>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button className="btn" onClick={() => setStornoState(null)}>Abbrechen</button>
+            {stornoState.hasPayments && (
+              <button className="btn btn-danger" onClick={() => { void stornoState.onStorno(true); setStornoState(null) }}>
+                Stornieren + Zahlungen löschen
+              </button>
+            )}
+            <button className="btn btn-danger" onClick={() => { void stornoState.onStorno(false); setStornoState(null) }}>
+              {stornoState.hasPayments ? 'Nur stornieren' : 'Stornieren'}
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {/* Detail modal */}
       <Modal open={detailRow !== null} onClose={() => setDetailRow(null)}

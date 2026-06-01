@@ -4,9 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
 import { Message }     from '@/components/ui/Message'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FormField }   from '@/components/ui/FormField'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { useCtrlS } from '@/hooks/useCtrlS'
+import { useToast }  from '@/store/toastStore'
 import {
   fetchCountries, fetchSalutations, fetchGenders,
   fetchAddressList, searchAddressesApi, createAddress, updateAddress, deleteAddress,
@@ -204,15 +206,17 @@ interface AdressenSectionProps {
 
 function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: AdressenSectionProps) {
   const qc = useQueryClient()
-  const [tab,      setTab]      = useState('list')
-  const [search,   setSearch]   = useState(initialSearch ?? '')
-  const [sortKey,  setSortKey]  = useState<AddrSortKey>('ADDRESS_NAME_1')
-  const [sortDir,  setSortDir]  = useState<'asc'|'desc'>('asc')
-  const [editAddr, setEditAddr] = useState<Address | null>(null)
-  const [form,     setForm]     = useState<AddressPayload>(emptyAddr)
-  const [editForm, setEditForm] = useState<AddressPayload>(emptyAddr)
-  const [msg,      setMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [editMsg,  setEditMsg]  = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const toast = useToast()
+  const [tab,          setTab]          = useState('list')
+  const [search,       setSearch]       = useState(initialSearch ?? '')
+  const [sortKey,      setSortKey]      = useState<AddrSortKey>('ADDRESS_NAME_1')
+  const [sortDir,      setSortDir]      = useState<'asc'|'desc'>('asc')
+  const [editAddr,     setEditAddr]     = useState<Address | null>(null)
+  const [form,         setForm]         = useState<AddressPayload>(emptyAddr)
+  const [editForm,     setEditForm]     = useState<AddressPayload>(emptyAddr)
+  const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   // Filter + columns state
   const [activeLand,     setActiveLand]     = useState<Set<string>>(new Set())
@@ -316,12 +320,15 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   const deleteMut = useMutation({
     mutationFn: deleteAddress,
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['addresses'] }),
-    onError: (e: Error) => alert(e.message),
+    onError: (e: Error) => toast.error(e.message),
   })
 
-  async function handleDelete(a: Address) {
-    if (!window.confirm(`„${a.ADDRESS_NAME_1}" wirklich löschen?`)) return
-    deleteMut.mutate(a.ID)
+  function handleDelete(a: Address) {
+    setConfirmState({
+      title: 'Adresse löschen',
+      message: `„${a.ADDRESS_NAME_1}" wirklich löschen?`,
+      onConfirm: () => deleteMut.mutate(a.ID),
+    })
   }
 
   function openEdit(a: Address) {
@@ -472,6 +479,16 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
           </div>
         </form>
       </Modal>
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel="Löschen"
+        confirmClass="danger"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+        onCancel={() => setConfirmState(null)}
+      />
     </>
   )
 }
@@ -498,6 +515,8 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
   const [editAddrText, setEditAddrText] = useState('')
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const toast = useToast()
 
   useEffect(() => {
     if (initialSearch !== undefined) setSearch(initialSearch)
@@ -592,12 +611,15 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
   const deleteConMut = useMutation({
     mutationFn: deleteContact,
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['contacts'] }),
-    onError: (e: Error) => alert(e.message),
+    onError: (e: Error) => toast.error(e.message),
   })
 
-  async function handleDeleteContact(c: Contact) {
-    if (!window.confirm(`${c.FIRST_NAME} ${c.LAST_NAME} wirklich löschen?`)) return
-    deleteConMut.mutate(c.ID)
+  function handleDeleteContact(c: Contact) {
+    setConfirmState({
+      title: 'Kontakt löschen',
+      message: `${c.FIRST_NAME} ${c.LAST_NAME} wirklich löschen?`,
+      onConfirm: () => deleteConMut.mutate(c.ID),
+    })
   }
 
   function openEdit(c: Contact) {
@@ -747,6 +769,16 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
           </div>
         </form>
       </Modal>
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel="Löschen"
+        confirmClass="danger"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+        onCancel={() => setConfirmState(null)}
+      />
     </>
   )
 }

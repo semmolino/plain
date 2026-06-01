@@ -246,9 +246,11 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
     mutationFn: ({ id, val }: { id: number; val: boolean }) => updateProject(id, { is_internal: val }),
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
-      if (window.confirm('Sollen alle Strukturpositionen dieses Projekts ebenfalls entsprechend markiert werden?')) {
-        cascadeMut.mutate({ id: variables.id, val: variables.val })
-      }
+      setConfirmState({
+        title: 'Strukturpositionen aktualisieren',
+        message: 'Sollen alle Strukturpositionen dieses Projekts ebenfalls entsprechend markiert werden?',
+        onConfirm: () => cascadeMut.mutate({ id: variables.id, val: variables.val }),
+      })
     },
   })
 

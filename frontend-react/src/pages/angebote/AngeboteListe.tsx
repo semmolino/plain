@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
   fetchOffers, deleteOffer, openOfferPdf, openAuftragsbestaetigungPdf, fetchOfferStructure, convertOffer, updateOffer,
   fetchOfferStatuses,
@@ -22,6 +23,28 @@ function fmtDate(s: string | null | undefined) {
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
+// ── Row overflow menu ──────────────────────────────────────────────────────────
+
+function RowMenu({ id, open, onOpen, onClose, children }: {
+  id: number; open: boolean; onOpen: () => void; onClose: () => void; children: React.ReactNode
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open, onClose])
+  return (
+    <div ref={wrapRef} className="row-menu-wrap" style={{ display: 'inline-block', position: 'relative' }}>
+      <button className="row-action-btn" onClick={open ? onClose : onOpen} title="Weitere Aktionen">⋯</button>
+      {open && <div className="row-menu-dropdown">{children}</div>}
+    </div>
+  )
+}
+
 export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, name: string) => void }) {
   const qc = useQueryClient()
   const [search,      setSearch]      = useState('')
@@ -30,6 +53,8 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
   const [msg,         setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [beauftragtRow, setBeauftragtRow] = useState<OfferListItem | null>(null)
   const [convertErr,    setConvertErr]    = useState<string | null>(null)
+  const [menuOpenId,    setMenuOpenId]    = useState<number | null>(null)
+  const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; confirmLabel?: string; onConfirm: () => void } | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['offers'], queryFn: fetchOffers })
   const { data: statusData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
@@ -82,15 +107,30 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
   const safePage   = Math.min(page, totalPages)
   const pageRows   = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  function handleDelete(r: OfferListItem) {
-    if (!confirm(`Angebot "${r.NAME_SHORT ?? r.NAME_LONG}" wirklich löschen?`)) return
-    deleteMut.mutate(r.ID)
+  function requestDelete(r: OfferListItem) {
+    setMenuOpenId(null)
+    setConfirmState({
+      title: 'Angebot löschen',
+      message: `Angebot „${r.NAME_SHORT ?? r.NAME_LONG}" wirklich löschen?`,
+      confirmLabel: 'Löschen',
+      onConfirm: () => deleteMut.mutate(r.ID),
+    })
   }
 
-  function handleReject(r: OfferListItem) {
-    if (!confirm(`Angebot "${r.NAME_SHORT ?? r.NAME_LONG}" als abgelehnt markieren?`)) return
-    rejectMut.mutate(r.ID)
+  function requestReject(r: OfferListItem) {
+    setMenuOpenId(null)
+    setConfirmState({
+      title: 'Als abgelehnt markieren',
+      message: `Angebot „${r.NAME_SHORT ?? r.NAME_LONG}" als abgelehnt markieren?`,
+      confirmLabel: 'Abgelehnt markieren',
+      onConfirm: () => rejectMut.mutate(r.ID),
+    })
   }
+
+  const isOpen = (r: OfferListItem) =>
+    r.PROJECT_ID === null && (rejectedId === null || r.OFFER_STATUS_ID !== rejectedId)
+  const isRejected = (r: OfferListItem) =>
+    rejectedId !== null && r.OFFER_STATUS_ID === rejectedId
 
   return (
     <>
@@ -142,38 +182,45 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
                   <td className="num">{r.PROBABILITY != null ? `${r.PROBABILITY} %` : '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.OFFER_DATE ?? r.CREATED_AT)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.VALID_UNTIL)}</td>
-                  <td className="doc-actions">
-                    <button className="btn-small" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')}>Bearbeiten</button>
-                    <button className="btn-small" onClick={() => openOfferPdf(r.ID)}>PDF</button>
-                    {r.PROJECT_ID ? (
-                      <>
-                        <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                          ✅ {r.PROJECT_NAME ?? `Projekt #${r.PROJECT_ID}`}
-                        </span>
-                        <button className="btn-small" onClick={() => openAuftragsbestaetigungPdf(r.ID)}>
-                          Auftragsbestätigung
-                        </button>
-                      </>
-                    ) : (rejectedId !== null && r.OFFER_STATUS_ID === rejectedId) ? null : (
-                      <>
-                        <button
-                          className="btn-small"
-                          style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
-                          onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
-                        >
+                  <td className="doc-actions" onClick={e => e.stopPropagation()}>
+                    <button className="row-action-btn" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Bearbeiten">✏️</button>
+                    <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">📄</button>
+                    {r.PROJECT_ID && (
+                      <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, padding: '0 4px', whiteSpace: 'nowrap' }}>
+                        ✅ {r.PROJECT_NAME ?? `#${r.PROJECT_ID}`}
+                      </span>
+                    )}
+                    <RowMenu
+                      id={r.ID}
+                      open={menuOpenId === r.ID}
+                      onOpen={() => setMenuOpenId(r.ID)}
+                      onClose={() => setMenuOpenId(null)}
+                    >
+                      {isOpen(r) && (
+                        <button className="row-menu-item" onClick={() => { setMenuOpenId(null); setConvertErr(null); setBeauftragtRow(r) }}>
                           Beauftragt
                         </button>
-                        <button
-                          className="btn-small"
-                          style={{ background: '#dc2626', color: '#fff', borderColor: '#dc2626' }}
-                          disabled={rejectMut.isPending}
-                          onClick={() => handleReject(r)}
-                        >
+                      )}
+                      {r.PROJECT_ID && (
+                        <button className="row-menu-item" onClick={() => { setMenuOpenId(null); openAuftragsbestaetigungPdf(r.ID) }}>
+                          Auftragsbestätigung
+                        </button>
+                      )}
+                      {isOpen(r) && (
+                        <button className="row-menu-item" onClick={() => requestReject(r)}>
+                          Als abgelehnt markieren
+                        </button>
+                      )}
+                      {isRejected(r) && (
+                        <button className="row-menu-item" style={{ color: 'var(--text-2)', fontSize: 11 }} disabled>
                           Abgelehnt
                         </button>
-                      </>
-                    )}
-                    <button className="btn-small btn-danger" disabled={deleteMut.isPending} onClick={() => handleDelete(r)}>Löschen</button>
+                      )}
+                      <div className="row-menu-divider" />
+                      <button className="row-menu-item danger" onClick={() => requestDelete(r)}>
+                        Löschen
+                      </button>
+                    </RowMenu>
                   </td>
                 </tr>
               ))}
@@ -216,6 +263,16 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
         error={convertErr}
       />
     )}
+
+    <ConfirmModal
+      open={confirmState !== null}
+      title={confirmState?.title ?? ''}
+      message={confirmState?.message ?? ''}
+      confirmLabel={confirmState?.confirmLabel ?? 'Bestätigen'}
+      confirmClass="danger"
+      onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+      onCancel={() => setConfirmState(null)}
+    />
     </>
   )
 }

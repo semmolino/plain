@@ -3,6 +3,7 @@ import { useNavigate }    from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal }          from '@/components/ui/Modal'
 import { Message }        from '@/components/ui/Message'
+import { ConfirmModal }   from '@/components/ui/ConfirmModal'
 import {
   fetchMahnungen, upsertMahnung, sendMahnungEmail, openMahnungPdf,
   fetchMahnungSettings,
@@ -45,6 +46,28 @@ function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + 'T00:00:00')
   d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
+}
+
+// ── Row overflow menu ─────────────────────────────────────────────────────────
+
+function RowMenu({ id, open, onOpen, onClose, children }: {
+  id: string; open: boolean; onOpen: () => void; onClose: () => void; children: React.ReactNode
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open, onClose])
+  return (
+    <div ref={wrapRef} className="row-menu-wrap" style={{ display: 'inline-block', position: 'relative' }}>
+      <button className="row-action-btn" onClick={open ? onClose : onOpen} title="Weitere Aktionen">⋯</button>
+      {open && <div className="row-menu-dropdown">{children}</div>}
+    </div>
+  )
 }
 
 // ── Mahnstufe badge-select ────────────────────────────────────────────────────
@@ -265,6 +288,8 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
   )
   const [colPanelOpen, setColPanelOpen] = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
+  const [menuOpenId,   setMenuOpenId]   = useState<string | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   useEffect(() => { saveFilters(filters) }, [filters])
 
@@ -561,8 +586,15 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
     })
   }
 
-  async function handleDeletePayment(payId: number) {
-    if (!window.confirm('Zahlung wirklich löschen?')) return
+  function handleDeletePayment(payId: number) {
+    setConfirmState({
+      title: 'Zahlung löschen',
+      message: 'Diese Zahlung wirklich löschen?',
+      onConfirm: () => actuallyDeletePayment(payId),
+    })
+  }
+
+  async function actuallyDeletePayment(payId: number) {
     setDeletingPayId(payId)
     try {
       await deletePayment(payId)
@@ -772,8 +804,8 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                         />
                       </td>
 
-                      {/* Inline action buttons */}
-                      <td onClick={e => e.stopPropagation()} className="row-actions">
+                      {/* Row actions */}
+                      <td onClick={e => e.stopPropagation()} className="doc-actions">
                         <button
                           className="row-action-btn"
                           title="PDF öffnen"
@@ -782,20 +814,31 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                         >📄</button>
                         <button
                           className="row-action-btn"
-                          title="E-Mail senden"
-                          disabled={!r.mahnungId}
-                          onClick={() => r.mahnungId && openEmailFor(r)}
-                        >✉</button>
-                        <button
-                          className="row-action-btn"
                           title="Zahlung erfassen"
                           onClick={() => openPaymentFor(r)}
                         >💶</button>
-                        <button
-                          className="row-action-btn"
-                          title="→ Rechnung"
-                          onClick={() => navigate('/rechnungen', { state: { projectSearch: r.number } })}
-                        >🧾</button>
+                        <RowMenu
+                          id={rowKey(r)}
+                          open={menuOpenId === rowKey(r)}
+                          onOpen={() => setMenuOpenId(rowKey(r))}
+                          onClose={() => setMenuOpenId(null)}
+                        >
+                          <button
+                            className="row-menu-item"
+                            disabled={!r.mahnungId}
+                            onClick={() => { setMenuOpenId(null); r.mahnungId && openEmailFor(r) }}
+                          >✉ E-Mail senden</button>
+                          <button
+                            className="row-menu-item"
+                            onClick={() => { setMenuOpenId(null); navigate('/rechnungen', { state: { projectSearch: r.number } }) }}
+                          >🧾 → Rechnung</button>
+                          {r.projectId && (
+                            <button
+                              className="row-menu-item"
+                              onClick={() => { setMenuOpenId(null); navigate('/projekte', { state: { search: r.projectNumber ?? r.projectName } }) }}
+                            >📁 → Projekt</button>
+                          )}
+                        </RowMenu>
                         {emp && <span title={`Verantw.: ${emp.SHORT_NAME}`} style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 2px' }}>{emp.SHORT_NAME}</span>}
                       </td>
                     </tr>
@@ -1065,6 +1108,16 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
           </form>
         )}
       </Modal>
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel="Löschen"
+        confirmClass="danger"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+        onCancel={() => setConfirmState(null)}
+      />
     </div>
   )
 }
