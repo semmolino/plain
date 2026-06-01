@@ -1519,7 +1519,7 @@ export function DashboardPage() {
   const overdue        = overdueQ.data?.data    ?? []
   const teamUtil       = teamQ.data?.data       ?? []
   const mahnStats      = mahnungenQ.data?.data  ?? null
-  const riskProjects   = riskQ.data?.data       ?? []
+
   const billingSummary = billingQ.data?.data     ?? null
   const teamHours      = teamHoursQ.data?.data  ?? null
 
