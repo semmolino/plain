@@ -742,7 +742,7 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
             </thead>
             <tbody>
               {rows.map(row => (
-                <tr key={row.key}>
+                <tr key={row.key} className={`row-status-${row.statusClass}`}>
                   <td style={{ padding: '4px', textAlign: 'center' }}>
                     <input type="checkbox" checked={selected.has(row.key)} onChange={() => toggleRowSel(row.key)} />
                   </td>
@@ -784,7 +784,13 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                   </td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={3 + visibleCols.length} className="empty-note">Keine Einträge</td></tr>}
+              {!rows.length && (
+                <tr><td colSpan={3 + visibleCols.length} className="empty-note">
+                  {(search.trim() || onlyOpen || activeFilters.status.size > 0 || activeFilters.typ.size > 0)
+                    ? 'Keine Rechnungen für diese Filter.'
+                    : 'Noch keine Rechnungen vorhanden.'}
+                </td></tr>
+              )}
             </tbody>
             <tfoot>
               <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>

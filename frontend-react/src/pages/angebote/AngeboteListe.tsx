@@ -177,7 +177,11 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number) 
                   </td>
                 </tr>
               ))}
-              {!pageRows.length && <tr><td colSpan={10} className="empty-note">Keine Angebote vorhanden.</td></tr>}
+              {!pageRows.length && (
+                <tr><td colSpan={10} className="empty-note">
+                  {rows.length === 0 ? 'Noch keine Angebote vorhanden.' : 'Keine Angebote für diese Filter.'}
+                </td></tr>
+              )}
             </tbody>
             <tfoot>
               <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
