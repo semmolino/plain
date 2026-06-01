@@ -272,13 +272,26 @@ export interface CompanyKpis {
 }
 
 export interface CompanyKpiResult {
-  year: number
-  raw:  CompanyKpiRaw
-  kpis: CompanyKpis
+  year:         number
+  periodType:   'year' | 'quarter' | 'month'
+  periodMonths: number
+  raw:          CompanyKpiRaw
+  kpis:         CompanyKpis
 }
 
-export const fetchCompanyKpis = (year: number) =>
-  apiClient.get<{ data: CompanyKpiResult }>(`/reports/company-kpis?year=${year}`)
+export interface CompanyKpiPeriod {
+  type:     'year' | 'quarter' | 'month'
+  year:     number
+  quarter?: number
+  month?:   number
+}
+
+export const fetchCompanyKpis = (period: CompanyKpiPeriod) => {
+  const qs = new URLSearchParams({ period_type: period.type, year: String(period.year) })
+  if (period.type === 'quarter' && period.quarter != null) qs.set('quarter', String(period.quarter))
+  if (period.type === 'month'   && period.month   != null) qs.set('month',   String(period.month))
+  return apiClient.get<{ data: CompanyKpiResult }>(`/reports/company-kpis?${qs}`)
+}
 
 export interface TeamHoursMonth {
   month: string

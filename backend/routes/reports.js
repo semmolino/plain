@@ -755,7 +755,9 @@ module.exports = (supabase) => {
   });
 
   // ── Company-level KPIs (Unternehmenskennzahlen) ───────────────────────────
-  // GET /reports/company-kpis?year=2026
+  // GET /reports/company-kpis?period_type=year&year=2026
+  // GET /reports/company-kpis?period_type=quarter&year=2026&quarter=2
+  // GET /reports/company-kpis?period_type=month&year=2026&month=5
   router.get("/company-kpis", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
@@ -764,8 +766,27 @@ module.exports = (supabase) => {
     if (isNaN(year) || year < 2000 || year > 2100) {
       return res.status(400).json({ error: "Ungültiges Jahr" });
     }
-    const yearStart = `${year}-01-01`;
-    const yearEnd   = `${year}-12-31`;
+
+    const periodType = req.query.period_type || 'year';
+    let periodStart, periodEnd, periodMonths;
+
+    if (periodType === 'quarter') {
+      const q = Math.max(1, Math.min(4, parseInt(req.query.quarter || 1, 10)));
+      const sm = (q - 1) * 3 + 1;
+      const em = sm + 2;
+      periodStart = `${year}-${String(sm).padStart(2, '0')}-01`;
+      periodEnd   = `${year}-${String(em).padStart(2, '0')}-${String(new Date(year, em, 0).getDate()).padStart(2, '0')}`;
+      periodMonths = 3;
+    } else if (periodType === 'month') {
+      const m = Math.max(1, Math.min(12, parseInt(req.query.month || 1, 10)));
+      periodStart = `${year}-${String(m).padStart(2, '0')}-01`;
+      periodEnd   = `${year}-${String(m).padStart(2, '0')}-${String(new Date(year, m, 0).getDate()).padStart(2, '0')}`;
+      periodMonths = 1;
+    } else {
+      periodStart  = `${year}-01-01`;
+      periodEnd    = `${year}-12-31`;
+      periodMonths = 12;
+    }
 
     try {
       const [invoiceRes, ppRes, tecRes, empRes, backlogRes] = await Promise.all([
@@ -774,8 +795,8 @@ module.exports = (supabase) => {
           .select("TOTAL_AMOUNT_NET")
           .eq("TENANT_ID", tenantId)
           .eq("STATUS_ID", 2)
-          .gte("INVOICE_DATE", yearStart)
-          .lte("INVOICE_DATE", yearEnd)
+          .gte("INVOICE_DATE", periodStart)
+          .lte("INVOICE_DATE", periodEnd)
           .neq("INVOICE_TYPE", "stornorechnung")
           .neq("INVOICE_TYPE", "storno_partial"),
 
@@ -784,16 +805,16 @@ module.exports = (supabase) => {
           .select("AMOUNT_NET, AMOUNT_EXTRAS_NET")
           .eq("TENANT_ID", tenantId)
           .eq("STATUS_ID", 2)
-          .gte("PARTIAL_PAYMENT_DATE", yearStart)
-          .lte("PARTIAL_PAYMENT_DATE", yearEnd)
+          .gte("PARTIAL_PAYMENT_DATE", periodStart)
+          .lte("PARTIAL_PAYMENT_DATE", periodEnd)
           .is("CANCELS_PARTIAL_PAYMENT_ID", null),
 
         // TEC: all entries in year (employee_id, hours, costs)
         supabase.from("TEC")
           .select("EMPLOYEE_ID, QUANTITY_INT, CP_TOT")
           .eq("TENANT_ID", tenantId)
-          .gte("DATE_VOUCHER", yearStart)
-          .lte("DATE_VOUCHER", yearEnd),
+          .gte("DATE_VOUCHER", periodStart)
+          .lte("DATE_VOUCHER", periodEnd),
 
         // Active employees
         supabase.from("EMPLOYEE")
@@ -834,7 +855,7 @@ module.exports = (supabase) => {
       const backlogRounded = Math.round(backlog * 100) / 100;
 
       // Computed KPIs (null when denominator is 0)
-      const monthlyRevenue        = revenue / 12;
+      const monthlyRevenue        = revenue / periodMonths;
       const umsatzProMitarbeiter  = employeeCount > 0 ? Math.round(revenue / employeeCount) : null;
       const anteilProjektmitarb   = employeeCount > 0 ? Math.round((projectEmployeeCount / employeeCount) * 1000) / 10 : null;
       const mittlererStundensatz  = totalHours > 0 ? Math.round((directCosts / totalHours) * 100) / 100 : null;
@@ -844,6 +865,8 @@ module.exports = (supabase) => {
       res.json({
         data: {
           year,
+          periodType,
+          periodMonths,
           raw: { revenue, directCosts, totalHours, employeeCount, projectEmployeeCount, backlog: backlogRounded },
           kpis: {
             umsatzProMitarbeiter,

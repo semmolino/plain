@@ -1810,7 +1810,11 @@ input::placeholder { color: var(--text-4); }
 .unk-root { padding: 4px 0 32px; max-width: 900px; }
 .unk-header { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; flex-wrap: wrap; }
 .unk-title { font-size: 16px; font-weight: 700; margin: 0; }
-.unk-year-wrap { display: flex; align-items: center; margin-left: auto; }
+.unk-year-wrap { display: flex; align-items: center; gap: 0; margin-left: auto; flex-wrap: wrap; }
+.unk-period-tabs { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-right: 2px; }
+.unk-period-tab { padding: 4px 11px; background: transparent; border: none; cursor: pointer; font-size: 12px; color: var(--text-2); line-height: 1.6; transition: background 0.12s, color 0.12s; }
+.unk-period-tab:hover { background: var(--surface-2); color: var(--text); }
+.unk-period-tab.active { background: var(--accent); color: #fff; }
 
 .unk-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 @media (max-width: 680px) { .unk-grid { grid-template-columns: 1fr; } }

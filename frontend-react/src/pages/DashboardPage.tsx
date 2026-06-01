@@ -500,7 +500,7 @@ function GeschaeftsleitungView({
       <SubNav
         options={[
           { id: 'uebersicht',  label: 'Übersicht'     },
-          { id: 'risiko',      label: 'Risiko-Cockpit' },
+          { id: 'risiko',      label: 'Projekte'       },
           { id: 'abrechnung',  label: 'Abrechnung'     },
           { id: 'personal',    label: 'Personal'       },
         ]}
@@ -752,7 +752,7 @@ function BereichsleiterView({
       <SubNav
         options={[
           { id: 'uebersicht', label: 'Übersicht'     },
-          { id: 'risiko',     label: 'Risiko-Cockpit' },
+          { id: 'risiko',     label: 'Projekte'       },
           { id: 'personal',   label: 'Personal'       },
         ]}
         active={subPage}

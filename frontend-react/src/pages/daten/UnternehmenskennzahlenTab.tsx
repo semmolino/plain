@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, Users, Clock, CalendarRange, BarChart3, AlertCircle } from 'lucide-react'
-import { fetchCompanyKpis } from '@/api/reports'
+import { fetchCompanyKpis, type CompanyKpiPeriod } from '@/api/reports'
 
 const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_EURK = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -12,8 +12,34 @@ const fmtPct   = (v: number | null) => v == null ? '–' : `${FMT_NUM.format(v)}
 const fmtH     = (v: number | null) => v == null ? '–' : `${FMT_NUM.format(v)} h`
 const fmtM     = (v: number | null) => v == null ? '–' : `${FMT_NUM.format(v)} Mon.`
 
-const CURRENT_YEAR = new Date().getFullYear()
+const NOW          = new Date()
+const CURRENT_YEAR = NOW.getFullYear()
+const CURRENT_MONTH   = NOW.getMonth() + 1
+const CURRENT_QUARTER = Math.ceil(CURRENT_MONTH / 3)
+
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i)
+
+const QUARTER_OPTIONS = [
+  { value: 1, label: 'Q1 (Jan–Mär)' },
+  { value: 2, label: 'Q2 (Apr–Jun)' },
+  { value: 3, label: 'Q3 (Jul–Sep)' },
+  { value: 4, label: 'Q4 (Okt–Dez)' },
+]
+
+const MONTH_OPTIONS = [
+  { value:  1, label: 'Januar'    }, { value:  2, label: 'Februar'   }, { value:  3, label: 'März'      },
+  { value:  4, label: 'April'     }, { value:  5, label: 'Mai'        }, { value:  6, label: 'Juni'      },
+  { value:  7, label: 'Juli'      }, { value:  8, label: 'August'     }, { value:  9, label: 'September' },
+  { value: 10, label: 'Oktober'   }, { value: 11, label: 'November'   }, { value: 12, label: 'Dezember'  },
+]
+
+type PeriodType = 'year' | 'quarter' | 'month'
+
+const PERIOD_TABS: { id: PeriodType; label: string }[] = [
+  { id: 'year',    label: 'Jahr'    },
+  { id: 'quarter', label: 'Quartal' },
+  { id: 'month',   label: 'Monat'   },
+]
 
 // ── KPI card ──────────────────────────────────────────────────────────────────
 
@@ -63,18 +89,27 @@ function BaseDataRow({ label, value }: { label: string; value: string }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function UnternehmenskennzahlenTab() {
-  const [year, setYear] = useState(CURRENT_YEAR)
+  const [periodType, setPeriodType] = useState<PeriodType>('year')
+  const [year,    setYear]    = useState(CURRENT_YEAR)
+  const [quarter, setQuarter] = useState(CURRENT_QUARTER)
+  const [month,   setMonth]   = useState(CURRENT_MONTH)
+
+  const period: CompanyKpiPeriod = { type: periodType, year, quarter, month }
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['company-kpis', year],
-    queryFn:  () => fetchCompanyKpis(year).then(r => r.data),
+    queryKey: ['company-kpis', periodType, year, quarter, month],
+    queryFn:  () => fetchCompanyKpis(period).then(r => r.data),
   })
 
-  const kpi  = data  // CompanyKpiResult | undefined
+  const kpi  = data
   const raw  = kpi?.raw
   const kpis = kpi?.kpis
 
-  // Heuristic quality indicators
+  const periodLabel =
+    periodType === 'quarter' ? `Q${quarter} ${year}` :
+    periodType === 'month'   ? `${MONTH_OPTIONS.find(m => m.value === month)?.label} ${year}` :
+    String(year)
+
   function dbMargeHighlight(v: number | null): 'good' | 'warn' | 'bad' | 'neutral' {
     if (v == null) return 'neutral'
     if (v >= 20)   return 'good'
@@ -91,26 +126,55 @@ export function UnternehmenskennzahlenTab() {
   return (
     <div className="unk-root">
 
-      {/* ── Year selector ── */}
+      {/* ── Header with period selector ── */}
       <div className="unk-header">
         <h2 className="unk-title">Unternehmenskennzahlen</h2>
         <div className="unk-year-wrap">
-          <label htmlFor="unk-year" style={{ fontSize: 13, color: 'var(--text-2)', marginRight: 6 }}>Jahr</label>
+          <div className="unk-period-tabs">
+            {PERIOD_TABS.map(t => (
+              <button
+                key={t.id}
+                className={`unk-period-tab${periodType === t.id ? ' active' : ''}`}
+                onClick={() => setPeriodType(t.id)}
+              >{t.label}</button>
+            ))}
+          </div>
+
           <select
-            id="unk-year"
             className="inline-select"
             value={year}
             onChange={e => setYear(Number(e.target.value))}
+            style={{ marginLeft: 8 }}
           >
-            {YEAR_OPTIONS.map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
+            {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
+
+          {periodType === 'quarter' && (
+            <select
+              className="inline-select"
+              value={quarter}
+              onChange={e => setQuarter(Number(e.target.value))}
+              style={{ marginLeft: 6 }}
+            >
+              {QUARTER_OPTIONS.map(q => <option key={q.value} value={q.value}>{q.label}</option>)}
+            </select>
+          )}
+
+          {periodType === 'month' && (
+            <select
+              className="inline-select"
+              value={month}
+              onChange={e => setMonth(Number(e.target.value))}
+              style={{ marginLeft: 6 }}
+            >
+              {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
       <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20, lineHeight: 1.5 }}>
-        Basierend auf Rechnungen, Teilzahlungen und Zeitbuchungen des gewählten Jahres.
+        Basierend auf Rechnungen, Teilzahlungen und Zeitbuchungen des gewählten Zeitraums.
         Für Kennzahlen, die eine vollständige Kostenaufschlüsselung erfordern, sind Platzhalter ausgewiesen.
       </p>
 
@@ -126,7 +190,7 @@ export function UnternehmenskennzahlenTab() {
               icon={<TrendingUp size={20} strokeWidth={1.75} />}
               label="Umsatz pro Mitarbeiter"
               value={fmtEur(kpis.umsatzProMitarbeiter)}
-              formula="Jahresumsatz (inkl. Abschläge) / Mitarbeiteranzahl"
+              formula="Umsatz (inkl. Abschläge) / Mitarbeiteranzahl"
               note="Mitarbeiteranzahl: aktive Mitarbeiter zum Abfragezeitpunkt"
             />
 
@@ -151,7 +215,7 @@ export function UnternehmenskennzahlenTab() {
               icon={<CalendarRange size={20} strokeWidth={1.75} />}
               label="Auftragsreichweite"
               value={fmtM(kpis.auftragsreichweite)}
-              formula="Auftragsbestand × 12 / Jahresumsatz"
+              formula="Auftragsbestand / Ø Monatsumsatz"
               note="Auftragsbestand = Summe (Budget – Abgerechnet) aller aktiven Projekte"
               highlight={auftragsHighlight(kpis.auftragsreichweite)}
             />
@@ -193,7 +257,7 @@ export function UnternehmenskennzahlenTab() {
           {/* ── Raw data strip ── */}
           <details style={{ marginTop: 24 }}>
             <summary style={{ fontSize: 12, color: 'var(--text-3)', cursor: 'pointer', userSelect: 'none', marginBottom: 8 }}>
-              Basisdaten {year}
+              Basisdaten {periodLabel}
             </summary>
             <div className="unk-base-strip">
               <BaseDataRow label="Umsatz (Rechnungen + Abschläge)" value={fmtEur(raw?.revenue ?? null)} />
@@ -204,12 +268,6 @@ export function UnternehmenskennzahlenTab() {
               <BaseDataRow label="Auftragsbestand (alle Projekte)" value={fmtEur(raw?.backlog ?? null)} />
             </div>
           </details>
-
-          {/* ── Source notes ── */}
-          <div className="unk-source-notes">
-            <p><strong>Literatur:</strong> Die Kennzahlen orientieren sich am Standard der PBP Planungsbüro Professionell (Evelyn Saxinger, Frenz | Saxinger Unternehmensberatung) und den PeP-7-Kennzahlen des Vereins „Praxisinitiative erfolgreiches Planungsbüro e.V."</p>
-            <p><strong>Hinweis Vergleichbarkeit:</strong> Kennzahlen verschiedener Büros sind schwer vergleichbar (unterschiedliche Definitionen von Umsatz, Projektstunden, Mitarbeiteranzahl). Der interne Jahresvergleich ist aussagekräftiger als Branchenvergleiche.</p>
-          </div>
         </>
       )}
     </div>
