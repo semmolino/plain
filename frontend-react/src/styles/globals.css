@@ -342,16 +342,38 @@ button:hover {
   background: var(--bg);
 }
 
+/* ── Global input baseline ───────────────────────────────────────────────── */
+input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  box-sizing: border-box;
+}
+input[type="date"], input[type="time"] {
+  color-scheme: light;
+}
+
 /* ── Form fields ─────────────────────────────────────────────────────────── */
 .form-group { margin-bottom: 20px; }
 .form-group label { display: block; margin-bottom: 8px; font-weight: 600; }
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
   width: 100%; padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface); color: var(--text);
   font-size: 15px; outline: none;
+}
+/* Toolbar / filter-bar inputs and selects */
+.list-toolbar input[type="text"],
+.list-toolbar input[type="date"],
+.list-toolbar input[type="search"],
+.list-toolbar select {
+  padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text);
+  font-size: 14px; outline: none; height: 38px;
 }
 input::placeholder { color: var(--text-4); }
 
@@ -729,6 +751,16 @@ input::placeholder { color: var(--text-4); }
 .master-page-title { font-size: 20px; font-weight: 800; }
 .master-section { padding-top: 4px; }
 
+/* form-control / form-label aliases (used in MahnungenListe detail panel) */
+.form-control {
+  width: 100%; padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text);
+  font-size: 14px; outline: none;
+}
+.form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(var(--accent-rgb,59,130,246),0.12); }
+.form-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+
 /* ── Master form ─────────────────────────────────────────────────────────── */
 .master-form { display: flex; flex-direction: column; gap: 0; max-width: 480px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -755,7 +787,7 @@ input::placeholder { color: var(--text-4); }
   text-align: left; padding: 7px 8px; font-weight: 700;
   color: var(--text-3); border-bottom: 2px solid var(--border-2);
   white-space: nowrap;
-  position: sticky; top: 48px; z-index: 5; background: var(--surface);
+  position: sticky; top: 0; z-index: 2; background: var(--surface);
 }
 .master-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-4); }
 .master-table tr:last-child td { border-bottom: none; }
@@ -890,6 +922,7 @@ input::placeholder { color: var(--text-4); }
   display: flex; align-items: center; justify-content: center;
   z-index: 500; padding: 16px;
 }
+.modal-backdrop--confirm { z-index: 600; }
 .modal-card {
   background: var(--surface); border-radius: 18px;
   width: 100%; max-width: 480px; max-height: 90vh;

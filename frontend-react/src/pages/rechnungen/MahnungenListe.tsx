@@ -653,7 +653,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
             Fällig bis
             <input type="date" value={filters.stichtag}
               onChange={e => setFilters(f => ({ ...f, stichtag: e.target.value }))}
-              style={{ fontSize: 12, padding: '2px 5px' }}
+              className="inline-date-input"
             />
             {filters.stichtag && <button className="filter-chip-clear" onClick={() => setFilters(f => ({ ...f, stichtag: '' }))} title="Zurücksetzen">×</button>}
           </label>
