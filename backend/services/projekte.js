@@ -855,7 +855,7 @@ async function createStructureNode(supabase, { projectId, node, transferParentVa
 async function patchStructure(supabase, { structureId, update }) {
   const { data: current, error: currentErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID")
+    .select("NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
     .eq("ID", structureId)
     .maybeSingle();
 
@@ -910,6 +910,37 @@ async function patchStructure(supabase, { structureId, update }) {
   const revenueCompletion = (revenuePct * revenue) / 100;
   const extrasCompletion = (extrasPct * extras) / 100;
 
+  // Surcharge computation
+  const pick = (field, fallback) =>
+    update[field] !== undefined ? update[field] : (current[field] ?? fallback);
+
+  const s1Label = pick("SURCHARGE_1_LABEL", null);
+  const s1Pct   = Number(pick("SURCHARGE_1_PCT", 0));
+  const s1Cumul = !!pick("SURCHARGE_1_CUMUL", true);
+  const s2Label = pick("SURCHARGE_2_LABEL", null);
+  const s2Pct   = Number(pick("SURCHARGE_2_PCT", 0));
+  const s2Cumul = !!pick("SURCHARGE_2_CUMUL", true);
+  const s3Label = pick("SURCHARGE_3_LABEL", null);
+  const s3Pct   = Number(pick("SURCHARGE_3_PCT", 0));
+  const s3Cumul = !!pick("SURCHARGE_3_CUMUL", true);
+
+  const surchargeBase = revenue + extras;
+  const s1Active = s1Label !== null && s1Label !== "" && s1Pct !== 0;
+  const s1Eur   = s1Active ? (surchargeBase * s1Pct) / 100 : 0;
+  const s1Sub   = surchargeBase + s1Eur;
+
+  const s2Base   = s2Cumul ? s1Sub : surchargeBase;
+  const s2Active = s2Label !== null && s2Label !== "" && s2Pct !== 0;
+  const s2Eur    = s2Active ? (s2Base * s2Pct) / 100 : 0;
+  const s2Sub    = s1Sub + s2Eur;
+
+  const s3Base   = s3Cumul ? s2Sub : surchargeBase;
+  const s3Active = s3Label !== null && s3Label !== "" && s3Pct !== 0;
+  const s3Eur    = s3Active ? (s3Base * s3Pct) / 100 : 0;
+
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const surchargesTotal = r2(s1Eur + s2Eur + s3Eur);
+
   const updatePayload = {
     NAME_SHORT: nameShort,
     NAME_LONG: nameLong,
@@ -921,6 +952,19 @@ async function patchStructure(supabase, { structureId, update }) {
     EXTRAS: extras,
     REVENUE_COMPLETION: revenueCompletion,
     EXTRAS_COMPLETION: extrasCompletion,
+    SURCHARGE_1_LABEL: s1Label,
+    SURCHARGE_1_PCT:   s1Active ? s1Pct : null,
+    SURCHARGE_1_EUR:   r2(s1Eur),
+    SURCHARGE_1_CUMUL: s1Cumul,
+    SURCHARGE_2_LABEL: s2Label,
+    SURCHARGE_2_PCT:   s2Active ? s2Pct : null,
+    SURCHARGE_2_EUR:   r2(s2Eur),
+    SURCHARGE_2_CUMUL: s2Cumul,
+    SURCHARGE_3_LABEL: s3Label,
+    SURCHARGE_3_PCT:   s3Active ? s3Pct : null,
+    SURCHARGE_3_EUR:   r2(s3Eur),
+    SURCHARGE_3_CUMUL: s3Cumul,
+    SURCHARGES_TOTAL:  surchargesTotal,
     ...(update.IS_INTERNAL !== undefined ? { IS_INTERNAL: !!update.IS_INTERNAL } : {}),
   };
 

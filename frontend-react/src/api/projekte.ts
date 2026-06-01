@@ -46,6 +46,19 @@ export interface StructureNode {
   EXTRAS_COMPLETION:           number
   TEC_SP_TOT_SUM:              number
   IS_INTERNAL:                 boolean
+  SURCHARGE_1_LABEL:           string | null
+  SURCHARGE_1_PCT:             number | null
+  SURCHARGE_1_EUR:             number | null
+  SURCHARGE_1_CUMUL:           boolean
+  SURCHARGE_2_LABEL:           string | null
+  SURCHARGE_2_PCT:             number | null
+  SURCHARGE_2_EUR:             number | null
+  SURCHARGE_2_CUMUL:           boolean
+  SURCHARGE_3_LABEL:           string | null
+  SURCHARGE_3_PCT:             number | null
+  SURCHARGE_3_EUR:             number | null
+  SURCHARGE_3_CUMUL:           boolean
+  SURCHARGES_TOTAL:            number
   children?:                   StructureNode[]
 }
 
@@ -139,6 +152,9 @@ export const patchStructureNode = (structureId: number, body: Partial<{
   BILLING_TYPE_ID: number; REVENUE: number; EXTRAS_PERCENT: number
   REVENUE_COMPLETION_PERCENT: number; EXTRAS_COMPLETION_PERCENT: number
   IS_INTERNAL: boolean
+  SURCHARGE_1_LABEL: string | null; SURCHARGE_1_PCT: number | null; SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null; SURCHARGE_2_PCT: number | null; SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null; SURCHARGE_3_PCT: number | null; SURCHARGE_3_CUMUL: boolean
 }>) => apiClient.patch<{ data: StructureNode }>(`/projekte/structure/${structureId}`, body)
 
 export const inheritStructureExtras = (structureId: number, extrasPercent: number) =>
