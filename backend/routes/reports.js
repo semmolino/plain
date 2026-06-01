@@ -590,6 +590,126 @@ module.exports = (supabase) => {
     res.json({ data: result });
   });
 
+  // Risk-Cockpit: all projects with ampel + flags
+  router.get("/dashboard/risk-projects", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const { data, error } = await supabase
+      .from("VW_REPORT_PROJECT_DETAIL")
+      .select([
+        "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+        "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
+        "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
+        "DEPARTMENT_ID", "DEPARTMENT_NAME",
+        "BUDGET_TOTAL_NET", "LEISTUNGSSTAND_PERCENT", "LEISTUNGSSTAND_VALUE",
+        "COST_TOTAL", "COST_RATIO", "BILLED_NET_TOTAL", "OPEN_NET_TOTAL",
+      ].join(", "))
+      .eq("TENANT_ID", tenantId)
+      .order("BUDGET_TOTAL_NET", { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    const result = (data || []).map(p => {
+      const budget    = Number(p.BUDGET_TOTAL_NET)      || 0;
+      const costs     = Number(p.COST_TOTAL)            || 0;
+      const leistung  = Number(p.LEISTUNGSSTAND_VALUE)  || 0;
+      const openNet   = Number(p.OPEN_NET_TOTAL)        || 0;
+      const costRatio = budget > 0 ? costs / budget : 0;
+      const db        = leistung - costs;
+      const flags = [];
+      if (budget > 0 && costRatio >= 0.9)                       flags.push("budget_kritisch");
+      if (db < 0 && (costs > 500 || leistung > 500))            flags.push("db_negativ");
+      if (budget > 0 && costRatio >= 0.75 && costRatio < 0.9)   flags.push("budget_warn");
+      if (openNet > 5000)                                        flags.push("abrechnung_potential");
+      let ampel = "gruen";
+      if (flags.includes("budget_kritisch") || flags.includes("db_negativ")) ampel = "rot";
+      else if (flags.includes("budget_warn"))                                 ampel = "orange";
+      else if (flags.includes("abrechnung_potential"))                        ampel = "gelb";
+      return { ...p, ampel, flags, db };
+    });
+    res.json({ data: result });
+  });
+
+  // Billing summary: projects with open amounts + by-PL aggregation
+  router.get("/dashboard/billing-summary", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const { data, error } = await supabase
+      .from("VW_REPORT_PROJECT_DETAIL")
+      .select("PROJECT_ID, NAME_SHORT, PROJECT_MANAGER_ID, PROJECT_MANAGER_DISPLAY, OPEN_NET_TOTAL")
+      .eq("TENANT_ID", tenantId)
+      .gt("OPEN_NET_TOTAL", 0)
+      .order("OPEN_NET_TOTAL", { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    const projects = (data || []).map(p => ({
+      PROJECT_ID:              p.PROJECT_ID,
+      NAME_SHORT:              p.NAME_SHORT,
+      PROJECT_MANAGER_DISPLAY: p.PROJECT_MANAGER_DISPLAY,
+      OPEN_NET_TOTAL:          Number(p.OPEN_NET_TOTAL) || 0,
+    }));
+    const byPlMap = {};
+    for (const p of projects) {
+      const name = p.PROJECT_MANAGER_DISPLAY || "(Unbekannt)";
+      if (!byPlMap[name]) byPlMap[name] = { name, total: 0, count: 0 };
+      byPlMap[name].total += p.OPEN_NET_TOTAL;
+      byPlMap[name].count += 1;
+    }
+    const byPl = Object.values(byPlMap).sort((a, b) => b.total - a.total);
+    res.json({ data: { projects, byPl } });
+  });
+
+  // Team hours: TEC confirmed hours per employee per month (last 6 months)
+  router.get("/dashboard/team-hours", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const today   = new Date();
+    const from    = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+    const fromStr = from.toISOString().slice(0, 10);
+    const toStr   = today.toISOString().slice(0, 10);
+
+    const [{ data: tec }, { data: employees }] = await Promise.all([
+      supabase.from("TEC").select("EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT")
+        .eq("TENANT_ID", tenantId).eq("STATUS", "CONFIRMED")
+        .gte("DATE_VOUCHER", fromStr).lte("DATE_VOUCHER", toStr),
+      supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+        .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
+    ]);
+
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+
+    const byEmpMonth = {};
+    for (const row of (tec || [])) {
+      if (!row.DATE_VOUCHER) continue;
+      const month = row.DATE_VOUCHER.substring(0, 7);
+      if (!months.includes(month)) continue;
+      const key = `${row.EMPLOYEE_ID}__${month}`;
+      byEmpMonth[key] = (byEmpMonth[key] || 0) + Number(row.QUANTITY_INT || 0);
+    }
+
+    const activeEmpIds = new Set((tec || []).map(r => r.EMPLOYEE_ID));
+    const result = (employees || [])
+      .filter(e => activeEmpIds.has(e.ID))
+      .map(e => {
+        const empMonths = months.map(m => ({
+          month: m,
+          hours: Math.round((byEmpMonth[`${e.ID}__${m}`] || 0) * 100) / 100,
+        }));
+        const total = empMonths.reduce((s, m) => s + m.hours, 0);
+        return {
+          employee_id: e.ID,
+          short_name:  e.SHORT_NAME || `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim(),
+          months:      empMonths,
+          total:       Math.round(total * 100) / 100,
+        };
+      })
+      .filter(e => e.total > 0)
+      .sort((a, b) => b.total - a.total);
+
+    res.json({ data: { employees: result, months } });
+  });
+
   // Hours booked per employee over last 28 days (Bereichsleiter view)
   router.get("/dashboard/team-utilization", async (req, res) => {
     const tenantId = requireTenantId(req, res);

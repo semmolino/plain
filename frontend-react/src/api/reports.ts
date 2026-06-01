@@ -209,3 +209,71 @@ export const fetchOverdueInvoices = () =>
 
 export const fetchTeamUtilization = () =>
   apiClient.get<{ data: TeamMemberUtilization[] }>('/reports/dashboard/team-utilization')
+
+// ── Risk cockpit ──────────────────────────────────────────────────────────────
+
+export interface RiskProject {
+  PROJECT_ID:                number
+  NAME_SHORT:                string
+  NAME_LONG:                 string | null
+  PROJECT_STATUS_ID:         number | null
+  PROJECT_STATUS_NAME_SHORT: string | null
+  PROJECT_MANAGER_ID:        number | null
+  PROJECT_MANAGER_DISPLAY:   string | null
+  DEPARTMENT_ID:             number | null
+  DEPARTMENT_NAME:           string | null
+  BUDGET_TOTAL_NET:          number
+  LEISTUNGSSTAND_PERCENT:    number | null
+  LEISTUNGSSTAND_VALUE:      number
+  COST_TOTAL:                number
+  COST_RATIO:                number | null
+  BILLED_NET_TOTAL:          number
+  OPEN_NET_TOTAL:            number
+  ampel:  'rot' | 'orange' | 'gelb' | 'gruen'
+  flags:  string[]
+  db:     number
+}
+
+export interface BillingProject {
+  PROJECT_ID:              number
+  NAME_SHORT:              string
+  PROJECT_MANAGER_DISPLAY: string | null
+  OPEN_NET_TOTAL:          number
+}
+
+export interface BillingByPl {
+  name:  string
+  total: number
+  count: number
+}
+
+export interface BillingSummaryData {
+  projects: BillingProject[]
+  byPl:     BillingByPl[]
+}
+
+export interface TeamHoursMonth {
+  month: string
+  hours: number
+}
+
+export interface TeamHoursEmployee {
+  employee_id: number
+  short_name:  string
+  months:      TeamHoursMonth[]
+  total:       number
+}
+
+export interface TeamHoursData {
+  employees: TeamHoursEmployee[]
+  months:    string[]
+}
+
+export const fetchRiskProjects = () =>
+  apiClient.get<{ data: RiskProject[] }>('/reports/dashboard/risk-projects')
+
+export const fetchBillingSummary = () =>
+  apiClient.get<{ data: BillingSummaryData }>('/reports/dashboard/billing-summary')
+
+export const fetchTeamHours = () =>
+  apiClient.get<{ data: TeamHoursData }>('/reports/dashboard/team-hours')

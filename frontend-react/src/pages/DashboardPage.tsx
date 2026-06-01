@@ -19,6 +19,9 @@ import {
   fetchDashboardAlerts,
   fetchOverdueInvoices,
   fetchTeamUtilization,
+  fetchRiskProjects,
+  fetchBillingSummary,
+  fetchTeamHours,
   type DashboardKpis,
   type DashboardProject,
   type DashboardMonthly,
@@ -27,7 +30,11 @@ import {
   type DashboardAlert,
   type OverdueInvoice,
   type TeamMemberUtilization,
+  type RiskProject,
+  type BillingSummaryData,
+  type TeamHoursData,
 } from '@/api/reports'
+import { Modal } from '@/components/ui/Modal'
 import { fetchCompanies, fetchDefaults, fetchLogo } from '@/api/stammdaten'
 import { fetchNumberRanges } from '@/api/numberRanges'
 import {
@@ -474,10 +481,12 @@ function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
 // ── Role views ────────────────────────────────────────────────────────────────
 
 function GeschaeftsleitungView({
-  kpis, projects, byStatus, alerts,
+  kpis, projects, byStatus, alerts, riskProjects, billingSummary, teamHours,
 }: {
   kpis: DashboardKpis; projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
+  riskProjects: RiskProject[]; billingSummary: BillingSummaryData | null; teamHours: TeamHoursData | null;
 }) {
+  const [subPage, setSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
   const honorar      = Number(kpis.HONORAR_GESAMT)       || 0
   const leistung     = Number(kpis.LEISTUNGSSTAND_VALUE) || 0
   const offeneLeist  = Number(kpis.OFFENE_LEISTUNG)      || 0
@@ -488,37 +497,54 @@ function GeschaeftsleitungView({
 
   return (
     <>
-      <AlertStrip alerts={alerts} />
+      <SubNav
+        options={[
+          { id: 'uebersicht',  label: 'Übersicht'     },
+          { id: 'risiko',      label: 'Risiko-Cockpit' },
+          { id: 'abrechnung',  label: 'Abrechnung'     },
+          { id: 'personal',    label: 'Personal'       },
+        ]}
+        active={subPage}
+        onChange={id => setSubPage(id as typeof subPage)}
+      />
 
-      <div className="kpi-grid">
-        <KpiCard label="Honorar gesamt"   value={fmtEur(kpis.HONORAR_GESAMT)}       />
-        <KpiCard label="Offene Leistung"  value={fmtEur(kpis.OFFENE_LEISTUNG)}      />
-        <KpiCard label="Leistungsstand"   value={fmtEur(kpis.LEISTUNGSSTAND_VALUE)} meta={`${fmtPct(leistPct)} des Honorars`} />
-        <KpiCard label="Aktive Projekte"  value={String(activeCount)}               />
-      </div>
+      {subPage === 'uebersicht' && (<>
+        <AlertStrip alerts={alerts} />
 
-      <NarrativeBlock>
-        Honorar gesamt: <strong>{fmtEur(honorar)}</strong>. Leistungsstand bei{' '}
-        <strong>{fmtPct(leistPct)}</strong> — {leistPct >= 80 ? 'gut im Plan' : leistPct >= 50 ? 'im Aufbau' : 'frühe Phase'}.
-        {' '}{activeCount} Projekt{activeCount !== 1 ? 'e' : ''} aktiv
-        {atRiskCount > 0 ? `, davon ${atRiskCount} über 90% Budget` : ', alle im Budget-Rahmen'}.
-        {' '}Offene Leistung zu fakturieren: <strong>{fmtEur(offeneLeist)}</strong>.
-      </NarrativeBlock>
-
-      <DashboardTimeline />
-
-      <div className="dash-two-col">
-        <div className="dash-card">
-          <div className="dash-card-title">Top-Projekte</div>
-          <ProjectTable projects={projects} maxRows={5} />
+        <div className="kpi-grid">
+          <KpiCard label="Honorar gesamt"   value={fmtEur(kpis.HONORAR_GESAMT)}       />
+          <KpiCard label="Offene Leistung"  value={fmtEur(kpis.OFFENE_LEISTUNG)}      />
+          <KpiCard label="Leistungsstand"   value={fmtEur(kpis.LEISTUNGSSTAND_VALUE)} meta={`${fmtPct(leistPct)} des Honorars`} />
+          <KpiCard label="Aktive Projekte"  value={String(activeCount)}               />
         </div>
-        <div className="dash-card">
-          <div className="dash-card-title">Leistungsverteilung</div>
-          <DonutChart kpis={kpis} />
-          <div className="dash-card-title" style={{ marginTop: 20 }}>Projekte nach Status</div>
-          <StatusList items={byStatus} />
+
+        <NarrativeBlock>
+          Honorar gesamt: <strong>{fmtEur(honorar)}</strong>. Leistungsstand bei{' '}
+          <strong>{fmtPct(leistPct)}</strong> — {leistPct >= 80 ? 'gut im Plan' : leistPct >= 50 ? 'im Aufbau' : 'frühe Phase'}.
+          {' '}{activeCount} Projekt{activeCount !== 1 ? 'e' : ''} aktiv
+          {atRiskCount > 0 ? `, davon ${atRiskCount} über 90% Budget` : ', alle im Budget-Rahmen'}.
+          {' '}Offene Leistung zu fakturieren: <strong>{fmtEur(offeneLeist)}</strong>.
+        </NarrativeBlock>
+
+        <DashboardTimeline />
+
+        <div className="dash-two-col">
+          <div className="dash-card">
+            <div className="dash-card-title">Top-Projekte</div>
+            <ProjectTable projects={projects} maxRows={5} />
+          </div>
+          <div className="dash-card">
+            <div className="dash-card-title">Leistungsverteilung</div>
+            <DonutChart kpis={kpis} />
+            <div className="dash-card-title" style={{ marginTop: 20 }}>Projekte nach Status</div>
+            <StatusList items={byStatus} />
+          </div>
         </div>
-      </div>
+      </>)}
+
+      {subPage === 'risiko'     && <RisikoView projects={riskProjects} />}
+      {subPage === 'abrechnung' && <AbrechnungView billing={billingSummary} />}
+      {subPage === 'personal'   && <PersonalView teamHours={teamHours} />}
     </>
   )
 }
@@ -708,10 +734,12 @@ function ControllerView({
 }
 
 function BereichsleiterView({
-  kpis, projects, byStatus, alerts, teamUtil,
+  kpis, projects, byStatus, alerts, teamUtil, riskProjects, teamHours,
 }: {
-  kpis: DashboardKpis; projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[]; teamUtil: TeamMemberUtilization[];
+  kpis: DashboardKpis; projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
+  teamUtil: TeamMemberUtilization[]; riskProjects: RiskProject[]; teamHours: TeamHoursData | null;
 }) {
+  const [subPage, setSubPage]  = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
   const budgetHealthy = projects.filter(p =>
     Number(p.BUDGET_TOTAL_NET) > 0 &&
     Number(p.COST_TOTAL) / Number(p.BUDGET_TOTAL_NET) < 0.8
@@ -721,36 +749,51 @@ function BereichsleiterView({
 
   return (
     <>
-      <AlertStrip alerts={alerts} />
+      <SubNav
+        options={[
+          { id: 'uebersicht', label: 'Übersicht'     },
+          { id: 'risiko',     label: 'Risiko-Cockpit' },
+          { id: 'personal',   label: 'Personal'       },
+        ]}
+        active={subPage}
+        onChange={id => setSubPage(id as typeof subPage)}
+      />
 
-      <div className="kpi-grid">
-        <KpiCard label="Aktive Projekte"    value={String(projects.length)}             />
-        <KpiCard label="Stunden (Monat)"    value={fmtH(kpis.STUNDEN_MONAT)}           />
-        <KpiCard label="Budget-Gesundheit"  value={fmtPct(budgetHealthPct)}             meta={`${budgetHealthy} von ${projects.length} im grünen Bereich`} />
-        <KpiCard label="Offene Leistung"    value={fmtEur(kpis.OFFENE_LEISTUNG)}       />
-      </div>
+      {subPage === 'uebersicht' && (<>
+        <AlertStrip alerts={alerts} />
 
-      <NarrativeBlock>
-        Team-Stunden letzte 4 Wochen: <strong>{fmtH(totalHours4w)}</strong> gesamt über {teamUtil.length} Mitarbeiter.{' '}
-        <strong>{budgetHealthy}</strong> von <strong>{projects.length}</strong> Projekt{projects.length !== 1 ? 'en' : ''} im grünen Bereich (unter 80% Budget).
-        {budgetHealthPct < 60 && ' Mehrere Projekte benötigen Aufmerksamkeit.'}
-      </NarrativeBlock>
-
-      <div className="dash-two-col">
-        <div className="dash-card">
-          <div className="dash-card-title">Team-Auslastung (letzte 4 Wochen)</div>
-          <TeamUtilizationChart data={teamUtil} />
+        <div className="kpi-grid">
+          <KpiCard label="Aktive Projekte"    value={String(projects.length)}             />
+          <KpiCard label="Stunden (Monat)"    value={fmtH(kpis.STUNDEN_MONAT)}           />
+          <KpiCard label="Budget-Gesundheit"  value={fmtPct(budgetHealthPct)}             meta={`${budgetHealthy} von ${projects.length} im grünen Bereich`} />
+          <KpiCard label="Offene Leistung"    value={fmtEur(kpis.OFFENE_LEISTUNG)}       />
         </div>
-        <div className="dash-card">
-          <div className="dash-card-title">Projekte nach Status</div>
-          <StatusList items={byStatus} />
-        </div>
-      </div>
 
-      <div className="dash-card">
-        <div className="dash-card-title">Projektportfolio</div>
-        <ProjectTable projects={projects} />
-      </div>
+        <NarrativeBlock>
+          Team-Stunden letzte 4 Wochen: <strong>{fmtH(totalHours4w)}</strong> gesamt über {teamUtil.length} Mitarbeiter.{' '}
+          <strong>{budgetHealthy}</strong> von <strong>{projects.length}</strong> Projekt{projects.length !== 1 ? 'en' : ''} im grünen Bereich (unter 80% Budget).
+          {budgetHealthPct < 60 && ' Mehrere Projekte benötigen Aufmerksamkeit.'}
+        </NarrativeBlock>
+
+        <div className="dash-two-col">
+          <div className="dash-card">
+            <div className="dash-card-title">Team-Auslastung (letzte 4 Wochen)</div>
+            <TeamUtilizationChart data={teamUtil} />
+          </div>
+          <div className="dash-card">
+            <div className="dash-card-title">Projekte nach Status</div>
+            <StatusList items={byStatus} />
+          </div>
+        </div>
+
+        <div className="dash-card">
+          <div className="dash-card-title">Projektportfolio</div>
+          <ProjectTable projects={projects} />
+        </div>
+      </>)}
+
+      {subPage === 'risiko'   && <RisikoView projects={riskProjects} />}
+      {subPage === 'personal' && <PersonalView teamHours={teamHours} />}
     </>
   )
 }
@@ -897,16 +940,421 @@ function MitarbeiterView({ employeeId }: { employeeId: number }) {
   )
 }
 
+// ── Risk cockpit helpers ──────────────────────────────────────────────────────
+
+const FLAG_LABELS: Record<string, { label: string; sev: 'rot' | 'orange' | 'gelb' }> = {
+  budget_kritisch:      { label: 'Budget >90%',         sev: 'rot'    },
+  db_negativ:           { label: 'Kosten > Leistung',   sev: 'rot'    },
+  budget_warn:          { label: 'Budget 75–90%',        sev: 'orange' },
+  abrechnung_potential: { label: 'Abrechnungspotenzial', sev: 'gelb'   },
+}
+
+const ACTION_MAP: Record<string, string> = {
+  budget_kritisch:      'Zusatzleistungen beauftragen oder Kosten reduzieren.',
+  db_negativ:           'Kosten übersteigen Leistungsstand — Budgetgespräch führen.',
+  budget_warn:          'Fortschritt und verbleibende Leistungen prüfen.',
+  abrechnung_potential: 'Offene Leistungen können jetzt fakturiert werden.',
+}
+
+const AMPEL_COLORS: Record<string, string> = {
+  rot: '#dc2626', orange: '#ea580c', gelb: '#ca8a04', gruen: '#16a34a',
+}
+
+const AMPEL_LABELS: Record<string, string> = {
+  rot: 'Kritisch', orange: 'Warnung', gelb: 'Aufmerksamkeit', gruen: 'OK',
+}
+
+function ampelDot(ampel: string, size = 10) {
+  return (
+    <span style={{
+      display: 'inline-block', width: size, height: size, borderRadius: '50%',
+      background: AMPEL_COLORS[ampel] ?? '#9ca3af', flexShrink: 0,
+      verticalAlign: 'middle',
+    }} />
+  )
+}
+
+// ── Sub-navigation ────────────────────────────────────────────────────────────
+
+function SubNav({ options, active, onChange }: {
+  options: Array<{ id: string; label: string }>
+  active:  string
+  onChange: (id: string) => void
+}) {
+  return (
+    <div className="dash-subnav">
+      {options.map(o => (
+        <button
+          key={o.id}
+          className={`dash-subnav-btn${active === o.id ? ' active' : ''}`}
+          onClick={() => onChange(o.id)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Projekt detail modal ──────────────────────────────────────────────────────
+
+function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClose: () => void }) {
+  const navigate = useNavigate()
+  const flags    = project.flags ?? []
+
+  return (
+    <Modal open={true} onClose={onClose} title={project.NAME_SHORT} className="projekt-detail-modal">
+      <div className="projekt-detail-grid">
+
+        <div>
+          <table className="detail-kv-table">
+            <tbody>
+              <tr><td>Status</td><td>{project.PROJECT_STATUS_NAME_SHORT || '—'}</td></tr>
+              <tr><td>Projektleitung</td><td>{project.PROJECT_MANAGER_DISPLAY || '—'}</td></tr>
+              <tr><td>Abteilung</td><td>{project.DEPARTMENT_NAME ? <span className="dept-badge">{project.DEPARTMENT_NAME}</span> : '—'}</td></tr>
+              <tr><td>Honorar</td><td>{fmtEur(project.BUDGET_TOTAL_NET)}</td></tr>
+              <tr><td>Leistungsstand</td><td>
+                {fmtEur(project.LEISTUNGSSTAND_VALUE)}
+                {project.LEISTUNGSSTAND_PERCENT != null ? ` (${fmtPct(Number(project.LEISTUNGSSTAND_PERCENT))})` : ''}
+              </td></tr>
+              <tr><td>Kosten</td><td>{fmtEur(project.COST_TOTAL)}</td></tr>
+              <tr>
+                <td>Deckungsbeitrag</td>
+                <td style={{ color: project.db < 0 ? '#b91c1c' : '#16a34a', fontWeight: 700 }}>
+                  {fmtEur(project.db)}
+                </td>
+              </tr>
+              <tr><td>Abgerechnet</td><td>{fmtEur(project.BILLED_NET_TOTAL)}</td></tr>
+              <tr><td>Zu fakturieren</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? '#1d4ed8' : undefined }}>{fmtEur(project.OPEN_NET_TOTAL)}</td></tr>
+            </tbody>
+          </table>
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" onClick={() => { onClose(); navigate('/daten', { state: { tab: 'einzelprojekt', projectId: project.PROJECT_ID } }) }}>
+              → Projektbericht
+            </button>
+            <button className="btn btn-sm" onClick={() => { onClose(); navigate('/rechnungen', { state: { projectSearch: project.NAME_SHORT } }) }}>
+              → Rechnungen
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 6 }}>Ampel</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {ampelDot(project.ampel, 14)}
+              <strong style={{ color: AMPEL_COLORS[project.ampel] }}>{AMPEL_LABELS[project.ampel] ?? '—'}</strong>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 8 }}>
+            Risikohinweise
+          </div>
+          {flags.length === 0 ? (
+            <div style={{ color: '#16a34a', fontSize: 13 }}>✓ Keine Risiken erkannt</div>
+          ) : (
+            flags.map(f => {
+              const info = FLAG_LABELS[f]
+              if (!info) return null
+              return (
+                <div key={f} style={{ marginBottom: 10 }}>
+                  <span className={`flag-badge flag-${info.sev}`}>{info.label}</span>
+                  {ACTION_MAP[f] && (
+                    <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 3 }}>{ACTION_MAP[f]}</div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+
+      </div>
+    </Modal>
+  )
+}
+
+// ── Risiko-Cockpit view ───────────────────────────────────────────────────────
+
+type AmpelFilter = 'alle' | 'rot' | 'orange' | 'gelb' | 'gruen'
+
+function RisikoView({ projects }: { projects: RiskProject[] }) {
+  const [ampelFilter, setAmpelFilter] = useState<AmpelFilter>('alle')
+  const [selected, setSelected]       = useState<RiskProject | null>(null)
+
+  const counts = {
+    rot:    projects.filter(p => p.ampel === 'rot').length,
+    orange: projects.filter(p => p.ampel === 'orange').length,
+    gelb:   projects.filter(p => p.ampel === 'gelb').length,
+    gruen:  projects.filter(p => p.ampel === 'gruen').length,
+  }
+
+  const AMPEL_ORDER: Record<string, number> = { rot: 0, orange: 1, gelb: 2, gruen: 3 }
+  const filtered = (ampelFilter === 'alle' ? projects : projects.filter(p => p.ampel === ampelFilter))
+    .slice()
+    .sort((a, b) => (AMPEL_ORDER[a.ampel] ?? 4) - (AMPEL_ORDER[b.ampel] ?? 4))
+
+  return (
+    <>
+      {selected && <ProjektDetailModal project={selected} onClose={() => setSelected(null)} />}
+
+      <div className="kpi-grid">
+        <KpiCard label="Projekte gesamt"   value={String(projects.length)}   />
+        <KpiCard label="Kritisch (rot)"    value={String(counts.rot)}    accent={counts.rot > 0} />
+        <KpiCard label="Warnung (orange)"  value={String(counts.orange)} />
+        <KpiCard label="OK (grün)"         value={String(counts.gruen)}  />
+      </div>
+
+      <div className="dash-ampel-filter">
+        {(['alle', 'rot', 'orange', 'gelb', 'gruen'] as const).map(a => (
+          <button
+            key={a}
+            className={`ampel-filter-btn${ampelFilter === a ? ' active' : ''} ampel-${a}`}
+            onClick={() => setAmpelFilter(a)}
+          >
+            {a === 'alle'
+              ? 'Alle'
+              : <>{ampelDot(a)} {AMPEL_LABELS[a]} ({counts[a as keyof typeof counts]})</>
+            }
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0
+        ? <p className="empty-note">Keine Projekte gefunden.</p>
+        : (
+          <div className="dash-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <table className="dash-table dash-table-clickable" style={{ margin: 0 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 4, padding: 0 }}></th>
+                  <th>Projekt</th>
+                  <th className="num col-hide-mobile">Honorar</th>
+                  <th className="num">Kosten</th>
+                  <th className="num col-hide-mobile">Budget %</th>
+                  <th className="num col-hide-mobile">Offen</th>
+                  <th>Flags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(p => (
+                  <tr
+                    key={p.PROJECT_ID}
+                    className="clickable-row"
+                    onClick={() => setSelected(p)}
+                    style={{ borderLeft: `4px solid ${AMPEL_COLORS[p.ampel] ?? '#9ca3af'}` }}
+                  >
+                    <td style={{ padding: 0 }}></td>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{p.NAME_SHORT}</div>
+                      {p.PROJECT_MANAGER_DISPLAY && (
+                        <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
+                      )}
+                    </td>
+                    <td className="num col-hide-mobile">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
+                    <td className="num">{fmtEur(p.COST_TOTAL)}</td>
+                    <td className="num col-hide-mobile">
+                      {Number(p.BUDGET_TOTAL_NET) > 0 ? fmtPct(Number(p.COST_RATIO || 0) * 100) : '—'}
+                    </td>
+                    <td className="num col-hide-mobile">
+                      {Number(p.OPEN_NET_TOTAL) > 0 ? fmtEur(p.OPEN_NET_TOTAL) : '—'}
+                    </td>
+                    <td>
+                      {p.flags.map(f => {
+                        const info = FLAG_LABELS[f]
+                        return info
+                          ? <span key={f} className={`flag-badge flag-${info.sev}`} style={{ marginRight: 3 }}>{info.label}</span>
+                          : null
+                      })}
+                      {p.flags.length === 0 && <span style={{ color: '#16a34a', fontSize: 12 }}>✓</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </>
+  )
+}
+
+// ── Abrechnung view ───────────────────────────────────────────────────────────
+
+function AbrechnungView({ billing }: { billing: BillingSummaryData | null }) {
+  const navigate  = useNavigate()
+  if (!billing) return <p className="empty-note">Laden …</p>
+
+  const totalOpen = billing.projects.reduce((s, p) => s + p.OPEN_NET_TOTAL, 0)
+  const maxPl     = Math.max(...billing.byPl.map(p => p.total), 1)
+
+  return (
+    <>
+      <div className="kpi-grid">
+        <KpiCard label="Zu fakturieren gesamt"       value={fmtEur(totalOpen)}                   accent={totalOpen > 0} />
+        <KpiCard label="Projekte mit offenem Betrag" value={String(billing.projects.length)}      />
+        <KpiCard label="Projektleiter involviert"    value={String(billing.byPl.length)}          />
+      </div>
+
+      {billing.projects.length === 0 ? (
+        <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
+          Kein Abrechnungspotenzial erkannt. Alle Projekte sind vollständig fakturiert.
+        </div>
+      ) : (
+        <div className="dash-two-col">
+          <div className="dash-card">
+            <div className="dash-card-title">Top Projektleiter (offene Beträge)</div>
+            {billing.byPl.length === 0
+              ? <p className="empty-note">Keine Daten.</p>
+              : (
+                <div className="util-bar-chart">
+                  {billing.byPl.slice(0, 10).map((pl, i) => {
+                    const pct = Math.round((pl.total / maxPl) * 100)
+                    return (
+                      <div key={i} className="util-bar-row">
+                        <span className="util-bar-label">{pl.name}</span>
+                        <div className="util-bar-track">
+                          <div className="util-bar-fill" style={{ width: `${pct}%`, background: 'rgba(139,92,246,0.65)' }} />
+                        </div>
+                        <span className="util-bar-value">{fmtEur(pl.total)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            }
+          </div>
+
+          <div className="dash-card">
+            <div className="dash-card-title">Projekte mit Abrechnungspotenzial</div>
+            <table className="dash-table dash-table-clickable">
+              <thead>
+                <tr>
+                  <th>Projekt</th>
+                  <th className="num">Zu fakturieren</th>
+                </tr>
+              </thead>
+              <tbody>
+                {billing.projects.slice(0, 10).map((p, i) => (
+                  <tr
+                    key={i}
+                    className="clickable-row"
+                    onClick={() => navigate('/rechnungen', { state: { projectSearch: p.NAME_SHORT } })}
+                  >
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{p.NAME_SHORT}</div>
+                      {p.PROJECT_MANAGER_DISPLAY && (
+                        <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
+                      )}
+                    </td>
+                    <td className="num" style={{ fontWeight: 600, color: '#1d4ed8' }}>{fmtEur(p.OPEN_NET_TOTAL)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Personal / HR analytics view ──────────────────────────────────────────────
+
+function PersonalView({ teamHours }: { teamHours: TeamHoursData | null }) {
+  if (!teamHours) return <p className="empty-note">Laden …</p>
+  const { employees, months } = teamHours
+  if (employees.length === 0) return <p className="empty-note">Keine Buchungen in den letzten 6 Monaten.</p>
+
+  const totalHours = employees.reduce((s, e) => s + e.total, 0)
+  const avgHours   = employees.length > 0 ? totalHours / employees.length : 0
+
+  const colors = [
+    'rgba(59,130,246,0.75)', 'rgba(16,185,129,0.75)', 'rgba(245,158,11,0.75)',
+    'rgba(139,92,246,0.75)', 'rgba(236,72,153,0.75)',  'rgba(6,182,212,0.75)',
+  ]
+  const topEmps = employees.slice(0, 6)
+
+  const datasets = topEmps.map((emp, i) => ({
+    label:           emp.short_name,
+    data:            emp.months.map(m => m.hours),
+    backgroundColor: colors[i % colors.length],
+    borderRadius:    3,
+    stack:           'stack',
+  }))
+
+  const labels = months.map(m => {
+    const month = parseInt(m.split('-')[1], 10)
+    return MONTHS_DE[month - 1] ?? m
+  })
+
+  return (
+    <>
+      <div className="kpi-grid">
+        <KpiCard label="Gesamtstunden (6 Monate)" value={fmtH(totalHours)}          />
+        <KpiCard label="Ø pro Mitarbeiter"        value={fmtH(avgHours)}            />
+        <KpiCard label="Aktive Mitarbeiter"       value={String(employees.length)}  />
+      </div>
+
+      <div className="dash-card">
+        <div className="dash-card-title">Stunden nach Mitarbeiter (letzte 6 Monate)</div>
+        <div className="chart-wrap">
+          <Bar
+            data={{ labels, datasets }}
+            options={{
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 10 } } },
+              scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
+                y: { stacked: true, ticks: { font: { size: 10 } } },
+              },
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="dash-card">
+        <div className="dash-card-title">Mitarbeiter-Übersicht</div>
+        <table className="dash-table">
+          <thead>
+            <tr>
+              <th>Mitarbeiter</th>
+              {months.map(m => {
+                const month = parseInt(m.split('-')[1], 10)
+                return <th key={m} className="num col-hide-mobile">{MONTHS_DE[month - 1]}</th>
+              })}
+              <th className="num">Gesamt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employees.map(emp => (
+              <tr key={emp.employee_id}>
+                <td>{emp.short_name}</td>
+                {emp.months.map(m => (
+                  <td key={m.month} className="num col-hide-mobile">
+                    {m.hours > 0 ? fmtH(m.hours) : <span style={{ color: 'var(--text-4)' }}>—</span>}
+                  </td>
+                ))}
+                <td className="num"><strong>{fmtH(emp.total)}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
   const { dashboardRole, setDashboardRole, employeeId } = useSession()
 
   const isMitarbeiter = dashboardRole === 'mitarbeiter'
-
   const isController  = dashboardRole === 'controller'
+  const isGl          = dashboardRole === 'geschaeftsleitung'
+  const isBl          = dashboardRole === 'bereichsleiter'
 
-  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ] = useQueries({
+  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ, riskQ, billingQ, teamHoursQ] = useQueries({
     queries: [
       { queryKey: ['dashboard', 'kpis'],             queryFn: fetchDashboardKpis,      staleTime: 300000, enabled: !isMitarbeiter },
       { queryKey: ['dashboard', 'projects'],          queryFn: fetchDashboardProjects,  staleTime: 300000, enabled: !isMitarbeiter },
@@ -916,17 +1364,23 @@ export function DashboardPage() {
       { queryKey: ['dashboard', 'overdue-invoices'],  queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
       { queryKey: ['dashboard', 'team-utilization'],  queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
       { queryKey: ['dashboard', 'mahnung-stats'],     queryFn: fetchMahnungStats,       staleTime: 120000, enabled: isController },
+      { queryKey: ['dashboard', 'risk-projects'],     queryFn: fetchRiskProjects,       staleTime: 300000, enabled: isGl || isBl },
+      { queryKey: ['dashboard', 'billing-summary'],   queryFn: fetchBillingSummary,     staleTime: 300000, enabled: isGl },
+      { queryKey: ['dashboard', 'team-hours'],        queryFn: fetchTeamHours,          staleTime: 300000, enabled: isGl || isBl },
     ],
   })
 
-  const kpis       = kpisQ.data?.data
-  const projects   = projectsQ.data?.data  ?? []
-  const monthly    = monthlyQ.data?.data   ?? []
-  const byStatus   = byStatusQ.data?.data  ?? []
-  const alerts     = alertsQ.data?.data    ?? []
-  const overdue    = overdueQ.data?.data   ?? []
-  const teamUtil   = teamQ.data?.data      ?? []
-  const mahnStats  = mahnungenQ.data?.data ?? null
+  const kpis           = kpisQ.data?.data
+  const projects       = projectsQ.data?.data   ?? []
+  const monthly        = monthlyQ.data?.data    ?? []
+  const byStatus       = byStatusQ.data?.data   ?? []
+  const alerts         = alertsQ.data?.data     ?? []
+  const overdue        = overdueQ.data?.data    ?? []
+  const teamUtil       = teamQ.data?.data       ?? []
+  const mahnStats      = mahnungenQ.data?.data  ?? null
+  const riskProjects   = riskQ.data?.data       ?? []
+  const billingSummary = billingQ.data?.data     ?? null
+  const teamHours      = teamHoursQ.data?.data  ?? null
 
   const isLoading = kpisQ.isLoading || projectsQ.isLoading
 
@@ -956,7 +1410,7 @@ export function DashboardPage() {
       {isLoading && dashboardRole && <div className="dash-loading">Laden …</div>}
 
       {!isLoading && kpis && dashboardRole === 'geschaeftsleitung' && (
-        <GeschaeftsleitungView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} />
+        <GeschaeftsleitungView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} riskProjects={riskProjects} billingSummary={billingSummary} teamHours={teamHours} />
       )}
 
       {!isLoading && kpis && dashboardRole === 'controller' && (
@@ -964,7 +1418,7 @@ export function DashboardPage() {
       )}
 
       {!isLoading && kpis && dashboardRole === 'bereichsleiter' && (
-        <BereichsleiterView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} teamUtil={teamUtil} />
+        <BereichsleiterView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} teamUtil={teamUtil} riskProjects={riskProjects} teamHours={teamHours} />
       )}
 
       {isMitarbeiter && employeeId !== null && (
