@@ -1405,8 +1405,6 @@ export function DashboardPage() {
 
       <SetupChecklist />
 
-      {!isMitarbeiter && <AlertStrip alerts={alerts} />}
-
       {!dashboardRole && <RoleSelector onSelect={setDashboardRole} />}
 
       {isLoading && dashboardRole && <div className="dash-loading">Laden …</div>}
