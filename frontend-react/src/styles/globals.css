@@ -479,6 +479,12 @@ input::placeholder { color: var(--text-4); }
   margin-bottom: 16px;
 }
 .dash-title { font-size: 20px; font-weight: 800; color: var(--text); }
+
+.dash-filter-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.dash-filter-group { display: flex; align-items: center; gap: 6px; }
+.dash-filter-label { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.dash-filter-reset { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--accent); background: none; border: none; cursor: pointer; padding: 3px 6px; border-radius: 4px; }
+.dash-filter-reset:hover { background: var(--accent-subtle, rgba(59,130,246,0.08)); }
 .dash-logout {
   font-size: 11px; font-weight: 600;
   color: var(--text-3);

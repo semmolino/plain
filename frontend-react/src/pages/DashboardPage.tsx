@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
@@ -69,6 +69,37 @@ function monthLabel(yyyymm: string) {
 function fmtDateDE(iso: string) {
   const d = new Date(iso + 'T00:00:00')
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+// ── Dashboard filter types ────────────────────────────────────────────────────
+
+type ZeitraumKey = 'last12m' | 'last6m' | 'last3m' | 'thisYear' | 'lastYear'
+
+interface DashboardFilters {
+  zeitraum:      ZeitraumKey
+  abteilung:     string
+  projektleiter: string
+  status:        string
+}
+
+const DEFAULT_FILTERS: DashboardFilters = { zeitraum: 'last12m', abteilung: '', projektleiter: '', status: '' }
+
+const ZEITRAUM_OPTIONS: { value: ZeitraumKey; label: string }[] = [
+  { value: 'last12m',  label: 'Letzte 12 Monate' },
+  { value: 'last6m',   label: 'Letzte 6 Monate'  },
+  { value: 'last3m',   label: 'Letzte 3 Monate'  },
+  { value: 'thisYear', label: 'Dieses Jahr'       },
+  { value: 'lastYear', label: 'Letztes Jahr'      },
+]
+
+function computeDateRange(z: ZeitraumKey): { dateFrom: string; dateTo: string } {
+  const today = new Date()
+  const dateTo = today.toISOString().substring(0, 10)
+  if (z === 'last3m')    { const d = new Date(today); d.setMonth(d.getMonth() - 3);  return { dateFrom: d.toISOString().substring(0, 10), dateTo } }
+  if (z === 'last6m')    { const d = new Date(today); d.setMonth(d.getMonth() - 6);  return { dateFrom: d.toISOString().substring(0, 10), dateTo } }
+  if (z === 'thisYear')  return { dateFrom: `${today.getFullYear()}-01-01`, dateTo }
+  if (z === 'lastYear')  { const y = today.getFullYear() - 1; return { dateFrom: `${y}-01-01`, dateTo: `${y}-12-31` } }
+  const d = new Date(today); d.setMonth(d.getMonth() - 12); return { dateFrom: d.toISOString().substring(0, 10), dateTo }
 }
 
 // ── Shared sub-components ────────────────────────────────────────────────────
@@ -228,11 +259,7 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
 
 // ── Timeline chart ────────────────────────────────────────────────────────────
 
-function DashboardTimeline() {
-  const today    = new Date()
-  const dateFrom = `${today.getFullYear()}-01-01`
-  const dateTo   = today.toISOString().substring(0, 10)
-
+function DashboardTimeline({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ['projects-timeline', dateFrom, dateTo],
     queryFn:  () => fetchProjectsTimeline({ mode: 'period', dateFrom, dateTo }),
@@ -481,10 +508,11 @@ function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
 // ── Role views ────────────────────────────────────────────────────────────────
 
 function GeschaeftsleitungView({
-  kpis, projects, byStatus, alerts, riskProjects, billingSummary, teamHours,
+  kpis, projects, byStatus, alerts, riskProjects, billingSummary, teamHours, dateFrom, dateTo,
 }: {
   kpis: DashboardKpis; projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   riskProjects: RiskProject[]; billingSummary: BillingSummaryData | null; teamHours: TeamHoursData | null;
+  dateFrom: string; dateTo: string;
 }) {
   const [subPage, setSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
   const honorar      = Number(kpis.HONORAR_GESAMT)       || 0
@@ -526,7 +554,7 @@ function GeschaeftsleitungView({
           {' '}Offene Leistung zu fakturieren: <strong>{fmtEur(offeneLeist)}</strong>.
         </NarrativeBlock>
 
-        <DashboardTimeline />
+        <DashboardTimeline dateFrom={dateFrom} dateTo={dateTo} />
 
         <div className="dash-two-col">
           <div className="dash-card">
@@ -1346,8 +1374,74 @@ function PersonalView({ teamHours }: { teamHours: TeamHoursData | null }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+// ── Dashboard filter bar ──────────────────────────────────────────────────────
+
+function DashboardFilterBar({
+  filters, onChange, abteilungen, plOptions, statusOptions, showDimensions,
+}: {
+  filters:        DashboardFilters
+  onChange:       (patch: Partial<DashboardFilters>) => void
+  abteilungen:    string[]
+  plOptions:      string[]
+  statusOptions:  string[]
+  showDimensions: boolean
+}) {
+  const isActive = filters.zeitraum !== 'last12m' || !!filters.abteilung || !!filters.projektleiter || !!filters.status
+  return (
+    <div className="dash-filter-bar">
+      <div className="dash-filter-group">
+        <span className="dash-filter-label">Zeitraum</span>
+        <select className="inline-select" value={filters.zeitraum}
+          onChange={e => onChange({ zeitraum: e.target.value as ZeitraumKey })}>
+          {ZEITRAUM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+
+      {showDimensions && abteilungen.length > 1 && (
+        <div className="dash-filter-group">
+          <span className="dash-filter-label">Abteilung</span>
+          <select className="inline-select" value={filters.abteilung}
+            onChange={e => onChange({ abteilung: e.target.value })}>
+            <option value="">Alle</option>
+            {abteilungen.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+      )}
+
+      {showDimensions && plOptions.length > 1 && (
+        <div className="dash-filter-group">
+          <span className="dash-filter-label">Projektleiter</span>
+          <select className="inline-select" value={filters.projektleiter}
+            onChange={e => onChange({ projektleiter: e.target.value })}>
+            <option value="">Alle</option>
+            {plOptions.map(pl => <option key={pl} value={pl}>{pl}</option>)}
+          </select>
+        </div>
+      )}
+
+      {showDimensions && statusOptions.length > 1 && (
+        <div className="dash-filter-group">
+          <span className="dash-filter-label">Status</span>
+          <select className="inline-select" value={filters.status}
+            onChange={e => onChange({ status: e.target.value })}>
+            <option value="">Alle</option>
+            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      )}
+
+      {isActive && (
+        <button className="dash-filter-reset" onClick={() => onChange(DEFAULT_FILTERS)}>
+          Zurücksetzen
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const { dashboardRole, setDashboardRole, employeeId } = useSession()
+  const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
 
   const isMitarbeiter = dashboardRole === 'mitarbeiter'
   const isController  = dashboardRole === 'controller'
@@ -1384,6 +1478,45 @@ export function DashboardPage() {
 
   const isLoading = kpisQ.isLoading || projectsQ.isLoading
 
+  // ── Filter computations ──
+  const dateRange = useMemo(() => computeDateRange(filters.zeitraum), [filters.zeitraum])
+
+  const abteilungen = useMemo(() =>
+    [...new Set(riskProjects.map(p => p.DEPARTMENT_NAME).filter(Boolean))].sort() as string[],
+    [riskProjects])
+  const plOptions = useMemo(() =>
+    [...new Set(riskProjects.map(p => p.PROJECT_MANAGER_DISPLAY).filter(Boolean))].sort() as string[],
+    [riskProjects])
+  const statusOptions = useMemo(() =>
+    [...new Set(riskProjects.map(p => p.PROJECT_STATUS_NAME_SHORT).filter(Boolean))].sort() as string[],
+    [riskProjects])
+
+  const filteredRiskProjects = useMemo(() =>
+    riskProjects
+      .filter(p => !filters.abteilung     || p.DEPARTMENT_NAME          === filters.abteilung)
+      .filter(p => !filters.projektleiter || p.PROJECT_MANAGER_DISPLAY  === filters.projektleiter)
+      .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
+    [riskProjects, filters.abteilung, filters.projektleiter, filters.status])
+
+  const filteredProjectIds = useMemo(() =>
+    new Set(filteredRiskProjects.map(p => p.PROJECT_ID)), [filteredRiskProjects])
+
+  const filteredProjects = useMemo(() =>
+    (filters.abteilung || filters.projektleiter || filters.status)
+      ? projects.filter(p => p.PROJECT_ID != null && filteredProjectIds.has(p.PROJECT_ID))
+      : projects,
+    [projects, filteredProjectIds, filters.abteilung, filters.projektleiter, filters.status])
+
+  const filteredMonthly = useMemo(() => {
+    if (!monthly.length) return monthly
+    const { dateFrom, dateTo } = dateRange
+    const from = dateFrom.substring(0, 7)
+    const to   = dateTo.substring(0, 7)
+    return [...monthly]
+      .filter(m => String(m.MONTH) >= from && String(m.MONTH) <= to)
+      .sort((a, b) => String(a.MONTH).localeCompare(String(b.MONTH)))
+  }, [monthly, dateRange])
+
   const roleLabel = ROLES.find(r => r.id === dashboardRole)?.title ?? ''
 
   return (
@@ -1405,20 +1538,38 @@ export function DashboardPage() {
 
       <SetupChecklist />
 
+      {dashboardRole && !isMitarbeiter && (
+        <DashboardFilterBar
+          filters={filters}
+          onChange={patch => setFilters(f => ({ ...f, ...patch }))}
+          abteilungen={abteilungen}
+          plOptions={plOptions}
+          statusOptions={statusOptions}
+          showDimensions={isGl || isBl}
+        />
+      )}
+
       {!dashboardRole && <RoleSelector onSelect={setDashboardRole} />}
 
       {isLoading && dashboardRole && <div className="dash-loading">Laden …</div>}
 
       {!isLoading && kpis && dashboardRole === 'geschaeftsleitung' && (
-        <GeschaeftsleitungView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} riskProjects={riskProjects} billingSummary={billingSummary} teamHours={teamHours} />
+        <GeschaeftsleitungView
+          kpis={kpis} projects={filteredProjects} byStatus={byStatus} alerts={alerts}
+          riskProjects={filteredRiskProjects} billingSummary={billingSummary} teamHours={teamHours}
+          dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
+        />
       )}
 
       {!isLoading && kpis && dashboardRole === 'controller' && (
-        <ControllerView kpis={kpis} monthly={monthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} />
+        <ControllerView kpis={kpis} monthly={filteredMonthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} />
       )}
 
       {!isLoading && kpis && dashboardRole === 'bereichsleiter' && (
-        <BereichsleiterView kpis={kpis} projects={projects} byStatus={byStatus} alerts={alerts} teamUtil={teamUtil} riskProjects={riskProjects} teamHours={teamHours} />
+        <BereichsleiterView
+          kpis={kpis} projects={filteredProjects} byStatus={byStatus} alerts={alerts}
+          teamUtil={teamUtil} riskProjects={filteredRiskProjects} teamHours={teamHours}
+        />
       )}
 
       {isMitarbeiter && employeeId !== null && (
