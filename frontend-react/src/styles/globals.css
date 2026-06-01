@@ -1109,6 +1109,23 @@ input::placeholder { color: var(--text-4); }
 .struct-context-danger:hover:not(:disabled) { background: #fef2f2 !important; }
 .struct-context-divider { height: 1px; background: var(--border); margin: 3px 4px; }
 
+/* Project autocomplete dropdown */
+.project-ac-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+  max-height: 280px; overflow-y: auto; margin-top: 2px;
+}
+.project-ac-option {
+  display: flex; flex-direction: column; align-items: flex-start;
+  width: 100%; padding: 7px 12px; border: none; background: transparent;
+  cursor: pointer; text-align: left; gap: 1px;
+}
+.project-ac-option:hover,
+.project-ac-option.active { background: var(--surface-2); }
+.project-ac-short { font-size: 13px; font-weight: 600; color: var(--text); }
+.project-ac-long  { font-size: 11px; color: var(--text-4); }
+
 /* Wizard layout */
 .wizard-wrap { max-width: 100%; }
 .wizard-steps {
