@@ -71,8 +71,9 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const [showForm,     setShowForm]     = useState(false)
   const [form,         setForm]         = useState<BuchungForm>(emptyForm)
   const [msg,          setMsg]          = useState<{ text: string; type: 'success'|'error' } | null>(null)
-  const [filterStruct, setFilterStruct] = useState<string>('')
-  const [search,       setSearch]       = useState('')
+  const [filterStruct,  setFilterStruct]  = useState<string>('')
+  const [search,        setSearch]        = useState('')
+  const [structSearch,  setStructSearch]  = useState('')
   const [sortCol,      setSortCol]      = useState<SortCol>('date')
   const [sortDir,      setSortDir]      = useState<SortDir>('asc')
   const [editRow,      setEditRow]      = useState<Buchung | null>(null)
@@ -180,6 +181,16 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     for (const n of structure) m.set(n.STRUCTURE_ID, structPath(n.STRUCTURE_ID))
     return m
   }, [structure, nodeById])
+
+  const filteredStructureForSelect = useMemo(() => {
+    if (!structSearch.trim()) return allStructureSorted
+    const sq = structSearch.toLowerCase()
+    return allStructureSorted.filter(n =>
+      n.NAME_SHORT.toLowerCase().includes(sq) ||
+      (n.NAME_LONG?.toLowerCase().includes(sq) ?? false) ||
+      (pathCache.get(n.STRUCTURE_ID) ?? '').toLowerCase().includes(sq)
+    )
+  }, [allStructureSorted, structSearch, pathCache])
 
   const filterDescendants = useMemo(() => {
     if (!filterStruct) return null
@@ -371,9 +382,12 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 10, flexWrap: 'wrap' }}>
                 <div className="form-group" style={{ flex: '1 1 260px', minWidth: 200, marginBottom: 0 }}>
                   <label>Strukturelement</label>
+                  <input type="search" className="list-search" placeholder="Elemente filtern …"
+                    style={{ marginBottom: 4, fontSize: 12 }}
+                    value={structSearch} onChange={e => setStructSearch(e.target.value)} />
                   <select value={filterStruct} onChange={e => setFilterStruct(e.target.value)}>
                     <option value="">Alle Strukturelemente</option>
-                    {allStructureSorted.map(n => (
+                    {filteredStructureForSelect.map(n => (
                       <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
                         {pathCache.get(n.STRUCTURE_ID) ?? n.NAME_SHORT}
                       </option>

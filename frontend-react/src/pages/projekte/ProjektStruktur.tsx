@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, Percent } from 'lucide-react'
 import { Message }       from '@/components/ui/Message'
+import { Modal }         from '@/components/ui/Modal'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
@@ -105,7 +106,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
   const parentMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
 
-  // Bottom-up aggregate: extras (for Nebenkosten display) and surcharges (total across subtree)
+  // Bottom-up aggregate: extras, surcharges, and revenueBasis (sum of leaf REVENUE_BASIS values)
   const aggMap = (() => {
     const childrenOf = new Map<string, string[]>()
     for (const n of structure) {
@@ -117,19 +118,19 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       }
     }
     const nodeMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n]))
-    const cache = new Map<string, { extras: number; surcharges: number }>()
-    function agg(id: string): { extras: number; surcharges: number } {
+    const cache = new Map<string, { extras: number; surcharges: number; revenueBasis: number }>()
+    function agg(id: string): { extras: number; surcharges: number; revenueBasis: number } {
       if (cache.has(id)) return cache.get(id)!
       const children = childrenOf.get(id) ?? []
       if (children.length === 0) {
         const n = nodeMap.get(id)!
-        const r = { extras: n?.EXTRAS ?? 0, surcharges: n?.SURCHARGES_TOTAL ?? 0 }
+        const r = { extras: n?.EXTRAS ?? 0, surcharges: n?.SURCHARGES_TOTAL ?? 0, revenueBasis: n?.REVENUE_BASIS ?? n?.REVENUE ?? 0 }
         cache.set(id, r); return r
       }
-      let extras = 0, surcharges = 0
-      for (const cid of children) { const c = agg(cid); extras += c.extras; surcharges += c.surcharges }
-      surcharges += nodeMap.get(id)?.SURCHARGES_TOTAL ?? 0  // own surcharges
-      cache.set(id, { extras, surcharges }); return { extras, surcharges }
+      let extras = 0, surcharges = 0, revenueBasis = 0
+      for (const cid of children) { const c = agg(cid); extras += c.extras; surcharges += c.surcharges; revenueBasis += c.revenueBasis }
+      surcharges += nodeMap.get(id)?.SURCHARGES_TOTAL ?? 0  // parent's own surcharges on top
+      cache.set(id, { extras, surcharges, revenueBasis }); return { extras, surcharges, revenueBasis }
     }
     for (const n of structure) agg(String(n.STRUCTURE_ID))
     return cache
@@ -610,7 +611,11 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
   // ── Root row totals ───────────────────────────────────────────────────────
   const currentProject = projects.find(p => p.ID === selectedPid)
-  const rootRevenue     = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE_BASIS ?? n.REVENUE ?? 0), 0)
+  // rootRevenue = pure sum of leaf REVENUE_BASIS values (before any surcharges at any level)
+  const rootRevenue = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => {
+    const isP = parentIds.has(String(n.STRUCTURE_ID))
+    return s + (isP ? (aggMap.get(String(n.STRUCTURE_ID))?.revenueBasis ?? 0) : (n.REVENUE_BASIS ?? n.REVENUE ?? 0))
+  }, 0)
   const rootSurcharges  = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.surcharges ?? 0), 0)
   const rootRevenueFinal = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE ?? 0), 0)
   const rootExtras      = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.extras ?? 0), 0)
@@ -730,8 +735,8 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th>Bezeichnung</th>
                         <th>Abrechnung</th>
                         <th className="num">Honorar €</th>
-                        <th className="num" style={{ fontSize: 10, color: '#9ca3af' }}>davon Zuschläge</th>
-                        <th className="num" style={{ fontSize: 10, color: '#2563eb' }}>Honorar + Zuschläge</th>
+                        <th className="num">Zuschläge €</th>
+                        <th className="num" style={{ color: '#2563eb' }}>Honorar + Zuschl. €</th>
                         <th className="num">NK %</th>
                         <th className="num">Nebenkosten €</th>
                         <th className="num">Stand €</th>
@@ -831,10 +836,10 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               </select>
                             </td>
                             <td className="num">
-                              {/* Honorar € = REVENUE_BASIS for all nodes (base before surcharges) */}
+                              {/* Honorar € = pure leaf sum (REVENUE_BASIS) so it never includes surcharges */}
                               {isParent || isTec ? (
                                 <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>
-                                  {fmtEur(isTec ? node.TEC_SP_TOT_SUM : (node.REVENUE_BASIS ?? node.REVENUE))}
+                                  {fmtEur(isTec ? node.TEC_SP_TOT_SUM : (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0))}
                                 </span>
                               ) : (
                                 <input className="tbl-input" type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
@@ -979,80 +984,14 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                 <p className="empty-note">Keine Projektstruktur gefunden.</p>
               )}
 
-              {/* ── Add form ── */}
-              {addForm && (
-                <div className="struct-add-form">
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Kürzel*</label>
-                      <input style={{ width: 80 }} value={addForm.NAME_SHORT}
-                        onChange={e => setAddForm(f => f && { ...f, NAME_SHORT: e.target.value })} />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Bezeichnung</label>
-                      <input style={{ width: 140 }} value={addForm.NAME_LONG}
-                        onChange={e => setAddForm(f => f && { ...f, NAME_LONG: e.target.value })} />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Abrechnungsart*</label>
-                      <select style={{ fontSize: 12 }} value={addForm.BILLING_TYPE_ID}
-                        onChange={e => setAddForm(f => f && { ...f, BILLING_TYPE_ID: e.target.value })}>
-                        <option value="">Bitte wählen …</option>
-                        {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Honorar €</label>
-                      <input type="number" min={0} step={100} style={{ width: 100 }} placeholder="0"
-                        value={addForm.REVENUE}
-                        onChange={e => setAddForm(f => f && { ...f, REVENUE: e.target.value })} />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>NK %</label>
-                      <input type="number" min={0} max={100} step={0.1} style={{ width: 70 }} placeholder="0"
-                        value={addForm.EXTRAS_PERCENT}
-                        onChange={e => setAddForm(f => f && { ...f, EXTRAS_PERCENT: e.target.value })} />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Übergeordnet</label>
-                      <select style={{ fontSize: 12 }} value={addForm.FATHER_ID}
-                        onChange={e => {
-                          const fatherId = e.target.value
-                          const parent = structure.find(n => String(n.STRUCTURE_ID) === fatherId)
-                          setAddForm(f => f && {
-                            ...f, FATHER_ID: fatherId,
-                            ...(parent ? {
-                              BILLING_TYPE_ID: String(parent.BILLING_TYPE_ID ?? f.BILLING_TYPE_ID),
-                              EXTRAS_PERCENT:  String(parent.EXTRAS_PERCENT  ?? f.EXTRAS_PERCENT),
-                            } : {}),
-                          })
-                        }}>
-                        <option value="">(Root)</option>
-                        {flatTree.map(({ node }) => (
-                          <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
-                            {node.NAME_SHORT}{node.NAME_LONG ? ' – ' + node.NAME_LONG : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button className="btn-primary btn-small" type="button" onClick={submitAdd} disabled={addMut.isPending}>
-                      {addMut.isPending ? '…' : 'Speichern (Strg+S)'}
-                    </button>
-                    <button className="btn-small" type="button" onClick={() => { setAddForm(null); setSaveMsg(null) }}>
-                      Abbrechen
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <div className="structure-actions">
                 <button className="btn-primary" type="button"
-                  onClick={addForm ? submitAdd : saveAll}
-                  disabled={saveMut.isPending || addMut.isPending}>
-                  {(saveMut.isPending || addMut.isPending) ? 'Speichert …' : 'Speichern (Strg+S)'}
+                  onClick={saveAll}
+                  disabled={saveMut.isPending}>
+                  {saveMut.isPending ? 'Speichert …' : 'Speichern (Strg+S)'}
                 </button>
-                <button type="button" onClick={() => { setSaveMsg(null); setAddForm(f => f ? null : emptyAdd()) }}>
-                  {addForm ? 'Formular schließen' : '+ Neues Element'}
+                <button type="button" onClick={() => { setSaveMsg(null); setAddForm(emptyAdd()) }}>
+                  + Neues Element
                 </button>
               </div>
               <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />
@@ -1060,6 +999,77 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
           )}
         </>
       )}
+    {/* ── Add element modal ── */}
+    <Modal open={addForm !== null} onClose={() => { setAddForm(null); setSaveMsg(null) }} title="Neues Element anlegen">
+      {addForm && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Kürzel*</label>
+              <input style={{ width: 80 }} value={addForm.NAME_SHORT}
+                onChange={e => setAddForm(f => f && { ...f, NAME_SHORT: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Bezeichnung</label>
+              <input style={{ width: 160 }} value={addForm.NAME_LONG}
+                onChange={e => setAddForm(f => f && { ...f, NAME_LONG: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Abrechnungsart*</label>
+              <select style={{ fontSize: 12 }} value={addForm.BILLING_TYPE_ID}
+                onChange={e => setAddForm(f => f && { ...f, BILLING_TYPE_ID: e.target.value })}>
+                <option value="">Bitte wählen …</option>
+                {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Honorar €</label>
+              <input type="number" min={0} step={100} style={{ width: 100 }} placeholder="0"
+                value={addForm.REVENUE}
+                onChange={e => setAddForm(f => f && { ...f, REVENUE: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>NK %</label>
+              <input type="number" min={0} max={100} step={0.1} style={{ width: 70 }} placeholder="0"
+                value={addForm.EXTRAS_PERCENT}
+                onChange={e => setAddForm(f => f && { ...f, EXTRAS_PERCENT: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Übergeordnet</label>
+              <select style={{ fontSize: 12 }} value={addForm.FATHER_ID}
+                onChange={e => {
+                  const fatherId = e.target.value
+                  const parent = structure.find(n => String(n.STRUCTURE_ID) === fatherId)
+                  setAddForm(f => f && {
+                    ...f, FATHER_ID: fatherId,
+                    ...(parent ? {
+                      BILLING_TYPE_ID: String(parent.BILLING_TYPE_ID ?? f.BILLING_TYPE_ID),
+                      EXTRAS_PERCENT:  String(parent.EXTRAS_PERCENT  ?? f.EXTRAS_PERCENT),
+                    } : {}),
+                  })
+                }}>
+                <option value="">(Root)</option>
+                {flatTree.map(({ node }) => (
+                  <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
+                    {node.NAME_SHORT}{node.NAME_LONG ? ' – ' + node.NAME_LONG : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-primary btn-small" type="button" onClick={submitAdd} disabled={addMut.isPending}>
+              {addMut.isPending ? '…' : 'Speichern (Strg+S)'}
+            </button>
+            <button className="btn-small" type="button" onClick={() => { setAddForm(null); setSaveMsg(null) }}>
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+
     <ConfirmModal
       open={confirmState !== null}
       title={confirmState?.title ?? ''}

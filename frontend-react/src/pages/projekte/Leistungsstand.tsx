@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -25,9 +25,10 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
   const navigate = useNavigate()
   const [pid,  setPid]  = useState<number | null>(initialProjectId ?? null)
   const [vals, setVals] = useState<Record<number, string>>({})
-  const [msg,     setMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [snapMsg, setSnapMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const inputRefs             = useRef<Record<number, HTMLInputElement | null>>({})
+  const [msg,           setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [snapMsg,       setSnapMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [elementSearch, setElementSearch] = useState('')
+  const inputRefs                       = useRef<Record<number, HTMLInputElement | null>>({})
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects-short'],
@@ -97,7 +98,30 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
   const tree      = buildStructureTree(lsNodes as StructureNode[])
   const flatNodes = flattenTree(tree)
 
-  const leafIds = flatNodes
+  const parentMap = useMemo(
+    () => new Map(lsNodes.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null])),
+    [lsNodes]
+  )
+
+  const filteredFlatNodes = useMemo(() => {
+    if (!elementSearch.trim()) return flatNodes
+    const sq = elementSearch.toLowerCase().trim()
+    const matchIds = new Set(
+      flatNodes
+        .filter(({ node }) =>
+          node.NAME_SHORT.toLowerCase().includes(sq) ||
+          (node.NAME_LONG?.toLowerCase().includes(sq) ?? false)
+        )
+        .map(({ node }) => node.STRUCTURE_ID)
+    )
+    for (const id of [...matchIds]) {
+      let cursor = parentMap.get(String(id))
+      while (cursor != null) { matchIds.add(Number(cursor)); cursor = parentMap.get(cursor) }
+    }
+    return flatNodes.filter(({ node }) => matchIds.has(node.STRUCTURE_ID))
+  }, [flatNodes, elementSearch, parentMap])
+
+  const leafIds = filteredFlatNodes
     .filter(fn => (fn.node as unknown as LeistungsstandNode).IS_LEAF)
     .map(fn => fn.node.STRUCTURE_ID)
 
@@ -165,6 +189,11 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
 
       {pid && !isLoading && lsNodes.length > 0 && (
         <>
+          <div style={{ marginBottom: 8 }}>
+            <input type="search" className="list-search" placeholder="Elemente filtern …"
+              style={{ maxWidth: 260, fontSize: 13 }}
+              value={elementSearch} onChange={e => setElementSearch(e.target.value)} />
+          </div>
           <div className="ls-table-wrap">
             <table className="ls-table">
               <thead>
@@ -179,7 +208,7 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {flatNodes.map(({ node, depth }) => {
+                {filteredFlatNodes.map(({ node, depth }) => {
                   const n      = node as unknown as LeistungsstandNode
                   const sid    = n.STRUCTURE_ID
                   const isLeaf = n.IS_LEAF

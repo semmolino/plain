@@ -34,15 +34,23 @@ export function ProjektePage() {
   })
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(() => {
     const s = location.state as { projectId?: number } | null
-    return s?.projectId
+    if (s?.projectId) return s.projectId
+    const saved = localStorage.getItem('projekte-selected-pid')
+    return saved ? Number(saved) : undefined
   })
+
+  function persistProjectId(id: number | undefined) {
+    setSelectedProjectId(id)
+    if (id != null) localStorage.setItem('projekte-selected-pid', String(id))
+    else localStorage.removeItem('projekte-selected-pid')
+  }
 
   // Apply navigation state (handles both initial mount and subsequent same-route navigations)
   useEffect(() => {
     const state = location.state as { tab?: Tab; projectId?: number } | null
     if (!state) return
     if (state.tab) setTab(state.tab)
-    if (state.projectId != null) setSelectedProjectId(state.projectId)
+    if (state.projectId != null) persistProjectId(state.projectId)
     navigate('/projekte', { replace: true, state: null })
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -53,12 +61,12 @@ export function ProjektePage() {
   })
 
   function openProject(id: number) {
-    setSelectedProjectId(id)
+    persistProjectId(id)
     setTab('struktur')
   }
 
   function onProjectChange(id: number | null) {
-    setSelectedProjectId(id ?? undefined)
+    persistProjectId(id ?? undefined)
   }
 
   return (
@@ -71,7 +79,7 @@ export function ProjektePage() {
       />
       {selectedProjectId && tab !== 'liste' && (
         <div className="project-context-strip">
-          <button className="project-context-back" onClick={() => { setTab('liste'); setSelectedProjectId(undefined) }}>
+          <button className="project-context-back" onClick={() => { setTab('liste'); persistProjectId(undefined) }}>
             ← Alle Projekte
           </button>
           <span className="project-context-name">
