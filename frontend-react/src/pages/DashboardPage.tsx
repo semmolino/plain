@@ -303,7 +303,7 @@ function DashboardTimeline({ dateFrom, dateTo }: { dateFrom: string; dateTo: str
 
   return (
     <div className="timeline-wrap">
-      <h3 className="timeline-title">Gesamtverlauf {today.getFullYear()} (Jahr bis heute)</h3>
+      <h3 className="timeline-title">Projektverlauf {dateFrom.substring(0, 4)}{dateFrom.substring(0, 4) !== dateTo.substring(0, 4) ? `–${dateTo.substring(0, 4)}` : ''}</h3>
       <div className="timeline-chart"><Line data={chartData} options={options} /></div>
     </div>
   )
