@@ -334,5 +334,7 @@ export const fetchRiskProjects = () =>
 export const fetchBillingSummary = () =>
   apiClient.get<{ data: BillingSummaryData }>('/reports/dashboard/billing-summary')
 
-export const fetchTeamHours = () =>
-  apiClient.get<{ data: TeamHoursData }>('/reports/dashboard/team-hours')
+export const fetchTeamHours = (dateFrom?: string, dateTo?: string) => {
+  const qs = dateFrom && dateTo ? `?date_from=${dateFrom}&date_to=${dateTo}` : ''
+  return apiClient.get<{ data: TeamHoursData }>(`/reports/dashboard/team-hours${qs}`)
+}

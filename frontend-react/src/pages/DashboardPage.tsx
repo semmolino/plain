@@ -169,6 +169,43 @@ function DonutChart({ billed, open, remaining }: { billed: number; open: number;
   )
 }
 
+function deriveRiskFromProject(p: DashboardProject): RiskProject {
+  const budget    = Number(p.BUDGET_TOTAL_NET    || 0)
+  const costs     = Number(p.COST_TOTAL          || 0)
+  const leistung  = Number(p.LEISTUNGSSTAND_VALUE || 0)
+  const openNet   = Number(p.OPEN_NET_TOTAL       || 0)
+  const costRatio = budget > 0 ? costs / budget : 0
+  const db        = leistung - costs
+  const flags: string[] = []
+  if (budget > 0 && costRatio >= 0.9)                     flags.push('budget_kritisch')
+  if (db < 0 && (costs > 500 || leistung > 500))          flags.push('db_negativ')
+  if (budget > 0 && costRatio >= 0.75 && costRatio < 0.9) flags.push('budget_warn')
+  if (openNet > 5000)                                      flags.push('abrechnung_potential')
+  let ampel: 'rot' | 'orange' | 'gelb' | 'gruen' = 'gruen'
+  if (flags.includes('budget_kritisch') || flags.includes('db_negativ')) ampel = 'rot'
+  else if (flags.includes('budget_warn'))                                 ampel = 'orange'
+  else if (flags.includes('abrechnung_potential'))                        ampel = 'gelb'
+  return {
+    PROJECT_ID:                Number(p.PROJECT_ID || 0),
+    NAME_SHORT:                p.NAME_SHORT ?? '',
+    NAME_LONG:                 p.NAME_LONG,
+    PROJECT_STATUS_ID:         p.PROJECT_STATUS_ID,
+    PROJECT_STATUS_NAME_SHORT: p.PROJECT_STATUS_NAME_SHORT,
+    PROJECT_MANAGER_ID:        p.PROJECT_MANAGER_ID,
+    PROJECT_MANAGER_DISPLAY:   p.PROJECT_MANAGER_DISPLAY,
+    DEPARTMENT_ID:             p.DEPARTMENT_ID,
+    DEPARTMENT_NAME:           p.DEPARTMENT_NAME,
+    BUDGET_TOTAL_NET:          budget,
+    LEISTUNGSSTAND_PERCENT:    p.LEISTUNGSSTAND_PERCENT,
+    LEISTUNGSSTAND_VALUE:      leistung,
+    COST_TOTAL:                costs,
+    COST_RATIO:                costRatio,
+    BILLED_NET_TOTAL:          Number(p.BILLED_NET_TOTAL || 0),
+    OPEN_NET_TOTAL:            openNet,
+    ampel, flags, db,
+  }
+}
+
 function budgetHealthClass(cost: number | null, budget: number | null): string {
   if (!budget || budget <= 0) return ''
   const ratio = Number(cost || 0) / Number(budget)
@@ -573,7 +610,7 @@ function GeschaeftsleitungView({
 
       {subPage === 'risiko'     && <RisikoView projects={riskProjects} />}
       {subPage === 'abrechnung' && <AbrechnungView billing={billingSummary} />}
-      {subPage === 'personal'   && <PersonalView teamHours={teamHours} />}
+      {subPage === 'personal'   && <PersonalView teamHours={teamHours} dateFrom={dateFrom} dateTo={dateTo} />}
     </>
   )
 }
@@ -763,11 +800,11 @@ function ControllerView({
 }
 
 function BereichsleiterView({
-  projects, byStatus, alerts, teamUtil, riskProjects, teamHours, monthly,
+  projects, byStatus, alerts, teamUtil, riskProjects, teamHours, monthly, dateFrom, dateTo,
 }: {
   projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   teamUtil: TeamMemberUtilization[]; riskProjects: RiskProject[]; teamHours: TeamHoursData | null;
-  monthly: DashboardMonthly[];
+  monthly: DashboardMonthly[]; dateFrom: string; dateTo: string;
 }) {
   const [subPage, setSubPage]  = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
   const budgetHealthy = projects.filter(p =>
@@ -825,7 +862,7 @@ function BereichsleiterView({
       </>)}
 
       {subPage === 'risiko'   && <RisikoView projects={riskProjects} />}
-      {subPage === 'personal' && <PersonalView teamHours={teamHours} />}
+      {subPage === 'personal' && <PersonalView teamHours={teamHours} dateFrom={dateFrom} dateTo={dateTo} />}
     </>
   )
 }
@@ -1292,10 +1329,13 @@ function AbrechnungView({ billing }: { billing: BillingSummaryData | null }) {
 
 // ── Personal / HR analytics view ──────────────────────────────────────────────
 
-function PersonalView({ teamHours }: { teamHours: TeamHoursData | null }) {
+function PersonalView({ teamHours, dateFrom, dateTo }: { teamHours: TeamHoursData | null; dateFrom: string; dateTo: string }) {
   if (!teamHours) return <p className="empty-note">Laden …</p>
   const { employees, months } = teamHours
-  if (employees.length === 0) return <p className="empty-note">Keine Buchungen in den letzten 6 Monaten.</p>
+  const periodLabel = months.length > 0
+    ? `${MONTHS_DE[parseInt(months[0].split('-')[1], 10) - 1]} ${months[0].split('-')[0]} – ${MONTHS_DE[parseInt(months[months.length - 1].split('-')[1], 10) - 1]} ${months[months.length - 1].split('-')[0]}`
+    : `${dateFrom.substring(0, 7)} – ${dateTo.substring(0, 7)}`
+  if (employees.length === 0) return <p className="empty-note">Keine Buchungen im Zeitraum {periodLabel}.</p>
 
   const totalHours = employees.reduce((s, e) => s + e.total, 0)
   const avgHours   = employees.length > 0 ? totalHours / employees.length : 0
@@ -1322,13 +1362,13 @@ function PersonalView({ teamHours }: { teamHours: TeamHoursData | null }) {
   return (
     <>
       <div className="kpi-grid">
-        <KpiCard label="Gesamtstunden (6 Monate)" value={fmtH(totalHours)}          />
-        <KpiCard label="Ø pro Mitarbeiter"        value={fmtH(avgHours)}            />
-        <KpiCard label="Aktive Mitarbeiter"       value={String(employees.length)}  />
+        <KpiCard label={`Gesamtstunden (${months.length} Mon.)`} value={fmtH(totalHours)}         />
+        <KpiCard label="Ø pro Mitarbeiter"                       value={fmtH(avgHours)}           />
+        <KpiCard label="Aktive Mitarbeiter"                      value={String(employees.length)} />
       </div>
 
       <div className="dash-card">
-        <div className="dash-card-title">Stunden nach Mitarbeiter (letzte 6 Monate)</div>
+        <div className="dash-card-title">Stunden nach Mitarbeiter ({periodLabel})</div>
         <div className="chart-wrap">
           <Bar
             data={{ labels, datasets }}
@@ -1465,9 +1505,9 @@ export function DashboardPage() {
       { queryKey: ['dashboard', 'overdue-invoices'],                           queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
       { queryKey: ['dashboard', 'team-utilization'],                           queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
       { queryKey: ['dashboard', 'mahnung-stats'],                              queryFn: fetchMahnungStats,       staleTime: 120000, enabled: isController },
-      { queryKey: ['dashboard', 'risk-projects'],                              queryFn: fetchRiskProjects,       staleTime: 300000, enabled: isGl || isBl },
+      { queryKey: ['dashboard', 'risk-projects'],                              queryFn: fetchRiskProjects,       staleTime: 300000, enabled: false },
       { queryKey: ['dashboard', 'billing-summary'],                            queryFn: fetchBillingSummary,     staleTime: 300000, enabled: isGl },
-      { queryKey: ['dashboard', 'team-hours'],                                 queryFn: fetchTeamHours,          staleTime: 300000, enabled: isGl || isBl },
+      { queryKey: ['dashboard', 'team-hours', dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchTeamHours(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: isGl || isBl },
     ],
   })
 
@@ -1506,13 +1546,8 @@ export function DashboardPage() {
       .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
     [projects, filters.abteilung, filters.projektleiter, filters.status])
 
-  // Risk projects: always current-state snapshot; apply dimension filters only
-  const filteredRiskProjects = useMemo(() =>
-    riskProjects
-      .filter(p => !filters.abteilung     || p.DEPARTMENT_NAME          === filters.abteilung)
-      .filter(p => !filters.projektleiter || p.PROJECT_MANAGER_DISPLAY  === filters.projektleiter)
-      .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
-    [riskProjects, filters.abteilung, filters.projektleiter, filters.status])
+  // Derive risk flags from the already time+dimension-filtered projects (no separate endpoint needed)
+  const derivedRiskProjects = useMemo(() => filteredProjects.map(deriveRiskFromProject), [filteredProjects])
 
   const roleLabel = ROLES.find(r => r.id === dashboardRole)?.title ?? ''
 
@@ -1553,7 +1588,7 @@ export function DashboardPage() {
       {!isLoading && dashboardRole === 'geschaeftsleitung' && (
         <GeschaeftsleitungView
           projects={filteredProjects} byStatus={byStatus} alerts={alerts}
-          riskProjects={filteredRiskProjects} billingSummary={billingSummary} teamHours={teamHours}
+          riskProjects={derivedRiskProjects} billingSummary={billingSummary} teamHours={teamHours}
           dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
         />
       )}
@@ -1565,8 +1600,8 @@ export function DashboardPage() {
       {!isLoading && dashboardRole === 'bereichsleiter' && (
         <BereichsleiterView
           projects={filteredProjects} byStatus={byStatus} alerts={alerts}
-          teamUtil={teamUtil} riskProjects={filteredRiskProjects} teamHours={teamHours}
-          monthly={monthly}
+          teamUtil={teamUtil} riskProjects={derivedRiskProjects} teamHours={teamHours}
+          monthly={monthly} dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
         />
       )}
 

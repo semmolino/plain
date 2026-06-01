@@ -717,14 +717,21 @@ module.exports = (supabase) => {
     res.json({ data: { projects, byPl } });
   });
 
-  // Team hours: TEC confirmed hours per employee per month (last 6 months)
+  // Team hours: TEC confirmed hours per employee per month (date-range aware)
   router.get("/dashboard/team-hours", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
-    const today   = new Date();
-    const from    = new Date(today.getFullYear(), today.getMonth() - 5, 1);
-    const fromStr = from.toISOString().slice(0, 10);
-    const toStr   = today.toISOString().slice(0, 10);
+
+    let fromStr, toStr;
+    if (req.query.date_from && req.query.date_to) {
+      fromStr = req.query.date_from;
+      toStr   = req.query.date_to;
+    } else {
+      const today = new Date();
+      const from  = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+      fromStr = from.toISOString().slice(0, 10);
+      toStr   = today.toISOString().slice(0, 10);
+    }
 
     const [{ data: tec }, { data: employees }] = await Promise.all([
       supabase.from("TEC").select("EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT")
@@ -734,10 +741,14 @@ module.exports = (supabase) => {
         .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
     ]);
 
+    // Build months array dynamically from the actual date range
     const months = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    const cur = new Date(fromStr + "T00:00:00");
+    const end = new Date(toStr   + "T00:00:00");
+    cur.setDate(1);
+    while (cur <= end) {
+      months.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`);
+      cur.setMonth(cur.getMonth() + 1);
     }
 
     const byEmpMonth = {};
