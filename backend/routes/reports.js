@@ -754,5 +754,110 @@ module.exports = (supabase) => {
     res.json({ data: result });
   });
 
+  // ── Company-level KPIs (Unternehmenskennzahlen) ───────────────────────────
+  // GET /reports/company-kpis?year=2026
+  router.get("/company-kpis", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const year = parseInt(req.query.year || new Date().getFullYear(), 10);
+    if (isNaN(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ error: "Ungültiges Jahr" });
+    }
+    const yearStart = `${year}-01-01`;
+    const yearEnd   = `${year}-12-31`;
+
+    try {
+      const [invoiceRes, ppRes, tecRes, empRes, backlogRes] = await Promise.all([
+        // Revenue: booked invoices in year (no storno)
+        supabase.from("INVOICE")
+          .select("TOTAL_AMOUNT_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .gte("INVOICE_DATE", yearStart)
+          .lte("INVOICE_DATE", yearEnd)
+          .neq("INVOICE_TYPE", "stornorechnung")
+          .neq("INVOICE_TYPE", "storno_partial"),
+
+        // Revenue: confirmed partial payments in year
+        supabase.from("PARTIAL_PAYMENT")
+          .select("AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .eq("TENANT_ID", tenantId)
+          .eq("STATUS_ID", 2)
+          .gte("PARTIAL_PAYMENT_DATE", yearStart)
+          .lte("PARTIAL_PAYMENT_DATE", yearEnd)
+          .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+
+        // TEC: all entries in year (employee_id, hours, costs)
+        supabase.from("TEC")
+          .select("EMPLOYEE_ID, QUANTITY_INT, CP_TOT")
+          .eq("TENANT_ID", tenantId)
+          .gte("DATE_VOUCHER", yearStart)
+          .lte("DATE_VOUCHER", yearEnd),
+
+        // Active employees
+        supabase.from("EMPLOYEE")
+          .select("ID")
+          .eq("TENANT_ID", tenantId)
+          .or("ACTIVE.is.null,ACTIVE.neq.2"),
+
+        // Project backlog: remaining billable per project (budget - billed, capped at 0)
+        supabase.from("VW_REPORT_PROJECT_LIST_ROOT")
+          .select("BUDGET_TOTAL_NET, BILLED_NET_TOTAL")
+          .eq("TENANT_ID", tenantId),
+      ]);
+
+      for (const r of [invoiceRes, ppRes, tecRes, empRes, backlogRes]) {
+        if (r.error) throw r.error;
+      }
+
+      // Revenue
+      const invoiceRevenue = (invoiceRes.data || []).reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0);
+      const ppRevenue      = (ppRes.data || []).reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0);
+      const revenue        = Math.round((invoiceRevenue + ppRevenue) * 100) / 100;
+
+      // TEC metrics
+      const tecRows      = tecRes.data || [];
+      const totalHours   = Math.round(tecRows.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0) * 100) / 100;
+      const directCosts  = Math.round(tecRows.reduce((s, r) => s + Number(r.CP_TOT || 0), 0) * 100) / 100;
+      const uniqueEmpIds = new Set(tecRows.map(r => r.EMPLOYEE_ID));
+      const projectEmployeeCount = uniqueEmpIds.size;
+
+      // Employee count
+      const employeeCount = (empRes.data || []).length;
+
+      // Backlog: sum of max(0, BUDGET - BILLED) across all projects
+      const backlog = (backlogRes.data || []).reduce((s, r) => {
+        const remaining = Number(r.BUDGET_TOTAL_NET || 0) - Number(r.BILLED_NET_TOTAL || 0);
+        return s + Math.max(0, remaining);
+      }, 0);
+      const backlogRounded = Math.round(backlog * 100) / 100;
+
+      // Computed KPIs (null when denominator is 0)
+      const monthlyRevenue        = revenue / 12;
+      const umsatzProMitarbeiter  = employeeCount > 0 ? Math.round(revenue / employeeCount) : null;
+      const anteilProjektmitarb   = employeeCount > 0 ? Math.round((projectEmployeeCount / employeeCount) * 1000) / 10 : null;
+      const mittlererStundensatz  = totalHours > 0 ? Math.round((directCosts / totalHours) * 100) / 100 : null;
+      const auftragsreichweite    = monthlyRevenue > 0 ? Math.round((backlogRounded / monthlyRevenue) * 10) / 10 : null;
+      const dbMarge               = revenue > 0 ? Math.round(((revenue - directCosts) / revenue) * 1000) / 10 : null;
+
+      res.json({
+        data: {
+          year,
+          raw: { revenue, directCosts, totalHours, employeeCount, projectEmployeeCount, backlog: backlogRounded },
+          kpis: {
+            umsatzProMitarbeiter,
+            anteilProjektmitarbeiter: anteilProjektmitarb,
+            mittlererStundensatz,
+            auftragsreichweite,
+            deckungsbeitragMarge: dbMarge,
+          },
+        },
+      });
+    } catch (e) {
+      res.status(500).json({ error: e?.message || String(e) });
+    }
+  });
+
   return router;
 };

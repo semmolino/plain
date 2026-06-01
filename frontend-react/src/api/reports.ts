@@ -252,6 +252,34 @@ export interface BillingSummaryData {
   byPl:     BillingByPl[]
 }
 
+// ── Company KPIs (Unternehmenskennzahlen) ─────────────────────────────────────
+
+export interface CompanyKpiRaw {
+  revenue:               number
+  directCosts:           number
+  totalHours:            number
+  employeeCount:         number
+  projectEmployeeCount:  number
+  backlog:               number
+}
+
+export interface CompanyKpis {
+  umsatzProMitarbeiter:      number | null
+  anteilProjektmitarbeiter:  number | null   // %
+  mittlererStundensatz:      number | null   // €/h
+  auftragsreichweite:        number | null   // months
+  deckungsbeitragMarge:      number | null   // %
+}
+
+export interface CompanyKpiResult {
+  year: number
+  raw:  CompanyKpiRaw
+  kpis: CompanyKpis
+}
+
+export const fetchCompanyKpis = (year: number) =>
+  apiClient.get<{ data: CompanyKpiResult }>(`/reports/company-kpis?year=${year}`)
+
 export interface TeamHoursMonth {
   month: string
   hours: number
