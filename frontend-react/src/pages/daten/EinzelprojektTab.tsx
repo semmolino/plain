@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { computeEvm, computeBurnRate, monthsRemaining, fmtCpi } from '@/utils/projectForecasting'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -270,6 +271,12 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
     queryFn:  () => fetchProjectReportStructure(pid!, filter),
     enabled:  pid !== null && filterReady,
   })
+  const { data: timelineData } = useQuery({
+    queryKey: ['project-timeline', pid, filter],
+    queryFn:  () => fetchProjectTimeline(pid!, filter),
+    enabled:  pid !== null && filterReady,
+    staleTime: 300000,
+  })
 
   const projects  = projectsData?.data ?? []
   const header    = headerData?.data   ?? null
@@ -400,6 +407,52 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
             )}
           </div>
 
+          {/* ── Prognose (EVM) ── */}
+          {(() => {
+            const evm     = computeEvm(header)
+            const tl      = timelineData?.data ?? []
+            const avgBurn = computeBurnRate(tl.map(p => p.KOSTEN_TOTAL))
+            const moRem   = monthsRemaining(evm.etc, avgBurn)
+            if (evm.cpi == null) return null
+            const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+            const fmtM    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(v)} Mon.`
+            const fmtB    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0, style: 'currency', currency: 'EUR' }).format(v)}/Mon.`
+            return (
+              <div className="prognose-section">
+                <div className="prognose-title">Prognose</div>
+                <div className="prognose-grid">
+                  <div className="prognose-tile">
+                    <span className="prognose-label">CPI (Effizienz)</span>
+                    <span className="prognose-value" style={{ color: cpiColor }}>{fmtCpi(evm.cpi)}</span>
+                    <span className="prognose-sub">{evm.cpiStatus === 'good' ? 'Unter Budget' : evm.cpiStatus === 'warn' ? 'Leicht überbudget' : 'Überbudget — Handlungsbedarf'}</span>
+                  </div>
+                  <div className="prognose-tile">
+                    <span className="prognose-label">EAC (Progn. Gesamtkosten)</span>
+                    <span className="prognose-value">{fmtEur(evm.eac)}</span>
+                    <span className="prognose-sub">von {fmtEur(header.BUDGET_TOTAL_NET)} Budget</span>
+                  </div>
+                  <div className="prognose-tile">
+                    <span className="prognose-label">VAC (Ergebnisabweichung)</span>
+                    <span className="prognose-value" style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c' }}>{fmtEur(evm.vac)}</span>
+                    <span className="prognose-sub">{(evm.vac ?? 0) >= 0 ? 'Projekt im Plan' : 'Prognose: Überschreitung'}</span>
+                  </div>
+                  <div className="prognose-tile">
+                    <span className="prognose-label">ETC (Noch zu erwartende Kosten)</span>
+                    <span className="prognose-value">{fmtEur(evm.etc)}</span>
+                    <span className="prognose-sub">verbleibend bis Abschluss</span>
+                  </div>
+                  {avgBurn != null && (
+                    <div className="prognose-tile">
+                      <span className="prognose-label">Burn Rate (Ø letzte 3 Perioden)</span>
+                      <span className="prognose-value">{fmtB(avgBurn)}</span>
+                      <span className="prognose-sub">{moRem != null ? `≈ ${fmtM(moRem)} bis Abschluss` : '–'}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
           <div style={{ marginTop: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
               <input
@@ -429,6 +482,8 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                       <SortTh label="Stunden"          field="hours"   current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
                       <SortTh label="Kosten €"         field="cost"    current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
                       <SortTh label="Kostenquote"      field="kq"      current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
+                      <th className="num" title="Cost Performance Index: Leistungsstand / Kosten">CPI</th>
+                      <th className="num" title="Estimate at Completion: Prognose Gesamtkosten">EAC (Prognose)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -449,6 +504,16 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                         <td className="num">
                           {s.KOSTENQUOTE != null ? fmtPct(s.KOSTENQUOTE * 100) : '—'}
                         </td>
+                        {(() => {
+                          const evm = computeEvm({ BUDGET_TOTAL_NET: s.HONORAR_NET, LEISTUNGSSTAND_VALUE: s.EARNED_VALUE_NET, COST_TOTAL: s.COST_TOTAL })
+                          const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : evm.cpiStatus === 'bad' ? '#b91c1c' : 'var(--text-3)'
+                          return (
+                            <>
+                              <td className="num" style={{ color, fontWeight: evm.cpi != null ? 600 : undefined }}>{fmtCpi(evm.cpi)}</td>
+                              <td className="num">{fmtEur(evm.eac)}</td>
+                            </>
+                          )
+                        })()}
                       </tr>
                     ))}
                   </tbody>
@@ -471,6 +536,16 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                           <td className="num"><strong>{fmtH(totHours)}</strong></td>
                           <td className="num"><strong>{fmtEur(totCost)}</strong></td>
                           <td className="num"><strong>{totKq != null ? fmtPct(totKq) : '—'}</strong></td>
+                          {(() => {
+                            const totEvm = computeEvm({ BUDGET_TOTAL_NET: totHonorar, LEISTUNGSSTAND_VALUE: totEarned, COST_TOTAL: totCost })
+                            const col = totEvm.cpiStatus === 'good' ? '#16a34a' : totEvm.cpiStatus === 'warn' ? '#b45309' : totEvm.cpiStatus === 'bad' ? '#b91c1c' : undefined
+                            return (
+                              <>
+                                <td className="num" style={{ color: col }}><strong>{fmtCpi(totEvm.cpi)}</strong></td>
+                                <td className="num"><strong>{fmtEur(totEvm.eac)}</strong></td>
+                              </>
+                            )
+                          })()}
                         </tr>
                       )
                     })()}

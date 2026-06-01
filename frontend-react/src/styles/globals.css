@@ -1194,6 +1194,41 @@ input::placeholder { color: var(--text-4); }
 }
 .daten-kpi-value.accent { color: var(--accent); }
 
+/* ── Prognose / EVM section ──────────────────────────────────────────────────── */
+.prognose-section {
+  margin: 16px 0 8px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.04) 0%, rgba(16,185,129,0.04) 100%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.prognose-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-4); margin-bottom: 10px;
+}
+.prognose-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.prognose-tile {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.prognose-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-5);
+}
+.prognose-value {
+  font-size: 16px; font-weight: 700; color: var(--text);
+}
+.prognose-sub {
+  font-size: 11px; color: var(--text-3);
+}
+
 /* ── Project timeline chart ──────────────────────────────────────────────── */
 .timeline-wrap {
   margin-top: 32px;

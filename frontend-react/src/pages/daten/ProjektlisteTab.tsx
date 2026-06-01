@@ -28,6 +28,7 @@ import {
   type FilterMode,
   type TimelinePoint,
 } from '@/api/reports'
+import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -63,6 +64,7 @@ function deserializeFilters(raw: Record<string, string[]>): ActiveFilters {
 type ColKey = 'status' | 'manager' | 'typ' | 'abteilung' | 'adresse'
   | 'honorar' | 'lstPct' | 'lstEur' | 'rest' | 'hoursInt' | 'cost'
   | 'billed' | 'open' | 'payed' | 'kq'
+  | 'cpi' | 'eac' | 'vac'
 
 type SortField = 'name' | ColKey
 
@@ -180,6 +182,39 @@ const COLUMNS: ColDef[] = [
       const l = sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)
       const c = sumRows(rs, r => r.COST_TOTAL)
       return l > 0 ? fmtPct((c / l) * 100) : '—'
+    },
+  },
+  {
+    key: 'cpi', label: 'CPI', className: 'num', defaultVisible: false,
+    render: r => {
+      const evm = computeEvm(r)
+      const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : evm.cpiStatus === 'bad' ? '#b91c1c' : 'var(--text-3)'
+      return <span style={{ color, fontWeight: evm.cpi != null ? 600 : undefined }}>{fmtCpi(evm.cpi)}</span>
+    },
+    sortValue:   r  => computeEvm(r).cpi ?? -999,
+    renderTotal: rs => {
+      const cpi = portfolioCpi(rs)
+      const color = cpi == null ? undefined : cpi >= 0.95 ? '#16a34a' : cpi >= 0.80 ? '#b45309' : '#b91c1c'
+      return <span style={{ color, fontWeight: 600 }}>{fmtCpi(cpi)}</span>
+    },
+  },
+  {
+    key: 'eac', label: 'EAC (Prognose)', className: 'num', defaultVisible: false,
+    render:      r  => fmtEur(computeEvm(r).eac),
+    sortValue:   r  => computeEvm(r).eac ?? 0,
+    renderTotal: rs => fmtEur(rs.reduce((s, r) => s + (computeEvm(r).eac ?? Number(r.BUDGET_TOTAL_NET) ?? 0), 0)),
+  },
+  {
+    key: 'vac', label: 'VAC (Abweichung)', className: 'num', defaultVisible: false,
+    render: r => {
+      const vac = computeEvm(r).vac
+      if (vac == null) return '—'
+      return <span style={{ color: vac >= 0 ? '#16a34a' : '#b91c1c' }}>{fmtEur(vac)}</span>
+    },
+    sortValue:   r  => computeEvm(r).vac ?? 0,
+    renderTotal: rs => {
+      const total = rs.reduce((s, r) => s + (computeEvm(r).vac ?? 0), 0)
+      return <span style={{ color: total >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 600 }}>{fmtEur(total)}</span>
     },
   },
 ]

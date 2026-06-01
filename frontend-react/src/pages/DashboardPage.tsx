@@ -10,6 +10,7 @@ import {
 import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSession } from '@/hooks/useSession'
+import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import {
   fetchDashboardKpis,
   fetchDashboardProjects,
@@ -176,11 +177,13 @@ function deriveRiskFromProject(p: DashboardProject): RiskProject {
   const openNet   = Number(p.OPEN_NET_TOTAL       || 0)
   const costRatio = budget > 0 ? costs / budget : 0
   const db        = leistung - costs
+  const cpi = costs > 100 && leistung > 0 ? leistung / costs : null
   const flags: string[] = []
   if (budget > 0 && costRatio >= 0.9)                     flags.push('budget_kritisch')
   if (db < 0 && (costs > 500 || leistung > 500))          flags.push('db_negativ')
   if (budget > 0 && costRatio >= 0.75 && costRatio < 0.9) flags.push('budget_warn')
   if (openNet > 5000)                                      flags.push('abrechnung_potential')
+  if (cpi != null && cpi < 0.80 && !flags.includes('budget_kritisch')) flags.push('cpi_warn')
   let ampel: 'rot' | 'orange' | 'gelb' | 'gruen' = 'gruen'
   if (flags.includes('budget_kritisch') || flags.includes('db_negativ')) ampel = 'rot'
   else if (flags.includes('budget_warn'))                                 ampel = 'orange'
@@ -227,6 +230,7 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
           <th className="num">Leistungsstand</th>
           <th className="num">Stunden</th>
           <th className="num">Kosten</th>
+          <th className="num col-hide-mobile" style={{ width: 56 }} title="Cost Performance Index">CPI</th>
           <th className="col-hide-mobile" style={{ width: 80 }}>Budget %</th>
         </tr>
       </thead>
@@ -249,6 +253,14 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
               <td className="num">{fmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
               <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
               <td className="num">{fmtEur(p.COST_TOTAL)}</td>
+              <td className="num col-hide-mobile">
+                {(() => {
+                  const evm = computeEvm(p)
+                  if (evm.cpi == null) return <span style={{ color: 'var(--text-4)' }}>–</span>
+                  const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+                  return <span style={{ color, fontWeight: 600, fontSize: 12 }}>{fmtCpi(evm.cpi)}</span>
+                })()}
+              </td>
               <td className="col-hide-mobile">
                 {Number(p.BUDGET_TOTAL_NET) > 0 ? (
                   <div className="budget-bar-wrap">
@@ -580,6 +592,15 @@ function GeschaeftsleitungView({
           <KpiCard label="Offene Leistung"  value={fmtEur(offeneLeist)} />
           <KpiCard label="Leistungsstand"   value={fmtEur(leistung)}   meta={`${fmtPct(leistPct)} des Honorars`} />
           <KpiCard label="Aktive Projekte"  value={String(activeCount)} />
+          {(() => {
+            const cpi = portfolioCpi(projects)
+            const color = cpi == null ? undefined : cpi >= 0.95 ? '#16a34a' : cpi >= 0.80 ? '#b45309' : '#b91c1c'
+            const vacTotal = projects.reduce((s, p) => { const v = computeEvm(p).vac; return s + (v ?? 0) }, 0)
+            return <>
+              <KpiCard label="Portfolio-CPI" value={fmtCpi(cpi)} meta={cpi == null ? undefined : cpi >= 0.95 ? 'Effizient' : cpi >= 0.80 ? 'Leicht überbudget' : 'Überbudget'} accent={cpi != null && cpi < 0.80} />
+              <KpiCard label="Prognose-Ergebnis (VAC)" value={fmtEur(vacTotal)} meta={vacTotal >= 0 ? 'Projekte im Plan' : 'Progn. Überschreitung'} accent={vacTotal < 0} />
+            </>
+          })()}
         </div>
 
         <NarrativeBlock>
@@ -1019,6 +1040,7 @@ const FLAG_LABELS: Record<string, { label: string; sev: 'rot' | 'orange' | 'gelb
   budget_kritisch:      { label: 'Budget >90%',         sev: 'rot'    },
   db_negativ:           { label: 'Kosten > Leistung',   sev: 'rot'    },
   budget_warn:          { label: 'Budget 75–90%',        sev: 'orange' },
+  cpi_warn:             { label: 'CPI < 0.80',           sev: 'orange' },
   abrechnung_potential: { label: 'Abrechnungspotenzial', sev: 'gelb'   },
 }
 
@@ -1026,6 +1048,7 @@ const ACTION_MAP: Record<string, string> = {
   budget_kritisch:      'Zusatzleistungen beauftragen oder Kosten reduzieren.',
   db_negativ:           'Kosten übersteigen Leistungsstand — Budgetgespräch führen.',
   budget_warn:          'Fortschritt und verbleibende Leistungen prüfen.',
+  cpi_warn:             'Kosteneffizienz unter 0.80 — Prognose zeigt mögliche Überschreitung.',
   abrechnung_potential: 'Offene Leistungen können jetzt fakturiert werden.',
 }
 
@@ -1099,6 +1122,17 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
               </tr>
               <tr><td>Abgerechnet</td><td>{fmtEur(project.BILLED_NET_TOTAL)}</td></tr>
               <tr><td>Zu fakturieren</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? '#1d4ed8' : undefined }}>{fmtEur(project.OPEN_NET_TOTAL)}</td></tr>
+              {(() => {
+                const evm = computeEvm(project)
+                if (evm.cpi == null) return null
+                const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+                return (<>
+                  <tr><td colSpan={2}><div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} /></td></tr>
+                  <tr><td>CPI (Effizienz)</td><td style={{ color: cpiColor, fontWeight: 700 }}>{fmtCpi(evm.cpi)}</td></tr>
+                  <tr><td>EAC (Progn. Kosten)</td><td>{fmtEur(evm.eac)}</td></tr>
+                  <tr><td>VAC (Abweichung)</td><td style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 700 }}>{fmtEur(evm.vac)}</td></tr>
+                </>)
+              })()}
             </tbody>
           </table>
           <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1204,6 +1238,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                   <th className="num col-hide-mobile">Honorar</th>
                   <th className="num">Kosten</th>
                   <th className="num col-hide-mobile">Budget %</th>
+                  <th className="num col-hide-mobile" title="Cost Performance Index">CPI</th>
                   <th className="num col-hide-mobile">Offen</th>
                   <th>Flags</th>
                 </tr>
@@ -1227,6 +1262,14 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                     <td className="num">{fmtEur(p.COST_TOTAL)}</td>
                     <td className="num col-hide-mobile">
                       {Number(p.BUDGET_TOTAL_NET) > 0 ? fmtPct(Number(p.COST_RATIO || 0) * 100) : '—'}
+                    </td>
+                    <td className="num col-hide-mobile">
+                      {(() => {
+                        const evm = computeEvm(p)
+                        if (evm.cpi == null) return <span style={{ color: 'var(--text-4)' }}>–</span>
+                        const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+                        return <span style={{ color, fontWeight: 600 }}>{fmtCpi(evm.cpi)}</span>
+                      })()}
                     </td>
                     <td className="num col-hide-mobile">
                       {Number(p.OPEN_NET_TOTAL) > 0 ? fmtEur(p.OPEN_NET_TOTAL) : '—'}
