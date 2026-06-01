@@ -594,7 +594,6 @@ function GeschaeftsleitungView({
           <KpiCard label="Aktive Projekte"  value={String(activeCount)} />
           {(() => {
             const cpi = portfolioCpi(projects)
-            const color = cpi == null ? undefined : cpi >= 0.95 ? '#16a34a' : cpi >= 0.80 ? '#b45309' : '#b91c1c'
             const vacTotal = projects.reduce((s, p) => { const v = computeEvm(p).vac; return s + (v ?? 0) }, 0)
             return <>
               <KpiCard label="Portfolio-CPI" value={fmtCpi(cpi)} meta={cpi == null ? undefined : cpi >= 0.95 ? 'Effizient' : cpi >= 0.80 ? 'Leicht überbudget' : 'Überbudget'} accent={cpi != null && cpi < 0.80} />
