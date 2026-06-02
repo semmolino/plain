@@ -46,7 +46,6 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
   const [contextMenu, setContextMenu]   = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
   const [kalkFatherId, setKalkFatherId] = useState<number | null>(null)
-  const [offerSearch, setOfferSearch]   = useState('')
   const contextMenuRef                  = useRef<HTMLDivElement>(null)
   const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
   const [elementSearch, setElementSearch]   = useState('')
@@ -67,14 +66,6 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const { data: btData } = useQuery({ queryKey: ['billing-types'], queryFn: fetchBillingTypes })
 
   const offers = offersData?.data ?? []
-  const filteredOffers = useMemo(() => {
-    if (!offerSearch.trim()) return offers
-    const sq = offerSearch.toLowerCase()
-    return offers.filter(o =>
-      (o.NAME_SHORT?.toLowerCase().includes(sq)) ||
-      (o.NAME_LONG?.toLowerCase().includes(sq))
-    )
-  }, [offers, offerSearch])
 
   const structure = structData?.data ?? []
   const btypes    = btData?.data     ?? []
@@ -452,8 +443,6 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   }
 
   // ── Render guard ─────────────────────────────────────────────────────────
-
-  const currentOffer = offers.find(o => o.ID === oid)
 
   return (
     <>
