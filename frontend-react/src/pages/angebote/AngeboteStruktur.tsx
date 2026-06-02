@@ -4,8 +4,9 @@ import { X, Percent } from 'lucide-react'
 import { Message }      from '@/components/ui/Message'
 import { Modal }        from '@/components/ui/Modal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import {
-  fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
+  fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
   deleteOfferStructureNode, moveOfferStructureNode, updateOfferStructureSurcharges,
   type OfferStructureNode,
 } from '@/api/angebote'
@@ -30,7 +31,7 @@ function emptyAdd(): AddForm {
 
 interface Props { initialOfferId?: number; onOfferChange?: (id: number | null) => void }
 
-export function AngeboteStruktur({ initialOfferId }: Props) {
+export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const qc = useQueryClient()
   const oid = initialOfferId ?? null
 
@@ -43,6 +44,10 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   const [addForm, setAddForm]           = useState<AddForm | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
+  const [contextMenu, setContextMenu]   = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
+  const [kalkFatherId, setKalkFatherId] = useState<number | null>(null)
+  const [offerSearch, setOfferSearch]   = useState('')
+  const contextMenuRef                  = useRef<HTMLDivElement>(null)
   const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
   const [elementSearch, setElementSearch]   = useState('')
 
@@ -53,6 +58,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   const selectedIdsRef = useRef<Set<number>>(new Set())
   const parentMapRef   = useRef<Map<string, string|null>>(new Map())
 
+  const { data: offersData } = useQuery({ queryKey: ['offers'], queryFn: fetchOffers })
   const { data: structData, isLoading } = useQuery({
     queryKey: ['offer-structure', oid],
     queryFn:  () => fetchOfferStructure(oid!),
@@ -60,10 +66,30 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   })
   const { data: btData } = useQuery({ queryKey: ['billing-types'], queryFn: fetchBillingTypes })
 
+  const offers = offersData?.data ?? []
+  const filteredOffers = useMemo(() => {
+    if (!offerSearch.trim()) return offers
+    const sq = offerSearch.toLowerCase()
+    return offers.filter(o =>
+      (o.NAME_SHORT?.toLowerCase().includes(sq)) ||
+      (o.NAME_LONG?.toLowerCase().includes(sq))
+    )
+  }, [offers, offerSearch])
+
   const structure = structData?.data ?? []
   const btypes    = btData?.data     ?? []
 
   useEffect(() => { setEdits({}); setAddForm(null); setSelectedIds(new Set()) }, [oid])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function onDown(e: MouseEvent) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node))
+        setContextMenu(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [contextMenu])
 
   const flatTree = structure.length
     ? flattenTree(buildStructureTree(structure.map(n => ({ ...n, STRUCTURE_ID: n.ID })) as unknown as StructureNode[]))
@@ -427,16 +453,25 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
 
   // ── Render guard ─────────────────────────────────────────────────────────
 
-  if (!oid) {
-    return <p className="ls-empty" style={{ marginTop: 24 }}>Kein Angebot ausgewählt. Bitte in der Angebotsliste eines öffnen.</p>
-  }
+  const currentOffer = offers.find(o => o.ID === oid)
 
   return (
     <>
     <div className="ls-wrap">
-      {isLoading && <p className="ls-empty">Lade …</p>}
+      {/* ── Offer selector ── */}
+      <div className="ls-toolbar" style={{ marginBottom: 12 }}>
+        <label className="ls-label">Angebot</label>
+        <select className="ls-select" value={oid ?? ''}
+          onChange={e => {
+            const id = e.target.value ? Number(e.target.value) : null
+            onOfferChange?.(id)
+          }}>
+          <option value="">— Angebot wählen —</option>
+          {offers.map(o => <option key={o.ID} value={o.ID}>{o.NAME_SHORT} – {o.NAME_LONG}</option>)}
+        </select>
+      </div>
 
-      {!isLoading && (
+      {oid && !isLoading && (
         <>
           {selectedIds.size > 0 && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -533,6 +568,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                           isDragOver && dragZone === 'above' ? 'ps-drop-above' : '',
                           dragIds.has(n.ID) ? 'ps-dragging' : '',
                         ].filter(Boolean).join(' ')}
+                        onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: n.ID }) }}
                       >
                         <td>
                           <input type="checkbox" checked={selectedIds.has(n.ID)} onChange={() => toggleRow(n.ID)} />
@@ -753,6 +789,69 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />
+
+    <Modal open={kalkFatherId !== null} onClose={() => setKalkFatherId(null)} title="HOAI-Kalkulation anlegen" className="modal-xl">
+      {kalkFatherId !== null && oid && (
+        <HonorarWizard
+          offerId={oid}
+          initialFatherId={kalkFatherId}
+          onDone={() => {
+            setKalkFatherId(null)
+            void qc.invalidateQueries({ queryKey: ['offer-structure', oid] })
+          }}
+        />
+      )}
+    </Modal>
+
+    {contextMenu && (() => {
+      const cmNode = contextMenu.nodeId != null ? structure.find(n => n.ID === contextMenu.nodeId) : undefined
+      const isMultiDelete = contextMenu.nodeId != null && selectedIds.has(contextMenu.nodeId) && selectedIds.size > 1
+      const style: React.CSSProperties = { position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 1500 }
+      return (
+        <div className="struct-context-menu" ref={contextMenuRef} style={style}>
+          <button onClick={() => {
+            setAddForm({
+              ...emptyAdd(),
+              FATHER_ID:       contextMenu.nodeId != null ? String(contextMenu.nodeId) : '',
+              BILLING_TYPE_ID: cmNode ? String(cmNode.BILLING_TYPE_ID ?? '') : '',
+              EXTRAS_PERCENT:  cmNode ? String(cmNode.EXTRAS_PERCENT  ?? '') : '',
+            })
+            setContextMenu(null)
+          }}>Element anlegen</button>
+          {contextMenu.nodeId != null && (
+            <button onClick={() => { setSurchargePanel(contextMenu.nodeId as number); setContextMenu(null) }}>
+              Zuschlag hinzufügen
+            </button>
+          )}
+          {contextMenu.nodeId != null && (
+            <button onClick={() => { setKalkFatherId(contextMenu.nodeId as number); setContextMenu(null) }}>
+              Kalkulation anlegen
+            </button>
+          )}
+          {(cmNode || isMultiDelete) && <div className="struct-context-divider" />}
+          {isMultiDelete ? (
+            <button className="struct-context-danger" onClick={() => {
+              const ids = Array.from(selectedIds)
+              setConfirmState({
+                title: `${ids.length} Elemente löschen`,
+                message: `${ids.length} Elemente löschen?`,
+                onConfirm: () => void doBulkDelete(ids),
+              })
+              setContextMenu(null)
+            }}>{selectedIds.size} Elemente löschen</button>
+          ) : cmNode ? (
+            <button className="struct-context-danger" onClick={() => {
+              setConfirmState({
+                title: 'Element löschen',
+                message: `Element „${cmNode.NAME_SHORT}" löschen?`,
+                onConfirm: () => deleteMut.mutate(cmNode.ID),
+              })
+              setContextMenu(null)
+            }}>Element löschen</button>
+          ) : null}
+        </div>
+      )
+    })()}
     </>
   )
 }

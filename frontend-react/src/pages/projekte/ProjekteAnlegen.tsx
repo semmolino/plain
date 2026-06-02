@@ -9,7 +9,6 @@ import {
 } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
-import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 
 // ── Wizard state ──────────────────────────────────────────────────────────────
 
@@ -46,7 +45,7 @@ function StepIndicator({ step, total }: { step: number; total: number }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export function ProjekteAnlegen() {
+export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: number) => void }) {
   const qc = useQueryClient()
   const [step, setStep]           = useState(1)
   const [basic, setBasic]         = useState<BasicForm>(emptyBasic)
@@ -54,7 +53,6 @@ export function ProjekteAnlegen() {
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<number>>(new Set())
   const [e2p, setE2p]             = useState<E2PState>({})
   const [msg, setMsg]             = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
-  const [newProjectId, setNewProjectId]   = useState<number | null>(null)
 
   const { data: deptData    } = useQuery({ queryKey: ['departments'],        queryFn: fetchDepartments      })
   const { data: statusData  } = useQuery({ queryKey: ['project-statuses'],  queryFn: fetchProjectStatuses  })
@@ -93,18 +91,14 @@ export function ProjekteAnlegen() {
     mutationFn: createProject,
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
+      void qc.invalidateQueries({ queryKey: ['projects-short'] })
       setMsg({ text: `Projekt "${res.data.NAME_SHORT}" wurde angelegt.`, type: 'success' })
-      setNewProjectId(res.data.ID)
-      setStep(4)  // advance to HOAI step
+      if (onProjectCreated) {
+        onProjectCreated(res.data.ID)
+      }
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
-
-  function handleFinish() {
-    setStep(1); setBasic(emptyBasic()); setAddrText('')
-    setSelectedEmpIds(new Set()); setE2p({})
-    setNewProjectId(null); setMsg(null)
-  }
 
   const setB = (k: keyof BasicForm) => (v: string) => setBasic(f => ({ ...f, [k]: v }))
 
@@ -157,10 +151,7 @@ export function ProjekteAnlegen() {
   function goNext() {
     if (step === 1 && !validateStep1()) return
     setMsg(null)
-    if (step === 3) {
-      submit()  // creates project → onSuccess advances to step 4
-      return
-    }
+    if (step === 3) { submit(); return }
     setStep(s => s + 1)
   }
 
@@ -192,7 +183,7 @@ export function ProjekteAnlegen() {
 
   return (
     <div className="wizard-wrap">
-      <StepIndicator step={step} total={4} />
+      <StepIndicator step={step} total={3} />
 
       {/* ── Step 1: Basisdaten ── */}
       {step === 1 && (
@@ -328,22 +319,11 @@ export function ProjekteAnlegen() {
         </div>
       )}
 
-      {/* ── Step 4: HOAI-Kalkulation ── */}
-      {step === 4 && (
-        <div className="wizard-step-content">
-          <h3 className="wizard-step-title">Schritt 4: HOAI-Kalkulation (optional)</h3>
-          {newProjectId
-            ? <HonorarWizard initialProjectId={newProjectId} onDone={handleFinish} />
-            : <p className="admin-section-hint">Projekt wird angelegt…</p>
-          }
-        </div>
-      )}
-
       <Message text={msg?.text ?? null} type={msg?.type} />
 
       {/* Navigation */}
       <div className="wizard-nav">
-        {step > 1 && step < 4 && (
+        {step > 1 && (
           <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>
         )}
         {step < 3 && (
@@ -351,11 +331,8 @@ export function ProjekteAnlegen() {
         )}
         {step === 3 && (
           <button className="btn-primary" type="button" disabled={createMut.isPending} onClick={goNext}>
-            {createMut.isPending ? 'Speichert …' : 'Projekt anlegen →'}
+            {createMut.isPending ? 'Speichert …' : 'Projekt anlegen'}
           </button>
-        )}
-        {step === 4 && (
-          <button type="button" onClick={handleFinish}>Fertig / Überspringen</button>
         )}
       </div>
     </div>

@@ -160,10 +160,12 @@ interface WizardProps {
   initialProjectId?: number | null
   /** When set, calc is linked to an offer instead of a project */
   offerId?: number | null
+  /** Pre-select this structure node as the parent in the final step */
+  initialFatherId?: number | null
   onDone?: () => void
 }
 
-export function HonorarWizard({ existingId, initialProjectId, offerId, onDone }: WizardProps) {
+export function HonorarWizard({ existingId, initialProjectId, offerId, initialFatherId, onDone }: WizardProps) {
   const qc = useQueryClient()
   const isEdit      = !!existingId
   const isOfferMode = !!offerId
@@ -203,7 +205,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, onDone }:
   const [expandedSurchargeIdx, setExpandedSurchargeIdx] = useState<number | null>(null)
 
   // Step 6
-  const [fatherId, setFatherId] = useState('')
+  const [fatherId, setFatherId] = useState(initialFatherId != null ? String(initialFatherId) : '')
 
   const { data: groupsData }   = useQuery({ queryKey: ['fee-groups'],     queryFn: fetchFeeGroups })
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })

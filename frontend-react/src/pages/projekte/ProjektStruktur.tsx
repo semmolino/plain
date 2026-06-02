@@ -5,6 +5,7 @@ import { X, Percent } from 'lucide-react'
 import { Message }       from '@/components/ui/Message'
 import { Modal }         from '@/components/ui/Modal'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
+import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
   inheritStructureExtras, patchStructureNode,
@@ -78,6 +79,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
   const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
+  const [kalkFatherId, setKalkFatherId]     = useState<number | null>(null)
   const [projectInput, setProjectInput]           = useState('')
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [elementSearch, setElementSearch]         = useState('')
@@ -1078,6 +1080,18 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />
+    <Modal open={kalkFatherId !== null} onClose={() => setKalkFatherId(null)} title="HOAI-Kalkulation anlegen" className="modal-xl">
+      {kalkFatherId !== null && selectedPid && (
+        <HonorarWizard
+          initialProjectId={selectedPid}
+          initialFatherId={kalkFatherId}
+          onDone={() => {
+            setKalkFatherId(null)
+            void qc.invalidateQueries({ queryKey: ['structure', selectedPid] })
+          }}
+        />
+      )}
+    </Modal>
     {contextMenu && (() => {
       const cmNode = contextMenu.nodeId != null ? structure.find(n => n.STRUCTURE_ID === contextMenu.nodeId) : undefined
       const cmName = cmNode?.NAME_SHORT ?? ''
@@ -1101,6 +1115,11 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
           {contextMenu.nodeId != null && (
             <button onClick={() => { setSurchargePanel(contextMenu.nodeId as number); setContextMenu(null) }}>
               Zuschlag hinzufügen
+            </button>
+          )}
+          {contextMenu.nodeId != null && (
+            <button onClick={() => { setKalkFatherId(contextMenu.nodeId as number); setContextMenu(null) }}>
+              Kalkulation anlegen
             </button>
           )}
           {(cmNode || isMultiDelete) && <div className="struct-context-divider" />}

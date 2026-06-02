@@ -18,7 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'liste',           label: 'Liste' },
   { id: 'anlegen',         label: 'Anlegen' },
   { id: 'honorar',         label: 'Honorar (HOAI)' },
-  { id: 'struktur',        label: 'Struktur' },
+  { id: 'struktur',        label: 'Projektstruktur' },
   { id: 'buchungen',       label: 'Buchungen' },
   { id: 'leistungsstand',  label: 'Leistungsstände' },
   { id: 'vertraege',       label: 'Verträge' },
@@ -89,7 +89,7 @@ export function ProjektePage() {
       )}
       <div className="master-tab-content">
         {tab === 'liste'          && <ProjekteListe onSelectProject={openProject} />}
-        {tab === 'anlegen'        && <ProjekteAnlegen />}
+        {tab === 'anlegen'        && <ProjekteAnlegen onProjectCreated={id => { persistProjectId(id); setTab('struktur') }} />}
         {tab === 'honorar'        && <HonorarTab initialProjectId={selectedProjectId} />}
         {tab === 'struktur'       && <ProjektStruktur initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}

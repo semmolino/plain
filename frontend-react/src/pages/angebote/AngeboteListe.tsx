@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil, FileText, MoreHorizontal } from 'lucide-react'
+import { Pencil, FileText, MoreHorizontal, FolderOpen } from 'lucide-react'
 import { Message } from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
@@ -48,6 +49,7 @@ function RowMenu({ open, onOpen, onClose, children }: {
 
 export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, name: string) => void }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [search,      setSearch]      = useState('')
   const [page,        setPage]        = useState(1)
   const [onlyOpen,    setOnlyOpen]    = useState(false)
@@ -187,9 +189,15 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
                     <button className="row-action-btn" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Bearbeiten"><Pencil size={14} strokeWidth={2} /></button>
                     <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF"><FileText size={14} strokeWidth={1.75} /></button>
                     {r.PROJECT_ID && (
-                      <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, padding: '0 4px', whiteSpace: 'nowrap' }}>
-                        ✅ {r.PROJECT_NAME ?? `#${r.PROJECT_ID}`}
-                      </span>
+                      <button
+                        className="btn-small"
+                        style={{ color: '#16a34a', borderColor: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        title={`Zum Projekt ${r.PROJECT_NAME ?? r.PROJECT_ID}`}
+                        onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}
+                      >
+                        <FolderOpen size={12} strokeWidth={2} />
+                        {r.PROJECT_NAME ?? `#${r.PROJECT_ID}`}
+                      </button>
                     )}
                     <RowMenu
                       open={menuOpenId === r.ID}

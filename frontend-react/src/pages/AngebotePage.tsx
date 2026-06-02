@@ -12,11 +12,11 @@ import { fetchOffer }           from '@/api/angebote'
 type Tab = 'liste' | 'anlegen' | 'stammdaten' | 'struktur' | 'hoai'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'liste',      label: 'Angebotsliste' },
-  { id: 'anlegen',    label: 'Anlegen'       },
-  { id: 'stammdaten', label: 'Stammdaten'    },
-  { id: 'struktur',   label: 'Struktur'      },
-  { id: 'hoai',       label: 'HOAI'          },
+  { id: 'liste',      label: 'Angebotsliste'   },
+  { id: 'anlegen',    label: 'Anlegen'          },
+  { id: 'stammdaten', label: 'Angebotsdaten'    },
+  { id: 'struktur',   label: 'Angebotsstruktur' },
+  { id: 'hoai',       label: 'HOAI'             },
 ]
 
 const STORAGE_KEY = 'angebote-selected-oid'
@@ -43,12 +43,11 @@ export function AngebotePage() {
     else localStorage.removeItem(STORAGE_KEY)
   }
 
-  // Apply navigation state
   useEffect(() => {
     const state = location.state as { tab?: Tab; offerId?: number } | null
     if (!state) return
-    if (state.tab)     setTab(state.tab)
-    if (state.offerId != null) persistOfferId(state.offerId)
+    if (state.tab)              setTab(state.tab)
+    if (state.offerId != null)  persistOfferId(state.offerId)
     navigate('/angebote', { replace: true, state: null })
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -85,8 +84,8 @@ export function AngebotePage() {
 
       <div className="master-tab-content">
         {tab === 'liste'      && <AngeboteListe onSelectOffer={openOffer} />}
-        {tab === 'anlegen'    && <AngeboteAnlegen />}
-        {tab === 'stammdaten' && <AngeboteStammdaten initialOfferId={selectedOfferId} onOfferChange={onOfferChange} />}
+        {tab === 'anlegen'    && <AngeboteAnlegen onOfferCreated={id => { persistOfferId(id); setTab('struktur') }} />}
+        {tab === 'stammdaten' && <AngeboteStammdaten initialOfferId={selectedOfferId} />}
         {tab === 'struktur'   && <AngeboteStruktur   initialOfferId={selectedOfferId} onOfferChange={onOfferChange} />}
         {tab === 'hoai'       && <AngeboteHoai       initialOfferId={selectedOfferId} />}
       </div>

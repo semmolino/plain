@@ -36,7 +36,7 @@ function StepIndicator({ step }: { step: number }) {
   )
 }
 
-export function AngeboteAnlegen() {
+export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: number) => void }) {
   const qc = useQueryClient()
   const [step, setStep]                   = useState(1)
   const [basic, setBasic]                 = useState<BasicForm>(emptyBasic)
@@ -92,7 +92,11 @@ export function AngeboteAnlegen() {
       void qc.invalidateQueries({ queryKey: ['number-ranges'] })
       setCreatedOfferId(res.data.ID)
       setMsg({ text: `Angebot "${res.data.NAME_SHORT}" wurde angelegt ✅`, type: 'success' })
-      setStep(2)
+      if (onOfferCreated) {
+        onOfferCreated(res.data.ID)
+      } else {
+        setStep(2)
+      }
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
