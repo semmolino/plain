@@ -281,23 +281,79 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
     .from(structTable).select('STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET').eq(docIdField, docId);
   const docMap = Object.fromEntries((docRows || []).map(r => [r.STRUCTURE_ID, r]));
 
-  // Compute set of parent IDs (nodes that have children) — for isLeaf flag
-  const fatherIds = new Set((data || []).filter(r => r.FATHER_ID != null).map(r => String(r.FATHER_ID)));
+  const rows = data || [];
+  // Build child lookup so we can compute depth + leaf-descendant sums for parents
+  const childrenOf = new Map();
+  for (const r of rows) {
+    const pid = r.FATHER_ID != null ? String(r.FATHER_ID) : null;
+    if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+    childrenOf.get(pid).push(r);
+  }
+  const fatherIds = new Set(rows.filter(r => r.FATHER_ID != null).map(r => String(r.FATHER_ID)));
 
-  return (data || []).map(r => {
-    const revenue         = Number(r.REVENUE || 0);
-    const extras          = Number(r.EXTRAS  || 0);
-    const feeTotal        = revenue + extras;
+  // depth: 0 for roots, +1 per ancestor
+  const depthOf = new Map();
+  function computeDepth(id) {
+    if (depthOf.has(id)) return depthOf.get(id);
+    const r = rows.find(x => String(x.ID) === String(id));
+    if (!r) return 0;
+    const d = r.FATHER_ID == null ? 0 : (computeDepth(String(r.FATHER_ID)) + 1);
+    depthOf.set(id, d);
+    return d;
+  }
+  for (const r of rows) computeDepth(String(r.ID));
+
+  // For parents, the displayed Auftragswert / Abgerechnet / Diese Rechnung should
+  // be the SUM over leaf descendants — so parent value = visual subtotal that
+  // matches what the leaves underneath add up to. Parent's own surcharges
+  // appear separately in the Zuschlagsübersicht below.
+  function leafDescendants(id) {
+    const out = [];
+    const stack = [String(id)];
+    while (stack.length) {
+      const cur = stack.pop();
+      const kids = childrenOf.get(cur) || [];
+      if (kids.length === 0) {
+        const node = rows.find(x => String(x.ID) === cur);
+        if (node) out.push(node);
+      } else {
+        for (const k of kids) stack.push(String(k.ID));
+      }
+    }
+    return out;
+  }
+
+  return rows.map(r => {
+    const isLeaf = !fatherIds.has(String(r.ID));
+    let revenue, extras, alreadyBilled, thisDocNet;
+    if (isLeaf) {
+      revenue       = Number(r.REVENUE  || 0);
+      extras        = Number(r.EXTRAS   || 0);
+      alreadyBilled = docType === 'INVOICE' ? Number(r.INVOICED || 0) : Number(r.PARTIAL_PAYMENTS || 0);
+      const dr = docMap[r.ID];
+      thisDocNet = dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0;
+    } else {
+      // Parent — aggregate from leaf descendants so the displayed value matches
+      // the sum of the visible child rows below it.
+      const leaves = leafDescendants(r.ID);
+      revenue = leaves.reduce((s, l) => s + Number(l.REVENUE || 0), 0);
+      extras  = leaves.reduce((s, l) => s + Number(l.EXTRAS  || 0), 0);
+      alreadyBilled = leaves.reduce((s, l) => {
+        return s + (docType === 'INVOICE' ? Number(l.INVOICED || 0) : Number(l.PARTIAL_PAYMENTS || 0));
+      }, 0);
+      thisDocNet = leaves.reduce((s, l) => {
+        const dr = docMap[l.ID];
+        return s + (dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0);
+      }, 0);
+    }
+    const feeTotal        = Math.round((revenue + extras) * 100) / 100;
     const revenueBasis    = Number(r.REVENUE_BASIS ?? r.REVENUE ?? 0);
     const surchargesTotal = Number(r.SURCHARGES_TOTAL || 0);
-    const alreadyBilled   = docType === 'INVOICE'
-      ? Number(r.INVOICED         || 0)
-      : Number(r.PARTIAL_PAYMENTS || 0);
-    const dr         = docMap[r.ID];
-    const thisDocNet = dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0;
+    const depth           = depthOf.get(String(r.ID)) ?? 0;
     return {
       id:             r.ID,
-      isLeaf:         !fatherIds.has(String(r.ID)),
+      isLeaf,
+      depth,
       nameShort:      r.NAME_SHORT || '',
       nameLong:       r.NAME_LONG  || '',
       feeTotal,
