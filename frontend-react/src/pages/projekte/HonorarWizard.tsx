@@ -6,7 +6,7 @@ import {
   fetchFeeGroups, fetchFeeMasters, fetchFeeZones,
   fetchFeeCalcMasters, fetchFeeCalcMaster,
   initFeeCalcMaster, saveFeeCalcBasis, initFeePhases, saveFeePhases,
-  deleteFeeCalcMaster, attachFeeToStructure,
+  deleteFeeCalcMaster, attachFeeToStructure, attachFeeToOfferStructure,
   fetchFeeSurchargesGlobal, fetchFeeCalcSurcharges, saveFeeCalcSurcharges,
   fetchFeeCalcBl, saveFeeCalcBl,
   openHonorarPdf, syncFeeCalcToStructure,
@@ -478,14 +478,21 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
 
   async function finishOffer() {
     if (!calcMaster) return
-    setLoading(true); setMsg({ text: 'Speichere Zuordnung …', type: 'info' })
+    if (!fatherId) { setMsg({ text: 'Bitte übergeordnetes Strukturelement wählen', type: 'error' }); return }
+    setLoading(true); setMsg({ text: 'Erzeuge Angebotsstruktur …', type: 'info' })
     try {
+      // Save ATTACH_TO_OFFER_STRUCTURE_ID for when offer is converted to project
       await saveFeeCalcBasis(calcMaster.ID, {
-        ATTACH_TO_OFFER_STRUCTURE_ID: fatherId ? Number(fatherId) : null,
+        ATTACH_TO_OFFER_STRUCTURE_ID: Number(fatherId),
       })
+      // Immediately create OFFER_STRUCTURE entries under the selected parent
+      const res = await attachFeeToOfferStructure(calcMaster.ID, Number(fatherId))
+      if (calcMaster.OFFER_ID != null) {
+        void qc.invalidateQueries({ queryKey: ['offer-structure', calcMaster.OFFER_ID] })
+      }
       void qc.invalidateQueries({ queryKey: ['fee-calc-masters'] })
-      setMsg({ text: 'Kalkulation gespeichert ✅', type: 'success' })
-      setTimeout(() => resetWizard(), 800)
+      setMsg({ text: res.message || 'Angebotsstruktur wurde angelegt ✅', type: 'success' })
+      setTimeout(() => resetWizard(), 1200)
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
     } finally { setLoading(false) }

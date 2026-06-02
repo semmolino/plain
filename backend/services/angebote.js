@@ -891,6 +891,106 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
   }
 }
 
+// ── attach fee calc to offer structure ───────────────────────────────────────
+
+async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId, offerId, tenantId }) {
+  const { loadPhaseRowsWithLabels } = require('./stammdaten');
+  const phaseRows   = await loadPhaseRowsWithLabels(supabase, calcMasterId);
+  const activePhases = phaseRows.filter(r => (Number(r.PHASE_REVENUE) || 0) !== 0 || (Number(r.FEE_PERCENT) || 0) !== 0);
+
+  const blQueryRes = await supabase.from('FEE_CALCULATION_BL')
+    .select('ID, NAME, AMOUNT').eq('FEE_CALC_MASTER_ID', calcMasterId).order('SORT_ORDER', { ascending: true });
+  const blItems = blQueryRes.data || [];
+
+  if (!activePhases.length && !blItems.length) return;
+
+  // Phase label map
+  const phaseIds = [...new Set(activePhases.map(r => r.FEE_PHASE_ID).filter(Boolean))];
+  let phaseMap = new Map();
+  if (phaseIds.length) {
+    const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, NAME_SHORT, NAME_LONG').in('ID', phaseIds);
+    phaseMap = new Map((phaseDefs || []).map(r => [r.ID, r]));
+  }
+
+  // EXTRAS_PERCENT from parent node
+  let extrasPercent = 0;
+  if (fatherId) {
+    const { data: father } = await supabase.from('OFFER_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).single();
+    extrasPercent = Number(father?.EXTRAS_PERCENT ?? 0) || 0;
+  }
+
+  // Surcharge allocation (same as project version)
+  let lphAlloc = {}, blAlloc = {};
+  try {
+    const surRes = await supabase.from('FEE_CALCULATION_SURCHARGES').select('AMOUNT, LPH_FILTER, BL_FILTER')
+      .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER');
+    const allPhaseIds = activePhases.map(p => p.ID);
+    for (const s of (surRes.data || [])) {
+      const amount = Number(s.AMOUNT) || 0;
+      if (!amount) continue;
+      const selIds    = s.LPH_FILTER ? (() => { try { return JSON.parse(s.LPH_FILTER); } catch { return allPhaseIds; } })() : allPhaseIds;
+      const selPhases = activePhases.filter(p => selIds.includes(p.ID));
+      const lphBase   = selPhases.reduce((sum, p) => sum + (Number(p.PHASE_REVENUE) || 0), 0);
+      let selBls = [], blBase = 0;
+      if (s.BL_FILTER) {
+        try { const ids = JSON.parse(s.BL_FILTER); selBls = blItems.filter(b => ids.includes(b.ID)); blBase = selBls.reduce((sum, b) => sum + (Number(b.AMOUNT) || 0), 0); } catch { /* ignore */ }
+      }
+      const base = lphBase + blBase;
+      if (!base) continue;
+      const lphAmt = amount * (lphBase / base);
+      for (const p of selPhases) { const pRev = Number(p.PHASE_REVENUE) || 0; if (pRev) lphAlloc[p.ID] = (lphAlloc[p.ID] || 0) + (pRev / lphBase) * lphAmt; }
+      const blAmt = amount * (blBase / base);
+      for (const b of selBls) { const bAmt = Number(b.AMOUNT) || 0; if (bAmt) blAlloc[b.ID] = (blAlloc[b.ID] || 0) + (bAmt / blBase) * blAmt; }
+    }
+  } catch (_) { /* soft-fail */ }
+
+  // Determine SORT_ORDER start (append after existing children)
+  let sortBase = 0;
+  if (fatherId) {
+    const { data: siblings } = await supabase.from('OFFER_STRUCTURE').select('SORT_ORDER').eq('FATHER_ID', fatherId);
+    if (siblings && siblings.length > 0) sortBase = Math.max(...siblings.map(s => Number(s.SORT_ORDER ?? 0))) + 10;
+  }
+
+  // Insert LPH rows
+  if (activePhases.length) {
+    const insertRows = activePhases.map((r, i) => {
+      const def = phaseMap.get(r.FEE_PHASE_ID) || {};
+      const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
+      return {
+        NAME_SHORT:     def.NAME_SHORT || `LPH ${r.FEE_PHASE_ID}`,
+        NAME_LONG:      def.NAME_LONG  || null,
+        OFFER_ID:       offerId, FATHER_ID: fatherId,
+        BILLING_TYPE_ID: 1, EXTRAS_PERCENT: extrasPercent,
+        REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
+        SURCHARGES_TOTAL: 0, SORT_ORDER: sortBase + i * 10,
+        TENANT_ID: tenantId,
+      };
+    });
+    await supabase.from('OFFER_STRUCTURE').insert(insertRows);
+  }
+
+  // Insert BL rows
+  if (blItems.length) {
+    const lphCount = activePhases.length;
+    const blRows = blItems.map((b, i) => {
+      const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
+      return {
+        NAME_SHORT:      b.NAME || b.NAME_SHORT || 'BL',
+        NAME_LONG:       b.NAME || null,
+        OFFER_ID:        offerId, FATHER_ID: fatherId,
+        BILLING_TYPE_ID: 1, EXTRAS_PERCENT: extrasPercent,
+        REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
+        SURCHARGES_TOTAL: 0, SORT_ORDER: sortBase + (lphCount + i) * 10,
+        TENANT_ID: tenantId,
+      };
+    });
+    await supabase.from('OFFER_STRUCTURE').insert(blRows);
+  }
+
+  // Recalculate parent
+  if (fatherId) await recalcOfferParent(supabase, { parentId: fatherId });
+}
+
 // ── offer → project conversion ────────────────────────────────────────────────
 
 async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
@@ -1291,6 +1391,7 @@ module.exports = {
   updateOfferStructureNode,
   deleteOfferStructureNode,
   moveOfferStructureNode,
+  attachFeeCalcToOfferStructure,
   buildOfferPdfViewModel,
   convertOfferToProject,
   copyOffer,

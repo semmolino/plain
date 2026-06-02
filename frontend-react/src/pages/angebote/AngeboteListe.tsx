@@ -190,13 +190,11 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
                     <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF"><FileText size={14} strokeWidth={1.75} /></button>
                     {r.PROJECT_ID && (
                       <button
-                        className="btn-small"
-                        style={{ color: '#16a34a', borderColor: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        className="row-action-btn"
                         title={`Zum Projekt ${r.PROJECT_NAME ?? r.PROJECT_ID}`}
                         onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}
                       >
-                        <FolderOpen size={12} strokeWidth={2} />
-                        {r.PROJECT_NAME ?? `#${r.PROJECT_ID}`}
+                        <FolderOpen size={14} strokeWidth={1.75} />
                       </button>
                     )}
                     <RowMenu

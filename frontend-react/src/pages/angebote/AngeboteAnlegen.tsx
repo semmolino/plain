@@ -26,16 +26,6 @@ function emptyBasic(): BasicForm {
     contact_id: '', offer_date: todayIso(), valid_until: '' }
 }
 
-function StepIndicator({ step }: { step: number }) {
-  return (
-    <div className="wizard-steps">
-      {[1, 2].map(s => (
-        <span key={s} className={`wizard-step${s === step ? ' active' : s < step ? ' done' : ''}`}>{s}</span>
-      ))}
-    </div>
-  )
-}
-
 export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: number) => void }) {
   const qc = useQueryClient()
   const [step, setStep]                   = useState(1)
@@ -138,7 +128,6 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
 
   return (
     <div className="wizard-wrap">
-      <StepIndicator step={step} />
 
       {/* ── Step 1: Angebotsdaten ── */}
       {step === 1 && (
