@@ -863,13 +863,28 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
           )}
 
           {/* Totals */}
-          {dedTotals && (
-            <div className="billing-proposal-box" style={{ marginBottom: 14 }}>
-              <div className="bp-row"><span>Positionen Netto</span><strong>{fmtEur(dedTotals.phaseTotal)}</strong></div>
-              <div className="bp-row"><span>Abzüge Netto</span><strong>– {fmtEur(dedTotals.deductionsTotal)}</strong></div>
-              <div className="bp-row total"><span>Netto gesamt</span><strong>{fmtEur(dedTotals.totalNet)}</strong></div>
-            </div>
-          )}
+          {dedTotals && (() => {
+            const netAfterDiscAndSkonto = Math.round((base - totalDisc - cdAmt) * 100) / 100
+            const hasDeductions = totalDisc > 0 || cdAmt > 0
+            return (
+              <div className="billing-proposal-box" style={{ marginBottom: 14 }}>
+                <div className="bp-row"><span>Positionen Netto</span><strong>{fmtEur(dedTotals.phaseTotal)}</strong></div>
+                <div className="bp-row"><span>Abzüge Netto</span><strong>– {fmtEur(dedTotals.deductionsTotal)}</strong></div>
+                <div className="bp-row"><span>Netto Zwischensumme</span><strong>{fmtEur(base)}</strong></div>
+                {totalDisc > 0 && (
+                  <div className="bp-row" style={{ color: '#b91c1c' }}>
+                    <span>./. Nachlässe</span><strong>− {fmtEur(totalDisc)}</strong>
+                  </div>
+                )}
+                {cdAmt > 0 && (
+                  <div className="bp-row" style={{ color: '#b91c1c' }}>
+                    <span>./. Skonto</span><strong>− {fmtEur(cdAmt)}</strong>
+                  </div>
+                )}
+                <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{fmtEur(netAfterDiscAndSkonto)}</strong></div>
+              </div>
+            )
+          })()}
 
           {draftId && (
             <div style={{ display: 'flex', gap: 8, margin: '12px 0 4px', flexWrap: 'wrap' }}>
@@ -879,12 +894,28 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
             </div>
           )}
           <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', marginTop: 8 }}>
-            Nach dem Buchen sind alle gewählten Strukturpositionen als abgeschlossen markiert.
+            Nach dem Buchen sind alle gewählten Strukturpositionen als abgeschlossen markiert. Vorher kann die Rechnung als Entwurf zwischengespeichert werden.
           </p>
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">
             <button onClick={handleCancel}>Abbrechen</button>
             <button onClick={() => void goToStep(3)}>← Zurück</button>
+            <button
+              onClick={async () => {
+                if (!draftId) return
+                await patchInvoice(draftId, {
+                  discount_1_percent:   showDiscounts ? d1 : 0,
+                  discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
+                  discount_2_percent:   showDiscounts ? d2 : 0,
+                  discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
+                  total_discounts:      showDiscounts ? totalDisc : 0,
+                  cash_discount_percent: showSkonto ? cdPct : 0,
+                  cash_discount_days:    showSkonto ? cdDays : 0,
+                  cash_discount_amount:  showSkonto ? cdAmt : 0,
+                })
+                setMsg({ text: 'Als Entwurf gespeichert ✅', type: 'success' })
+              }}
+            >Speichern (Entwurf)</button>
             <button className="btn-primary" onClick={() => { if (draftId) bookMut.mutate(draftId) }} disabled={bookMut.isPending}>
               {bookMut.isPending ? 'Bucht …' : 'Jetzt buchen ✓'}
             </button>
