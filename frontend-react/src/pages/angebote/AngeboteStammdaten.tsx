@@ -119,6 +119,24 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
     onError: (e: Error) => setConvertErr(e.message),
   })
 
+  const { data: statusListData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
+  const beauftragtStatusId = statusListData?.data?.find(s => s.NAME_SHORT === 'Beauftragt')?.ID ?? null
+
+  const markOrderedMut = useMutation({
+    mutationFn: (body: { order_date: string; project_id?: number | null }) =>
+      updateOffer(oid!, {
+        order_date: body.order_date,
+        project_id: body.project_id ?? null,
+        ...(beauftragtStatusId ? { offer_status_id: beauftragtStatusId } : {}),
+      }),
+    onSuccess: () => {
+      setShowBeauftragt(false); setConvertErr(null)
+      void qc.invalidateQueries({ queryKey: ['offer', oid] })
+      void qc.invalidateQueries({ queryKey: ['offers'] })
+    },
+    onError: (e: Error) => setConvertErr(e.message),
+  })
+
   const setF = (k: keyof EditForm) => (v: string) => { setForm(f => f ? { ...f, [k]: v } : f) }
 
   function handleSave() { if (form && !saveMut.isPending) { saveState.mark('saving'); saveMut.mutate(form) } }
@@ -246,8 +264,9 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
         offerName={offerData?.data?.NAME_SHORT ?? offerData?.data?.NAME_LONG ?? ''}
         structNodes={structData?.data ?? []}
         onConvert={body => convertMut.mutate(body)}
+        onMarkOrdered={body => markOrderedMut.mutate(body)}
         onClose={() => setShowBeauftragt(false)}
-        isPending={convertMut.isPending}
+        isPending={convertMut.isPending || markOrderedMut.isPending}
         error={convertErr}
       />
 

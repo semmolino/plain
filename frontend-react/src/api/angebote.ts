@@ -136,6 +136,8 @@ export interface UpdateOfferPayload {
   offer_date?:       string | null
   valid_until?:      string | null
   refusal_date?:     string | null
+  order_date?:       string | null
+  project_id?:       number | null
 }
 
 export interface AddStructureNodePayload {

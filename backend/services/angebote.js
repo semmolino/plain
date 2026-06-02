@@ -315,6 +315,8 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
   if (b.offer_date      !== undefined) patch.OFFER_DATE      = b.offer_date    || null;
   if (b.valid_until     !== undefined) patch.VALID_UNTIL     = b.valid_until   || null;
   if (b.refusal_date    !== undefined) patch.REFUSAL_DATE    = b.refusal_date  || null;
+  if (b.order_date      !== undefined) patch.ORDER_DATE      = b.order_date    || null;
+  if (b.project_id      !== undefined) patch.PROJECT_ID      = b.project_id != null && b.project_id !== '' ? parseInt(String(b.project_id), 10) : null;
 
   const { data, error } = await supabase
     .from('OFFER')
