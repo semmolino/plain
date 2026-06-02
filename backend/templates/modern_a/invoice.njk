@@ -621,6 +621,54 @@ table.data-table thead { display: table-header-group; }
     </tbody>
   </table>
 
+  {% if structureSurchargesTotal > 0 %}
+  <div style="margin-top:8mm; font-size:9pt; font-weight:700; color:#374151; border-bottom:0.5pt solid #d1d5db; padding-bottom:1mm;">Zuschlagsübersicht</div>
+  <table class="data-table" style="margin-top:3mm">
+    <thead>
+      <tr>
+        <th>Leistungsphase</th>
+        <th class="r">Honorar (Basis)</th>
+        <th>Zuschlag</th>
+        <th class="r">%</th>
+        <th class="r">Betrag</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in surchargeSummaryRows %}
+        {% if r.s1Label %}
+        <tr>
+          <td><span class="bold">{{ r.nameShort }}</span>{% if r.nameLong %} – {{ r.nameLong }}{% endif %}</td>
+          <td class="r">{{ r.revenueBasis | money }}</td>
+          <td>{{ r.s1Label }}</td>
+          <td class="r">{{ r.s1Pct | round(2) }}&#8239;%</td>
+          <td class="r">{{ r.s1Eur | money }}</td>
+        </tr>
+        {% endif %}
+        {% if r.s2Label %}
+        <tr>
+          <td></td><td></td>
+          <td>{{ r.s2Label }}</td>
+          <td class="r">{{ r.s2Pct | round(2) }}&#8239;%</td>
+          <td class="r">{{ r.s2Eur | money }}</td>
+        </tr>
+        {% endif %}
+        {% if r.s3Label %}
+        <tr>
+          <td></td><td></td>
+          <td>{{ r.s3Label }}</td>
+          <td class="r">{{ r.s3Pct | round(2) }}&#8239;%</td>
+          <td class="r">{{ r.s3Eur | money }}</td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      <tr class="sum-row">
+        <td colspan="4">Gesamt Zuschläge</td>
+        <td class="r">{{ structureSurchargesTotal | money }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% endif %}
+
 </div>
 {% endif %}
 

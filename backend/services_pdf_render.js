@@ -265,7 +265,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
 
   const { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, NAME_SHORT, NAME_LONG, REVENUE, EXTRAS, PARTIAL_PAYMENTS, INVOICED')
+    .select('ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, PARTIAL_PAYMENTS, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
     .eq('PROJECT_ID', projectId)
     .order('ID', { ascending: true });
 
@@ -282,21 +282,34 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
   const docMap = Object.fromEntries((docRows || []).map(r => [r.STRUCTURE_ID, r]));
 
   return (data || []).map(r => {
-    const revenue       = Number(r.REVENUE || 0);
-    const extras        = Number(r.EXTRAS  || 0);
-    const feeTotal      = revenue + extras;
-    const alreadyBilled = docType === 'INVOICE'
+    const revenue         = Number(r.REVENUE || 0);
+    const extras          = Number(r.EXTRAS  || 0);
+    const feeTotal        = revenue + extras;
+    const revenueBasis    = Number(r.REVENUE_BASIS ?? r.REVENUE ?? 0);
+    const surchargesTotal = Number(r.SURCHARGES_TOTAL || 0);
+    const alreadyBilled   = docType === 'INVOICE'
       ? Number(r.INVOICED         || 0)
       : Number(r.PARTIAL_PAYMENTS || 0);
     const dr         = docMap[r.ID];
     const thisDocNet = dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0;
     return {
-      nameShort:    r.NAME_SHORT || '',
-      nameLong:     r.NAME_LONG  || '',
+      nameShort:      r.NAME_SHORT || '',
+      nameLong:       r.NAME_LONG  || '',
       feeTotal,
       alreadyBilled,
       thisDocNet,
-      performedPct: feeTotal > 0 ? Math.round((alreadyBilled / feeTotal) * 100) : 0,
+      performedPct:   feeTotal > 0 ? Math.round((alreadyBilled / feeTotal) * 100) : 0,
+      revenueBasis,
+      surchargesTotal,
+      s1Label: r.SURCHARGE_1_LABEL || null,
+      s1Pct:   Number(r.SURCHARGE_1_PCT || 0),
+      s1Eur:   Number(r.SURCHARGE_1_EUR || 0),
+      s2Label: r.SURCHARGE_2_LABEL || null,
+      s2Pct:   Number(r.SURCHARGE_2_PCT || 0),
+      s2Eur:   Number(r.SURCHARGE_2_EUR || 0),
+      s3Label: r.SURCHARGE_3_LABEL || null,
+      s3Pct:   Number(r.SURCHARGE_3_PCT || 0),
+      s3Eur:   Number(r.SURCHARGE_3_EUR || 0),
     };
   });
 }
@@ -461,6 +474,8 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     alreadyBilled: projectStructureRows.reduce((s, r) => s + r.alreadyBilled, 0),
     thisDocNet:    projectStructureRows.reduce((s, r) => s + r.thisDocNet,    0),
   };
+  const surchargeSummaryRows    = projectStructureRows.filter(r => r.surchargesTotal > 0);
+  const structureSurchargesTotal = Math.round(surchargeSummaryRows.reduce((s, r) => s + r.surchargesTotal, 0) * 100) / 100;
 
   // Discount / skonto fields
   const totalAmountNet     = Number(rawDoc.TOTAL_AMOUNT_NET ?? 0);
@@ -522,6 +537,8 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     text2,
     projectStructureRows,
     structureTotals,
+    surchargeSummaryRows,
+    structureSurchargesTotal,
     projectPayments,
     paymentTotals,
     tec,

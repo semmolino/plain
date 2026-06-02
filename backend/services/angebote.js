@@ -609,6 +609,17 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   const totalNet     = fmt2(totalRevenue + totalExtras);
 
   const hasExtras = leaves.some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
+  const hasSurcharges = (structRows || []).some(r => Number(r.SURCHARGES_TOTAL || 0) > 0);
+  const offerSurchargesTotal = fmt2((structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).reduce((s, r) => s + Number(r.SURCHARGES_TOTAL || 0), 0));
+  const surchargeSummaryRows = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).map(r => ({
+    nameShort:      r.NAME_SHORT || '',
+    nameLong:       r.NAME_LONG  || '',
+    revenueBasis:   Number(r.REVENUE_BASIS ?? r.REVENUE ?? 0),
+    surchargesTotal: Number(r.SURCHARGES_TOTAL || 0),
+    s1Label: r.SURCHARGE_1_LABEL || null, s1Pct: Number(r.SURCHARGE_1_PCT || 0), s1Eur: Number(r.SURCHARGE_1_EUR || 0),
+    s2Label: r.SURCHARGE_2_LABEL || null, s2Pct: Number(r.SURCHARGE_2_PCT || 0), s2Eur: Number(r.SURCHARGE_2_EUR || 0),
+    s3Label: r.SURCHARGE_3_LABEL || null, s3Pct: Number(r.SURCHARGE_3_PCT || 0), s3Eur: Number(r.SURCHARGE_3_EUR || 0),
+  }));
 
   // VAT
   let vatPercent = 0;
@@ -645,21 +656,26 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
     contact: contact || null,
     employee: employee || null,
     structureRows: flat.map(({ node: n, depth }) => ({
-      id:         n.ID,
+      id:              n.ID,
       depth,
-      nameShort:  n.NAME_SHORT  || '',
-      nameLong:   n.NAME_LONG   || '',
-      btId:       Number(n.BILLING_TYPE_ID),
-      isHourly:   Number(n.BILLING_TYPE_ID) === 2,
-      quantity:   Number(n.QUANTITY    || 0),
-      spRate:     Number(n.SP_RATE     || 0),
-      revenue:    Number(n.REVENUE     || 0),
-      extrasPct:  Number(n.EXTRAS_PERCENT || 0),
-      extras:     Number(n.EXTRAS      || 0),
-      total:      fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
-      roleName:   n.ROLE_NAME_LONG  || n.ROLE_NAME_SHORT || '',
+      nameShort:       n.NAME_SHORT  || '',
+      nameLong:        n.NAME_LONG   || '',
+      btId:            Number(n.BILLING_TYPE_ID),
+      isHourly:        Number(n.BILLING_TYPE_ID) === 2,
+      quantity:        Number(n.QUANTITY       || 0),
+      spRate:          Number(n.SP_RATE        || 0),
+      revenueBasis:    Number(n.REVENUE_BASIS  ?? n.REVENUE ?? 0),
+      revenue:         Number(n.REVENUE        || 0),
+      extrasPct:       Number(n.EXTRAS_PERCENT || 0),
+      extras:          Number(n.EXTRAS         || 0),
+      total:           fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
+      roleName:        n.ROLE_NAME_LONG || n.ROLE_NAME_SHORT || '',
+      surchargesTotal: Number(n.SURCHARGES_TOTAL || 0),
     })),
     hasExtras,
+    hasSurcharges,
+    offerSurchargesTotal,
+    surchargeSummaryRows,
     vatPercent,
     vatAmount,
     grossTotal,
