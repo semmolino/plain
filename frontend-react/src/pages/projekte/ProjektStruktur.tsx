@@ -736,7 +736,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th>Abrechnung</th>
                         <th className="num">Honorar €</th>
                         <th className="num">Zuschläge €</th>
-                        <th className="num" style={{ color: '#2563eb' }}>Honorar + Zuschl. €</th>
+                        <th className="num">Honorar + Zuschl. €</th>
                         <th className="num">NK %</th>
                         <th className="num">Nebenkosten €</th>
                         <th className="num">Stand €</th>
@@ -756,8 +756,8 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                           <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.7)' }}>{currentProject.NAME_LONG}</td>
                           <td><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
-                          <td className="num"><span style={{ color: '#2563eb', fontSize: 12 }}>{rootSurcharges > 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
-                          <td className="num"><span style={{ color: '#2563eb', fontSize: 12, fontWeight: 600 }}>{fmtEur(rootRevenueFinal)}</span></td>
+                          <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : rootSurcharges < 0 ? '#dc2626' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
+                          <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges !== 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootStand)}</span></td>
@@ -849,18 +849,17 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             </td>
                             <td className="num">
                               {/* davon Zuschläge = aggregate surcharges for whole subtree */}
-                              {(isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)) > 0 ? (
-                                <span style={{ color: '#2563eb', fontSize: 12 }}>
-                                  {fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.surcharges : node.SURCHARGES_TOTAL)}
-                                </span>
-                              ) : (
-                                <span style={{ color: 'rgba(17,24,39,0.25)', fontSize: 12 }}>—</span>
-                              )}
+                              {(() => {
+                                const sv = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
+                                return sv !== 0
+                                  ? <span style={{ color: sv > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{fmtEur(sv)}</span>
+                                  : <span style={{ color: 'rgba(17,24,39,0.25)', fontSize: 12 }}>—</span>
+                              })()}
                             </td>
                             <td className="num">
                               {/* Honorar + Zuschläge = REVENUE (final, all surcharges included) */}
-                              <span style={{ color: '#2563eb', fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
-                                {fmtEur(isTec ? (node.REVENUE ?? 0) : (node.REVENUE ?? 0))}
+                              <span style={{ fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
+                                {fmtEur(node.REVENUE ?? 0)}
                               </span>
                             </td>
                             <td className="num">

@@ -632,7 +632,7 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                       <th className="ls-th">Art</th>
                       <th className="ls-th ls-col-num">Honorar €</th>
                       <th className="ls-th ls-col-num">Zuschläge €</th>
-                      <th className="ls-th ls-col-num" style={{ color: '#2563eb' }}>Honorar + Zuschl. €</th>
+                      <th className="ls-th ls-col-num">Honorar + Zuschl. €</th>
                       <th className="ls-th ls-col-num">NK</th>
                       <th className="ls-th ls-col-num">Gesamt</th>
                       <th className="ls-th"></th>
@@ -674,14 +674,14 @@ export function AngeboteBearbeiten({ initialOfferId }: { initialOfferId?: number
                             </span>
                           </td>
                           <td className="ls-td ls-right">
-                            {displaySurcharges > 0 ? (
-                              <span style={{ color: '#2563eb', fontSize: 12 }}>{FMT_EUR.format(displaySurcharges)}</span>
+                            {displaySurcharges !== 0 ? (
+                              <span style={{ color: displaySurcharges > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{FMT_EUR.format(displaySurcharges)}</span>
                             ) : (
                               <span className="ls-muted">—</span>
                             )}
                           </td>
                           <td className="ls-td ls-right">
-                            <span style={{ color: '#2563eb', fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
+                            <span style={{ fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
                               {FMT_EUR.format(revenue)}
                             </span>
                           </td>
