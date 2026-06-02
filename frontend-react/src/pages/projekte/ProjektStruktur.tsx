@@ -1234,9 +1234,17 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
             setContextMenu(null)
           }}>Element anlegen</button>
           <button disabled style={{ opacity: 0.4 }}>Vorlage anlegen</button>
-          {contextMenu.nodeId != null && (
+          {contextMenu.nodeId != null ? (
             <button onClick={() => { setSurchargePanel(contextMenu.nodeId as number); setContextMenu(null) }}>
               Zuschlag hinzufügen
+            </button>
+          ) : (
+            <button onClick={() => {
+              setProjectSurchargeEdit(projectSurchargeDefault())
+              setProjectSurchargePanel(true)
+              setContextMenu(null)
+            }}>
+              Projektzuschlag hinzufügen
             </button>
           )}
           {contextMenu.nodeId != null && (

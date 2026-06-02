@@ -987,9 +987,17 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
             })
             setContextMenu(null)
           }}>Element anlegen</button>
-          {contextMenu.nodeId != null && (
+          {contextMenu.nodeId != null ? (
             <button onClick={() => { setSurchargePanel(contextMenu.nodeId as number); setContextMenu(null) }}>
               Zuschlag hinzufügen
+            </button>
+          ) : (
+            <button onClick={() => {
+              setOfferSurchargeEdit(offerSurchargeDefault())
+              setOfferSurchargePanel(true)
+              setContextMenu(null)
+            }}>
+              Angebotszuschlag hinzufügen
             </button>
           )}
           {contextMenu.nodeId != null && (
