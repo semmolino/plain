@@ -152,7 +152,12 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       }
       let surcharges = 0, revenueBasis = 0, extras = 0
       for (const cid of children) { const c = agg(cid); surcharges += c.surcharges; revenueBasis += c.revenueBasis; extras += c.extras }
-      surcharges += Number(nodeMap.get(id)?.SURCHARGES_TOTAL ?? 0)
+      const ownNode       = nodeMap.get(id)
+      const ownSurcharges = Number(ownNode?.SURCHARGES_TOTAL ?? 0)
+      const ownNk         = Number(ownNode?.EXTRAS_PERCENT ?? 0)
+      surcharges += ownSurcharges  // parent's own surcharges on top
+      // NK applies to the parent's own surcharges too
+      extras = Math.round((extras + ownSurcharges * ownNk / 100) * 100) / 100
       cache.set(id, { surcharges, revenueBasis, extras }); return { surcharges, revenueBasis, extras }
     }
     for (const n of structure) agg(String(n.ID))

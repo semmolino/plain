@@ -118,6 +118,8 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const parentMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
 
   // Bottom-up aggregate: extras, surcharges, and revenueBasis (sum of leaf REVENUE_BASIS values)
+  // Parent EXTRAS = sum(children.EXTRAS) + own_surcharges × own_NK%
+  // so NK applies to the surcharged total, not just the base.
   const aggMap = (() => {
     const childrenOf = new Map<string, string[]>()
     for (const n of structure) {
@@ -129,6 +131,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       }
     }
     const nodeMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n]))
+    const r2 = (n: number) => Math.round(n * 100) / 100
     const cache = new Map<string, { extras: number; surcharges: number; revenueBasis: number }>()
     function agg(id: string): { extras: number; surcharges: number; revenueBasis: number } {
       if (cache.has(id)) return cache.get(id)!
@@ -140,7 +143,11 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       }
       let extras = 0, surcharges = 0, revenueBasis = 0
       for (const cid of children) { const c = agg(cid); extras += c.extras; surcharges += c.surcharges; revenueBasis += c.revenueBasis }
-      surcharges += nodeMap.get(id)?.SURCHARGES_TOTAL ?? 0  // parent's own surcharges on top
+      const ownNode = nodeMap.get(id)
+      const ownSurcharges = ownNode?.SURCHARGES_TOTAL ?? 0
+      const ownNk         = Number(ownNode?.EXTRAS_PERCENT ?? 0)
+      surcharges += ownSurcharges  // parent's own surcharges on top
+      extras = r2(extras + ownSurcharges * ownNk / 100)  // NK applies to own surcharges too
       cache.set(id, { extras, surcharges, revenueBasis }); return { extras, surcharges, revenueBasis }
     }
     for (const n of structure) agg(String(n.STRUCTURE_ID))

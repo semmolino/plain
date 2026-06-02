@@ -581,7 +581,7 @@ async function recalcParent(supabase, { parentId }) {
   // Apply parent's own surcharges on top of the aggregated basis
   const { data: parentSettings } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
+    .select("EXTRAS_PERCENT, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
     .eq("ID", parentId)
     .maybeSingle();
 
@@ -589,15 +589,21 @@ async function recalcParent(supabase, { parentId }) {
   const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesNode(revenueBasis, parentSettings);
   const revenue = r2(revenueBasis + surchargesTotal);
 
+  // NK should apply to the parent's own surcharges as well, not just the basis.
+  // Children's EXTRAS already reflect their own surcharges via their per-row NK calc.
+  const parentExtrasPercent = Number(parentSettings?.EXTRAS_PERCENT ?? 0);
+  const ownSurchargeExtras  = r2(surchargesTotal * parentExtrasPercent / 100);
+  const extrasFinal         = r2(extras + ownSurchargeExtras);
+
   const revenuePct = revenue > 0 ? (revenueCompletion / revenue) * 100 : 0;
-  const extrasPct  = extras  > 0 ? (extrasCompletion  / extras)  * 100 : 0;
+  const extrasPct  = extrasFinal > 0 ? (extrasCompletion / extrasFinal) * 100 : 0;
 
   const { error: uErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .update({
       REVENUE_BASIS: revenueBasis,
       REVENUE: revenue,
-      EXTRAS: extras,
+      EXTRAS: extrasFinal,
       COSTS: costs,
       // EXTRAS_PERCENT is NOT aggregated — parent keeps its own manually-set NK%
       REVENUE_COMPLETION: revenueCompletion,
