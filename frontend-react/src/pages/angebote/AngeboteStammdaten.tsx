@@ -3,11 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCtrlS }     from '@/hooks/useCtrlS'
 import { useSaveState } from '@/hooks/useSaveState'
 import { SaveBadge }    from '@/components/ui/SaveBadge'
-import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
-  fetchOffer, fetchOffers, updateOffer, copyOffer, fetchOfferStructure, convertOffer, openOfferPdf, openAuftragsbestaetigungPdf,
+  fetchOffer, updateOffer, copyOffer, fetchOfferStructure, convertOffer, openOfferPdf, openAuftragsbestaetigungPdf,
   type Offer, type ConvertOfferPayload,
 } from '@/api/angebote'
 import { fetchOfferStatuses } from '@/api/angebote'
@@ -40,10 +39,10 @@ function offerToForm(o: Offer): EditForm {
 
 interface Props {
   initialOfferId?: number
-  onOfferChange?: (id: number | null) => void
+  onOfferChange?: (_id: number | null) => void
 }
 
-export function AngeboteStammdaten({ initialOfferId, onOfferChange }: Props) {
+export function AngeboteStammdaten({ initialOfferId }: Props) {
   const qc = useQueryClient()
   const [oid, setOid]         = useState<number | null>(initialOfferId ?? null)
   const [form, setForm]       = useState<EditForm | null>(null)
@@ -53,7 +52,6 @@ export function AngeboteStammdaten({ initialOfferId, onOfferChange }: Props) {
   const [confirmState, setConfirmState]     = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const saveState = useSaveState()
 
-  const { data: offersData  } = useQuery({ queryKey: ['offers'],           queryFn: fetchOffers         })
   const { data: statusData  } = useQuery({ queryKey: ['offer-statuses'],  queryFn: fetchOfferStatuses  })
   const { data: mgrData     } = useQuery({ queryKey: ['project-managers'],queryFn: fetchProjectManagers })
   const { data: companyData } = useQuery({ queryKey: ['companies'],       queryFn: fetchCompanies      })
@@ -102,13 +100,13 @@ export function AngeboteStammdaten({ initialOfferId, onOfferChange }: Props) {
       void qc.invalidateQueries({ queryKey: ['offers'] })
       void qc.invalidateQueries({ queryKey: ['offer', oid] })
     },
-    onError: (e: Error) => { saveState.mark('error') },
+    onError: () => { saveState.mark('error') },
   })
 
   const copyMut = useMutation({
     mutationFn: () => copyOffer(oid!),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['offers'] }),
-    onError: (e: Error) => console.error(e),
+    onError: () => {},
   })
 
   const convertMut = useMutation({
@@ -121,7 +119,7 @@ export function AngeboteStammdaten({ initialOfferId, onOfferChange }: Props) {
     onError: (e: Error) => setConvertErr(e.message),
   })
 
-  const setF = (k: keyof EditForm) => (v: string) => { saveState.mark('unsaved'); setForm(f => f ? { ...f, [k]: v } : f) }
+  const setF = (k: keyof EditForm) => (v: string) => { setForm(f => f ? { ...f, [k]: v } : f) }
 
   function handleSave() { if (form && !saveMut.isPending) { saveState.mark('saving'); saveMut.mutate(form) } }
 

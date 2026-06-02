@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Modal }        from '@/components/ui/Modal'
 import { fetchFeeCalcMasters, openHonorarPdf, deleteFeeCalcMaster } from '@/api/fee'
@@ -12,7 +12,6 @@ interface Props {
 }
 
 export function AngeboteHoai({ initialOfferId }: Props) {
-  const qc = useQueryClient()
   const oid = initialOfferId ?? null
   const [showAdd,    setShowAdd]    = useState(false)
   const [editCalcId, setEditCalcId] = useState<number | null>(null)
