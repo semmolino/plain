@@ -653,14 +653,13 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
 
   const flat = flattenOfferStructure(structRows || []);
 
-  // Aggregate totals (leaf nodes only — nodes without children)
-  const withChildren = new Set((structRows || []).map(r => r.FATHER_ID).filter(Boolean));
-  const leaves = (structRows || []).filter(r => !withChildren.has(r.ID));
-  const totalRevenue = leaves.reduce((s, r) => s + (Number(r.REVENUE)  || 0), 0);
-  const totalExtras  = leaves.reduce((s, r) => s + (Number(r.EXTRAS)   || 0), 0);
+  // Totals from root-level nodes (no FATHER_ID) so parent surcharges are included in the sum
+  const roots      = (structRows || []).filter(r => r.FATHER_ID == null);
+  const totalRevenue = roots.reduce((s, r) => s + (Number(r.REVENUE)  || 0), 0);
+  const totalExtras  = roots.reduce((s, r) => s + (Number(r.EXTRAS)   || 0), 0);
   const totalNet     = fmt2(totalRevenue + totalExtras);
 
-  const hasExtras = leaves.some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
+  const hasExtras = (structRows || []).some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
   const hasSurcharges = (structRows || []).some(r => Number(r.SURCHARGES_TOTAL || 0) > 0);
   const offerSurchargesTotal = fmt2((structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).reduce((s, r) => s + Number(r.SURCHARGES_TOTAL || 0), 0));
   const surchargeSummaryRows = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).map(r => ({
@@ -1227,6 +1226,18 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
         }
 
         if (fatherId) {
+          // Skip if OFFER_STRUCTURE already had children under ATTACH_TO_OFFER_STRUCTURE_ID —
+          // those nodes were copied to PROJECT_STRUCTURE above; calling attachFeeCalcToProjectStructure
+          // would create duplicates.
+          if (calc.ATTACH_TO_OFFER_STRUCTURE_ID) {
+            const { data: existingChildren } = await supabase
+              .from('OFFER_STRUCTURE').select('ID')
+              .eq('FATHER_ID', calc.ATTACH_TO_OFFER_STRUCTURE_ID).limit(1);
+            if (existingChildren && existingChildren.length > 0) {
+              console.log('[convertOffer] skipping attachFeeCalcToProjectStructure for calcId=%d (already in OFFER_STRUCTURE)', calc.ID);
+              continue;
+            }
+          }
           await attachFeeCalcToProjectStructure(supabase, { calcMasterId: calc.ID, fatherId, projectId: project.ID, tenantId });
 
           // Direct BL failsafe: query BL items independently (no TENANT_ID filter) and create

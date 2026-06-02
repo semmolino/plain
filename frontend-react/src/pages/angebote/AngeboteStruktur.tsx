@@ -8,6 +8,7 @@ import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import {
   fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
   deleteOfferStructureNode, moveOfferStructureNode, updateOfferStructureSurcharges,
+  openOfferPdf,
   type OfferStructureNode,
 } from '@/api/angebote'
 import { fetchBillingTypes } from '@/api/projekte'
@@ -45,8 +46,11 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
   const [contextMenu, setContextMenu]   = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
-  const [kalkFatherId, setKalkFatherId] = useState<number | null>(null)
-  const contextMenuRef                  = useRef<HTMLDivElement>(null)
+  const [kalkFatherId, setKalkFatherId]             = useState<number | null>(null)
+  const [offerInput, setOfferInput]                 = useState('')
+  const [offerDropdownOpen, setOfferDropdownOpen]   = useState(false)
+  const contextMenuRef                              = useRef<HTMLDivElement>(null)
+  const offerAcRef                                  = useRef<HTMLDivElement>(null)
   const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
   const [elementSearch, setElementSearch]   = useState('')
 
@@ -71,6 +75,32 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const btypes    = btData?.data     ?? []
 
   useEffect(() => { setEdits({}); setAddForm(null); setSelectedIds(new Set()) }, [oid])
+
+  // Sync offer input display when oid or offers change
+  useEffect(() => {
+    if (oid && offers.length > 0) {
+      const o = offers.find(x => x.ID === oid)
+      if (o) setOfferInput(o.NAME_SHORT + (o.NAME_LONG ? ` – ${o.NAME_LONG}` : ''))
+    } else if (!oid) {
+      setOfferInput('')
+    }
+  }, [oid, offers])
+
+  // Close offer autocomplete on outside click, restore display name
+  useEffect(() => {
+    if (!offerDropdownOpen) return
+    function onDown(e: MouseEvent) {
+      if (offerAcRef.current && !offerAcRef.current.contains(e.target as Node)) {
+        setOfferDropdownOpen(false)
+        if (oid) {
+          const o = offers.find(x => x.ID === oid)
+          if (o) setOfferInput(o.NAME_SHORT + (o.NAME_LONG ? ` – ${o.NAME_LONG}` : ''))
+        }
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [offerDropdownOpen, oid, offers])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -119,6 +149,16 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     for (const n of structure) agg(String(n.ID))
     return cache
   }, [structure])
+
+  const filteredOffers = useMemo(() => {
+    if (!offerDropdownOpen) return offers
+    const sq = offerInput.toLowerCase().trim()
+    if (!sq) return offers
+    return offers.filter(o =>
+      (o.NAME_SHORT?.toLowerCase().includes(sq)) ||
+      (o.NAME_LONG?.toLowerCase().includes(sq))
+    )
+  }, [offers, offerInput, offerDropdownOpen])
 
   const filteredFlatTree = useMemo(() => {
     if (!elementSearch) return flatTree
@@ -447,17 +487,41 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   return (
     <>
     <div className="ls-wrap">
-      {/* ── Offer selector ── */}
+      {/* ── Offer selector + PDF button ── */}
       <div className="ls-toolbar" style={{ marginBottom: 12 }}>
         <label className="ls-label">Angebot</label>
-        <select className="ls-select" value={oid ?? ''}
-          onChange={e => {
-            const id = e.target.value ? Number(e.target.value) : null
-            onOfferChange?.(id)
-          }}>
-          <option value="">— Angebot wählen —</option>
-          {offers.map(o => <option key={o.ID} value={o.ID}>{o.NAME_SHORT} – {o.NAME_LONG}</option>)}
-        </select>
+        <div ref={offerAcRef} className="project-ac-wrap" style={{ flex: 1, maxWidth: 380, position: 'relative' }}>
+          <input
+            className="ls-select"
+            style={{ width: '100%' }}
+            placeholder="— Angebot wählen —"
+            value={offerInput}
+            onFocus={() => setOfferDropdownOpen(true)}
+            onChange={e => { setOfferInput(e.target.value); setOfferDropdownOpen(true) }}
+          />
+          {offerDropdownOpen && (
+            <div className="project-ac-dropdown">
+              {filteredOffers.length === 0 && (
+                <div className="project-ac-option" style={{ color: '#6b7280', fontStyle: 'italic' }}>Keine Treffer</div>
+              )}
+              {filteredOffers.map(o => (
+                <div key={o.ID} className="project-ac-option"
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    setOfferInput(o.NAME_SHORT + (o.NAME_LONG ? ` – ${o.NAME_LONG}` : ''))
+                    setOfferDropdownOpen(false)
+                    onOfferChange?.(o.ID)
+                  }}>
+                  <span className="project-ac-short">{o.NAME_SHORT}</span>
+                  {o.NAME_LONG && <span className="project-ac-long">{o.NAME_LONG}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {oid && (
+          <button className="btn-small" onClick={() => openOfferPdf(oid)} title="PDF öffnen">PDF</button>
+        )}
       </div>
 
       {oid && !isLoading && (
@@ -505,7 +569,8 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                 <tbody ref={tbodyRef}>
                   {/* Root totals row */}
                   {structure.length > 0 && (
-                    <tr style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)' }}>
+                    <tr style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)', cursor: 'context-menu' }}
+                      onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null }) }}>
                       <td></td><td></td>
                       <td style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>Gesamt</td>
                       <td></td>
