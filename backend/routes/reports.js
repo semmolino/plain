@@ -588,7 +588,18 @@ module.exports = (supabase) => {
     }
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ data: data || [] });
+
+    // Add parent-level surcharges per project
+    const rows = data || [];
+    const projectIds = rows.map(r => r.PROJECT_ID).filter(Boolean);
+    const parentSurchargesMap = await loadParentSurchargesByProject(projectIds);
+    for (const row of rows) {
+      const sur = parentSurchargesMap.get(String(row.PROJECT_ID)) || 0;
+      if (!sur) continue;
+      row.BUDGET_TOTAL_NET     = round2(Number(row.BUDGET_TOTAL_NET || 0) + sur);
+      row.REMAINING_BUDGET_NET = round2(Number(row.REMAINING_BUDGET_NET || 0) + sur);
+    }
+    res.json({ data: rows });
   });
 
   // Hours + costs per month — date-filtered by querying TEC directly when params present
@@ -729,13 +740,27 @@ module.exports = (supabase) => {
       .eq("TENANT_ID", tenantId)
       .order("BUDGET_TOTAL_NET", { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
+
+    // Add parent-level surcharges per project (leaf-based view misses these)
+    const projIds = (data || []).map(p => p.PROJECT_ID).filter(Boolean);
+    const parentSurchargesMap = await loadParentSurchargesByProject(projIds);
+
     const result = (data || []).map(p => {
-      const budget    = Number(p.BUDGET_TOTAL_NET)      || 0;
+      const sur       = parentSurchargesMap.get(String(p.PROJECT_ID)) || 0;
+      const budget    = round2((Number(p.BUDGET_TOTAL_NET) || 0) + sur);
       const costs     = Number(p.COST_TOTAL)            || 0;
-      const leistung  = Number(p.LEISTUNGSSTAND_VALUE)  || 0;
+      // Allocate surcharge contribution to leistung proportionally to completion
+      const leistRaw  = Number(p.LEISTUNGSSTAND_VALUE)  || 0;
+      const baseHonor = Number(p.BUDGET_TOTAL_NET)      || 0;
+      const leistung  = baseHonor > 0 && sur > 0
+        ? round2(leistRaw + sur * Math.min(1, leistRaw / baseHonor))
+        : leistRaw;
       const openNet   = Number(p.OPEN_NET_TOTAL)        || 0;
       const costRatio = budget > 0 ? costs / budget : 0;
       const db        = leistung - costs;
+      // Write back so the modal/cards show the adjusted values
+      p.BUDGET_TOTAL_NET     = budget;
+      p.LEISTUNGSSTAND_VALUE = leistung;
       const flags = [];
       if (budget > 0 && costRatio >= 0.9)                       flags.push("budget_kritisch");
       if (db < 0 && (costs > 500 || leistung > 500))            flags.push("db_negativ");

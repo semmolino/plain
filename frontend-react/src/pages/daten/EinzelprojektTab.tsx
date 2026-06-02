@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { computeEvm, computeBurnRate, monthsRemaining, fmtCpi } from '@/utils/projectForecasting'
@@ -242,6 +242,9 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
 export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: number } = {}) {
   const navigate = useNavigate()
   const [pid,       setPid]      = useState<number | null>(initialProjectId ?? null)
+  const [projectInput,         setProjectInput]         = useState('')
+  const [projectDropdownOpen,  setProjectDropdownOpen]  = useState(false)
+  const projectAcRef                                   = useRef<HTMLDivElement>(null)
   const [mode,      setMode]     = useState<FilterMode>('now')
   const [asOfDate,  setAsOfDate] = useState('')
   const [dateFrom,  setDateFrom] = useState('')
@@ -281,6 +284,42 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
   const projects  = projectsData?.data ?? []
   const header    = headerData?.data   ?? null
   const structure = structData?.data   ?? []
+
+  // Sync project input display when pid or projects change
+  useEffect(() => {
+    if (pid && projects.length > 0) {
+      const p = projects.find(proj => proj.ID === pid)
+      if (p) setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+    } else if (!pid) {
+      setProjectInput('')
+    }
+  }, [pid, projects])
+
+  // Close project autocomplete on outside click, restore display name
+  useEffect(() => {
+    if (!projectDropdownOpen) return
+    function onDown(e: MouseEvent) {
+      if (projectAcRef.current && !projectAcRef.current.contains(e.target as Node)) {
+        setProjectDropdownOpen(false)
+        if (pid) {
+          const p = projects.find(proj => proj.ID === pid)
+          if (p) setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+        }
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [projectDropdownOpen, pid, projects])
+
+  const filteredProjects = useMemo(() => {
+    if (!projectDropdownOpen) return projects
+    const sq = projectInput.toLowerCase().trim()
+    if (!sq) return projects
+    return projects.filter(p =>
+      p.NAME_SHORT.toLowerCase().includes(sq) ||
+      (p.NAME_LONG?.toLowerCase().includes(sq) ?? false)
+    )
+  }, [projects, projectInput, projectDropdownOpen])
   const loading   = headerLoading || structLoading
 
   const byId = useMemo(
@@ -341,10 +380,34 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <div className="form-group" style={{ maxWidth: 400, marginBottom: 0 }}>
           <label>Projekt</label>
-          <select value={pid ?? ''} onChange={e => setPid(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">Bitte wählen …</option>
-            {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
-          </select>
+          <div ref={projectAcRef} className="project-ac-wrap" style={{ position: 'relative' }}>
+            <input
+              style={{ width: '100%' }}
+              placeholder="Suchen oder auswählen …"
+              value={projectInput}
+              onFocus={() => setProjectDropdownOpen(true)}
+              onChange={e => { setProjectInput(e.target.value); setProjectDropdownOpen(true) }}
+            />
+            {projectDropdownOpen && (
+              <div className="project-ac-dropdown">
+                {filteredProjects.length === 0 && (
+                  <div className="project-ac-option" style={{ color: '#6b7280', fontStyle: 'italic' }}>Keine Treffer</div>
+                )}
+                {filteredProjects.map(p => (
+                  <div key={p.ID} className="project-ac-option"
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+                      setProjectDropdownOpen(false)
+                      setPid(p.ID)
+                    }}>
+                    <span className="project-ac-short">{p.NAME_SHORT}</span>
+                    {p.NAME_LONG && <span className="project-ac-long">{p.NAME_LONG}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         {pid !== null && (
           <button className="btn-small" onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: pid } })}>
