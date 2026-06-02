@@ -80,8 +80,8 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Beauftragt – ${offerName}`}>
-      <div style={{ minWidth: 560, maxWidth: 640 }}>
+    <Modal open={open} onClose={onClose} title={`Beauftragt – ${offerName}`} className="modal-wide">
+      <div>
 
         {/* Mode selector */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, padding: 4, background: 'rgba(17,24,39,0.04)', borderRadius: 6 }}>
