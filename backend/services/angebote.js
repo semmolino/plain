@@ -1104,7 +1104,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     throw { status: 500, message: 'Nummernkreis konnte nicht geladen werden: ' + (numErr?.message || 'kein Ergebnis') };
   }
 
-  // Insert PROJECT
+  // Insert PROJECT — also copy root-level (offer-level) surcharges
   const projectRow = {
     NAME_SHORT:         num,
     NAME_LONG:          offer.NAME_LONG,
@@ -1117,6 +1117,19 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     CONTACT_ID:         offer.CONTACT_ID,
     TENANT_ID:          tenantId,
     OFFER_ID:           offerId,
+    SURCHARGE_1_LABEL:  offer.SURCHARGE_1_LABEL ?? null,
+    SURCHARGE_1_PCT:    offer.SURCHARGE_1_PCT   ?? null,
+    SURCHARGE_1_EUR:    offer.SURCHARGE_1_EUR   ?? 0,
+    SURCHARGE_1_CUMUL:  offer.SURCHARGE_1_CUMUL ?? true,
+    SURCHARGE_2_LABEL:  offer.SURCHARGE_2_LABEL ?? null,
+    SURCHARGE_2_PCT:    offer.SURCHARGE_2_PCT   ?? null,
+    SURCHARGE_2_EUR:    offer.SURCHARGE_2_EUR   ?? 0,
+    SURCHARGE_2_CUMUL:  offer.SURCHARGE_2_CUMUL ?? true,
+    SURCHARGE_3_LABEL:  offer.SURCHARGE_3_LABEL ?? null,
+    SURCHARGE_3_PCT:    offer.SURCHARGE_3_PCT   ?? null,
+    SURCHARGE_3_EUR:    offer.SURCHARGE_3_EUR   ?? 0,
+    SURCHARGE_3_CUMUL:  offer.SURCHARGE_3_CUMUL ?? true,
+    SURCHARGES_TOTAL:   offer.SURCHARGES_TOTAL  ?? 0,
   };
 
   let project = null;
@@ -1130,6 +1143,13 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       const row2 = { ...projectRow };
       if (msg.includes('OFFER_ID'))   delete row2.OFFER_ID;
       if (msg.includes('COMPANY_ID')) delete row2.COMPANY_ID;
+      // If SURCHARGE_* columns don't exist yet (migration 0046 not run), drop them and retry
+      if (msg.includes('SURCHARGE')) {
+        delete row2.SURCHARGE_1_LABEL; delete row2.SURCHARGE_1_PCT; delete row2.SURCHARGE_1_EUR; delete row2.SURCHARGE_1_CUMUL;
+        delete row2.SURCHARGE_2_LABEL; delete row2.SURCHARGE_2_PCT; delete row2.SURCHARGE_2_EUR; delete row2.SURCHARGE_2_CUMUL;
+        delete row2.SURCHARGE_3_LABEL; delete row2.SURCHARGE_3_PCT; delete row2.SURCHARGE_3_EUR; delete row2.SURCHARGE_3_CUMUL;
+        delete row2.SURCHARGES_TOTAL;
+      }
       const r2 = await supabase.from('PROJECT').insert([row2])
         .select('ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
         .single();
@@ -1177,6 +1197,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       PROJECT_ID:       project.ID,
       BILLING_TYPE_ID:  btId,
       FATHER_ID:        null,
+      REVENUE_BASIS:    isBt1 ? fmt2(Number(n.REVENUE_BASIS ?? n.REVENUE ?? 0)) : 0,
       REVENUE:          isBt1 ? fmt2(Number(n.REVENUE || 0)) : 0,
       EXTRAS_PERCENT:   Number(n.EXTRAS_PERCENT || 0),
       EXTRAS:           isBt1 ? fmt2(Number(n.EXTRAS  || 0)) : 0,
@@ -1186,13 +1207,48 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       REVENUE_COMPLETION: 0,
       EXTRAS_COMPLETION:  0,
       TENANT_ID:        tenantId,
+      // Per-node surcharges
+      SURCHARGE_1_LABEL: n.SURCHARGE_1_LABEL ?? null,
+      SURCHARGE_1_PCT:   n.SURCHARGE_1_PCT   ?? null,
+      SURCHARGE_1_EUR:   n.SURCHARGE_1_EUR   ?? 0,
+      SURCHARGE_1_CUMUL: n.SURCHARGE_1_CUMUL ?? true,
+      SURCHARGE_2_LABEL: n.SURCHARGE_2_LABEL ?? null,
+      SURCHARGE_2_PCT:   n.SURCHARGE_2_PCT   ?? null,
+      SURCHARGE_2_EUR:   n.SURCHARGE_2_EUR   ?? 0,
+      SURCHARGE_2_CUMUL: n.SURCHARGE_2_CUMUL ?? true,
+      SURCHARGE_3_LABEL: n.SURCHARGE_3_LABEL ?? null,
+      SURCHARGE_3_PCT:   n.SURCHARGE_3_PCT   ?? null,
+      SURCHARGE_3_EUR:   n.SURCHARGE_3_EUR   ?? 0,
+      SURCHARGE_3_CUMUL: n.SURCHARGE_3_CUMUL ?? true,
+      SURCHARGES_TOTAL:  n.SURCHARGES_TOTAL  ?? 0,
     }; });
 
-    const { data: createdNodes, error: psErr } = await supabase
-      .from('PROJECT_STRUCTURE')
-      .insert(insertRows)
-      .select('ID');
-    if (psErr) throw { status: 500, message: 'Projektstruktur konnte nicht angelegt werden: ' + psErr.message };
+    let createdNodes;
+    {
+      const r = await supabase.from('PROJECT_STRUCTURE').insert(insertRows).select('ID');
+      if (r.error) {
+        const msg = String(r.error.message || '');
+        // Fallback: schema may be missing surcharge columns
+        if (msg.includes('SURCHARGE') || msg.includes('REVENUE_BASIS')) {
+          const stripped = insertRows.map(row => {
+            const c = { ...row };
+            delete c.REVENUE_BASIS;
+            delete c.SURCHARGE_1_LABEL; delete c.SURCHARGE_1_PCT; delete c.SURCHARGE_1_EUR; delete c.SURCHARGE_1_CUMUL;
+            delete c.SURCHARGE_2_LABEL; delete c.SURCHARGE_2_PCT; delete c.SURCHARGE_2_EUR; delete c.SURCHARGE_2_CUMUL;
+            delete c.SURCHARGE_3_LABEL; delete c.SURCHARGE_3_PCT; delete c.SURCHARGE_3_EUR; delete c.SURCHARGE_3_CUMUL;
+            delete c.SURCHARGES_TOTAL;
+            return c;
+          });
+          const r2 = await supabase.from('PROJECT_STRUCTURE').insert(stripped).select('ID');
+          if (r2.error) throw { status: 500, message: 'Projektstruktur konnte nicht angelegt werden: ' + r2.error.message };
+          createdNodes = r2.data;
+        } else {
+          throw { status: 500, message: 'Projektstruktur konnte nicht angelegt werden: ' + r.error.message };
+        }
+      } else {
+        createdNodes = r.data;
+      }
+    }
 
     // Map old offer structure ID → new project structure ID
     (createdNodes || []).forEach((row, i) => { offerIdToNew.set(offerStruct[i].ID, row.ID); });
