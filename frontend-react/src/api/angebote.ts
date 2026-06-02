@@ -206,6 +206,9 @@ export interface UpdateOfferSurchargesPayload {
 export const updateOfferStructureSurcharges = (offerId: number, nodeId: number, body: UpdateOfferSurchargesPayload) =>
   apiClient.put<{ data: OfferStructureNode }>(`/angebote/${offerId}/structure/${nodeId}`, body)
 
+export const moveOfferStructureNode = (offerId: number, nodeId: number, body: { father_id: number | null; sort_after_id: string | null }) =>
+  apiClient.put<{ ok: boolean }>(`/angebote/${offerId}/structure/${nodeId}/move`, body)
+
 export const openOfferPdf = (id: number) =>
   openPdfWithAuth(`/angebote/${id}/pdf`)
 

@@ -539,6 +539,58 @@ async function recalcOfferParent(supabase, { parentId }) {
   if (uErr) throw uErr;
 }
 
+async function moveOfferStructureNode(supabase, { tenantId, nodeId, fatherRaw, sortAfterId }) {
+  const newFatherId =
+    fatherRaw === undefined || fatherRaw === null || String(fatherRaw) === '' || String(fatherRaw) === '0'
+      ? null : parseInt(String(fatherRaw), 10);
+
+  const { data: current, error: curErr } = await supabase
+    .from('OFFER_STRUCTURE').select('ID, OFFER_ID, FATHER_ID').eq('ID', nodeId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (curErr) throw curErr;
+  if (!current) throw { status: 404, message: 'OFFER_STRUCTURE nicht gefunden' };
+  if (newFatherId !== null && newFatherId === nodeId)
+    throw { status: 400, message: 'Ein Element kann nicht sich selbst untergeordnet werden' };
+
+  if (newFatherId !== null) {
+    const { data: all } = await supabase.from('OFFER_STRUCTURE').select('ID, FATHER_ID').eq('OFFER_ID', current.OFFER_ID);
+    const map = new Map((all || []).map(n => [String(n.ID), n.FATHER_ID === null ? null : String(n.FATHER_ID)]));
+    let cursor = String(newFatherId), guard = 0;
+    while (cursor && guard++ < 5000) {
+      if (cursor === String(nodeId)) throw { status: 400, message: 'Ungültige Verschiebung (Zyklus)' };
+      const next = map.get(cursor);
+      if (!next) break;
+      cursor = next;
+    }
+  }
+
+  const oldFatherId = current.FATHER_ID === null || current.FATHER_ID === undefined ? null : current.FATHER_ID;
+
+  await supabase.from('OFFER_STRUCTURE').update({ FATHER_ID: newFatherId }).eq('ID', nodeId);
+
+  // Re-order siblings in new parent group
+  const sibQ = supabase.from('OFFER_STRUCTURE').select('ID, SORT_ORDER')
+    .eq('OFFER_ID', current.OFFER_ID).neq('ID', nodeId)
+    .order('SORT_ORDER', { ascending: true }).order('ID', { ascending: true });
+  const { data: newSiblings } = newFatherId !== null
+    ? await sibQ.eq('FATHER_ID', newFatherId)
+    : await sibQ.is('FATHER_ID', null);
+
+  const ordered = [...(newSiblings || [])];
+  const finalIdx = sortAfterId === '__end__' ? ordered.length
+    : sortAfterId === null ? 0
+    : (() => { const i = ordered.findIndex(s => String(s.ID) === String(sortAfterId)); return i === -1 ? ordered.length : i + 1 })();
+  ordered.splice(finalIdx, 0, { ID: nodeId });
+  for (let i = 0; i < ordered.length; i++) {
+    await supabase.from('OFFER_STRUCTURE').update({ SORT_ORDER: i * 10 }).eq('ID', ordered[i].ID);
+  }
+
+  // Propagate aggregation
+  await propagateUpwardsOffer(supabase, { structureId: nodeId });
+  if (oldFatherId !== null && oldFatherId !== newFatherId) {
+    await recalcOfferParent(supabase, { parentId: oldFatherId });
+  }
+}
+
 async function propagateUpwardsOffer(supabase, { structureId }) {
   const { data: node } = await supabase
     .from('OFFER_STRUCTURE')
@@ -1238,6 +1290,7 @@ module.exports = {
   addOfferStructureNode,
   updateOfferStructureNode,
   deleteOfferStructureNode,
+  moveOfferStructureNode,
   buildOfferPdfViewModel,
   convertOfferToProject,
   copyOffer,

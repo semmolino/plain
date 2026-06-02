@@ -107,6 +107,22 @@ async function deleteOfferStructureNode(req, res, supabase) {
   }
 }
 
+async function moveOfferStructureNode(req, res, supabase) {
+  try {
+    const nodeId = parseInt(req.params.nodeId, 10);
+    if (!nodeId) return res.status(400).json({ error: 'Ungültige Node-ID' });
+    await svc.moveOfferStructureNode(supabase, {
+      tenantId: req.tenantId,
+      nodeId,
+      fatherRaw:   req.body.father_id,
+      sortAfterId: req.body.sort_after_id,
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 async function convertOffer(req, res, supabase) {
   try {
     const id = parseInt(req.params.id, 10);
@@ -176,6 +192,7 @@ module.exports = {
   addOfferStructureNode,
   updateOfferStructureNode,
   deleteOfferStructureNode,
+  moveOfferStructureNode,
   convertOffer,
   copyOffer,
   getOfferPdf,
