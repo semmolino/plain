@@ -519,9 +519,16 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                   </tbody>
                   <tfoot>
                     {(() => {
-                      const totHonorar  = sorted.reduce((a, s) => a + s.HONORAR_NET, 0)
-                      const totEarned   = sorted.reduce((a, s) => a + s.EARNED_VALUE_NET, 0)
-                      const totRest     = sorted.reduce((a, s) => a + s.REST_HONORAR, 0)
+                      // Sum of displayed rows (leaves) — may miss parent-level surcharges
+                      const sumLeafHonorar = sorted.reduce((a, s) => a + s.HONORAR_NET, 0)
+                      const sumLeafEarned  = sorted.reduce((a, s) => a + s.EARNED_VALUE_NET, 0)
+                      // Use the header's project-wide BUDGET_TOTAL_NET (includes parent surcharges)
+                      // — but only if it's larger than the leaf sum to avoid breaking other cases
+                      const totHonorar  = header?.BUDGET_TOTAL_NET != null && Number(header.BUDGET_TOTAL_NET) >= sumLeafHonorar
+                        ? Number(header.BUDGET_TOTAL_NET) : sumLeafHonorar
+                      const surchargeDelta = totHonorar - sumLeafHonorar
+                      const totEarned   = sumLeafEarned + (sumLeafHonorar > 0 ? surchargeDelta * Math.min(1, sumLeafEarned / sumLeafHonorar) : 0)
+                      const totRest     = totHonorar - totEarned
                       const totHours    = sorted.reduce((a, s) => a + s.HOURS_TOTAL, 0)
                       const totCost     = sorted.reduce((a, s) => a + s.COST_TOTAL, 0)
                       const totLstPct   = totHonorar > 0 ? (totEarned / totHonorar) * 100 : null
