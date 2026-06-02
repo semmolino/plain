@@ -84,6 +84,18 @@ async function listProjectsFull(req, res, supabase) {
   }
 }
 
+async function getProject(req, res, supabase) {
+  const id = String(req.params.id || "").trim();
+  if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
+  try {
+    const data = await svc.getProject(supabase, { id, tenantId: req.tenantId });
+    res.json({ data });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || err });
+  }
+}
+
 async function patchProject(req, res, supabase) {
   const id = String(req.params.id || "").trim();
   if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
@@ -390,6 +402,7 @@ module.exports = {
   getActiveRoles,
   createProject,
   listProjects,
+  getProject,
   listProjectsFull,
   patchProject,
   searchProjects,

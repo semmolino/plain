@@ -25,6 +25,19 @@ export interface Offer {
   VALID_UNTIL:     string | null
   PROJECT_ID:      number | null
   ORDER_DATE:      string | null
+  SURCHARGE_1_LABEL?: string | null
+  SURCHARGE_1_PCT?:   number | null
+  SURCHARGE_1_EUR?:   number | null
+  SURCHARGE_1_CUMUL?: boolean
+  SURCHARGE_2_LABEL?: string | null
+  SURCHARGE_2_PCT?:   number | null
+  SURCHARGE_2_EUR?:   number | null
+  SURCHARGE_2_CUMUL?: boolean
+  SURCHARGE_3_LABEL?: string | null
+  SURCHARGE_3_PCT?:   number | null
+  SURCHARGE_3_EUR?:   number | null
+  SURCHARGE_3_CUMUL?: boolean
+  SURCHARGES_TOTAL?:  number
 }
 
 export interface ConvertOfferPayload {
@@ -210,6 +223,9 @@ export const updateOfferStructureSurcharges = (offerId: number, nodeId: number, 
 
 export const moveOfferStructureNode = (offerId: number, nodeId: number, body: { father_id: number | null; sort_after_id: string | null }) =>
   apiClient.put<{ ok: boolean }>(`/angebote/${offerId}/structure/${nodeId}/move`, body)
+
+export const patchOfferRootSurcharges = (offerId: number, body: UpdateOfferSurchargesPayload) =>
+  apiClient.put<{ data: Offer }>(`/angebote/${offerId}`, body)
 
 export const openOfferPdf = (id: number) =>
   openPdfWithAuth(`/angebote/${id}/pdf`)

@@ -353,6 +353,18 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
   }));
 }
 
+async function getProject(supabase, { id, tenantId }) {
+  const { data, error } = await supabase
+    .from("PROJECT")
+    .select("*")
+    .eq("ID", id)
+    .eq("TENANT_ID", tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw { status: 404, message: "Projekt nicht gefunden" };
+  return data;
+}
+
 async function patchProject(supabase, { id, body, tenantId }) {
   const b = body || {};
   const upd = {};
@@ -379,6 +391,22 @@ async function patchProject(supabase, { id, body, tenantId }) {
   if (b.is_internal !== undefined) {
     upd.IS_INTERNAL = !!b.is_internal;
   }
+  // Root-level surcharge settings (Option A)
+  if (b.SURCHARGE_1_LABEL !== undefined) upd.SURCHARGE_1_LABEL = b.SURCHARGE_1_LABEL;
+  if (b.SURCHARGE_1_PCT   !== undefined) upd.SURCHARGE_1_PCT   = b.SURCHARGE_1_PCT != null && b.SURCHARGE_1_PCT !== "" ? Number(b.SURCHARGE_1_PCT) : null;
+  if (b.SURCHARGE_1_CUMUL !== undefined) upd.SURCHARGE_1_CUMUL = !!b.SURCHARGE_1_CUMUL;
+  if (b.SURCHARGE_2_LABEL !== undefined) upd.SURCHARGE_2_LABEL = b.SURCHARGE_2_LABEL;
+  if (b.SURCHARGE_2_PCT   !== undefined) upd.SURCHARGE_2_PCT   = b.SURCHARGE_2_PCT != null && b.SURCHARGE_2_PCT !== "" ? Number(b.SURCHARGE_2_PCT) : null;
+  if (b.SURCHARGE_2_CUMUL !== undefined) upd.SURCHARGE_2_CUMUL = !!b.SURCHARGE_2_CUMUL;
+  if (b.SURCHARGE_3_LABEL !== undefined) upd.SURCHARGE_3_LABEL = b.SURCHARGE_3_LABEL;
+  if (b.SURCHARGE_3_PCT   !== undefined) upd.SURCHARGE_3_PCT   = b.SURCHARGE_3_PCT != null && b.SURCHARGE_3_PCT !== "" ? Number(b.SURCHARGE_3_PCT) : null;
+  if (b.SURCHARGE_3_CUMUL !== undefined) upd.SURCHARGE_3_CUMUL = !!b.SURCHARGE_3_CUMUL;
+
+  const hasSurchargeChange =
+    b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined || b.SURCHARGE_1_CUMUL !== undefined ||
+    b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined || b.SURCHARGE_2_CUMUL !== undefined ||
+    b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined || b.SURCHARGE_3_CUMUL !== undefined;
+
   if (upd.NAME_SHORT !== undefined && !upd.NAME_SHORT) {
     throw { status: 400, message: "NAME_SHORT ist erforderlich" };
   }
@@ -392,6 +420,10 @@ async function patchProject(supabase, { id, body, tenantId }) {
     .single();
 
   if (uErr) throw uErr;
+
+  if (hasSurchargeChange) {
+    await recalcProjectRootSurcharges(supabase, { projectId: id });
+  }
 
   const [st, ty, mg] = await Promise.all([
     updated.PROJECT_STATUS_ID
@@ -587,12 +619,45 @@ async function recalcParent(supabase, { parentId }) {
 async function propagateUpwards(supabase, { structureId }) {
   const { data: node } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("FATHER_ID")
+    .select("FATHER_ID, PROJECT_ID")
     .eq("ID", structureId)
     .maybeSingle();
-  if (!node || node.FATHER_ID === null || node.FATHER_ID === undefined) return;
+  if (!node) return;
+  if (node.FATHER_ID === null || node.FATHER_ID === undefined) {
+    // Reached a root structure node; recompute project-level surcharges
+    if (node.PROJECT_ID) await recalcProjectRootSurcharges(supabase, { projectId: node.PROJECT_ID });
+    return;
+  }
   await recalcParent(supabase, { parentId: node.FATHER_ID });
   await propagateUpwards(supabase, { structureId: node.FATHER_ID });
+}
+
+// Compute project-level surcharges (Option A — root surcharges live on PROJECT)
+// Basis = sum of root-level PROJECT_STRUCTURE REVENUE for this project.
+async function recalcProjectRootSurcharges(supabase, { projectId }) {
+  const { data: roots } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("REVENUE")
+    .eq("PROJECT_ID", projectId)
+    .is("FATHER_ID", null);
+  const basis = (roots || []).reduce((s, r) => s + Number(r.REVENUE || 0), 0);
+
+  const { data: settings } = await supabase
+    .from("PROJECT")
+    .select("SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
+    .eq("ID", projectId)
+    .maybeSingle();
+  if (!settings) return;
+
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesNode(basis, settings);
+
+  await supabase.from("PROJECT").update({
+    SURCHARGE_1_EUR:  r2(s1Eur),
+    SURCHARGE_2_EUR:  r2(s2Eur),
+    SURCHARGE_3_EUR:  r2(s3Eur),
+    SURCHARGES_TOTAL: surchargesTotal,
+  }).eq("ID", projectId);
 }
 
 async function progressSnapshot(supabase, { projectId }) {
@@ -1701,6 +1766,8 @@ module.exports = {
   createProject,
   listProjects,
   listProjectsFull,
+  getProject,
+  recalcProjectRootSurcharges,
   patchProject,
   searchProjects,
   searchContracts,

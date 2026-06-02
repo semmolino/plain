@@ -15,6 +15,7 @@ module.exports = (supabase) => {
   router.post("/",                                     (req, res) => ctrl.createProject(req, res, supabase));
   router.get("/",                                      (req, res) => ctrl.listProjects(req, res, supabase));
   router.get("/list",                                  (req, res) => ctrl.listProjectsFull(req, res, supabase));
+  router.get("/:id",                                   (req, res) => ctrl.getProject(req, res, supabase));
   router.patch("/:id",                                 (req, res) => ctrl.patchProject(req, res, supabase));
   router.patch("/:id/internal-cascade",               (req, res) => ctrl.patchProjectInternalCascade(req, res, supabase));
   router.get("/search",                                (req, res) => ctrl.searchProjects(req, res, supabase));

@@ -475,7 +475,36 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     thisDocNet:    projectStructureRows.reduce((s, r) => s + r.thisDocNet,    0),
   };
   const surchargeSummaryRows    = projectStructureRows.filter(r => r.surchargesTotal > 0);
-  const structureSurchargesTotal = Math.round(surchargeSummaryRows.reduce((s, r) => s + r.surchargesTotal, 0) * 100) / 100;
+  let structureSurchargesTotal = Math.round(surchargeSummaryRows.reduce((s, r) => s + r.surchargesTotal, 0) * 100) / 100;
+
+  // Project-level (root) surcharges — Option A
+  if (rawDoc.PROJECT_ID) {
+    try {
+      const { data: projRow } = await supabase
+        .from('PROJECT')
+        .select('SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR, SURCHARGES_TOTAL')
+        .eq('ID', rawDoc.PROJECT_ID)
+        .maybeSingle();
+      const projectSurchargesTotal = Number(projRow?.SURCHARGES_TOTAL || 0);
+      if (projRow && projectSurchargesTotal > 0) {
+        // The summary basis for the project-level row = sum of root-node REVENUE
+        const rootBasis = projectStructureRows.reduce((s, r) => s + (r.feeTotal - (r.surchargesTotal || 0)), 0);
+        surchargeSummaryRows.push({
+          nameShort: 'Projekt',
+          nameLong:  'Projektweite Zuschläge',
+          revenueBasis:    rootBasis,
+          surchargesTotal: projectSurchargesTotal,
+          s1Label: projRow.SURCHARGE_1_LABEL || null, s1Pct: Number(projRow.SURCHARGE_1_PCT || 0), s1Eur: Number(projRow.SURCHARGE_1_EUR || 0),
+          s2Label: projRow.SURCHARGE_2_LABEL || null, s2Pct: Number(projRow.SURCHARGE_2_PCT || 0), s2Eur: Number(projRow.SURCHARGE_2_EUR || 0),
+          s3Label: projRow.SURCHARGE_3_LABEL || null, s3Pct: Number(projRow.SURCHARGE_3_PCT || 0), s3Eur: Number(projRow.SURCHARGE_3_EUR || 0),
+          // Fields needed by templates
+          feeTotal: rootBasis + projectSurchargesTotal,
+          alreadyBilled: 0, thisDocNet: 0, performedPct: 0,
+        });
+        structureSurchargesTotal = Math.round((structureSurchargesTotal + projectSurchargesTotal) * 100) / 100;
+      }
+    } catch (_) { /* surcharge columns may not exist yet — soft-fail */ }
+  }
 
   // Discount / skonto fields
   const totalAmountNet     = Number(rawDoc.TOTAL_AMOUNT_NET ?? 0);

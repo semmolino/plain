@@ -111,6 +111,35 @@ export const fetchProjectListFull = () =>
 export const fetchProjectsShort = () =>
   apiClient.get<{ data: Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string }> }>('/projekte')
 
+export interface ProjectRootSurcharges {
+  ID:                number
+  SURCHARGE_1_LABEL: string | null
+  SURCHARGE_1_PCT:   number | null
+  SURCHARGE_1_EUR:   number | null
+  SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null
+  SURCHARGE_2_PCT:   number | null
+  SURCHARGE_2_EUR:   number | null
+  SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null
+  SURCHARGE_3_PCT:   number | null
+  SURCHARGE_3_EUR:   number | null
+  SURCHARGE_3_CUMUL: boolean
+  SURCHARGES_TOTAL:  number
+}
+
+export const fetchProject = (id: number) =>
+  apiClient.get<{ data: ProjectRootSurcharges & Project }>(`/projekte/${id}`)
+
+export interface UpdateRootSurchargesPayload {
+  SURCHARGE_1_LABEL: string | null; SURCHARGE_1_PCT: number | null; SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null; SURCHARGE_2_PCT: number | null; SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null; SURCHARGE_3_PCT: number | null; SURCHARGE_3_CUMUL: boolean
+}
+
+export const patchProjectRootSurcharges = (id: number, body: UpdateRootSurchargesPayload) =>
+  apiClient.patch<{ data: ProjectRootSurcharges }>(`/projekte/${id}`, body)
+
 export const createProject = (body: CreateProjectPayload) =>
   apiClient.post<{ data: Project }>('/projekte', body)
 

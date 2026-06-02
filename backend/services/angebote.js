@@ -318,6 +318,22 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
   if (b.order_date      !== undefined) patch.ORDER_DATE      = b.order_date    || null;
   if (b.project_id      !== undefined) patch.PROJECT_ID      = b.project_id != null && b.project_id !== '' ? parseInt(String(b.project_id), 10) : null;
 
+  // Root-level surcharge settings (Option A — offer-level surcharges)
+  if (b.SURCHARGE_1_LABEL !== undefined) patch.SURCHARGE_1_LABEL = b.SURCHARGE_1_LABEL;
+  if (b.SURCHARGE_1_PCT   !== undefined) patch.SURCHARGE_1_PCT   = b.SURCHARGE_1_PCT != null && b.SURCHARGE_1_PCT !== '' ? Number(b.SURCHARGE_1_PCT) : null;
+  if (b.SURCHARGE_1_CUMUL !== undefined) patch.SURCHARGE_1_CUMUL = !!b.SURCHARGE_1_CUMUL;
+  if (b.SURCHARGE_2_LABEL !== undefined) patch.SURCHARGE_2_LABEL = b.SURCHARGE_2_LABEL;
+  if (b.SURCHARGE_2_PCT   !== undefined) patch.SURCHARGE_2_PCT   = b.SURCHARGE_2_PCT != null && b.SURCHARGE_2_PCT !== '' ? Number(b.SURCHARGE_2_PCT) : null;
+  if (b.SURCHARGE_2_CUMUL !== undefined) patch.SURCHARGE_2_CUMUL = !!b.SURCHARGE_2_CUMUL;
+  if (b.SURCHARGE_3_LABEL !== undefined) patch.SURCHARGE_3_LABEL = b.SURCHARGE_3_LABEL;
+  if (b.SURCHARGE_3_PCT   !== undefined) patch.SURCHARGE_3_PCT   = b.SURCHARGE_3_PCT != null && b.SURCHARGE_3_PCT !== '' ? Number(b.SURCHARGE_3_PCT) : null;
+  if (b.SURCHARGE_3_CUMUL !== undefined) patch.SURCHARGE_3_CUMUL = !!b.SURCHARGE_3_CUMUL;
+
+  const hasSurchargeChange =
+    b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined || b.SURCHARGE_1_CUMUL !== undefined ||
+    b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined || b.SURCHARGE_2_CUMUL !== undefined ||
+    b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined || b.SURCHARGE_3_CUMUL !== undefined;
+
   const { data, error } = await supabase
     .from('OFFER')
     .update(patch)
@@ -326,7 +342,39 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
     .select('*')
     .single();
   if (error) throw error;
+
+  if (hasSurchargeChange) {
+    await recalcOfferRootSurcharges(supabase, { offerId });
+    const { data: refreshed } = await supabase.from('OFFER').select('*').eq('ID', offerId).eq('TENANT_ID', tenantId).maybeSingle();
+    return refreshed || data;
+  }
   return data;
+}
+
+async function recalcOfferRootSurcharges(supabase, { offerId }) {
+  const { data: roots } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('REVENUE')
+    .eq('OFFER_ID', offerId)
+    .is('FATHER_ID', null);
+  const basis = (roots || []).reduce((s, r) => s + Number(r.REVENUE || 0), 0);
+
+  const { data: settings } = await supabase
+    .from('OFFER')
+    .select('SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+    .eq('ID', offerId)
+    .maybeSingle();
+  if (!settings) return;
+
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesOffer(basis, settings);
+
+  await supabase.from('OFFER').update({
+    SURCHARGE_1_EUR:  r2(s1Eur),
+    SURCHARGE_2_EUR:  r2(s2Eur),
+    SURCHARGE_3_EUR:  r2(s3Eur),
+    SURCHARGES_TOTAL: surchargesTotal,
+  }).eq('ID', offerId);
 }
 
 async function deleteOffer(supabase, { tenantId, offerId }) {
@@ -596,10 +644,15 @@ async function moveOfferStructureNode(supabase, { tenantId, nodeId, fatherRaw, s
 async function propagateUpwardsOffer(supabase, { structureId }) {
   const { data: node } = await supabase
     .from('OFFER_STRUCTURE')
-    .select('FATHER_ID')
+    .select('FATHER_ID, OFFER_ID')
     .eq('ID', structureId)
     .maybeSingle();
-  if (!node || node.FATHER_ID == null) return;
+  if (!node) return;
+  if (node.FATHER_ID == null) {
+    // Reached a root structure node — recompute offer-level surcharges
+    if (node.OFFER_ID) await recalcOfferRootSurcharges(supabase, { offerId: node.OFFER_ID });
+    return;
+  }
   await recalcOfferParent(supabase, { parentId: node.FATHER_ID });
   await propagateUpwardsOffer(supabase, { structureId: node.FATHER_ID });
 }
@@ -657,13 +710,18 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
 
   // Totals from root-level nodes (no FATHER_ID) so parent surcharges are included in the sum
   const roots      = (structRows || []).filter(r => r.FATHER_ID == null);
-  const totalRevenue = roots.reduce((s, r) => s + (Number(r.REVENUE)  || 0), 0);
+  const structureRevenueSum = roots.reduce((s, r) => s + (Number(r.REVENUE)  || 0), 0);
   const totalExtras  = roots.reduce((s, r) => s + (Number(r.EXTRAS)   || 0), 0);
+
+  // Offer-level (root) surcharges — Option A
+  const offerLevelSurcharges = Number(offer.SURCHARGES_TOTAL || 0);
+  const totalRevenue = structureRevenueSum + offerLevelSurcharges;
   const totalNet     = fmt2(totalRevenue + totalExtras);
 
   const hasExtras = (structRows || []).some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
-  const hasSurcharges = (structRows || []).some(r => Number(r.SURCHARGES_TOTAL || 0) > 0);
-  const offerSurchargesTotal = fmt2((structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).reduce((s, r) => s + Number(r.SURCHARGES_TOTAL || 0), 0));
+  const hasSurcharges = (structRows || []).some(r => Number(r.SURCHARGES_TOTAL || 0) > 0) || offerLevelSurcharges > 0;
+  const structureSurchargesTotal = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).reduce((s, r) => s + Number(r.SURCHARGES_TOTAL || 0), 0);
+  const offerSurchargesTotal = fmt2(structureSurchargesTotal + offerLevelSurcharges);
   const surchargeSummaryRows = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).map(r => ({
     nameShort:      r.NAME_SHORT || '',
     nameLong:       r.NAME_LONG  || '',
@@ -673,6 +731,18 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
     s2Label: r.SURCHARGE_2_LABEL || null, s2Pct: Number(r.SURCHARGE_2_PCT || 0), s2Eur: Number(r.SURCHARGE_2_EUR || 0),
     s3Label: r.SURCHARGE_3_LABEL || null, s3Pct: Number(r.SURCHARGE_3_PCT || 0), s3Eur: Number(r.SURCHARGE_3_EUR || 0),
   }));
+  // Append offer-level surcharges as a final summary row
+  if (offerLevelSurcharges > 0) {
+    surchargeSummaryRows.push({
+      nameShort:      'Angebot',
+      nameLong:       'Angebotsweite Zuschläge',
+      revenueBasis:   structureRevenueSum,
+      surchargesTotal: offerLevelSurcharges,
+      s1Label: offer.SURCHARGE_1_LABEL || null, s1Pct: Number(offer.SURCHARGE_1_PCT || 0), s1Eur: Number(offer.SURCHARGE_1_EUR || 0),
+      s2Label: offer.SURCHARGE_2_LABEL || null, s2Pct: Number(offer.SURCHARGE_2_PCT || 0), s2Eur: Number(offer.SURCHARGE_2_EUR || 0),
+      s3Label: offer.SURCHARGE_3_LABEL || null, s3Pct: Number(offer.SURCHARGE_3_PCT || 0), s3Eur: Number(offer.SURCHARGE_3_EUR || 0),
+    });
+  }
 
   // VAT
   let vatPercent = 0;
@@ -1404,6 +1474,7 @@ module.exports = {
   updateOfferStructureNode,
   deleteOfferStructureNode,
   moveOfferStructureNode,
+  recalcOfferRootSurcharges,
   attachFeeCalcToOfferStructure,
   buildOfferPdfViewModel,
   convertOfferToProject,

@@ -57,25 +57,42 @@ module.exports = (supabase) => {
     return null;
   }
 
-  // Compute sum of parent (non-leaf) SURCHARGES_TOTAL per project — these are the
-  // surcharges applied at parent-level which the leaf-based reporting views miss.
+  // Compute sum of parent (non-leaf) SURCHARGES_TOTAL per project PLUS the
+  // project-level (root) SURCHARGES_TOTAL — these are the surcharges that the
+  // leaf-based reporting views miss.
   // Returns Map<projectId(string), surchargeSum(number)>
   async function loadParentSurchargesByProject(projectIds) {
     const out = new Map();
     if (!projectIds || projectIds.length === 0) return out;
-    const { data, error } = await supabase
+
+    // 1) Non-leaf structure-node surcharges
+    const { data: structRows } = await supabase
       .from("PROJECT_STRUCTURE")
       .select("PROJECT_ID, ID, FATHER_ID, SURCHARGES_TOTAL")
       .in("PROJECT_ID", projectIds);
-    if (error || !data) return out;
-    const fatherIds = new Set(data.filter(r => r.FATHER_ID != null).map(r => String(r.FATHER_ID)));
-    for (const r of data) {
-      if (!fatherIds.has(String(r.ID))) continue; // skip leaves — their REVENUE already includes own surcharges
+    const fatherIds = new Set((structRows || []).filter(r => r.FATHER_ID != null).map(r => String(r.FATHER_ID)));
+    for (const r of (structRows || [])) {
+      if (!fatherIds.has(String(r.ID))) continue; // skip leaves
       const pid = String(r.PROJECT_ID);
       const inc = Number(r.SURCHARGES_TOTAL || 0);
       if (!inc) continue;
       out.set(pid, (out.get(pid) || 0) + inc);
     }
+
+    // 2) Project-level (root) surcharges — Option A
+    try {
+      const { data: projRows } = await supabase
+        .from("PROJECT")
+        .select("ID, SURCHARGES_TOTAL")
+        .in("ID", projectIds);
+      for (const p of (projRows || [])) {
+        const sur = Number(p.SURCHARGES_TOTAL || 0);
+        if (!sur) continue;
+        const pid = String(p.ID);
+        out.set(pid, (out.get(pid) || 0) + sur);
+      }
+    } catch (_) { /* column may not exist yet (migration not run) — soft-fail */ }
+
     return out;
   }
   const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;

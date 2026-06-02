@@ -11,6 +11,7 @@ import {
   inheritStructureExtras, patchStructureNode,
   createStructureNode, deleteStructureNode, moveStructureNode,
   fetchParentChildCheck, transferFatherToChild,
+  fetchProject, patchProjectRootSurcharges,
   type StructureNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
@@ -80,6 +81,8 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
   const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
   const [kalkFatherId, setKalkFatherId]     = useState<number | null>(null)
+  const [projectSurchargePanel, setProjectSurchargePanel] = useState<boolean>(false)
+  const [projectSurchargeEdit,  setProjectSurchargeEdit]  = useState<SurchargeEdit | null>(null)
   const [projectInput, setProjectInput]           = useState('')
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [elementSearch, setElementSearch]         = useState('')
@@ -95,9 +98,15 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
     enabled:  selectedPid !== null,
   })
   const { data: btData } = useQuery({ queryKey: ['billing-types'], queryFn: fetchBillingTypes })
+  const { data: projectData } = useQuery({
+    queryKey: ['project-detail', selectedPid],
+    queryFn:  () => fetchProject(selectedPid!),
+    enabled:  selectedPid !== null,
+  })
 
   const projects  = projectsData?.data ?? []
   const structure = structData?.data   ?? []
+  const projectRow = projectData?.data ?? null
   const btypes    = btData?.data       ?? []
 
   useEffect(() => { setEdits({}); setAddForm(null); setSelectedIds(new Set()) }, [selectedPid])
@@ -299,6 +308,49 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
     const pending = surchargeEdits[nodeId]
     if (pending) surchargeMut.mutate({ id: nodeId, s: pending })
     setSurchargePanel(null)
+  }
+
+  // Project-level (root) surcharge mutation — Option A
+  const projectSurchargeMut = useMutation({
+    mutationFn: (s: SurchargeEdit) =>
+      patchProjectRootSurcharges(selectedPid!, {
+        SURCHARGE_1_LABEL: s.s1Label || null,
+        SURCHARGE_1_PCT:   s.s1Pct !== '' ? Number(s.s1Pct) : null,
+        SURCHARGE_1_CUMUL: s.s1Cumul,
+        SURCHARGE_2_LABEL: s.s2Label || null,
+        SURCHARGE_2_PCT:   s.s2Pct !== '' ? Number(s.s2Pct) : null,
+        SURCHARGE_2_CUMUL: s.s2Cumul,
+        SURCHARGE_3_LABEL: s.s3Label || null,
+        SURCHARGE_3_PCT:   s.s3Pct !== '' ? Number(s.s3Pct) : null,
+        SURCHARGE_3_CUMUL: s.s3Cumul,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['project-detail', selectedPid] })
+      setProjectSurchargeEdit(null)
+      setSaveMsg({ text: 'Projektzuschläge gespeichert ✅', type: 'success' })
+      setTimeout(() => setSaveMsg(null), 3000)
+    },
+    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
+  })
+
+  function closeProjectSurchargePanel() {
+    if (projectSurchargeEdit) projectSurchargeMut.mutate(projectSurchargeEdit)
+    setProjectSurchargePanel(false)
+  }
+
+  function projectSurchargeDefault(): SurchargeEdit {
+    const p = projectRow as Record<string, unknown> | null
+    return {
+      s1Label: (p?.SURCHARGE_1_LABEL as string | null) ?? '',
+      s1Pct:   p?.SURCHARGE_1_PCT != null ? String(p.SURCHARGE_1_PCT) : '',
+      s1Cumul: (p?.SURCHARGE_1_CUMUL as boolean | undefined) ?? true,
+      s2Label: (p?.SURCHARGE_2_LABEL as string | null) ?? '',
+      s2Pct:   p?.SURCHARGE_2_PCT != null ? String(p.SURCHARGE_2_PCT) : '',
+      s2Cumul: (p?.SURCHARGE_2_CUMUL as boolean | undefined) ?? true,
+      s3Label: (p?.SURCHARGE_3_LABEL as string | null) ?? '',
+      s3Pct:   p?.SURCHARGE_3_PCT != null ? String(p.SURCHARGE_3_PCT) : '',
+      s3Cumul: (p?.SURCHARGE_3_CUMUL as boolean | undefined) ?? true,
+    }
   }
 
   function surchargeDefault(node: StructureNode): SurchargeEdit {
@@ -618,10 +670,19 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
     const isP = parentIds.has(String(n.STRUCTURE_ID))
     return s + (isP ? (aggMap.get(String(n.STRUCTURE_ID))?.revenueBasis ?? 0) : (n.REVENUE_BASIS ?? n.REVENUE ?? 0))
   }, 0)
-  const rootSurcharges  = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.surcharges ?? 0), 0)
-  const rootRevenueFinal = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE ?? 0), 0)
+  // Sum surcharges from structure subtree + project-level (root) surcharges
+  const structureSurcharges = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.surcharges ?? 0), 0)
+  const projectLevelSurcharges = Number((projectRow as Record<string, unknown> | null)?.SURCHARGES_TOTAL || 0)
+  const rootSurcharges = structureSurcharges + projectLevelSurcharges
+  const rootStructureRevenueSum = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE ?? 0), 0)
+  const rootRevenueFinal = rootStructureRevenueSum + projectLevelSurcharges
   const rootExtras      = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.extras ?? 0), 0)
   const rootStand       = structure.reduce((s, n) => s + (n.REVENUE_COMPLETION ?? 0), 0)
+
+  // Computed live preview of project-level surcharge amounts (used in the panel)
+  function computeProjectSurchargesPreview(s: SurchargeEdit) {
+    return computeSurcharges(rootStructureRevenueSum, s)
+  }
 
   // ── Select helpers ────────────────────────────────────────────────────────
 
@@ -748,6 +809,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                     </thead>
                     <tbody ref={tbodyRef}>
                       {currentProject && (
+                        <>
                         <tr
                           style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)', cursor: 'context-menu' }}
                           onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null }) }}
@@ -764,8 +826,68 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootStand)}</span></td>
                           <td></td>
-                          <td></td>
+                          <td>
+                            <button
+                              className="row-action-btn"
+                              title={projectLevelSurcharges > 0 ? `Projektzuschläge (${fmtEur(projectLevelSurcharges)})` : 'Projektzuschläge bearbeiten'}
+                              style={projectLevelSurcharges > 0 ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
+                              onClick={() => {
+                                if (projectSurchargePanel) closeProjectSurchargePanel()
+                                else { setProjectSurchargeEdit(projectSurchargeDefault()); setProjectSurchargePanel(true) }
+                              }}
+                            ><Percent size={13} strokeWidth={2} /></button>
+                          </td>
                         </tr>
+                        {projectSurchargePanel && projectSurchargeEdit && (() => {
+                          const sE = projectSurchargeEdit
+                          const computed = computeProjectSurchargesPreview(sE)
+                          const setEdit = (f: Partial<SurchargeEdit>) => setProjectSurchargeEdit(prev => prev ? { ...prev, ...f } : prev)
+                          return (
+                            <tr className="surcharge-panel-row">
+                              <td colSpan={13}>
+                                <div className="surcharge-panel">
+                                  <div className="surcharge-panel-basis">
+                                    Projektzuschläge – Basis (Summe Wurzel-Honorar): <strong>{fmtEur(rootStructureRevenueSum)}</strong>
+                                  </div>
+                                  <div className="surcharge-grid">
+                                    <div className="surcharge-grid-header">
+                                      <span>Kumul.</span>
+                                      <span>Bezeichnung</span>
+                                      <span style={{ textAlign: 'right' }}>%</span>
+                                      <span style={{ textAlign: 'right' }}>Betrag</span>
+                                    </div>
+                                    {([
+                                      { label: sE.s1Label, pct: sE.s1Pct, cumul: sE.s1Cumul, eur: computed.s1Eur, disableCumul: true,  placeholder: 'z.B. GP-Zuschlag', labelKey: 's1Label' as const, pctKey: 's1Pct' as const, cumulKey: 's1Cumul' as const },
+                                      { label: sE.s2Label, pct: sE.s2Pct, cumul: sE.s2Cumul, eur: computed.s2Eur, disableCumul: false, placeholder: '(leer = inaktiv)', labelKey: 's2Label' as const, pctKey: 's2Pct' as const, cumulKey: 's2Cumul' as const },
+                                      { label: sE.s3Label, pct: sE.s3Pct, cumul: sE.s3Cumul, eur: computed.s3Eur, disableCumul: false, placeholder: '(leer = inaktiv)', labelKey: 's3Label' as const, pctKey: 's3Pct' as const, cumulKey: 's3Cumul' as const },
+                                    ] as const).map((row, i) => (
+                                      <div className="surcharge-grid-row" key={i}>
+                                        <input type="checkbox" checked={row.cumul} disabled={row.disableCumul}
+                                          title={row.disableCumul ? 'Erster Zuschlag bezieht sich immer auf die Basis' : 'Kumulativ (auf laufende Zwischensumme)'}
+                                          onChange={e => setEdit({ [row.cumulKey]: e.target.checked })} />
+                                        <input className="tbl-input" placeholder={row.placeholder} value={row.label}
+                                          onChange={e => setEdit({ [row.labelKey]: e.target.value })} />
+                                        <input className="tbl-input" type="number" min={-100} max={500} step={0.1}
+                                          style={{ width: 64, textAlign: 'right' }} value={row.pct}
+                                          onChange={e => setEdit({ [row.pctKey]: e.target.value })} />
+                                        <span className="surcharge-eur">{row.label || row.pct ? fmtEur(row.eur) : '—'}</span>
+                                      </div>
+                                    ))}
+                                    <div className="surcharge-grid-total">
+                                      Gesamt Projektzuschläge: <strong>{fmtEur(computed.total)}</strong>
+                                    </div>
+                                  </div>
+                                  <div className="surcharge-panel-actions">
+                                    <button className="btn-small" onClick={closeProjectSurchargePanel}>
+                                      {projectSurchargeMut.isPending ? 'Speichert …' : 'Schließen (speichert automatisch)'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })()}
+                        </>
                       )}
                       {filteredFlatTree.map(({ node, depth }) => {
                         const edit      = edits[node.STRUCTURE_ID]

@@ -6,9 +6,9 @@ import { Modal }        from '@/components/ui/Modal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import {
-  fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
+  fetchOffer, fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
   deleteOfferStructureNode, moveOfferStructureNode, updateOfferStructureSurcharges,
-  openOfferPdf,
+  patchOfferRootSurcharges, openOfferPdf,
   type OfferStructureNode,
 } from '@/api/angebote'
 import { fetchBillingTypes } from '@/api/projekte'
@@ -49,6 +49,8 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const [kalkFatherId, setKalkFatherId]             = useState<number | null>(null)
   const [offerInput, setOfferInput]                 = useState('')
   const [offerDropdownOpen, setOfferDropdownOpen]   = useState(false)
+  const [offerSurchargePanel, setOfferSurchargePanel] = useState<boolean>(false)
+  const [offerSurchargeEdit,  setOfferSurchargeEdit]  = useState<SurchargeEdit | null>(null)
   const contextMenuRef                              = useRef<HTMLDivElement>(null)
   const offerAcRef                                  = useRef<HTMLDivElement>(null)
   const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
@@ -70,6 +72,13 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const { data: btData } = useQuery({ queryKey: ['billing-types'], queryFn: fetchBillingTypes })
 
   const offers = offersData?.data ?? []
+
+  const { data: offerDetailData } = useQuery({
+    queryKey: ['offer-detail', oid],
+    queryFn:  () => fetchOffer(oid!),
+    enabled:  oid !== null,
+  })
+  const offerDetail = offerDetailData?.data ?? null
 
   const structure = structData?.data ?? []
   const btypes    = btData?.data     ?? []
@@ -181,8 +190,11 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     const isP = parentIds.has(String(n.ID))
     return s + (isP ? (aggMap.get(String(n.ID))?.revenueBasis ?? 0) : (n.REVENUE_BASIS != null ? Number(n.REVENUE_BASIS) : Number(n.REVENUE ?? 0)))
   }, 0), [structure, aggMap, parentIds])
-  const rootSurcharges    = useMemo(() => structure.reduce((s, n) => s + Number(n.SURCHARGES_TOTAL ?? 0), 0), [structure])
-  const rootRevenueFinal  = useMemo(() => structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + Number(n.REVENUE ?? 0), 0), [structure])
+  const structureSurcharges = useMemo(() => structure.reduce((s, n) => s + Number(n.SURCHARGES_TOTAL ?? 0), 0), [structure])
+  const offerLevelSurcharges = Number(offerDetail?.SURCHARGES_TOTAL ?? 0)
+  const rootSurcharges = structureSurcharges + offerLevelSurcharges
+  const rootStructureRevenueSum = useMemo(() => structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + Number(n.REVENUE ?? 0), 0), [structure])
+  const rootRevenueFinal  = rootStructureRevenueSum + offerLevelSurcharges
   const rootExtras        = useMemo(() => structure.filter(n => n.FATHER_ID == null).reduce((s, n) => {
     const isP = parentIds.has(String(n.ID))
     return s + (isP ? (aggMap.get(String(n.ID))?.extras ?? 0) : Number(n.EXTRAS ?? 0))
@@ -254,6 +266,49 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     const pending = surchargeEdits[nodeId]
     if (pending) surchargeMut.mutate({ id: nodeId, s: pending })
     setSurchargePanel(null)
+  }
+
+  // Offer-level (root) surcharge mutation — Option A
+  const offerSurchargeMut = useMutation({
+    mutationFn: (s: SurchargeEdit) =>
+      patchOfferRootSurcharges(oid!, {
+        SURCHARGE_1_LABEL: s.s1Label || null,
+        SURCHARGE_1_PCT:   s.s1Pct !== '' ? Number(s.s1Pct) : null,
+        SURCHARGE_1_CUMUL: s.s1Cumul,
+        SURCHARGE_2_LABEL: s.s2Label || null,
+        SURCHARGE_2_PCT:   s.s2Pct !== '' ? Number(s.s2Pct) : null,
+        SURCHARGE_2_CUMUL: s.s2Cumul,
+        SURCHARGE_3_LABEL: s.s3Label || null,
+        SURCHARGE_3_PCT:   s.s3Pct !== '' ? Number(s.s3Pct) : null,
+        SURCHARGE_3_CUMUL: s.s3Cumul,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offer-detail', oid] })
+      setOfferSurchargeEdit(null)
+      setSaveMsg({ text: 'Angebotszuschläge gespeichert ✅', type: 'success' })
+      setTimeout(() => setSaveMsg(null), 3000)
+    },
+    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
+  })
+
+  function closeOfferSurchargePanel() {
+    if (offerSurchargeEdit) offerSurchargeMut.mutate(offerSurchargeEdit)
+    setOfferSurchargePanel(false)
+  }
+
+  function offerSurchargeDefault(): SurchargeEdit {
+    const o = offerDetail
+    return {
+      s1Label: o?.SURCHARGE_1_LABEL ?? '',
+      s1Pct:   o?.SURCHARGE_1_PCT != null ? String(o.SURCHARGE_1_PCT) : '',
+      s1Cumul: o?.SURCHARGE_1_CUMUL ?? true,
+      s2Label: o?.SURCHARGE_2_LABEL ?? '',
+      s2Pct:   o?.SURCHARGE_2_PCT != null ? String(o.SURCHARGE_2_PCT) : '',
+      s2Cumul: o?.SURCHARGE_2_CUMUL ?? true,
+      s3Label: o?.SURCHARGE_3_LABEL ?? '',
+      s3Pct:   o?.SURCHARGE_3_PCT != null ? String(o.SURCHARGE_3_PCT) : '',
+      s3Cumul: o?.SURCHARGE_3_CUMUL ?? true,
+    }
   }
 
   const addMut = useMutation({
@@ -569,6 +624,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                 <tbody ref={tbodyRef}>
                   {/* Root totals row */}
                   {structure.length > 0 && (
+                    <>
                     <tr style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)', cursor: 'context-menu' }}
                       onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null }) }}>
                       <td></td><td></td>
@@ -580,8 +636,67 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                       <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges > 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
                       <td className="num"><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
                       <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
-                      <td></td>
+                      <td>
+                        <button
+                          className="row-action-btn"
+                          title={offerLevelSurcharges > 0 ? `Angebotszuschläge (${fmtEur(offerLevelSurcharges)})` : 'Angebotszuschläge bearbeiten'}
+                          style={offerLevelSurcharges > 0 ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
+                          onClick={() => {
+                            if (offerSurchargePanel) closeOfferSurchargePanel()
+                            else { setOfferSurchargeEdit(offerSurchargeDefault()); setOfferSurchargePanel(true) }
+                          }}
+                        ><Percent size={13} strokeWidth={2} /></button>
+                      </td>
                     </tr>
+                    {offerSurchargePanel && offerSurchargeEdit && (() => {
+                      const sE = offerSurchargeEdit
+                      const computed = computeSurchargesDisplay(rootStructureRevenueSum, sE)
+                      const setEdit = (f: Partial<SurchargeEdit>) => setOfferSurchargeEdit(prev => prev ? { ...prev, ...f } : prev)
+                      return (
+                        <tr className="surcharge-panel-row">
+                          <td colSpan={11}>
+                            <div className="surcharge-panel">
+                              <div className="surcharge-panel-basis">
+                                Angebotszuschläge – Basis (Summe Wurzel-Honorar): <strong>{fmtEur(rootStructureRevenueSum)}</strong>
+                              </div>
+                              <div className="surcharge-grid">
+                                <div className="surcharge-grid-header">
+                                  <span>Kumul.</span>
+                                  <span>Bezeichnung</span>
+                                  <span style={{ textAlign: 'right' }}>%</span>
+                                  <span style={{ textAlign: 'right' }}>Betrag</span>
+                                </div>
+                                {([
+                                  { label: sE.s1Label, pct: sE.s1Pct, cumul: sE.s1Cumul, eur: computed.s1Eur, disableCumul: true,  placeholder: 'z.B. GP-Zuschlag', labelKey: 's1Label' as const, pctKey: 's1Pct' as const, cumulKey: 's1Cumul' as const },
+                                  { label: sE.s2Label, pct: sE.s2Pct, cumul: sE.s2Cumul, eur: computed.s2Eur, disableCumul: false, placeholder: '(leer = inaktiv)', labelKey: 's2Label' as const, pctKey: 's2Pct' as const, cumulKey: 's2Cumul' as const },
+                                  { label: sE.s3Label, pct: sE.s3Pct, cumul: sE.s3Cumul, eur: computed.s3Eur, disableCumul: false, placeholder: '(leer = inaktiv)', labelKey: 's3Label' as const, pctKey: 's3Pct' as const, cumulKey: 's3Cumul' as const },
+                                ] as const).map((row, i) => (
+                                  <div className="surcharge-grid-row" key={i}>
+                                    <input type="checkbox" checked={row.cumul} disabled={row.disableCumul}
+                                      onChange={e => setEdit({ [row.cumulKey]: e.target.checked })} />
+                                    <input className="tbl-input" placeholder={row.placeholder} value={row.label}
+                                      onChange={e => setEdit({ [row.labelKey]: e.target.value })} />
+                                    <input className="tbl-input" type="number" min={-100} max={500} step={0.1}
+                                      style={{ width: 64, textAlign: 'right' }} value={row.pct}
+                                      onChange={e => setEdit({ [row.pctKey]: e.target.value })} />
+                                    <span className="surcharge-eur">{row.label || row.pct ? fmtEur(row.eur) : '—'}</span>
+                                  </div>
+                                ))}
+                                <div className="surcharge-grid-total">
+                                  Gesamt Angebotszuschläge: <strong>{fmtEur(computed.total)}</strong>
+                                </div>
+                              </div>
+                              <div className="surcharge-panel-actions">
+                                <button className="btn-small" onClick={closeOfferSurchargePanel}>
+                                  {offerSurchargeMut.isPending ? 'Speichert …' : 'Schließen (speichert automatisch)'}
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })()}
+                    </>
                   )}
 
                   {filteredFlatTree.map(({ node, depth }) => {
