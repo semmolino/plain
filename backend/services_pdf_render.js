@@ -265,7 +265,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
 
   const { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, PARTIAL_PAYMENTS, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
+    .select('ID, FATHER_ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, PARTIAL_PAYMENTS, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
     .eq('PROJECT_ID', projectId)
     .order('ID', { ascending: true });
 
@@ -281,6 +281,9 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
     .from(structTable).select('STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET').eq(docIdField, docId);
   const docMap = Object.fromEntries((docRows || []).map(r => [r.STRUCTURE_ID, r]));
 
+  // Compute set of parent IDs (nodes that have children) — for isLeaf flag
+  const fatherIds = new Set((data || []).filter(r => r.FATHER_ID != null).map(r => String(r.FATHER_ID)));
+
   return (data || []).map(r => {
     const revenue         = Number(r.REVENUE || 0);
     const extras          = Number(r.EXTRAS  || 0);
@@ -293,6 +296,8 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
     const dr         = docMap[r.ID];
     const thisDocNet = dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0;
     return {
+      id:             r.ID,
+      isLeaf:         !fatherIds.has(String(r.ID)),
       nameShort:      r.NAME_SHORT || '',
       nameLong:       r.NAME_LONG  || '',
       feeTotal,
@@ -469,12 +474,17 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     vat:   projectPayments.reduce((s, p) => s + p.vatAmount,   0),
     gross: projectPayments.reduce((s, p) => s + p.grossAmount, 0),
   };
+  // Only LEAF rows count in the Summe — parents are aggregated displays of
+  // their children's values, so including them would double-count.
+  const leafProjectStructureRows = projectStructureRows.filter(r => r.isLeaf);
   const structureTotals = {
-    feeTotal:      projectStructureRows.reduce((s, r) => s + r.feeTotal,      0),
-    alreadyBilled: projectStructureRows.reduce((s, r) => s + r.alreadyBilled, 0),
-    thisDocNet:    projectStructureRows.reduce((s, r) => s + r.thisDocNet,    0),
+    feeTotal:      leafProjectStructureRows.reduce((s, r) => s + r.feeTotal,      0),
+    alreadyBilled: leafProjectStructureRows.reduce((s, r) => s + r.alreadyBilled, 0),
+    thisDocNet:    leafProjectStructureRows.reduce((s, r) => s + r.thisDocNet,    0),
   };
   const surchargeSummaryRows    = projectStructureRows.filter(r => r.surchargesTotal > 0);
+  // Each row's surchargesTotal is its OWN surcharges (not aggregated from
+  // children), so summing all rows with surcharges is correct — no double-count.
   let structureSurchargesTotal = Math.round(surchargeSummaryRows.reduce((s, r) => s + r.surchargesTotal, 0) * 100) / 100;
 
   // Project-level (root) surcharges — Option A

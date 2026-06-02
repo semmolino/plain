@@ -600,9 +600,9 @@ table.data-table thead { display: table-header-group; }
     </thead>
     <tbody>
       {% for r in projectStructureRows %}
-      <tr>
+      <tr{% if not r.isLeaf %} style="background:rgba(17,24,39,0.025); font-style:italic;"{% endif %}>
         <td>
-          <div class="bold">{{ r.nameShort }}</div>
+          <div class="bold">{{ r.nameShort }}{% if not r.isLeaf %} (Σ){% endif %}</div>
           {% if r.nameLong %}<div class="muted">{{ r.nameLong }}</div>{% endif %}
         </td>
         <td class="r">{{ r.feeTotal      | money }}</td>
