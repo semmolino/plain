@@ -13,6 +13,7 @@ module.exports = (supabase) => {
   router.delete('/:id',                     (req, res) => ctrl.deleteOffer(req, res, supabase));
   router.get('/:id/structure',              (req, res) => ctrl.getOfferStructure(req, res, supabase));
   router.post('/:id/structure',             (req, res) => ctrl.addOfferStructureNode(req, res, supabase));
+  router.put('/:id/structure/:nodeId/move', (req, res) => ctrl.moveOfferStructureNode(req, res, supabase));
   router.put('/:id/structure/:nodeId',      (req, res) => ctrl.updateOfferStructureNode(req, res, supabase));
   router.delete('/:id/structure/:nodeId',   (req, res) => ctrl.deleteOfferStructureNode(req, res, supabase));
   router.get('/:id/pdf',                          (req, res) => ctrl.getOfferPdf(req, res, supabase));

@@ -1,6 +1,7 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil, FileText, MoreHorizontal } from 'lucide-react'
+import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignature } from 'lucide-react'
 import { Message } from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
@@ -24,42 +25,21 @@ function fmtDate(s: string | null | undefined) {
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
-// ── Row overflow menu ──────────────────────────────────────────────────────────
-
-function RowMenu({ open, onOpen, onClose, children }: {
-  open: boolean; onOpen: () => void; onClose: () => void; children: React.ReactNode
-}) {
-  const wrapRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    function onDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose()
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open, onClose])
-  return (
-    <div ref={wrapRef} className="row-menu-wrap" style={{ display: 'inline-block', position: 'relative' }}>
-      <button className="row-action-btn" onClick={open ? onClose : onOpen} title="Weitere Aktionen"><MoreHorizontal size={15} strokeWidth={1.75} /></button>
-      {open && <div className="row-menu-dropdown">{children}</div>}
-    </div>
-  )
-}
-
 export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, name: string) => void }) {
   const qc = useQueryClient()
-  const [search,      setSearch]      = useState('')
-  const [page,        setPage]        = useState(1)
-  const [onlyOpen,    setOnlyOpen]    = useState(false)
-  const [msg,         setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const navigate = useNavigate()
+  const [search,        setSearch]        = useState('')
+  const [page,          setPage]          = useState(1)
+  const [onlyOpen,      setOnlyOpen]      = useState(false)
+  const [msg,           setMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [beauftragtRow, setBeauftragtRow] = useState<OfferListItem | null>(null)
   const [convertErr,    setConvertErr]    = useState<string | null>(null)
-  const [menuOpenId,    setMenuOpenId]    = useState<number | null>(null)
   const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; confirmLabel?: string; onConfirm: () => void } | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['offers'], queryFn: fetchOffers })
   const { data: statusData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
-  const rejectedId = statusData?.data?.find(s => s.NAME_SHORT === 'Abgelehnt')?.ID ?? null
+  const rejectedId   = statusData?.data?.find(s => s.NAME_SHORT === 'Abgelehnt')?.ID ?? null
+  const beauftragtId = statusData?.data?.find(s => s.NAME_SHORT === 'Beauftragt')?.ID ?? null
 
   const { data: structData } = useQuery({
     queryKey: ['offer-structure', beauftragtRow?.ID],
@@ -90,6 +70,22 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
     onError: (e: Error) => setConvertErr(e.message),
   })
 
+  const markOrderedMut = useMutation({
+    mutationFn: (body: { order_date: string; project_id?: number | null }) =>
+      updateOffer(beauftragtRow!.ID, {
+        order_date:      body.order_date,
+        project_id:      body.project_id ?? null,
+        ...(beauftragtId ? { offer_status_id: beauftragtId } : {}),
+      }),
+    onSuccess: () => {
+      setBeauftragtRow(null)
+      setConvertErr(null)
+      void qc.invalidateQueries({ queryKey: ['offers'] })
+      setMsg({ text: 'Angebot als beauftragt markiert ✅', type: 'success' })
+    },
+    onError: (e: Error) => setConvertErr(e.message),
+  })
+
   const rows = data?.data ?? []
 
   const filtered = useMemo(() => {
@@ -100,7 +96,7 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
       `${r.NAME_SHORT} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q)
     )
     return result
-  }, [rows, search, onlyOpen])
+  }, [rows, search, onlyOpen, rejectedId])
 
   const totalSum = useMemo(() => filtered.reduce((s, r) => s + (r.TOTAL_AMOUNT ?? 0), 0), [filtered])
 
@@ -109,7 +105,6 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
   const pageRows   = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   function requestDelete(r: OfferListItem) {
-    setMenuOpenId(null)
     setConfirmState({
       title: 'Angebot löschen',
       message: `Angebot „${r.NAME_SHORT ?? r.NAME_LONG}" wirklich löschen?`,
@@ -119,7 +114,6 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
   }
 
   function requestReject(r: OfferListItem) {
-    setMenuOpenId(null)
     setConfirmState({
       title: 'Als abgelehnt markieren',
       message: `Angebot „${r.NAME_SHORT ?? r.NAME_LONG}" als abgelehnt markieren?`,
@@ -184,43 +178,66 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.OFFER_DATE ?? r.CREATED_AT)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.VALID_UNTIL)}</td>
                   <td className="doc-actions" onClick={e => e.stopPropagation()}>
-                    <button className="row-action-btn" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Bearbeiten"><Pencil size={14} strokeWidth={2} /></button>
-                    <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF"><FileText size={14} strokeWidth={1.75} /></button>
+                    <button className="row-action-btn" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Bearbeiten">
+                      <Pencil size={14} strokeWidth={2} />
+                    </button>
+                    <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">
+                      <FileText size={14} strokeWidth={1.75} />
+                    </button>
                     {r.PROJECT_ID && (
-                      <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, padding: '0 4px', whiteSpace: 'nowrap' }}>
-                        ✅ {r.PROJECT_NAME ?? `#${r.PROJECT_ID}`}
+                      <>
+                        <button
+                          className="row-action-btn"
+                          onClick={() => openAuftragsbestaetigungPdf(r.ID)}
+                          title="Auftragsbestätigung PDF"
+                        >
+                          <FileSignature size={14} strokeWidth={1.75} />
+                        </button>
+                        <button
+                          className="row-action-btn"
+                          title={`Zum Projekt ${r.PROJECT_NAME ?? r.PROJECT_ID}`}
+                          onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}
+                        >
+                          <FolderOpen size={14} strokeWidth={1.75} />
+                        </button>
+                      </>
+                    )}
+                    {isOpen(r) && (
+                      <button
+                        className="row-action-btn"
+                        style={{ color: '#16a34a', borderColor: '#16a34a' }}
+                        onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
+                        title="Beauftragt"
+                      >
+                        <CheckCircle2 size={14} strokeWidth={2} />
+                      </button>
+                    )}
+                    {isOpen(r) && (
+                      <button
+                        className="row-action-btn"
+                        style={{ color: '#ea580c', borderColor: '#ea580c' }}
+                        onClick={() => requestReject(r)}
+                        title="Als abgelehnt markieren"
+                      >
+                        <XCircle size={14} strokeWidth={2} />
+                      </button>
+                    )}
+                    {isRejected(r) && (
+                      <span
+                        title="Abgelehnt"
+                        style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px', color: '#9ca3af', fontSize: 11, fontWeight: 600 }}
+                      >
+                        Abgelehnt
                       </span>
                     )}
-                    <RowMenu
-                      open={menuOpenId === r.ID}
-                      onOpen={() => setMenuOpenId(r.ID)}
-                      onClose={() => setMenuOpenId(null)}
+                    <button
+                      className="row-action-btn"
+                      style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                      onClick={() => requestDelete(r)}
+                      title="Löschen"
                     >
-                      {isOpen(r) && (
-                        <button className="row-menu-item" onClick={() => { setMenuOpenId(null); setConvertErr(null); setBeauftragtRow(r) }}>
-                          Beauftragt
-                        </button>
-                      )}
-                      {r.PROJECT_ID && (
-                        <button className="row-menu-item" onClick={() => { setMenuOpenId(null); openAuftragsbestaetigungPdf(r.ID) }}>
-                          Auftragsbestätigung
-                        </button>
-                      )}
-                      {isOpen(r) && (
-                        <button className="row-menu-item" onClick={() => requestReject(r)}>
-                          Als abgelehnt markieren
-                        </button>
-                      )}
-                      {isRejected(r) && (
-                        <button className="row-menu-item" style={{ color: 'var(--text-2)', fontSize: 11 }} disabled>
-                          Abgelehnt
-                        </button>
-                      )}
-                      <div className="row-menu-divider" />
-                      <button className="row-menu-item danger" onClick={() => requestDelete(r)}>
-                        Löschen
-                      </button>
-                    </RowMenu>
+                      <Trash2 size={14} strokeWidth={2} />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -258,8 +275,9 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
         offerName={beauftragtRow.NAME_SHORT ?? beauftragtRow.NAME_LONG}
         structNodes={structData?.data ?? []}
         onConvert={body => convertMut.mutate(body)}
+        onMarkOrdered={body => markOrderedMut.mutate(body)}
         onClose={() => setBeauftragtRow(null)}
-        isPending={convertMut.isPending}
+        isPending={convertMut.isPending || markOrderedMut.isPending}
         error={convertErr}
       />
     )}

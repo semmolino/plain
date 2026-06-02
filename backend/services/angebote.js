@@ -6,6 +6,34 @@ function fmt2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+function computeSurchargesOffer(revenueBasis, settings) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const s1Label = settings?.SURCHARGE_1_LABEL ?? null;
+  const s1Pct   = Number(settings?.SURCHARGE_1_PCT ?? 0);
+  const s1Cumul = !!(settings?.SURCHARGE_1_CUMUL ?? true);
+  const s2Label = settings?.SURCHARGE_2_LABEL ?? null;
+  const s2Pct   = Number(settings?.SURCHARGE_2_PCT ?? 0);
+  const s2Cumul = !!(settings?.SURCHARGE_2_CUMUL ?? true);
+  const s3Label = settings?.SURCHARGE_3_LABEL ?? null;
+  const s3Pct   = Number(settings?.SURCHARGE_3_PCT ?? 0);
+  const s3Cumul = !!(settings?.SURCHARGE_3_CUMUL ?? true);
+
+  const s1Active = s1Label !== null && s1Label !== '' && s1Pct !== 0;
+  const s1Eur    = s1Active ? r2(revenueBasis * s1Pct / 100) : 0;
+  const s1Sub    = revenueBasis + s1Eur;
+
+  const s2Base   = s2Cumul ? s1Sub : revenueBasis;
+  const s2Active = s2Label !== null && s2Label !== '' && s2Pct !== 0;
+  const s2Eur    = s2Active ? r2(s2Base * s2Pct / 100) : 0;
+  const s2Sub    = s1Sub + s2Eur;
+
+  const s3Base   = s3Cumul ? s2Sub : revenueBasis;
+  const s3Active = s3Label !== null && s3Label !== '' && s3Pct !== 0;
+  const s3Eur    = s3Active ? r2(s3Base * s3Pct / 100) : 0;
+
+  return { s1Eur, s2Eur, s3Eur, surchargesTotal: r2(s1Eur + s2Eur + s3Eur) };
+}
+
 // Build flat ordered list from OFFER_STRUCTURE rows (respects FATHER_ID tree)
 function flattenOfferStructure(rows) {
   const byId     = new Map(rows.map(r => [r.ID, r]));
@@ -287,6 +315,24 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
   if (b.offer_date      !== undefined) patch.OFFER_DATE      = b.offer_date    || null;
   if (b.valid_until     !== undefined) patch.VALID_UNTIL     = b.valid_until   || null;
   if (b.refusal_date    !== undefined) patch.REFUSAL_DATE    = b.refusal_date  || null;
+  if (b.order_date      !== undefined) patch.ORDER_DATE      = b.order_date    || null;
+  if (b.project_id      !== undefined) patch.PROJECT_ID      = b.project_id != null && b.project_id !== '' ? parseInt(String(b.project_id), 10) : null;
+
+  // Root-level surcharge settings (Option A — offer-level surcharges)
+  if (b.SURCHARGE_1_LABEL !== undefined) patch.SURCHARGE_1_LABEL = b.SURCHARGE_1_LABEL;
+  if (b.SURCHARGE_1_PCT   !== undefined) patch.SURCHARGE_1_PCT   = b.SURCHARGE_1_PCT != null && b.SURCHARGE_1_PCT !== '' ? Number(b.SURCHARGE_1_PCT) : null;
+  if (b.SURCHARGE_1_CUMUL !== undefined) patch.SURCHARGE_1_CUMUL = !!b.SURCHARGE_1_CUMUL;
+  if (b.SURCHARGE_2_LABEL !== undefined) patch.SURCHARGE_2_LABEL = b.SURCHARGE_2_LABEL;
+  if (b.SURCHARGE_2_PCT   !== undefined) patch.SURCHARGE_2_PCT   = b.SURCHARGE_2_PCT != null && b.SURCHARGE_2_PCT !== '' ? Number(b.SURCHARGE_2_PCT) : null;
+  if (b.SURCHARGE_2_CUMUL !== undefined) patch.SURCHARGE_2_CUMUL = !!b.SURCHARGE_2_CUMUL;
+  if (b.SURCHARGE_3_LABEL !== undefined) patch.SURCHARGE_3_LABEL = b.SURCHARGE_3_LABEL;
+  if (b.SURCHARGE_3_PCT   !== undefined) patch.SURCHARGE_3_PCT   = b.SURCHARGE_3_PCT != null && b.SURCHARGE_3_PCT !== '' ? Number(b.SURCHARGE_3_PCT) : null;
+  if (b.SURCHARGE_3_CUMUL !== undefined) patch.SURCHARGE_3_CUMUL = !!b.SURCHARGE_3_CUMUL;
+
+  const hasSurchargeChange =
+    b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined || b.SURCHARGE_1_CUMUL !== undefined ||
+    b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined || b.SURCHARGE_2_CUMUL !== undefined ||
+    b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined || b.SURCHARGE_3_CUMUL !== undefined;
 
   const { data, error } = await supabase
     .from('OFFER')
@@ -296,7 +342,39 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
     .select('*')
     .single();
   if (error) throw error;
+
+  if (hasSurchargeChange) {
+    await recalcOfferRootSurcharges(supabase, { offerId });
+    const { data: refreshed } = await supabase.from('OFFER').select('*').eq('ID', offerId).eq('TENANT_ID', tenantId).maybeSingle();
+    return refreshed || data;
+  }
   return data;
+}
+
+async function recalcOfferRootSurcharges(supabase, { offerId }) {
+  const { data: roots } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('REVENUE')
+    .eq('OFFER_ID', offerId)
+    .is('FATHER_ID', null);
+  const basis = (roots || []).reduce((s, r) => s + Number(r.REVENUE || 0), 0);
+
+  const { data: settings } = await supabase
+    .from('OFFER')
+    .select('SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+    .eq('ID', offerId)
+    .maybeSingle();
+  if (!settings) return;
+
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesOffer(basis, settings);
+
+  await supabase.from('OFFER').update({
+    SURCHARGE_1_EUR:  r2(s1Eur),
+    SURCHARGE_2_EUR:  r2(s2Eur),
+    SURCHARGE_3_EUR:  r2(s3Eur),
+    SURCHARGES_TOTAL: surchargesTotal,
+  }).eq('ID', offerId);
 }
 
 async function deleteOffer(supabase, { tenantId, offerId }) {
@@ -354,7 +432,9 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
       OFFER_ID:        offerId,
       BILLING_TYPE_ID: btId,
       FATHER_ID:       fatherId,
+      REVENUE_BASIS:   revenue,
       REVENUE:         revenue,
+      SURCHARGES_TOTAL: 0,
       EXTRAS_PERCENT:  extPct,
       EXTRAS:          extras,
       SORT_ORDER:      maxSort + 10,
@@ -368,40 +448,86 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
     .select('*')
     .single();
   if (error) throw error;
+  if (fatherId !== null) await recalcOfferParent(supabase, { parentId: fatherId });
   return data;
 }
 
 async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
-  const b       = body || {};
-  const btId    = b.billing_type_id != null ? parseInt(String(b.billing_type_id), 10) : undefined;
+  const b        = body || {};
+  const r2       = (n) => Math.round(n * 100) / 100;
+  const btId     = b.billing_type_id != null ? parseInt(String(b.billing_type_id), 10) : undefined;
   const isHourly = btId === 2;
-  const patch   = {};
+  const patch    = {};
 
-  if (b.name_short    !== undefined) patch.NAME_SHORT    = String(b.name_short).trim();
-  if (b.name_long     !== undefined) patch.NAME_LONG     = String(b.name_long).trim();
-  if (btId            !== undefined) patch.BILLING_TYPE_ID = btId;
-  if (b.extras_percent !== undefined) patch.EXTRAS_PERCENT = Number(b.extras_percent) || 0;
+  if (b.name_short      !== undefined) patch.NAME_SHORT      = String(b.name_short).trim();
+  if (b.name_long       !== undefined) patch.NAME_LONG       = String(b.name_long).trim();
+  if (btId              !== undefined) patch.BILLING_TYPE_ID = btId;
+  if (b.extras_percent  !== undefined) patch.EXTRAS_PERCENT  = Number(b.extras_percent) || 0;
   if (b.role_name_short !== undefined) patch.ROLE_NAME_SHORT = b.role_name_short || null;
   if (b.role_name_long  !== undefined) patch.ROLE_NAME_LONG  = b.role_name_long  || null;
-  if (b.role_id         !== undefined) patch.ROLE_ID = b.role_id ? parseInt(String(b.role_id), 10) : null;
+  if (b.role_id         !== undefined) patch.ROLE_ID         = b.role_id ? parseInt(String(b.role_id), 10) : null;
 
-  // Recalculate revenue and extras
-  if (isHourly || (btId === undefined && b.quantity !== undefined)) {
-    const q = Number(b.quantity  ?? 0);
-    const r = Number(b.sp_rate   ?? 0);
-    patch.QUANTITY = q;
-    patch.SP_RATE  = r;
-    patch.REVENUE  = fmt2(q * r);
-  } else if (b.revenue !== undefined) {
-    patch.REVENUE = fmt2(Number(b.revenue));
-  }
+  // Surcharge settings
+  if (b.SURCHARGE_1_LABEL !== undefined) patch.SURCHARGE_1_LABEL = b.SURCHARGE_1_LABEL;
+  if (b.SURCHARGE_1_PCT   !== undefined) patch.SURCHARGE_1_PCT   = b.SURCHARGE_1_PCT != null ? Number(b.SURCHARGE_1_PCT) : null;
+  if (b.SURCHARGE_1_CUMUL !== undefined) patch.SURCHARGE_1_CUMUL = !!b.SURCHARGE_1_CUMUL;
+  if (b.SURCHARGE_2_LABEL !== undefined) patch.SURCHARGE_2_LABEL = b.SURCHARGE_2_LABEL;
+  if (b.SURCHARGE_2_PCT   !== undefined) patch.SURCHARGE_2_PCT   = b.SURCHARGE_2_PCT != null ? Number(b.SURCHARGE_2_PCT) : null;
+  if (b.SURCHARGE_2_CUMUL !== undefined) patch.SURCHARGE_2_CUMUL = !!b.SURCHARGE_2_CUMUL;
+  if (b.SURCHARGE_3_LABEL !== undefined) patch.SURCHARGE_3_LABEL = b.SURCHARGE_3_LABEL;
+  if (b.SURCHARGE_3_PCT   !== undefined) patch.SURCHARGE_3_PCT   = b.SURCHARGE_3_PCT != null ? Number(b.SURCHARGE_3_PCT) : null;
+  if (b.SURCHARGE_3_CUMUL !== undefined) patch.SURCHARGE_3_CUMUL = !!b.SURCHARGE_3_CUMUL;
 
-  // Recalculate extras from current or new values
-  if (patch.REVENUE !== undefined || patch.EXTRAS_PERCENT !== undefined) {
-    const { data: current } = await supabase.from('OFFER_STRUCTURE').select('REVENUE, EXTRAS_PERCENT').eq('ID', nodeId).maybeSingle();
-    const rev  = patch.REVENUE        ?? Number(current?.REVENUE || 0);
-    const pct  = patch.EXTRAS_PERCENT ?? Number(current?.EXTRAS_PERCENT || 0);
-    patch.EXTRAS = fmt2(rev * pct / 100);
+  const hasSurchargeChange = b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined ||
+    b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined ||
+    b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined;
+  const hasRevenueChange = isHourly || b.quantity !== undefined || b.revenue !== undefined;
+
+  if (hasRevenueChange || hasSurchargeChange || patch.EXTRAS_PERCENT !== undefined) {
+    const { data: cur } = await supabase
+      .from('OFFER_STRUCTURE')
+      .select('REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, SP_RATE, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+      .eq('ID', nodeId)
+      .maybeSingle();
+
+    let revenueBasis;
+    if (isHourly || b.quantity !== undefined || b.sp_rate !== undefined) {
+      const q = Number(b.quantity ?? cur?.QUANTITY ?? 0);
+      const s = Number(b.sp_rate  ?? cur?.SP_RATE  ?? 0);
+      if (b.quantity !== undefined) patch.QUANTITY = q;
+      if (b.sp_rate  !== undefined) patch.SP_RATE  = s;
+      revenueBasis = r2(q * s);
+    } else if (b.revenue !== undefined) {
+      revenueBasis = r2(Number(b.revenue));
+    } else {
+      revenueBasis = Number(cur?.REVENUE_BASIS ?? cur?.REVENUE ?? 0);
+    }
+
+    const settings = {
+      SURCHARGE_1_LABEL: patch.SURCHARGE_1_LABEL !== undefined ? patch.SURCHARGE_1_LABEL : cur?.SURCHARGE_1_LABEL,
+      SURCHARGE_1_PCT:   patch.SURCHARGE_1_PCT   !== undefined ? patch.SURCHARGE_1_PCT   : cur?.SURCHARGE_1_PCT,
+      SURCHARGE_1_CUMUL: patch.SURCHARGE_1_CUMUL !== undefined ? patch.SURCHARGE_1_CUMUL : cur?.SURCHARGE_1_CUMUL,
+      SURCHARGE_2_LABEL: patch.SURCHARGE_2_LABEL !== undefined ? patch.SURCHARGE_2_LABEL : cur?.SURCHARGE_2_LABEL,
+      SURCHARGE_2_PCT:   patch.SURCHARGE_2_PCT   !== undefined ? patch.SURCHARGE_2_PCT   : cur?.SURCHARGE_2_PCT,
+      SURCHARGE_2_CUMUL: patch.SURCHARGE_2_CUMUL !== undefined ? patch.SURCHARGE_2_CUMUL : cur?.SURCHARGE_2_CUMUL,
+      SURCHARGE_3_LABEL: patch.SURCHARGE_3_LABEL !== undefined ? patch.SURCHARGE_3_LABEL : cur?.SURCHARGE_3_LABEL,
+      SURCHARGE_3_PCT:   patch.SURCHARGE_3_PCT   !== undefined ? patch.SURCHARGE_3_PCT   : cur?.SURCHARGE_3_PCT,
+      SURCHARGE_3_CUMUL: patch.SURCHARGE_3_CUMUL !== undefined ? patch.SURCHARGE_3_CUMUL : cur?.SURCHARGE_3_CUMUL,
+    };
+    const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesOffer(revenueBasis, settings);
+
+    patch.REVENUE_BASIS   = revenueBasis;
+    patch.SURCHARGES_TOTAL = surchargesTotal;
+    patch.SURCHARGE_1_EUR  = r2(s1Eur);
+    patch.SURCHARGE_2_EUR  = r2(s2Eur);
+    patch.SURCHARGE_3_EUR  = r2(s3Eur);
+    patch.REVENUE          = r2(revenueBasis + surchargesTotal);
+
+    const extrasPct = patch.EXTRAS_PERCENT !== undefined ? patch.EXTRAS_PERCENT : Number(cur?.EXTRAS_PERCENT || 0);
+    patch.EXTRAS = r2(patch.REVENUE * extrasPct / 100);
+  } else if (patch.EXTRAS_PERCENT !== undefined) {
+    const { data: cur2 } = await supabase.from('OFFER_STRUCTURE').select('REVENUE').eq('ID', nodeId).maybeSingle();
+    patch.EXTRAS = r2(Number(cur2?.REVENUE || 0) * patch.EXTRAS_PERCENT / 100);
   }
 
   const { data, error } = await supabase
@@ -412,13 +538,123 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
     .select('*')
     .single();
   if (error) throw error;
+
+  await propagateUpwardsOffer(supabase, { structureId: nodeId });
   return data;
 }
 
 async function deleteOfferStructureNode(supabase, { tenantId, nodeId }) {
+  const { data: nd } = await supabase.from('OFFER_STRUCTURE').select('FATHER_ID').eq('ID', nodeId).eq('TENANT_ID', tenantId).maybeSingle();
+  const fatherId = nd?.FATHER_ID ?? null;
   await supabase.from('OFFER_STRUCTURE').delete().eq('FATHER_ID', nodeId).eq('TENANT_ID', tenantId);
   const { error } = await supabase.from('OFFER_STRUCTURE').delete().eq('ID', nodeId).eq('TENANT_ID', tenantId);
   if (error) throw error;
+  if (fatherId != null) await recalcOfferParent(supabase, { parentId: fatherId });
+}
+
+async function recalcOfferParent(supabase, { parentId }) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { data: children, error } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('REVENUE, EXTRAS')
+    .eq('FATHER_ID', parentId);
+  if (error) throw error;
+  if (!children || children.length === 0) return;
+
+  const revenueBasis = children.reduce((s, c) => s + Number(c.REVENUE || 0), 0);
+
+  const { data: parent } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('EXTRAS_PERCENT, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+    .eq('ID', parentId)
+    .maybeSingle();
+
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesOffer(revenueBasis, parent);
+  const revenue   = r2(revenueBasis + surchargesTotal);
+  const extrasPct = Number(parent?.EXTRAS_PERCENT || 0);
+  const extras    = r2(revenue * extrasPct / 100);
+
+  const { error: uErr } = await supabase
+    .from('OFFER_STRUCTURE')
+    .update({
+      REVENUE_BASIS:    revenueBasis,
+      REVENUE:          revenue,
+      EXTRAS:           extras,
+      SURCHARGES_TOTAL: surchargesTotal,
+      SURCHARGE_1_EUR:  r2(s1Eur),
+      SURCHARGE_2_EUR:  r2(s2Eur),
+      SURCHARGE_3_EUR:  r2(s3Eur),
+    })
+    .eq('ID', parentId);
+  if (uErr) throw uErr;
+}
+
+async function moveOfferStructureNode(supabase, { tenantId, nodeId, fatherRaw, sortAfterId }) {
+  const newFatherId =
+    fatherRaw === undefined || fatherRaw === null || String(fatherRaw) === '' || String(fatherRaw) === '0'
+      ? null : parseInt(String(fatherRaw), 10);
+
+  const { data: current, error: curErr } = await supabase
+    .from('OFFER_STRUCTURE').select('ID, OFFER_ID, FATHER_ID').eq('ID', nodeId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (curErr) throw curErr;
+  if (!current) throw { status: 404, message: 'OFFER_STRUCTURE nicht gefunden' };
+  if (newFatherId !== null && newFatherId === nodeId)
+    throw { status: 400, message: 'Ein Element kann nicht sich selbst untergeordnet werden' };
+
+  if (newFatherId !== null) {
+    const { data: all } = await supabase.from('OFFER_STRUCTURE').select('ID, FATHER_ID').eq('OFFER_ID', current.OFFER_ID);
+    const map = new Map((all || []).map(n => [String(n.ID), n.FATHER_ID === null ? null : String(n.FATHER_ID)]));
+    let cursor = String(newFatherId), guard = 0;
+    while (cursor && guard++ < 5000) {
+      if (cursor === String(nodeId)) throw { status: 400, message: 'Ungültige Verschiebung (Zyklus)' };
+      const next = map.get(cursor);
+      if (!next) break;
+      cursor = next;
+    }
+  }
+
+  const oldFatherId = current.FATHER_ID === null || current.FATHER_ID === undefined ? null : current.FATHER_ID;
+
+  await supabase.from('OFFER_STRUCTURE').update({ FATHER_ID: newFatherId }).eq('ID', nodeId);
+
+  // Re-order siblings in new parent group
+  const sibQ = supabase.from('OFFER_STRUCTURE').select('ID, SORT_ORDER')
+    .eq('OFFER_ID', current.OFFER_ID).neq('ID', nodeId)
+    .order('SORT_ORDER', { ascending: true }).order('ID', { ascending: true });
+  const { data: newSiblings } = newFatherId !== null
+    ? await sibQ.eq('FATHER_ID', newFatherId)
+    : await sibQ.is('FATHER_ID', null);
+
+  const ordered = [...(newSiblings || [])];
+  const finalIdx = sortAfterId === '__end__' ? ordered.length
+    : sortAfterId === null ? 0
+    : (() => { const i = ordered.findIndex(s => String(s.ID) === String(sortAfterId)); return i === -1 ? ordered.length : i + 1 })();
+  ordered.splice(finalIdx, 0, { ID: nodeId });
+  for (let i = 0; i < ordered.length; i++) {
+    await supabase.from('OFFER_STRUCTURE').update({ SORT_ORDER: i * 10 }).eq('ID', ordered[i].ID);
+  }
+
+  // Propagate aggregation
+  await propagateUpwardsOffer(supabase, { structureId: nodeId });
+  if (oldFatherId !== null && oldFatherId !== newFatherId) {
+    await recalcOfferParent(supabase, { parentId: oldFatherId });
+  }
+}
+
+async function propagateUpwardsOffer(supabase, { structureId }) {
+  const { data: node } = await supabase
+    .from('OFFER_STRUCTURE')
+    .select('FATHER_ID, OFFER_ID')
+    .eq('ID', structureId)
+    .maybeSingle();
+  if (!node) return;
+  if (node.FATHER_ID == null) {
+    // Reached a root structure node — recompute offer-level surcharges
+    if (node.OFFER_ID) await recalcOfferRootSurcharges(supabase, { offerId: node.OFFER_ID });
+    return;
+  }
+  await recalcOfferParent(supabase, { parentId: node.FATHER_ID });
+  await propagateUpwardsOffer(supabase, { structureId: node.FATHER_ID });
 }
 
 // ── PDF view model ────────────────────────────────────────────────────────────
@@ -472,14 +708,41 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
 
   const flat = flattenOfferStructure(structRows || []);
 
-  // Aggregate totals (leaf nodes only — nodes without children)
-  const withChildren = new Set((structRows || []).map(r => r.FATHER_ID).filter(Boolean));
-  const leaves = (structRows || []).filter(r => !withChildren.has(r.ID));
-  const totalRevenue = leaves.reduce((s, r) => s + (Number(r.REVENUE)  || 0), 0);
-  const totalExtras  = leaves.reduce((s, r) => s + (Number(r.EXTRAS)   || 0), 0);
+  // Totals from root-level nodes (no FATHER_ID) so parent surcharges are included in the sum
+  const roots      = (structRows || []).filter(r => r.FATHER_ID == null);
+  const structureRevenueSum = roots.reduce((s, r) => s + (Number(r.REVENUE)  || 0), 0);
+  const totalExtras  = roots.reduce((s, r) => s + (Number(r.EXTRAS)   || 0), 0);
+
+  // Offer-level (root) surcharges — Option A
+  const offerLevelSurcharges = Number(offer.SURCHARGES_TOTAL || 0);
+  const totalRevenue = structureRevenueSum + offerLevelSurcharges;
   const totalNet     = fmt2(totalRevenue + totalExtras);
 
-  const hasExtras = leaves.some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
+  const hasExtras = (structRows || []).some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
+  const hasSurcharges = (structRows || []).some(r => Number(r.SURCHARGES_TOTAL || 0) > 0) || offerLevelSurcharges > 0;
+  const structureSurchargesTotal = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).reduce((s, r) => s + Number(r.SURCHARGES_TOTAL || 0), 0);
+  const offerSurchargesTotal = fmt2(structureSurchargesTotal + offerLevelSurcharges);
+  const surchargeSummaryRows = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).map(r => ({
+    nameShort:      r.NAME_SHORT || '',
+    nameLong:       r.NAME_LONG  || '',
+    revenueBasis:   Number(r.REVENUE_BASIS ?? r.REVENUE ?? 0),
+    surchargesTotal: Number(r.SURCHARGES_TOTAL || 0),
+    s1Label: r.SURCHARGE_1_LABEL || null, s1Pct: Number(r.SURCHARGE_1_PCT || 0), s1Eur: Number(r.SURCHARGE_1_EUR || 0),
+    s2Label: r.SURCHARGE_2_LABEL || null, s2Pct: Number(r.SURCHARGE_2_PCT || 0), s2Eur: Number(r.SURCHARGE_2_EUR || 0),
+    s3Label: r.SURCHARGE_3_LABEL || null, s3Pct: Number(r.SURCHARGE_3_PCT || 0), s3Eur: Number(r.SURCHARGE_3_EUR || 0),
+  }));
+  // Append offer-level surcharges as a final summary row
+  if (offerLevelSurcharges > 0) {
+    surchargeSummaryRows.push({
+      nameShort:      'Angebot',
+      nameLong:       'Angebotsweite Zuschläge',
+      revenueBasis:   structureRevenueSum,
+      surchargesTotal: offerLevelSurcharges,
+      s1Label: offer.SURCHARGE_1_LABEL || null, s1Pct: Number(offer.SURCHARGE_1_PCT || 0), s1Eur: Number(offer.SURCHARGE_1_EUR || 0),
+      s2Label: offer.SURCHARGE_2_LABEL || null, s2Pct: Number(offer.SURCHARGE_2_PCT || 0), s2Eur: Number(offer.SURCHARGE_2_EUR || 0),
+      s3Label: offer.SURCHARGE_3_LABEL || null, s3Pct: Number(offer.SURCHARGE_3_PCT || 0), s3Eur: Number(offer.SURCHARGE_3_EUR || 0),
+    });
+  }
 
   // VAT
   let vatPercent = 0;
@@ -516,21 +779,26 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
     contact: contact || null,
     employee: employee || null,
     structureRows: flat.map(({ node: n, depth }) => ({
-      id:         n.ID,
+      id:              n.ID,
       depth,
-      nameShort:  n.NAME_SHORT  || '',
-      nameLong:   n.NAME_LONG   || '',
-      btId:       Number(n.BILLING_TYPE_ID),
-      isHourly:   Number(n.BILLING_TYPE_ID) === 2,
-      quantity:   Number(n.QUANTITY    || 0),
-      spRate:     Number(n.SP_RATE     || 0),
-      revenue:    Number(n.REVENUE     || 0),
-      extrasPct:  Number(n.EXTRAS_PERCENT || 0),
-      extras:     Number(n.EXTRAS      || 0),
-      total:      fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
-      roleName:   n.ROLE_NAME_LONG  || n.ROLE_NAME_SHORT || '',
+      nameShort:       n.NAME_SHORT  || '',
+      nameLong:        n.NAME_LONG   || '',
+      btId:            Number(n.BILLING_TYPE_ID),
+      isHourly:        Number(n.BILLING_TYPE_ID) === 2,
+      quantity:        Number(n.QUANTITY       || 0),
+      spRate:          Number(n.SP_RATE        || 0),
+      revenueBasis:    Number(n.REVENUE_BASIS  ?? n.REVENUE ?? 0),
+      revenue:         Number(n.REVENUE        || 0),
+      extrasPct:       Number(n.EXTRAS_PERCENT || 0),
+      extras:          Number(n.EXTRAS         || 0),
+      total:           fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
+      roleName:        n.ROLE_NAME_LONG || n.ROLE_NAME_SHORT || '',
+      surchargesTotal: Number(n.SURCHARGES_TOTAL || 0),
     })),
     hasExtras,
+    hasSurcharges,
+    offerSurchargesTotal,
+    surchargeSummaryRows,
     vatPercent,
     vatAmount,
     grossTotal,
@@ -694,6 +962,106 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
   }
 }
 
+// ── attach fee calc to offer structure ───────────────────────────────────────
+
+async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId, offerId, tenantId }) {
+  const { loadPhaseRowsWithLabels } = require('./stammdaten');
+  const phaseRows   = await loadPhaseRowsWithLabels(supabase, calcMasterId);
+  const activePhases = phaseRows.filter(r => (Number(r.PHASE_REVENUE) || 0) !== 0 || (Number(r.FEE_PERCENT) || 0) !== 0);
+
+  const blQueryRes = await supabase.from('FEE_CALCULATION_BL')
+    .select('ID, NAME, AMOUNT').eq('FEE_CALC_MASTER_ID', calcMasterId).order('SORT_ORDER', { ascending: true });
+  const blItems = blQueryRes.data || [];
+
+  if (!activePhases.length && !blItems.length) return;
+
+  // Phase label map
+  const phaseIds = [...new Set(activePhases.map(r => r.FEE_PHASE_ID).filter(Boolean))];
+  let phaseMap = new Map();
+  if (phaseIds.length) {
+    const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, NAME_SHORT, NAME_LONG').in('ID', phaseIds);
+    phaseMap = new Map((phaseDefs || []).map(r => [r.ID, r]));
+  }
+
+  // EXTRAS_PERCENT from parent node
+  let extrasPercent = 0;
+  if (fatherId) {
+    const { data: father } = await supabase.from('OFFER_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).single();
+    extrasPercent = Number(father?.EXTRAS_PERCENT ?? 0) || 0;
+  }
+
+  // Surcharge allocation (same as project version)
+  let lphAlloc = {}, blAlloc = {};
+  try {
+    const surRes = await supabase.from('FEE_CALCULATION_SURCHARGES').select('AMOUNT, LPH_FILTER, BL_FILTER')
+      .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER');
+    const allPhaseIds = activePhases.map(p => p.ID);
+    for (const s of (surRes.data || [])) {
+      const amount = Number(s.AMOUNT) || 0;
+      if (!amount) continue;
+      const selIds    = s.LPH_FILTER ? (() => { try { return JSON.parse(s.LPH_FILTER); } catch { return allPhaseIds; } })() : allPhaseIds;
+      const selPhases = activePhases.filter(p => selIds.includes(p.ID));
+      const lphBase   = selPhases.reduce((sum, p) => sum + (Number(p.PHASE_REVENUE) || 0), 0);
+      let selBls = [], blBase = 0;
+      if (s.BL_FILTER) {
+        try { const ids = JSON.parse(s.BL_FILTER); selBls = blItems.filter(b => ids.includes(b.ID)); blBase = selBls.reduce((sum, b) => sum + (Number(b.AMOUNT) || 0), 0); } catch { /* ignore */ }
+      }
+      const base = lphBase + blBase;
+      if (!base) continue;
+      const lphAmt = amount * (lphBase / base);
+      for (const p of selPhases) { const pRev = Number(p.PHASE_REVENUE) || 0; if (pRev) lphAlloc[p.ID] = (lphAlloc[p.ID] || 0) + (pRev / lphBase) * lphAmt; }
+      const blAmt = amount * (blBase / base);
+      for (const b of selBls) { const bAmt = Number(b.AMOUNT) || 0; if (bAmt) blAlloc[b.ID] = (blAlloc[b.ID] || 0) + (bAmt / blBase) * blAmt; }
+    }
+  } catch (_) { /* soft-fail */ }
+
+  // Determine SORT_ORDER start (append after existing children)
+  let sortBase = 0;
+  if (fatherId) {
+    const { data: siblings } = await supabase.from('OFFER_STRUCTURE').select('SORT_ORDER').eq('FATHER_ID', fatherId);
+    if (siblings && siblings.length > 0) sortBase = Math.max(...siblings.map(s => Number(s.SORT_ORDER ?? 0))) + 10;
+  }
+
+  // Insert LPH rows
+  if (activePhases.length) {
+    const insertRows = activePhases.map((r, i) => {
+      const def = phaseMap.get(r.FEE_PHASE_ID) || {};
+      const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
+      return {
+        NAME_SHORT:     def.NAME_SHORT || `LPH ${r.FEE_PHASE_ID}`,
+        NAME_LONG:      def.NAME_LONG  || null,
+        OFFER_ID:       offerId, FATHER_ID: fatherId,
+        BILLING_TYPE_ID: 1, EXTRAS_PERCENT: extrasPercent,
+        REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
+        SURCHARGES_TOTAL: 0, SORT_ORDER: sortBase + i * 10,
+        TENANT_ID: tenantId,
+      };
+    });
+    await supabase.from('OFFER_STRUCTURE').insert(insertRows);
+  }
+
+  // Insert BL rows
+  if (blItems.length) {
+    const lphCount = activePhases.length;
+    const blRows = blItems.map((b, i) => {
+      const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
+      return {
+        NAME_SHORT:      b.NAME || b.NAME_SHORT || 'BL',
+        NAME_LONG:       b.NAME || null,
+        OFFER_ID:        offerId, FATHER_ID: fatherId,
+        BILLING_TYPE_ID: 1, EXTRAS_PERCENT: extrasPercent,
+        REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
+        SURCHARGES_TOTAL: 0, SORT_ORDER: sortBase + (lphCount + i) * 10,
+        TENANT_ID: tenantId,
+      };
+    });
+    await supabase.from('OFFER_STRUCTURE').insert(blRows);
+  }
+
+  // Recalculate parent
+  if (fatherId) await recalcOfferParent(supabase, { parentId: fatherId });
+}
+
 // ── offer → project conversion ────────────────────────────────────────────────
 
 async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
@@ -736,7 +1104,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     throw { status: 500, message: 'Nummernkreis konnte nicht geladen werden: ' + (numErr?.message || 'kein Ergebnis') };
   }
 
-  // Insert PROJECT
+  // Insert PROJECT — also copy root-level (offer-level) surcharges
   const projectRow = {
     NAME_SHORT:         num,
     NAME_LONG:          offer.NAME_LONG,
@@ -749,6 +1117,19 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     CONTACT_ID:         offer.CONTACT_ID,
     TENANT_ID:          tenantId,
     OFFER_ID:           offerId,
+    SURCHARGE_1_LABEL:  offer.SURCHARGE_1_LABEL ?? null,
+    SURCHARGE_1_PCT:    offer.SURCHARGE_1_PCT   ?? null,
+    SURCHARGE_1_EUR:    offer.SURCHARGE_1_EUR   ?? 0,
+    SURCHARGE_1_CUMUL:  offer.SURCHARGE_1_CUMUL ?? true,
+    SURCHARGE_2_LABEL:  offer.SURCHARGE_2_LABEL ?? null,
+    SURCHARGE_2_PCT:    offer.SURCHARGE_2_PCT   ?? null,
+    SURCHARGE_2_EUR:    offer.SURCHARGE_2_EUR   ?? 0,
+    SURCHARGE_2_CUMUL:  offer.SURCHARGE_2_CUMUL ?? true,
+    SURCHARGE_3_LABEL:  offer.SURCHARGE_3_LABEL ?? null,
+    SURCHARGE_3_PCT:    offer.SURCHARGE_3_PCT   ?? null,
+    SURCHARGE_3_EUR:    offer.SURCHARGE_3_EUR   ?? 0,
+    SURCHARGE_3_CUMUL:  offer.SURCHARGE_3_CUMUL ?? true,
+    SURCHARGES_TOTAL:   offer.SURCHARGES_TOTAL  ?? 0,
   };
 
   let project = null;
@@ -762,6 +1143,13 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       const row2 = { ...projectRow };
       if (msg.includes('OFFER_ID'))   delete row2.OFFER_ID;
       if (msg.includes('COMPANY_ID')) delete row2.COMPANY_ID;
+      // If SURCHARGE_* columns don't exist yet (migration 0046 not run), drop them and retry
+      if (msg.includes('SURCHARGE')) {
+        delete row2.SURCHARGE_1_LABEL; delete row2.SURCHARGE_1_PCT; delete row2.SURCHARGE_1_EUR; delete row2.SURCHARGE_1_CUMUL;
+        delete row2.SURCHARGE_2_LABEL; delete row2.SURCHARGE_2_PCT; delete row2.SURCHARGE_2_EUR; delete row2.SURCHARGE_2_CUMUL;
+        delete row2.SURCHARGE_3_LABEL; delete row2.SURCHARGE_3_PCT; delete row2.SURCHARGE_3_EUR; delete row2.SURCHARGE_3_CUMUL;
+        delete row2.SURCHARGES_TOTAL;
+      }
       const r2 = await supabase.from('PROJECT').insert([row2])
         .select('ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
         .single();
@@ -809,6 +1197,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       PROJECT_ID:       project.ID,
       BILLING_TYPE_ID:  btId,
       FATHER_ID:        null,
+      REVENUE_BASIS:    isBt1 ? fmt2(Number(n.REVENUE_BASIS ?? n.REVENUE ?? 0)) : 0,
       REVENUE:          isBt1 ? fmt2(Number(n.REVENUE || 0)) : 0,
       EXTRAS_PERCENT:   Number(n.EXTRAS_PERCENT || 0),
       EXTRAS:           isBt1 ? fmt2(Number(n.EXTRAS  || 0)) : 0,
@@ -818,13 +1207,48 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       REVENUE_COMPLETION: 0,
       EXTRAS_COMPLETION:  0,
       TENANT_ID:        tenantId,
+      // Per-node surcharges
+      SURCHARGE_1_LABEL: n.SURCHARGE_1_LABEL ?? null,
+      SURCHARGE_1_PCT:   n.SURCHARGE_1_PCT   ?? null,
+      SURCHARGE_1_EUR:   n.SURCHARGE_1_EUR   ?? 0,
+      SURCHARGE_1_CUMUL: n.SURCHARGE_1_CUMUL ?? true,
+      SURCHARGE_2_LABEL: n.SURCHARGE_2_LABEL ?? null,
+      SURCHARGE_2_PCT:   n.SURCHARGE_2_PCT   ?? null,
+      SURCHARGE_2_EUR:   n.SURCHARGE_2_EUR   ?? 0,
+      SURCHARGE_2_CUMUL: n.SURCHARGE_2_CUMUL ?? true,
+      SURCHARGE_3_LABEL: n.SURCHARGE_3_LABEL ?? null,
+      SURCHARGE_3_PCT:   n.SURCHARGE_3_PCT   ?? null,
+      SURCHARGE_3_EUR:   n.SURCHARGE_3_EUR   ?? 0,
+      SURCHARGE_3_CUMUL: n.SURCHARGE_3_CUMUL ?? true,
+      SURCHARGES_TOTAL:  n.SURCHARGES_TOTAL  ?? 0,
     }; });
 
-    const { data: createdNodes, error: psErr } = await supabase
-      .from('PROJECT_STRUCTURE')
-      .insert(insertRows)
-      .select('ID');
-    if (psErr) throw { status: 500, message: 'Projektstruktur konnte nicht angelegt werden: ' + psErr.message };
+    let createdNodes;
+    {
+      const r = await supabase.from('PROJECT_STRUCTURE').insert(insertRows).select('ID');
+      if (r.error) {
+        const msg = String(r.error.message || '');
+        // Fallback: schema may be missing surcharge columns
+        if (msg.includes('SURCHARGE') || msg.includes('REVENUE_BASIS')) {
+          const stripped = insertRows.map(row => {
+            const c = { ...row };
+            delete c.REVENUE_BASIS;
+            delete c.SURCHARGE_1_LABEL; delete c.SURCHARGE_1_PCT; delete c.SURCHARGE_1_EUR; delete c.SURCHARGE_1_CUMUL;
+            delete c.SURCHARGE_2_LABEL; delete c.SURCHARGE_2_PCT; delete c.SURCHARGE_2_EUR; delete c.SURCHARGE_2_CUMUL;
+            delete c.SURCHARGE_3_LABEL; delete c.SURCHARGE_3_PCT; delete c.SURCHARGE_3_EUR; delete c.SURCHARGE_3_CUMUL;
+            delete c.SURCHARGES_TOTAL;
+            return c;
+          });
+          const r2 = await supabase.from('PROJECT_STRUCTURE').insert(stripped).select('ID');
+          if (r2.error) throw { status: 500, message: 'Projektstruktur konnte nicht angelegt werden: ' + r2.error.message };
+          createdNodes = r2.data;
+        } else {
+          throw { status: 500, message: 'Projektstruktur konnte nicht angelegt werden: ' + r.error.message };
+        }
+      } else {
+        createdNodes = r.data;
+      }
+    }
 
     // Map old offer structure ID → new project structure ID
     (createdNodes || []).forEach((row, i) => { offerIdToNew.set(offerStruct[i].ID, row.ID); });
@@ -930,6 +1354,18 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
         }
 
         if (fatherId) {
+          // Skip if OFFER_STRUCTURE already had children under ATTACH_TO_OFFER_STRUCTURE_ID —
+          // those nodes were copied to PROJECT_STRUCTURE above; calling attachFeeCalcToProjectStructure
+          // would create duplicates.
+          if (calc.ATTACH_TO_OFFER_STRUCTURE_ID) {
+            const { data: existingChildren } = await supabase
+              .from('OFFER_STRUCTURE').select('ID')
+              .eq('FATHER_ID', calc.ATTACH_TO_OFFER_STRUCTURE_ID).limit(1);
+            if (existingChildren && existingChildren.length > 0) {
+              console.log('[convertOffer] skipping attachFeeCalcToProjectStructure for calcId=%d (already in OFFER_STRUCTURE)', calc.ID);
+              continue;
+            }
+          }
           await attachFeeCalcToProjectStructure(supabase, { calcMasterId: calc.ID, fatherId, projectId: project.ID, tenantId });
 
           // Direct BL failsafe: query BL items independently (no TENANT_ID filter) and create
@@ -1093,6 +1529,9 @@ module.exports = {
   addOfferStructureNode,
   updateOfferStructureNode,
   deleteOfferStructureNode,
+  moveOfferStructureNode,
+  recalcOfferRootSurcharges,
+  attachFeeCalcToOfferStructure,
   buildOfferPdfViewModel,
   convertOfferToProject,
   copyOffer,

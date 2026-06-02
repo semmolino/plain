@@ -317,9 +317,11 @@ body {
   <table class="pos-table">
     <thead>
       <tr>
-        <th style="width:18mm">Position</th>
+        <th style="width:16mm">Position</th>
         <th>Bezeichnung</th>
-        <th class="r" style="width:26mm">Honorar</th>
+        {% if hasSurcharges %}<th class="r" style="width:24mm">Honorar (Basis)</th>{% endif %}
+        {% if hasSurcharges %}<th class="r" style="width:20mm">Zuschläge</th>{% endif %}
+        <th class="r" style="width:{% if hasSurcharges %}20{% else %}26{% endif %}mm">Honorar</th>
         {% if hasExtras %}<th class="r" style="width:18mm">Nebenkosten</th>{% endif %}
         <th class="r" style="width:22mm">Gesamt</th>
       </tr>
@@ -334,6 +336,10 @@ body {
           <div class="sub-info">{{ row.quantity }}&thinsp;h &times; {{ row.spRate | money }}/h{% if row.roleName %} ({{ row.roleName }}){% endif %}</div>
           {% endif %}
         </td>
+        {% if hasSurcharges %}
+        <td class="r">{{ row.revenueBasis | money }}</td>
+        <td class="r">{% if row.surchargesTotal > 0 %}{{ row.surchargesTotal | money }}{% else %}&mdash;{% endif %}</td>
+        {% endif %}
         <td class="r">{{ row.revenue | money }}</td>
         {% if hasExtras %}
         <td class="r">
@@ -345,57 +351,62 @@ body {
       {% endfor %}
     </tbody>
   </table>
-  {% endif %}
 
-  {# ── HOAI-Leistungen (structure visible to customer) ── #}
-  {% if honorarCalcs and honorarCalcs.length > 0 %}
-  {% for hc in honorarCalcs %}
-  <div style="margin-top:6mm; margin-bottom:1mm; font-size:9pt; font-weight:700; color:#374151; border-bottom:0.5pt solid #d1d5db; padding-bottom:1mm;">
-    HOAI-Leistungen – {{ hc.nameShort }}{% if hc.nameLong %}: {{ hc.nameLong }}{% endif %}
-  </div>
-  <table class="pos-table">
+  {% if hasSurcharges %}
+  <div style="margin-top:6mm; font-size:9pt; font-weight:700; color:#374151; border-bottom:0.5pt solid #d1d5db; padding-bottom:1mm;">Zuschlagsübersicht</div>
+  <table class="pos-table" style="margin-top:3mm">
     <thead>
       <tr>
         <th style="width:18mm">Position</th>
         <th>Bezeichnung</th>
-        <th class="r" style="width:26mm">Honorar</th>
-        <th class="r" style="width:22mm">Gesamt</th>
+        <th>Zuschlag</th>
+        <th class="r" style="width:14mm">%</th>
+        <th class="r" style="width:26mm">Betrag</th>
       </tr>
     </thead>
     <tbody>
-      {% for p in hc.phases %}
-      <tr class="leaf-row">
-        <td>{{ p.kx }}</td>
-        <td>{{ p.phaseLabel }}</td>
-        <td class="r">{{ p.phaseRevenue | money }}</td>
-        <td class="r">{{ p.phaseRevenue | money }}</td>
-      </tr>
-      {% endfor %}
-      {% for b in hc.blItems %}
-      <tr class="leaf-row">
-        <td>{{ b.nameShort or "BL" }}</td>
-        <td>{{ b.name }}</td>
-        <td class="r">{{ b.amount | money }}</td>
-        <td class="r">{{ b.amount | money }}</td>
-      </tr>
+      {% for r in surchargeSummaryRows %}
+        {% if r.s1Label %}
+        <tr class="leaf-row">
+          <td>{{ r.nameShort }}</td>
+          <td>{% if r.nameLong %}{{ r.nameLong }}{% endif %}</td>
+          <td>{{ r.s1Label }}</td>
+          <td class="r">{{ r.s1Pct | round(2) }}&#8239;%</td>
+          <td class="r">{{ r.s1Eur | money }}</td>
+        </tr>
+        {% endif %}
+        {% if r.s2Label %}
+        <tr class="leaf-row">
+          <td></td><td></td>
+          <td>{{ r.s2Label }}</td>
+          <td class="r">{{ r.s2Pct | round(2) }}&#8239;%</td>
+          <td class="r">{{ r.s2Eur | money }}</td>
+        </tr>
+        {% endif %}
+        {% if r.s3Label %}
+        <tr class="leaf-row">
+          <td></td><td></td>
+          <td>{{ r.s3Label }}</td>
+          <td class="r">{{ r.s3Pct | round(2) }}&#8239;%</td>
+          <td class="r">{{ r.s3Eur | money }}</td>
+        </tr>
+        {% endif %}
       {% endfor %}
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="2" style="font-weight:700">Gesamthonorar (netto)</td>
-        <td></td>
-        <td class="r" style="font-weight:700">{{ hc.gesamthonorar | money }}</td>
+        <td colspan="4" style="font-weight:700">Gesamt Zuschläge</td>
+        <td class="r" style="font-weight:700">{{ offerSurchargesTotal | money }}</td>
       </tr>
     </tfoot>
   </table>
-  {% endfor %}
+  {% endif %}
+
   {% endif %}
 
   {# ── Calculation table ── #}
-  {% set hasHoai = honorarCalcs and honorarCalcs.length > 0 %}
-  {% set combinedNet = totals.total + (honorarTotalSum if hasHoai else 0) %}
-  {% set combinedVat = combinedNet * vatPercent / 100 %}
-  {% set combinedGross = combinedNet + combinedVat %}
+  {# Totals are from root-level OFFER_STRUCTURE nodes (includes parent surcharges).
+     HOAI-Leistungen are shown in full detail on the appendix pages below. #}
   <table class="calc-table">
     {% if structureRows and structureRows.length > 0 %}
     <tr>
@@ -409,22 +420,16 @@ body {
     </tr>
     {% endif %}
     {% endif %}
-    {% if hasHoai %}
-    <tr>
-      <td class="label">zzgl. HOAI-Honorare (netto)</td>
-      <td class="amount">{{ honorarTotalSum | money }}</td>
-    </tr>
-    {% endif %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     {% if vatPercent > 0 %}
     <tr>
       <td class="label">zzgl. {{ vatPercent }}&thinsp;% Mehrwertsteuer</td>
-      <td class="amount">{{ (combinedVat if hasHoai else vatAmount) | money }}</td>
+      <td class="amount">{{ vatAmount | money }}</td>
     </tr>
     {% endif %}
     <tr class="total-row">
       <td class="label">Angebotssumme {% if vatPercent > 0 %}(brutto){% else %}(netto){% endif %}</td>
-      <td class="amount">{{ (combinedGross if (hasHoai and vatPercent > 0) else (combinedNet if hasHoai else (grossTotal if vatPercent > 0 else totals.total))) | money }}</td>
+      <td class="amount">{{ (grossTotal if vatPercent > 0 else totals.total) | money }}</td>
     </tr>
   </table>
 

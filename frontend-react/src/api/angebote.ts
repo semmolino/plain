@@ -25,6 +25,19 @@ export interface Offer {
   VALID_UNTIL:     string | null
   PROJECT_ID:      number | null
   ORDER_DATE:      string | null
+  SURCHARGE_1_LABEL?: string | null
+  SURCHARGE_1_PCT?:   number | null
+  SURCHARGE_1_EUR?:   number | null
+  SURCHARGE_1_CUMUL?: boolean
+  SURCHARGE_2_LABEL?: string | null
+  SURCHARGE_2_PCT?:   number | null
+  SURCHARGE_2_EUR?:   number | null
+  SURCHARGE_2_CUMUL?: boolean
+  SURCHARGE_3_LABEL?: string | null
+  SURCHARGE_3_PCT?:   number | null
+  SURCHARGE_3_EUR?:   number | null
+  SURCHARGE_3_CUMUL?: boolean
+  SURCHARGES_TOTAL?:  number
 }
 
 export interface ConvertOfferPayload {
@@ -65,6 +78,7 @@ export interface OfferStructureNode {
   NAME_SHORT:      string | null
   NAME_LONG:       string | null
   OFFER_ID:        number
+  REVENUE_BASIS:   number | null
   REVENUE:         number
   EXTRAS_PERCENT:  number
   EXTRAS:          number
@@ -77,6 +91,19 @@ export interface OfferStructureNode {
   ROLE_NAME_LONG:  string | null
   ROLE_ID:         number | null
   TENANT_ID:       number | null
+  SURCHARGE_1_LABEL: string | null
+  SURCHARGE_1_PCT:   number | null
+  SURCHARGE_1_EUR:   number | null
+  SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null
+  SURCHARGE_2_PCT:   number | null
+  SURCHARGE_2_EUR:   number | null
+  SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null
+  SURCHARGE_3_PCT:   number | null
+  SURCHARGE_3_EUR:   number | null
+  SURCHARGE_3_CUMUL: boolean
+  SURCHARGES_TOTAL:  number
 }
 
 export interface OfferStructureDraftRow {
@@ -122,6 +149,8 @@ export interface UpdateOfferPayload {
   offer_date?:       string | null
   valid_until?:      string | null
   refusal_date?:     string | null
+  order_date?:       string | null
+  project_id?:       number | null
 }
 
 export interface AddStructureNodePayload {
@@ -182,6 +211,21 @@ export const updateOfferStructureNode = (offerId: number, nodeId: number, body: 
 
 export const deleteOfferStructureNode = (offerId: number, nodeId: number) =>
   apiClient.delete<{ ok: boolean }>(`/angebote/${offerId}/structure/${nodeId}`)
+
+export interface UpdateOfferSurchargesPayload {
+  SURCHARGE_1_LABEL: string | null; SURCHARGE_1_PCT: number | null; SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null; SURCHARGE_2_PCT: number | null; SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null; SURCHARGE_3_PCT: number | null; SURCHARGE_3_CUMUL: boolean
+}
+
+export const updateOfferStructureSurcharges = (offerId: number, nodeId: number, body: UpdateOfferSurchargesPayload) =>
+  apiClient.put<{ data: OfferStructureNode }>(`/angebote/${offerId}/structure/${nodeId}`, body)
+
+export const moveOfferStructureNode = (offerId: number, nodeId: number, body: { father_id: number | null; sort_after_id: string | null }) =>
+  apiClient.put<{ ok: boolean }>(`/angebote/${offerId}/structure/${nodeId}/move`, body)
+
+export const patchOfferRootSurcharges = (offerId: number, body: UpdateOfferSurchargesPayload) =>
+  apiClient.put<{ data: Offer }>(`/angebote/${offerId}`, body)
 
 export const openOfferPdf = (id: number) =>
   openPdfWithAuth(`/angebote/${id}/pdf`)

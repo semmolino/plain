@@ -46,6 +46,20 @@ export interface StructureNode {
   EXTRAS_COMPLETION:           number
   TEC_SP_TOT_SUM:              number
   IS_INTERNAL:                 boolean
+  REVENUE_BASIS:               number | null
+  SURCHARGE_1_LABEL:           string | null
+  SURCHARGE_1_PCT:             number | null
+  SURCHARGE_1_EUR:             number | null
+  SURCHARGE_1_CUMUL:           boolean
+  SURCHARGE_2_LABEL:           string | null
+  SURCHARGE_2_PCT:             number | null
+  SURCHARGE_2_EUR:             number | null
+  SURCHARGE_2_CUMUL:           boolean
+  SURCHARGE_3_LABEL:           string | null
+  SURCHARGE_3_PCT:             number | null
+  SURCHARGE_3_EUR:             number | null
+  SURCHARGE_3_CUMUL:           boolean
+  SURCHARGES_TOTAL:            number
   children?:                   StructureNode[]
 }
 
@@ -97,6 +111,35 @@ export const fetchProjectListFull = () =>
 export const fetchProjectsShort = () =>
   apiClient.get<{ data: Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string }> }>('/projekte')
 
+export interface ProjectRootSurcharges {
+  ID:                number
+  SURCHARGE_1_LABEL: string | null
+  SURCHARGE_1_PCT:   number | null
+  SURCHARGE_1_EUR:   number | null
+  SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null
+  SURCHARGE_2_PCT:   number | null
+  SURCHARGE_2_EUR:   number | null
+  SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null
+  SURCHARGE_3_PCT:   number | null
+  SURCHARGE_3_EUR:   number | null
+  SURCHARGE_3_CUMUL: boolean
+  SURCHARGES_TOTAL:  number
+}
+
+export const fetchProject = (id: number) =>
+  apiClient.get<{ data: ProjectRootSurcharges & Project }>(`/projekte/${id}`)
+
+export interface UpdateRootSurchargesPayload {
+  SURCHARGE_1_LABEL: string | null; SURCHARGE_1_PCT: number | null; SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null; SURCHARGE_2_PCT: number | null; SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null; SURCHARGE_3_PCT: number | null; SURCHARGE_3_CUMUL: boolean
+}
+
+export const patchProjectRootSurcharges = (id: number, body: UpdateRootSurchargesPayload) =>
+  apiClient.patch<{ data: ProjectRootSurcharges }>(`/projekte/${id}`, body)
+
 export const createProject = (body: CreateProjectPayload) =>
   apiClient.post<{ data: Project }>('/projekte', body)
 
@@ -139,6 +182,9 @@ export const patchStructureNode = (structureId: number, body: Partial<{
   BILLING_TYPE_ID: number; REVENUE: number; EXTRAS_PERCENT: number
   REVENUE_COMPLETION_PERCENT: number; EXTRAS_COMPLETION_PERCENT: number
   IS_INTERNAL: boolean
+  SURCHARGE_1_LABEL: string | null; SURCHARGE_1_PCT: number | null; SURCHARGE_1_CUMUL: boolean
+  SURCHARGE_2_LABEL: string | null; SURCHARGE_2_PCT: number | null; SURCHARGE_2_CUMUL: boolean
+  SURCHARGE_3_LABEL: string | null; SURCHARGE_3_PCT: number | null; SURCHARGE_3_CUMUL: boolean
 }>) => apiClient.patch<{ data: StructureNode }>(`/projekte/structure/${structureId}`, body)
 
 export const inheritStructureExtras = (structureId: number, extrasPercent: number) =>

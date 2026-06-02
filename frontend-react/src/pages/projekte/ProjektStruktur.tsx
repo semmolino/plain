@@ -1,14 +1,18 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X } from 'lucide-react'
+import { X, Percent } from 'lucide-react'
 import { Message }       from '@/components/ui/Message'
+import { Modal }         from '@/components/ui/Modal'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
+import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
   inheritStructureExtras, patchStructureNode,
   createStructureNode, deleteStructureNode, moveStructureNode,
   fetchParentChildCheck, transferFatherToChild,
+  fetchProject, patchProjectRootSurcharges,
+  type StructureNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 
@@ -18,6 +22,12 @@ const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.fo
 type RowEdit = {
   nameShort: string; nameLong: string; billingTypeId: string
   nk: string; budget: string
+}
+
+type SurchargeEdit = {
+  s1Label: string; s1Pct: string; s1Cumul: boolean
+  s2Label: string; s2Pct: string; s2Cumul: boolean
+  s3Label: string; s3Pct: string; s3Cumul: boolean
 }
 
 type AddForm = {
@@ -44,7 +54,16 @@ function depthOf(id: string, parentMap: Map<string, string | null>): number {
 export function ProjektStruktur({ initialProjectId, onProjectChange }: { initialProjectId?: number; onProjectChange?: (id: number | null) => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const [selectedPid, setSelectedPid]   = useState<number | null>(initialProjectId ?? null)
+  const [selectedPid, setSelectedPidState] = useState<number | null>(() => {
+    if (initialProjectId != null) return initialProjectId
+    const saved = localStorage.getItem('projekte-struct-pid')
+    return saved ? Number(saved) : null
+  })
+  function setSelectedPid(id: number | null) {
+    setSelectedPidState(id)
+    if (id != null) localStorage.setItem('projekte-struct-pid', String(id))
+    else localStorage.removeItem('projekte-struct-pid')
+  }
   const [edits, setEdits]               = useState<Record<number, RowEdit>>({})
   const [selectedIds, setSelectedIds]   = useState<Set<number>>(new Set())
   const [dragIds, setDragIds]           = useState<Set<number>>(new Set())
@@ -59,6 +78,18 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const [saveMsg, setSaveMsg]           = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [addForm, setAddForm]           = useState<AddForm | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
+  const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
+  const [kalkFatherId, setKalkFatherId]     = useState<number | null>(null)
+  const [projectSurchargePanel, setProjectSurchargePanel] = useState<boolean>(false)
+  const [projectSurchargeEdit,  setProjectSurchargeEdit]  = useState<SurchargeEdit | null>(null)
+  const [projectInput, setProjectInput]           = useState('')
+  const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
+  const [elementSearch, setElementSearch]         = useState('')
+  const [contextMenu, setContextMenu]             = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
+  const contextMenuRef                            = useRef<HTMLDivElement>(null)
+  const projectAcRef                              = useRef<HTMLDivElement>(null)
+  const longPressRef                              = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: structData, isLoading } = useQuery({
@@ -67,20 +98,28 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
     enabled:  selectedPid !== null,
   })
   const { data: btData } = useQuery({ queryKey: ['billing-types'], queryFn: fetchBillingTypes })
+  const { data: projectData } = useQuery({
+    queryKey: ['project-detail', selectedPid],
+    queryFn:  () => fetchProject(selectedPid!),
+    enabled:  selectedPid !== null,
+  })
 
   const projects  = projectsData?.data ?? []
   const structure = structData?.data   ?? []
+  const projectRow = projectData?.data ?? null
   const btypes    = btData?.data       ?? []
 
   useEffect(() => { setEdits({}); setAddForm(null); setSelectedIds(new Set()) }, [selectedPid])
   useEffect(() => { if (initialProjectId) setSelectedPid(initialProjectId) }, [initialProjectId])
 
   const flatTree = structure.length ? flattenTree(buildStructureTree(structure)) : []
-  // Use String keys throughout to avoid bigint vs number type mismatches at runtime
+  // String keys avoid bigint vs number mismatches at runtime
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
   const parentMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
 
-  // Aggregate sums for parent nodes (computed bottom-up, client-side)
+  // Bottom-up aggregate: extras, surcharges, and revenueBasis (sum of leaf REVENUE_BASIS values)
+  // Parent EXTRAS = sum(children.EXTRAS) + own_surcharges × own_NK%
+  // so NK applies to the surcharged total, not just the base.
   const aggMap = (() => {
     const childrenOf = new Map<string, string[]>()
     for (const n of structure) {
@@ -92,23 +131,100 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       }
     }
     const nodeMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n]))
-    const cache = new Map<string, { revenue: number; extras: number }>()
-    function agg(id: string): { revenue: number; extras: number } {
+    const r2 = (n: number) => Math.round(n * 100) / 100
+    const cache = new Map<string, { extras: number; surcharges: number; revenueBasis: number }>()
+    function agg(id: string): { extras: number; surcharges: number; revenueBasis: number } {
       if (cache.has(id)) return cache.get(id)!
       const children = childrenOf.get(id) ?? []
       if (children.length === 0) {
         const n = nodeMap.get(id)!
-        const isTec = Number(n?.BILLING_TYPE_ID) === 2
-        const r = { revenue: isTec ? (n?.TEC_SP_TOT_SUM ?? 0) : (n?.REVENUE ?? 0), extras: n?.EXTRAS ?? 0 }
+        const r = { extras: n?.EXTRAS ?? 0, surcharges: n?.SURCHARGES_TOTAL ?? 0, revenueBasis: n?.REVENUE_BASIS ?? n?.REVENUE ?? 0 }
         cache.set(id, r); return r
       }
-      let revenue = 0, extras = 0
-      for (const cid of children) { const c = agg(cid); revenue += c.revenue; extras += c.extras }
-      cache.set(id, { revenue, extras }); return { revenue, extras }
+      let extras = 0, surcharges = 0, revenueBasis = 0
+      for (const cid of children) { const c = agg(cid); extras += c.extras; surcharges += c.surcharges; revenueBasis += c.revenueBasis }
+      const ownNode = nodeMap.get(id)
+      const ownSurcharges = ownNode?.SURCHARGES_TOTAL ?? 0
+      const ownNk         = Number(ownNode?.EXTRAS_PERCENT ?? 0)
+      surcharges += ownSurcharges  // parent's own surcharges on top
+      extras = r2(extras + ownSurcharges * ownNk / 100)  // NK applies to own surcharges too
+      cache.set(id, { extras, surcharges, revenueBasis }); return { extras, surcharges, revenueBasis }
     }
     for (const n of structure) agg(String(n.STRUCTURE_ID))
     return cache
   })()
+
+  // These depend on parentMap and aggMap — declared AFTER them to avoid TDZ crash
+  const filteredProjects = useMemo(() => {
+    if (!projectDropdownOpen) return projects
+    const sq = projectInput.toLowerCase().trim()
+    if (!sq) return projects
+    return projects.filter(p =>
+      p.NAME_SHORT.toLowerCase().includes(sq) || (p.NAME_LONG?.toLowerCase().includes(sq) ?? false)
+    )
+  }, [projects, projectInput, projectDropdownOpen])
+
+  const filteredFlatTree = useMemo(() => {
+    if (!elementSearch) return flatTree
+    const sq = elementSearch.toLowerCase()
+    const matchIds = new Set(
+      flatTree
+        .filter(({ node }) =>
+          node.NAME_SHORT.toLowerCase().includes(sq) ||
+          (node.NAME_LONG?.toLowerCase().includes(sq))
+        )
+        .map(({ node }) => node.STRUCTURE_ID)
+    )
+    for (const id of [...matchIds]) {
+      let cursor = parentMap.get(String(id))
+      while (cursor != null) { matchIds.add(Number(cursor)); cursor = parentMap.get(cursor) }
+    }
+    return flatTree.filter(({ node }) => matchIds.has(node.STRUCTURE_ID))
+  }, [flatTree, elementSearch, parentMap])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function onDown(e: MouseEvent) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node))
+        setContextMenu(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [contextMenu])
+
+  // Sync project input display value when selectedPid or projects change
+  useEffect(() => {
+    if (selectedPid && projects.length > 0) {
+      const p = projects.find(proj => proj.ID === selectedPid)
+      if (p) setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+    } else if (!selectedPid) {
+      setProjectInput('')
+    }
+  }, [selectedPid, projects])
+
+  // Close project autocomplete on outside click, restoring display name
+  useEffect(() => {
+    if (!projectDropdownOpen) return
+    function onDown(e: MouseEvent) {
+      if (projectAcRef.current && !projectAcRef.current.contains(e.target as Node)) {
+        setProjectDropdownOpen(false)
+        if (selectedPid) {
+          const p = projects.find(proj => proj.ID === selectedPid)
+          if (p) setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+        }
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [projectDropdownOpen, selectedPid, projects])
+
+  function selectProject(id: number) {
+    const p = projects.find(proj => proj.ID === id)
+    setSelectedPid(id)
+    onProjectChange?.(id)
+    if (p) setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+    setProjectDropdownOpen(false)
+  }
 
   function nodeDefault(structId: number): RowEdit {
     const node = structure.find(n => n.STRUCTURE_ID === structId)
@@ -117,7 +233,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       nameLong:     node?.NAME_LONG  ?? '',
       billingTypeId: String(node?.BILLING_TYPE_ID ?? ''),
       nk:     String(node?.EXTRAS_PERCENT ?? 0),
-      budget: String(node?.REVENUE ?? 0),
+      budget: String(node?.REVENUE_BASIS ?? node?.REVENUE ?? 0),
     }
   }
 
@@ -173,6 +289,106 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
   })
 
+  const surchargeMut = useMutation({
+    mutationFn: ({ id, s }: { id: number; s: SurchargeEdit }) =>
+      patchStructureNode(id, {
+        SURCHARGE_1_LABEL: s.s1Label || null,
+        SURCHARGE_1_PCT:   s.s1Pct !== '' ? Number(s.s1Pct) : null,
+        SURCHARGE_1_CUMUL: s.s1Cumul,
+        SURCHARGE_2_LABEL: s.s2Label || null,
+        SURCHARGE_2_PCT:   s.s2Pct !== '' ? Number(s.s2Pct) : null,
+        SURCHARGE_2_CUMUL: s.s2Cumul,
+        SURCHARGE_3_LABEL: s.s3Label || null,
+        SURCHARGE_3_PCT:   s.s3Pct !== '' ? Number(s.s3Pct) : null,
+        SURCHARGE_3_CUMUL: s.s3Cumul,
+      }),
+    onSuccess: (_, { id }) => {
+      void qc.invalidateQueries({ queryKey: ['structure', selectedPid] })
+      setSurchargeEdits(prev => { const n = { ...prev }; delete n[id]; return n })
+      setSaveMsg({ text: 'Zuschläge gespeichert ✅', type: 'success' })
+      setTimeout(() => setSaveMsg(null), 3000)
+    },
+    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
+  })
+
+  function closeSurchargePanel(nodeId: number) {
+    const pending = surchargeEdits[nodeId]
+    if (pending) surchargeMut.mutate({ id: nodeId, s: pending })
+    setSurchargePanel(null)
+  }
+
+  // Project-level (root) surcharge mutation — Option A
+  const projectSurchargeMut = useMutation({
+    mutationFn: (s: SurchargeEdit) =>
+      patchProjectRootSurcharges(selectedPid!, {
+        SURCHARGE_1_LABEL: s.s1Label || null,
+        SURCHARGE_1_PCT:   s.s1Pct !== '' ? Number(s.s1Pct) : null,
+        SURCHARGE_1_CUMUL: s.s1Cumul,
+        SURCHARGE_2_LABEL: s.s2Label || null,
+        SURCHARGE_2_PCT:   s.s2Pct !== '' ? Number(s.s2Pct) : null,
+        SURCHARGE_2_CUMUL: s.s2Cumul,
+        SURCHARGE_3_LABEL: s.s3Label || null,
+        SURCHARGE_3_PCT:   s.s3Pct !== '' ? Number(s.s3Pct) : null,
+        SURCHARGE_3_CUMUL: s.s3Cumul,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['project-detail', selectedPid] })
+      setProjectSurchargeEdit(null)
+      setSaveMsg({ text: 'Projektzuschläge gespeichert ✅', type: 'success' })
+      setTimeout(() => setSaveMsg(null), 3000)
+    },
+    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
+  })
+
+  function closeProjectSurchargePanel() {
+    if (projectSurchargeEdit) projectSurchargeMut.mutate(projectSurchargeEdit)
+    setProjectSurchargePanel(false)
+  }
+
+  function projectSurchargeDefault(): SurchargeEdit {
+    const p = projectRow as Record<string, unknown> | null
+    return {
+      s1Label: (p?.SURCHARGE_1_LABEL as string | null) ?? '',
+      s1Pct:   p?.SURCHARGE_1_PCT != null ? String(p.SURCHARGE_1_PCT) : '',
+      s1Cumul: (p?.SURCHARGE_1_CUMUL as boolean | undefined) ?? true,
+      s2Label: (p?.SURCHARGE_2_LABEL as string | null) ?? '',
+      s2Pct:   p?.SURCHARGE_2_PCT != null ? String(p.SURCHARGE_2_PCT) : '',
+      s2Cumul: (p?.SURCHARGE_2_CUMUL as boolean | undefined) ?? true,
+      s3Label: (p?.SURCHARGE_3_LABEL as string | null) ?? '',
+      s3Pct:   p?.SURCHARGE_3_PCT != null ? String(p.SURCHARGE_3_PCT) : '',
+      s3Cumul: (p?.SURCHARGE_3_CUMUL as boolean | undefined) ?? true,
+    }
+  }
+
+  function surchargeDefault(node: StructureNode): SurchargeEdit {
+    return {
+      s1Label: node.SURCHARGE_1_LABEL ?? '',
+      s1Pct:   node.SURCHARGE_1_PCT != null ? String(node.SURCHARGE_1_PCT) : '',
+      s1Cumul: node.SURCHARGE_1_CUMUL ?? true,
+      s2Label: node.SURCHARGE_2_LABEL ?? '',
+      s2Pct:   node.SURCHARGE_2_PCT != null ? String(node.SURCHARGE_2_PCT) : '',
+      s2Cumul: node.SURCHARGE_2_CUMUL ?? true,
+      s3Label: node.SURCHARGE_3_LABEL ?? '',
+      s3Pct:   node.SURCHARGE_3_PCT != null ? String(node.SURCHARGE_3_PCT) : '',
+      s3Cumul: node.SURCHARGE_3_CUMUL ?? true,
+    }
+  }
+
+  function computeSurcharges(base: number, s: SurchargeEdit) {
+    const r2 = (n: number) => Math.round(n * 100) / 100
+    const s1Active = !!s.s1Label && s.s1Pct !== '' && Number(s.s1Pct) !== 0
+    const s1Eur    = s1Active ? r2(base * Number(s.s1Pct) / 100) : 0
+    const s1Sub    = base + s1Eur
+    const s2Base   = s.s2Cumul ? s1Sub : base
+    const s2Active = !!s.s2Label && s.s2Pct !== '' && Number(s.s2Pct) !== 0
+    const s2Eur    = s2Active ? r2(s2Base * Number(s.s2Pct) / 100) : 0
+    const s2Sub    = s1Sub + s2Eur
+    const s3Base   = s.s3Cumul ? s2Sub : base
+    const s3Active = !!s.s3Label && s.s3Pct !== '' && Number(s.s3Pct) !== 0
+    const s3Eur    = s3Active ? r2(s3Base * Number(s.s3Pct) / 100) : 0
+    return { s1Eur, s2Eur, s3Eur, total: r2(s1Eur + s2Eur + s3Eur) }
+  }
+
   const internalMut = useMutation({
     mutationFn: ({ id, val }: { id: number; val: boolean }) => patchStructureNode(id, { IS_INTERNAL: val }),
     onSuccess: () => {
@@ -219,15 +435,12 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
   // ── Bulk delete ───────────────────────────────────────────────────────────
 
-  async function bulkDelete() {
-    const ids = Array.from(selectedIds)
+  async function doBulkDelete(ids: number[]) {
     if (!ids.length) return
-    if (!confirm(`${ids.length} Element${ids.length > 1 ? 'e' : ''} löschen?\nHinweis: Nur möglich wenn keine Buchungen/Rechnungen darauf verweisen.`)) return
-    // deepest first (children before parents)
-    ids.sort((a, b) => depthOf(String(b), parentMap) - depthOf(String(a), parentMap))
+    const sorted = [...ids].sort((a, b) => depthOf(String(b), parentMap) - depthOf(String(a), parentMap))
     setSaveMsg(null)
     let failed = 0
-    for (const id of ids) {
+    for (const id of sorted) {
       try { await deleteStructureNode(id, false) }
       catch { failed++ }
     }
@@ -237,6 +450,16 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       ? { text: `${ids.length - failed} gelöscht, ${failed} fehlgeschlagen`, type: 'error' }
       : { text: `${ids.length} Element${ids.length > 1 ? 'e' : ''} gelöscht ✅`, type: 'success' })
     setTimeout(() => setSaveMsg(null), 4000)
+  }
+
+  function bulkDelete() {
+    const ids = Array.from(selectedIds)
+    if (!ids.length) return
+    setConfirmState({
+      title: `${ids.length} Element${ids.length > 1 ? 'e' : ''} löschen`,
+      message: `${ids.length} Element${ids.length > 1 ? 'e' : ''} löschen?\nHinweis: Nur möglich wenn keine Buchungen/Rechnungen darauf verweisen.`,
+      onConfirm: () => void doBulkDelete(ids),
+    })
   }
 
   // ── Save ─────────────────────────────────────────────────────────────────
@@ -449,9 +672,24 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
   // ── Root row totals ───────────────────────────────────────────────────────
   const currentProject = projects.find(p => p.ID === selectedPid)
-  const rootRevenue = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.revenue ?? 0), 0)
-  const rootExtras  = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.extras  ?? 0), 0)
-  const rootStand   = structure.reduce((s, n) => s + (n.REVENUE_COMPLETION ?? 0), 0)
+  // rootRevenue = pure sum of leaf REVENUE_BASIS values (before any surcharges at any level)
+  const rootRevenue = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => {
+    const isP = parentIds.has(String(n.STRUCTURE_ID))
+    return s + (isP ? (aggMap.get(String(n.STRUCTURE_ID))?.revenueBasis ?? 0) : (n.REVENUE_BASIS ?? n.REVENUE ?? 0))
+  }, 0)
+  // Sum surcharges from structure subtree + project-level (root) surcharges
+  const structureSurcharges = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.surcharges ?? 0), 0)
+  const projectLevelSurcharges = Number((projectRow as Record<string, unknown> | null)?.SURCHARGES_TOTAL || 0)
+  const rootSurcharges = structureSurcharges + projectLevelSurcharges
+  const rootStructureRevenueSum = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE ?? 0), 0)
+  const rootRevenueFinal = rootStructureRevenueSum + projectLevelSurcharges
+  const rootExtras      = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.extras ?? 0), 0)
+  const rootStand       = structure.reduce((s, n) => s + (n.REVENUE_COMPLETION ?? 0), 0)
+
+  // Computed live preview of project-level surcharge amounts (used in the panel)
+  function computeProjectSurchargesPreview(s: SurchargeEdit) {
+    return computeSurcharges(rootStructureRevenueSum, s)
+  }
 
   // ── Select helpers ────────────────────────────────────────────────────────
 
@@ -474,12 +712,34 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
   return (
     <div>
-      <div className="form-group" style={{ maxWidth: 400, marginBottom: 12 }}>
+      <div className="form-group" style={{ maxWidth: 440, marginBottom: 12 }}>
         <label>Projekt</label>
-        <select value={selectedPid ?? ''} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setSelectedPid(id); onProjectChange?.(id) }}>
-          <option value="">Bitte wählen …</option>
-          {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
-        </select>
+        <div ref={projectAcRef} style={{ position: 'relative' }}>
+          <input
+            type="text" className="list-search" placeholder="Projekt suchen …"
+            style={{ width: '100%', fontSize: 13 }}
+            value={projectInput}
+            onChange={e => { setProjectInput(e.target.value); setProjectDropdownOpen(true) }}
+            onFocus={() => setProjectDropdownOpen(true)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { const first = filteredProjects[0]; if (first) selectProject(first.ID); e.preventDefault() }
+              if (e.key === 'Escape') setProjectDropdownOpen(false)
+            }}
+          />
+          {projectDropdownOpen && filteredProjects.length > 0 && (
+            <div className="project-ac-dropdown">
+              {filteredProjects.slice(0, 30).map(p => (
+                <button key={p.ID}
+                  className={`project-ac-option${p.ID === selectedPid ? ' active' : ''}`}
+                  onMouseDown={ev => { ev.preventDefault(); selectProject(p.ID) }}
+                >
+                  <span className="project-ac-short">{p.NAME_SHORT}</span>
+                  {p.NAME_LONG && <span className="project-ac-long">{p.NAME_LONG}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {selectedPid !== null && currentProject && (
@@ -527,6 +787,12 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
               {flatTree.length > 0 && (
                 <div className="list-section">
+                  <div style={{ marginBottom: 8 }}>
+                    <input type="search" className="list-search" placeholder="Elemente filtern …"
+                      style={{ maxWidth: 260, fontSize: 13 }}
+                      value={elementSearch} onChange={e => setElementSearch(e.target.value)}
+                    />
+                  </div>
                   <table className="master-table structure-table">
                     <thead>
                       <tr>
@@ -539,6 +805,8 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th>Bezeichnung</th>
                         <th>Abrechnung</th>
                         <th className="num">Honorar €</th>
+                        <th className="num">Zuschläge €</th>
+                        <th className="num">Honorar + Zuschl. €</th>
                         <th className="num">NK %</th>
                         <th className="num">Nebenkosten €</th>
                         <th className="num">Stand €</th>
@@ -548,23 +816,91 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                     </thead>
                     <tbody ref={tbodyRef}>
                       {currentProject && (
-                        <tr style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)' }}>
+                        <>
+                        <tr
+                          style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)', cursor: 'context-menu' }}
+                          onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null }) }}
+                        >
                           <td></td>
                           <td></td>
                           <td style={{ paddingLeft: 4, fontSize: 13 }}>{currentProject.NAME_SHORT}</td>
                           <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.7)' }}>{currentProject.NAME_LONG}</td>
                           <td><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
+                          <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : rootSurcharges < 0 ? '#dc2626' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
+                          <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges !== 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootStand)}</span></td>
                           <td></td>
+                          <td>
+                            <button
+                              className="row-action-btn"
+                              title={projectLevelSurcharges > 0 ? `Projektzuschläge (${fmtEur(projectLevelSurcharges)})` : 'Projektzuschläge bearbeiten'}
+                              style={projectLevelSurcharges > 0 ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
+                              onClick={() => {
+                                if (projectSurchargePanel) closeProjectSurchargePanel()
+                                else { setProjectSurchargeEdit(projectSurchargeDefault()); setProjectSurchargePanel(true) }
+                              }}
+                            ><Percent size={13} strokeWidth={2} /></button>
+                          </td>
                         </tr>
+                        {projectSurchargePanel && projectSurchargeEdit && (() => {
+                          const sE = projectSurchargeEdit
+                          const computed = computeProjectSurchargesPreview(sE)
+                          const setEdit = (f: Partial<SurchargeEdit>) => setProjectSurchargeEdit(prev => prev ? { ...prev, ...f } : prev)
+                          return (
+                            <tr className="surcharge-panel-row">
+                              <td colSpan={13}>
+                                <div className="surcharge-panel">
+                                  <div className="surcharge-panel-basis">
+                                    Projektzuschläge – Basis (Summe Wurzel-Honorar): <strong>{fmtEur(rootStructureRevenueSum)}</strong>
+                                  </div>
+                                  <div className="surcharge-grid">
+                                    <div className="surcharge-grid-header">
+                                      <span>Kumul.</span>
+                                      <span>Bezeichnung</span>
+                                      <span style={{ textAlign: 'right' }}>%</span>
+                                      <span style={{ textAlign: 'right' }}>Betrag</span>
+                                    </div>
+                                    {([
+                                      { label: sE.s1Label, pct: sE.s1Pct, cumul: sE.s1Cumul, eur: computed.s1Eur, disableCumul: true,  placeholder: 'z.B. GP-Zuschlag', labelKey: 's1Label' as const, pctKey: 's1Pct' as const, cumulKey: 's1Cumul' as const },
+                                      { label: sE.s2Label, pct: sE.s2Pct, cumul: sE.s2Cumul, eur: computed.s2Eur, disableCumul: false, placeholder: '(leer = inaktiv)', labelKey: 's2Label' as const, pctKey: 's2Pct' as const, cumulKey: 's2Cumul' as const },
+                                      { label: sE.s3Label, pct: sE.s3Pct, cumul: sE.s3Cumul, eur: computed.s3Eur, disableCumul: false, placeholder: '(leer = inaktiv)', labelKey: 's3Label' as const, pctKey: 's3Pct' as const, cumulKey: 's3Cumul' as const },
+                                    ] as const).map((row, i) => (
+                                      <div className="surcharge-grid-row" key={i}>
+                                        <input type="checkbox" checked={row.cumul} disabled={row.disableCumul}
+                                          title={row.disableCumul ? 'Erster Zuschlag bezieht sich immer auf die Basis' : 'Kumulativ (auf laufende Zwischensumme)'}
+                                          onChange={e => setEdit({ [row.cumulKey]: e.target.checked })} />
+                                        <input className="tbl-input" placeholder={row.placeholder} value={row.label}
+                                          onChange={e => setEdit({ [row.labelKey]: e.target.value })} />
+                                        <input className="tbl-input" type="number" min={-100} max={500} step={0.1}
+                                          style={{ width: 64, textAlign: 'right' }} value={row.pct}
+                                          onChange={e => setEdit({ [row.pctKey]: e.target.value })} />
+                                        <span className="surcharge-eur">{row.label || row.pct ? fmtEur(row.eur) : '—'}</span>
+                                      </div>
+                                    ))}
+                                    <div className="surcharge-grid-total">
+                                      Gesamt Projektzuschläge: <strong>{fmtEur(computed.total)}</strong>
+                                    </div>
+                                  </div>
+                                  <div className="surcharge-panel-actions">
+                                    <button className="btn-small" onClick={closeProjectSurchargePanel}>
+                                      {projectSurchargeMut.isPending ? 'Speichert …' : 'Schließen (speichert automatisch)'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })()}
+                        </>
                       )}
-                      {flatTree.map(({ node, depth }) => {
+                      {filteredFlatTree.map(({ node, depth }) => {
                         const edit      = edits[node.STRUCTURE_ID]
                         const nkVal     = edit?.nk     ?? String(node.EXTRAS_PERCENT ?? 0)
-                        const budgetVal = edit?.budget ?? String(node.REVENUE ?? 0)
+                        // Editable "Honorar" shows REVENUE_BASIS (the base before surcharges)
+                        const budgetVal = edit?.budget ?? String(node.REVENUE_BASIS ?? node.REVENUE ?? 0)
                         const nameShort = edit?.nameShort     ?? (node.NAME_SHORT ?? '')
                         const nameLong  = edit?.nameLong      ?? (node.NAME_LONG  ?? '')
                         const btId      = edit?.billingTypeId ?? String(node.BILLING_TYPE_ID ?? '')
@@ -572,9 +908,17 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         const isParent  = parentIds.has(String(node.STRUCTURE_ID))
                         const isDragOver = dragOverId === node.STRUCTURE_ID
 
+                        const sEdit = surchargeEdits[node.STRUCTURE_ID] ?? surchargeDefault(node)
+                        // Surcharge base = REVENUE_BASIS only (for leaf) or sum of children's REVENUE (for parent)
+                        const surchargeBase = isParent
+                          ? (node.REVENUE_BASIS ?? 0)
+                          : (isTec ? (node.TEC_SP_TOT_SUM ?? 0) : (node.REVENUE_BASIS ?? node.REVENUE ?? 0))
+                        const computed = computeSurcharges(surchargeBase, sEdit)
+                        const hasSurcharges = (node.SURCHARGES_TOTAL ?? 0) !== 0
+
                         return (
+                          <React.Fragment key={node.STRUCTURE_ID}>
                           <tr
-                            key={node.STRUCTURE_ID}
                             data-struct-id={node.STRUCTURE_ID}
                             className={[
                               isParent ? 'struct-row-parent' : '',
@@ -582,6 +926,10 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               isDragOver && dragZone === 'above' ? 'ps-drop-above' : '',
                               dragIds.has(node.STRUCTURE_ID) ? 'ps-dragging' : '',
                             ].filter(Boolean).join(' ')}
+                            onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.STRUCTURE_ID }) }}
+                            onTouchStart={() => { longPressRef.current = setTimeout(() => setContextMenu({ x: 0, y: 0, nodeId: node.STRUCTURE_ID }), 600) }}
+                            onTouchEnd={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null } }}
+                            onTouchMove={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null } }}
                             style={node.IS_INTERNAL ? { opacity: 0.6 } : undefined}
                           >
                             <td>
@@ -619,15 +967,31 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               </select>
                             </td>
                             <td className="num">
+                              {/* Honorar € = pure leaf sum (REVENUE_BASIS) so it never includes surcharges */}
                               {isParent || isTec ? (
                                 <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>
-                                  {fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.revenue : node.TEC_SP_TOT_SUM)}
+                                  {fmtEur(isTec ? node.TEC_SP_TOT_SUM : (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0))}
                                 </span>
                               ) : (
                                 <input className="tbl-input" type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
                                   value={budgetVal}
                                   onChange={e => setField(node.STRUCTURE_ID, 'budget', e.target.value)} />
                               )}
+                            </td>
+                            <td className="num">
+                              {/* davon Zuschläge = aggregate surcharges for whole subtree */}
+                              {(() => {
+                                const sv = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
+                                return sv !== 0
+                                  ? <span style={{ color: sv > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{fmtEur(sv)}</span>
+                                  : <span style={{ color: 'rgba(17,24,39,0.25)', fontSize: 12 }}>—</span>
+                              })()}
+                            </td>
+                            <td className="num">
+                              {/* Honorar + Zuschläge = REVENUE (final, all surcharges included) */}
+                              <span style={{ fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
+                                {fmtEur(node.REVENUE ?? 0)}
+                              </span>
                             </td>
                             <td className="num">
                               <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'flex-end' }}>
@@ -658,17 +1022,87 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               />
                             </td>
                             <td>
-                              <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c', display: 'inline-flex', alignItems: 'center' }}
-                                disabled={deleteMut.isPending}
-                                title="Element löschen"
-                                onClick={() => setConfirmState({
-                                  title: 'Element löschen',
-                                  message: `Element „${nameShort}" und alle Kind-Elemente löschen?`,
-                                  onConfirm: () => deleteMut.mutate(node.STRUCTURE_ID),
-                                })}
-                              ><X size={12} strokeWidth={2.5} /></button>
+                              <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                                <button
+                                  className="row-action-btn"
+                                  title={hasSurcharges ? `Zuschläge (${fmtEur(node.SURCHARGES_TOTAL)})` : 'Zuschläge bearbeiten'}
+                                  style={hasSurcharges ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
+                                  onClick={() => { if (surchargePanel === node.STRUCTURE_ID) closeSurchargePanel(node.STRUCTURE_ID); else setSurchargePanel(node.STRUCTURE_ID) }}
+                                ><Percent size={13} strokeWidth={2} /></button>
+                                <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c', display: 'inline-flex', alignItems: 'center' }}
+                                  disabled={deleteMut.isPending}
+                                  title="Element löschen"
+                                  onClick={() => setConfirmState({
+                                    title: 'Element löschen',
+                                    message: `Element „${nameShort}" und alle Kind-Elemente löschen?`,
+                                    onConfirm: () => deleteMut.mutate(node.STRUCTURE_ID),
+                                  })}
+                                ><X size={12} strokeWidth={2.5} /></button>
+                              </div>
                             </td>
                           </tr>
+                          {surchargePanel === node.STRUCTURE_ID && (
+                            <tr className="surcharge-panel-row">
+                              <td colSpan={13}>
+                                <div className="surcharge-panel">
+                                  <div className="surcharge-panel-basis">
+                                    Basis (Honorar): <strong>{fmtEur(surchargeBase)}</strong>
+                                  </div>
+                                  <div className="surcharge-grid">
+                                    <div className="surcharge-grid-header">
+                                      <span>Kumul.</span>
+                                      <span>Bezeichnung</span>
+                                      <span style={{ textAlign: 'right' }}>%</span>
+                                      <span style={{ textAlign: 'right' }}>Betrag</span>
+                                    </div>
+                                    {([
+                                      {
+                                        label: sEdit.s1Label, pct: sEdit.s1Pct, cumul: sEdit.s1Cumul, eur: computed.s1Eur,
+                                        disableCumul: true, placeholder: 'z.B. GP-Zuschlag',
+                                        onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [node.STRUCTURE_ID]: { ...(prev[node.STRUCTURE_ID] ?? surchargeDefault(node)), ...f } })),
+                                        labelKey: 's1Label' as const, pctKey: 's1Pct' as const, cumulKey: 's1Cumul' as const,
+                                      },
+                                      {
+                                        label: sEdit.s2Label, pct: sEdit.s2Pct, cumul: sEdit.s2Cumul, eur: computed.s2Eur,
+                                        disableCumul: false, placeholder: '(leer = inaktiv)',
+                                        onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [node.STRUCTURE_ID]: { ...(prev[node.STRUCTURE_ID] ?? surchargeDefault(node)), ...f } })),
+                                        labelKey: 's2Label' as const, pctKey: 's2Pct' as const, cumulKey: 's2Cumul' as const,
+                                      },
+                                      {
+                                        label: sEdit.s3Label, pct: sEdit.s3Pct, cumul: sEdit.s3Cumul, eur: computed.s3Eur,
+                                        disableCumul: false, placeholder: '(leer = inaktiv)',
+                                        onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [node.STRUCTURE_ID]: { ...(prev[node.STRUCTURE_ID] ?? surchargeDefault(node)), ...f } })),
+                                        labelKey: 's3Label' as const, pctKey: 's3Pct' as const, cumulKey: 's3Cumul' as const,
+                                      },
+                                    ] as const).map((row, i) => (
+                                      <div className="surcharge-grid-row" key={i}>
+                                        <input type="checkbox" checked={row.cumul} disabled={row.disableCumul}
+                                          title={row.disableCumul ? 'Erster Zuschlag bezieht sich immer auf die Basis' : 'Kumulativ (auf laufende Zwischensumme)'}
+                                          onChange={e => row.onChange({ [row.cumulKey]: e.target.checked })} />
+                                        <input className="tbl-input" placeholder={row.placeholder}
+                                          value={row.label}
+                                          onChange={e => row.onChange({ [row.labelKey]: e.target.value })} />
+                                        <input className="tbl-input" type="number" min={-100} max={500} step={0.1}
+                                          style={{ width: 64, textAlign: 'right' }}
+                                          value={row.pct}
+                                          onChange={e => row.onChange({ [row.pctKey]: e.target.value })} />
+                                        <span className="surcharge-eur">{row.label || row.pct ? fmtEur(row.eur) : '—'}</span>
+                                      </div>
+                                    ))}
+                                    <div className="surcharge-grid-total">
+                                      Gesamt Zuschläge: <strong>{fmtEur(computed.total)}</strong>
+                                    </div>
+                                  </div>
+                                  <div className="surcharge-panel-actions">
+                                    <button className="btn-small" onClick={() => closeSurchargePanel(node.STRUCTURE_ID)}>
+                                      {surchargeMut.isPending ? 'Speichert …' : 'Schließen (speichert automatisch)'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </React.Fragment>
                         )
                       })}
                     </tbody>
@@ -680,80 +1114,14 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                 <p className="empty-note">Keine Projektstruktur gefunden.</p>
               )}
 
-              {/* ── Add form ── */}
-              {addForm && (
-                <div className="struct-add-form">
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Kürzel*</label>
-                      <input style={{ width: 80 }} value={addForm.NAME_SHORT}
-                        onChange={e => setAddForm(f => f && { ...f, NAME_SHORT: e.target.value })} />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Bezeichnung</label>
-                      <input style={{ width: 140 }} value={addForm.NAME_LONG}
-                        onChange={e => setAddForm(f => f && { ...f, NAME_LONG: e.target.value })} />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Abrechnungsart*</label>
-                      <select style={{ fontSize: 12 }} value={addForm.BILLING_TYPE_ID}
-                        onChange={e => setAddForm(f => f && { ...f, BILLING_TYPE_ID: e.target.value })}>
-                        <option value="">Bitte wählen …</option>
-                        {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Honorar €</label>
-                      <input type="number" min={0} step={100} style={{ width: 100 }} placeholder="0"
-                        value={addForm.REVENUE}
-                        onChange={e => setAddForm(f => f && { ...f, REVENUE: e.target.value })} />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>NK %</label>
-                      <input type="number" min={0} max={100} step={0.1} style={{ width: 70 }} placeholder="0"
-                        value={addForm.EXTRAS_PERCENT}
-                        onChange={e => setAddForm(f => f && { ...f, EXTRAS_PERCENT: e.target.value })} />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 11 }}>Übergeordnet</label>
-                      <select style={{ fontSize: 12 }} value={addForm.FATHER_ID}
-                        onChange={e => {
-                          const fatherId = e.target.value
-                          const parent = structure.find(n => String(n.STRUCTURE_ID) === fatherId)
-                          setAddForm(f => f && {
-                            ...f, FATHER_ID: fatherId,
-                            ...(parent ? {
-                              BILLING_TYPE_ID: String(parent.BILLING_TYPE_ID ?? f.BILLING_TYPE_ID),
-                              EXTRAS_PERCENT:  String(parent.EXTRAS_PERCENT  ?? f.EXTRAS_PERCENT),
-                            } : {}),
-                          })
-                        }}>
-                        <option value="">(Root)</option>
-                        {flatTree.map(({ node }) => (
-                          <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
-                            {node.NAME_SHORT}{node.NAME_LONG ? ' – ' + node.NAME_LONG : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button className="btn-primary btn-small" type="button" onClick={submitAdd} disabled={addMut.isPending}>
-                      {addMut.isPending ? '…' : 'Speichern (Strg+S)'}
-                    </button>
-                    <button className="btn-small" type="button" onClick={() => { setAddForm(null); setSaveMsg(null) }}>
-                      Abbrechen
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <div className="structure-actions">
                 <button className="btn-primary" type="button"
-                  onClick={addForm ? submitAdd : saveAll}
-                  disabled={saveMut.isPending || addMut.isPending}>
-                  {(saveMut.isPending || addMut.isPending) ? 'Speichert …' : 'Speichern (Strg+S)'}
+                  onClick={saveAll}
+                  disabled={saveMut.isPending}>
+                  {saveMut.isPending ? 'Speichert …' : 'Speichern (Strg+S)'}
                 </button>
-                <button type="button" onClick={() => { setSaveMsg(null); setAddForm(f => f ? null : emptyAdd()) }}>
-                  {addForm ? 'Formular schließen' : '+ Neues Element'}
+                <button type="button" onClick={() => { setSaveMsg(null); setAddForm(emptyAdd()) }}>
+                  + Neues Element
                 </button>
               </div>
               <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />
@@ -761,6 +1129,77 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
           )}
         </>
       )}
+    {/* ── Add element modal ── */}
+    <Modal open={addForm !== null} onClose={() => { setAddForm(null); setSaveMsg(null) }} title="Neues Element anlegen">
+      {addForm && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Kürzel*</label>
+              <input style={{ width: 80 }} value={addForm.NAME_SHORT}
+                onChange={e => setAddForm(f => f && { ...f, NAME_SHORT: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Bezeichnung</label>
+              <input style={{ width: 160 }} value={addForm.NAME_LONG}
+                onChange={e => setAddForm(f => f && { ...f, NAME_LONG: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Abrechnungsart*</label>
+              <select style={{ fontSize: 12 }} value={addForm.BILLING_TYPE_ID}
+                onChange={e => setAddForm(f => f && { ...f, BILLING_TYPE_ID: e.target.value })}>
+                <option value="">Bitte wählen …</option>
+                {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Honorar €</label>
+              <input type="number" min={0} step={100} style={{ width: 100 }} placeholder="0"
+                value={addForm.REVENUE}
+                onChange={e => setAddForm(f => f && { ...f, REVENUE: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>NK %</label>
+              <input type="number" min={0} max={100} step={0.1} style={{ width: 70 }} placeholder="0"
+                value={addForm.EXTRAS_PERCENT}
+                onChange={e => setAddForm(f => f && { ...f, EXTRAS_PERCENT: e.target.value })} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: 11 }}>Übergeordnet</label>
+              <select style={{ fontSize: 12 }} value={addForm.FATHER_ID}
+                onChange={e => {
+                  const fatherId = e.target.value
+                  const parent = structure.find(n => String(n.STRUCTURE_ID) === fatherId)
+                  setAddForm(f => f && {
+                    ...f, FATHER_ID: fatherId,
+                    ...(parent ? {
+                      BILLING_TYPE_ID: String(parent.BILLING_TYPE_ID ?? f.BILLING_TYPE_ID),
+                      EXTRAS_PERCENT:  String(parent.EXTRAS_PERCENT  ?? f.EXTRAS_PERCENT),
+                    } : {}),
+                  })
+                }}>
+                <option value="">(Root)</option>
+                {flatTree.map(({ node }) => (
+                  <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
+                    {node.NAME_SHORT}{node.NAME_LONG ? ' – ' + node.NAME_LONG : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-primary btn-small" type="button" onClick={submitAdd} disabled={addMut.isPending}>
+              {addMut.isPending ? '…' : 'Speichern (Strg+S)'}
+            </button>
+            <button className="btn-small" type="button" onClick={() => { setAddForm(null); setSaveMsg(null) }}>
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+
     <ConfirmModal
       open={confirmState !== null}
       title={confirmState?.title ?? ''}
@@ -770,6 +1209,80 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />
+    <Modal open={kalkFatherId !== null} onClose={() => setKalkFatherId(null)} title="HOAI-Kalkulation anlegen" className="modal-xl">
+      {kalkFatherId !== null && selectedPid && (
+        <HonorarWizard
+          initialProjectId={selectedPid}
+          initialFatherId={kalkFatherId}
+          onDone={() => {
+            setKalkFatherId(null)
+            void qc.invalidateQueries({ queryKey: ['structure', selectedPid] })
+          }}
+        />
+      )}
+    </Modal>
+    {contextMenu && (() => {
+      const cmNode = contextMenu.nodeId != null ? structure.find(n => n.STRUCTURE_ID === contextMenu.nodeId) : undefined
+      const cmName = cmNode?.NAME_SHORT ?? ''
+      const isMultiDelete = contextMenu.nodeId != null && selectedIds.has(contextMenu.nodeId) && selectedIds.size > 1
+      const style: React.CSSProperties = contextMenu.x === 0
+        ? { position: 'fixed', top: '40%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 1500 }
+        : { position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 1500 }
+      return (
+        <div className="struct-context-menu" ref={contextMenuRef} style={style}>
+          <button onClick={() => {
+            const fNode = contextMenu.nodeId != null ? structure.find(n => n.STRUCTURE_ID === contextMenu.nodeId) : undefined
+            setAddForm({
+              ...emptyAdd(),
+              FATHER_ID:       contextMenu.nodeId != null ? String(contextMenu.nodeId) : '',
+              BILLING_TYPE_ID: fNode ? String(fNode.BILLING_TYPE_ID ?? '') : '',
+              EXTRAS_PERCENT:  fNode ? String(fNode.EXTRAS_PERCENT  ?? '') : '',
+            })
+            setContextMenu(null)
+          }}>Element anlegen</button>
+          <button disabled style={{ opacity: 0.4 }}>Vorlage anlegen</button>
+          {contextMenu.nodeId != null ? (
+            <button onClick={() => { setSurchargePanel(contextMenu.nodeId as number); setContextMenu(null) }}>
+              Zuschlag hinzufügen
+            </button>
+          ) : (
+            <button onClick={() => {
+              setProjectSurchargeEdit(projectSurchargeDefault())
+              setProjectSurchargePanel(true)
+              setContextMenu(null)
+            }}>
+              Projektzuschlag hinzufügen
+            </button>
+          )}
+          {contextMenu.nodeId != null && (
+            <button onClick={() => { setKalkFatherId(contextMenu.nodeId as number); setContextMenu(null) }}>
+              Kalkulation anlegen
+            </button>
+          )}
+          {(cmNode || isMultiDelete) && <div className="struct-context-divider" />}
+          {isMultiDelete ? (
+            <button className="struct-context-danger" onClick={() => {
+              const ids = Array.from(selectedIds)
+              setConfirmState({
+                title: `${ids.length} Elemente löschen`,
+                message: `${ids.length} Elemente löschen?\nHinweis: Nur möglich wenn keine Buchungen/Rechnungen darauf verweisen.`,
+                onConfirm: () => void doBulkDelete(ids),
+              })
+              setContextMenu(null)
+            }}>{selectedIds.size} Elemente löschen</button>
+          ) : cmNode ? (
+            <button className="struct-context-danger" onClick={() => {
+              setConfirmState({
+                title: 'Element löschen',
+                message: `Element „${cmName}" und alle Kind-Elemente löschen?`,
+                onConfirm: () => deleteMut.mutate(cmNode.STRUCTURE_ID),
+              })
+              setContextMenu(null)
+            }}>Element löschen</button>
+          ) : null}
+        </div>
+      )
+    })()}
     </div>
   )
 }

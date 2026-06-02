@@ -353,6 +353,18 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
   }));
 }
 
+async function getProject(supabase, { id, tenantId }) {
+  const { data, error } = await supabase
+    .from("PROJECT")
+    .select("*")
+    .eq("ID", id)
+    .eq("TENANT_ID", tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw { status: 404, message: "Projekt nicht gefunden" };
+  return data;
+}
+
 async function patchProject(supabase, { id, body, tenantId }) {
   const b = body || {};
   const upd = {};
@@ -379,6 +391,22 @@ async function patchProject(supabase, { id, body, tenantId }) {
   if (b.is_internal !== undefined) {
     upd.IS_INTERNAL = !!b.is_internal;
   }
+  // Root-level surcharge settings (Option A)
+  if (b.SURCHARGE_1_LABEL !== undefined) upd.SURCHARGE_1_LABEL = b.SURCHARGE_1_LABEL;
+  if (b.SURCHARGE_1_PCT   !== undefined) upd.SURCHARGE_1_PCT   = b.SURCHARGE_1_PCT != null && b.SURCHARGE_1_PCT !== "" ? Number(b.SURCHARGE_1_PCT) : null;
+  if (b.SURCHARGE_1_CUMUL !== undefined) upd.SURCHARGE_1_CUMUL = !!b.SURCHARGE_1_CUMUL;
+  if (b.SURCHARGE_2_LABEL !== undefined) upd.SURCHARGE_2_LABEL = b.SURCHARGE_2_LABEL;
+  if (b.SURCHARGE_2_PCT   !== undefined) upd.SURCHARGE_2_PCT   = b.SURCHARGE_2_PCT != null && b.SURCHARGE_2_PCT !== "" ? Number(b.SURCHARGE_2_PCT) : null;
+  if (b.SURCHARGE_2_CUMUL !== undefined) upd.SURCHARGE_2_CUMUL = !!b.SURCHARGE_2_CUMUL;
+  if (b.SURCHARGE_3_LABEL !== undefined) upd.SURCHARGE_3_LABEL = b.SURCHARGE_3_LABEL;
+  if (b.SURCHARGE_3_PCT   !== undefined) upd.SURCHARGE_3_PCT   = b.SURCHARGE_3_PCT != null && b.SURCHARGE_3_PCT !== "" ? Number(b.SURCHARGE_3_PCT) : null;
+  if (b.SURCHARGE_3_CUMUL !== undefined) upd.SURCHARGE_3_CUMUL = !!b.SURCHARGE_3_CUMUL;
+
+  const hasSurchargeChange =
+    b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined || b.SURCHARGE_1_CUMUL !== undefined ||
+    b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined || b.SURCHARGE_2_CUMUL !== undefined ||
+    b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined || b.SURCHARGE_3_CUMUL !== undefined;
+
   if (upd.NAME_SHORT !== undefined && !upd.NAME_SHORT) {
     throw { status: 400, message: "NAME_SHORT ist erforderlich" };
   }
@@ -392,6 +420,10 @@ async function patchProject(supabase, { id, body, tenantId }) {
     .single();
 
   if (uErr) throw uErr;
+
+  if (hasSurchargeChange) {
+    await recalcProjectRootSurcharges(supabase, { projectId: id });
+  }
 
   const [st, ty, mg] = await Promise.all([
     updated.PROJECT_STATUS_ID
@@ -489,6 +521,41 @@ async function patchStructureCompletionPercents(supabase, { structureId, revPct,
 }
 
 // ---------------------------------------------------------------------------
+// Surcharge helper (shared by patchStructure and recalcParent)
+// ---------------------------------------------------------------------------
+
+function computeSurchargesNode(revenueBasis, settings) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const s1Label = settings?.SURCHARGE_1_LABEL ?? null;
+  const s1Pct   = Number(settings?.SURCHARGE_1_PCT ?? 0);
+  const s1Cumul = !!(settings?.SURCHARGE_1_CUMUL ?? true);
+  const s2Label = settings?.SURCHARGE_2_LABEL ?? null;
+  const s2Pct   = Number(settings?.SURCHARGE_2_PCT ?? 0);
+  const s2Cumul = !!(settings?.SURCHARGE_2_CUMUL ?? true);
+  const s3Label = settings?.SURCHARGE_3_LABEL ?? null;
+  const s3Pct   = Number(settings?.SURCHARGE_3_PCT ?? 0);
+  const s3Cumul = !!(settings?.SURCHARGE_3_CUMUL ?? true);
+
+  const s1Active = s1Label !== null && s1Label !== "" && s1Pct !== 0;
+  const s1Eur    = s1Active ? r2(revenueBasis * s1Pct / 100) : 0;
+  const s1Sub    = revenueBasis + s1Eur;
+
+  const s2Base   = s2Cumul ? s1Sub : revenueBasis;
+  const s2Active = s2Label !== null && s2Label !== "" && s2Pct !== 0;
+  const s2Eur    = s2Active ? r2(s2Base * s2Pct / 100) : 0;
+  const s2Sub    = s1Sub + s2Eur;
+
+  const s3Base   = s3Cumul ? s2Sub : revenueBasis;
+  const s3Active = s3Label !== null && s3Label !== "" && s3Pct !== 0;
+  const s3Eur    = s3Active ? r2(s3Base * s3Pct / 100) : 0;
+
+  return {
+    s1Eur, s2Eur, s3Eur,
+    surchargesTotal: r2(s1Eur + s2Eur + s3Eur),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Parent aggregation helpers
 // ---------------------------------------------------------------------------
 
@@ -501,7 +568,8 @@ async function recalcParent(supabase, { parentId }) {
   if (!children || children.length === 0) return;
 
   const s = (field) => children.reduce((acc, c) => acc + Number(c[field] ?? 0), 0);
-  const revenue          = s("REVENUE");
+  // Children's REVENUE already includes their own surcharges; this sum is the parent's basis
+  const revenueBasis     = s("REVENUE");
   const extras           = s("EXTRAS");
   const costs            = s("COSTS");
   const revenueCompletion = s("REVENUE_COMPLETION");
@@ -509,15 +577,33 @@ async function recalcParent(supabase, { parentId }) {
   const partialPayments  = s("PARTIAL_PAYMENTS");
   const invoiced         = s("INVOICED");
   const payed            = s("PAYED");
+
+  // Apply parent's own surcharges on top of the aggregated basis
+  const { data: parentSettings } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("EXTRAS_PERCENT, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
+    .eq("ID", parentId)
+    .maybeSingle();
+
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesNode(revenueBasis, parentSettings);
+  const revenue = r2(revenueBasis + surchargesTotal);
+
+  // NK should apply to the parent's own surcharges as well, not just the basis.
+  // Children's EXTRAS already reflect their own surcharges via their per-row NK calc.
+  const parentExtrasPercent = Number(parentSettings?.EXTRAS_PERCENT ?? 0);
+  const ownSurchargeExtras  = r2(surchargesTotal * parentExtrasPercent / 100);
+  const extrasFinal         = r2(extras + ownSurchargeExtras);
+
   const revenuePct = revenue > 0 ? (revenueCompletion / revenue) * 100 : 0;
-  const extrasPct  = extras  > 0 ? (extrasCompletion  / extras)  * 100 : 0;
-  const extrasPercent = revenue > 0 ? (extras / revenue) * 100 : 0;
+  const extrasPct  = extrasFinal > 0 ? (extrasCompletion / extrasFinal) * 100 : 0;
 
   const { error: uErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .update({
+      REVENUE_BASIS: revenueBasis,
       REVENUE: revenue,
-      EXTRAS: extras,
+      EXTRAS: extrasFinal,
       COSTS: costs,
       // EXTRAS_PERCENT is NOT aggregated — parent keeps its own manually-set NK%
       REVENUE_COMPLETION: revenueCompletion,
@@ -527,6 +613,10 @@ async function recalcParent(supabase, { parentId }) {
       PARTIAL_PAYMENTS: partialPayments,
       INVOICED: invoiced,
       PAYED: payed,
+      SURCHARGES_TOTAL:  surchargesTotal,
+      SURCHARGE_1_EUR:   r2(s1Eur),
+      SURCHARGE_2_EUR:   r2(s2Eur),
+      SURCHARGE_3_EUR:   r2(s3Eur),
     })
     .eq("ID", parentId);
   if (uErr) throw uErr;
@@ -535,12 +625,45 @@ async function recalcParent(supabase, { parentId }) {
 async function propagateUpwards(supabase, { structureId }) {
   const { data: node } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("FATHER_ID")
+    .select("FATHER_ID, PROJECT_ID")
     .eq("ID", structureId)
     .maybeSingle();
-  if (!node || node.FATHER_ID === null || node.FATHER_ID === undefined) return;
+  if (!node) return;
+  if (node.FATHER_ID === null || node.FATHER_ID === undefined) {
+    // Reached a root structure node; recompute project-level surcharges
+    if (node.PROJECT_ID) await recalcProjectRootSurcharges(supabase, { projectId: node.PROJECT_ID });
+    return;
+  }
   await recalcParent(supabase, { parentId: node.FATHER_ID });
   await propagateUpwards(supabase, { structureId: node.FATHER_ID });
+}
+
+// Compute project-level surcharges (Option A — root surcharges live on PROJECT)
+// Basis = sum of root-level PROJECT_STRUCTURE REVENUE for this project.
+async function recalcProjectRootSurcharges(supabase, { projectId }) {
+  const { data: roots } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("REVENUE")
+    .eq("PROJECT_ID", projectId)
+    .is("FATHER_ID", null);
+  const basis = (roots || []).reduce((s, r) => s + Number(r.REVENUE || 0), 0);
+
+  const { data: settings } = await supabase
+    .from("PROJECT")
+    .select("SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
+    .eq("ID", projectId)
+    .maybeSingle();
+  if (!settings) return;
+
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesNode(basis, settings);
+
+  await supabase.from("PROJECT").update({
+    SURCHARGE_1_EUR:  r2(s1Eur),
+    SURCHARGE_2_EUR:  r2(s2Eur),
+    SURCHARGE_3_EUR:  r2(s3Eur),
+    SURCHARGES_TOTAL: surchargesTotal,
+  }).eq("ID", projectId);
 }
 
 async function progressSnapshot(supabase, { projectId }) {
@@ -855,7 +978,7 @@ async function createStructureNode(supabase, { projectId, node, transferParentVa
 async function patchStructure(supabase, { structureId, update }) {
   const { data: current, error: currentErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID")
+    .select("NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, REVENUE_BASIS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
     .eq("ID", structureId)
     .maybeSingle();
 
@@ -889,10 +1012,11 @@ async function patchStructure(supabase, { structureId, update }) {
       ? Number(update.EXTRAS_PERCENT)
       : Number(current.EXTRAS_PERCENT ?? 0);
 
-  let revenue =
+  // REVENUE sent from frontend = the user's entered base (REVENUE_BASIS); BT=2 overrides from TEC
+  let revenueBasis =
     update.REVENUE !== undefined && update.REVENUE !== null && String(update.REVENUE) !== ""
       ? Number(update.REVENUE)
-      : Number(current.REVENUE ?? 0);
+      : Number(current.REVENUE_BASIS ?? current.REVENUE ?? 0);
 
   if (Number(billingTypeId) === 2) {
     const { data: tecRows, error: tecError } = await supabase
@@ -900,12 +1024,39 @@ async function patchStructure(supabase, { structureId, update }) {
       .select("SP_TOT")
       .eq("STRUCTURE_ID", structureId);
     if (tecError) throw tecError;
-    revenue = (tecRows || []).reduce((acc, r) => {
+    revenueBasis = (tecRows || []).reduce((acc, r) => {
       const v = Number(r.SP_TOT ?? 0);
       return acc + (Number.isFinite(v) ? v : 0);
     }, 0);
   }
 
+  // Surcharge computation (base = REVENUE_BASIS only, extras applied after)
+  const pick = (field, fallback) =>
+    update[field] !== undefined ? update[field] : (current[field] ?? fallback);
+
+  const s1Label = pick("SURCHARGE_1_LABEL", null);
+  const s1Pct   = Number(pick("SURCHARGE_1_PCT", 0));
+  const s1Cumul = !!pick("SURCHARGE_1_CUMUL", true);
+  const s2Label = pick("SURCHARGE_2_LABEL", null);
+  const s2Pct   = Number(pick("SURCHARGE_2_PCT", 0));
+  const s2Cumul = !!pick("SURCHARGE_2_CUMUL", true);
+  const s3Label = pick("SURCHARGE_3_LABEL", null);
+  const s3Pct   = Number(pick("SURCHARGE_3_PCT", 0));
+  const s3Cumul = !!pick("SURCHARGE_3_CUMUL", true);
+
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesNode(revenueBasis, {
+    SURCHARGE_1_LABEL: s1Label, SURCHARGE_1_PCT: s1Pct, SURCHARGE_1_CUMUL: s1Cumul,
+    SURCHARGE_2_LABEL: s2Label, SURCHARGE_2_PCT: s2Pct, SURCHARGE_2_CUMUL: s2Cumul,
+    SURCHARGE_3_LABEL: s3Label, SURCHARGE_3_PCT: s3Pct, SURCHARGE_3_CUMUL: s3Cumul,
+  });
+
+  const s1Active = s1Label !== null && s1Label !== "" && s1Pct !== 0;
+  const s2Active = s2Label !== null && s2Label !== "" && s2Pct !== 0;
+  const s3Active = s3Label !== null && s3Label !== "" && s3Pct !== 0;
+
+  // Final REVENUE = REVENUE_BASIS + surcharges; EXTRAS computed on surcharged REVENUE
+  const revenue = r2(revenueBasis + surchargesTotal);
   const extras = (revenue * extrasPercent) / 100;
   const revenueCompletion = (revenuePct * revenue) / 100;
   const extrasCompletion = (extrasPct * extras) / 100;
@@ -914,6 +1065,7 @@ async function patchStructure(supabase, { structureId, update }) {
     NAME_SHORT: nameShort,
     NAME_LONG: nameLong,
     BILLING_TYPE_ID: billingTypeId,
+    REVENUE_BASIS: revenueBasis,
     REVENUE: revenue,
     EXTRAS_PERCENT: extrasPercent,
     REVENUE_COMPLETION_PERCENT: revenuePct,
@@ -921,6 +1073,19 @@ async function patchStructure(supabase, { structureId, update }) {
     EXTRAS: extras,
     REVENUE_COMPLETION: revenueCompletion,
     EXTRAS_COMPLETION: extrasCompletion,
+    SURCHARGE_1_LABEL: s1Label,
+    SURCHARGE_1_PCT:   s1Active ? s1Pct : null,
+    SURCHARGE_1_EUR:   r2(s1Eur),
+    SURCHARGE_1_CUMUL: s1Cumul,
+    SURCHARGE_2_LABEL: s2Label,
+    SURCHARGE_2_PCT:   s2Active ? s2Pct : null,
+    SURCHARGE_2_EUR:   r2(s2Eur),
+    SURCHARGE_2_CUMUL: s2Cumul,
+    SURCHARGE_3_LABEL: s3Label,
+    SURCHARGE_3_PCT:   s3Active ? s3Pct : null,
+    SURCHARGE_3_EUR:   r2(s3Eur),
+    SURCHARGE_3_CUMUL: s3Cumul,
+    SURCHARGES_TOTAL:  surchargesTotal,
     ...(update.IS_INTERNAL !== undefined ? { IS_INTERNAL: !!update.IS_INTERNAL } : {}),
   };
 
@@ -1607,6 +1772,8 @@ module.exports = {
   createProject,
   listProjects,
   listProjectsFull,
+  getProject,
+  recalcProjectRootSurcharges,
   patchProject,
   searchProjects,
   searchContracts,

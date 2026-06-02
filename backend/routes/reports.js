@@ -57,6 +57,46 @@ module.exports = (supabase) => {
     return null;
   }
 
+  // Compute sum of parent (non-leaf) SURCHARGES_TOTAL per project PLUS the
+  // project-level (root) SURCHARGES_TOTAL — these are the surcharges that the
+  // leaf-based reporting views miss.
+  // Returns Map<projectId(string), surchargeSum(number)>
+  async function loadParentSurchargesByProject(projectIds) {
+    const out = new Map();
+    if (!projectIds || projectIds.length === 0) return out;
+
+    // 1) Non-leaf structure-node surcharges
+    const { data: structRows } = await supabase
+      .from("PROJECT_STRUCTURE")
+      .select("PROJECT_ID, ID, FATHER_ID, SURCHARGES_TOTAL")
+      .in("PROJECT_ID", projectIds);
+    const fatherIds = new Set((structRows || []).filter(r => r.FATHER_ID != null).map(r => String(r.FATHER_ID)));
+    for (const r of (structRows || [])) {
+      if (!fatherIds.has(String(r.ID))) continue; // skip leaves
+      const pid = String(r.PROJECT_ID);
+      const inc = Number(r.SURCHARGES_TOTAL || 0);
+      if (!inc) continue;
+      out.set(pid, (out.get(pid) || 0) + inc);
+    }
+
+    // 2) Project-level (root) surcharges — Option A
+    try {
+      const { data: projRows } = await supabase
+        .from("PROJECT")
+        .select("ID, SURCHARGES_TOTAL")
+        .in("ID", projectIds);
+      for (const p of (projRows || [])) {
+        const sur = Number(p.SURCHARGES_TOTAL || 0);
+        if (!sur) continue;
+        const pid = String(p.ID);
+        out.set(pid, (out.get(pid) || 0) + sur);
+      }
+    } catch (_) { /* column may not exist yet (migration not run) — soft-fail */ }
+
+    return out;
+  }
+  const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+
   // Header KPIs (one row per project)
   router.get("/project/:projectId/header", async (req, res) => {
     const tenantId = requireTenantId(req, res);
@@ -87,6 +127,14 @@ module.exports = (supabase) => {
 
     if (error) return res.status(500).json({ error: error.message });
     if (!data)  return res.status(404).json({ error: "Project report header not found" });
+
+    // Add parent-level surcharges (leaf-based view misses these)
+    const parentSurchargesMap = await loadParentSurchargesByProject([projectId]);
+    const parentSurcharges = parentSurchargesMap.get(String(projectId)) || 0;
+    if (parentSurcharges) {
+      data.BUDGET_TOTAL_NET    = round2(Number(data.BUDGET_TOTAL_NET || 0) + parentSurcharges);
+      data.REMAINING_BUDGET_NET = round2(Number(data.REMAINING_BUDGET_NET || 0) + parentSurcharges);
+    }
     res.json({ data });
   });
 
@@ -159,7 +207,18 @@ module.exports = (supabase) => {
     }
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ data: data || [] });
+
+    // Add parent-level surcharges per project
+    const rows = data || [];
+    const projectIds = rows.map(r => r.PROJECT_ID).filter(Boolean);
+    const parentSurchargesMap = await loadParentSurchargesByProject(projectIds);
+    for (const row of rows) {
+      const sur = parentSurchargesMap.get(String(row.PROJECT_ID)) || 0;
+      if (!sur) continue;
+      row.BUDGET_TOTAL_NET     = round2(Number(row.BUDGET_TOTAL_NET || 0) + sur);
+      row.REMAINING_BUDGET_NET = round2(Number(row.REMAINING_BUDGET_NET || 0) + sur);
+    }
+    res.json({ data: rows });
   });
 
   // Project progress timeline (for chart visualization)
@@ -262,9 +321,11 @@ module.exports = (supabase) => {
 
       if (sortedDates.length === 0) return res.json({ data: [] });
 
-      // 8. Compute cumulative values at each event date
-      const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+      // Parent-level surcharges (leaf-based loop misses these)
+      const parentSurchargesMap = await loadParentSurchargesByProject([projectId]);
+      const parentSurcharges = parentSurchargesMap.get(String(projectId)) || 0;
 
+      // 8. Compute cumulative values at each event date
       const result = sortedDates.map(date => {
         let honorar       = 0;
         let leistungsstand = 0;
@@ -296,6 +357,13 @@ module.exports = (supabase) => {
               leistungsstand += +(lastCompl.REVENUE_COMPLETION || 0) + +(lastCompl.EXTRAS_COMPLETION || 0);
             }
           }
+        }
+
+        // Add parent-level surcharges to honorar; allocate proportionally to leistungsstand
+        if (parentSurcharges) {
+          const ratio = honorar > 0 ? Math.min(1, leistungsstand / honorar) : 0;
+          honorar       += parentSurcharges;
+          leistungsstand += parentSurcharges * ratio;
         }
 
         const kosten = (tecRows || [])
@@ -341,7 +409,7 @@ module.exports = (supabase) => {
       // 1. All structures for the entire tenant
       const { data: structures, error: sErr } = await supabase
         .from("PROJECT_STRUCTURE")
-        .select("ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, created_at")
+        .select("ID, PROJECT_ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, created_at")
         .eq("TENANT_ID", tenantId);
       if (sErr) return res.status(500).json({ error: sErr.message });
       if (!structures || structures.length === 0) return res.json({ data: [] });
@@ -418,7 +486,11 @@ module.exports = (supabase) => {
 
       if (sortedDates.length === 0) return res.json({ data: [] });
 
-      const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+      // Parent-level surcharges across all projects in this aggregation
+      const distinctProjectIds = [...new Set(structures.map(s => s.PROJECT_ID).filter(Boolean))];
+      const parentSurchargesMap = await loadParentSurchargesByProject(distinctProjectIds);
+      let totalParentSurcharges = 0;
+      for (const v of parentSurchargesMap.values()) totalParentSurcharges += v;
 
       const result = sortedDates.map(date => {
         let honorar = 0;
@@ -448,6 +520,12 @@ module.exports = (supabase) => {
               leistungsstand += +(lastCompl.REVENUE_COMPLETION || 0) + +(lastCompl.EXTRAS_COMPLETION || 0);
             }
           }
+        }
+
+        if (totalParentSurcharges) {
+          const ratio = honorar > 0 ? Math.min(1, leistungsstand / honorar) : 0;
+          honorar        += totalParentSurcharges;
+          leistungsstand += totalParentSurcharges * ratio;
         }
 
         const kosten = (tecRows || [])
@@ -527,7 +605,18 @@ module.exports = (supabase) => {
     }
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ data: data || [] });
+
+    // Add parent-level surcharges per project
+    const rows = data || [];
+    const projectIds = rows.map(r => r.PROJECT_ID).filter(Boolean);
+    const parentSurchargesMap = await loadParentSurchargesByProject(projectIds);
+    for (const row of rows) {
+      const sur = parentSurchargesMap.get(String(row.PROJECT_ID)) || 0;
+      if (!sur) continue;
+      row.BUDGET_TOTAL_NET     = round2(Number(row.BUDGET_TOTAL_NET || 0) + sur);
+      row.REMAINING_BUDGET_NET = round2(Number(row.REMAINING_BUDGET_NET || 0) + sur);
+    }
+    res.json({ data: rows });
   });
 
   // Hours + costs per month — date-filtered by querying TEC directly when params present
@@ -668,13 +757,27 @@ module.exports = (supabase) => {
       .eq("TENANT_ID", tenantId)
       .order("BUDGET_TOTAL_NET", { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
+
+    // Add parent-level surcharges per project (leaf-based view misses these)
+    const projIds = (data || []).map(p => p.PROJECT_ID).filter(Boolean);
+    const parentSurchargesMap = await loadParentSurchargesByProject(projIds);
+
     const result = (data || []).map(p => {
-      const budget    = Number(p.BUDGET_TOTAL_NET)      || 0;
+      const sur       = parentSurchargesMap.get(String(p.PROJECT_ID)) || 0;
+      const budget    = round2((Number(p.BUDGET_TOTAL_NET) || 0) + sur);
       const costs     = Number(p.COST_TOTAL)            || 0;
-      const leistung  = Number(p.LEISTUNGSSTAND_VALUE)  || 0;
+      // Allocate surcharge contribution to leistung proportionally to completion
+      const leistRaw  = Number(p.LEISTUNGSSTAND_VALUE)  || 0;
+      const baseHonor = Number(p.BUDGET_TOTAL_NET)      || 0;
+      const leistung  = baseHonor > 0 && sur > 0
+        ? round2(leistRaw + sur * Math.min(1, leistRaw / baseHonor))
+        : leistRaw;
       const openNet   = Number(p.OPEN_NET_TOTAL)        || 0;
       const costRatio = budget > 0 ? costs / budget : 0;
       const db        = leistung - costs;
+      // Write back so the modal/cards show the adjusted values
+      p.BUDGET_TOTAL_NET     = budget;
+      p.LEISTUNGSSTAND_VALUE = leistung;
       const flags = [];
       if (budget > 0 && costRatio >= 0.9)                       flags.push("budget_kritisch");
       if (db < 0 && (costs > 500 || leistung > 500))            flags.push("db_negativ");

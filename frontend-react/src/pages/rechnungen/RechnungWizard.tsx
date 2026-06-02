@@ -581,15 +581,36 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
               )}
             </div>
 
-            {proposal && (
-              <div className="billing-proposal-box">
-                <div className="bp-row"><span>Leistungsbetrag Netto</span><strong>{fmtEur(proposal.performance_amount)}</strong></div>
-                <div className="bp-row"><span>Buchungen Netto</span><strong>{fmtEur(proposal.bookings_sum)}</strong></div>
-                <div className="bp-row"><span>Nebenkosten Netto</span><strong>{fmtEur(proposal.amount_extras_net)}</strong></div>
-                <div className="bp-row total"><span>Netto gesamt</span><strong>{fmtEur(proposal.total_amount_net)}</strong></div>
-                <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(proposal.total_amount_gross)}</strong></div>
-              </div>
-            )}
+            {proposal && (() => {
+              const vatPct = Number(proposal.vat_percent ?? 0)
+              const netAfterDiscAndSkonto = Math.round((base - totalDisc - cdAmt) * 100) / 100
+              const taxAfter   = Math.round(netAfterDiscAndSkonto * vatPct / 100 * 100) / 100
+              const grossAfter = Math.round((netAfterDiscAndSkonto + taxAfter) * 100) / 100
+              const hasDeductions = totalDisc > 0 || cdAmt > 0
+              return (
+                <div className="billing-proposal-box">
+                  <div className="bp-row"><span>Leistungsbetrag Netto</span><strong>{fmtEur(proposal.performance_amount)}</strong></div>
+                  <div className="bp-row"><span>Buchungen Netto</span><strong>{fmtEur(proposal.bookings_sum)}</strong></div>
+                  <div className="bp-row"><span>Nebenkosten Netto</span><strong>{fmtEur(proposal.amount_extras_net)}</strong></div>
+                  <div className="bp-row"><span>Netto Zwischensumme</span><strong>{fmtEur(base)}</strong></div>
+                  {totalDisc > 0 && (
+                    <div className="bp-row" style={{ color: '#b91c1c' }}>
+                      <span>./. Nachlässe</span><strong>− {fmtEur(totalDisc)}</strong>
+                    </div>
+                  )}
+                  {cdAmt > 0 && (
+                    <div className="bp-row" style={{ color: '#b91c1c' }}>
+                      <span>./. Skonto</span><strong>− {fmtEur(cdAmt)}</strong>
+                    </div>
+                  )}
+                  <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{fmtEur(netAfterDiscAndSkonto)}</strong></div>
+                  {vatPct > 0 && (
+                    <div className="bp-row"><span>zzgl. {vatPct}&thinsp;% MwSt.</span><strong>{fmtEur(taxAfter)}</strong></div>
+                  )}
+                  <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(grossAfter)}</strong></div>
+                </div>
+              )
+            })()}
             {draftId && (
               <div style={{ display: 'flex', gap: 8, margin: '12px 0 4px', flexWrap: 'wrap' }}>
                 <button className="btn-small" onClick={() => void saveDiscountsAndPreview()}>PDF ansehen</button>
@@ -598,12 +619,28 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
               </div>
             )}
             <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', marginTop: 8 }}>
-              Nach dem Buchen ist die Rechnung unveränderlich.
+              Nach dem Buchen ist die Rechnung unveränderlich. Vorher kann sie als Entwurf zwischengespeichert werden.
             </p>
             <Message text={msg?.text ?? null} type={msg?.type} />
             <div className="wizard-nav">
               <button onClick={handleCancel}>Abbrechen</button>
               <button onClick={() => setStep(2)}>← Zurück</button>
+              <button
+                onClick={async () => {
+                  if (!draftId) return
+                  await patchInvoice(draftId, {
+                    discount_1_percent:   showDiscounts ? d1 : 0,
+                    discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
+                    discount_2_percent:   showDiscounts ? d2 : 0,
+                    discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
+                    total_discounts:      showDiscounts ? totalDisc : 0,
+                    cash_discount_percent: showSkonto ? cdPct : 0,
+                    cash_discount_days:    showSkonto ? cdDays : 0,
+                    cash_discount_amount:  showSkonto ? cdAmt : 0,
+                  })
+                  setMsg({ text: 'Als Entwurf gespeichert ✅', type: 'success' })
+                }}
+              >Speichern (Entwurf)</button>
               <button className="btn-primary" onClick={() => { if (draftId) bookMut.mutate(draftId) }} disabled={bookMut.isPending}>
                 {bookMut.isPending ? 'Bucht …' : 'Jetzt buchen ✓'}
               </button>

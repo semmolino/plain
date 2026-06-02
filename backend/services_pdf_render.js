@@ -265,7 +265,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
 
   const { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, NAME_SHORT, NAME_LONG, REVENUE, EXTRAS, PARTIAL_PAYMENTS, INVOICED')
+    .select('ID, FATHER_ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, PARTIAL_PAYMENTS, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
     .eq('PROJECT_ID', projectId)
     .order('ID', { ascending: true });
 
@@ -281,22 +281,96 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
     .from(structTable).select('STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET').eq(docIdField, docId);
   const docMap = Object.fromEntries((docRows || []).map(r => [r.STRUCTURE_ID, r]));
 
-  return (data || []).map(r => {
-    const revenue       = Number(r.REVENUE || 0);
-    const extras        = Number(r.EXTRAS  || 0);
-    const feeTotal      = revenue + extras;
-    const alreadyBilled = docType === 'INVOICE'
-      ? Number(r.INVOICED         || 0)
-      : Number(r.PARTIAL_PAYMENTS || 0);
-    const dr         = docMap[r.ID];
-    const thisDocNet = dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0;
+  const rows = data || [];
+  // Build child lookup so we can compute depth + leaf-descendant sums for parents
+  const childrenOf = new Map();
+  for (const r of rows) {
+    const pid = r.FATHER_ID != null ? String(r.FATHER_ID) : null;
+    if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+    childrenOf.get(pid).push(r);
+  }
+  const fatherIds = new Set(rows.filter(r => r.FATHER_ID != null).map(r => String(r.FATHER_ID)));
+
+  // depth: 0 for roots, +1 per ancestor
+  const depthOf = new Map();
+  function computeDepth(id) {
+    if (depthOf.has(id)) return depthOf.get(id);
+    const r = rows.find(x => String(x.ID) === String(id));
+    if (!r) return 0;
+    const d = r.FATHER_ID == null ? 0 : (computeDepth(String(r.FATHER_ID)) + 1);
+    depthOf.set(id, d);
+    return d;
+  }
+  for (const r of rows) computeDepth(String(r.ID));
+
+  // For parents, the displayed Auftragswert / Abgerechnet / Diese Rechnung should
+  // be the SUM over leaf descendants — so parent value = visual subtotal that
+  // matches what the leaves underneath add up to. Parent's own surcharges
+  // appear separately in the Zuschlagsübersicht below.
+  function leafDescendants(id) {
+    const out = [];
+    const stack = [String(id)];
+    while (stack.length) {
+      const cur = stack.pop();
+      const kids = childrenOf.get(cur) || [];
+      if (kids.length === 0) {
+        const node = rows.find(x => String(x.ID) === cur);
+        if (node) out.push(node);
+      } else {
+        for (const k of kids) stack.push(String(k.ID));
+      }
+    }
+    return out;
+  }
+
+  return rows.map(r => {
+    const isLeaf = !fatherIds.has(String(r.ID));
+    let revenue, extras, alreadyBilled, thisDocNet;
+    if (isLeaf) {
+      revenue       = Number(r.REVENUE  || 0);
+      extras        = Number(r.EXTRAS   || 0);
+      alreadyBilled = docType === 'INVOICE' ? Number(r.INVOICED || 0) : Number(r.PARTIAL_PAYMENTS || 0);
+      const dr = docMap[r.ID];
+      thisDocNet = dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0;
+    } else {
+      // Parent — aggregate from leaf descendants so the displayed value matches
+      // the sum of the visible child rows below it.
+      const leaves = leafDescendants(r.ID);
+      revenue = leaves.reduce((s, l) => s + Number(l.REVENUE || 0), 0);
+      extras  = leaves.reduce((s, l) => s + Number(l.EXTRAS  || 0), 0);
+      alreadyBilled = leaves.reduce((s, l) => {
+        return s + (docType === 'INVOICE' ? Number(l.INVOICED || 0) : Number(l.PARTIAL_PAYMENTS || 0));
+      }, 0);
+      thisDocNet = leaves.reduce((s, l) => {
+        const dr = docMap[l.ID];
+        return s + (dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0);
+      }, 0);
+    }
+    const feeTotal        = Math.round((revenue + extras) * 100) / 100;
+    const revenueBasis    = Number(r.REVENUE_BASIS ?? r.REVENUE ?? 0);
+    const surchargesTotal = Number(r.SURCHARGES_TOTAL || 0);
+    const depth           = depthOf.get(String(r.ID)) ?? 0;
     return {
-      nameShort:    r.NAME_SHORT || '',
-      nameLong:     r.NAME_LONG  || '',
+      id:             r.ID,
+      isLeaf,
+      depth,
+      nameShort:      r.NAME_SHORT || '',
+      nameLong:       r.NAME_LONG  || '',
       feeTotal,
       alreadyBilled,
       thisDocNet,
-      performedPct: feeTotal > 0 ? Math.round((alreadyBilled / feeTotal) * 100) : 0,
+      performedPct:   feeTotal > 0 ? Math.round((alreadyBilled / feeTotal) * 100) : 0,
+      revenueBasis,
+      surchargesTotal,
+      s1Label: r.SURCHARGE_1_LABEL || null,
+      s1Pct:   Number(r.SURCHARGE_1_PCT || 0),
+      s1Eur:   Number(r.SURCHARGE_1_EUR || 0),
+      s2Label: r.SURCHARGE_2_LABEL || null,
+      s2Pct:   Number(r.SURCHARGE_2_PCT || 0),
+      s2Eur:   Number(r.SURCHARGE_2_EUR || 0),
+      s3Label: r.SURCHARGE_3_LABEL || null,
+      s3Pct:   Number(r.SURCHARGE_3_PCT || 0),
+      s3Eur:   Number(r.SURCHARGE_3_EUR || 0),
     };
   });
 }
@@ -456,11 +530,47 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     vat:   projectPayments.reduce((s, p) => s + p.vatAmount,   0),
     gross: projectPayments.reduce((s, p) => s + p.grossAmount, 0),
   };
+  // Only LEAF rows count in the Summe — parents are aggregated displays of
+  // their children's values, so including them would double-count.
+  const leafProjectStructureRows = projectStructureRows.filter(r => r.isLeaf);
   const structureTotals = {
-    feeTotal:      projectStructureRows.reduce((s, r) => s + r.feeTotal,      0),
-    alreadyBilled: projectStructureRows.reduce((s, r) => s + r.alreadyBilled, 0),
-    thisDocNet:    projectStructureRows.reduce((s, r) => s + r.thisDocNet,    0),
+    feeTotal:      leafProjectStructureRows.reduce((s, r) => s + r.feeTotal,      0),
+    alreadyBilled: leafProjectStructureRows.reduce((s, r) => s + r.alreadyBilled, 0),
+    thisDocNet:    leafProjectStructureRows.reduce((s, r) => s + r.thisDocNet,    0),
   };
+  const surchargeSummaryRows    = projectStructureRows.filter(r => r.surchargesTotal > 0);
+  // Each row's surchargesTotal is its OWN surcharges (not aggregated from
+  // children), so summing all rows with surcharges is correct — no double-count.
+  let structureSurchargesTotal = Math.round(surchargeSummaryRows.reduce((s, r) => s + r.surchargesTotal, 0) * 100) / 100;
+
+  // Project-level (root) surcharges — Option A
+  if (rawDoc.PROJECT_ID) {
+    try {
+      const { data: projRow } = await supabase
+        .from('PROJECT')
+        .select('SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR, SURCHARGES_TOTAL')
+        .eq('ID', rawDoc.PROJECT_ID)
+        .maybeSingle();
+      const projectSurchargesTotal = Number(projRow?.SURCHARGES_TOTAL || 0);
+      if (projRow && projectSurchargesTotal > 0) {
+        // The summary basis for the project-level row = sum of root-node REVENUE
+        const rootBasis = projectStructureRows.reduce((s, r) => s + (r.feeTotal - (r.surchargesTotal || 0)), 0);
+        surchargeSummaryRows.push({
+          nameShort: 'Projekt',
+          nameLong:  'Projektweite Zuschläge',
+          revenueBasis:    rootBasis,
+          surchargesTotal: projectSurchargesTotal,
+          s1Label: projRow.SURCHARGE_1_LABEL || null, s1Pct: Number(projRow.SURCHARGE_1_PCT || 0), s1Eur: Number(projRow.SURCHARGE_1_EUR || 0),
+          s2Label: projRow.SURCHARGE_2_LABEL || null, s2Pct: Number(projRow.SURCHARGE_2_PCT || 0), s2Eur: Number(projRow.SURCHARGE_2_EUR || 0),
+          s3Label: projRow.SURCHARGE_3_LABEL || null, s3Pct: Number(projRow.SURCHARGE_3_PCT || 0), s3Eur: Number(projRow.SURCHARGE_3_EUR || 0),
+          // Fields needed by templates
+          feeTotal: rootBasis + projectSurchargesTotal,
+          alreadyBilled: 0, thisDocNet: 0, performedPct: 0,
+        });
+        structureSurchargesTotal = Math.round((structureSurchargesTotal + projectSurchargesTotal) * 100) / 100;
+      }
+    } catch (_) { /* surcharge columns may not exist yet — soft-fail */ }
+  }
 
   // Discount / skonto fields
   const totalAmountNet     = Number(rawDoc.TOTAL_AMOUNT_NET ?? 0);
@@ -522,6 +632,8 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     text2,
     projectStructureRows,
     structureTotals,
+    surchargeSummaryRows,
+    structureSurchargesTotal,
     projectPayments,
     paymentTotals,
     tec,

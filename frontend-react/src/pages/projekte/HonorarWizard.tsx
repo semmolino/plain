@@ -6,7 +6,7 @@ import {
   fetchFeeGroups, fetchFeeMasters, fetchFeeZones,
   fetchFeeCalcMasters, fetchFeeCalcMaster,
   initFeeCalcMaster, saveFeeCalcBasis, initFeePhases, saveFeePhases,
-  deleteFeeCalcMaster, attachFeeToStructure,
+  deleteFeeCalcMaster, attachFeeToStructure, attachFeeToOfferStructure,
   fetchFeeSurchargesGlobal, fetchFeeCalcSurcharges, saveFeeCalcSurcharges,
   fetchFeeCalcBl, saveFeeCalcBl,
   openHonorarPdf, syncFeeCalcToStructure,
@@ -160,10 +160,12 @@ interface WizardProps {
   initialProjectId?: number | null
   /** When set, calc is linked to an offer instead of a project */
   offerId?: number | null
+  /** Pre-select this structure node as the parent in the final step */
+  initialFatherId?: number | null
   onDone?: () => void
 }
 
-export function HonorarWizard({ existingId, initialProjectId, offerId, onDone }: WizardProps) {
+export function HonorarWizard({ existingId, initialProjectId, offerId, initialFatherId, onDone }: WizardProps) {
   const qc = useQueryClient()
   const isEdit      = !!existingId
   const isOfferMode = !!offerId
@@ -203,7 +205,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, onDone }:
   const [expandedSurchargeIdx, setExpandedSurchargeIdx] = useState<number | null>(null)
 
   // Step 6
-  const [fatherId, setFatherId] = useState('')
+  const [fatherId, setFatherId] = useState(initialFatherId != null ? String(initialFatherId) : '')
 
   const { data: groupsData }   = useQuery({ queryKey: ['fee-groups'],     queryFn: fetchFeeGroups })
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
@@ -476,14 +478,21 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, onDone }:
 
   async function finishOffer() {
     if (!calcMaster) return
-    setLoading(true); setMsg({ text: 'Speichere Zuordnung …', type: 'info' })
+    if (!fatherId) { setMsg({ text: 'Bitte übergeordnetes Strukturelement wählen', type: 'error' }); return }
+    setLoading(true); setMsg({ text: 'Erzeuge Angebotsstruktur …', type: 'info' })
     try {
+      // Save ATTACH_TO_OFFER_STRUCTURE_ID for when offer is converted to project
       await saveFeeCalcBasis(calcMaster.ID, {
-        ATTACH_TO_OFFER_STRUCTURE_ID: fatherId ? Number(fatherId) : null,
+        ATTACH_TO_OFFER_STRUCTURE_ID: Number(fatherId),
       })
+      // Immediately create OFFER_STRUCTURE entries under the selected parent
+      const res = await attachFeeToOfferStructure(calcMaster.ID, Number(fatherId))
+      if (calcMaster.OFFER_ID != null) {
+        void qc.invalidateQueries({ queryKey: ['offer-structure', calcMaster.OFFER_ID] })
+      }
       void qc.invalidateQueries({ queryKey: ['fee-calc-masters'] })
-      setMsg({ text: 'Kalkulation gespeichert ✅', type: 'success' })
-      setTimeout(() => resetWizard(), 800)
+      setMsg({ text: res.message || 'Angebotsstruktur wurde angelegt ✅', type: 'success' })
+      setTimeout(() => resetWizard(), 1200)
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
     } finally { setLoading(false) }
