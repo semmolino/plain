@@ -1,5 +1,7 @@
 "use strict";
 
+const arbzg = require("./arbzg");
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -93,34 +95,68 @@ async function checkMonthNotClosed(supabase, tenantId, employeeId, dateStr) {
 
 async function createTimerDraft(supabase, { body, tenantId }) {
   const b = body;
-  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || !b.STRUCTURE_ID || !b.PROJECT_ID) {
+  const entryKind = b.ENTRY_KIND === 'BREAK' ? 'BREAK' : 'WORK';
+
+  // STRUCTURE/PROJECT-Pflicht entfällt für Pausen-Blöcke
+  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER ||
+      (entryKind === 'WORK' && (!b.STRUCTURE_ID || !b.PROJECT_ID))) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
 
   await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
 
-  const { data: projRow, error: projErr } = await supabase
-    .from("PROJECT")
-    .select("TENANT_ID")
-    .eq("ID", b.PROJECT_ID)
-    .maybeSingle();
-  if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
-  const resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
-
-  const preset = await loadEmployee2Project(supabase, Number(b.EMPLOYEE_ID), Number(b.PROJECT_ID));
+  let resolvedTenantId = tenantId ?? null;
+  let preset = null;
+  if (b.PROJECT_ID) {
+    const { data: projRow, error: projErr } = await supabase
+      .from("PROJECT")
+      .select("TENANT_ID")
+      .eq("ID", b.PROJECT_ID)
+      .maybeSingle();
+    if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
+    resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
+    preset = await loadEmployee2Project(supabase, Number(b.EMPLOYEE_ID), Number(b.PROJECT_ID));
+  }
 
   const quantityInt = Number(b.QUANTITY_INT ?? 0);
   const quantityExt = quantityInt;
 
-  // Look up time-based CP rate; fall back to 0 if none defined yet
-  const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
-  const cpRate = lookedUpRate !== null ? lookedUpRate : 0;
+  // Pause-Blöcke werden kostenneutral gebucht.
+  let cpRate = 0;
+  let spRate = 0;
+  if (entryKind === 'WORK') {
+    const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
+    cpRate = lookedUpRate !== null ? lookedUpRate : 0;
+    spRate = preset?.SP_RATE != null ? Number(preset.SP_RATE) : 0;
+  }
 
-  const spRate = preset?.SP_RATE != null ? Number(preset.SP_RATE) : 0;
+  // ── ArbZG-Vorabprüfung ──────────────────────────────────────────────────
+  let arbzgIssues = [];
+  try {
+    const r = await arbzg.validateBookingArbZG(supabase, {
+      tenantId:    resolvedTenantId,
+      employeeId:  Number(b.EMPLOYEE_ID),
+      dateVoucher: b.DATE_VOUCHER,
+      timeStart:   b.TIME_START || null,
+      timeFinish:  b.TIME_FINISH || null,
+      quantityInt,
+      entryKind,
+    });
+    arbzgIssues = r.issues;
+    const blockers = arbzgIssues.filter(i => i.severity === 'BLOCK');
+    if (blockers.length > 0) {
+      throw { status: 409, message: blockers.map(i => i.message).join(' · '),
+              details: { code: 'ARBZG_BLOCK', issues: arbzgIssues } };
+    }
+  } catch (e) {
+    if (e?.details?.code === 'ARBZG_BLOCK') throw e;
+    // Andere ArbZG-Fehler nicht block — Buchung darf trotzdem rein
+  }
 
   const { data: inserted, error: insErr } = await supabase.from("TEC").insert([{
     TENANT_ID: resolvedTenantId,
     STATUS: "DRAFT",
+    ENTRY_KIND: entryKind,
     EMPLOYEE_ID: b.EMPLOYEE_ID,
     DATE_VOUCHER: b.DATE_VOUCHER,
     TIME_START: b.TIME_START || null,
@@ -135,12 +171,30 @@ async function createTimerDraft(supabase, { body, tenantId }) {
     SP_RATE: spRate,
     SP_TOT: quantityExt * spRate,
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "",
-    PROJECT_ID: b.PROJECT_ID,
-    STRUCTURE_ID: b.STRUCTURE_ID,
+    PROJECT_ID: b.PROJECT_ID ?? null,
+    STRUCTURE_ID: b.STRUCTURE_ID ?? null,
   }]).select("ID").single();
 
-  if (insErr) throw { status: 500, message: "Fehler beim Speichern des Entwurfs: " + insErr.message };
-  return inserted;
+  if (insErr) {
+    // Fallback: wenn ENTRY_KIND-Spalte (Migration 0051) noch nicht existiert,
+    // retry ohne sie. Pausen sind dann nicht buchbar — aber WORK funktioniert.
+    if (/ENTRY_KIND/i.test(insErr.message) && entryKind === 'WORK') {
+      const { data: retry, error: retryErr } = await supabase.from("TEC").insert([{
+        TENANT_ID: resolvedTenantId, STATUS: "DRAFT", EMPLOYEE_ID: b.EMPLOYEE_ID,
+        DATE_VOUCHER: b.DATE_VOUCHER, TIME_START: b.TIME_START || null,
+        TIME_FINISH: b.TIME_FINISH || null, QUANTITY_INT: quantityInt,
+        CP_RATE: cpRate, CP_TOT: quantityInt * cpRate, QUANTITY_EXT: quantityExt,
+        ROLE_ID: preset?.ROLE_ID ?? null, ROLE_NAME_SHORT: preset?.ROLE_NAME_SHORT ?? null,
+        ROLE_NAME_LONG: preset?.ROLE_NAME_LONG ?? null, SP_RATE: spRate,
+        SP_TOT: quantityExt * spRate, POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "",
+        PROJECT_ID: b.PROJECT_ID ?? null, STRUCTURE_ID: b.STRUCTURE_ID ?? null,
+      }]).select("ID").single();
+      if (retryErr) throw { status: 500, message: "Fehler beim Speichern des Entwurfs: " + retryErr.message };
+      return { ...retry, arbzgIssues };
+    }
+    throw { status: 500, message: "Fehler beim Speichern des Entwurfs: " + insErr.message };
+  }
+  return { ...inserted, arbzgIssues };
 }
 
 async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
@@ -167,30 +221,157 @@ async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
   return data || [];
 }
 
-async function confirmDrafts(supabase, { ids }) {
+async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId }) {
   if (!Array.isArray(ids) || !ids.length) throw { status: 400, message: "ids fehlen" };
 
   const { data: rows, error: fetchErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID, STATUS")
+    .select("ID, TENANT_ID, EMPLOYEE_ID, DATE_VOUCHER, STRUCTURE_ID, STATUS, QUANTITY_INT, ENTRY_KIND")
     .in("ID", ids);
   if (fetchErr) throw fetchErr;
 
-  const draftIds = (rows || []).filter(r => r.STATUS === "DRAFT").map(r => r.ID);
-  if (!draftIds.length) return { confirmed: 0 };
+  const drafts = (rows || []).filter(r => r.STATUS === "DRAFT");
+  if (!drafts.length) return { confirmed: 0, arbzgEvents: [] };
 
+  const draftIds = drafts.map(r => r.ID);
+  const resolvedTenant = drafts[0].TENANT_ID ?? tenantId ?? null;
+
+  // ── ArbZG-Tagesabschluss pro (Mitarbeiter, Datum) ───────────────────────
+  const settings = await arbzg.getArbzgSettings(supabase, resolvedTenant);
+  const auditEvents = [];
+
+  // Gruppiere Drafts pro (employee, date)
+  const groups = new Map();
+  for (const r of drafts) {
+    const key = `${r.EMPLOYEE_ID}|${r.DATE_VOUCHER}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+
+  for (const [key, groupRows] of groups) {
+    const [empIdStr, dateVoucher] = key.split('|');
+    const employeeId = Number(empIdStr);
+
+    if (settings.enabled) {
+      const model     = await arbzg.getActiveWorkModel(supabase, resolvedTenant, employeeId, dateVoucher);
+      const breakRule = await arbzg.getBreakRule(supabase, resolvedTenant,
+        model?.BREAK_RULE_ID ?? settings.defaultBreakRuleId);
+
+      // Tagesgesamtsumme nach Bestätigung (inkl. dieser drafts):
+      const dayWork  = await arbzg.sumDayWorkHours(supabase, resolvedTenant, employeeId, dateVoucher);
+      const dayBreak = await arbzg.sumDayBreakMinutes(supabase, resolvedTenant, employeeId, dateVoucher);
+
+      // § 4 — Pflichtpause / Auto-Abzug
+      if (settings.checkBreakRequired) {
+        const required = dayWork > Number(breakRule.T2_HOURS) ? Number(breakRule.T2_BREAK_MIN)
+                       : dayWork > Number(breakRule.T1_HOURS) ? Number(breakRule.T1_BREAK_MIN)
+                       : 0;
+        if (required > 0 && dayBreak < required) {
+          const missingMin = required - dayBreak;
+          const conf = breakConfirmations[key] || breakConfirmations[`${employeeId}|${dateVoucher}`];
+
+          if (settings.autoBreakRequireConfirm && !conf) {
+            throw {
+              status: 409,
+              message: `Pausenbestätigung erforderlich für ${employeeId} / ${dateVoucher}`,
+              details: { code: 'ARBZG_BREAK_CONFIRM_REQUIRED',
+                         employeeId, dateVoucher, requiredMin: required,
+                         currentMin: dayBreak, missingMin },
+            };
+          }
+
+          if (conf?.kind === 'ACCEPT_AUTO_DEDUCT' || (!conf && settings.autoBreakDeduct)) {
+            // Auto-Abzug auf den letzten WORK-Draft des Tages buchen.
+            const workDrafts = groupRows.filter(r => (r.ENTRY_KIND ?? 'WORK') === 'WORK');
+            const target = workDrafts[workDrafts.length - 1] || groupRows[groupRows.length - 1];
+            if (target) {
+              const reducedH = Math.max(0, Number(target.QUANTITY_INT || 0) - missingMin / 60);
+              const { error: autoErr } = await supabase
+                .from("TEC")
+                .update({
+                  QUANTITY_INT:            reducedH,
+                  PAUSE_AUTO_DEDUCTED_MIN: missingMin,
+                  CONFIRMED_BY_EMPLOYEE_AT: new Date().toISOString(),
+                })
+                .eq("ID", target.ID);
+              // Spalten-Fallback: falls Migration 0051 noch nicht gelaufen
+              if (autoErr && /PAUSE_AUTO_DEDUCTED_MIN|CONFIRMED_BY_EMPLOYEE_AT/i.test(autoErr.message)) {
+                await supabase.from("TEC").update({ QUANTITY_INT: reducedH }).eq("ID", target.ID);
+              }
+              auditEvents.push({
+                employeeId, dateVoucher, tecId: target.ID,
+                eventType: 'PAUSE_AUTO_DEDUCT', severity: 'WARN',
+                details: { deductedMin: missingMin, required, current: dayBreak },
+              });
+            }
+          } else if (conf?.kind === 'BREAK_TAKEN_UNRECORDED') {
+            // Mitarbeiter trägt zusätzliche Pause ein.
+            const addMin = Number(conf.minutes || missingMin);
+            const { error: brErr } = await supabase.from("TEC").insert([{
+              TENANT_ID: resolvedTenant, STATUS: "CONFIRMED", ENTRY_KIND: 'BREAK',
+              EMPLOYEE_ID: employeeId, DATE_VOUCHER: dateVoucher,
+              TIME_START: null, TIME_FINISH: null,
+              QUANTITY_INT: Math.round(addMin / 60 * 100) / 100,
+              CP_RATE: 0, CP_TOT: 0, QUANTITY_EXT: 0, SP_RATE: 0, SP_TOT: 0,
+              POSTING_DESCRIPTION: 'Pause (nachträglich, bestätigt)',
+              CONFIRMED_BY_EMPLOYEE_AT: new Date().toISOString(),
+            }]);
+            if (brErr && !/ENTRY_KIND|CONFIRMED_BY_EMPLOYEE_AT/i.test(brErr.message)) {
+              throw { status: 500, message: 'Pausen-Buchung fehlgeschlagen: ' + brErr.message };
+            }
+            auditEvents.push({
+              employeeId, dateVoucher,
+              eventType: 'MANUAL_OVERRIDE', severity: 'INFO',
+              details: { kind: 'BREAK_TAKEN_UNRECORDED', minutes: addMin },
+            });
+          }
+        }
+      }
+
+      // > 8 h Dokumentation (§ 16 Abs. 2)
+      if (dayWork > 8) {
+        auditEvents.push({
+          employeeId, dateVoucher,
+          eventType: 'OVER_8H', severity: 'INFO',
+          details: { dayWork },
+        });
+      }
+    }
+  }
+
+  // Tatsächlich bestätigen (inkl. evtl. reduzierter Stunden)
   const { error: updErr } = await supabase
     .from("TEC")
-    .update({ STATUS: "CONFIRMED" })
+    .update({ STATUS: "CONFIRMED", CONFIRMED_BY_EMPLOYEE_AT: new Date().toISOString() })
     .in("ID", draftIds);
-  if (updErr) throw { status: 500, message: "Fehler beim Freigeben: " + updErr.message };
+  if (updErr) {
+    // Fallback ohne CONFIRMED_BY_EMPLOYEE_AT
+    if (/CONFIRMED_BY_EMPLOYEE_AT/i.test(updErr.message)) {
+      const { error: retry } = await supabase
+        .from("TEC").update({ STATUS: "CONFIRMED" }).in("ID", draftIds);
+      if (retry) throw { status: 500, message: "Fehler beim Freigeben: " + retry.message };
+    } else {
+      throw { status: 500, message: "Fehler beim Freigeben: " + updErr.message };
+    }
+  }
 
-  const affectedStructures = [...new Set((rows || []).map(r => r.STRUCTURE_ID).filter(Boolean))];
+  // Audit-Events schreiben (BOOKING_CONFIRMED + alle vorher gesammelten)
+  for (const r of drafts) {
+    auditEvents.push({
+      employeeId: r.EMPLOYEE_ID, dateVoucher: r.DATE_VOUCHER, tecId: r.ID,
+      eventType: 'BOOKING_CONFIRMED', severity: 'INFO',
+      details: { entryKind: r.ENTRY_KIND ?? 'WORK', quantityInt: Number(r.QUANTITY_INT || 0) },
+    });
+  }
+  await arbzg.writeAuditEvents(supabase, resolvedTenant, auditEvents);
+
+  // Struktur-Recompute
+  const affectedStructures = [...new Set(drafts.map(r => r.STRUCTURE_ID).filter(Boolean))];
   for (const sid of affectedStructures) {
     await recomputeStructure(supabase, sid);
   }
 
-  return { confirmed: draftIds.length };
+  return { confirmed: draftIds.length, arbzgEvents: auditEvents };
 }
 
 async function deleteDraft(supabase, { id }) {
@@ -270,6 +451,26 @@ async function createBuchung(supabase, { body, tenantId }) {
   // Look up time-based CP rate; fall back to 0 if none defined yet
   const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
   const effectiveCpRate = lookedUpRate !== null ? lookedUpRate : 0;
+
+  // ── ArbZG-Vorabprüfung (nur BLOCK hindert Insert) ──────────────────────
+  try {
+    const r = await arbzg.validateBookingArbZG(supabase, {
+      tenantId:    resolvedTenantId,
+      employeeId:  Number(b.EMPLOYEE_ID),
+      dateVoucher: b.DATE_VOUCHER,
+      timeStart:   b.TIME_START || null,
+      timeFinish:  b.TIME_FINISH || null,
+      quantityInt: Number(b.QUANTITY_INT || 0),
+      entryKind:   'WORK',
+    });
+    const blockers = r.issues.filter(i => i.severity === 'BLOCK');
+    if (blockers.length > 0) {
+      throw { status: 409, message: blockers.map(i => i.message).join(' · '),
+              details: { code: 'ARBZG_BLOCK', issues: r.issues } };
+    }
+  } catch (e) {
+    if (e?.details?.code === 'ARBZG_BLOCK') throw e;
+  }
 
   const { error: insertError } = await supabase.from("TEC").insert([{
     TENANT_ID: resolvedTenantId,

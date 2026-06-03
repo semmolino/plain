@@ -67,13 +67,17 @@ async function listDraftsByEmployee(req, res, supabase) {
 }
 
 async function confirmDrafts(req, res, supabase) {
-  const { ids } = req.body || {};
+  const { ids, break_confirmations } = req.body || {};
   try {
-    const result = await svc.confirmDrafts(supabase, { ids });
+    const result = await svc.confirmDrafts(supabase, {
+      ids,
+      breakConfirmations: break_confirmations || {},
+      tenantId: req.tenantId,
+    });
     res.json({ success: true, ...result });
   } catch (err) {
     const status = err.status || 500;
-    res.status(status).json({ error: err.message || err });
+    res.status(status).json({ error: err.message || err, details: err.details });
   }
 }
 
