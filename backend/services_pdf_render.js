@@ -600,6 +600,26 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     adjustedNet, adjustedVat, adjustedGross, hasDiscounts, hasSkonto, skontoPaymentAmount,
   };
 
+  // Sicherheitseinbehalt (Phase 1)
+  const sePct       = Number(rawDoc.SE_PERCENT ?? 0);
+  const seBasis     = rawDoc.SE_BASIS || null;   // 'BRUTTO' | 'NETTO' | null
+  const seBasisAmt  = Number(rawDoc.SE_BASIS_AMT ?? 0);
+  const seAmount    = Number(rawDoc.SE_AMOUNT ?? 0);
+  const hasSe       = sePct > 0 && seAmount > 0;
+  const sePayable   = hasSe ? Math.round((adjustedGross - seAmount) * 100) / 100 : adjustedGross;
+  let seLegalReference = null;
+  if (hasSe && rawDoc.CONTRACT_ID) {
+    try {
+      const { data: c } = await supabase
+        .from('CONTRACT').select('SE_LEGAL_REFERENCE').eq('ID', rawDoc.CONTRACT_ID).maybeSingle();
+      seLegalReference = c?.SE_LEGAL_REFERENCE ?? null;
+    } catch (_) { /* schema may lack column */ }
+  }
+  const securityRetention = {
+    pct: sePct, basis: seBasis, basisAmount: seBasisAmt, amount: seAmount,
+    legalReference: seLegalReference, hasSe, payable: sePayable,
+  };
+
   // HOAI Kalkulationen für das Projekt laden (soft-fail)
   let honorarCalcs = [];
   if (rawDoc.PROJECT_ID && tenantId) {
@@ -639,6 +659,7 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     tec,
     deductionTotals,
     discounts,
+    securityRetention,
     honorarCalcs,
   };
 }
