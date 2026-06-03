@@ -867,11 +867,68 @@ async function deleteInvoice(supabase, { id, tenantId }) {
   if (delErr) throw new Error(delErr.message);
 }
 
-async function bookInvoice(supabase, { id, inv }) {
+async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = null }) {
   const vatPercent = toNum(inv.VAT_PERCENT);
   const totalNet = toNum(inv.TOTAL_AMOUNT_NET);
   const taxAmountNet = round2(totalNet * vatPercent / 100);
   const totalGross = round2(totalNet + taxAmountNet);
+
+  // ── Sicherheitseinbehalt-Auflösung (Phase 2) ──────────────────────────────
+  // For Schluss-/Teilschlussrechnungen, release the selected open SE from
+  // prior Abschlagsrechnungen BEFORE rendering the PDF so the PDF can
+  // reflect SE_RELEASE_TOTAL.
+  let seReleaseTotal = 0;
+  if (Array.isArray(releasePpIds) && releasePpIds.length > 0) {
+    try {
+      // Load each PP's SE_AMOUNT (and double-check it's still open + same project)
+      const { data: pps, error: ppsErr } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("ID, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID, PROJECT_ID, TENANT_ID")
+        .in("ID", releasePpIds);
+      if (ppsErr) throw new Error(ppsErr.message);
+
+      const validPps = (pps || []).filter(p =>
+        Number(p.SE_AMOUNT || 0) > 0 &&
+        p.SE_RELEASED_BY_INVOICE_ID == null &&
+        (tenantId == null || p.TENANT_ID == tenantId) &&
+        (inv.PROJECT_ID == null || p.PROJECT_ID == inv.PROJECT_ID)
+      );
+
+      for (const pp of validPps) {
+        const amt = round2(Number(pp.SE_AMOUNT || 0));
+        seReleaseTotal = round2(seReleaseTotal + amt);
+        const { error: upPpErr } = await supabase
+          .from("PARTIAL_PAYMENT")
+          .update({ SE_RELEASED_BY_INVOICE_ID: parseInt(id, 10) })
+          .eq("ID", pp.ID);
+        if (upPpErr) throw new Error(upPpErr.message);
+
+        // Audit trail (soft-fail if migration 0048 not yet run)
+        try {
+          await supabase.from("SE_RELEASE").insert({
+            TENANT_ID:           tenantId || pp.TENANT_ID,
+            PARTIAL_PAYMENT_ID:  pp.ID,
+            INVOICE_ID:          parseInt(id, 10),
+            SE_AMOUNT_RELEASED:  amt,
+          });
+        } catch (_) { /* ignore — audit table may not exist yet */ }
+      }
+
+      if (seReleaseTotal > 0) {
+        // Persist on INVOICE (soft-fail if SE_RELEASE_TOTAL column missing)
+        const { error: invUpErr } = await supabase.from("INVOICE")
+          .update({ SE_RELEASE_TOTAL: seReleaseTotal })
+          .eq("ID", id);
+        if (invUpErr && String(invUpErr.message || "").includes("SE_")) {
+          // schema lacks column — keep going, just no persisted total
+        } else if (invUpErr) {
+          throw new Error(invUpErr.message);
+        }
+      }
+    } catch (e) {
+      throw { status: 500, message: `Sicherheitseinbehalt-Auflösung fehlgeschlagen: ${e?.message || e}` };
+    }
+  }
 
   if (!inv.INVOICE_NUMBER || !String(inv.INVOICE_NUMBER).trim()) {
     const { data: num, error: numErr } = await supabase.rpc("next_document_number", {

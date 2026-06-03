@@ -6,6 +6,46 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
 
 // ---------------------------------------------------------------------------
+// GET /api/v1/partial-payments/open-se?project_id=...
+// List open Sicherheitseinbehalte for a project (Phase 2)
+// Returns PARTIAL_PAYMENTs that:
+//  - belong to the given project
+//  - have SE_AMOUNT > 0
+//  - are NOT yet released (SE_RELEASED_BY_INVOICE_ID IS NULL)
+//  - are booked (STATUS_ID = 2)
+// ---------------------------------------------------------------------------
+async function listOpenSeForProject(req, res, supabase) {
+  const projectId = parseInt(String(req.query.project_id ?? ""), 10);
+  if (!Number.isFinite(projectId) || projectId <= 0) {
+    return res.status(400).json({ error: "project_id erforderlich" });
+  }
+  try {
+    const baseCols = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID";
+    const seCols = ", SE_PERCENT, SE_BASIS, SE_BASIS_AMT, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID";
+
+    // Try with SE columns
+    let { data, error } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select(baseCols + seCols)
+      .eq("TENANT_ID", req.tenantId)
+      .eq("PROJECT_ID", projectId)
+      .eq("STATUS_ID", 2)
+      .gt("SE_AMOUNT", 0)
+      .is("SE_RELEASED_BY_INVOICE_ID", null)
+      .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+
+    if (error && String(error.message || "").includes("SE_")) {
+      // Migration 0047 not yet run — return empty list
+      return res.json({ data: [] });
+    }
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ data: data || [] });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/partial-payments
 // ---------------------------------------------------------------------------
 async function listPartialPayments(req, res, supabase) {
@@ -730,6 +770,7 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
 
 module.exports = {
   listPartialPayments,
+  listOpenSeForProject,
   initPartialPayment,
   patchPartialPayment,
   getBillingProposal,

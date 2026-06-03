@@ -422,6 +422,16 @@ table.data-table thead { display: table-header-group; }
       <td class="label" style="color:#b91c1c">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
       <td class="amount" style="color:#b91c1c">− {{ securityRetention.amount | money }}</td>
     </tr>
+    {% endif %}
+    {% if securityRetention and securityRetention.hasSeRelease %}
+    {% for r in securityRetention.releaseRows %}
+    <tr>
+      <td class="label" style="color:#15803d">+ Auflösung Sicherheitseinbehalt aus Nr. {{ r.number }} v. {{ r.date | date_de }}</td>
+      <td class="amount" style="color:#15803d">+ {{ r.amount | money }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+    {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
     <tr class="total-row">
       <td class="label">Sofort fällig</td>
       <td class="amount">{{ securityRetention.payable | money }}</td>
@@ -445,6 +455,16 @@ table.data-table thead { display: table-header-group; }
       <td class="label" style="color:#b91c1c">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
       <td class="amount" style="color:#b91c1c">− {{ securityRetention.amount | money }}</td>
     </tr>
+    {% endif %}
+    {% if securityRetention and securityRetention.hasSeRelease %}
+    {% for r in securityRetention.releaseRows %}
+    <tr>
+      <td class="label" style="color:#15803d">+ Auflösung Sicherheitseinbehalt aus Nr. {{ r.number }} v. {{ r.date | date_de }}</td>
+      <td class="amount" style="color:#15803d">+ {{ r.amount | money }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+    {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
     <tr class="total-row">
       <td class="label">Sofort fällig</td>
       <td class="amount">{{ securityRetention.payable | money }}</td>
@@ -499,6 +519,16 @@ table.data-table thead { display: table-header-group; }
       <td class="label" style="color:#b91c1c">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
       <td class="amount" style="color:#b91c1c">− {{ securityRetention.amount | money }}</td>
     </tr>
+    {% endif %}
+    {% if securityRetention and securityRetention.hasSeRelease %}
+    {% for r in securityRetention.releaseRows %}
+    <tr>
+      <td class="label" style="color:#15803d">+ Auflösung Sicherheitseinbehalt aus Nr. {{ r.number }} v. {{ r.date | date_de }}</td>
+      <td class="amount" style="color:#15803d">+ {{ r.amount | money }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+    {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
     <tr class="total-row">
       <td class="label">Sofort fällig</td>
       <td class="amount">{{ securityRetention.payable | money }}</td>
@@ -521,6 +551,16 @@ table.data-table thead { display: table-header-group; }
       <td class="label" style="color:#b91c1c">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
       <td class="amount" style="color:#b91c1c">− {{ securityRetention.amount | money }}</td>
     </tr>
+    {% endif %}
+    {% if securityRetention and securityRetention.hasSeRelease %}
+    {% for r in securityRetention.releaseRows %}
+    <tr>
+      <td class="label" style="color:#15803d">+ Auflösung Sicherheitseinbehalt aus Nr. {{ r.number }} v. {{ r.date | date_de }}</td>
+      <td class="amount" style="color:#15803d">+ {{ r.amount | money }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+    {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
     <tr class="total-row">
       <td class="label">Sofort fällig</td>
       <td class="amount">{{ securityRetention.payable | money }}</td>

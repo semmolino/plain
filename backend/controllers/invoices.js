@@ -460,8 +460,16 @@ async function bookInvoice(req, res, supabase) {
     return res.status(400).json({ error: "Rechnung ist bereits gebucht" });
   }
 
+  const releasePpIds = Array.isArray(req.body?.release_partial_payment_ids)
+    ? req.body.release_partial_payment_ids.map(n => parseInt(String(n), 10)).filter(Number.isFinite)
+    : [];
+
   try {
-    const result = await svc.bookInvoice(supabase, { id, inv });
+    const result = await svc.bookInvoice(supabase, {
+      id, inv,
+      releasePpIds,
+      tenantId: req.tenantId,
+    });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;

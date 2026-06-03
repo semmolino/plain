@@ -9,6 +9,7 @@ module.exports = (supabase) => {
   const router = express.Router();
 
   router.get("/",                              (req, res) => ctrl.listPartialPayments(req, res, supabase));
+  router.get("/open-se",                       (req, res) => ctrl.listOpenSeForProject(req, res, supabase));
   router.post("/init",                         (req, res) => ctrl.initPartialPayment(req, res, supabase));
   router.patch("/:id",                         (req, res) => ctrl.patchPartialPayment(req, res, supabase));
   router.get("/:id/billing-proposal",          (req, res) => ctrl.getBillingProposal(req, res, supabase));

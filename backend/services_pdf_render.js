@@ -606,18 +606,44 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
   const seBasisAmt  = Number(rawDoc.SE_BASIS_AMT ?? 0);
   const seAmount    = Number(rawDoc.SE_AMOUNT ?? 0);
   const hasSe       = sePct > 0 && seAmount > 0;
-  const sePayable   = hasSe ? Math.round((adjustedGross - seAmount) * 100) / 100 : adjustedGross;
   let seLegalReference = null;
-  if (hasSe && rawDoc.CONTRACT_ID) {
+  if ((hasSe || Number(rawDoc.SE_RELEASE_TOTAL ?? 0) > 0) && rawDoc.CONTRACT_ID) {
     try {
       const { data: c } = await supabase
         .from('CONTRACT').select('SE_LEGAL_REFERENCE').eq('ID', rawDoc.CONTRACT_ID).maybeSingle();
       seLegalReference = c?.SE_LEGAL_REFERENCE ?? null;
     } catch (_) { /* schema may lack column */ }
   }
+
+  // SE-Auflösung (Phase 2) — only for INVOICE docs (Schluss/Teilschluss)
+  let seReleaseRows = [];
+  let seReleaseTotal = Number(rawDoc.SE_RELEASE_TOTAL ?? 0);
+  if (docType === 'INVOICE') {
+    try {
+      const { data: rels } = await supabase
+        .from('PARTIAL_PAYMENT')
+        .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, SE_AMOUNT')
+        .eq('SE_RELEASED_BY_INVOICE_ID', parseInt(rawDoc.ID, 10))
+        .order('PARTIAL_PAYMENT_DATE', { ascending: true });
+      seReleaseRows = (rels || []).map(r => ({
+        number: r.PARTIAL_PAYMENT_NUMBER || String(r.ID),
+        date:   r.PARTIAL_PAYMENT_DATE,
+        amount: Number(r.SE_AMOUNT || 0),
+      }));
+      if (seReleaseTotal === 0 && seReleaseRows.length > 0) {
+        seReleaseTotal = Math.round(seReleaseRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+      }
+    } catch (_) { /* schema may lack SE_RELEASED_BY_INVOICE_ID */ }
+  }
+  const hasSeRelease = seReleaseRows.length > 0 && seReleaseTotal > 0;
+
+  // Final "sofort fällig" considers BOTH withheld AND released SE
+  const sePayable = Math.round((adjustedGross - (hasSe ? seAmount : 0) + (hasSeRelease ? seReleaseTotal : 0)) * 100) / 100;
+
   const securityRetention = {
     pct: sePct, basis: seBasis, basisAmount: seBasisAmt, amount: seAmount,
     legalReference: seLegalReference, hasSe, payable: sePayable,
+    releaseRows: seReleaseRows, releaseTotal: seReleaseTotal, hasSeRelease,
   };
 
   // HOAI Kalkulationen für das Projekt laden (soft-fail)
