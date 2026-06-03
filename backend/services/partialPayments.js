@@ -500,20 +500,27 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
 // ---------------------------------------------------------------------------
 
 async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
-  let query = supabase
-    .from("PARTIAL_PAYMENT")
-    .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_PARTIAL_PAYMENT_ID")
-    .eq("TENANT_ID", tenantId)
-    .order("PARTIAL_PAYMENT_DATE", { ascending: false })
-    .limit(limit);
-
-  if (statusId) query = query.eq("STATUS_ID", statusId);
-  if (q) {
-    const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
-    query = query.or(`PARTIAL_PAYMENT_NUMBER.ilike.%${esc}%,CONTACT.ilike.%${esc}%`);
+  const BASE_COLS = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_PARTIAL_PAYMENT_ID";
+  const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASED_BY_INVOICE_ID";
+  const buildQuery = (cols) => {
+    let q1 = supabase
+      .from("PARTIAL_PAYMENT")
+      .select(cols)
+      .eq("TENANT_ID", tenantId)
+      .order("PARTIAL_PAYMENT_DATE", { ascending: false })
+      .limit(limit);
+    if (statusId) q1 = q1.eq("STATUS_ID", statusId);
+    if (q) {
+      const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      q1 = q1.or(`PARTIAL_PAYMENT_NUMBER.ilike.%${esc}%,CONTACT.ilike.%${esc}%`);
+    }
+    return q1;
+  };
+  let { data: rows, error } = await buildQuery(BASE_COLS + SE_COLS);
+  if (error && /SE_/.test(error.message || "")) {
+    const r = await buildQuery(BASE_COLS);
+    rows = r.data; error = r.error;
   }
-
-  const { data: rows, error } = await query;
   if (error) throw error;
 
   const ppRows = Array.isArray(rows) ? rows : [];

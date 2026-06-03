@@ -496,21 +496,27 @@ async function findTecIdsToAutoAssign(supabase, { invoiceId, structureIds }) {
 // ---------------------------------------------------------------------------
 
 async function listInvoices(supabase, { tenantId, limit, q }) {
-  let query = supabase
-    .from("INVOICE")
-    .select(
-      "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, INVOICE_TYPE, CANCELS_INVOICE_ID"
-    )
-    .eq("TENANT_ID", tenantId)
-    .order("INVOICE_DATE", { ascending: false })
-    .limit(limit);
-
-  if (q) {
-    const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
-    query = query.or(`INVOICE_NUMBER.ilike.%${esc}%`);
+  const BASE_COLS = "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, INVOICE_TYPE, CANCELS_INVOICE_ID";
+  const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASE_TOTAL";
+  const buildQuery = (cols) => {
+    let q1 = supabase
+      .from("INVOICE")
+      .select(cols)
+      .eq("TENANT_ID", tenantId)
+      .order("INVOICE_DATE", { ascending: false })
+      .limit(limit);
+    if (q) {
+      const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      q1 = q1.or(`INVOICE_NUMBER.ilike.%${esc}%`);
+    }
+    return q1;
+  };
+  let { data: rows, error } = await buildQuery(BASE_COLS + SE_COLS);
+  if (error && /SE_/.test(error.message || "")) {
+    // Migration 0047 nicht gelaufen — Fallback ohne SE-Spalten.
+    const r = await buildQuery(BASE_COLS);
+    rows = r.data; error = r.error;
   }
-
-  const { data: rows, error } = await query;
   if (error) throw error;
 
   const invRows = Array.isArray(rows) ? rows : [];

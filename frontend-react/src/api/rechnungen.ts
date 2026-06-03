@@ -42,6 +42,10 @@ export interface Invoice {
   CASH_DISCOUNT_DAYS:     number | null
   BILLING_PERIOD_START:   string | null
   BILLING_PERIOD_FINISH:  string | null
+  SE_AMOUNT?:             number | null
+  SE_PERCENT?:            number | null
+  SE_BASIS?:              'BRUTTO' | 'NETTO' | null
+  SE_RELEASE_TOTAL?:      number | null
 }
 
 export interface PartialPayment {
@@ -76,6 +80,10 @@ export interface PartialPayment {
   CASH_DISCOUNT_DAYS:           number | null
   BILLING_PERIOD_START:         string | null
   BILLING_PERIOD_FINISH:        string | null
+  SE_AMOUNT?:                   number | null
+  SE_PERCENT?:                  number | null
+  SE_BASIS?:                    'BRUTTO' | 'NETTO' | null
+  SE_RELEASED_BY_INVOICE_ID?:   number | null
 }
 
 export interface BillingProposal {
