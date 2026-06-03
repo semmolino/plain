@@ -160,14 +160,67 @@ async function getPhases(supabase, { id, tenantId }) {
     .eq("INVOICE_ID", id);
   const selectedMap = new Map((isRows || []).map((r) => [String(r.STRUCTURE_ID), r]));
 
+  // Self-healing recompute of INVOICED + PARTIAL_PAYMENTS per structure
+  // from raw INVOICE_STRUCTURE / PARTIAL_PAYMENT_STRUCTURE, ignoring possibly
+  // drifted cached columns. Storno-Pairs (orig + Stornorechnung) net to zero.
+  const recomputedInvoiced = new Map();
+  const recomputedPartial  = new Map();
+  let recomputeOk = false;
+  if (inv.CONTRACT_ID) {
+    try {
+      const { data: otherInvs } = await supabase
+        .from("INVOICE")
+        .select("ID")
+        .eq("CONTRACT_ID", inv.CONTRACT_ID)
+        .neq("ID", id)
+        .in("STATUS_ID", [2, 3]);
+      const otherInvIds = (otherInvs || []).map(i => i.ID);
+      if (otherInvIds.length > 0) {
+        const { data: invStructs } = await supabase
+          .from("INVOICE_STRUCTURE")
+          .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .in("INVOICE_ID", otherInvIds);
+        for (const r of invStructs || []) {
+          const sid = String(r.STRUCTURE_ID);
+          recomputedInvoiced.set(sid,
+            round2((recomputedInvoiced.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+        }
+      }
+      const { data: pps } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("ID")
+        .eq("CONTRACT_ID", inv.CONTRACT_ID)
+        .eq("STATUS_ID", 2);
+      const ppIds = (pps || []).map(p => p.ID);
+      if (ppIds.length > 0) {
+        const { data: ppStructs } = await supabase
+          .from("PARTIAL_PAYMENT_STRUCTURE")
+          .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .in("PARTIAL_PAYMENT_ID", ppIds);
+        for (const r of ppStructs || []) {
+          const sid = String(r.STRUCTURE_ID);
+          recomputedPartial.set(sid,
+            round2((recomputedPartial.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+        }
+      }
+      recomputeOk = true;
+    } catch (_) { /* fall back to cached cols */ }
+  }
+
   return psRows.map((ps) => {
     const revenue = toNum(ps.REVENUE_COMPLETION);
     const extrasAmount = round2((revenue * toNum(ps.EXTRAS_PERCENT)) / 100);
     const totalEarned = round2(revenue + extrasAmount);
-    // BILLED_FINAL = amount already invoiced via previous final invoices (not Abschlagsrechnungen)
-    const billedFinal = round2(toNum(ps.INVOICED));
-    // ALREADY_BILLED = informational total (partial payments + final invoices)
-    const alreadyBilled = round2(toNum(ps.PARTIAL_PAYMENTS) + billedFinal);
+    const sidKey = String(ps.ID);
+    // When recompute succeeded, prefer it ALWAYS (default to 0 if no rows for
+    // this structure). Otherwise fall back to cached PS columns.
+    const billedFinal = recomputeOk
+      ? (recomputedInvoiced.get(sidKey) || 0)
+      : round2(toNum(ps.INVOICED));
+    const partialNet = recomputeOk
+      ? (recomputedPartial.get(sidKey) || 0)
+      : round2(toNum(ps.PARTIAL_PAYMENTS));
+    const alreadyBilled = round2(partialNet + billedFinal);
     const sel = selectedMap.get(String(ps.ID));
     const closedByOther = ps.CLOSED_BY_INVOICE_ID && String(ps.CLOSED_BY_INVOICE_ID) !== String(id);
     const defaultAmount = round2(Math.max(0, totalEarned - billedFinal));
@@ -548,12 +601,34 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [] }) {
     }
 
     // PROJECT_PROGRESS: one row per structure with the INVOICED delta
+    // AND PROJECT_STRUCTURE.INVOICED: accumulate so the value stays consistent
+    // with bookInvoice's behaviour (used by getPhases as "already billed" basis).
+    // Without this, a storno (which goes through bookInvoice and *does* decrement
+    // PROJECT_STRUCTURE.INVOICED) would push the value negative.
     if ((isRows || []).length > 0) {
       const addByStructure = new Map();
       (isRows || []).forEach((r) => {
         const sid = String(r.STRUCTURE_ID);
         addByStructure.set(sid, round2((addByStructure.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
       });
+
+      // Update PROJECT_STRUCTURE.INVOICED in lockstep with the delta.
+      try {
+        const sIds = Array.from(addByStructure.keys()).map(x => parseInt(x, 10)).filter(Number.isFinite);
+        if (sIds.length > 0) {
+          const { data: psRows } = await supabase
+            .from("PROJECT_STRUCTURE").select("ID, INVOICED").in("ID", sIds);
+          const currentById = new Map((psRows || []).map(s => [String(s.ID), toNum(s.INVOICED)]));
+          const updates = sIds.map(sid => ({
+            ID: sid,
+            INVOICED: round2((currentById.get(String(sid)) || 0) + (addByStructure.get(String(sid)) || 0)),
+          }));
+          const { error: psUpErr } = await supabase
+            .from("PROJECT_STRUCTURE").upsert(updates, { onConflict: "ID" });
+          if (psUpErr) console.error("[BOOK_FINAL][PS_INVOICED]", psUpErr.message);
+        }
+      } catch (e) { console.error("[BOOK_FINAL][PS_INVOICED]", e?.message || e); }
+
       const finalProgressRows = Array.from(addByStructure.entries()).map(([sid, invoiced]) => ({
         TENANT_ID:    inv.TENANT_ID ?? tenantId ?? null,
         STRUCTURE_ID: parseInt(sid, 10),
