@@ -28,19 +28,23 @@ CREATE INDEX IF NOT EXISTS "idx_break_rule_tenant"
   ON "BREAK_RULE" ("TENANT_ID");
 
 -- Seed: für jeden bestehenden Tenant die beiden Standardregeln anlegen.
+-- Es gibt keine eigene TENANT-Tabelle; die existierenden TENANT_IDs werden
+-- aus COMPANY abgeleitet (jeder Tenant hat dort mindestens einen Eintrag).
 -- Idempotent dank NOT EXISTS-Check.
 INSERT INTO "BREAK_RULE" ("TENANT_ID", "NAME", "T1_HOURS", "T1_BREAK_MIN", "T2_HOURS", "T2_BREAK_MIN", "MIN_BLOCK_MIN")
-SELECT t."ID", 'ArbZG-Standard', 6, 30, 9, 45, 15
-FROM "TENANT" t
-WHERE NOT EXISTS (
-  SELECT 1 FROM "BREAK_RULE" br
-  WHERE br."TENANT_ID" = t."ID" AND br."NAME" = 'ArbZG-Standard'
-);
+SELECT DISTINCT c."TENANT_ID", 'ArbZG-Standard', 6, 30, 9, 45, 15
+FROM "COMPANY" c
+WHERE c."TENANT_ID" IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM "BREAK_RULE" br
+    WHERE br."TENANT_ID" = c."TENANT_ID" AND br."NAME" = 'ArbZG-Standard'
+  );
 
 INSERT INTO "BREAK_RULE" ("TENANT_ID", "NAME", "T1_HOURS", "T1_BREAK_MIN", "T2_HOURS", "T2_BREAK_MIN", "MIN_BLOCK_MIN")
-SELECT t."ID", 'JArbSchG U18', 4.5, 30, 6, 60, 15
-FROM "TENANT" t
-WHERE NOT EXISTS (
-  SELECT 1 FROM "BREAK_RULE" br
-  WHERE br."TENANT_ID" = t."ID" AND br."NAME" = 'JArbSchG U18'
-);
+SELECT DISTINCT c."TENANT_ID", 'JArbSchG U18', 4.5, 30, 6, 60, 15
+FROM "COMPANY" c
+WHERE c."TENANT_ID" IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM "BREAK_RULE" br
+    WHERE br."TENANT_ID" = c."TENANT_ID" AND br."NAME" = 'JArbSchG U18'
+  );
