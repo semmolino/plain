@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, downloadWithAuth } from './client'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -118,12 +118,13 @@ export const fetchArbzgAudit = (params: {
   return apiClient.get<{ data: AuditEntry[]; warning?: string }>(`/arbzg/audit?${qs.toString()}`)
 }
 
-export const arbzgAuditExportUrl = (params: {
+export const downloadArbzgAuditCsv = (params: {
   employee_id?: number; date_from?: string; date_to?: string
 } = {}) => {
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) if (v != null && v !== '') qs.append(k, String(v))
-  return `/api/v1/arbzg/audit/export?${qs.toString()}`
+  const fname = `arbzg_audit_${params.date_from || 'all'}_${params.date_to || 'all'}.csv`
+  return downloadWithAuth(`/arbzg/audit/export?${qs.toString()}`, fname)
 }
 
 export const fetchBreakRules = () =>

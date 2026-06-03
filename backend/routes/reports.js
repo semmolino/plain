@@ -854,6 +854,56 @@ module.exports = (supabase) => {
     }
   });
 
+  // ── Dashboard: ArbZG-Statistik (laufende Woche + 30 Tage) ────────────────
+  router.get("/dashboard/arbzg-stats", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    try {
+      const today = new Date();
+      const day   = today.getDay();
+      const diffToMon = (day === 0 ? -6 : 1) - day;
+      const monday = new Date(today);
+      monday.setDate(today.getDate() + diffToMon);
+      const weekStart = monday.toISOString().slice(0, 10);
+      const minus30 = new Date(today); minus30.setDate(today.getDate() - 30);
+      const m30Start = minus30.toISOString().slice(0, 10);
+
+      const { data: weekRows, error: wErr } = await supabase
+        .from("ARBZG_AUDIT")
+        .select("EVENT_TYPE, SEVERITY")
+        .eq("TENANT_ID", tenantId)
+        .gte("DATE_VOUCHER", weekStart);
+      if (wErr && /relation .*ARBZG_AUDIT/i.test(wErr.message)) {
+        return res.json({ data: { warnWeek: 0, blockWeek: 0, over8hWeek: 0,
+                                   warn30: 0, block30: 0, breakMissing30: 0,
+                                   available: false } });
+      }
+      if (wErr) return res.status(500).json({ error: wErr.message });
+
+      const warnWeek   = (weekRows || []).filter(r => r.SEVERITY === 'WARN').length;
+      const blockWeek  = (weekRows || []).filter(r => r.SEVERITY === 'BLOCK').length;
+      const over8hWeek = (weekRows || []).filter(r => r.EVENT_TYPE === 'OVER_8H').length;
+
+      const { data: m30Rows } = await supabase
+        .from("ARBZG_AUDIT")
+        .select("EVENT_TYPE, SEVERITY")
+        .eq("TENANT_ID", tenantId)
+        .gte("DATE_VOUCHER", m30Start);
+
+      const warn30         = (m30Rows || []).filter(r => r.SEVERITY === 'WARN').length;
+      const block30        = (m30Rows || []).filter(r => r.SEVERITY === 'BLOCK').length;
+      const breakMissing30 = (m30Rows || []).filter(r => r.EVENT_TYPE === 'BREAK_MISSING').length;
+
+      return res.json({ data: {
+        warnWeek, blockWeek, over8hWeek,
+        warn30, block30, breakMissing30,
+        available: true,
+      }});
+    } catch (e) {
+      return res.status(500).json({ error: e?.message || String(e) });
+    }
+  });
+
   // Billing summary: projects with open amounts + by-PL aggregation
   router.get("/dashboard/billing-summary", async (req, res) => {
     const tenantId = requireTenantId(req, res);

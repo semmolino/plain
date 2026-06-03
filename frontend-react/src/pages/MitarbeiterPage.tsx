@@ -19,6 +19,7 @@ import {
   type MonthCloseOverviewEmployee, type DayBooking, type EmployeeReportRow,
 } from '@/api/mitarbeiter'
 import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
+import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeverity } from '@/api/arbzg'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ const TABS = [
   { id: 'create',    label: 'Anlegen'          },
   { id: 'reporting', label: 'Reporting'        },
   { id: 'overview',  label: 'Monatsübersicht'  },
+  { id: 'arbzg',     label: 'ArbZG-Auditlog'   },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -1162,6 +1164,197 @@ function MonthsOverviewTab() {
   )
 }
 
+// ── ArbZG-Auditlog ────────────────────────────────────────────────────────────
+
+const EVENT_TYPES = [
+  { value: '',                    label: '— alle Ereignisse —' },
+  { value: 'BOOKING_CONFIRMED',   label: 'Buchung freigegeben' },
+  { value: 'OVER_8H',             label: '> 8 Stunden (§ 16 Abs. 2)' },
+  { value: 'OVER_10H',            label: '> 10 Stunden (§ 3 ArbZG)' },
+  { value: 'OVER_8H_MINOR',       label: '> 8 Stunden (U18, JArbSchG)' },
+  { value: 'BREAK_MISSING',       label: 'Pflichtpause fehlt' },
+  { value: 'REST_LT_11H',         label: 'Ruhezeit unterschritten' },
+  { value: 'SUNDAY_WORK',         label: 'Sonntagsarbeit' },
+  { value: 'HOLIDAY_WORK',        label: 'Feiertagsarbeit' },
+  { value: 'PAUSE_AUTO_DEDUCT',   label: 'Auto-Pausenabzug' },
+  { value: 'MANUAL_OVERRIDE',     label: 'Manueller Override' },
+]
+const SEVERITIES: Array<{ value: '' | ArbzgSeverity; label: string }> = [
+  { value: '',      label: '— alle —' },
+  { value: 'INFO',  label: 'Info' },
+  { value: 'WARN',  label: 'Warnung' },
+  { value: 'BLOCK', label: 'Blockade' },
+]
+const EVENT_LABEL: Record<string, string> = Object.fromEntries(
+  EVENT_TYPES.filter(e => e.value).map(e => [e.value, e.label])
+)
+
+function sevBadge(s: ArbzgSeverity) {
+  const style: Record<ArbzgSeverity, React.CSSProperties> = {
+    INFO:  { background: 'rgba(59,130,246,0.12)',  color: '#1e40af' },
+    WARN:  { background: 'rgba(245,158,11,0.15)',  color: '#92400e' },
+    BLOCK: { background: 'rgba(220,38,38,0.13)',   color: '#7f1d1d' },
+  }
+  return (
+    <span style={{ ...style[s], display: 'inline-block', padding: '2px 8px',
+                    borderRadius: 10, fontSize: 11, fontWeight: 600 }}>
+      {s}
+    </span>
+  )
+}
+
+function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
+  const [empId,    setEmpId]    = useState<number | ''>('')
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    return d.toISOString().slice(0, 10)
+  })
+  const [dateTo,   setDateTo]   = useState<string>(() => new Date().toISOString().slice(0, 10))
+  const [evtType,  setEvtType]  = useState<string>('')
+  const [sev,      setSev]      = useState<'' | ArbzgSeverity>('')
+
+  const params = useMemo(() => ({
+    employee_id: empId === '' ? undefined : Number(empId),
+    date_from:   dateFrom || undefined,
+    date_to:     dateTo   || undefined,
+    event_type:  evtType  || undefined,
+    severity:    sev      || undefined,
+  }), [empId, dateFrom, dateTo, evtType, sev])
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['arbzg-audit', params],
+    queryFn:  () => fetchArbzgAudit(params),
+  })
+
+  const rows: AuditEntry[] = data?.data ?? []
+  const warning = data?.warning
+
+  const empMap = useMemo(() => new Map(employees.map(e => [e.ID, e])), [employees])
+
+  function fmtDateTime(s: string) {
+    const d = new Date(s)
+    return isNaN(d.getTime()) ? s : d.toLocaleString('de-DE')
+  }
+  function fmtDate(s: string) {
+    return new Date(s).toLocaleDateString('de-DE')
+  }
+  function fmtDetails(d: Record<string, unknown>) {
+    const keys = Object.keys(d || {})
+    if (!keys.length) return ''
+    return keys.slice(0, 4).map(k => `${k}: ${String(d[k])}`).join(' · ')
+  }
+
+  const toast = useToast()
+  async function handleExport() {
+    try {
+      await downloadArbzgAuditCsv({
+        employee_id: empId === '' ? undefined : Number(empId),
+        date_from:   dateFrom || undefined,
+        date_to:     dateTo   || undefined,
+      })
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 1100 }}>
+      <p className="admin-section-hint" style={{ marginBottom: 14 }}>
+        Audit-Log der ArbZG-Ereignisse — Pflichtarchiv nach § 16 Abs. 2 ArbZG (2 Jahre).
+        Datensätze sind gegen Löschen und Manipulation geschützt.
+      </p>
+
+      <div className="pl-toolbar" style={{ marginBottom: 12 }}>
+        <select className="list-search" value={empId}
+          onChange={e => setEmpId(e.target.value === '' ? '' : Number(e.target.value))}
+          style={{ minWidth: 200, maxWidth: 240 }}>
+          <option value="">— Alle Mitarbeiter —</option>
+          {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+        </select>
+        <label style={{ fontSize: 12 }}>Von
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            style={{ marginLeft: 4 }} />
+        </label>
+        <label style={{ fontSize: 12 }}>Bis
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            style={{ marginLeft: 4 }} />
+        </label>
+        <select value={evtType} onChange={e => setEvtType(e.target.value)}
+          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}>
+          {EVENT_TYPES.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+        </select>
+        <select value={sev} onChange={e => setSev(e.target.value as '' | ArbzgSeverity)}
+          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}>
+          {SEVERITIES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        <button type="button" className="btn-small btn-save"
+          style={{ marginLeft: 'auto' }} onClick={handleExport}>
+          ↓ CSV-Export
+        </button>
+      </div>
+
+      {warning && (
+        <p style={{ fontSize: 12, color: '#92400e', background: 'rgba(245,158,11,0.08)',
+                    border: '1px solid rgba(245,158,11,0.25)', borderRadius: 6,
+                    padding: '8px 12px', marginBottom: 12 }}>
+          ⚠ {warning}
+        </p>
+      )}
+
+      {isLoading && <p className="empty-note">Laden…</p>}
+
+      {!isLoading && rows.length === 0 && !warning && (
+        <p className="empty-note">Keine Einträge für die gewählten Filter.</p>
+      )}
+
+      {!isLoading && rows.length > 0 && (
+        <div className="list-section table-scroll">
+          <table className="master-table">
+            <thead>
+              <tr>
+                <th>Mitarbeiter</th>
+                <th>Datum</th>
+                <th>Ereignis</th>
+                <th>Schwere</th>
+                <th>Details</th>
+                <th>Erfasst</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => {
+                const emp = empMap.get(r.EMPLOYEE_ID)
+                return (
+                  <tr key={r.ID}>
+                    <td>
+                      <strong>{emp?.SHORT_NAME ?? `#${r.EMPLOYEE_ID}`}</strong>
+                      {emp && <span style={{ display: 'block', fontSize: 11, color: '#6b7280' }}>
+                        {emp.FIRST_NAME} {emp.LAST_NAME}
+                      </span>}
+                    </td>
+                    <td>{fmtDate(r.DATE_VOUCHER)}</td>
+                    <td>{EVENT_LABEL[r.EVENT_TYPE] ?? r.EVENT_TYPE}</td>
+                    <td>{sevBadge(r.SEVERITY)}</td>
+                    <td style={{ fontSize: 12, color: '#374151' }}>{fmtDetails(r.DETAILS || {})}</td>
+                    <td style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                      {fmtDateTime(r.CREATED_AT)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+          {rows.length} Einträge · limitiert auf 1.000 — bei mehr Treffern Filter verfeinern.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function MitarbeiterPage() {
@@ -1456,6 +1649,10 @@ export function MitarbeiterPage() {
 
         {tab === 'overview' && (
           <MonthsOverviewTab />
+        )}
+
+        {tab === 'arbzg' && (
+          <ArbzgAuditTab employees={employees} />
         )}
       </div>
 
