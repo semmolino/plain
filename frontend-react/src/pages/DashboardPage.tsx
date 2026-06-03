@@ -759,6 +759,13 @@ function ControllerView({
   kpis: DashboardKpis; monthly: DashboardMonthly[]; alerts: DashboardAlert[];
   overdueInvoices: OverdueInvoice[]; mahnStats: MahnungStats | null;
 }) {
+  const openSeQ = useQuery({
+    queryKey: ['dashboard', 'open-se'],
+    queryFn:  fetchDashboardOpenSe,
+    staleTime: 300000,
+  })
+  const openSe = openSeQ.data?.data ?? null
+
   const overdueTotal = overdueInvoices.reduce((s, inv) => s + Number(inv.TOTAL_AMOUNT_NET || 0), 0)
   const avgMonthlyCost = monthly.length
     ? monthly.reduce((s, m) => s + (Number(m.COST_TOTAL) || 0), 0) / monthly.length
@@ -1578,14 +1585,6 @@ export function DashboardPage() {
 
   const billingSummary = billingQ.data?.data     ?? null
   const teamHours      = teamHoursQ.data?.data  ?? null
-
-  const openSeQ = useQuery({
-    queryKey: ['dashboard', 'open-se'],
-    queryFn:  fetchDashboardOpenSe,
-    staleTime: 300000,
-    enabled:  isController,
-  })
-  const openSe = openSeQ.data?.data ?? null
 
   const isLoading = projectsQ.isLoading || monthlyQ.isLoading || (isController && kpisQ.isLoading)
 
