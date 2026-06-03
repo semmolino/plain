@@ -99,6 +99,15 @@ async function patchPartialPayment(req, res, supabase) {
   if (b.cash_discount_days    !== undefined) payload.CASH_DISCOUNT_DAYS    = b.cash_discount_days    != null ? parseInt(String(b.cash_discount_days), 10) : null;
   if (b.cash_discount_amount  !== undefined) payload.CASH_DISCOUNT  = b.cash_discount_amount  != null ? toNum(b.cash_discount_amount)  : null;
 
+  // Sicherheitseinbehalt (Phase 1)
+  if (b.se_percent    !== undefined) payload.SE_PERCENT    = b.se_percent    != null && b.se_percent !== "" ? toNum(b.se_percent)    : null;
+  if (b.se_basis      !== undefined) {
+    const v = String(b.se_basis || "").toUpperCase();
+    payload.SE_BASIS = v === "NETTO" ? "NETTO" : v === "BRUTTO" ? "BRUTTO" : null;
+  }
+  if (b.se_basis_amt  !== undefined) payload.SE_BASIS_AMT  = b.se_basis_amt  != null && b.se_basis_amt !== "" ? toNum(b.se_basis_amt)  : null;
+  if (b.se_amount     !== undefined) payload.SE_AMOUNT     = b.se_amount     != null && b.se_amount !== "" ? toNum(b.se_amount)     : null;
+
   if (b.vat_id !== undefined) {
     const vatId = b.vat_id;
     if (!vatId) return res.status(400).json({ error: "Mehrwertsteuersatz ist erforderlich" });
@@ -136,7 +145,14 @@ async function patchPartialPayment(req, res, supabase) {
     payload.PAYMENT_MEANS_ID = pm;
   }
 
-  const { error } = await supabase.from("PARTIAL_PAYMENT").update(payload).eq("ID", id).eq("TENANT_ID", req.tenantId);
+  let { error } = await supabase.from("PARTIAL_PAYMENT").update(payload).eq("ID", id).eq("TENANT_ID", req.tenantId);
+  if (error && String(error.message || "").includes("SE_")) {
+    // Migration 0047 not yet run — retry without SE fields
+    const stripped = { ...payload };
+    delete stripped.SE_PERCENT; delete stripped.SE_BASIS; delete stripped.SE_BASIS_AMT; delete stripped.SE_AMOUNT;
+    const r = await supabase.from("PARTIAL_PAYMENT").update(stripped).eq("ID", id).eq("TENANT_ID", req.tenantId);
+    error = r.error;
+  }
   if (error) return res.status(500).json({ error: error.message });
 
   return res.json({ success: true });

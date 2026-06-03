@@ -779,6 +779,16 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   if (body.cash_discount_days    !== undefined) payload.CASH_DISCOUNT_DAYS    = body.cash_discount_days    != null ? parseInt(String(body.cash_discount_days), 10) : null;
   if (body.cash_discount_amount  !== undefined) payload.CASH_DISCOUNT  = body.cash_discount_amount  != null ? toNum(body.cash_discount_amount)  : null;
 
+  // Sicherheitseinbehalt (Phase 1)
+  if (body.se_percent       !== undefined) payload.SE_PERCENT       = body.se_percent       != null && body.se_percent !== "" ? toNum(body.se_percent)       : null;
+  if (body.se_basis         !== undefined) {
+    const v = String(body.se_basis || "").toUpperCase();
+    payload.SE_BASIS = v === "NETTO" ? "NETTO" : v === "BRUTTO" ? "BRUTTO" : null;
+  }
+  if (body.se_basis_amt     !== undefined) payload.SE_BASIS_AMT     = body.se_basis_amt     != null && body.se_basis_amt !== "" ? toNum(body.se_basis_amt)     : null;
+  if (body.se_amount        !== undefined) payload.SE_AMOUNT        = body.se_amount        != null && body.se_amount !== "" ? toNum(body.se_amount)        : null;
+  if (body.se_release_total !== undefined) payload.SE_RELEASE_TOTAL = body.se_release_total != null && body.se_release_total !== "" ? toNum(body.se_release_total) : null;
+
   if (body.vat_id !== undefined) {
     const vatId = body.vat_id;
     if (!vatId) throw { status: 400, message: "Mehrwertsteuersatz ist erforderlich" };
@@ -805,7 +815,14 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
 
   if (Object.keys(payload).length === 0) return { ok: true };
 
-  const { error: upErr } = await supabase.from("INVOICE").update(payload).eq("ID", id);
+  let { error: upErr } = await supabase.from("INVOICE").update(payload).eq("ID", id);
+  if (upErr && String(upErr.message || "").includes("SE_")) {
+    // Migration 0047 not yet run — retry without SE fields
+    const stripped = { ...payload };
+    delete stripped.SE_PERCENT; delete stripped.SE_BASIS; delete stripped.SE_BASIS_AMT; delete stripped.SE_AMOUNT; delete stripped.SE_RELEASE_TOTAL;
+    const r = await supabase.from("INVOICE").update(stripped).eq("ID", id);
+    upErr = r.error;
+  }
   if (upErr) throw { status: 500, message: upErr.message };
 
   return { ok: true };

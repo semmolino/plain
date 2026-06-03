@@ -1325,16 +1325,23 @@ async function moveStructure(supabase, { structureId, fatherRaw, sortAfterId }) 
 }
 
 async function getContractByProject(supabase, { projectId, tenantId }) {
-  const query = (table) =>
+  const query = (table, columns) =>
     supabase
       .from(table)
-      .select("ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS")
+      .select(columns)
       .eq("PROJECT_ID", projectId)
       .limit(1)
       .maybeSingle();
 
-  let { data, error } = await query("CONTRACT");
-  if (error) ({ data, error } = await query("CONTRACTS"));
+  const fullCols = "ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, SE_ENABLED, SE_PERCENT, SE_BASIS, SE_LEGAL_REFERENCE";
+  const basicCols = "ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS";
+
+  let { data, error } = await query("CONTRACT", fullCols);
+  if (error && String(error.message || "").includes("SE_")) {
+    // Migration 0047 not yet run — retry with basic columns
+    ({ data, error } = await query("CONTRACT", basicCols));
+  }
+  if (error) ({ data, error } = await query("CONTRACTS", basicCols));
   if (error) throw error;
   if (!data) return null;
 
@@ -1373,12 +1380,36 @@ async function patchContract(supabase, { contractId, body }) {
   if (body.CASH_DISCOUNT_DAYS !== undefined) {
     allowed.CASH_DISCOUNT_DAYS = body.CASH_DISCOUNT_DAYS === null || body.CASH_DISCOUNT_DAYS === "" ? null : parseInt(body.CASH_DISCOUNT_DAYS, 10);
   }
+  // Sicherheitseinbehalt (Phase 1)
+  if (body.SE_ENABLED !== undefined) {
+    allowed.SE_ENABLED = !!body.SE_ENABLED;
+  }
+  if (body.SE_PERCENT !== undefined) {
+    allowed.SE_PERCENT = body.SE_PERCENT === null || body.SE_PERCENT === "" ? null : parseFloat(body.SE_PERCENT);
+  }
+  if (body.SE_BASIS !== undefined) {
+    const v = String(body.SE_BASIS || "").toUpperCase();
+    allowed.SE_BASIS = v === "NETTO" ? "NETTO" : "BRUTTO";
+  }
+  if (body.SE_LEGAL_REFERENCE !== undefined) {
+    allowed.SE_LEGAL_REFERENCE = body.SE_LEGAL_REFERENCE === null || body.SE_LEGAL_REFERENCE === "" ? null : String(body.SE_LEGAL_REFERENCE).trim();
+  }
 
   if (!Object.keys(allowed).length) throw { status: 400, message: "Keine Felder zum Aktualisieren" };
 
   let error;
   ({ error } = await supabase.from("CONTRACT").update(allowed).eq("ID", contractId));
   if (error) {
+    const msg = String(error.message || "");
+    // Retry without SE fields if migration 0047 not yet run
+    if (msg.includes("SE_")) {
+      const stripped = { ...allowed };
+      delete stripped.SE_ENABLED; delete stripped.SE_PERCENT; delete stripped.SE_BASIS; delete stripped.SE_LEGAL_REFERENCE;
+      if (Object.keys(stripped).length) {
+        const r0 = await supabase.from("CONTRACT").update(stripped).eq("ID", contractId);
+        if (!r0.error) return;
+      }
+    }
     const r = await supabase.from("CONTRACTS").update(allowed).eq("ID", contractId);
     error = r.error;
   }
