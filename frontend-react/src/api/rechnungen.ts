@@ -207,6 +207,24 @@ export interface OpenSeEntry {
 export const fetchOpenSeForProject = (projectId: number) =>
   apiClient.get<{ data: OpenSeEntry[] }>(`/partial-payments/open-se?project_id=${projectId}`)
 
+export interface SeOverviewEntry {
+  id: number
+  partial_payment_number: string | null
+  partial_payment_date:   string | null
+  total_amount_gross:     number
+  se_percent:             number | null
+  se_basis:               'BRUTTO' | 'NETTO' | null
+  se_amount:              number
+  status:                 'OFFEN' | 'AUFGELOEST'
+  released_by_invoice_id:     number | null
+  released_by_invoice_number: string | null
+  released_by_invoice_date:   string | null
+  released_at:                string | null
+}
+
+export const fetchSeOverviewForProject = (projectId: number) =>
+  apiClient.get<{ data: SeOverviewEntry[] }>(`/partial-payments/se-overview?project_id=${projectId}`)
+
 export const deleteInvoice = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/invoices/${id}`)
 

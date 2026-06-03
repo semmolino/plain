@@ -43,6 +43,7 @@ import {
   type DayBooking, type RunningMonth,
 } from '@/api/mitarbeiter'
 import { fetchMahnungStats, type MahnungStats, type MahnungSuggestion } from '@/api/mahnungen'
+import { fetchDashboardOpenSe }     from '@/api/reports'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -785,6 +786,13 @@ function ControllerView({
           />
         )}
         {!mahnStats && <KpiCard label="Offene Leistung" value={fmtEur(kpis.OFFENE_LEISTUNG)} />}
+        {openSe && openSe.totalOpen > 0 && (
+          <KpiCard
+            label="Offene Sicherheitseinbehalte"
+            value={fmtEur(openSe.totalOpen)}
+            meta={`${openSe.count} ${openSe.count === 1 ? 'Eintrag' : 'Einträge'} aus ${openSe.byProject.length} ${openSe.byProject.length === 1 ? 'Projekt' : 'Projekten'}`}
+          />
+        )}
       </div>
 
       <NarrativeBlock>
@@ -1570,6 +1578,14 @@ export function DashboardPage() {
 
   const billingSummary = billingQ.data?.data     ?? null
   const teamHours      = teamHoursQ.data?.data  ?? null
+
+  const openSeQ = useQuery({
+    queryKey: ['dashboard', 'open-se'],
+    queryFn:  fetchDashboardOpenSe,
+    staleTime: 300000,
+    enabled:  isController,
+  })
+  const openSe = openSeQ.data?.data ?? null
 
   const isLoading = projectsQ.isLoading || monthlyQ.isLoading || (isController && kpisQ.isLoading)
 

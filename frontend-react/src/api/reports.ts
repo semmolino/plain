@@ -52,6 +52,22 @@ export const fetchDashboardProjects = (dateFrom?: string, dateTo?: string) => {
   return apiClient.get<{ data: DashboardProject[] }>(`/reports/dashboard/projects${qs}`)
 }
 
+// Phase 3 — Open Sicherheitseinbehalte across the whole tenant
+export interface DashboardOpenSe {
+  totalOpen: number
+  count:     number
+  byProject: Array<{
+    project_id: number
+    name_short?: string
+    name_long?:  string
+    total:      number
+    count:      number
+  }>
+}
+
+export const fetchDashboardOpenSe = () =>
+  apiClient.get<{ data: DashboardOpenSe }>('/reports/dashboard/open-se')
+
 export const fetchDashboardMonthly = (dateFrom?: string, dateTo?: string) => {
   const qs = dateFrom && dateTo ? `?date_from=${dateFrom}&date_to=${dateTo}` : ''
   return apiClient.get<{ data: DashboardMonthly[] }>(`/reports/dashboard/monthly${qs}`)

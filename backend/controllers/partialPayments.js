@@ -46,6 +46,78 @@ async function listOpenSeForProject(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/v1/partial-payments/se-overview?project_id=...
+// Phase 3 — Full SE overview for a project: all SE entries (open + released)
+// Returns array of:
+//   { id, partial_payment_number, partial_payment_date, total_amount_gross,
+//     se_percent, se_basis, se_amount,
+//     status: 'OFFEN' | 'AUFGELOEST',
+//     released_by_invoice_id, released_by_invoice_number, released_at }
+// ---------------------------------------------------------------------------
+async function seOverviewForProject(req, res, supabase) {
+  const projectId = parseInt(String(req.query.project_id ?? ""), 10);
+  if (!Number.isFinite(projectId) || projectId <= 0) {
+    return res.status(400).json({ error: "project_id erforderlich" });
+  }
+  try {
+    const cols = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_GROSS, SE_PERCENT, SE_BASIS, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID";
+    let { data: pps, error } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select(cols)
+      .eq("TENANT_ID", req.tenantId)
+      .eq("PROJECT_ID", projectId)
+      .eq("STATUS_ID", 2)
+      .gt("SE_AMOUNT", 0)
+      .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+    if (error && String(error.message || "").includes("SE_")) return res.json({ data: [] });
+    if (error) return res.status(500).json({ error: error.message });
+    pps = pps || [];
+
+    // Enrich released entries with invoice number + release timestamp
+    const releaseInvoiceIds = [...new Set(pps.map(p => p.SE_RELEASED_BY_INVOICE_ID).filter(Boolean))];
+    const invoiceMap = new Map();
+    if (releaseInvoiceIds.length > 0) {
+      const { data: invs } = await supabase
+        .from("INVOICE")
+        .select("ID, INVOICE_NUMBER, INVOICE_DATE")
+        .in("ID", releaseInvoiceIds);
+      (invs || []).forEach(i => invoiceMap.set(i.ID, i));
+    }
+    const releaseTimes = new Map();
+    if (releaseInvoiceIds.length > 0) {
+      try {
+        const { data: rels } = await supabase
+          .from("SE_RELEASE")
+          .select("PARTIAL_PAYMENT_ID, RELEASED_AT")
+          .in("INVOICE_ID", releaseInvoiceIds);
+        (rels || []).forEach(r => releaseTimes.set(r.PARTIAL_PAYMENT_ID, r.RELEASED_AT));
+      } catch (_) { /* table may not exist */ }
+    }
+
+    const result = pps.map(p => {
+      const inv = p.SE_RELEASED_BY_INVOICE_ID ? invoiceMap.get(p.SE_RELEASED_BY_INVOICE_ID) : null;
+      return {
+        id: p.ID,
+        partial_payment_number: p.PARTIAL_PAYMENT_NUMBER,
+        partial_payment_date:   p.PARTIAL_PAYMENT_DATE,
+        total_amount_gross:     Number(p.TOTAL_AMOUNT_GROSS || 0),
+        se_percent:             p.SE_PERCENT,
+        se_basis:               p.SE_BASIS,
+        se_amount:              Number(p.SE_AMOUNT || 0),
+        status:                 p.SE_RELEASED_BY_INVOICE_ID ? "AUFGELOEST" : "OFFEN",
+        released_by_invoice_id:     p.SE_RELEASED_BY_INVOICE_ID,
+        released_by_invoice_number: inv?.INVOICE_NUMBER || null,
+        released_by_invoice_date:   inv?.INVOICE_DATE || null,
+        released_at:                releaseTimes.get(p.ID) || null,
+      };
+    });
+    return res.json({ data: result });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/partial-payments
 // ---------------------------------------------------------------------------
 async function listPartialPayments(req, res, supabase) {
@@ -771,6 +843,7 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
 module.exports = {
   listPartialPayments,
   listOpenSeForProject,
+  seOverviewForProject,
   initPartialPayment,
   patchPartialPayment,
   getBillingProposal,
