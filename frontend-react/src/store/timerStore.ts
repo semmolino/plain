@@ -12,8 +12,18 @@ export interface TimerSession {
   blockStartIso:    string  // ISO timestamp when current block started
 }
 
+export interface BreakState {
+  startIso: string
+  // remember the work block context to resume after the pause is persisted
+  resumeProjectId:     number
+  resumeProjectName:   string
+  resumeStructureId:   number
+  resumeStructureName: string
+}
+
 interface TimerStore {
   session:     TimerSession | null
+  breakState:  BreakState | null
   showReview:  boolean
 
   startSession: (s: TimerSession) => void
@@ -21,12 +31,17 @@ interface TimerStore {
   endSession:   () => void
   openReview:   () => void
   closeReview:  () => void
+
+  startBreak:   () => void
+  endBreak:     () => void
+  cancelBreak:  () => void
 }
 
 export const useTimerStore = create<TimerStore>()(
   persist(
     (set, get) => ({
       session:    null,
+      breakState: null,
       showReview: false,
 
       startSession: (s) => set({ session: s, showReview: false }),
@@ -46,10 +61,37 @@ export const useTimerStore = create<TimerStore>()(
         })
       },
 
-      endSession: () => set({ session: null, showReview: false }),
+      endSession: () => set({ session: null, breakState: null, showReview: false }),
 
       openReview:  () => set({ showReview: true }),
       closeReview: () => set({ showReview: false }),
+
+      startBreak: () => {
+        const prev = get().session
+        if (!prev || get().breakState) return
+        set({
+          breakState: {
+            startIso:            new Date().toISOString(),
+            resumeProjectId:     prev.projectId,
+            resumeProjectName:   prev.projectName,
+            resumeStructureId:   prev.structureId,
+            resumeStructureName: prev.structureName,
+          },
+        })
+      },
+
+      endBreak: () => {
+        const prev = get().session
+        const br   = get().breakState
+        if (!prev || !br) return
+        // Resume work on the same task with a fresh block start.
+        set({
+          breakState: null,
+          session: { ...prev, blockStartIso: new Date().toISOString() },
+        })
+      },
+
+      cancelBreak: () => set({ breakState: null }),
     }),
     {
       name: 'plain-timer-session',
