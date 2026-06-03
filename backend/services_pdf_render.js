@@ -477,9 +477,51 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
 
   // Honorar vs Nebenkosten split for the calc table
   let amountNet, amountExtrasNet;
+  // Cumulative-AR view for Abschlagsrechnung PDFs (#9):
+  //   "Erbrachtes Honorar"           = sum of AMOUNT_NET of all PPs in this contract (incl. this)
+  //   "abzgl. bisheriger Abschlags." = sum of AMOUNT_NET of all prior PPs
+  //   "In dieser Rechnung"           = AMOUNT_NET of this PP
+  let arProgress = null;
   if (docType === 'PARTIAL_PAYMENT') {
     amountNet       = Number(rawDoc.AMOUNT_NET       ?? inv.totals.lineTotal ?? 0);
     amountExtrasNet = Number(rawDoc.AMOUNT_EXTRAS_NET ?? 0);
+    if (rawDoc.CONTRACT_ID) {
+      try {
+        const { data: contractPps } = await supabase
+          .from('PARTIAL_PAYMENT')
+          .select('ID, AMOUNT_NET, STATUS_ID, CANCELS_PARTIAL_PAYMENT_ID, PARTIAL_PAYMENT_DATE')
+          .eq('CONTRACT_ID', rawDoc.CONTRACT_ID);
+        const all = (contractPps || []).filter(p =>
+          // exclude this very PP from "prior"
+          parseInt(p.ID, 10) !== parseInt(rawDoc.ID, 10) &&
+          // exclude storno rows (CANCELS_PARTIAL_PAYMENT_ID is set on the reversal entry)
+          p.CANCELS_PARTIAL_PAYMENT_ID == null &&
+          // include only booked or open (status != 3 = stornoed/cancelled, depending on schema)
+          String(p.STATUS_ID) !== '3' &&
+          // only PPs dated up to this one's date so older are summed
+          (!rawDoc.PARTIAL_PAYMENT_DATE || !p.PARTIAL_PAYMENT_DATE ||
+           p.PARTIAL_PAYMENT_DATE <= rawDoc.PARTIAL_PAYMENT_DATE)
+        );
+        // also exclude PPs that are storno'd by another PP
+        const cancelledIds = new Set(
+          (contractPps || [])
+            .map(p => p.CANCELS_PARTIAL_PAYMENT_ID)
+            .filter(Boolean)
+            .map(x => parseInt(x, 10))
+        );
+        const priorPps = all.filter(p => !cancelledIds.has(parseInt(p.ID, 10)));
+        const priorNet = Math.round(priorPps.reduce((s, p) => s + Number(p.AMOUNT_NET || 0), 0) * 100) / 100;
+        const thisNet  = Math.round(amountNet * 100) / 100;
+        if (priorNet > 0) {
+          arProgress = {
+            priorNet,
+            thisNet,
+            cumulativeNet: Math.round((priorNet + thisNet) * 100) / 100,
+            hasPrior: true,
+          };
+        }
+      } catch (_) { /* soft-fail */ }
+    }
   } else {
     const { data: structRows } = await supabase
       .from('INVOICE_STRUCTURE').select('AMOUNT_NET, AMOUNT_EXTRAS_NET').eq('INVOICE_ID', docId);
@@ -686,6 +728,7 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     deductionTotals,
     discounts,
     securityRetention,
+    arProgress,
     honorarCalcs,
   };
 }

@@ -475,10 +475,27 @@ table.data-table thead { display: table-header-group; }
     {% else %}
 
     {# Regular invoice / Abschlagsrechnung layout #}
+    {% if arProgress and arProgress.hasPrior %}
+    {# Kumulative Abschlagsrechnung-Header (#9) #}
+    <tr>
+      <td class="label">Erbrachtes Honorar</td>
+      <td class="amount">{{ arProgress.cumulativeNet | money }}</td>
+    </tr>
+    <tr>
+      <td class="label">abzgl. bisheriger Abschlagsrechnungen</td>
+      <td class="amount">&minus;&#8239;{{ arProgress.priorNet | money }}</td>
+    </tr>
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">In dieser Rechnung</td>
+      <td class="amount">{{ arProgress.thisNet | money }}</td>
+    </tr>
+    {% else %}
     <tr>
       <td class="label">erbrachtes Honorar</td>
       <td class="amount">{{ amountNet | money }}</td>
     </tr>
+    {% endif %}
     {% if amountExtrasNet and amountExtrasNet != 0 %}
     <tr>
       <td class="label">zzgl. Nebenkosten</td>
