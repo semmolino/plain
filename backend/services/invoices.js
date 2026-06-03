@@ -1093,6 +1093,31 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
 
   const isFinalInvoice = orig.INVOICE_TYPE === "schlussrechnung" || orig.INVOICE_TYPE === "teilschlussrechnung";
 
+  // ── Phase 5: Sicherheitseinbehalt-Reversal ───────────────────────────────
+  // If this is a Schluss-/Teilschluss invoice that released SE from prior ARs,
+  // reverse the release: set SE_RELEASED_BY_INVOICE_ID = NULL on those ARs.
+  // SE_RELEASE audit rows stay for history.
+  if (isFinalInvoice) {
+    try {
+      const { data: linkedPps } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("ID, SE_AMOUNT")
+        .eq("SE_RELEASED_BY_INVOICE_ID", parseInt(id, 10));
+      const ppCount = (linkedPps || []).length;
+      if (ppCount > 0) {
+        const totalReversed = (linkedPps || []).reduce((s, p) => s + Number(p.SE_AMOUNT || 0), 0);
+        console.log(`[CANCEL_INVOICE] Reversing SE release: ${ppCount} PP(s), total ${totalReversed.toFixed(2)} EUR (invoice ${id})`);
+        await supabase
+          .from("PARTIAL_PAYMENT")
+          .update({ SE_RELEASED_BY_INVOICE_ID: null })
+          .eq("SE_RELEASED_BY_INVOICE_ID", parseInt(id, 10));
+      }
+    } catch (e) {
+      // Schema may not have SE columns yet — log but don't fail the storno
+      console.warn(`[CANCEL_INVOICE] SE reversal skipped (schema missing?): ${e?.message || e}`);
+    }
+  }
+
   // ── Optional: delete existing payments for this invoice ──────────────────
   if (deletePayments) {
     const { data: payments } = await supabase

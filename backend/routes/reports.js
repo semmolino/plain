@@ -810,7 +810,19 @@ module.exports = (supabase) => {
         return res.json({ data: { totalOpen: 0, count: 0, byProject: [] } });
       }
       if (error) return res.status(500).json({ error: error.message });
-      const rows = data || [];
+      let rows = data || [];
+
+      // Phase 5: Exclude storno'd ARs
+      if (rows.length > 0) {
+        const ids = rows.map(r => r.ID);
+        const { data: stornos } = await supabase
+          .from("PARTIAL_PAYMENT")
+          .select("CANCELS_PARTIAL_PAYMENT_ID")
+          .in("CANCELS_PARTIAL_PAYMENT_ID", ids);
+        const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+        rows = rows.filter(r => !cancelled.has(r.ID));
+      }
+
       const totalOpen = round2(rows.reduce((s, r) => s + Number(r.SE_AMOUNT || 0), 0));
 
       // Group by project + enrich with project name

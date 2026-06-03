@@ -907,6 +907,13 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
     throw { status: 409, message: `Es existiert bereits eine Storno-Abschlagsrechnung (${label}) für diesen Eintrag` };
   }
 
+  // Phase 5: Warn if this AR had SE already released by a Schluss/Teilschluss.
+  // Storno proceeds, but the linked Schluss already accounted for the SE — manual
+  // reconciliation may be needed.
+  if (Number(orig.SE_AMOUNT || 0) > 0 && orig.SE_RELEASED_BY_INVOICE_ID) {
+    console.warn(`[CANCEL_PARTIAL_PAYMENT] AR ${id} has SE_AMOUNT=${orig.SE_AMOUNT} already released by INVOICE ${orig.SE_RELEASED_BY_INVOICE_ID}. Storno will not auto-reverse the Schluss; manual reconciliation may be required.`);
+  }
+
   // ── Optional: delete existing payments ──────────────────────────────────
   if (deletePayments) {
     const { data: payments } = await supabase

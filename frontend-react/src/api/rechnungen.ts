@@ -215,7 +215,7 @@ export interface SeOverviewEntry {
   se_percent:             number | null
   se_basis:               'BRUTTO' | 'NETTO' | null
   se_amount:              number
-  status:                 'OFFEN' | 'AUFGELOEST'
+  status:                 'OFFEN' | 'AUFGELOEST' | 'STORNIERT'
   released_by_invoice_id:     number | null
   released_by_invoice_number: string | null
   released_by_invoice_date:   string | null

@@ -39,6 +39,18 @@ async function listOpenSeForProject(req, res, supabase) {
       return res.json({ data: [] });
     }
     if (error) return res.status(500).json({ error: error.message });
+
+    // Phase 5: Filter out ARs that have been storno'd (a Storno-AR points to them)
+    const ids = (data || []).map(r => r.ID);
+    if (ids.length > 0) {
+      const { data: stornos } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("CANCELS_PARTIAL_PAYMENT_ID")
+        .in("CANCELS_PARTIAL_PAYMENT_ID", ids);
+      const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+      const filtered = (data || []).filter(r => !cancelled.has(r.ID));
+      return res.json({ data: filtered });
+    }
     return res.json({ data: data || [] });
   } catch (e) {
     return res.status(500).json({ error: e?.message || String(e) });
@@ -94,8 +106,20 @@ async function seOverviewForProject(req, res, supabase) {
       } catch (_) { /* table may not exist */ }
     }
 
+    // Phase 5: Determine which ARs have been storno'd
+    const allIds = pps.map(p => p.ID);
+    let cancelled = new Set();
+    if (allIds.length > 0) {
+      const { data: stornos } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("CANCELS_PARTIAL_PAYMENT_ID")
+        .in("CANCELS_PARTIAL_PAYMENT_ID", allIds);
+      cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+    }
+
     const result = pps.map(p => {
       const inv = p.SE_RELEASED_BY_INVOICE_ID ? invoiceMap.get(p.SE_RELEASED_BY_INVOICE_ID) : null;
+      const isCancelled = cancelled.has(p.ID);
       return {
         id: p.ID,
         partial_payment_number: p.PARTIAL_PAYMENT_NUMBER,
@@ -104,7 +128,9 @@ async function seOverviewForProject(req, res, supabase) {
         se_percent:             p.SE_PERCENT,
         se_basis:               p.SE_BASIS,
         se_amount:              Number(p.SE_AMOUNT || 0),
-        status:                 p.SE_RELEASED_BY_INVOICE_ID ? "AUFGELOEST" : "OFFEN",
+        status: isCancelled
+          ? "STORNIERT"
+          : (p.SE_RELEASED_BY_INVOICE_ID ? "AUFGELOEST" : "OFFEN"),
         released_by_invoice_id:     p.SE_RELEASED_BY_INVOICE_ID,
         released_by_invoice_number: inv?.INVOICE_NUMBER || null,
         released_by_invoice_date:   inv?.INVOICE_DATE || null,
