@@ -5,7 +5,7 @@ import { apiClient, downloadWithAuth, openPdfWithAuth } from './client'
 export interface Company      { ID: number; COMPANY_NAME_1: string }
 export interface VatRate      { ID: number; VAT: string; VAT_PERCENT: number }
 export interface PaymentMeans { ID: number; NAME_SHORT: string; NAME_LONG: string }
-export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: string; PROJECT_ID: number; CASH_DISCOUNT_PERCENT?: number | null; CASH_DISCOUNT_DAYS?: number | null }
+export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: string; PROJECT_ID: number; CASH_DISCOUNT_PERCENT?: number | null; CASH_DISCOUNT_DAYS?: number | null; SE_ENABLED?: boolean; SE_PERCENT?: number | null; SE_BASIS?: 'BRUTTO' | 'NETTO' | null; SE_LEGAL_REFERENCE?: string | null }
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
 
@@ -169,6 +169,9 @@ export const patchInvoice = (id: number, body: Partial<{
   discount_1_percent: number; discount_2_percent: number; total_discounts: number
   discount_1_reason: string | null; discount_2_reason: string | null
   cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
+  se_percent: number | null; se_basis: 'BRUTTO' | 'NETTO' | null
+  se_basis_amt: number | null; se_amount: number | null
+  se_release_total: number | null
 }>) => apiClient.patch<{ ok: boolean }>(`/invoices/${id}`, body)
 
 export const getInvoiceBillingProposal = (id: number) =>
@@ -235,6 +238,8 @@ export const patchPartialPayment = (id: number, body: Partial<{
   discount_1_percent: number; discount_2_percent: number; total_discounts: number
   discount_1_reason: string | null; discount_2_reason: string | null
   cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
+  se_percent: number | null; se_basis: 'BRUTTO' | 'NETTO' | null
+  se_basis_amt: number | null; se_amount: number | null
 }>) => apiClient.patch<{ success: boolean }>(`/partial-payments/${id}`, body)
 
 export const getPpBillingProposal = (id: number) =>

@@ -458,17 +458,23 @@ async function searchProjects(supabase, { q, tenantId }) {
 }
 
 async function searchContracts(supabase, { projectId, q }) {
-  const query = (table) =>
+  const query = (table, cols) =>
     supabase
       .from(table)
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS")
+      .select(cols)
       .eq("PROJECT_ID", projectId)
       .or(`NAME_SHORT.ilike.%${q}%,NAME_LONG.ilike.%${q}%`)
       .order("NAME_SHORT", { ascending: true })
       .limit(20);
 
-  let { data, error } = await query("CONTRACT");
-  if (error) ({ data, error } = await query("CONTRACTS"));
+  const fullCols  = "ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, SE_ENABLED, SE_PERCENT, SE_BASIS, SE_LEGAL_REFERENCE";
+  const basicCols = "ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS";
+
+  let { data, error } = await query("CONTRACT", fullCols);
+  if (error && String(error.message || "").includes("SE_")) {
+    ({ data, error } = await query("CONTRACT", basicCols));
+  }
+  if (error) ({ data, error } = await query("CONTRACTS", basicCols));
   if (error) throw error;
   return data || [];
 }

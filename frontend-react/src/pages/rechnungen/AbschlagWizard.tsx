@@ -80,6 +80,11 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
   const [cashDiscPct,    setCashDiscPct]    = useState('')
   const [cashDiscDays,   setCashDiscDays]   = useState('')
 
+  // Sicherheitseinbehalt (Phase 1)
+  const [seEnabled,      setSeEnabled]      = useState(false)
+  const [sePct,          setSePct]          = useState('')
+  const [seBasis,        setSeBasis]        = useState<'BRUTTO' | 'NETTO'>('BRUTTO')
+
   const draftIdRef = useRef<number | null>(null)
   useEffect(() => { draftIdRef.current = draftId }, [draftId])
 
@@ -108,6 +113,8 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
   const projectResultsRef = useRef<Map<number, number | null>>(new Map())
   // Cache contract skonto defaults for pre-population
   const contractSkontoRef = useRef<Map<number, { pct: number | null; days: number | null }>>(new Map())
+  // Cache contract SE defaults for pre-population
+  const contractSeRef = useRef<Map<number, { enabled: boolean; pct: number | null; basis: 'BRUTTO' | 'NETTO' }>>(new Map())
 
   // Show browser "leave?" dialog and delete draft when user closes/reloads
   useEffect(() => {
@@ -134,10 +141,24 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
     searchContracts(projectId, '').then(res => {
       const list = res.data ?? []
       setContractsForProject(list)
-      list.forEach(c => contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null }))
+      list.forEach(c => {
+        contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null })
+        contractSeRef.current.set(c.ID, {
+          enabled: !!c.SE_ENABLED,
+          pct:     c.SE_PERCENT ?? null,
+          basis:   (c.SE_BASIS === 'NETTO' ? 'NETTO' : 'BRUTTO') as 'BRUTTO' | 'NETTO',
+        })
+      })
       if (list.length === 1) {
         setContractId(list[0].ID)
         setContractLabel(`${list[0].NAME_SHORT} – ${list[0].NAME_LONG}`)
+        // Pre-fill SE from contract when auto-selected
+        const se = contractSeRef.current.get(list[0].ID)
+        if (se?.enabled) {
+          setSeEnabled(true)
+          if (se.pct != null) setSePct(String(se.pct))
+          setSeBasis(se.basis)
+        }
       } else {
         setContractId(null); setContractLabel('')
       }
@@ -196,6 +217,13 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
       const cdPct = Number(cashDiscPct) || 0
       const cdDays = Number(cashDiscDays) || 0
       const cdAmt = Math.round((base - totalDiscounts) * cdPct / 100 * 100) / 100
+      const netAfter = Math.round((base - totalDiscounts - cdAmt) * 100) / 100
+      const vatPct = Number(proposal?.vat_percent ?? 0)
+      const taxAfter = Math.round(netAfter * vatPct / 100 * 100) / 100
+      const grossAfter = Math.round((netAfter + taxAfter) * 100) / 100
+      const sePctNum = seEnabled ? (Number(sePct) || 0) : 0
+      const seBasisAmt = seEnabled ? (seBasis === 'BRUTTO' ? grossAfter : netAfter) : 0
+      const seAmt = Math.round(seBasisAmt * sePctNum / 100 * 100) / 100
       await patchPartialPayment(id, {
         discount_1_percent:   showDiscounts ? d1 : 0,
         discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
@@ -205,6 +233,10 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
         cash_discount_percent: showSkonto ? cdPct : 0,
         cash_discount_days:    showSkonto ? cdDays : 0,
         cash_discount_amount:  showSkonto ? cdAmt : 0,
+        se_percent:           seEnabled ? sePctNum : null,
+        se_basis:             seEnabled ? seBasis : null,
+        se_basis_amt:         seEnabled ? seBasisAmt : null,
+        se_amount:            seEnabled ? seAmt : null,
       })
       return bookPartialPayment(id)
     },
@@ -230,7 +262,7 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
     setEmployeeId('')
     setDetDate(todayIso()); setDueDate(''); setBpStart(''); setBpFinish(''); setComment('')
     setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set()); setHasBt2(false)
-    setShowDiscounts(false); setD1Pct(''); setD2Pct(''); setShowSkonto(false); setCashDiscPct(''); setCashDiscDays('')
+    setShowDiscounts(false); setD1Pct(''); setD2Pct(''); setShowSkonto(false); setCashDiscPct(''); setCashDiscDays(''); setSeEnabled(false); setSePct(''); setSeBasis('BRUTTO')
     setMsg(null)
   }
 
@@ -355,12 +387,27 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
                   deletePartialPayment(draftId).catch(() => {})
                   clearDraftState()
                 }
-                setContractId(Number(id)); setContractLabel(label)
+                const cid = Number(id)
+                setContractId(cid); setContractLabel(label)
+                // Pre-fill SE from contract
+                const se = contractSeRef.current.get(cid)
+                if (se?.enabled) {
+                  setSeEnabled(true)
+                  if (se.pct != null) setSePct(String(se.pct))
+                  setSeBasis(se.basis)
+                }
               }}
               search={async q => {
                 if (!projectId) return []
                 const res = await searchContracts(projectId, q)
-                res.data.forEach(c => contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null }))
+                res.data.forEach(c => {
+                  contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null })
+                  contractSeRef.current.set(c.ID, {
+                    enabled: !!c.SE_ENABLED,
+                    pct:     c.SE_PERCENT ?? null,
+                    basis:   (c.SE_BASIS === 'NETTO' ? 'NETTO' : 'BRUTTO') as 'BRUTTO' | 'NETTO',
+                  })
+                })
                 return res.data.map(c => ({ id: c.ID, label: `${c.NAME_SHORT} – ${c.NAME_LONG}` }))
               }}
               placeholder={projectId ? 'Vertrag suchen …' : 'Erst Projekt wählen'}
@@ -481,6 +528,7 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
       {/* Step 3: Book */}
       {step === 3 && (() => {
         const base = proposal?.total_amount_net ?? 0
+        const vatPct = Number(proposal?.vat_percent ?? 0)
         const d1 = showDiscounts ? (Number(d1Pct) || 0) : 0
         const d2 = showDiscounts ? (Number(d2Pct) || 0) : 0
         const d1Amt = Math.round(base * d1 / 100 * 100) / 100
@@ -490,6 +538,13 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
         const cdDays = showSkonto ? (Number(cashDiscDays) || 0) : 0
         const cdAmt  = Math.round((base - totalDisc) * cdPct / 100 * 100) / 100
         const netAfter = Math.round((base - totalDisc - cdAmt) * 100) / 100
+        // Sicherheitseinbehalt — calculated on Netto or Brutto AFTER discounts/skonto
+        const taxAfter   = Math.round(netAfter * vatPct / 100 * 100) / 100
+        const grossAfter = Math.round((netAfter + taxAfter) * 100) / 100
+        const sePctNum   = seEnabled ? (Number(sePct) || 0) : 0
+        const seBasisAmt = seEnabled ? (seBasis === 'BRUTTO' ? grossAfter : netAfter) : 0
+        const seAmt      = Math.round(seBasisAmt * sePctNum / 100 * 100) / 100
+        const payable    = Math.round((grossAfter - seAmt) * 100) / 100
         async function saveDiscountsAndPreview() {
           if (!draftId) return
           await patchPartialPayment(draftId, {
@@ -501,6 +556,10 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
             cash_discount_percent: showSkonto ? cdPct : 0,
             cash_discount_days:    showSkonto ? cdDays : 0,
             cash_discount_amount:  showSkonto ? cdAmt : 0,
+            se_percent:           seEnabled ? sePctNum : null,
+            se_basis:             seEnabled ? seBasis : null,
+            se_basis_amt:         seEnabled ? seBasisAmt : null,
+            se_amount:            seEnabled ? seAmt : null,
           })
           openPpPdf(draftId)
         }
@@ -577,13 +636,40 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
                   Rechnungssumme netto nach Abzügen: <strong>{fmtEur(netAfter)}</strong>
                 </div>
               )}
+
+              {/* Sicherheitseinbehalt */}
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(17,24,39,0.08)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
+                  <input type="checkbox" checked={seEnabled} onChange={e => setSeEnabled(e.target.checked)} />
+                  Sicherheitseinbehalt einbehalten
+                </label>
+                {seEnabled && (
+                  <div style={{ paddingLeft: 22, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                      Prozent (%):
+                      <input type="number" step="0.01" min="0" max="100" value={sePct}
+                        onChange={e => setSePct(e.target.value)}
+                        style={{ width: 80, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                        placeholder="z. B. 5" />
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+                      <span>Basis:</span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input type="radio" checked={seBasis === 'BRUTTO'} onChange={() => setSeBasis('BRUTTO')} />
+                        Brutto
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input type="radio" checked={seBasis === 'NETTO'} onChange={() => setSeBasis('NETTO')} />
+                        Netto
+                      </label>
+                    </div>
+                    {seAmt > 0 && <span style={{ fontSize: 12, color: '#374151' }}>= <strong>{fmtEur(seAmt)}</strong></span>}
+                  </div>
+                )}
+              </div>
             </div>
 
             {proposal && (() => {
-              const vatPct = Number(proposal.vat_percent ?? 0)
-              const netAfterDiscAndSkonto = Math.round((base - totalDisc - cdAmt) * 100) / 100
-              const taxAfter   = Math.round(netAfterDiscAndSkonto * vatPct / 100 * 100) / 100
-              const grossAfter = Math.round((netAfterDiscAndSkonto + taxAfter) * 100) / 100
               const hasDeductions = totalDisc > 0 || cdAmt > 0
               return (
                 <div className="billing-proposal-box">
@@ -601,11 +687,20 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
                       <span>./. Skonto</span><strong>− {fmtEur(cdAmt)}</strong>
                     </div>
                   )}
-                  <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{fmtEur(netAfterDiscAndSkonto)}</strong></div>
+                  <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{fmtEur(netAfter)}</strong></div>
                   {vatPct > 0 && (
                     <div className="bp-row"><span>zzgl. {vatPct}&thinsp;% MwSt.</span><strong>{fmtEur(taxAfter)}</strong></div>
                   )}
                   <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(grossAfter)}</strong></div>
+                  {seEnabled && seAmt > 0 && (
+                    <div className="bp-row" style={{ color: '#b91c1c' }}>
+                      <span>./. Sicherheitseinbehalt {sePctNum}&thinsp;% vom {seBasis === 'BRUTTO' ? 'Brutto' : 'Netto'}</span>
+                      <strong>− {fmtEur(seAmt)}</strong>
+                    </div>
+                  )}
+                  {seEnabled && seAmt > 0 && (
+                    <div className="bp-row total"><span>Sofort fällig</span><strong>{fmtEur(payable)}</strong></div>
+                  )}
                 </div>
               )
             })()}
@@ -635,6 +730,10 @@ export function AbschlagWizard({ initialDraft }: { initialDraft?: DraftResume } 
                     cash_discount_percent: showSkonto ? cdPct : 0,
                     cash_discount_days:    showSkonto ? cdDays : 0,
                     cash_discount_amount:  showSkonto ? cdAmt : 0,
+                    se_percent:           seEnabled ? sePctNum : null,
+                    se_basis:             seEnabled ? seBasis : null,
+                    se_basis_amt:         seEnabled ? seBasisAmt : null,
+                    se_amount:            seEnabled ? seAmt : null,
                   })
                   setMsg({ text: 'Als Entwurf gespeichert ✅', type: 'success' })
                 }}
