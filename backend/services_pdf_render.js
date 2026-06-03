@@ -715,7 +715,12 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   await injectTextTemplate(supabase, vm, tenantId);
 
   // EPC / GiroCode QR — only for payable documents (not storno)
-  const payAmount = vm.discounts.hasDiscounts ? vm.discounts.adjustedGross : vm.inv.totals.grandTotal;
+  // When SE is in play (withheld or released), use securityRetention.payable so the
+  // QR code + payment instruction match the actual amount the customer should pay.
+  const baseGross = vm.discounts.hasDiscounts ? vm.discounts.adjustedGross : vm.inv.totals.grandTotal;
+  const seInPlay  = vm.securityRetention && (vm.securityRetention.hasSe || vm.securityRetention.hasSeRelease);
+  const payAmount = seInPlay ? vm.securityRetention.payable : baseGross;
+  vm.payAmount = payAmount;
   vm.epcQrDataUri = await buildEpcQrDataUri({
     bic:       vm.inv.seller.bic,
     iban:      vm.inv.seller.iban,
