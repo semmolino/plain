@@ -380,7 +380,7 @@ async function getFinalInvoice(supabase, { id, tenantId }) {
   return { ...inv, PHASE_TOTAL: phaseTotal, DEDUCTIONS_TOTAL: deductionsTotal };
 }
 
-async function bookFinalInvoice(supabase, { id, tenantId }) {
+async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [] }) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
     .select("ID, COMPANY_ID, PROJECT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID, INVOICE_TYPE, TENANT_ID")
@@ -393,6 +393,56 @@ async function bookFinalInvoice(supabase, { id, tenantId }) {
   const validTypes = ["schlussrechnung", "teilschlussrechnung"];
   if (!validTypes.includes(inv.INVOICE_TYPE)) {
     throw { status: 400, message: "Nur Schluss- und Teilschlussrechnungen können über diesen Endpunkt gebucht werden" };
+  }
+
+  // ── Sicherheitseinbehalt-Auflösung (Phase 2) ──────────────────────────────
+  // BEFORE PDF render so PDF reflects the SE release rows.
+  let seReleaseTotal = 0;
+  if (Array.isArray(releasePpIds) && releasePpIds.length > 0) {
+    try {
+      const { data: pps, error: ppsErr } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("ID, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID, PROJECT_ID, TENANT_ID")
+        .in("ID", releasePpIds);
+      if (ppsErr) throw new Error(ppsErr.message);
+
+      const validPps = (pps || []).filter(p =>
+        Number(p.SE_AMOUNT || 0) > 0 &&
+        p.SE_RELEASED_BY_INVOICE_ID == null &&
+        p.TENANT_ID == tenantId &&
+        (inv.PROJECT_ID == null || p.PROJECT_ID == inv.PROJECT_ID)
+      );
+
+      for (const pp of validPps) {
+        const amt = round2(Number(pp.SE_AMOUNT || 0));
+        seReleaseTotal = round2(seReleaseTotal + amt);
+        const { error: upPpErr } = await supabase
+          .from("PARTIAL_PAYMENT")
+          .update({ SE_RELEASED_BY_INVOICE_ID: parseInt(id, 10) })
+          .eq("ID", pp.ID);
+        if (upPpErr) throw new Error(upPpErr.message);
+
+        try {
+          await supabase.from("SE_RELEASE").insert({
+            TENANT_ID:          tenantId || pp.TENANT_ID,
+            PARTIAL_PAYMENT_ID: pp.ID,
+            INVOICE_ID:         parseInt(id, 10),
+            SE_AMOUNT_RELEASED: amt,
+          });
+        } catch (_) { /* SE_RELEASE table may not exist yet */ }
+      }
+
+      if (seReleaseTotal > 0) {
+        const { error: invUpErr } = await supabase.from("INVOICE")
+          .update({ SE_RELEASE_TOTAL: seReleaseTotal })
+          .eq("ID", id);
+        if (invUpErr && !String(invUpErr.message || "").includes("SE_")) {
+          throw new Error(invUpErr.message);
+        }
+      }
+    } catch (e) {
+      throw { status: 500, message: `Sicherheitseinbehalt-Auflösung fehlgeschlagen: ${e?.message || e}` };
+    }
   }
 
   const vatPercent = toNum(inv.VAT_PERCENT);

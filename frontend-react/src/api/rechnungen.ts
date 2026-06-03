@@ -187,8 +187,25 @@ export const postInvoiceTec = (id: number, body: {
   ids_assign: number[]; ids_unassign: number[]; performance_amount?: number
 }) => apiClient.post<{ data: BillingProposal }>(`/invoices/${id}/tec`, body)
 
-export const bookInvoice = (id: number) =>
-  apiClient.post<{ success: boolean; invoice_number: string }>(`/invoices/${id}/book`, {})
+export const bookInvoice = (id: number, opts?: { release_partial_payment_ids?: number[] }) =>
+  apiClient.post<{ success: boolean; invoice_number: string }>(`/invoices/${id}/book`, opts || {})
+
+// ── Open Sicherheitseinbehalte (Phase 2) ─────────────────────────────────────
+
+export interface OpenSeEntry {
+  ID: number
+  PARTIAL_PAYMENT_NUMBER: string | null
+  PARTIAL_PAYMENT_DATE: string | null
+  TOTAL_AMOUNT_NET: number | null
+  TOTAL_AMOUNT_GROSS: number | null
+  SE_PERCENT: number | null
+  SE_BASIS: 'BRUTTO' | 'NETTO' | null
+  SE_BASIS_AMT: number | null
+  SE_AMOUNT: number
+}
+
+export const fetchOpenSeForProject = (projectId: number) =>
+  apiClient.get<{ data: OpenSeEntry[] }>(`/partial-payments/open-se?project_id=${projectId}`)
 
 export const deleteInvoice = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/invoices/${id}`)
@@ -292,8 +309,8 @@ export const getFinalInvoiceDeductions = (id: number) =>
 export const saveFinalInvoiceDeductions = (id: number, items: { partial_payment_id: number; deduction_amount_net: number }[]) =>
   apiClient.post<{ ok: boolean } & FinalTotals>(`/final-invoices/${id}/deductions`, { items })
 
-export const bookFinalInvoice = (id: number) =>
-  apiClient.post<{ success: boolean; invoice_number: string }>(`/final-invoices/${id}/book`, {})
+export const bookFinalInvoice = (id: number, opts?: { release_partial_payment_ids?: number[] }) =>
+  apiClient.post<{ success: boolean; invoice_number: string }>(`/final-invoices/${id}/book`, opts || {})
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 

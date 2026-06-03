@@ -72,7 +72,14 @@ async function getFinalInvoice(req, res, supabase) {
 
 async function bookFinalInvoice(req, res, supabase) {
   try {
-    const result = await svc.bookFinalInvoice(supabase, { id: req.params.id, tenantId: req.tenantId });
+    const releasePpIds = Array.isArray(req.body?.release_partial_payment_ids)
+      ? req.body.release_partial_payment_ids.map(n => parseInt(String(n), 10)).filter(Number.isFinite)
+      : [];
+    const result = await svc.bookFinalInvoice(supabase, {
+      id: req.params.id,
+      tenantId: req.tenantId,
+      releasePpIds,
+    });
     res.json({ success: true, ...result });
   } catch (err) {
     const status = err.status || 500;

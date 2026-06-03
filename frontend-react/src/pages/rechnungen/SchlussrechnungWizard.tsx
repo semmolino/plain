@@ -11,7 +11,9 @@ import {
   getFinalInvoiceDeductions, saveFinalInvoiceDeductions,
   bookFinalInvoice, deleteInvoice,
   openInvoicePdf, downloadInvoiceEinvoice,
+  fetchOpenSeForProject,
   type InvoiceType, type FinalPhase, type FinalDeduction, type FinalTotals,
+  type OpenSeEntry,
 } from '@/api/rechnungen'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
@@ -86,6 +88,10 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
   const [cashDiscPct,   setCashDiscPct]   = useState('')
   const [cashDiscDays,  setCashDiscDays]  = useState('')
 
+  // SE-Auflösung (Phase 2)
+  const [openSeList,    setOpenSeList]    = useState<OpenSeEntry[]>([])
+  const [seReleaseSel,  setSeReleaseSel]  = useState<Set<number>>(new Set())  // PP IDs to release
+
   const contractSkontoRef = useRef<Map<number, { pct: number | null; days: number | null }>>(new Map())
   const draftIdRef = useRef<number | null>(null)
   useEffect(() => { draftIdRef.current = draftId }, [draftId])
@@ -125,6 +131,17 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [])
+
+  // Load open Sicherheitseinbehalte (Phase 2)
+  // Pre-select ALL by default since Schlussrechnung finalizes the project
+  useEffect(() => {
+    if (!projectId) { setOpenSeList([]); setSeReleaseSel(new Set()); return }
+    fetchOpenSeForProject(projectId).then(r => {
+      const list = r.data ?? []
+      setOpenSeList(list)
+      setSeReleaseSel(new Set(list.map(e => e.ID)))
+    }).catch(() => { setOpenSeList([]); setSeReleaseSel(new Set()) })
+  }, [projectId])
 
   // Auto-fetch contracts when project changes; pre-select if only 1
   useEffect(() => {
@@ -257,7 +274,7 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
         cash_discount_days:    showSkonto ? cdDays : 0,
         cash_discount_amount:  showSkonto ? cdAmt : 0,
       })
-      return bookFinalInvoice(id)
+      return bookFinalInvoice(id, { release_partial_payment_ids: Array.from(seReleaseSel) })
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['invoices'] })
@@ -283,6 +300,7 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
     setPhases([]); setPhaseChecked(new Set()); setPhaseTotals(null)
     setDeductions([]); setDeductAmounts({}); setDedSelected(new Set()); setDedTotals(null); setDedWarn(null)
     setShowDiscounts(false); setD1Pct(''); setD2Pct(''); setShowSkonto(false); setCashDiscPct(''); setCashDiscDays('')
+    setOpenSeList([]); setSeReleaseSel(new Set())
     setMsg(null)
   }
 
@@ -862,10 +880,54 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
             </>
           )}
 
+          {/* ── Sicherheitseinbehalt-Auflösung (Phase 2) ───────────────── */}
+          {openSeList.length > 0 && (
+            <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
+              <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Sicherheitseinbehalt-Auflösung</p>
+              <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+                Diese Abschlagsrechnungen haben Sicherheitseinbehalte, die mit dieser Rechnung aufgelöst werden können.
+                Standardmäßig sind alle ausgewählt (komplette Auflösung).
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {openSeList.map(e => (
+                  <label key={e.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={seReleaseSel.has(e.ID)}
+                      onChange={ev => {
+                        setSeReleaseSel(prev => {
+                          const next = new Set(prev)
+                          if (ev.target.checked) next.add(e.ID); else next.delete(e.ID)
+                          return next
+                        })
+                      }}
+                    />
+                    <span style={{ minWidth: 140 }}>
+                      Nr. <strong>{e.PARTIAL_PAYMENT_NUMBER || `#${e.ID}`}</strong>
+                      {e.PARTIAL_PAYMENT_DATE ? <span style={{ color: '#6b7280' }}> · {fmtDate(e.PARTIAL_PAYMENT_DATE)}</span> : null}
+                    </span>
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: '#15803d' }}>+ {fmtEur(e.SE_AMOUNT)}</span>
+                  </label>
+                ))}
+                {(() => {
+                  const selSum = openSeList.filter(e => seReleaseSel.has(e.ID)).reduce((s, e) => s + (e.SE_AMOUNT || 0), 0)
+                  return (
+                    <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(17,24,39,0.08)', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Σ Auflösung in dieser Rechnung</span>
+                      <strong style={{ color: '#15803d' }}>+ {fmtEur(selSum)}</strong>
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* Totals */}
           {dedTotals && (() => {
             const netAfterDiscAndSkonto = Math.round((base - totalDisc - cdAmt) * 100) / 100
             const hasDeductions = totalDisc > 0 || cdAmt > 0
+            const seReleaseSum = openSeList.filter(e => seReleaseSel.has(e.ID)).reduce((s, e) => s + (e.SE_AMOUNT || 0), 0)
+            const payable = Math.round((netAfterDiscAndSkonto + seReleaseSum) * 100) / 100
             return (
               <div className="billing-proposal-box" style={{ marginBottom: 14 }}>
                 <div className="bp-row"><span>Positionen Netto</span><strong>{fmtEur(dedTotals.phaseTotal)}</strong></div>
@@ -882,6 +944,14 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
                   </div>
                 )}
                 <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{fmtEur(netAfterDiscAndSkonto)}</strong></div>
+                {seReleaseSum > 0 && (
+                  <div className="bp-row" style={{ color: '#15803d' }}>
+                    <span>+ Auflösung Sicherheitseinbehalt (Brutto, bereits versteuert)</span><strong>+ {fmtEur(seReleaseSum)}</strong>
+                  </div>
+                )}
+                {seReleaseSum > 0 && (
+                  <div className="bp-row total"><span>Sofort fällig</span><strong>{fmtEur(payable)}</strong></div>
+                )}
               </div>
             )
           })()}
