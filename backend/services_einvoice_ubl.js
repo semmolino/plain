@@ -64,6 +64,24 @@ function buildBillingReferences(data) {
   return refs.join('\n');
 }
 
+// Sicherheitseinbehalt (Phase 4): human-readable Note explaining held / released SE.
+// VAT is intentionally NOT modified — SE is reflected only in PayableAmount (BT-115).
+function buildSecurityRetentionNote(data) {
+  const se = data.securityRetention;
+  if (!se || (!se.hasHeld && !se.hasRelease)) return '';
+  const lines = [];
+  if (se.hasHeld) {
+    const basisText = se.held.basis === 'NETTO' ? 'Netto' : 'Brutto';
+    const refText = se.legalReference ? ` gem. ${se.legalReference}` : '';
+    lines.push(`Sicherheitseinbehalt ${n2(se.held.percent)} % vom ${basisText}${refText}: ${n2(se.held.amount)} EUR. Dieser Betrag wird einbehalten und mit der Schluss-/Teilschlussrechnung aufgeloest.`);
+  }
+  if (se.hasRelease) {
+    const refs = (se.release.rows || []).map(r => `${r.number}: ${n2(r.amount)} EUR`).join('; ');
+    lines.push(`Aufloesung Sicherheitseinbehalt aus frueheren Abschlagsrechnungen (bereits versteuert): ${n2(se.release.total)} EUR${refs ? ` (${refs})` : ''}.`);
+  }
+  return `<cbc:Note>${x(lines.join(' '))}</cbc:Note>`;
+}
+
 function buildAllowanceCharges(data) {
   if (!data.allowances || data.allowances.length === 0) return '';
   const cur      = data.currency;
@@ -161,6 +179,7 @@ function generateUblXml(data) {
   ${data.dueDate ? `<cbc:DueDate>${x(data.dueDate)}</cbc:DueDate>` : ''}
   <cbc:InvoiceTypeCode>${x(typeCode)}</cbc:InvoiceTypeCode>
   ${data.comment ? `<cbc:Note>${x(data.comment)}</cbc:Note>` : ''}
+  ${buildSecurityRetentionNote(data)}
   <cbc:DocumentCurrencyCode>${x(cur)}</cbc:DocumentCurrencyCode>
   <cbc:BuyerReference>${x(data.buyerReference || '-')}</cbc:BuyerReference>
 

@@ -73,6 +73,21 @@ function buildNotes(data) {
   if (data.comment) {
     notes.push(`    <ram:IncludedNote><ram:Content>${x(data.comment)}</ram:Content></ram:IncludedNote>`);
   }
+  // Sicherheitseinbehalt (Phase 4) — human-readable note. VAT is unaffected.
+  const se = data.securityRetention;
+  if (se && (se.hasHeld || se.hasRelease)) {
+    const parts = [];
+    if (se.hasHeld) {
+      const basisText = se.held.basis === 'NETTO' ? 'Netto' : 'Brutto';
+      const refText = se.legalReference ? ` gem. ${se.legalReference}` : '';
+      parts.push(`Sicherheitseinbehalt ${n2(se.held.percent)} % vom ${basisText}${refText}: ${n2(se.held.amount)} EUR. Dieser Betrag wird einbehalten und mit der Schluss-/Teilschlussrechnung aufgeloest.`);
+    }
+    if (se.hasRelease) {
+      const refs = (se.release.rows || []).map(r => `${r.number}: ${n2(r.amount)} EUR`).join('; ');
+      parts.push(`Aufloesung Sicherheitseinbehalt aus frueheren Abschlagsrechnungen (bereits versteuert): ${n2(se.release.total)} EUR${refs ? ` (${refs})` : ''}.`);
+    }
+    notes.push(`    <ram:IncludedNote><ram:Content>${x(parts.join(' '))}</ram:Content></ram:IncludedNote>`);
+  }
   const regContent = [
     data.seller.name,
     data.seller.street,

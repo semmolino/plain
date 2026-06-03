@@ -301,8 +301,58 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   // Prepaid = gross already invoiced via prior ARs (Schlussrechnung only)
   const prepaidGross = fmt2(deductions.reduce((s, d) => s + d.grossAmount, 0));
-  // DuePayable = what remains to be paid now
-  const duePayable   = fmt2(grandTotal - prepaidGross);
+
+  // ── Sicherheitseinbehalt (Phase 4) ────────────────────────────────────────
+  // SE held in THIS doc → reduces payable (customer pays less).
+  // SE released by THIS doc → increases payable (customer pays more, gets prior SE back).
+  // VAT is NOT affected — kept in PayableAmount only.
+  const seHeldAmount    = toNum(doc.SE_AMOUNT ?? 0);
+  const seHeldPercent   = toNum(doc.SE_PERCENT ?? 0);
+  const seHeldBasis     = String(doc.SE_BASIS ?? '').trim() || null;   // 'BRUTTO' | 'NETTO'
+  const seReleaseTotal  = toNum(doc.SE_RELEASE_TOTAL ?? 0);
+
+  // Load released PARTIAL_PAYMENTs (Phase 2 link) for SE-release reason text
+  let seReleaseRows = [];
+  if (docType === 'INVOICE' && doc.ID) {
+    try {
+      const { data: rels } = await supabase
+        .from('PARTIAL_PAYMENT')
+        .select('ID, PARTIAL_PAYMENT_NUMBER, SE_AMOUNT')
+        .eq('SE_RELEASED_BY_INVOICE_ID', doc.ID);
+      seReleaseRows = (rels || []).map(r => ({
+        number: r.PARTIAL_PAYMENT_NUMBER || String(r.ID),
+        amount: fmt2(toNum(r.SE_AMOUNT ?? 0)),
+      }));
+    } catch (_) { /* schema may lack column */ }
+  }
+
+  // Legal reference text from CONTRACT
+  let seLegalReference = null;
+  if ((seHeldAmount > 0 || seReleaseTotal > 0) && doc.CONTRACT_ID) {
+    try {
+      const { data: c } = await supabase
+        .from('CONTRACT').select('SE_LEGAL_REFERENCE').eq('ID', doc.CONTRACT_ID).maybeSingle();
+      seLegalReference = c?.SE_LEGAL_REFERENCE ?? null;
+    } catch (_) { /* ignore */ }
+  }
+
+  const securityRetention = {
+    held: {
+      amount:  fmt2(seHeldAmount),
+      percent: seHeldPercent,
+      basis:   seHeldBasis,
+    },
+    release: {
+      total:   fmt2(seReleaseTotal),
+      rows:    seReleaseRows,
+    },
+    legalReference: seLegalReference,
+    hasHeld:    seHeldAmount > 0,
+    hasRelease: seReleaseTotal > 0,
+  };
+
+  // DuePayable = what remains to be paid now (with SE adjustments)
+  const duePayable   = fmt2(grandTotal - prepaidGross - seHeldAmount + seReleaseTotal);
 
   const vatBreakdown = [{
     rate: vatPercent, basis: taxBasis, amount: taxAmount, category: vatCategory,
@@ -372,6 +422,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     deductions,
     allowances,
     cashDiscount,
+    securityRetention,
 
     totals: {
       lineTotal,
