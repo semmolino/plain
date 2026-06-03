@@ -632,9 +632,28 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     contractRow = c2;
   }
 
+  // VAT resolution order:
+  //   1) Contract VAT_ID (when set)
+  //   2) TENANT_SETTINGS.default_vat_id (fallback)
+  // Without this fallback, ARs from contracts without VAT_ID got VAT_PERCENT=null
+  // and the wizard hid the MwSt-Zeile until the user saved & reopened.
+  let effectiveVatId = contractRow.VAT_ID ?? null;
+  if (!effectiveVatId) {
+    try {
+      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+      const tenantId = projT?.TENANT_ID ?? null;
+      if (tenantId) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("KEY, VALUE")
+          .eq("TENANT_ID", tenantId).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) effectiveVatId = Number(defVatId);
+      }
+    } catch (_) { /* settings missing — fall through */ }
+  }
   let contractVatPercent = null;
-  if (contractRow.VAT_ID) {
-    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", contractRow.VAT_ID).maybeSingle();
+  if (effectiveVatId) {
+    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", effectiveVatId).maybeSingle();
     contractVatPercent = vat?.VAT_PERCENT ?? null;
   }
 
@@ -669,7 +688,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     PROJECT_ID: projectId,
     CONTRACT_ID: contractId,
     CURRENCY_ID: contractRow.CURRENCY_ID ?? null,
-    VAT_ID: contractRow.VAT_ID ?? null,
+    VAT_ID: effectiveVatId,
     VAT_PERCENT: contractVatPercent,
     STATUS_ID: 1,
     COMPANY_NAME_1: company.COMPANY_NAME_1 ?? null,

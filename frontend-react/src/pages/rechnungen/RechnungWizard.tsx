@@ -103,9 +103,10 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
     if (initialDraft.d2Reason) setD2Reason(initialDraft.d2Reason)
     if (initialDraft.cashDiscPct > 0) { setShowSkonto(true); setCashDiscPct(String(initialDraft.cashDiscPct)) }
     if (initialDraft.cashDiscDays > 0) setCashDiscDays(String(initialDraft.cashDiscDays))
+    // Reopened drafts start at step 1 (Rechnungsdetails) — see AbschlagWizard.
     getInvoiceBillingProposal(initialDraft.id)
-      .then(r => { setProposal(r.data); setStep(3) })
-      .catch(() => setStep(3))
+      .then(r => { setProposal(r.data); setStep(1) })
+      .catch(() => setStep(1))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
