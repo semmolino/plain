@@ -1339,8 +1339,8 @@ async function getContractByProject(supabase, { projectId, tenantId }) {
       .limit(1)
       .maybeSingle();
 
-  const fullCols = "ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, SE_ENABLED, SE_PERCENT, SE_BASIS, SE_LEGAL_REFERENCE";
-  const basicCols = "ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS";
+  const fullCols = "ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, VAT_ID, SE_ENABLED, SE_PERCENT, SE_BASIS, SE_LEGAL_REFERENCE";
+  const basicCols = "ID, NAME_SHORT, NAME_LONG, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, VAT_ID";
 
   let { data, error } = await query("CONTRACT", fullCols);
   if (error && String(error.message || "").includes("SE_")) {
@@ -1385,6 +1385,9 @@ async function patchContract(supabase, { contractId, body }) {
   }
   if (body.CASH_DISCOUNT_DAYS !== undefined) {
     allowed.CASH_DISCOUNT_DAYS = body.CASH_DISCOUNT_DAYS === null || body.CASH_DISCOUNT_DAYS === "" ? null : parseInt(body.CASH_DISCOUNT_DAYS, 10);
+  }
+  if (body.VAT_ID !== undefined) {
+    allowed.VAT_ID = body.VAT_ID === null || body.VAT_ID === "" ? null : parseInt(body.VAT_ID, 10);
   }
   // Sicherheitseinbehalt (Phase 1)
   if (body.SE_ENABLED !== undefined) {
