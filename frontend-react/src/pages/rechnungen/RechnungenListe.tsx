@@ -248,7 +248,7 @@ const COLUMNS: ColDef[] = [
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-type SortKey = 'number' | 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
+type SortKey = 'number' | 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'seHeld' | 'payable' | 'paid' | 'open' | 'statusLabel'
 
 function SortTh({ label, k, sortKey, dir, onClick, className }: {
   label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'

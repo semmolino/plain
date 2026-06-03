@@ -1014,8 +1014,11 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                             </td>
                             <td className="num">{fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
                             <td className="num">{(() => {
-                              const rev = isParent ? aggMap.get(String(node.STRUCTURE_ID))?.revenue ?? 0 : Number(node.REVENUE ?? 0)
-                              const ext = isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras  ?? 0 : Number(node.EXTRAS  ?? 0)
+                              // Honorar + Zuschl. wird in der Vor-Spalte als node.REVENUE
+                              // angezeigt (gilt für Leaves wie Parents). Nebenkosten je
+                              // nach Ebene aus aggMap oder direkt aus node.EXTRAS.
+                              const rev = Number(node.REVENUE ?? 0)
+                              const ext = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.extras ?? 0) : Number(node.EXTRAS ?? 0)
                               return fmtEur(rev + ext)
                             })()}</td>
                             <td style={{ textAlign: 'center' }}>
