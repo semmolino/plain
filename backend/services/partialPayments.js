@@ -259,11 +259,17 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
 
   const map = new Map();
 
+  // STATUS_ID=2 = gebucht; STATUS_ID=3 = stornoiertes Original. Beide
+  // einbeziehen, damit Storno-Paare (Original=3 mit +X, Storno-Rechnung=2
+  // mit -X) auf 0 saldieren und nicht versehentlich nur die Storno-Hälfte
+  // zählt — sonst wird der "Empfohlene Leistungsbetrag" doppelt zu hoch.
+  const statusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
+
   // --- Amounts from booked PARTIAL_PAYMENT rows ---
   let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID");
   if (contractId !== null && contractId !== undefined) ppQ = ppQ.eq("CONTRACT_ID", contractId);
   else if (projectId !== null && projectId !== undefined) ppQ = ppQ.eq("PROJECT_ID", projectId);
-  if (bookedStatusId !== null && bookedStatusId !== undefined) ppQ = ppQ.eq("STATUS_ID", bookedStatusId);
+  if (bookedStatusId !== null && bookedStatusId !== undefined) ppQ = ppQ.in("STATUS_ID", statusIds);
   if (excludePartialPaymentId) ppQ = ppQ.neq("ID", excludePartialPaymentId);
 
   const { data: ppRows, error: ppErr } = await ppQ;
@@ -281,7 +287,7 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   }
 
   // --- Amounts from booked INVOICE rows (must also be subtracted) ---
-  let invQ = supabase.from("INVOICE").select("ID").eq("STATUS_ID", bookedStatusId);
+  let invQ = supabase.from("INVOICE").select("ID").in("STATUS_ID", statusIds);
   if (contractId !== null && contractId !== undefined) invQ = invQ.eq("CONTRACT_ID", contractId);
   else if (projectId !== null && projectId !== undefined) invQ = invQ.eq("PROJECT_ID", projectId);
 
