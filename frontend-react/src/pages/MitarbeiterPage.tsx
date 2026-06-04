@@ -1347,40 +1347,39 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
     return new Date(s).toLocaleDateString('de-DE')
   }
   function fmtDetails(d: Record<string, unknown>) {
-    if (!d) return ''
-    // Bekannte Felder ins Deutsche übersetzen + sinnvoll formatieren
+    if (!d) return '—'
     const parts: string[] = []
-    const dayTotal = d.dayTotal
-    if (typeof dayTotal === 'number') parts.push(`Tagessumme ${dayTotal.toFixed(2).replace('.', ',')} h`)
-    const dayWork = d.dayWork
-    if (typeof dayWork === 'number') parts.push(`Arbeit ${dayWork.toFixed(2).replace('.', ',')} h`)
-    const max = d.max
-    if (typeof max === 'number') parts.push(`Maximum ${max} h`)
-    const required = d.required
-    if (typeof required === 'number') parts.push(`erforderlich ${required} min`)
-    const current = d.current
-    if (typeof current === 'number') parts.push(`erfasst ${current} min`)
-    const breakRule = d.breakRule
-    if (typeof breakRule === 'string') parts.push(`Pausenregel: ${breakRule}`)
-    const restHours = d.restHours
-    if (typeof restHours === 'number') parts.push(`Ruhezeit ${restHours.toFixed(1).replace('.', ',')} h`)
-    const deductedMin = d.deductedMin
-    if (typeof deductedMin === 'number') parts.push(`Auto-Abzug ${deductedMin} min`)
-    const quantityInt = d.quantityInt
-    if (typeof quantityInt === 'number' && quantityInt > 0) parts.push(`${quantityInt.toFixed(2).replace('.', ',')} h`)
-    const entryKind = d.entryKind
-    if (typeof entryKind === 'string' && entryKind === 'BREAK') parts.push('Pause-Block')
+    const hHum = (n: number) => `${n.toFixed(2).replace('.', ',')} h`
+
+    // entryKind + quantityInt zusammen als "X h Projektzeit" / "X h Pause" zeigen
+    const entryKind   = d.entryKind
+    const quantityInt = typeof d.quantityInt === 'number' ? d.quantityInt : null
+    if (entryKind === 'BREAK') {
+      parts.push(quantityInt != null && quantityInt > 0 ? `${hHum(quantityInt)} Pause` : 'Pause-Block')
+    } else if (entryKind === 'WORK') {
+      parts.push(quantityInt != null && quantityInt > 0 ? `${hHum(quantityInt)} Projektzeit` : 'Arbeitsblock')
+    } else if (quantityInt != null && quantityInt > 0) {
+      parts.push(`${hHum(quantityInt)}`)
+    }
+
+    // ArbZG-spezifische Felder
+    if (typeof d.dayTotal === 'number')   parts.push(`Tagessumme ${hHum(d.dayTotal as number)}`)
+    if (typeof d.dayWork === 'number')    parts.push(`Arbeit heute ${hHum(d.dayWork as number)}`)
+    if (typeof d.max === 'number')        parts.push(`Maximum ${d.max} h`)
+    if (typeof d.required === 'number')   parts.push(`erforderlich ${d.required} min`)
+    if (typeof d.current === 'number')    parts.push(`erfasst ${d.current} min`)
+    if (typeof d.breakRule === 'string')  parts.push(`Pausenregel: ${d.breakRule}`)
+    if (typeof d.restHours === 'number')  parts.push(`Ruhezeit ${(d.restHours as number).toFixed(1).replace('.', ',')} h`)
+    if (typeof d.deductedMin === 'number') parts.push(`Auto-Abzug ${d.deductedMin} min`)
+
     const kind = d.kind
     if (typeof kind === 'string') {
       if (kind === 'BREAK_TAKEN_UNRECORDED') parts.push('Pause nachgetragen')
       else if (kind === 'ACCEPT_AUTO_DEDUCT') parts.push('Auto-Abzug akzeptiert')
-      else parts.push(kind)
+      // andere kind-Werte bewusst weggelassen — keine DB-Rohformate
     }
-    if (parts.length === 0) {
-      // Fallback: noch unbekannte Felder roh anzeigen
-      return Object.keys(d).slice(0, 3).map(k => `${k}: ${String(d[k])}`).join(' · ')
-    }
-    return parts.join(' · ')
+
+    return parts.length > 0 ? parts.join(' · ') : '—'
   }
 
   const toast = useToast()
