@@ -39,7 +39,12 @@ function StepIndicator({ step, onStepClick }: { step: number; onStepClick: (i: n
 
 interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; d1Pct: number; d2Pct: number; d1Reason: string | null; d2Reason: string | null; cashDiscPct: number; cashDiscDays: number }
 
-export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } = {}) {
+export function RechnungWizard({ initialDraft, initialProjectId, initialProjectLabel, onPrefillConsumed }: {
+  initialDraft?: DraftResume
+  initialProjectId?: number
+  initialProjectLabel?: string
+  onPrefillConsumed?: () => void
+} = {}) {
   const qc = useQueryClient()
   const [step,         setStep]         = useState(0)
   const [draftId,      setDraftId]      = useState<number | null>(null)
@@ -90,7 +95,14 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
 
   // Resume existing draft passed from the invoice list
   useEffect(() => {
-    if (!initialDraft) return
+    if (!initialDraft) {
+      if (initialProjectId && initialProjectLabel) {
+        setProjectId(initialProjectId)
+        setProjectLabel(initialProjectLabel)
+        onPrefillConsumed?.()
+      }
+      return
+    }
     isResumeRef.current = true
     setDraftId(initialDraft.id)
     setProjectId(initialDraft.projectId)
