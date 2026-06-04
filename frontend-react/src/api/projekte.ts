@@ -322,6 +322,7 @@ export const fetchBuchungen = (projectId: number) =>
 
 export interface UpdateBuchungPayload {
   EMPLOYEE_ID?:         number
+  PROJECT_ID?:          number | null
   STRUCTURE_ID?:        number | null
   DATE_VOUCHER?:        string
   TIME_START?:          string
