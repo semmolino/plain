@@ -329,6 +329,150 @@ async function evaluateAfterTecChange(supabase, { tenantId, projectId, structure
   await evaluateScopes(supabase, { tenantId, projectId, structureIds: fullScope, triggerEmployeeId, triggerTecId });
 }
 
+// ── CRUD / Tab-Daten ────────────────────────────────────────────────────────
+
+async function listRulesForProject(supabase, { tenantId, projectId }) {
+  // Alle Regeln dieses Projekts (Projekt-Ebene + alle Strukturen darunter)
+  const { data: structures } = await supabase
+    .from('PROJECT_STRUCTURE').select('ID').eq('PROJECT_ID', projectId);
+  const sids = (structures || []).map(s => s.ID);
+  const orParts = [`PROJECT_ID.eq.${projectId}`];
+  if (sids.length > 0) orParts.push(`STRUCTURE_ID.in.(${sids.join(',')})`);
+  const { data, error } = await supabase
+    .from('BUDGET_WARNING_RULE').select('*')
+    .eq('TENANT_ID', tenantId)
+    .or(orParts.join(','))
+    .order('STRUCTURE_ID', { ascending: true, nullsFirst: true })
+    .order('THRESHOLD_PCT', { ascending: true });
+  if (error) throw { status: 500, message: error.message };
+  return data || [];
+}
+
+async function listRecentFiredForProject(supabase, { tenantId, projectId, limit = 20 }) {
+  const rules = await listRulesForProject(supabase, { tenantId, projectId });
+  const ids = rules.map(r => r.ID);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from('BUDGET_WARNING_FIRED').select('*')
+    .in('RULE_ID', ids)
+    .order('FIRED_AT', { ascending: false })
+    .limit(limit);
+  if (error) throw { status: 500, message: error.message };
+  return data || [];
+}
+
+async function getProjectOverview(supabase, { tenantId, projectId }) {
+  const project = await loadProjectMeta(supabase, projectId);
+  if (!project) throw { status: 404, message: 'Projekt nicht gefunden' };
+
+  const projAgg = await projectAggregate(supabase, projectId);
+  const { nodes, childrenOf } = await loadProjectTree(supabase, projectId);
+  const cache = new Map();
+  const structures = Array.from(nodes.values()).map(n => {
+    const agg = aggregateSubtree(String(n.ID), nodes, childrenOf, cache);
+    return {
+      ID:        n.ID,
+      FATHER_ID: n.FATHER_ID,
+      budget:    agg.budget,
+      verbrauch: agg.verbrauch,
+    };
+  });
+
+  const rules = await listRulesForProject(supabase, { tenantId, projectId });
+  const fired = await listRecentFiredForProject(supabase, { tenantId, projectId, limit: 50 });
+
+  return {
+    project: {
+      ID: project.ID,
+      NAME_SHORT: project.NAME_SHORT,
+      NAME_LONG:  project.NAME_LONG,
+      PROJECT_MANAGER_ID: project.PROJECT_MANAGER_ID,
+      BUDGET_WARNINGS_MUTED: !!project.BUDGET_WARNINGS_MUTED,
+    },
+    projectAggregate: projAgg,
+    structures,
+    rules,
+    fired,
+  };
+}
+
+async function createRule(supabase, { tenantId, projectId, body, employeeId }) {
+  const b = body || {};
+  const pct = Number(b.threshold_pct);
+  if (!Number.isFinite(pct) || pct <= 0 || pct > 500) {
+    throw { status: 400, message: 'threshold_pct muss > 0 und <= 500 sein' };
+  }
+  const structureId = b.structure_id != null && b.structure_id !== '' ? Number(b.structure_id) : null;
+  // Scope-Check: STRUCTURE_ID muss im Projekt liegen, sonst Projekt-Regel
+  if (structureId != null) {
+    const { data: s } = await supabase
+      .from('PROJECT_STRUCTURE').select('ID, PROJECT_ID').eq('ID', structureId).maybeSingle();
+    if (!s || Number(s.PROJECT_ID) !== Number(projectId)) {
+      throw { status: 400, message: 'STRUCTURE_ID gehört nicht zum Projekt' };
+    }
+  }
+  const row = {
+    TENANT_ID:     tenantId,
+    PROJECT_ID:    structureId == null ? Number(projectId) : null,
+    STRUCTURE_ID:  structureId,
+    THRESHOLD_PCT: pct,
+    NOTIFY_PM:     b.notify_pm     !== false,
+    NOTIFY_BOOKER: b.notify_booker !== false,
+    NOTIFY_CC:     Array.isArray(b.notify_cc) ? b.notify_cc.map(Number).filter(Number.isFinite) : null,
+    MUTED:         !!b.muted,
+    CREATED_BY:    employeeId ?? null,
+  };
+  const { data, error } = await supabase
+    .from('BUDGET_WARNING_RULE').insert([row]).select('*').single();
+  if (error) throw { status: 500, message: error.message };
+  return data;
+}
+
+async function updateRule(supabase, { tenantId, ruleId, body }) {
+  const b = body || {};
+  const patch = {};
+  if (b.threshold_pct !== undefined) {
+    const pct = Number(b.threshold_pct);
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 500) {
+      throw { status: 400, message: 'threshold_pct muss > 0 und <= 500 sein' };
+    }
+    patch.THRESHOLD_PCT = pct;
+  }
+  if (b.notify_pm     !== undefined) patch.NOTIFY_PM     = !!b.notify_pm;
+  if (b.notify_booker !== undefined) patch.NOTIFY_BOOKER = !!b.notify_booker;
+  if (b.notify_cc     !== undefined) {
+    patch.NOTIFY_CC = Array.isArray(b.notify_cc)
+      ? b.notify_cc.map(Number).filter(Number.isFinite) : null;
+  }
+  if (b.muted !== undefined) patch.MUTED = !!b.muted;
+  if (Object.keys(patch).length === 0) {
+    throw { status: 400, message: 'Keine Felder zum Aktualisieren' };
+  }
+  const { data, error } = await supabase
+    .from('BUDGET_WARNING_RULE').update(patch)
+    .eq('ID', ruleId).eq('TENANT_ID', tenantId)
+    .select('*').single();
+  if (error) throw { status: 500, message: error.message };
+  return data;
+}
+
+async function deleteRule(supabase, { tenantId, ruleId }) {
+  const { error } = await supabase
+    .from('BUDGET_WARNING_RULE').delete()
+    .eq('ID', ruleId).eq('TENANT_ID', tenantId);
+  if (error) throw { status: 500, message: error.message };
+  return { ok: true };
+}
+
+async function setProjectMute(supabase, { tenantId, projectId, muted }) {
+  const { data, error } = await supabase
+    .from('PROJECT').update({ BUDGET_WARNINGS_MUTED: !!muted })
+    .eq('ID', projectId).eq('TENANT_ID', tenantId)
+    .select('ID, BUDGET_WARNINGS_MUTED').single();
+  if (error) throw { status: 500, message: error.message };
+  return data;
+}
+
 module.exports = {
   // Public API für andere Services
   evaluateAfterTecChange,
@@ -338,4 +482,12 @@ module.exports = {
   loadProjectTree,
   aggregateSubtree,
   getSettings,
+  // CRUD / Tab-Daten
+  getProjectOverview,
+  listRulesForProject,
+  listRecentFiredForProject,
+  createRule,
+  updateRule,
+  deleteRule,
+  setProjectMute,
 };

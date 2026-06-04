@@ -58,6 +58,7 @@ const angeboteRoutes         = require("./routes/angebote")(supabase);
 const kostensatzRoutes       = require("./routes/kostensatz")(supabase);
 const mahnungenRoutes        = require("./routes/mahnungen")(supabase);
 const arbzgRoutes            = require("./routes/arbzg")(supabase);
+const budgetWarningsRoutes   = require("./routes/budgetWarnings")(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
 const { startMonatsabschlussChecker } = require("./services/monatsabschluss");
 const { startMahnungChecker } = require("./services/mahnungChecker");
@@ -81,6 +82,7 @@ app.use("/api/v1/angebote",          authMiddleware, angeboteRoutes);
 app.use("/api/v1/kostensatz",        authMiddleware, kostensatzRoutes);
 app.use("/api/v1/mahnungen",         authMiddleware, mahnungenRoutes);
 app.use("/api/v1/arbzg",             authMiddleware, arbzgRoutes);
+app.use("/api/v1/budget-warnings",   authMiddleware, budgetWarningsRoutes);
 
 
 
