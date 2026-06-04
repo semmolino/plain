@@ -151,12 +151,9 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
       if (list.length === 1) {
         setContractId(list[0].ID)
         setContractLabel(`${list[0].NAME_SHORT} – ${list[0].NAME_LONG}`)
-        const se = contractSeRef.current.get(list[0].ID)
-        if (se?.enabled) {
-          setSeEnabled(true)
-          if (se.pct != null) setSePct(String(se.pct))
-          setSeBasis(se.basis)
-        }
+        // Sicherheitseinbehalt wird in der "Rechnung" (Einzelrechnung) nicht
+        // genutzt — siehe Buchen-Schritt. State bleibt false, alle se_*-Felder
+        // werden mit null gepatcht, kein SE-Abzug.
       } else {
         setContractId(null); setContractLabel('')
       }
@@ -390,12 +387,8 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
                 }
                 const cid = Number(id)
                 setContractId(cid); setContractLabel(label)
-                const se = contractSeRef.current.get(cid)
-                if (se?.enabled) {
-                  setSeEnabled(true)
-                  if (se.pct != null) setSePct(String(se.pct))
-                  setSeBasis(se.basis)
-                }
+                // SE-Defaults aus dem Vertrag werden in der "Rechnung" ignoriert
+                // — Einzelrechnung hat keinen SE-Lebenszyklus.
               }}
               search={async q => {
                 if (!projectId) return []
