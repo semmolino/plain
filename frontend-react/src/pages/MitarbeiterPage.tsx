@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
 import { Message }     from '@/components/ui/Message'
@@ -19,6 +19,8 @@ import {
   type MonthCloseOverviewEmployee, type DayBooking, type EmployeeReportRow,
 } from '@/api/mitarbeiter'
 import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
+import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeverity } from '@/api/arbzg'
+import { updateBuchung, deleteBuchung } from '@/api/projekte'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,7 @@ const TABS = [
   { id: 'create',    label: 'Anlegen'          },
   { id: 'reporting', label: 'Reporting'        },
   { id: 'overview',  label: 'Monatsübersicht'  },
+  { id: 'arbzg',     label: 'ArbZG-Auditlog'   },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -837,6 +840,76 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
   const [viewMode, setViewMode] = useState<'month' | 'running'>('month')
   const [closeLoading, setCloseLoading] = useState(false)
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+  const [editBooking, setEditBooking] = useState<DayBooking | null>(null)
+  const [editSiblings, setEditSiblings] = useState<DayBooking[]>([])
+  const [editStart,   setEditStart]   = useState('')
+  const [editFinish,  setEditFinish]  = useState('')
+  const [editQty,     setEditQty]     = useState('')
+  const [editDesc,    setEditDesc]    = useState('')
+
+  function openEditBooking(b: DayBooking, sameDay: DayBooking[]) {
+    setEditBooking(b)
+    setEditSiblings(sameDay.filter(x => x.id !== b.id))
+    setEditStart(b.time_start ?? '')
+    setEditFinish(b.time_finish ?? '')
+    setEditQty(String(b.hours ?? 0))
+    setEditDesc(b.description ?? '')
+  }
+
+  // Erkennt Überschneidung mit anderen Buchungen desselben Tages.
+  // Liefert die Liste der überlappenden Geschwister (leer = kein Konflikt).
+  function detectOverlaps(start: string, finish: string): DayBooking[] {
+    const s = start.slice(0, 5), f = finish.slice(0, 5)
+    if (!s || !f) return []
+    const [sh, sm] = s.split(':').map(Number)
+    const [fh, fm] = f.split(':').map(Number)
+    const a1 = sh * 60 + sm, a2 = fh * 60 + fm
+    if (a2 <= a1) return []
+    return editSiblings.filter(x => {
+      if (!x.time_start || !x.time_finish) return false
+      const [bsh, bsm] = x.time_start.slice(0, 5).split(':').map(Number)
+      const [bfh, bfm] = x.time_finish.slice(0, 5).split(':').map(Number)
+      const b1 = bsh * 60 + bsm, b2 = bfh * 60 + bfm
+      // Klassische Intervall-Überschneidung: a1 < b2 && b1 < a2
+      return a1 < b2 && b1 < a2
+    })
+  }
+
+  const patchBookingMut = useMutation({
+    mutationFn: async () => {
+      if (!editBooking) return
+      // PATCH-Semantik: nur die wirklich geänderten Felder schicken. DATE_VOUCHER,
+      // CP_RATE etc. bleiben so unverändert in der DB. Ohne diesen Trimm
+      // setzte das Backend DATE_VOUCHER auf NULL → Buchung war aus der
+      // Monatsübersicht verschwunden.
+      const qty = Number(editQty.replace(',', '.')) || 0
+      await updateBuchung(editBooking.id, {
+        TIME_START:   editStart  ? `${editStart}:00`  : '',
+        TIME_FINISH:  editFinish ? `${editFinish}:00` : '',
+        QUANTITY_INT: qty,
+        QUANTITY_EXT: qty,
+        POSTING_DESCRIPTION: editDesc,
+      })
+    },
+    onSuccess: () => {
+      toast.success('Buchung aktualisiert')
+      setEditBooking(null)
+      void qc.invalidateQueries({ queryKey: ['emp-balance-month'] })
+      void qc.invalidateQueries({ queryKey: ['emp-balance-running'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const deleteBookingMut = useMutation({
+    mutationFn: (id: number) => deleteBuchung(id),
+    onSuccess: () => {
+      toast.success('Buchung gelöscht')
+      setEditBooking(null)
+      void qc.invalidateQueries({ queryKey: ['emp-balance-month'] })
+      void qc.invalidateQueries({ queryKey: ['emp-balance-running'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   function toggleDay(date: string) {
     setExpandedDays(prev => {
@@ -1023,9 +1096,16 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                             </td>
                           </tr>
                           {isExpanded && (d.bookings as DayBooking[]).map(b => (
-                            <tr key={`bk-${b.id}`} style={{ background: '#f0f9ff' }}>
+                            <tr key={`bk-${b.id}`} style={{ background: '#f0f9ff', cursor: 'pointer' }}
+                                title="Klicken zum Bearbeiten"
+                                onClick={() => openEditBooking(b, d.bookings as DayBooking[])}>
                               <td></td>
                               <td colSpan={2} style={{ color: '#0369a1', fontSize: 11, paddingLeft: 12 }}>
+                                {b.time_start && b.time_finish && (
+                                  <span style={{ color: '#6b7280', marginRight: 6 }}>
+                                    {b.time_start.slice(0, 5)}–{b.time_finish.slice(0, 5)}
+                                  </span>
+                                )}
                                 {b.project}{b.structure ? ` / ${b.structure}` : ''}
                               </td>
                               <td colSpan={2} style={{ color: '#374151', fontSize: 11 }}>{b.description}</td>
@@ -1084,6 +1164,100 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
       )}
       </div>
       )}
+
+      <Modal open={editBooking !== null} onClose={() => setEditBooking(null)}
+        title={`Buchung bearbeiten`}>
+        {editBooking && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+              {editBooking.project}{editBooking.structure ? ` / ${editBooking.structure}` : ''}
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Zeit Start</label>
+                <input type="time" value={editStart.slice(0, 5)}
+                  onChange={e => {
+                    const v = e.target.value
+                    setEditStart(v)
+                    const f = editFinish.slice(0, 5)
+                    if (v && f) {
+                      const [sh, sm] = v.split(':').map(Number)
+                      const [fh, fm] = f.split(':').map(Number)
+                      const min = Math.max(0, (fh * 60 + fm) - (sh * 60 + sm))
+                      setEditQty((Math.round(min / 60 * 100) / 100).toString().replace('.', ','))
+                    }
+                  }} />
+              </div>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Zeit Ende</label>
+                <input type="time" value={editFinish.slice(0, 5)}
+                  onChange={e => {
+                    const v = e.target.value
+                    setEditFinish(v)
+                    const s = editStart.slice(0, 5)
+                    if (s && v) {
+                      const [sh, sm] = s.split(':').map(Number)
+                      const [fh, fm] = v.split(':').map(Number)
+                      const min = Math.max(0, (fh * 60 + fm) - (sh * 60 + sm))
+                      setEditQty((Math.round(min / 60 * 100) / 100).toString().replace('.', ','))
+                    }
+                  }} />
+              </div>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Stunden</label>
+                <input type="number" step="0.25" min={0} value={editQty}
+                  onChange={e => setEditQty(e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Beschreibung</label>
+              <input type="text" value={editDesc}
+                onChange={e => setEditDesc(e.target.value)} />
+            </div>
+            {(() => {
+              const overlaps = detectOverlaps(editStart, editFinish)
+              if (overlaps.length === 0) {
+                return (
+                  <p style={{ fontSize: 11, color: '#92400e', background: 'rgba(245,158,11,0.08)',
+                              padding: '6px 10px', borderRadius: 6, margin: 0 }}>
+                    ⚠ Änderungen wirken sich auf das Zeitkonto, Projektkosten und ggf. das ArbZG-Audit aus.
+                  </p>
+                )
+              }
+              return (
+                <p style={{ fontSize: 12, color: '#7f1d1d', background: 'rgba(220,38,38,0.08)',
+                            padding: '8px 12px', borderRadius: 6, margin: 0,
+                            border: '1px solid rgba(220,38,38,0.25)' }}>
+                  <strong>Zeitliche Überschneidung</strong> mit {overlaps.length === 1 ? '1 Buchung' : `${overlaps.length} Buchungen`} desselben Tages:
+                  <span style={{ display: 'block', marginTop: 4, fontSize: 11 }}>
+                    {overlaps.map(o => (
+                      <span key={o.id} style={{ display: 'block' }}>
+                        {o.time_start?.slice(0, 5)}–{o.time_finish?.slice(0, 5)} · {o.project}
+                        {o.structure ? ` / ${o.structure}` : ''}
+                      </span>
+                    ))}
+                  </span>
+                </p>
+              )
+            })()}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 4 }}>
+              <button className="btn-small btn-danger" disabled={deleteBookingMut.isPending}
+                onClick={() => deleteBookingMut.mutate(editBooking.id)}>
+                {deleteBookingMut.isPending ? '…' : 'Löschen'}
+              </button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn-small" onClick={() => setEditBooking(null)}>Abbrechen</button>
+                <button className="btn-small btn-save"
+                  disabled={patchBookingMut.isPending || detectOverlaps(editStart, editFinish).length > 0}
+                  title={detectOverlaps(editStart, editFinish).length > 0 ? 'Zeitliche Überschneidung beheben' : ''}
+                  onClick={() => patchBookingMut.mutate()}>
+                  {patchBookingMut.isPending ? 'Speichert…' : 'Speichern'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -1158,6 +1332,227 @@ function MonthsOverviewTab() {
       <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
         ✓ Abgeschlossen &nbsp;·&nbsp; ○ Offen &nbsp;·&nbsp; Klicken zum Umschalten
       </p>
+    </div>
+  )
+}
+
+// ── ArbZG-Auditlog ────────────────────────────────────────────────────────────
+
+const EVENT_TYPES = [
+  { value: '',                    label: '— alle Ereignisse —' },
+  { value: 'BOOKING_CONFIRMED',   label: 'Buchung freigegeben' },
+  { value: 'OVER_8H',             label: '> 8 Stunden (§ 16 Abs. 2)' },
+  { value: 'OVER_10H',            label: '> 10 Stunden (§ 3 ArbZG)' },
+  { value: 'OVER_8H_MINOR',       label: '> 8 Stunden (U18, JArbSchG)' },
+  { value: 'BREAK_MISSING',       label: 'Pflichtpause fehlt' },
+  { value: 'REST_LT_11H',         label: 'Ruhezeit unterschritten' },
+  { value: 'SUNDAY_WORK',         label: 'Sonntagsarbeit' },
+  { value: 'HOLIDAY_WORK',        label: 'Feiertagsarbeit' },
+  { value: 'PAUSE_AUTO_DEDUCT',   label: 'Auto-Pausenabzug' },
+  { value: 'MANUAL_OVERRIDE',     label: 'Manueller Override' },
+]
+const SEVERITIES: Array<{ value: '' | ArbzgSeverity; label: string }> = [
+  { value: '',      label: '— alle —' },
+  { value: 'INFO',  label: 'Info' },
+  { value: 'WARN',  label: 'Warnung' },
+  { value: 'BLOCK', label: 'Blockade' },
+]
+const EVENT_LABEL: Record<string, string> = Object.fromEntries(
+  EVENT_TYPES.filter(e => e.value).map(e => [e.value, e.label])
+)
+
+function sevBadge(s: ArbzgSeverity) {
+  const style: Record<ArbzgSeverity, React.CSSProperties> = {
+    INFO:  { background: 'rgba(59,130,246,0.12)',  color: '#1e40af' },
+    WARN:  { background: 'rgba(245,158,11,0.15)',  color: '#92400e' },
+    BLOCK: { background: 'rgba(220,38,38,0.13)',   color: '#7f1d1d' },
+  }
+  return (
+    <span style={{ ...style[s], display: 'inline-block', padding: '2px 8px',
+                    borderRadius: 10, fontSize: 11, fontWeight: 600 }}>
+      {s}
+    </span>
+  )
+}
+
+function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
+  const [empId,    setEmpId]    = useState<number | ''>('')
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    return d.toISOString().slice(0, 10)
+  })
+  const [dateTo,   setDateTo]   = useState<string>(() => new Date().toISOString().slice(0, 10))
+  const [evtType,  setEvtType]  = useState<string>('')
+  const [sev,      setSev]      = useState<'' | ArbzgSeverity>('')
+
+  const params = useMemo(() => ({
+    employee_id: empId === '' ? undefined : Number(empId),
+    date_from:   dateFrom || undefined,
+    date_to:     dateTo   || undefined,
+    event_type:  evtType  || undefined,
+    severity:    sev      || undefined,
+  }), [empId, dateFrom, dateTo, evtType, sev])
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['arbzg-audit', params],
+    queryFn:  () => fetchArbzgAudit(params),
+  })
+
+  const rows: AuditEntry[] = data?.data ?? []
+  const warning = data?.warning
+
+  const empMap = useMemo(() => new Map(employees.map(e => [e.ID, e])), [employees])
+
+  function fmtDateTime(s: string) {
+    const d = new Date(s)
+    return isNaN(d.getTime()) ? s : d.toLocaleString('de-DE')
+  }
+  function fmtDate(s: string) {
+    return new Date(s).toLocaleDateString('de-DE')
+  }
+  function fmtDetails(d: Record<string, unknown>) {
+    if (!d) return '—'
+    const parts: string[] = []
+    const hHum = (n: number) => `${n.toFixed(2).replace('.', ',')} h`
+
+    // entryKind + quantityInt zusammen als "X h Projektzeit" / "X h Pause" zeigen
+    const entryKind   = d.entryKind
+    const quantityInt = typeof d.quantityInt === 'number' ? d.quantityInt : null
+    if (entryKind === 'BREAK') {
+      parts.push(quantityInt != null && quantityInt > 0 ? `${hHum(quantityInt)} Pause` : 'Pause-Block')
+    } else if (entryKind === 'WORK') {
+      parts.push(quantityInt != null && quantityInt > 0 ? `${hHum(quantityInt)} Projektzeit` : 'Arbeitsblock')
+    } else if (quantityInt != null && quantityInt > 0) {
+      parts.push(`${hHum(quantityInt)}`)
+    }
+
+    // ArbZG-spezifische Felder
+    if (typeof d.dayTotal === 'number')   parts.push(`Tagessumme ${hHum(d.dayTotal as number)}`)
+    if (typeof d.dayWork === 'number')    parts.push(`Arbeit heute ${hHum(d.dayWork as number)}`)
+    if (typeof d.max === 'number')        parts.push(`Maximum ${d.max} h`)
+    if (typeof d.required === 'number')   parts.push(`erforderlich ${d.required} min`)
+    if (typeof d.current === 'number')    parts.push(`erfasst ${d.current} min`)
+    if (typeof d.breakRule === 'string')  parts.push(`Pausenregel: ${d.breakRule}`)
+    if (typeof d.restHours === 'number')  parts.push(`Ruhezeit ${(d.restHours as number).toFixed(1).replace('.', ',')} h`)
+    if (typeof d.deductedMin === 'number') parts.push(`Auto-Abzug ${d.deductedMin} min`)
+
+    const kind = d.kind
+    if (typeof kind === 'string') {
+      if (kind === 'BREAK_TAKEN_UNRECORDED') parts.push('Pause nachgetragen')
+      else if (kind === 'ACCEPT_AUTO_DEDUCT') parts.push('Auto-Abzug akzeptiert')
+      // andere kind-Werte bewusst weggelassen — keine DB-Rohformate
+    }
+
+    return parts.length > 0 ? parts.join(' · ') : '—'
+  }
+
+  const toast = useToast()
+  async function handleExport() {
+    try {
+      await downloadArbzgAuditCsv({
+        employee_id: empId === '' ? undefined : Number(empId),
+        date_from:   dateFrom || undefined,
+        date_to:     dateTo   || undefined,
+      })
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 1100 }}>
+      <p className="admin-section-hint" style={{ marginBottom: 14 }}>
+        Audit-Log der ArbZG-Ereignisse — Pflichtarchiv nach § 16 Abs. 2 ArbZG (2 Jahre).
+        Datensätze sind gegen Löschen und Manipulation geschützt.
+      </p>
+
+      <div className="pl-toolbar" style={{ marginBottom: 12 }}>
+        <select className="list-search" value={empId}
+          onChange={e => setEmpId(e.target.value === '' ? '' : Number(e.target.value))}
+          style={{ minWidth: 200, maxWidth: 240 }}>
+          <option value="">— Alle Mitarbeiter —</option>
+          {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+        </select>
+        <label style={{ fontSize: 12 }}>Von
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            style={{ marginLeft: 4 }} />
+        </label>
+        <label style={{ fontSize: 12 }}>Bis
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            style={{ marginLeft: 4 }} />
+        </label>
+        <select value={evtType} onChange={e => setEvtType(e.target.value)}
+          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}>
+          {EVENT_TYPES.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+        </select>
+        <select value={sev} onChange={e => setSev(e.target.value as '' | ArbzgSeverity)}
+          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}>
+          {SEVERITIES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        <button type="button" className="btn-small btn-save"
+          style={{ marginLeft: 'auto' }} onClick={handleExport}>
+          ↓ CSV-Export
+        </button>
+      </div>
+
+      {warning && (
+        <p style={{ fontSize: 12, color: '#92400e', background: 'rgba(245,158,11,0.08)',
+                    border: '1px solid rgba(245,158,11,0.25)', borderRadius: 6,
+                    padding: '8px 12px', marginBottom: 12 }}>
+          ⚠ {warning}
+        </p>
+      )}
+
+      {isLoading && <p className="empty-note">Laden…</p>}
+
+      {!isLoading && rows.length === 0 && !warning && (
+        <p className="empty-note">Keine Einträge für die gewählten Filter.</p>
+      )}
+
+      {!isLoading && rows.length > 0 && (
+        <div className="list-section table-scroll">
+          <table className="master-table">
+            <thead>
+              <tr>
+                <th>Mitarbeiter</th>
+                <th>Datum</th>
+                <th>Ereignis</th>
+                <th>Schwere</th>
+                <th>Details</th>
+                <th>Erfasst</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => {
+                const emp = empMap.get(r.EMPLOYEE_ID)
+                return (
+                  <tr key={r.ID}>
+                    <td>
+                      <strong>{emp?.SHORT_NAME ?? `#${r.EMPLOYEE_ID}`}</strong>
+                      {emp && <span style={{ display: 'block', fontSize: 11, color: '#6b7280' }}>
+                        {emp.FIRST_NAME} {emp.LAST_NAME}
+                      </span>}
+                    </td>
+                    <td>{fmtDate(r.DATE_VOUCHER)}</td>
+                    <td>{EVENT_LABEL[r.EVENT_TYPE] ?? r.EVENT_TYPE}</td>
+                    <td>{sevBadge(r.SEVERITY)}</td>
+                    <td style={{ fontSize: 12, color: '#374151' }}>{fmtDetails(r.DETAILS || {})}</td>
+                    <td style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                      {fmtDateTime(r.CREATED_AT)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+          {rows.length} Einträge · limitiert auf 1.000 — bei mehr Treffern Filter verfeinern.
+        </p>
+      )}
     </div>
   )
 }
@@ -1456,6 +1851,10 @@ export function MitarbeiterPage() {
 
         {tab === 'overview' && (
           <MonthsOverviewTab />
+        )}
+
+        {tab === 'arbzg' && (
+          <ArbzgAuditTab employees={employees} />
         )}
       </div>
 

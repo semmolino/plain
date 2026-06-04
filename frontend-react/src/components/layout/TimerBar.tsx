@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTimerStore, elapsedSeconds, formatDuration, formatDurationHuman, quantityFromSeconds } from '@/store/timerStore'
 import type { TimerSession } from '@/store/timerStore'
 import { fetchActiveEmployees, fetchProjectsShort, fetchProjectStructure } from '@/api/projekte'
 import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
 import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraft } from '@/api/timer'
+import type { DraftEntry } from '@/api/timer'
+import { fetchArbzgLimits } from '@/api/arbzg'
+import type { ArbzgLimits, BreakConfirmation, BreakConfirmationMap } from '@/api/arbzg'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
@@ -365,6 +368,8 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
   const [editRow,    setEditRow]    = useState<EditingRow | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [error,      setError]      = useState<string | null>(null)
+  const [breakChoice, setBreakChoice] = useState<'auto' | 'manual'>('auto')
+  const [breakManualMin, setBreakManualMin] = useState<string>('')
 
   const today = nowDateIso()
 
@@ -374,9 +379,41 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
     enabled: !!employeeId,
     refetchOnWindowFocus: false,
   })
+  const { data: limitsData } = useQuery({
+    queryKey: ['arbzg-limits', employeeId, today],
+    queryFn: () => fetchArbzgLimits(employeeId!, today),
+    enabled: !!employeeId,
+    refetchOnWindowFocus: false,
+  })
 
-  const drafts = draftsData?.data ?? []
-  const totalH = drafts.reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)
+  const drafts = (draftsData?.data ?? []) as DraftEntry[]
+  const totalH = drafts
+    .filter(d => (d.ENTRY_KIND ?? 'WORK') === 'WORK')
+    .reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)
+
+  // ── ArbZG-Auswertung der Drafts ───────────────────────────────────────
+  const limits = limitsData?.data as ArbzgLimits | undefined
+  const breakAnalysis = useMemo(() => {
+    if (!limits?.settings.enabled || !limits.settings.checkBreakRequired) return null
+    const dayWork = drafts
+      .filter(d => (d.ENTRY_KIND ?? 'WORK') === 'WORK')
+      .reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)
+    const breakMin = drafts
+      .filter(d => d.ENTRY_KIND === 'BREAK')
+      .reduce((s, d) => s + Math.round(Number(d.QUANTITY_INT ?? 0) * 60), 0)
+    const br = limits.breakRule
+    const required = dayWork > Number(br.T2_HOURS) ? Number(br.T2_BREAK_MIN)
+                   : dayWork > Number(br.T1_HOURS) ? Number(br.T1_BREAK_MIN)
+                   : 0
+    const missing  = Math.max(0, required - breakMin)
+    return { dayWork, breakMin, required, missing, breakRule: br }
+  }, [drafts, limits])
+
+  const dayKey = employeeId ? `${employeeId}|${today}` : ''
+  const needsBreakConfirm =
+    !!limits?.settings.autoBreakRequireConfirm &&
+    !!breakAnalysis &&
+    breakAnalysis.missing > 0
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteTimerDraft(id),
@@ -434,13 +471,26 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
     setConfirming(true)
     setError(null)
     try {
-      await confirmDrafts(drafts.map(d => d.ID))
+      const confirmations: BreakConfirmationMap = {}
+      if (needsBreakConfirm && dayKey && breakAnalysis) {
+        const c: BreakConfirmation = breakChoice === 'manual'
+          ? { kind: 'BREAK_TAKEN_UNRECORDED',
+              minutes: Number(breakManualMin) || breakAnalysis.missing }
+          : { kind: 'ACCEPT_AUTO_DEDUCT' }
+        confirmations[dayKey] = c
+      }
+      await confirmDrafts(drafts.map(d => d.ID), confirmations)
       void qc.invalidateQueries({ queryKey: ['buchungen'] })
       void qc.invalidateQueries({ queryKey: ['structure'] })
+      void qc.invalidateQueries({ queryKey: ['arbzg-audit'] })
       endSession()
       onClose()
     } catch (e: unknown) {
-      setError((e as { message?: string }).message ?? 'Fehler')
+      const err = e as { message?: string; details?: { code?: string } }
+      const code = err.details?.code
+      setError(code === 'ARBZG_BREAK_CONFIRM_REQUIRED'
+        ? 'Bitte Pausenbestätigung wählen, bevor freigegeben wird.'
+        : (err.message ?? 'Fehler'))
       setConfirming(false)
     }
   }
@@ -459,6 +509,63 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
             <p className="tbm-info">Keine Entwürfe für heute.</p>
           )}
 
+          {/* ── ArbZG-Block ─────────────────────────────────────────── */}
+          {limits?.settings.enabled && breakAnalysis && breakAnalysis.required > 0 && (
+            <div className={breakAnalysis.missing > 0 ? 'tbm-arbzg-warn' : 'tbm-arbzg-ok'}>
+              {breakAnalysis.missing > 0 ? (
+                <>
+                  <div className="tbm-arbzg-title">
+                    ⚠ {breakAnalysis.dayWork.toFixed(2)} h Arbeit ohne ausreichende Pause
+                  </div>
+                  <div className="tbm-arbzg-meta">
+                    Erforderlich: {breakAnalysis.required} min ·
+                    gestempelt: {breakAnalysis.breakMin} min ·
+                    fehlt: {breakAnalysis.missing} min
+                    {limits.breakRule?.NAME && <> ({limits.breakRule.NAME})</>}
+                  </div>
+                  {needsBreakConfirm && (
+                    <div className="tbm-arbzg-choices">
+                      <label className="tbm-arbzg-choice">
+                        <input type="radio" name="brkChoice"
+                          checked={breakChoice === 'auto'}
+                          onChange={() => setBreakChoice('auto')} />
+                        <span>
+                          Auto-Abzug akzeptieren — {breakAnalysis.missing} min werden
+                          vom letzten Arbeitsblock abgezogen
+                        </span>
+                      </label>
+                      <label className="tbm-arbzg-choice">
+                        <input type="radio" name="brkChoice"
+                          checked={breakChoice === 'manual'}
+                          onChange={() => setBreakChoice('manual')} />
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          Ich habe zusätzlich
+                          <input type="number" min={1} step={5}
+                            className="tbm-input"
+                            style={{ width: 64, padding: '2px 4px' }}
+                            value={breakManualMin}
+                            placeholder={String(breakAnalysis.missing)}
+                            onFocus={() => setBreakChoice('manual')}
+                            onChange={e => setBreakManualMin(e.target.value)} />
+                          min Pause gemacht (wird nachgetragen)
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="tbm-arbzg-title">
+                  ✓ Pausenpflicht (§ 4 ArbZG) erfüllt — {breakAnalysis.breakMin}/{breakAnalysis.required} min
+                </div>
+              )}
+              {breakAnalysis.dayWork > 8 && (
+                <div className="tbm-arbzg-info">
+                  ℹ Tagesarbeit {breakAnalysis.dayWork.toFixed(2)} h wird gem. § 16 Abs. 2 ArbZG dokumentiert.
+                </div>
+              )}
+            </div>
+          )}
+
           {drafts.length > 0 && (
             <table className="tbm-review-table">
               <thead>
@@ -473,11 +580,20 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
               <tbody>
                 {drafts.map(d => {
                   const isEditing = editRow?.id === d.ID
+                  const isBreak   = d.ENTRY_KIND === 'BREAK'
                   return (
                     <tr key={d.ID} className={isEditing ? 'tbm-row-editing' : ''}>
                       <td>
-                        <span className="tbm-review-proj">{d.PROJECT?.NAME_SHORT}</span>
-                        <span className="tbm-review-struct">{d.STRUCTURE?.NAME_SHORT}</span>
+                        {isBreak ? (
+                          <span className="tbm-review-proj" style={{ color: '#92400e' }}>
+                            ⏸ Pause
+                          </span>
+                        ) : (
+                          <>
+                            <span className="tbm-review-proj">{d.PROJECT?.NAME_SHORT}</span>
+                            <span className="tbm-review-struct">{d.STRUCTURE?.NAME_SHORT}</span>
+                          </>
+                        )}
                       </td>
                       {isEditing ? (
                         <>
@@ -582,18 +698,82 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
 
 type ModalState = 'none' | 'start' | 'next' | 'finish'
 
-export function TimerBar() {
-  const { session, showReview, closeReview } = useTimerStore()
-  const [modal,   setModal]   = useState<ModalState>('none')
-  const [elapsed, setElapsed] = useState(0)
+function clockClassForHours(h: number): string {
+  if (h >= 10) return 'tbr-clock tbr-clock-red'
+  if (h >= 9)  return 'tbr-clock tbr-clock-orange'
+  if (h >= 6)  return 'tbr-clock tbr-clock-yellow'
+  return 'tbr-clock tbr-clock-green'
+}
 
-  // Live clock tick
+export function TimerBar() {
+  const { session, breakState, showReview, closeReview, startBreak, endBreak, cancelBreak }
+    = useTimerStore()
+  const qc = useQueryClient()
+  const [modal,    setModal]    = useState<ModalState>('none')
+  const [elapsed,  setElapsed]  = useState(0)
+  const [brElapsed, setBrElapsed] = useState(0)
+  const [savingBreak, setSavingBreak] = useState(false)
+  const [breakErr,    setBreakErr]    = useState<string | null>(null)
+
+  const today = nowDateIso()
+
+  // Live clocks
   useEffect(() => {
     if (!session) { setElapsed(0); return }
     setElapsed(elapsedSeconds(session.blockStartIso))
     const id = setInterval(() => setElapsed(elapsedSeconds(session.blockStartIso)), 1000)
     return () => clearInterval(id)
   }, [session])
+
+  useEffect(() => {
+    if (!breakState) { setBrElapsed(0); return }
+    setBrElapsed(elapsedSeconds(breakState.startIso))
+    const id = setInterval(() => setBrElapsed(elapsedSeconds(breakState.startIso)), 1000)
+    return () => clearInterval(id)
+  }, [breakState])
+
+  // Tageskumulation (für Live-Farbanzeige)
+  const { data: draftsData } = useQuery({
+    queryKey: ['timer-drafts', session?.employeeId, today],
+    queryFn:  () => fetchDrafts(session!.employeeId, today),
+    enabled:  !!session?.employeeId,
+    refetchInterval: 60_000,
+  })
+  const persistedWorkH = (draftsData?.data ?? [])
+    .filter(d => (d.ENTRY_KIND ?? 'WORK') === 'WORK')
+    .reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)
+  const liveBlockH = breakState ? 0 : quantityFromSeconds(elapsed)
+  const dayWorkH   = persistedWorkH + liveBlockH
+
+  async function handleEndBreak() {
+    if (!breakState || !session) return
+    setSavingBreak(true)
+    setBreakErr(null)
+    try {
+      const sec      = elapsedSeconds(breakState.startIso)
+      const qty      = quantityFromSeconds(sec)
+      const startStr = new Date(breakState.startIso).toTimeString().slice(0, 8)
+      const finStr   = nowTimeIso()
+      await createTimerDraft({
+        EMPLOYEE_ID:         session.employeeId,
+        PROJECT_ID:          null,
+        STRUCTURE_ID:        null,
+        DATE_VOUCHER:        today,
+        TIME_START:          startStr,
+        TIME_FINISH:         finStr,
+        QUANTITY_INT:        qty,
+        CP_RATE:             0,
+        POSTING_DESCRIPTION: 'Pause',
+        ENTRY_KIND:          'BREAK',
+      })
+      void qc.invalidateQueries({ queryKey: ['timer-drafts'] })
+      endBreak()
+    } catch (e: unknown) {
+      setBreakErr((e as { message?: string }).message ?? 'Fehler beim Speichern der Pause')
+    } finally {
+      setSavingBreak(false)
+    }
+  }
 
   if (!session) {
     return (
@@ -607,13 +787,33 @@ export function TimerBar() {
     )
   }
 
+  if (breakState) {
+    return (
+      <div className="tbr-running tbr-running-break">
+        <span className="tbr-clock tbr-clock-break">⏸ {formatDuration(brElapsed)}</span>
+        <span className="tbr-task tbr-task-break">Pause läuft</span>
+        <button className="tbr-btn tbr-resume" disabled={savingBreak} onClick={handleEndBreak}>
+          {savingBreak ? 'Speichere…' : '▶ Pause beenden'}
+        </button>
+        <button className="tbr-btn" title="Pause verwerfen (nicht buchen)" onClick={cancelBreak}>✕</button>
+        {breakErr && <span className="tbr-error">{breakErr}</span>}
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="tbr-running">
-        <span className="tbr-clock">{formatDuration(elapsed)}</span>
+        <span className={clockClassForHours(dayWorkH)} title={`Heute insgesamt ${dayWorkH.toFixed(2)} h`}>
+          {formatDuration(elapsed)}
+        </span>
         <span className="tbr-task" title={`${session.projectName} / ${session.structureName}`}>
           {session.projectName} / {session.structureName}
         </span>
+        <button className="tbr-btn tbr-pause" onClick={startBreak} title="Pause starten">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          Pause
+        </button>
         <button className="tbr-btn tbr-next" onClick={() => setModal('next')} title="Nächste Aufgabe">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12,5 19,12 12,19"/></svg>
           Nächste Aufgabe

@@ -68,6 +68,19 @@ export interface DashboardOpenSe {
 export const fetchDashboardOpenSe = () =>
   apiClient.get<{ data: DashboardOpenSe }>('/reports/dashboard/open-se')
 
+export interface DashboardArbzgStats {
+  warnWeek:       number
+  blockWeek:      number
+  over8hWeek:     number
+  warn30:         number
+  block30:        number
+  breakMissing30: number
+  available:      boolean
+}
+
+export const fetchDashboardArbzgStats = () =>
+  apiClient.get<{ data: DashboardArbzgStats }>('/reports/dashboard/arbzg-stats')
+
 export const fetchDashboardMonthly = (dateFrom?: string, dateTo?: string) => {
   const qs = dateFrom && dateTo ? `?date_from=${dateFrom}&date_to=${dateTo}` : ''
   return apiClient.get<{ data: DashboardMonthly[] }>(`/reports/dashboard/monthly${qs}`)

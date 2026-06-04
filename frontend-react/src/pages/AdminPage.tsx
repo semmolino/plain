@@ -32,6 +32,11 @@ import {
   type OverheadItem, type EmployeeCalcParams, type CalcResult,
 } from '@/api/kostensatz'
 import { fetchEmployeeList } from '@/api/mitarbeiter'
+import {
+  fetchArbzgSettings, saveArbzgSettings,
+  fetchBreakRules, upsertBreakRule, deleteBreakRule,
+  type ArbzgSettings, type BreakRule,
+} from '@/api/arbzg'
 
 const PAGE_TABS = [
   { id: 'stammdaten',              label: 'Stammdaten'              },
@@ -39,6 +44,8 @@ const PAGE_TABS = [
   { id: 'unternehmen',             label: 'Unternehmen'             },
   { id: 'vorbelegungen',           label: 'Vorbelegungen'           },
   { id: 'arbeitszeitmodelle',      label: 'Arbeitszeitmodelle'      },
+  { id: 'pausenregeln',            label: 'Pausenregeln'            },
+  { id: 'arbzg',                   label: 'ArbZG-Einstellungen'     },
   { id: 'monatsabschluss',         label: 'Monatsabschluss'         },
   { id: 'kostensatz',              label: 'Kostensatz-Rechner'      },
   { id: 'mahnungseinstellungen',   label: 'Mahnungseinstellungen'   },
@@ -622,6 +629,7 @@ function VorbelegungenSection() {
   const [cashDiscDays,   setCashDiscDays]   = useState('')
   const [offerText1,     setOfferText1]     = useState('')
   const [offerText2,     setOfferText2]     = useState('')
+  const [timerEnabled,   setTimerEnabled]   = useState(true)
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -639,6 +647,8 @@ function VorbelegungenSection() {
     setCashDiscDays(defData.data.default_cash_discount_days ?? '')
     setOfferText1(defData.data.offer_text_1 ?? '')
     setOfferText2(defData.data.offer_text_2 ?? '')
+    // timer_enabled: fehlt = aktiv (Default)
+    setTimerEnabled(defData.data.timer_enabled !== 'false')
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -650,6 +660,8 @@ function VorbelegungenSection() {
       await putDefault('default_cash_discount_days',    cashDiscDays   || null)
       await putDefault('offer_text_1',                  offerText1     || null)
       await putDefault('offer_text_2',                  offerText2     || null)
+      // Stempeluhr: nur den deaktivierten Zustand persistieren (Default = aktiv)
+      await putDefault('timer_enabled', timerEnabled ? null : 'false')
     },
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -736,6 +748,21 @@ function VorbelegungenSection() {
               </div>
             </div>
             <p className="admin-section-hint">Diese Werte werden beim Anlegen eines Vertrags vorbelegt und können pro Vertrag überschrieben werden.</p>
+          </div>
+          <div className="admin-block">
+            <h3 className="admin-block-title">Stempeluhr</h3>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={timerEnabled}
+                onChange={e => setTimerEnabled(e.target.checked)}
+              />
+              <span>Stempeluhr aktiv</span>
+            </label>
+            <p className="admin-section-hint">
+              Deaktiviert die Start/Pause/Stop-Buttons in der Kopfzeile. Bereits erfasste
+              Buchungen bleiben unverändert sichtbar, neue Stempelvorgänge sind nicht möglich.
+            </p>
           </div>
           <Message text={msg?.text ?? null} type={msg?.type} />
           <button className="btn-primary" style={{ marginTop: 8 }} disabled={saveMut.isPending} onClick={() => { setMsg(null); saveMut.mutate() }} type="button">
@@ -898,6 +925,8 @@ function MonatsabschlussSection() {
 const EMPTY_WTM_FORM: WorkingTimeModelPayload = {
   name: '', country_code: 'DE', state_code: null,
   mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0,
+  model_type: 'FIXED', break_rule_id: null,
+  max_daily_hours: 10, min_rest_hours: 11, is_minor_profile: false,
 }
 
 const WTM_TEMPLATES = [
@@ -909,7 +938,7 @@ const WTM_TEMPLATES = [
 
 function WtmHourRow({ form, onChange }: {
   form: WorkingTimeModelPayload
-  onChange: (k: keyof WorkingTimeModelPayload, v: string | number | null) => void
+  onChange: (k: keyof WorkingTimeModelPayload, v: string | number | boolean | null) => void
 }) {
   const days: Array<{ key: keyof WorkingTimeModelPayload; label: string }> = [
     { key: 'mon', label: 'Mo' }, { key: 'tue', label: 'Di' },
@@ -943,13 +972,15 @@ function ArbeitszeitmodelleSection() {
 
   const { data: modelsRes }    = useQuery({ queryKey: ['working-time-models'],   queryFn: fetchWorkingTimeModels })
   const { data: statesRes }    = useQuery({ queryKey: ['country-states'],        queryFn: fetchCountryStates })
+  const { data: brulesRes }    = useQuery({ queryKey: ['break-rules'],           queryFn: fetchBreakRules })
 
   const models: WorkingTimeModel[] = modelsRes?.data ?? []
   const countryStates: Record<string, CountryState[]> = statesRes?.data ?? {}
+  const breakRules: BreakRule[] = brulesRes?.data ?? []
 
   const statesForCountry: CountryState[] = countryStates[form.country_code] ?? []
 
-  function setField(k: keyof WorkingTimeModelPayload, v: string | number | null) {
+  function setField(k: keyof WorkingTimeModelPayload, v: string | number | boolean | null) {
     setForm(f => {
       const next = { ...f, [k]: v }
       if (k === 'country_code') next.state_code = null
@@ -991,8 +1022,15 @@ function ArbeitszeitmodelleSection() {
 
   function startEdit(m: WorkingTimeModel) {
     setEditingId(m.ID)
-    setForm({ name: m.NAME, country_code: m.COUNTRY_CODE, state_code: m.STATE_CODE,
-      mon: m.MON, tue: m.TUE, wed: m.WED, thu: m.THU, fri: m.FRI, sat: m.SAT, sun: m.SUN })
+    setForm({
+      name: m.NAME, country_code: m.COUNTRY_CODE, state_code: m.STATE_CODE,
+      mon: m.MON, tue: m.TUE, wed: m.WED, thu: m.THU, fri: m.FRI, sat: m.SAT, sun: m.SUN,
+      model_type:       m.MODEL_TYPE       ?? 'FIXED',
+      break_rule_id:    m.BREAK_RULE_ID    ?? null,
+      max_daily_hours:  m.MAX_DAILY_HOURS  ?? 10,
+      min_rest_hours:   m.MIN_REST_HOURS   ?? 11,
+      is_minor_profile: m.IS_MINOR_PROFILE ?? false,
+    })
     setShowForm(true)
   }
 
@@ -1099,6 +1137,53 @@ function ArbeitszeitmodelleSection() {
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Stunden pro Tag</div>
               <WtmHourRow form={form} onChange={setField} />
+            </div>
+
+            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>
+                ArbZG-Rahmen
+              </div>
+              <div className="form-row" style={{ marginBottom: 8 }}>
+                <div className="form-group">
+                  <label>Modelltyp</label>
+                  <select value={form.model_type ?? 'FIXED'} onChange={e => setField('model_type', e.target.value)}>
+                    <option value="FIXED">Fest (Soll wird angezeigt)</option>
+                    <option value="TRUST">Vertrauensarbeitszeit (Soll wird ausgeblendet)</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Pausenregel</label>
+                  <select value={form.break_rule_id ?? ''} onChange={e => setField('break_rule_id', e.target.value ? Number(e.target.value) : null)}>
+                    <option value="">— Tenant-Standard —</option>
+                    {breakRules.map(br => (
+                      <option key={br.ID} value={br.ID}>
+                        {br.NAME} ({br.T1_HOURS}h → {br.T1_BREAK_MIN}min, {br.T2_HOURS}h → {br.T2_BREAK_MIN}min)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="form-row" style={{ marginBottom: 8 }}>
+                <div className="form-group">
+                  <label>Max. Tagesarbeit (h)</label>
+                  <input type="number" min={1} max={24} step={0.5}
+                    value={form.max_daily_hours ?? 10}
+                    onChange={e => setField('max_daily_hours', parseFloat(e.target.value) || 10)} />
+                </div>
+                <div className="form-group">
+                  <label>Mindest-Ruhezeit (h)</label>
+                  <input type="number" min={1} max={24} step={0.5}
+                    value={form.min_rest_hours ?? 11}
+                    onChange={e => setField('min_rest_hours', parseFloat(e.target.value) || 11)} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!form.is_minor_profile}
+                    onChange={e => setField('is_minor_profile', e.target.checked)} />
+                  <span>Jugendarbeitsschutz (U18-Profil) — 8 h/Tag, 12 h Ruhezeit</span>
+                </label>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
@@ -1748,6 +1833,300 @@ function TextVorlagenSection() {
   )
 }
 
+// ── Pausenregeln ──────────────────────────────────────────────────────────────
+
+const EMPTY_BR_FORM = {
+  id: undefined as number | undefined,
+  name: '', t1_hours: 6, t1_break_min: 30, t2_hours: 9, t2_break_min: 45, min_block_min: 15,
+}
+
+function PausenregelnSection() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ ...EMPTY_BR_FORM })
+
+  const { data: rulesRes, isLoading } = useQuery({ queryKey: ['break-rules'], queryFn: fetchBreakRules })
+  const rules: BreakRule[] = rulesRes?.data ?? []
+
+  const upsertMut = useMutation({
+    mutationFn: () => upsertBreakRule(form),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['break-rules'] })
+      toast.success(form.id ? 'Pausenregel aktualisiert' : 'Pausenregel angelegt')
+      setShowForm(false); setForm({ ...EMPTY_BR_FORM })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => deleteBreakRule(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['break-rules'] }),
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  function startEdit(r: BreakRule) {
+    setForm({
+      id: r.ID, name: r.NAME,
+      t1_hours: Number(r.T1_HOURS), t1_break_min: Number(r.T1_BREAK_MIN),
+      t2_hours: Number(r.T2_HOURS), t2_break_min: Number(r.T2_BREAK_MIN),
+      min_block_min: Number(r.MIN_BLOCK_MIN),
+    })
+    setShowForm(true)
+  }
+
+  return (
+    <div className="admin-section">
+      <div className="admin-block">
+        <h3 className="admin-block-title">Pausenregeln</h3>
+        <p className="admin-section-hint" style={{ marginBottom: 12 }}>
+          Definiert ab welcher Tagesarbeitszeit wie viel Pflichtpause gilt (§ 4 ArbZG).
+          Pro Arbeitszeitmodell zuweisbar; "Tenant-Standard" gilt fallweise.
+        </p>
+
+        {isLoading && <p className="empty-note">Lade…</p>}
+
+        {!isLoading && rules.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 14 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+                <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Name</th>
+                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>ab Std.</th>
+                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Pause</th>
+                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>ab Std.</th>
+                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Pause</th>
+                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Min-Block</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map(r => (
+                <tr key={r.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '3px 8px 3px 0', fontWeight: 600 }}>{r.NAME}</td>
+                  <td style={{ padding: '3px 8px 3px 0', textAlign: 'right' }}>{r.T1_HOURS}</td>
+                  <td style={{ padding: '3px 8px 3px 0', textAlign: 'right' }}>{r.T1_BREAK_MIN} min</td>
+                  <td style={{ padding: '3px 8px 3px 0', textAlign: 'right' }}>{r.T2_HOURS}</td>
+                  <td style={{ padding: '3px 8px 3px 0', textAlign: 'right' }}>{r.T2_BREAK_MIN} min</td>
+                  <td style={{ padding: '3px 8px 3px 0', textAlign: 'right' }}>{r.MIN_BLOCK_MIN} min</td>
+                  <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => startEdit(r)}>✎</button>
+                    <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} disabled={deleteMut.isPending} onClick={() => deleteMut.mutate(r.ID)}>×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {!isLoading && rules.length === 0 && (
+          <p className="empty-note" style={{ margin: '4px 0 12px' }}>
+            Keine Pausenregeln. Migrationsstand prüfen — Phase 1 legt zwei Standardregeln pro Tenant an.
+          </p>
+        )}
+
+        {!showForm && (
+          <button type="button" className="btn-small btn-save"
+            onClick={() => { setForm({ ...EMPTY_BR_FORM }); setShowForm(true) }}>
+            + Neue Pausenregel
+          </button>
+        )}
+
+        {showForm && (
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 14, marginTop: 12 }}>
+            <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 13 }}>
+              {form.id ? 'Pausenregel bearbeiten' : 'Neue Pausenregel'}
+            </div>
+            <div className="form-row" style={{ marginBottom: 8 }}>
+              <div className="form-group" style={{ flex: 2 }}>
+                <label>Name*</label>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="z. B. Tarifvertrag XY" />
+              </div>
+              <div className="form-group">
+                <label>Min-Block (min)</label>
+                <input type="number" min={1} value={form.min_block_min}
+                  onChange={e => setForm(f => ({ ...f, min_block_min: Number(e.target.value) || 15 }))} />
+              </div>
+            </div>
+            <div className="form-row" style={{ marginBottom: 8 }}>
+              <div className="form-group">
+                <label>Schwelle 1 (h)</label>
+                <input type="number" min={0} step={0.5} value={form.t1_hours}
+                  onChange={e => setForm(f => ({ ...f, t1_hours: Number(e.target.value) || 0 }))} />
+              </div>
+              <div className="form-group">
+                <label>Pause 1 (min)</label>
+                <input type="number" min={0} value={form.t1_break_min}
+                  onChange={e => setForm(f => ({ ...f, t1_break_min: Number(e.target.value) || 0 }))} />
+              </div>
+              <div className="form-group">
+                <label>Schwelle 2 (h)</label>
+                <input type="number" min={0} step={0.5} value={form.t2_hours}
+                  onChange={e => setForm(f => ({ ...f, t2_hours: Number(e.target.value) || 0 }))} />
+              </div>
+              <div className="form-group">
+                <label>Pause 2 (min)</label>
+                <input type="number" min={0} value={form.t2_break_min}
+                  onChange={e => setForm(f => ({ ...f, t2_break_min: Number(e.target.value) || 0 }))} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn-small btn-save"
+                disabled={upsertMut.isPending || !form.name.trim()}
+                onClick={() => upsertMut.mutate()}>
+                {upsertMut.isPending ? '…' : form.id ? 'Speichern' : 'Anlegen'}
+              </button>
+              <button type="button" className="btn-small"
+                onClick={() => { setShowForm(false); setForm({ ...EMPTY_BR_FORM }) }}>
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── ArbZG-Einstellungen ───────────────────────────────────────────────────────
+
+function ArbzgSettingsSection() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const { data: settingsRes, isLoading } = useQuery({ queryKey: ['arbzg-settings'], queryFn: fetchArbzgSettings })
+  const { data: brulesRes } = useQuery({ queryKey: ['break-rules'], queryFn: fetchBreakRules })
+  const { data: statesRes } = useQuery({ queryKey: ['country-states'], queryFn: fetchCountryStates })
+
+  const initial = settingsRes?.data
+  const [form, setForm] = useState<Partial<ArbzgSettings>>({})
+
+  useEffect(() => { if (initial) setForm({}) }, [initial])
+
+  const merged: ArbzgSettings | null = initial
+    ? { ...initial, ...form } as ArbzgSettings
+    : null
+
+  function set<K extends keyof ArbzgSettings>(k: K, v: ArbzgSettings[K]) {
+    setForm(f => ({ ...f, [k]: v }))
+  }
+
+  const saveMut = useMutation({
+    mutationFn: () => saveArbzgSettings(form),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['arbzg-settings'] })
+      toast.success('ArbZG-Einstellungen gespeichert')
+      setForm({})
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  useCtrlS(() => saveMut.mutate())
+
+  if (isLoading || !merged) return <p className="empty-note">Lade…</p>
+
+  const breakRules: BreakRule[] = brulesRes?.data ?? []
+  const countryStates: Record<string, CountryState[]> = statesRes?.data ?? {}
+  const states: CountryState[] = countryStates[merged.country] ?? []
+
+  const Tog = ({ k, label, hint }: { k: keyof ArbzgSettings; label: string; hint?: string }) => (
+    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '4px 0' }}>
+      <input type="checkbox" style={{ marginTop: 3 }}
+        checked={!!merged[k]}
+        onChange={e => set(k, e.target.checked as ArbzgSettings[typeof k])} />
+      <span>
+        <span style={{ fontSize: 13, color: '#111827' }}>{label}</span>
+        {hint && <span style={{ display: 'block', fontSize: 11, color: '#6b7280', marginTop: 1 }}>{hint}</span>}
+      </span>
+    </label>
+  )
+
+  return (
+    <div className="admin-section">
+      <div className="admin-block" style={{ maxWidth: 720 }}>
+        <h3 className="admin-block-title">ArbZG-Einstellungen</h3>
+        <p className="admin-section-hint" style={{ marginBottom: 12 }}>
+          Tenant-weite Konfiguration für die Stempeluhr-Prüfungen nach
+          Arbeitszeitgesetz (BAG-Urteil vom 13.09.2022 + ArbZG-Reform 2026).
+        </p>
+
+        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Allgemein</legend>
+          <Tog k="enabled"    label="ArbZG-Prüfung aktiv"
+            hint="Master-Schalter. Deaktiviert alle nachstehenden Prüfungen, ohne dass die Konfiguration verloren geht." />
+          <Tog k="strictMode" label="Strikter Modus"
+            hint="Warnungen werden zu Blockaden — Buchungen, die ArbZG verletzen, werden abgewiesen." />
+        </fieldset>
+
+        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Prüfungen</legend>
+          <Tog k="checkBreakRequired" label="Pflichtpause prüfen (§ 4 ArbZG)" />
+          <Tog k="checkMaxDaily"      label="Tageshöchstarbeitszeit prüfen (§ 3 ArbZG)"
+            hint="Wert pro Mitarbeiter über das Arbeitszeitmodell konfigurierbar (Default 10 h)." />
+          <Tog k="checkMinRest"       label="11-Stunden-Ruhezeit prüfen (§ 5 ArbZG)"
+            hint="JArbSchG-Profil verschärft automatisch auf 12 h." />
+          <Tog k="checkSundayHoliday" label="Sonn- und Feiertagsarbeit sperren (§ 9 ArbZG)"
+            hint="Architektur-/Planungsbüros fallen nicht unter § 10 — Buchungen werden geblockt." />
+          <Tog k="checkAvg6m"         label="6-Monats-Ausgleichsperiode auswerten"
+            hint="Nur Reporting — verhindert keine Buchung." />
+        </fieldset>
+
+        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Automatischer Pausenabzug</legend>
+          <Tog k="autoBreakDeduct" label="Fehlende Pause beim Tagesabschluss abziehen"
+            hint="Vermeidet, dass die Tagessumme höher gemeldet wird als rechtskonform." />
+          <Tog k="autoBreakRequireConfirm" label="Mitarbeiter muss Auto-Abzug bestätigen"
+            hint="BAG 2025: ein blinder Abzug ohne Bestätigung wäre als Lohnraub angreifbar. Empfohlen AN." />
+        </fieldset>
+
+        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Region</legend>
+          <div className="form-row" style={{ marginBottom: 8 }}>
+            <div className="form-group">
+              <label>Land</label>
+              <select value={merged.country} onChange={e => { set('country', e.target.value); set('stateCode', null) }}>
+                <option value="DE">Deutschland</option>
+                <option value="AT">Österreich</option>
+                <option value="CH">Schweiz</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Bundesland (Feiertage)</label>
+              <select value={merged.stateCode ?? ''} onChange={e => set('stateCode', e.target.value || null)}>
+                <option value="">— gesamtes Land —</option>
+                {states.filter(s => s.code !== null).map(s => (
+                  <option key={s.code!} value={s.code!}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Standard-Pausenregel</label>
+              <select value={merged.defaultBreakRuleId ?? ''}
+                onChange={e => set('defaultBreakRuleId', e.target.value ? Number(e.target.value) : null)}>
+                <option value="">— Inline-Default (6h/9h) —</option>
+                {breakRules.map(br => <option key={br.ID} value={br.ID}>{br.NAME}</option>)}
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Hinweistext beim Tagesabschluss</legend>
+          <textarea rows={4} style={{ width: '100%', fontSize: 12, padding: 8, fontFamily: 'inherit',
+                                       border: '1px solid #d1d5db', borderRadius: 4 }}
+            value={merged.legalTextBlock ?? ''}
+            onChange={e => set('legalTextBlock', e.target.value)} />
+        </fieldset>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" className="btn-primary"
+            disabled={saveMut.isPending || Object.keys(form).length === 0}
+            onClick={() => saveMut.mutate()}>
+            {saveMut.isPending ? 'Speichern…' : 'Speichern'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -1767,6 +2146,8 @@ export function AdminPage() {
         {tab === 'unternehmen'           && <UnternehmenSection />}
         {tab === 'vorbelegungen'         && <VorbelegungenSection />}
         {tab === 'arbeitszeitmodelle'    && <ArbeitszeitmodelleSection />}
+        {tab === 'pausenregeln'          && <PausenregelnSection />}
+        {tab === 'arbzg'                 && <ArbzgSettingsSection />}
         {tab === 'monatsabschluss'       && <MonatsabschlussSection />}
         {tab === 'kostensatz'            && <KostensatzSection />}
         {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}

@@ -43,7 +43,7 @@ import {
   type DayBooking, type RunningMonth,
 } from '@/api/mitarbeiter'
 import { fetchMahnungStats, type MahnungStats, type MahnungSuggestion } from '@/api/mahnungen'
-import { fetchDashboardOpenSe }     from '@/api/reports'
+import { fetchDashboardOpenSe, fetchDashboardArbzgStats } from '@/api/reports'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -766,6 +766,13 @@ function ControllerView({
   })
   const openSe = openSeQ.data?.data ?? null
 
+  const arbzgQ = useQuery({
+    queryKey: ['dashboard', 'arbzg-stats'],
+    queryFn:  fetchDashboardArbzgStats,
+    staleTime: 300000,
+  })
+  const arbzg = arbzgQ.data?.data ?? null
+
   const overdueTotal = overdueInvoices.reduce((s, inv) => s + Number(inv.TOTAL_AMOUNT_NET || 0), 0)
   const avgMonthlyCost = monthly.length
     ? monthly.reduce((s, m) => s + (Number(m.COST_TOTAL) || 0), 0) / monthly.length
@@ -798,6 +805,20 @@ function ControllerView({
             label="Offene Sicherheitseinbehalte"
             value={fmtEur(openSe.totalOpen)}
             meta={`${openSe.count} ${openSe.count === 1 ? 'Eintrag' : 'Einträge'} aus ${openSe.byProject.length} ${openSe.byProject.length === 1 ? 'Projekt' : 'Projekten'}`}
+          />
+        )}
+        {arbzg && arbzg.available && (arbzg.warnWeek + arbzg.blockWeek + arbzg.over8hWeek) > 0 && (
+          <KpiCard
+            label="ArbZG-Hinweise diese Woche"
+            value={String(arbzg.warnWeek + arbzg.blockWeek)}
+            meta={
+              [
+                arbzg.blockWeek > 0 && `${arbzg.blockWeek} Blockade${arbzg.blockWeek !== 1 ? 'n' : ''}`,
+                arbzg.warnWeek  > 0 && `${arbzg.warnWeek} Warnung${arbzg.warnWeek !== 1 ? 'en' : ''}`,
+                arbzg.over8hWeek > 0 && `${arbzg.over8hWeek}× > 8 h`,
+              ].filter(Boolean).join(' · ') || undefined
+            }
+            accent={arbzg.blockWeek > 0}
           />
         )}
       </div>

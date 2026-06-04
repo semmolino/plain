@@ -108,6 +108,14 @@ async function postFeeCalcMasterInit(req, res, supabase) {
 
   const offerIdRaw = (req.body?.offer_id ?? "").toString().trim();
   const offerId = offerIdRaw ? Number.parseInt(offerIdRaw, 10) : null;
+  const projectIdRaw = (req.body?.project_id ?? "").toString().trim();
+  const projectId = projectIdRaw ? Number.parseInt(projectIdRaw, 10) : null;
+
+  // DB-Constraint chk_fee_calc_master_source verlangt PROJECT_ID oder
+  // OFFER_ID beim Insert — sonst kommt ein 23514-Check-Violation-Error.
+  if (!offerId && !projectId) {
+    return res.status(400).json({ error: "project_id oder offer_id ist erforderlich" });
+  }
 
   const { data, error } = await supabase
     .from("FEE_CALCULATION_MASTER")
@@ -116,7 +124,8 @@ async function postFeeCalcMasterInit(req, res, supabase) {
       NAME_SHORT:    feeMaster.NAME_SHORT || null,
       NAME_LONG:     feeMaster.NAME_LONG  || null,
       TENANT_ID:     req.tenantId ?? null,
-      ...(offerId ? { OFFER_ID: offerId } : {}),
+      ...(offerId   ? { OFFER_ID:   offerId   } : {}),
+      ...(projectId ? { PROJECT_ID: projectId } : {}),
     }])
     .select("*")
     .single();

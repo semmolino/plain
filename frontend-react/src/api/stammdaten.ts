@@ -248,6 +248,11 @@ export interface WorkingTimeModel {
   COUNTRY_CODE: string
   STATE_CODE:   string | null
   MON: number; TUE: number; WED: number; THU: number; FRI: number; SAT: number; SUN: number
+  MODEL_TYPE?:        'FIXED' | 'TRUST'
+  BREAK_RULE_ID?:     number | null
+  MAX_DAILY_HOURS?:   number
+  MIN_REST_HOURS?:    number
+  IS_MINOR_PROFILE?:  boolean
 }
 
 export interface WorkingTimeModelPayload {
@@ -255,6 +260,11 @@ export interface WorkingTimeModelPayload {
   country_code: string
   state_code?:  string | null
   mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number
+  model_type?:        'FIXED' | 'TRUST'
+  break_rule_id?:     number | null
+  max_daily_hours?:   number
+  min_rest_hours?:    number
+  is_minor_profile?:  boolean
 }
 
 export interface CountryState { code: string | null; label: string }
