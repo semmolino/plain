@@ -227,7 +227,14 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
     mutationFn: ({ id, ids }: { id: number; ids: number[] }) =>
       saveFinalInvoicePhases(id, ids),
     onSuccess: async (res) => {
-      setPhaseTotals({ phaseTotal: res.phaseTotal, deductionsTotal: res.deductionsTotal, totalNet: res.totalNet })
+      setPhaseTotals({
+        phaseTotal:      res.phaseTotal,
+        deductionsTotal: res.deductionsTotal,
+        totalNet:        res.totalNet,
+        vatPercent:      res.vatPercent,
+        taxAmountNet:    res.taxAmountNet,
+        totalGross:      res.totalGross,
+      })
       if (!draftId) return
       setMsg(null)
       const ded = await getFinalInvoiceDeductions(draftId)
@@ -246,7 +253,14 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
     mutationFn: ({ id, items }: { id: number; items: { partial_payment_id: number; deduction_amount_net: number }[] }) =>
       saveFinalInvoiceDeductions(id, items),
     onSuccess: (res) => {
-      setDedTotals({ phaseTotal: res.phaseTotal, deductionsTotal: res.deductionsTotal, totalNet: res.totalNet })
+      setDedTotals({
+        phaseTotal:      res.phaseTotal,
+        deductionsTotal: res.deductionsTotal,
+        totalNet:        res.totalNet,
+        vatPercent:      res.vatPercent,
+        taxAmountNet:    res.taxAmountNet,
+        totalGross:      res.totalGross,
+      })
       setMsg(null)
       setStep(4)
     },
