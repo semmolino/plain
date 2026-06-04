@@ -630,6 +630,10 @@ function VorbelegungenSection() {
   const [offerText1,     setOfferText1]     = useState('')
   const [offerText2,     setOfferText2]     = useState('')
   const [timerEnabled,   setTimerEnabled]   = useState(true)
+  const [bwEnabled,      setBwEnabled]      = useState(true)
+  const [bwPcts,         setBwPcts]         = useState('75,90,100')
+  const [bwNotifyPm,     setBwNotifyPm]     = useState(true)
+  const [bwNotifyBooker, setBwNotifyBooker] = useState(true)
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -649,6 +653,11 @@ function VorbelegungenSection() {
     setOfferText2(defData.data.offer_text_2 ?? '')
     // timer_enabled: fehlt = aktiv (Default)
     setTimerEnabled(defData.data.timer_enabled !== 'false')
+    // Budget-Warnungen: Defaults wenn nicht persistiert
+    setBwEnabled(defData.data.budget_warning_enabled !== 'false')
+    setBwPcts(defData.data.budget_warning_default_pcts ?? '75,90,100')
+    setBwNotifyPm(defData.data.budget_warning_notify_pm !== 'false')
+    setBwNotifyBooker(defData.data.budget_warning_notify_booker !== 'false')
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -662,6 +671,11 @@ function VorbelegungenSection() {
       await putDefault('offer_text_2',                  offerText2     || null)
       // Stempeluhr: nur den deaktivierten Zustand persistieren (Default = aktiv)
       await putDefault('timer_enabled', timerEnabled ? null : 'false')
+      // Budget-Warnungen
+      await putDefault('budget_warning_enabled',       bwEnabled ? null : 'false')
+      await putDefault('budget_warning_default_pcts',  bwPcts.trim() || '75,90,100')
+      await putDefault('budget_warning_notify_pm',     bwNotifyPm ? null : 'false')
+      await putDefault('budget_warning_notify_booker', bwNotifyBooker ? null : 'false')
     },
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -763,6 +777,53 @@ function VorbelegungenSection() {
               Deaktiviert die Start/Pause/Stop-Buttons in der Kopfzeile. Bereits erfasste
               Buchungen bleiben unverändert sichtbar, neue Stempelvorgänge sind nicht möglich.
             </p>
+          </div>
+          <div className="admin-block">
+            <h3 className="admin-block-title">Budget-Warnungen</h3>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={bwEnabled}
+                onChange={e => setBwEnabled(e.target.checked)}
+              />
+              <span>Budget-Warnungen aktiv</span>
+            </label>
+            <p className="admin-section-hint">
+              Wenn deaktiviert, werden für neue Projekte keine Default-Regeln angelegt und
+              bestehende Regeln werden nicht ausgewertet.
+            </p>
+            <div className="form-group" style={{ marginTop: 12 }}>
+              <label>Standard-Schwellen (% – kommagetrennt)</label>
+              <input
+                type="text"
+                value={bwPcts}
+                onChange={e => setBwPcts(e.target.value)}
+                placeholder="z. B. 75, 90, 100"
+              />
+              <p className="admin-section-hint">
+                Wird beim Anlegen neuer Projekte als Projekt-Regel materialisiert. Pro
+                Projekt im Tab „Budget" anpassbar.
+              </p>
+            </div>
+            <div className="form-group">
+              <label>Standard-Empfänger</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={bwNotifyPm}
+                  onChange={e => setBwNotifyPm(e.target.checked)}
+                />
+                <span>Projektleiter benachrichtigen</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={bwNotifyBooker}
+                  onChange={e => setBwNotifyBooker(e.target.checked)}
+                />
+                <span>Verursachende Mitarbeiter benachrichtigen</span>
+              </label>
+            </div>
           </div>
           <Message text={msg?.text ?? null} type={msg?.type} />
           <button className="btn-primary" style={{ marginTop: 8 }} disabled={saveMut.isPending} onClick={() => { setMsg(null); saveMut.mutate() }} type="button">

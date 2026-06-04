@@ -11,9 +11,10 @@ import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
 import { Vertraege }      from '@/pages/projekte/Vertraege'
 import { Sicherheitseinbehalte } from '@/pages/projekte/Sicherheitseinbehalte'
 import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
+import { Budget }          from '@/pages/projekte/Budget'
 import { fetchProjectReportHeader } from '@/api/reports'
 
-type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand' | 'vertraege' | 'se' | 'mitarbeiter'
+type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand' | 'vertraege' | 'se' | 'mitarbeiter' | 'budget'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'liste',           label: 'Liste' },
@@ -24,6 +25,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'leistungsstand',  label: 'Leistungsstände' },
   { id: 'vertraege',       label: 'Verträge' },
   { id: 'se',              label: 'Sicherheitseinbehalte' },
+  { id: 'budget',          label: 'Budget' },
   { id: 'mitarbeiter',     label: 'Mitarbeiter' },
 ]
 
@@ -98,6 +100,7 @@ export function ProjektePage() {
         {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'vertraege'      && <Vertraege      initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'se'             && <Sicherheitseinbehalte initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
+        {tab === 'budget'         && <Budget         initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'mitarbeiter'    && <Mitarbeiter    initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
       </div>
     </div>
