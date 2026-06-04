@@ -280,6 +280,32 @@ async function createProject(supabase, { body, tenantId }) {
     }
   }
 
+  // Budget-Warnungen: Default-Regeln auf Projekt-Ebene materialisieren.
+  // Fehler hier dürfen das Projekt nicht killen.
+  try {
+    const enabled       = (defaults.budget_warning_enabled ?? 'true') === 'true';
+    const pctsRaw       = String(defaults.budget_warning_default_pcts ?? '75,90,100');
+    const notifyPm      = (defaults.budget_warning_notify_pm     ?? 'true') === 'true';
+    const notifyBooker  = (defaults.budget_warning_notify_booker ?? 'true') === 'true';
+    if (enabled) {
+      const pcts = pctsRaw.split(',').map(s => Number(s.trim())).filter(n => n > 0 && n <= 500);
+      if (pcts.length > 0) {
+        const ruleRows = pcts.map(p => ({
+          TENANT_ID:     project.TENANT_ID,
+          PROJECT_ID:    project.ID,
+          STRUCTURE_ID:  null,
+          THRESHOLD_PCT: p,
+          NOTIFY_PM:     notifyPm,
+          NOTIFY_BOOKER: notifyBooker,
+          MUTED:         false,
+        }));
+        await supabase.from("BUDGET_WARNING_RULE").insert(ruleRows);
+      }
+    }
+  } catch (e) {
+    console.warn(`[BUDGET_WARNING] Default-Regeln nicht angelegt: ${e?.message || e}`);
+  }
+
   return project;
 }
 
