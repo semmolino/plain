@@ -215,6 +215,18 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
 
   const totalPhaseRev = phases.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
 
+  // Bemessungsgrundlage des Leistungsbilds — bestimmt UI/PDF-Labels und
+  // ob K0..K4 oder nur ein Fläche-Feld (ha) angezeigt wird. Fallback
+  // 'cost_eur' = bisheriges Verhalten.
+  const baseType: 'cost_eur' | 'area_ha' =
+    calcMaster?.BASE_TYPE
+    ?? (feeMasterId
+          ? (masters.find(m => String(m.ID) === String(feeMasterId))?.BASE_TYPE ?? 'cost_eur')
+          : 'cost_eur')
+  const isAreaHa  = baseType === 'area_ha'
+  const baseLabel = isAreaHa ? 'Plangebiet (ha)'        : 'Baukosten (€)'
+  const kxOptionsForBase = isAreaHa ? (['K0'] as const) : KX_OPTIONS
+
   // Compute surcharges without BL first (for pct_gesamthonorar BL base)
   const surchargeEffectsNoBl = computeSurchargeEffects(phases, surcharges, [], [])
   const surchargeNoBlTotal = surchargeEffectsNoBl.reduce((s, e) => s + e.amount, 0)
@@ -348,10 +360,10 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
         ZONE_ID:               basis.ZONE_ID    ? Number(basis.ZONE_ID) : null,
         ZONE_PERCENT:          toNum(basis.ZONE_PERCENT),
         CONSTRUCTION_COSTS_K0: toNum(basis.K0),
-        CONSTRUCTION_COSTS_K1: toNum(basis.K1),
-        CONSTRUCTION_COSTS_K2: toNum(basis.K2),
-        CONSTRUCTION_COSTS_K3: toNum(basis.K3),
-        CONSTRUCTION_COSTS_K4: toNum(basis.K4),
+        CONSTRUCTION_COSTS_K1: isAreaHa ? null : toNum(basis.K1),
+        CONSTRUCTION_COSTS_K2: isAreaHa ? null : toNum(basis.K2),
+        CONSTRUCTION_COSTS_K3: isAreaHa ? null : toNum(basis.K3),
+        CONSTRUCTION_COSTS_K4: isAreaHa ? null : toNum(basis.K4),
       })
       populateBasis(updated.data)
       setMsg({ text: 'Lade Leistungsphasen …', type: 'info' })
@@ -700,15 +712,31 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             <label>Zonenanteil %</label>
             <input type="number" step="0.01" value={basis.ZONE_PERCENT} onChange={e => setBasis(b => ({ ...b, ZONE_PERCENT: e.target.value }))} />
           </div>
-          <p className="admin-block-title" style={{ marginTop: 12 }}>Baukosten (€)</p>
-          <div className="fee-k-grid">
-            {(['K0','K1','K2','K3','K4'] as const).map(k => (
-              <div key={k} className="form-group">
-                <label>{k}</label>
-                <input type="number" step="0.01" value={(basis as Record<string, string>)[k]} onChange={e => setBasis(b => ({ ...b, [k]: e.target.value }))} />
-              </div>
-            ))}
-          </div>
+          <p className="admin-block-title" style={{ marginTop: 12 }}>{baseLabel}</p>
+          {isAreaHa ? (
+            <div className="form-group">
+              <label>Plangebiet</label>
+              <input
+                type="number" step="0.01" min={0}
+                value={basis.K0}
+                onChange={e => setBasis(b => ({ ...b, K0: e.target.value, K1: '', K2: '', K3: '', K4: '' }))}
+                placeholder="Größe des Plangebiets in ha"
+              />
+              <p className="admin-section-hint">
+                Bei Flächenplanung wird das Honorar aus der Plangebietsgröße in
+                Hektar interpoliert (HOAI 2021 §17 ff.).
+              </p>
+            </div>
+          ) : (
+            <div className="fee-k-grid">
+              {(['K0','K1','K2','K3','K4'] as const).map(k => (
+                <div key={k} className="form-group">
+                  <label>{k}</label>
+                  <input type="number" step="0.01" value={(basis as Record<string, string>)[k]} onChange={e => setBasis(b => ({ ...b, [k]: e.target.value }))} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -738,8 +766,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                     <tr key={p.ID}>
                       <td>{p.PHASE_LABEL}</td>
                       <td>
-                        <select className="tbl-select" value={p.KX || 'K0'} onChange={e => updatePhaseKx(p.ID, e.target.value)}>
-                          {KX_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                        <select className="tbl-select" value={p.KX || 'K0'} onChange={e => updatePhaseKx(p.ID, e.target.value)} disabled={isAreaHa}>
+                          {kxOptionsForBase.map(k => <option key={k} value={k}>{k}</option>)}
                         </select>
                       </td>
                       <td style={{ textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
@@ -832,6 +860,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                             onChange={e => updateBl({ AMOUNT_TYPE: e.target.value as BlAmountType, PERCENT: null, KX_REF: null })}>
                             {(Object.entries(BL_AMOUNT_TYPE_LABELS) as [BlAmountType, string][])
                               .filter(([k]) => k !== 'pct_gesamthonorar')
+                              .filter(([k]) => !(isAreaHa && k === 'pct_baukosten'))
                               .map(([k, v]) => (
                                 <option key={k} value={k}>{v}</option>
                               ))}
@@ -850,7 +879,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                               value={b.KX_REF || ''}
                               onChange={e => updateBl({ KX_REF: e.target.value || null })}>
                               <option value="">— Kx —</option>
-                              {KX_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                              {kxOptionsForBase.map(k => <option key={k} value={k}>{k}</option>)}
                             </select>
                           )}
                         </td>

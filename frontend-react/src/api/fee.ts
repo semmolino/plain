@@ -1,7 +1,8 @@
 import { apiClient, openPdfWithAuth } from './client'
 
 export interface FeeGroup  { ID: number; NAME_SHORT: string; NAME_LONG: string }
-export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string }
+export type FeeBaseType = 'cost_eur' | 'area_ha'
+export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string; BASE_TYPE?: FeeBaseType }
 export interface FeeZone   { ID: number; NAME_SHORT: string; NAME_LONG: string }
 
 export interface FeeCalcMaster {
@@ -24,6 +25,8 @@ export interface FeeCalcMaster {
   REVENUE_K2:                  number | null
   REVENUE_K3:                  number | null
   REVENUE_K4:                  number | null
+  // angereichert vom Backend aus FEE_MASTERS.BASE_TYPE
+  BASE_TYPE?:                  FeeBaseType
   // enriched fields from listFeeCalcMasters
   projectLabel?: string | null
   offerLabel?:   string | null
