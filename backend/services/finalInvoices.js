@@ -236,11 +236,14 @@ async function getPhases(supabase, { id, tenantId }) {
             round2((recomputedInvoiced.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
         }
       }
+      // STATUS 2 (gebucht) + 3 (stornoiertes Original) — beide nötig, sonst
+      // sieht die Funktion nach AR-Storno nur die Storno-Hälfte (-X) und
+      // das Original (+X) rutscht durch. Wie bei loadPreviouslyBilledByStructure.
       const { data: pps } = await supabase
         .from("PARTIAL_PAYMENT")
         .select("ID")
         .eq("CONTRACT_ID", inv.CONTRACT_ID)
-        .eq("STATUS_ID", 2);
+        .in("STATUS_ID", [2, 3]);
       const ppIds = (pps || []).map(p => p.ID);
       if (ppIds.length > 0) {
         const { data: ppStructs } = await supabase
