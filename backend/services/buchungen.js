@@ -435,7 +435,7 @@ async function createBuchung(supabase, { body, tenantId }) {
   const b = body;
 
   if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || b.QUANTITY_INT == null ||
-      b.QUANTITY_EXT == null || !b.SP_RATE || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
+      b.QUANTITY_EXT == null || b.SP_RATE == null || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
 

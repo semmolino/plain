@@ -280,7 +280,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   function submitForm(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
-    if (!pid || !form.EMPLOYEE_ID || !form.DATE_VOUCHER || !form.QUANTITY_INT || !form.QUANTITY_EXT || !form.SP_RATE || !form.POSTING_DESCRIPTION) {
+    if (!pid || !form.EMPLOYEE_ID || !form.DATE_VOUCHER || !form.QUANTITY_INT || !form.QUANTITY_EXT || form.SP_RATE === '' || !form.POSTING_DESCRIPTION) {
       setMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
     createMut.mutate({
@@ -302,7 +302,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     e.preventDefault()
     if (!editRow) return
     setEditMsg(null)
-    if (!editForm.EMPLOYEE_ID || !editForm.DATE_VOUCHER || !editForm.QUANTITY_INT || !editForm.CP_RATE || !editForm.QUANTITY_EXT || !editForm.SP_RATE || !editForm.POSTING_DESCRIPTION) {
+    if (!editForm.EMPLOYEE_ID || !editForm.DATE_VOUCHER || !editForm.QUANTITY_INT || editForm.CP_RATE === '' || !editForm.QUANTITY_EXT || editForm.SP_RATE === '' || !editForm.POSTING_DESCRIPTION) {
       setEditMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
     patchMut.mutate({
