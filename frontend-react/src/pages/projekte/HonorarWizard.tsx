@@ -318,9 +318,14 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
 
   async function goNext1() {
     if (!feeMasterId) { setMsg({ text: 'Bitte Leistungsbild wählen', type: 'error' }); return }
+    if (!isOfferMode && !projectId) { setMsg({ text: 'Bitte Projekt wählen', type: 'error' }); return }
     setLoading(true); setMsg({ text: 'Anlegen der Honorarberechnung …', type: 'info' })
     try {
-      const opts = offerId ? { offer_id: offerId } : undefined
+      // PROJECT_ID oder OFFER_ID muss beim Insert gesetzt sein (DB-Check
+      // chk_fee_calc_master_source). Eines von beiden ist hier garantiert.
+      const opts: { project_id?: number; offer_id?: number } = offerId
+        ? { offer_id: offerId }
+        : { project_id: Number(projectId) }
       const row = await initFeeCalcMaster(Number(feeMasterId), opts)
       const zonesRes = await fetchFeeZones(feeMasterId)
       setZones(zonesRes.data ?? [])
@@ -624,6 +629,21 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       {step === 1 && (
         <div className="wizard-step-content">
           <h3 className="wizard-step-title">Schritt 1: Honorarordnung &amp; Leistungsbild</h3>
+          {!isOfferMode && (
+            <div className="form-group">
+              <label>Projekt*</label>
+              <select value={projectId} onChange={e => { setProjectId(e.target.value); setBasis(b => ({ ...b, PROJECT_ID: e.target.value })) }}>
+                <option value="">Bitte wählen …</option>
+                {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
+              </select>
+            </div>
+          )}
+          {isOfferMode && (
+            <div className="form-group">
+              <label>Angebot</label>
+              <input readOnly value={`Angebot #${offerId ?? '?'} (festgelegt)`} style={{ background: '#f9fafb', color: '#6b7280' }} />
+            </div>
+          )}
           <div className="form-group">
             <label>Honorarordnung</label>
             <select value={feeGroupId} onChange={e => void loadMasters(e.target.value)}>
