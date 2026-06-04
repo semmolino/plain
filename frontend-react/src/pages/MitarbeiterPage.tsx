@@ -841,17 +841,38 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
   const [closeLoading, setCloseLoading] = useState(false)
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
   const [editBooking, setEditBooking] = useState<DayBooking | null>(null)
+  const [editSiblings, setEditSiblings] = useState<DayBooking[]>([])
   const [editStart,   setEditStart]   = useState('')
   const [editFinish,  setEditFinish]  = useState('')
   const [editQty,     setEditQty]     = useState('')
   const [editDesc,    setEditDesc]    = useState('')
 
-  function openEditBooking(b: DayBooking) {
+  function openEditBooking(b: DayBooking, sameDay: DayBooking[]) {
     setEditBooking(b)
+    setEditSiblings(sameDay.filter(x => x.id !== b.id))
     setEditStart(b.time_start ?? '')
     setEditFinish(b.time_finish ?? '')
     setEditQty(String(b.hours ?? 0))
     setEditDesc(b.description ?? '')
+  }
+
+  // Erkennt Überschneidung mit anderen Buchungen desselben Tages.
+  // Liefert die Liste der überlappenden Geschwister (leer = kein Konflikt).
+  function detectOverlaps(start: string, finish: string): DayBooking[] {
+    const s = start.slice(0, 5), f = finish.slice(0, 5)
+    if (!s || !f) return []
+    const [sh, sm] = s.split(':').map(Number)
+    const [fh, fm] = f.split(':').map(Number)
+    const a1 = sh * 60 + sm, a2 = fh * 60 + fm
+    if (a2 <= a1) return []
+    return editSiblings.filter(x => {
+      if (!x.time_start || !x.time_finish) return false
+      const [bsh, bsm] = x.time_start.slice(0, 5).split(':').map(Number)
+      const [bfh, bfm] = x.time_finish.slice(0, 5).split(':').map(Number)
+      const b1 = bsh * 60 + bsm, b2 = bfh * 60 + bfm
+      // Klassische Intervall-Überschneidung: a1 < b2 && b1 < a2
+      return a1 < b2 && b1 < a2
+    })
   }
 
   const patchBookingMut = useMutation({
@@ -1077,7 +1098,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                           {isExpanded && (d.bookings as DayBooking[]).map(b => (
                             <tr key={`bk-${b.id}`} style={{ background: '#f0f9ff', cursor: 'pointer' }}
                                 title="Klicken zum Bearbeiten"
-                                onClick={() => openEditBooking(b)}>
+                                onClick={() => openEditBooking(b, d.bookings as DayBooking[])}>
                               <td></td>
                               <td colSpan={2} style={{ color: '#0369a1', fontSize: 11, paddingLeft: 12 }}>
                                 {b.time_start && b.time_finish && (
@@ -1193,10 +1214,32 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
               <input type="text" value={editDesc}
                 onChange={e => setEditDesc(e.target.value)} />
             </div>
-            <p style={{ fontSize: 11, color: '#92400e', background: 'rgba(245,158,11,0.08)',
-                        padding: '6px 10px', borderRadius: 6, margin: 0 }}>
-              ⚠ Änderungen wirken sich auf das Zeitkonto, Projektkosten und ggf. das ArbZG-Audit aus.
-            </p>
+            {(() => {
+              const overlaps = detectOverlaps(editStart, editFinish)
+              if (overlaps.length === 0) {
+                return (
+                  <p style={{ fontSize: 11, color: '#92400e', background: 'rgba(245,158,11,0.08)',
+                              padding: '6px 10px', borderRadius: 6, margin: 0 }}>
+                    ⚠ Änderungen wirken sich auf das Zeitkonto, Projektkosten und ggf. das ArbZG-Audit aus.
+                  </p>
+                )
+              }
+              return (
+                <p style={{ fontSize: 12, color: '#7f1d1d', background: 'rgba(220,38,38,0.08)',
+                            padding: '8px 12px', borderRadius: 6, margin: 0,
+                            border: '1px solid rgba(220,38,38,0.25)' }}>
+                  <strong>Zeitliche Überschneidung</strong> mit {overlaps.length === 1 ? '1 Buchung' : `${overlaps.length} Buchungen`} desselben Tages:
+                  <span style={{ display: 'block', marginTop: 4, fontSize: 11 }}>
+                    {overlaps.map(o => (
+                      <span key={o.id} style={{ display: 'block' }}>
+                        {o.time_start?.slice(0, 5)}–{o.time_finish?.slice(0, 5)} · {o.project}
+                        {o.structure ? ` / ${o.structure}` : ''}
+                      </span>
+                    ))}
+                  </span>
+                </p>
+              )
+            })()}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 4 }}>
               <button className="btn-small btn-danger" disabled={deleteBookingMut.isPending}
                 onClick={() => deleteBookingMut.mutate(editBooking.id)}>
@@ -1204,7 +1247,9 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
               </button>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="btn-small" onClick={() => setEditBooking(null)}>Abbrechen</button>
-                <button className="btn-small btn-save" disabled={patchBookingMut.isPending}
+                <button className="btn-small btn-save"
+                  disabled={patchBookingMut.isPending || detectOverlaps(editStart, editFinish).length > 0}
+                  title={detectOverlaps(editStart, editFinish).length > 0 ? 'Zeitliche Überschneidung beheben' : ''}
                   onClick={() => patchBookingMut.mutate()}>
                   {patchBookingMut.isPending ? 'Speichert…' : 'Speichern'}
                 </button>
