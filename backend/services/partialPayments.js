@@ -1051,6 +1051,12 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
     TOTAL_AMOUNT_GROSS:-round2(toNum(orig.TOTAL_AMOUNT_GROSS)),
   };
 
+  // SE-Beträge auch negieren, damit die Storno-Zeile in der Rechnungsliste
+  // korrekt spiegelt: Original Forderung = Brutto − SEB, Storno Forderung
+  // muss = −Brutto + SEB sein, damit die Summe der beiden auf 0 saldiert.
+  if ("SE_AMOUNT"    in orig) cancelRow.SE_AMOUNT    = orig.SE_AMOUNT    != null ? -round2(toNum(orig.SE_AMOUNT))    : null;
+  if ("SE_BASIS_AMT" in orig) cancelRow.SE_BASIS_AMT = orig.SE_BASIS_AMT != null ? -round2(toNum(orig.SE_BASIS_AMT)) : null;
+
   const { data: created, error: insertErr } = await supabase
     .from("PARTIAL_PAYMENT").insert([cancelRow]).select("ID").single();
   if (insertErr) throw { status: 500, message: insertErr.message };

@@ -776,7 +776,14 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                     if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
                     if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
                     if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
-                    if (c.key === 'seHeld')      return <td key={c.key} className="num">{row.seHeld != null ? `− ${fmtEur(row.seHeld)}` : '—'}</td>
+                    if (c.key === 'seHeld') {
+                      if (row.seHeld == null) return <td key={c.key} className="num">—</td>
+                      const v = row.seHeld
+                      // Original-AR: positiv → als Abzug "− X" zeigen.
+                      // Storno-AR:    negativ → als Rückbuchung "+ X" zeigen.
+                      const label = v >= 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`
+                      return <td key={c.key} className="num">{label}</td>
+                    }
                     if (c.key === 'payable')     return <td key={c.key} className="num">{row.payable != null && (row.seHeld != null || row.seRelease != null) ? <strong>{fmtEur(row.payable)}</strong> : fmtEur(row.payable)}</td>
                     if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>
                     if (c.key === 'open')        return <td key={c.key} className="num">{fmtEur(row.open)}</td>
@@ -825,7 +832,11 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                 {visibleCols.map(c => {
                   if (c.key === 'net')     return <td key={c.key} className="num"><strong>{fmtEur(totals.net)}</strong></td>
                   if (c.key === 'gross')   return <td key={c.key} className="num"><strong>{fmtEur(totals.gross)}</strong></td>
-                  if (c.key === 'seHeld')  return <td key={c.key} className="num"><strong>{totals.seHeld > 0 ? `− ${fmtEur(totals.seHeld)}` : '—'}</strong></td>
+                  if (c.key === 'seHeld') {
+                    const v = totals.seHeld
+                    const label = v === 0 ? '—' : v > 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`
+                    return <td key={c.key} className="num"><strong>{label}</strong></td>
+                  }
                   if (c.key === 'payable') return <td key={c.key} className="num"><strong>{fmtEur(totals.payable)}</strong></td>
                   if (c.key === 'paid')    return <td key={c.key} className="num"><strong>{fmtEur(totals.paid)}</strong></td>
                   if (c.key === 'open')    return <td key={c.key} className="num"><strong>{fmtEur(totals.open)}</strong></td>

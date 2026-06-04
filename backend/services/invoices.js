@@ -282,7 +282,10 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   }
 
   // --- Amounts from booked PARTIAL_PAYMENT rows (must also be subtracted) ---
-  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID").eq("STATUS_ID", bookedStatusId);
+  // Storno-Paare: Original wird STATUS_ID=3 + Storno hat STATUS_ID=2 mit
+  // negierten Beträgen. Beide einbeziehen, damit sie auf 0 saldieren.
+  const ppStatusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
+  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID").in("STATUS_ID", ppStatusIds);
   if (contractId) ppQ = ppQ.eq("CONTRACT_ID", contractId);
   else ppQ = ppQ.eq("PROJECT_ID", projectId);
 
