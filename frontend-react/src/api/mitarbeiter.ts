@@ -70,11 +70,15 @@ export interface EmployeeCpRate {
 }
 
 export interface DayBooking {
-  id:          number
-  hours:       number
-  description: string
-  project:     string
-  structure:   string
+  id:           number
+  hours:        number
+  description:  string
+  project:      string
+  structure:    string
+  time_start:   string | null
+  time_finish:  string | null
+  project_id:   number | null
+  structure_id: number | null
 }
 
 export interface DayBalance {

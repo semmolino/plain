@@ -20,6 +20,7 @@ import {
 } from '@/api/mitarbeiter'
 import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
 import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeverity } from '@/api/arbzg'
+import { updateBuchung, deleteBuchung } from '@/api/projekte'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -839,6 +840,56 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
   const [viewMode, setViewMode] = useState<'month' | 'running'>('month')
   const [closeLoading, setCloseLoading] = useState(false)
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+  const [editBooking, setEditBooking] = useState<DayBooking | null>(null)
+  const [editStart,   setEditStart]   = useState('')
+  const [editFinish,  setEditFinish]  = useState('')
+  const [editQty,     setEditQty]     = useState('')
+  const [editDesc,    setEditDesc]    = useState('')
+
+  function openEditBooking(b: DayBooking) {
+    setEditBooking(b)
+    setEditStart(b.time_start ?? '')
+    setEditFinish(b.time_finish ?? '')
+    setEditQty(String(b.hours ?? 0))
+    setEditDesc(b.description ?? '')
+  }
+
+  const patchBookingMut = useMutation({
+    mutationFn: async () => {
+      if (!editBooking) return
+      await updateBuchung(editBooking.id, {
+        EMPLOYEE_ID:  empId ?? undefined,
+        STRUCTURE_ID: editBooking.structure_id ?? undefined,
+        PROJECT_ID:   editBooking.project_id   ?? undefined,
+        DATE_VOUCHER: undefined,
+        TIME_START:   editStart  || undefined,
+        TIME_FINISH:  editFinish || undefined,
+        QUANTITY_INT: Number(editQty.replace(',', '.')) || 0,
+        QUANTITY_EXT: Number(editQty.replace(',', '.')) || 0,
+        CP_RATE:      undefined,
+        SP_RATE:      undefined,
+        POSTING_DESCRIPTION: editDesc,
+      })
+    },
+    onSuccess: () => {
+      toast.success('Buchung aktualisiert')
+      setEditBooking(null)
+      void qc.invalidateQueries({ queryKey: ['emp-balance-month'] })
+      void qc.invalidateQueries({ queryKey: ['emp-balance-running'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const deleteBookingMut = useMutation({
+    mutationFn: (id: number) => deleteBuchung(id),
+    onSuccess: () => {
+      toast.success('Buchung gelöscht')
+      setEditBooking(null)
+      void qc.invalidateQueries({ queryKey: ['emp-balance-month'] })
+      void qc.invalidateQueries({ queryKey: ['emp-balance-running'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   function toggleDay(date: string) {
     setExpandedDays(prev => {
@@ -1025,9 +1076,16 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
                             </td>
                           </tr>
                           {isExpanded && (d.bookings as DayBooking[]).map(b => (
-                            <tr key={`bk-${b.id}`} style={{ background: '#f0f9ff' }}>
+                            <tr key={`bk-${b.id}`} style={{ background: '#f0f9ff', cursor: 'pointer' }}
+                                title="Klicken zum Bearbeiten"
+                                onClick={() => openEditBooking(b)}>
                               <td></td>
                               <td colSpan={2} style={{ color: '#0369a1', fontSize: 11, paddingLeft: 12 }}>
+                                {b.time_start && b.time_finish && (
+                                  <span style={{ color: '#6b7280', marginRight: 6 }}>
+                                    {b.time_start.slice(0, 5)}–{b.time_finish.slice(0, 5)}
+                                  </span>
+                                )}
                                 {b.project}{b.structure ? ` / ${b.structure}` : ''}
                               </td>
                               <td colSpan={2} style={{ color: '#374151', fontSize: 11 }}>{b.description}</td>
@@ -1086,6 +1144,56 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
       )}
       </div>
       )}
+
+      <Modal open={editBooking !== null} onClose={() => setEditBooking(null)}
+        title={`Buchung bearbeiten`}>
+        {editBooking && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+              {editBooking.project}{editBooking.structure ? ` / ${editBooking.structure}` : ''}
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Zeit Start</label>
+                <input type="time" value={editStart.slice(0, 5)}
+                  onChange={e => setEditStart(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Zeit Ende</label>
+                <input type="time" value={editFinish.slice(0, 5)}
+                  onChange={e => setEditFinish(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Stunden</label>
+                <input type="number" step="0.25" min={0} value={editQty}
+                  onChange={e => setEditQty(e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Beschreibung</label>
+              <input type="text" value={editDesc}
+                onChange={e => setEditDesc(e.target.value)} />
+            </div>
+            <p style={{ fontSize: 11, color: '#92400e', background: 'rgba(245,158,11,0.08)',
+                        padding: '6px 10px', borderRadius: 6, margin: 0 }}>
+              ⚠ Änderungen wirken sich auf das Zeitkonto, Projektkosten und ggf. das ArbZG-Audit aus.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 4 }}>
+              <button className="btn-small btn-danger" disabled={deleteBookingMut.isPending}
+                onClick={() => deleteBookingMut.mutate(editBooking.id)}>
+                {deleteBookingMut.isPending ? '…' : 'Löschen'}
+              </button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn-small" onClick={() => setEditBooking(null)}>Abbrechen</button>
+                <button className="btn-small btn-save" disabled={patchBookingMut.isPending}
+                  onClick={() => patchBookingMut.mutate()}>
+                  {patchBookingMut.isPending ? 'Speichert…' : 'Speichern'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -1239,9 +1347,40 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
     return new Date(s).toLocaleDateString('de-DE')
   }
   function fmtDetails(d: Record<string, unknown>) {
-    const keys = Object.keys(d || {})
-    if (!keys.length) return ''
-    return keys.slice(0, 4).map(k => `${k}: ${String(d[k])}`).join(' · ')
+    if (!d) return ''
+    // Bekannte Felder ins Deutsche übersetzen + sinnvoll formatieren
+    const parts: string[] = []
+    const dayTotal = d.dayTotal
+    if (typeof dayTotal === 'number') parts.push(`Tagessumme ${dayTotal.toFixed(2).replace('.', ',')} h`)
+    const dayWork = d.dayWork
+    if (typeof dayWork === 'number') parts.push(`Arbeit ${dayWork.toFixed(2).replace('.', ',')} h`)
+    const max = d.max
+    if (typeof max === 'number') parts.push(`Maximum ${max} h`)
+    const required = d.required
+    if (typeof required === 'number') parts.push(`erforderlich ${required} min`)
+    const current = d.current
+    if (typeof current === 'number') parts.push(`erfasst ${current} min`)
+    const breakRule = d.breakRule
+    if (typeof breakRule === 'string') parts.push(`Pausenregel: ${breakRule}`)
+    const restHours = d.restHours
+    if (typeof restHours === 'number') parts.push(`Ruhezeit ${restHours.toFixed(1).replace('.', ',')} h`)
+    const deductedMin = d.deductedMin
+    if (typeof deductedMin === 'number') parts.push(`Auto-Abzug ${deductedMin} min`)
+    const quantityInt = d.quantityInt
+    if (typeof quantityInt === 'number' && quantityInt > 0) parts.push(`${quantityInt.toFixed(2).replace('.', ',')} h`)
+    const entryKind = d.entryKind
+    if (typeof entryKind === 'string' && entryKind === 'BREAK') parts.push('Pause-Block')
+    const kind = d.kind
+    if (typeof kind === 'string') {
+      if (kind === 'BREAK_TAKEN_UNRECORDED') parts.push('Pause nachgetragen')
+      else if (kind === 'ACCEPT_AUTO_DEDUCT') parts.push('Auto-Abzug akzeptiert')
+      else parts.push(kind)
+    }
+    if (parts.length === 0) {
+      // Fallback: noch unbekannte Felder roh anzeigen
+      return Object.keys(d).slice(0, 3).map(k => `${k}: ${String(d[k])}`).join(' · ')
+    }
+    return parts.join(' · ')
   }
 
   const toast = useToast()

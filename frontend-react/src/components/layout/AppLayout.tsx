@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
@@ -8,6 +8,7 @@ import { NotificationBell } from './NotificationBell'
 import { TimerBar } from './TimerBar'
 import { ThemeSwitcher } from './ThemeSwitcher'
 import { ToastContainer } from '@/components/ui/Toast'
+import { fetchDefaults } from '@/api/stammdaten'
 
 function UserMenu() {
   const [open,       setOpen]       = useState(false)
@@ -75,11 +76,18 @@ function UserMenu() {
 }
 
 export function AppLayout() {
+  // Stempeluhr kann tenant-weit deaktiviert werden — default aktiv.
+  const { data: defData } = useQuery({
+    queryKey: ['defaults'], queryFn: fetchDefaults,
+    staleTime: 60_000,
+  })
+  const timerEnabled = defData?.data?.timer_enabled !== 'false'
+
   return (
     <div className="app-layout">
       <header className="app-header">
         <div className="app-header-left">
-          <TimerBar />
+          {timerEnabled && <TimerBar />}
         </div>
         <div className="app-header-right">
           <ThemeSwitcher />

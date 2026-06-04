@@ -75,7 +75,8 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
   const { data, error } = await supabase
     .from('TEC')
     .select(`
-      ID, DATE_VOUCHER, QUANTITY_INT, POSTING_DESCRIPTION,
+      ID, DATE_VOUCHER, TIME_START, TIME_FINISH, QUANTITY_INT, POSTING_DESCRIPTION,
+      PROJECT_ID, STRUCTURE_ID,
       PROJECT:PROJECT_ID(NAME_SHORT),
       STRUCTURE:STRUCTURE_ID(NAME_SHORT)
     `)
@@ -97,11 +98,15 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
     sumMap.set(d, (sumMap.get(d) || 0) + h);
     if (!bookingsMap.has(d)) bookingsMap.set(d, []);
     bookingsMap.get(d).push({
-      id:          row.ID,
-      hours:       h,
-      description: row.POSTING_DESCRIPTION || '',
-      project:     row.PROJECT?.NAME_SHORT  || '',
-      structure:   row.STRUCTURE?.NAME_SHORT || '',
+      id:           row.ID,
+      hours:        h,
+      description:  row.POSTING_DESCRIPTION || '',
+      project:      row.PROJECT?.NAME_SHORT  || '',
+      structure:    row.STRUCTURE?.NAME_SHORT || '',
+      time_start:   row.TIME_START  || null,
+      time_finish:  row.TIME_FINISH || null,
+      project_id:   row.PROJECT_ID  ?? null,
+      structure_id: row.STRUCTURE_ID ?? null,
     });
   }
   return { sumMap, bookingsMap };

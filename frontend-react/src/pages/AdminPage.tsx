@@ -629,6 +629,7 @@ function VorbelegungenSection() {
   const [cashDiscDays,   setCashDiscDays]   = useState('')
   const [offerText1,     setOfferText1]     = useState('')
   const [offerText2,     setOfferText2]     = useState('')
+  const [timerEnabled,   setTimerEnabled]   = useState(true)
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -646,6 +647,8 @@ function VorbelegungenSection() {
     setCashDiscDays(defData.data.default_cash_discount_days ?? '')
     setOfferText1(defData.data.offer_text_1 ?? '')
     setOfferText2(defData.data.offer_text_2 ?? '')
+    // timer_enabled: fehlt = aktiv (Default)
+    setTimerEnabled(defData.data.timer_enabled !== 'false')
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -657,6 +660,8 @@ function VorbelegungenSection() {
       await putDefault('default_cash_discount_days',    cashDiscDays   || null)
       await putDefault('offer_text_1',                  offerText1     || null)
       await putDefault('offer_text_2',                  offerText2     || null)
+      // Stempeluhr: nur den deaktivierten Zustand persistieren (Default = aktiv)
+      await putDefault('timer_enabled', timerEnabled ? null : 'false')
     },
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -743,6 +748,21 @@ function VorbelegungenSection() {
               </div>
             </div>
             <p className="admin-section-hint">Diese Werte werden beim Anlegen eines Vertrags vorbelegt und können pro Vertrag überschrieben werden.</p>
+          </div>
+          <div className="admin-block">
+            <h3 className="admin-block-title">Stempeluhr</h3>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={timerEnabled}
+                onChange={e => setTimerEnabled(e.target.checked)}
+              />
+              <span>Stempeluhr aktiv</span>
+            </label>
+            <p className="admin-section-hint">
+              Deaktiviert die Start/Pause/Stop-Buttons in der Kopfzeile. Bereits erfasste
+              Buchungen bleiben unverändert sichtbar, neue Stempelvorgänge sind nicht möglich.
+            </p>
           </div>
           <Message text={msg?.text ?? null} type={msg?.type} />
           <button className="btn-primary" style={{ marginTop: 8 }} disabled={saveMut.isPending} onClick={() => { setMsg(null); saveMut.mutate() }} type="button">
