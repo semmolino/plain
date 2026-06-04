@@ -260,6 +260,34 @@ async function getPhases(supabase, { id, tenantId }) {
     } catch (_) { /* fall back to cached cols */ }
   }
 
+  // Fill-First-Attribution für alreadyBilled:
+  // Wenn die Recompute-Daten verfügbar sind, summieren wir die gesamte
+  // bisher abgerechnete Summe über alle Leaf-Strukturen und attributieren
+  // sie in der Reihenfolge ihrer ID. Dadurch sieht ein Phasenmodell sauber
+  // aus, auch wenn ein historisches applyPerformanceAmount die Beträge
+  // proportional verteilt hatte (Bsp.: AR über 2.164,13 € → System hatte
+  // 517,51 € auf LPH 1 und 1.646,62 € auf LPH 2 verteilt; bei Fill-First
+  // wird stattdessen LPH 1 voll abgerechnet, LPH 2 = 0).
+  const leafPsRows = psRows.filter(p => {
+    // Leaves = Strukturen ohne Kinder
+    return !psRows.some(other => String(other.FATHER_ID) === String(p.ID));
+  }).sort((a, b) => Number(a.ID) - Number(b.ID));
+  let alreadyBilledByLeaf = new Map();
+  if (recomputeOk) {
+    let totalBilled = 0;
+    for (const sidKey of [...recomputedInvoiced.keys(), ...recomputedPartial.keys()]) {
+      totalBilled += (recomputedInvoiced.get(sidKey) || 0) + (recomputedPartial.get(sidKey) || 0);
+    }
+    totalBilled = round2(totalBilled);
+    let remaining = totalBilled;
+    for (const leaf of leafPsRows) {
+      const cap = round2(toNum(leaf.REVENUE_COMPLETION) + (toNum(leaf.REVENUE_COMPLETION) * toNum(leaf.EXTRAS_PERCENT)) / 100);
+      const fill = remaining <= 0 ? 0 : Math.min(cap, remaining);
+      alreadyBilledByLeaf.set(String(leaf.ID), round2(fill));
+      remaining = round2(remaining - fill);
+    }
+  }
+
   return psRows.map((ps) => {
     const revenue = toNum(ps.REVENUE_COMPLETION);
     const extrasAmount = round2((revenue * toNum(ps.EXTRAS_PERCENT)) / 100);
@@ -273,7 +301,10 @@ async function getPhases(supabase, { id, tenantId }) {
     const partialNet = recomputeOk
       ? (recomputedPartial.get(sidKey) || 0)
       : round2(toNum(ps.PARTIAL_PAYMENTS));
-    const alreadyBilled = round2(partialNet + billedFinal);
+    // alreadyBilled: Fill-First-Verteilung (wenn verfügbar), sonst Roh-Summe.
+    const alreadyBilled = recomputeOk && alreadyBilledByLeaf.has(sidKey)
+      ? alreadyBilledByLeaf.get(sidKey)
+      : round2(partialNet + billedFinal);
     const sel = selectedMap.get(String(ps.ID));
     const closedByOther = ps.CLOSED_BY_INVOICE_ID && String(ps.CLOSED_BY_INVOICE_ID) !== String(id);
     const defaultAmount = round2(Math.max(0, totalEarned - billedFinal));
