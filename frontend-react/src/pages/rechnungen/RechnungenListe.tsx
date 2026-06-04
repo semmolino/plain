@@ -6,6 +6,7 @@ import { Modal }        from '@/components/ui/Modal'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useToast }     from '@/store/toastStore'
+import { AbrechenbareProjekte } from '@/pages/rechnungen/AbrechenbareProjekte'
 import {
   fetchInvoices, fetchPartialPayments,
   openInvoicePdf, openPpPdf,
@@ -304,12 +305,13 @@ function RowMenu({ children }: { children: React.ReactNode }) {
 
 interface RechnungenListeProps {
   onEditDraft?:  (d: EditDraftPayload) => void
+  onCreateInvoiceFromBilling?: (wizardType: 'abschlag' | 'rechnung' | 'schluss', projectId: number, projectLabel: string) => void
   initialSearch?: string
   backProject?:  { id: number; name: string }
   onClearBack?:  () => void
 }
 
-export function RechnungenListe({ onEditDraft, initialSearch, backProject, onClearBack }: RechnungenListeProps = {}) {
+export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initialSearch, backProject, onClearBack }: RechnungenListeProps = {}) {
   const qc = useQueryClient()
   const navigate = useNavigate()
 
@@ -678,6 +680,9 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
             ← Projektstruktur ({backProject.name})
           </button>
         </div>
+      )}
+      {onCreateInvoiceFromBilling && (
+        <AbrechenbareProjekte onCreateInvoice={onCreateInvoiceFromBilling} />
       )}
       <div className="pl-toolbar" style={{ marginTop: backProject ? 0 : 10 }}>
         <input

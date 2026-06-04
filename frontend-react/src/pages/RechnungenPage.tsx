@@ -51,6 +51,9 @@ export function RechnungenPage() {
   const [initSearch,  setInitSearch]  = useState<string | undefined>(navState?.projectSearch)
   const [backProject, setBackProject] = useState<{ id: number; name: string } | undefined>(navState?.backProject ?? undefined)
   const [openMahnung, setOpenMahnung] = useState<{ sourceType: string; sourceId: number } | null>(navState?.openMahnung ?? null)
+  // Vorbelegung aus "Abrechenbare Projekte" — wird vom Wizard nach
+  // Verarbeitung via onPrefillConsumed wieder geleert
+  const [prefillProject, setPrefillProject] = useState<{ id: number; label: string } | null>(null)
 
   // Initial mount: clear location.state and apply initial URL tab
   useEffect(() => {
@@ -87,6 +90,19 @@ export function RechnungenPage() {
   function handleTabChange(id: string) {
     setTab(id as Tab)
     setEditDraft(null)
+    // Manueller Tab-Wechsel verwirft Prefill, damit sie nicht in einem
+    // unerwarteten Wizard landet
+    setPrefillProject(null)
+  }
+
+  function handleCreateInvoiceFromBilling(
+    wizardType: 'abschlag' | 'rechnung' | 'schluss',
+    projectId: number,
+    projectLabel: string,
+  ) {
+    setEditDraft(null)
+    setPrefillProject({ id: projectId, label: projectLabel })
+    setTab(wizardType)
   }
 
   const resumeFor = (t: Tab) =>
@@ -106,10 +122,10 @@ export function RechnungenPage() {
         </div>
       )}
       <div className="master-tab-content">
-        {tab === 'liste'     && <RechnungenListe onEditDraft={handleEditDraft} initialSearch={initSearch} backProject={backProject} onClearBack={() => { setInitSearch(undefined); setBackProject(undefined) }} />}
-        {tab === 'abschlag'  && <AbschlagWizard initialDraft={resumeFor('abschlag')} />}
-        {tab === 'rechnung'  && <RechnungWizard initialDraft={resumeFor('rechnung')} />}
-        {tab === 'schluss'   && <SchlussrechnungWizard initialDraft={resumeFor('schluss')} />}
+        {tab === 'liste'     && <RechnungenListe onEditDraft={handleEditDraft} onCreateInvoiceFromBilling={handleCreateInvoiceFromBilling} initialSearch={initSearch} backProject={backProject} onClearBack={() => { setInitSearch(undefined); setBackProject(undefined) }} />}
+        {tab === 'abschlag'  && <AbschlagWizard initialDraft={resumeFor('abschlag')} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} />}
+        {tab === 'rechnung'  && <RechnungWizard initialDraft={resumeFor('rechnung')} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} />}
+        {tab === 'schluss'   && <SchlussrechnungWizard initialDraft={resumeFor('schluss')} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} />}
         {tab === 'mahnungen' && <MahnungenListe openMahnung={openMahnung} />}
       </div>
     </div>
