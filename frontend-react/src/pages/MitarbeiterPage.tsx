@@ -1155,12 +1155,32 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
               <div className="form-group" style={{ flex: 1 }}>
                 <label>Zeit Start</label>
                 <input type="time" value={editStart.slice(0, 5)}
-                  onChange={e => setEditStart(e.target.value)} />
+                  onChange={e => {
+                    const v = e.target.value
+                    setEditStart(v)
+                    const f = editFinish.slice(0, 5)
+                    if (v && f) {
+                      const [sh, sm] = v.split(':').map(Number)
+                      const [fh, fm] = f.split(':').map(Number)
+                      const min = Math.max(0, (fh * 60 + fm) - (sh * 60 + sm))
+                      setEditQty((Math.round(min / 60 * 100) / 100).toString().replace('.', ','))
+                    }
+                  }} />
               </div>
               <div className="form-group" style={{ flex: 1 }}>
                 <label>Zeit Ende</label>
                 <input type="time" value={editFinish.slice(0, 5)}
-                  onChange={e => setEditFinish(e.target.value)} />
+                  onChange={e => {
+                    const v = e.target.value
+                    setEditFinish(v)
+                    const s = editStart.slice(0, 5)
+                    if (s && v) {
+                      const [sh, sm] = s.split(':').map(Number)
+                      const [fh, fm] = v.split(':').map(Number)
+                      const min = Math.max(0, (fh * 60 + fm) - (sh * 60 + sm))
+                      setEditQty((Math.round(min / 60 * 100) / 100).toString().replace('.', ','))
+                    }
+                  }} />
               </div>
               <div className="form-group" style={{ flex: 1 }}>
                 <label>Stunden</label>
