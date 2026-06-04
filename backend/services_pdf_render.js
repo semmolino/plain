@@ -189,6 +189,14 @@ function env() {
 
   e.addFilter('money', v => fmtMoney(v));
 
+  // Fläche in ha — deutsche Zahlformatierung mit "ha" Suffix
+  e.addFilter('area_ha', v => {
+    if (v === null || v === undefined || v === '') return '';
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '';
+    return n.toLocaleString('de-DE', { maximumFractionDigits: 4 }) + ' ha';
+  });
+
   _nunjucksEnv = e;
   return _nunjucksEnv;
 }
@@ -1146,6 +1154,16 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     zoneName = zone?.NAME_SHORT ?? null;
   }
 
+  // Bemessungsgrundlage des Leistungsbilds (cost_eur | area_ha)
+  let baseType = 'cost_eur';
+  if (calc.FEE_MASTER_ID) {
+    try {
+      const { data: fm } = await supabase
+        .from('FEE_MASTERS').select('BASE_TYPE').eq('ID', calc.FEE_MASTER_ID).maybeSingle();
+      if (fm?.BASE_TYPE) baseType = fm.BASE_TYPE;
+    } catch (_) { /* Migration noch nicht gelaufen -> Default */ }
+  }
+
   const buildSurchargeCtx = ({ r, effectiveBase, amount, lphItems, surchargeBls }) => {
     let lphDetail = null;
     if (r.LPH_FILTER) {
@@ -1176,6 +1194,9 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     calc: {
       nameShort:           calc.NAME_SHORT || '',
       nameLong:            calc.NAME_LONG  || '',
+      baseType,
+      isAreaHa:            baseType === 'area_ha',
+      baseLabel:           baseType === 'area_ha' ? 'Plangebiet (ha)' : 'Baukosten (€)',
       zoneName,
       zonePercent:         calc.ZONE_PERCENT ?? '',
       constructionCostsK0: calc.CONSTRUCTION_COSTS_K0 ?? null,

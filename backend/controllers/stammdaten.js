@@ -4,6 +4,24 @@ const fs   = require("fs");
 const path = require("path");
 const svc  = require("../services/stammdaten");
 
+// Reichert FEE_CALCULATION_MASTER-Rows um BASE_TYPE aus FEE_MASTERS an.
+// Fällt auf 'cost_eur' (= bisheriges Verhalten) zurück, wenn Migration
+// 0054 noch nicht gelaufen ist und die Spalte noch nicht existiert.
+async function enrichBaseType(supabase, rows) {
+  const arr = Array.isArray(rows) ? rows : [rows];
+  const ids = [...new Set(arr.map(r => r?.FEE_MASTER_ID).filter(Boolean))];
+  let map = new Map();
+  if (ids.length) {
+    const { data: masters, error } = await supabase
+      .from("FEE_MASTERS").select("ID, BASE_TYPE").in("ID", ids);
+    if (!error) {
+      map = new Map((masters || []).map(m => [m.ID, m.BASE_TYPE || 'cost_eur']));
+    }
+  }
+  const enrich = (r) => ({ ...r, BASE_TYPE: (r?.FEE_MASTER_ID && map.get(r.FEE_MASTER_ID)) || 'cost_eur' });
+  return Array.isArray(rows) ? arr.map(enrich) : enrich(rows);
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/stammdaten/status
 // ---------------------------------------------------------------------------
@@ -73,11 +91,22 @@ async function getFeeMasters(req, res, supabase) {
   const feeGroupId = feeGroupIdRaw ? Number.parseInt(feeGroupIdRaw, 10) : null;
   if (feeGroupIdRaw && Number.isNaN(feeGroupId)) return res.status(400).json({ error: "fee_group_id must be a number" });
 
-  let query = supabase.from("FEE_MASTERS").select("ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID").order("NAME_SHORT", { ascending: true, nullsFirst: false });
+  let query = supabase.from("FEE_MASTERS").select("ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID, BASE_TYPE").order("NAME_SHORT", { ascending: true, nullsFirst: false });
   if (feeGroupId !== null) query = query.eq("FEE_GROUP_ID", feeGroupId);
 
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
+  let { data, error } = await query;
+  if (error) {
+    // Fallback wenn Migration 0054 noch nicht gelaufen ist — BASE_TYPE
+    // existiert dann nicht und Select wirft. Wir liefern dann ohne den
+    // Flag aus und Default ist 'cost_eur' (bisheriges Verhalten).
+    let fb = supabase.from("FEE_MASTERS")
+      .select("ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID")
+      .order("NAME_SHORT", { ascending: true, nullsFirst: false });
+    if (feeGroupId !== null) fb = fb.eq("FEE_GROUP_ID", feeGroupId);
+    const fallback = await fb;
+    if (fallback.error) return res.status(500).json({ error: fallback.error.message });
+    data = (fallback.data || []).map(r => ({ ...r, BASE_TYPE: 'cost_eur' }));
+  }
   res.json({ data });
 }
 
@@ -130,7 +159,8 @@ async function postFeeCalcMasterInit(req, res, supabase) {
     .select("*")
     .single();
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+  const enriched = await enrichBaseType(supabase, data);
+  res.json({ data: enriched });
 }
 
 // ---------------------------------------------------------------------------
@@ -1248,7 +1278,8 @@ async function listFeeCalcMasters(req, res, supabase) {
         gesamthonorar: (phaseSum[m.ID] || 0) + (surchargeSum[m.ID] || 0),
       };
     });
-    res.json({ data: result });
+    const enriched = await enrichBaseType(supabase, result);
+    res.json({ data: enriched });
   } catch (e) {
     res.status(500).json({ error: e?.message || String(e) });
   }
@@ -1261,7 +1292,8 @@ async function getFeeCalcMasterDetail(req, res, supabase) {
     const { data, error } = await supabase.from("FEE_CALCULATION_MASTER")
       .select("*").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
     if (error) return res.status(404).json({ error: error.message });
-    res.json({ data });
+    const enriched = await enrichBaseType(supabase, data);
+    res.json({ data: enriched });
   } catch (e) {
     res.status(500).json({ error: e?.message || String(e) });
   }
