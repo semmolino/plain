@@ -139,6 +139,9 @@ export interface FinalTotals {
   phaseTotal:       number
   deductionsTotal:  number
   totalNet:         number
+  vatPercent?:      number
+  taxAmountNet?:    number
+  totalGross?:      number
 }
 
 // ── Lookups ───────────────────────────────────────────────────────────────────

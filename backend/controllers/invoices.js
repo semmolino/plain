@@ -114,6 +114,12 @@ async function getBillingProposal(req, res, supabase) {
           const defVatId = settingsRows?.[0]?.VALUE;
           if (defVatId) resolvedVatId = Number(defVatId);
         }
+        // Last-Resort: höchster VAT-Eintrag (i.d.R. 19%)
+        if (!resolvedVatId) {
+          const { data: anyVat } = await supabase
+            .from("VAT").select("ID").order("VAT_PERCENT", { ascending: false }).limit(1);
+          if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+        }
         if (resolvedVatId) {
           const { data: vat } = await supabase
             .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();

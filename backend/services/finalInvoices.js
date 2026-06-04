@@ -115,13 +115,63 @@ async function recomputeTotal(supabase, invoiceId) {
 
   const totalNet = round2(phaseTotal - deductionsTotal);
 
+  // VAT-Self-Heal (gleich wie in getBillingProposal): wenn die Rechnung kein
+  // VAT_PERCENT hat, aus Vertrag bzw. Tenant-Default ergänzen.
+  const { data: inv } = await supabase
+    .from("INVOICE")
+    .select("VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
+    .eq("ID", invoiceId)
+    .maybeSingle();
+  let vatPercent = toNum(inv?.VAT_PERCENT);
+  let vatId      = inv?.VAT_ID ?? null;
+  if (vatPercent === 0 && inv) {
+    try {
+      let resolvedVatId = null;
+      if (inv.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", inv.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId && inv.TENANT_ID) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("VALUE")
+          .eq("TENANT_ID", inv.TENANT_ID).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      // Last-Resort: höchster VAT-Eintrag
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        const newPct = vat?.VAT_PERCENT;
+        if (newPct != null) { vatPercent = toNum(newPct); vatId = resolvedVatId; }
+      }
+    } catch (_) { /* soft-fail */ }
+  }
+
+  const taxAmountNet = round2((totalNet * vatPercent) / 100);
+  const totalGross   = round2(totalNet + taxAmountNet);
+
+  const updatePayload = {
+    TOTAL_AMOUNT_NET:    totalNet,
+    TAX_AMOUNT_NET:      taxAmountNet,
+    TOTAL_AMOUNT_GROSS:  totalGross,
+  };
+  if (vatId)            updatePayload.VAT_ID      = vatId;
+  if (vatPercent !== 0) updatePayload.VAT_PERCENT = vatPercent;
+
   const { error: upErr } = await supabase
     .from("INVOICE")
-    .update({ TOTAL_AMOUNT_NET: totalNet })
+    .update(updatePayload)
     .eq("ID", invoiceId);
   if (upErr) throw new Error(upErr.message);
 
-  return { phaseTotal, deductionsTotal, totalNet };
+  return { phaseTotal, deductionsTotal, totalNet, vatPercent, taxAmountNet, totalGross };
 }
 
 // ---------------------------------------------------------------------------

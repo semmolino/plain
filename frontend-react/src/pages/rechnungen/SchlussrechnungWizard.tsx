@@ -926,8 +926,11 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
           {dedTotals && (() => {
             const netAfterDiscAndSkonto = Math.round((base - totalDisc - cdAmt) * 100) / 100
             const hasDeductions = totalDisc > 0 || cdAmt > 0
-            const seReleaseSum = openSeList.filter(e => seReleaseSel.has(e.ID)).reduce((s, e) => s + (e.SE_AMOUNT || 0), 0)
-            const payable = Math.round((netAfterDiscAndSkonto + seReleaseSum) * 100) / 100
+            const vatPct        = Number(dedTotals.vatPercent ?? 0)
+            const taxAmount     = Math.round(netAfterDiscAndSkonto * vatPct / 100 * 100) / 100
+            const gross         = Math.round((netAfterDiscAndSkonto + taxAmount) * 100) / 100
+            const seReleaseSum  = openSeList.filter(e => seReleaseSel.has(e.ID)).reduce((s, e) => s + (e.SE_AMOUNT || 0), 0)
+            const payable       = Math.round((gross + seReleaseSum) * 100) / 100
             return (
               <div className="billing-proposal-box" style={{ marginBottom: 14 }}>
                 <div className="bp-row"><span>Positionen Netto</span><strong>{fmtEur(dedTotals.phaseTotal)}</strong></div>
@@ -944,13 +947,17 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
                   </div>
                 )}
                 <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{fmtEur(netAfterDiscAndSkonto)}</strong></div>
+                {vatPct > 0 && (
+                  <div className="bp-row"><span>zzgl. {vatPct}&thinsp;% MwSt</span><strong>{fmtEur(taxAmount)}</strong></div>
+                )}
+                <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(gross)}</strong></div>
                 {seReleaseSum > 0 && (
                   <div className="bp-row" style={{ color: '#15803d' }}>
-                    <span>+ Auflösung Sicherheitseinbehalt (Brutto, bereits versteuert)</span><strong>+ {fmtEur(seReleaseSum)}</strong>
+                    <span>+ Auflösung Sicherheitseinbehalt</span><strong>+ {fmtEur(seReleaseSum)}</strong>
                   </div>
                 )}
                 {seReleaseSum > 0 && (
-                  <div className="bp-row total"><span>Sofort fällig</span><strong>{fmtEur(payable)}</strong></div>
+                  <div className="bp-row total"><span>Zahlungsbetrag</span><strong>{fmtEur(payable)}</strong></div>
                 )}
               </div>
             )

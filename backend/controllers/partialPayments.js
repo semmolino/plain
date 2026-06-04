@@ -329,6 +329,14 @@ async function getBillingProposal(req, res, supabase) {
         const defVatId = settingsRows?.[0]?.VALUE;
         if (defVatId) resolvedVatId = Number(defVatId);
       }
+      // Last-Resort: ersten VAT-Eintrag des Tenants (oder gemeinsam) nehmen,
+      // damit der Wizard nicht stumm bei 0% MwSt landet, wenn weder Vertrag
+      // noch Tenant-Default konfiguriert sind.
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID, VAT_PERCENT").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
       if (resolvedVatId) {
         const { data: vat } = await supabase
           .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();

@@ -253,7 +253,12 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   const m = new Map();
 
   // --- Amounts from booked INVOICE rows ---
-  let invQ = supabase.from("INVOICE").select("ID").eq("STATUS_ID", bookedStatusId);
+  // STATUS_ID=2 = gebucht; STATUS_ID=3 = stornoiertes Original (durch eine
+  // Stornorechnung neutralisiert). Beide einbeziehen, damit Storno-Paare
+  // (Original=3 mit +X, Storno-Rechnung=2 mit -X) auf 0 saldieren. Sonst
+  // wirkt nur die negative Storno und der Vorschlag wird viel zu hoch.
+  const invStatusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
+  let invQ = supabase.from("INVOICE").select("ID").in("STATUS_ID", invStatusIds);
   if (contractId) invQ = invQ.eq("CONTRACT_ID", contractId);
   else invQ = invQ.eq("PROJECT_ID", projectId);
   if (excludeInvoiceId) invQ = invQ.neq("ID", excludeInvoiceId);
@@ -1220,6 +1225,13 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
     TAX_AMOUNT_NET:      -round2(toNum(orig.TAX_AMOUNT_NET)),
     TOTAL_AMOUNT_GROSS:  -round2(toNum(orig.TOTAL_AMOUNT_GROSS)),
   };
+
+  // SE-Beträge negieren (nur wenn die Spalten existieren — Pre-0047 schickt
+  // sie schlicht nicht mit), damit die Storno-Zeile in Rechnungsliste +
+  // Reporting korrekt spiegelt (Original 18011.53 → Storno -18011.53).
+  if ("SE_AMOUNT" in orig)        cancelRow.SE_AMOUNT        = orig.SE_AMOUNT        != null ? -round2(toNum(orig.SE_AMOUNT))        : null;
+  if ("SE_BASIS_AMT" in orig)     cancelRow.SE_BASIS_AMT     = orig.SE_BASIS_AMT     != null ? -round2(toNum(orig.SE_BASIS_AMT))     : null;
+  if ("SE_RELEASE_TOTAL" in orig) cancelRow.SE_RELEASE_TOTAL = orig.SE_RELEASE_TOTAL != null ? -round2(toNum(orig.SE_RELEASE_TOTAL)) : null;
 
   const { data: created, error: insertErr } = await supabase
     .from("INVOICE").insert([cancelRow]).select("ID").single();
