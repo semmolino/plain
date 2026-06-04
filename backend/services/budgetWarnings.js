@@ -425,6 +425,20 @@ async function createRule(supabase, { tenantId, projectId, body, employeeId }) {
   const { data, error } = await supabase
     .from('BUDGET_WARNING_RULE').insert([row]).select('*').single();
   if (error) throw { status: 500, message: error.message };
+
+  // Sofort-Eval: wenn die neue Regel bereits ueberschritten ist, Notification
+  // jetzt feuern (nicht erst beim naechsten TEC-Change warten)
+  try {
+    await evaluateAfterTecChange(supabase, {
+      tenantId,
+      projectId,
+      structureIds: structureId != null ? new Set([Number(structureId)]) : new Set(),
+      triggerEmployeeId: employeeId ?? null,
+      triggerTecId: null,
+    });
+  } catch (e) {
+    console.warn(`[BUDGET_WARNING] post-create eval failed: ${e?.message || e}`);
+  }
   return data;
 }
 
@@ -453,6 +467,28 @@ async function updateRule(supabase, { tenantId, ruleId, body }) {
     .eq('ID', ruleId).eq('TENANT_ID', tenantId)
     .select('*').single();
   if (error) throw { status: 500, message: error.message };
+
+  // Sofort-Eval auf die geaenderte Regel (Schwelle koennte jetzt
+  // ueberschritten oder zurueckgesetzt sein)
+  try {
+    const projectId = data.PROJECT_ID
+      ?? (data.STRUCTURE_ID ? await (async () => {
+        const { data: s } = await supabase
+          .from('PROJECT_STRUCTURE').select('PROJECT_ID').eq('ID', data.STRUCTURE_ID).maybeSingle();
+        return s?.PROJECT_ID ?? null;
+      })() : null);
+    if (projectId) {
+      await evaluateAfterTecChange(supabase, {
+        tenantId,
+        projectId,
+        structureIds: data.STRUCTURE_ID ? new Set([Number(data.STRUCTURE_ID)]) : new Set(),
+        triggerEmployeeId: null,
+        triggerTecId: null,
+      });
+    }
+  } catch (e) {
+    console.warn(`[BUDGET_WARNING] post-update eval failed: ${e?.message || e}`);
+  }
   return data;
 }
 
