@@ -1,6 +1,7 @@
 "use strict";
 
 const arbzg = require("./arbzg");
+const budgetWarnings = require("./budgetWarnings");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -371,6 +372,29 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
     await recomputeStructure(supabase, sid);
   }
 
+  // Budget-Warnungen: pro betroffenes Projekt einmal eval (Ancestor-Kette
+  // wird intern ergänzt). Bewusst soft: Fehler darf die Buchung nicht killen.
+  try {
+    const byProject = new Map();
+    for (const r of drafts) {
+      if (!r.PROJECT_ID || !r.STRUCTURE_ID) continue;
+      const key = String(r.PROJECT_ID);
+      if (!byProject.has(key)) byProject.set(key, { sids: new Set(), triggerEmpId: r.EMPLOYEE_ID, triggerTecId: r.ID });
+      byProject.get(key).sids.add(Number(r.STRUCTURE_ID));
+    }
+    for (const [pidStr, info] of byProject) {
+      await budgetWarnings.evaluateAfterTecChange(supabase, {
+        tenantId: resolvedTenant,
+        projectId: Number(pidStr),
+        structureIds: info.sids,
+        triggerEmployeeId: info.triggerEmpId,
+        triggerTecId: info.triggerTecId,
+      });
+    }
+  } catch (e) {
+    console.warn(`[BUDGET_WARNING] confirmDrafts eval failed: ${e?.message || e}`);
+  }
+
   return { confirmed: draftIds.length, arbzgEvents: auditEvents };
 }
 
@@ -643,13 +667,29 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
     await recomputeStructure(supabase, sid);
   }
 
+  // Budget-Warnungen: für alte + neue Struktur (Reset bzw. Fire)
+  try {
+    const effProjectId = updatedTec.PROJECT_ID ?? null;
+    if (effProjectId && affected.size > 0) {
+      await budgetWarnings.evaluateAfterTecChange(supabase, {
+        tenantId: resolvedTenantId,
+        projectId: Number(effProjectId),
+        structureIds: new Set(Array.from(affected).map(Number)),
+        triggerEmployeeId: updatedTec.EMPLOYEE_ID,
+        triggerTecId: updatedTec.ID,
+      });
+    }
+  } catch (e) {
+    console.warn(`[BUDGET_WARNING] patchBuchung eval failed: ${e?.message || e}`);
+  }
+
   return updatedTec;
 }
 
 async function deleteBuchung(supabase, { id }) {
   const { data: existing, error: exErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID")
     .eq("ID", id)
     .single();
 
@@ -694,6 +734,22 @@ async function deleteBuchung(supabase, { id }) {
 
   const { error: psErr } = await supabase.from("PROJECT_STRUCTURE").update(structureUpdate).eq("ID", structureId);
   if (psErr) throw { status: 500, message: "Fehler beim Aktualisieren der Projektstruktur: " + psErr.message };
+
+  // Budget-Warnungen: bei Löschen typischerweise Reset (Verbrauch sinkt),
+  // aber evaluator entscheidet selbst (Fire/Reset/Nichts).
+  try {
+    if (existing.PROJECT_ID && existing.TENANT_ID) {
+      await budgetWarnings.evaluateAfterTecChange(supabase, {
+        tenantId: existing.TENANT_ID,
+        projectId: Number(existing.PROJECT_ID),
+        structureIds: new Set([Number(structureId)]),
+        triggerEmployeeId: existing.EMPLOYEE_ID,
+        triggerTecId: null,
+      });
+    }
+  } catch (e) {
+    console.warn(`[BUDGET_WARNING] deleteBuchung eval failed: ${e?.message || e}`);
+  }
 }
 
 async function listBuchungenByProject(supabase, { projectId, tenantId }) {
