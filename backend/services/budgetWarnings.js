@@ -144,7 +144,11 @@ async function notifyBudgetWarning(supabase, { rule, project, structure, budget,
   if (Array.isArray(rule.NOTIFY_CC)) {
     for (const eid of rule.NOTIFY_CC) if (eid) recipients.add(Number(eid));
   }
-  if (recipients.size === 0) return;
+  if (recipients.size === 0) {
+    console.warn(`[BUDGET_WARNING] rule ${rule.ID}: KEINE Empfaenger (PM=${rule.NOTIFY_PM}/PMSet=${!!project?.PROJECT_MANAGER_ID}, BOOKER=${rule.NOTIFY_BOOKER}/BookerSet=${!!triggerEmployeeId}, CC=${(rule.NOTIFY_CC||[]).length})`);
+    return;
+  }
+  console.log(`[BUDGET_WARNING] rule ${rule.ID}: ${recipients.size} Empfaenger: ${Array.from(recipients).join(',')}`);
 
   const scopeLabel = structure
     ? `${structure.NAME_SHORT ?? ''}${structure.NAME_LONG ? ' – ' + structure.NAME_LONG : ''}`
@@ -231,7 +235,10 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
   let budget, verbrauch, structure = null;
   if (rule.STRUCTURE_ID) {
     const sid = String(rule.STRUCTURE_ID);
-    if (!nodes.has(sid)) return; // Struktur gelöscht
+    if (!nodes.has(sid)) {
+      console.log(`[BUDGET_WARNING] rule ${rule.ID}: STRUCTURE ${rule.STRUCTURE_ID} nicht gefunden, skip`);
+      return;
+    }
     const agg = aggregateSubtree(sid, nodes, childrenOf, aggCache);
     budget = agg.budget;
     verbrauch = agg.verbrauch;
@@ -253,7 +260,10 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
     budget = round2(b);
     verbrauch = round2(v);
   }
-  if (budget <= 0) return; // Sinnlos
+  if (budget <= 0) {
+    console.log(`[BUDGET_WARNING] rule ${rule.ID}: Budget = 0, skip`);
+    return;
+  }
 
   const limit = round2(budget * Number(rule.THRESHOLD_PCT) / 100);
   const breached = verbrauch >= limit;
@@ -267,6 +277,8 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
     .limit(1);
   const open = openRows?.[0] || null;
 
+  console.log(`[BUDGET_WARNING] rule ${rule.ID} (proj=${project.ID}, struct=${rule.STRUCTURE_ID ?? '-'}, pct=${rule.THRESHOLD_PCT}): budget=${budget}, verbrauch=${verbrauch}, limit=${limit}, breached=${breached}, open=${!!open}`);
+
   if (breached && !open) {
     // Cooldown: letzte FIRED-Zeile (auch reseted) — wenn < 24h, skip
     const { data: recent } = await supabase
@@ -277,7 +289,11 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
       .limit(1);
     if (recent && recent.length > 0) {
       const last = new Date(recent[0].FIRED_AT).getTime();
-      if (Date.now() - last < COOLDOWN_MS) return;
+      const dtMs = Date.now() - last;
+      if (dtMs < COOLDOWN_MS) {
+        console.log(`[BUDGET_WARNING] rule ${rule.ID}: Cooldown aktiv (${Math.round(dtMs/60000)} min < 24h), skip`);
+        return;
+      }
     }
 
     const { error: insErr } = await supabase
@@ -291,12 +307,13 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
       console.warn(`[BUDGET_WARNING] insert fired failed: ${insErr.message}`);
       return;
     }
+    console.log(`[BUDGET_WARNING] rule ${rule.ID}: FIRE notification`);
     await notifyBudgetWarning(supabase, {
       rule, project, structure, budget, actual: verbrauch, limitEur: limit,
       triggerEmployeeId, triggerTecId, tenantId,
     });
   } else if (!breached && open) {
-    // Reset — kein Ping
+    console.log(`[BUDGET_WARNING] rule ${rule.ID}: RESET open trigger`);
     await supabase
       .from('BUDGET_WARNING_FIRED')
       .update({ RESET_AT: new Date().toISOString() })
@@ -445,12 +462,14 @@ async function createRule(supabase, { tenantId, projectId, body, employeeId }) {
 async function updateRule(supabase, { tenantId, ruleId, body }) {
   const b = body || {};
   const patch = {};
+  let thresholdChanged = false;
   if (b.threshold_pct !== undefined) {
     const pct = Number(b.threshold_pct);
     if (!Number.isFinite(pct) || pct <= 0 || pct > 500) {
       throw { status: 400, message: 'threshold_pct muss > 0 und <= 500 sein' };
     }
     patch.THRESHOLD_PCT = pct;
+    thresholdChanged = true;
   }
   if (b.notify_pm     !== undefined) patch.NOTIFY_PM     = !!b.notify_pm;
   if (b.notify_booker !== undefined) patch.NOTIFY_BOOKER = !!b.notify_booker;
@@ -467,6 +486,20 @@ async function updateRule(supabase, { tenantId, ruleId, body }) {
     .eq('ID', ruleId).eq('TENANT_ID', tenantId)
     .select('*').single();
   if (error) throw { status: 500, message: error.message };
+
+  // Schwellen-Aenderung: offenen Trigger schliessen, damit Sofort-Eval
+  // mit der neuen Schwelle frisch entscheiden kann (Fire oder nicht).
+  if (thresholdChanged) {
+    try {
+      await supabase
+        .from('BUDGET_WARNING_FIRED')
+        .update({ RESET_AT: new Date().toISOString() })
+        .eq('RULE_ID', ruleId)
+        .is('RESET_AT', null);
+    } catch (e) {
+      console.warn(`[BUDGET_WARNING] could not close open trigger on threshold change: ${e?.message || e}`);
+    }
+  }
 
   // Sofort-Eval auf die geaenderte Regel (Schwelle koennte jetzt
   // ueberschritten oder zurueckgesetzt sein)
