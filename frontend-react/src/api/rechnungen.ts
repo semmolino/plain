@@ -5,7 +5,7 @@ import { apiClient, downloadWithAuth, openPdfWithAuth } from './client'
 export interface Company      { ID: number; COMPANY_NAME_1: string }
 export interface VatRate      { ID: number; VAT: string; VAT_PERCENT: number }
 export interface PaymentMeans { ID: number; NAME_SHORT: string; NAME_LONG: string }
-export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: string; PROJECT_ID: number; CASH_DISCOUNT_PERCENT?: number | null; CASH_DISCOUNT_DAYS?: number | null }
+export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: string; PROJECT_ID: number; CASH_DISCOUNT_PERCENT?: number | null; CASH_DISCOUNT_DAYS?: number | null; SE_ENABLED?: boolean; SE_PERCENT?: number | null; SE_BASIS?: 'BRUTTO' | 'NETTO' | null; SE_LEGAL_REFERENCE?: string | null }
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
 
@@ -42,6 +42,10 @@ export interface Invoice {
   CASH_DISCOUNT_DAYS:     number | null
   BILLING_PERIOD_START:   string | null
   BILLING_PERIOD_FINISH:  string | null
+  SE_AMOUNT?:             number | null
+  SE_PERCENT?:            number | null
+  SE_BASIS?:              'BRUTTO' | 'NETTO' | null
+  SE_RELEASE_TOTAL?:      number | null
 }
 
 export interface PartialPayment {
@@ -76,6 +80,10 @@ export interface PartialPayment {
   CASH_DISCOUNT_DAYS:           number | null
   BILLING_PERIOD_START:         string | null
   BILLING_PERIOD_FINISH:        string | null
+  SE_AMOUNT?:                   number | null
+  SE_PERCENT?:                  number | null
+  SE_BASIS?:                    'BRUTTO' | 'NETTO' | null
+  SE_RELEASED_BY_INVOICE_ID?:   number | null
 }
 
 export interface BillingProposal {
@@ -131,6 +139,9 @@ export interface FinalTotals {
   phaseTotal:       number
   deductionsTotal:  number
   totalNet:         number
+  vatPercent?:      number
+  taxAmountNet?:    number
+  totalGross?:      number
 }
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
@@ -169,6 +180,9 @@ export const patchInvoice = (id: number, body: Partial<{
   discount_1_percent: number; discount_2_percent: number; total_discounts: number
   discount_1_reason: string | null; discount_2_reason: string | null
   cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
+  se_percent: number | null; se_basis: 'BRUTTO' | 'NETTO' | null
+  se_basis_amt: number | null; se_amount: number | null
+  se_release_total: number | null
 }>) => apiClient.patch<{ ok: boolean }>(`/invoices/${id}`, body)
 
 export const getInvoiceBillingProposal = (id: number) =>
@@ -184,8 +198,43 @@ export const postInvoiceTec = (id: number, body: {
   ids_assign: number[]; ids_unassign: number[]; performance_amount?: number
 }) => apiClient.post<{ data: BillingProposal }>(`/invoices/${id}/tec`, body)
 
-export const bookInvoice = (id: number) =>
-  apiClient.post<{ success: boolean; invoice_number: string }>(`/invoices/${id}/book`, {})
+export const bookInvoice = (id: number, opts?: { release_partial_payment_ids?: number[] }) =>
+  apiClient.post<{ success: boolean; invoice_number: string }>(`/invoices/${id}/book`, opts || {})
+
+// ── Open Sicherheitseinbehalte (Phase 2) ─────────────────────────────────────
+
+export interface OpenSeEntry {
+  ID: number
+  PARTIAL_PAYMENT_NUMBER: string | null
+  PARTIAL_PAYMENT_DATE: string | null
+  TOTAL_AMOUNT_NET: number | null
+  TOTAL_AMOUNT_GROSS: number | null
+  SE_PERCENT: number | null
+  SE_BASIS: 'BRUTTO' | 'NETTO' | null
+  SE_BASIS_AMT: number | null
+  SE_AMOUNT: number
+}
+
+export const fetchOpenSeForProject = (projectId: number) =>
+  apiClient.get<{ data: OpenSeEntry[] }>(`/partial-payments/open-se?project_id=${projectId}`)
+
+export interface SeOverviewEntry {
+  id: number
+  partial_payment_number: string | null
+  partial_payment_date:   string | null
+  total_amount_gross:     number
+  se_percent:             number | null
+  se_basis:               'BRUTTO' | 'NETTO' | null
+  se_amount:              number
+  status:                 'OFFEN' | 'AUFGELOEST' | 'STORNIERT'
+  released_by_invoice_id:     number | null
+  released_by_invoice_number: string | null
+  released_by_invoice_date:   string | null
+  released_at:                string | null
+}
+
+export const fetchSeOverviewForProject = (projectId: number) =>
+  apiClient.get<{ data: SeOverviewEntry[] }>(`/partial-payments/se-overview?project_id=${projectId}`)
 
 export const deleteInvoice = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/invoices/${id}`)
@@ -193,8 +242,11 @@ export const deleteInvoice = (id: number) =>
 export const cancelInvoice = (id: number, opts?: { delete_payments?: boolean }) =>
   apiClient.post<{ id: number }>(`/invoices/${id}/cancel`, opts ?? {})
 
-export const openInvoicePdf = (id: number) =>
-  openPdfWithAuth(`/invoices/${id}/pdf?preview=1`)
+export const openInvoicePdf = (id: number, opts?: { releasePpIds?: number[] }) => {
+  const ids = opts?.releasePpIds?.filter(n => n > 0) ?? []
+  const q = ids.length > 0 ? `&release_pp_ids=${ids.join(',')}` : ''
+  return openPdfWithAuth(`/invoices/${id}/pdf?preview=1${q}`)
+}
 
 export const openPpPdf = (id: number) =>
   openPdfWithAuth(`/partial-payments/${id}/pdf?preview=1`)
@@ -235,6 +287,8 @@ export const patchPartialPayment = (id: number, body: Partial<{
   discount_1_percent: number; discount_2_percent: number; total_discounts: number
   discount_1_reason: string | null; discount_2_reason: string | null
   cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
+  se_percent: number | null; se_basis: 'BRUTTO' | 'NETTO' | null
+  se_basis_amt: number | null; se_amount: number | null
 }>) => apiClient.patch<{ success: boolean }>(`/partial-payments/${id}`, body)
 
 export const getPpBillingProposal = (id: number) =>
@@ -287,8 +341,8 @@ export const getFinalInvoiceDeductions = (id: number) =>
 export const saveFinalInvoiceDeductions = (id: number, items: { partial_payment_id: number; deduction_amount_net: number }[]) =>
   apiClient.post<{ ok: boolean } & FinalTotals>(`/final-invoices/${id}/deductions`, { items })
 
-export const bookFinalInvoice = (id: number) =>
-  apiClient.post<{ success: boolean; invoice_number: string }>(`/final-invoices/${id}/book`, {})
+export const bookFinalInvoice = (id: number, opts?: { release_partial_payment_ids?: number[] }) =>
+  apiClient.post<{ success: boolean; invoice_number: string }>(`/final-invoices/${id}/book`, opts || {})
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 

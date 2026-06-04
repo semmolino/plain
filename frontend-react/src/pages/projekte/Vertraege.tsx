@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchProjectsShort, fetchContractByProject, patchContract } from '@/api/projekte'
-import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
+import { searchAddressesApi, fetchContactsByAddress, fetchVatList } from '@/api/stammdaten'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { Message } from '@/components/ui/Message'
 
@@ -27,10 +27,17 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
   const [contacts,     setContacts]     = useState<ContactOpt[]>([])
   const [cashDiscPct,  setCashDiscPct]  = useState('')
   const [cashDiscDays, setCashDiscDays] = useState('')
+  const [vatId,        setVatId]        = useState<number | null>(null)
+  // Sicherheitseinbehalt (Phase 1)
+  const [seEnabled,    setSeEnabled]    = useState(false)
+  const [sePct,        setSePct]        = useState('')
+  const [seBasis,      setSeBasis]      = useState<'BRUTTO' | 'NETTO'>('BRUTTO')
+  const [seLegalRef,   setSeLegalRef]   = useState('')
   const [dirty,        setDirty]        = useState(false)
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
+  const { data: vatListData }  = useQuery({ queryKey: ['vat-list'],       queryFn: fetchVatList })
 
   const { data: contractData, isLoading, isError } = useQuery({
     queryKey: ['contract', pid],
@@ -47,6 +54,11 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
     setNameLong(c.NAME_LONG ?? '')
     setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
     setCashDiscDays(c.CASH_DISCOUNT_DAYS != null ? String(c.CASH_DISCOUNT_DAYS) : '')
+    setVatId(c.VAT_ID ?? null)
+    setSeEnabled(!!c.SE_ENABLED)
+    setSePct(c.SE_PERCENT != null ? String(c.SE_PERCENT) : '')
+    setSeBasis((c.SE_BASIS as 'BRUTTO' | 'NETTO') === 'NETTO' ? 'NETTO' : 'BRUTTO')
+    setSeLegalRef(c.SE_LEGAL_REFERENCE ?? '')
     setContactId(c.INVOICE_CONTACT_ID ?? null)
     setDirty(false)
 
@@ -72,6 +84,11 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
         INVOICE_CONTACT_ID:    contactId,
         CASH_DISCOUNT_PERCENT: cashDiscPct !== '' ? parseFloat(cashDiscPct) : null,
         CASH_DISCOUNT_DAYS:    cashDiscDays !== '' ? parseInt(cashDiscDays, 10) : null,
+        VAT_ID:                vatId,
+        SE_ENABLED:            seEnabled,
+        SE_PERCENT:            seEnabled && sePct !== '' ? parseFloat(sePct) : null,
+        SE_BASIS:              seEnabled ? seBasis : null,
+        SE_LEGAL_REFERENCE:    seEnabled && seLegalRef.trim() ? seLegalRef.trim() : null,
       })
     },
     onSuccess: () => {
@@ -119,6 +136,10 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
     setContactId(c.INVOICE_CONTACT_ID ?? null)
     setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
     setCashDiscDays(c.CASH_DISCOUNT_DAYS != null ? String(c.CASH_DISCOUNT_DAYS) : '')
+    setSeEnabled(!!c.SE_ENABLED)
+    setSePct(c.SE_PERCENT != null ? String(c.SE_PERCENT) : '')
+    setSeBasis((c.SE_BASIS as 'BRUTTO' | 'NETTO') === 'NETTO' ? 'NETTO' : 'BRUTTO')
+    setSeLegalRef(c.SE_LEGAL_REFERENCE ?? '')
     // reset address
     const addrId = c.INVOICE_ADDRESS_ID ?? null
     setAddressId(addrId)
@@ -211,6 +232,74 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
                 placeholder="z.B. 14"
               />
             </div>
+          </div>
+
+          <div className="form-group">
+            <label>Steuerschlüssel (MwSt.)</label>
+            <select
+              value={vatId ?? ''}
+              onChange={e => { setVatId(e.target.value ? Number(e.target.value) : null); touch() }}
+            >
+              <option value="">— Tenant-Standard verwenden —</option>
+              {(vatListData?.data ?? []).map(v => (
+                <option key={v.ID} value={v.ID}>
+                  {v.VAT} ({v.VAT_PERCENT}&nbsp;%)
+                </option>
+              ))}
+            </select>
+            <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0' }}>
+              Bestimmt den MwSt-Satz für alle Rechnungen aus diesem Vertrag.
+              Bei "Tenant-Standard" wird der Default aus den Vorbelegungen verwendet.
+            </p>
+          </div>
+
+          {/* ── Sicherheitseinbehalt ───────────────────────────────────────── */}
+          <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginTop: 12, marginBottom: 8 }}>
+            <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Sicherheitseinbehalt</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>
+              <input type="checkbox" checked={seEnabled} onChange={e => { setSeEnabled(e.target.checked); touch() }} />
+              Sicherheitseinbehalt vereinbart
+            </label>
+            {seEnabled && (
+              <div style={{ paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                    Prozent (%):
+                    <input
+                      type="number" min={0} max={100} step={0.01}
+                      value={sePct}
+                      onChange={e => { setSePct(e.target.value); touch() }}
+                      style={{ width: 80, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      placeholder="z.B. 5"
+                    />
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+                    <span>Basis:</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <input type="radio" checked={seBasis === 'BRUTTO'} onChange={() => { setSeBasis('BRUTTO'); touch() }} />
+                      vom Brutto
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <input type="radio" checked={seBasis === 'NETTO'} onChange={() => { setSeBasis('NETTO'); touch() }} />
+                      vom Netto
+                    </label>
+                  </div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <span style={{ minWidth: 130 }}>Rechtsgrundlage:</span>
+                  <input
+                    type="text"
+                    value={seLegalRef}
+                    onChange={e => { setSeLegalRef(e.target.value); touch() }}
+                    placeholder="z.B. § 17 VOB/B oder freier Text"
+                    style={{ flex: 1, minWidth: 200, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                  />
+                </label>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+                  Wird in jeder Abschlagsrechnung abgezogen und mit der Schluss-/Teilschlussrechnung aufgelöst.
+                </p>
+              </div>
+            )}
           </div>
 
           <Autocomplete

@@ -417,6 +417,26 @@ table.data-table thead { display: table-header-group; }
       <td class="label">Rechnungssumme brutto</td>
       <td class="amount">{{ discounts.adjustedGross | money }}</td>
     </tr>
+    {% if securityRetention and securityRetention.hasSe %}
+    <tr>
+      <td class="label">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
+      <td class="amount">− {{ securityRetention.amount | money }}</td>
+    </tr>
+    {% endif %}
+    {% if securityRetention and securityRetention.hasSeRelease %}
+    {% for r in securityRetention.releaseRows %}
+    <tr>
+      <td class="label" style="color:#15803d">+ Auflösung Sicherheitseinbehalt aus Nr. {{ r.number }} v. {{ r.date | date_de }}</td>
+      <td class="amount" style="color:#15803d">+ {{ r.amount | money }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+    {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
+    <tr class="total-row">
+      <td class="label">Zahlungsbetrag</td>
+      <td class="amount">{{ securityRetention.payable | money }}</td>
+    </tr>
+    {% endif %}
     {% else %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     {% for vat in inv.vatBreakdown %}
@@ -430,15 +450,52 @@ table.data-table thead { display: table-header-group; }
       <td class="label">Rechnungssumme brutto</td>
       <td class="amount">{{ inv.totals.grandTotal | money }}</td>
     </tr>
+    {% if securityRetention and securityRetention.hasSe %}
+    <tr>
+      <td class="label">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
+      <td class="amount">− {{ securityRetention.amount | money }}</td>
+    </tr>
+    {% endif %}
+    {% if securityRetention and securityRetention.hasSeRelease %}
+    {% for r in securityRetention.releaseRows %}
+    <tr>
+      <td class="label" style="color:#15803d">+ Auflösung Sicherheitseinbehalt aus Nr. {{ r.number }} v. {{ r.date | date_de }}</td>
+      <td class="amount" style="color:#15803d">+ {{ r.amount | money }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+    {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
+    <tr class="total-row">
+      <td class="label">Zahlungsbetrag</td>
+      <td class="amount">{{ securityRetention.payable | money }}</td>
+    </tr>
+    {% endif %}
     {% endif %}
 
     {% else %}
 
     {# Regular invoice / Abschlagsrechnung layout #}
+    {% if arProgress and arProgress.hasPrior %}
+    {# Kumulative Abschlagsrechnung-Header (#9) #}
+    <tr>
+      <td class="label">Erbrachtes Honorar</td>
+      <td class="amount">{{ arProgress.cumulativeNet | money }}</td>
+    </tr>
+    <tr>
+      <td class="label">abzgl. bisheriger Abschlagsrechnungen</td>
+      <td class="amount">&minus;&#8239;{{ arProgress.priorNet | money }}</td>
+    </tr>
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">In dieser Rechnung</td>
+      <td class="amount">{{ arProgress.thisNet | money }}</td>
+    </tr>
+    {% else %}
     <tr>
       <td class="label">erbrachtes Honorar</td>
       <td class="amount">{{ amountNet | money }}</td>
     </tr>
+    {% endif %}
     {% if amountExtrasNet and amountExtrasNet != 0 %}
     <tr>
       <td class="label">zzgl. Nebenkosten</td>
@@ -474,6 +531,26 @@ table.data-table thead { display: table-header-group; }
       <td class="label">Rechnungssumme</td>
       <td class="amount">{{ discounts.adjustedGross | money }}</td>
     </tr>
+    {% if securityRetention and securityRetention.hasSe %}
+    <tr>
+      <td class="label">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
+      <td class="amount">− {{ securityRetention.amount | money }}</td>
+    </tr>
+    {% endif %}
+    {% if securityRetention and securityRetention.hasSeRelease %}
+    {% for r in securityRetention.releaseRows %}
+    <tr>
+      <td class="label" style="color:#15803d">+ Auflösung Sicherheitseinbehalt aus Nr. {{ r.number }} v. {{ r.date | date_de }}</td>
+      <td class="amount" style="color:#15803d">+ {{ r.amount | money }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+    {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
+    <tr class="total-row">
+      <td class="label">Zahlungsbetrag</td>
+      <td class="amount">{{ securityRetention.payable | money }}</td>
+    </tr>
+    {% endif %}
     {% else %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     {% for vat in inv.vatBreakdown %}
@@ -486,8 +563,36 @@ table.data-table thead { display: table-header-group; }
       <td class="label">Rechnungssumme</td>
       <td class="amount">{{ inv.totals.grandTotal | money }}</td>
     </tr>
+    {% if securityRetention and securityRetention.hasSe %}
+    <tr>
+      <td class="label">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
+      <td class="amount">− {{ securityRetention.amount | money }}</td>
+    </tr>
+    {% endif %}
+    {% if securityRetention and securityRetention.hasSeRelease %}
+    {% for r in securityRetention.releaseRows %}
+    <tr>
+      <td class="label" style="color:#15803d">+ Auflösung Sicherheitseinbehalt aus Nr. {{ r.number }} v. {{ r.date | date_de }}</td>
+      <td class="amount" style="color:#15803d">+ {{ r.amount | money }}</td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+    {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
+    <tr class="total-row">
+      <td class="label">Zahlungsbetrag</td>
+      <td class="amount">{{ securityRetention.payable | money }}</td>
+    </tr>
+    {% endif %}
     {% endif %}
 
+    {% endif %}
+
+    {% if securityRetention and securityRetention.hasSe %}
+    <p style="margin-top:6mm;font-size:9pt;color:#374151;line-height:1.4">
+      Hinweis: Der Sicherheitseinbehalt in Höhe von <strong>{{ securityRetention.amount | money }}</strong>
+      ({{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}){% if securityRetention.legalReference %} gem. {{ securityRetention.legalReference }}{% endif %}
+      wird einbehalten und mit der Schluss-/Teilschlussrechnung aufgelöst.
+    </p>
     {% endif %}
 
   </table>
@@ -500,7 +605,7 @@ table.data-table thead { display: table-header-group; }
     <div class="payment-note-text">
       <div class="payment-note">
         Bitte überweisen Sie
-        {% if discounts.hasDiscounts %}<strong>{{ discounts.adjustedGross | money }}</strong>{% else %}<strong>{{ inv.totals.grandTotal | money }}</strong>{% endif %}
+        {% if payAmount %}<strong>{{ payAmount | money }}</strong>{% elif discounts.hasDiscounts %}<strong>{{ discounts.adjustedGross | money }}</strong>{% else %}<strong>{{ inv.totals.grandTotal | money }}</strong>{% endif %}
         unter Angabe der Rechnungsnummer <strong>{{ inv.number }}</strong>
         {% if inv.dueDate %}bis zum <strong>{{ inv.dueDate | date_de }}</strong>{% endif %}
         auf folgendes Konto:{% if inv.seller.iban %}<br>

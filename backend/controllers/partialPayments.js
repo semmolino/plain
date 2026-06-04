@@ -6,6 +6,144 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
 
 // ---------------------------------------------------------------------------
+// GET /api/v1/partial-payments/open-se?project_id=...
+// List open Sicherheitseinbehalte for a project (Phase 2)
+// Returns PARTIAL_PAYMENTs that:
+//  - belong to the given project
+//  - have SE_AMOUNT > 0
+//  - are NOT yet released (SE_RELEASED_BY_INVOICE_ID IS NULL)
+//  - are booked (STATUS_ID = 2)
+// ---------------------------------------------------------------------------
+async function listOpenSeForProject(req, res, supabase) {
+  const projectId = parseInt(String(req.query.project_id ?? ""), 10);
+  if (!Number.isFinite(projectId) || projectId <= 0) {
+    return res.status(400).json({ error: "project_id erforderlich" });
+  }
+  try {
+    const baseCols = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID";
+    const seCols = ", SE_PERCENT, SE_BASIS, SE_BASIS_AMT, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID";
+
+    // Try with SE columns
+    let { data, error } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select(baseCols + seCols)
+      .eq("TENANT_ID", req.tenantId)
+      .eq("PROJECT_ID", projectId)
+      .eq("STATUS_ID", 2)
+      .gt("SE_AMOUNT", 0)
+      .is("SE_RELEASED_BY_INVOICE_ID", null)
+      .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+
+    if (error && String(error.message || "").includes("SE_")) {
+      // Migration 0047 not yet run — return empty list
+      return res.json({ data: [] });
+    }
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Phase 5: Filter out ARs that have been storno'd (a Storno-AR points to them)
+    const ids = (data || []).map(r => r.ID);
+    if (ids.length > 0) {
+      const { data: stornos } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("CANCELS_PARTIAL_PAYMENT_ID")
+        .in("CANCELS_PARTIAL_PAYMENT_ID", ids);
+      const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+      const filtered = (data || []).filter(r => !cancelled.has(r.ID));
+      return res.json({ data: filtered });
+    }
+    return res.json({ data: data || [] });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/partial-payments/se-overview?project_id=...
+// Phase 3 — Full SE overview for a project: all SE entries (open + released)
+// Returns array of:
+//   { id, partial_payment_number, partial_payment_date, total_amount_gross,
+//     se_percent, se_basis, se_amount,
+//     status: 'OFFEN' | 'AUFGELOEST',
+//     released_by_invoice_id, released_by_invoice_number, released_at }
+// ---------------------------------------------------------------------------
+async function seOverviewForProject(req, res, supabase) {
+  const projectId = parseInt(String(req.query.project_id ?? ""), 10);
+  if (!Number.isFinite(projectId) || projectId <= 0) {
+    return res.status(400).json({ error: "project_id erforderlich" });
+  }
+  try {
+    const cols = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_GROSS, SE_PERCENT, SE_BASIS, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID";
+    let { data: pps, error } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select(cols)
+      .eq("TENANT_ID", req.tenantId)
+      .eq("PROJECT_ID", projectId)
+      .eq("STATUS_ID", 2)
+      .gt("SE_AMOUNT", 0)
+      .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+    if (error && String(error.message || "").includes("SE_")) return res.json({ data: [] });
+    if (error) return res.status(500).json({ error: error.message });
+    pps = pps || [];
+
+    // Enrich released entries with invoice number + release timestamp
+    const releaseInvoiceIds = [...new Set(pps.map(p => p.SE_RELEASED_BY_INVOICE_ID).filter(Boolean))];
+    const invoiceMap = new Map();
+    if (releaseInvoiceIds.length > 0) {
+      const { data: invs } = await supabase
+        .from("INVOICE")
+        .select("ID, INVOICE_NUMBER, INVOICE_DATE")
+        .in("ID", releaseInvoiceIds);
+      (invs || []).forEach(i => invoiceMap.set(i.ID, i));
+    }
+    const releaseTimes = new Map();
+    if (releaseInvoiceIds.length > 0) {
+      try {
+        const { data: rels } = await supabase
+          .from("SE_RELEASE")
+          .select("PARTIAL_PAYMENT_ID, RELEASED_AT")
+          .in("INVOICE_ID", releaseInvoiceIds);
+        (rels || []).forEach(r => releaseTimes.set(r.PARTIAL_PAYMENT_ID, r.RELEASED_AT));
+      } catch (_) { /* table may not exist */ }
+    }
+
+    // Phase 5: Determine which ARs have been storno'd
+    const allIds = pps.map(p => p.ID);
+    let cancelled = new Set();
+    if (allIds.length > 0) {
+      const { data: stornos } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("CANCELS_PARTIAL_PAYMENT_ID")
+        .in("CANCELS_PARTIAL_PAYMENT_ID", allIds);
+      cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+    }
+
+    const result = pps.map(p => {
+      const inv = p.SE_RELEASED_BY_INVOICE_ID ? invoiceMap.get(p.SE_RELEASED_BY_INVOICE_ID) : null;
+      const isCancelled = cancelled.has(p.ID);
+      return {
+        id: p.ID,
+        partial_payment_number: p.PARTIAL_PAYMENT_NUMBER,
+        partial_payment_date:   p.PARTIAL_PAYMENT_DATE,
+        total_amount_gross:     Number(p.TOTAL_AMOUNT_GROSS || 0),
+        se_percent:             p.SE_PERCENT,
+        se_basis:               p.SE_BASIS,
+        se_amount:              Number(p.SE_AMOUNT || 0),
+        status: isCancelled
+          ? "STORNIERT"
+          : (p.SE_RELEASED_BY_INVOICE_ID ? "AUFGELOEST" : "OFFEN"),
+        released_by_invoice_id:     p.SE_RELEASED_BY_INVOICE_ID,
+        released_by_invoice_number: inv?.INVOICE_NUMBER || null,
+        released_by_invoice_date:   inv?.INVOICE_DATE || null,
+        released_at:                releaseTimes.get(p.ID) || null,
+      };
+    });
+    return res.json({ data: result });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/partial-payments
 // ---------------------------------------------------------------------------
 async function listPartialPayments(req, res, supabase) {
@@ -99,6 +237,15 @@ async function patchPartialPayment(req, res, supabase) {
   if (b.cash_discount_days    !== undefined) payload.CASH_DISCOUNT_DAYS    = b.cash_discount_days    != null ? parseInt(String(b.cash_discount_days), 10) : null;
   if (b.cash_discount_amount  !== undefined) payload.CASH_DISCOUNT  = b.cash_discount_amount  != null ? toNum(b.cash_discount_amount)  : null;
 
+  // Sicherheitseinbehalt (Phase 1)
+  if (b.se_percent    !== undefined) payload.SE_PERCENT    = b.se_percent    != null && b.se_percent !== "" ? toNum(b.se_percent)    : null;
+  if (b.se_basis      !== undefined) {
+    const v = String(b.se_basis || "").toUpperCase();
+    payload.SE_BASIS = v === "NETTO" ? "NETTO" : v === "BRUTTO" ? "BRUTTO" : null;
+  }
+  if (b.se_basis_amt  !== undefined) payload.SE_BASIS_AMT  = b.se_basis_amt  != null && b.se_basis_amt !== "" ? toNum(b.se_basis_amt)  : null;
+  if (b.se_amount     !== undefined) payload.SE_AMOUNT     = b.se_amount     != null && b.se_amount !== "" ? toNum(b.se_amount)     : null;
+
   if (b.vat_id !== undefined) {
     const vatId = b.vat_id;
     if (!vatId) return res.status(400).json({ error: "Mehrwertsteuersatz ist erforderlich" });
@@ -136,7 +283,14 @@ async function patchPartialPayment(req, res, supabase) {
     payload.PAYMENT_MEANS_ID = pm;
   }
 
-  const { error } = await supabase.from("PARTIAL_PAYMENT").update(payload).eq("ID", id).eq("TENANT_ID", req.tenantId);
+  let { error } = await supabase.from("PARTIAL_PAYMENT").update(payload).eq("ID", id).eq("TENANT_ID", req.tenantId);
+  if (error && String(error.message || "").includes("SE_")) {
+    // Migration 0047 not yet run — retry without SE fields
+    const stripped = { ...payload };
+    delete stripped.SE_PERCENT; delete stripped.SE_BASIS; delete stripped.SE_BASIS_AMT; delete stripped.SE_AMOUNT;
+    const r = await supabase.from("PARTIAL_PAYMENT").update(stripped).eq("ID", id).eq("TENANT_ID", req.tenantId);
+    error = r.error;
+  }
   if (error) return res.status(500).json({ error: error.message });
 
   return res.json({ success: true });
@@ -150,11 +304,53 @@ async function getBillingProposal(req, res, supabase) {
 
   const { data: pp, error: ppErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, PROJECT_ID, CONTRACT_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT")
+    .select("ID, PROJECT_ID, CONTRACT_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT, VAT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
+
+  // Self-Heal: wenn VAT_PERCENT auf der AR fehlt, aus Vertrag oder
+  // Tenant-Standard nachziehen und in die DB persistieren. Damit zeigt
+  // der Wizard sofort MwSt + korrekten Brutto, auch wenn der Draft vor
+  // dem Fix angelegt wurde.
+  if (pp.VAT_PERCENT == null || svc.toNum(pp.VAT_PERCENT) === 0) {
+    try {
+      let resolvedVatId = null;
+      if (pp.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", pp.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("KEY, VALUE")
+          .eq("TENANT_ID", req.tenantId).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      // Last-Resort: ersten VAT-Eintrag des Tenants (oder gemeinsam) nehmen,
+      // damit der Wizard nicht stumm bei 0% MwSt landet, wenn weder Vertrag
+      // noch Tenant-Default konfiguriert sind.
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID, VAT_PERCENT").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        const newVatPct = vat?.VAT_PERCENT ?? null;
+        if (newVatPct != null) {
+          await supabase.from("PARTIAL_PAYMENT")
+            .update({ VAT_ID: resolvedVatId, VAT_PERCENT: newVatPct })
+            .eq("ID", id);
+          pp.VAT_ID = resolvedVatId;
+          pp.VAT_PERCENT = newVatPct;
+        }
+      }
+    } catch (_) { /* soft-fail — bleibt 0% */ }
+  }
 
   let structures = [];
   try {
@@ -195,7 +391,14 @@ async function getBillingProposal(req, res, supabase) {
     const bt1Existing = await svc.sumPpsForPartialPayment(supabase, { partialPaymentId: id, structureIds: bt1Ids });
     performanceAmount = bt1Existing.net;
 
-    if (performanceAmount <= 0 && performanceSuggested > 0) {
+    // Auto-Recompute in zwei Fällen:
+    //   a) noch nichts allokiert
+    //   b) gespeicherter Betrag ist GRÖSSER als der aktuell abrechenbare
+    //      Vorschlag — das passiert, wenn die abrechenbare Summe zwischen-
+    //      durch durch Storno-Vorgänge sank. Stale Drafts heilen so von
+    //      selbst, ohne den User zu zwingen, den Entwurf zu löschen.
+    const isStale = performanceSuggested > 0 && performanceAmount > performanceSuggested + 0.5;
+    if ((performanceAmount <= 0 || isStale) && performanceSuggested > 0) {
       const r = await svc.applyPerformanceAmount(supabase, {
         partialPaymentId: id,
         contractId: pp.CONTRACT_ID,
@@ -248,7 +451,7 @@ async function putPerformance(req, res, supabase) {
 
   const { data: pp, error: ppErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, PROJECT_ID, CONTRACT_ID")
+    .select("ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
@@ -266,6 +469,7 @@ async function putPerformance(req, res, supabase) {
         amount_extras_net: totals.amount_extras_net,
         total_amount_net: totals.total_amount_net,
         total_amount_gross: totals.total_amount_gross,
+        vat_percent: totals.vat_percent,
       },
     });
   } catch (e) {
@@ -389,6 +593,7 @@ async function postTec(req, res, supabase) {
         amount_extras_net: totals.amount_extras_net,
         total_amount_net: totals.total_amount_net,
         total_amount_gross: totals.total_amount_gross,
+        vat_percent: totals.vat_percent,
       },
     });
   } catch (e) {
@@ -714,6 +919,8 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
 
 module.exports = {
   listPartialPayments,
+  listOpenSeForProject,
+  seOverviewForProject,
   initPartialPayment,
   patchPartialPayment,
   getBillingProposal,

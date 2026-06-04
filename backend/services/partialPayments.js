@@ -259,11 +259,17 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
 
   const map = new Map();
 
+  // STATUS_ID=2 = gebucht; STATUS_ID=3 = stornoiertes Original. Beide
+  // einbeziehen, damit Storno-Paare (Original=3 mit +X, Storno-Rechnung=2
+  // mit -X) auf 0 saldieren und nicht versehentlich nur die Storno-Hälfte
+  // zählt — sonst wird der "Empfohlene Leistungsbetrag" doppelt zu hoch.
+  const statusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
+
   // --- Amounts from booked PARTIAL_PAYMENT rows ---
   let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID");
   if (contractId !== null && contractId !== undefined) ppQ = ppQ.eq("CONTRACT_ID", contractId);
   else if (projectId !== null && projectId !== undefined) ppQ = ppQ.eq("PROJECT_ID", projectId);
-  if (bookedStatusId !== null && bookedStatusId !== undefined) ppQ = ppQ.eq("STATUS_ID", bookedStatusId);
+  if (bookedStatusId !== null && bookedStatusId !== undefined) ppQ = ppQ.in("STATUS_ID", statusIds);
   if (excludePartialPaymentId) ppQ = ppQ.neq("ID", excludePartialPaymentId);
 
   const { data: ppRows, error: ppErr } = await ppQ;
@@ -281,7 +287,7 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   }
 
   // --- Amounts from booked INVOICE rows (must also be subtracted) ---
-  let invQ = supabase.from("INVOICE").select("ID").eq("STATUS_ID", bookedStatusId);
+  let invQ = supabase.from("INVOICE").select("ID").in("STATUS_ID", statusIds);
   if (contractId !== null && contractId !== undefined) invQ = invQ.eq("CONTRACT_ID", contractId);
   else if (projectId !== null && projectId !== undefined) invQ = invQ.eq("PROJECT_ID", projectId);
 
@@ -364,29 +370,66 @@ async function writePpsRows(supabase, { partialPaymentId, structureIds, rows }) 
 async function recomputePartialPaymentTotals(supabase, partialPaymentId) {
   const { data: pp, error: ppErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, VAT_PERCENT")
+    .select("ID, VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
     .eq("ID", partialPaymentId)
     .maybeSingle();
   if (ppErr || !pp) throw new Error("PARTIAL_PAYMENT konnte nicht geladen werden");
+
+  // Self-Heal VAT_PERCENT (siehe recomputeInvoiceTotals)
+  let vatPercent = toNum(pp.VAT_PERCENT);
+  let resolvedVatId = pp.VAT_ID ?? null;
+  if (vatPercent === 0) {
+    try {
+      if (!resolvedVatId && pp.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", pp.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId && pp.TENANT_ID) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("VALUE")
+          .eq("TENANT_ID", pp.TENANT_ID).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        if (vat?.VAT_PERCENT != null) vatPercent = toNum(vat.VAT_PERCENT);
+      }
+    } catch (_) { /* soft-fail */ }
+  }
 
   const sums = await sumPpsForPartialPayment(supabase, { partialPaymentId });
   const amountNet = sums.net;
   const amountExtras = sums.extras;
   const totalNet = round2(amountNet + amountExtras);
-  const vatPercent = toNum(pp.VAT_PERCENT);
   const taxAmountNet = round2(totalNet * vatPercent / 100);
   const totalGross = round2(totalNet + taxAmountNet);
 
-  const { error: upErr } = await supabase.from("PARTIAL_PAYMENT").update({
+  const updatePayload = {
     AMOUNT_NET: amountNet,
     AMOUNT_EXTRAS_NET: amountExtras,
     TOTAL_AMOUNT_NET: totalNet,
     TAX_AMOUNT_NET: taxAmountNet,
     TOTAL_AMOUNT_GROSS: totalGross,
-  }).eq("ID", partialPaymentId);
+  };
+  if (vatPercent !== 0) updatePayload.VAT_PERCENT = vatPercent;
+  if (resolvedVatId)    updatePayload.VAT_ID      = resolvedVatId;
+
+  const { error: upErr } = await supabase.from("PARTIAL_PAYMENT").update(updatePayload).eq("ID", partialPaymentId);
   if (upErr) throw new Error(upErr.message);
 
-  return { amount_net: amountNet, amount_extras_net: amountExtras, total_amount_net: totalNet, tax_amount_net: taxAmountNet, total_amount_gross: totalGross };
+  return {
+    amount_net: amountNet, amount_extras_net: amountExtras,
+    total_amount_net: totalNet, tax_amount_net: taxAmountNet,
+    total_amount_gross: totalGross, vat_percent: vatPercent,
+  };
 }
 
 async function applyPerformanceAmount(supabase, { partialPaymentId, contractId, projectId, amount, tenantId = undefined }) {
@@ -500,20 +543,27 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
 // ---------------------------------------------------------------------------
 
 async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
-  let query = supabase
-    .from("PARTIAL_PAYMENT")
-    .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_PARTIAL_PAYMENT_ID")
-    .eq("TENANT_ID", tenantId)
-    .order("PARTIAL_PAYMENT_DATE", { ascending: false })
-    .limit(limit);
-
-  if (statusId) query = query.eq("STATUS_ID", statusId);
-  if (q) {
-    const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
-    query = query.or(`PARTIAL_PAYMENT_NUMBER.ilike.%${esc}%,CONTACT.ilike.%${esc}%`);
+  const BASE_COLS = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_PARTIAL_PAYMENT_ID";
+  const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASED_BY_INVOICE_ID";
+  const buildQuery = (cols) => {
+    let q1 = supabase
+      .from("PARTIAL_PAYMENT")
+      .select(cols)
+      .eq("TENANT_ID", tenantId)
+      .order("PARTIAL_PAYMENT_DATE", { ascending: false })
+      .limit(limit);
+    if (statusId) q1 = q1.eq("STATUS_ID", statusId);
+    if (q) {
+      const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      q1 = q1.or(`PARTIAL_PAYMENT_NUMBER.ilike.%${esc}%,CONTACT.ilike.%${esc}%`);
+    }
+    return q1;
+  };
+  let { data: rows, error } = await buildQuery(BASE_COLS + SE_COLS);
+  if (error && /SE_/.test(error.message || "")) {
+    const r = await buildQuery(BASE_COLS);
+    rows = r.data; error = r.error;
   }
-
-  const { data: rows, error } = await query;
   if (error) throw error;
 
   const ppRows = Array.isArray(rows) ? rows : [];
@@ -585,6 +635,10 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
     ADDRESS_NAME_1: r.ADDRESS_NAME_1 ?? "",
     AMOUNT_PAYED_GROSS: payedGrossMap[r.ID] ?? 0,
     COMMENT: r.COMMENT ?? "",
+    SE_AMOUNT:                  r.SE_AMOUNT ?? null,
+    SE_PERCENT:                 r.SE_PERCENT ?? null,
+    SE_BASIS:                   r.SE_BASIS ?? null,
+    SE_RELEASED_BY_INVOICE_ID:  r.SE_RELEASED_BY_INVOICE_ID ?? null,
   }));
 }
 
@@ -632,9 +686,28 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     contractRow = c2;
   }
 
+  // VAT resolution order:
+  //   1) Contract VAT_ID (when set)
+  //   2) TENANT_SETTINGS.default_vat_id (fallback)
+  // Without this fallback, ARs from contracts without VAT_ID got VAT_PERCENT=null
+  // and the wizard hid the MwSt-Zeile until the user saved & reopened.
+  let effectiveVatId = contractRow.VAT_ID ?? null;
+  if (!effectiveVatId) {
+    try {
+      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+      const tenantId = projT?.TENANT_ID ?? null;
+      if (tenantId) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("KEY, VALUE")
+          .eq("TENANT_ID", tenantId).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) effectiveVatId = Number(defVatId);
+      }
+    } catch (_) { /* settings missing — fall through */ }
+  }
   let contractVatPercent = null;
-  if (contractRow.VAT_ID) {
-    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", contractRow.VAT_ID).maybeSingle();
+  if (effectiveVatId) {
+    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", effectiveVatId).maybeSingle();
     contractVatPercent = vat?.VAT_PERCENT ?? null;
   }
 
@@ -669,7 +742,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     PROJECT_ID: projectId,
     CONTRACT_ID: contractId,
     CURRENCY_ID: contractRow.CURRENCY_ID ?? null,
-    VAT_ID: contractRow.VAT_ID ?? null,
+    VAT_ID: effectiveVatId,
     VAT_PERCENT: contractVatPercent,
     STATUS_ID: 1,
     COMPANY_NAME_1: company.COMPANY_NAME_1 ?? null,
@@ -907,6 +980,13 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
     throw { status: 409, message: `Es existiert bereits eine Storno-Abschlagsrechnung (${label}) für diesen Eintrag` };
   }
 
+  // Phase 5: Warn if this AR had SE already released by a Schluss/Teilschluss.
+  // Storno proceeds, but the linked Schluss already accounted for the SE — manual
+  // reconciliation may be needed.
+  if (Number(orig.SE_AMOUNT || 0) > 0 && orig.SE_RELEASED_BY_INVOICE_ID) {
+    console.warn(`[CANCEL_PARTIAL_PAYMENT] AR ${id} has SE_AMOUNT=${orig.SE_AMOUNT} already released by INVOICE ${orig.SE_RELEASED_BY_INVOICE_ID}. Storno will not auto-reverse the Schluss; manual reconciliation may be required.`);
+  }
+
   // ── Optional: delete existing payments ──────────────────────────────────
   if (deletePayments) {
     const { data: payments } = await supabase
@@ -976,6 +1056,12 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
     TAX_AMOUNT_NET:    -round2(toNum(orig.TAX_AMOUNT_NET)),
     TOTAL_AMOUNT_GROSS:-round2(toNum(orig.TOTAL_AMOUNT_GROSS)),
   };
+
+  // SE-Beträge auch negieren, damit die Storno-Zeile in der Rechnungsliste
+  // korrekt spiegelt: Original Forderung = Brutto − SEB, Storno Forderung
+  // muss = −Brutto + SEB sein, damit die Summe der beiden auf 0 saldiert.
+  if ("SE_AMOUNT"    in orig) cancelRow.SE_AMOUNT    = orig.SE_AMOUNT    != null ? -round2(toNum(orig.SE_AMOUNT))    : null;
+  if ("SE_BASIS_AMT" in orig) cancelRow.SE_BASIS_AMT = orig.SE_BASIS_AMT != null ? -round2(toNum(orig.SE_BASIS_AMT)) : null;
 
   const { data: created, error: insertErr } = await supabase
     .from("PARTIAL_PAYMENT").insert([cancelRow]).select("ID").single();

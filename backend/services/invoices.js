@@ -253,7 +253,12 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   const m = new Map();
 
   // --- Amounts from booked INVOICE rows ---
-  let invQ = supabase.from("INVOICE").select("ID").eq("STATUS_ID", bookedStatusId);
+  // STATUS_ID=2 = gebucht; STATUS_ID=3 = stornoiertes Original (durch eine
+  // Stornorechnung neutralisiert). Beide einbeziehen, damit Storno-Paare
+  // (Original=3 mit +X, Storno-Rechnung=2 mit -X) auf 0 saldieren. Sonst
+  // wirkt nur die negative Storno und der Vorschlag wird viel zu hoch.
+  const invStatusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
+  let invQ = supabase.from("INVOICE").select("ID").in("STATUS_ID", invStatusIds);
   if (contractId) invQ = invQ.eq("CONTRACT_ID", contractId);
   else invQ = invQ.eq("PROJECT_ID", projectId);
   if (excludeInvoiceId) invQ = invQ.neq("ID", excludeInvoiceId);
@@ -277,7 +282,10 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   }
 
   // --- Amounts from booked PARTIAL_PAYMENT rows (must also be subtracted) ---
-  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID").eq("STATUS_ID", bookedStatusId);
+  // Storno-Paare: Original wird STATUS_ID=3 + Storno hat STATUS_ID=2 mit
+  // negierten Beträgen. Beide einbeziehen, damit sie auf 0 saldieren.
+  const ppStatusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
+  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID").in("STATUS_ID", ppStatusIds);
   if (contractId) ppQ = ppQ.eq("CONTRACT_ID", contractId);
   else ppQ = ppQ.eq("PROJECT_ID", projectId);
 
@@ -350,32 +358,67 @@ async function writeInvoiceStructureRows(supabase, { invoiceId, rows, deleteStru
 async function recomputeInvoiceTotals(supabase, invoiceId) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
-    .select("ID, VAT_PERCENT")
+    .select("ID, VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
     .eq("ID", invoiceId)
     .maybeSingle();
   if (invErr || !inv) throw new Error("INVOICE konnte nicht geladen werden");
+
+  // Self-Heal VAT_PERCENT: Vertrag → Tenant-Default → höchster VAT-Eintrag
+  let vatPct = toNum(inv.VAT_PERCENT);
+  let resolvedVatId = inv.VAT_ID ?? null;
+  if (vatPct === 0) {
+    try {
+      if (!resolvedVatId && inv.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", inv.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId && inv.TENANT_ID) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("VALUE")
+          .eq("TENANT_ID", inv.TENANT_ID).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        if (vat?.VAT_PERCENT != null) vatPct = toNum(vat.VAT_PERCENT);
+      }
+    } catch (_) { /* soft-fail */ }
+  }
 
   const sums = await sumInvStructureForInvoice(supabase, { invoiceId });
   const amountNet = round2(sums.net);
   const amountExtras = round2(sums.extras);
   const totalNet = round2(amountNet + amountExtras);
-  const vatPct = toNum(inv.VAT_PERCENT);
   const taxAmountNet = round2(totalNet * vatPct / 100);
   const totalGross = round2(totalNet + taxAmountNet);
 
+  const updatePayload = {
+    AMOUNT_NET: amountNet,
+    AMOUNT_EXTRAS_NET: amountExtras,
+    TOTAL_AMOUNT_NET: totalNet,
+    TAX_AMOUNT_NET: taxAmountNet,
+    TOTAL_AMOUNT_GROSS: totalGross,
+  };
+  if (vatPct !== 0)     updatePayload.VAT_PERCENT = vatPct;
+  if (resolvedVatId)    updatePayload.VAT_ID      = resolvedVatId;
+
   const { error: upErr } = await supabase
-    .from("INVOICE")
-    .update({
-      AMOUNT_NET: amountNet,
-      AMOUNT_EXTRAS_NET: amountExtras,
-      TOTAL_AMOUNT_NET: totalNet,
-      TAX_AMOUNT_NET: taxAmountNet,
-      TOTAL_AMOUNT_GROSS: totalGross,
-    })
-    .eq("ID", invoiceId);
+    .from("INVOICE").update(updatePayload).eq("ID", invoiceId);
   if (upErr) throw new Error(upErr.message);
 
-  return { amount_net: amountNet, amount_extras_net: amountExtras, total_amount_net: totalNet, tax_amount_net: taxAmountNet, total_amount_gross: totalGross };
+  return {
+    amount_net: amountNet, amount_extras_net: amountExtras,
+    total_amount_net: totalNet, tax_amount_net: taxAmountNet,
+    total_amount_gross: totalGross, vat_percent: vatPct,
+  };
 }
 
 async function applyPerformanceAmount(supabase, { invoiceId, contractId, projectId, amount, tenantId = undefined }) {
@@ -496,21 +539,27 @@ async function findTecIdsToAutoAssign(supabase, { invoiceId, structureIds }) {
 // ---------------------------------------------------------------------------
 
 async function listInvoices(supabase, { tenantId, limit, q }) {
-  let query = supabase
-    .from("INVOICE")
-    .select(
-      "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, INVOICE_TYPE, CANCELS_INVOICE_ID"
-    )
-    .eq("TENANT_ID", tenantId)
-    .order("INVOICE_DATE", { ascending: false })
-    .limit(limit);
-
-  if (q) {
-    const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
-    query = query.or(`INVOICE_NUMBER.ilike.%${esc}%`);
+  const BASE_COLS = "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, INVOICE_TYPE, CANCELS_INVOICE_ID";
+  const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASE_TOTAL";
+  const buildQuery = (cols) => {
+    let q1 = supabase
+      .from("INVOICE")
+      .select(cols)
+      .eq("TENANT_ID", tenantId)
+      .order("INVOICE_DATE", { ascending: false })
+      .limit(limit);
+    if (q) {
+      const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      q1 = q1.or(`INVOICE_NUMBER.ilike.%${esc}%`);
+    }
+    return q1;
+  };
+  let { data: rows, error } = await buildQuery(BASE_COLS + SE_COLS);
+  if (error && /SE_/.test(error.message || "")) {
+    // Migration 0047 nicht gelaufen — Fallback ohne SE-Spalten.
+    const r = await buildQuery(BASE_COLS);
+    rows = r.data; error = r.error;
   }
-
-  const { data: rows, error } = await query;
   if (error) throw error;
 
   const invRows = Array.isArray(rows) ? rows : [];
@@ -588,6 +637,10 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
     ADDRESS_NAME_1: r.ADDRESS_NAME_1 ?? "",
     AMOUNT_PAYED_GROSS: payedGrossMap[r.ID] ?? 0,
     COMMENT: r.COMMENT ?? "",
+    SE_AMOUNT:         r.SE_AMOUNT ?? null,
+    SE_PERCENT:        r.SE_PERCENT ?? null,
+    SE_BASIS:          r.SE_BASIS ?? null,
+    SE_RELEASE_TOTAL:  r.SE_RELEASE_TOTAL ?? null,
   }));
 }
 
@@ -658,9 +711,24 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     contractRow = c2;
   }
 
+  // VAT resolution: contract.VAT_ID > TENANT_SETTINGS.default_vat_id
+  let effectiveVatId = contractRow.VAT_ID ?? null;
+  if (!effectiveVatId) {
+    try {
+      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+      const tenantId = projT?.TENANT_ID ?? null;
+      if (tenantId) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("KEY, VALUE")
+          .eq("TENANT_ID", tenantId).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) effectiveVatId = Number(defVatId);
+      }
+    } catch (_) { /* settings missing — fall through */ }
+  }
   let contractVatPercent = null;
-  if (contractRow.VAT_ID) {
-    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", contractRow.VAT_ID).maybeSingle();
+  if (effectiveVatId) {
+    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", effectiveVatId).maybeSingle();
     contractVatPercent = vat?.VAT_PERCENT ?? null;
   }
 
@@ -692,7 +760,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     PROJECT_ID: projectId,
     CONTRACT_ID: contractId,
     CURRENCY_ID: contractRow.CURRENCY_ID ?? null,
-    VAT_ID: contractRow.VAT_ID ?? null,
+    VAT_ID: effectiveVatId,
     VAT_PERCENT: contractVatPercent,
     STATUS_ID: 1,
     COMPANY_NAME_1: company.COMPANY_NAME_1 ?? null,
@@ -779,6 +847,16 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   if (body.cash_discount_days    !== undefined) payload.CASH_DISCOUNT_DAYS    = body.cash_discount_days    != null ? parseInt(String(body.cash_discount_days), 10) : null;
   if (body.cash_discount_amount  !== undefined) payload.CASH_DISCOUNT  = body.cash_discount_amount  != null ? toNum(body.cash_discount_amount)  : null;
 
+  // Sicherheitseinbehalt (Phase 1)
+  if (body.se_percent       !== undefined) payload.SE_PERCENT       = body.se_percent       != null && body.se_percent !== "" ? toNum(body.se_percent)       : null;
+  if (body.se_basis         !== undefined) {
+    const v = String(body.se_basis || "").toUpperCase();
+    payload.SE_BASIS = v === "NETTO" ? "NETTO" : v === "BRUTTO" ? "BRUTTO" : null;
+  }
+  if (body.se_basis_amt     !== undefined) payload.SE_BASIS_AMT     = body.se_basis_amt     != null && body.se_basis_amt !== "" ? toNum(body.se_basis_amt)     : null;
+  if (body.se_amount        !== undefined) payload.SE_AMOUNT        = body.se_amount        != null && body.se_amount !== "" ? toNum(body.se_amount)        : null;
+  if (body.se_release_total !== undefined) payload.SE_RELEASE_TOTAL = body.se_release_total != null && body.se_release_total !== "" ? toNum(body.se_release_total) : null;
+
   if (body.vat_id !== undefined) {
     const vatId = body.vat_id;
     if (!vatId) throw { status: 400, message: "Mehrwertsteuersatz ist erforderlich" };
@@ -805,7 +883,14 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
 
   if (Object.keys(payload).length === 0) return { ok: true };
 
-  const { error: upErr } = await supabase.from("INVOICE").update(payload).eq("ID", id);
+  let { error: upErr } = await supabase.from("INVOICE").update(payload).eq("ID", id);
+  if (upErr && String(upErr.message || "").includes("SE_")) {
+    // Migration 0047 not yet run — retry without SE fields
+    const stripped = { ...payload };
+    delete stripped.SE_PERCENT; delete stripped.SE_BASIS; delete stripped.SE_BASIS_AMT; delete stripped.SE_AMOUNT; delete stripped.SE_RELEASE_TOTAL;
+    const r = await supabase.from("INVOICE").update(stripped).eq("ID", id);
+    upErr = r.error;
+  }
   if (upErr) throw { status: 500, message: upErr.message };
 
   return { ok: true };
@@ -850,11 +935,68 @@ async function deleteInvoice(supabase, { id, tenantId }) {
   if (delErr) throw new Error(delErr.message);
 }
 
-async function bookInvoice(supabase, { id, inv }) {
+async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = null }) {
   const vatPercent = toNum(inv.VAT_PERCENT);
   const totalNet = toNum(inv.TOTAL_AMOUNT_NET);
   const taxAmountNet = round2(totalNet * vatPercent / 100);
   const totalGross = round2(totalNet + taxAmountNet);
+
+  // ── Sicherheitseinbehalt-Auflösung (Phase 2) ──────────────────────────────
+  // For Schluss-/Teilschlussrechnungen, release the selected open SE from
+  // prior Abschlagsrechnungen BEFORE rendering the PDF so the PDF can
+  // reflect SE_RELEASE_TOTAL.
+  let seReleaseTotal = 0;
+  if (Array.isArray(releasePpIds) && releasePpIds.length > 0) {
+    try {
+      // Load each PP's SE_AMOUNT (and double-check it's still open + same project)
+      const { data: pps, error: ppsErr } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("ID, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID, PROJECT_ID, TENANT_ID")
+        .in("ID", releasePpIds);
+      if (ppsErr) throw new Error(ppsErr.message);
+
+      const validPps = (pps || []).filter(p =>
+        Number(p.SE_AMOUNT || 0) > 0 &&
+        p.SE_RELEASED_BY_INVOICE_ID == null &&
+        (tenantId == null || p.TENANT_ID == tenantId) &&
+        (inv.PROJECT_ID == null || p.PROJECT_ID == inv.PROJECT_ID)
+      );
+
+      for (const pp of validPps) {
+        const amt = round2(Number(pp.SE_AMOUNT || 0));
+        seReleaseTotal = round2(seReleaseTotal + amt);
+        const { error: upPpErr } = await supabase
+          .from("PARTIAL_PAYMENT")
+          .update({ SE_RELEASED_BY_INVOICE_ID: parseInt(id, 10) })
+          .eq("ID", pp.ID);
+        if (upPpErr) throw new Error(upPpErr.message);
+
+        // Audit trail (soft-fail if migration 0048 not yet run)
+        try {
+          await supabase.from("SE_RELEASE").insert({
+            TENANT_ID:           tenantId || pp.TENANT_ID,
+            PARTIAL_PAYMENT_ID:  pp.ID,
+            INVOICE_ID:          parseInt(id, 10),
+            SE_AMOUNT_RELEASED:  amt,
+          });
+        } catch (_) { /* ignore — audit table may not exist yet */ }
+      }
+
+      if (seReleaseTotal > 0) {
+        // Persist on INVOICE (soft-fail if SE_RELEASE_TOTAL column missing)
+        const { error: invUpErr } = await supabase.from("INVOICE")
+          .update({ SE_RELEASE_TOTAL: seReleaseTotal })
+          .eq("ID", id);
+        if (invUpErr && String(invUpErr.message || "").includes("SE_")) {
+          // schema lacks column — keep going, just no persisted total
+        } else if (invUpErr) {
+          throw new Error(invUpErr.message);
+        }
+      }
+    } catch (e) {
+      throw { status: 500, message: `Sicherheitseinbehalt-Auflösung fehlgeschlagen: ${e?.message || e}` };
+    }
+  }
 
   if (!inv.INVOICE_NUMBER || !String(inv.INVOICE_NUMBER).trim()) {
     const { data: num, error: numErr } = await supabase.rpc("next_document_number", {
@@ -1019,6 +1161,31 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
 
   const isFinalInvoice = orig.INVOICE_TYPE === "schlussrechnung" || orig.INVOICE_TYPE === "teilschlussrechnung";
 
+  // ── Phase 5: Sicherheitseinbehalt-Reversal ───────────────────────────────
+  // If this is a Schluss-/Teilschluss invoice that released SE from prior ARs,
+  // reverse the release: set SE_RELEASED_BY_INVOICE_ID = NULL on those ARs.
+  // SE_RELEASE audit rows stay for history.
+  if (isFinalInvoice) {
+    try {
+      const { data: linkedPps } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("ID, SE_AMOUNT")
+        .eq("SE_RELEASED_BY_INVOICE_ID", parseInt(id, 10));
+      const ppCount = (linkedPps || []).length;
+      if (ppCount > 0) {
+        const totalReversed = (linkedPps || []).reduce((s, p) => s + Number(p.SE_AMOUNT || 0), 0);
+        console.log(`[CANCEL_INVOICE] Reversing SE release: ${ppCount} PP(s), total ${totalReversed.toFixed(2)} EUR (invoice ${id})`);
+        await supabase
+          .from("PARTIAL_PAYMENT")
+          .update({ SE_RELEASED_BY_INVOICE_ID: null })
+          .eq("SE_RELEASED_BY_INVOICE_ID", parseInt(id, 10));
+      }
+    } catch (e) {
+      // Schema may not have SE columns yet — log but don't fail the storno
+      console.warn(`[CANCEL_INVOICE] SE reversal skipped (schema missing?): ${e?.message || e}`);
+    }
+  }
+
   // ── Optional: delete existing payments for this invoice ──────────────────
   if (deletePayments) {
     const { data: payments } = await supabase
@@ -1096,6 +1263,13 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
     TAX_AMOUNT_NET:      -round2(toNum(orig.TAX_AMOUNT_NET)),
     TOTAL_AMOUNT_GROSS:  -round2(toNum(orig.TOTAL_AMOUNT_GROSS)),
   };
+
+  // SE-Beträge negieren (nur wenn die Spalten existieren — Pre-0047 schickt
+  // sie schlicht nicht mit), damit die Storno-Zeile in Rechnungsliste +
+  // Reporting korrekt spiegelt (Original 18011.53 → Storno -18011.53).
+  if ("SE_AMOUNT" in orig)        cancelRow.SE_AMOUNT        = orig.SE_AMOUNT        != null ? -round2(toNum(orig.SE_AMOUNT))        : null;
+  if ("SE_BASIS_AMT" in orig)     cancelRow.SE_BASIS_AMT     = orig.SE_BASIS_AMT     != null ? -round2(toNum(orig.SE_BASIS_AMT))     : null;
+  if ("SE_RELEASE_TOTAL" in orig) cancelRow.SE_RELEASE_TOTAL = orig.SE_RELEASE_TOTAL != null ? -round2(toNum(orig.SE_RELEASE_TOTAL)) : null;
 
   const { data: created, error: insertErr } = await supabase
     .from("INVOICE").insert([cancelRow]).select("ID").single();

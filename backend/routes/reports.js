@@ -792,6 +792,68 @@ module.exports = (supabase) => {
     res.json({ data: result });
   });
 
+  // Open Sicherheitseinbehalte across the whole tenant (Phase 3 — Dashboard KPI)
+  // Returns { totalOpen: number, count: number, byProject: [...] }
+  router.get("/dashboard/open-se", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    try {
+      let { data, error } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("ID, PROJECT_ID, SE_AMOUNT")
+        .eq("TENANT_ID", tenantId)
+        .eq("STATUS_ID", 2)
+        .gt("SE_AMOUNT", 0)
+        .is("SE_RELEASED_BY_INVOICE_ID", null);
+      if (error && String(error.message || "").includes("SE_")) {
+        // Migration 0047 not yet run
+        return res.json({ data: { totalOpen: 0, count: 0, byProject: [] } });
+      }
+      if (error) return res.status(500).json({ error: error.message });
+      let rows = data || [];
+
+      // Phase 5: Exclude storno'd ARs
+      if (rows.length > 0) {
+        const ids = rows.map(r => r.ID);
+        const { data: stornos } = await supabase
+          .from("PARTIAL_PAYMENT")
+          .select("CANCELS_PARTIAL_PAYMENT_ID")
+          .in("CANCELS_PARTIAL_PAYMENT_ID", ids);
+        const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+        rows = rows.filter(r => !cancelled.has(r.ID));
+      }
+
+      const totalOpen = round2(rows.reduce((s, r) => s + Number(r.SE_AMOUNT || 0), 0));
+
+      // Group by project + enrich with project name
+      const byProjectMap = new Map();
+      for (const r of rows) {
+        const pid = r.PROJECT_ID;
+        if (!pid) continue;
+        if (!byProjectMap.has(pid)) byProjectMap.set(pid, { project_id: pid, total: 0, count: 0 });
+        const e = byProjectMap.get(pid);
+        e.total = round2(e.total + Number(r.SE_AMOUNT || 0));
+        e.count += 1;
+      }
+      const projectIds = [...byProjectMap.keys()];
+      if (projectIds.length > 0) {
+        const { data: projs } = await supabase
+          .from("PROJECT")
+          .select("ID, NAME_SHORT, NAME_LONG")
+          .in("ID", projectIds);
+        (projs || []).forEach(p => {
+          const e = byProjectMap.get(p.ID);
+          if (e) { e.name_short = p.NAME_SHORT; e.name_long = p.NAME_LONG; }
+        });
+      }
+      const byProject = [...byProjectMap.values()].sort((a, b) => b.total - a.total);
+
+      return res.json({ data: { totalOpen, count: rows.length, byProject } });
+    } catch (e) {
+      return res.status(500).json({ error: e?.message || String(e) });
+    }
+  });
+
   // Billing summary: projects with open amounts + by-PL aggregation
   router.get("/dashboard/billing-summary", async (req, res) => {
     const tenantId = requireTenantId(req, res);

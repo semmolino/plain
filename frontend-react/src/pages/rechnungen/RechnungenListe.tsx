@@ -66,6 +66,9 @@ interface UnifiedRow {
   gross:      number | null
   paid:       number | null
   open:       number | null
+  seHeld:     number | null   // einbehaltener SEB für diese Rechnung (≥ 0)
+  seRelease:  number | null   // aufgelöster SEB durch diese Rechnung (≥ 0, nur INVOICE)
+  payable:    number | null   // tatsächliche Forderungssumme nach SEB
   statusLabel: string
   statusClass: string
   raw:        Invoice | PartialPayment
@@ -96,8 +99,14 @@ function fromInvoice(inv: Invoice): UnifiedRow {
   const adjustedNet   = rawNet != null ? Math.round((rawNet - discountNet) * 100) / 100 : null
   const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
   const cdPct         = Number(inv.CASH_DISCOUNT_PERCENT ?? 0)
-  const skontoGross   = cdPct > 0 && adjustedGross != null ? Math.round(adjustedGross * (1 - cdPct / 100) * 100) / 100 : null
-  const rawOpen       = adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null
+  const seHeld        = inv.SE_AMOUNT != null ? Number(inv.SE_AMOUNT) : 0
+  const seRelease     = inv.SE_RELEASE_TOTAL != null ? Number(inv.SE_RELEASE_TOTAL) : 0
+  const payable       = adjustedGross != null
+    ? Math.round((adjustedGross - seHeld + seRelease) * 100) / 100
+    : null
+  const skontoBase    = payable ?? adjustedGross
+  const skontoGross   = cdPct > 0 && skontoBase != null ? Math.round(skontoBase * (1 - cdPct / 100) * 100) / 100 : null
+  const rawOpen       = payable != null ? Math.round((payable - (paid ?? 0)) * 100) / 100 : null
   const open          = skontoGross !== null && (paid ?? 0) >= skontoGross - 0.005 ? 0 : rawOpen
   const today = new Date().toISOString().slice(0, 10)
   const dueDate   = inv.DUE_DATE ?? null
@@ -117,6 +126,9 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     gross:       adjustedGross,
     paid,
     open,
+    seHeld:      seHeld !== 0 ? seHeld : null,
+    seRelease:   seRelease > 0 ? seRelease : null,
+    payable,
     statusLabel,
     statusClass,
     raw:         inv,
@@ -141,8 +153,13 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   const adjustedNet   = rawNet != null ? Math.round((rawNet - discountNet) * 100) / 100 : null
   const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
   const cdPct         = Number(pp.CASH_DISCOUNT_PERCENT ?? 0)
-  const skontoGross   = cdPct > 0 && adjustedGross != null ? Math.round(adjustedGross * (1 - cdPct / 100) * 100) / 100 : null
-  const rawOpen       = adjustedGross != null ? Math.round((adjustedGross - (paid ?? 0)) * 100) / 100 : null
+  const seHeld        = pp.SE_AMOUNT != null ? Number(pp.SE_AMOUNT) : 0
+  const payable       = adjustedGross != null
+    ? Math.round((adjustedGross - seHeld) * 100) / 100
+    : null
+  const skontoBase    = payable ?? adjustedGross
+  const skontoGross   = cdPct > 0 && skontoBase != null ? Math.round(skontoBase * (1 - cdPct / 100) * 100) / 100 : null
+  const rawOpen       = payable != null ? Math.round((payable - (paid ?? 0)) * 100) / 100 : null
   const open          = skontoGross !== null && (paid ?? 0) >= skontoGross - 0.005 ? 0 : rawOpen
   const today2   = new Date().toISOString().slice(0, 10)
   const dueDate2  = pp.DUE_DATE ?? null
@@ -162,6 +179,9 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     gross:       adjustedGross,
     paid,
     open,
+    seHeld:      seHeld !== 0 ? seHeld : null,
+    seRelease:   null,
+    payable,
     statusLabel,
     statusClass,
     raw:         pp,
@@ -209,7 +229,7 @@ function FilterChip({ label, options, active, onChange }: {
 
 // ── Column visibility ─────────────────────────────────────────────────────────
 
-type ColKey = 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
+type ColKey = 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'seHeld' | 'payable' | 'paid' | 'open' | 'statusLabel'
 
 interface ColDef { key: ColKey; label: string; className?: string; defaultVisible: boolean }
 const COLUMNS: ColDef[] = [
@@ -219,6 +239,8 @@ const COLUMNS: ColDef[] = [
   { key: 'address',     label: 'Adresse',         defaultVisible: false },
   { key: 'net',         label: 'Netto €',         className: 'num', defaultVisible: true  },
   { key: 'gross',       label: 'Brutto €',        className: 'num', defaultVisible: true  },
+  { key: 'seHeld',      label: 'SEB €',           className: 'num', defaultVisible: true  },
+  { key: 'payable',     label: 'Forderung €',     className: 'num', defaultVisible: true  },
   { key: 'paid',        label: 'Bezahlt €',       className: 'num', defaultVisible: false },
   { key: 'open',        label: 'Offene Posten €', className: 'num', defaultVisible: true  },
   { key: 'statusLabel', label: 'Status',          defaultVisible: true  },
@@ -226,7 +248,7 @@ const COLUMNS: ColDef[] = [
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-type SortKey = 'number' | 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'paid' | 'open' | 'statusLabel'
+type SortKey = 'number' | 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'seHeld' | 'payable' | 'paid' | 'open' | 'statusLabel'
 
 function SortTh({ label, k, sortKey, dir, onClick, className }: {
   label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'
@@ -408,10 +430,12 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
   }, [allRows, search, onlyOpen, sortKey, sortDir, activeFilters])
 
   const totals = useMemo(() => ({
-    net:   rows.reduce((s, r) => s + (r.net   ?? 0), 0),
-    gross: rows.reduce((s, r) => s + (r.gross ?? 0), 0),
-    paid:  rows.reduce((s, r) => s + (r.paid  ?? 0), 0),
-    open:  rows.reduce((s, r) => s + (r.open  ?? 0), 0),
+    net:     rows.reduce((s, r) => s + (r.net     ?? 0), 0),
+    gross:   rows.reduce((s, r) => s + (r.gross   ?? 0), 0),
+    seHeld:  rows.reduce((s, r) => s + (r.seHeld  ?? 0), 0),
+    payable: rows.reduce((s, r) => s + (r.payable ?? 0), 0),
+    paid:    rows.reduce((s, r) => s + (r.paid    ?? 0), 0),
+    open:    rows.reduce((s, r) => s + (r.open    ?? 0), 0),
   }), [rows])
 
   function toggleSort(k: SortKey) {
@@ -446,11 +470,13 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
     setDeletingPayId(null)
     const id  = (row.raw as Invoice).ID ?? (row.raw as PartialPayment).ID
     const raw = row.raw as Invoice & PartialPayment
+    // payable = Brutto − einbehaltener SEB + aufgelöster SEB.
+    // Wenn SE im Spiel ist, ist der Soll-Zahlbetrag genau payable, NICHT gross.
     setPayTarget({
       source:           row.source,
       id,
       label:            row.number ?? `#${id}`,
-      totalGross:       row.gross,
+      totalGross:       row.payable ?? row.gross,
       paidGross:        row.paid,
       cashDiscountPct:  Number(raw.CASH_DISCOUNT_PERCENT ?? 0),
       cashDiscountDays: Number(raw.CASH_DISCOUNT_DAYS ?? 0),
@@ -750,6 +776,15 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                     if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
                     if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
                     if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
+                    if (c.key === 'seHeld') {
+                      if (row.seHeld == null) return <td key={c.key} className="num">—</td>
+                      const v = row.seHeld
+                      // Original-AR: positiv → als Abzug "− X" zeigen.
+                      // Storno-AR:    negativ → als Rückbuchung "+ X" zeigen.
+                      const label = v >= 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`
+                      return <td key={c.key} className="num">{label}</td>
+                    }
+                    if (c.key === 'payable')     return <td key={c.key} className="num">{row.payable != null && (row.seHeld != null || row.seRelease != null) ? <strong>{fmtEur(row.payable)}</strong> : fmtEur(row.payable)}</td>
                     if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>
                     if (c.key === 'open')        return <td key={c.key} className="num">{fmtEur(row.open)}</td>
                     if (c.key === 'statusLabel') return <td key={c.key}><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span>{row.isOverdue && <span className="status-badge overdue" title={`Fällig: ${row.dueDate}`}>Überfällig</span>}</td>
@@ -795,10 +830,16 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                   {rows.length !== allRows.length ? `${rows.length} / ${allRows.length}` : `${allRows.length}`}
                 </td>
                 {visibleCols.map(c => {
-                  if (c.key === 'net')   return <td key={c.key} className="num"><strong>{fmtEur(totals.net)}</strong></td>
-                  if (c.key === 'gross') return <td key={c.key} className="num"><strong>{fmtEur(totals.gross)}</strong></td>
-                  if (c.key === 'paid')  return <td key={c.key} className="num"><strong>{fmtEur(totals.paid)}</strong></td>
-                  if (c.key === 'open')  return <td key={c.key} className="num"><strong>{fmtEur(totals.open)}</strong></td>
+                  if (c.key === 'net')     return <td key={c.key} className="num"><strong>{fmtEur(totals.net)}</strong></td>
+                  if (c.key === 'gross')   return <td key={c.key} className="num"><strong>{fmtEur(totals.gross)}</strong></td>
+                  if (c.key === 'seHeld') {
+                    const v = totals.seHeld
+                    const label = v === 0 ? '—' : v > 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`
+                    return <td key={c.key} className="num"><strong>{label}</strong></td>
+                  }
+                  if (c.key === 'payable') return <td key={c.key} className="num"><strong>{fmtEur(totals.payable)}</strong></td>
+                  if (c.key === 'paid')    return <td key={c.key} className="num"><strong>{fmtEur(totals.paid)}</strong></td>
+                  if (c.key === 'open')    return <td key={c.key} className="num"><strong>{fmtEur(totals.open)}</strong></td>
                   return <td key={c.key}></td>
                 })}
                 <td></td>
@@ -915,8 +956,11 @@ export function RechnungenListe({ onEditDraft, initialSearch, backProject, onCle
                     {discNet > 0 && amtRow('Netto nach Nachlässen', adjNet, false, true)}
                     {amtRow(`zzgl. ${vatPct} % MwSt`, adjVat)}
                     {amtRow('Rechnungssumme brutto', adjGross, true)}
+                    {detailRow.seHeld != null && detailRow.seHeld > 0 && amtRow('./. Sicherheitseinbehalt', detailRow.seHeld, false, true, true)}
+                    {detailRow.seRelease != null && detailRow.seRelease > 0 && amtRow('+ Auflösung Sicherheitseinbehalt', detailRow.seRelease, false, true)}
+                    {(detailRow.seHeld != null || detailRow.seRelease != null) && detailRow.payable != null && amtRow('Zahlungsbetrag', detailRow.payable, true)}
                     {detailRow.paid != null && detailRow.paid > 0 && amtRow('Bezahlt', detailRow.paid, false, true, true)}
-                    {amtRow('Offene Posten', detailRow.open ?? adjGross, true)}
+                    {amtRow('Offene Posten', detailRow.open ?? detailRow.payable ?? adjGross, true)}
                     {cdPct > 0 && (
                       <tr>
                         <td colSpan={2} style={{ paddingTop: 8, fontSize: 12, color: 'rgba(17,24,39,0.55)', fontStyle: 'italic' }}>

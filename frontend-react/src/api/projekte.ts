@@ -236,6 +236,12 @@ export interface Contract {
   INVOICE_CONTACT_ID:    number | null
   CASH_DISCOUNT_PERCENT: number | null
   CASH_DISCOUNT_DAYS:    number | null
+  VAT_ID:                number | null
+  // Sicherheitseinbehalt (Phase 1)
+  SE_ENABLED?:           boolean
+  SE_PERCENT?:           number | null
+  SE_BASIS?:             'BRUTTO' | 'NETTO' | null
+  SE_LEGAL_REFERENCE?:   string | null
 }
 
 export const fetchContractByProject = (projectId: number) =>
@@ -248,6 +254,11 @@ export const patchContract = (contractId: number, body: Partial<{
   INVOICE_CONTACT_ID: number | null
   CASH_DISCOUNT_PERCENT: number | null
   CASH_DISCOUNT_DAYS: number | null
+  VAT_ID: number | null
+  SE_ENABLED: boolean
+  SE_PERCENT: number | null
+  SE_BASIS: 'BRUTTO' | 'NETTO' | null
+  SE_LEGAL_REFERENCE: string | null
 }>) => apiClient.patch<{ success: boolean }>(`/projekte/contract/${contractId}`, body)
 
 // ── Leistungsstände ───────────────────────────────────────────────────────────
