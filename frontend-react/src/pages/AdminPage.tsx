@@ -37,6 +37,12 @@ import {
   fetchBreakRules, upsertBreakRule, deleteBreakRule,
   type ArbzgSettings, type BreakRule,
 } from '@/api/arbzg'
+import {
+  fetchNotificationConfigs, upsertNotificationConfig,
+  type NotificationTypeConfig,
+} from '@/api/notificationConfig'
+import { fetchActiveEmployees } from '@/api/projekte'
+import { Modal } from '@/components/ui/Modal'
 
 const PAGE_TABS = [
   { id: 'stammdaten',              label: 'Stammdaten'              },
@@ -50,6 +56,7 @@ const PAGE_TABS = [
   { id: 'kostensatz',              label: 'Kostensatz-Rechner'      },
   { id: 'mahnungseinstellungen',   label: 'Mahnungseinstellungen'   },
   { id: 'textvorlagen',            label: 'Textvorlagen'            },
+  { id: 'benachrichtigungen',      label: 'Benachrichtigungen'      },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -2188,6 +2195,297 @@ function ArbzgSettingsSection() {
   )
 }
 
+// ── Benachrichtigungen ────────────────────────────────────────────────────────
+
+const CATEGORY_LABELS: Record<string, string> = {
+  invoice: 'Rechnungen',
+  mahnung: 'Mahnungen',
+  budget:  'Budget & Projekte',
+  system:  'System',
+}
+
+const DASHBOARD_ROLE_LABELS: Record<string, string> = {
+  geschaeftsleitung: 'Geschäftsleitung',
+  controller:        'Controller',
+  bereichsleiter:    'Bereichsleiter',
+}
+
+function BenachrichtigungenSection() {
+  const qc = useQueryClient()
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['notification-configs'],
+    queryFn:  fetchNotificationConfigs,
+  })
+  const configs = data?.data ?? []
+
+  // Gruppieren nach Kategorie, sortiert nach SORT_ORDER innerhalb
+  const grouped = configs.reduce<Record<string, NotificationTypeConfig[]>>((acc, c) => {
+    (acc[c.category] = acc[c.category] || []).push(c)
+    return acc
+  }, {})
+  const categoryOrder = Object.keys(grouped).sort((a, b) => {
+    const ra = grouped[a][0]?.sortOrder ?? 0
+    const rb = grouped[b][0]?.sortOrder ?? 0
+    return ra - rb
+  })
+
+  const toggleMut = useMutation({
+    mutationFn: (vars: { typeKey: string; enabled: boolean; cur: NotificationTypeConfig }) =>
+      upsertNotificationConfig(vars.typeKey, {
+        enabled:             vars.enabled,
+        audienceUseDefault:  vars.cur.audienceUseDefault,
+        audienceAllTenant:   vars.cur.audienceAllTenant,
+        audienceRoles:       vars.cur.audienceRoles,
+        audienceDepartments: vars.cur.audienceDepartments,
+        audienceEmployees:   vars.cur.audienceEmployees,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notification-configs'] }),
+  })
+
+  function summarizeAudience(c: NotificationTypeConfig): string {
+    if (c.defaultAudienceKind === 'managed_by_rule') return 'Pro Regel / Datensatz konfiguriert'
+    if (c.audienceUseDefault) return 'Tenant-Standard (alle Mitarbeiter)'
+    if (c.audienceAllTenant)  return 'Alle Mitarbeiter'
+    const parts: string[] = []
+    if (c.audienceRoles?.length)       parts.push(`Rollen: ${c.audienceRoles.map(r => DASHBOARD_ROLE_LABELS[r] ?? r).join(', ')}`)
+    if (c.audienceDepartments?.length) parts.push(`${c.audienceDepartments.length} Abteilung(en)`)
+    if (c.audienceEmployees?.length)   parts.push(`${c.audienceEmployees.length} Mitarbeiter`)
+    return parts.length ? parts.join(' · ') : 'Niemand (Empfaengerliste leer)'
+  }
+
+  if (isLoading) return <p className="empty-note">Lade …</p>
+
+  return (
+    <div className="admin-section">
+      <p className="admin-section-hint">
+        Aktiviert/deaktiviert Benachrichtigungstypen und legt fest, wer sie erhalten soll.
+        Neue Typen werden vom System nach und nach hinzugefügt.
+      </p>
+
+      {categoryOrder.map(cat => (
+        <div className="admin-block" key={cat}>
+          <h3 className="admin-block-title">{CATEGORY_LABELS[cat] ?? cat}</h3>
+          {grouped[cat].sort((a, b) => a.sortOrder - b.sortOrder).map(c => (
+            <div key={c.typeKey} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12,
+              padding: '10px 0', borderBottom: '1px solid var(--border)',
+            }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', cursor: 'pointer',
+                paddingTop: 2,
+              }} title="Aktiv / inaktiv">
+                <input
+                  type="checkbox"
+                  checked={c.enabled}
+                  onChange={e => toggleMut.mutate({ typeKey: c.typeKey, enabled: e.target.checked, cur: c })}
+                />
+              </label>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title}</div>
+                {c.description && (
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{c.description}</div>
+                )}
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                  Empfänger: {summarizeAudience(c)}
+                </div>
+              </div>
+              {c.supportsAudienceOverride ? (
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => setEditingKey(c.typeKey)}
+                  disabled={!c.enabled}
+                >
+                  Bearbeiten
+                </button>
+              ) : (
+                <span style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic', paddingTop: 4 }}>
+                  nur ein/aus
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+
+      <BenachrichtigungEditModal
+        open={editingKey != null}
+        config={editingKey ? configs.find(c => c.typeKey === editingKey) ?? null : null}
+        onClose={() => setEditingKey(null)}
+      />
+    </div>
+  )
+}
+
+function BenachrichtigungEditModal({ open, config, onClose }: {
+  open: boolean
+  config: NotificationTypeConfig | null
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [enabled,             setEnabled]             = useState(true)
+  const [audienceUseDefault,  setAudienceUseDefault]  = useState(true)
+  const [audienceAllTenant,   setAudienceAllTenant]   = useState(false)
+  const [audienceRoles,       setAudienceRoles]       = useState<string[]>([])
+  const [audienceDepartments, setAudienceDepartments] = useState<number[]>([])
+  const [audienceEmployees,   setAudienceEmployees]   = useState<number[]>([])
+
+  const { data: deptData } = useQuery({ queryKey: ['departments'],       queryFn: fetchDepartments })
+  const { data: empData }  = useQuery({ queryKey: ['active-employees'],  queryFn: fetchActiveEmployees })
+  const departments = deptData?.data ?? []
+  const employees   = empData?.data  ?? []
+
+  useEffect(() => {
+    if (!config) return
+    setEnabled(config.enabled)
+    setAudienceUseDefault(config.audienceUseDefault)
+    setAudienceAllTenant(config.audienceAllTenant)
+    setAudienceRoles(config.audienceRoles ?? [])
+    setAudienceDepartments(config.audienceDepartments ?? [])
+    setAudienceEmployees(config.audienceEmployees ?? [])
+  }, [config])
+
+  const saveMut = useMutation({
+    mutationFn: () => upsertNotificationConfig(config!.typeKey, {
+      enabled,
+      audienceUseDefault,
+      audienceAllTenant,
+      audienceRoles,
+      audienceDepartments,
+      audienceEmployees,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notification-configs'] })
+      onClose()
+    },
+  })
+
+  if (!config) return null
+  const manualMode = !audienceUseDefault
+
+  return (
+    <Modal open={open} onClose={onClose} title={config.title}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 420 }}>
+        {config.description && (
+          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{config.description}</p>
+        )}
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+          <span>Benachrichtigungstyp aktiv</span>
+        </label>
+
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Empfänger</div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
+            <input
+              type="radio"
+              name="audMode"
+              checked={audienceUseDefault}
+              onChange={() => setAudienceUseDefault(true)}
+              disabled={!enabled}
+            />
+            <span>
+              <strong>Tenant-Standard</strong>
+              <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
+                Wirkt für alle Mitarbeiter (tenantweit).
+              </span>
+            </span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="audMode"
+              checked={!audienceUseDefault}
+              onChange={() => setAudienceUseDefault(false)}
+              disabled={!enabled}
+            />
+            <span>
+              <strong>Manuell konfigurieren</strong>
+              <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
+                Empfänger werden aus Rollen / Abteilungen / Mitarbeitern kombiniert (OR-Verknüpfung).
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {manualMode && enabled && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingLeft: 24, borderLeft: '2px solid var(--border)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={audienceAllTenant}
+                onChange={e => setAudienceAllTenant(e.target.checked)}
+              />
+              <span>Alle Mitarbeiter (überspringt die Filter unten)</span>
+            </label>
+
+            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
+              <label>Rollen</label>
+              <select
+                multiple
+                disabled={audienceAllTenant}
+                value={audienceRoles}
+                onChange={e => setAudienceRoles(Array.from(e.target.selectedOptions, o => o.value))}
+                style={{ minHeight: 70 }}
+              >
+                {Object.entries(DASHBOARD_ROLE_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+              <p className="admin-section-hint">Strg-/Cmd-Klick für Mehrfachauswahl.</p>
+            </div>
+
+            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
+              <label>Abteilungen</label>
+              <select
+                multiple
+                disabled={audienceAllTenant}
+                value={audienceDepartments.map(String)}
+                onChange={e => setAudienceDepartments(
+                  Array.from(e.target.selectedOptions, o => Number(o.value))
+                )}
+                style={{ minHeight: 90 }}
+              >
+                {departments.map(d => (
+                  <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
+              <label>Plus folgende Mitarbeiter</label>
+              <select
+                multiple
+                disabled={audienceAllTenant}
+                value={audienceEmployees.map(String)}
+                onChange={e => setAudienceEmployees(
+                  Array.from(e.target.selectedOptions, o => Number(o.value))
+                )}
+                style={{ minHeight: 110 }}
+              >
+                {employees.map(emp => (
+                  <option key={emp.ID} value={emp.ID}>{emp.SHORT_NAME}</option>
+                ))}
+              </select>
+              <p className="admin-section-hint">Zusätzlich zu den Rollen- und Abteilungs-Treffern.</p>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button className="btn-primary" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -2213,6 +2511,7 @@ export function AdminPage() {
         {tab === 'kostensatz'            && <KostensatzSection />}
         {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}
         {tab === 'textvorlagen'          && <TextVorlagenSection />}
+        {tab === 'benachrichtigungen'    && <BenachrichtigungenSection />}
       </div>
     </div>
   )

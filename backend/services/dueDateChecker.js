@@ -10,20 +10,34 @@ function daysBetween(dateA, dateB) {
   return Math.round((dateB - dateA) / (1000 * 60 * 60 * 24));
 }
 
-function notifType(kind, days) {
-  return `invoice_${kind}_${days}d`;
-}
+// Konsolidierte Typen (Migration 0055). Die Schwelle wandert ins Metadata-Feld.
+const TYPE_DUE     = 'invoice_due';
+const TYPE_OVERDUE = 'invoice_overdue';
 
-// Check whether a notification for this (type, invoiceId) already exists
-async function alreadyNotified(supabase, { tenantId, type, invoiceId }) {
+// Check whether a notification for this (type, invoiceId, days) already exists
+async function alreadyNotified(supabase, { tenantId, type, invoiceId, days }) {
   const { data } = await supabase
     .from("NOTIFICATION")
     .select("ID")
     .eq("TENANT_ID", tenantId)
     .eq("TYPE", type)
     .eq("METADATA->>invoice_id", String(invoiceId))
+    .eq("METADATA->>days_offset", String(days))
     .limit(1);
-  return Array.isArray(data) && data.length > 0;
+  if (Array.isArray(data) && data.length > 0) return true;
+
+  // Rueckwaerts-Kompatibilitaet: alte Notification-Zeilen mit Legacy-Typ
+  // wie 'invoice_due_7d' / 'invoice_overdue_14d'. Wenn so eine schon existiert,
+  // nicht erneut feuern.
+  const legacyType = `${type}_${days}d`;
+  const { data: legacy } = await supabase
+    .from("NOTIFICATION")
+    .select("ID")
+    .eq("TENANT_ID", tenantId)
+    .eq("TYPE", legacyType)
+    .eq("METADATA->>invoice_id", String(invoiceId))
+    .limit(1);
+  return Array.isArray(legacy) && legacy.length > 0;
 }
 
 async function checkDueDates(supabase) {
@@ -51,22 +65,20 @@ async function checkDueDates(supabase) {
     const diff = daysBetween(today, due); // positive = future, negative = past
 
     const label = inv.INVOICE_NUMBER || `#${inv.ID}`;
-    const meta  = { invoice_id: String(inv.ID) };
     const link  = `/rechnungen`;
 
     // Approaching
     for (const days of APPROACHING_DAYS) {
       if (diff === days) {
-        const type = notifType("due", days);
-        if (await alreadyNotified(supabase, { tenantId: inv.TENANT_ID, type, invoiceId: inv.ID })) continue;
+        if (await alreadyNotified(supabase, { tenantId: inv.TENANT_ID, type: TYPE_DUE, invoiceId: inv.ID, days })) continue;
         await createNotification(supabase, {
           tenantId: inv.TENANT_ID,
-          userId:   null, // tenant-wide
-          type,
+          userId:   null, // wird vom Gate ggf. ueberschrieben
+          type:     TYPE_DUE,
           title:    `Rechnung ${label} fällig in ${days} Tag${days > 1 ? "en" : ""}`,
           body:     `Fälligkeitsdatum: ${inv.DUE_DATE.slice(0, 10)}`,
           link,
-          metadata: meta,
+          metadata: { invoice_id: String(inv.ID), days_offset: String(days) },
         });
         created++;
       }
@@ -75,16 +87,15 @@ async function checkDueDates(supabase) {
     // Overdue
     for (const days of OVERDUE_DAYS) {
       if (diff === -days) {
-        const type = notifType("overdue", days);
-        if (await alreadyNotified(supabase, { tenantId: inv.TENANT_ID, type, invoiceId: inv.ID })) continue;
+        if (await alreadyNotified(supabase, { tenantId: inv.TENANT_ID, type: TYPE_OVERDUE, invoiceId: inv.ID, days })) continue;
         await createNotification(supabase, {
           tenantId: inv.TENANT_ID,
           userId:   null,
-          type,
+          type:     TYPE_OVERDUE,
           title:    `Rechnung ${label} ist ${days} Tag${days > 1 ? "e" : ""} überfällig`,
           body:     `Fälligkeitsdatum war: ${inv.DUE_DATE.slice(0, 10)}`,
           link,
-          metadata: meta,
+          metadata: { invoice_id: String(inv.ID), days_offset: String(days) },
         });
         created++;
       }

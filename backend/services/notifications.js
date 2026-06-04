@@ -1,10 +1,59 @@
 "use strict";
 
+const notificationConfig = require('./notificationConfig');
+
 // ---------------------------------------------------------------------------
-// createNotification – insert a notification row
-//   userId: Supabase auth UUID string, or null for tenant-wide broadcast
+// createNotification – Gate-Layer.
+//
+// Reihenfolge:
+//   1. Typ im NOTIFICATION_TYPE-Katalog?
+//      -> Nein  -> Legacy-Pfad (kein Gate, USER_ID wie uebergeben).
+//   2. ENABLED?
+//      -> Nein  -> nichts tun.
+//   3. DEFAULT_AUDIENCE_KIND='managed_by_rule' (z.B. budget_warning)?
+//      -> Aufrufer muss userId explizit setzen; wir ehren sie (Legacy-Pfad).
+//   4. Sonst Empfaenger ueber resolveAudience aufloesen.
+//
+// Aufrufer aus dem alten Code (mit hardcoded userId) muessen nichts umschreiben:
+//   - userId=null  +  Typ im Katalog + AUDIENCE_USE_DEFAULT=true (Default)
+//     -> tenant-wide, identisch zum frueheren Verhalten.
+//   - userId=String(empId) bei budget_warning -> wird durchgereicht.
 // ---------------------------------------------------------------------------
 async function createNotification(supabase, { tenantId, userId = null, type, title, body = null, link = null, metadata = null }) {
+  if (!tenantId || !type) {
+    throw { status: 400, message: 'tenantId und type sind erforderlich' };
+  }
+
+  let audience = null;
+  try {
+    audience = await notificationConfig.resolveAudience(supabase, tenantId, type, null);
+  } catch (e) {
+    console.warn(`[NOTIFICATION] resolveAudience fehlgeschlagen, Legacy-Fallback: ${e?.message || e}`);
+    audience = null;
+  }
+
+  // Typ deaktiviert -> nichts tun
+  if (audience === 'disabled') return;
+
+  // Rule-managed (budget_warning): respektiere uebergebene userId
+  if (audience === 'managed_by_rule') {
+    return insertOne(supabase, { tenantId, userId, type, title, body, link, metadata });
+  }
+
+  // Set<empId> -> eine Zeile pro Empfaenger
+  if (audience instanceof Set) {
+    if (audience.size === 0) return; // Mixed-Config liefert keine Personen
+    for (const empId of audience) {
+      await insertOne(supabase, { tenantId, userId: String(empId), type, title, body, link, metadata });
+    }
+    return;
+  }
+
+  // audience === null: tenant-wide (Default fuer bekannte Typen + Legacy)
+  return insertOne(supabase, { tenantId, userId, type, title, body, link, metadata });
+}
+
+async function insertOne(supabase, { tenantId, userId, type, title, body, link, metadata }) {
   const { error } = await supabase.from("NOTIFICATION").insert([{
     TENANT_ID: tenantId,
     USER_ID:   userId,
