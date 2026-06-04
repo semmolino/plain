@@ -857,17 +857,16 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
   const patchBookingMut = useMutation({
     mutationFn: async () => {
       if (!editBooking) return
+      // PATCH-Semantik: nur die wirklich geänderten Felder schicken. DATE_VOUCHER,
+      // CP_RATE etc. bleiben so unverändert in der DB. Ohne diesen Trimm
+      // setzte das Backend DATE_VOUCHER auf NULL → Buchung war aus der
+      // Monatsübersicht verschwunden.
+      const qty = Number(editQty.replace(',', '.')) || 0
       await updateBuchung(editBooking.id, {
-        EMPLOYEE_ID:  empId ?? undefined,
-        STRUCTURE_ID: editBooking.structure_id ?? undefined,
-        PROJECT_ID:   editBooking.project_id   ?? undefined,
-        DATE_VOUCHER: undefined,
-        TIME_START:   editStart  || undefined,
-        TIME_FINISH:  editFinish || undefined,
-        QUANTITY_INT: Number(editQty.replace(',', '.')) || 0,
-        QUANTITY_EXT: Number(editQty.replace(',', '.')) || 0,
-        CP_RATE:      undefined,
-        SP_RATE:      undefined,
+        TIME_START:   editStart  ? `${editStart}:00`  : '',
+        TIME_FINISH:  editFinish ? `${editFinish}:00` : '',
+        QUANTITY_INT: qty,
+        QUANTITY_EXT: qty,
         POSTING_DESCRIPTION: editDesc,
       })
     },

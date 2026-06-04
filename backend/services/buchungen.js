@@ -539,7 +539,7 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
 
   const { data: existing, error: exErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_RATE, SP_RATE")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .single();
@@ -563,13 +563,6 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   const newProjectId = normFk(b.PROJECT_ID);
   const newStructureId = normFk(b.STRUCTURE_ID);
 
-  const quantityInt = Number(b.QUANTITY_INT ?? 0);
-  const cpRate = Number(b.CP_RATE ?? 0);
-  const quantityExt = Number(b.QUANTITY_EXT ?? 0);
-  const spRate = Number(b.SP_RATE ?? 0);
-  const cpTot = quantityInt * cpRate;
-  const spTot = quantityExt * spRate;
-
   const toNullIfEmpty = (v) => {
     if (v === undefined || v === null) return null;
     const s = String(v).trim();
@@ -583,26 +576,40 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
     resolvedTenantId = projRow?.TENANT_ID ?? null;
   }
 
-  const updateTec = {
-    TENANT_ID: resolvedTenantId,
-    DATE_VOUCHER: b.DATE_VOUCHER ?? null,
-    TIME_START: toNullIfEmpty(b.TIME_START),
-    TIME_FINISH: toNullIfEmpty(b.TIME_FINISH),
-    QUANTITY_INT: quantityInt,
-    CP_RATE: cpRate,
-    CP_TOT: cpTot,
-    QUANTITY_EXT: quantityExt,
-    SP_RATE: spRate,
-    SP_TOT: spTot,
-    POSTING_DESCRIPTION: b.POSTING_DESCRIPTION ?? "",
-  };
+  // Echtes PATCH: nur Felder schreiben, die im Body explizit gesetzt sind.
+  // Effektivwerte für Berechnung (Total-Spalten) aus den existierenden Werten
+  // zusammensetzen, wenn das jeweilige Feld nicht geliefert wurde.
+  const updateTec = { TENANT_ID: resolvedTenantId };
+  if (b.DATE_VOUCHER       !== undefined) updateTec.DATE_VOUCHER       = b.DATE_VOUCHER || null;
+  if (b.TIME_START         !== undefined) updateTec.TIME_START         = toNullIfEmpty(b.TIME_START);
+  if (b.TIME_FINISH        !== undefined) updateTec.TIME_FINISH        = toNullIfEmpty(b.TIME_FINISH);
+  if (b.POSTING_DESCRIPTION !== undefined) updateTec.POSTING_DESCRIPTION = b.POSTING_DESCRIPTION ?? "";
 
-  if (newEmployeeId !== undefined) updateTec.EMPLOYEE_ID = newEmployeeId;
-  if (newProjectId !== undefined) updateTec.PROJECT_ID = newProjectId;
+  const effQty    = b.QUANTITY_INT !== undefined ? Number(b.QUANTITY_INT) : Number(existing.QUANTITY_INT ?? 0);
+  const effQtyExt = b.QUANTITY_EXT !== undefined ? Number(b.QUANTITY_EXT) : Number(existing.QUANTITY_EXT ?? 0);
+  const effCpRate = b.CP_RATE      !== undefined ? Number(b.CP_RATE)      : Number(existing.CP_RATE ?? 0);
+  const effSpRate = b.SP_RATE      !== undefined ? Number(b.SP_RATE)      : Number(existing.SP_RATE ?? 0);
+
+  if (b.QUANTITY_INT !== undefined) updateTec.QUANTITY_INT = effQty;
+  if (b.QUANTITY_EXT !== undefined) updateTec.QUANTITY_EXT = effQtyExt;
+  if (b.CP_RATE      !== undefined) updateTec.CP_RATE      = effCpRate;
+  if (b.SP_RATE      !== undefined) updateTec.SP_RATE      = effSpRate;
+
+  // Total-Spalten neu rechnen, wenn sich Menge oder Satz geändert hat
+  const totalsChanged =
+    b.QUANTITY_INT !== undefined || b.CP_RATE !== undefined ||
+    b.QUANTITY_EXT !== undefined || b.SP_RATE !== undefined;
+  if (totalsChanged) {
+    updateTec.CP_TOT = Math.round(effQty    * effCpRate * 100) / 100;
+    updateTec.SP_TOT = Math.round(effQtyExt * effSpRate * 100) / 100;
+  }
+
+  if (newEmployeeId  !== undefined) updateTec.EMPLOYEE_ID  = newEmployeeId;
+  if (newProjectId   !== undefined) updateTec.PROJECT_ID   = newProjectId;
   if (newStructureId !== undefined) updateTec.STRUCTURE_ID = newStructureId;
 
   const effectiveEmployeeId = newEmployeeId !== undefined ? newEmployeeId : existing.EMPLOYEE_ID;
-  const effectiveProjectId = newProjectId !== undefined ? newProjectId : existing.PROJECT_ID;
+  const effectiveProjectId  = newProjectId  !== undefined ? newProjectId  : existing.PROJECT_ID;
 
   let preset = null;
   try {
@@ -616,7 +623,7 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
     updateTec.ROLE_NAME_SHORT = preset.ROLE_NAME_SHORT ?? null;
     updateTec.ROLE_NAME_LONG = preset.ROLE_NAME_LONG ?? null;
     updateTec.SP_RATE = Number(preset.SP_RATE);
-    updateTec.SP_TOT = quantityExt * Number(preset.SP_RATE);
+    updateTec.SP_TOT = Math.round(effQtyExt * Number(preset.SP_RATE) * 100) / 100;
   }
 
   const { data: updatedTec, error: updErr } = await supabase
