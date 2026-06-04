@@ -711,7 +711,7 @@ export function SchlussrechnungWizard({ initialDraft }: { initialDraft?: DraftRe
             cash_discount_days:    showSkonto ? cdDays : 0,
             cash_discount_amount:  showSkonto ? cdAmt : 0,
           })
-          openInvoicePdf(draftId)
+          openInvoicePdf(draftId, { releasePpIds: Array.from(seReleaseSel) })
         }
         return (
         <div className="wizard-step-content">

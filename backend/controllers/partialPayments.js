@@ -304,11 +304,45 @@ async function getBillingProposal(req, res, supabase) {
 
   const { data: pp, error: ppErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, PROJECT_ID, CONTRACT_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT")
+    .select("ID, PROJECT_ID, CONTRACT_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT, VAT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
+
+  // Self-Heal: wenn VAT_PERCENT auf der AR fehlt, aus Vertrag oder
+  // Tenant-Standard nachziehen und in die DB persistieren. Damit zeigt
+  // der Wizard sofort MwSt + korrekten Brutto, auch wenn der Draft vor
+  // dem Fix angelegt wurde.
+  if (pp.VAT_PERCENT == null || svc.toNum(pp.VAT_PERCENT) === 0) {
+    try {
+      let resolvedVatId = null;
+      if (pp.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", pp.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("KEY, VALUE")
+          .eq("TENANT_ID", req.tenantId).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        const newVatPct = vat?.VAT_PERCENT ?? null;
+        if (newVatPct != null) {
+          await supabase.from("PARTIAL_PAYMENT")
+            .update({ VAT_ID: resolvedVatId, VAT_PERCENT: newVatPct })
+            .eq("ID", id);
+          pp.VAT_ID = resolvedVatId;
+          pp.VAT_PERCENT = newVatPct;
+        }
+      }
+    } catch (_) { /* soft-fail — bleibt 0% */ }
+  }
 
   let structures = [];
   try {

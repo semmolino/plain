@@ -88,7 +88,7 @@ async function getBillingProposal(req, res, supabase) {
   try {
     const { data: inv, error: invErr } = await supabase
       .from("INVOICE")
-      .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT")
+      .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT, VAT_ID")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
@@ -96,6 +96,37 @@ async function getBillingProposal(req, res, supabase) {
     if (!inv) return res.status(404).json({ error: "INVOICE nicht gefunden" });
     if (String(inv.STATUS_ID) === "2") {
       return res.status(400).json({ error: "Gebuchte Rechnungen können nicht geändert werden" });
+    }
+
+    // Self-Heal: VAT_PERCENT aus Vertrag / Tenant-Standard nachziehen
+    if (inv.VAT_PERCENT == null || svc.toNum(inv.VAT_PERCENT) === 0) {
+      try {
+        let resolvedVatId = null;
+        if (inv.CONTRACT_ID) {
+          const { data: cRow } = await supabase
+            .from("CONTRACT").select("VAT_ID").eq("ID", inv.CONTRACT_ID).maybeSingle();
+          resolvedVatId = cRow?.VAT_ID ?? null;
+        }
+        if (!resolvedVatId) {
+          const { data: settingsRows } = await supabase
+            .from("TENANT_SETTINGS").select("KEY, VALUE")
+            .eq("TENANT_ID", req.tenantId).eq("KEY", "default_vat_id");
+          const defVatId = settingsRows?.[0]?.VALUE;
+          if (defVatId) resolvedVatId = Number(defVatId);
+        }
+        if (resolvedVatId) {
+          const { data: vat } = await supabase
+            .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+          const newVatPct = vat?.VAT_PERCENT ?? null;
+          if (newVatPct != null) {
+            await supabase.from("INVOICE")
+              .update({ VAT_ID: resolvedVatId, VAT_PERCENT: newVatPct })
+              .eq("ID", id);
+            inv.VAT_ID = resolvedVatId;
+            inv.VAT_PERCENT = newVatPct;
+          }
+        }
+      } catch (_) { /* soft-fail */ }
     }
 
     const structures = await svc.loadProjectStructuresForContext(supabase, { contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
@@ -549,11 +580,18 @@ async function getPdf(req, res, supabase) {
       }
     }
 
+    // Preview-Only: wenn der Wizard SE-Release-IDs mitschickt, in die
+    // Preview einsynthetisieren (siehe buildPdfViewModel).
+    const releasePpIds = String(req.query.release_pp_ids || "")
+      .split(",").map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isFinite(n) && n > 0);
+
     const { pdf } = await renderDocumentPdf({
       supabase,
       docType: "INVOICE",
       docId: invoiceId,
       templateId: Number.isFinite(templateId) ? templateId : null,
+      previewReleasePpIds: preview ? releasePpIds : [],
     });
 
     res.setHeader("Content-Type", "application/pdf");

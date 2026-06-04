@@ -594,6 +594,10 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
     ADDRESS_NAME_1: r.ADDRESS_NAME_1 ?? "",
     AMOUNT_PAYED_GROSS: payedGrossMap[r.ID] ?? 0,
     COMMENT: r.COMMENT ?? "",
+    SE_AMOUNT:         r.SE_AMOUNT ?? null,
+    SE_PERCENT:        r.SE_PERCENT ?? null,
+    SE_BASIS:          r.SE_BASIS ?? null,
+    SE_RELEASE_TOTAL:  r.SE_RELEASE_TOTAL ?? null,
   }));
 }
 

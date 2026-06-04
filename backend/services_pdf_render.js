@@ -458,7 +458,7 @@ const DOC_TITLES = {
   stornorechnung:     'Stornorechnung',
 };
 
-async function buildPdfViewModel({ supabase, docType, docId }) {
+async function buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds = [] }) {
   const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
 
   // Load raw doc for fields not exposed by loadInvoiceData
@@ -675,6 +675,25 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
       if (seReleaseTotal === 0 && seReleaseRows.length > 0) {
         seReleaseTotal = Math.round(seReleaseRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
       }
+      // Preview-Pfad: vor dem Buchen ist SE_RELEASED_BY_INVOICE_ID auf den
+      // PPs noch nicht gesetzt. Wenn der Wizard die geplante Auswahl mitschickt,
+      // synthetisieren wir die Auflösung daraus, damit Preview = Buchung.
+      if (seReleaseRows.length === 0 && Array.isArray(previewReleasePpIds) && previewReleasePpIds.length > 0) {
+        const { data: previewPps } = await supabase
+          .from('PARTIAL_PAYMENT')
+          .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID')
+          .in('ID', previewReleasePpIds)
+          .order('PARTIAL_PAYMENT_DATE', { ascending: true });
+        const openPreview = (previewPps || []).filter(p =>
+          Number(p.SE_AMOUNT || 0) > 0 && p.SE_RELEASED_BY_INVOICE_ID == null
+        );
+        seReleaseRows = openPreview.map(r => ({
+          number: r.PARTIAL_PAYMENT_NUMBER || String(r.ID),
+          date:   r.PARTIAL_PAYMENT_DATE,
+          amount: Number(r.SE_AMOUNT || 0),
+        }));
+        seReleaseTotal = Math.round(seReleaseRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+      }
     } catch (_) { /* schema may lack SE_RELEASED_BY_INVOICE_ID */ }
   }
   const hasSeRelease = seReleaseRows.length > 0 && seReleaseTotal > 0;
@@ -735,7 +754,7 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
+async function renderDocumentPdf({ supabase, docType, docId, templateId, previewReleasePpIds = [] }) {
   const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
   const { data: docMeta } = await supabase.from(table).select('COMPANY_ID, TENANT_ID').eq('ID', docId).maybeSingle();
   const companyId = docMeta?.COMPANY_ID;
@@ -749,7 +768,7 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
   ]);
 
-  const vm = await buildPdfViewModel({ supabase, docType, docId });
+  const vm = await buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds });
   vm.theme             = theme;
   vm.logoDataUri       = logoDataUri;
   vm.signatureDataUri  = signatureDataUri;

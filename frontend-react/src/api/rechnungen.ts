@@ -239,8 +239,11 @@ export const deleteInvoice = (id: number) =>
 export const cancelInvoice = (id: number, opts?: { delete_payments?: boolean }) =>
   apiClient.post<{ id: number }>(`/invoices/${id}/cancel`, opts ?? {})
 
-export const openInvoicePdf = (id: number) =>
-  openPdfWithAuth(`/invoices/${id}/pdf?preview=1`)
+export const openInvoicePdf = (id: number, opts?: { releasePpIds?: number[] }) => {
+  const ids = opts?.releasePpIds?.filter(n => n > 0) ?? []
+  const q = ids.length > 0 ? `&release_pp_ids=${ids.join(',')}` : ''
+  return openPdfWithAuth(`/invoices/${id}/pdf?preview=1${q}`)
+}
 
 export const openPpPdf = (id: number) =>
   openPdfWithAuth(`/partial-payments/${id}/pdf?preview=1`)
