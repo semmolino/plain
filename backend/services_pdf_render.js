@@ -458,7 +458,7 @@ const DOC_TITLES = {
   stornorechnung:     'Stornorechnung',
 };
 
-async function buildPdfViewModel({ supabase, docType, docId }) {
+async function buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds = [] }) {
   const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
 
   // Load raw doc for fields not exposed by loadInvoiceData
@@ -477,9 +477,51 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
 
   // Honorar vs Nebenkosten split for the calc table
   let amountNet, amountExtrasNet;
+  // Cumulative-AR view for Abschlagsrechnung PDFs (#9):
+  //   "Erbrachtes Honorar"           = sum of AMOUNT_NET of all PPs in this contract (incl. this)
+  //   "abzgl. bisheriger Abschlags." = sum of AMOUNT_NET of all prior PPs
+  //   "In dieser Rechnung"           = AMOUNT_NET of this PP
+  let arProgress = null;
   if (docType === 'PARTIAL_PAYMENT') {
     amountNet       = Number(rawDoc.AMOUNT_NET       ?? inv.totals.lineTotal ?? 0);
     amountExtrasNet = Number(rawDoc.AMOUNT_EXTRAS_NET ?? 0);
+    if (rawDoc.CONTRACT_ID) {
+      try {
+        const { data: contractPps } = await supabase
+          .from('PARTIAL_PAYMENT')
+          .select('ID, AMOUNT_NET, STATUS_ID, CANCELS_PARTIAL_PAYMENT_ID, PARTIAL_PAYMENT_DATE')
+          .eq('CONTRACT_ID', rawDoc.CONTRACT_ID);
+        const all = (contractPps || []).filter(p =>
+          // exclude this very PP from "prior"
+          parseInt(p.ID, 10) !== parseInt(rawDoc.ID, 10) &&
+          // exclude storno rows (CANCELS_PARTIAL_PAYMENT_ID is set on the reversal entry)
+          p.CANCELS_PARTIAL_PAYMENT_ID == null &&
+          // include only booked or open (status != 3 = stornoed/cancelled, depending on schema)
+          String(p.STATUS_ID) !== '3' &&
+          // only PPs dated up to this one's date so older are summed
+          (!rawDoc.PARTIAL_PAYMENT_DATE || !p.PARTIAL_PAYMENT_DATE ||
+           p.PARTIAL_PAYMENT_DATE <= rawDoc.PARTIAL_PAYMENT_DATE)
+        );
+        // also exclude PPs that are storno'd by another PP
+        const cancelledIds = new Set(
+          (contractPps || [])
+            .map(p => p.CANCELS_PARTIAL_PAYMENT_ID)
+            .filter(Boolean)
+            .map(x => parseInt(x, 10))
+        );
+        const priorPps = all.filter(p => !cancelledIds.has(parseInt(p.ID, 10)));
+        const priorNet = Math.round(priorPps.reduce((s, p) => s + Number(p.AMOUNT_NET || 0), 0) * 100) / 100;
+        const thisNet  = Math.round(amountNet * 100) / 100;
+        if (priorNet > 0) {
+          arProgress = {
+            priorNet,
+            thisNet,
+            cumulativeNet: Math.round((priorNet + thisNet) * 100) / 100,
+            hasPrior: true,
+          };
+        }
+      } catch (_) { /* soft-fail */ }
+    }
   } else {
     const { data: structRows } = await supabase
       .from('INVOICE_STRUCTURE').select('AMOUNT_NET, AMOUNT_EXTRAS_NET').eq('INVOICE_ID', docId);
@@ -633,6 +675,25 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
       if (seReleaseTotal === 0 && seReleaseRows.length > 0) {
         seReleaseTotal = Math.round(seReleaseRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
       }
+      // Preview-Pfad: vor dem Buchen ist SE_RELEASED_BY_INVOICE_ID auf den
+      // PPs noch nicht gesetzt. Wenn der Wizard die geplante Auswahl mitschickt,
+      // synthetisieren wir die Auflösung daraus, damit Preview = Buchung.
+      if (seReleaseRows.length === 0 && Array.isArray(previewReleasePpIds) && previewReleasePpIds.length > 0) {
+        const { data: previewPps } = await supabase
+          .from('PARTIAL_PAYMENT')
+          .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID')
+          .in('ID', previewReleasePpIds)
+          .order('PARTIAL_PAYMENT_DATE', { ascending: true });
+        const openPreview = (previewPps || []).filter(p =>
+          Number(p.SE_AMOUNT || 0) > 0 && p.SE_RELEASED_BY_INVOICE_ID == null
+        );
+        seReleaseRows = openPreview.map(r => ({
+          number: r.PARTIAL_PAYMENT_NUMBER || String(r.ID),
+          date:   r.PARTIAL_PAYMENT_DATE,
+          amount: Number(r.SE_AMOUNT || 0),
+        }));
+        seReleaseTotal = Math.round(seReleaseRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+      }
     } catch (_) { /* schema may lack SE_RELEASED_BY_INVOICE_ID */ }
   }
   const hasSeRelease = seReleaseRows.length > 0 && seReleaseTotal > 0;
@@ -686,13 +747,14 @@ async function buildPdfViewModel({ supabase, docType, docId }) {
     deductionTotals,
     discounts,
     securityRetention,
+    arProgress,
     honorarCalcs,
   };
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
+async function renderDocumentPdf({ supabase, docType, docId, templateId, previewReleasePpIds = [] }) {
   const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
   const { data: docMeta } = await supabase.from(table).select('COMPANY_ID, TENANT_ID').eq('ID', docId).maybeSingle();
   const companyId = docMeta?.COMPANY_ID;
@@ -706,7 +768,7 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
   ]);
 
-  const vm = await buildPdfViewModel({ supabase, docType, docId });
+  const vm = await buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds });
   vm.theme             = theme;
   vm.logoDataUri       = logoDataUri;
   vm.signatureDataUri  = signatureDataUri;
@@ -715,7 +777,12 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId }) {
   await injectTextTemplate(supabase, vm, tenantId);
 
   // EPC / GiroCode QR — only for payable documents (not storno)
-  const payAmount = vm.discounts.hasDiscounts ? vm.discounts.adjustedGross : vm.inv.totals.grandTotal;
+  // When SE is in play (withheld or released), use securityRetention.payable so the
+  // QR code + payment instruction match the actual amount the customer should pay.
+  const baseGross = vm.discounts.hasDiscounts ? vm.discounts.adjustedGross : vm.inv.totals.grandTotal;
+  const seInPlay  = vm.securityRetention && (vm.securityRetention.hasSe || vm.securityRetention.hasSeRelease);
+  const payAmount = seInPlay ? vm.securityRetention.payable : baseGross;
+  vm.payAmount = payAmount;
   vm.epcQrDataUri = await buildEpcQrDataUri({
     bic:       vm.inv.seller.bic,
     iban:      vm.inv.seller.iban,

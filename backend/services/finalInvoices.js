@@ -115,13 +115,63 @@ async function recomputeTotal(supabase, invoiceId) {
 
   const totalNet = round2(phaseTotal - deductionsTotal);
 
+  // VAT-Self-Heal (gleich wie in getBillingProposal): wenn die Rechnung kein
+  // VAT_PERCENT hat, aus Vertrag bzw. Tenant-Default ergänzen.
+  const { data: inv } = await supabase
+    .from("INVOICE")
+    .select("VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
+    .eq("ID", invoiceId)
+    .maybeSingle();
+  let vatPercent = toNum(inv?.VAT_PERCENT);
+  let vatId      = inv?.VAT_ID ?? null;
+  if (vatPercent === 0 && inv) {
+    try {
+      let resolvedVatId = null;
+      if (inv.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", inv.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId && inv.TENANT_ID) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("VALUE")
+          .eq("TENANT_ID", inv.TENANT_ID).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      // Last-Resort: höchster VAT-Eintrag
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        const newPct = vat?.VAT_PERCENT;
+        if (newPct != null) { vatPercent = toNum(newPct); vatId = resolvedVatId; }
+      }
+    } catch (_) { /* soft-fail */ }
+  }
+
+  const taxAmountNet = round2((totalNet * vatPercent) / 100);
+  const totalGross   = round2(totalNet + taxAmountNet);
+
+  const updatePayload = {
+    TOTAL_AMOUNT_NET:    totalNet,
+    TAX_AMOUNT_NET:      taxAmountNet,
+    TOTAL_AMOUNT_GROSS:  totalGross,
+  };
+  if (vatId)            updatePayload.VAT_ID      = vatId;
+  if (vatPercent !== 0) updatePayload.VAT_PERCENT = vatPercent;
+
   const { error: upErr } = await supabase
     .from("INVOICE")
-    .update({ TOTAL_AMOUNT_NET: totalNet })
+    .update(updatePayload)
     .eq("ID", invoiceId);
   if (upErr) throw new Error(upErr.message);
 
-  return { phaseTotal, deductionsTotal, totalNet };
+  return { phaseTotal, deductionsTotal, totalNet, vatPercent, taxAmountNet, totalGross };
 }
 
 // ---------------------------------------------------------------------------
@@ -160,14 +210,101 @@ async function getPhases(supabase, { id, tenantId }) {
     .eq("INVOICE_ID", id);
   const selectedMap = new Map((isRows || []).map((r) => [String(r.STRUCTURE_ID), r]));
 
+  // Self-healing recompute of INVOICED + PARTIAL_PAYMENTS per structure
+  // from raw INVOICE_STRUCTURE / PARTIAL_PAYMENT_STRUCTURE, ignoring possibly
+  // drifted cached columns. Storno-Pairs (orig + Stornorechnung) net to zero.
+  const recomputedInvoiced = new Map();
+  const recomputedPartial  = new Map();
+  let recomputeOk = false;
+  if (inv.CONTRACT_ID) {
+    try {
+      const { data: otherInvs } = await supabase
+        .from("INVOICE")
+        .select("ID")
+        .eq("CONTRACT_ID", inv.CONTRACT_ID)
+        .neq("ID", id)
+        .in("STATUS_ID", [2, 3]);
+      const otherInvIds = (otherInvs || []).map(i => i.ID);
+      if (otherInvIds.length > 0) {
+        const { data: invStructs } = await supabase
+          .from("INVOICE_STRUCTURE")
+          .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .in("INVOICE_ID", otherInvIds);
+        for (const r of invStructs || []) {
+          const sid = String(r.STRUCTURE_ID);
+          recomputedInvoiced.set(sid,
+            round2((recomputedInvoiced.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+        }
+      }
+      // STATUS 2 (gebucht) + 3 (stornoiertes Original) — beide nötig, sonst
+      // sieht die Funktion nach AR-Storno nur die Storno-Hälfte (-X) und
+      // das Original (+X) rutscht durch. Wie bei loadPreviouslyBilledByStructure.
+      const { data: pps } = await supabase
+        .from("PARTIAL_PAYMENT")
+        .select("ID")
+        .eq("CONTRACT_ID", inv.CONTRACT_ID)
+        .in("STATUS_ID", [2, 3]);
+      const ppIds = (pps || []).map(p => p.ID);
+      if (ppIds.length > 0) {
+        const { data: ppStructs } = await supabase
+          .from("PARTIAL_PAYMENT_STRUCTURE")
+          .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .in("PARTIAL_PAYMENT_ID", ppIds);
+        for (const r of ppStructs || []) {
+          const sid = String(r.STRUCTURE_ID);
+          recomputedPartial.set(sid,
+            round2((recomputedPartial.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+        }
+      }
+      recomputeOk = true;
+    } catch (_) { /* fall back to cached cols */ }
+  }
+
+  // Fill-First-Attribution für alreadyBilled:
+  // Wenn die Recompute-Daten verfügbar sind, summieren wir die gesamte
+  // bisher abgerechnete Summe über alle Leaf-Strukturen und attributieren
+  // sie in der Reihenfolge ihrer ID. Dadurch sieht ein Phasenmodell sauber
+  // aus, auch wenn ein historisches applyPerformanceAmount die Beträge
+  // proportional verteilt hatte (Bsp.: AR über 2.164,13 € → System hatte
+  // 517,51 € auf LPH 1 und 1.646,62 € auf LPH 2 verteilt; bei Fill-First
+  // wird stattdessen LPH 1 voll abgerechnet, LPH 2 = 0).
+  const leafPsRows = psRows.filter(p => {
+    // Leaves = Strukturen ohne Kinder
+    return !psRows.some(other => String(other.FATHER_ID) === String(p.ID));
+  }).sort((a, b) => Number(a.ID) - Number(b.ID));
+  let alreadyBilledByLeaf = new Map();
+  if (recomputeOk) {
+    let totalBilled = 0;
+    for (const sidKey of [...recomputedInvoiced.keys(), ...recomputedPartial.keys()]) {
+      totalBilled += (recomputedInvoiced.get(sidKey) || 0) + (recomputedPartial.get(sidKey) || 0);
+    }
+    totalBilled = round2(totalBilled);
+    let remaining = totalBilled;
+    for (const leaf of leafPsRows) {
+      const cap = round2(toNum(leaf.REVENUE_COMPLETION) + (toNum(leaf.REVENUE_COMPLETION) * toNum(leaf.EXTRAS_PERCENT)) / 100);
+      const fill = remaining <= 0 ? 0 : Math.min(cap, remaining);
+      alreadyBilledByLeaf.set(String(leaf.ID), round2(fill));
+      remaining = round2(remaining - fill);
+    }
+  }
+
   return psRows.map((ps) => {
     const revenue = toNum(ps.REVENUE_COMPLETION);
     const extrasAmount = round2((revenue * toNum(ps.EXTRAS_PERCENT)) / 100);
     const totalEarned = round2(revenue + extrasAmount);
-    // BILLED_FINAL = amount already invoiced via previous final invoices (not Abschlagsrechnungen)
-    const billedFinal = round2(toNum(ps.INVOICED));
-    // ALREADY_BILLED = informational total (partial payments + final invoices)
-    const alreadyBilled = round2(toNum(ps.PARTIAL_PAYMENTS) + billedFinal);
+    const sidKey = String(ps.ID);
+    // When recompute succeeded, prefer it ALWAYS (default to 0 if no rows for
+    // this structure). Otherwise fall back to cached PS columns.
+    const billedFinal = recomputeOk
+      ? (recomputedInvoiced.get(sidKey) || 0)
+      : round2(toNum(ps.INVOICED));
+    const partialNet = recomputeOk
+      ? (recomputedPartial.get(sidKey) || 0)
+      : round2(toNum(ps.PARTIAL_PAYMENTS));
+    // alreadyBilled: Fill-First-Verteilung (wenn verfügbar), sonst Roh-Summe.
+    const alreadyBilled = recomputeOk && alreadyBilledByLeaf.has(sidKey)
+      ? alreadyBilledByLeaf.get(sidKey)
+      : round2(partialNet + billedFinal);
     const sel = selectedMap.get(String(ps.ID));
     const closedByOther = ps.CLOSED_BY_INVOICE_ID && String(ps.CLOSED_BY_INVOICE_ID) !== String(id);
     const defaultAmount = round2(Math.max(0, totalEarned - billedFinal));
@@ -247,11 +384,16 @@ async function getDeductions(supabase, { id, tenantId }) {
     .maybeSingle();
   if (invErr || !inv) throw { status: 404, message: "INVOICE nicht gefunden" };
 
+  // STATUS_ID=2 = gebucht + nicht (mehr) storniert (Original wechselt bei
+  // Storno auf STATUS=3). Storno-ARs (CANCELS_PARTIAL_PAYMENT_ID gesetzt)
+  // haben zwar auch STATUS=2, sollen aber NICHT als Abzug auftauchen — sie
+  // gehören zum Storno-Paar mit dem Original und beide saldieren netto auf 0.
   const { data: ppRows, error: ppErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_NET")
+    .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_NET, CANCELS_PARTIAL_PAYMENT_ID")
     .eq("PROJECT_ID", inv.PROJECT_ID)
     .eq("STATUS_ID", 2)
+    .is("CANCELS_PARTIAL_PAYMENT_ID", null)
     .eq("TENANT_ID", tenantId)
     .order("PARTIAL_PAYMENT_DATE", { ascending: true });
   if (ppErr) throw new Error(ppErr.message);
@@ -548,12 +690,34 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [] }) {
     }
 
     // PROJECT_PROGRESS: one row per structure with the INVOICED delta
+    // AND PROJECT_STRUCTURE.INVOICED: accumulate so the value stays consistent
+    // with bookInvoice's behaviour (used by getPhases as "already billed" basis).
+    // Without this, a storno (which goes through bookInvoice and *does* decrement
+    // PROJECT_STRUCTURE.INVOICED) would push the value negative.
     if ((isRows || []).length > 0) {
       const addByStructure = new Map();
       (isRows || []).forEach((r) => {
         const sid = String(r.STRUCTURE_ID);
         addByStructure.set(sid, round2((addByStructure.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
       });
+
+      // Update PROJECT_STRUCTURE.INVOICED in lockstep with the delta.
+      try {
+        const sIds = Array.from(addByStructure.keys()).map(x => parseInt(x, 10)).filter(Number.isFinite);
+        if (sIds.length > 0) {
+          const { data: psRows } = await supabase
+            .from("PROJECT_STRUCTURE").select("ID, INVOICED").in("ID", sIds);
+          const currentById = new Map((psRows || []).map(s => [String(s.ID), toNum(s.INVOICED)]));
+          const updates = sIds.map(sid => ({
+            ID: sid,
+            INVOICED: round2((currentById.get(String(sid)) || 0) + (addByStructure.get(String(sid)) || 0)),
+          }));
+          const { error: psUpErr } = await supabase
+            .from("PROJECT_STRUCTURE").upsert(updates, { onConflict: "ID" });
+          if (psUpErr) console.error("[BOOK_FINAL][PS_INVOICED]", psUpErr.message);
+        }
+      } catch (e) { console.error("[BOOK_FINAL][PS_INVOICED]", e?.message || e); }
+
       const finalProgressRows = Array.from(addByStructure.entries()).map(([sid, invoiced]) => ({
         TENANT_ID:    inv.TENANT_ID ?? tenantId ?? null,
         STRUCTURE_ID: parseInt(sid, 10),

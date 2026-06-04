@@ -42,6 +42,10 @@ export interface Invoice {
   CASH_DISCOUNT_DAYS:     number | null
   BILLING_PERIOD_START:   string | null
   BILLING_PERIOD_FINISH:  string | null
+  SE_AMOUNT?:             number | null
+  SE_PERCENT?:            number | null
+  SE_BASIS?:              'BRUTTO' | 'NETTO' | null
+  SE_RELEASE_TOTAL?:      number | null
 }
 
 export interface PartialPayment {
@@ -76,6 +80,10 @@ export interface PartialPayment {
   CASH_DISCOUNT_DAYS:           number | null
   BILLING_PERIOD_START:         string | null
   BILLING_PERIOD_FINISH:        string | null
+  SE_AMOUNT?:                   number | null
+  SE_PERCENT?:                  number | null
+  SE_BASIS?:                    'BRUTTO' | 'NETTO' | null
+  SE_RELEASED_BY_INVOICE_ID?:   number | null
 }
 
 export interface BillingProposal {
@@ -131,6 +139,9 @@ export interface FinalTotals {
   phaseTotal:       number
   deductionsTotal:  number
   totalNet:         number
+  vatPercent?:      number
+  taxAmountNet?:    number
+  totalGross?:      number
 }
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
@@ -231,8 +242,11 @@ export const deleteInvoice = (id: number) =>
 export const cancelInvoice = (id: number, opts?: { delete_payments?: boolean }) =>
   apiClient.post<{ id: number }>(`/invoices/${id}/cancel`, opts ?? {})
 
-export const openInvoicePdf = (id: number) =>
-  openPdfWithAuth(`/invoices/${id}/pdf?preview=1`)
+export const openInvoicePdf = (id: number, opts?: { releasePpIds?: number[] }) => {
+  const ids = opts?.releasePpIds?.filter(n => n > 0) ?? []
+  const q = ids.length > 0 ? `&release_pp_ids=${ids.join(',')}` : ''
+  return openPdfWithAuth(`/invoices/${id}/pdf?preview=1${q}`)
+}
 
 export const openPpPdf = (id: number) =>
   openPdfWithAuth(`/partial-payments/${id}/pdf?preview=1`)

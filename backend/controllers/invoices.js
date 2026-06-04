@@ -88,7 +88,7 @@ async function getBillingProposal(req, res, supabase) {
   try {
     const { data: inv, error: invErr } = await supabase
       .from("INVOICE")
-      .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT")
+      .select("ID, STATUS_ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT, VAT_ID")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
@@ -96,6 +96,43 @@ async function getBillingProposal(req, res, supabase) {
     if (!inv) return res.status(404).json({ error: "INVOICE nicht gefunden" });
     if (String(inv.STATUS_ID) === "2") {
       return res.status(400).json({ error: "Gebuchte Rechnungen können nicht geändert werden" });
+    }
+
+    // Self-Heal: VAT_PERCENT aus Vertrag / Tenant-Standard nachziehen
+    if (inv.VAT_PERCENT == null || svc.toNum(inv.VAT_PERCENT) === 0) {
+      try {
+        let resolvedVatId = null;
+        if (inv.CONTRACT_ID) {
+          const { data: cRow } = await supabase
+            .from("CONTRACT").select("VAT_ID").eq("ID", inv.CONTRACT_ID).maybeSingle();
+          resolvedVatId = cRow?.VAT_ID ?? null;
+        }
+        if (!resolvedVatId) {
+          const { data: settingsRows } = await supabase
+            .from("TENANT_SETTINGS").select("KEY, VALUE")
+            .eq("TENANT_ID", req.tenantId).eq("KEY", "default_vat_id");
+          const defVatId = settingsRows?.[0]?.VALUE;
+          if (defVatId) resolvedVatId = Number(defVatId);
+        }
+        // Last-Resort: höchster VAT-Eintrag (i.d.R. 19%)
+        if (!resolvedVatId) {
+          const { data: anyVat } = await supabase
+            .from("VAT").select("ID").order("VAT_PERCENT", { ascending: false }).limit(1);
+          if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+        }
+        if (resolvedVatId) {
+          const { data: vat } = await supabase
+            .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+          const newVatPct = vat?.VAT_PERCENT ?? null;
+          if (newVatPct != null) {
+            await supabase.from("INVOICE")
+              .update({ VAT_ID: resolvedVatId, VAT_PERCENT: newVatPct })
+              .eq("ID", id);
+            inv.VAT_ID = resolvedVatId;
+            inv.VAT_PERCENT = newVatPct;
+          }
+        }
+      } catch (_) { /* soft-fail */ }
     }
 
     const structures = await svc.loadProjectStructuresForContext(supabase, { contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
@@ -121,7 +158,10 @@ async function getBillingProposal(req, res, supabase) {
     );
 
     const bt1Sums = await svc.sumInvStructureForInvoice(supabase, { invoiceId: id, structureIds: bt1Ids });
-    if (bt1Sums.net <= 0 && perfSuggested > 0) {
+    // Recompute auch bei stalem Entwurf (gespeicherter Betrag > Vorschlag,
+    // z.B. nach Storno einer früheren Rechnung sinkt der abrechenbare Anteil).
+    const isStale = perfSuggested > 0 && bt1Sums.net > perfSuggested + 0.5;
+    if ((bt1Sums.net <= 0 || isStale) && perfSuggested > 0) {
       await svc.applyPerformanceAmount(supabase, {
         invoiceId: id,
         contractId: inv.CONTRACT_ID,
@@ -549,11 +589,18 @@ async function getPdf(req, res, supabase) {
       }
     }
 
+    // Preview-Only: wenn der Wizard SE-Release-IDs mitschickt, in die
+    // Preview einsynthetisieren (siehe buildPdfViewModel).
+    const releasePpIds = String(req.query.release_pp_ids || "")
+      .split(",").map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isFinite(n) && n > 0);
+
     const { pdf } = await renderDocumentPdf({
       supabase,
       docType: "INVOICE",
       docId: invoiceId,
       templateId: Number.isFinite(templateId) ? templateId : null,
+      previewReleasePpIds: preview ? releasePpIds : [],
     });
 
     res.setHeader("Content-Type", "application/pdf");

@@ -684,7 +684,10 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const rootStructureRevenueSum = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE ?? 0), 0)
   const rootRevenueFinal = rootStructureRevenueSum + projectLevelSurcharges
   const rootExtras      = structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.extras ?? 0), 0)
-  const rootStand       = structure.reduce((s, n) => s + (n.REVENUE_COMPLETION ?? 0), 0)
+  // Gesamt-Spalte: Summe aus Honorar + Zuschläge (REVENUE) + Nebenkosten (EXTRAS).
+  // Wird auf Root-Ebene aus den Top-Level-Aggregaten + Projekt-Root-Surcharges
+  // summiert.
+  const rootGesamt = rootRevenueFinal + rootExtras
 
   // Computed live preview of project-level surcharge amounts (used in the panel)
   function computeProjectSurchargesPreview(s: SurchargeEdit) {
@@ -807,9 +810,9 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th className="num">Honorar €</th>
                         <th className="num">Zuschläge €</th>
                         <th className="num">Honorar + Zuschl. €</th>
-                        <th className="num">NK %</th>
+                        <th style={{ textAlign: 'left' }}>NK %</th>
                         <th className="num">Nebenkosten €</th>
-                        <th className="num">Stand €</th>
+                        <th className="num">Gesamt €</th>
                         <th style={{ textAlign: 'center', fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>Interne Pos.</th>
                         <th></th>
                       </tr>
@@ -829,9 +832,9 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
                           <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : rootSurcharges < 0 ? '#dc2626' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
                           <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges !== 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
-                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
+                          <td style={{ textAlign: 'left' }}><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
-                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootStand)}</span></td>
+                          <td className="num"><span style={{ fontSize: 12, fontWeight: 700 }}>{fmtEur(rootGesamt)}</span></td>
                           <td></td>
                           <td>
                             <button
@@ -993,8 +996,8 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                                 {fmtEur(node.REVENUE ?? 0)}
                               </span>
                             </td>
-                            <td className="num">
-                              <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'flex-end' }}>
+                            <td>
+                              <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'flex-start' }}>
                                 <input className="tbl-input" type="number" min={0} max={100} step={0.1} style={{ width: 56 }}
                                   value={nkVal}
                                   onChange={e => setField(node.STRUCTURE_ID, 'nk', e.target.value)} />
@@ -1010,7 +1013,14 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               </div>
                             </td>
                             <td className="num">{fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
-                            <td className="num">{fmtEur(node.REVENUE_COMPLETION)}</td>
+                            <td className="num">{(() => {
+                              // Honorar + Zuschl. wird in der Vor-Spalte als node.REVENUE
+                              // angezeigt (gilt für Leaves wie Parents). Nebenkosten je
+                              // nach Ebene aus aggMap oder direkt aus node.EXTRAS.
+                              const rev = Number(node.REVENUE ?? 0)
+                              const ext = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.extras ?? 0) : Number(node.EXTRAS ?? 0)
+                              return fmtEur(rev + ext)
+                            })()}</td>
                             <td style={{ textAlign: 'center' }}>
                               <input
                                 type="checkbox"

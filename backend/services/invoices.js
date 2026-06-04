@@ -253,7 +253,12 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   const m = new Map();
 
   // --- Amounts from booked INVOICE rows ---
-  let invQ = supabase.from("INVOICE").select("ID").eq("STATUS_ID", bookedStatusId);
+  // STATUS_ID=2 = gebucht; STATUS_ID=3 = stornoiertes Original (durch eine
+  // Stornorechnung neutralisiert). Beide einbeziehen, damit Storno-Paare
+  // (Original=3 mit +X, Storno-Rechnung=2 mit -X) auf 0 saldieren. Sonst
+  // wirkt nur die negative Storno und der Vorschlag wird viel zu hoch.
+  const invStatusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
+  let invQ = supabase.from("INVOICE").select("ID").in("STATUS_ID", invStatusIds);
   if (contractId) invQ = invQ.eq("CONTRACT_ID", contractId);
   else invQ = invQ.eq("PROJECT_ID", projectId);
   if (excludeInvoiceId) invQ = invQ.neq("ID", excludeInvoiceId);
@@ -277,7 +282,10 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   }
 
   // --- Amounts from booked PARTIAL_PAYMENT rows (must also be subtracted) ---
-  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID").eq("STATUS_ID", bookedStatusId);
+  // Storno-Paare: Original wird STATUS_ID=3 + Storno hat STATUS_ID=2 mit
+  // negierten Beträgen. Beide einbeziehen, damit sie auf 0 saldieren.
+  const ppStatusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
+  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID").in("STATUS_ID", ppStatusIds);
   if (contractId) ppQ = ppQ.eq("CONTRACT_ID", contractId);
   else ppQ = ppQ.eq("PROJECT_ID", projectId);
 
@@ -350,32 +358,67 @@ async function writeInvoiceStructureRows(supabase, { invoiceId, rows, deleteStru
 async function recomputeInvoiceTotals(supabase, invoiceId) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
-    .select("ID, VAT_PERCENT")
+    .select("ID, VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
     .eq("ID", invoiceId)
     .maybeSingle();
   if (invErr || !inv) throw new Error("INVOICE konnte nicht geladen werden");
+
+  // Self-Heal VAT_PERCENT: Vertrag → Tenant-Default → höchster VAT-Eintrag
+  let vatPct = toNum(inv.VAT_PERCENT);
+  let resolvedVatId = inv.VAT_ID ?? null;
+  if (vatPct === 0) {
+    try {
+      if (!resolvedVatId && inv.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", inv.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId && inv.TENANT_ID) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("VALUE")
+          .eq("TENANT_ID", inv.TENANT_ID).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        if (vat?.VAT_PERCENT != null) vatPct = toNum(vat.VAT_PERCENT);
+      }
+    } catch (_) { /* soft-fail */ }
+  }
 
   const sums = await sumInvStructureForInvoice(supabase, { invoiceId });
   const amountNet = round2(sums.net);
   const amountExtras = round2(sums.extras);
   const totalNet = round2(amountNet + amountExtras);
-  const vatPct = toNum(inv.VAT_PERCENT);
   const taxAmountNet = round2(totalNet * vatPct / 100);
   const totalGross = round2(totalNet + taxAmountNet);
 
+  const updatePayload = {
+    AMOUNT_NET: amountNet,
+    AMOUNT_EXTRAS_NET: amountExtras,
+    TOTAL_AMOUNT_NET: totalNet,
+    TAX_AMOUNT_NET: taxAmountNet,
+    TOTAL_AMOUNT_GROSS: totalGross,
+  };
+  if (vatPct !== 0)     updatePayload.VAT_PERCENT = vatPct;
+  if (resolvedVatId)    updatePayload.VAT_ID      = resolvedVatId;
+
   const { error: upErr } = await supabase
-    .from("INVOICE")
-    .update({
-      AMOUNT_NET: amountNet,
-      AMOUNT_EXTRAS_NET: amountExtras,
-      TOTAL_AMOUNT_NET: totalNet,
-      TAX_AMOUNT_NET: taxAmountNet,
-      TOTAL_AMOUNT_GROSS: totalGross,
-    })
-    .eq("ID", invoiceId);
+    .from("INVOICE").update(updatePayload).eq("ID", invoiceId);
   if (upErr) throw new Error(upErr.message);
 
-  return { amount_net: amountNet, amount_extras_net: amountExtras, total_amount_net: totalNet, tax_amount_net: taxAmountNet, total_amount_gross: totalGross };
+  return {
+    amount_net: amountNet, amount_extras_net: amountExtras,
+    total_amount_net: totalNet, tax_amount_net: taxAmountNet,
+    total_amount_gross: totalGross, vat_percent: vatPct,
+  };
 }
 
 async function applyPerformanceAmount(supabase, { invoiceId, contractId, projectId, amount, tenantId = undefined }) {
@@ -496,21 +539,27 @@ async function findTecIdsToAutoAssign(supabase, { invoiceId, structureIds }) {
 // ---------------------------------------------------------------------------
 
 async function listInvoices(supabase, { tenantId, limit, q }) {
-  let query = supabase
-    .from("INVOICE")
-    .select(
-      "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, INVOICE_TYPE, CANCELS_INVOICE_ID"
-    )
-    .eq("TENANT_ID", tenantId)
-    .order("INVOICE_DATE", { ascending: false })
-    .limit(limit);
-
-  if (q) {
-    const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
-    query = query.or(`INVOICE_NUMBER.ilike.%${esc}%`);
+  const BASE_COLS = "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, INVOICE_TYPE, CANCELS_INVOICE_ID";
+  const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASE_TOTAL";
+  const buildQuery = (cols) => {
+    let q1 = supabase
+      .from("INVOICE")
+      .select(cols)
+      .eq("TENANT_ID", tenantId)
+      .order("INVOICE_DATE", { ascending: false })
+      .limit(limit);
+    if (q) {
+      const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      q1 = q1.or(`INVOICE_NUMBER.ilike.%${esc}%`);
+    }
+    return q1;
+  };
+  let { data: rows, error } = await buildQuery(BASE_COLS + SE_COLS);
+  if (error && /SE_/.test(error.message || "")) {
+    // Migration 0047 nicht gelaufen — Fallback ohne SE-Spalten.
+    const r = await buildQuery(BASE_COLS);
+    rows = r.data; error = r.error;
   }
-
-  const { data: rows, error } = await query;
   if (error) throw error;
 
   const invRows = Array.isArray(rows) ? rows : [];
@@ -588,6 +637,10 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
     ADDRESS_NAME_1: r.ADDRESS_NAME_1 ?? "",
     AMOUNT_PAYED_GROSS: payedGrossMap[r.ID] ?? 0,
     COMMENT: r.COMMENT ?? "",
+    SE_AMOUNT:         r.SE_AMOUNT ?? null,
+    SE_PERCENT:        r.SE_PERCENT ?? null,
+    SE_BASIS:          r.SE_BASIS ?? null,
+    SE_RELEASE_TOTAL:  r.SE_RELEASE_TOTAL ?? null,
   }));
 }
 
@@ -658,9 +711,24 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     contractRow = c2;
   }
 
+  // VAT resolution: contract.VAT_ID > TENANT_SETTINGS.default_vat_id
+  let effectiveVatId = contractRow.VAT_ID ?? null;
+  if (!effectiveVatId) {
+    try {
+      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
+      const tenantId = projT?.TENANT_ID ?? null;
+      if (tenantId) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("KEY, VALUE")
+          .eq("TENANT_ID", tenantId).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) effectiveVatId = Number(defVatId);
+      }
+    } catch (_) { /* settings missing — fall through */ }
+  }
   let contractVatPercent = null;
-  if (contractRow.VAT_ID) {
-    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", contractRow.VAT_ID).maybeSingle();
+  if (effectiveVatId) {
+    const { data: vat } = await supabase.from("VAT").select("VAT_PERCENT").eq("ID", effectiveVatId).maybeSingle();
     contractVatPercent = vat?.VAT_PERCENT ?? null;
   }
 
@@ -692,7 +760,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     PROJECT_ID: projectId,
     CONTRACT_ID: contractId,
     CURRENCY_ID: contractRow.CURRENCY_ID ?? null,
-    VAT_ID: contractRow.VAT_ID ?? null,
+    VAT_ID: effectiveVatId,
     VAT_PERCENT: contractVatPercent,
     STATUS_ID: 1,
     COMPANY_NAME_1: company.COMPANY_NAME_1 ?? null,
@@ -1195,6 +1263,13 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
     TAX_AMOUNT_NET:      -round2(toNum(orig.TAX_AMOUNT_NET)),
     TOTAL_AMOUNT_GROSS:  -round2(toNum(orig.TOTAL_AMOUNT_GROSS)),
   };
+
+  // SE-Beträge negieren (nur wenn die Spalten existieren — Pre-0047 schickt
+  // sie schlicht nicht mit), damit die Storno-Zeile in Rechnungsliste +
+  // Reporting korrekt spiegelt (Original 18011.53 → Storno -18011.53).
+  if ("SE_AMOUNT" in orig)        cancelRow.SE_AMOUNT        = orig.SE_AMOUNT        != null ? -round2(toNum(orig.SE_AMOUNT))        : null;
+  if ("SE_BASIS_AMT" in orig)     cancelRow.SE_BASIS_AMT     = orig.SE_BASIS_AMT     != null ? -round2(toNum(orig.SE_BASIS_AMT))     : null;
+  if ("SE_RELEASE_TOTAL" in orig) cancelRow.SE_RELEASE_TOTAL = orig.SE_RELEASE_TOTAL != null ? -round2(toNum(orig.SE_RELEASE_TOTAL)) : null;
 
   const { data: created, error: insertErr } = await supabase
     .from("INVOICE").insert([cancelRow]).select("ID").single();

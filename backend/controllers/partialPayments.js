@@ -304,11 +304,53 @@ async function getBillingProposal(req, res, supabase) {
 
   const { data: pp, error: ppErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, PROJECT_ID, CONTRACT_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT")
+    .select("ID, PROJECT_ID, CONTRACT_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT, VAT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
+
+  // Self-Heal: wenn VAT_PERCENT auf der AR fehlt, aus Vertrag oder
+  // Tenant-Standard nachziehen und in die DB persistieren. Damit zeigt
+  // der Wizard sofort MwSt + korrekten Brutto, auch wenn der Draft vor
+  // dem Fix angelegt wurde.
+  if (pp.VAT_PERCENT == null || svc.toNum(pp.VAT_PERCENT) === 0) {
+    try {
+      let resolvedVatId = null;
+      if (pp.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", pp.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("KEY, VALUE")
+          .eq("TENANT_ID", req.tenantId).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      // Last-Resort: ersten VAT-Eintrag des Tenants (oder gemeinsam) nehmen,
+      // damit der Wizard nicht stumm bei 0% MwSt landet, wenn weder Vertrag
+      // noch Tenant-Default konfiguriert sind.
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID, VAT_PERCENT").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        const newVatPct = vat?.VAT_PERCENT ?? null;
+        if (newVatPct != null) {
+          await supabase.from("PARTIAL_PAYMENT")
+            .update({ VAT_ID: resolvedVatId, VAT_PERCENT: newVatPct })
+            .eq("ID", id);
+          pp.VAT_ID = resolvedVatId;
+          pp.VAT_PERCENT = newVatPct;
+        }
+      }
+    } catch (_) { /* soft-fail — bleibt 0% */ }
+  }
 
   let structures = [];
   try {
@@ -349,7 +391,14 @@ async function getBillingProposal(req, res, supabase) {
     const bt1Existing = await svc.sumPpsForPartialPayment(supabase, { partialPaymentId: id, structureIds: bt1Ids });
     performanceAmount = bt1Existing.net;
 
-    if (performanceAmount <= 0 && performanceSuggested > 0) {
+    // Auto-Recompute in zwei Fällen:
+    //   a) noch nichts allokiert
+    //   b) gespeicherter Betrag ist GRÖSSER als der aktuell abrechenbare
+    //      Vorschlag — das passiert, wenn die abrechenbare Summe zwischen-
+    //      durch durch Storno-Vorgänge sank. Stale Drafts heilen so von
+    //      selbst, ohne den User zu zwingen, den Entwurf zu löschen.
+    const isStale = performanceSuggested > 0 && performanceAmount > performanceSuggested + 0.5;
+    if ((performanceAmount <= 0 || isStale) && performanceSuggested > 0) {
       const r = await svc.applyPerformanceAmount(supabase, {
         partialPaymentId: id,
         contractId: pp.CONTRACT_ID,
@@ -402,7 +451,7 @@ async function putPerformance(req, res, supabase) {
 
   const { data: pp, error: ppErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, PROJECT_ID, CONTRACT_ID")
+    .select("ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
@@ -420,6 +469,7 @@ async function putPerformance(req, res, supabase) {
         amount_extras_net: totals.amount_extras_net,
         total_amount_net: totals.total_amount_net,
         total_amount_gross: totals.total_amount_gross,
+        vat_percent: totals.vat_percent,
       },
     });
   } catch (e) {
@@ -543,6 +593,7 @@ async function postTec(req, res, supabase) {
         amount_extras_net: totals.amount_extras_net,
         total_amount_net: totals.total_amount_net,
         total_amount_gross: totals.total_amount_gross,
+        vat_percent: totals.vat_percent,
       },
     });
   } catch (e) {

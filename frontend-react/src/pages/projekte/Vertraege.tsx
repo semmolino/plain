@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchProjectsShort, fetchContractByProject, patchContract } from '@/api/projekte'
-import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
+import { searchAddressesApi, fetchContactsByAddress, fetchVatList } from '@/api/stammdaten'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { Message } from '@/components/ui/Message'
 
@@ -27,6 +27,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
   const [contacts,     setContacts]     = useState<ContactOpt[]>([])
   const [cashDiscPct,  setCashDiscPct]  = useState('')
   const [cashDiscDays, setCashDiscDays] = useState('')
+  const [vatId,        setVatId]        = useState<number | null>(null)
   // Sicherheitseinbehalt (Phase 1)
   const [seEnabled,    setSeEnabled]    = useState(false)
   const [sePct,        setSePct]        = useState('')
@@ -36,6 +37,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
+  const { data: vatListData }  = useQuery({ queryKey: ['vat-list'],       queryFn: fetchVatList })
 
   const { data: contractData, isLoading, isError } = useQuery({
     queryKey: ['contract', pid],
@@ -52,6 +54,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
     setNameLong(c.NAME_LONG ?? '')
     setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
     setCashDiscDays(c.CASH_DISCOUNT_DAYS != null ? String(c.CASH_DISCOUNT_DAYS) : '')
+    setVatId(c.VAT_ID ?? null)
     setSeEnabled(!!c.SE_ENABLED)
     setSePct(c.SE_PERCENT != null ? String(c.SE_PERCENT) : '')
     setSeBasis((c.SE_BASIS as 'BRUTTO' | 'NETTO') === 'NETTO' ? 'NETTO' : 'BRUTTO')
@@ -81,6 +84,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
         INVOICE_CONTACT_ID:    contactId,
         CASH_DISCOUNT_PERCENT: cashDiscPct !== '' ? parseFloat(cashDiscPct) : null,
         CASH_DISCOUNT_DAYS:    cashDiscDays !== '' ? parseInt(cashDiscDays, 10) : null,
+        VAT_ID:                vatId,
         SE_ENABLED:            seEnabled,
         SE_PERCENT:            seEnabled && sePct !== '' ? parseFloat(sePct) : null,
         SE_BASIS:              seEnabled ? seBasis : null,
@@ -228,6 +232,25 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
                 placeholder="z.B. 14"
               />
             </div>
+          </div>
+
+          <div className="form-group">
+            <label>Steuerschlüssel (MwSt.)</label>
+            <select
+              value={vatId ?? ''}
+              onChange={e => { setVatId(e.target.value ? Number(e.target.value) : null); touch() }}
+            >
+              <option value="">— Tenant-Standard verwenden —</option>
+              {(vatListData?.data ?? []).map(v => (
+                <option key={v.ID} value={v.ID}>
+                  {v.VAT} ({v.VAT_PERCENT}&nbsp;%)
+                </option>
+              ))}
+            </select>
+            <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0' }}>
+              Bestimmt den MwSt-Satz für alle Rechnungen aus diesem Vertrag.
+              Bei "Tenant-Standard" wird der Default aus den Vorbelegungen verwendet.
+            </p>
           </div>
 
           {/* ── Sicherheitseinbehalt ───────────────────────────────────────── */}

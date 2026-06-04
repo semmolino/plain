@@ -103,9 +103,10 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
     if (initialDraft.d2Reason) setD2Reason(initialDraft.d2Reason)
     if (initialDraft.cashDiscPct > 0) { setShowSkonto(true); setCashDiscPct(String(initialDraft.cashDiscPct)) }
     if (initialDraft.cashDiscDays > 0) setCashDiscDays(String(initialDraft.cashDiscDays))
+    // Reopened drafts start at step 1 (Rechnungsdetails) — see AbschlagWizard.
     getInvoiceBillingProposal(initialDraft.id)
-      .then(r => { setProposal(r.data); setStep(3) })
-      .catch(() => setStep(3))
+      .then(r => { setProposal(r.data); setStep(1) })
+      .catch(() => setStep(1))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -150,12 +151,9 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
       if (list.length === 1) {
         setContractId(list[0].ID)
         setContractLabel(`${list[0].NAME_SHORT} – ${list[0].NAME_LONG}`)
-        const se = contractSeRef.current.get(list[0].ID)
-        if (se?.enabled) {
-          setSeEnabled(true)
-          if (se.pct != null) setSePct(String(se.pct))
-          setSeBasis(se.basis)
-        }
+        // Sicherheitseinbehalt wird in der "Rechnung" (Einzelrechnung) nicht
+        // genutzt — siehe Buchen-Schritt. State bleibt false, alle se_*-Felder
+        // werden mit null gepatcht, kein SE-Abzug.
       } else {
         setContractId(null); setContractLabel('')
       }
@@ -389,12 +387,8 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
                 }
                 const cid = Number(id)
                 setContractId(cid); setContractLabel(label)
-                const se = contractSeRef.current.get(cid)
-                if (se?.enabled) {
-                  setSeEnabled(true)
-                  if (se.pct != null) setSePct(String(se.pct))
-                  setSeBasis(se.basis)
-                }
+                // SE-Defaults aus dem Vertrag werden in der "Rechnung" ignoriert
+                // — Einzelrechnung hat keinen SE-Lebenszyklus.
               }}
               search={async q => {
                 if (!projectId) return []
@@ -634,36 +628,10 @@ export function RechnungWizard({ initialDraft }: { initialDraft?: DraftResume } 
                 </div>
               )}
 
-              {/* Sicherheitseinbehalt */}
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(17,24,39,0.08)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
-                  <input type="checkbox" checked={seEnabled} onChange={e => setSeEnabled(e.target.checked)} />
-                  Sicherheitseinbehalt einbehalten
-                </label>
-                {seEnabled && (
-                  <div style={{ paddingLeft: 22, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                      Prozent (%):
-                      <input type="number" step="0.01" min="0" max="100" value={sePct}
-                        onChange={e => setSePct(e.target.value)}
-                        style={{ width: 80, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
-                        placeholder="z. B. 5" />
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
-                      <span>Basis:</span>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <input type="radio" checked={seBasis === 'BRUTTO'} onChange={() => setSeBasis('BRUTTO')} />
-                        Brutto
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <input type="radio" checked={seBasis === 'NETTO'} onChange={() => setSeBasis('NETTO')} />
-                        Netto
-                      </label>
-                    </div>
-                    {seAmt > 0 && <span style={{ fontSize: 12, color: '#374151' }}>= <strong>{fmtEur(seAmt)}</strong></span>}
-                  </div>
-                )}
-              </div>
+              {/* Sicherheitseinbehalt steht nur für Abschlags- und (Teil-)
+                  Schlussrechnungen zur Verfügung — eine Einzelrechnung
+                  ("Rechnung") behält den SE nicht ein, das ergibt nur Sinn
+                  im Phasen-Modell. */}
             </div>
 
             {proposal && (() => {

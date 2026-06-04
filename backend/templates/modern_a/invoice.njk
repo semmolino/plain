@@ -419,8 +419,8 @@ table.data-table thead { display: table-header-group; }
     </tr>
     {% if securityRetention and securityRetention.hasSe %}
     <tr>
-      <td class="label" style="color:#b91c1c">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
-      <td class="amount" style="color:#b91c1c">− {{ securityRetention.amount | money }}</td>
+      <td class="label">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
+      <td class="amount">− {{ securityRetention.amount | money }}</td>
     </tr>
     {% endif %}
     {% if securityRetention and securityRetention.hasSeRelease %}
@@ -433,7 +433,7 @@ table.data-table thead { display: table-header-group; }
     {% endif %}
     {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
     <tr class="total-row">
-      <td class="label">Sofort fällig</td>
+      <td class="label">Zahlungsbetrag</td>
       <td class="amount">{{ securityRetention.payable | money }}</td>
     </tr>
     {% endif %}
@@ -452,8 +452,8 @@ table.data-table thead { display: table-header-group; }
     </tr>
     {% if securityRetention and securityRetention.hasSe %}
     <tr>
-      <td class="label" style="color:#b91c1c">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
-      <td class="amount" style="color:#b91c1c">− {{ securityRetention.amount | money }}</td>
+      <td class="label">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
+      <td class="amount">− {{ securityRetention.amount | money }}</td>
     </tr>
     {% endif %}
     {% if securityRetention and securityRetention.hasSeRelease %}
@@ -466,7 +466,7 @@ table.data-table thead { display: table-header-group; }
     {% endif %}
     {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
     <tr class="total-row">
-      <td class="label">Sofort fällig</td>
+      <td class="label">Zahlungsbetrag</td>
       <td class="amount">{{ securityRetention.payable | money }}</td>
     </tr>
     {% endif %}
@@ -475,10 +475,27 @@ table.data-table thead { display: table-header-group; }
     {% else %}
 
     {# Regular invoice / Abschlagsrechnung layout #}
+    {% if arProgress and arProgress.hasPrior %}
+    {# Kumulative Abschlagsrechnung-Header (#9) #}
+    <tr>
+      <td class="label">Erbrachtes Honorar</td>
+      <td class="amount">{{ arProgress.cumulativeNet | money }}</td>
+    </tr>
+    <tr>
+      <td class="label">abzgl. bisheriger Abschlagsrechnungen</td>
+      <td class="amount">&minus;&#8239;{{ arProgress.priorNet | money }}</td>
+    </tr>
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr>
+      <td class="label">In dieser Rechnung</td>
+      <td class="amount">{{ arProgress.thisNet | money }}</td>
+    </tr>
+    {% else %}
     <tr>
       <td class="label">erbrachtes Honorar</td>
       <td class="amount">{{ amountNet | money }}</td>
     </tr>
+    {% endif %}
     {% if amountExtrasNet and amountExtrasNet != 0 %}
     <tr>
       <td class="label">zzgl. Nebenkosten</td>
@@ -516,8 +533,8 @@ table.data-table thead { display: table-header-group; }
     </tr>
     {% if securityRetention and securityRetention.hasSe %}
     <tr>
-      <td class="label" style="color:#b91c1c">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
-      <td class="amount" style="color:#b91c1c">− {{ securityRetention.amount | money }}</td>
+      <td class="label">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
+      <td class="amount">− {{ securityRetention.amount | money }}</td>
     </tr>
     {% endif %}
     {% if securityRetention and securityRetention.hasSeRelease %}
@@ -530,7 +547,7 @@ table.data-table thead { display: table-header-group; }
     {% endif %}
     {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
     <tr class="total-row">
-      <td class="label">Sofort fällig</td>
+      <td class="label">Zahlungsbetrag</td>
       <td class="amount">{{ securityRetention.payable | money }}</td>
     </tr>
     {% endif %}
@@ -548,8 +565,8 @@ table.data-table thead { display: table-header-group; }
     </tr>
     {% if securityRetention and securityRetention.hasSe %}
     <tr>
-      <td class="label" style="color:#b91c1c">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
-      <td class="amount" style="color:#b91c1c">− {{ securityRetention.amount | money }}</td>
+      <td class="label">./. Sicherheitseinbehalt {{ securityRetention.pct | round(2) }}&#8239;% vom {% if securityRetention.basis == 'NETTO' %}Netto{% else %}Brutto{% endif %}</td>
+      <td class="amount">− {{ securityRetention.amount | money }}</td>
     </tr>
     {% endif %}
     {% if securityRetention and securityRetention.hasSeRelease %}
@@ -562,7 +579,7 @@ table.data-table thead { display: table-header-group; }
     {% endif %}
     {% if securityRetention and (securityRetention.hasSe or securityRetention.hasSeRelease) %}
     <tr class="total-row">
-      <td class="label">Sofort fällig</td>
+      <td class="label">Zahlungsbetrag</td>
       <td class="amount">{{ securityRetention.payable | money }}</td>
     </tr>
     {% endif %}
@@ -588,7 +605,7 @@ table.data-table thead { display: table-header-group; }
     <div class="payment-note-text">
       <div class="payment-note">
         Bitte überweisen Sie
-        {% if discounts.hasDiscounts %}<strong>{{ discounts.adjustedGross | money }}</strong>{% else %}<strong>{{ inv.totals.grandTotal | money }}</strong>{% endif %}
+        {% if payAmount %}<strong>{{ payAmount | money }}</strong>{% elif discounts.hasDiscounts %}<strong>{{ discounts.adjustedGross | money }}</strong>{% else %}<strong>{{ inv.totals.grandTotal | money }}</strong>{% endif %}
         unter Angabe der Rechnungsnummer <strong>{{ inv.number }}</strong>
         {% if inv.dueDate %}bis zum <strong>{{ inv.dueDate | date_de }}</strong>{% endif %}
         auf folgendes Konto:{% if inv.seller.iban %}<br>
