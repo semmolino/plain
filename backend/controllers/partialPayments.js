@@ -391,7 +391,14 @@ async function getBillingProposal(req, res, supabase) {
     const bt1Existing = await svc.sumPpsForPartialPayment(supabase, { partialPaymentId: id, structureIds: bt1Ids });
     performanceAmount = bt1Existing.net;
 
-    if (performanceAmount <= 0 && performanceSuggested > 0) {
+    // Auto-Recompute in zwei Fällen:
+    //   a) noch nichts allokiert
+    //   b) gespeicherter Betrag ist GRÖSSER als der aktuell abrechenbare
+    //      Vorschlag — das passiert, wenn die abrechenbare Summe zwischen-
+    //      durch durch Storno-Vorgänge sank. Stale Drafts heilen so von
+    //      selbst, ohne den User zu zwingen, den Entwurf zu löschen.
+    const isStale = performanceSuggested > 0 && performanceAmount > performanceSuggested + 0.5;
+    if ((performanceAmount <= 0 || isStale) && performanceSuggested > 0) {
       const r = await svc.applyPerformanceAmount(supabase, {
         partialPaymentId: id,
         contractId: pp.CONTRACT_ID,

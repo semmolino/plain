@@ -158,7 +158,10 @@ async function getBillingProposal(req, res, supabase) {
     );
 
     const bt1Sums = await svc.sumInvStructureForInvoice(supabase, { invoiceId: id, structureIds: bt1Ids });
-    if (bt1Sums.net <= 0 && perfSuggested > 0) {
+    // Recompute auch bei stalem Entwurf (gespeicherter Betrag > Vorschlag,
+    // z.B. nach Storno einer früheren Rechnung sinkt der abrechenbare Anteil).
+    const isStale = perfSuggested > 0 && bt1Sums.net > perfSuggested + 0.5;
+    if ((bt1Sums.net <= 0 || isStale) && perfSuggested > 0) {
       await svc.applyPerformanceAmount(supabase, {
         invoiceId: id,
         contractId: inv.CONTRACT_ID,
