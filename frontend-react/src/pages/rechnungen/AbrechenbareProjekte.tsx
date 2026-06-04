@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, FileText, Receipt, FileCheck2 } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, ChevronRight, FileText, Receipt, FileCheck2, RefreshCcw } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { fetchBillingSummary } from '@/api/reports'
 
@@ -34,10 +34,15 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
     localStorage.setItem(storageKey, next ? '1' : '0')
   }
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard', 'billing-summary'],
+  const qc = useQueryClient()
+  // Eigener Query-Key + immer beim Mounten neu laden, damit das Widget
+  // nicht den Dashboard-Cache (staleTime 5 min) erbt — wer eine Rechnung
+  // gebucht hat, soll beim naechsten Aufruf den aktuellen Stand sehen.
+  const { data, isLoading, isFetching, error } = useQuery({
+    queryKey: ['rechnungen', 'billing-summary'],
     queryFn:  fetchBillingSummary,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
   })
 
   const billing  = data?.data ?? null
@@ -58,17 +63,20 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
       border: '1px solid var(--border)', borderRadius: 8, marginBottom: 16,
       background: 'var(--surface-1, #fff)',
     }}>
-      <button
-        type="button"
-        onClick={toggleCollapsed}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer',
-          borderRadius: 8,
-        }}
-        aria-expanded={!collapsed}
-      >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '6px 8px 6px 14px', borderRadius: 8,
+      }}>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          style={{
+            flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            padding: '4px 0', textAlign: 'left',
+          }}
+          aria-expanded={!collapsed}
+        >
           {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
           <strong style={{ fontSize: 14 }}>Abrechenbare Projekte</strong>
           {!isLoading && projects.length > 0 && (
@@ -79,15 +87,30 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
               {projects.length}
             </span>
           )}
-        </span>
-        <span style={{ fontSize: 12, color: 'var(--text-4, #6b7280)' }}>
+        </button>
+        <span style={{ fontSize: 12, color: 'var(--text-4, #6b7280)', display: 'flex', alignItems: 'center', gap: 8 }}>
           {isLoading
             ? 'lädt …'
             : projects.length === 0
               ? 'keine'
               : `Zu fakturieren: ${fmtEur(total)}`}
+          <button
+            type="button"
+            onClick={() => qc.invalidateQueries({ queryKey: ['rechnungen', 'billing-summary'] })}
+            disabled={isFetching}
+            title="Aktualisieren"
+            style={{
+              background: 'transparent', border: 'none', cursor: isFetching ? 'wait' : 'pointer',
+              padding: 4, borderRadius: 4, display: 'inline-flex', alignItems: 'center',
+              color: 'var(--text-4, #6b7280)',
+            }}
+          >
+            <RefreshCcw size={14} strokeWidth={1.75} style={{
+              animation: isFetching ? 'spin 1s linear infinite' : undefined,
+            }} />
+          </button>
         </span>
-      </button>
+      </div>
 
       {!collapsed && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
