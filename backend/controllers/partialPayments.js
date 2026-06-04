@@ -444,7 +444,7 @@ async function putPerformance(req, res, supabase) {
 
   const { data: pp, error: ppErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, PROJECT_ID, CONTRACT_ID")
+    .select("ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
@@ -462,6 +462,7 @@ async function putPerformance(req, res, supabase) {
         amount_extras_net: totals.amount_extras_net,
         total_amount_net: totals.total_amount_net,
         total_amount_gross: totals.total_amount_gross,
+        vat_percent: totals.vat_percent,
       },
     });
   } catch (e) {
@@ -585,6 +586,7 @@ async function postTec(req, res, supabase) {
         amount_extras_net: totals.amount_extras_net,
         total_amount_net: totals.total_amount_net,
         total_amount_gross: totals.total_amount_gross,
+        vat_percent: totals.vat_percent,
       },
     });
   } catch (e) {

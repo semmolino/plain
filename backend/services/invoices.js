@@ -355,32 +355,67 @@ async function writeInvoiceStructureRows(supabase, { invoiceId, rows, deleteStru
 async function recomputeInvoiceTotals(supabase, invoiceId) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
-    .select("ID, VAT_PERCENT")
+    .select("ID, VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
     .eq("ID", invoiceId)
     .maybeSingle();
   if (invErr || !inv) throw new Error("INVOICE konnte nicht geladen werden");
+
+  // Self-Heal VAT_PERCENT: Vertrag → Tenant-Default → höchster VAT-Eintrag
+  let vatPct = toNum(inv.VAT_PERCENT);
+  let resolvedVatId = inv.VAT_ID ?? null;
+  if (vatPct === 0) {
+    try {
+      if (!resolvedVatId && inv.CONTRACT_ID) {
+        const { data: cRow } = await supabase
+          .from("CONTRACT").select("VAT_ID").eq("ID", inv.CONTRACT_ID).maybeSingle();
+        resolvedVatId = cRow?.VAT_ID ?? null;
+      }
+      if (!resolvedVatId && inv.TENANT_ID) {
+        const { data: settingsRows } = await supabase
+          .from("TENANT_SETTINGS").select("VALUE")
+          .eq("TENANT_ID", inv.TENANT_ID).eq("KEY", "default_vat_id");
+        const defVatId = settingsRows?.[0]?.VALUE;
+        if (defVatId) resolvedVatId = Number(defVatId);
+      }
+      if (!resolvedVatId) {
+        const { data: anyVat } = await supabase
+          .from("VAT").select("ID").order("VAT_PERCENT", { ascending: false }).limit(1);
+        if (anyVat && anyVat.length > 0) resolvedVatId = anyVat[0].ID;
+      }
+      if (resolvedVatId) {
+        const { data: vat } = await supabase
+          .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
+        if (vat?.VAT_PERCENT != null) vatPct = toNum(vat.VAT_PERCENT);
+      }
+    } catch (_) { /* soft-fail */ }
+  }
 
   const sums = await sumInvStructureForInvoice(supabase, { invoiceId });
   const amountNet = round2(sums.net);
   const amountExtras = round2(sums.extras);
   const totalNet = round2(amountNet + amountExtras);
-  const vatPct = toNum(inv.VAT_PERCENT);
   const taxAmountNet = round2(totalNet * vatPct / 100);
   const totalGross = round2(totalNet + taxAmountNet);
 
+  const updatePayload = {
+    AMOUNT_NET: amountNet,
+    AMOUNT_EXTRAS_NET: amountExtras,
+    TOTAL_AMOUNT_NET: totalNet,
+    TAX_AMOUNT_NET: taxAmountNet,
+    TOTAL_AMOUNT_GROSS: totalGross,
+  };
+  if (vatPct !== 0)     updatePayload.VAT_PERCENT = vatPct;
+  if (resolvedVatId)    updatePayload.VAT_ID      = resolvedVatId;
+
   const { error: upErr } = await supabase
-    .from("INVOICE")
-    .update({
-      AMOUNT_NET: amountNet,
-      AMOUNT_EXTRAS_NET: amountExtras,
-      TOTAL_AMOUNT_NET: totalNet,
-      TAX_AMOUNT_NET: taxAmountNet,
-      TOTAL_AMOUNT_GROSS: totalGross,
-    })
-    .eq("ID", invoiceId);
+    .from("INVOICE").update(updatePayload).eq("ID", invoiceId);
   if (upErr) throw new Error(upErr.message);
 
-  return { amount_net: amountNet, amount_extras_net: amountExtras, total_amount_net: totalNet, tax_amount_net: taxAmountNet, total_amount_gross: totalGross };
+  return {
+    amount_net: amountNet, amount_extras_net: amountExtras,
+    total_amount_net: totalNet, tax_amount_net: taxAmountNet,
+    total_amount_gross: totalGross, vat_percent: vatPct,
+  };
 }
 
 async function applyPerformanceAmount(supabase, { invoiceId, contractId, projectId, amount, tenantId = undefined }) {
