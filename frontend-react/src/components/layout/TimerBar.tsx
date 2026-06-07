@@ -742,11 +742,13 @@ export function TimerBar() {
 
   // Workstart-Auto-Popup: nur wenn keine Session aktiv ist (Start-Button
   // sichtbar). Wir holen Tenant-Schalter + ob heute schon TEC existiert in
-  // einem Aufruf.
+  // einem Aufruf — pro eingeloggtem Mitarbeiter (employeeId im QueryKey,
+  // damit Login-Wechsel auf demselben Browser nicht den Cache erbt).
+  const currentEmployeeId = useAuthStore(s => s.employeeId)
   const { data: workstartStatus } = useQuery({
-    queryKey: ['workstart-status'],
+    queryKey: ['workstart-status', currentEmployeeId],
     queryFn:  fetchWorkstartStatus,
-    enabled:  !session,
+    enabled:  !session && !!currentEmployeeId,
     staleTime: 60_000,
   })
   useEffect(() => {
@@ -756,13 +758,15 @@ export function TimerBar() {
     if (!s.autoshowEnabled) return
     if (s.hasBookingsToday) return
     if (modal !== 'none') return
-    // localStorage-Sperre: einmal pro Tag automatisch zeigen, danach
-    // nicht erneut nach manuellem Schliessen.
-    const key = `workstart-autoshown-${s.today}`
+    if (!currentEmployeeId) return
+    // localStorage-Sperre: einmal pro Tag und Mitarbeiter automatisch
+    // zeigen. Mit employeeId im Key teilt sich nicht der ganze Browser
+    // einen einzigen "schon gezeigt"-Flag.
+    const key = `workstart-autoshown-${currentEmployeeId}-${s.today}`
     if (localStorage.getItem(key) === '1') return
     localStorage.setItem(key, '1')
     setModal('start')
-  }, [workstartStatus?.data, session, modal])
+  }, [workstartStatus?.data, session, modal, currentEmployeeId])
   const persistedWorkH = (draftsData?.data ?? [])
     .filter(d => (d.ENTRY_KIND ?? 'WORK') === 'WORK')
     .reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)

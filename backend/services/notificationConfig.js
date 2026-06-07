@@ -61,6 +61,7 @@ async function getEffectiveConfig(supabase, tenantId, typeKey) {
   return {
     typeKey,
     catalog: cat,
+    hasOverride:         !!cfg, // existiert eine NOTIFICATION_TYPE_CONFIG-Zeile?
     enabled:             cfg ? !!cfg.ENABLED : !!cat.DEFAULT_ENABLED,
     audienceUseDefault:  cfg ? !!cfg.AUDIENCE_USE_DEFAULT : true,
     audienceAllTenant:   cfg ? !!cfg.AUDIENCE_ALL_TENANT  : false,
@@ -74,10 +75,20 @@ async function getEffectiveConfig(supabase, tenantId, typeKey) {
 async function resolveAudience(supabase, tenantId, typeKey /*, context */) {
   const eff = await getEffectiveConfig(supabase, tenantId, typeKey);
   if (!eff) return null; // Typ nicht im Katalog -> Legacy-Verhalten (tenant-wide)
-  if (!eff.enabled) return 'disabled';
+
+  // managed_by_rule-Typen: die Regel oder der Schedule sind die
+  // autoritative Quelle (BUDGET_WARNING_RULE.MUTED bzw.
+  // NOTIFICATION_SCHEDULE_CONFIG.ENABLED). Den Katalog-DEFAULT_ENABLED
+  // ignorieren wir hier — sonst muss der Seed-Wert immer TRUE sein,
+  // sonst blockt der Gate stillschweigend. Nur ein expliziter
+  // Tenant-Override (NOTIFICATION_TYPE_CONFIG mit ENABLED=false) wirkt
+  // weiterhin als Master-Kill-Switch.
   if (eff.catalog.DEFAULT_AUDIENCE_KIND === 'managed_by_rule') {
+    if (eff.hasOverride && !eff.enabled) return 'disabled';
     return 'managed_by_rule';
   }
+
+  if (!eff.enabled) return 'disabled';
   // Default fuer alle anderen Typen: 'tenant_wide'
   if (eff.audienceUseDefault) {
     return null; // tenant-wide
