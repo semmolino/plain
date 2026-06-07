@@ -76,14 +76,17 @@ export function ProjektePage() {
     navigate('/projekte', { replace: true, state: null })
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Initial-URL-Mount: Query-Parameter konsumieren und URL bereinigen,
-  // damit Tab-Wechsel nicht durch alte URL gegen aktuelle State-Aenderungen
-  // arbeiten.
+  // URL-Query-Parameter anwenden — sowohl beim Mount als auch wenn der
+  // Nutzer schon auf /projekte ist und ueber eine Notification ein
+  // weiteres Mal hierher navigiert (URL aendert sich, Komponente bleibt
+  // gemountet). Danach URL bereinigen, damit nachfolgende Tab-Wechsel
+  // nicht gegen die alte URL kaempfen.
   useEffect(() => {
-    if (tabFromUrl || pidFromUrl != null) {
-      setSearchParams({}, { replace: true })
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!tabFromUrl && pidFromUrl == null) return
+    if (tabFromUrl) setTab(tabFromUrl)
+    if (pidFromUrl != null) persistProjectId(pidFromUrl)
+    setSearchParams({}, { replace: true })
+  }, [tabFromUrl, pidFromUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: projectHeader } = useQuery({
     queryKey: ['project-header-name', selectedProjectId],
