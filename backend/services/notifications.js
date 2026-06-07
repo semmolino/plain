@@ -110,8 +110,11 @@ async function markRead(supabase, { id, tenantId, userId }) {
     .maybeSingle();
 
   if (fetchErr || !row) throw { status: 404, message: "Benachrichtigung nicht gefunden" };
-  // Allow if user-specific match or tenant-wide
-  if (row.USER_ID !== null && row.USER_ID !== userId) {
+  // Allow if user-specific match or tenant-wide.
+  // NOTIFICATION.USER_ID ist TEXT, req.userId ein INTEGER aus dem JWT —
+  // beide Seiten als String vergleichen, damit "1" === 1 nicht in
+  // 403 Kein-Zugriff laeuft.
+  if (row.USER_ID !== null && String(row.USER_ID) !== String(userId)) {
     throw { status: 403, message: "Kein Zugriff" };
   }
 

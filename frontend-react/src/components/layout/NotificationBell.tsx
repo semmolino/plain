@@ -49,11 +49,17 @@ export function NotificationBell() {
   }, [open])
 
   async function handleClick(n: Notification) {
-    if (!n.READ_AT) {
-      await markNotificationRead(n.ID)
-      qc.invalidateQueries({ queryKey: ['notifications'] })
-    }
     setOpen(false)
+    // Read-Marking darf die Navigation nie verschlucken — z.B. wenn ein
+    // 403 kommt soll der User trotzdem zum verlinkten Bereich kommen.
+    if (!n.READ_AT) {
+      try {
+        await markNotificationRead(n.ID)
+        qc.invalidateQueries({ queryKey: ['notifications'] })
+      } catch (e) {
+        console.warn('[NotificationBell] markRead fehlgeschlagen:', e)
+      }
+    }
     if (n.LINK) {
       // Upgrade old mahnung_due notifications that still link to /rechnungen without tab param
       const link = (n.TYPE === 'mahnung_due' && n.LINK === '/rechnungen')
