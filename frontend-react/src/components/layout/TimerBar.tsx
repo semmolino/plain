@@ -4,7 +4,7 @@ import { useTimerStore, elapsedSeconds, formatDuration, formatDurationHuman, qua
 import type { TimerSession } from '@/store/timerStore'
 import { fetchActiveEmployees, fetchProjectsShort, fetchProjectStructure } from '@/api/projekte'
 import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
-import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraft } from '@/api/timer'
+import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraft, fetchWorkstartStatus } from '@/api/timer'
 import type { DraftEntry } from '@/api/timer'
 import { fetchArbzgLimits } from '@/api/arbzg'
 import type { ArbzgLimits, BreakConfirmation, BreakConfirmationMap } from '@/api/arbzg'
@@ -739,6 +739,34 @@ export function TimerBar() {
     enabled:  !!session?.employeeId,
     refetchInterval: 60_000,
   })
+
+  // Workstart-Auto-Popup: nur wenn keine Session aktiv ist (Start-Button
+  // sichtbar). Wir holen Tenant-Schalter + ob heute schon TEC existiert in
+  // einem Aufruf — pro eingeloggtem Mitarbeiter (employeeId im QueryKey,
+  // damit Login-Wechsel auf demselben Browser nicht den Cache erbt).
+  const currentEmployeeId = useAuthStore(s => s.employeeId)
+  const { data: workstartStatus } = useQuery({
+    queryKey: ['workstart-status', currentEmployeeId],
+    queryFn:  fetchWorkstartStatus,
+    enabled:  !session && !!currentEmployeeId,
+    staleTime: 60_000,
+  })
+  useEffect(() => {
+    const s = workstartStatus?.data
+    if (!s) return
+    if (session) return
+    if (!s.autoshowEnabled) return
+    if (s.hasBookingsToday) return
+    if (modal !== 'none') return
+    if (!currentEmployeeId) return
+    // localStorage-Sperre: einmal pro Tag und Mitarbeiter automatisch
+    // zeigen. Mit employeeId im Key teilt sich nicht der ganze Browser
+    // einen einzigen "schon gezeigt"-Flag.
+    const key = `workstart-autoshown-${currentEmployeeId}-${s.today}`
+    if (localStorage.getItem(key) === '1') return
+    localStorage.setItem(key, '1')
+    setModal('start')
+  }, [workstartStatus?.data, session, modal, currentEmployeeId])
   const persistedWorkH = (draftsData?.data ?? [])
     .filter(d => (d.ENTRY_KIND ?? 'WORK') === 'WORK')
     .reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)

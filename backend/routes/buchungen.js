@@ -15,6 +15,7 @@ module.exports = (supabase) => {
   router.post("/timer/confirm",      (req, res) => ctrl.confirmDrafts(req, res, supabase));
   router.delete("/timer/draft/:id",  (req, res) => ctrl.deleteDraft(req, res, supabase));
   router.patch("/timer/draft/:id",   (req, res) => ctrl.patchDraftDescription(req, res, supabase));
+  router.get("/workstart-status",    (req, res) => ctrl.getWorkstartStatus(req, res, supabase));
 
   return router;
 };

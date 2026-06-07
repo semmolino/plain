@@ -37,6 +37,15 @@ import {
   fetchBreakRules, upsertBreakRule, deleteBreakRule,
   type ArbzgSettings, type BreakRule,
 } from '@/api/arbzg'
+import {
+  fetchNotificationConfigs, upsertNotificationConfig,
+  type NotificationTypeConfig,
+} from '@/api/notificationConfig'
+import {
+  fetchNotificationSchedule, upsertNotificationSchedule, runNotificationScheduleNow,
+} from '@/api/notificationSchedule'
+import { fetchActiveEmployees } from '@/api/projekte'
+import { Modal } from '@/components/ui/Modal'
 
 const PAGE_TABS = [
   { id: 'stammdaten',              label: 'Stammdaten'              },
@@ -50,6 +59,7 @@ const PAGE_TABS = [
   { id: 'kostensatz',              label: 'Kostensatz-Rechner'      },
   { id: 'mahnungseinstellungen',   label: 'Mahnungseinstellungen'   },
   { id: 'textvorlagen',            label: 'Textvorlagen'            },
+  { id: 'benachrichtigungen',      label: 'Benachrichtigungen'      },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -2188,6 +2198,661 @@ function ArbzgSettingsSection() {
   )
 }
 
+// ── Benachrichtigungen ────────────────────────────────────────────────────────
+
+const CATEGORY_LABELS: Record<string, string> = {
+  invoice: 'Rechnungen',
+  mahnung: 'Mahnungen',
+  budget:  'Budget & Projekte',
+  system:  'System',
+}
+
+const DASHBOARD_ROLE_LABELS: Record<string, string> = {
+  geschaeftsleitung: 'Geschäftsleitung',
+  controller:        'Controller',
+  bereichsleiter:    'Bereichsleiter',
+}
+
+function BenachrichtigungenSection() {
+  const qc = useQueryClient()
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['notification-configs'],
+    queryFn:  fetchNotificationConfigs,
+  })
+  // Types mit dedizierter Schedule-UI (Block unten) sind aus der
+  // generischen Liste ausgeblendet, damit es keine zwei Bedienorte gibt.
+  const SCHEDULE_TYPES = new Set(['leistungsstand_reminder', 'hours_booking_reminder'])
+  const configs = (data?.data ?? []).filter(c => !SCHEDULE_TYPES.has(c.typeKey))
+
+  // Gruppieren nach Kategorie, sortiert nach SORT_ORDER innerhalb
+  const grouped = configs.reduce<Record<string, NotificationTypeConfig[]>>((acc, c) => {
+    (acc[c.category] = acc[c.category] || []).push(c)
+    return acc
+  }, {})
+  const categoryOrder = Object.keys(grouped).sort((a, b) => {
+    const ra = grouped[a][0]?.sortOrder ?? 0
+    const rb = grouped[b][0]?.sortOrder ?? 0
+    return ra - rb
+  })
+
+  const toggleMut = useMutation({
+    mutationFn: (vars: { typeKey: string; enabled: boolean; cur: NotificationTypeConfig }) =>
+      upsertNotificationConfig(vars.typeKey, {
+        enabled:             vars.enabled,
+        audienceUseDefault:  vars.cur.audienceUseDefault,
+        audienceAllTenant:   vars.cur.audienceAllTenant,
+        audienceRoles:       vars.cur.audienceRoles,
+        audienceDepartments: vars.cur.audienceDepartments,
+        audienceEmployees:   vars.cur.audienceEmployees,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notification-configs'] }),
+  })
+
+  function summarizeAudience(c: NotificationTypeConfig): string {
+    if (c.defaultAudienceKind === 'managed_by_rule') return 'Pro Regel / Datensatz konfiguriert'
+    if (c.audienceUseDefault) return 'Tenant-Standard (alle Mitarbeiter)'
+    if (c.audienceAllTenant)  return 'Alle Mitarbeiter'
+    const parts: string[] = []
+    if (c.audienceRoles?.length)       parts.push(`Rollen: ${c.audienceRoles.map(r => DASHBOARD_ROLE_LABELS[r] ?? r).join(', ')}`)
+    if (c.audienceDepartments?.length) parts.push(`${c.audienceDepartments.length} Abteilung(en)`)
+    if (c.audienceEmployees?.length)   parts.push(`${c.audienceEmployees.length} Mitarbeiter`)
+    return parts.length ? parts.join(' · ') : 'Niemand (Empfaengerliste leer)'
+  }
+
+  if (isLoading) return <p className="empty-note">Lade …</p>
+
+  return (
+    <div className="admin-section">
+      <p className="admin-section-hint">
+        Aktiviert/deaktiviert Benachrichtigungstypen und legt fest, wer sie erhalten soll.
+        Neue Typen werden vom System nach und nach hinzugefügt.
+      </p>
+
+      {categoryOrder.map(cat => (
+        <div className="admin-block" key={cat}>
+          <h3 className="admin-block-title">{CATEGORY_LABELS[cat] ?? cat}</h3>
+          {grouped[cat].sort((a, b) => a.sortOrder - b.sortOrder).map(c => (
+            <div key={c.typeKey} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12,
+              padding: '10px 0', borderBottom: '1px solid var(--border)',
+            }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', cursor: 'pointer',
+                paddingTop: 2,
+              }} title="Aktiv / inaktiv">
+                <input
+                  type="checkbox"
+                  checked={c.enabled}
+                  onChange={e => toggleMut.mutate({ typeKey: c.typeKey, enabled: e.target.checked, cur: c })}
+                />
+              </label>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title}</div>
+                {c.description && (
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{c.description}</div>
+                )}
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                  Empfänger: {summarizeAudience(c)}
+                </div>
+              </div>
+              {c.supportsAudienceOverride ? (
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => setEditingKey(c.typeKey)}
+                  disabled={!c.enabled}
+                >
+                  Bearbeiten
+                </button>
+              ) : (
+                <span style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic', paddingTop: 4 }}>
+                  nur ein/aus
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+
+      <BenachrichtigungEditModal
+        open={editingKey != null}
+        config={editingKey ? configs.find(c => c.typeKey === editingKey) ?? null : null}
+        onClose={() => setEditingKey(null)}
+      />
+
+      <LeistungsstandReminderBlock />
+      <HoursBookingReminderBlock />
+    </div>
+  )
+}
+
+// ── Reminder-Block: Leistungsstand pflegen ───────────────────────────────────
+
+function LeistungsstandReminderBlock() {
+  const TYPE_KEY = 'leistungsstand_reminder'
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [msg, setMsg] = useState<{ text: string; type: 'success'|'error' } | null>(null)
+
+  const [enabled,             setEnabled]             = useState(false)
+  const [scheduleDays,        setScheduleDays]        = useState<number[]>([25])
+  const [scheduleLastDay,     setScheduleLastDay]     = useState(false)
+  const [notifyProjectPm,     setNotifyProjectPm]     = useState(true)
+  const [projectStatusIds,    setProjectStatusIds]    = useState<number[]>([])
+  const [audienceRoles,       setAudienceRoles]       = useState<string[]>([])
+  const [audienceDepartments, setAudienceDepartments] = useState<number[]>([])
+  const [audienceEmployees,   setAudienceEmployees]   = useState<number[]>([])
+  const [lastFiredDate,       setLastFiredDate]       = useState<string | null>(null)
+
+  const { data: scheduleData, isLoading } = useQuery({
+    queryKey: ['notification-schedule', TYPE_KEY],
+    queryFn:  () => fetchNotificationSchedule(TYPE_KEY),
+  })
+  const { data: statusData } = useQuery({ queryKey: ['project-statuses'],     queryFn: fetchProjectStatuses })
+  const { data: deptData   } = useQuery({ queryKey: ['departments'],          queryFn: fetchDepartments })
+  const { data: empData    } = useQuery({ queryKey: ['active-employees'],     queryFn: fetchActiveEmployees })
+
+  const statuses    = statusData?.data ?? []
+  const departments = deptData?.data ?? []
+  const employees   = empData?.data ?? []
+
+  useEffect(() => {
+    const s = scheduleData?.data
+    if (!s) return
+    setEnabled(s.ENABLED)
+    setScheduleDays(s.SCHEDULE_DAYS ?? [25])
+    setScheduleLastDay(s.SCHEDULE_LAST_DAY)
+    setNotifyProjectPm(s.NOTIFY_PROJECT_PM)
+    setProjectStatusIds(s.PROJECT_STATUS_IDS ?? [])
+    setAudienceRoles(s.AUDIENCE_ROLES ?? [])
+    setAudienceDepartments(s.AUDIENCE_DEPARTMENTS ?? [])
+    setAudienceEmployees(s.AUDIENCE_EMPLOYEES ?? [])
+    setLastFiredDate(s.LAST_FIRED_DATE)
+  }, [scheduleData?.data])
+
+  const saveMut = useMutation({
+    mutationFn: () => upsertNotificationSchedule(TYPE_KEY, {
+      enabled, scheduleDays, scheduleLastDay, notifyProjectPm, projectStatusIds,
+      audienceRoles, audienceDepartments, audienceEmployees,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
+      setMsg({ text: 'Gespeichert.', type: 'success' })
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const runMut = useMutation({
+    mutationFn: () => runNotificationScheduleNow(TYPE_KEY),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
+      toast.success(`Erinnerungen ausgeloest: ${r.created} Notification(s)`)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  useCtrlS(() => { setMsg(null); saveMut.mutate() }, !isLoading && !saveMut.isPending)
+
+  // Komma-getrennte Tagesliste fuers Input-Feld
+  const [dayInput, setDayInput] = useState('25')
+  useEffect(() => {
+    setDayInput(scheduleDays.join(', '))
+  }, [scheduleDays])
+
+  function commitDays() {
+    const parsed = dayInput.split(',')
+      .map(s => Number(s.trim()))
+      .filter(n => Number.isInteger(n) && n >= 1 && n <= 31)
+    setScheduleDays(Array.from(new Set(parsed)).sort((a, b) => a - b))
+  }
+
+  return (
+    <div className="admin-block" style={{ marginTop: 24 }}>
+      <h3 className="admin-block-title">Reminder & Schedules</h3>
+      <p className="admin-section-hint">
+        Wiederkehrende Erinnerungen mit eigenem Zeitplan und Empfaengerkonfiguration.
+      </p>
+
+      <div style={{
+        border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginTop: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <strong style={{ fontSize: 14 }}>Leistungsstand pflegen</strong>
+            <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#6b7280' }}>
+              Monatliche Erinnerung an die Pflege der Leistungsstaende.
+            </p>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+            <span>aktiv</span>
+          </label>
+        </div>
+
+        {enabled && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
+
+            {/* Schedule */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>Wann im Monat</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  value={dayInput}
+                  onChange={e => setDayInput(e.target.value)}
+                  onBlur={commitDays}
+                  placeholder="z.B. 25, 26, 27"
+                  style={{ width: 180 }}
+                />
+                <span style={{ fontSize: 12, color: '#6b7280' }}>(Komma-Liste, Tag 1–31)</span>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={scheduleLastDay}
+                  onChange={e => setScheduleLastDay(e.target.checked)}
+                />
+                <span>Zusätzlich am letzten Tag des Monats</span>
+              </label>
+            </div>
+
+            {/* Projekt-Status-Filter */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                Projektstatus (welche Projekte berücksichtigt werden)
+              </label>
+              <select
+                multiple
+                value={projectStatusIds.map(String)}
+                onChange={e => setProjectStatusIds(Array.from(e.target.selectedOptions, o => Number(o.value)))}
+                style={{ minHeight: 90, width: '100%' }}
+              >
+                {statuses.map(s => (
+                  <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>
+                ))}
+              </select>
+              <p className="admin-section-hint">
+                Leer = alle Projekte. Strg-/Cmd-Klick für Mehrfachauswahl.
+              </p>
+            </div>
+
+            {/* PM-Empfaenger */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                Empfänger
+              </label>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={notifyProjectPm}
+                  onChange={e => setNotifyProjectPm(e.target.checked)}
+                />
+                <span>
+                  <strong>Projektleiter</strong> des jeweiligen Projekts
+                  <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
+                    Pro Projekt eine Notification an den eingetragenen Projektleiter (Link springt direkt zum Projekt).
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {/* Zusaetzliche Audience */}
+            <div style={{ paddingLeft: 8, borderLeft: '2px solid var(--border)' }}>
+              <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 8px 0' }}>
+                Zusätzliche Empfänger (OR-verknüpft, Link führt zur Leistungsstand-Liste):
+              </p>
+
+              <div className="form-group">
+                <label>Rollen</label>
+                <select
+                  multiple
+                  value={audienceRoles}
+                  onChange={e => setAudienceRoles(Array.from(e.target.selectedOptions, o => o.value))}
+                  style={{ minHeight: 70 }}
+                >
+                  {Object.entries(DASHBOARD_ROLE_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Abteilungen</label>
+                <select
+                  multiple
+                  value={audienceDepartments.map(String)}
+                  onChange={e => setAudienceDepartments(Array.from(e.target.selectedOptions, o => Number(o.value)))}
+                  style={{ minHeight: 90 }}
+                >
+                  {departments.map(d => (
+                    <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Plus folgende Mitarbeiter</label>
+                <select
+                  multiple
+                  value={audienceEmployees.map(String)}
+                  onChange={e => setAudienceEmployees(Array.from(e.target.selectedOptions, o => Number(o.value)))}
+                  style={{ minHeight: 100 }}
+                >
+                  {employees.map(emp => (
+                    <option key={emp.ID} value={emp.ID}>{emp.SHORT_NAME}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {lastFiredDate && (
+              <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+                Letzter Lauf: {new Date(lastFiredDate).toLocaleDateString('de-DE')}
+              </p>
+            )}
+          </div>
+        )}
+
+        <Message text={msg?.text ?? null} type={msg?.type} />
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+          <button className="btn-primary"
+            disabled={saveMut.isPending || isLoading}
+            onClick={() => { setMsg(null); saveMut.mutate() }}>
+            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+          </button>
+          <button className="btn-secondary"
+            disabled={runMut.isPending || !enabled || !scheduleData?.data}
+            onClick={() => runMut.mutate()}
+            title="Erinnerung sofort ausloesen, unabhaengig vom Zeitplan">
+            {runMut.isPending ? 'Läuft …' : 'Jetzt ausführen'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Reminder-Block: Stunden fuer heute buchen ────────────────────────────────
+
+function HoursBookingReminderBlock() {
+  const TYPE_KEY = 'hours_booking_reminder'
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [msg, setMsg] = useState<{ text: string; type: 'success'|'error' } | null>(null)
+
+  const [enabled,            setEnabled]            = useState(false)
+  const [scheduleTimeOfDay,  setScheduleTimeOfDay]  = useState('17:00')
+  const [lastFiredDate,      setLastFiredDate]      = useState<string | null>(null)
+
+  const { data: scheduleData, isLoading } = useQuery({
+    queryKey: ['notification-schedule', TYPE_KEY],
+    queryFn:  () => fetchNotificationSchedule(TYPE_KEY),
+  })
+
+  useEffect(() => {
+    const s = scheduleData?.data
+    if (!s) return
+    setEnabled(s.ENABLED)
+    // DB liefert "HH:MM:SS" oder NULL — Picker erwartet "HH:MM"
+    setScheduleTimeOfDay(s.SCHEDULE_TIME_OF_DAY ? String(s.SCHEDULE_TIME_OF_DAY).slice(0,5) : '17:00')
+    setLastFiredDate(s.LAST_FIRED_DATE)
+  }, [scheduleData?.data])
+
+  const saveMut = useMutation({
+    mutationFn: () => upsertNotificationSchedule(TYPE_KEY, {
+      enabled,
+      scheduleTimeOfDay,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
+      setMsg({ text: 'Gespeichert.', type: 'success' })
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const runMut = useMutation({
+    mutationFn: () => runNotificationScheduleNow(TYPE_KEY),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
+      toast.success(`Erinnerungen ausgeloest: ${r.created} Notification(s)`)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  useCtrlS(() => { setMsg(null); saveMut.mutate() }, !isLoading && !saveMut.isPending)
+
+  return (
+    <div style={{
+      border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginTop: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <strong style={{ fontSize: 14 }}>Stunden für heute buchen</strong>
+          <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#6b7280' }}>
+            Tägliche Erinnerung an alle aktiven Mitarbeiter, die heute noch keine Zeitbuchung haben.
+          </p>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+          <span>aktiv</span>
+        </label>
+      </div>
+
+      {enabled && (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+              Uhrzeit (täglich)
+            </label>
+            <input
+              type="time"
+              value={scheduleTimeOfDay}
+              onChange={e => setScheduleTimeOfDay(e.target.value)}
+              style={{ width: 140 }}
+            />
+            <p className="admin-section-hint">
+              Sobald die Uhrzeit erreicht ist, geht eine Notification an alle aktiven
+              Mitarbeiter, die heute noch keine TEC-Zeile haben (Mitarbeiter mit
+              Buchung werden uebersprungen).
+            </p>
+          </div>
+          {lastFiredDate && (
+            <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+              Letzter Lauf: {new Date(lastFiredDate).toLocaleDateString('de-DE')}
+            </p>
+          )}
+        </div>
+      )}
+
+      <Message text={msg?.text ?? null} type={msg?.type} />
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button className="btn-primary"
+          disabled={saveMut.isPending || isLoading}
+          onClick={() => { setMsg(null); saveMut.mutate() }}>
+          {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+        </button>
+        <button className="btn-secondary"
+          disabled={runMut.isPending || !enabled || !scheduleData?.data}
+          onClick={() => runMut.mutate()}
+          title="Erinnerung sofort ausloesen, unabhaengig von der Uhrzeit">
+          {runMut.isPending ? 'Läuft …' : 'Jetzt ausführen'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function BenachrichtigungEditModal({ open, config, onClose }: {
+  open: boolean
+  config: NotificationTypeConfig | null
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [enabled,             setEnabled]             = useState(true)
+  const [audienceUseDefault,  setAudienceUseDefault]  = useState(true)
+  const [audienceAllTenant,   setAudienceAllTenant]   = useState(false)
+  const [audienceRoles,       setAudienceRoles]       = useState<string[]>([])
+  const [audienceDepartments, setAudienceDepartments] = useState<number[]>([])
+  const [audienceEmployees,   setAudienceEmployees]   = useState<number[]>([])
+
+  const { data: deptData } = useQuery({ queryKey: ['departments'],       queryFn: fetchDepartments })
+  const { data: empData }  = useQuery({ queryKey: ['active-employees'],  queryFn: fetchActiveEmployees })
+  const departments = deptData?.data ?? []
+  const employees   = empData?.data  ?? []
+
+  useEffect(() => {
+    if (!config) return
+    setEnabled(config.enabled)
+    setAudienceUseDefault(config.audienceUseDefault)
+    setAudienceAllTenant(config.audienceAllTenant)
+    setAudienceRoles(config.audienceRoles ?? [])
+    setAudienceDepartments(config.audienceDepartments ?? [])
+    setAudienceEmployees(config.audienceEmployees ?? [])
+  }, [config])
+
+  const saveMut = useMutation({
+    mutationFn: () => upsertNotificationConfig(config!.typeKey, {
+      enabled,
+      audienceUseDefault,
+      audienceAllTenant,
+      audienceRoles,
+      audienceDepartments,
+      audienceEmployees,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notification-configs'] })
+      onClose()
+    },
+  })
+
+  if (!config) return null
+  const manualMode = !audienceUseDefault
+
+  return (
+    <Modal open={open} onClose={onClose} title={config.title}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 420 }}>
+        {config.description && (
+          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{config.description}</p>
+        )}
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+          <span>Benachrichtigungstyp aktiv</span>
+        </label>
+
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Empfänger</div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
+            <input
+              type="radio"
+              name="audMode"
+              checked={audienceUseDefault}
+              onChange={() => setAudienceUseDefault(true)}
+              disabled={!enabled}
+            />
+            <span>
+              <strong>Tenant-Standard</strong>
+              <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
+                Wirkt für alle Mitarbeiter (tenantweit).
+              </span>
+            </span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="audMode"
+              checked={!audienceUseDefault}
+              onChange={() => setAudienceUseDefault(false)}
+              disabled={!enabled}
+            />
+            <span>
+              <strong>Manuell konfigurieren</strong>
+              <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
+                Empfänger werden aus Rollen / Abteilungen / Mitarbeitern kombiniert (OR-Verknüpfung).
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {manualMode && enabled && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingLeft: 24, borderLeft: '2px solid var(--border)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={audienceAllTenant}
+                onChange={e => setAudienceAllTenant(e.target.checked)}
+              />
+              <span>Alle Mitarbeiter (überspringt die Filter unten)</span>
+            </label>
+
+            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
+              <label>Rollen</label>
+              <select
+                multiple
+                disabled={audienceAllTenant}
+                value={audienceRoles}
+                onChange={e => setAudienceRoles(Array.from(e.target.selectedOptions, o => o.value))}
+                style={{ minHeight: 70 }}
+              >
+                {Object.entries(DASHBOARD_ROLE_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+              <p className="admin-section-hint">Strg-/Cmd-Klick für Mehrfachauswahl.</p>
+            </div>
+
+            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
+              <label>Abteilungen</label>
+              <select
+                multiple
+                disabled={audienceAllTenant}
+                value={audienceDepartments.map(String)}
+                onChange={e => setAudienceDepartments(
+                  Array.from(e.target.selectedOptions, o => Number(o.value))
+                )}
+                style={{ minHeight: 90 }}
+              >
+                {departments.map(d => (
+                  <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
+              <label>Plus folgende Mitarbeiter</label>
+              <select
+                multiple
+                disabled={audienceAllTenant}
+                value={audienceEmployees.map(String)}
+                onChange={e => setAudienceEmployees(
+                  Array.from(e.target.selectedOptions, o => Number(o.value))
+                )}
+                style={{ minHeight: 110 }}
+              >
+                {employees.map(emp => (
+                  <option key={emp.ID} value={emp.ID}>{emp.SHORT_NAME}</option>
+                ))}
+              </select>
+              <p className="admin-section-hint">Zusätzlich zu den Rollen- und Abteilungs-Treffern.</p>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button className="btn-primary" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -2213,6 +2878,7 @@ export function AdminPage() {
         {tab === 'kostensatz'            && <KostensatzSection />}
         {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}
         {tab === 'textvorlagen'          && <TextVorlagenSection />}
+        {tab === 'benachrichtigungen'    && <BenachrichtigungenSection />}
       </div>
     </div>
   )

@@ -59,9 +59,13 @@ const kostensatzRoutes       = require("./routes/kostensatz")(supabase);
 const mahnungenRoutes        = require("./routes/mahnungen")(supabase);
 const arbzgRoutes            = require("./routes/arbzg")(supabase);
 const budgetWarningsRoutes   = require("./routes/budgetWarnings")(supabase);
+const notificationConfigRoutes = require("./routes/notificationConfig")(supabase);
+const notificationScheduleRoutes = require("./routes/notificationSchedule")(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
 const { startMonatsabschlussChecker } = require("./services/monatsabschluss");
 const { startMahnungChecker } = require("./services/mahnungChecker");
+const { startLeistungsstandReminderChecker } = require("./services/leistungsstandReminderChecker");
+const { startHoursBookingReminderChecker }   = require("./services/hoursBookingReminderChecker");
 
 app.use("/api/v1/stammdaten",        authMiddleware, stammdatenRoutes);
 app.use("/api/v1/mitarbeiter",       authMiddleware, mitarbeiterRoutes);
@@ -83,6 +87,8 @@ app.use("/api/v1/kostensatz",        authMiddleware, kostensatzRoutes);
 app.use("/api/v1/mahnungen",         authMiddleware, mahnungenRoutes);
 app.use("/api/v1/arbzg",             authMiddleware, arbzgRoutes);
 app.use("/api/v1/budget-warnings",   authMiddleware, budgetWarningsRoutes);
+app.use("/api/v1/notification-config", authMiddleware, notificationConfigRoutes);
+app.use("/api/v1/notification-schedule", authMiddleware, notificationScheduleRoutes);
 
 
 
@@ -98,4 +104,10 @@ app.get(/^(?!\/api\/).*/, (req, res) => {
 
 app.listen(port, () => {
   console.log(`✅ Backend läuft auf Port ${port}`);
+  // Daily/periodic checkers
+  try { startDueDateChecker(supabase); }              catch (e) { console.error("startDueDateChecker:", e?.message || e); }
+  try { startMonatsabschlussChecker(supabase); }      catch (e) { console.error("startMonatsabschlussChecker:", e?.message || e); }
+  try { startMahnungChecker(supabase); }              catch (e) { console.error("startMahnungChecker:", e?.message || e); }
+  try { startLeistungsstandReminderChecker(supabase); } catch (e) { console.error("startLeistungsstandReminderChecker:", e?.message || e); }
+  try { startHoursBookingReminderChecker(supabase); }    catch (e) { console.error("startHoursBookingReminderChecker:", e?.message || e); }
 });
