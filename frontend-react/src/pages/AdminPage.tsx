@@ -43,9 +43,8 @@ import {
 } from '@/api/notificationConfig'
 import {
   fetchNotificationSchedule, upsertNotificationSchedule, runNotificationScheduleNow,
-  type NotificationSchedule,
 } from '@/api/notificationSchedule'
-import { fetchActiveEmployees, fetchProjectStatuses } from '@/api/projekte'
+import { fetchActiveEmployees } from '@/api/projekte'
 import { Modal } from '@/components/ui/Modal'
 
 const PAGE_TABS = [
