@@ -24,6 +24,9 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [pid,  setPid]  = useState<number | null>(initialProjectId ?? null)
+  // Aenderung von aussen (z.B. Notification-Klick mit anderem Projekt)
+  // soll das aktuelle Projekt umschalten.
+  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
   const [vals, setVals] = useState<Record<number, string>>({})
   const [msg,           setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [snapMsg,       setSnapMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)

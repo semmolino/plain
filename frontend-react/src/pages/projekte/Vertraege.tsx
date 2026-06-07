@@ -19,6 +19,8 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
   const navigate = useNavigate()
 
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
+  // Notification-Klick mit neuem Projekt soll umschalten.
+  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
   const [nameShort,    setNameShort]    = useState('')
   const [nameLong,     setNameLong]     = useState('')
   const [addressId,    setAddressId]    = useState<number | null>(null)

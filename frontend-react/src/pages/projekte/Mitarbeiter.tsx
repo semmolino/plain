@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
@@ -47,6 +47,8 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
   const navigate = useNavigate()
 
   const [pid,       setPid]       = useState<number | null>(initialProjectId ?? null)
+  // Notification-Klick mit neuem Projekt soll umschalten.
+  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm,  setEditForm]  = useState<EditState>({ role_id: '', role_name_short: '', role_name_long: '', sp_rate: '' })
   const [addForm,      setAddForm]      = useState(emptyAdd())

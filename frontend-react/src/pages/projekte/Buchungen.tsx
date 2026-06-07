@@ -68,6 +68,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const navigate = useNavigate()
   const formRef = useRef<HTMLFormElement>(null)
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
+  // Notification-Klick mit neuem Projekt soll umschalten.
+  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
   const [showForm,     setShowForm]     = useState(false)
   const [form,         setForm]         = useState<BuchungForm>(emptyForm)
   const [msg,          setMsg]          = useState<{ text: string; type: 'success'|'error' } | null>(null)
