@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery }       from '@tanstack/react-query'
 import { Tabs }           from '@/components/ui/Tabs'
 import { ProjekteListe }  from '@/pages/projekte/ProjekteListe'
@@ -29,14 +29,32 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'mitarbeiter',     label: 'Mitarbeiter' },
 ]
 
+const VALID_TABS: Tab[] = ['liste','anlegen','honorar','struktur','buchungen','leistungsstand','vertraege','se','budget','mitarbeiter']
+function parseTab(s: string | null): Tab | null {
+  return s && (VALID_TABS as string[]).includes(s) ? (s as Tab) : null
+}
+
 export function ProjektePage() {
   const location = useLocation()
   const navigate  = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Query-Parameter haben Vorrang vor location.state (notification deep links
+  // funktionieren so out of the box: /projekte?tab=leistungsstand&projectId=42)
+  const tabFromUrl   = parseTab(searchParams.get('tab'))
+  const pidFromUrl   = (() => {
+    const raw = searchParams.get('projectId')
+    const n = raw ? Number(raw) : NaN
+    return Number.isFinite(n) ? n : null
+  })()
+
   const [tab, setTab] = useState<Tab>(() => {
+    if (tabFromUrl) return tabFromUrl
     const s = location.state as { tab?: Tab } | null
     return s?.tab ?? 'liste'
   })
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(() => {
+    if (pidFromUrl != null) return pidFromUrl
     const s = location.state as { projectId?: number } | null
     if (s?.projectId) return s.projectId
     const saved = localStorage.getItem('projekte-selected-pid')
@@ -57,6 +75,15 @@ export function ProjektePage() {
     if (state.projectId != null) persistProjectId(state.projectId)
     navigate('/projekte', { replace: true, state: null })
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initial-URL-Mount: Query-Parameter konsumieren und URL bereinigen,
+  // damit Tab-Wechsel nicht durch alte URL gegen aktuelle State-Aenderungen
+  // arbeiten.
+  useEffect(() => {
+    if (tabFromUrl || pidFromUrl != null) {
+      setSearchParams({}, { replace: true })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: projectHeader } = useQuery({
     queryKey: ['project-header-name', selectedProjectId],
