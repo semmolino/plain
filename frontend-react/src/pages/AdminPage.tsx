@@ -2223,7 +2223,8 @@ function BenachrichtigungenSection() {
   })
   // Types mit dedizierter Schedule-UI (Block unten) sind aus der
   // generischen Liste ausgeblendet, damit es keine zwei Bedienorte gibt.
-  const configs = (data?.data ?? []).filter(c => c.typeKey !== 'leistungsstand_reminder')
+  const SCHEDULE_TYPES = new Set(['leistungsstand_reminder', 'hours_booking_reminder'])
+  const configs = (data?.data ?? []).filter(c => !SCHEDULE_TYPES.has(c.typeKey))
 
   // Gruppieren nach Kategorie, sortiert nach SORT_ORDER innerhalb
   const grouped = configs.reduce<Record<string, NotificationTypeConfig[]>>((acc, c) => {
@@ -2322,6 +2323,7 @@ function BenachrichtigungenSection() {
       />
 
       <LeistungsstandReminderBlock />
+      <HoursBookingReminderBlock />
     </div>
   )
 }
@@ -2568,6 +2570,117 @@ function LeistungsstandReminderBlock() {
             {runMut.isPending ? 'Läuft …' : 'Jetzt ausführen'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Reminder-Block: Stunden fuer heute buchen ────────────────────────────────
+
+function HoursBookingReminderBlock() {
+  const TYPE_KEY = 'hours_booking_reminder'
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [msg, setMsg] = useState<{ text: string; type: 'success'|'error' } | null>(null)
+
+  const [enabled,            setEnabled]            = useState(false)
+  const [scheduleTimeOfDay,  setScheduleTimeOfDay]  = useState('17:00')
+  const [lastFiredDate,      setLastFiredDate]      = useState<string | null>(null)
+
+  const { data: scheduleData, isLoading } = useQuery({
+    queryKey: ['notification-schedule', TYPE_KEY],
+    queryFn:  () => fetchNotificationSchedule(TYPE_KEY),
+  })
+
+  useEffect(() => {
+    const s = scheduleData?.data
+    if (!s) return
+    setEnabled(s.ENABLED)
+    // DB liefert "HH:MM:SS" oder NULL — Picker erwartet "HH:MM"
+    setScheduleTimeOfDay(s.SCHEDULE_TIME_OF_DAY ? String(s.SCHEDULE_TIME_OF_DAY).slice(0,5) : '17:00')
+    setLastFiredDate(s.LAST_FIRED_DATE)
+  }, [scheduleData?.data])
+
+  const saveMut = useMutation({
+    mutationFn: () => upsertNotificationSchedule(TYPE_KEY, {
+      enabled,
+      scheduleTimeOfDay,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
+      setMsg({ text: 'Gespeichert.', type: 'success' })
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const runMut = useMutation({
+    mutationFn: () => runNotificationScheduleNow(TYPE_KEY),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
+      toast.success(`Erinnerungen ausgeloest: ${r.created} Notification(s)`)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  useCtrlS(() => { setMsg(null); saveMut.mutate() }, !isLoading && !saveMut.isPending)
+
+  return (
+    <div style={{
+      border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginTop: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <strong style={{ fontSize: 14 }}>Stunden für heute buchen</strong>
+          <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#6b7280' }}>
+            Tägliche Erinnerung an alle aktiven Mitarbeiter, die heute noch keine Zeitbuchung haben.
+          </p>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+          <span>aktiv</span>
+        </label>
+      </div>
+
+      {enabled && (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+              Uhrzeit (täglich)
+            </label>
+            <input
+              type="time"
+              value={scheduleTimeOfDay}
+              onChange={e => setScheduleTimeOfDay(e.target.value)}
+              style={{ width: 140 }}
+            />
+            <p className="admin-section-hint">
+              Sobald die Uhrzeit erreicht ist, geht eine Notification an alle aktiven
+              Mitarbeiter, die heute noch keine TEC-Zeile haben (Mitarbeiter mit
+              Buchung werden uebersprungen).
+            </p>
+          </div>
+          {lastFiredDate && (
+            <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+              Letzter Lauf: {new Date(lastFiredDate).toLocaleDateString('de-DE')}
+            </p>
+          )}
+        </div>
+      )}
+
+      <Message text={msg?.text ?? null} type={msg?.type} />
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button className="btn-primary"
+          disabled={saveMut.isPending || isLoading}
+          onClick={() => { setMsg(null); saveMut.mutate() }}>
+          {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+        </button>
+        <button className="btn-secondary"
+          disabled={runMut.isPending || !enabled || !scheduleData?.data}
+          onClick={() => runMut.mutate()}
+          title="Erinnerung sofort ausloesen, unabhaengig von der Uhrzeit">
+          {runMut.isPending ? 'Läuft …' : 'Jetzt ausführen'}
+        </button>
       </div>
     </div>
   )

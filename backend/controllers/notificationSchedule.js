@@ -2,6 +2,12 @@
 
 const svc                       = require('../services/notificationSchedule');
 const leistungsstandReminder    = require('../services/leistungsstandReminderChecker');
+const hoursBookingReminder      = require('../services/hoursBookingReminderChecker');
+
+const RUNNERS_BY_TYPE = {
+  leistungsstand_reminder: leistungsstandReminder.runNowForTenant,
+  hours_booking_reminder:  hoursBookingReminder.runNowForTenant,
+};
 
 async function list(req, res, supabase) {
   try {
@@ -37,10 +43,11 @@ async function upsert(req, res, supabase) {
 async function runNow(req, res, supabase) {
   try {
     const typeKey = String(req.params.typeKey || '').trim();
-    if (typeKey !== 'leistungsstand_reminder') {
-      return res.status(400).json({ error: 'Manueller Trigger nur fuer leistungsstand_reminder' });
+    const runner  = RUNNERS_BY_TYPE[typeKey];
+    if (!runner) {
+      return res.status(400).json({ error: `Manueller Trigger fuer ${typeKey} nicht unterstuetzt` });
     }
-    const created = await leistungsstandReminder.runNowForTenant(supabase, req.tenantId);
+    const created = await runner(supabase, req.tenantId);
     res.json({ ok: true, created });
   } catch (e) { res.status(e.status || 500).json({ error: e.message || String(e) }); }
 }

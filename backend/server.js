@@ -65,6 +65,7 @@ const { startDueDateChecker } = require("./services/dueDateChecker");
 const { startMonatsabschlussChecker } = require("./services/monatsabschluss");
 const { startMahnungChecker } = require("./services/mahnungChecker");
 const { startLeistungsstandReminderChecker } = require("./services/leistungsstandReminderChecker");
+const { startHoursBookingReminderChecker }   = require("./services/hoursBookingReminderChecker");
 
 app.use("/api/v1/stammdaten",        authMiddleware, stammdatenRoutes);
 app.use("/api/v1/mitarbeiter",       authMiddleware, mitarbeiterRoutes);
@@ -108,4 +109,5 @@ app.listen(port, () => {
   try { startMonatsabschlussChecker(supabase); }      catch (e) { console.error("startMonatsabschlussChecker:", e?.message || e); }
   try { startMahnungChecker(supabase); }              catch (e) { console.error("startMahnungChecker:", e?.message || e); }
   try { startLeistungsstandReminderChecker(supabase); } catch (e) { console.error("startLeistungsstandReminderChecker:", e?.message || e); }
+  try { startHoursBookingReminderChecker(supabase); }    catch (e) { console.error("startHoursBookingReminderChecker:", e?.message || e); }
 });

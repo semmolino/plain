@@ -7,6 +7,7 @@ export interface NotificationSchedule {
   ENABLED:               boolean
   SCHEDULE_DAYS:         number[] | null
   SCHEDULE_LAST_DAY:     boolean
+  SCHEDULE_TIME_OF_DAY:  string | null   // "HH:MM:SS"
   NOTIFY_PROJECT_PM:     boolean
   PROJECT_STATUS_IDS:    number[] | null
   AUDIENCE_ROLES:        string[] | null
@@ -20,6 +21,7 @@ export interface UpsertNotificationScheduleBody {
   enabled?:             boolean
   scheduleDays?:        number[]
   scheduleLastDay?:     boolean
+  scheduleTimeOfDay?:   string          // "HH:MM"
   notifyProjectPm?:     boolean
   projectStatusIds?:    number[]
   audienceRoles?:       string[]

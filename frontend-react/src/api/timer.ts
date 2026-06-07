@@ -45,6 +45,14 @@ export const createTimerDraft = (body: CreateDraftPayload) =>
 export const fetchDrafts = (employeeId: number, date: string) =>
   apiClient.get<{ data: DraftEntry[] }>(`/buchungen/timer/drafts?employee_id=${employeeId}&date=${date}`)
 
+export interface WorkstartStatus {
+  autoshowEnabled:  boolean
+  hasBookingsToday: boolean
+  today:            string
+}
+export const fetchWorkstartStatus = () =>
+  apiClient.get<{ data: WorkstartStatus }>('/buchungen/workstart-status')
+
 export const confirmDrafts = (ids: number[], breakConfirmations?: BreakConfirmationMap) =>
   apiClient.post<{ success: boolean; confirmed: number; arbzgEvents?: unknown[] }>(
     '/buchungen/timer/confirm', { ids, break_confirmations: breakConfirmations || {} }
