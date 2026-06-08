@@ -114,6 +114,8 @@ ${data.vatBreakdown.map(vb => `
     <cac:TaxCategory>
       <cbc:ID>${x(vb.category)}</cbc:ID>
       <cbc:Percent>${n2(vb.rate)}</cbc:Percent>
+      ${vb.exemptionReasonCode ? `<cbc:TaxExemptionReasonCode>${x(vb.exemptionReasonCode)}</cbc:TaxExemptionReasonCode>` : ''}
+      ${vb.exemptionReasonText ? `<cbc:TaxExemptionReason>${x(vb.exemptionReasonText)}</cbc:TaxExemptionReason>` : ''}
       <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
     </cac:TaxCategory>
   </cac:TaxSubtotal>`).join('\n')}

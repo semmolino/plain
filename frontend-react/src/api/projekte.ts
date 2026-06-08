@@ -242,6 +242,10 @@ export interface Contract {
   SE_PERCENT?:           number | null
   SE_BASIS?:             'BRUTTO' | 'NETTO' | null
   SE_LEGAL_REFERENCE?:   string | null
+  // E-Rechnung Branch 2 — VAT-Category default
+  VAT_CATEGORY?:               'S'|'AE'|'E'|'Z'|'O'|'G'|'K' | null
+  VAT_EXEMPTION_REASON_CODE?:  string | null
+  VAT_EXEMPTION_REASON_TEXT?:  string | null
 }
 
 export const fetchContractByProject = (projectId: number) =>
@@ -259,6 +263,9 @@ export const patchContract = (contractId: number, body: Partial<{
   SE_PERCENT: number | null
   SE_BASIS: 'BRUTTO' | 'NETTO' | null
   SE_LEGAL_REFERENCE: string | null
+  VAT_CATEGORY: 'S'|'AE'|'E'|'Z'|'O'|'G'|'K'
+  VAT_EXEMPTION_REASON_CODE: string | null
+  VAT_EXEMPTION_REASON_TEXT: string | null
 }>) => apiClient.patch<{ success: boolean }>(`/projekte/contract/${contractId}`, body)
 
 // ── Leistungsstände ───────────────────────────────────────────────────────────

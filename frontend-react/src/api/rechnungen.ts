@@ -51,6 +51,22 @@ export interface Invoice {
   BUYER_ORDER_REFERENCE?:       string | null   // BT-13 Bestellnummer
   BUYER_ACCOUNTING_REFERENCE?:  string | null   // BT-19 Kostenstelle
   REMITTANCE_INFORMATION?:      string | null   // BT-83 Verwendungszweck
+  // E-Rechnung Branch 2 — VAT-Category + Exemption
+  VAT_CATEGORY?:                VatCategory | null  // BT-118
+  VAT_EXEMPTION_REASON_CODE?:   string | null       // BT-121
+  VAT_EXEMPTION_REASON_TEXT?:   string | null       // BT-120/123
+}
+
+export type VatCategory = 'S' | 'AE' | 'E' | 'Z' | 'O' | 'G' | 'K'
+
+export const VAT_CATEGORY_LABELS: Record<VatCategory, string> = {
+  S:  'Standard (Regelsatz)',
+  AE: 'Reverse Charge §13b UStG',
+  E:  'Steuerbefreit (§4 UStG)',
+  Z:  '0 % USt (nicht steuerbar)',
+  O:  'Außerhalb USt (§19 Kleinunternehmer)',
+  G:  'Steuerfreie Ausfuhrlieferung',
+  K:  'Innergemeinschaftliche Lieferung (steuerfrei)',
 }
 
 export interface PartialPayment {
@@ -94,6 +110,10 @@ export interface PartialPayment {
   BUYER_ORDER_REFERENCE?:       string | null
   BUYER_ACCOUNTING_REFERENCE?:  string | null
   REMITTANCE_INFORMATION?:      string | null
+  // E-Rechnung Branch 2 — VAT-Category + Exemption
+  VAT_CATEGORY?:                VatCategory | null
+  VAT_EXEMPTION_REASON_CODE?:   string | null
+  VAT_EXEMPTION_REASON_TEXT?:   string | null
 }
 
 export interface BillingProposal {
@@ -198,6 +218,10 @@ export const patchInvoice = (id: number, body: Partial<{
   buyer_order_reference: string | null
   buyer_accounting_reference: string | null
   remittance_information: string | null
+  // E-Rechnung Branch 2 — VAT-Category + Exemption
+  vat_category: VatCategory
+  vat_exemption_reason_code: string | null
+  vat_exemption_reason_text: string | null
 }>) => apiClient.patch<{ ok: boolean }>(`/invoices/${id}`, body)
 
 export const getInvoiceBillingProposal = (id: number) =>
@@ -309,6 +333,10 @@ export const patchPartialPayment = (id: number, body: Partial<{
   buyer_order_reference: string | null
   buyer_accounting_reference: string | null
   remittance_information: string | null
+  // E-Rechnung Branch 2 — VAT-Category + Exemption
+  vat_category: VatCategory
+  vat_exemption_reason_code: string | null
+  vat_exemption_reason_text: string | null
 }>) => apiClient.patch<{ success: boolean }>(`/partial-payments/${id}`, body)
 
 export const getPpBillingProposal = (id: number) =>

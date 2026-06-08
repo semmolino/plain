@@ -678,10 +678,10 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   if (!employee) throw { status: 500, message: "Mitarbeiter konnte nicht geladen werden" };
 
   let contractRow = null;
-  const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("ID", contractId).maybeSingle();
+  const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).maybeSingle();
   if (!c1Err && c1) contractRow = c1;
   if (!contractRow) {
-    const { data: c2, error: c2Err } = await supabase.from("CONTRACTS").select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("ID", contractId).maybeSingle();
+    const { data: c2, error: c2Err } = await supabase.from("CONTRACTS").select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).maybeSingle();
     if (c2Err || !c2) throw { status: 500, message: "Vertrag konnte nicht geladen werden" };
     contractRow = c2;
   }
@@ -772,6 +772,10 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     ADDRESS_DEBITOR_NUMBER: invoiceAddress.CUSTOMER_NUMBER ?? null,
     BUYER_REFERENCE: invoiceAddress.BUYER_REFERENCE ?? null,
     ADDRESS_REFERENCE_NUMBER: invoiceAddress.BUYER_REFERENCE ?? null,
+    // E-Rechnung Branch 2 — VAT-Category vom Vertrag uebernehmen
+    VAT_CATEGORY:              contractRow.VAT_CATEGORY              ?? 'S',
+    VAT_EXEMPTION_REASON_CODE: contractRow.VAT_EXEMPTION_REASON_CODE ?? null,
+    VAT_EXEMPTION_REASON_TEXT: contractRow.VAT_EXEMPTION_REASON_TEXT ?? null,
     PARTIAL_PAYMENT_CONTACT_ID: invoiceContactId,
     CONTACT: `${(invoiceContact.FIRST_NAME ?? "").trim()} ${(invoiceContact.LAST_NAME ?? "").trim()}`.trim(),
     CONTACT_SALUTATION: contactSalutation,

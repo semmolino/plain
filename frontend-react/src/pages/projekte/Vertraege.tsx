@@ -35,6 +35,10 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
   const [sePct,        setSePct]        = useState('')
   const [seBasis,      setSeBasis]      = useState<'BRUTTO' | 'NETTO'>('BRUTTO')
   const [seLegalRef,   setSeLegalRef]   = useState('')
+  // E-Rechnung Branch 2 — VAT-Category-Default des Vertrags
+  const [vatCategory,  setVatCategory]  = useState<'S'|'AE'|'E'|'Z'|'O'|'G'|'K'>('S')
+  const [vatExemptCode,setVatExemptCode]= useState('')
+  const [vatExemptText,setVatExemptText]= useState('')
   const [dirty,        setDirty]        = useState(false)
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
@@ -61,6 +65,9 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
     setSePct(c.SE_PERCENT != null ? String(c.SE_PERCENT) : '')
     setSeBasis((c.SE_BASIS as 'BRUTTO' | 'NETTO') === 'NETTO' ? 'NETTO' : 'BRUTTO')
     setSeLegalRef(c.SE_LEGAL_REFERENCE ?? '')
+    setVatCategory((c.VAT_CATEGORY as 'S'|'AE'|'E'|'Z'|'O'|'G'|'K') ?? 'S')
+    setVatExemptCode(c.VAT_EXEMPTION_REASON_CODE ?? '')
+    setVatExemptText(c.VAT_EXEMPTION_REASON_TEXT ?? '')
     setContactId(c.INVOICE_CONTACT_ID ?? null)
     setDirty(false)
 
@@ -91,6 +98,9 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
         SE_PERCENT:            seEnabled && sePct !== '' ? parseFloat(sePct) : null,
         SE_BASIS:              seEnabled ? seBasis : null,
         SE_LEGAL_REFERENCE:    seEnabled && seLegalRef.trim() ? seLegalRef.trim() : null,
+        VAT_CATEGORY:              vatCategory,
+        VAT_EXEMPTION_REASON_CODE: vatExemptCode.trim() || null,
+        VAT_EXEMPTION_REASON_TEXT: vatExemptText.trim() || null,
       })
     },
     onSuccess: () => {
@@ -302,6 +312,36 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
                 </p>
               </div>
             )}
+          </div>
+
+          {/* ── Umsatzsteuer-Kategorie (Default für Rechnungen) ───────────────── */}
+          <div style={{ marginTop: 16, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8 }}>
+            <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Umsatzsteuer-Kategorie (BT-118)</p>
+            <select value={vatCategory} onChange={e => { setVatCategory(e.target.value as 'S'|'AE'|'E'|'Z'|'O'|'G'|'K'); touch() }}
+              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', width: '100%', fontSize: 13 }}>
+              <option value="S">Standard (Regelsatz)</option>
+              <option value="AE">Reverse Charge §13b UStG</option>
+              <option value="E">Steuerbefreit (§4 UStG)</option>
+              <option value="Z">0 % USt (nicht steuerbar)</option>
+              <option value="O">Außerhalb USt (§19 Kleinunternehmer)</option>
+              <option value="G">Steuerfreie Ausfuhrlieferung</option>
+              <option value="K">Innergemeinschaftliche Lieferung (steuerfrei)</option>
+            </select>
+            {vatCategory !== 'S' && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input type="text" value={vatExemptCode}
+                  onChange={e => { setVatExemptCode(e.target.value); touch() }}
+                  placeholder="Begründung Code (BT-121, optional)"
+                  style={{ padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }} />
+                <textarea rows={2} value={vatExemptText}
+                  onChange={e => { setVatExemptText(e.target.value); touch() }}
+                  placeholder="Begründungstext (leer = Standardtext)"
+                  style={{ padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }} />
+              </div>
+            )}
+            <p style={{ fontSize: 12, color: '#6b7280', margin: '8px 0 0 0' }}>
+              Default für alle Rechnungen aus diesem Vertrag. Pro Rechnung im Wizard überschreibbar.
+            </p>
           </div>
 
           <Autocomplete

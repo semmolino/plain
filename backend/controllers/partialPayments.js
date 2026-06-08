@@ -256,24 +256,44 @@ async function patchPartialPayment(req, res, supabase) {
     payload.VAT_PERCENT = vat.VAT_PERCENT ?? null;
   }
 
-  const needsTaxRecalc = payload.TOTAL_AMOUNT_NET !== undefined || payload.VAT_PERCENT !== undefined;
+  // E-Rechnung Branch 2 — VAT-Category + Exemption
+  if (b.vat_category !== undefined) {
+    const cat = String(b.vat_category || "S").toUpperCase();
+    if (!['S','AE','E','Z','O','G','K'].includes(cat)) {
+      return res.status(400).json({ error: `Ungueltige Umsatzsteuer-Kategorie: ${cat}` });
+    }
+    payload.VAT_CATEGORY = cat;
+  }
+  if (b.vat_exemption_reason_code !== undefined) payload.VAT_EXEMPTION_REASON_CODE = String(b.vat_exemption_reason_code || "").trim() || null;
+  if (b.vat_exemption_reason_text !== undefined) payload.VAT_EXEMPTION_REASON_TEXT = String(b.vat_exemption_reason_text || "").trim() || null;
+
+  const needsTaxRecalc =
+    payload.TOTAL_AMOUNT_NET !== undefined ||
+    payload.VAT_PERCENT      !== undefined ||
+    payload.VAT_CATEGORY     !== undefined;
   if (needsTaxRecalc) {
     const { data: cur, error: curErr } = await supabase
       .from("PARTIAL_PAYMENT")
-      .select("TOTAL_AMOUNT_NET, VAT_PERCENT")
+      .select("TOTAL_AMOUNT_NET, VAT_PERCENT, VAT_CATEGORY")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
     if (curErr) return res.status(500).json({ error: curErr.message });
 
-    const totalNet = payload.TOTAL_AMOUNT_NET !== undefined ? payload.TOTAL_AMOUNT_NET : cur?.TOTAL_AMOUNT_NET;
-    const vatPercent = payload.VAT_PERCENT !== undefined ? payload.VAT_PERCENT : cur?.VAT_PERCENT;
+    const totalNet   = payload.TOTAL_AMOUNT_NET !== undefined ? payload.TOTAL_AMOUNT_NET : cur?.TOTAL_AMOUNT_NET;
+    const vatPercent = payload.VAT_PERCENT      !== undefined ? payload.VAT_PERCENT      : cur?.VAT_PERCENT;
+    const effCat     = payload.VAT_CATEGORY     ?? cur?.VAT_CATEGORY ?? 'S';
 
     if (totalNet !== undefined && totalNet !== null) {
       const net = toNum(totalNet);
-      const vat = toNum(vatPercent);
-      payload.TAX_AMOUNT_NET = round2(net * vat / 100);
-      payload.TOTAL_AMOUNT_GROSS = round2(net + payload.TAX_AMOUNT_NET);
+      if (effCat === 'S') {
+        const vat = toNum(vatPercent);
+        payload.TAX_AMOUNT_NET     = round2(net * vat / 100);
+        payload.TOTAL_AMOUNT_GROSS = round2(net + payload.TAX_AMOUNT_NET);
+      } else {
+        payload.TAX_AMOUNT_NET     = 0;
+        payload.TOTAL_AMOUNT_GROSS = net;
+      }
     }
   }
 

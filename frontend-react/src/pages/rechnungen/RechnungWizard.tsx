@@ -9,7 +9,8 @@ import {
   initInvoice, patchInvoice, getInvoiceBillingProposal,
   putInvoicePerformance, getInvoiceTec, postInvoiceTec, bookInvoice, deleteInvoice,
   openInvoicePdf, downloadInvoiceEinvoice,
-  type InvoiceType, type BillingProposal, type TecEntry,
+  VAT_CATEGORY_LABELS,
+  type InvoiceType, type BillingProposal, type TecEntry, type VatCategory,
 } from '@/api/rechnungen'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
@@ -68,12 +69,15 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
   const [bpStart,  setBpStart]  = useState('')
   const [bpFinish, setBpFinish] = useState('')
   const [comment,  setComment]  = useState('')
-  // E-Rechnungs-Felder (BT-10/13/19/83)
+  // E-Rechnungs-Felder (BT-10/13/19/83 + BT-118/120-123)
   const [showEinvoice,  setShowEinvoice]  = useState(false)
   const [buyerRef,      setBuyerRef]      = useState('')
   const [orderRef,      setOrderRef]      = useState('')
   const [accountingRef, setAccountingRef] = useState('')
   const [remittance,    setRemittance]    = useState('')
+  const [vatCategory,   setVatCategory]   = useState<VatCategory>('S')
+  const [vatExemptCode, setVatExemptCode] = useState('')
+  const [vatExemptText, setVatExemptText] = useState('')
 
   // Step 2
   const [proposal,  setProposal]  = useState<BillingProposal | null>(null)
@@ -330,6 +334,9 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
       buyer_order_reference:       orderRef.trim()      || null,
       buyer_accounting_reference:  accountingRef.trim() || null,
       remittance_information:      remittance.trim()    || null,
+      vat_category:                vatCategory,
+      vat_exemption_reason_code:   vatExemptCode.trim() || null,
+      vat_exemption_reason_text:   vatExemptText.trim() || null,
     }})
   }
 
@@ -479,6 +486,34 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                   value={accountingRef} onChange={e => setAccountingRef(e.target.value)} />
                 <FormField label="Verwendungszweck für Überweisung (BT-83)" id="ri-remit"
                   value={remittance} onChange={e => setRemittance(e.target.value)} />
+
+                {/* VAT-Category (BT-118) */}
+                <div className="form-group">
+                  <label>Umsatzsteuer-Kategorie (BT-118)</label>
+                  <select value={vatCategory} onChange={e => setVatCategory(e.target.value as VatCategory)}
+                    style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', width: '100%' }}>
+                    {(Object.keys(VAT_CATEGORY_LABELS) as VatCategory[]).map(k => (
+                      <option key={k} value={k}>{VAT_CATEGORY_LABELS[k]}</option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0 0' }}>
+                    Bei "Reverse Charge §13b UStG" (z.B. Bauleistung an Bauträger) wird kein Steuerbetrag ausgewiesen
+                    und der Standardhinweis automatisch ergänzt.
+                  </p>
+                </div>
+                {vatCategory !== 'S' && (
+                  <>
+                    <FormField label="Begründung Code (BT-121, optional)" id="ri-exempt-code"
+                      value={vatExemptCode} onChange={e => setVatExemptCode(e.target.value)} />
+                    <div className="form-group">
+                      <label>Begründungstext (BT-120/123)</label>
+                      <textarea rows={2} value={vatExemptText} onChange={e => setVatExemptText(e.target.value)}
+                        placeholder="Leer lassen für Standardtext"
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }} />
+                    </div>
+                  </>
+                )}
+
                 <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
                   Optional. Bei öffentlichen Auftraggebern ist die Leitweg-ID erforderlich — wird vom Empfänger im Format geprüft.
                 </p>
