@@ -154,8 +154,30 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   // ── 6. VAT ────────────────────────────────────────────────────────────────
 
-  const vatPercent  = toNum(doc.VAT_PERCENT ?? 0);
-  const vatCategory = vatPercent > 0 ? 'S' : 'Z';
+  const vatPercent = toNum(doc.VAT_PERCENT ?? 0);
+  // VAT-Category aus DB (Branch 2). Fallback wenn Spalte nicht da:
+  //   vatPercent > 0  -> 'S' (Standard)
+  //   vatPercent = 0  -> 'Z' (Zero rated)
+  // Bei Reverse-Charge/Steuerbefreit/Kleinunternehmer setzt der User
+  // bewusst auf 'AE'/'E'/'O'/'G'/'K'.
+  const vatCategoryRaw  = String(doc.VAT_CATEGORY ?? '').trim().toUpperCase();
+  const vatCategoryAllowed = ['S','AE','E','Z','O','G','K'];
+  const vatCategory     = vatCategoryAllowed.includes(vatCategoryRaw)
+    ? vatCategoryRaw
+    : (vatPercent > 0 ? 'S' : 'Z');
+  // BT-121 Exemption-Reason-Code (von User gepflegt) bzw. KoSIT-Standardtexte
+  // BT-120/123 Exemption-Reason-Text mit Auto-Defaults bei AE
+  const vatExemptionReasonCode = String(doc.VAT_EXEMPTION_REASON_CODE ?? '').trim() || null;
+  let   vatExemptionReasonText = String(doc.VAT_EXEMPTION_REASON_TEXT ?? '').trim() || null;
+  if (!vatExemptionReasonText) {
+    if (vatCategory === 'AE') vatExemptionReasonText = 'Steuerschuldnerschaft des Leistungsempfängers gem. §13b UStG';
+    else if (vatCategory === 'O') vatExemptionReasonText = 'Kein Ausweis von Umsatzsteuer gem. §19 UStG (Kleinunternehmer)';
+    else if (vatCategory === 'E') vatExemptionReasonText = 'Steuerbefreite Leistung';
+    else if (vatCategory === 'K') vatExemptionReasonText = 'Innergemeinschaftliche Lieferung — steuerfrei nach §6a UStG';
+    else if (vatCategory === 'G') vatExemptionReasonText = 'Ausfuhrlieferung — steuerfrei nach §6 UStG';
+  }
+  // Bei Nicht-Standard-Categories ist der gesetzliche VAT-Satz 0
+  const effectiveVatPercent = (vatCategory === 'S') ? vatPercent : 0;
 
   // ── 7. Document-level allowances (Skonto-unabhängige Nachlässe) ───────────
 
@@ -231,7 +253,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
           unitCode:    'LS',
           unitPrice:   lineTotal,
           lineTotal,
-          vatRate:     vatPercent,
+          vatRate:     effectiveVatPercent,
           vatCategory,
           billingPeriodStart: asIsoDate(doc.BILLING_PERIOD_START),
           billingPeriodEnd:   asIsoDate(doc.BILLING_PERIOD_FINISH),
@@ -249,7 +271,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       id: 1, description: label,
       note:     amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '',
       quantity: 1, unitCode: 'LS', unitPrice: lineTotal, lineTotal,
-      vatRate: vatPercent, vatCategory,
+      vatRate: effectiveVatPercent, vatCategory,
       billingPeriodStart: asIsoDate(doc.BILLING_PERIOD_START),
       billingPeriodEnd:   asIsoDate(doc.BILLING_PERIOD_FINISH),
     });
@@ -294,10 +316,17 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const allowanceTotal = fmt2(allowances.reduce((s, a) => s + a.amount, 0));
   const chargeTotal    = 0;
 
-  // Use stored totals from the document (authoritative, handles all edge cases)
+  // Use stored totals from the document (authoritative, handles all edge cases).
+  // Bei Reverse-Charge / Steuerbefreit (Kategorie != 'S') wird kein
+  // Steuerbetrag ausgewiesen — auch wenn die DB-Spalte aus Altdaten noch
+  // einen Wert haelt, ueberschreiben wir mit 0.
   const taxBasis   = fmt2(toNum(doc.TOTAL_AMOUNT_NET) || fmt2(lineTotal - allowanceTotal));
-  const taxAmount  = fmt2(toNum(doc.TAX_AMOUNT_NET)   || fmt2(taxBasis * vatPercent / 100));
-  const grandTotal = fmt2(toNum(doc.TOTAL_AMOUNT_GROSS) || fmt2(taxBasis + taxAmount));
+  const taxAmount  = vatCategory === 'S'
+    ? fmt2(toNum(doc.TAX_AMOUNT_NET) || fmt2(taxBasis * vatPercent / 100))
+    : 0;
+  const grandTotal = vatCategory === 'S'
+    ? fmt2(toNum(doc.TOTAL_AMOUNT_GROSS) || fmt2(taxBasis + taxAmount))
+    : taxBasis;
 
   // Prepaid = gross already invoiced via prior ARs (Schlussrechnung only)
   const prepaidGross = fmt2(deductions.reduce((s, d) => s + d.grossAmount, 0));
@@ -355,7 +384,12 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const duePayable   = fmt2(grandTotal - prepaidGross - seHeldAmount + seReleaseTotal);
 
   const vatBreakdown = [{
-    rate: vatPercent, basis: taxBasis, amount: taxAmount, category: vatCategory,
+    rate:        effectiveVatPercent,
+    basis:       taxBasis,
+    amount:      taxAmount,
+    category:    vatCategory,
+    exemptionReasonCode: vatExemptionReasonCode,
+    exemptionReasonText: vatExemptionReasonText,
   }];
 
   // ── 13. Project / Contract references ────────────────────────────────────

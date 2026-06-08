@@ -696,7 +696,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   {
     const { data: c1, error: c1Err } = await supabase
       .from("CONTRACT")
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT")
       .eq("ID", contractId)
       .maybeSingle();
     if (!c1Err && c1) contractRow = c1;
@@ -704,7 +704,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   if (!contractRow) {
     const { data: c2, error: c2Err } = await supabase
       .from("CONTRACTS")
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT")
       .eq("ID", contractId)
       .maybeSingle();
     if (c2Err || !c2) throw { status: 500, message: "Vertrag konnte nicht geladen werden" };
@@ -797,6 +797,10 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     CONTACT_PHONE: invoiceContact.MOBILE ?? null,
     TENANT_ID: project.TENANT_ID ?? null,
     INVOICE_TYPE: invoiceType,
+    // E-Rechnung Branch 2 — VAT-Category vom Vertrag uebernehmen
+    VAT_CATEGORY:              contractRow.VAT_CATEGORY              ?? 'S',
+    VAT_EXEMPTION_REASON_CODE: contractRow.VAT_EXEMPTION_REASON_CODE ?? null,
+    VAT_EXEMPTION_REASON_TEXT: contractRow.VAT_EXEMPTION_REASON_TEXT ?? null,
   };
 
   const { data: created, error: insertErr } = await supabase
@@ -880,11 +884,30 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   if (body.buyer_accounting_reference !== undefined) payload.BUYER_ACCOUNTING_REFERENCE = String(body.buyer_accounting_reference || "").trim() || null;
   if (body.remittance_information   !== undefined) payload.REMITTANCE_INFORMATION      = String(body.remittance_information   || "").trim() || null;
 
-  if (payload.VAT_PERCENT !== undefined) {
+  // E-Rechnung Branch 2 — VAT-Category + Exemption (BT-118 / BT-120-123)
+  if (body.vat_category !== undefined) {
+    const cat = String(body.vat_category || "S").toUpperCase();
+    if (!['S','AE','E','Z','O','G','K'].includes(cat)) {
+      throw { status: 400, message: `Ungueltige Umsatzsteuer-Kategorie: ${cat}` };
+    }
+    payload.VAT_CATEGORY = cat;
+  }
+  if (body.vat_exemption_reason_code !== undefined) payload.VAT_EXEMPTION_REASON_CODE = String(body.vat_exemption_reason_code || "").trim() || null;
+  if (body.vat_exemption_reason_text !== undefined) payload.VAT_EXEMPTION_REASON_TEXT = String(body.vat_exemption_reason_text || "").trim() || null;
+
+  // Steuer + Brutto neu berechnen wenn VAT_PERCENT oder VAT_CATEGORY geaendert wurde.
+  const effectiveCategory = payload.VAT_CATEGORY ?? currentInv.VAT_CATEGORY ?? 'S';
+  if (payload.VAT_PERCENT !== undefined || payload.VAT_CATEGORY !== undefined) {
     const totalNet = toNum(currentInv.TOTAL_AMOUNT_NET);
-    const vatPercent = toNum(payload.VAT_PERCENT);
-    payload.TAX_AMOUNT_NET = round2(totalNet * vatPercent / 100);
-    payload.TOTAL_AMOUNT_GROSS = round2(totalNet + payload.TAX_AMOUNT_NET);
+    if (effectiveCategory === 'S') {
+      const vatPercent = toNum(payload.VAT_PERCENT ?? currentInv.VAT_PERCENT);
+      payload.TAX_AMOUNT_NET     = round2(totalNet * vatPercent / 100);
+      payload.TOTAL_AMOUNT_GROSS = round2(totalNet + payload.TAX_AMOUNT_NET);
+    } else {
+      // Reverse-Charge / steuerfrei: kein Steuerbetrag im Rechnungstotal
+      payload.TAX_AMOUNT_NET     = 0;
+      payload.TOTAL_AMOUNT_GROSS = totalNet;
+    }
   }
 
   if (Object.keys(payload).length === 0) return { ok: true };

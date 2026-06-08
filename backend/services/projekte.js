@@ -1429,6 +1429,20 @@ async function patchContract(supabase, { contractId, body }) {
   if (body.SE_LEGAL_REFERENCE !== undefined) {
     allowed.SE_LEGAL_REFERENCE = body.SE_LEGAL_REFERENCE === null || body.SE_LEGAL_REFERENCE === "" ? null : String(body.SE_LEGAL_REFERENCE).trim();
   }
+  // E-Rechnung Branch 2 — VAT-Category + Exemption
+  if (body.VAT_CATEGORY !== undefined) {
+    const cat = String(body.VAT_CATEGORY || "S").toUpperCase();
+    if (!['S','AE','E','Z','O','G','K'].includes(cat)) {
+      throw { status: 400, message: `Ungueltige Umsatzsteuer-Kategorie: ${cat}` };
+    }
+    allowed.VAT_CATEGORY = cat;
+  }
+  if (body.VAT_EXEMPTION_REASON_CODE !== undefined) {
+    allowed.VAT_EXEMPTION_REASON_CODE = body.VAT_EXEMPTION_REASON_CODE === null || body.VAT_EXEMPTION_REASON_CODE === "" ? null : String(body.VAT_EXEMPTION_REASON_CODE).trim();
+  }
+  if (body.VAT_EXEMPTION_REASON_TEXT !== undefined) {
+    allowed.VAT_EXEMPTION_REASON_TEXT = body.VAT_EXEMPTION_REASON_TEXT === null || body.VAT_EXEMPTION_REASON_TEXT === "" ? null : String(body.VAT_EXEMPTION_REASON_TEXT).trim();
+  }
 
   if (!Object.keys(allowed).length) throw { status: 400, message: "Keine Felder zum Aktualisieren" };
 

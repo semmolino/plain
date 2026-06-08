@@ -174,8 +174,10 @@ function buildTaxSubtotals(data, profile) {
       <ram:ApplicableTradeTax>
         <ram:CalculatedAmount>${n2(vb.amount)}</ram:CalculatedAmount>
         <ram:TypeCode>VAT</ram:TypeCode>
+        ${vb.exemptionReasonText ? `<ram:ExemptionReason>${x(vb.exemptionReasonText)}</ram:ExemptionReason>` : ''}
         <ram:BasisAmount>${n2(vb.basis)}</ram:BasisAmount>
         <ram:CategoryCode>${x(vb.category)}</ram:CategoryCode>
+        ${vb.exemptionReasonCode ? `<ram:ExemptionReasonCode>${x(vb.exemptionReasonCode)}</ram:ExemptionReasonCode>` : ''}
         <ram:RateApplicablePercent>${n2(vb.rate)}</ram:RateApplicablePercent>
       </ram:ApplicableTradeTax>`).join('\n');
 }
