@@ -234,10 +234,33 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       const structIds = invStructures.map(r => r.STRUCTURE_ID);
       const { data: projStructures } = await supabase
         .from('PROJECT_STRUCTURE')
-        .select('ID, NAME_SHORT, NAME_LONG')
+        .select('ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID')
         .in('ID', structIds);
 
       const nameMap = Object.fromEntries((projStructures ?? []).map(r => [r.ID, r]));
+
+      // Branch 3 — Stundenrechnungen: TEC-Zeilen je BT2-Struktur
+      // aggregieren (Summe Stunden). Daraus kann eine Rechnungszeile mit
+      // unitCode='HUR' und reellem Stundensatz gebildet werden.
+      const bt2StructIds = (projStructures || [])
+        .filter(s => Number(s.BILLING_TYPE_ID) === 2)
+        .map(s => s.ID);
+      const tecAggByStructure = new Map();
+      if (bt2StructIds.length > 0) {
+        const { data: tecRows } = await supabase
+          .from('TEC')
+          .select('STRUCTURE_ID, QUANTITY_INT, SP_RATE, SP_TOT')
+          .eq('INVOICE_ID', docId)
+          .in('STRUCTURE_ID', bt2StructIds);
+        for (const t of (tecRows || [])) {
+          const sid = t.STRUCTURE_ID;
+          const agg = tecAggByStructure.get(sid) || { hours: 0, totalNet: 0, distinctRates: new Set() };
+          agg.hours    += toNum(t.QUANTITY_INT);
+          agg.totalNet += toNum(t.SP_TOT);
+          if (t.SP_RATE != null) agg.distinctRates.add(Number(t.SP_RATE));
+          tecAggByStructure.set(sid, agg);
+        }
+      }
 
       lines = invStructures.map((row, idx) => {
         const ps           = nameMap[row.STRUCTURE_ID] ?? {};
@@ -245,13 +268,35 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
         const amountExtras = fmt2(row.AMOUNT_EXTRAS_NET ?? 0);
         const lineTotal    = fmt2(amountNet + amountExtras);
         const desc = [ps.NAME_SHORT, ps.NAME_LONG].filter(Boolean).join(' – ') || `Position ${idx + 1}`;
+
+        // Default Pauschal-Line
+        let unitCode  = 'LS';
+        let quantity  = 1;
+        let unitPrice = lineTotal;
+        let note      = amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '';
+
+        // Stundenrechnung: wenn BT2 und Stunden gebucht
+        const tecAgg = tecAggByStructure.get(row.STRUCTURE_ID);
+        if (Number(ps.BILLING_TYPE_ID) === 2 && tecAgg && tecAgg.hours > 0) {
+          const hours = fmt2(tecAgg.hours);
+          unitCode  = 'HUR';
+          quantity  = hours;
+          unitPrice = fmt2(amountNet / hours);
+          const rateText = tecAgg.distinctRates.size === 1
+            ? `${fmt2([...tecAgg.distinctRates][0])} €/h`
+            : `Ø ${unitPrice} €/h (gemischte Saetze)`;
+          note = amountExtras > 0
+            ? `${hours} Std. (${rateText}) + Nebenkosten: ${amountExtras}`
+            : `${hours} Std. (${rateText})`;
+        }
+
         return {
           id:          idx + 1,
           description: desc,
-          note:        amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '',
-          quantity:    1,
-          unitCode:    'LS',
-          unitPrice:   lineTotal,
+          note,
+          quantity,
+          unitCode,
+          unitPrice,
           lineTotal,
           vatRate:     effectiveVatPercent,
           vatCategory,
@@ -267,10 +312,51 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     const amountExtras = fmt2(doc.AMOUNT_EXTRAS_NET ?? 0);
     const lineTotal    = fmt2(amountNet + amountExtras);
     const label = docType === 'PARTIAL_PAYMENT' ? 'Abschlagsrechnung' : 'Rechnung';
+
+    // Branch 3 — Stundenrechnungen: wenn TEC-Stunden mit diesem Dokument
+    // verknuepft sind und deren SP_TOT-Summe (== Stunden-Anteil am Net)
+    // dem amountNet entspricht, dann Unit=HUR statt LS.
+    let unitCode  = 'LS';
+    let quantity  = 1;
+    let unitPrice = lineTotal;
+    let note      = amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '';
+
+    try {
+      const tecFilter = docType === 'PARTIAL_PAYMENT'
+        ? { col: 'PARTIAL_PAYMENT_ID', val: docId }
+        : { col: 'INVOICE_ID',          val: docId };
+      const { data: tecRows } = await supabase
+        .from('TEC')
+        .select('QUANTITY_INT, SP_RATE, SP_TOT')
+        .eq(tecFilter.col, tecFilter.val);
+      if (tecRows && tecRows.length > 0) {
+        let hours = 0, totalNetTec = 0;
+        const distinctRates = new Set();
+        for (const t of tecRows) {
+          hours       += toNum(t.QUANTITY_INT);
+          totalNetTec += toNum(t.SP_TOT);
+          if (t.SP_RATE != null) distinctRates.add(Number(t.SP_RATE));
+        }
+        // Akzeptanz: TEC-Summe deckt amountNet (Toleranz 1 Cent).
+        if (hours > 0 && Math.abs(fmt2(totalNetTec) - amountNet) <= 0.01) {
+          const h = fmt2(hours);
+          unitCode  = 'HUR';
+          quantity  = h;
+          unitPrice = fmt2(amountNet / h);
+          const rateText = distinctRates.size === 1
+            ? `${fmt2([...distinctRates][0])} €/h`
+            : `Ø ${unitPrice} €/h (gemischte Saetze)`;
+          note = amountExtras > 0
+            ? `${h} Std. (${rateText}) + Nebenkosten: ${amountExtras}`
+            : `${h} Std. (${rateText})`;
+        }
+      }
+    } catch (_) { /* TEC fehlt -> Pauschal-Fallback */ }
+
     lines.push({
       id: 1, description: label,
-      note:     amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '',
-      quantity: 1, unitCode: 'LS', unitPrice: lineTotal, lineTotal,
+      note,
+      quantity, unitCode, unitPrice, lineTotal,
       vatRate: effectiveVatPercent, vatCategory,
       billingPeriodStart: asIsoDate(doc.BILLING_PERIOD_START),
       billingPeriodEnd:   asIsoDate(doc.BILLING_PERIOD_FINISH),
