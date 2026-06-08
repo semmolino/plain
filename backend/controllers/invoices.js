@@ -34,7 +34,7 @@ async function listInvoices(req, res, supabase) {
 async function initInvoice(req, res, supabase) {
   const b = req.body || {};
   const { company_id: companyId, employee_id: employeeId, project_id: projectId, contract_id: contractId } = b;
-  const invoiceType = ["schlussrechnung", "teilschlussrechnung"].includes(b.invoice_type)
+  const invoiceType = ["schlussrechnung", "teilschlussrechnung", "gutschrift"].includes(b.invoice_type)
     ? b.invoice_type
     : "rechnung";
 

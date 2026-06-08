@@ -493,6 +493,45 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   // ── 14. Assemble ─────────────────────────────────────────────────────────
 
+  // Storno: TypeCode 384, Beleg zeigt korrigierende Bewegung. EN 16931
+  // erlaubt zwar positive Werte mit Kennung als "Korrektur", aber viele
+  // Empfaenger erwarten negative Betraege. Wir setzen sie negativ um —
+  // Lines, Allowances, Totals werden gespiegelt.
+  const negateForStorno = (isStorno || isStornoPP);
+  const flip = v => negateForStorno ? -v : v;
+  if (negateForStorno) {
+    for (const l of lines) {
+      l.unitPrice = flip(l.unitPrice);
+      l.lineTotal = flip(l.lineTotal);
+    }
+    for (const a of allowances) { a.amount = flip(a.amount); }
+    for (const vb of vatBreakdown) {
+      vb.basis  = flip(vb.basis);
+      vb.amount = flip(vb.amount);
+    }
+  }
+  const totalsOut = negateForStorno ? {
+    lineTotal:      flip(lineTotal),
+    allowanceTotal: flip(allowanceTotal),
+    chargeTotal,
+    taxBasis:       flip(taxBasis),
+    taxAmount:      flip(taxAmount),
+    grandTotal:     flip(grandTotal),
+    prepaidGross:   flip(prepaidGross),
+    duePayable:     flip(duePayable),
+    prepaidAmount:  flip(prepaidGross),
+  } : {
+    lineTotal,
+    allowanceTotal,
+    chargeTotal,
+    taxBasis,
+    taxAmount,
+    grandTotal,
+    prepaidGross,
+    duePayable,
+    prepaidAmount: prepaidGross,
+  };
+
   return {
     docType,
     invoiceType,
@@ -548,17 +587,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     cashDiscount,
     securityRetention,
 
-    totals: {
-      lineTotal,
-      allowanceTotal,
-      chargeTotal,
-      taxBasis,
-      taxAmount,
-      grandTotal,
-      prepaidGross,
-      duePayable,
-      prepaidAmount: prepaidGross,  // legacy compat
-    },
+    totals: totalsOut,
 
     canceledDocNumber,
     canceledDocDate,

@@ -9,7 +9,7 @@ export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: strin
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
 
-export type InvoiceType = 'rechnung' | 'schlussrechnung' | 'teilschlussrechnung' | 'stornorechnung'
+export type InvoiceType = 'rechnung' | 'schlussrechnung' | 'teilschlussrechnung' | 'stornorechnung' | 'gutschrift'
 
 export interface Invoice {
   ID:                   number

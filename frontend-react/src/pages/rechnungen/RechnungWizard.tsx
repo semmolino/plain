@@ -40,11 +40,12 @@ function StepIndicator({ step, onStepClick }: { step: number; onStepClick: (i: n
 
 interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; d1Pct: number; d2Pct: number; d1Reason: string | null; d2Reason: string | null; cashDiscPct: number; cashDiscDays: number }
 
-export function RechnungWizard({ initialDraft, initialProjectId, initialProjectLabel, onPrefillConsumed }: {
+export function RechnungWizard({ initialDraft, initialProjectId, initialProjectLabel, onPrefillConsumed, invoiceType = 'rechnung' }: {
   initialDraft?: DraftResume
   initialProjectId?: number
   initialProjectLabel?: string
   onPrefillConsumed?: () => void
+  invoiceType?: InvoiceType
 } = {}) {
   const qc = useQueryClient()
   const [step,         setStep]         = useState(0)
@@ -61,7 +62,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
   const [contractLabel, setContractLabel] = useState('')
   const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string }>>([])
   const [employeeId,   setEmployeeId]   = useState(() => String(useAuthStore.getState().employeeId ?? ''))
-  const invType: InvoiceType = 'rechnung'
+  const invType: InvoiceType = invoiceType
 
   // Step 1 fields
   const [detDate,  setDetDate]  = useState(todayIso())

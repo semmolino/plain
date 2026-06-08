@@ -7,7 +7,7 @@ import { RechnungWizard }        from '@/pages/rechnungen/RechnungWizard'
 import { SchlussrechnungWizard } from '@/pages/rechnungen/SchlussrechnungWizard'
 import { MahnungenListe }        from '@/pages/rechnungen/MahnungenListe'
 
-type Tab = 'liste' | 'abschlag' | 'rechnung' | 'schluss' | 'mahnungen'
+type Tab = 'liste' | 'abschlag' | 'rechnung' | 'schluss' | 'gutschrift' | 'mahnungen'
 
 export interface DraftResume {
   id:            number
@@ -27,8 +27,9 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'liste',     label: 'Rechnungsliste' },
   { id: 'abschlag',  label: 'Abschlagsrechnung' },
   { id: 'rechnung',  label: 'Rechnung' },
-  { id: 'schluss',   label: 'Teilschluss-/Schlussrechnung' },
-  { id: 'mahnungen', label: 'Mahnungen' },
+  { id: 'schluss',    label: 'Teilschluss-/Schlussrechnung' },
+  { id: 'gutschrift', label: 'Gutschrift' },
+  { id: 'mahnungen',  label: 'Mahnungen' },
 ]
 
 export function RechnungenPage() {
@@ -125,8 +126,9 @@ export function RechnungenPage() {
         {tab === 'liste'     && <RechnungenListe onEditDraft={handleEditDraft} onCreateInvoiceFromBilling={handleCreateInvoiceFromBilling} initialSearch={initSearch} backProject={backProject} onClearBack={() => { setInitSearch(undefined); setBackProject(undefined) }} />}
         {tab === 'abschlag'  && <AbschlagWizard initialDraft={resumeFor('abschlag')} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} />}
         {tab === 'rechnung'  && <RechnungWizard initialDraft={resumeFor('rechnung')} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} />}
-        {tab === 'schluss'   && <SchlussrechnungWizard initialDraft={resumeFor('schluss')} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} />}
-        {tab === 'mahnungen' && <MahnungenListe openMahnung={openMahnung} />}
+        {tab === 'schluss'    && <SchlussrechnungWizard initialDraft={resumeFor('schluss')} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} />}
+        {tab === 'gutschrift' && <RechnungWizard initialDraft={resumeFor('gutschrift' as Tab)} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} invoiceType="gutschrift" />}
+        {tab === 'mahnungen'  && <MahnungenListe openMahnung={openMahnung} />}
       </div>
     </div>
   )

@@ -46,6 +46,7 @@ function capitalizeInvType(t: string | null | undefined): string {
     schlussrechnung:     'Teilschluss-/Schlussrechnung',
     teilschlussrechnung: 'Teilschluss-/Schlussrechnung',
     stornorechnung:      'Stornorechnung',
+    gutschrift:          'Gutschrift',
   }
   return map[t.toLowerCase()] ?? (t.charAt(0).toUpperCase() + t.slice(1))
 }
