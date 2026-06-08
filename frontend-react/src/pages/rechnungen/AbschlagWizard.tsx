@@ -67,6 +67,12 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
   const [bpStart,  setBpStart]  = useState('')
   const [bpFinish, setBpFinish] = useState('')
   const [comment,  setComment]  = useState('')
+  // E-Rechnungs-Felder (BT-10/13/19/83)
+  const [showEinvoice,  setShowEinvoice]  = useState(false)
+  const [buyerRef,      setBuyerRef]      = useState('')
+  const [orderRef,      setOrderRef]      = useState('')
+  const [accountingRef, setAccountingRef] = useState('')
+  const [remittance,    setRemittance]    = useState('')
 
   // Step 2
   const [proposal,  setProposal]  = useState<BillingProposal | null>(null)
@@ -326,6 +332,11 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
       billing_period_start:  bpStart  || undefined,
       billing_period_finish: bpFinish || undefined,
       comment:               comment  || undefined,
+      // E-Rechnungs-Felder
+      buyer_reference:             buyerRef.trim()      || null,
+      buyer_order_reference:       orderRef.trim()      || null,
+      buyer_accounting_reference:  accountingRef.trim() || null,
+      remittance_information:      remittance.trim()    || null,
     }})
   }
 
@@ -463,6 +474,30 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
             <textarea rows={2} value={comment} onChange={e => setComment(e.target.value)}
               style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15 }} />
           </div>
+
+          {/* E-Rechnungs-Felder (BT-10/13/19/83) */}
+          <div style={{ marginTop: 12, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+            <button type="button" onClick={() => setShowEinvoice(s => !s)}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#374151', padding: 0 }}>
+              {showEinvoice ? '▼' : '▶'} E-Rechnungs-Detailfelder
+            </button>
+            {showEinvoice && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <FormField label="Käuferreferenz / Leitweg-ID (BT-10)" id="pp-buyer-ref"
+                  value={buyerRef} onChange={e => setBuyerRef(e.target.value)} />
+                <FormField label="Bestellnummer des Käufers (BT-13)" id="pp-order-ref"
+                  value={orderRef} onChange={e => setOrderRef(e.target.value)} />
+                <FormField label="Kostenstelle (BT-19)" id="pp-acc-ref"
+                  value={accountingRef} onChange={e => setAccountingRef(e.target.value)} />
+                <FormField label="Verwendungszweck (BT-83)" id="pp-remit"
+                  value={remittance} onChange={e => setRemittance(e.target.value)} />
+                <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+                  Optional. Leitweg-ID nur bei öffentlichen Auftraggebern.
+                </p>
+              </div>
+            )}
+          </div>
+
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">
             <button onClick={handleCancel}>Abbrechen</button>

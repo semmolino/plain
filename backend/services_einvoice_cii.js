@@ -126,6 +126,12 @@ function buildBuyer(data) {
   return `
       <ram:BuyerTradeParty>
         <ram:Name>${x(b.name)}</ram:Name>
+        ${b.contactName ? `
+        <ram:DefinedTradeContact>
+          <ram:PersonName>${x(b.contactName)}</ram:PersonName>
+          ${b.contactPhone ? `<ram:TelephoneUniversalCommunication><ram:CompleteNumber>${x(b.contactPhone)}</ram:CompleteNumber></ram:TelephoneUniversalCommunication>` : ''}
+          ${b.contactEmail ? `<ram:EmailURIUniversalCommunication><ram:URIID>${x(b.contactEmail)}</ram:URIID></ram:EmailURIUniversalCommunication>` : ''}
+        </ram:DefinedTradeContact>` : ''}
         <ram:PostalTradeAddress>
           ${b.postCode ? `<ram:PostcodeCode>${x(b.postCode)}</ram:PostcodeCode>` : ''}
           ${b.street   ? `<ram:LineOne>${x(b.street)}</ram:LineOne>` : ''}
@@ -352,16 +358,18 @@ ${buildNotes(data)}
   <rsm:SupplyChainTradeTransaction>
 ${lineItems}
     <ram:ApplicableHeaderTradeAgreement>
-      <ram:BuyerReference>${x(data.buyerReference || '-')}</ram:BuyerReference>
+      <ram:BuyerReference>${x(data.buyerReference || '')}</ram:BuyerReference>
 ${buildSeller(data, profile)}
 ${buildBuyer(data)}
       ${data.orderNumber    ? `<ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>${x(data.orderNumber)}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>` : ''}
       ${data.contractNumber ? `<ram:ContractReferencedDocument><ram:IssuerAssignedID>${x(data.contractNumber)}</ram:IssuerAssignedID></ram:ContractReferencedDocument>` : ''}
+      ${data.projectNumber  ? `<ram:SpecifiedProcuringProject><ram:ID>${x(data.projectNumber)}</ram:ID><ram:Name>${x(data.projectNumber)}</ram:Name></ram:SpecifiedProcuringProject>` : ''}
     </ram:ApplicableHeaderTradeAgreement>
 
 ${buildDelivery(data)}
 
     <ram:ApplicableHeaderTradeSettlement>
+      ${data.remittanceInformation ? `<ram:PaymentReference>${x(data.remittanceInformation)}</ram:PaymentReference>` : ''}
       <ram:InvoiceCurrencyCode>${x(data.currency)}</ram:InvoiceCurrencyCode>
 ${buildPaymentMeans(data)}
 ${buildTaxSubtotals(data, profile)}
@@ -370,6 +378,7 @@ ${buildAllowances(data)}
 ${buildPaymentTerms(data, profile)}
 ${buildReferencedDocuments(data)}
 ${buildMonetarySummation(data, profile)}
+      ${data.buyerAccountingRef ? `<ram:ReceivableSpecifiedTradeAccountingAccount><ram:ID>${x(data.buyerAccountingRef)}</ram:ID></ram:ReceivableSpecifiedTradeAccountingAccount>` : ''}
     </ram:ApplicableHeaderTradeSettlement>
   </rsm:SupplyChainTradeTransaction>
 </rsm:CrossIndustryInvoice>`;

@@ -181,7 +181,8 @@ function generateUblXml(data) {
   ${data.comment ? `<cbc:Note>${x(data.comment)}</cbc:Note>` : ''}
   ${buildSecurityRetentionNote(data)}
   <cbc:DocumentCurrencyCode>${x(cur)}</cbc:DocumentCurrencyCode>
-  <cbc:BuyerReference>${x(data.buyerReference || '-')}</cbc:BuyerReference>
+  ${data.buyerAccountingRef ? `<cbc:AccountingCost>${x(data.buyerAccountingRef)}</cbc:AccountingCost>` : ''}
+  <cbc:BuyerReference>${x(data.buyerReference || '')}</cbc:BuyerReference>
 
   ${data.billingPeriodStart || data.billingPeriodEnd ? `
   <cac:InvoicePeriod>
@@ -192,6 +193,7 @@ function generateUblXml(data) {
   ${data.orderNumber    ? `<cac:OrderReference><cbc:ID>${x(data.orderNumber)}</cbc:ID></cac:OrderReference>` : ''}
 ${buildBillingReferences(data)}
   ${data.contractNumber ? `<cac:ContractDocumentReference><cbc:ID>${x(data.contractNumber)}</cbc:ID></cac:ContractDocumentReference>` : ''}
+  ${data.projectNumber  ? `<cac:ProjectReference><cbc:ID>${x(data.projectNumber)}</cbc:ID></cac:ProjectReference>` : ''}
 
   <cac:AccountingSupplierParty>
     <cac:Party>
@@ -243,12 +245,19 @@ ${buildBillingReferences(data)}
       <cac:PartyLegalEntity>
         <cbc:RegistrationName>${x(b.name)}</cbc:RegistrationName>
       </cac:PartyLegalEntity>
+      ${b.contactName ? `
+      <cac:Contact>
+        <cbc:Name>${x(b.contactName)}</cbc:Name>
+        ${b.contactPhone ? `<cbc:Telephone>${x(b.contactPhone)}</cbc:Telephone>` : ''}
+        ${b.contactEmail ? `<cbc:ElectronicMail>${x(b.contactEmail)}</cbc:ElectronicMail>` : ''}
+      </cac:Contact>` : ''}
     </cac:Party>
   </cac:AccountingCustomerParty>
 
   ${s.iban ? `
   <cac:PaymentMeans>
     <cbc:PaymentMeansCode>58</cbc:PaymentMeansCode>
+    ${data.remittanceInformation ? `<cbc:PaymentID>${x(data.remittanceInformation)}</cbc:PaymentID>` : ''}
     <cac:PayeeFinancialAccount>
       <cbc:ID>${x(s.iban)}</cbc:ID>
       ${s.bic ? `<cac:FinancialInstitutionBranch><cbc:ID>${x(s.bic)}</cbc:ID></cac:FinancialInstitutionBranch>` : ''}

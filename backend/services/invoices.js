@@ -874,6 +874,12 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
     payload.PAYMENT_MEANS_ID = pm;
   }
 
+  // E-Rechnung Branch 1 — Quick-Win-BT-Felder (BT-10/13/19/83)
+  if (body.buyer_reference          !== undefined) payload.BUYER_REFERENCE             = String(body.buyer_reference          || "").trim() || null;
+  if (body.buyer_order_reference    !== undefined) payload.BUYER_ORDER_REFERENCE       = String(body.buyer_order_reference    || "").trim() || null;
+  if (body.buyer_accounting_reference !== undefined) payload.BUYER_ACCOUNTING_REFERENCE = String(body.buyer_accounting_reference || "").trim() || null;
+  if (body.remittance_information   !== undefined) payload.REMITTANCE_INFORMATION      = String(body.remittance_information   || "").trim() || null;
+
   if (payload.VAT_PERCENT !== undefined) {
     const totalNet = toNum(currentInv.TOTAL_AMOUNT_NET);
     const vatPercent = toNum(payload.VAT_PERCENT);
