@@ -46,6 +46,11 @@ export interface Invoice {
   SE_PERCENT?:            number | null
   SE_BASIS?:              'BRUTTO' | 'NETTO' | null
   SE_RELEASE_TOTAL?:      number | null
+  // E-Rechnung Branch 1 — BT-Felder
+  BUYER_REFERENCE?:             string | null   // BT-10 Käuferreferenz / Leitweg-ID
+  BUYER_ORDER_REFERENCE?:       string | null   // BT-13 Bestellnummer
+  BUYER_ACCOUNTING_REFERENCE?:  string | null   // BT-19 Kostenstelle
+  REMITTANCE_INFORMATION?:      string | null   // BT-83 Verwendungszweck
 }
 
 export interface PartialPayment {
@@ -84,6 +89,11 @@ export interface PartialPayment {
   SE_PERCENT?:                  number | null
   SE_BASIS?:                    'BRUTTO' | 'NETTO' | null
   SE_RELEASED_BY_INVOICE_ID?:   number | null
+  // E-Rechnung Branch 1 — BT-Felder
+  BUYER_REFERENCE?:             string | null
+  BUYER_ORDER_REFERENCE?:       string | null
+  BUYER_ACCOUNTING_REFERENCE?:  string | null
+  REMITTANCE_INFORMATION?:      string | null
 }
 
 export interface BillingProposal {
@@ -183,6 +193,11 @@ export const patchInvoice = (id: number, body: Partial<{
   se_percent: number | null; se_basis: 'BRUTTO' | 'NETTO' | null
   se_basis_amt: number | null; se_amount: number | null
   se_release_total: number | null
+  // E-Rechnung Branch 1 — BT-Felder
+  buyer_reference: string | null
+  buyer_order_reference: string | null
+  buyer_accounting_reference: string | null
+  remittance_information: string | null
 }>) => apiClient.patch<{ ok: boolean }>(`/invoices/${id}`, body)
 
 export const getInvoiceBillingProposal = (id: number) =>
@@ -289,6 +304,11 @@ export const patchPartialPayment = (id: number, body: Partial<{
   cash_discount_percent: number; cash_discount_days: number; cash_discount_amount: number
   se_percent: number | null; se_basis: 'BRUTTO' | 'NETTO' | null
   se_basis_amt: number | null; se_amount: number | null
+  // E-Rechnung Branch 1 — BT-Felder
+  buyer_reference: string | null
+  buyer_order_reference: string | null
+  buyer_accounting_reference: string | null
+  remittance_information: string | null
 }>) => apiClient.patch<{ success: boolean }>(`/partial-payments/${id}`, body)
 
 export const getPpBillingProposal = (id: number) =>

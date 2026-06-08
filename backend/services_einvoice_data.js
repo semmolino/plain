@@ -415,6 +415,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       vatId:         buyerVatId,
       debitorNumber: buyerDebitorNumber,
       email:         String(doc.CONTACT_MAIL ?? '').trim(),
+      // BT-56/57/58 Buyer Contact (Ansprechpartner beim Kaeufer)
+      contactName:   String(doc.CONTACT       ?? '').trim(),
+      contactPhone:  String(doc.CONTACT_PHONE ?? '').trim(),
+      contactEmail:  String(doc.CONTACT_MAIL  ?? '').trim(),
     },
 
     lines,
@@ -438,9 +442,11 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
     canceledDocNumber,
     canceledDocDate,
-    projectNumber,
-    contractNumber,
-    orderNumber: '',
+    projectNumber,                                          // BT-11
+    contractNumber,                                         // BT-12
+    orderNumber:           String(doc.BUYER_ORDER_REFERENCE      ?? '').trim(), // BT-13
+    buyerAccountingRef:    String(doc.BUYER_ACCOUNTING_REFERENCE ?? '').trim(), // BT-19
+    remittanceInformation: String(doc.REMITTANCE_INFORMATION     ?? '').trim(), // BT-83
   };
 }
 

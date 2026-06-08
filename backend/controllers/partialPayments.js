@@ -283,6 +283,12 @@ async function patchPartialPayment(req, res, supabase) {
     payload.PAYMENT_MEANS_ID = pm;
   }
 
+  // E-Rechnung Branch 1 — Quick-Win-BT-Felder (BT-10/13/19/83)
+  if (b.buyer_reference            !== undefined) payload.BUYER_REFERENCE             = String(b.buyer_reference            || "").trim() || null;
+  if (b.buyer_order_reference      !== undefined) payload.BUYER_ORDER_REFERENCE       = String(b.buyer_order_reference      || "").trim() || null;
+  if (b.buyer_accounting_reference !== undefined) payload.BUYER_ACCOUNTING_REFERENCE  = String(b.buyer_accounting_reference || "").trim() || null;
+  if (b.remittance_information     !== undefined) payload.REMITTANCE_INFORMATION      = String(b.remittance_information     || "").trim() || null;
+
   let { error } = await supabase.from("PARTIAL_PAYMENT").update(payload).eq("ID", id).eq("TENANT_ID", req.tenantId);
   if (error && String(error.message || "").includes("SE_")) {
     // Migration 0047 not yet run — retry without SE fields
