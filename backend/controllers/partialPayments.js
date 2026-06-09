@@ -6,6 +6,7 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
 const { generateUblXml } = require("../services_einvoice_ubl");
 const { embedXmlIntoPdf } = require("../services_einvoice_pdf_embed");
+const { validateEInvoiceData } = require("../services_einvoice_validator");
 
 // ---------------------------------------------------------------------------
 // GET /api/v1/partial-payments/open-se?project_id=...
@@ -799,12 +800,33 @@ async function bookPartialPayment(req, res, supabase) {
     return res.status(400).json({ error: "PARTIAL_PAYMENT ist bereits gebucht" });
   }
 
+  const force = String(req.query.force || req.body?.force || "") === "1" || req.body?.force === true;
+
   try {
-    const result = await svc.bookPartialPayment(supabase, { id, pp });
+    const result = await svc.bookPartialPayment(supabase, { id, pp, tenantId: req.tenantId, force });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;
+    if (e?.validation) {
+      return res.status(status).json({ error: e.message, validation: e.validation });
+    }
     return res.status(status).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/partial-payments/:id/validate
+// ---------------------------------------------------------------------------
+async function validatePp(req, res, supabase) {
+  try {
+    const ppId = parseInt(req.params.id, 10);
+    if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
+
+    const data = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const result = validateEInvoiceData(data);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
   }
 }
 
@@ -1026,4 +1048,5 @@ module.exports = {
   bookPartialPayment,
   getPdf,
   getPdfHybrid,
+  validatePp,
 };

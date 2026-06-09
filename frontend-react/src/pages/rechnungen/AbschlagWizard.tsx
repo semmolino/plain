@@ -4,14 +4,17 @@ import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
+import { ValidationModal } from '@/components/ui/ValidationModal'
 import {
   searchContracts,
   initPartialPayment, patchPartialPayment, getPpBillingProposal,
-  putPpPerformance, getPpTec, postPpTec, bookPartialPayment, deletePartialPayment,
+  putPpPerformance, getPpTec, postPpTec, bookPartialPayment, bookPartialPaymentForce, deletePartialPayment,
   openPpPdf, downloadPpEinvoice,
   VAT_CATEGORY_LABELS,
   type BillingProposal, type TecEntry, type VatCategory,
+  type ValidationResult,
 } from '@/api/rechnungen'
+import { ApiRequestError } from '@/api/client'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
 import { API_BASE }     from '@/api/client'
@@ -270,6 +273,34 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['partial-payments'] })
       setMsg({ text: `Abschlagsrechnung ${res.success ? 'gebucht ✅' : ''}`, type: 'success' })
+      resetAll()
+    },
+    onError: (e: Error) => {
+      if (e instanceof ApiRequestError && e.status === 422) {
+        const details = e.details as { validation?: ValidationResult } | undefined
+        if (details?.validation) {
+          setValidationResult(details.validation)
+          setValidationOpen(true)
+          return
+        }
+      }
+      setMsg({ text: e.message, type: 'error' })
+    },
+  })
+
+  // ── E-Rechnung Vorpruefung (Branch 6) ──────────────────────────────────────
+  const [validationOpen, setValidationOpen]     = useState(false)
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+
+  const forceMut = useMutation({
+    mutationFn: async () => {
+      if (!draftId) throw new Error('Keine Abschlags-ID')
+      return bookPartialPaymentForce(draftId)
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+      setValidationOpen(false)
+      setMsg({ text: 'Abschlagsrechnung notgebucht ⚠️', type: 'success' })
       resetAll()
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -835,6 +866,14 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
         confirmLabel="Bestätigen"
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
+      />
+
+      <ValidationModal
+        open={validationOpen}
+        onClose={() => setValidationOpen(false)}
+        result={validationResult}
+        onForce={() => forceMut.mutate()}
+        onAcknowledge={() => forceMut.mutate()}
       />
     </div>
   )

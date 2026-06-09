@@ -6,6 +6,7 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
 const { generateUblXml } = require("../services_einvoice_ubl");
 const { embedXmlIntoPdf } = require("../services_einvoice_pdf_embed");
+const { validateEInvoiceData } = require("../services_einvoice_validator");
 
 // ---------------------------------------------------------------------------
 // GET /api/invoices
@@ -506,15 +507,21 @@ async function bookInvoice(req, res, supabase) {
     ? req.body.release_partial_payment_ids.map(n => parseInt(String(n), 10)).filter(Number.isFinite)
     : [];
 
+  const force = String(req.query.force || req.body?.force || "") === "1" || req.body?.force === true;
+
   try {
     const result = await svc.bookInvoice(supabase, {
       id, inv,
       releasePpIds,
       tenantId: req.tenantId,
+      force,
     });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;
+    if (e?.validation) {
+      return res.status(status).json({ error: e.message, validation: e.validation });
+    }
     return res.status(status).json({ error: e?.message || String(e) });
   }
 }
@@ -613,6 +620,24 @@ async function getPdf(req, res, supabase) {
     res.send(Buffer.from(pdf));
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/invoices/:id/validate
+// Validiert die InvoiceData gegen die EN16931 Business-Rules.
+// Liefert { ok, errors, warnings } -- ohne Buchung.
+// ---------------------------------------------------------------------------
+async function validateInvoice(req, res, supabase) {
+  try {
+    const invoiceId = parseInt(req.params.id, 10);
+    if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
+
+    const data = await loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId);
+    const result = validateEInvoiceData(data);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
   }
 }
 
@@ -794,4 +819,5 @@ module.exports = {
   getInvoice,
   getPdf,
   getPdfHybrid,
+  validateInvoice,
 };

@@ -12,10 +12,12 @@ export const API_BASE = '/api/v1'
 
 export class ApiRequestError extends Error {
   readonly status: number
-  constructor(status: number, message: string) {
+  readonly details?: unknown
+  constructor(status: number, message: string, details?: unknown) {
     super(message)
     this.name = 'ApiRequestError'
     this.status = status
+    this.details = details
   }
 }
 
@@ -43,13 +45,14 @@ async function request<T>(
 
   if (!res.ok) {
     let message = `HTTP ${res.status}`
+    let payload: Record<string, unknown> | null = null
     try {
-      const body = await res.json() as { error?: string }
-      if (body.error) message = body.error
+      payload = await res.json() as Record<string, unknown>
+      if (typeof payload.error === 'string') message = payload.error
     } catch {
       // ignore parse error
     }
-    throw new ApiRequestError(res.status, message)
+    throw new ApiRequestError(res.status, message, payload)
   }
 
   // 204 No Content

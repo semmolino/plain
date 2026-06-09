@@ -4,18 +4,20 @@ import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
+import { ValidationModal } from '@/components/ui/ValidationModal'
 import {
   searchContracts,
   initInvoice, patchInvoice,
   getFinalInvoicePhases, saveFinalInvoicePhases,
   getFinalInvoiceDeductions, saveFinalInvoiceDeductions,
-  bookFinalInvoice, deleteInvoice,
+  bookFinalInvoice, bookFinalInvoiceForce, deleteInvoice,
   openInvoicePdf, downloadInvoiceEinvoice,
   fetchOpenSeForProject,
   VAT_CATEGORY_LABELS,
   type InvoiceType, type FinalPhase, type FinalDeduction, type FinalTotals,
-  type OpenSeEntry, type VatCategory,
+  type OpenSeEntry, type VatCategory, type ValidationResult,
 } from '@/api/rechnungen'
+import { ApiRequestError } from '@/api/client'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
 import { API_BASE }     from '@/api/client'
@@ -315,6 +317,34 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['invoices'] })
       setMsg({ text: 'Schlussrechnung gebucht ✅', type: 'success' })
+      resetAll()
+    },
+    onError: (e: Error) => {
+      if (e instanceof ApiRequestError && e.status === 422) {
+        const details = e.details as { validation?: ValidationResult } | undefined
+        if (details?.validation) {
+          setValidationResult(details.validation)
+          setValidationOpen(true)
+          return
+        }
+      }
+      setMsg({ text: e.message, type: 'error' })
+    },
+  })
+
+  // ── E-Rechnung Vorpruefung (Branch 6) ──────────────────────────────────────
+  const [validationOpen, setValidationOpen]     = useState(false)
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+
+  const forceMut = useMutation({
+    mutationFn: async () => {
+      if (!draftId) throw new Error('Keine Rechnungs-ID')
+      return bookFinalInvoiceForce(draftId, { release_partial_payment_ids: Array.from(seReleaseSel) })
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['invoices'] })
+      setValidationOpen(false)
+      setMsg({ text: 'Schlussrechnung notgebucht ⚠️', type: 'success' })
       resetAll()
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -1099,6 +1129,14 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
         confirmLabel="Bestätigen"
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
+      />
+
+      <ValidationModal
+        open={validationOpen}
+        onClose={() => setValidationOpen(false)}
+        result={validationResult}
+        onForce={() => forceMut.mutate()}
+        onAcknowledge={() => forceMut.mutate()}
       />
     </div>
   )

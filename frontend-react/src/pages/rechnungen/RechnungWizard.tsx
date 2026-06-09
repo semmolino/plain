@@ -4,14 +4,17 @@ import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
+import { ValidationModal } from '@/components/ui/ValidationModal'
 import {
   searchContracts,
   initInvoice, patchInvoice, getInvoiceBillingProposal,
-  putInvoicePerformance, getInvoiceTec, postInvoiceTec, bookInvoice, deleteInvoice,
+  putInvoicePerformance, getInvoiceTec, postInvoiceTec, bookInvoice, bookInvoiceForce, deleteInvoice,
   openInvoicePdf, downloadInvoiceEinvoice,
   VAT_CATEGORY_LABELS,
   type InvoiceType, type BillingProposal, type TecEntry, type VatCategory,
+  type ValidationResult,
 } from '@/api/rechnungen'
+import { ApiRequestError } from '@/api/client'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
 import { API_BASE }     from '@/api/client'
@@ -264,6 +267,35 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['invoices'] })
       setMsg({ text: 'Rechnung gebucht ✅', type: 'success' })
+      resetAll()
+    },
+    onError: (e: Error) => {
+      // 422 mit Validierungsergebnis => Modal aufmachen statt Fehler-Toast
+      if (e instanceof ApiRequestError && e.status === 422) {
+        const details = e.details as { validation?: ValidationResult } | undefined
+        if (details?.validation) {
+          setValidationResult(details.validation)
+          setValidationOpen(true)
+          return
+        }
+      }
+      setMsg({ text: e.message, type: 'error' })
+    },
+  })
+
+  // ── E-Rechnung Vorpruefung (Branch 6) ──────────────────────────────────────
+  const [validationOpen, setValidationOpen]     = useState(false)
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+
+  const forceMut = useMutation({
+    mutationFn: async () => {
+      if (!draftId) throw new Error('Keine Rechnungs-ID')
+      return bookInvoiceForce(draftId)
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['invoices'] })
+      setValidationOpen(false)
+      setMsg({ text: 'Rechnung notgebucht ⚠️', type: 'success' })
       resetAll()
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -801,6 +833,14 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
         confirmLabel="Bestätigen"
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
+      />
+
+      <ValidationModal
+        open={validationOpen}
+        onClose={() => setValidationOpen(false)}
+        result={validationResult}
+        onForce={() => forceMut.mutate()}
+        onAcknowledge={() => forceMut.mutate()}
       />
     </div>
   )

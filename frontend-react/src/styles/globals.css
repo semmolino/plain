@@ -954,6 +954,21 @@ input::placeholder { color: var(--text-4); }
 .modal-card.modal-wide { max-width: 860px; }
 .modal-card.modal-xl   { max-width: 1100px; }
 
+/* ── Validation modal (E-Rechnung BR-Check) ─────────────────────────────── */
+.validation-summary       { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
+.validation-summary.clean { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.validation-section       { margin-top: 12px; }
+.validation-heading       { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin: 0 0 6px 0; }
+.validation-heading.error   { color: #b91c1c; }
+.validation-heading.warning { color: #b45309; }
+.validation-list          { list-style: none; padding: 0; margin: 0; max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+.validation-item          { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.validation-item:last-child { border-bottom: none; }
+.validation-item.error    { background: #fef2f2; }
+.validation-item.warning  { background: #fffbeb; }
+.validation-code          { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--text-4); }
+.validation-msg           { color: var(--text); line-height: 1.4; }
+
 /* ── Admin section ───────────────────────────────────────────────────────── */
 .admin-section { max-width: 480px; }
 .admin-section-hint { font-size: 12px; color: var(--text-4); margin-bottom: 14px; }

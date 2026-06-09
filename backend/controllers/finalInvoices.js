@@ -75,14 +75,19 @@ async function bookFinalInvoice(req, res, supabase) {
     const releasePpIds = Array.isArray(req.body?.release_partial_payment_ids)
       ? req.body.release_partial_payment_ids.map(n => parseInt(String(n), 10)).filter(Number.isFinite)
       : [];
+    const force = String(req.query.force || req.body?.force || "") === "1" || req.body?.force === true;
     const result = await svc.bookFinalInvoice(supabase, {
       id: req.params.id,
       tenantId: req.tenantId,
       releasePpIds,
+      force,
     });
     res.json({ success: true, ...result });
   } catch (err) {
     const status = err.status || 500;
+    if (err.validation) {
+      return res.status(status).json({ error: err.message, validation: err.validation });
+    }
     res.status(status).json({ error: err.message || err });
   }
 }

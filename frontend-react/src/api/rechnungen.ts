@@ -306,6 +306,34 @@ export function downloadInvoiceEinvoice(
   return downloadWithAuth(`${base}/einvoice/${format}?${params}`, fileName)
 }
 
+// E-Rechnung BR-Validierung (Branch 6)
+export interface ValidationIssue {
+  code: string
+  severity: 'error' | 'warning'
+  message: string
+  btField: string | null
+}
+export interface ValidationResult {
+  ok: boolean
+  errors: ValidationIssue[]
+  warnings: ValidationIssue[]
+}
+
+export const validateInvoice = (id: number) =>
+  apiClient.get<ValidationResult>(`/invoices/${id}/validate`)
+
+export const validatePp = (id: number) =>
+  apiClient.get<ValidationResult>(`/partial-payments/${id}/validate`)
+
+export const bookInvoiceForce = (id: number) =>
+  apiClient.post<{ success: boolean }>(`/invoices/${id}/book?force=1`, {})
+
+export const bookPartialPaymentForce = (id: number) =>
+  apiClient.post<{ success: boolean }>(`/partial-payments/${id}/book?force=1`, {})
+
+export const bookFinalInvoiceForce = (id: number, opts?: { release_partial_payment_ids?: number[] }) =>
+  apiClient.post<{ success: boolean }>(`/final-invoices/${id}/book?force=1`, opts || {})
+
 // Hybrid PDF (Rechnungs-PDF mit eingebetteter ZUGFeRD-XML)
 export function downloadInvoicePdfHybrid(
   id: number,

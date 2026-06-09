@@ -522,7 +522,7 @@ async function getFinalInvoice(supabase, { id, tenantId }) {
   return { ...inv, PHASE_TOTAL: phaseTotal, DEDUCTIONS_TOTAL: deductionsTotal };
 }
 
-async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [] }) {
+async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], force = false }) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
     .select("ID, COMPANY_ID, PROJECT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID, INVOICE_TYPE, TENANT_ID")
@@ -535,6 +535,28 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [] }) {
   const validTypes = ["schlussrechnung", "teilschlussrechnung"];
   if (!validTypes.includes(inv.INVOICE_TYPE)) {
     throw { status: 400, message: "Nur Schluss- und Teilschlussrechnungen können über diesen Endpunkt gebucht werden" };
+  }
+
+  // ── E-Rechnung Vorpruefung (Branch 6) ─────────────────────────────────────
+  try {
+    const { loadInvoiceData } = require("../services_einvoice_data");
+    const { validateEInvoiceData } = require("../services_einvoice_validator");
+    const data = await loadInvoiceData(supabase, parseInt(id, 10), "INVOICE", tenantId);
+    const v = validateEInvoiceData(data);
+    if (!v.ok && !force) {
+      const err = new Error(`E-Rechnung Validierung fehlgeschlagen: ${v.errors.length} Fehler`);
+      err.status = 422;
+      err.validation = v;
+      throw err;
+    }
+  } catch (e) {
+    if (e?.status === 422 && e?.validation) throw e;
+    if (!force) {
+      const err = new Error(`Vorpruefung konnte nicht abgeschlossen werden: ${e?.message || e}`);
+      err.status = 422;
+      err.validation = { ok: false, errors: [{ code: 'BR-LOAD', severity: 'error', message: err.message, btField: null }], warnings: [] };
+      throw err;
+    }
   }
 
   // ── Sicherheitseinbehalt-Auflösung (Phase 2) ──────────────────────────────
