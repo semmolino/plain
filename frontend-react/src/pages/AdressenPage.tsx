@@ -84,6 +84,11 @@ interface AddrFormProps {
 }
 
 function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
+  // E-Rechnungs-Angaben (Kauferreferenz / Peppol) standardmaessig versteckt —
+  // wird automatisch aufgeklappt, wenn beim Bearbeiten bereits Werte vorhanden sind.
+  const hasEinvoiceData = !!(vals.buyer_reference || vals.peppol_endpoint_id || vals.peppol_scheme_id)
+  const [showEinvoice, setShowEinvoice] = useState(hasEinvoiceData)
+
   return (
     <div className="master-form">
       <FormField label="Name 1*"        id="an1" value={vals.address_name_1}       onChange={e => setK('address_name_1')(e.target.value)} />
@@ -102,28 +107,51 @@ function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
       </div>
       <FormField label="Kundennr."      id="acn" value={vals.customer_number ?? ''} onChange={e => setK('customer_number')(e.target.value)} />
       <FormField label="Steuernummer"   id="ati" value={vals.tax_id ?? ''}          onChange={e => setK('tax_id')(e.target.value)} />
-      <FormField label="Käuferreferenz" id="abr" value={vals.buyer_reference ?? ''} onChange={e => setK('buyer_reference')(e.target.value)} />
-      <div className="form-group">
-        <label htmlFor="ape-id">Peppol Endpoint-ID</label>
-        <input id="ape-id" type="text"
-          value={vals.peppol_endpoint_id ?? ''}
-          onChange={e => setK('peppol_endpoint_id')(e.target.value)}
-          placeholder="z.B. DE123456789 oder GLN" />
+
+      {/* E-Rechnungs-Angaben — aufklappbar */}
+      <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 14, marginTop: 4 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: showEinvoice ? 12 : 0 }}>
+          <input
+            type="checkbox"
+            checked={showEinvoice}
+            onChange={e => setShowEinvoice(e.target.checked)}
+            style={{ width: 16, height: 16, cursor: 'pointer' }}
+          />
+          <span style={{ fontWeight: 500 }}>Angaben für E-Rechnung</span>
+        </label>
+        {!showEinvoice && (
+          <p style={{ fontSize: 12, color: '#6b7280', margin: '6px 0 0 26px' }}>
+            Käuferreferenz / Leitweg-ID und Peppol-Endpoint — nur bei öffentlichen Auftraggebern oder Kunden im Peppol-Netz nötig.
+          </p>
+        )}
+        {showEinvoice && (
+          <>
+            <FormField label="Käuferreferenz / Leitweg-ID" id="abr" value={vals.buyer_reference ?? ''} onChange={e => setK('buyer_reference')(e.target.value)} />
+            <div className="form-group">
+              <label htmlFor="ape-id">Peppol Endpoint-ID</label>
+              <input id="ape-id" type="text"
+                value={vals.peppol_endpoint_id ?? ''}
+                onChange={e => setK('peppol_endpoint_id')(e.target.value)}
+                placeholder="z.B. DE123456789 oder GLN" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="ape-sc">Peppol Scheme-ID (EAS)</label>
+              <select id="ape-sc" value={vals.peppol_scheme_id ?? ''} onChange={e => setK('peppol_scheme_id')(e.target.value)}>
+                <option value="">— keiner —</option>
+                <option value="0088">0088 — GLN</option>
+                <option value="9930">9930 — DE USt-IdNr.</option>
+                <option value="9931">9931 — AT VAT</option>
+                <option value="9957">9957 — FR SIRET</option>
+                <option value="9959">9959 — BE Enterprise</option>
+                <option value="0184">0184 — DK CVR</option>
+                <option value="0192">0192 — NO Org.nr</option>
+                <option value="EM">EM — E-Mail</option>
+              </select>
+            </div>
+          </>
+        )}
       </div>
-      <div className="form-group">
-        <label htmlFor="ape-sc">Peppol Scheme-ID (EAS)</label>
-        <select id="ape-sc" value={vals.peppol_scheme_id ?? ''} onChange={e => setK('peppol_scheme_id')(e.target.value)}>
-          <option value="">— keiner —</option>
-          <option value="0088">0088 — GLN</option>
-          <option value="9930">9930 — DE USt-IdNr.</option>
-          <option value="9931">9931 — AT VAT</option>
-          <option value="9957">9957 — FR SIRET</option>
-          <option value="9959">9959 — BE Enterprise</option>
-          <option value="0184">0184 — DK CVR</option>
-          <option value="0192">0192 — NO Org.nr</option>
-          <option value="EM">EM — E-Mail</option>
-        </select>
-      </div>
+
       <Message text={m?.text ?? null} type={m?.type} />
     </div>
   )
