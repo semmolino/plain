@@ -32,9 +32,9 @@ const PAGE_SIZE = 25
 const TABS: { id: string; label: string; permissions: string[] }[] = [
   { id: 'list',      label: 'Mitarbeiterliste',     permissions: ['employees.view'] },
   { id: 'create',    label: 'Anlegen',              permissions: ['employees.create'] },
-  { id: 'reporting', label: 'Reporting',            permissions: ['employees.view','reports.view'] },
-  { id: 'overview',  label: 'Monatsübersicht',      permissions: ['employees.month_close.edit','employees.view'] },
-  { id: 'arbzg',     label: 'Arbeitszeit (Details)',permissions: ['employees.view'] },
+  { id: 'reporting', label: 'Reporting',            permissions: ['employees.bookings.view_all'] },
+  { id: 'overview',  label: 'Monatsübersicht',      permissions: ['employees.bookings.view_all','employees.month_close.edit'] },
+  { id: 'arbzg',     label: 'Arbeitszeit (Details)',permissions: ['employees.bookings.view_all'] },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']

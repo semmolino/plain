@@ -1,4 +1,5 @@
 const express = require("express");
+const { requirePermission } = require("../middleware/permissions");
 
 /**
  * Reporting endpoints
@@ -15,6 +16,15 @@ const express = require("express");
  */
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 4: dedizierte Reporting-Endpoints (/project/*, /projects/*,
+  // /company-kpis, /trends, /finance/*) erfordern reports.view.
+  // /dashboard/* bleibt offen, weil das Dashboard fuer jeden User mit
+  // dashboard.view zugaenglich sein muss.
+  router.use((req, res, next) => {
+    if (req.path.startsWith("/dashboard/")) return next();
+    return requirePermission("reports.view")(req, res, next);
+  });
 
   function requireTenantId(req, res) {
     const tenantId = req.tenantId;

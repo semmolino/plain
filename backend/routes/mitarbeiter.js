@@ -30,19 +30,41 @@ async function checkEmployeeDuplicates(supabase, tenantId, { short_name, personn
 module.exports = (supabase) => {
   const router = express.Router();
 
-  // Phase 2: Mitarbeiter-Routen erfordern employees.view.
-  // Ausnahmen:
-  //   /genders, /                  -> Lookups (Geschlechter, Kurzliste fuer Dropdowns)
-  //   /:id/balance, /:id/balance/running -> eigene Daten muessen lesbar bleiben
-  //                                         (wird im Handler weiter geprueft)
-  //   /search                      -> Suche fuer Dropdowns ueberall
-  const VIEW_GUARD = requirePermission("employees.view");
-  const lookupPaths = new Set(["/genders","/","/search"]);
+  // Phase 2+4: Mitarbeiter-Routen erfordern employees.view.
+  // Lookup-Ausnahmen (Dropdowns) + "eigene Daten implicit right":
+  //   /genders, /, /search        -> Lookups
+  //   /:id/balance(/running)      -> eigener Saldo
+  //   /:id/work-models            -> eigenes Arbeitszeitmodell
+  //   /:id/month-close/:y/:m      -> eigene Monatsabschluss-Daten lesen
+  //
+  // /:id/cp-rate(s) sind sensibel und erfordern IMMER employees.salary.view
+  // (durchgehend, auch fuer eigenen Datensatz — Gehalt ist tabu).
+  const VIEW_GUARD   = requirePermission("employees.view");
+  const SALARY_GUARD = requirePermission("employees.salary.view");
+  const lookupPaths  = new Set(["/genders","/","/search"]);
+
+  function isOwn(req, id) {
+    return parseInt(id, 10) === req.employeeId;
+  }
+
   router.use((req, res, next) => {
     if (lookupPaths.has(req.path)) return next();
-    // Eigenen Saldo / eigene Daten immer erlauben (own data implicit right)
-    const m = req.path.match(/^\/(\d+)\/balance/);
-    if (m && parseInt(m[1], 10) === req.employeeId) return next();
+
+    // Salary (cp-rate / cp-rates): GET -> salary.view, mutationen werden
+    // bereits an den Endpoints mit salary.edit gegated.
+    const cpr = req.path.match(/^\/(\d+)\/(cp-rate|cp-rates)$/);
+    if (cpr && req.method === "GET") {
+      return SALARY_GUARD(req, res, next);
+    }
+
+    // Own-data implicit right:
+    const mBal = req.path.match(/^\/(\d+)\/balance/);
+    if (mBal && isOwn(req, mBal[1])) return next();
+    const mWm = req.path.match(/^\/(\d+)\/work-models$/);
+    if (mWm && req.method === "GET" && isOwn(req, mWm[1])) return next();
+    const mMc = req.path.match(/^\/(\d+)\/month-close\//);
+    if (mMc && req.method === "GET" && isOwn(req, mMc[1])) return next();
+
     return VIEW_GUARD(req, res, next);
   });
 
@@ -256,7 +278,7 @@ router.get("/", async (req, res) => {
 
 // ── Month-close overview (must be before /:id routes) ─────────────────────────
 // GET /mitarbeiter/month-close-overview
-router.get("/month-close-overview", async (req, res) => {
+router.get("/month-close-overview", requirePermission("employees.bookings.view_all"), async (req, res) => {
   const { data: employees, error: empErr } = await supabase
     .from("EMPLOYEE")
     .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
@@ -540,7 +562,7 @@ router.delete("/:id/month-close/:year/:month", requirePermission("employees.mont
 
 // ── Employee list report ───────────────────────────────────────────────────────
 // GET /mitarbeiter/report-list?mode=now|as_of|period&as_of_date=&date_from=&date_to=&employee_id=
-router.get("/report-list", async (req, res) => {
+router.get("/report-list", requirePermission("employees.bookings.view_all"), async (req, res) => {
   const mode       = req.query.mode       || 'now';
   const asOfDate   = req.query.as_of_date || null;
   const dateFrom   = req.query.date_from  || null;
