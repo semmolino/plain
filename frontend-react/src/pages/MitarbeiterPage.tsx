@@ -8,6 +8,9 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
 import { Pencil, Trash2 } from 'lucide-react'
+import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
+import { useFilterTabs } from '@/store/permissionsStore'
+import { Can } from '@/components/ui/Can'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
@@ -26,12 +29,12 @@ import { updateBuchung, deleteBuchung } from '@/api/projekte'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25
-const TABS = [
-  { id: 'list',      label: 'Mitarbeiterliste' },
-  { id: 'create',    label: 'Anlegen'          },
-  { id: 'reporting', label: 'Reporting'        },
-  { id: 'overview',  label: 'Monatsübersicht'  },
-  { id: 'arbzg',     label: 'Arbeitszeit (Details)' },
+const TABS: { id: string; label: string; permissions: string[] }[] = [
+  { id: 'list',      label: 'Mitarbeiterliste',     permissions: ['employees.view'] },
+  { id: 'create',    label: 'Anlegen',              permissions: ['employees.create'] },
+  { id: 'reporting', label: 'Reporting',            permissions: ['employees.bookings.view_all'] },
+  { id: 'overview',  label: 'Monatsübersicht',      permissions: ['employees.bookings.view_all','employees.month_close.edit'] },
+  { id: 'arbzg',     label: 'Arbeitszeit (Details)',permissions: ['employees.bookings.view_all'] },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -1558,6 +1561,104 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
   )
 }
 
+// ── Rolle pro Mitarbeiter (Badge + Edit-Modal) ───────────────────────────────
+
+function EmployeeRoleBadge({ employeeId, roles, mapping, onClick }: {
+  employeeId: number
+  roles:    UserRole[]
+  mapping:  EmployeeRoleMapping[]
+  onClick:  () => void
+}) {
+  const assignedIds = mapping.filter(m => m.EMPLOYEE_ID === employeeId).map(m => m.ROLE_ID)
+  const assigned    = roles.filter(r => assignedIds.includes(r.ID))
+
+  if (assigned.length === 0) {
+    return (
+      <button onClick={onClick} style={{
+        background: 'transparent', border: '1px dashed #d1d5db', borderRadius: 12, padding: '2px 8px',
+        fontSize: 11, color: '#9ca3af', cursor: 'pointer',
+      }}>+ Rolle</button>
+    )
+  }
+
+  return (
+    <button onClick={onClick} style={{
+      background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+      display: 'inline-flex', gap: 4, flexWrap: 'wrap',
+    }}>
+      {assigned.map(r => (
+        <span key={r.ID} style={{
+          background: r.COLOR || '#6b7280', color: '#fff',
+          fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+        }}>
+          {r.NAME_SHORT}
+        </span>
+      ))}
+    </button>
+  )
+}
+
+function EmployeeRoleEditModal({ employeeId, roles, mapping, onClose }: {
+  employeeId: number
+  roles:   UserRole[]
+  mapping: EmployeeRoleMapping[]
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const currentIds = mapping.filter(m => m.EMPLOYEE_ID === employeeId).map(m => m.ROLE_ID)
+  const [selected, setSelected] = useState<Set<number>>(new Set(currentIds))
+
+  const saveMut = useMutation({
+    mutationFn: () => setEmployeeRoles(employeeId, Array.from(selected)),
+    onSuccess: () => {
+      toast.success('Rollen aktualisiert')
+      void qc.invalidateQueries({ queryKey: ['employee-role-map'] })
+      void qc.invalidateQueries({ queryKey: ['user-roles'] })
+      onClose()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <Modal open onClose={onClose} title="Rolle zuweisen">
+      <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+        Mehrere Rollen sind möglich — der Mitarbeiter erhält die Vereinigungsmenge der Berechtigungen.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 380, overflowY: 'auto' }}>
+        {roles.map(r => {
+          const on = selected.has(r.ID)
+          return (
+            <label key={r.ID} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+              border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
+              background: on ? '#f0f9ff' : 'transparent',
+            }}>
+              <input type="checkbox" checked={on} onChange={() => setSelected(prev => {
+                const next = new Set(prev)
+                if (next.has(r.ID)) next.delete(r.ID); else next.add(r.ID)
+                return next
+              })} />
+              <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || '#6b7280' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{r.NAME_SHORT}</div>
+                {r.NAME_LONG && <div style={{ fontSize: 11, color: '#6b7280' }}>{r.NAME_LONG}</div>}
+              </div>
+              {r.IS_SYSTEM && <span style={{ fontSize: 10, color: '#6b7280' }}>SYSTEM</span>}
+            </label>
+          )
+        })}
+      </div>
+      <div className="modal-actions">
+        <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
+        <button className="btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+          {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function MitarbeiterPage() {
@@ -1572,6 +1673,7 @@ export function MitarbeiterPage() {
   const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>(() => lsGet<'asc'|'desc'>(`${ML}:sortDir`, 'asc'))
   const [page,      setPage]     = useState(1)
   const [editRow,   setEditRow]  = useState<Employee | null>(null)
+  const [editRoleEmpId, setEditRoleEmpId] = useState<number | null>(null)
   const [form,      setForm]     = useState<CreateEmployeePayload>(emptyCreateForm)
   const [createWmModelId,    setCreateWmModelId]    = useState('')
   const [createWmValidFrom,  setCreateWmValidFrom]  = useState('')
@@ -1587,8 +1689,12 @@ export function MitarbeiterPage() {
   const { data: genData }               = useQuery({ queryKey: ['emp-genders'],         queryFn: fetchEmployeeGenders   })
   const { data: deptData }              = useQuery({ queryKey: ['departments'],         queryFn: fetchDepartments       })
   const { data: wtmData }               = useQuery({ queryKey: ['working-time-models'], queryFn: fetchWorkingTimeModels })
+  const { data: rolesData }             = useQuery({ queryKey: ['user-roles'],          queryFn: fetchRoles })
+  const { data: empRoleData }           = useQuery({ queryKey: ['employee-role-map'],   queryFn: fetchEmployeeRoleMap })
 
   const employees  = listData?.data  ?? []
+  const userRoles  = rolesData?.data ?? []
+  const empRoleMap = empRoleData?.data ?? []
   const genders    = genData?.data   ?? []
   const departments = deptData?.data ?? []
   const workModels = wtmData?.data   ?? []
@@ -1699,7 +1805,7 @@ export function MitarbeiterPage() {
       <div className="master-page-header">
         <h1 className="master-page-title">Mitarbeiter</h1>
       </div>
-      <Tabs tabs={TABS} active={tab} onChange={t => { setTab(t); setCreateMsg(null) }} />
+      <Tabs tabs={useFilterTabs(TABS)} active={tab} onChange={t => { setTab(t); setCreateMsg(null) }} />
 
       <div className="master-section">
         {tab === 'list' && (
@@ -1740,6 +1846,7 @@ export function MitarbeiterPage() {
                       <th>Abteilung</th>
                       <th>Modell</th>
                       <th>Status</th>
+                      <th>Rolle</th>
                       <th>Dashboard-Rolle</th>
                       <th></th>
                     </tr>
@@ -1762,16 +1869,27 @@ export function MitarbeiterPage() {
                             {r.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}
                           </span>
                         </td>
+                        <td>
+                          <Can permission="employees.role.assign" fallback={
+                            <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => {}} />
+                          }>
+                            <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => setEditRoleEmpId(r.ID)} />
+                          </Can>
+                        </td>
                         <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
                           {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
                         </td>
                         <td className="doc-actions">
-                          <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
-                            <Pencil size={14} strokeWidth={2} />
-                          </button>
-                          <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(r)} title="Löschen">
-                            <Trash2 size={14} strokeWidth={2} />
-                          </button>
+                          <Can permission="employees.edit">
+                            <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
+                              <Pencil size={14} strokeWidth={2} />
+                            </button>
+                          </Can>
+                          <Can permission="employees.delete">
+                            <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(r)} title="Löschen">
+                              <Trash2 size={14} strokeWidth={2} />
+                            </button>
+                          </Can>
                         </td>
                       </tr>
                     ))}
@@ -1884,6 +2002,15 @@ export function MitarbeiterPage() {
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />
+
+      {editRoleEmpId !== null && (
+        <EmployeeRoleEditModal
+          employeeId={editRoleEmpId}
+          roles={userRoles}
+          mapping={empRoleMap}
+          onClose={() => setEditRoleEmpId(null)}
+        />
+      )}
     </div>
   )
 }

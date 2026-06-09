@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { fetchMe } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
+import { usePermissionsStore } from '@/store/permissionsStore'
 
 export type UrlFlowType = 'invite' | 'recovery' | null
 
@@ -41,8 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email:       me.email,
             companyName: me.company_name,
           })
+          // RBAC: Permissions des Users laden (soft-fail wenn Migration fehlt)
+          void usePermissionsStore.getState().reload()
         } catch {
           clearAuth()
+          usePermissionsStore.getState().clear()
         }
       } else {
         setLoading(false)

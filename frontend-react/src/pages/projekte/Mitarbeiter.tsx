@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Pencil, Trash2 } from 'lucide-react'
+import { Can } from '@/components/ui/Can'
 import {
   fetchProjectsShort, fetchActiveEmployees, fetchActiveRoles,
   fetchE2PByProject, createE2P, updateE2P, deleteE2P,
@@ -263,12 +264,14 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
                         <td>{row.ROLE_NAME_LONG  || '—'}</td>
                         <td className="num">{fmtRate(row.SP_RATE)}</td>
                         <td className="doc-actions">
-                          <button className="row-action-btn" onClick={() => startEdit(row)} title="Bearbeiten">
-                            <Pencil size={14} strokeWidth={2} />
-                          </button>
-                          <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(row)} title="Entfernen">
-                            <Trash2 size={14} strokeWidth={2} />
-                          </button>
+                          <Can permission="projects.hourly_rates.edit">
+                            <button className="row-action-btn" onClick={() => startEdit(row)} title="Bearbeiten">
+                              <Pencil size={14} strokeWidth={2} />
+                            </button>
+                            <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(row)} title="Entfernen">
+                              <Trash2 size={14} strokeWidth={2} />
+                            </button>
+                          </Can>
                         </td>
                       </>
                     )}

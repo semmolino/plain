@@ -1,9 +1,13 @@
 const express = require("express");
 const svc     = require("../services/mahnungenService");
 const { renderMahnungPdf } = require("../services_pdf_render");
+const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 2: alle Mahnungen-Routen erfordern dunning.view
+  router.use(requirePermission("dunning.view"));
 
   function tid(req) { return req.tenantId; }
   function eid(req) { return req.employeeId; }
@@ -20,8 +24,8 @@ module.exports = (supabase) => {
     }
   });
 
-  // PUT /mahnungen/settings
-  router.put("/settings", async (req, res) => {
+  // PUT /mahnungen/settings — gehoert in Mahnungs-Konfiguration (Einstellungen)
+  router.put("/settings", requirePermission("settings.dunning_config.edit"), async (req, res) => {
     try {
       const result = await svc.saveSettings(supabase, { tenantId: tid(req), levels: req.body.levels });
       res.json(result);
@@ -40,8 +44,8 @@ module.exports = (supabase) => {
     }
   });
 
-  // PUT /mahnungen/text-templates/:type
-  router.put("/text-templates/:type", async (req, res) => {
+  // PUT /mahnungen/text-templates/:type — Textvorlagen (settings)
+  router.put("/text-templates/:type", requirePermission("settings.text_templates.edit"), async (req, res) => {
     try {
       const result = await svc.saveTextTemplate(supabase, {
         tenantId:     tid(req),
@@ -75,8 +79,8 @@ module.exports = (supabase) => {
     }
   });
 
-  // PUT /mahnungen/upsert
-  router.put("/upsert", async (req, res) => {
+  // PUT /mahnungen/upsert — Mahnung anlegen/bearbeiten
+  router.put("/upsert", requirePermission("dunning.edit"), async (req, res) => {
     try {
       const result = await svc.upsertMahnung(supabase, {
         body:       req.body,
@@ -104,8 +108,8 @@ module.exports = (supabase) => {
     }
   });
 
-  // POST /mahnungen/:id/send
-  router.post("/:id/send", async (req, res) => {
+  // POST /mahnungen/:id/send — Mahnung versenden
+  router.post("/:id/send", requirePermission("dunning.send"), async (req, res) => {
     try {
       const result = await svc.sendMahnungEmail(supabase, {
         mahnungId:    Number(req.params.id),

@@ -7,6 +7,7 @@ import { RechnungWizard }        from '@/pages/rechnungen/RechnungWizard'
 import { SchlussrechnungWizard } from '@/pages/rechnungen/SchlussrechnungWizard'
 import { MahnungenListe }        from '@/pages/rechnungen/MahnungenListe'
 import { Sicherheitseinbehalte } from '@/pages/projekte/Sicherheitseinbehalte'
+import { useFilterTabs } from '@/store/permissionsStore'
 
 type Tab = 'liste' | 'mahnungen' | 'abschlag' | 'rechnung' | 'schluss' | 'gutschrift' | 'se'
 
@@ -24,14 +25,14 @@ export interface DraftResume {
   cashDiscDays:  number
 }
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'liste',      label: 'Rechnungsliste' },
-  { id: 'mahnungen',  label: 'Mahnungen' },
-  { id: 'abschlag',   label: 'Abschlagsrechnungen' },
-  { id: 'rechnung',   label: 'Einzelrechnung' },
-  { id: 'schluss',    label: 'Teilschluss-/Schlussrechnung' },
-  { id: 'gutschrift', label: 'Gutschrift' },
-  { id: 'se',         label: 'Sicherheitseinbehalte' },
+const TABS: { id: Tab; label: string; permissions: string[] }[] = [
+  { id: 'liste',      label: 'Rechnungsliste',              permissions: ['invoices.view'] },
+  { id: 'mahnungen',  label: 'Mahnungen',                   permissions: ['dunning.view'] },
+  { id: 'abschlag',   label: 'Abschlagsrechnungen',         permissions: ['invoices.create_partial'] },
+  { id: 'rechnung',   label: 'Einzelrechnung',              permissions: ['invoices.create_single'] },
+  { id: 'schluss',    label: 'Teilschluss-/Schlussrechnung',permissions: ['invoices.create_final'] },
+  { id: 'gutschrift', label: 'Gutschrift',                  permissions: ['invoices.create_credit'] },
+  { id: 'se',         label: 'Sicherheitseinbehalte',       permissions: ['security_retention.view'] },
 ]
 
 export function RechnungenPage() {
@@ -114,10 +115,12 @@ export function RechnungenPage() {
   const wizardTabs: Tab[] = ['abschlag', 'rechnung', 'schluss']
   const showContext = wizardTabs.includes(tab) && editDraft != null
 
+  const visibleTabs = useFilterTabs(TABS)
+
   return (
     <div className="master-page">
       <h1 className="master-title">Rechnungen</h1>
-      <Tabs tabs={TABS} active={tab} onChange={handleTabChange} />
+      <Tabs tabs={visibleTabs} active={tab} onChange={handleTabChange} />
       {showContext && (
         <div className="project-context-strip">
           <button className="project-context-back" onClick={() => handleTabChange('liste')}>← Rechnungsliste</button>

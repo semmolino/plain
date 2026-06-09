@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
+import { usePermissionsStore } from '@/store/permissionsStore'
+import { useToast } from '@/store/toastStore'
 import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
 import { NotificationBell } from './NotificationBell'
@@ -34,6 +36,7 @@ function UserMenu() {
   function handleLogout() {
     qc.clear()
     clearAuth()
+    usePermissionsStore.getState().clear()
     navigate('/login')
   }
 
@@ -82,6 +85,30 @@ export function AppLayout() {
     staleTime: 60_000,
   })
   const timerEnabled = defData?.data?.timer_enabled !== 'false'
+
+  const location = useLocation()
+  const toast    = useToast()
+  const reloadPermissions = usePermissionsStore(s => s.reload)
+
+  // Phase 5: Permissions refreshen bei Navigation, max. 1x pro 30s.
+  // Damit sieht ein User Rollen-Aenderungen, ohne sich neu einloggen zu muessen.
+  useEffect(() => {
+    const last = Number(sessionStorage.getItem('perm-last-reload') || 0)
+    if (Date.now() - last > 30_000) {
+      sessionStorage.setItem('perm-last-reload', String(Date.now()))
+      void reloadPermissions()
+    }
+  }, [location.pathname, reloadPermissions])
+
+  // Phase 5: globaler 403-Handler installieren -> Toast + Refresh
+  useEffect(() => {
+    const g = globalThis as typeof globalThis & { __onPermissionDenied?: (msg: string) => void }
+    g.__onPermissionDenied = (msg: string) => {
+      toast.error(msg || 'Du hast keine Berechtigung fuer diese Aktion.')
+      void reloadPermissions()
+    }
+    return () => { g.__onPermissionDenied = undefined }
+  }, [toast, reloadPermissions])
 
   return (
     <div className="app-layout">

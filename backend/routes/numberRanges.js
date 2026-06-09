@@ -1,4 +1,5 @@
 const express = require("express");
+const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -80,7 +81,7 @@ module.exports = (supabase) => {
   // - year (optional)
   // - next_counter (required, 1..9999) => GLOBAL
   // - project_next_counter (optional, 1..999) => PROJECT
-  router.post("/set", async (req, res) => {
+  router.post("/set", requirePermission("settings.numbers.edit"), async (req, res) => {
     const b = req.body || {};
     const year = parseInt(String(b.year || currentYear()), 10);
     const nextCounter = parseInt(String(b.next_counter || ""), 10);

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, Mail } from 'lucide-react'
+import { Can } from '@/components/ui/Can'
 import { Modal }        from '@/components/ui/Modal'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -860,26 +861,38 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                   })}
                   <td className="doc-actions" style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn-small" onClick={() => setDetailRow(row)}>Details</button>
-                    <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
+                    <Can permission="invoices.download_pdf">
+                      <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
+                    </Can>
                     {row.statusClass === 'booked' && (
-                      <button className="btn-small" title="Per E-Mail senden" onClick={() => openEmailFor(row)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={13} strokeWidth={1.75} />Mail</button>
+                      <Can permission="invoices.send_email">
+                        <button className="btn-small" title="Per E-Mail senden" onClick={() => openEmailFor(row)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={13} strokeWidth={1.75} />Mail</button>
+                      </Can>
                     )}
                     {canPay(row) && (
                       <button className="btn-small btn-save" onClick={() => openPayment(row)}>Zahlung</button>
                     )}
                     <RowMenu>
-                      <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
-                      <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
-                      <button className="row-menu-item" onClick={() => openPeppol(row)}>Peppol BIS 3.0</button>
-                      <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
+                      <Can permission="invoices.download_xml">
+                        <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
+                        <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
+                        <button className="row-menu-item" onClick={() => openPeppol(row)}>Peppol BIS 3.0</button>
+                        <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
+                      </Can>
                       {row.statusClass === 'booked' && (
-                        <button className="row-menu-item" onClick={() => navigate('/rechnungen?tab=mahnungen')}>→ Mahnung</button>
+                        <Can permission="dunning.view">
+                          <button className="row-menu-item" onClick={() => navigate('/rechnungen?tab=mahnungen')}>→ Mahnung</button>
+                        </Can>
                       )}
                       {canCancel(row) && (
-                        <button className="row-menu-item danger" onClick={() => handleCancel(row)}>Storno</button>
+                        <Can permission="invoices.cancel">
+                          <button className="row-menu-item danger" onClick={() => handleCancel(row)}>Storno</button>
+                        </Can>
                       )}
                       {canDelete(row) && (
-                        <button className="row-menu-item danger" onClick={() => handleDelete(row)}>Löschen</button>
+                        <Can permission="invoices.delete">
+                          <button className="row-menu-item danger" onClick={() => handleDelete(row)}>Löschen</button>
+                        </Can>
                       )}
                     </RowMenu>
                   </td>
