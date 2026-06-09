@@ -9,6 +9,8 @@ import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
 import { Pencil, Trash2 } from 'lucide-react'
 import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
+import { useFilterTabs } from '@/store/permissionsStore'
+import { Can } from '@/components/ui/Can'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
@@ -27,12 +29,12 @@ import { updateBuchung, deleteBuchung } from '@/api/projekte'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25
-const TABS = [
-  { id: 'list',      label: 'Mitarbeiterliste' },
-  { id: 'create',    label: 'Anlegen'          },
-  { id: 'reporting', label: 'Reporting'        },
-  { id: 'overview',  label: 'Monatsübersicht'  },
-  { id: 'arbzg',     label: 'Arbeitszeit (Details)' },
+const TABS: { id: string; label: string; permissions: string[] }[] = [
+  { id: 'list',      label: 'Mitarbeiterliste',     permissions: ['employees.view'] },
+  { id: 'create',    label: 'Anlegen',              permissions: ['employees.create'] },
+  { id: 'reporting', label: 'Reporting',            permissions: ['employees.view','reports.view'] },
+  { id: 'overview',  label: 'Monatsübersicht',      permissions: ['employees.month_close.edit','employees.view'] },
+  { id: 'arbzg',     label: 'Arbeitszeit (Details)',permissions: ['employees.view'] },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -1803,7 +1805,7 @@ export function MitarbeiterPage() {
       <div className="master-page-header">
         <h1 className="master-page-title">Mitarbeiter</h1>
       </div>
-      <Tabs tabs={TABS} active={tab} onChange={t => { setTab(t); setCreateMsg(null) }} />
+      <Tabs tabs={useFilterTabs(TABS)} active={tab} onChange={t => { setTab(t); setCreateMsg(null) }} />
 
       <div className="master-section">
         {tab === 'list' && (
@@ -1868,18 +1870,26 @@ export function MitarbeiterPage() {
                           </span>
                         </td>
                         <td>
-                          <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => setEditRoleEmpId(r.ID)} />
+                          <Can permission="employees.role.assign" fallback={
+                            <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => {}} />
+                          }>
+                            <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => setEditRoleEmpId(r.ID)} />
+                          </Can>
                         </td>
                         <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
                           {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
                         </td>
                         <td className="doc-actions">
-                          <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
-                            <Pencil size={14} strokeWidth={2} />
-                          </button>
-                          <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(r)} title="Löschen">
-                            <Trash2 size={14} strokeWidth={2} />
-                          </button>
+                          <Can permission="employees.edit">
+                            <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
+                              <Pencil size={14} strokeWidth={2} />
+                            </button>
+                          </Can>
+                          <Can permission="employees.delete">
+                            <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(r)} title="Löschen">
+                              <Trash2 size={14} strokeWidth={2} />
+                            </button>
+                          </Can>
                         </td>
                       </tr>
                     ))}

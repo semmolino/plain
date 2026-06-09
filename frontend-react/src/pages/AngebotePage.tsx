@@ -9,14 +9,15 @@ import { AngeboteStammdaten }   from '@/pages/angebote/AngeboteStammdaten'
 import { AngeboteStruktur }     from '@/pages/angebote/AngeboteStruktur'
 import { AngeboteHoai }         from '@/pages/angebote/AngeboteHoai'
 import { fetchOffer }           from '@/api/angebote'
+import { useFilterTabs }        from '@/store/permissionsStore'
 
 type Tab = 'liste' | 'anlegen' | 'struktur' | 'hoai'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'liste',      label: 'Angebotsliste'   },
-  { id: 'anlegen',    label: 'Anlegen'          },
-  { id: 'struktur',   label: 'Angebotsstruktur' },
-  { id: 'hoai',       label: 'HOAI'             },
+const TABS: { id: Tab; label: string; permissions: string[] }[] = [
+  { id: 'liste',      label: 'Angebotsliste',   permissions: ['offers.view'] },
+  { id: 'anlegen',    label: 'Anlegen',         permissions: ['offers.create'] },
+  { id: 'struktur',   label: 'Angebotsstruktur',permissions: ['offers.edit'] },
+  { id: 'hoai',       label: 'HOAI',            permissions: ['projects.calculations.view'] },
 ]
 
 const STORAGE_KEY = 'angebote-selected-oid'
@@ -73,7 +74,7 @@ export function AngebotePage() {
   return (
     <div className="master-page">
       <h1 className="master-title">Angebote</h1>
-      <Tabs tabs={TABS} active={tab} onChange={id => setTab(id as Tab)} />
+      <Tabs tabs={useFilterTabs(TABS)} active={tab} onChange={id => setTab(id as Tab)} />
 
       {selectedOfferId && tab !== 'liste' && (
         <div className="project-context-strip">

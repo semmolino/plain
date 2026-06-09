@@ -12,19 +12,20 @@ import { Vertraege }      from '@/pages/projekte/Vertraege'
 import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
 import { Budget }          from '@/pages/projekte/Budget'
 import { fetchProjectReportHeader } from '@/api/reports'
+import { useFilterTabs } from '@/store/permissionsStore'
 
 type Tab = 'liste' | 'anlegen' | 'struktur' | 'leistungsstand' | 'buchungen' | 'budget' | 'mitarbeiter' | 'honorar' | 'vertraege'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'liste',           label: 'Liste' },
-  { id: 'anlegen',         label: 'Anlegen' },
-  { id: 'struktur',        label: 'Projektstruktur' },
-  { id: 'leistungsstand',  label: 'Leistungsstände' },
-  { id: 'buchungen',       label: 'Buchungen' },
-  { id: 'budget',          label: 'Interne Budgets' },
-  { id: 'mitarbeiter',     label: 'Stundensätze' },
-  { id: 'honorar',         label: 'Kalkulationen' },
-  { id: 'vertraege',       label: 'Verträge' },
+const TABS: { id: Tab; label: string; permissions: string[] }[] = [
+  { id: 'liste',           label: 'Liste',           permissions: ['projects.view'] },
+  { id: 'anlegen',         label: 'Anlegen',         permissions: ['projects.create'] },
+  { id: 'struktur',        label: 'Projektstruktur', permissions: ['projects.structure.view'] },
+  { id: 'leistungsstand',  label: 'Leistungsstände', permissions: ['projects.performance.view'] },
+  { id: 'buchungen',       label: 'Buchungen',       permissions: ['projects.bookings.view'] },
+  { id: 'budget',          label: 'Interne Budgets', permissions: ['projects.budget.view'] },
+  { id: 'mitarbeiter',     label: 'Stundensätze',    permissions: ['projects.hourly_rates.view'] },
+  { id: 'honorar',         label: 'Kalkulationen',   permissions: ['projects.calculations.view'] },
+  { id: 'vertraege',       label: 'Verträge',        permissions: ['projects.contracts.view'] },
 ]
 
 const VALID_TABS: Tab[] = ['liste','anlegen','struktur','leistungsstand','buchungen','budget','mitarbeiter','honorar','vertraege']
@@ -101,11 +102,13 @@ export function ProjektePage() {
     persistProjectId(id ?? undefined)
   }
 
+  const visibleTabs = useFilterTabs(TABS)
+
   return (
     <div className="master-page">
       <h1 className="master-title">Projekte</h1>
       <Tabs
-        tabs={TABS}
+        tabs={visibleTabs}
         active={tab}
         onChange={id => setTab(id as Tab)}
       />

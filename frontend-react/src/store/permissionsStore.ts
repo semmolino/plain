@@ -70,3 +70,16 @@ export function usePermission(key: string): boolean {
 export function useAnyPermission(keys: string[]): boolean {
   return usePermissionsStore(s => s.unrestricted || keys.some(k => s.keys.has(k)))
 }
+
+/** Filtert eine Liste von Tab-Definitionen anhand der `permissions`-Eigenschaft.
+ *  Tabs ohne `permissions` bleiben immer sichtbar. */
+export function useFilterTabs<T extends { permissions?: string[] }>(tabs: T[]): T[] {
+  const unrestricted = usePermissionsStore(s => s.unrestricted)
+  const keys         = usePermissionsStore(s => s.keys)
+  return tabs.filter(t =>
+    !t.permissions ||
+    t.permissions.length === 0 ||
+    unrestricted ||
+    t.permissions.some(p => keys.has(p))
+  )
+}

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignature } from 'lucide-react'
+import { Can } from '@/components/ui/Can'
 import { Message } from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
@@ -178,9 +179,11 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.OFFER_DATE ?? r.CREATED_AT)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.VALID_UNTIL)}</td>
                   <td className="doc-actions" onClick={e => e.stopPropagation()}>
-                    <button className="row-action-btn" onClick={() => onEditStammdaten?.(r.ID)} title="Angebotsdaten bearbeiten">
-                      <Pencil size={14} strokeWidth={2} />
-                    </button>
+                    <Can permission="offers.edit">
+                      <button className="row-action-btn" onClick={() => onEditStammdaten?.(r.ID)} title="Angebotsdaten bearbeiten">
+                        <Pencil size={14} strokeWidth={2} />
+                      </button>
+                    </Can>
                     <button className="btn-small" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Angebotsstruktur öffnen">Öffnen</button>
                     <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">
                       <FileText size={14} strokeWidth={1.75} />
@@ -204,24 +207,28 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                       </>
                     )}
                     {isOpen(r) && (
-                      <button
-                        className="row-action-btn"
-                        style={{ color: '#16a34a', borderColor: '#16a34a' }}
-                        onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
-                        title="Beauftragt"
-                      >
-                        <CheckCircle2 size={14} strokeWidth={2} />
-                      </button>
+                      <Can permission="offers.convert">
+                        <button
+                          className="row-action-btn"
+                          style={{ color: '#16a34a', borderColor: '#16a34a' }}
+                          onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
+                          title="Beauftragt"
+                        >
+                          <CheckCircle2 size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
                     )}
                     {isOpen(r) && (
-                      <button
-                        className="row-action-btn"
-                        style={{ color: '#ea580c', borderColor: '#ea580c' }}
-                        onClick={() => requestReject(r)}
-                        title="Als abgelehnt markieren"
-                      >
-                        <XCircle size={14} strokeWidth={2} />
-                      </button>
+                      <Can permission="offers.edit">
+                        <button
+                          className="row-action-btn"
+                          style={{ color: '#ea580c', borderColor: '#ea580c' }}
+                          onClick={() => requestReject(r)}
+                          title="Als abgelehnt markieren"
+                        >
+                          <XCircle size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
                     )}
                     {isRejected(r) && (
                       <span
@@ -231,14 +238,16 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                         Abgelehnt
                       </span>
                     )}
-                    <button
-                      className="row-action-btn"
-                      style={{ color: '#dc2626', borderColor: '#dc2626' }}
-                      onClick={() => requestDelete(r)}
-                      title="Löschen"
-                    >
-                      <Trash2 size={14} strokeWidth={2} />
-                    </button>
+                    <Can permission="offers.delete">
+                      <button
+                        className="row-action-btn"
+                        style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                        onClick={() => requestDelete(r)}
+                        title="Löschen"
+                      >
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
+                    </Can>
                   </td>
                 </tr>
               ))}

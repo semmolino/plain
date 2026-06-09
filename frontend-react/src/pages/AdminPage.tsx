@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { RollenSection } from '@/pages/admin/RollenSection'
+import { useFilterTabs } from '@/store/permissionsStore'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
@@ -48,18 +49,18 @@ import {
 import { fetchActiveEmployees } from '@/api/projekte'
 import { Modal } from '@/components/ui/Modal'
 
-const PAGE_TABS = [
-  { id: 'stammdaten',              label: 'Stammdaten'              },
-  { id: 'vorbelegungen',           label: 'Vorbelegungen'           },
-  { id: 'benachrichtigungen',      label: 'Benachrichtigungen'      },
-  { id: 'monatsabschluss',         label: 'Monatsabschluss'         },
-  { id: 'unternehmen',             label: 'Unternehmen'             },
-  { id: 'nummernkreise',           label: 'Nummernkreise'           },
-  { id: 'textvorlagen',            label: 'Textvorlagen'            },
-  { id: 'mahnungseinstellungen',   label: 'Mahnungen'               },
-  { id: 'arbzg',                   label: 'Arbeitszeiten'           },
-  { id: 'kostensatz',              label: 'Kostensatz-Rechner'      },
-  { id: 'rollen',                  label: 'Rollen & Berechtigungen' },
+const PAGE_TABS: { id: string; label: string; permissions: string[] }[] = [
+  { id: 'stammdaten',              label: 'Stammdaten',              permissions: ['settings.basedata.view','settings.basedata.edit'] },
+  { id: 'vorbelegungen',           label: 'Vorbelegungen',           permissions: ['settings.defaults.edit'] },
+  { id: 'benachrichtigungen',      label: 'Benachrichtigungen',      permissions: ['settings.notifications.edit'] },
+  { id: 'monatsabschluss',         label: 'Monatsabschluss',         permissions: ['settings.monthly_close.edit'] },
+  { id: 'unternehmen',             label: 'Unternehmen',             permissions: ['settings.company.view','settings.company.edit'] },
+  { id: 'nummernkreise',           label: 'Nummernkreise',           permissions: ['settings.numbers.edit'] },
+  { id: 'textvorlagen',            label: 'Textvorlagen',            permissions: ['settings.text_templates.edit'] },
+  { id: 'mahnungseinstellungen',   label: 'Mahnungen',               permissions: ['settings.dunning_config.edit'] },
+  { id: 'arbzg',                   label: 'Arbeitszeiten',           permissions: ['settings.work_time.edit'] },
+  { id: 'kostensatz',              label: 'Kostensatz-Rechner',      permissions: ['settings.cost_rate.edit'] },
+  { id: 'rollen',                  label: 'Rollen & Berechtigungen', permissions: ['roles.view'] },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -2882,7 +2883,7 @@ export function AdminPage() {
       <div className="master-page-header">
         <h1 className="master-page-title">Administration</h1>
       </div>
-      <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={useFilterTabs(PAGE_TABS)} active={tab} onChange={setTab} />
       <div className="master-section">
         {tab === 'stammdaten'            && (
           <>

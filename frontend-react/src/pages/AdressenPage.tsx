@@ -2,6 +2,8 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Can } from '@/components/ui/Can'
+import { useFilterTabs } from '@/store/permissionsStore'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
 import { Message }     from '@/components/ui/Message'
@@ -19,17 +21,17 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const ADDR_TABS = [
+const ADDR_TABS: { id: string; label: string; permissions?: string[] }[] = [
   { id: 'list',   label: 'Adressen' },
-  { id: 'create', label: 'Neue Adresse' },
+  { id: 'create', label: 'Neue Adresse', permissions: ['addresses.create'] },
 ]
-const CON_TABS = [
+const CON_TABS: { id: string; label: string; permissions?: string[] }[] = [
   { id: 'list',   label: 'Kontakte' },
-  { id: 'create', label: 'Neuer Kontakt' },
+  { id: 'create', label: 'Neuer Kontakt', permissions: ['addresses.contacts.create'] },
 ]
-const PAGE_TABS = [
-  { id: 'adressen', label: 'Adressen'  },
-  { id: 'kontakte', label: 'Kontakte'  },
+const PAGE_TABS: { id: string; label: string; permissions: string[] }[] = [
+  { id: 'adressen', label: 'Adressen',  permissions: ['addresses.view'] },
+  { id: 'kontakte', label: 'Kontakte',  permissions: ['addresses.contacts.view'] },
 ]
 
 function emptyAddr(): AddressPayload {
@@ -425,7 +427,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
 
   return (
     <>
-      <Tabs tabs={ADDR_TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={useFilterTabs(ADDR_TABS)} active={tab} onChange={setTab} />
 
       {tab === 'list' && (
         <div className="list-section">
@@ -489,12 +491,16 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
                       >
                         Kontakte{cnt > 0 ? ` (${cnt})` : ''}
                       </button>
-                      <button className="row-action-btn" onClick={() => openEdit(a)} title="Bearbeiten">
-                        <Pencil size={14} strokeWidth={2} />
-                      </button>
-                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(a)} title="Löschen">
-                        <Trash2 size={14} strokeWidth={2} />
-                      </button>
+                      <Can permission="addresses.edit">
+                        <button className="row-action-btn" onClick={() => openEdit(a)} title="Bearbeiten">
+                          <Pencil size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
+                      <Can permission="addresses.delete">
+                        <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(a)} title="Löschen">
+                          <Trash2 size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
                     </td>
                   </tr>
                   )
@@ -720,7 +726,7 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
 
   return (
     <>
-      <Tabs tabs={CON_TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={useFilterTabs(CON_TABS)} active={tab} onChange={setTab} />
 
       {tab === 'list' && (
         <div className="list-section">
@@ -778,12 +784,16 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
                     ) : (c.ADDRESS ?? '—')}</td>
                     {visibleOptCols.map(col => <td key={col.key}>{(c[col.key as keyof Contact] as string | null | undefined) ?? '—'}</td>)}
                     <td className="doc-actions">
-                      <button className="row-action-btn" onClick={() => openEdit(c)} title="Bearbeiten">
-                        <Pencil size={14} strokeWidth={2} />
-                      </button>
-                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDeleteContact(c)} title="Löschen">
-                        <Trash2 size={14} strokeWidth={2} />
-                      </button>
+                      <Can permission="addresses.contacts.edit">
+                        <button className="row-action-btn" onClick={() => openEdit(c)} title="Bearbeiten">
+                          <Pencil size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
+                      <Can permission="addresses.contacts.delete">
+                        <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDeleteContact(c)} title="Löschen">
+                          <Trash2 size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
                     </td>
                   </tr>
                 ))}
@@ -881,7 +891,7 @@ export function AdressenPage() {
       <div className="master-page-header">
         <h1 className="master-page-title">Adressen &amp; Kontakte</h1>
       </div>
-      <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={useFilterTabs(PAGE_TABS)} active={tab} onChange={setTab} />
       <div className="master-section">
         {tab === 'adressen' && (
           <AdressenSection

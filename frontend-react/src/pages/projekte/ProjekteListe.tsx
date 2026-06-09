@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Pencil, Copy, Trash2 } from 'lucide-react'
+import { Can } from '@/components/ui/Can'
 import { Modal }         from '@/components/ui/Modal'
 import { Message }       from '@/components/ui/Message'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
@@ -461,15 +462,21 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                       />
                     </td>
                     <td className="doc-actions">
-                      <button className="row-action-btn" onClick={() => openEdit(p)} title="Bearbeiten">
-                        <Pencil size={14} strokeWidth={2} />
-                      </button>
-                      <button className="row-action-btn" onClick={() => copyMut.mutate(p.ID)} disabled={copyMut.isPending} title="Kopieren">
-                        <Copy size={14} strokeWidth={2} />
-                      </button>
-                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(p)} title="Löschen">
-                        <Trash2 size={14} strokeWidth={2} />
-                      </button>
+                      <Can permission="projects.edit">
+                        <button className="row-action-btn" onClick={() => openEdit(p)} title="Bearbeiten">
+                          <Pencil size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
+                      <Can permission="projects.create">
+                        <button className="row-action-btn" onClick={() => copyMut.mutate(p.ID)} disabled={copyMut.isPending} title="Kopieren">
+                          <Copy size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
+                      <Can permission="projects.delete">
+                        <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(p)} title="Löschen">
+                          <Trash2 size={14} strokeWidth={2} />
+                        </button>
+                      </Can>
                     </td>
                     {onSelectProject && (
                       <td><button className="btn-small btn-save" onClick={() => onSelectProject(p.ID)}>Öffnen</button></td>
