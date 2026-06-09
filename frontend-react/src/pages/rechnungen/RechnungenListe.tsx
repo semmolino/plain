@@ -293,7 +293,7 @@ function RowMenu({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('mousedown', h)
   }, [open])
   return (
-    <div ref={ref} className="row-menu-wrap">
+    <div ref={ref} className={`row-menu-wrap${open ? ' row-menu-open' : ''}`}>
       <button className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen" style={{ display: 'inline-flex', alignItems: 'center' }}><MoreHorizontal size={15} strokeWidth={1.75} /></button>
       {open && (
         <div className="row-menu-dropdown" onClick={() => setOpen(false)}>
