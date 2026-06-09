@@ -596,7 +596,7 @@ async function postFeeCalcAddToOfferStructure(req, res, supabase) {
 async function getCompanies(req, res, supabase) {
   const { data, error } = await supabase
     .from("COMPANY")
-    .select("ID, COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, TAX_NUMBER, \"TAX-ID\", BIC, IBAN, \"CREDITOR-ID\", PEPPOL_ENDPOINT_ID, PEPPOL_SCHEME_ID")
+    .select("ID, COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, TAX_NUMBER, \"TAX-ID\", BIC, IBAN, \"CREDITOR-ID\"")
     .eq("TENANT_ID", req.tenantId)
     .order("COMPANY_NAME_1", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
@@ -632,7 +632,12 @@ async function postCompany(req, res, supabase) {
   if (!company_name_1 || typeof company_name_1 !== "string") return res.status(400).json({ error: "company_name_1 is required" });
 
   const row = { ...buildCompanyRow(req.body), TENANT_ID: req.tenantId ?? null };
-  const { data, error } = await supabase.from("COMPANY").insert([row]);
+  let { data, error } = await supabase.from("COMPANY").insert([row]);
+  if (error && /column .*PEPPOL_/i.test(String(error.message))) {
+    delete row.PEPPOL_ENDPOINT_ID;
+    delete row.PEPPOL_SCHEME_ID;
+    ({ data, error } = await supabase.from("COMPANY").insert([row]));
+  }
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -646,11 +651,17 @@ async function putCompany(req, res, supabase) {
   const { company_name_1 } = req.body || {};
   if (!company_name_1 || typeof company_name_1 !== "string") return res.status(400).json({ error: "company_name_1 is required" });
 
-  const { data, error } = await supabase
+  const row = buildCompanyRow(req.body);
+  let { data, error } = await supabase
     .from("COMPANY")
-    .update(buildCompanyRow(req.body))
+    .update(row)
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId);
+  if (error && /column .*PEPPOL_/i.test(String(error.message))) {
+    delete row.PEPPOL_ENDPOINT_ID;
+    delete row.PEPPOL_SCHEME_ID;
+    ({ data, error } = await supabase.from("COMPANY").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId));
+  }
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -681,7 +692,12 @@ async function postAddress(req, res, supabase) {
   if (peppol_endpoint_id !== undefined) insertRow.PEPPOL_ENDPOINT_ID = (peppol_endpoint_id || "").trim() || null;
   if (peppol_scheme_id   !== undefined) insertRow.PEPPOL_SCHEME_ID   = (peppol_scheme_id   || "").trim() || null;
 
-  const { data, error } = await supabase.from("ADDRESS").insert([insertRow]);
+  let { data, error } = await supabase.from("ADDRESS").insert([insertRow]);
+  if (error && /column .*PEPPOL_/i.test(String(error.message))) {
+    delete insertRow.PEPPOL_ENDPOINT_ID;
+    delete insertRow.PEPPOL_SCHEME_ID;
+    ({ data, error } = await supabase.from("ADDRESS").insert([insertRow]));
+  }
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -754,7 +770,7 @@ async function listAddresses(req, res, supabase) {
 
   const { data: addresses, error: aErr } = await supabase
     .from("ADDRESS")
-    .select('ID, ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, CUSTOMER_NUMBER, "TAX-ID", BUYER_REFERENCE, PEPPOL_ENDPOINT_ID, PEPPOL_SCHEME_ID')
+    .select('ID, ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, CUSTOMER_NUMBER, "TAX-ID", BUYER_REFERENCE')
     .eq("TENANT_ID", req.tenantId)
     .order("ADDRESS_NAME_1", { ascending: true })
     .limit(limit);
@@ -786,7 +802,13 @@ async function patchAddress(req, res, supabase) {
   if (peppol_endpoint_id !== undefined) update.PEPPOL_ENDPOINT_ID = peppol_endpoint_id || null;
   if (peppol_scheme_id   !== undefined) update.PEPPOL_SCHEME_ID   = peppol_scheme_id   || null;
 
-  const { data, error } = await supabase.from("ADDRESS").update(update).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single();
+  let { data, error } = await supabase.from("ADDRESS").update(update).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single();
+  // Soft-fail wenn Migration 0061 noch nicht durch: retry ohne PEPPOL-Felder
+  if (error && /column .*PEPPOL_/i.test(String(error.message))) {
+    delete update.PEPPOL_ENDPOINT_ID;
+    delete update.PEPPOL_SCHEME_ID;
+    ({ data, error } = await supabase.from("ADDRESS").update(update).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single());
+  }
   if (error) return res.status(500).json({ error: error.message });
 
   let countryName = "";
