@@ -231,7 +231,7 @@ function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; max
           <th className="num">Leistungsstand</th>
           <th className="num">Stunden</th>
           <th className="num">Kosten</th>
-          <th className="num col-hide-mobile" style={{ width: 56 }} title="Cost Performance Index">CPI</th>
+          <th className="num col-hide-mobile" style={{ width: 56 }} title="CPI (Cost-Performance-Index): Kosten-Leistung-Index">CPI</th>
           <th className="col-hide-mobile" style={{ width: 80 }}>Budget %</th>
         </tr>
       </thead>
@@ -597,7 +597,7 @@ function GeschaeftsleitungView({
             const cpi = portfolioCpi(projects)
             const vacTotal = projects.reduce((s, p) => { const v = computeEvm(p).vac; return s + (v ?? 0) }, 0)
             return <>
-              <KpiCard label="Portfolio-CPI" value={fmtCpi(cpi)} meta={cpi == null ? undefined : cpi >= 0.95 ? 'Effizient' : cpi >= 0.80 ? 'Leicht überbudget' : 'Überbudget'} accent={cpi != null && cpi < 0.80} />
+              <KpiCard label="CPI (Cost-Performance-Index)" value={fmtCpi(cpi)} meta={cpi == null ? undefined : cpi >= 0.95 ? 'Effizient' : cpi >= 0.80 ? 'Leicht überbudget' : 'Überbudget'} accent={cpi != null && cpi < 0.80} />
               <KpiCard label="Prognose-Ergebnis (VAC)" value={fmtEur(vacTotal)} meta={vacTotal >= 0 ? 'Projekte im Plan' : 'Progn. Überschreitung'} accent={vacTotal < 0} />
             </>
           })()}
@@ -608,7 +608,7 @@ function GeschaeftsleitungView({
           <strong>{fmtPct(leistPct)}</strong> — {leistPct >= 80 ? 'gut im Plan' : leistPct >= 50 ? 'im Aufbau' : 'frühe Phase'}.
           {' '}{activeCount} Projekt{activeCount !== 1 ? 'e' : ''} aktiv
           {atRiskCount > 0 ? `, davon ${atRiskCount} über 90% Budget` : ', alle im Budget-Rahmen'}.
-          {' '}Offene Leistung zu fakturieren: <strong>{fmtEur(offeneLeist)}</strong>.
+          {' '}Offene Leistung zur Abrechnung: <strong>{fmtEur(offeneLeist)}</strong>.
         </NarrativeBlock>
 
         <DashboardTimeline dateFrom={dateFrom} dateTo={dateTo} />
@@ -831,7 +831,7 @@ function ControllerView({
             </>
           : 'Keine überfälligen Rechnungen. '}
         Monatliche Kosten Ø (letzte {monthly.length} Monate): <strong>{fmtEur(avgMonthlyCost)}</strong>.
-        Zu fakturierende Leistung: <strong>{fmtEur(kpis.OFFENE_LEISTUNG)}</strong>.
+        Leistung zur Abrechnung: <strong>{fmtEur(kpis.OFFENE_LEISTUNG)}</strong>.
         {mahnStats && mahnStats.totalOverdue > 0 && (
           <> {mahnStats.totalOverdue} überfällige Rechnung{mahnStats.totalOverdue !== 1 ? 'en' : ''}
           {mahnStats.noDunningCount > 0 ? `, davon ${mahnStats.noDunningCount} noch ungemahnt` : ''}
@@ -901,7 +901,7 @@ function BereichsleiterView({
         <NarrativeBlock>
           Team-Stunden letzte 4 Wochen: <strong>{fmtH(totalHours4w)}</strong> gesamt über {teamUtil.length} Mitarbeiter.{' '}
           <strong>{budgetHealthy}</strong> von <strong>{projects.length}</strong> Projekt{projects.length !== 1 ? 'en' : ''} im grünen Bereich (unter 80% Budget).
-          {budgetHealthPct < 60 && ' Mehrere Projekte benötigen Aufmerksamkeit.'}
+          {budgetHealthPct < 60 && ' Mehrere Projekte benötigen Fokus.'}
         </NarrativeBlock>
 
         <div className="dash-two-col">
@@ -1092,7 +1092,7 @@ const AMPEL_COLORS: Record<string, string> = {
 }
 
 const AMPEL_LABELS: Record<string, string> = {
-  rot: 'Kritisch', orange: 'Warnung', gelb: 'Aufmerksamkeit', gruen: 'OK',
+  rot: 'Kritisch', orange: 'Warnung', gelb: 'Fokus', gruen: 'OK',
 }
 
 function ampelDot(ampel: string, size = 10) {
@@ -1156,7 +1156,7 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
                 </td>
               </tr>
               <tr><td>Abgerechnet</td><td>{fmtEur(project.BILLED_NET_TOTAL)}</td></tr>
-              <tr><td>Zu fakturieren</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? '#1d4ed8' : undefined }}>{fmtEur(project.OPEN_NET_TOTAL)}</td></tr>
+              <tr><td>Zur Abrechnung</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? '#1d4ed8' : undefined }}>{fmtEur(project.OPEN_NET_TOTAL)}</td></tr>
               {(() => {
                 const evm = computeEvm(project)
                 if (evm.cpi == null) return null
@@ -1273,9 +1273,9 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                   <th className="num col-hide-mobile">Honorar</th>
                   <th className="num">Kosten</th>
                   <th className="num col-hide-mobile">Budget %</th>
-                  <th className="num col-hide-mobile" title="Cost Performance Index">CPI</th>
+                  <th className="num col-hide-mobile" title="CPI (Cost-Performance-Index): Kosten-Leistung-Index">CPI</th>
                   <th className="num col-hide-mobile">Offen</th>
-                  <th>Flags</th>
+                  <th>Hinweis</th>
                 </tr>
               </thead>
               <tbody>
@@ -1341,7 +1341,7 @@ function AbrechnungView({ billing }: { billing: BillingSummaryData | null }) {
   return (
     <>
       <div className="kpi-grid">
-        <KpiCard label="Zu fakturieren gesamt"       value={fmtEur(totalOpen)}                   accent={totalOpen > 0} />
+        <KpiCard label="Zur Abrechnung gesamt"       value={fmtEur(totalOpen)}                   accent={totalOpen > 0} />
         <KpiCard label="Projekte mit offenem Betrag" value={String(billing.projects.length)}      />
         <KpiCard label="Projektleiter involviert"    value={String(billing.byPl.length)}          />
       </div>
@@ -1381,7 +1381,7 @@ function AbrechnungView({ billing }: { billing: BillingSummaryData | null }) {
               <thead>
                 <tr>
                   <th>Projekt</th>
-                  <th className="num">Zu fakturieren</th>
+                  <th className="num">Zur Abrechnung</th>
                 </tr>
               </thead>
               <tbody>

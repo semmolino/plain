@@ -545,7 +545,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                       <SortTh label="Stunden"          field="hours"   current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
                       <SortTh label="Kosten €"         field="cost"    current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
                       <SortTh label="Kostenquote"      field="kq"      current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
-                      <th className="num" title="Cost Performance Index: Leistungsstand / Kosten">CPI</th>
+                      <th className="num" title="CPI (Cost-Performance-Index): Kosten-Leistung-Index">CPI</th>
                       <th className="num" title="Estimate at Completion: Prognose Gesamtkosten">EAC (Prognose)</th>
                     </tr>
                   </thead>

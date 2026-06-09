@@ -15,7 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/',           icon: LayoutDashboard, label: 'Übersicht'   },
   { to: '/adressen',   icon: BookUser,        label: 'Adressen'    },
   { to: '/projekte',   icon: FolderOpen,      label: 'Projekte'    },
-  { to: '/daten',      icon: BarChart3,       label: 'Daten'       },
+  { to: '/daten',      icon: BarChart3,       label: 'Projekt-Reports' },
   { to: '/rechnungen', icon: Receipt,         label: 'Rechnungen'  },
   { to: '/admin',      icon: Settings,        label: 'Admin'       },
   { to: '/mitarbeiter',icon: Users,           label: 'Mitarbeiter' },

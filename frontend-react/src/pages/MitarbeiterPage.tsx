@@ -30,7 +30,7 @@ const TABS = [
   { id: 'create',    label: 'Anlegen'          },
   { id: 'reporting', label: 'Reporting'        },
   { id: 'overview',  label: 'Monatsübersicht'  },
-  { id: 'arbzg',     label: 'ArbZG-Auditlog'   },
+  { id: 'arbzg',     label: 'Arbeitszeit (Details)' },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']

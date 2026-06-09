@@ -512,18 +512,18 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
             </button>
             {showEinvoice && (
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <FormField label="Käuferreferenz / Leitweg-ID (BT-10)" id="ri-buyer-ref"
+                <FormField label="Käuferreferenz / Leitweg-ID" id="ri-buyer-ref"
                   value={buyerRef} onChange={e => setBuyerRef(e.target.value)} />
-                <FormField label="Bestellnummer des Käufers (BT-13)" id="ri-order-ref"
+                <FormField label="Bestellnummer des Käufers" id="ri-order-ref"
                   value={orderRef} onChange={e => setOrderRef(e.target.value)} />
-                <FormField label="Kostenstelle (BT-19)" id="ri-acc-ref"
+                <FormField label="Kostenstelle" id="ri-acc-ref"
                   value={accountingRef} onChange={e => setAccountingRef(e.target.value)} />
-                <FormField label="Verwendungszweck für Überweisung (BT-83)" id="ri-remit"
+                <FormField label="Verwendungszweck für Überweisung" id="ri-remit"
                   value={remittance} onChange={e => setRemittance(e.target.value)} />
 
-                {/* VAT-Category (BT-118) */}
+                {/* VAT-Category */}
                 <div className="form-group">
-                  <label>Umsatzsteuer-Kategorie (BT-118)</label>
+                  <label>Umsatzsteuer-Kategorie</label>
                   <select value={vatCategory} onChange={e => setVatCategory(e.target.value as VatCategory)}
                     style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', width: '100%' }}>
                     {(Object.keys(VAT_CATEGORY_LABELS) as VatCategory[]).map(k => (
@@ -537,10 +537,10 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                 </div>
                 {vatCategory !== 'S' && (
                   <>
-                    <FormField label="Begründung Code (BT-121, optional)" id="ri-exempt-code"
+                    <FormField label="Begründung Code (optional)" id="ri-exempt-code"
                       value={vatExemptCode} onChange={e => setVatExemptCode(e.target.value)} />
                     <div className="form-group">
-                      <label>Begründungstext (BT-120/123)</label>
+                      <label>Begründungstext</label>
                       <textarea rows={2} value={vatExemptText} onChange={e => setVatExemptText(e.target.value)}
                         placeholder="Leer lassen für Standardtext"
                         style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }} />

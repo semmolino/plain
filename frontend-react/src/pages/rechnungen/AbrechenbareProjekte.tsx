@@ -93,7 +93,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
             ? 'lädt …'
             : projects.length === 0
               ? 'keine'
-              : `Zu fakturieren: ${fmtEur(total)}`}
+              : `Zur Abrechnung: ${fmtEur(total)}`}
           <button
             type="button"
             onClick={() => qc.invalidateQueries({ queryKey: ['rechnungen', 'billing-summary'] })}
@@ -127,7 +127,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
                   <tr>
                     <th className="ls-th">Projekt</th>
                     <th className="ls-th">Projektleiter</th>
-                    <th className="ls-th ls-col-num">Zu fakturieren</th>
+                    <th className="ls-th ls-col-num">Zur Abrechnung</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -316,7 +316,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
 
           {/* ── Umsatzsteuer-Kategorie (Default für Rechnungen) ───────────────── */}
           <div style={{ marginTop: 16, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8 }}>
-            <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Umsatzsteuer-Kategorie (BT-118)</p>
+            <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Umsatzsteuer-Kategorie</p>
             <select value={vatCategory} onChange={e => { setVatCategory(e.target.value as 'S'|'AE'|'E'|'Z'|'O'|'G'|'K'); touch() }}
               style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', width: '100%', fontSize: 13 }}>
               <option value="S">Standard (Regelsatz)</option>
@@ -331,7 +331,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <input type="text" value={vatExemptCode}
                   onChange={e => { setVatExemptCode(e.target.value); touch() }}
-                  placeholder="Begründung Code (BT-121, optional)"
+                  placeholder="Begründung Code (optional)"
                   style={{ padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }} />
                 <textarea rows={2} value={vatExemptText}
                   onChange={e => { setVatExemptText(e.target.value); touch() }}
