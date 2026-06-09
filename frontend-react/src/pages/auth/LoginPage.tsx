@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { loginEmployee, requestPasswordReset } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
+import { usePermissionsStore } from '@/store/permissionsStore'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 
@@ -42,6 +43,8 @@ export function LoginPage() {
         companyName:   res.company_name,
         dashboardRole: res.dashboard_role ?? null,
       })
+      // RBAC: Permissions des Users laden (soft-fail wenn Migration fehlt)
+      void usePermissionsStore.getState().reload()
       navigate('/')
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen.', type: 'error' })

@@ -61,6 +61,9 @@ const arbzgRoutes            = require("./routes/arbzg")(supabase);
 const budgetWarningsRoutes   = require("./routes/budgetWarnings")(supabase);
 const notificationConfigRoutes = require("./routes/notificationConfig")(supabase);
 const notificationScheduleRoutes = require("./routes/notificationSchedule")(supabase);
+const rolesRoutes                = require("./routes/roles")(supabase);
+const { makeMiddleware: makePermissionsMiddleware } = require("./middleware/permissions");
+const permissionsMiddleware = makePermissionsMiddleware(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
 const { startMonatsabschlussChecker } = require("./services/monatsabschluss");
 const { startMahnungChecker } = require("./services/mahnungChecker");
@@ -89,6 +92,11 @@ app.use("/api/v1/arbzg",             authMiddleware, arbzgRoutes);
 app.use("/api/v1/budget-warnings",   authMiddleware, budgetWarningsRoutes);
 app.use("/api/v1/notification-config", authMiddleware, notificationConfigRoutes);
 app.use("/api/v1/notification-schedule", authMiddleware, notificationScheduleRoutes);
+
+// RBAC (Phase 0) — Permissions + Rollen + Mitarbeiter-Rollen-Zuweisung.
+// Permissions-Middleware laeuft NACH authMiddleware und legt req.permissions ab.
+// Soft-fail wenn Migration 0062 fehlt — req._permissionsUnrestricted = true.
+app.use("/api/v1", authMiddleware, permissionsMiddleware, rolesRoutes);
 
 
 

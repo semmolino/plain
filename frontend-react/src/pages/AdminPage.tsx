@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
+import { RollenSection } from '@/pages/admin/RollenSection'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
@@ -58,6 +59,7 @@ const PAGE_TABS = [
   { id: 'mahnungseinstellungen',   label: 'Mahnungen'               },
   { id: 'arbzg',                   label: 'Arbeitszeiten'           },
   { id: 'kostensatz',              label: 'Kostensatz-Rechner'      },
+  { id: 'rollen',                  label: 'Rollen & Berechtigungen' },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -2904,6 +2906,7 @@ export function AdminPage() {
         {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}
         {tab === 'textvorlagen'          && <TextVorlagenSection />}
         {tab === 'benachrichtigungen'    && <BenachrichtigungenSection />}
+        {tab === 'rollen'                && <RollenSection />}
       </div>
     </div>
   )

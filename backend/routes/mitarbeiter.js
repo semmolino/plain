@@ -81,6 +81,24 @@ module.exports = (supabase) => {
       return res.status(500).json({ error: error.message });
     }
 
+    // RBAC Phase 0: neuen Mitarbeiter der Default-Rolle des Tenants zuweisen
+    // (soft-fail wenn Migration 0062 noch nicht durch)
+    try {
+      const { data: defRole } = await supabase
+        .from("USER_ROLE")
+        .select("ID")
+        .eq("TENANT_ID", req.tenantId)
+        .eq("IS_DEFAULT", true)
+        .maybeSingle();
+      if (defRole?.ID && data?.ID) {
+        await supabase.from("EMPLOYEE_ROLE").insert([{
+          EMPLOYEE_ID: data.ID,
+          ROLE_ID:     defRole.ID,
+          ASSIGNED_BY: req.employeeId || null,
+        }]);
+      }
+    } catch (_) { /* ignore: Migration 0062 evtl. fehlt */ }
+
     res.json({ data });
   });
 

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
+import { usePermissionsStore } from '@/store/permissionsStore'
 import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
 import { NotificationBell } from './NotificationBell'
@@ -34,6 +35,7 @@ function UserMenu() {
   function handleLogout() {
     qc.clear()
     clearAuth()
+    usePermissionsStore.getState().clear()
     navigate('/login')
   }
 
