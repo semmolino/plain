@@ -77,6 +77,9 @@ export const patchRole = (id: number, body: PatchRolePayload) =>
 export const deleteRole = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/roles/${id}`)
 
+export const duplicateRole = (id: number) =>
+  apiClient.post<{ data: UserRole }>(`/roles/${id}/duplicate`, {})
+
 export const fetchEmployeeRoleMap = () =>
   apiClient.get<{ data: EmployeeRoleMapping[] }>('/roles/employees')
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Trash2, Plus } from 'lucide-react'
+import { Pencil, Trash2, Plus, Copy } from 'lucide-react'
 import { Modal }        from '@/components/ui/Modal'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -8,7 +8,7 @@ import { FormField }    from '@/components/ui/FormField'
 import { useToast }     from '@/store/toastStore'
 import {
   fetchRoles, fetchRole, fetchPermissionCatalog,
-  createRole, patchRole, deleteRole,
+  createRole, patchRole, deleteRole, duplicateRole,
   type UserRole, type Permission,
 } from '@/api/rbac'
 
@@ -55,6 +55,15 @@ export function RollenSection() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  const dupMut = useMutation({
+    mutationFn: duplicateRole,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['user-roles'] })
+      toast.success('Rolle dupliziert')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   return (
     <div style={{ maxWidth: 920 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -84,6 +93,7 @@ export function RollenSection() {
               key={r.ID}
               role={r}
               onEdit={() => setEditId(r.ID)}
+              onDuplicate={() => dupMut.mutate(r.ID)}
               onDelete={() => setConfirmState({
                 title: 'Rolle löschen',
                 message: `Soll die Rolle „${r.NAME_SHORT}" wirklich gelöscht werden? Mitarbeiter, die nur diese Rolle haben, verlieren damit ihre Berechtigungen.`,
@@ -125,7 +135,7 @@ export function RollenSection() {
 
 // ── Rolle eine Zeile ────────────────────────────────────────────────────────
 
-function RoleRow({ role, onEdit, onDelete }: { role: UserRole; onEdit: () => void; onDelete: () => void }) {
+function RoleRow({ role, onEdit, onDelete, onDuplicate }: { role: UserRole; onEdit: () => void; onDelete: () => void; onDuplicate: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
       <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: role.COLOR || '#6b7280', flexShrink: 0 }} />
@@ -152,6 +162,9 @@ function RoleRow({ role, onEdit, onDelete }: { role: UserRole; onEdit: () => voi
       </span>
       <button className="row-action-btn" onClick={onEdit} title="Bearbeiten">
         <Pencil size={14} strokeWidth={2} />
+      </button>
+      <button className="row-action-btn" onClick={onDuplicate} title="Duplizieren">
+        <Copy size={14} strokeWidth={2} />
       </button>
       {!role.IS_SYSTEM && (
         <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={onDelete} title="Löschen">

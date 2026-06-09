@@ -52,6 +52,13 @@ async function request<T>(
     } catch {
       // ignore parse error
     }
+    // Phase 5: globaler 403-Hook -- triggert Toast + Permissions-Refresh
+    if (res.status === 403) {
+      try {
+        const handler = (globalThis as typeof globalThis & { __onPermissionDenied?: (msg: string) => void }).__onPermissionDenied
+        if (typeof handler === 'function') handler(message)
+      } catch { /* ignore */ }
+    }
     throw new ApiRequestError(res.status, message, payload)
   }
 

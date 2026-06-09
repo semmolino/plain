@@ -18,6 +18,7 @@ module.exports = (supabase) => {
   router.post  ("/roles",              requirePermission("roles.create"), (req, res) => ctrl.createRole(req, res, supabase));
   router.patch ("/roles/:id",          requirePermission("roles.edit"),   (req, res) => ctrl.patchRole(req, res, supabase));
   router.delete("/roles/:id",          requirePermission("roles.delete"), (req, res) => ctrl.deleteRole(req, res, supabase));
+  router.post  ("/roles/:id/duplicate", requirePermission("roles.create"), (req, res) => ctrl.duplicateRole(req, res, supabase));
 
   // /api/v1/employees/:id/roles
   router.put   ("/employees/:id/roles", requirePermission("employees.role.assign"), (req, res) => ctrl.setEmployeeRoles(req, res, supabase));
