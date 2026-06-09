@@ -275,6 +275,25 @@ export interface SeOverviewEntry {
 export const fetchSeOverviewForProject = (projectId: number) =>
   apiClient.get<{ data: SeOverviewEntry[] }>(`/partial-payments/se-overview?project_id=${projectId}`)
 
+// Aggregat aller Projekte/Vertraege mit Sicherheitseinbehalten
+export interface SeSummaryRow {
+  project_id:        number | null
+  project_number:    string | null
+  project_name:      string | null
+  contract_id:       number | null
+  contract_number:   string | null
+  contract_name:     string | null
+  open_sum:          number
+  open_count:        number
+  released_sum:      number
+  released_count:    number
+  cancelled_count:   number
+  total_active_sum:  number
+  active_count:      number
+}
+export const fetchSeSummary = () =>
+  apiClient.get<{ data: SeSummaryRow[] }>('/partial-payments/se-summary')
+
 export const deleteInvoice = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/invoices/${id}`)
 

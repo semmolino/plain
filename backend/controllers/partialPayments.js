@@ -61,6 +61,101 @@ async function listOpenSeForProject(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/v1/partial-payments/se-summary
+// Aggregat ueber alle Projekte/Vertraege mit Sicherheitseinbehalten.
+// Liefert pro (Projekt, Vertrag) eine Zeile mit offenen/aufgeloesten
+// Summen und Anzahlen.
+// ---------------------------------------------------------------------------
+async function seSummary(req, res, supabase) {
+  try {
+    let { data: pps, error } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select("ID, PROJECT_ID, CONTRACT_ID, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID")
+      .eq("TENANT_ID", req.tenantId)
+      .eq("STATUS_ID", 2)
+      .gt("SE_AMOUNT", 0);
+    if (error && String(error.message || "").includes("SE_")) return res.json({ data: [] });
+    if (error) return res.status(500).json({ error: error.message });
+    pps = pps || [];
+
+    if (pps.length === 0) return res.json({ data: [] });
+
+    // Storno-Markierung
+    const allIds = pps.map(p => p.ID);
+    const { data: stornos } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select("CANCELS_PARTIAL_PAYMENT_ID")
+      .in("CANCELS_PARTIAL_PAYMENT_ID", allIds);
+    const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+
+    // Gruppieren nach (PROJECT_ID, CONTRACT_ID)
+    const groups = new Map();
+    for (const p of pps) {
+      const key = `${p.PROJECT_ID || 0}::${p.CONTRACT_ID || 0}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          project_id: p.PROJECT_ID, contract_id: p.CONTRACT_ID,
+          open_sum: 0, open_count: 0,
+          released_sum: 0, released_count: 0,
+          cancelled_count: 0,
+        });
+      }
+      const g = groups.get(key);
+      if (cancelled.has(p.ID)) g.cancelled_count++;
+      else if (p.SE_RELEASED_BY_INVOICE_ID) { g.released_sum += Number(p.SE_AMOUNT || 0); g.released_count++; }
+      else                                  { g.open_sum     += Number(p.SE_AMOUNT || 0); g.open_count++; }
+    }
+
+    // Projekt- und Vertragsnamen nachladen
+    const projIds     = [...new Set([...groups.values()].map(g => g.project_id).filter(Boolean))];
+    const contractIds = [...new Set([...groups.values()].map(g => g.contract_id).filter(Boolean))];
+
+    const projMap = new Map();
+    if (projIds.length > 0) {
+      const { data: projs } = await supabase
+        .from("PROJECT").select("ID, NAME_SHORT, NAME_LONG").in("ID", projIds);
+      (projs || []).forEach(p => projMap.set(p.ID, p));
+    }
+    const contractMap = new Map();
+    if (contractIds.length > 0) {
+      const { data: cons } = await supabase
+        .from("CONTRACT").select("ID, NAME_SHORT, NAME_LONG").in("ID", contractIds);
+      (cons || []).forEach(c => contractMap.set(c.ID, c));
+    }
+
+    const result = [...groups.values()].map(g => {
+      const proj = projMap.get(g.project_id);
+      const con  = g.contract_id ? contractMap.get(g.contract_id) : null;
+      return {
+        project_id:        g.project_id,
+        project_number:    proj?.NAME_SHORT || null,
+        project_name:      proj?.NAME_LONG  || null,
+        contract_id:       g.contract_id,
+        contract_number:   con?.NAME_SHORT  || null,
+        contract_name:     con?.NAME_LONG   || null,
+        open_sum:          Math.round(g.open_sum     * 100) / 100,
+        open_count:        g.open_count,
+        released_sum:      Math.round(g.released_sum * 100) / 100,
+        released_count:    g.released_count,
+        cancelled_count:   g.cancelled_count,
+        total_active_sum:  Math.round((g.open_sum + g.released_sum) * 100) / 100,
+        active_count:      g.open_count + g.released_count,
+      };
+    });
+
+    result.sort((a, b) => {
+      const pn = (a.project_number || '').localeCompare(b.project_number || '');
+      if (pn !== 0) return pn;
+      return (a.contract_number || '').localeCompare(b.contract_number || '');
+    });
+
+    return res.json({ data: result });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/v1/partial-payments/se-overview?project_id=...
 // Phase 3 — Full SE overview for a project: all SE entries (open + released)
 // Returns array of:
@@ -1062,6 +1157,7 @@ module.exports = {
   listPartialPayments,
   listOpenSeForProject,
   seOverviewForProject,
+  seSummary,
   initPartialPayment,
   patchPartialPayment,
   getBillingProposal,
