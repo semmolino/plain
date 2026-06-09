@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Trash2, Plus } from 'lucide-react'
 import { Modal }        from '@/components/ui/Modal'
@@ -185,17 +185,18 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
 
-  // Init form when role data loads
-  const initialized = !isCreate && roleData?.data
-  if (initialized && form.name_short === '' && roleData.data.NAME_SHORT) {
+  // Init form when role data loads (useEffect statt setState waehrend Render)
+  useEffect(() => {
+    if (isCreate || !roleData?.data) return
+    const d = roleData.data
     setForm({
-      name_short: roleData.data.NAME_SHORT,
-      name_long:  roleData.data.NAME_LONG  || '',
-      color:      roleData.data.COLOR      || '#2563eb',
-      is_default: roleData.data.IS_DEFAULT,
+      name_short: d.NAME_SHORT,
+      name_long:  d.NAME_LONG  || '',
+      color:      d.COLOR      || '#2563eb',
+      is_default: d.IS_DEFAULT,
     })
-    setSelected(new Set(roleData.data.PERMISSION_IDS))
-  }
+    setSelected(new Set(d.PERMISSION_IDS))
+  }, [roleData?.data, isCreate])
 
   const isSystem = roleData?.data?.IS_SYSTEM === true
 

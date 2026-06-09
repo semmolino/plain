@@ -22,15 +22,17 @@ interface Props {
  * waehrend wir die RBAC schrittweise einbauen.
  */
 export function Can({ permission, anyOf, allOf, fallback = null, children }: Props) {
-  const { unrestricted, keys } = usePermissionsStore(s => ({ unrestricted: s.unrestricted, keys: s.keys }))
+  // Wichtig: jeden Wert einzeln selektieren (primitiv / stabile Referenz).
+  // Object-Literal-Selectors triggern bei Zustand sonst Re-Renders auf jeden Store-Tick.
+  const unrestricted = usePermissionsStore(s => s.unrestricted)
+  const keys         = usePermissionsStore(s => s.keys)
 
-  const granted = (() => {
-    if (unrestricted) return true
-    if (permission && !keys.has(permission)) return false
-    if (anyOf && anyOf.length > 0 && !anyOf.some(k => keys.has(k))) return false
-    if (allOf && allOf.length > 0 && !allOf.every(k => keys.has(k))) return false
-    return true
-  })()
+  let granted = true
+  if (!unrestricted) {
+    if (permission && !keys.has(permission)) granted = false
+    else if (anyOf && anyOf.length > 0 && !anyOf.some(k => keys.has(k))) granted = false
+    else if (allOf && allOf.length > 0 && !allOf.every(k => keys.has(k))) granted = false
+  }
 
   return <>{granted ? children : fallback}</>
 }
