@@ -4,7 +4,7 @@ const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/invoices");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
-const { generateUblXml } = require("../services_einvoice_ubl");
+const { generateUblXml, generatePeppolXml } = require("../services_einvoice_ubl");
 const { embedXmlIntoPdf } = require("../services_einvoice_pdf_embed");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
 
@@ -624,6 +624,37 @@ async function getPdf(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/invoices/:id/einvoice/peppol
+// Branch 11: Peppol BIS Billing 3.0 XML
+// ---------------------------------------------------------------------------
+async function getEinvoicePeppol(req, res, supabase) {
+  const invoiceId = parseInt(String(req.params.id || ""), 10);
+  if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
+
+  const download = String(req.query.download || "") === "1";
+
+  try {
+    const { data: invRow } = await supabase
+      .from("INVOICE")
+      .select("INVOICE_NUMBER")
+      .eq("ID", invoiceId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+    if (!invRow) return res.status(404).json({ error: "INVOICE nicht gefunden" });
+
+    const data = await loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId);
+    const xml = generatePeppolXml(data);
+    const fname = `Peppol_${invRow.INVOICE_NUMBER || invoiceId}.xml`;
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fname}"`);
+    return res.send(xml);
+  } catch (err) {
+    console.error("[EINVOICE_PEPPOL_INV]", { invoice_id: invoiceId, error: err?.message, stack: err?.stack });
+    return res.status(500).json({ error: `Peppol XML konnte nicht erzeugt werden: ${err?.message || err}` });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/invoices/:id/validate
 // Validiert die InvoiceData gegen die EN16931 Business-Rules.
 // Liefert { ok, errors, warnings } -- ohne Buchung.
@@ -820,4 +851,5 @@ module.exports = {
   getPdf,
   getPdfHybrid,
   validateInvoice,
+  getEinvoicePeppol,
 };

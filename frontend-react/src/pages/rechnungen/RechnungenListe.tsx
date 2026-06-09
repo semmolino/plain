@@ -12,6 +12,7 @@ import {
   openInvoicePdf, openPpPdf,
   downloadInvoiceEinvoice, downloadPpEinvoice,
   downloadInvoicePdfHybrid, downloadPpPdfHybrid,
+  downloadInvoicePeppol, downloadPpPeppol,
   cancelInvoice, cancelPartialPayment,
   deleteInvoice, deletePartialPayment,
   fetchPayments, createPayment, deletePayment,
@@ -671,6 +672,21 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     }
   }
 
+  async function openPeppol(row: UnifiedRow) {
+    try {
+      if (row.source === 'invoice') {
+        const inv = row.raw as Invoice
+        await downloadInvoicePeppol(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER)
+      } else {
+        const pp = row.raw as PartialPayment
+        await downloadPpPeppol(pp.ID, pp.PARTIAL_PAYMENT_NUMBER)
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Peppol-XML konnte nicht geladen werden: ${msg}`)
+    }
+  }
+
   async function openHybridPdf(row: UnifiedRow) {
     try {
       if (row.source === 'invoice') {
@@ -824,6 +840,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     <RowMenu>
                       <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
                       <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
+                      <button className="row-menu-item" onClick={() => openPeppol(row)}>Peppol BIS 3.0</button>
                       <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
                       {row.statusClass === 'booked' && (
                         <button className="row-menu-item" onClick={() => navigate('/rechnungen?tab=mahnungen')}>→ Mahnung</button>

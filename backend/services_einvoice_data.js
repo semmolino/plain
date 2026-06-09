@@ -129,6 +129,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const sellerCreditorId  = String(doc['COMPANY_CREDITOR-ID']                        ?? '').trim();
   const sellerPostOffBox  = String(doc.COMPANY_POST_OFFICE_BOX                       ?? '').trim();
 
+  // Branch 11: Peppol-Endpoint (Verkauefer aus COMPANY)
+  const sellerPeppolEndpointId = String(company?.PEPPOL_ENDPOINT_ID ?? '').trim();
+  const sellerPeppolSchemeId   = String(company?.PEPPOL_SCHEME_ID   ?? '').trim();
+
   // ── 3. Seller contact (EMPLOYEE) ─────────────────────────────────────────
 
   const employee = await one(supabase, 'EMPLOYEE', doc.EMPLOYEE_ID, tenantId);
@@ -155,6 +159,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   const buyerVatId         = normalizeVatId(doc.ADDRESS_VAT_ID ?? address?.VAT_ID ?? '', buyerCountry);
   const buyerDebitorNumber = String(doc.ADDRESS_DEBITOR_NUMBER ?? address?.DEBITOR_NUMBER ?? '').trim();
+
+  // Branch 11: Peppol-Endpoint (Kaeufer aus ADDRESS)
+  const buyerPeppolEndpointId = String(address?.PEPPOL_ENDPOINT_ID ?? '').trim();
+  const buyerPeppolSchemeId   = String(address?.PEPPOL_SCHEME_ID   ?? '').trim();
 
   // ── 5. Currency ───────────────────────────────────────────────────────────
 
@@ -571,6 +579,8 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       bic:           sellerBic,
       creditorId:    sellerCreditorId,
       postOfficeBox: sellerPostOffBox,
+      peppolEndpointId: sellerPeppolEndpointId,
+      peppolSchemeId:   sellerPeppolSchemeId,
       contactName:   contactName,
       contactPhone:  contactPhone,
       contactEmail:  contactEmail,
@@ -578,7 +588,9 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     },
 
     buyer: {
-      name:          buyerName,
+      name:               buyerName,
+      peppolEndpointId:   buyerPeppolEndpointId,
+      peppolSchemeId:     buyerPeppolSchemeId,
       street:        String(doc.ADDRESS_STREET    ?? address?.STREET    ?? '').trim(),
       city:          String(doc.ADDRESS_CITY      ?? address?.CITY      ?? '').trim(),
       postCode:      String(doc.ADDRESS_POST_CODE ?? address?.POST_CODE ?? '').trim(),

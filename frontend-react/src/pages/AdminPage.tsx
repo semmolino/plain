@@ -427,6 +427,7 @@ const EMPTY_COMPANY_FORM = {
   company_name_1: '', company_name_2: '', street: '', post_code: '', city: '',
   post_office_box: '', country_id: '', tax_number: '', tax_id: '',
   bic: '', iban: '', creditor_id: '',
+  peppol_endpoint_id: '', peppol_scheme_id: '',
 }
 
 function companyToForm(c: Company) {
@@ -443,6 +444,8 @@ function companyToForm(c: Company) {
     bic:            c.BIC ?? '',
     iban:           c.IBAN ?? '',
     creditor_id:    c['CREDITOR-ID'] ?? '',
+    peppol_endpoint_id: c.PEPPOL_ENDPOINT_ID ?? '',
+    peppol_scheme_id:   c.PEPPOL_SCHEME_ID   ?? '',
   }
 }
 
@@ -617,6 +620,20 @@ function UnternehmenSection() {
         <FormField label="BIC"                             id="ubic"  value={form.bic}             onChange={set('bic')} />
         <FormField label="IBAN"                            id="uiban" value={form.iban}            onChange={set('iban')} />
         <FormField label="Gläubiger-Identifikationsnummer" id="ucid"  value={form.creditor_id}     onChange={set('creditor_id')} />
+        <FormField label="Peppol Endpoint-ID (Versender)"   id="upep" value={form.peppol_endpoint_id} onChange={set('peppol_endpoint_id')} />
+        <div className="form-group">
+          <label htmlFor="upep-sc">Peppol Scheme-ID (EAS)</label>
+          <select id="upep-sc" value={form.peppol_scheme_id} onChange={e => setForm({ ...form, peppol_scheme_id: e.target.value })}>
+            <option value="">— keiner —</option>
+            <option value="0088">0088 — GLN</option>
+            <option value="9930">9930 — DE USt-IdNr.</option>
+            <option value="9931">9931 — AT VAT</option>
+            <option value="9957">9957 — FR SIRET</option>
+            <option value="9959">9959 — BE Enterprise</option>
+            <option value="0184">0184 — DK CVR</option>
+            <option value="0192">0192 — NO Org.nr</option>
+          </select>
+        </div>
         <Message text={msg?.text ?? null} type={msg?.type} />
         <button className="btn-primary" type="submit" disabled={isPending}>
           {isPending ? 'Speichert …' : selectedId !== null ? 'Änderungen speichern' : 'Neu anlegen'}

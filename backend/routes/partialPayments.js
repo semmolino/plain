@@ -27,6 +27,7 @@ module.exports = (supabase) => {
   router.delete("/:id",                        (req, res) => ctrl.deletePartialPayment(req, res, supabase));
   router.get("/:id/pdf",                       (req, res) => ctrl.getPdf(req, res, supabase));
   router.get("/:id/pdf-hybrid",                (req, res) => ctrl.getPdfHybrid(req, res, supabase));
+  router.get("/:id/einvoice/peppol",           (req, res) => ctrl.getEinvoicePeppol(req, res, supabase));
   router.get("/:id/validate",                  (req, res) => ctrl.validatePp(req, res, supabase));
 
   // Anlagen (Branch 9)

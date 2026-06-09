@@ -335,6 +335,30 @@ export const bookFinalInvoiceForce = (id: number, opts?: { release_partial_payme
   apiClient.post<{ success: boolean }>(`/final-invoices/${id}/book?force=1`, opts || {})
 
 // Hybrid PDF (Rechnungs-PDF mit eingebetteter ZUGFeRD-XML)
+// Branch 11: Peppol BIS 3.0 Download
+export function downloadInvoicePeppol(
+  id: number,
+  invoiceType: InvoiceType | null | undefined,
+  invoiceNumber: string | null | undefined,
+): Promise<void> {
+  const isFinal = invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung'
+  const base    = isFinal ? `/final-invoices/${id}` : `/invoices/${id}`
+  const params  = new URLSearchParams({ download: '1' })
+  const num     = invoiceNumber || String(id)
+  const fileName = `Peppol_${num}.xml`
+  return downloadWithAuth(`${base}/einvoice/peppol?${params}`, fileName)
+}
+
+export function downloadPpPeppol(
+  id: number,
+  ppNumber: string | null | undefined,
+): Promise<void> {
+  const params   = new URLSearchParams({ download: '1' })
+  const num      = ppNumber || String(id)
+  const fileName = `Peppol_${num}.xml`
+  return downloadWithAuth(`/partial-payments/${id}/einvoice/peppol?${params}`, fileName)
+}
+
 export function downloadInvoicePdfHybrid(
   id: number,
   invoiceNumber: string | null | undefined,

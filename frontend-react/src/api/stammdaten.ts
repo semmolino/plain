@@ -18,6 +18,8 @@ export interface Address {
   CUSTOMER_NUMBER:  string | null
   TAX_ID:           string | null
   BUYER_REFERENCE:  string | null
+  PEPPOL_ENDPOINT_ID: string | null
+  PEPPOL_SCHEME_ID:   string | null
   COUNTRY:          string
 }
 
@@ -48,6 +50,8 @@ export interface AddressPayload {
   customer_number?: string
   tax_id?: string
   buyer_reference?: string
+  peppol_endpoint_id?: string
+  peppol_scheme_id?:   string
 }
 
 export interface ContactPayload {
@@ -120,6 +124,8 @@ export interface Company {
   BIC: string | null
   IBAN: string | null
   'CREDITOR-ID': string | null
+  PEPPOL_ENDPOINT_ID: string | null
+  PEPPOL_SCHEME_ID:   string | null
 }
 
 export interface CompanyPayload {
@@ -135,6 +141,8 @@ export interface CompanyPayload {
   bic?: string
   iban?: string
   creditor_id?: string
+  peppol_endpoint_id?: string
+  peppol_scheme_id?:   string
 }
 
 export const fetchCompanies = () =>

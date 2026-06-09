@@ -596,7 +596,7 @@ async function postFeeCalcAddToOfferStructure(req, res, supabase) {
 async function getCompanies(req, res, supabase) {
   const { data, error } = await supabase
     .from("COMPANY")
-    .select("ID, COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, TAX_NUMBER, \"TAX-ID\", BIC, IBAN, \"CREDITOR-ID\"")
+    .select("ID, COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, TAX_NUMBER, \"TAX-ID\", BIC, IBAN, \"CREDITOR-ID\", PEPPOL_ENDPOINT_ID, PEPPOL_SCHEME_ID")
     .eq("TENANT_ID", req.tenantId)
     .order("COMPANY_NAME_1", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
@@ -618,6 +618,9 @@ function buildCompanyRow(body) {
     BIC:             s(body.bic),
     IBAN:            s(body.iban),
     "CREDITOR-ID":   s(body.creditor_id),
+    // Branch 11: Peppol-Endpoint
+    ...(body.peppol_endpoint_id !== undefined ? { PEPPOL_ENDPOINT_ID: s(body.peppol_endpoint_id) } : {}),
+    ...(body.peppol_scheme_id   !== undefined ? { PEPPOL_SCHEME_ID:   s(body.peppol_scheme_id)   } : {}),
   };
 }
 
@@ -656,13 +659,13 @@ async function putCompany(req, res, supabase) {
 // POST /api/stammdaten/address
 // ---------------------------------------------------------------------------
 async function postAddress(req, res, supabase) {
-  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference } = req.body || {};
+  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference, peppol_endpoint_id, peppol_scheme_id } = req.body || {};
   if (!address_name_1 || typeof address_name_1 !== "string") return res.status(400).json({ error: "address_name_1 is required" });
 
   const parsedCountryId = typeof country_id === "number" ? country_id : parseInt(country_id, 10);
   if (!parsedCountryId || Number.isNaN(parsedCountryId)) return res.status(400).json({ error: "country_id is required" });
 
-  const { data, error } = await supabase.from("ADDRESS").insert([{
+  const insertRow = {
     ADDRESS_NAME_1: address_name_1.trim(),
     ADDRESS_NAME_2: (address_name_2 || "").trim() || null,
     STREET: (street || "").trim() || null,
@@ -674,7 +677,11 @@ async function postAddress(req, res, supabase) {
     "TAX-ID": (tax_id || "").trim() || null,
     BUYER_REFERENCE: (buyer_reference || "").trim() || null,
     TENANT_ID: req.tenantId ?? null,
-  }]);
+  };
+  if (peppol_endpoint_id !== undefined) insertRow.PEPPOL_ENDPOINT_ID = (peppol_endpoint_id || "").trim() || null;
+  if (peppol_scheme_id   !== undefined) insertRow.PEPPOL_SCHEME_ID   = (peppol_scheme_id   || "").trim() || null;
+
+  const { data, error } = await supabase.from("ADDRESS").insert([insertRow]);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -747,7 +754,7 @@ async function listAddresses(req, res, supabase) {
 
   const { data: addresses, error: aErr } = await supabase
     .from("ADDRESS")
-    .select('ID, ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, CUSTOMER_NUMBER, "TAX-ID", BUYER_REFERENCE')
+    .select('ID, ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, CUSTOMER_NUMBER, "TAX-ID", BUYER_REFERENCE, PEPPOL_ENDPOINT_ID, PEPPOL_SCHEME_ID')
     .eq("TENANT_ID", req.tenantId)
     .order("ADDRESS_NAME_1", { ascending: true })
     .limit(limit);
@@ -766,15 +773,20 @@ async function listAddresses(req, res, supabase) {
 // ---------------------------------------------------------------------------
 async function patchAddress(req, res, supabase) {
   const id = req.params.id;
-  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference } = req.body || {};
+  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference, peppol_endpoint_id, peppol_scheme_id } = req.body || {};
   if (!address_name_1 || !country_id) return res.status(400).json({ error: "ADDRESS_NAME_1 und COUNTRY_ID sind erforderlich" });
 
-  const { data, error } = await supabase.from("ADDRESS").update({
+  const update = {
     ADDRESS_NAME_1: address_name_1, ADDRESS_NAME_2: address_name_2 || null,
     STREET: street || null, POST_CODE: post_code || null, CITY: city || null,
     POST_OFFICE_BOX: post_office_box || null, COUNTRY_ID: parseInt(country_id, 10),
     CUSTOMER_NUMBER: customer_number || null, "TAX-ID": tax_id || null, BUYER_REFERENCE: buyer_reference || null,
-  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single();
+  };
+  // Branch 11: Peppol — nur setzen wenn explizit gesendet (Migration 0061 evtl. nicht da)
+  if (peppol_endpoint_id !== undefined) update.PEPPOL_ENDPOINT_ID = peppol_endpoint_id || null;
+  if (peppol_scheme_id   !== undefined) update.PEPPOL_SCHEME_ID   = peppol_scheme_id   || null;
+
+  const { data, error } = await supabase.from("ADDRESS").update(update).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single();
   if (error) return res.status(500).json({ error: error.message });
 
   let countryName = "";
