@@ -2,9 +2,23 @@
 
 const express = require("express");
 const ctrl = require("../controllers/projekte");
+const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 2: alle projekte-Routes ausser den reinen Stammdaten-Lookups
+  // (departments, statuses, types, managers, employees/active, roles/active)
+  // benoetigen projects.view. Lookups bleiben offen, weil sie auf dem
+  // Dashboard und in Wizards anderer Module gebraucht werden.
+  const VIEW_GUARD = requirePermission("projects.view");
+  const lookupPaths = new Set([
+    "/departments","/statuses","/types","/managers","/employees/active","/roles/active",
+  ]);
+  router.use((req, res, next) => {
+    if (lookupPaths.has(req.path)) return next();
+    return VIEW_GUARD(req, res, next);
+  });
 
   router.get("/departments",                           (req, res) => ctrl.getDepartments(req, res, supabase));
   router.get("/statuses",                              (req, res) => ctrl.getStatuses(req, res, supabase));

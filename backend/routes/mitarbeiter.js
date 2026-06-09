@@ -1,6 +1,7 @@
 const express      = require("express");
 const bcrypt       = require("bcryptjs");
 const balanceSvc   = require("../services/employeeBalance");
+const { requirePermission } = require("../middleware/permissions");
 
 // Returns an error message string if a duplicate is found, otherwise null.
 // excludeId: skip this employee ID (used on update to ignore self).
@@ -28,6 +29,22 @@ async function checkEmployeeDuplicates(supabase, tenantId, { short_name, personn
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 2: Mitarbeiter-Routen erfordern employees.view.
+  // Ausnahmen:
+  //   /genders, /                  -> Lookups (Geschlechter, Kurzliste fuer Dropdowns)
+  //   /:id/balance, /:id/balance/running -> eigene Daten muessen lesbar bleiben
+  //                                         (wird im Handler weiter geprueft)
+  //   /search                      -> Suche fuer Dropdowns ueberall
+  const VIEW_GUARD = requirePermission("employees.view");
+  const lookupPaths = new Set(["/genders","/","/search"]);
+  router.use((req, res, next) => {
+    if (lookupPaths.has(req.path)) return next();
+    // Eigenen Saldo / eigene Daten immer erlauben (own data implicit right)
+    const m = req.path.match(/^\/(\d+)\/balance/);
+    if (m && parseInt(m[1], 10) === req.employeeId) return next();
+    return VIEW_GUARD(req, res, next);
+  });
 
   // GET /api/mitarbeiter/genders
   router.get("/genders", async (req, res) => {

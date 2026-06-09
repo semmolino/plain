@@ -70,33 +70,37 @@ const { startMahnungChecker } = require("./services/mahnungChecker");
 const { startLeistungsstandReminderChecker } = require("./services/leistungsstandReminderChecker");
 const { startHoursBookingReminderChecker }   = require("./services/hoursBookingReminderChecker");
 
-app.use("/api/v1/stammdaten",        authMiddleware, stammdatenRoutes);
-app.use("/api/v1/mitarbeiter",       authMiddleware, mitarbeiterRoutes);
-app.use("/api/v1/projekte",          authMiddleware, projekteRoutes);
-app.use("/api/v1/buchungen",         authMiddleware, buchungenRoutes);
-app.use("/api/v1/employee2project",  authMiddleware, employee2projectRoutes);
-app.use("/api/v1/partial-payments",  authMiddleware, partialPaymentsRoutes);
-app.use("/api/v1/invoices",          authMiddleware, invoicesRoutes);
-app.use("/api/v1/payments",          authMiddleware, paymentsRoutes);
-app.use("/api/v1/assets",            authMiddleware, assetsRoutes);
-app.use("/api/v1/document-templates",authMiddleware, documentTemplatesRoutes);
-app.use("/api/v1/documents",         authMiddleware, documentsRoutes);
-app.use("/api/v1/number-ranges",     authMiddleware, numberRangesRoutes);
-app.use("/api/v1/reports",           authMiddleware, reportsRoutes);
-app.use("/api/v1/final-invoices",    authMiddleware, finalInvoicesRoutes);
-app.use("/api/v1/notifications",     authMiddleware, notificationsRoutes);
-app.use("/api/v1/angebote",          authMiddleware, angeboteRoutes);
-app.use("/api/v1/kostensatz",        authMiddleware, kostensatzRoutes);
-app.use("/api/v1/mahnungen",         authMiddleware, mahnungenRoutes);
-app.use("/api/v1/arbzg",             authMiddleware, arbzgRoutes);
-app.use("/api/v1/budget-warnings",   authMiddleware, budgetWarningsRoutes);
-app.use("/api/v1/notification-config", authMiddleware, notificationConfigRoutes);
-app.use("/api/v1/notification-schedule", authMiddleware, notificationScheduleRoutes);
+// RBAC: permissionsMiddleware laeuft global nach authMiddleware und legt
+// req.permissions + req.hasPermission ab. Soft-fail wenn Migration 0062 fehlt
+// (req._permissionsUnrestricted = true) -- damit bleiben alle Routen ohne
+// Migration voll nutzbar.
+const authChain = [authMiddleware, permissionsMiddleware];
 
-// RBAC (Phase 0) — Permissions + Rollen + Mitarbeiter-Rollen-Zuweisung.
-// Permissions-Middleware laeuft NACH authMiddleware und legt req.permissions ab.
-// Soft-fail wenn Migration 0062 fehlt — req._permissionsUnrestricted = true.
-app.use("/api/v1", authMiddleware, permissionsMiddleware, rolesRoutes);
+app.use("/api/v1/stammdaten",        ...authChain, stammdatenRoutes);
+app.use("/api/v1/mitarbeiter",       ...authChain, mitarbeiterRoutes);
+app.use("/api/v1/projekte",          ...authChain, projekteRoutes);
+app.use("/api/v1/buchungen",         ...authChain, buchungenRoutes);
+app.use("/api/v1/employee2project",  ...authChain, employee2projectRoutes);
+app.use("/api/v1/partial-payments",  ...authChain, partialPaymentsRoutes);
+app.use("/api/v1/invoices",          ...authChain, invoicesRoutes);
+app.use("/api/v1/payments",          ...authChain, paymentsRoutes);
+app.use("/api/v1/assets",            ...authChain, assetsRoutes);
+app.use("/api/v1/document-templates",...authChain, documentTemplatesRoutes);
+app.use("/api/v1/documents",         ...authChain, documentsRoutes);
+app.use("/api/v1/number-ranges",     ...authChain, numberRangesRoutes);
+app.use("/api/v1/reports",           ...authChain, reportsRoutes);
+app.use("/api/v1/final-invoices",    ...authChain, finalInvoicesRoutes);
+app.use("/api/v1/notifications",     ...authChain, notificationsRoutes);
+app.use("/api/v1/angebote",          ...authChain, angeboteRoutes);
+app.use("/api/v1/kostensatz",        ...authChain, kostensatzRoutes);
+app.use("/api/v1/mahnungen",         ...authChain, mahnungenRoutes);
+app.use("/api/v1/arbzg",             ...authChain, arbzgRoutes);
+app.use("/api/v1/budget-warnings",   ...authChain, budgetWarningsRoutes);
+app.use("/api/v1/notification-config", ...authChain, notificationConfigRoutes);
+app.use("/api/v1/notification-schedule", ...authChain, notificationScheduleRoutes);
+
+// Rollen + Mitarbeiter-Rollen-Zuweisung (eigene Routes mit eigenen Guards)
+app.use("/api/v1", ...authChain, rolesRoutes);
 
 
 

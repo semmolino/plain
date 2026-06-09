@@ -4,9 +4,13 @@
 
 const express = require("express");
 const ctrl = require("../controllers/finalInvoices");
+const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 2: final-invoices = Teil-/Schlussrechnungen → invoices.view
+  router.use(requirePermission("invoices.view"));
 
   router.get("/:id/phases",               (req, res) => ctrl.getPhases(req, res, supabase));
   router.post("/:id/phases",              (req, res) => ctrl.savePhases(req, res, supabase));

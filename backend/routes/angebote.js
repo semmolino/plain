@@ -2,9 +2,16 @@
 
 const express = require('express');
 const ctrl    = require('../controllers/angebote');
+const { requirePermission } = require('../middleware/permissions');
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 2: alle Angebote-Routen ausser /statuses-Lookup erfordern offers.view
+  router.use((req, res, next) => {
+    if (req.path === '/statuses') return next();
+    return requirePermission('offers.view')(req, res, next);
+  });
 
   router.get('/statuses',                   (req, res) => ctrl.getOfferStatuses(req, res, supabase));
   router.get('/',                           (req, res) => ctrl.listOffers(req, res, supabase));

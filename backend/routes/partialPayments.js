@@ -5,9 +5,20 @@ const ctrl    = require("../controllers/partialPayments");
 const att     = require("../controllers/attachments");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { sendMail }    = require("../services/emailService");
+const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 2: partial-payments = Abschlagsrechnungen → invoices.view.
+  // Ausnahme: SE-Routen brauchen security_retention.view (kann auch ohne
+  // invoices.view erteilt werden).
+  router.use((req, res, next) => {
+    if (req.path === "/se-overview" || req.path === "/se-summary" || req.path === "/open-se") {
+      return requireAnyPermission("security_retention.view", "invoices.view")(req, res, next);
+    }
+    return requirePermission("invoices.view")(req, res, next);
+  });
 
   router.get("/",                              (req, res) => ctrl.listPartialPayments(req, res, supabase));
   router.get("/open-se",                       (req, res) => ctrl.listOpenSeForProject(req, res, supabase));

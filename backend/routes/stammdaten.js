@@ -2,6 +2,7 @@
 
 const express = require("express");
 const ctrl = require("../controllers/stammdaten");
+const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -43,7 +44,7 @@ module.exports = (supabase) => {
   router.get("/companies/:id/assets",                                (req, res) => ctrl.getCompanyAssets(req, res, supabase));
   router.put("/companies/:id/logo",                                  (req, res) => ctrl.putCompanyLogo(req, res, supabase));
   router.put("/companies/:id/signature",                             (req, res) => ctrl.putCompanySignature(req, res, supabase));
-  router.post("/address",                                            (req, res) => ctrl.postAddress(req, res, supabase));
+  router.post("/address",                                            requirePermission("addresses.view"), (req, res) => ctrl.postAddress(req, res, supabase));
   router.post("/rollen",                                             (req, res) => ctrl.postRollen(req, res, supabase));
   router.get("/rollen",                                              (req, res) => ctrl.getRollen(req, res, supabase));
   router.patch("/rolle/:id",                                         (req, res) => ctrl.patchRolle(req, res, supabase));
@@ -52,22 +53,22 @@ module.exports = (supabase) => {
   router.put("/logo",                                                (req, res) => ctrl.putLogo(req, res, supabase));
   router.get("/salutations",                                         (req, res) => ctrl.getSalutations(req, res, supabase));
   router.get("/genders",                                             (req, res) => ctrl.getGenders(req, res, supabase));
-  router.get("/addresses/search",                                    (req, res) => ctrl.searchAddresses(req, res, supabase));
-  router.get("/addresses/list",                                      (req, res) => ctrl.listAddresses(req, res, supabase));
-  router.patch("/addresses/:id",                                     (req, res) => ctrl.patchAddress(req, res, supabase));
-  router.delete("/addresses/:id",                                    (req, res) => ctrl.deleteAddress(req, res, supabase));
-  router.get("/contacts/search",                                     (req, res) => ctrl.searchContacts(req, res, supabase));
-  router.get("/contacts/by-address",                                 (req, res) => ctrl.getContactsByAddress(req, res, supabase));
-  router.get("/contacts/list",                                       (req, res) => ctrl.listContacts(req, res, supabase));
-  router.patch("/contacts/:id",                                      (req, res) => ctrl.patchContact(req, res, supabase));
-  router.delete("/contacts/:id",                                     (req, res) => ctrl.deleteContact(req, res, supabase));
+  router.get("/addresses/search",                                    requirePermission("addresses.view"),   (req, res) => ctrl.searchAddresses(req, res, supabase));
+  router.get("/addresses/list",                                      requirePermission("addresses.view"),   (req, res) => ctrl.listAddresses(req, res, supabase));
+  router.patch("/addresses/:id",                                     requirePermission("addresses.view"),   (req, res) => ctrl.patchAddress(req, res, supabase));
+  router.delete("/addresses/:id",                                    requirePermission("addresses.view"),   (req, res) => ctrl.deleteAddress(req, res, supabase));
+  router.get("/contacts/search",                                     requirePermission("addresses.contacts.view"), (req, res) => ctrl.searchContacts(req, res, supabase));
+  router.get("/contacts/by-address",                                 requirePermission("addresses.contacts.view"), (req, res) => ctrl.getContactsByAddress(req, res, supabase));
+  router.get("/contacts/list",                                       requirePermission("addresses.contacts.view"), (req, res) => ctrl.listContacts(req, res, supabase));
+  router.patch("/contacts/:id",                                      requirePermission("addresses.contacts.view"), (req, res) => ctrl.patchContact(req, res, supabase));
+  router.delete("/contacts/:id",                                     requirePermission("addresses.contacts.view"), (req, res) => ctrl.deleteContact(req, res, supabase));
   router.get("/vat/search",                                          (req, res) => ctrl.searchVat(req, res, supabase));
   router.get("/vat",                                                 (req, res) => ctrl.getVat(req, res, supabase));
   router.get("/currencies",                                          (req, res) => ctrl.getCurrencies(req, res, supabase));
   router.get("/defaults",                                            (req, res) => ctrl.getDefaults(req, res, supabase));
   router.put("/defaults",                                            (req, res) => ctrl.putDefault(req, res, supabase));
   router.get("/payment-means/search",                                (req, res) => ctrl.searchPaymentMeans(req, res, supabase));
-  router.post("/contacts",                                           (req, res) => ctrl.postContact(req, res, supabase));
+  router.post("/contacts",                                           requirePermission("addresses.contacts.view"), (req, res) => ctrl.postContact(req, res, supabase));
 
   router.get("/monatsabschluss",                                     (req, res) => ctrl.getMonatsabschluss(req, res, supabase));
   router.put("/monatsabschluss",                                     (req, res) => ctrl.putMonatsabschluss(req, res, supabase));

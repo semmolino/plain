@@ -1,9 +1,13 @@
 const express = require("express");
 const svc     = require("../services/mahnungenService");
 const { renderMahnungPdf } = require("../services_pdf_render");
+const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 2: alle Mahnungen-Routen erfordern dunning.view
+  router.use(requirePermission("dunning.view"));
 
   function tid(req) { return req.tenantId; }
   function eid(req) { return req.employeeId; }

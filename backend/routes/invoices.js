@@ -5,9 +5,13 @@ const ctrl    = require("../controllers/invoices");
 const att     = require("../controllers/attachments");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { sendMail }          = require("../services/emailService");
+const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 2: gesamte invoices-Routes erfordern invoices.view
+  router.use(requirePermission("invoices.view"));
 
   router.get("/",                              (req, res) => ctrl.listInvoices(req, res, supabase));
   router.post("/init",                         (req, res) => ctrl.initInvoice(req, res, supabase));
