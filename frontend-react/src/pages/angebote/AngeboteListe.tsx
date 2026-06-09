@@ -25,7 +25,7 @@ function fmtDate(s: string | null | undefined) {
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
-export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, name: string) => void }) {
+export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOffer?: (id: number, name: string) => void; onEditStammdaten?: (id: number) => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [search,        setSearch]        = useState('')
@@ -178,9 +178,10 @@ export function AngeboteListe({ onSelectOffer }: { onSelectOffer?: (id: number, 
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.OFFER_DATE ?? r.CREATED_AT)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.VALID_UNTIL)}</td>
                   <td className="doc-actions" onClick={e => e.stopPropagation()}>
-                    <button className="row-action-btn" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Bearbeiten">
+                    <button className="row-action-btn" onClick={() => onEditStammdaten?.(r.ID)} title="Angebotsdaten bearbeiten">
                       <Pencil size={14} strokeWidth={2} />
                     </button>
+                    <button className="btn-small" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Angebotsstruktur öffnen">Öffnen</button>
                     <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">
                       <FileText size={14} strokeWidth={1.75} />
                     </button>

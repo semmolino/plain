@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, Percent } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { Message }       from '@/components/ui/Message'
 import { Modal }         from '@/components/ui/Modal'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
@@ -836,17 +836,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                           <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
                           <td className="num"><span style={{ fontSize: 12, fontWeight: 700 }}>{fmtEur(rootGesamt)}</span></td>
                           <td></td>
-                          <td>
-                            <button
-                              className="row-action-btn"
-                              title={projectLevelSurcharges > 0 ? `Projektzuschläge (${fmtEur(projectLevelSurcharges)})` : 'Projektzuschläge bearbeiten'}
-                              style={projectLevelSurcharges > 0 ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
-                              onClick={() => {
-                                if (projectSurchargePanel) closeProjectSurchargePanel()
-                                else { setProjectSurchargeEdit(projectSurchargeDefault()); setProjectSurchargePanel(true) }
-                              }}
-                            ><Percent size={13} strokeWidth={2} /></button>
-                          </td>
+                          <td></td>
                         </tr>
                         {projectSurchargePanel && projectSurchargeEdit && (() => {
                           const sE = projectSurchargeEdit
@@ -1032,23 +1022,15 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                               />
                             </td>
                             <td>
-                              <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                                <button
-                                  className="row-action-btn"
-                                  title={hasSurcharges ? `Zuschläge (${fmtEur(node.SURCHARGES_TOTAL)})` : 'Zuschläge bearbeiten'}
-                                  style={hasSurcharges ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
-                                  onClick={() => { if (surchargePanel === node.STRUCTURE_ID) closeSurchargePanel(node.STRUCTURE_ID); else setSurchargePanel(node.STRUCTURE_ID) }}
-                                ><Percent size={13} strokeWidth={2} /></button>
-                                <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c', display: 'inline-flex', alignItems: 'center' }}
-                                  disabled={deleteMut.isPending}
-                                  title="Element löschen"
-                                  onClick={() => setConfirmState({
-                                    title: 'Element löschen',
-                                    message: `Element „${nameShort}" und alle Kind-Elemente löschen?`,
-                                    onConfirm: () => deleteMut.mutate(node.STRUCTURE_ID),
-                                  })}
-                                ><X size={12} strokeWidth={2.5} /></button>
-                              </div>
+                              <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                                disabled={deleteMut.isPending}
+                                title="Element löschen"
+                                onClick={() => setConfirmState({
+                                  title: 'Element löschen',
+                                  message: `Element „${nameShort}" und alle Kind-Elemente löschen?`,
+                                  onConfirm: () => deleteMut.mutate(node.STRUCTURE_ID),
+                                })}
+                              ><Trash2 size={14} strokeWidth={2} /></button>
                             </td>
                           </tr>
                           {surchargePanel === node.STRUCTURE_ID && (

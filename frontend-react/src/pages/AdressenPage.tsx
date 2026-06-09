@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { SlidersHorizontal } from 'lucide-react'
+import { SlidersHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
 import { Message }     from '@/components/ui/Message'
@@ -489,8 +489,12 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
                       >
                         Kontakte{cnt > 0 ? ` (${cnt})` : ''}
                       </button>
-                      <button className="btn-small" onClick={() => openEdit(a)}>Bearbeiten</button>
-                      <button className="btn-small btn-danger" onClick={() => handleDelete(a)}>Löschen</button>
+                      <button className="row-action-btn" onClick={() => openEdit(a)} title="Bearbeiten">
+                        <Pencil size={14} strokeWidth={2} />
+                      </button>
+                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(a)} title="Löschen">
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
                     </td>
                   </tr>
                   )
@@ -774,8 +778,12 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
                     ) : (c.ADDRESS ?? '—')}</td>
                     {visibleOptCols.map(col => <td key={col.key}>{(c[col.key as keyof Contact] as string | null | undefined) ?? '—'}</td>)}
                     <td className="doc-actions">
-                      <button className="btn-small" onClick={() => openEdit(c)}>Bearbeiten</button>
-                      <button className="btn-small btn-danger" onClick={() => handleDeleteContact(c)}>Löschen</button>
+                      <button className="row-action-btn" onClick={() => openEdit(c)} title="Bearbeiten">
+                        <Pencil size={14} strokeWidth={2} />
+                      </button>
+                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDeleteContact(c)} title="Löschen">
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
                     </td>
                   </tr>
                 ))}

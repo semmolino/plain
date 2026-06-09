@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Tabs }                 from '@/components/ui/Tabs'
+import { Modal }                from '@/components/ui/Modal'
 import { AngeboteListe }        from '@/pages/angebote/AngeboteListe'
 import { AngeboteAnlegen }      from '@/pages/angebote/AngeboteAnlegen'
 import { AngeboteStammdaten }   from '@/pages/angebote/AngeboteStammdaten'
@@ -9,12 +10,11 @@ import { AngeboteStruktur }     from '@/pages/angebote/AngeboteStruktur'
 import { AngeboteHoai }         from '@/pages/angebote/AngeboteHoai'
 import { fetchOffer }           from '@/api/angebote'
 
-type Tab = 'liste' | 'anlegen' | 'stammdaten' | 'struktur' | 'hoai'
+type Tab = 'liste' | 'anlegen' | 'struktur' | 'hoai'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'liste',      label: 'Angebotsliste'   },
   { id: 'anlegen',    label: 'Anlegen'          },
-  { id: 'stammdaten', label: 'Angebotsdaten'    },
   { id: 'struktur',   label: 'Angebotsstruktur' },
   { id: 'hoai',       label: 'HOAI'             },
 ]
@@ -68,6 +68,8 @@ export function AngebotePage() {
 
   const offerName = offerData?.data?.NAME_SHORT ?? (selectedOfferId ? `#${selectedOfferId}` : '')
 
+  const [editStammdatenId, setEditStammdatenId] = useState<number | null>(null)
+
   return (
     <div className="master-page">
       <h1 className="master-title">Angebote</h1>
@@ -83,12 +85,15 @@ export function AngebotePage() {
       )}
 
       <div className="master-tab-content">
-        {tab === 'liste'      && <AngeboteListe onSelectOffer={openOffer} />}
+        {tab === 'liste'      && <AngeboteListe onSelectOffer={openOffer} onEditStammdaten={id => setEditStammdatenId(id)} />}
         {tab === 'anlegen'    && <AngeboteAnlegen onOfferCreated={id => { persistOfferId(id); setTab('struktur') }} />}
-        {tab === 'stammdaten' && <AngeboteStammdaten initialOfferId={selectedOfferId} />}
         {tab === 'struktur'   && <AngeboteStruktur   initialOfferId={selectedOfferId} onOfferChange={onOfferChange} />}
         {tab === 'hoai'       && <AngeboteHoai       initialOfferId={selectedOfferId} />}
       </div>
+
+      <Modal open={editStammdatenId !== null} onClose={() => setEditStammdatenId(null)} title="Angebot bearbeiten" className="modal-xl">
+        {editStammdatenId !== null && <AngeboteStammdaten initialOfferId={editStammdatenId} />}
+      </Modal>
     </div>
   )
 }

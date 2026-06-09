@@ -7,6 +7,7 @@ import { FormField }   from '@/components/ui/FormField'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
+import { Pencil, Trash2 } from 'lucide-react'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
@@ -1765,8 +1766,12 @@ export function MitarbeiterPage() {
                           {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
                         </td>
                         <td className="doc-actions">
-                          <button className="btn-small" onClick={() => setEditRow(r)}>Bearbeiten</button>
-                          <button className="btn-small btn-danger" onClick={() => handleDelete(r)}>Löschen</button>
+                          <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
+                            <Pencil size={14} strokeWidth={2} />
+                          </button>
+                          <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(r)} title="Löschen">
+                            <Trash2 size={14} strokeWidth={2} />
+                          </button>
                         </td>
                       </tr>
                     ))}

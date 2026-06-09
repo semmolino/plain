@@ -797,6 +797,7 @@ input::placeholder { color: var(--text-4); }
   white-space: nowrap;
   position: sticky; top: 0; z-index: 2; background: var(--surface);
 }
+.master-table th.num, .master-table td.num { text-align: right; }
 .master-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-4); }
 .master-table tr:last-child td { border-bottom: none; }
 .master-table tr:hover td { background: var(--accent-tint); }
@@ -1595,10 +1596,12 @@ input::placeholder { color: var(--text-4); }
 .ls-row-leaf:hover td { background: var(--accent-tint); }
 .ls-col-short { width: 140px; }
 .ls-col-name  { min-width: 180px; }
-.ls-col-num   { width: 120px; }
-.ls-col-input { width: 110px; }
-.ls-col-delta { width: 80px; }
+/* Numerische Spalten — Header UND Zellen rechtsbuendig */
+.ls-col-num,   th.ls-col-num   { width: 120px; text-align: right; }
+.ls-col-input, th.ls-col-input { width: 110px; text-align: right; }
+.ls-col-delta, th.ls-col-delta { width: 80px;  text-align: right; }
 .ls-right { text-align: right; }
+.ls-table th.num, .ls-table td.num { text-align: right; }
 .ls-muted { color: var(--text-5); }
 .ls-prev-wrap { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .ls-badge-prev {

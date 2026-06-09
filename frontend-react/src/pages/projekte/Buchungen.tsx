@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
 import { Modal }       from '@/components/ui/Modal'
+import { Pencil, Trash2 } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FormField }   from '@/components/ui/FormField'
 import {
@@ -439,8 +440,12 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         <td className="doc-actions">
                           {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
                             <>
-                              <button className="btn-small" onClick={() => openEdit(b)}>Bearbeiten</button>
-                              <button className="btn-small btn-danger" onClick={() => confirmDelete(b)}>×</button>
+                              <button className="row-action-btn" onClick={() => openEdit(b)} title="Bearbeiten">
+                                <Pencil size={14} strokeWidth={2} />
+                              </button>
+                              <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => confirmDelete(b)} title="Löschen">
+                                <Trash2 size={14} strokeWidth={2} />
+                              </button>
                             </>
                           ) : (
                             <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.4)', whiteSpace: 'nowrap' }}>abgerechnet</span>

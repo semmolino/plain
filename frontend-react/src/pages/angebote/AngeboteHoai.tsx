@@ -4,6 +4,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Modal }        from '@/components/ui/Modal'
 import { fetchFeeCalcMasters, openHonorarPdf, deleteFeeCalcMaster } from '@/api/fee'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
+import { Pencil, FileText, Trash2 } from 'lucide-react'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -68,14 +69,20 @@ export function AngeboteHoai({ initialOfferId }: Props) {
                     {c.gesamthonorar != null ? FMT_EUR.format(c.gesamthonorar) : '—'}
                   </td>
                   <td className="ls-td doc-actions">
-                    <button className="btn-small" onClick={() => setEditCalcId(c.ID)}>Bearbeiten</button>
-                    <button className="btn-small" onClick={() => openHonorarPdf(c.ID)}>PDF</button>
-                    <button className="btn-small btn-danger" disabled={deleteMut.isPending}
+                    <button className="row-action-btn" onClick={() => setEditCalcId(c.ID)} title="Bearbeiten">
+                      <Pencil size={14} strokeWidth={2} />
+                    </button>
+                    <button className="row-action-btn" onClick={() => openHonorarPdf(c.ID)} title="PDF">
+                      <FileText size={14} strokeWidth={1.75} />
+                    </button>
+                    <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} disabled={deleteMut.isPending} title="Löschen"
                       onClick={() => setConfirmState({
                         title: 'Kalkulation löschen',
                         message: `HOAI-Kalkulation „${c.NAME_SHORT || c.NAME_LONG || 'Kalkulation'}" löschen?`,
                         onConfirm: () => deleteMut.mutate(c.ID),
-                      })}>×</button>
+                      })}>
+                      <Trash2 size={14} strokeWidth={2} />
+                    </button>
                   </td>
                 </tr>
               ))}
