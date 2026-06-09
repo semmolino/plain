@@ -95,10 +95,28 @@ app.use("/api/v1/notification-schedule", authMiddleware, notificationScheduleRou
 
 // ── Serve React frontend (SPA) ───────────────────────────────────────────────
 const FRONTEND_DIST = path.join(__dirname, "../frontend-react/dist");
-app.use(express.static(FRONTEND_DIST));
+app.use(express.static(FRONTEND_DIST, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith("index.html")) {
+      // Kein Caching von index.html -- darin stehen die Hashes der
+      // aktuellen JS/CSS-Bundles. Sonst zeigt Railway/CDN/Browser
+      // nach Deploys weiterhin alte Versionen.
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    } else {
+      // Gehashte Assets duerfen aggressiv gecacht werden -- bei einem
+      // Deploy aendert sich der Filename, daher unschaedlich.
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    }
+  },
+}));
 
 // SPA fallback — all non-API routes return index.html
 app.get(/^(?!\/api\/).*/, (req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.sendFile(path.join(FRONTEND_DIST, "index.html"));
 });
 
