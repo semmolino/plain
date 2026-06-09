@@ -9,6 +9,13 @@ on:
     # Daily at 06:00 UTC
     - cron: "0 6 * * *"
 
+# Bei neuem Push/Commit fuer denselben Ref alle laufenden Runs
+# abbrechen — verhindert CI-Stau auf main wenn schnell hintereinander
+# committed wird.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend (Jest)
