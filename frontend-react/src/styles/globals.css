@@ -1973,10 +1973,11 @@ input::placeholder { color: var(--text-4); }
 
 /* ── Row overflow menu (Rechnungen, etc.) ────────────────────────────────── */
 .row-menu-wrap { position: relative; display: inline-block; }
-/* Wenn das Menue offen ist, hebt es den ganzen Wrap aus der Tabellenzeilen-Stapelung —
-   sonst ueberlappen Buttons der naechsten Zeile das Dropdown. */
-.row-menu-wrap.row-menu-open { z-index: 300; }
-.row-menu-dropdown { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); min-width: 200px; z-index: 300; overflow: hidden; }
+/* Inline-Variante (fallback, momentan nicht verwendet — portal-Version unten) */
+.row-menu-dropdown { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); min-width: 200px; overflow: hidden; }
+/* Portal-Variante: am <body> verankert, z-index 9999 sticht alles aus.
+   So gibt's keinen Stacking-Context-Konflikt mehr mit Tabellenzeilen darunter. */
+.row-menu-dropdown-portal { position: fixed; z-index: 9999; }
 .row-menu-item { display: flex; align-items: center; width: 100%; text-align: left; padding: 9px 14px; font-size: 13px; background: none; border: none; cursor: pointer; color: var(--text); white-space: nowrap; gap: 0; }
 .row-menu-item:hover { background: var(--surface-2); }
 .row-menu-item.danger { color: #b91c1c; }

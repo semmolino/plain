@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, Mail } from 'lucide-react'
@@ -285,22 +286,51 @@ function emptyPaymentForm() {
 
 function RowMenu({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    const t = triggerRef.current
+    if (t) {
+      const r = t.getBoundingClientRect()
+      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right })
+    }
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (triggerRef.current?.contains(target)) return
+      if (dropdownRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const handleScroll = () => setOpen(false)
+    document.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('scroll', handleScroll, true)
+    window.addEventListener('resize', handleScroll)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('resize', handleScroll)
+    }
   }, [open])
+
   return (
-    <div ref={ref} className={`row-menu-wrap${open ? ' row-menu-open' : ''}`}>
-      <button className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen" style={{ display: 'inline-flex', alignItems: 'center' }}><MoreHorizontal size={15} strokeWidth={1.75} /></button>
-      {open && (
-        <div className="row-menu-dropdown" onClick={() => setOpen(false)}>
+    <>
+      <button ref={triggerRef} className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen" style={{ display: 'inline-flex', alignItems: 'center' }}>
+        <MoreHorizontal size={15} strokeWidth={1.75} />
+      </button>
+      {open && pos && createPortal(
+        <div
+          ref={dropdownRef}
+          className="row-menu-dropdown row-menu-dropdown-portal"
+          style={{ top: pos.top, right: pos.right }}
+          onClick={() => setOpen(false)}
+        >
           {children}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
 
