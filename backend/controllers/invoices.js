@@ -4,6 +4,9 @@ const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/invoices");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
+const { generateUblXml, generatePeppolXml } = require("../services_einvoice_ubl");
+const { embedXmlIntoPdf } = require("../services_einvoice_pdf_embed");
+const { validateEInvoiceData } = require("../services_einvoice_validator");
 
 // ---------------------------------------------------------------------------
 // GET /api/invoices
@@ -34,7 +37,7 @@ async function listInvoices(req, res, supabase) {
 async function initInvoice(req, res, supabase) {
   const b = req.body || {};
   const { company_id: companyId, employee_id: employeeId, project_id: projectId, contract_id: contractId } = b;
-  const invoiceType = ["schlussrechnung", "teilschlussrechnung"].includes(b.invoice_type)
+  const invoiceType = ["schlussrechnung", "teilschlussrechnung", "gutschrift"].includes(b.invoice_type)
     ? b.invoice_type
     : "rechnung";
 
@@ -504,15 +507,21 @@ async function bookInvoice(req, res, supabase) {
     ? req.body.release_partial_payment_ids.map(n => parseInt(String(n), 10)).filter(Number.isFinite)
     : [];
 
+  const force = String(req.query.force || req.body?.force || "") === "1" || req.body?.force === true;
+
   try {
     const result = await svc.bookInvoice(supabase, {
       id, inv,
       releasePpIds,
       tenantId: req.tenantId,
+      force,
     });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;
+    if (e?.validation) {
+      return res.status(status).json({ error: e.message, validation: e.validation });
+    }
     return res.status(status).json({ error: e?.message || String(e) });
   }
 }
@@ -610,6 +619,121 @@ async function getPdf(req, res, supabase) {
     res.setHeader("Expires", "0");
     res.send(Buffer.from(pdf));
   } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/invoices/:id/einvoice/peppol
+// Branch 11: Peppol BIS Billing 3.0 XML
+// ---------------------------------------------------------------------------
+async function getEinvoicePeppol(req, res, supabase) {
+  const invoiceId = parseInt(String(req.params.id || ""), 10);
+  if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
+
+  const download = String(req.query.download || "") === "1";
+
+  try {
+    const { data: invRow } = await supabase
+      .from("INVOICE")
+      .select("INVOICE_NUMBER")
+      .eq("ID", invoiceId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+    if (!invRow) return res.status(404).json({ error: "INVOICE nicht gefunden" });
+
+    const data = await loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId);
+    const xml = generatePeppolXml(data);
+    const fname = `Peppol_${invRow.INVOICE_NUMBER || invoiceId}.xml`;
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fname}"`);
+    return res.send(xml);
+  } catch (err) {
+    console.error("[EINVOICE_PEPPOL_INV]", { invoice_id: invoiceId, error: err?.message, stack: err?.stack });
+    return res.status(500).json({ error: `Peppol XML konnte nicht erzeugt werden: ${err?.message || err}` });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/invoices/:id/validate
+// Validiert die InvoiceData gegen die EN16931 Business-Rules.
+// Liefert { ok, errors, warnings } -- ohne Buchung.
+// ---------------------------------------------------------------------------
+async function validateInvoice(req, res, supabase) {
+  try {
+    const invoiceId = parseInt(req.params.id, 10);
+    if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
+
+    const data = await loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId);
+    const result = validateEInvoiceData(data);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/invoices/:id/pdf-hybrid?profile=EN16931&format=cii|ubl
+// Hybrid PDF mit eingebetteter ZUGFeRD / Factur-X / XRechnung XML
+// ---------------------------------------------------------------------------
+async function getPdfHybrid(req, res, supabase) {
+  try {
+    const invoiceId = parseInt(req.params.id, 10);
+    if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
+
+    const profile  = String(req.query.profile || "EN16931").toUpperCase();
+    const format   = String(req.query.format  || "cii").toLowerCase();   // 'cii' | 'ubl'
+    const download = String(req.query.download || "") === "1";
+    const templateId = req.query.template_id ? parseInt(String(req.query.template_id), 10) : null;
+
+    const releasePpIds = String(req.query.release_pp_ids || "")
+      .split(",").map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isFinite(n) && n > 0);
+
+    const [{ pdf }, data] = await Promise.all([
+      renderDocumentPdf({
+        supabase,
+        docType: "INVOICE",
+        docId: invoiceId,
+        templateId: Number.isFinite(templateId) ? templateId : null,
+        previewReleasePpIds: releasePpIds,
+      }),
+      loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId),
+    ]);
+
+    const xml = format === "ubl"
+      ? generateUblXml(data)
+      : generateCiiXml(data, profile);
+
+    const xmlProfileKey = format === "ubl" ? "XRECHNUNG" : profile;
+    const xmlFilename   = format === "ubl" ? "xrechnung.xml" : "factur-x.xml";
+
+    const { data: invRow } = await supabase
+      .from("INVOICE")
+      .select("INVOICE_NUMBER")
+      .eq("ID", invoiceId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+    const pdfName = `Rechnung_${invRow?.INVOICE_NUMBER || invoiceId}_ZUGFeRD.pdf`;
+
+    const hybrid = await embedXmlIntoPdf({
+      pdfBuffer: Buffer.from(pdf),
+      xml,
+      profileKey: xmlProfileKey,
+      filename: xmlFilename,
+      title: `Rechnung ${invRow?.INVOICE_NUMBER || invoiceId}`,
+      author: "PlaIn",
+      producer: "PlaIn — Hybrid PDF",
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${pdfName}"`);
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.send(hybrid);
+  } catch (e) {
+    console.error("[PDF_HYBRID_INV]", { invoice_id: req.params.id, error: e?.message, stack: e?.stack });
     res.status(500).json({ error: String(e?.message || e) });
   }
 }
@@ -725,4 +849,7 @@ module.exports = {
   cancelInvoice,
   getInvoice,
   getPdf,
+  getPdfHybrid,
+  validateInvoice,
+  getEinvoicePeppol,
 };

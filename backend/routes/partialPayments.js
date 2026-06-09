@@ -2,6 +2,7 @@
 
 const express = require("express");
 const ctrl    = require("../controllers/partialPayments");
+const att     = require("../controllers/attachments");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { sendMail }    = require("../services/emailService");
 
@@ -25,6 +26,15 @@ module.exports = (supabase) => {
   router.post("/:id/cancel",                   (req, res) => ctrl.cancelPartialPayment(req, res, supabase));
   router.delete("/:id",                        (req, res) => ctrl.deletePartialPayment(req, res, supabase));
   router.get("/:id/pdf",                       (req, res) => ctrl.getPdf(req, res, supabase));
+  router.get("/:id/pdf-hybrid",                (req, res) => ctrl.getPdfHybrid(req, res, supabase));
+  router.get("/:id/einvoice/peppol",           (req, res) => ctrl.getEinvoicePeppol(req, res, supabase));
+  router.get("/:id/validate",                  (req, res) => ctrl.validatePp(req, res, supabase));
+
+  // Anlagen (Branch 9)
+  router.get   ("/:id/attachments",            (req, res) => att.list  (req, res, supabase));
+  router.post  ("/:id/attachments",            (req, res) => att.add   (req, res, supabase));
+  router.patch ("/:id/attachments/:attId",     (req, res) => att.patch (req, res, supabase));
+  router.delete("/:id/attachments/:attId",     (req, res) => att.remove(req, res, supabase));
 
   // POST /partial-payments/:id/email  — send partial payment PDF via SMTP
   router.post("/:id/email", async (req, res) => {

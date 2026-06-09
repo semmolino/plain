@@ -19,6 +19,12 @@ const XRECHNUNG_CUSTOMIZATION_ID =
 const XRECHNUNG_PROFILE_ID =
   'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
 
+// Branch 11: Peppol BIS Billing 3.0 (PEPPOL BIS 3.0)
+const PEPPOL_CUSTOMIZATION_ID =
+  'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0';
+const PEPPOL_PROFILE_ID =
+  'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
+
 // ── XML helpers ───────────────────────────────────────────────────────────────
 
 function x(v) {
@@ -35,6 +41,20 @@ function amt(v, cur, tag) {
 }
 
 // ── Building blocks ───────────────────────────────────────────────────────────
+
+function buildAttachmentsUbl(data) {
+  // Branch 9 (BG-24): cac:AdditionalDocumentReference mit cbc:EmbeddedDocumentBinaryObject
+  const atts = Array.isArray(data.attachments) ? data.attachments : [];
+  if (atts.length === 0) return '';
+  return atts.map(a => `
+  <cac:AdditionalDocumentReference>
+    <cbc:ID>${x(a.documentReference || `ATT-${a.id}`)}</cbc:ID>
+    ${a.description ? `<cbc:DocumentDescription>${x(a.description)}</cbc:DocumentDescription>` : ''}
+    <cac:Attachment>
+      <cbc:EmbeddedDocumentBinaryObject mimeCode="${x(a.mimeType || 'application/octet-stream')}" filename="${x(a.fileName || `attachment-${a.id}`)}">${a.base64}</cbc:EmbeddedDocumentBinaryObject>
+    </cac:Attachment>
+  </cac:AdditionalDocumentReference>`).join('\n');
+}
 
 function buildBillingReferences(data) {
   const refs = [];
@@ -151,12 +171,29 @@ function buildLineItem(line, cur) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-function generateUblXml(data) {
+// Branch 11: Endpoint-ID Helper -- liefert XML-Snippet fuer cbc:EndpointID
+function buildEndpointId(party, fallbackEmail, flavor) {
+  if (flavor === 'PEPPOL') {
+    // Peppol verlangt EndpointID mit konkretem EAS schemeID (z.B. 9930 DE VAT).
+    // Fallback: USt-ID (9930) wenn vorhanden, sonst E-Mail (EM).
+    const scheme = party.peppolSchemeId || (party.vatId ? '9930' : 'EM');
+    const value  = party.peppolEndpointId || party.vatId || fallbackEmail || '';
+    if (!value) return '';
+    return `<cbc:EndpointID schemeID="${x(scheme)}">${x(value)}</cbc:EndpointID>`;
+  }
+  // XRechnung: E-Mail als Endpoint reicht
+  return fallbackEmail ? `<cbc:EndpointID schemeID="EM">${x(fallbackEmail)}</cbc:EndpointID>` : '';
+}
+
+function generateUblXml(data, opts = {}) {
+  const flavor = (opts.flavor || 'XRECHNUNG').toUpperCase();
   const cur = data.currency;
   const s   = data.seller;
   const b   = data.buyer;
   const t   = data.totals;
 
+  const customization = flavor === 'PEPPOL' ? PEPPOL_CUSTOMIZATION_ID : XRECHNUNG_CUSTOMIZATION_ID;
+  const profile       = flavor === 'PEPPOL' ? PEPPOL_PROFILE_ID       : XRECHNUNG_PROFILE_ID;
   const typeCode  = data.typeCodeUbl ?? data.typeCode ?? '380';
   const lineItems = data.lines.map(l => buildLineItem(l, cur)).join('\n');
 
@@ -174,8 +211,8 @@ function generateUblXml(data) {
          xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
          xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
 
-  <cbc:CustomizationID>${x(XRECHNUNG_CUSTOMIZATION_ID)}</cbc:CustomizationID>
-  <cbc:ProfileID>${x(XRECHNUNG_PROFILE_ID)}</cbc:ProfileID>
+  <cbc:CustomizationID>${x(customization)}</cbc:CustomizationID>
+  <cbc:ProfileID>${x(profile)}</cbc:ProfileID>
   <cbc:ID>${x(data.number)}</cbc:ID>
   <cbc:IssueDate>${x(data.date)}</cbc:IssueDate>
   ${data.dueDate ? `<cbc:DueDate>${x(data.dueDate)}</cbc:DueDate>` : ''}
@@ -195,11 +232,12 @@ function generateUblXml(data) {
   ${data.orderNumber    ? `<cac:OrderReference><cbc:ID>${x(data.orderNumber)}</cbc:ID></cac:OrderReference>` : ''}
 ${buildBillingReferences(data)}
   ${data.contractNumber ? `<cac:ContractDocumentReference><cbc:ID>${x(data.contractNumber)}</cbc:ID></cac:ContractDocumentReference>` : ''}
+${buildAttachmentsUbl(data)}
   ${data.projectNumber  ? `<cac:ProjectReference><cbc:ID>${x(data.projectNumber)}</cbc:ID></cac:ProjectReference>` : ''}
 
   <cac:AccountingSupplierParty>
     <cac:Party>
-      ${s.email ? `<cbc:EndpointID schemeID="EM">${x(s.email)}</cbc:EndpointID>` : ''}
+      ${buildEndpointId(s, s.email, flavor)}
       <cac:PartyName><cbc:Name>${x(s.name)}</cbc:Name></cac:PartyName>
       <cac:PostalAddress>
         ${s.street   ? `<cbc:StreetName>${x(s.street)}</cbc:StreetName>` : ''}
@@ -231,7 +269,7 @@ ${buildBillingReferences(data)}
 
   <cac:AccountingCustomerParty>
     <cac:Party>
-      ${b.email ? `<cbc:EndpointID schemeID="EM">${x(b.email)}</cbc:EndpointID>` : ''}
+      ${buildEndpointId(b, b.email, flavor)}
       <cac:PartyName><cbc:Name>${x(b.name)}</cbc:Name></cac:PartyName>
       <cac:PostalAddress>
         ${b.street   ? `<cbc:StreetName>${x(b.street)}</cbc:StreetName>` : ''}
@@ -303,4 +341,8 @@ async function generateUblInvoiceXml({ supabase, doc, invoice, partialPayment, d
   return generateUblXml(data);
 }
 
-module.exports = { generateUblXml, generateUblInvoiceXml };
+function generatePeppolXml(data) {
+  return generateUblXml(data, { flavor: 'PEPPOL' });
+}
+
+module.exports = { generateUblXml, generateUblInvoiceXml, generatePeppolXml };

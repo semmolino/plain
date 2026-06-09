@@ -3,6 +3,8 @@
 const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { insertProgressSnapshot } = require("./projectProgress");
+const { loadInvoiceData } = require("../services_einvoice_data");
+const { validateEInvoiceData } = require("../services_einvoice_validator");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -964,7 +966,34 @@ async function deleteInvoice(supabase, { id, tenantId }) {
   if (delErr) throw new Error(delErr.message);
 }
 
-async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = null }) {
+async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = null, force = false }) {
+  // ── E-Rechnung Vorpruefung (Branch 6) ─────────────────────────────────────
+  // Validiert gegen die EN16931 Business-Rules BEVOR irgendetwas persistiert
+  // wird (SE-Auflosung, PDF, XML, Status-Update). Bei Fehlern wirft die
+  // Funktion mit status 422 + Validierungs-Details; Frontend kann mit
+  // force=true uebersteuern (z.B. Notbuchung).
+  try {
+    const data = await loadInvoiceData(supabase, parseInt(id, 10), "INVOICE", tenantId);
+    const v = validateEInvoiceData(data);
+    if (!v.ok && !force) {
+      const err = new Error(`E-Rechnung Validierung fehlgeschlagen: ${v.errors.length} Fehler`);
+      err.status = 422;
+      err.validation = v;
+      throw err;
+    }
+  } catch (e) {
+    if (e?.status === 422 && e?.validation) throw e;
+    // Falls loadInvoiceData scheitert (z.B. Beleg unvollstaendig),
+    // brechen wir mit klarer Meldung ab statt durchzulaufen.
+    console.warn("[BOOK_INVOICE][VALIDATE]", { invoice_id: id, error: e?.message });
+    if (!force) {
+      const err = new Error(`Vorpruefung konnte nicht abgeschlossen werden: ${e?.message || e}`);
+      err.status = 422;
+      err.validation = { ok: false, errors: [{ code: 'BR-LOAD', severity: 'error', message: err.message, btField: null }], warnings: [] };
+      throw err;
+    }
+  }
+
   const vatPercent = toNum(inv.VAT_PERCENT);
   const totalNet = toNum(inv.TOTAL_AMOUNT_NET);
   const taxAmountNet = round2(totalNet * vatPercent / 100);

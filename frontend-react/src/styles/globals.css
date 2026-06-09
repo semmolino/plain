@@ -954,6 +954,37 @@ input::placeholder { color: var(--text-4); }
 .modal-card.modal-wide { max-width: 860px; }
 .modal-card.modal-xl   { max-width: 1100px; }
 
+/* ── Validation modal (E-Rechnung BR-Check) ─────────────────────────────── */
+.validation-summary       { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
+.validation-summary.clean { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.validation-section       { margin-top: 12px; }
+.validation-heading       { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin: 0 0 6px 0; }
+.validation-heading.error   { color: #b91c1c; }
+.validation-heading.warning { color: #b45309; }
+.validation-list          { list-style: none; padding: 0; margin: 0; max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+.validation-item          { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.validation-item:last-child { border-bottom: none; }
+.validation-item.error    { background: #fef2f2; }
+.validation-item.warning  { background: #fffbeb; }
+.validation-code          { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--text-4); }
+.validation-msg           { color: var(--text); line-height: 1.4; }
+
+/* ── E-Rechnung Anlagen (Branch 9) ───────────────────────────────────────── */
+.anlagen-section          { margin-top: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; background: var(--surface-1); }
+.anlagen-header           { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-2); }
+.anlagen-hint             { font-weight: 400; color: var(--text-4); font-size: 11px; margin-left: 4px; }
+.anlagen-list             { list-style: none; padding: 0; margin: 0 0 8px 0; }
+.anlagen-item             { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
+.anlagen-item:last-child  { border-bottom: none; }
+.anlagen-desc             { flex: 1; cursor: pointer; color: var(--text); }
+.anlagen-desc:hover       { text-decoration: underline; }
+.anlagen-meta             { color: var(--text-4); font-size: 11px; }
+.anlagen-edit-input       { flex: 1; padding: 2px 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px; }
+.anlagen-del              { background: transparent; border: none; cursor: pointer; color: var(--text-4); padding: 2px 4px; }
+.anlagen-del:hover        { color: #b91c1c; }
+.anlagen-empty            { padding: 4px 0; font-size: 12px; color: var(--text-4); font-style: italic; }
+.anlagen-loading          { padding: 4px 0; font-size: 12px; color: var(--text-4); }
+
 /* ── Admin section ───────────────────────────────────────────────────────── */
 .admin-section { max-width: 480px; }
 .admin-section-hint { font-size: 12px; color: var(--text-4); margin-bottom: 14px; }
@@ -1942,7 +1973,11 @@ input::placeholder { color: var(--text-4); }
 
 /* ── Row overflow menu (Rechnungen, etc.) ────────────────────────────────── */
 .row-menu-wrap { position: relative; display: inline-block; }
-.row-menu-dropdown { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); min-width: 160px; z-index: 200; overflow: hidden; }
+/* Inline-Variante (fallback, momentan nicht verwendet — portal-Version unten) */
+.row-menu-dropdown { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); min-width: 200px; overflow: hidden; }
+/* Portal-Variante: am <body> verankert, z-index 9999 sticht alles aus.
+   So gibt's keinen Stacking-Context-Konflikt mehr mit Tabellenzeilen darunter. */
+.row-menu-dropdown-portal { position: fixed; z-index: 9999; }
 .row-menu-item { display: flex; align-items: center; width: 100%; text-align: left; padding: 9px 14px; font-size: 13px; background: none; border: none; cursor: pointer; color: var(--text); white-space: nowrap; gap: 0; }
 .row-menu-item:hover { background: var(--surface-2); }
 .row-menu-item.danger { color: #b91c1c; }

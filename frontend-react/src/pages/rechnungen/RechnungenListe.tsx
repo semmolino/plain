@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, Mail } from 'lucide-react'
@@ -11,6 +12,8 @@ import {
   fetchInvoices, fetchPartialPayments,
   openInvoicePdf, openPpPdf,
   downloadInvoiceEinvoice, downloadPpEinvoice,
+  downloadInvoicePdfHybrid, downloadPpPdfHybrid,
+  downloadInvoicePeppol, downloadPpPeppol,
   cancelInvoice, cancelPartialPayment,
   deleteInvoice, deletePartialPayment,
   fetchPayments, createPayment, deletePayment,
@@ -46,6 +49,7 @@ function capitalizeInvType(t: string | null | undefined): string {
     schlussrechnung:     'Teilschluss-/Schlussrechnung',
     teilschlussrechnung: 'Teilschluss-/Schlussrechnung',
     stornorechnung:      'Stornorechnung',
+    gutschrift:          'Gutschrift',
   }
   return map[t.toLowerCase()] ?? (t.charAt(0).toUpperCase() + t.slice(1))
 }
@@ -282,22 +286,51 @@ function emptyPaymentForm() {
 
 function RowMenu({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    const t = triggerRef.current
+    if (t) {
+      const r = t.getBoundingClientRect()
+      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right })
+    }
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (triggerRef.current?.contains(target)) return
+      if (dropdownRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const handleScroll = () => setOpen(false)
+    document.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('scroll', handleScroll, true)
+    window.addEventListener('resize', handleScroll)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('resize', handleScroll)
+    }
   }, [open])
+
   return (
-    <div ref={ref} className="row-menu-wrap">
-      <button className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen" style={{ display: 'inline-flex', alignItems: 'center' }}><MoreHorizontal size={15} strokeWidth={1.75} /></button>
-      {open && (
-        <div className="row-menu-dropdown" onClick={() => setOpen(false)}>
+    <>
+      <button ref={triggerRef} className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen" style={{ display: 'inline-flex', alignItems: 'center' }}>
+        <MoreHorizontal size={15} strokeWidth={1.75} />
+      </button>
+      {open && pos && createPortal(
+        <div
+          ref={dropdownRef}
+          className="row-menu-dropdown row-menu-dropdown-portal"
+          style={{ top: pos.top, right: pos.right }}
+          onClick={() => setOpen(false)}
+        >
           {children}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
 
@@ -669,6 +702,36 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     }
   }
 
+  async function openPeppol(row: UnifiedRow) {
+    try {
+      if (row.source === 'invoice') {
+        const inv = row.raw as Invoice
+        await downloadInvoicePeppol(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER)
+      } else {
+        const pp = row.raw as PartialPayment
+        await downloadPpPeppol(pp.ID, pp.PARTIAL_PAYMENT_NUMBER)
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Peppol-XML konnte nicht geladen werden: ${msg}`)
+    }
+  }
+
+  async function openHybridPdf(row: UnifiedRow) {
+    try {
+      if (row.source === 'invoice') {
+        const inv = row.raw as Invoice
+        await downloadInvoicePdfHybrid(inv.ID, inv.INVOICE_NUMBER)
+      } else {
+        const pp = row.raw as PartialPayment
+        await downloadPpPdfHybrid(pp.ID, pp.PARTIAL_PAYMENT_NUMBER)
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Hybrid-PDF konnte nicht erzeugt werden: ${msg}`)
+    }
+  }
+
   const sp = { sortKey, dir: sortDir, onClick: toggleSort }
   const remaining = payTarget ? (Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100) : null
 
@@ -807,6 +870,8 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     <RowMenu>
                       <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
                       <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
+                      <button className="row-menu-item" onClick={() => openPeppol(row)}>Peppol BIS 3.0</button>
+                      <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
                       {row.statusClass === 'booked' && (
                         <button className="row-menu-item" onClick={() => navigate('/rechnungen?tab=mahnungen')}>→ Mahnung</button>
                       )}

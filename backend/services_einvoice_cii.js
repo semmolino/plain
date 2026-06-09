@@ -242,6 +242,19 @@ function buildPaymentTerms(data, profile) {
       </ram:SpecifiedTradePaymentTerms>`;
 }
 
+function buildAttachmentsCii(data) {
+  // Branch 9 (BG-24): AdditionalReferencedDocument mit base64 Binary Object
+  const atts = Array.isArray(data.attachments) ? data.attachments : [];
+  if (atts.length === 0) return '';
+  return atts.map(a => `
+      <ram:AdditionalReferencedDocument>
+        <ram:IssuerAssignedID>${x(a.documentReference || `ATT-${a.id}`)}</ram:IssuerAssignedID>
+        <ram:TypeCode>${x(a.attachmentTypeCode || '916')}</ram:TypeCode>
+        ${a.description ? `<ram:Name>${x(a.description)}</ram:Name>` : ''}
+        <ram:AttachmentBinaryObject mimeCode="${x(a.mimeType || 'application/octet-stream')}" filename="${x(a.fileName || `attachment-${a.id}`)}">${a.base64}</ram:AttachmentBinaryObject>
+      </ram:AdditionalReferencedDocument>`).join('\n');
+}
+
 function buildReferencedDocuments(data) {
   const refs = [];
 
@@ -365,6 +378,7 @@ ${buildSeller(data, profile)}
 ${buildBuyer(data)}
       ${data.orderNumber    ? `<ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>${x(data.orderNumber)}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>` : ''}
       ${data.contractNumber ? `<ram:ContractReferencedDocument><ram:IssuerAssignedID>${x(data.contractNumber)}</ram:IssuerAssignedID></ram:ContractReferencedDocument>` : ''}
+${buildAttachmentsCii(data)}
       ${data.projectNumber  ? `<ram:SpecifiedProcuringProject><ram:ID>${x(data.projectNumber)}</ram:ID><ram:Name>${x(data.projectNumber)}</ram:Name></ram:SpecifiedProcuringProject>` : ''}
     </ram:ApplicableHeaderTradeAgreement>
 

@@ -3,7 +3,7 @@
 const svc    = require("../services/finalInvoices");
 const invSvc = require("../services/invoices");
 const { loadInvoiceData } = require("../services_einvoice_data");
-const { generateUblXml }  = require("../services_einvoice_ubl");
+const { generateUblXml, generatePeppolXml }  = require("../services_einvoice_ubl");
 const { generateCiiXml }  = require("../services_einvoice_cii");
 
 async function getPhases(req, res, supabase) {
@@ -75,14 +75,19 @@ async function bookFinalInvoice(req, res, supabase) {
     const releasePpIds = Array.isArray(req.body?.release_partial_payment_ids)
       ? req.body.release_partial_payment_ids.map(n => parseInt(String(n), 10)).filter(Number.isFinite)
       : [];
+    const force = String(req.query.force || req.body?.force || "") === "1" || req.body?.force === true;
     const result = await svc.bookFinalInvoice(supabase, {
       id: req.params.id,
       tenantId: req.tenantId,
       releasePpIds,
+      force,
     });
     res.json({ success: true, ...result });
   } catch (err) {
     const status = err.status || 500;
+    if (err.validation) {
+      return res.status(status).json({ error: err.message, validation: err.validation });
+    }
     res.status(status).json({ error: err.message || err });
   }
 }
@@ -208,6 +213,28 @@ async function getEinvoiceCii(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/final-invoices/:id/einvoice/peppol (Branch 11)
+// ---------------------------------------------------------------------------
+async function getEinvoicePeppol(req, res, supabase) {
+  const id = parseInt(String(req.params.id || ""), 10);
+  const download = String(req.query.download || "") === "1";
+  let row;
+  try { row = await loadFinalInvoiceRow(supabase, id); }
+  catch (e) { return res.status(e.status || 500).json({ error: e.message }); }
+  try {
+    const data = await loadInvoiceData(supabase, id, "INVOICE", req.tenantId);
+    const xml  = generatePeppolXml(data);
+    const fname = `Peppol_${row.INVOICE_NUMBER || row.ID}.xml`;
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fname}"`);
+    return res.send(xml);
+  } catch (err) {
+    console.error("[EINVOICE_PEPPOL_FINAL]", { id, error: err?.message, stack: err?.stack });
+    return res.status(500).json({ error: `Peppol XML konnte nicht erzeugt werden: ${err?.message || err}` });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/final-invoices/:id/einvoice/cii/snapshot?profile=EN16931
 // ---------------------------------------------------------------------------
 async function postEinvoiceCiiSnapshot(req, res, supabase) {
@@ -256,6 +283,7 @@ module.exports = {
   getFinalInvoice,
   bookFinalInvoice,
   getEinvoiceUbl,
+  getEinvoicePeppol,
   postEinvoiceUblSnapshot,
   getEinvoiceCii,
   postEinvoiceCiiSnapshot,

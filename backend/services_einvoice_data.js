@@ -63,6 +63,18 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const doc   = await one(supabase, table, docId, tenantId);
   if (!doc) throw new InvoiceDataError(`${table} ${docId} not found.`);
 
+  // Branch 9: Anlagen laden (soft-fail wenn Tabelle/Datei fehlt)
+  let attachments = [];
+  try {
+    const attSvc = require('./services/attachments');
+    attachments = await attSvc.loadAttachmentsForXml(supabase, { docType, docId, tenantId });
+  } catch (e) {
+    // Migration 0060 evtl. noch nicht gelaufen -- nur loggen, nicht abbrechen
+    if (!String(e?.message || '').includes('does not exist')) {
+      console.warn('[loadInvoiceData][attachments]', e?.message);
+    }
+  }
+
   // ── 1. Document type & TypeCodes ──────────────────────────────────────────
 
   const isInvoice  = docType === 'INVOICE';
@@ -117,6 +129,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const sellerCreditorId  = String(doc['COMPANY_CREDITOR-ID']                        ?? '').trim();
   const sellerPostOffBox  = String(doc.COMPANY_POST_OFFICE_BOX                       ?? '').trim();
 
+  // Branch 11: Peppol-Endpoint (Verkauefer aus COMPANY)
+  const sellerPeppolEndpointId = String(company?.PEPPOL_ENDPOINT_ID ?? '').trim();
+  const sellerPeppolSchemeId   = String(company?.PEPPOL_SCHEME_ID   ?? '').trim();
+
   // ── 3. Seller contact (EMPLOYEE) ─────────────────────────────────────────
 
   const employee = await one(supabase, 'EMPLOYEE', doc.EMPLOYEE_ID, tenantId);
@@ -143,6 +159,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   const buyerVatId         = normalizeVatId(doc.ADDRESS_VAT_ID ?? address?.VAT_ID ?? '', buyerCountry);
   const buyerDebitorNumber = String(doc.ADDRESS_DEBITOR_NUMBER ?? address?.DEBITOR_NUMBER ?? '').trim();
+
+  // Branch 11: Peppol-Endpoint (Kaeufer aus ADDRESS)
+  const buyerPeppolEndpointId = String(address?.PEPPOL_ENDPOINT_ID ?? '').trim();
+  const buyerPeppolSchemeId   = String(address?.PEPPOL_SCHEME_ID   ?? '').trim();
 
   // ── 5. Currency ───────────────────────────────────────────────────────────
 
@@ -493,6 +513,45 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   // ── 14. Assemble ─────────────────────────────────────────────────────────
 
+  // Storno: TypeCode 384, Beleg zeigt korrigierende Bewegung. EN 16931
+  // erlaubt zwar positive Werte mit Kennung als "Korrektur", aber viele
+  // Empfaenger erwarten negative Betraege. Wir setzen sie negativ um —
+  // Lines, Allowances, Totals werden gespiegelt.
+  const negateForStorno = (isStorno || isStornoPP);
+  const flip = v => negateForStorno ? -v : v;
+  if (negateForStorno) {
+    for (const l of lines) {
+      l.unitPrice = flip(l.unitPrice);
+      l.lineTotal = flip(l.lineTotal);
+    }
+    for (const a of allowances) { a.amount = flip(a.amount); }
+    for (const vb of vatBreakdown) {
+      vb.basis  = flip(vb.basis);
+      vb.amount = flip(vb.amount);
+    }
+  }
+  const totalsOut = negateForStorno ? {
+    lineTotal:      flip(lineTotal),
+    allowanceTotal: flip(allowanceTotal),
+    chargeTotal,
+    taxBasis:       flip(taxBasis),
+    taxAmount:      flip(taxAmount),
+    grandTotal:     flip(grandTotal),
+    prepaidGross:   flip(prepaidGross),
+    duePayable:     flip(duePayable),
+    prepaidAmount:  flip(prepaidGross),
+  } : {
+    lineTotal,
+    allowanceTotal,
+    chargeTotal,
+    taxBasis,
+    taxAmount,
+    grandTotal,
+    prepaidGross,
+    duePayable,
+    prepaidAmount: prepaidGross,
+  };
+
   return {
     docType,
     invoiceType,
@@ -520,6 +579,8 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       bic:           sellerBic,
       creditorId:    sellerCreditorId,
       postOfficeBox: sellerPostOffBox,
+      peppolEndpointId: sellerPeppolEndpointId,
+      peppolSchemeId:   sellerPeppolSchemeId,
       contactName:   contactName,
       contactPhone:  contactPhone,
       contactEmail:  contactEmail,
@@ -527,7 +588,9 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     },
 
     buyer: {
-      name:          buyerName,
+      name:               buyerName,
+      peppolEndpointId:   buyerPeppolEndpointId,
+      peppolSchemeId:     buyerPeppolSchemeId,
       street:        String(doc.ADDRESS_STREET    ?? address?.STREET    ?? '').trim(),
       city:          String(doc.ADDRESS_CITY      ?? address?.CITY      ?? '').trim(),
       postCode:      String(doc.ADDRESS_POST_CODE ?? address?.POST_CODE ?? '').trim(),
@@ -548,17 +611,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     cashDiscount,
     securityRetention,
 
-    totals: {
-      lineTotal,
-      allowanceTotal,
-      chargeTotal,
-      taxBasis,
-      taxAmount,
-      grandTotal,
-      prepaidGross,
-      duePayable,
-      prepaidAmount: prepaidGross,  // legacy compat
-    },
+    totals: totalsOut,
 
     canceledDocNumber,
     canceledDocDate,
@@ -567,6 +620,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     orderNumber:           String(doc.BUYER_ORDER_REFERENCE      ?? '').trim(), // BT-13
     buyerAccountingRef:    String(doc.BUYER_ACCOUNTING_REFERENCE ?? '').trim(), // BT-19
     remittanceInformation: String(doc.REMITTANCE_INFORMATION     ?? '').trim(), // BT-83
+    attachments,                                            // Branch 9: BG-24
   };
 }
 

@@ -33,7 +33,7 @@ const PAGE_TABS = [
 ]
 
 function emptyAddr(): AddressPayload {
-  return { address_name_1: '', address_name_2: '', street: '', post_code: '', city: '', country_id: '', customer_number: '', tax_id: '', buyer_reference: '' }
+  return { address_name_1: '', address_name_2: '', street: '', post_code: '', city: '', country_id: '', customer_number: '', tax_id: '', buyer_reference: '', peppol_endpoint_id: '', peppol_scheme_id: '' }
 }
 function emptyContact(): ContactPayload {
   return { title: '', first_name: '', last_name: '', email: '', mobile: '', salutation_id: '', gender_id: '', address_id: '' }
@@ -103,6 +103,27 @@ function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
       <FormField label="Kundennr."      id="acn" value={vals.customer_number ?? ''} onChange={e => setK('customer_number')(e.target.value)} />
       <FormField label="Steuernummer"   id="ati" value={vals.tax_id ?? ''}          onChange={e => setK('tax_id')(e.target.value)} />
       <FormField label="Käuferreferenz" id="abr" value={vals.buyer_reference ?? ''} onChange={e => setK('buyer_reference')(e.target.value)} />
+      <div className="form-group">
+        <label htmlFor="ape-id">Peppol Endpoint-ID</label>
+        <input id="ape-id" type="text"
+          value={vals.peppol_endpoint_id ?? ''}
+          onChange={e => setK('peppol_endpoint_id')(e.target.value)}
+          placeholder="z.B. DE123456789 oder GLN" />
+      </div>
+      <div className="form-group">
+        <label htmlFor="ape-sc">Peppol Scheme-ID (EAS)</label>
+        <select id="ape-sc" value={vals.peppol_scheme_id ?? ''} onChange={e => setK('peppol_scheme_id')(e.target.value)}>
+          <option value="">— keiner —</option>
+          <option value="0088">0088 — GLN</option>
+          <option value="9930">9930 — DE USt-IdNr.</option>
+          <option value="9931">9931 — AT VAT</option>
+          <option value="9957">9957 — FR SIRET</option>
+          <option value="9959">9959 — BE Enterprise</option>
+          <option value="0184">0184 — DK CVR</option>
+          <option value="0192">0192 — NO Org.nr</option>
+          <option value="EM">EM — E-Mail</option>
+        </select>
+      </div>
       <Message text={m?.text ?? null} type={m?.type} />
     </div>
   )

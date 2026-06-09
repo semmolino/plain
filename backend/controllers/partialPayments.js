@@ -4,6 +4,9 @@ const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/partialPayments");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
+const { generateUblXml, generatePeppolXml } = require("../services_einvoice_ubl");
+const { embedXmlIntoPdf } = require("../services_einvoice_pdf_embed");
+const { validateEInvoiceData } = require("../services_einvoice_validator");
 
 // ---------------------------------------------------------------------------
 // GET /api/v1/partial-payments/open-se?project_id=...
@@ -797,12 +800,33 @@ async function bookPartialPayment(req, res, supabase) {
     return res.status(400).json({ error: "PARTIAL_PAYMENT ist bereits gebucht" });
   }
 
+  const force = String(req.query.force || req.body?.force || "") === "1" || req.body?.force === true;
+
   try {
-    const result = await svc.bookPartialPayment(supabase, { id, pp });
+    const result = await svc.bookPartialPayment(supabase, { id, pp, tenantId: req.tenantId, force });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;
+    if (e?.validation) {
+      return res.status(status).json({ error: e.message, validation: e.validation });
+    }
     return res.status(status).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/partial-payments/:id/validate
+// ---------------------------------------------------------------------------
+async function validatePp(req, res, supabase) {
+  try {
+    const ppId = parseInt(req.params.id, 10);
+    if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
+
+    const data = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const result = validateEInvoiceData(data);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
   }
 }
 
@@ -846,6 +870,97 @@ async function getPdf(req, res, supabase) {
     res.setHeader("Expires", "0");
     res.send(Buffer.from(pdf));
   } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/partial-payments/:id/einvoice/peppol (Branch 11)
+// ---------------------------------------------------------------------------
+async function getEinvoicePeppol(req, res, supabase) {
+  const ppId = parseInt(String(req.params.id || ""), 10);
+  if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
+
+  const download = String(req.query.download || "") === "1";
+
+  try {
+    const { data: ppRow } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select("PARTIAL_PAYMENT_NUMBER")
+      .eq("ID", ppId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+    if (!ppRow) return res.status(404).json({ error: "PARTIAL_PAYMENT nicht gefunden" });
+
+    const data = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const xml = generatePeppolXml(data);
+    const fname = `Peppol_${ppRow.PARTIAL_PAYMENT_NUMBER || ppId}.xml`;
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fname}"`);
+    return res.send(xml);
+  } catch (err) {
+    console.error("[EINVOICE_PEPPOL_PP]", { pp_id: ppId, error: err?.message, stack: err?.stack });
+    return res.status(500).json({ error: `Peppol XML konnte nicht erzeugt werden: ${err?.message || err}` });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/partial-payments/:id/pdf-hybrid?profile=EN16931&format=cii|ubl
+// Hybrid PDF mit eingebetteter ZUGFeRD / Factur-X / XRechnung XML
+// ---------------------------------------------------------------------------
+async function getPdfHybrid(req, res, supabase) {
+  try {
+    const ppId = parseInt(req.params.id, 10);
+    if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
+
+    const profile  = String(req.query.profile || "EN16931").toUpperCase();
+    const format   = String(req.query.format  || "cii").toLowerCase();
+    const download = String(req.query.download || "") === "1";
+    const templateId = req.query.template_id ? parseInt(String(req.query.template_id), 10) : null;
+
+    const [{ pdf }, data] = await Promise.all([
+      renderDocumentPdf({
+        supabase,
+        docType: "PARTIAL_PAYMENT",
+        docId: ppId,
+        templateId: Number.isFinite(templateId) ? templateId : null,
+      }),
+      loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId),
+    ]);
+
+    const xml = format === "ubl"
+      ? generateUblXml(data)
+      : generateCiiXml(data, profile);
+
+    const xmlProfileKey = format === "ubl" ? "XRECHNUNG" : profile;
+    const xmlFilename   = format === "ubl" ? "xrechnung.xml" : "factur-x.xml";
+
+    const { data: ppRow } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select("PARTIAL_PAYMENT_NUMBER")
+      .eq("ID", ppId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+    const pdfName = `Abschlagsrechnung_${ppRow?.PARTIAL_PAYMENT_NUMBER || ppId}_ZUGFeRD.pdf`;
+
+    const hybrid = await embedXmlIntoPdf({
+      pdfBuffer: Buffer.from(pdf),
+      xml,
+      profileKey: xmlProfileKey,
+      filename: xmlFilename,
+      title: `Abschlagsrechnung ${ppRow?.PARTIAL_PAYMENT_NUMBER || ppId}`,
+      author: "PlaIn",
+      producer: "PlaIn — Hybrid PDF",
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${pdfName}"`);
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.send(hybrid);
+  } catch (e) {
+    console.error("[PDF_HYBRID_PP]", { pp_id: req.params.id, error: e?.message, stack: e?.stack });
     res.status(500).json({ error: String(e?.message || e) });
   }
 }
@@ -962,4 +1077,7 @@ module.exports = {
   postEinvoiceCiiSnapshot,
   bookPartialPayment,
   getPdf,
+  getPdfHybrid,
+  validatePp,
+  getEinvoicePeppol,
 };

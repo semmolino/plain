@@ -16,6 +16,7 @@ module.exports = (supabase) => {
   router.post("/:id/einvoice/ubl/snapshot", (req, res) => ctrl.postEinvoiceUblSnapshot(req, res, supabase));
   router.get("/:id/einvoice/cii",         (req, res) => ctrl.getEinvoiceCii(req, res, supabase));
   router.post("/:id/einvoice/cii/snapshot", (req, res) => ctrl.postEinvoiceCiiSnapshot(req, res, supabase));
+  router.get("/:id/einvoice/peppol",       (req, res) => ctrl.getEinvoicePeppol(req, res, supabase));
   router.get("/:id",                      (req, res) => ctrl.getFinalInvoice(req, res, supabase));
   router.post("/:id/book",                (req, res) => ctrl.bookFinalInvoice(req, res, supabase));
 

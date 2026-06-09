@@ -9,7 +9,7 @@ export interface Contract     { ID: number; NAME_SHORT: string; NAME_LONG: strin
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
 
-export type InvoiceType = 'rechnung' | 'schlussrechnung' | 'teilschlussrechnung' | 'stornorechnung'
+export type InvoiceType = 'rechnung' | 'schlussrechnung' | 'teilschlussrechnung' | 'stornorechnung' | 'gutschrift'
 
 export interface Invoice {
   ID:                   number
@@ -306,6 +306,73 @@ export function downloadInvoiceEinvoice(
   return downloadWithAuth(`${base}/einvoice/${format}?${params}`, fileName)
 }
 
+// E-Rechnung BR-Validierung (Branch 6)
+export interface ValidationIssue {
+  code: string
+  severity: 'error' | 'warning'
+  message: string
+  btField: string | null
+}
+export interface ValidationResult {
+  ok: boolean
+  errors: ValidationIssue[]
+  warnings: ValidationIssue[]
+}
+
+export const validateInvoice = (id: number) =>
+  apiClient.get<ValidationResult>(`/invoices/${id}/validate`)
+
+export const validatePp = (id: number) =>
+  apiClient.get<ValidationResult>(`/partial-payments/${id}/validate`)
+
+export const bookInvoiceForce = (id: number) =>
+  apiClient.post<{ success: boolean }>(`/invoices/${id}/book?force=1`, {})
+
+export const bookPartialPaymentForce = (id: number) =>
+  apiClient.post<{ success: boolean }>(`/partial-payments/${id}/book?force=1`, {})
+
+export const bookFinalInvoiceForce = (id: number, opts?: { release_partial_payment_ids?: number[] }) =>
+  apiClient.post<{ success: boolean }>(`/final-invoices/${id}/book?force=1`, opts || {})
+
+// Hybrid PDF (Rechnungs-PDF mit eingebetteter ZUGFeRD-XML)
+// Branch 11: Peppol BIS 3.0 Download
+export function downloadInvoicePeppol(
+  id: number,
+  invoiceType: InvoiceType | null | undefined,
+  invoiceNumber: string | null | undefined,
+): Promise<void> {
+  const isFinal = invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung'
+  const base    = isFinal ? `/final-invoices/${id}` : `/invoices/${id}`
+  const params  = new URLSearchParams({ download: '1' })
+  const num     = invoiceNumber || String(id)
+  const fileName = `Peppol_${num}.xml`
+  return downloadWithAuth(`${base}/einvoice/peppol?${params}`, fileName)
+}
+
+export function downloadPpPeppol(
+  id: number,
+  ppNumber: string | null | undefined,
+): Promise<void> {
+  const params   = new URLSearchParams({ download: '1' })
+  const num      = ppNumber || String(id)
+  const fileName = `Peppol_${num}.xml`
+  return downloadWithAuth(`/partial-payments/${id}/einvoice/peppol?${params}`, fileName)
+}
+
+export function downloadInvoicePdfHybrid(
+  id: number,
+  invoiceNumber: string | null | undefined,
+  opts?: { format?: 'cii' | 'ubl'; profile?: string }
+): Promise<void> {
+  const format  = opts?.format  ?? 'cii'
+  const profile = opts?.profile ?? 'EN16931'
+  const params  = new URLSearchParams({ download: '1', format })
+  if (format === 'cii') params.set('profile', profile)
+  const num      = invoiceNumber || String(id)
+  const fileName = `Rechnung_${num}_ZUGFeRD.pdf`
+  return downloadWithAuth(`/invoices/${id}/pdf-hybrid?${params}`, fileName)
+}
+
 // ── Partial Payments ──────────────────────────────────────────────────────────
 
 export const fetchPartialPayments = (q = '') =>
@@ -373,6 +440,20 @@ export function downloadPpEinvoice(
   const num      = ppNumber || String(id)
   const fileName = format === 'ubl' ? `XRechnung_${num}.xml` : `ZUGFeRD_${num}.xml`
   return downloadWithAuth(`/partial-payments/${id}/einvoice/${format}?${params}`, fileName)
+}
+
+export function downloadPpPdfHybrid(
+  id: number,
+  ppNumber: string | null | undefined,
+  opts?: { format?: 'cii' | 'ubl'; profile?: string }
+): Promise<void> {
+  const format  = opts?.format  ?? 'cii'
+  const profile = opts?.profile ?? 'EN16931'
+  const params  = new URLSearchParams({ download: '1', format })
+  if (format === 'cii') params.set('profile', profile)
+  const num      = ppNumber || String(id)
+  const fileName = `Abschlagsrechnung_${num}_ZUGFeRD.pdf`
+  return downloadWithAuth(`/partial-payments/${id}/pdf-hybrid?${params}`, fileName)
 }
 
 // ── Final Invoices ────────────────────────────────────────────────────────────
