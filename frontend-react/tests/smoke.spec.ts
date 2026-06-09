@@ -86,19 +86,21 @@ test.describe('Authenticated shell', () => {
     await mockLoggedIn(page)
   })
 
-  test('dashboard loads and bottom nav is visible', async ({ page }) => {
+  test('dashboard loads and primary nav is visible', async ({ page, viewport }) => {
     await page.goto('/')
-    await expect(page.locator('.bottom-nav')).toBeVisible()
+    const isMobile = (viewport?.width ?? 0) < 1024
+    await expect(page.locator(isMobile ? '.bottom-nav' : '.side-nav')).toBeVisible()
   })
 
   test('no horizontal overflow on dashboard', async ({ page, viewport }) => {
     await page.goto('/')
-    await page.locator('.bottom-nav').waitFor()
+    await page.locator('.app-main').waitFor()
     const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
     expect(scrollWidth).toBeLessThanOrEqual((viewport?.width ?? 390) + 2)
   })
 
-  test('bottom nav items meet 44px touch target height', async ({ page }) => {
+  test('bottom nav items meet 44px touch target height (mobile only)', async ({ page, viewport }) => {
+    if ((viewport?.width ?? 0) >= 1024) return // bottom-nav hidden on desktop
     await page.goto('/')
     await page.locator('.bottom-nav-item').first().waitFor()
     const heights = await page.locator('.bottom-nav-item').evaluateAll(
@@ -110,21 +112,25 @@ test.describe('Authenticated shell', () => {
     }
   })
 
-  test('bottom nav navigates to /adressen', async ({ page }) => {
+  test('primary nav navigates to /adressen', async ({ page, viewport }) => {
     await page.goto('/')
-    await page.locator('.bottom-nav-item').filter({ hasText: 'Adressen' }).click()
+    const isMobile = (viewport?.width ?? 0) < 1024
+    const selector = isMobile ? '.bottom-nav-item' : '.side-nav-item'
+    await page.locator(selector).filter({ hasText: 'Adressen' }).click()
     await expect(page).toHaveURL('/adressen')
   })
 
-  test('bottom nav Angebote item links to /angebote', async ({ page }) => {
+  test('Angebote nav item links to /angebote', async ({ page, viewport }) => {
     await page.goto('/')
-    const href = await page.locator('.bottom-nav-item').filter({ hasText: 'Angebote' }).getAttribute('href')
+    const isMobile = (viewport?.width ?? 0) < 1024
+    const selector = isMobile ? '.bottom-nav-item' : '.side-nav-item'
+    const href = await page.locator(selector).filter({ hasText: 'Angebote' }).getAttribute('href')
     expect(href).toBe('/angebote')
   })
 
   test('no horizontal overflow on /angebote', async ({ page, viewport }) => {
     await page.goto('/angebote')
-    await page.locator('.bottom-nav').waitFor()
+    await page.locator('.app-main').waitFor()
     const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
     expect(scrollWidth).toBeLessThanOrEqual((viewport?.width ?? 390) + 2)
   })

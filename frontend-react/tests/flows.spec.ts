@@ -54,10 +54,17 @@ async function mockLoggedIn(page: Page) {
   )
 }
 
-/** Navigates to a page and waits for the bottom nav to confirm the app shell loaded. */
+/** Navigates to a page and waits for the app shell to be visible.
+ *  Uses .app-main which is always present (vs. .bottom-nav which is mobile-only,
+ *  display:none on desktop ≥ 1024px). */
 async function gotoPage(page: Page, path: string) {
   await page.goto(path)
-  await page.locator('.bottom-nav').waitFor({ timeout: 8_000 })
+  await page.locator('.app-main').waitFor({ timeout: 10_000 })
+}
+
+/** True when the test runs in the mobile project (viewport < 1024px). */
+function isMobile(viewport: { width: number; height: number } | null | undefined): boolean {
+  return (viewport?.width ?? 0) < 1024
 }
 
 // ── Shared layout checks (run on every main page) ─────────────────────────────
@@ -83,14 +90,19 @@ test.describe('Layout — all main pages', () => {
       expect(scrollWidth).toBeLessThanOrEqual((viewport?.width ?? 390) + 2)
     })
 
-    test(`${route.label}: bottom nav always visible`, async ({ page }) => {
+    test(`${route.label}: primary nav always visible`, async ({ page, viewport }) => {
       await gotoPage(page, route.path)
-      await expect(page.locator('.bottom-nav')).toBeVisible()
+      // Mobile: bottom-nav; Desktop: side-nav. Beide tragen die Hauptnavigation.
+      const selector = isMobile(viewport) ? '.bottom-nav' : '.side-nav'
+      await expect(page.locator(selector)).toBeVisible()
     })
 
-    test(`${route.label}: page content not hidden behind bottom nav`, async ({ page }) => {
+    test(`${route.label}: page content not hidden behind bottom nav`, async ({ page, viewport }) => {
+      if (!isMobile(viewport)) {
+        // Desktop hat keine fixed Bottom-Nav -- der Padding-Check ist mobile-only.
+        return
+      }
       await gotoPage(page, route.path)
-      // The main content area must have enough bottom padding so the nav doesn't cover it
       const paddingBottom = await page.evaluate(() => {
         const main = document.querySelector('main') ?? document.querySelector('.page-root') ?? document.body
         return parseInt(window.getComputedStyle(main).paddingBottom, 10)
@@ -122,8 +134,8 @@ test.describe('Angebote', () => {
 
   test('list page renders', async ({ page }) => {
     await gotoPage(page, '/angebote')
-    // Page should not crash — bottom nav confirms shell is up
-    await expect(page.locator('.bottom-nav')).toBeVisible()
+    // Page should not crash — app shell confirms render
+    await expect(page.locator('.app-main')).toBeVisible()
   })
 
   test('shows empty state when no offers exist', async ({ page }) => {
@@ -161,7 +173,7 @@ test.describe('Projekte', () => {
 
   test('list page renders', async ({ page }) => {
     await gotoPage(page, '/projekte')
-    await expect(page.locator('.bottom-nav')).toBeVisible()
+    await expect(page.locator('.app-main')).toBeVisible()
   })
 
   test('no error boundary triggered on empty data', async ({ page }) => {
@@ -179,7 +191,7 @@ test.describe('Rechnungen', () => {
 
   test('list page renders', async ({ page }) => {
     await gotoPage(page, '/rechnungen')
-    await expect(page.locator('.bottom-nav')).toBeVisible()
+    await expect(page.locator('.app-main')).toBeVisible()
   })
 
   test('no error boundary triggered on empty data', async ({ page }) => {
@@ -197,7 +209,7 @@ test.describe('Adressen', () => {
 
   test('page renders', async ({ page }) => {
     await gotoPage(page, '/adressen')
-    await expect(page.locator('.bottom-nav')).toBeVisible()
+    await expect(page.locator('.app-main')).toBeVisible()
   })
 })
 
@@ -210,13 +222,13 @@ test.describe('Mitarbeiter', () => {
 
   test('page renders', async ({ page }) => {
     await gotoPage(page, '/mitarbeiter')
-    await expect(page.locator('.bottom-nav')).toBeVisible()
+    await expect(page.locator('.app-main')).toBeVisible()
   })
 })
 
 // ── Navigation flow ───────────────────────────────────────────────────────────
 
-test.describe('Bottom nav navigation', () => {
+test.describe('Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await mockLoggedIn(page)
   })
@@ -225,8 +237,8 @@ test.describe('Bottom nav navigation', () => {
     await gotoPage(page, '/')
     for (const route of MAIN_ROUTES) {
       await page.goto(route.path)
-      await page.locator('.bottom-nav').waitFor({ timeout: 8_000 })
-      await expect(page.locator('.bottom-nav')).toBeVisible()
+      await page.locator('.app-main').waitFor({ timeout: 10_000 })
+      await expect(page.locator('.app-main')).toBeVisible()
     }
   })
 })
