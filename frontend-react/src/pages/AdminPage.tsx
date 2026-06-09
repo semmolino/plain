@@ -49,17 +49,15 @@ import { Modal } from '@/components/ui/Modal'
 
 const PAGE_TABS = [
   { id: 'stammdaten',              label: 'Stammdaten'              },
-  { id: 'nummernkreise',           label: 'Nummernkreise'           },
-  { id: 'unternehmen',             label: 'Unternehmen'             },
   { id: 'vorbelegungen',           label: 'Vorbelegungen'           },
-  { id: 'arbeitszeitmodelle',      label: 'Arbeitszeitmodelle'      },
-  { id: 'pausenregeln',            label: 'Pausenregeln'            },
-  { id: 'arbzg',                   label: 'ArbZG-Einstellungen'     },
-  { id: 'monatsabschluss',         label: 'Monatsabschluss'         },
-  { id: 'kostensatz',              label: 'Kostensatz-Rechner'      },
-  { id: 'mahnungseinstellungen',   label: 'Mahnungseinstellungen'   },
-  { id: 'textvorlagen',            label: 'Textvorlagen'            },
   { id: 'benachrichtigungen',      label: 'Benachrichtigungen'      },
+  { id: 'monatsabschluss',         label: 'Monatsabschluss'         },
+  { id: 'unternehmen',             label: 'Unternehmen'             },
+  { id: 'nummernkreise',           label: 'Nummernkreise'           },
+  { id: 'textvorlagen',            label: 'Textvorlagen'            },
+  { id: 'mahnungseinstellungen',   label: 'Mahnungen'               },
+  { id: 'arbzg',                   label: 'Arbeitszeiten'           },
+  { id: 'kostensatz',              label: 'Kostensatz-Rechner'      },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -2884,13 +2882,23 @@ export function AdminPage() {
       </div>
       <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
       <div className="master-section">
-        {tab === 'stammdaten'            && <StammdatenSection />}
+        {tab === 'stammdaten'            && (
+          <>
+            <StammdatenSection />
+            <hr style={{ margin: '32px 0', border: 0, borderTop: '1px solid var(--border)' }} />
+            <ArbeitszeitmodelleSection />
+          </>
+        )}
         {tab === 'nummernkreise'         && <NummernkreiseSection />}
         {tab === 'unternehmen'           && <UnternehmenSection />}
         {tab === 'vorbelegungen'         && <VorbelegungenSection />}
-        {tab === 'arbeitszeitmodelle'    && <ArbeitszeitmodelleSection />}
-        {tab === 'pausenregeln'          && <PausenregelnSection />}
-        {tab === 'arbzg'                 && <ArbzgSettingsSection />}
+        {tab === 'arbzg'                 && (
+          <>
+            <ArbzgSettingsSection />
+            <hr style={{ margin: '32px 0', border: 0, borderTop: '1px solid var(--border)' }} />
+            <PausenregelnSection />
+          </>
+        )}
         {tab === 'monatsabschluss'       && <MonatsabschlussSection />}
         {tab === 'kostensatz'            && <KostensatzSection />}
         {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}

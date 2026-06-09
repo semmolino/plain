@@ -6,8 +6,9 @@ import { AbschlagWizard }        from '@/pages/rechnungen/AbschlagWizard'
 import { RechnungWizard }        from '@/pages/rechnungen/RechnungWizard'
 import { SchlussrechnungWizard } from '@/pages/rechnungen/SchlussrechnungWizard'
 import { MahnungenListe }        from '@/pages/rechnungen/MahnungenListe'
+import { Sicherheitseinbehalte } from '@/pages/projekte/Sicherheitseinbehalte'
 
-type Tab = 'liste' | 'abschlag' | 'rechnung' | 'schluss' | 'gutschrift' | 'mahnungen'
+type Tab = 'liste' | 'mahnungen' | 'abschlag' | 'rechnung' | 'schluss' | 'gutschrift' | 'se'
 
 export interface DraftResume {
   id:            number
@@ -24,12 +25,13 @@ export interface DraftResume {
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'liste',     label: 'Rechnungsliste' },
-  { id: 'abschlag',  label: 'Abschlagsrechnung' },
-  { id: 'rechnung',  label: 'Rechnung' },
+  { id: 'liste',      label: 'Rechnungsliste' },
+  { id: 'mahnungen',  label: 'Mahnungen' },
+  { id: 'abschlag',   label: 'Abschlagsrechnungen' },
+  { id: 'rechnung',   label: 'Einzelrechnung' },
   { id: 'schluss',    label: 'Teilschluss-/Schlussrechnung' },
   { id: 'gutschrift', label: 'Gutschrift' },
-  { id: 'mahnungen',  label: 'Mahnungen' },
+  { id: 'se',         label: 'Sicherheitseinbehalte' },
 ]
 
 export function RechnungenPage() {
@@ -129,6 +131,7 @@ export function RechnungenPage() {
         {tab === 'schluss'    && <SchlussrechnungWizard initialDraft={resumeFor('schluss')} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} />}
         {tab === 'gutschrift' && <RechnungWizard initialDraft={resumeFor('gutschrift' as Tab)} initialProjectId={prefillProject?.id} initialProjectLabel={prefillProject?.label} onPrefillConsumed={() => setPrefillProject(null)} invoiceType="gutschrift" />}
         {tab === 'mahnungen'  && <MahnungenListe openMahnung={openMahnung} />}
+        {tab === 'se'         && <Sicherheitseinbehalte />}
       </div>
     </div>
   )

@@ -9,27 +9,25 @@ import { ProjektStruktur } from '@/pages/projekte/ProjektStruktur'
 import { Buchungen }      from '@/pages/projekte/Buchungen'
 import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
 import { Vertraege }      from '@/pages/projekte/Vertraege'
-import { Sicherheitseinbehalte } from '@/pages/projekte/Sicherheitseinbehalte'
 import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
 import { Budget }          from '@/pages/projekte/Budget'
 import { fetchProjectReportHeader } from '@/api/reports'
 
-type Tab = 'liste' | 'anlegen' | 'honorar' | 'struktur' | 'buchungen' | 'leistungsstand' | 'vertraege' | 'se' | 'mitarbeiter' | 'budget'
+type Tab = 'liste' | 'anlegen' | 'struktur' | 'leistungsstand' | 'buchungen' | 'budget' | 'mitarbeiter' | 'honorar' | 'vertraege'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'liste',           label: 'Liste' },
   { id: 'anlegen',         label: 'Anlegen' },
-  { id: 'honorar',         label: 'Honorar (HOAI)' },
   { id: 'struktur',        label: 'Projektstruktur' },
-  { id: 'buchungen',       label: 'Buchungen' },
   { id: 'leistungsstand',  label: 'Leistungsstände' },
+  { id: 'buchungen',       label: 'Buchungen' },
+  { id: 'budget',          label: 'Interne Budgets' },
+  { id: 'mitarbeiter',     label: 'Stundensätze' },
+  { id: 'honorar',         label: 'Kalkulationen' },
   { id: 'vertraege',       label: 'Verträge' },
-  { id: 'se',              label: 'Sicherheitseinbehalte' },
-  { id: 'budget',          label: 'Budget' },
-  { id: 'mitarbeiter',     label: 'Mitarbeiter' },
 ]
 
-const VALID_TABS: Tab[] = ['liste','anlegen','honorar','struktur','buchungen','leistungsstand','vertraege','se','budget','mitarbeiter']
+const VALID_TABS: Tab[] = ['liste','anlegen','struktur','leistungsstand','buchungen','budget','mitarbeiter','honorar','vertraege']
 function parseTab(s: string | null): Tab | null {
   return s && (VALID_TABS as string[]).includes(s) ? (s as Tab) : null
 }
@@ -129,7 +127,6 @@ export function ProjektePage() {
         {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'vertraege'      && <Vertraege      initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
-        {tab === 'se'             && <Sicherheitseinbehalte initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'budget'         && <Budget         initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
         {tab === 'mitarbeiter'    && <Mitarbeiter    initialProjectId={selectedProjectId} onProjectChange={onProjectChange} />}
       </div>

@@ -15,11 +15,11 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/',            icon: LayoutDashboard, label: 'Übersicht'   },
   { to: '/adressen',    icon: BookUser,        label: 'Adressen'    },
   { to: '/projekte',    icon: FolderOpen,      label: 'Projekte'    },
-  { to: '/daten',       icon: BarChart3,       label: 'Projekt-Reports' },
+  { to: '/daten',       icon: BarChart3,       label: 'Reporting'   },
   { to: '/rechnungen',  icon: Receipt,         label: 'Rechnungen'  },
   { to: '/angebote',    icon: FileSignature,   label: 'Angebote'    },
   { to: '/mitarbeiter', icon: Users,           label: 'Mitarbeiter' },
-  { to: '/admin',       icon: Settings,        label: 'Admin'       },
+  { to: '/admin',       icon: Settings,        label: 'Einstellungen' },
 ]
 
 export function SideNav() {

@@ -169,11 +169,11 @@ import { Pencil, FileText, MoreHorizontal } from 'lucide-react'
 - Übersicht → `LayoutDashboard`
 - Adressen → `BookUser`
 - Projekte → `FolderOpen`
-- Daten → `BarChart3`
+- Reporting → `BarChart3`
 - Rechnungen → `Receipt`
 - Angebote → `FileSignature`
 - Mitarbeiter → `Users`
-- Admin → `Settings`
+- Einstellungen → `Settings`
 
 **Common action icons:**
 - Edit/open → `Pencil`
