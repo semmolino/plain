@@ -5,6 +5,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
 import { ValidationModal } from '@/components/ui/ValidationModal'
+import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
 import {
   searchContracts,
   initInvoice, patchInvoice,
@@ -653,6 +654,8 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
               </div>
             )}
           </div>
+
+          <AnlagenSection base="invoices" docId={draftId} />
 
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">

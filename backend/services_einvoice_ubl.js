@@ -36,6 +36,20 @@ function amt(v, cur, tag) {
 
 // ── Building blocks ───────────────────────────────────────────────────────────
 
+function buildAttachmentsUbl(data) {
+  // Branch 9 (BG-24): cac:AdditionalDocumentReference mit cbc:EmbeddedDocumentBinaryObject
+  const atts = Array.isArray(data.attachments) ? data.attachments : [];
+  if (atts.length === 0) return '';
+  return atts.map(a => `
+  <cac:AdditionalDocumentReference>
+    <cbc:ID>${x(a.documentReference || `ATT-${a.id}`)}</cbc:ID>
+    ${a.description ? `<cbc:DocumentDescription>${x(a.description)}</cbc:DocumentDescription>` : ''}
+    <cac:Attachment>
+      <cbc:EmbeddedDocumentBinaryObject mimeCode="${x(a.mimeType || 'application/octet-stream')}" filename="${x(a.fileName || `attachment-${a.id}`)}">${a.base64}</cbc:EmbeddedDocumentBinaryObject>
+    </cac:Attachment>
+  </cac:AdditionalDocumentReference>`).join('\n');
+}
+
 function buildBillingReferences(data) {
   const refs = [];
 
@@ -195,6 +209,7 @@ function generateUblXml(data) {
   ${data.orderNumber    ? `<cac:OrderReference><cbc:ID>${x(data.orderNumber)}</cbc:ID></cac:OrderReference>` : ''}
 ${buildBillingReferences(data)}
   ${data.contractNumber ? `<cac:ContractDocumentReference><cbc:ID>${x(data.contractNumber)}</cbc:ID></cac:ContractDocumentReference>` : ''}
+${buildAttachmentsUbl(data)}
   ${data.projectNumber  ? `<cac:ProjectReference><cbc:ID>${x(data.projectNumber)}</cbc:ID></cac:ProjectReference>` : ''}
 
   <cac:AccountingSupplierParty>

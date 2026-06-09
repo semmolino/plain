@@ -63,6 +63,18 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const doc   = await one(supabase, table, docId, tenantId);
   if (!doc) throw new InvoiceDataError(`${table} ${docId} not found.`);
 
+  // Branch 9: Anlagen laden (soft-fail wenn Tabelle/Datei fehlt)
+  let attachments = [];
+  try {
+    const attSvc = require('./services/attachments');
+    attachments = await attSvc.loadAttachmentsForXml(supabase, { docType, docId, tenantId });
+  } catch (e) {
+    // Migration 0060 evtl. noch nicht gelaufen -- nur loggen, nicht abbrechen
+    if (!String(e?.message || '').includes('does not exist')) {
+      console.warn('[loadInvoiceData][attachments]', e?.message);
+    }
+  }
+
   // ── 1. Document type & TypeCodes ──────────────────────────────────────────
 
   const isInvoice  = docType === 'INVOICE';
@@ -596,6 +608,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     orderNumber:           String(doc.BUYER_ORDER_REFERENCE      ?? '').trim(), // BT-13
     buyerAccountingRef:    String(doc.BUYER_ACCOUNTING_REFERENCE ?? '').trim(), // BT-19
     remittanceInformation: String(doc.REMITTANCE_INFORMATION     ?? '').trim(), // BT-83
+    attachments,                                            // Branch 9: BG-24
   };
 }
 
