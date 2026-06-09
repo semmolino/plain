@@ -2,9 +2,14 @@
 
 const express = require('express');
 const svc     = require('../services/costRateCalc');
+const { requirePermission } = require('../middleware/permissions');
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 3: alle Kostensatz-Routen erfordern settings.cost_rate.edit
+  // (GET-Routen muessen auch gehen, weil sie Werte fuer das Eingabeformular liefern)
+  router.use(requirePermission('settings.cost_rate.edit'));
 
   // GET  /kostensatz/overhead?year=
   router.get('/overhead', async (req, res) => {

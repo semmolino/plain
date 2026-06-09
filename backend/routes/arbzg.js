@@ -2,13 +2,14 @@
 
 const express = require('express');
 const ctrl = require('../controllers/arbzg');
+const { requirePermission } = require('../middleware/permissions');
 
 module.exports = (supabase) => {
   const router = express.Router();
 
   // Settings (tenant-weit)
   router.get ('/settings',                (req, res) => ctrl.getSettings(req, res, supabase));
-  router.put ('/settings',                (req, res) => ctrl.saveSettings(req, res, supabase));
+  router.put ('/settings',                requirePermission('settings.work_time.edit'), (req, res) => ctrl.saveSettings(req, res, supabase));
 
   // Aktives Modell + Pausenregel für einen Mitarbeiter
   router.get ('/limits/:employeeId',      (req, res) => ctrl.getLimits(req, res, supabase));
@@ -22,8 +23,8 @@ module.exports = (supabase) => {
 
   // Pausenregeln-CRUD
   router.get ('/break-rules',             (req, res) => ctrl.listBreakRules(req, res, supabase));
-  router.put ('/break-rules',             (req, res) => ctrl.upsertBreakRule(req, res, supabase));
-  router.delete('/break-rules/:id',       (req, res) => ctrl.deleteBreakRule(req, res, supabase));
+  router.put ('/break-rules',             requirePermission('settings.work_time.edit'), (req, res) => ctrl.upsertBreakRule(req, res, supabase));
+  router.delete('/break-rules/:id',       requirePermission('settings.work_time.edit'), (req, res) => ctrl.deleteBreakRule(req, res, supabase));
 
   return router;
 };

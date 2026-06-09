@@ -60,7 +60,7 @@ module.exports = (supabase) => {
   });
 
   // POST /api/mitarbeiter
-  router.post("/", async (req, res) => {
+  router.post("/", requirePermission("employees.create"), async (req, res) => {
     const body = req.body;
     if (!body.short_name || !body.first_name || !body.last_name || !body.gender_id) {
       return res.status(400).json({ error: "Pflichtfelder fehlen" });
@@ -189,7 +189,7 @@ router.get("/", async (req, res) => {
   });
 
   // DELETE /api/mitarbeiter/:id
-  router.delete("/:id", async (req, res) => {
+  router.delete("/:id", requirePermission("employees.delete"), async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: "ID fehlt" });
     const { error } = await supabase.from("EMPLOYEE").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
@@ -199,7 +199,7 @@ router.get("/", async (req, res) => {
 
   // Update EMPLOYEE (for Mitarbeiterliste edit modal)
   // PATCH /api/mitarbeiter/:id
-  router.patch("/:id", async (req, res) => {
+  router.patch("/:id", requirePermission("employees.edit"), async (req, res) => {
     const id = req.params.id;
     const body = req.body || {};
 
@@ -338,7 +338,7 @@ router.get("/:id/work-models", async (req, res) => {
   res.json({ data: assignments.map(a => ({ ...a, model: modelMap.get(a.MODEL_ID) ?? null })) });
 });
 
-router.post("/:id/work-models", async (req, res) => {
+router.post("/:id/work-models", requirePermission("employees.edit"), async (req, res) => {
   const empId = Number(req.params.id);
   const { model_id, valid_from } = req.body;
   if (!model_id || !valid_from) return res.status(400).json({ error: 'model_id und valid_from sind Pflichtfelder' });
@@ -351,7 +351,7 @@ router.post("/:id/work-models", async (req, res) => {
   res.json({ data });
 });
 
-router.patch("/:id/work-models/:wid", async (req, res) => {
+router.patch("/:id/work-models/:wid", requirePermission("employees.edit"), async (req, res) => {
   const wid   = Number(req.params.wid);
   const empId = Number(req.params.id);
   const { model_id, valid_from } = req.body;
@@ -370,7 +370,7 @@ router.patch("/:id/work-models/:wid", async (req, res) => {
   res.json({ data });
 });
 
-router.delete("/:id/work-models/:wid", async (req, res) => {
+router.delete("/:id/work-models/:wid", requirePermission("employees.edit"), async (req, res) => {
   const wid   = Number(req.params.wid);
   const empId = Number(req.params.id);
   const { error } = await supabase
@@ -414,7 +414,7 @@ router.get("/:id/cp-rates", async (req, res) => {
   res.json({ data: data || [] });
 });
 
-router.post("/:id/cp-rates", async (req, res) => {
+router.post("/:id/cp-rates", requirePermission("employees.salary.edit"), async (req, res) => {
   const empId = Number(req.params.id);
   const { cp_rate, valid_from } = req.body;
   if (cp_rate == null || !valid_from) return res.status(400).json({ error: 'cp_rate und valid_from sind Pflichtfelder' });
@@ -427,7 +427,7 @@ router.post("/:id/cp-rates", async (req, res) => {
   res.json({ data });
 });
 
-router.patch("/:id/cp-rates/:rid", async (req, res) => {
+router.patch("/:id/cp-rates/:rid", requirePermission("employees.salary.edit"), async (req, res) => {
   const rid   = Number(req.params.rid);
   const empId = Number(req.params.id);
   const { cp_rate, valid_from } = req.body;
@@ -446,7 +446,7 @@ router.patch("/:id/cp-rates/:rid", async (req, res) => {
   res.json({ data });
 });
 
-router.delete("/:id/cp-rates/:rid", async (req, res) => {
+router.delete("/:id/cp-rates/:rid", requirePermission("employees.salary.edit"), async (req, res) => {
   const rid   = Number(req.params.rid);
   const empId = Number(req.params.id);
   const { error } = await supabase
@@ -462,7 +462,7 @@ router.delete("/:id/cp-rates/:rid", async (req, res) => {
 // ── Admin: set / clear employee password ─────────────────────────────────────
 // PATCH /mitarbeiter/:id/set-password
 // Body: { new_password: string } or { new_password: null } to clear
-router.patch("/:id/set-password", async (req, res) => {
+router.patch("/:id/set-password", requirePermission("employees.password.set"), async (req, res) => {
   const id = Number(req.params.id);
   const { new_password } = req.body || {};
 
@@ -503,7 +503,7 @@ router.get("/:id/month-close/:year/:month", async (req, res) => {
   res.json({ data: data ?? null });
 });
 
-router.post("/:id/month-close", async (req, res) => {
+router.post("/:id/month-close", requirePermission("employees.month_close.edit"), async (req, res) => {
   const empId = Number(req.params.id);
   const { year, month } = req.body || {};
   if (!year || !month) return res.status(400).json({ error: "year und month sind Pflichtfelder" });
@@ -523,7 +523,7 @@ router.post("/:id/month-close", async (req, res) => {
   res.json({ data });
 });
 
-router.delete("/:id/month-close/:year/:month", async (req, res) => {
+router.delete("/:id/month-close/:year/:month", requirePermission("employees.month_close.edit"), async (req, res) => {
   const empId = Number(req.params.id);
   const year  = Number(req.params.year);
   const month = Number(req.params.month);
