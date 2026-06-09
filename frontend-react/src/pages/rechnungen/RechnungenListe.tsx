@@ -11,6 +11,7 @@ import {
   fetchInvoices, fetchPartialPayments,
   openInvoicePdf, openPpPdf,
   downloadInvoiceEinvoice, downloadPpEinvoice,
+  downloadInvoicePdfHybrid, downloadPpPdfHybrid,
   cancelInvoice, cancelPartialPayment,
   deleteInvoice, deletePartialPayment,
   fetchPayments, createPayment, deletePayment,
@@ -670,6 +671,21 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     }
   }
 
+  async function openHybridPdf(row: UnifiedRow) {
+    try {
+      if (row.source === 'invoice') {
+        const inv = row.raw as Invoice
+        await downloadInvoicePdfHybrid(inv.ID, inv.INVOICE_NUMBER)
+      } else {
+        const pp = row.raw as PartialPayment
+        await downloadPpPdfHybrid(pp.ID, pp.PARTIAL_PAYMENT_NUMBER)
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Hybrid-PDF konnte nicht erzeugt werden: ${msg}`)
+    }
+  }
+
   const sp = { sortKey, dir: sortDir, onClick: toggleSort }
   const remaining = payTarget ? (Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100) : null
 
@@ -808,6 +824,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     <RowMenu>
                       <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
                       <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
+                      <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
                       {row.statusClass === 'booked' && (
                         <button className="row-menu-item" onClick={() => navigate('/rechnungen?tab=mahnungen')}>→ Mahnung</button>
                       )}

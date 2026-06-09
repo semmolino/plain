@@ -25,6 +25,7 @@ module.exports = (supabase) => {
   router.post("/:id/cancel",                   (req, res) => ctrl.cancelPartialPayment(req, res, supabase));
   router.delete("/:id",                        (req, res) => ctrl.deletePartialPayment(req, res, supabase));
   router.get("/:id/pdf",                       (req, res) => ctrl.getPdf(req, res, supabase));
+  router.get("/:id/pdf-hybrid",                (req, res) => ctrl.getPdfHybrid(req, res, supabase));
 
   // POST /partial-payments/:id/email  — send partial payment PDF via SMTP
   router.post("/:id/email", async (req, res) => {

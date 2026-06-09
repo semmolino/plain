@@ -23,6 +23,7 @@ module.exports = (supabase) => {
   router.post("/:id/cancel",                   (req, res) => ctrl.cancelInvoice(req, res, supabase));
   router.delete("/:id",                        (req, res) => ctrl.deleteInvoice(req, res, supabase));
   router.get("/:id/pdf",                       (req, res) => ctrl.getPdf(req, res, supabase));
+  router.get("/:id/pdf-hybrid",                (req, res) => ctrl.getPdfHybrid(req, res, supabase));
 
   // POST /invoices/:id/email  — send invoice PDF via SMTP
   router.post("/:id/email", async (req, res) => {
