@@ -30,6 +30,17 @@ async function mockLoggedIn(page: Page) {
     localStorage.setItem('plain_auth', JSON.stringify(auth))
   }, FAKE_AUTH)
 
+  // Playwright route precedence: most-recently-registered runs first.
+  // Catch-all MUSS daher ZUERST registriert werden, danach die spezifischen
+  // Handler, damit /auth/me und /permissions/me korrekt antworten.
+  await page.route('/api/v1/**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
+    })
+  )
+
   await page.route('/api/v1/auth/me', route =>
     route.fulfill({
       status: 200,
@@ -44,12 +55,13 @@ async function mockLoggedIn(page: Page) {
     })
   )
 
-  // Default stub — returns empty list for any unmatched API route
-  await page.route('/api/v1/**', route =>
+  // RBAC: Test-User ist "unrestricted" (= Admin/Foundation-Phase), damit Nav,
+  // Tabs und Buttons sichtbar bleiben. Sonst filtert die App alles weg.
+  await page.route('/api/v1/permissions/me', route =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: [] }),
+      body: JSON.stringify({ keys: [], unrestricted: true }),
     })
   )
 }
