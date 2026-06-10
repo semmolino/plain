@@ -34,16 +34,18 @@ export const usePermissionsStore = create<PermissionsState>((set, get) => ({
     set({ loading: true })
     try {
       const res = await fetchMyPermissions()
-      set({
-        keys:         new Set(res.keys || []),
-        unrestricted: !!res.unrestricted,
-        loaded:       true,
-        loading:      false,
-      })
+      const keys = new Set(res.keys || [])
+      const unrestricted = !!res.unrestricted
+      set({ keys, unrestricted, loaded: true, loading: false })
+      // Diagnose: in DevTools sichtbar als window.__plain_perms
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).__plain_perms = { keys: [...keys], unrestricted, buildTag: 'rbac-debug-1' }
+      console.info('[permissions] loaded', { unrestricted, keyCount: keys.size, buildTag: 'rbac-debug-1' })
     } catch (e) {
-      // Soft-fail: bei Netzwerkfehler bleibt unrestricted, damit App benutzbar bleibt
+      // Soft-fail: KEIN unrestricted=true beim Fehler — sonst bleiben Buttons sichtbar.
+      // Lieber alles versteckt + Fehler ins Log, dann sieht der User dass etwas kaputt ist.
       console.warn('[permissions] reload failed:', e)
-      set({ loading: false, loaded: true, unrestricted: true })
+      set({ loading: false, loaded: true, unrestricted: false })
     }
   },
 
