@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { changePassword } from '@/api/auth'
+import { AchievementsSection } from '@/components/engagement/AchievementsSection'
 
 export function ProfilePage() {
   const navigate   = useNavigate()
@@ -44,7 +45,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div style={{ maxWidth: 480, margin: '40px auto', padding: '0 16px' }}>
+    <div style={{ maxWidth: 720, margin: '40px auto', padding: '0 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
         <button
           onClick={() => navigate('/')}
@@ -68,6 +69,9 @@ export function ProfilePage() {
         <div style={{ fontWeight: 600, fontSize: 15 }}>{email}</div>
         {shortName && <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>Kürzel: {shortName}</div>}
       </div>
+
+      {/* Achievements */}
+      <AchievementsSection />
 
       {/* Password change form */}
       <div style={{

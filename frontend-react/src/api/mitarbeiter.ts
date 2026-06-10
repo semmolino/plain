@@ -168,6 +168,29 @@ export interface StreakData {
 export const fetchMyStreak = () =>
   apiClient.get<{ data: StreakData }>('/mitarbeiter/me/streak')
 
+// ── Achievements ─────────────────────────────────────────────────────────────
+
+export interface AchievementItem {
+  key:         string
+  title:       string
+  description: string | null
+  category:    string | null
+  position:    number
+  earned:      boolean
+  earned_at:   string | null
+  meta:        Record<string, unknown> | null
+}
+
+export interface AchievementsResponse {
+  items:          AchievementItem[]
+  earned_count:   number
+  total_count:    number
+  newly_unlocked: string[]
+}
+
+export const fetchMyAchievements = () =>
+  apiClient.get<{ data: AchievementsResponse }>('/mitarbeiter/me/achievements')
+
 // ── Employee list report ──────────────────────────────────────────────────────
 
 export interface EmployeeReportRow {
