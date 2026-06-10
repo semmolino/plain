@@ -128,6 +128,20 @@ module.exports = (supabase) => {
     }
   });
 
+  router.get("/me/recap", async (req, res) => {
+    try {
+      const svc = require("../services/recaps");
+      const period = (req.query.period || "week").toString();
+      if (!["week","month","year"].includes(period)) {
+        return res.status(400).json({ error: "period muss week|month|year sein" });
+      }
+      const r = await svc.computeRecap(supabase, { tenantId: req.tenantId, employeeId: req.employeeId, period });
+      res.json({ data: r });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   router.get("/me/achievements", async (req, res) => {
     try {
       const svc = require("../services/achievements");

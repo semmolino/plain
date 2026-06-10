@@ -191,6 +191,26 @@ export interface AchievementsResponse {
 export const fetchMyAchievements = () =>
   apiClient.get<{ data: AchievementsResponse }>('/mitarbeiter/me/achievements')
 
+// ── Recaps ───────────────────────────────────────────────────────────────────
+
+export type RecapPeriod = 'week' | 'month' | 'year'
+
+export interface RecapData {
+  period:           RecapPeriod
+  label:            string
+  from:             string
+  to:               string
+  hours_booked:     number
+  bookings_count:   number
+  projects_count:   number
+  offers_count:     number
+  invoices_count:   number
+  activity_score:   number
+}
+
+export const fetchMyRecap = (period: RecapPeriod) =>
+  apiClient.get<{ data: RecapData }>(`/mitarbeiter/me/recap?period=${period}`)
+
 // ── Employee list report ──────────────────────────────────────────────────────
 
 export interface EmployeeReportRow {

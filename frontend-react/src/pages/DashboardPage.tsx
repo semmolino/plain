@@ -49,6 +49,7 @@ import { usePermission } from '@/store/permissionsStore'
 import { RecentMixedList } from '@/components/recents/RecentList'
 import { useGamificationConfig } from '@/hooks/useGamificationConfig'
 import { StreakCard } from '@/components/engagement/StreakCard'
+import { RecapCard } from '@/components/engagement/RecapCard'
 import { fetchEmployeeList } from '@/api/mitarbeiter'
 import { fetchAddressList } from '@/api/stammdaten'
 import { fetchOffers } from '@/api/angebote'
@@ -1086,6 +1087,7 @@ function MitarbeiterView({ employeeId }: { employeeId: number }) {
 
   return (
     <>
+      <RecapCard />
       <StreakCard />
 
       <div className="kpi-grid">
