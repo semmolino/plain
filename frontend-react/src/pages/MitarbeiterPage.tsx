@@ -23,6 +23,8 @@ import {
   type MonthCloseOverviewEmployee, type DayBooking, type EmployeeReportRow,
 } from '@/api/mitarbeiter'
 import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
+import { RecentList } from '@/components/recents/RecentList'
+import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeverity } from '@/api/arbzg'
 import { updateBuchung, deleteBuchung } from '@/api/projekte'
 
@@ -529,6 +531,38 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
     (mode === 'as_of'  && asOfDate !== '') ||
     (mode === 'period' && dateFrom !== '' && dateTo !== '')
 
+  // ── Recents-Tracking fuer Mitarbeiter-Reports-Filter ────────────────────
+  const recentSnapshot = useMemo(() => ({
+    mode, asOfDate, dateFrom, dateTo,
+    dept:   [...deptFilter].sort(),
+    status: [...statusFilter].sort(),
+    model:  [...modelFilter].sort(),
+  }), [mode, asOfDate, dateFrom, dateTo, deptFilter, statusFilter, modelFilter])
+  const recentLabel = useMemo(() => {
+    const parts: string[] = []
+    if (mode === 'as_of'  && asOfDate)             parts.push(`Stichtag ${asOfDate}`)
+    if (mode === 'period' && dateFrom && dateTo)   parts.push(`${dateFrom} – ${dateTo}`)
+    if (mode === 'now')                            parts.push('Aktuell')
+    if (deptFilter.size  > 0) parts.push(`Abt.: ${[...deptFilter].slice(0,2).join(', ')}${deptFilter.size > 2 ? ` +${deptFilter.size-2}` : ''}`)
+    if (statusFilter.size > 0) parts.push(`Status: ${[...statusFilter].join(', ')}`)
+    if (modelFilter.size  > 0) parts.push(`Modell: ${[...modelFilter].slice(0,2).join(', ')}${modelFilter.size > 2 ? ` +${modelFilter.size-2}` : ''}`)
+    return parts.join(' · ') || 'Alle'
+  }, [mode, asOfDate, dateFrom, dateTo, deptFilter, statusFilter, modelFilter])
+  const hasAnyDimension = deptFilter.size > 0 || statusFilter.size > 0 || modelFilter.size > 0
+  const shouldTrack = filterReady && (mode !== 'now' || hasAnyDimension)
+  useTrackFilterRecent('mitarbeiter_report_filter', recentSnapshot, recentLabel, shouldTrack)
+
+  function applyRecent(meta: Record<string, unknown> | null) {
+    if (!meta) return
+    if (typeof meta.mode     === 'string') setMode(meta.mode as EmpRepMode)
+    if (typeof meta.asOfDate === 'string') setAsOfDate(meta.asOfDate)
+    if (typeof meta.dateFrom === 'string') setDateFrom(meta.dateFrom)
+    if (typeof meta.dateTo   === 'string') setDateTo(meta.dateTo)
+    if (Array.isArray(meta.dept))   setDeptFilter(new Set(meta.dept   as string[]))
+    if (Array.isArray(meta.status)) setStatusFilter(new Set(meta.status as string[]))
+    if (Array.isArray(meta.model))  setModelFilter(new Set(meta.model  as string[]))
+  }
+
   const qparams = filterReady ? {
     mode,
     asOfDate:   mode === 'as_of'  ? asOfDate : undefined,
@@ -632,6 +666,11 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
 
   return (
     <div>
+      <RecentList
+        type="mitarbeiter_report_filter"
+        title="Zuletzt verwendete Filter"
+        onSelect={(e) => applyRecent(e.META)}
+      />
       {/* Date filter */}
       <div className="daten-filter-bar">
         <div className="daten-filter-modes">

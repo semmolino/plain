@@ -19,6 +19,9 @@ const ALLOWED_TYPES = new Set([
   "offer",
   "mahnung",
   "address",
+  "project_structure",          // Strukturelement -- META.project_id pflicht
+  "report_filter",              // Reports-Filter   -- META = Filter-State
+  "mitarbeiter_report_filter",  // Mitarbeiter-Reports-Filter
 ]);
 
 // Eintraege, die laenger nicht mehr aufgerufen wurden, gelten nicht mehr
@@ -37,10 +40,13 @@ function assertType(entityType) {
   }
 }
 
-/** Trackt einen Zugriff. Upsert: vorhanden -> LAST_SEEN=NOW(), VIEW_COUNT+=1, LABEL aktualisieren. */
-async function trackRecent(supabase, { tenantId, employeeId, entityType, entityId, label }) {
+/** Trackt einen Zugriff. Upsert: vorhanden -> LAST_SEEN=NOW(), VIEW_COUNT+=1,
+ *  LABEL + META aktualisieren. */
+async function trackRecent(supabase, { tenantId, employeeId, entityType, entityId, label, meta }) {
   assertType(entityType);
   if (!entityId) throw { status: 400, message: "entity_id fehlt" };
+
+  const metaSafe = meta && typeof meta === "object" ? meta : null;
 
   // 1) Vorhandenen Eintrag suchen
   const { data: existing, error: er1 } = await supabase
@@ -60,6 +66,7 @@ async function trackRecent(supabase, { tenantId, employeeId, entityType, entityI
         LAST_SEEN:  new Date().toISOString(),
         VIEW_COUNT: (existing.VIEW_COUNT || 0) + 1,
         LABEL:      label || null,
+        META:       metaSafe,
       })
       .eq("ID", existing.ID);
     if (error) throw { status: 500, message: error.message };
@@ -74,6 +81,7 @@ async function trackRecent(supabase, { tenantId, employeeId, entityType, entityI
       ENTITY_TYPE: entityType,
       ENTITY_ID:   entityId,
       LABEL:       label || null,
+      META:        metaSafe,
       LAST_SEEN:   new Date().toISOString(),
       VIEW_COUNT:  1,
     })
@@ -83,41 +91,55 @@ async function trackRecent(supabase, { tenantId, employeeId, entityType, entityI
   return { id: data.ID, isNew: true };
 }
 
-/** Liefert die letzten n Eintraege pro Entity-Typ, optional mit Stale-Out. */
-async function listRecents(supabase, { tenantId, employeeId, entityType, limit, staleDays }) {
+/** Liefert die letzten n Eintraege pro Entity-Typ, optional mit Stale-Out
+ *  und optionalem META-Filter (z.B. project_id fuer project_structure). */
+async function listRecents(supabase, { tenantId, employeeId, entityType, limit, staleDays, projectId }) {
   assertType(entityType);
   const lim = Math.min(Math.max(parseInt(limit, 10) || 5, 1), 50);
 
-  const { data, error } = await supabase
+  let q = supabase
     .from("RECENT_VIEW")
-    .select("ID, ENTITY_TYPE, ENTITY_ID, LABEL, LAST_SEEN, VIEW_COUNT")
+    .select("ID, ENTITY_TYPE, ENTITY_ID, LABEL, META, LAST_SEEN, VIEW_COUNT")
     .eq("TENANT_ID",   tenantId)
     .eq("EMPLOYEE_ID", employeeId)
     .eq("ENTITY_TYPE", entityType)
     .gt("LAST_SEEN",   staleCutoffIso(staleDays))
     .order("LAST_SEEN", { ascending: false })
     .limit(lim);
+
+  if (projectId != null) {
+    q = q.eq("META->>project_id", String(parseInt(projectId, 10)));
+  }
+
+  const { data, error } = await q;
   if (error) {
-    if (/relation .* does not exist/i.test(error.message)) return [];
+    if (/relation .* does not exist|column .* does not exist/i.test(error.message)) return [];
     throw { status: 500, message: error.message };
   }
   return data || [];
 }
 
-/** Dashboard-Mix: ueber alle Typen sortiert nach LAST_SEEN, mit Stale-Out. */
+/** Dashboard-Mix: ueber alle Typen sortiert nach LAST_SEEN, mit Stale-Out.
+ *  Filter-Typen (report_filter etc.) werden hier ausgeblendet -- die machen
+ *  als kontextfreie Karte keinen Sinn. */
 async function listDashboardRecents(supabase, { tenantId, employeeId, limit, staleDays }) {
   const lim = Math.min(Math.max(parseInt(limit, 10) || 8, 1), 50);
 
+  const datasetTypes = [
+    "project", "invoice", "partial_payment", "offer", "mahnung", "address",
+  ];
+
   const { data, error } = await supabase
     .from("RECENT_VIEW")
-    .select("ID, ENTITY_TYPE, ENTITY_ID, LABEL, LAST_SEEN, VIEW_COUNT")
+    .select("ID, ENTITY_TYPE, ENTITY_ID, LABEL, META, LAST_SEEN, VIEW_COUNT")
     .eq("TENANT_ID",   tenantId)
     .eq("EMPLOYEE_ID", employeeId)
+    .in("ENTITY_TYPE", datasetTypes)
     .gt("LAST_SEEN",   staleCutoffIso(staleDays))
     .order("LAST_SEEN", { ascending: false })
     .limit(lim);
   if (error) {
-    if (/relation .* does not exist/i.test(error.message)) return [];
+    if (/relation .* does not exist|column .* does not exist/i.test(error.message)) return [];
     throw { status: 500, message: error.message };
   }
   return data || [];

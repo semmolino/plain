@@ -18,6 +18,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { RecentList } from '@/components/recents/RecentList'
+import { trackRecent } from '@/api/recents'
 
 const FMT_NUM = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
 const fmtN    = (v: number | null | undefined) => v == null ? '—' : FMT_NUM.format(v)
@@ -293,6 +294,12 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     if (!pid || !form.EMPLOYEE_ID || !form.DATE_VOUCHER || !form.QUANTITY_INT || !form.QUANTITY_EXT || form.SP_RATE === '' || !form.POSTING_DESCRIPTION) {
       setMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
+    // Recents: zuletzt gebuchte Strukturelemente pro Projekt mitschreiben
+    if (form.STRUCTURE_ID) {
+      const sid = Number(form.STRUCTURE_ID)
+      const label = pathCache.get(sid) ?? `#${sid}`
+      void trackRecent('project_structure', sid, label, { project_id: pid }).catch(() => {})
+    }
     createMut.mutate({
       PROJECT_ID:          pid,
       STRUCTURE_ID:        form.STRUCTURE_ID  ? Number(form.STRUCTURE_ID) : undefined,
@@ -506,6 +513,12 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                       <option value="">—</option>
                       {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}
                     </select>
+                    <RecentList
+                      type="project_structure"
+                      projectId={pid}
+                      title="Zuletzt gebucht in diesem Projekt"
+                      onSelect={(e) => setForm(f => ({ ...f, STRUCTURE_ID: String(e.ENTITY_ID) }))}
+                    />
                   </div>
                   <div className="form-row">
                     <FormField label="Datum*"      id="bda" type="date"   value={form.DATE_VOUCHER}  onChange={setF('DATE_VOUCHER')} required />

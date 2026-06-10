@@ -10,32 +10,41 @@ interface SingleProps {
   onSelect?: (entry: RecentEntry) => void   // Optionaler Override; sonst Navigations-Default
   emptyHint?: string
   className?: string
+  /** Fuer kontextabhaengige Typen wie project_structure: schraenkt die Liste
+   *  auf Eintraege ein, deren META.project_id zu diesem Wert passt. */
+  projectId?: number | null
 }
 
 const TYPE_DEFAULT_PATH: Record<RecentEntityType, (id: number) => string> = {
-  project:         (id) => `/projekte?selected=${id}`,
-  invoice:         (id) => `/rechnungen?selected=${id}`,
-  partial_payment: (id) => `/rechnungen?pp=${id}`,
-  offer:           (id) => `/angebote?selected=${id}`,
-  mahnung:         (id) => `/rechnungen?mahnung=${id}`,
-  address:         (id) => `/adressen?selected=${id}`,
+  project:                   (id) => `/projekte?selected=${id}`,
+  invoice:                   (id) => `/rechnungen?selected=${id}`,
+  partial_payment:           (id) => `/rechnungen?pp=${id}`,
+  offer:                     (id) => `/angebote?selected=${id}`,
+  mahnung:                   (id) => `/rechnungen?mahnung=${id}`,
+  address:                   (id) => `/adressen?selected=${id}`,
+  project_structure:         ()   => '/projekte',
+  report_filter:             ()   => '/daten',
+  mitarbeiter_report_filter: ()   => '/daten',
 }
 
 const TYPE_LABEL: Record<RecentEntityType, string> = {
-  project:         'Projekt',
-  invoice:         'Rechnung',
-  partial_payment: 'Abschlag',
-  offer:           'Angebot',
-  mahnung:         'Mahnung',
-  address:         'Adresse',
+  project:                   'Projekt',
+  invoice:                   'Rechnung',
+  partial_payment:           'Abschlag',
+  offer:                     'Angebot',
+  mahnung:                   'Mahnung',
+  address:                   'Adresse',
+  project_structure:         'Position',
+  report_filter:             'Filter',
+  mitarbeiter_report_filter: 'Filter',
 }
 
 /** Liste zuletzt verwendeter Datensaetze pro Entity-Typ. */
-export function RecentList({ type, limit = 5, title, onSelect, emptyHint, className }: SingleProps) {
+export function RecentList({ type, limit = 5, title, onSelect, emptyHint, className, projectId }: SingleProps) {
   const navigate = useNavigate()
   const { data, isLoading } = useQuery({
-    queryKey: ['recents', type],
-    queryFn:  () => fetchRecents(type, limit),
+    queryKey: ['recents', type, projectId ?? null],
+    queryFn:  () => fetchRecents(type, limit, { projectId }),
     staleTime: 30_000,
   })
 

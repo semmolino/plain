@@ -29,6 +29,8 @@ import {
   type TimelinePoint,
 } from '@/api/reports'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
+import { RecentList } from '@/components/recents/RecentList'
+import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -53,6 +55,25 @@ function serializeFilters(f: ActiveFilters): Record<string, string[]> {
   for (const [k, v] of Object.entries(f)) r[k] = [...v]
   return r
 }
+/** Liefert eine menschenlesbare Beschreibung des Filter-Sets fuer Recents-Labels. */
+function buildFilterLabel(
+  mode: FilterMode, asOfDate: string, dateFrom: string, dateTo: string,
+  dimensions: Record<string, string[]>,
+): string {
+  const parts: string[] = []
+  if (mode === 'as_of'  && asOfDate)             parts.push(`Stichtag ${asOfDate}`)
+  if (mode === 'period' && dateFrom && dateTo)   parts.push(`${dateFrom} – ${dateTo}`)
+  if (mode === 'now')                            parts.push('Aktuell')
+  const dimLabels: Record<string, string> = { status: 'Status', manager: 'PL', typ: 'Typ', abteilung: 'Abt.', adresse: 'Adresse' }
+  for (const [k, arr] of Object.entries(dimensions)) {
+    if (arr.length === 0) continue
+    const head = arr.slice(0, 2).join(', ')
+    const more = arr.length > 2 ? ` +${arr.length - 2}` : ''
+    parts.push(`${dimLabels[k] ?? k}: ${head}${more}`)
+  }
+  return parts.join(' · ') || 'Alle'
+}
+
 function deserializeFilters(raw: Record<string, string[]>): ActiveFilters {
   const base = emptyFilters()
   for (const k of Object.keys(base)) {
@@ -488,6 +509,29 @@ export function ProjektlisteTab() {
     (mode === 'as_of'  && asOfDate !== '') ||
     (mode === 'period' && dateFrom !== '' && dateTo !== '')
 
+  // ── Recents-Tracking ──────────────────────────────────────────────────────
+  // Snapshot der Filter-Kombi, die zum Wiederherstellen reicht
+  const serializedDimensions = useMemo(() => serializeFilters(activeFilters), [activeFilters])
+  const recentSnapshot = useMemo(() => ({
+    mode, asOfDate, dateFrom, dateTo,
+    dimensions: serializedDimensions,
+  }), [mode, asOfDate, dateFrom, dateTo, serializedDimensions])
+  const recentLabel = useMemo(() => buildFilterLabel(mode, asOfDate, dateFrom, dateTo, serializedDimensions), [mode, asOfDate, dateFrom, dateTo, serializedDimensions])
+  const hasAnyDimension = Object.values(serializedDimensions).some(arr => arr.length > 0)
+  const shouldTrack = filterReady && (mode !== 'now' || hasAnyDimension)
+  useTrackFilterRecent('report_filter', recentSnapshot, recentLabel, shouldTrack)
+
+  function applyRecent(meta: Record<string, unknown> | null) {
+    if (!meta) return
+    if (typeof meta.mode     === 'string') setMode(meta.mode as FilterMode)
+    if (typeof meta.asOfDate === 'string') setAsOfDate(meta.asOfDate)
+    if (typeof meta.dateFrom === 'string') setDateFrom(meta.dateFrom)
+    if (typeof meta.dateTo   === 'string') setDateTo(meta.dateTo)
+    if (meta.dimensions && typeof meta.dimensions === 'object') {
+      setActiveFilters(deserializeFilters(meta.dimensions as Record<string, string[]>))
+    }
+  }
+
   const { data, isLoading } = useQuery({
     queryKey: ['project-list', filter],
     queryFn:  () => fetchProjectList(filter),
@@ -582,6 +626,11 @@ export function ProjektlisteTab() {
 
   return (
     <div>
+      <RecentList
+        type="report_filter"
+        title="Zuletzt verwendete Filter"
+        onSelect={(e) => applyRecent(e.META)}
+      />
       {/* Date filter */}
       <div className="daten-filter-bar">
         <div className="daten-filter-modes">

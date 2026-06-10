@@ -18,13 +18,14 @@ module.exports = (supabase) => {
 
   router.post("/", async (req, res) => {
     try {
-      const { entity_type, entity_id, label } = req.body || {};
+      const { entity_type, entity_id, label, meta } = req.body || {};
       const r = await svc.trackRecent(supabase, {
         tenantId:   req.tenantId,
         employeeId: req.employeeId,
         entityType: entity_type,
         entityId:   parseInt(entity_id, 10),
         label:      typeof label === "string" ? label.slice(0, 200) : null,
+        meta:       meta && typeof meta === "object" ? meta : null,
       });
       res.json({ data: r });
     } catch (e) {
@@ -54,6 +55,7 @@ module.exports = (supabase) => {
         entityType: req.query.type,
         limit:      req.query.limit,
         staleDays:  req.query.stale_days,
+        projectId:  req.query.project_id,
       });
       res.json({ data });
     } catch (e) {
