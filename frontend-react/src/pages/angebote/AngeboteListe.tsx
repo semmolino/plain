@@ -5,6 +5,8 @@ import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignat
 import { Can } from '@/components/ui/Can'
 import { Message } from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { RecentList }  from '@/components/recents/RecentList'
+import { trackRecent } from '@/api/recents'
 import {
   fetchOffers, deleteOffer, openOfferPdf, openAuftragsbestaetigungPdf, fetchOfferStructure, convertOffer, updateOffer,
   fetchOfferStatuses,
@@ -131,6 +133,12 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
   return (
     <>
     <div>
+      <RecentList
+        type="offer"
+        title="Zuletzt verwendete Angebote"
+        onSelect={(e) => onSelectOffer?.(e.ENTITY_ID, e.LABEL ?? '')}
+      />
+
       <div className="list-toolbar" style={{ marginTop: 10 }}>
         <input
           className="list-search"
@@ -184,7 +192,10 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                         <Pencil size={14} strokeWidth={2} />
                       </button>
                     </Can>
-                    <button className="btn-small" onClick={() => onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')} title="Angebotsstruktur öffnen">Öffnen</button>
+                    <button className="btn-small" onClick={() => {
+                      void trackRecent('offer', r.ID, r.NAME_SHORT ?? `#${r.ID}`).catch(() => {})
+                      onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')
+                    }} title="Angebotsstruktur öffnen">Öffnen</button>
                     <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">
                       <FileText size={14} strokeWidth={1.75} />
                     </button>

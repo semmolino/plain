@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { RecentList } from '@/components/recents/RecentList'
+import { trackRecent } from '@/api/recents'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -748,6 +750,16 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       {onCreateInvoiceFromBilling && (
         <AbrechenbareProjekte onCreateInvoice={onCreateInvoiceFromBilling} />
       )}
+      <RecentList
+        type="invoice"
+        title="Zuletzt verwendete Rechnungen"
+        onSelect={(e) => {
+          const row = rows.find(r => r.source === 'invoice' && (r.raw as Invoice).ID === e.ENTITY_ID)
+          if (row) setDetailRow(row)
+          else     setSearch(e.LABEL ?? '')
+        }}
+      />
+
       <div className="pl-toolbar" style={{ marginTop: backProject ? 0 : 10 }}>
         <input
           className="list-search"
@@ -860,7 +872,12 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     return null
                   })}
                   <td className="doc-actions" style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn-small" onClick={() => setDetailRow(row)}>Details</button>
+                    <button className="btn-small" onClick={() => {
+                      setDetailRow(row)
+                      const id = row.source === 'invoice' ? (row.raw as Invoice).ID : (row.raw as PartialPayment).ID
+                      const type = row.source === 'invoice' ? 'invoice' : 'partial_payment'
+                      void trackRecent(type, id, row.number ?? `#${id}`).catch(() => {})
+                    }}>Details</button>
                     <Can permission="invoices.download_pdf">
                       <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
                     </Can>

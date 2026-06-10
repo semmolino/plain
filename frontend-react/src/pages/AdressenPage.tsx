@@ -12,6 +12,8 @@ import { FormField }   from '@/components/ui/FormField'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useToast }  from '@/store/toastStore'
+import { RecentList } from '@/components/recents/RecentList'
+import { trackRecent } from '@/api/recents'
 import {
   fetchCountries, fetchSalutations, fetchGenders,
   fetchAddressList, searchAddressesApi, createAddress, updateAddress, deleteAddress,
@@ -384,6 +386,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   }
 
   function openEdit(a: Address) {
+    void trackRecent('address', a.ID, a.ADDRESS_NAME_1 ?? `#${a.ID}`).catch(() => {})
     setEditForm({
       address_name_1:  a.ADDRESS_NAME_1  ?? '',
       address_name_2:  a.ADDRESS_NAME_2  ?? '',
@@ -431,6 +434,15 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
 
       {tab === 'list' && (
         <div className="list-section">
+          <RecentList
+            type="address"
+            title="Zuletzt verwendete Adressen"
+            onSelect={(e) => {
+              const found = addresses.find(a => a.ID === e.ENTITY_ID)
+              if (found) openEdit(found)
+              else       setSearch(e.LABEL ?? '')
+            }}
+          />
           <div className="pl-toolbar">
             <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
             <div className="pl-filter-chips">

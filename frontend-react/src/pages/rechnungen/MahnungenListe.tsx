@@ -5,6 +5,8 @@ import { FileText, Banknote, Mail, Receipt, Folder, MoreHorizontal, SlidersHoriz
 import { Modal }          from '@/components/ui/Modal'
 import { Message }        from '@/components/ui/Message'
 import { ConfirmModal }   from '@/components/ui/ConfirmModal'
+import { RecentList }     from '@/components/recents/RecentList'
+import { trackRecent }    from '@/api/recents'
 import {
   fetchMahnungen, upsertMahnung, sendMahnungEmail, openMahnungPdf,
   fetchMahnungSettings,
@@ -453,6 +455,9 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
       notes:                 r.notes,
     })
     setSaveMsg(null)
+    // Recents: identifiziert wird die Mahnung ueber sourceId (Invoice/PP);
+    // mahnungId ist null solange noch keine Mahnstufe gesetzt wurde.
+    void trackRecent('mahnung', r.sourceId, r.number).catch(() => {})
   }
   function closeDetail() { setDetailRow(null); setDraft({}) }
 
@@ -619,6 +624,16 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
   return (
     <div>
+
+      <RecentList
+        type="mahnung"
+        title="Zuletzt verwendete Mahnungen"
+        onSelect={(e) => {
+          const row = rows.find(r => r.sourceId === e.ENTITY_ID)
+          if (row) openDetail(row)
+          else     setFilters(f => ({ ...f, search: e.LABEL ?? '' }))
+        }}
+      />
 
       {/* ── Toolbar (search + filter chips) ── */}
       <div className="pl-toolbar" style={{ marginTop: 10 }}>

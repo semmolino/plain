@@ -38,6 +38,7 @@ module.exports = (supabase) => {
         tenantId:   req.tenantId,
         employeeId: req.employeeId,
         limit:      req.query.limit,
+        staleDays:  req.query.stale_days,
       });
       res.json({ data });
     } catch (e) {
@@ -52,6 +53,7 @@ module.exports = (supabase) => {
         employeeId: req.employeeId,
         entityType: req.query.type,
         limit:      req.query.limit,
+        staleDays:  req.query.stale_days,
       });
       res.json({ data });
     } catch (e) {
