@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, Users, Clock, CalendarRange, BarChart3, AlertCircle } from 'lucide-react'
 import { fetchCompanyKpis, type CompanyKpiPeriod } from '@/api/reports'
+import { RecentList } from '@/components/recents/RecentList'
+import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 
 const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_EURK = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -110,6 +112,21 @@ export function UnternehmenskennzahlenTab() {
     periodType === 'month'   ? `${MONTH_OPTIONS.find(m => m.value === month)?.label} ${year}` :
     String(year)
 
+  // ── Recents-Tracking ──────────────────────────────────────────────────────
+  // Periode-Default (Jahr CURRENT_YEAR) wird NICHT getrackt, sonst muellt
+  // sich die Liste mit dem ersten Aufruf zu.
+  const recentSnapshot = useMemo(() => ({ periodType, year, quarter, month }), [periodType, year, quarter, month])
+  const isDefaultPeriod = periodType === 'year' && year === CURRENT_YEAR
+  useTrackFilterRecent('report_kennzahlen_filter', recentSnapshot, periodLabel, !isDefaultPeriod)
+
+  function applyRecent(meta: Record<string, unknown> | null) {
+    if (!meta) return
+    if (typeof meta.periodType === 'string') setPeriodType(meta.periodType as PeriodType)
+    if (typeof meta.year     === 'number')   setYear(meta.year)
+    if (typeof meta.quarter  === 'number')   setQuarter(meta.quarter)
+    if (typeof meta.month    === 'number')   setMonth(meta.month)
+  }
+
   function dbMargeHighlight(v: number | null): 'good' | 'warn' | 'bad' | 'neutral' {
     if (v == null) return 'neutral'
     if (v >= 20)   return 'good'
@@ -125,6 +142,12 @@ export function UnternehmenskennzahlenTab() {
 
   return (
     <div className="unk-root">
+
+      <RecentList
+        type="report_kennzahlen_filter"
+        title="Zuletzt verwendete Perioden"
+        onSelect={(e) => applyRecent(e.META)}
+      />
 
       {/* ── Header with period selector ── */}
       <div className="unk-header">

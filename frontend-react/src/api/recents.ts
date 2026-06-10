@@ -8,7 +8,10 @@ export type RecentEntityType =
   | 'mahnung'
   | 'address'
   | 'project_structure'
-  | 'report_filter'
+  | 'report_filter'                // Legacy
+  | 'report_projektliste_filter'
+  | 'report_trends_filter'
+  | 'report_kennzahlen_filter'
   | 'mitarbeiter_report_filter'
 
 export interface RecentEntry {
@@ -41,15 +44,18 @@ export const trackRecent = (
     meta:        meta ?? null,
   } as TrackRecentBody)
 
+export type RecentSortBy = 'recent' | 'frequent'
+
 export const fetchRecents = (
   entityType: RecentEntityType,
   limit = 5,
-  opts: { projectId?: number | null } = {},
+  opts: { projectId?: number | null; sortBy?: RecentSortBy } = {},
 ) => {
   const params = new URLSearchParams()
   params.set('type', entityType)
   params.set('limit', String(limit))
   if (opts.projectId != null) params.set('project_id', String(opts.projectId))
+  if (opts.sortBy)            params.set('sort_by',    opts.sortBy)
   return apiClient.get<{ data: RecentEntry[] }>(`/recents?${params.toString()}`)
 }
 

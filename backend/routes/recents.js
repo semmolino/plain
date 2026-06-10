@@ -56,6 +56,7 @@ module.exports = (supabase) => {
         limit:      req.query.limit,
         staleDays:  req.query.stale_days,
         projectId:  req.query.project_id,
+        sortBy:     req.query.sort_by,
       });
       res.json({ data });
     } catch (e) {

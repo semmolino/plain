@@ -519,7 +519,7 @@ export function ProjektlisteTab() {
   const recentLabel = useMemo(() => buildFilterLabel(mode, asOfDate, dateFrom, dateTo, serializedDimensions), [mode, asOfDate, dateFrom, dateTo, serializedDimensions])
   const hasAnyDimension = Object.values(serializedDimensions).some(arr => arr.length > 0)
   const shouldTrack = filterReady && (mode !== 'now' || hasAnyDimension)
-  useTrackFilterRecent('report_filter', recentSnapshot, recentLabel, shouldTrack)
+  useTrackFilterRecent('report_projektliste_filter', recentSnapshot, recentLabel, shouldTrack)
 
   function applyRecent(meta: Record<string, unknown> | null) {
     if (!meta) return

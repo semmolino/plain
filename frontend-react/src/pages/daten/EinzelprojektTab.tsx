@@ -15,6 +15,8 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { fetchProjectsShort } from '@/api/projekte'
+import { useTrackRecent } from '@/hooks/useTrackRecent'
+import { RecentList } from '@/components/recents/RecentList'
 import {
   fetchProjectReportHeader,
   fetchProjectReportStructure,
@@ -285,6 +287,10 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
   const header    = headerData?.data   ?? null
   const structure = structData?.data   ?? []
 
+  // Recents: zuletzt im Projekt-Report analysierte Projekte
+  const currentProject = projects.find(p => p.ID === pid)
+  useTrackRecent('project', pid, currentProject?.NAME_SHORT ?? null)
+
   // Sync project input display when pid or projects change
   useEffect(() => {
     if (pid && projects.length > 0) {
@@ -377,6 +383,15 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
 
   return (
     <div>
+      <RecentList
+        type="project"
+        title="Zuletzt analysierte Projekte"
+        onSelect={(e) => {
+          setPid(e.ENTITY_ID)
+          const p = projects.find(proj => proj.ID === e.ENTITY_ID)
+          setProjectInput(p ? `${p.NAME_SHORT} – ${p.NAME_LONG ?? ''}` : '')
+        }}
+      />
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <div className="form-group" style={{ maxWidth: 400, marginBottom: 0 }}>
           <label>Projekt</label>

@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Clock } from 'lucide-react'
-import { fetchRecents, fetchDashboardRecents, type RecentEntityType, type RecentEntry } from '@/api/recents'
+import { Clock, TrendingUp } from 'lucide-react'
+import { fetchRecents, fetchDashboardRecents, type RecentEntityType, type RecentEntry, type RecentSortBy } from '@/api/recents'
 
 interface SingleProps {
   type:      RecentEntityType
@@ -13,38 +14,47 @@ interface SingleProps {
   /** Fuer kontextabhaengige Typen wie project_structure: schraenkt die Liste
    *  auf Eintraege ein, deren META.project_id zu diesem Wert passt. */
   projectId?: number | null
+  /** Blendet den 'Zuletzt | Haeufig'-Toggle aus. Default: an. */
+  hideSortToggle?: boolean
 }
 
 const TYPE_DEFAULT_PATH: Record<RecentEntityType, (id: number) => string> = {
-  project:                   (id) => `/projekte?selected=${id}`,
-  invoice:                   (id) => `/rechnungen?selected=${id}`,
-  partial_payment:           (id) => `/rechnungen?pp=${id}`,
-  offer:                     (id) => `/angebote?selected=${id}`,
-  mahnung:                   (id) => `/rechnungen?mahnung=${id}`,
-  address:                   (id) => `/adressen?selected=${id}`,
-  project_structure:         ()   => '/projekte',
-  report_filter:             ()   => '/daten',
-  mitarbeiter_report_filter: ()   => '/daten',
+  project:                     (id) => `/projekte?selected=${id}`,
+  invoice:                     (id) => `/rechnungen?selected=${id}`,
+  partial_payment:             (id) => `/rechnungen?pp=${id}`,
+  offer:                       (id) => `/angebote?selected=${id}`,
+  mahnung:                     (id) => `/rechnungen?mahnung=${id}`,
+  address:                     (id) => `/adressen?selected=${id}`,
+  project_structure:           ()   => '/projekte',
+  report_filter:               ()   => '/daten',
+  report_projektliste_filter:  ()   => '/daten',
+  report_trends_filter:        ()   => '/daten',
+  report_kennzahlen_filter:    ()   => '/daten',
+  mitarbeiter_report_filter:   ()   => '/mitarbeiter',
 }
 
 const TYPE_LABEL: Record<RecentEntityType, string> = {
-  project:                   'Projekt',
-  invoice:                   'Rechnung',
-  partial_payment:           'Abschlag',
-  offer:                     'Angebot',
-  mahnung:                   'Mahnung',
-  address:                   'Adresse',
-  project_structure:         'Position',
-  report_filter:             'Filter',
-  mitarbeiter_report_filter: 'Filter',
+  project:                     'Projekt',
+  invoice:                     'Rechnung',
+  partial_payment:             'Abschlag',
+  offer:                       'Angebot',
+  mahnung:                     'Mahnung',
+  address:                     'Adresse',
+  project_structure:           'Position',
+  report_filter:               'Filter',
+  report_projektliste_filter:  'Filter',
+  report_trends_filter:        'Filter',
+  report_kennzahlen_filter:    'Filter',
+  mitarbeiter_report_filter:   'Filter',
 }
 
 /** Liste zuletzt verwendeter Datensaetze pro Entity-Typ. */
-export function RecentList({ type, limit = 5, title, onSelect, emptyHint, className, projectId }: SingleProps) {
+export function RecentList({ type, limit = 5, title, onSelect, emptyHint, className, projectId, hideSortToggle }: SingleProps) {
   const navigate = useNavigate()
+  const [sortBy, setSortBy] = useState<RecentSortBy>('recent')
   const { data, isLoading } = useQuery({
-    queryKey: ['recents', type, projectId ?? null],
-    queryFn:  () => fetchRecents(type, limit, { projectId }),
+    queryKey: ['recents', type, projectId ?? null, sortBy],
+    queryFn:  () => fetchRecents(type, limit, { projectId, sortBy }),
     staleTime: 30_000,
   })
 
@@ -58,8 +68,25 @@ export function RecentList({ type, limit = 5, title, onSelect, emptyHint, classN
 
   return (
     <div className={`recent-list-card ${className ?? ''}`.trim()}>
-      <div className="recent-list-title">
-        <Clock size={13} strokeWidth={2} /> {title ?? 'Zuletzt verwendet'}
+      <div className="recent-list-header">
+        <div className="recent-list-title">
+          {sortBy === 'recent' ? <Clock size={13} strokeWidth={2} /> : <TrendingUp size={13} strokeWidth={2} />}
+          {' '}{title ?? (sortBy === 'recent' ? 'Zuletzt verwendet' : 'Häufig verwendet')}
+        </div>
+        {!hideSortToggle && (
+          <div className="recent-list-toggle">
+            <button
+              className={`recent-list-toggle-btn${sortBy === 'recent' ? ' active' : ''}`}
+              onClick={() => setSortBy('recent')}
+              title="Zuletzt verwendet"
+            >Zuletzt</button>
+            <button
+              className={`recent-list-toggle-btn${sortBy === 'frequent' ? ' active' : ''}`}
+              onClick={() => setSortBy('frequent')}
+              title="Häufig verwendet"
+            >Häufig</button>
+          </div>
+        )}
       </div>
       {isLoading ? (
         <div className="recent-list-empty">Laden …</div>
@@ -72,9 +99,10 @@ export function RecentList({ type, limit = 5, title, onSelect, emptyHint, classN
               key={e.ID}
               className="recent-chip"
               onClick={() => handleClick(e)}
-              title={`${TYPE_LABEL[e.ENTITY_TYPE]} – ${new Date(e.LAST_SEEN).toLocaleString('de-DE')}`}
+              title={`${TYPE_LABEL[e.ENTITY_TYPE]} – ${new Date(e.LAST_SEEN).toLocaleString('de-DE')} · ${e.VIEW_COUNT}×`}
             >
               {e.LABEL || `${TYPE_LABEL[e.ENTITY_TYPE]} #${e.ENTITY_ID}`}
+              {sortBy === 'frequent' && <span className="recent-chip-count"> · {e.VIEW_COUNT}×</span>}
             </button>
           ))}
         </div>

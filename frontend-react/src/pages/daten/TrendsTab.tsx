@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useMemo, type ReactNode } from 'react'
+import { RecentList } from '@/components/recents/RecentList'
+import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 import { useQuery } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
@@ -158,6 +160,18 @@ export function TrendsTab() {
     const r = defaultRange(g)
     setDateFrom(r.from)
     setDateTo(r.to)
+  }
+
+  // ── Recents-Tracking ──────────────────────────────────────────────────────
+  const recentSnapshot = useMemo(() => ({ groupBy, dateFrom, dateTo }), [groupBy, dateFrom, dateTo])
+  const recentLabel = `${groupBy === 'month' ? 'Monatlich' : groupBy === 'quarter' ? 'Quartal' : 'Jahr'} · ${dateFrom} – ${dateTo}`
+  useTrackFilterRecent('report_trends_filter', recentSnapshot, recentLabel, !!(dateFrom && dateTo))
+
+  function applyRecent(meta: Record<string, unknown> | null) {
+    if (!meta) return
+    if (typeof meta.groupBy  === 'string') setGroupBy(meta.groupBy as TrendsGroupBy)
+    if (typeof meta.dateFrom === 'string') setDateFrom(meta.dateFrom)
+    if (typeof meta.dateTo   === 'string') setDateTo(meta.dateTo)
   }
 
   const { data, isLoading } = useQuery({
@@ -425,6 +439,12 @@ export function TrendsTab() {
 
   return (
     <div className="trends-root">
+
+      <RecentList
+        type="report_filter"
+        title="Zuletzt verwendete Filter"
+        onSelect={(e) => applyRecent(e.META)}
+      />
 
       <div className="trends-controls">
         <div className="unk-period-tabs">

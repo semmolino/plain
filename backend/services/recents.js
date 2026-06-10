@@ -19,9 +19,14 @@ const ALLOWED_TYPES = new Set([
   "offer",
   "mahnung",
   "address",
-  "project_structure",          // Strukturelement -- META.project_id pflicht
-  "report_filter",              // Reports-Filter   -- META = Filter-State
-  "mitarbeiter_report_filter",  // Mitarbeiter-Reports-Filter
+  "project_structure",                // Strukturelement -- META.project_id pflicht
+  // Filter-Recents (pro Tab eigener Scope, damit Listen nicht durchmischen)
+  "report_projektliste_filter",       // Reports -> Projektliste
+  "report_trends_filter",             // Reports -> Trends
+  "report_kennzahlen_filter",         // Reports -> Unternehmenskennzahlen
+  "mitarbeiter_report_filter",        // Mitarbeiter -> Reporting
+  // Legacy-Alias bleibt erlaubt, fuer alte Eintraege
+  "report_filter",
 ]);
 
 // Eintraege, die laenger nicht mehr aufgerufen wurden, gelten nicht mehr
@@ -91,11 +96,12 @@ async function trackRecent(supabase, { tenantId, employeeId, entityType, entityI
   return { id: data.ID, isNew: true };
 }
 
-/** Liefert die letzten n Eintraege pro Entity-Typ, optional mit Stale-Out
- *  und optionalem META-Filter (z.B. project_id fuer project_structure). */
-async function listRecents(supabase, { tenantId, employeeId, entityType, limit, staleDays, projectId }) {
+/** Liefert die letzten n Eintraege pro Entity-Typ, optional mit Stale-Out,
+ *  optionalem META-Filter und Sortierung (recent|frequent). */
+async function listRecents(supabase, { tenantId, employeeId, entityType, limit, staleDays, projectId, sortBy }) {
   assertType(entityType);
   const lim = Math.min(Math.max(parseInt(limit, 10) || 5, 1), 50);
+  const useFrequent = sortBy === "frequent";
 
   let q = supabase
     .from("RECENT_VIEW")
@@ -104,8 +110,16 @@ async function listRecents(supabase, { tenantId, employeeId, entityType, limit, 
     .eq("EMPLOYEE_ID", employeeId)
     .eq("ENTITY_TYPE", entityType)
     .gt("LAST_SEEN",   staleCutoffIso(staleDays))
-    .order("LAST_SEEN", { ascending: false })
     .limit(lim);
+
+  if (useFrequent) {
+    // Erst nach Aufrufhaeufigkeit, bei Gleichstand nach Last_Seen
+    q = q
+      .order("VIEW_COUNT", { ascending: false })
+      .order("LAST_SEEN",  { ascending: false });
+  } else {
+    q = q.order("LAST_SEEN", { ascending: false });
+  }
 
   if (projectId != null) {
     q = q.eq("META->>project_id", String(parseInt(projectId, 10)));
@@ -127,7 +141,7 @@ async function listDashboardRecents(supabase, { tenantId, employeeId, limit, sta
 
   const datasetTypes = [
     "project", "invoice", "partial_payment", "offer", "mahnung", "address",
-  ];
+  ]; // bewusst keine *_filter / project_structure -- die brauchen Kontext
 
   const { data, error } = await supabase
     .from("RECENT_VIEW")
