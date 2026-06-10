@@ -174,23 +174,10 @@ module.exports = (supabase) => {
   // POST /preview: rendert ein Template lokal (ohne Counter zu verbrauchen).
   router.post("/templates/preview", async (req, res) => {
     try {
-      const { template, counter, company_id } = req.body || {};
+      const { template, counter } = req.body || {};
       const v = tmplSvc.validateTemplate(String(template || ""));
       if (!v.ok) return res.status(400).json({ error: v.error });
-
-      // Company-Code besorgen
-      let companyCode = "BUE";
-      if (company_id) {
-        try {
-          const { data } = await supabase
-            .from("COMPANY")
-            .select("COMPANY_NAME_SHORT")
-            .eq("ID", parseInt(company_id, 10))
-            .maybeSingle();
-          if (data?.COMPANY_NAME_SHORT) companyCode = data.COMPANY_NAME_SHORT;
-        } catch (_) {}
-      }
-      const rendered = tmplSvc.renderTemplate(String(template), { counter: parseInt(counter, 10) || 1, companyCode });
+      const rendered = tmplSvc.renderTemplate(String(template), { counter: parseInt(counter, 10) || 1 });
       res.json({ data: { rendered } });
     } catch (e) {
       res.status(e?.status || 500).json({ error: e?.message || String(e) });

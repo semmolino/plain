@@ -342,7 +342,6 @@ const TOKEN_PALETTE: { token: string; label: string; example: string }[] = [
   { token: '{YEAR2}',        label: 'Jahr 2-stellig',    example: '26'   },
   { token: '{MONTH:00}',     label: 'Monat',             example: '06'   },
   { token: '{DAY:00}',       label: 'Tag',               example: '10'   },
-  { token: '{COMPANY:CODE}', label: 'Firmen-Kürzel',     example: 'BUE'  },
 ]
 
 /**
@@ -533,7 +532,7 @@ function NrTemplateBlock({
 }) {
   // Lokale Preview: rendert das Template clientseitig (gleiche Token-Logik
   // wie Backend; identisches Resultat solange das Template valide ist).
-  const preview = useMemo(() => renderTemplateClient(template, { counter, companyCode: 'BUE' }), [template, counter])
+  const preview = useMemo(() => renderTemplateClient(template, { counter }), [template, counter])
   const valid   = useMemo(() => validateTemplateClient(template), [template])
   const tokenSnippet = useMemo(() => DOCTYPE_LABEL[docType], [docType])
 
@@ -603,15 +602,13 @@ function NrTemplateBlock({
 }
 
 // Client-side Renderer + Validator -- spiegelt das Backend
-function renderTemplateClient(template: string, { counter = 1, companyCode = 'BUE' }: { counter?: number; companyCode?: string } = {}) {
+function renderTemplateClient(template: string, { counter = 1 }: { counter?: number } = {}) {
   const now = new Date()
   const yr4 = String(now.getFullYear())
   const yr2 = String(now.getFullYear() % 100).padStart(2, '0')
   const m   = String(now.getMonth() + 1).padStart(2, '0')
   const d   = String(now.getDate()).padStart(2, '0')
   return template
-    .replaceAll('{COMPANY:CODE}', companyCode)
-    .replaceAll('{COMPANY}',      companyCode)
     .replaceAll('{YEAR4}',        yr4)
     .replaceAll('{YEAR2}',        yr2)
     .replaceAll('{MONTH:00}',     m)
@@ -624,10 +621,10 @@ function validateTemplateClient(template: string): { ok: boolean; error?: string
   if (!template || template.length === 0) return { ok: false, error: 'Template darf nicht leer sein.' }
   if (template.length > 80) return { ok: false, error: 'Max. 80 Zeichen.' }
   if (!/\{COUNTER(?::0+)?\}/.test(template)) return { ok: false, error: 'Template muss {COUNTER} enthalten.' }
-  const known = /\{(COUNTER(?::0+)?|YEAR4|YEAR2|MONTH:00|DAY:00|COMPANY(?::CODE)?)\}/g
+  const known = /\{(COUNTER(?::0+)?|YEAR4|YEAR2|MONTH:00|DAY:00)\}/g
   const all   = template.match(/\{[^}]*\}/g) ?? []
   const bad   = all.filter(t => !t.match(known))
-  if (bad.length > 0) return { ok: false, error: `Unbekannte Tokens: ${bad.join(', ')}` }
+  if (bad.length > 0) return { ok: false, error: `Unbekannte Bausteine: ${bad.join(', ')}` }
   return { ok: true }
 }
 

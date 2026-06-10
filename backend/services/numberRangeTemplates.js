@@ -9,7 +9,6 @@
  *   {YEAR2}              2-stelliges Jahr
  *   {MONTH:00}           Monat
  *   {DAY:00}             Tag
- *   {COMPANY:CODE}       COMPANY_NAME_SHORT
  *
  * Reset-Verhalten: Counter pro Jahr (wie bisher, hartkodiert -- keine
  * weitere Reset-Konfiguration noetig laut User-Entscheidung).
@@ -17,7 +16,7 @@
 
 const ALLOWED_DOC_TYPES = ["PROJECT", "OFFER", "INVOICE"];
 
-const TOKEN_REGEX = /\{(COUNTER(?::0+)?|YEAR4|YEAR2|MONTH:00|DAY:00|COMPANY(?::CODE)?)\}/g;
+const TOKEN_REGEX = /\{(COUNTER(?::0+)?|YEAR4|YEAR2|MONTH:00|DAY:00)\}/g;
 
 /**
  * Pruefen, ob ein Template valid ist:
@@ -43,25 +42,23 @@ function validateTemplate(template) {
     if (!t.match(TOKEN_REGEX)) unknown.push(t);
   }
   if (unknown.length > 0) {
-    return { ok: false, error: `Unbekannte Tokens: ${unknown.join(", ")}` };
+    return { ok: false, error: `Unbekannte Bausteine: ${unknown.join(", ")}` };
   }
   return { ok: true };
 }
 
 /** Rendert ein Template lokal (fuer die Preview im UI). */
-function renderTemplate(template, { counter = 1, companyCode = "BUE", now = new Date() } = {}) {
+function renderTemplate(template, { counter = 1, now = new Date() } = {}) {
   let s = template;
   const yr4   = String(now.getFullYear());
   const yr2   = String(now.getFullYear() % 100).padStart(2, "0");
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day   = String(now.getDate()).padStart(2, "0");
 
-  s = s.replaceAll("{COMPANY:CODE}", companyCode);
-  s = s.replaceAll("{COMPANY}",      companyCode);
-  s = s.replaceAll("{YEAR4}",        yr4);
-  s = s.replaceAll("{YEAR2}",        yr2);
-  s = s.replaceAll("{MONTH:00}",     month);
-  s = s.replaceAll("{DAY:00}",       day);
+  s = s.replaceAll("{YEAR4}",    yr4);
+  s = s.replaceAll("{YEAR2}",    yr2);
+  s = s.replaceAll("{MONTH:00}", month);
+  s = s.replaceAll("{DAY:00}",   day);
   s = s.replace(/\{COUNTER:(0+)\}/g, (_m, pad) =>
     String(counter).padStart(pad.length, "0"),
   );
