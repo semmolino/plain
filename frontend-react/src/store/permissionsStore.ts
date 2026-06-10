@@ -25,7 +25,7 @@ interface PermissionsState {
 
 export const usePermissionsStore = create<PermissionsState>((set, get) => ({
   keys:         new Set<string>(),
-  unrestricted: true,   // Optimistic default until first load completes
+  unrestricted: false,  // Sicherer Default: erst nach erfolgreichem reload() greift Soft-Fail
   loaded:       false,
   loading:      false,
 
@@ -47,7 +47,7 @@ export const usePermissionsStore = create<PermissionsState>((set, get) => ({
     }
   },
 
-  clear: () => set({ keys: new Set(), unrestricted: true, loaded: false }),
+  clear: () => set({ keys: new Set(), unrestricted: false, loaded: false }),
 
   has: (key: string) => {
     const s = get()

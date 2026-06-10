@@ -43,8 +43,9 @@ export function LoginPage() {
         companyName:   res.company_name,
         dashboardRole: res.dashboard_role ?? null,
       })
-      // RBAC: Permissions des Users laden (soft-fail wenn Migration fehlt)
-      void usePermissionsStore.getState().reload()
+      // RBAC: Permissions VOR Navigation laden, sonst zeigt die App
+      // beim ersten Render kurz alle Buttons/Spalten (Default: alles versteckt).
+      await usePermissionsStore.getState().reload()
       navigate('/')
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen.', type: 'error' })

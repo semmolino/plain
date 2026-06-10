@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
@@ -45,6 +45,7 @@ import {
 import { fetchMahnungStats, type MahnungStats, type MahnungSuggestion } from '@/api/mahnungen'
 import { fetchDashboardOpenSe, fetchDashboardArbzgStats } from '@/api/reports'
 import { Can } from '@/components/ui/Can'
+import { usePermission } from '@/store/permissionsStore'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -1568,6 +1569,16 @@ function DashboardFilterBar({
 
 export function DashboardPage() {
   const { dashboardRole, setDashboardRole, employeeId } = useSession()
+  const canSwitchView = usePermission('dashboard.view_switch')
+
+  // Ohne dashboard.view_switch darf der User keine Ansicht wählen → automatisch
+  // auf 'mitarbeiter' fallen, falls noch keine Rolle aus dem Backend kam.
+  useEffect(() => {
+    if (!canSwitchView && !dashboardRole) {
+      setDashboardRole('mitarbeiter')
+    }
+  }, [canSwitchView, dashboardRole, setDashboardRole])
+
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [glSubPage, setGlSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
   const [blSubPage, setBlSubPage] = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
@@ -1668,7 +1679,7 @@ export function DashboardPage() {
         />
       )}
 
-      {!dashboardRole && <RoleSelector onSelect={setDashboardRole} />}
+      {!dashboardRole && canSwitchView && <RoleSelector onSelect={setDashboardRole} />}
 
       {isLoading && dashboardRole && <div className="dash-loading">Laden …</div>}
 

@@ -42,8 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email:       me.email,
             companyName: me.company_name,
           })
-          // RBAC: Permissions des Users laden (soft-fail wenn Migration fehlt)
-          void usePermissionsStore.getState().reload()
+          // RBAC: Permissions des Users laden, BEVOR App rendert.
+          // Sonst rendern Komponenten mit dem optimistischen Default (unrestricted=true)
+          // und zeigen kurz alle Buttons/Spalten, bevor die API antwortet.
+          await usePermissionsStore.getState().reload()
         } catch {
           clearAuth()
           usePermissionsStore.getState().clear()
