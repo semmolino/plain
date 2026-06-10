@@ -29,27 +29,13 @@ async function safeCount(supabase, table, filter) {
 }
 
 const CHECKERS = {
-  setup_complete: async (supabase, { tenantId }) => {
-    // Alle 4 Setup-Voraussetzungen (Firma+Logo+VAT+NR) + 4 erste Datensaetze
-    // (Mitarbeiter, Adresse, Angebot, Projekt). Tenant-weit, deshalb wird das
-    // Achievement allen Usern des Tenants verliehen sobald es erfuellt ist.
+  setup_complete: async (supabase, { tenantId, employeeId }) => {
+    // Nutzt das gleiche Aggregat wie die SetupChecklist im Dashboard --
+    // ALLE Schritte (Admin + Daten) muessen erledigt sein.
     try {
-      const [companies, defaults, addresses, offers, projects, employees] = await Promise.all([
-        supabase.from("COMPANY").select("ID, COMPANY_NAME_1, STREET, CITY").eq("TENANT_ID", tenantId),
-        supabase.from("TENANT_SETTINGS").select("KEY,VALUE").eq("TENANT_ID", tenantId).in("KEY", ["default_vat_id","logo_asset_id"]),
-        safeCount(supabase, "ADDRESS",  { TENANT_ID: tenantId }),
-        safeCount(supabase, "OFFER",    { TENANT_ID: tenantId }),
-        safeCount(supabase, "PROJECT",  { TENANT_ID: tenantId }),
-        safeCount(supabase, "EMPLOYEE", { TENANT_ID: tenantId }),
-      ]);
-      const hasCompany = (companies.data || []).some(c => c.COMPANY_NAME_1 && c.STREET && c.CITY);
-      const settings = new Map((defaults.data || []).map(r => [r.KEY, r.VALUE]));
-      const hasLogo = !!settings.get("logo_asset_id");
-      const hasVat  = !!settings.get("default_vat_id");
-      const hasNr = true; // Nummernkreise: zu kostspielig live zu pruefen, behandle als erfuellt
-      const ok = hasCompany && hasLogo && hasVat && hasNr
-              && addresses > 0 && offers > 0 && projects > 0 && employees > 1;
-      return { unlocked: ok };
+      const setupSvc = require("./setupProgress");
+      const sp = await setupSvc.computeSetupProgress(supabase, { tenantId, employeeId });
+      return { unlocked: !!sp.all_done };
     } catch (_) {
       return { unlocked: false };
     }

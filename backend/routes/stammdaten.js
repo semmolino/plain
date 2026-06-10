@@ -68,6 +68,17 @@ module.exports = (supabase) => {
   router.get("/defaults",                                            (req, res) => ctrl.getDefaults(req, res, supabase));
   router.put("/defaults",                                            requirePermission("settings.defaults.edit"), (req, res) => ctrl.putDefault(req, res, supabase));
   router.get("/payment-means/search",                                (req, res) => ctrl.searchPaymentMeans(req, res, supabase));
+
+  // Setup-Progress (Aggregat fuer Dashboard-Checkliste)
+  router.get("/setup-progress",                                      async (req, res) => {
+    try {
+      const svc = require("../services/setupProgress");
+      const r = await svc.computeSetupProgress(supabase, { tenantId: req.tenantId, employeeId: req.employeeId });
+      res.json({ data: r });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
   router.post("/contacts",                                           requirePermission("addresses.contacts.create"), (req, res) => ctrl.postContact(req, res, supabase));
 
   router.get("/monatsabschluss",                                     (req, res) => ctrl.getMonatsabschluss(req, res, supabase));
