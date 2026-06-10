@@ -47,6 +47,11 @@ import { fetchDashboardOpenSe, fetchDashboardArbzgStats } from '@/api/reports'
 import { Can } from '@/components/ui/Can'
 import { usePermission } from '@/store/permissionsStore'
 import { RecentMixedList } from '@/components/recents/RecentList'
+import { useGamificationConfig } from '@/hooks/useGamificationConfig'
+import { fetchEmployeeList } from '@/api/mitarbeiter'
+import { fetchAddressList } from '@/api/stammdaten'
+import { fetchOffers } from '@/api/angebote'
+import { fetchProjectsShort } from '@/api/projekte'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -365,13 +370,34 @@ function DashboardTimeline({ dateFrom, dateTo }: { dateFrom: string; dateTo: str
 const CURRENT_YEAR   = new Date().getFullYear()
 const SETUP_DONE_KEY = 'plain_setup_checklist_done'
 
+interface ChecklistItem {
+  done:    boolean
+  label:   string
+  hint:    string
+  /** Ziel-URL bei Klick. Akzeptiert /admin?tab=… genauso wie /mitarbeiter etc. */
+  href:    string
+}
+
 function SetupChecklist() {
+  const { isFeatureEnabled } = useGamificationConfig()
+  const featureOn = isFeatureEnabled('setup_checklist')
   const [dismissed] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === '1')
-  const { data: companiesData, isLoading: l1, isFetching: f1 } = useQuery({ queryKey: ['companies'],     queryFn: fetchCompanies,                           staleTime: 60000 })
-  const { data: defaultsData,  isLoading: l2, isFetching: f2 } = useQuery({ queryKey: ['defaults'],      queryFn: fetchDefaults,                            staleTime: 60000 })
-  const { data: logoData,      isLoading: l3, isFetching: f3 } = useQuery({ queryKey: ['logo'],          queryFn: fetchLogo,                                staleTime: 60000 })
-  const { data: nrData,        isLoading: l4, isFetching: f4 } = useQuery({ queryKey: ['number-ranges', CURRENT_YEAR], queryFn: () => fetchNumberRanges(CURRENT_YEAR), staleTime: 60000 })
-  if (dismissed || l1 || l2 || l3 || l4 || f1 || f2 || f3 || f4) return null
+
+  // Stammdaten / Konfiguration
+  const { data: companiesData, isLoading: l1, isFetching: f1 } = useQuery({ queryKey: ['companies'],     queryFn: fetchCompanies,                           staleTime: 60000, enabled: featureOn })
+  const { data: defaultsData,  isLoading: l2, isFetching: f2 } = useQuery({ queryKey: ['defaults'],      queryFn: fetchDefaults,                            staleTime: 60000, enabled: featureOn })
+  const { data: logoData,      isLoading: l3, isFetching: f3 } = useQuery({ queryKey: ['logo'],          queryFn: fetchLogo,                                staleTime: 60000, enabled: featureOn })
+  const { data: nrData,        isLoading: l4, isFetching: f4 } = useQuery({ queryKey: ['number-ranges', CURRENT_YEAR], queryFn: () => fetchNumberRanges(CURRENT_YEAR), staleTime: 60000, enabled: featureOn })
+
+  // Aktivierungs-Schritte: gibt es bereits ersten Mitarbeiter / Adresse / Projekt / Angebot?
+  const { data: employeesData, isLoading: l5, isFetching: f5 } = useQuery({ queryKey: ['employees-list'], queryFn: fetchEmployeeList,    staleTime: 60000, enabled: featureOn })
+  const { data: addressesData, isLoading: l6, isFetching: f6 } = useQuery({ queryKey: ['addresses'],      queryFn: fetchAddressList,     staleTime: 60000, enabled: featureOn })
+  const { data: projectsData,  isLoading: l7, isFetching: f7 } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort,   staleTime: 60000, enabled: featureOn })
+  const { data: offersData,    isLoading: l8, isFetching: f8 } = useQuery({ queryKey: ['offers'],         queryFn: fetchOffers,          staleTime: 60000, enabled: featureOn })
+
+  if (!featureOn) return null
+  if (dismissed || l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8 || f1 || f2 || f3 || f4 || f5 || f6 || f7 || f8) return null
+
   const companies = companiesData?.data ?? []
   const defaults  = defaultsData?.data  ?? {}
   const logoId    = logoData?.data?.logo_asset_id ?? null
@@ -379,29 +405,51 @@ function SetupChecklist() {
   const hasLogo    = logoId !== null
   const hasVat     = !!defaults.default_vat_id
   const hasNr      = nrData != null
-  const items = [
-    { done: hasCompany, label: 'Firmendaten vervollständigen',   hint: 'Name, Adresse, Steuernummer',           tab: 'unternehmen'   },
-    { done: hasLogo,    label: 'Firmenlogo hochladen',           hint: 'Wird auf PDFs angezeigt',               tab: 'unternehmen'   },
-    { done: hasVat,     label: 'Standard-MwSt. festlegen',       hint: 'Für neue Verträge & Angebote',          tab: 'vorbelegungen' },
-    { done: hasNr,      label: 'Nummernkreise konfigurieren',    hint: 'Rechnungs-, Projekt-, Angebotsnummern', tab: 'nummernkreise' },
+  // Mehr als 1 Mitarbeiter (1 = nur der angemeldete Account, kein echter Team-Eintrag)
+  const hasEmployee  = (employeesData?.data?.length ?? 0) > 1
+  const hasAddress   = (addressesData?.data?.length ?? 0) > 0
+  const hasProject   = (projectsData?.data?.length  ?? 0) > 0
+  const hasOffer     = (offersData?.data?.length    ?? 0) > 0
+
+  const items: ChecklistItem[] = [
+    // Einrichtung
+    { done: hasCompany,  label: 'Firmendaten vervollständigen', hint: 'Name, Adresse, Steuernummer',           href: '/admin?tab=unternehmen'   },
+    { done: hasLogo,     label: 'Firmenlogo hochladen',         hint: 'Wird auf PDFs angezeigt',               href: '/admin?tab=unternehmen'   },
+    { done: hasVat,      label: 'Standard-MwSt. festlegen',     hint: 'Für neue Verträge & Angebote',          href: '/admin?tab=vorbelegungen' },
+    { done: hasNr,       label: 'Nummernkreise konfigurieren',  hint: 'Rechnungs-, Projekt-, Angebotsnummern', href: '/admin?tab=nummernkreise' },
+    // Erste Datensätze — bringt sofort Mehrwert
+    { done: hasEmployee, label: 'Erste:n Mitarbeiter:in anlegen', hint: 'Damit Zeit gebucht werden kann',      href: '/mitarbeiter' },
+    { done: hasAddress,  label: 'Erste Kunden-Adresse erfassen', hint: 'Grundlage für Angebote & Rechnungen',  href: '/adressen' },
+    { done: hasOffer,    label: 'Erstes Angebot erstellen',      hint: 'Mit Honorar nach HOAI oder pauschal',  href: '/angebote' },
+    { done: hasProject,  label: 'Erstes Projekt anlegen',        hint: 'Aus Angebot oder direkt',              href: '/projekte' },
   ]
   const allDone = items.every(i => i.done)
   if (allDone) { localStorage.setItem(SETUP_DONE_KEY, '1'); return null }
   const doneCount = items.filter(i => i.done).length
+  const pct = Math.round((doneCount / items.length) * 100)
+
   return (
-    <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '14px 18px', marginBottom: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <strong style={{ fontSize: 13 }}>Einrichtung abschließen</strong>
-        <span style={{ fontSize: 12, color: '#92400e' }}>{doneCount}/{items.length} erledigt</span>
+    <div className="setup-checklist">
+      <div className="setup-checklist-header">
+        <div>
+          <strong style={{ fontSize: 13 }}>Einrichtung abschließen</strong>
+          <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>{doneCount}/{items.length} Schritte erledigt</div>
+        </div>
+        <div className="setup-checklist-progress-wrap">
+          <div className="setup-checklist-progress-track">
+            <div className="setup-checklist-progress-fill" style={{ width: `${pct}%` }} />
+          </div>
+          <div className="setup-checklist-progress-pct">{pct}%</div>
+        </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
         {items.map((item, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 16, lineHeight: 1, color: item.done ? '#16a34a' : '#d97706' }}>{item.done ? '✓' : '○'}</span>
             <div style={{ flex: 1 }}>
               {item.done
                 ? <span style={{ fontSize: 12, color: '#6b7280', textDecoration: 'line-through' }}>{item.label}</span>
-                : <Link to={`/admin?tab=${item.tab}`} style={{ fontSize: 12, color: '#1d4ed8', textDecoration: 'none', fontWeight: 500 }}>{item.label}</Link>}
+                : <Link to={item.href} style={{ fontSize: 12, color: '#1d4ed8', textDecoration: 'none', fontWeight: 500 }}>{item.label}</Link>}
               <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 6 }}>{item.hint}</span>
             </div>
           </div>

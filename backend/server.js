@@ -63,6 +63,7 @@ const notificationConfigRoutes = require("./routes/notificationConfig")(supabase
 const notificationScheduleRoutes = require("./routes/notificationSchedule")(supabase);
 const rolesRoutes                = require("./routes/roles")(supabase);
 const recentsRoutes              = require("./routes/recents")(supabase);
+const gamificationRoutes         = require("./routes/gamification")(supabase);
 const { makeMiddleware: makePermissionsMiddleware } = require("./middleware/permissions");
 const permissionsMiddleware = makePermissionsMiddleware(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
@@ -105,6 +106,9 @@ app.use("/api/v1", ...authChain, rolesRoutes);
 
 // Zuletzt verwendet (pro Mitarbeiter)
 app.use("/api/v1/recents", ...authChain, recentsRoutes);
+
+// Engagement / Gamification (Tenant-Konfiguration)
+app.use("/api/v1/gamification", ...authChain, gamificationRoutes);
 
 
 

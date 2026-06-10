@@ -61,6 +61,7 @@ const PAGE_TABS: { id: string; label: string; permissions: string[] }[] = [
   { id: 'arbzg',                   label: 'Arbeitszeiten',           permissions: ['settings.work_time.edit'] },
   { id: 'kostensatz',              label: 'Kostensatz-Rechner',      permissions: ['settings.cost_rate.edit'] },
   { id: 'rollen',                  label: 'Rollen & Berechtigungen', permissions: ['roles.view'] },
+  { id: 'engagement',              label: 'Engagement',              permissions: ['settings.notifications.edit'] },
 ]
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -2871,6 +2872,90 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
   )
 }
 
+// ── Engagement-Konfiguration ─────────────────────────────────────────────────
+//
+// Tenant-weiter Master-Schalter plus 4 Feature-Toggles. Steuert, ob die
+// Engagement-Features (Setup-Checkliste, Streaks, Achievements, Recaps)
+// fuer die Mitarbeiter dieses Tenants angezeigt werden.
+
+function EngagementSection() {
+  const qc = useQueryClient()
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const { data, isLoading } = useQuery({
+    queryKey: ['gamification-config'],
+    queryFn:  () => import('@/api/gamification').then(m => m.fetchGamificationConfig()),
+  })
+  const cfg = data?.data ?? { enabled: true, setup_checklist: true, streaks: true, achievements: true, recaps: true }
+
+  const [draft, setDraft] = useState(cfg)
+  useEffect(() => { setDraft(cfg) /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [data?.data])
+
+  const saveMut = useMutation({
+    mutationFn: () => import('@/api/gamification').then(m => m.saveGamificationConfig(draft)),
+    onSuccess:  () => {
+      void qc.invalidateQueries({ queryKey: ['gamification-config'] })
+      setMsg({ text: 'Engagement-Einstellungen gespeichert ✅', type: 'success' })
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const features: Array<{ key: Exclude<keyof typeof draft, 'enabled'>; label: string; hint: string }> = [
+    { key: 'setup_checklist', label: 'Setup-Checkliste',     hint: 'Geführte Erstaufgaben für neue Tenants — auf dem Dashboard sichtbar bis erledigt' },
+    { key: 'streaks',         label: 'Streaks',              hint: 'Tägliche Buchungs-Streak, Saubere-Woche-Marker — rein persönlich, nicht teamübergreifend' },
+    { key: 'achievements',    label: 'Achievements',         hint: 'Persönliche Erfolge wie „Erster Auftrag konvertiert", „10 Projekte abgeschlossen"' },
+    { key: 'recaps',          label: 'Recaps & Rückblicke',  hint: 'Wöchentlicher / monatlicher / Jahresrückblick mit Statistik' },
+  ]
+
+  if (isLoading) return <p className="empty-note">Laden …</p>
+
+  return (
+    <div>
+      <h2 className="settings-section-title">Engagement-Funktionen</h2>
+      <p className="settings-section-hint" style={{ marginBottom: 18, fontSize: 12, color: '#6b7280' }}>
+        Steuert die optionalen Engagement-Hilfen für die Mitarbeiter deines Büros. Schaltet alles unsichtbar wenn der Master-Schalter aus ist.
+      </p>
+
+      {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
+
+      <div className="settings-card" style={{ marginBottom: 18 }}>
+        <label className="settings-toggle" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <input
+            type="checkbox"
+            checked={draft.enabled}
+            onChange={e => setDraft(d => ({ ...d, enabled: e.target.checked }))}
+          />
+          <strong>Engagement aktiv</strong>
+        </label>
+        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, marginLeft: 24 }}>
+          Master-Schalter. Wenn aus, sind alle vier Features unten unsichtbar — unabhängig davon, wie sie einzeln stehen.
+        </p>
+      </div>
+
+      <div className="settings-card" style={{ opacity: draft.enabled ? 1 : 0.5, pointerEvents: draft.enabled ? 'auto' : 'none' }}>
+        {features.map(f => (
+          <div key={f.key} style={{ padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
+            <label className="settings-toggle" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <input
+                type="checkbox"
+                checked={draft[f.key]}
+                onChange={e => setDraft(d => ({ ...d, [f.key]: e.target.checked }))}
+              />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{f.label}</span>
+            </label>
+            <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, marginLeft: 24 }}>{f.hint}</p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <button className="btn-primary" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+          {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -2908,6 +2993,7 @@ export function AdminPage() {
         {tab === 'textvorlagen'          && <TextVorlagenSection />}
         {tab === 'benachrichtigungen'    && <BenachrichtigungenSection />}
         {tab === 'rollen'                && <RollenSection />}
+        {tab === 'engagement'            && <EngagementSection />}
       </div>
     </div>
   )
