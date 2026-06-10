@@ -26,6 +26,38 @@ module.exports = (supabase) => {
     return requirePermission("reports.view")(req, res, next);
   });
 
+  // Phase 6: Reporting-Scope.
+  // - User mit reports.scope.all sieht alle Projekte des Tenants.
+  // - Ohne diese Permission: nur Projekte, in denen er Projektleiter ist.
+  // req.reportScopeProjectIds  = null (=alle) ODER Set<number> (=eingeschraenkt).
+  router.use(async (req, res, next) => {
+    if (req.path.startsWith("/dashboard/")) return next();
+    if (req._permissionsUnrestricted) { req.reportScopeProjectIds = null; return next(); }
+    if (req.permissions.has("reports.scope.all")) { req.reportScopeProjectIds = null; return next(); }
+    // Sonst: eigene Projekte ermitteln
+    try {
+      const { data } = await supabase
+        .from("PROJECT")
+        .select("ID")
+        .eq("TENANT_ID", req.tenantId)
+        .eq("PROJECT_MANAGER_ID", req.employeeId);
+      req.reportScopeProjectIds = new Set((data || []).map(r => r.ID));
+    } catch (_) {
+      req.reportScopeProjectIds = new Set();  // sicher: leer
+    }
+    next();
+  });
+
+  // Phase 6: /project/:projectId/* Endpoints duerfen nur in-scope Projekte beantworten.
+  router.use((req, res, next) => {
+    if (req.reportScopeProjectIds === null) return next();
+    const m = req.path.match(/^\/project\/(\d+)(?:\/|$)/);
+    if (!m) return next();
+    const pid = parseInt(m[1], 10);
+    if (req.reportScopeProjectIds.has(pid)) return next();
+    return res.status(403).json({ error: "Dieses Projekt liegt nicht in deinem Reporting-Scope" });
+  });
+
   function requireTenantId(req, res) {
     const tenantId = req.tenantId;
     if (!tenantId) {
@@ -218,8 +250,13 @@ module.exports = (supabase) => {
 
     if (error) return res.status(500).json({ error: error.message });
 
+    // Phase 6: Scope-Filter — ohne reports.scope.all nur eigene Projekte
+    let rows = data || [];
+    if (req.reportScopeProjectIds !== null) {
+      rows = rows.filter(r => req.reportScopeProjectIds.has(r.PROJECT_ID));
+    }
+
     // Add parent-level surcharges per project
-    const rows = data || [];
     const projectIds = rows.map(r => r.PROJECT_ID).filter(Boolean);
     const parentSurchargesMap = await loadParentSurchargesByProject(projectIds);
     for (const row of rows) {

@@ -7,6 +7,7 @@ import {
   type LeistungsstandNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
+import { Can } from '@/components/ui/Can'
 import type { StructureNode } from '@/api/projekte'
 import { Message } from '@/components/ui/Message'
 
@@ -301,13 +302,15 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
           </div>
 
           <div className="ls-footer">
-            <button
-              type="button"
-              disabled={snapMut.isPending}
-              onClick={() => { setSnapMsg(null); snapMut.mutate() }}
-            >
-              {snapMut.isPending ? 'Snapshot …' : 'Projekt-Snapshot'}
-            </button>
+            <Can permission="projects.performance.snapshot">
+              <button
+                type="button"
+                disabled={snapMut.isPending}
+                onClick={() => { setSnapMsg(null); snapMut.mutate() }}
+              >
+                {snapMut.isPending ? 'Snapshot …' : 'Projekt-Snapshot'}
+              </button>
+            </Can>
             <button
               className="btn btn-primary"
               disabled={saveMut.isPending}

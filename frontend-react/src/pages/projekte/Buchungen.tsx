@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
 import { Modal }       from '@/components/ui/Modal'
 import { Pencil, Trash2 } from 'lucide-react'
+import { usePermissionsStore } from '@/store/permissionsStore'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FormField }   from '@/components/ui/FormField'
 import {
@@ -68,6 +69,10 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const formRef = useRef<HTMLFormElement>(null)
+
+  // Phase 6: Sichtbarkeit Erloese / Kosten
+  const showRevenue = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.revenue.view'))
+  const showCosts   = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.costs.view'))
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
   // Notification-Klick mit neuem Projekt soll umschalten.
   useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
@@ -417,10 +422,10 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                       <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('employee')}>Mitarbeiter{sortIndicator('employee')}</th>
                       <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('path')}>Strukturpfad{sortIndicator('path')}</th>
                       <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('description')}>Beschreibung{sortIndicator('description')}</th>
-                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_int')}>h int.{sortIndicator('h_int')}</th>
-                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_ext')}>h ext.{sortIndicator('h_ext')}</th>
-                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('cost')}>Kosten €{sortIndicator('cost')}</th>
-                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('revenue')}>Erlös €{sortIndicator('revenue')}</th>
+                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_int')}>Stunden{sortIndicator('h_int')}</th>
+                      {showRevenue && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_ext')}>Zur Abrechnung{sortIndicator('h_ext')}</th>}
+                      {showCosts && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('cost')}>Kosten €{sortIndicator('cost')}</th>}
+                      {showRevenue && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('revenue')}>Erlös €{sortIndicator('revenue')}</th>}
                       <th></th>
                     </tr>
                   </thead>
@@ -434,9 +439,9 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         </td>
                         <td>{b.POSTING_DESCRIPTION}</td>
                         <td className="num">{fmtN(b.QUANTITY_INT)}</td>
-                        <td className="num">{fmtN(b.QUANTITY_EXT)}</td>
-                        <td className="num">{fmtN(b.CP_TOT)}</td>
-                        <td className="num">{fmtN(b.SP_TOT)}</td>
+                        {showRevenue && <td className="num">{fmtN(b.QUANTITY_EXT)}</td>}
+                        {showCosts && <td className="num">{fmtN(b.CP_TOT)}</td>}
+                        {showRevenue && <td className="num">{fmtN(b.SP_TOT)}</td>}
                         <td className="doc-actions">
                           {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
                             <>
@@ -453,7 +458,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         </td>
                       </tr>
                     ))}
-                    {!visibleBuchungen.length && <tr><td colSpan={9} className="empty-note">Keine Buchungen</td></tr>}
+                    {!visibleBuchungen.length && <tr><td colSpan={6 + (showRevenue ? 2 : 0) + (showCosts ? 1 : 0)} className="empty-note">Keine Buchungen</td></tr>}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
@@ -464,9 +469,9 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                       </td>
                       <td></td>
                       <td className="num">{fmtN(totalIntH)}</td>
-                      <td className="num">{fmtN(totalExtH)}</td>
-                      <td className="num">{fmtN(totalCost)}</td>
-                      <td className="num">{fmtN(totalRev)}</td>
+                      {showRevenue && <td className="num">{fmtN(totalExtH)}</td>}
+                      {showCosts && <td className="num">{fmtN(totalCost)}</td>}
+                      {showRevenue && <td className="num">{fmtN(totalRev)}</td>}
                       <td></td>
                     </tr>
                   </tfoot>
@@ -499,25 +504,31 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <FormField label="Bis"         id="btf" type="time"   value={form.TIME_FINISH}   onChange={setF('TIME_FINISH')} />
                   </div>
                   <div className="form-row">
-                    <FormField label="Stunden int.*" id="bqi" type="number" value={form.QUANTITY_INT}  onChange={setF('QUANTITY_INT')} step="0.25" required />
-                    <FormField label="Stunden ext.*" id="bqe" type="number" value={form.QUANTITY_EXT}  onChange={setF('QUANTITY_EXT')} step="0.25" required />
+                    <FormField label="Stunden*" id="bqi" type="number" value={form.QUANTITY_INT}  onChange={setF('QUANTITY_INT')} step="0.25" required />
+                    {showRevenue && (
+                      <FormField label="Zur Abrechnung*" id="bqe" type="number" value={form.QUANTITY_EXT}  onChange={setF('QUANTITY_EXT')} step="0.25" required />
+                    )}
                   </div>
                   <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="bcr">Kostensatz (€/h)</label>
-                      <input id="bcr" type="number" step="0.01" value={form.CP_RATE} readOnly
-                        style={{ background: 'rgba(17,24,39,0.04)', cursor: 'not-allowed' }}
-                        title="Wird automatisch aus dem Kostensatz-Verlauf ermittelt" />
-                      {cpRateFound === false && (
-                        <span style={{ fontSize: 11, color: '#dc2626', display: 'block', marginTop: 2 }}>
-                          ⚠ Kein Kostensatz für dieses Datum hinterlegt — Buchung wird mit 0 gespeichert.
-                        </span>
-                      )}
-                    </div>
-                    <FormField label="Stundensatz*"  id="bsr" type="number" value={form.SP_RATE}       onChange={setF('SP_RATE')} step="0.01" required
-                      readOnly={presetData?.found === true && presetData.SP_RATE != null}
-                      title={presetData?.found === true && presetData.SP_RATE != null ? 'Aus Mitarbeiter/Projekt-Zuordnung vorbelegt' : undefined}
-                      style={{ background: presetData?.found === true && presetData.SP_RATE != null ? 'rgba(17,24,39,0.04)' : undefined }} />
+                    {showCosts && (
+                      <div className="form-group">
+                        <label htmlFor="bcr">Kostensatz</label>
+                        <input id="bcr" type="number" step="0.01" value={form.CP_RATE} readOnly
+                          style={{ background: 'rgba(17,24,39,0.04)', cursor: 'not-allowed' }}
+                          title="Wird automatisch aus dem Kostensatz-Verlauf ermittelt" />
+                        {cpRateFound === false && (
+                          <span style={{ fontSize: 11, color: '#dc2626', display: 'block', marginTop: 2 }}>
+                            ⚠ Kein Kostensatz für dieses Datum hinterlegt — Buchung wird mit 0 gespeichert.
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {showRevenue && (
+                      <FormField label="Stundensatz*"  id="bsr" type="number" value={form.SP_RATE}       onChange={setF('SP_RATE')} step="0.01" required
+                        readOnly={presetData?.found === true && presetData.SP_RATE != null}
+                        title={presetData?.found === true && presetData.SP_RATE != null ? 'Aus Mitarbeiter/Projekt-Zuordnung vorbelegt' : undefined}
+                        style={{ background: presetData?.found === true && presetData.SP_RATE != null ? 'rgba(17,24,39,0.04)' : undefined }} />
+                    )}
                   </div>
                   <div className="form-group">
                     <label>Beschreibung*</label>
@@ -559,12 +570,18 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
             <FormField label="Bis"         id="etf" type="time"   value={editForm.TIME_FINISH}   onChange={setEF('TIME_FINISH')} />
           </div>
           <div className="form-row">
-            <FormField label="Stunden int.*" id="eqi" type="number" value={editForm.QUANTITY_INT}  onChange={setEF('QUANTITY_INT')} step="0.25" required />
-            <FormField label="Stunden ext.*" id="eqe" type="number" value={editForm.QUANTITY_EXT}  onChange={setEF('QUANTITY_EXT')} step="0.25" required />
+            <FormField label="Stunden*" id="eqi" type="number" value={editForm.QUANTITY_INT}  onChange={setEF('QUANTITY_INT')} step="0.25" required />
+            {showRevenue && (
+              <FormField label="Zur Abrechnung*" id="eqe" type="number" value={editForm.QUANTITY_EXT}  onChange={setEF('QUANTITY_EXT')} step="0.25" required />
+            )}
           </div>
           <div className="form-row">
-            <FormField label="Kostensatz*"   id="ecr" type="number" value={editForm.CP_RATE}       onChange={setEF('CP_RATE')} step="0.01" required />
-            <FormField label="Stundensatz*"  id="esr" type="number" value={editForm.SP_RATE}       onChange={setEF('SP_RATE')} step="0.01" required />
+            {showCosts && (
+              <FormField label="Kostensatz*"   id="ecr" type="number" value={editForm.CP_RATE}       onChange={setEF('CP_RATE')} step="0.01" required />
+            )}
+            {showRevenue && (
+              <FormField label="Stundensatz*"  id="esr" type="number" value={editForm.SP_RATE}       onChange={setEF('SP_RATE')} step="0.01" required />
+            )}
           </div>
           <div className="form-group">
             <label>Beschreibung*</label>

@@ -47,7 +47,7 @@ module.exports = (supabase) => {
   // Project-scoped routes
   router.get("/:id/structure",                         (req, res) => ctrl.getProjectStructure(req, res, supabase));
   router.post("/:id/structure",                        requirePermission("projects.structure.edit"), (req, res) => ctrl.createStructureNode(req, res, supabase));
-  router.post("/:id/progress-snapshot",                requirePermission("projects.performance.edit"), (req, res) => ctrl.progressSnapshot(req, res, supabase));
+  router.post("/:id/progress-snapshot",                requirePermission("projects.performance.snapshot"), (req, res) => ctrl.progressSnapshot(req, res, supabase));
   router.get("/:id/leistungsstand",                    (req, res) => ctrl.getLeistungsstand(req, res, supabase));
   router.post("/:id/leistungsstand",                   requirePermission("projects.performance.edit"), (req, res) => ctrl.saveLeistungsstand(req, res, supabase));
   router.get("/:id/contract",                          (req, res) => ctrl.getContractByProject(req, res, supabase));

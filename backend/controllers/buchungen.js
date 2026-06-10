@@ -40,7 +40,25 @@ async function listBuchungenByProject(req, res, supabase) {
   const projectId = req.params.id;
   try {
     const data = await svc.listBuchungenByProject(supabase, { projectId, tenantId: req.tenantId });
-    res.json({ data });
+
+    // Phase 6: Felder-Filter — Erloese / Kosten nur mit jeweiliger Permission
+    const showRevenue = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.revenue.view");
+    const showCosts   = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.costs.view");
+    const filtered = (data || []).map(r => {
+      const out = { ...r };
+      if (!showRevenue) {
+        delete out.QUANTITY_EXT;
+        delete out.SP_RATE;
+        delete out.SP_TOT;
+      }
+      if (!showCosts) {
+        delete out.CP_RATE;
+        delete out.CP_TOT;
+      }
+      return out;
+    });
+
+    res.json({ data: filtered });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
   }

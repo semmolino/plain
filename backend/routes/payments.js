@@ -1,10 +1,14 @@
 const express = require("express");
 const { insertProgressSnapshot } = require("../services/projectProgress");
+const { requirePermission } = require("../middleware/permissions");
 
 // Payment routes
 // Base path: /api/payments
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Phase 6: GET = payments.view, POST = create, PATCH = edit, DELETE = delete
+  // (kein blanket .use, weil die Methoden sich unterscheiden)
 
   const toNum = (v) => {
     const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
@@ -64,7 +68,7 @@ module.exports = (supabase) => {
   }
 
   // GET /api/payments?invoice_id=X  or  ?partial_payment_id=X
-  router.get("/", async (req, res) => {
+  router.get("/", requirePermission("payments.view"), async (req, res) => {
     try {
       const invoiceId = req.query.invoice_id ? parseInt(req.query.invoice_id, 10) : null;
       const ppId = req.query.partial_payment_id ? parseInt(req.query.partial_payment_id, 10) : null;
@@ -90,7 +94,7 @@ module.exports = (supabase) => {
   });
 
   // POST /api/payments
-  router.post("/", async (req, res) => {
+  router.post("/", requirePermission("payments.create"), async (req, res) => {
     try {
       const b = req.body || {};
       const partialPaymentId = b.partial_payment_id ?? null;
@@ -261,7 +265,7 @@ module.exports = (supabase) => {
   });
 
   // DELETE /api/payments/:id
-  router.delete("/:id", async (req, res) => {
+  router.delete("/:id", requirePermission("payments.delete"), async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (!Number.isFinite(id)) return res.status(400).json({ error: "Ungültige ID." });

@@ -44,6 +44,7 @@ import {
 } from '@/api/mitarbeiter'
 import { fetchMahnungStats, type MahnungStats, type MahnungSuggestion } from '@/api/mahnungen'
 import { fetchDashboardOpenSe, fetchDashboardArbzgStats } from '@/api/reports'
+import { Can } from '@/components/ui/Can'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -1643,12 +1644,14 @@ export function DashboardPage() {
           {roleLabel && <div style={{ fontSize: 12, color: 'var(--text-4)', marginTop: 2 }}>{roleLabel}</div>}
         </div>
         {dashboardRole && (
-          <button
-            className="dash-role-switch"
-            onClick={() => setDashboardRole(null)}
-          >
-            Ansicht wechseln
-          </button>
+          <Can permission="dashboard.view_switch">
+            <button
+              className="dash-role-switch"
+              onClick={() => setDashboardRole(null)}
+            >
+              Ansicht wechseln
+            </button>
+          </Can>
         )}
       </div>
 

@@ -42,6 +42,8 @@ module.exports = (supabase) => {
   const VIEW_GUARD   = requirePermission("employees.view");
   const SALARY_GUARD = requirePermission("employees.salary.view");
   const lookupPaths  = new Set(["/genders","/","/search"]);
+  // Phase 6: /me und alle /me/* Pfade -- eigenes Profil + eigene Reports/Arbeitszeit
+  const meRegex = /^\/me(?:\/|$)/;
 
   function isOwn(req, id) {
     return parseInt(id, 10) === req.employeeId;
@@ -49,6 +51,7 @@ module.exports = (supabase) => {
 
   router.use((req, res, next) => {
     if (lookupPaths.has(req.path)) return next();
+    if (meRegex.test(req.path)) return next();
 
     // Salary (cp-rate / cp-rates): GET -> salary.view, mutationen werden
     // bereits an den Endpoints mit salary.edit gegated.
@@ -79,6 +82,65 @@ module.exports = (supabase) => {
     }
 
     res.json({ data });
+  });
+
+  // ── /me Endpoints (Phase 6) — eigene Daten ohne employees.view ───────────
+
+  router.get("/me", async (req, res) => {
+    const { data, error } = await supabase
+      .from("EMPLOYEE")
+      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE, DASHBOARD_ROLE")
+      .eq("ID", req.employeeId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+    if (error || !data) return res.status(404).json({ error: error?.message || "Profil nicht gefunden" });
+    res.json({ data });
+  });
+
+  router.get("/me/work-models", async (req, res) => {
+    const { data, error } = await supabase
+      .from("EMPLOYEE_WORK_MODEL")
+      .select("ID, MODEL_ID, VALID_FROM")
+      .eq("EMPLOYEE_ID", req.employeeId)
+      .eq("TENANT_ID", req.tenantId)
+      .order("VALID_FROM", { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ data: data || [] });
+  });
+
+  router.get("/me/balance", async (req, res) => {
+    try {
+      const year  = parseInt(req.query.year  || new Date().getFullYear(), 10);
+      const month = parseInt(req.query.month || (new Date().getMonth() + 1), 10);
+      const r = await balanceSvc.calculateMonthBalance(supabase, req.tenantId, req.employeeId, year, month);
+      res.json({ data: r });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  router.get("/me/balance/running", async (req, res) => {
+    try {
+      const r = await balanceSvc.calculateRunningBalance(supabase, req.tenantId, req.employeeId);
+      res.json({ data: r });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  router.get("/me/arbzg-audit", async (req, res) => {
+    const { data, error } = await supabase
+      .from("ARBZG_AUDIT")
+      .select("*")
+      .eq("EMPLOYEE_ID", req.employeeId)
+      .eq("TENANT_ID", req.tenantId)
+      .order("DATE_DAY", { ascending: false })
+      .limit(500);
+    if (error) {
+      if (/does not exist/i.test(error.message)) return res.json({ data: [] });
+      return res.status(500).json({ error: error.message });
+    }
+    res.json({ data: data || [] });
   });
 
   // POST /api/mitarbeiter
