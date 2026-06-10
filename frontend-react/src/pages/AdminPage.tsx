@@ -335,15 +335,47 @@ const DEFAULT_TEMPLATES: Record<'INVOICE' | 'PROJECT' | 'OFFER', string> = {
 }
 
 const TOKEN_PALETTE: { token: string; label: string; example: string }[] = [
-  { token: '{COUNTER:0000}', label: 'Zähler (4-stellig)', example: '0042' },
-  { token: '{COUNTER:000}',  label: 'Zähler (3-stellig)', example: '042' },
-  { token: '{COUNTER}',      label: 'Zähler (frei)',      example: '42' },
-  { token: '{YEAR4}',        label: 'Jahr (4)',           example: '2026' },
-  { token: '{YEAR2}',        label: 'Jahr (2)',           example: '26' },
-  { token: '{MONTH:00}',     label: 'Monat',              example: '06' },
-  { token: '{DAY:00}',       label: 'Tag',                example: '10' },
-  { token: '{COMPANY:CODE}', label: 'Firma',              example: 'BUE' },
+  { token: '{COUNTER:0000}', label: 'Zähler 4-stellig',  example: '0042' },
+  { token: '{COUNTER:000}',  label: 'Zähler 3-stellig',  example: '042'  },
+  { token: '{COUNTER}',      label: 'Zähler ungenullt',  example: '42'   },
+  { token: '{YEAR4}',        label: 'Jahr 4-stellig',    example: '2026' },
+  { token: '{YEAR2}',        label: 'Jahr 2-stellig',    example: '26'   },
+  { token: '{MONTH:00}',     label: 'Monat',             example: '06'   },
+  { token: '{DAY:00}',       label: 'Tag',               example: '10'   },
+  { token: '{COMPANY:CODE}', label: 'Firmen-Kürzel',     example: 'BUE'  },
 ]
+
+/**
+ * Zerlegt ein Template in lesbare Bausteine -- fuer Anwender, die nicht
+ * verstehen sollen muessen, was {COUNTER:0000} bedeutet.
+ * Gibt z.B. fuer "RE-{YEAR4}-{COUNTER:0000}" zurueck:
+ *   [
+ *     { kind: 'literal', text: 'RE-' },
+ *     { kind: 'token',   text: 'Jahr 4-stellig' },
+ *     { kind: 'literal', text: '-' },
+ *     { kind: 'token',   text: 'Zähler 4-stellig' },
+ *   ]
+ */
+function describeTemplate(template: string): { kind: 'literal' | 'token'; text: string }[] {
+  const tokenLabel = new Map(TOKEN_PALETTE.map(t => [t.token, t.label]))
+  const parts: { kind: 'literal' | 'token'; text: string }[] = []
+  let i = 0
+  while (i < template.length) {
+    if (template[i] === '{') {
+      const end = template.indexOf('}', i)
+      if (end === -1) { parts.push({ kind: 'literal', text: template.slice(i) }); break }
+      const raw = template.slice(i, end + 1)
+      parts.push({ kind: 'token', text: tokenLabel.get(raw) ?? raw })
+      i = end + 1
+    } else {
+      const next = template.indexOf('{', i)
+      const chunk = next === -1 ? template.slice(i) : template.slice(i, next)
+      parts.push({ kind: 'literal', text: chunk })
+      i += chunk.length
+    }
+  }
+  return parts.filter(p => p.text.length > 0)
+}
 
 const DOCTYPE_LABEL: Record<'INVOICE' | 'PROJECT' | 'OFFER', string> = {
   INVOICE: 'Rechnungen',
@@ -531,22 +563,28 @@ function NrTemplateBlock({
         {!valid.ok && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>{valid.error}</div>}
       </div>
 
-      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Tokens einfügen:</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Bausteine einfügen:</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
         {TOKEN_PALETTE.map(t => (
           <button
             key={t.token}
             type="button"
             onClick={() => appendToken(t.token)}
-            style={{
-              padding: '3px 8px', fontSize: 11,
-              background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 999,
-              cursor: 'pointer', fontFamily: 'monospace',
-            }}
-            title={`${t.label}, Beispiel: ${t.example}`}
+            className="nr-token-chip"
+            title={`Beispiel: ${t.example}`}
           >
-            {t.token}
+            <span className="nr-token-chip-label">{t.label}</span>
+            <span className="nr-token-chip-example">{t.example}</span>
           </button>
+        ))}
+      </div>
+
+      <div className="nr-template-explain">
+        <span className="nr-template-explain-label">Aufbau:</span>
+        {describeTemplate(template).map((p, idx) => (
+          p.kind === 'literal'
+            ? <span key={idx} className="nr-template-explain-literal">„{p.text}"</span>
+            : <span key={idx} className="nr-template-explain-token">{p.text}</span>
         ))}
       </div>
 
