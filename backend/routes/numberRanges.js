@@ -142,5 +142,60 @@ module.exports = (supabase) => {
     }
   });
 
+  // ── Template-Konfiguration (Aufbau der Nummern) ─────────────────────────
+  const tmplSvc = require("../services/numberRangeTemplates");
+
+  router.get("/templates", async (req, res) => {
+    try {
+      const rows = await tmplSvc.listTemplates(supabase, { tenantId: req.tenantId });
+      res.json({ data: rows });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  router.put("/templates", requirePermission("settings.numbers.edit"), async (req, res) => {
+    try {
+      const { company_id, doc_type, template } = req.body || {};
+      await tmplSvc.upsertTemplate(supabase, {
+        tenantId:   req.tenantId,
+        employeeId: req.employeeId,
+        companyId:  parseInt(company_id, 10),
+        docType:    String(doc_type || "").toUpperCase(),
+        template:   String(template || "").trim(),
+      });
+      const rows = await tmplSvc.listTemplates(supabase, { tenantId: req.tenantId });
+      res.json({ data: rows });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  // POST /preview: rendert ein Template lokal (ohne Counter zu verbrauchen).
+  router.post("/templates/preview", async (req, res) => {
+    try {
+      const { template, counter, company_id } = req.body || {};
+      const v = tmplSvc.validateTemplate(String(template || ""));
+      if (!v.ok) return res.status(400).json({ error: v.error });
+
+      // Company-Code besorgen
+      let companyCode = "BUE";
+      if (company_id) {
+        try {
+          const { data } = await supabase
+            .from("COMPANY")
+            .select("COMPANY_NAME_SHORT")
+            .eq("ID", parseInt(company_id, 10))
+            .maybeSingle();
+          if (data?.COMPANY_NAME_SHORT) companyCode = data.COMPANY_NAME_SHORT;
+        } catch (_) {}
+      }
+      const rendered = tmplSvc.renderTemplate(String(template), { counter: parseInt(counter, 10) || 1, companyCode });
+      res.json({ data: { rendered } });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   return router;
 };

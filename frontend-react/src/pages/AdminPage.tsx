@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { RollenSection } from '@/pages/admin/RollenSection'
 import { useFilterTabs } from '@/store/permissionsStore'
 import { useSearchParams } from 'react-router-dom'
@@ -22,7 +22,7 @@ import {
 } from '@/api/stammdaten'
 import { fetchProjectStatuses, type ProjectStatus } from '@/api/projekte'
 import { useCtrlS } from '@/hooks/useCtrlS'
-import { fetchNumberRanges, saveNumberRanges } from '@/api/numberRanges'
+import { fetchNumberRanges, saveNumberRanges, fetchNumberRangeTemplates, saveNumberRangeTemplate } from '@/api/numberRanges'
 import {
   fetchMahnungSettings, saveMahnungSettings, fetchTextTemplates, saveTextTemplate,
   TEXT_TEMPLATE_LABELS,
@@ -342,7 +342,32 @@ function nrFormatOffer(v: number) {
   return `A-${yy}-${c}`
 }
 
+// ── Template-Default-Werte falls fuer einen DocType nichts konfiguriert ────
+const DEFAULT_TEMPLATES: Record<'INVOICE' | 'PROJECT' | 'OFFER', string> = {
+  INVOICE: 'RE-{YEAR4}-{COUNTER:0000}',
+  PROJECT: 'P-{YEAR2}-{COUNTER:000}',
+  OFFER:   'A-{YEAR2}-{COUNTER:000}',
+}
+
+const TOKEN_PALETTE: { token: string; label: string; example: string }[] = [
+  { token: '{COUNTER:0000}', label: 'Zähler (4-stellig)', example: '0042' },
+  { token: '{COUNTER:000}',  label: 'Zähler (3-stellig)', example: '042' },
+  { token: '{COUNTER}',      label: 'Zähler (frei)',      example: '42' },
+  { token: '{YEAR4}',        label: 'Jahr (4)',           example: '2026' },
+  { token: '{YEAR2}',        label: 'Jahr (2)',           example: '26' },
+  { token: '{MONTH:00}',     label: 'Monat',              example: '06' },
+  { token: '{DAY:00}',       label: 'Tag',                example: '10' },
+  { token: '{COMPANY:CODE}', label: 'Firma',              example: 'BUE' },
+]
+
+const DOCTYPE_LABEL: Record<'INVOICE' | 'PROJECT' | 'OFFER', string> = {
+  INVOICE: 'Rechnungen',
+  PROJECT: 'Projekte',
+  OFFER:   'Angebote',
+}
+
 function NummernkreiseSection() {
+  const qc = useQueryClient()
   const [invoiceNext, setInvoiceNext] = useState(1)
   const [projectNext, setProjectNext] = useState(1)
   const [offerNext,   setOfferNext]   = useState(1)
@@ -353,6 +378,28 @@ function NummernkreiseSection() {
     queryFn:  () => fetchNumberRanges(YEAR),
     staleTime: 0,
   })
+
+  // Templates: pro Doc-Typ pro Company. Wir gehen vom ersten Company-Eintrag
+  // des Tenants aus (PlaIn ist heute fast immer single-company); spaeter
+  // optional Multi-Company-Selector.
+  const { data: companiesData }  = useQuery({ queryKey: ['companies'], queryFn: fetchCompanies })
+  const { data: templatesData, isLoading: tmplLoading } = useQuery({
+    queryKey: ['number-range-templates'],
+    queryFn:  fetchNumberRangeTemplates,
+  })
+  const companyId = companiesData?.data?.[0]?.ID ?? null
+
+  const [tpl, setTpl] = useState<Record<'INVOICE' | 'PROJECT' | 'OFFER', string>>(DEFAULT_TEMPLATES)
+  useEffect(() => {
+    if (!templatesData?.data) return
+    const next = { ...DEFAULT_TEMPLATES }
+    for (const row of templatesData.data) {
+      if (row.DOC_TYPE === 'INVOICE' || row.DOC_TYPE === 'PROJECT' || row.DOC_TYPE === 'OFFER') {
+        next[row.DOC_TYPE] = row.TEMPLATE
+      }
+    }
+    setTpl(next)
+  }, [templatesData?.data])
 
   useEffect(() => {
     if (data) {
@@ -365,6 +412,15 @@ function NummernkreiseSection() {
   const saveMut = useMutation({
     mutationFn: saveNumberRanges,
     onSuccess: () => setMsg({ text: 'Nummernkreise gespeichert ✅', type: 'success' }),
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const saveTplMut = useMutation({
+    mutationFn: saveNumberRangeTemplate,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['number-range-templates'] })
+      setMsg({ text: 'Vorlage gespeichert ✅', type: 'success' })
+    },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -382,45 +438,174 @@ function NummernkreiseSection() {
     saveMut.mutate({ year: YEAR, next_counter: invoiceNext, project_next_counter: projectNext, offer_next_counter: offerNext })
   }
 
+  function handleSaveTemplate(docType: 'INVOICE' | 'PROJECT' | 'OFFER') {
+    if (!companyId) { setMsg({ text: 'Keine Company hinterlegt — bitte erst Firmendaten speichern.', type: 'error' }); return }
+    setMsg(null)
+    saveTplMut.mutate({ company_id: companyId, doc_type: docType, template: tpl[docType] })
+  }
+
   useCtrlS(handleSave, !isLoading)
 
   return (
     <div className="admin-section">
-      {isLoading && <p className="empty-note">Laden …</p>}
-      {!isLoading && (
+      {(isLoading || tmplLoading) && <p className="empty-note">Laden …</p>}
+      {!isLoading && !tmplLoading && (
         <>
-          <div className="admin-block">
-            <h3 className="admin-block-title">Rechnungen / Abschlagsrechnungen ({YEAR})</h3>
-            <div className="form-group">
-              <label>Nächste Nummer</label>
-              <input type="number" min={1} max={9999} value={invoiceNext} onChange={e => setInvoiceNext(parseInt(e.target.value, 10) || 1)} />
-            </div>
-            <p className="nr-preview">Vorschau: {nrFormatInvoice(invoiceNext)}</p>
-          </div>
-          <div className="admin-block">
-            <h3 className="admin-block-title">Projekte ({YEAR})</h3>
-            <div className="form-group">
-              <label>Nächste Nummer</label>
-              <input type="number" min={1} max={999} value={projectNext} onChange={e => setProjectNext(parseInt(e.target.value, 10) || 1)} />
-            </div>
-            <p className="nr-preview">Vorschau: {nrFormatProject(projectNext)}</p>
-          </div>
-          <div className="admin-block">
-            <h3 className="admin-block-title">Angebote ({YEAR})</h3>
-            <div className="form-group">
-              <label>Nächste Nummer</label>
-              <input type="number" min={1} max={999} value={offerNext} onChange={e => setOfferNext(parseInt(e.target.value, 10) || 1)} />
-            </div>
-            <p className="nr-preview">Vorschau: {nrFormatOffer(offerNext)}</p>
-          </div>
+          <NrTemplateBlock
+            docType="INVOICE"
+            label="Rechnungen / Abschlagsrechnungen"
+            year={YEAR}
+            counter={invoiceNext}
+            onCounter={setInvoiceNext}
+            counterMin={1} counterMax={9999}
+            template={tpl.INVOICE}
+            onTemplate={(t) => setTpl(s => ({ ...s, INVOICE: t }))}
+            onSaveTemplate={() => handleSaveTemplate('INVOICE')}
+            saving={saveTplMut.isPending}
+          />
+          <NrTemplateBlock
+            docType="PROJECT"
+            label="Projekte"
+            year={YEAR}
+            counter={projectNext}
+            onCounter={setProjectNext}
+            counterMin={1} counterMax={999}
+            template={tpl.PROJECT}
+            onTemplate={(t) => setTpl(s => ({ ...s, PROJECT: t }))}
+            onSaveTemplate={() => handleSaveTemplate('PROJECT')}
+            saving={saveTplMut.isPending}
+          />
+          <NrTemplateBlock
+            docType="OFFER"
+            label="Angebote"
+            year={YEAR}
+            counter={offerNext}
+            onCounter={setOfferNext}
+            counterMin={1} counterMax={999}
+            template={tpl.OFFER}
+            onTemplate={(t) => setTpl(s => ({ ...s, OFFER: t }))}
+            onSaveTemplate={() => handleSaveTemplate('OFFER')}
+            saving={saveTplMut.isPending}
+          />
           <Message text={msg?.text ?? null} type={msg?.type} />
           <button className="btn-primary" style={{ marginTop: 8 }} onClick={handleSave} disabled={saveMut.isPending} type="button">
-            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+            {saveMut.isPending ? 'Speichert …' : 'Zähler speichern'}
           </button>
         </>
       )}
     </div>
   )
+}
+
+// ── NrTemplateBlock: pro DocType ein Block mit Counter + Template-Editor ────
+function NrTemplateBlock({
+  docType, label, year, counter, onCounter, counterMin, counterMax,
+  template, onTemplate, onSaveTemplate, saving,
+}: {
+  docType:       'INVOICE' | 'PROJECT' | 'OFFER'
+  label:         string
+  year:          number
+  counter:       number
+  onCounter:     (v: number) => void
+  counterMin:    number
+  counterMax:    number
+  template:      string
+  onTemplate:    (t: string) => void
+  onSaveTemplate:() => void
+  saving:        boolean
+}) {
+  // Lokale Preview: rendert das Template clientseitig (gleiche Token-Logik
+  // wie Backend; identisches Resultat solange das Template valide ist).
+  const preview = useMemo(() => renderTemplateClient(template, { counter, companyCode: 'BUE' }), [template, counter])
+  const valid   = useMemo(() => validateTemplateClient(template), [template])
+  const tokenSnippet = useMemo(() => DOCTYPE_LABEL[docType], [docType])
+
+  function appendToken(token: string) {
+    onTemplate(template + token)
+  }
+
+  return (
+    <div className="admin-block">
+      <h3 className="admin-block-title">{label} ({year}) — {tokenSnippet}</h3>
+
+      <div className="form-group">
+        <label>Nächster Zähler</label>
+        <input type="number" min={counterMin} max={counterMax} value={counter} onChange={e => onCounter(parseInt(e.target.value, 10) || counterMin)} />
+      </div>
+
+      <div className="form-group">
+        <label>Nummer-Format (Template)</label>
+        <input
+          type="text"
+          value={template}
+          onChange={e => onTemplate(e.target.value)}
+          placeholder={DEFAULT_TEMPLATES[docType]}
+          maxLength={80}
+          style={{ fontFamily: 'monospace', fontSize: 13 }}
+        />
+        {!valid.ok && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>{valid.error}</div>}
+      </div>
+
+      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Tokens einfügen:</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+        {TOKEN_PALETTE.map(t => (
+          <button
+            key={t.token}
+            type="button"
+            onClick={() => appendToken(t.token)}
+            style={{
+              padding: '3px 8px', fontSize: 11,
+              background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 999,
+              cursor: 'pointer', fontFamily: 'monospace',
+            }}
+            title={`${t.label}, Beispiel: ${t.example}`}
+          >
+            {t.token}
+          </button>
+        ))}
+      </div>
+
+      <p className="nr-preview">Vorschau: <strong>{preview}</strong></p>
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={onSaveTemplate}
+        disabled={saving || !valid.ok}
+        style={{ marginTop: 6 }}
+      >
+        {saving ? 'Speichert …' : 'Format speichern'}
+      </button>
+    </div>
+  )
+}
+
+// Client-side Renderer + Validator -- spiegelt das Backend
+function renderTemplateClient(template: string, { counter = 1, companyCode = 'BUE' }: { counter?: number; companyCode?: string } = {}) {
+  const now = new Date()
+  const yr4 = String(now.getFullYear())
+  const yr2 = String(now.getFullYear() % 100).padStart(2, '0')
+  const m   = String(now.getMonth() + 1).padStart(2, '0')
+  const d   = String(now.getDate()).padStart(2, '0')
+  return template
+    .replaceAll('{COMPANY:CODE}', companyCode)
+    .replaceAll('{COMPANY}',      companyCode)
+    .replaceAll('{YEAR4}',        yr4)
+    .replaceAll('{YEAR2}',        yr2)
+    .replaceAll('{MONTH:00}',     m)
+    .replaceAll('{DAY:00}',       d)
+    .replace(/\{COUNTER:(0+)\}/g, (_x, pad: string) => String(counter).padStart(pad.length, '0'))
+    .replaceAll('{COUNTER}',      String(counter))
+}
+
+function validateTemplateClient(template: string): { ok: boolean; error?: string } {
+  if (!template || template.length === 0) return { ok: false, error: 'Template darf nicht leer sein.' }
+  if (template.length > 80) return { ok: false, error: 'Max. 80 Zeichen.' }
+  if (!/\{COUNTER(?::0+)?\}/.test(template)) return { ok: false, error: 'Template muss {COUNTER} enthalten.' }
+  const known = /\{(COUNTER(?::0+)?|YEAR4|YEAR2|MONTH:00|DAY:00|COMPANY(?::CODE)?)\}/g
+  const all   = template.match(/\{[^}]*\}/g) ?? []
+  const bad   = all.filter(t => !t.match(known))
+  if (bad.length > 0) return { ok: false, error: `Unbekannte Tokens: ${bad.join(', ')}` }
+  return { ok: true }
 }
 
 // ── Unternehmen ───────────────────────────────────────────────────────────────
