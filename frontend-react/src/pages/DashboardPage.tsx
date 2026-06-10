@@ -56,10 +56,11 @@ const FMT_EUR = new Intl.NumberFormat('de-DE', {
 })
 const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_NUM  = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
+const FMT_HOURS = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const MONTHS_DE = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
 
 function fmtEur(v: number | null | undefined)   { return v == null ? '—' : FMT_EUR.format(v) }
-function fmtH(v: number | null | undefined)     { return v == null ? '—' : FMT_NUM.format(v) + ' h' }
+function fmtH(v: number | null | undefined)     { return v == null ? '—' : FMT_HOURS.format(v) + ' h' }
 function fmtPct(v: number)                      { return FMT_NUM.format(v) + ' %' }
 function fmtSaldo(v: number | null | undefined) {
   if (v == null) return '—'
@@ -964,8 +965,16 @@ function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
 }
 
 function BookingsTable({ bookings }: { bookings: DayBooking[] }) {
+  // table-layout: fixed + colgroup => Spalten haben in JEDER Tabelle identische
+  // Breiten, damit "Letzte Buchungen dieses Monats" optisch buendig wirkt.
   return (
-    <table className="dash-table">
+    <table className="dash-table" style={{ tableLayout: 'fixed' }}>
+      <colgroup>
+        <col style={{ width: '18%' }} />
+        <col style={{ width: '14%' }} />
+        <col style={{ width: '10%' }} />
+        <col style={{ width: '58%' }} />
+      </colgroup>
       <thead>
         <tr>
           <th>Projekt</th>
