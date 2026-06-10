@@ -18,34 +18,56 @@
 
 const ADMIN_BYPASS = false;  // KEIN System-weiter Bypass — Admin = Rolle mit allen Permissions
 
-/** Soft-fail Loader: wenn Migration 0062 noch nicht gelaufen ist, liefere leeren Set. */
+/** Soft-fail Loader: wenn Migration 0062 noch nicht gelaufen ist, liefere null
+ *  (-> unrestricted Mode). Sonst Set aller Permission-Keys des Users.
+ *
+ *  Wir verwenden bewusst DREI separate Queries statt eines nested Joins,
+ *  weil supabase-js die FK-Auflosung bei nicht-konventionellen Spaltennamen
+ *  (ROLE_ID -> USER_ROLE) zickig macht. Drei kleine Queries sind schneller
+ *  als eine kaputte. */
 async function loadPermissions(supabase, employeeId) {
   if (!employeeId) return new Set();
   try {
-    const { data, error } = await supabase
+    // 1) Welche Rollen hat der Mitarbeiter?
+    const { data: ers, error: er1 } = await supabase
       .from("EMPLOYEE_ROLE")
-      .select(`
-        ROLE_ID,
-        USER_ROLE!inner ( ID,
-          ROLE_PERMISSION ( PERMISSION_ID, PERMISSION!inner ( KEY ) )
-        )
-      `)
+      .select("ROLE_ID")
       .eq("EMPLOYEE_ID", employeeId);
-    if (error) {
-      if (/relation .* does not exist|column .* does not exist/i.test(error.message)) {
-        // Migration noch nicht durch — Foundation-Phase erlaubt vollen Zugriff
+    if (er1) {
+      if (/relation .* does not exist|column .* does not exist/i.test(er1.message)) {
         return null;
       }
-      throw error;
+      throw er1;
     }
-    const keys = new Set();
-    for (const row of data || []) {
-      const rps = row.USER_ROLE?.ROLE_PERMISSION || [];
-      for (const rp of rps) {
-        const k = rp.PERMISSION?.KEY;
-        if (k) keys.add(k);
+    const roleIds = [...new Set((ers || []).map(r => r.ROLE_ID).filter(Boolean))];
+    if (roleIds.length === 0) return new Set();
+
+    // 2) Welche Permission-IDs haengen an diesen Rollen?
+    const { data: rps, error: er2 } = await supabase
+      .from("ROLE_PERMISSION")
+      .select("PERMISSION_ID")
+      .in("ROLE_ID", roleIds);
+    if (er2) {
+      if (/relation .* does not exist|column .* does not exist/i.test(er2.message)) {
+        return null;
       }
+      throw er2;
     }
+    const permIds = [...new Set((rps || []).map(r => r.PERMISSION_ID).filter(Boolean))];
+    if (permIds.length === 0) return new Set();
+
+    // 3) Permission-Keys auflesen
+    const { data: perms, error: er3 } = await supabase
+      .from("PERMISSION")
+      .select("KEY")
+      .in("ID", permIds);
+    if (er3) {
+      if (/relation .* does not exist|column .* does not exist/i.test(er3.message)) {
+        return null;
+      }
+      throw er3;
+    }
+    const keys = new Set((perms || []).map(p => p.KEY).filter(Boolean));
     return keys;
   } catch (e) {
     console.warn("[permissions] load failed:", e?.message);
