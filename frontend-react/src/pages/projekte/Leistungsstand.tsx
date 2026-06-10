@@ -10,6 +10,8 @@ import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import { Can } from '@/components/ui/Can'
 import type { StructureNode } from '@/api/projekte'
 import { Message } from '@/components/ui/Message'
+import { useTrackRecent } from '@/hooks/useTrackRecent'
+import { RecentList } from '@/components/recents/RecentList'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -152,9 +154,16 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
   }
 
   const currentProject = projects.find(p => p.ID === pid)
+  useTrackRecent('project', pid, currentProject?.NAME_SHORT ?? null)
 
   return (
     <div className="ls-wrap">
+      <RecentList
+        type="project"
+        title="Zuletzt verwendete Projekte"
+        onSelect={(e) => handleProjectChange(e.ENTITY_ID)}
+      />
+
       <div className="ls-toolbar">
         <label className="ls-label">Projekt</label>
         <select

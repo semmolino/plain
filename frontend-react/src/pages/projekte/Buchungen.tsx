@@ -16,6 +16,8 @@ import { fetchActiveEmployees } from '@/api/projekte'
 import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
 import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
+import { useTrackRecent } from '@/hooks/useTrackRecent'
+import { RecentList } from '@/components/recents/RecentList'
 
 const FMT_NUM = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
 const fmtN    = (v: number | null | undefined) => v == null ? '—' : FMT_NUM.format(v)
@@ -359,9 +361,16 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   }
 
   const currentProject = projects.find(p => p.ID === pid)
+  useTrackRecent('project', pid, currentProject?.NAME_SHORT ?? null)
 
   return (
     <div>
+      <RecentList
+        type="project"
+        title="Zuletzt verwendete Projekte"
+        onSelect={(e) => { setPid(e.ENTITY_ID); onProjectChange?.(e.ENTITY_ID); setMsg(null); setShowForm(false) }}
+      />
+
       <div className="form-group" style={{ maxWidth: 400, marginBottom: 12 }}>
         <label>Projekt</label>
         <select value={pid ?? ''} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setPid(id); onProjectChange?.(id); setMsg(null); setShowForm(false) }}>

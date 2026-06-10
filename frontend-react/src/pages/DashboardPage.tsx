@@ -46,6 +46,7 @@ import { fetchMahnungStats, type MahnungStats, type MahnungSuggestion } from '@/
 import { fetchDashboardOpenSe, fetchDashboardArbzgStats } from '@/api/reports'
 import { Can } from '@/components/ui/Can'
 import { usePermission } from '@/store/permissionsStore'
+import { RecentMixedList } from '@/components/recents/RecentList'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -1676,6 +1677,8 @@ export function DashboardPage() {
       </div>
 
       <SetupChecklist />
+
+      <RecentMixedList limit={8} />
 
       {dashboardRole && !isMitarbeiter && (
         <DashboardFilterBar

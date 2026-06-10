@@ -62,6 +62,7 @@ const budgetWarningsRoutes   = require("./routes/budgetWarnings")(supabase);
 const notificationConfigRoutes = require("./routes/notificationConfig")(supabase);
 const notificationScheduleRoutes = require("./routes/notificationSchedule")(supabase);
 const rolesRoutes                = require("./routes/roles")(supabase);
+const recentsRoutes              = require("./routes/recents")(supabase);
 const { makeMiddleware: makePermissionsMiddleware } = require("./middleware/permissions");
 const permissionsMiddleware = makePermissionsMiddleware(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
@@ -101,6 +102,9 @@ app.use("/api/v1/notification-schedule", ...authChain, notificationScheduleRoute
 
 // Rollen + Mitarbeiter-Rollen-Zuweisung (eigene Routes mit eigenen Guards)
 app.use("/api/v1", ...authChain, rolesRoutes);
+
+// Zuletzt verwendet (pro Mitarbeiter)
+app.use("/api/v1/recents", ...authChain, recentsRoutes);
 
 
 
