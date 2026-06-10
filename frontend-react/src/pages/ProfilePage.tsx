@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { changePassword } from '@/api/auth'
 import { AchievementsSection } from '@/components/engagement/AchievementsSection'
+import { MasterySection }      from '@/components/engagement/MasterySection'
 
 export function ProfilePage() {
   const navigate   = useNavigate()
@@ -69,6 +70,9 @@ export function ProfilePage() {
         <div style={{ fontWeight: 600, fontSize: 15 }}>{email}</div>
         {shortName && <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>Kürzel: {shortName}</div>}
       </div>
+
+      {/* Modul-Reife */}
+      <MasterySection />
 
       {/* Achievements */}
       <AchievementsSection />

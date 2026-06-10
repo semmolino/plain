@@ -211,6 +211,30 @@ export interface RecapData {
 export const fetchMyRecap = (period: RecapPeriod) =>
   apiClient.get<{ data: RecapData }>(`/mitarbeiter/me/recap?period=${period}`)
 
+// ── Mastery ──────────────────────────────────────────────────────────────────
+
+export interface MasteryModule {
+  module:            string
+  label:             string
+  count:             number
+  level:             string
+  level_label:       string
+  progress_in_level: number
+  tip:               string | null
+}
+
+export interface MasteryResponse {
+  modules: MasteryModule[]
+  tip_of_day: {
+    module: string
+    label:  string
+    text:   string
+  } | null
+}
+
+export const fetchMyMastery = () =>
+  apiClient.get<{ data: MasteryResponse }>('/mitarbeiter/me/mastery')
+
 // ── Employee list report ──────────────────────────────────────────────────────
 
 export interface EmployeeReportRow {

@@ -128,6 +128,16 @@ module.exports = (supabase) => {
     }
   });
 
+  router.get("/me/mastery", async (req, res) => {
+    try {
+      const svc = require("../services/mastery");
+      const r = await svc.computeMastery(supabase, { tenantId: req.tenantId, employeeId: req.employeeId });
+      res.json({ data: r });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   router.get("/me/recap", async (req, res) => {
     try {
       const svc = require("../services/recaps");
