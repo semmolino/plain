@@ -157,6 +157,17 @@ export const fetchMonthBalance = (id: number, year: number, month: number) =>
 export const fetchRunningBalance = (id: number) =>
   apiClient.get<{ data: { months: RunningMonth[]; totalBalance: number } }>(`/mitarbeiter/${id}/balance/running`)
 
+// ── Streak (Engagement / Buchungsstreak) ─────────────────────────────────────
+
+export interface StreakData {
+  current_streak: number
+  longest_streak: number
+  today_booked:   boolean
+}
+
+export const fetchMyStreak = () =>
+  apiClient.get<{ data: StreakData }>('/mitarbeiter/me/streak')
+
 // ── Employee list report ──────────────────────────────────────────────────────
 
 export interface EmployeeReportRow {

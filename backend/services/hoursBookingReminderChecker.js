@@ -1,6 +1,28 @@
 "use strict";
 
 const { createNotification } = require("./notifications");
+const streakSvc              = require("./streaks");
+
+/**
+ * Liest die Tenant-Engagement-Konfig. Bei Fehler / fehlender Tabelle:
+ * Default true, damit der Streak-Reminder nicht stillschweigend wegfaellt.
+ */
+async function gamificationStreaksEnabled(supabase, tenantId) {
+  try {
+    const { data } = await supabase
+      .from("TENANT_SETTINGS")
+      .select("KEY, VALUE")
+      .eq("TENANT_ID", tenantId)
+      .in("KEY", ["gamification.enabled", "gamification.streaks"]);
+    const map = new Map((data || []).map(r => [r.KEY, r.VALUE]));
+    const master = map.get("gamification.enabled");
+    const feat   = map.get("gamification.streaks");
+    const isOn = (v) => v == null ? true : String(v).toLowerCase() !== "false";
+    return isOn(master) && isOn(feat);
+  } catch (_) {
+    return true;
+  }
+}
 
 const TYPE_KEY = "hours_booking_reminder";
 
@@ -82,6 +104,8 @@ async function fireForTenant(supabase, cfg, todayStr) {
     .in("EMPLOYEE_ID", empIds);
   const bookedIds = new Set((tecToday || []).map(r => Number(r.EMPLOYEE_ID)));
 
+  const streaksOn = await gamificationStreaksEnabled(supabase, tenantId);
+
   let created = 0;
   for (const emp of employees) {
     if (bookedIds.has(Number(emp.ID))) continue;
@@ -97,13 +121,28 @@ async function fireForTenant(supabase, cfg, todayStr) {
       .limit(1);
     if (existing && existing.length > 0) continue;
 
+    let title = "Stunden für heute buchen";
+    let body  = "Du hast für heute noch keine Stunden gebucht. Bitte trage deine Zeiten ein.";
+
+    // Streak-Sicherung: wenn streaks aktiv und User eine laufende Streak hat,
+    // sachlich darauf hinweisen, dass sie heute Abend reisst.
+    if (streaksOn) {
+      try {
+        const s = await streakSvc.calculateStreak(supabase, { tenantId, employeeId: emp.ID });
+        if (s.current_streak >= 2 && !s.today_booked) {
+          title = `Streak sichern (${s.current_streak} Tage)`;
+          body  = `Du hast eine Buchungsstreak von ${s.current_streak} Tagen — heute noch buchen, um sie zu erhalten.`;
+        }
+      } catch (_) { /* streak ist nice-to-have, nicht blockierend */ }
+    }
+
     try {
       await createNotification(supabase, {
         tenantId,
         userId: String(emp.ID),
         type:   TYPE_KEY,
-        title:  "Stunden für heute buchen",
-        body:   "Du hast für heute noch keine Stunden gebucht. Bitte trage deine Zeiten ein.",
+        title,
+        body,
         link:   "/projekte?tab=buchungen",
         metadata: { ref_date: todayStr },
       });

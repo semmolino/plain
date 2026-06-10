@@ -48,6 +48,7 @@ import { Can } from '@/components/ui/Can'
 import { usePermission } from '@/store/permissionsStore'
 import { RecentMixedList } from '@/components/recents/RecentList'
 import { useGamificationConfig } from '@/hooks/useGamificationConfig'
+import { StreakCard } from '@/components/engagement/StreakCard'
 import { fetchEmployeeList } from '@/api/mitarbeiter'
 import { fetchAddressList } from '@/api/stammdaten'
 import { fetchOffers } from '@/api/angebote'
@@ -1085,6 +1086,8 @@ function MitarbeiterView({ employeeId }: { employeeId: number }) {
 
   return (
     <>
+      <StreakCard />
+
       <div className="kpi-grid">
         <KpiCard label="Stunden diesen Monat" value={fmtH(monthActual)} meta={`von ${fmtH(monthReq)} Soll`} />
         <KpiCard label="Saldo diesen Monat"   value={fmtSaldo(monthSaldo)} accent={monthSaldo < -8} />
