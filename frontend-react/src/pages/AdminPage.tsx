@@ -327,21 +327,6 @@ function StammdatenSection() {
 
 const YEAR = new Date().getFullYear()
 
-function nrFormatInvoice(v: number) {
-  const c = String(Math.max(0, v)).padStart(4, '0')
-  return `RE-${YEAR}-${c}`
-}
-function nrFormatProject(v: number) {
-  const yy = String(YEAR % 100).padStart(2, '0')
-  const c  = String(Math.max(0, v)).padStart(3, '0')
-  return `P-${yy}-${c}`
-}
-function nrFormatOffer(v: number) {
-  const yy = String(YEAR % 100).padStart(2, '0')
-  const c  = String(Math.max(0, v)).padStart(3, '0')
-  return `A-${yy}-${c}`
-}
-
 // ── Template-Default-Werte falls fuer einen DocType nichts konfiguriert ────
 const DEFAULT_TEMPLATES: Record<'INVOICE' | 'PROJECT' | 'OFFER', string> = {
   INVOICE: 'RE-{YEAR4}-{COUNTER:0000}',
