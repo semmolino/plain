@@ -1007,6 +1007,9 @@ async function getDepartments(req, res, supabase) {
 async function deleteDepartment(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
+  const depCheck = require("../services/dependencyCheck");
+  const check = await depCheck.checkDepartment(supabase, { tenantId: req.tenantId, id });
+  if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
   const { error } = await supabase.from("DEPARTMENT").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
@@ -1022,6 +1025,9 @@ async function getTypen(req, res, supabase) {
 async function deleteTyp(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
+  const depCheck = require("../services/dependencyCheck");
+  const check = await depCheck.checkProjectTyp(supabase, { tenantId: req.tenantId, id });
+  if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
   const { error } = await supabase.from("PROJECT_TYPE").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
@@ -1037,6 +1043,9 @@ async function getRollen(req, res, supabase) {
 async function deleteRolle(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
+  const depCheck = require("../services/dependencyCheck");
+  const check = await depCheck.checkRole(supabase, { tenantId: req.tenantId, id });
+  if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
   const { error } = await supabase.from("ROLE").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
@@ -1752,7 +1761,11 @@ async function patchWorkingTimeModel(req, res, supabase) {
 
 async function deleteWorkingTimeModel(req, res, supabase) {
   try {
-    await wtmSvc.deleteModel(supabase, req.tenantId, Number(req.params.id));
+    const id = Number(req.params.id);
+    const depCheck = require("../services/dependencyCheck");
+    const check = await depCheck.checkWorkingTimeModel(supabase, { tenantId: req.tenantId, id });
+    if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
+    await wtmSvc.deleteModel(supabase, req.tenantId, id);
     res.json({ ok: true });
   } catch (e) {
     res.status(e?.status || 500).json({ error: e?.message || String(e) });

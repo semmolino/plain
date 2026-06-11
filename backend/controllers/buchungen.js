@@ -25,9 +25,12 @@ async function patchBuchung(req, res, supabase) {
 }
 
 async function deleteBuchung(req, res, supabase) {
-  const id = req.params.id;
+  const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "ID fehlt" });
   try {
+    const depCheck = require("../services/dependencyCheck");
+    const check = await depCheck.checkTec(supabase, { tenantId: req.tenantId, id });
+    if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
     await svc.deleteBuchung(supabase, { id });
     res.json({ success: true });
   } catch (err) {

@@ -380,6 +380,11 @@ async function deleteRole(req, res, supabase) {
     const adminCount = await countAdminCapableEmployees(supabase, { tenantId: req.tenantId, excludeRoleId: id });
     if (adminCount === 0) return res.status(SELF_LOCKOUT_ERROR.status).json({ error: SELF_LOCKOUT_ERROR.message });
 
+    // Mitarbeiter-Zuweisungen pruefen
+    const depCheck = require("../services/dependencyCheck");
+    const check = await depCheck.checkUserRole(supabase, { tenantId: req.tenantId, id });
+    if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
+
     const { error } = await supabase
       .from("USER_ROLE")
       .delete()

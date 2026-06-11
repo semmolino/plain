@@ -56,6 +56,9 @@ async function deleteOffer(req, res, supabase) {
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error: 'Ungültige ID' });
+    const depCheck = require('../services/dependencyCheck');
+    const check = await depCheck.checkOffer(supabase, { tenantId: req.tenantId, id });
+    if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
     await svc.deleteOffer(supabase, { tenantId: req.tenantId, offerId: id });
     return res.json({ ok: true });
   } catch (e) {
@@ -100,6 +103,9 @@ async function deleteOfferStructureNode(req, res, supabase) {
   try {
     const nodeId = parseInt(req.params.nodeId, 10);
     if (!nodeId) return res.status(400).json({ error: 'Ungültige Node-ID' });
+    const depCheck = require('../services/dependencyCheck');
+    const check = await depCheck.checkOfferStructure(supabase, { tenantId: req.tenantId, id: nodeId });
+    if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
     await svc.deleteOfferStructureNode(supabase, { tenantId: req.tenantId, nodeId });
     return res.json({ ok: true });
   } catch (e) {

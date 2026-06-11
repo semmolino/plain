@@ -348,6 +348,12 @@ async function deleteStructure(req, res, supabase) {
   if (!structureId) return res.status(400).json({ error: "ID fehlt" });
   const cascade = String(req.query.cascade || "") === "1";
   try {
+    // Ohne cascade: pruefen ob Buchungen/Kinder dranhaengen
+    if (!cascade) {
+      const depCheck = require("../services/dependencyCheck");
+      const check = await depCheck.checkProjectStructure(supabase, { tenantId: req.tenantId, id: parseInt(structureId, 10) });
+      if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
+    }
     const deleted_ids = await svc.deleteStructure(supabase, { structureId, cascade });
     res.json({ success: true, deleted_ids });
   } catch (err) {
