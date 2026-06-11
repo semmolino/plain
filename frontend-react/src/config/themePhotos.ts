@@ -25,29 +25,33 @@ export interface ThemePhoto {
 //
 // Quelle: Unsplash (Lizenz erlaubt kommerzielle Nutzung ohne Attribution,
 // Photograph wird trotzdem genannt -- gute Praxis).
+// Cache-Buster: bei Aenderung am Bild hochzaehlen, damit Browser-Cache
+// die Datei neu zieht (statischer Pfad wuerde sonst aus dem Cache kommen).
+const V = '2'
+
 export const THEME_PHOTOS: Record<string, ThemePhoto> = {
   'architecture-foto': {
-    src:          '/themes/architecture-foto/hero.jpg',
+    src:          `/themes/architecture-foto/hero.jpg?v=${V}`,
     alt:          'Moderne Architektur — Betonfassade mit geometrischem Muster',
     photographer: 'Jisang Jung (Unsplash)',
   },
   'civil-foto': {
-    src:          '/themes/civil-foto/hero.jpg',
+    src:          `/themes/civil-foto/hero.jpg?v=${V}`,
     alt:          'Tiefbau — Blick in einen Betontunnel-Schacht',
     photographer: 'C Cai (Unsplash)',
   },
   'urban-foto': {
-    src:          '/themes/urban-foto/hero.jpg',
+    src:          `/themes/urban-foto/hero.jpg?v=${V}`,
     alt:          'Stadt-/Verkehrsplanung — Luftaufnahme eines Autobahnkreuzes',
     photographer: 'Bernd Dittrich (Unsplash)',
   },
   'tga-foto': {
-    src:          '/themes/tga-foto/hero.jpg',
+    src:          `/themes/tga-foto/hero.jpg?v=${V}`,
     alt:          'TGA — Sichtbare Rohrtechnik an Sichtbetonfassade',
     photographer: 'Julia Taubitz (Unsplash)',
   },
   'structural-foto': {
-    src:          '/themes/structural-foto/hero.jpg',
+    src:          `/themes/structural-foto/hero.jpg?v=${V}`,
     alt:          'Tragwerksplanung — Stahltragwerk einer Brücke',
     photographer: 'Li Zhang (Unsplash)',
   },
