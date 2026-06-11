@@ -48,6 +48,7 @@ import { RecentMixedList } from '@/components/recents/RecentList'
 import { useGamificationConfig } from '@/hooks/useGamificationConfig'
 import { StreakCard } from '@/components/engagement/StreakCard'
 import { RecapCard } from '@/components/engagement/RecapCard'
+import { DashboardHero } from '@/components/theme/DashboardHero'
 import { fetchSetupProgress } from '@/api/setupProgress'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
@@ -1721,6 +1722,8 @@ export function DashboardPage() {
           </Can>
         )}
       </div>
+
+      <DashboardHero />
 
       <SetupChecklist />
 

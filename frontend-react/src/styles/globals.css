@@ -544,6 +544,20 @@ body {
   background: rgba(28,28,33,0.88);
 }
 
+/* ── Dashboard Foto-Hero ────────────────────────────────────────────────── */
+.dashboard-hero {
+  height: 120px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+}
+@media (max-width: 768px) {
+  .dashboard-hero { height: 90px; border-radius: 10px; margin-bottom: 12px; }
+}
+
 /* ── Branch Empty State ─────────────────────────────────────────────────── */
 .branch-empty-state {
   display: flex; flex-direction: column; align-items: center;
