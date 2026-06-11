@@ -48,6 +48,7 @@ export default function App() {
           <Routes>
             {/* Public */}
             <Route path="/login"          element={<LoginPage />} />
+            <Route path="/login/:slug"    element={<LoginPage />} />
             <Route path="/signup"         element={<SignupPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
 

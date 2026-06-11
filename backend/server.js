@@ -38,6 +38,10 @@ app.use("/api/v1/auth", authRoutes);
 const webhookRoutes = require("./routes/webhooks");
 app.use("/api/v1/webhooks", webhookRoutes);
 
+// Public branding routes (no JWT -- liefert Login-Hero-Info via Slug)
+const brandingRoutes = require("./routes/branding")(supabase);
+app.use("/api/v1/branding", brandingRoutes);
+
 // All other API routes require a valid session
 const stammdatenRoutes       = require("./routes/stammdaten")(supabase);
 const mitarbeiterRoutes      = require("./routes/mitarbeiter")(supabase);
@@ -64,6 +68,7 @@ const notificationScheduleRoutes = require("./routes/notificationSchedule")(supa
 const rolesRoutes                = require("./routes/roles")(supabase);
 const recentsRoutes              = require("./routes/recents")(supabase);
 const gamificationRoutes         = require("./routes/gamification")(supabase);
+const tenantsRoutes              = require("./routes/tenants")(supabase);
 const { makeMiddleware: makePermissionsMiddleware } = require("./middleware/permissions");
 const permissionsMiddleware = makePermissionsMiddleware(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
@@ -109,6 +114,9 @@ app.use("/api/v1/recents", ...authChain, recentsRoutes);
 
 // Engagement / Gamification (Tenant-Konfiguration)
 app.use("/api/v1/gamification", ...authChain, gamificationRoutes);
+
+// Tenant-Konfiguration (Slug fuer Login-Branding etc.)
+app.use("/api/v1/tenants", ...authChain, tenantsRoutes);
 
 
 

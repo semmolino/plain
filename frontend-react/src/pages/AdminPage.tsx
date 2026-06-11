@@ -849,6 +849,185 @@ function UnternehmenSection() {
       </form>
 
       {selectedId !== null && <CompanyAssetsSection companyId={selectedId} />}
+
+      <TenantBrandingSection />
+    </div>
+  )
+}
+
+// ── Tenant-Branding (Slug + Theme-Default + Custom-Hero-Upload) ─────────────
+
+function TenantBrandingSection() {
+  const qc = useQueryClient()
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [themeDefault,   setThemeDefault]   = useState('')
+  const [heroAssetId,    setHeroAssetId]    = useState<number | null>(null)
+  const [slug,           setSlug]           = useState('')
+  const [uploadingHero,  setUploadingHero]  = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { data: defData } = useQuery({ queryKey: ['defaults'], queryFn: fetchDefaults })
+  const { data: tenantData } = useQuery({
+    queryKey: ['tenant-me'],
+    queryFn:  () => import('@/api/tenants').then(m => m.fetchTenantMe()),
+  })
+
+  useEffect(() => {
+    if (!defData?.data) return
+    setThemeDefault((defData.data as Record<string, string>)['tenant.theme_default'] ?? '')
+    const heroId = (defData.data as Record<string, string>)['tenant.hero_asset_id']
+    setHeroAssetId(heroId ? parseInt(heroId, 10) : null)
+  }, [defData?.data])
+
+  useEffect(() => {
+    if (tenantData?.data) setSlug(tenantData.data.SLUG ?? '')
+  }, [tenantData?.data])
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      await putDefault('tenant.theme_default', themeDefault || null)
+      await putDefault('tenant.hero_asset_id', heroAssetId != null ? String(heroAssetId) : null)
+      const slugClean = slug.trim().toLowerCase()
+      const slugMod = await import('@/api/tenants')
+      await slugMod.saveTenantSlug(slugClean === '' ? null : slugClean)
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['defaults'] })
+      void qc.invalidateQueries({ queryKey: ['tenant-me'] })
+      setMsg({ text: 'Branding gespeichert ✅', type: 'success' })
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  async function handleHeroPick(file: File | null) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setMsg({ text: 'Bitte ein Bild auswählen (JPEG, PNG, WebP).', type: 'error' }); return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setMsg({ text: 'Maximal 5 MB.', type: 'error' }); return
+    }
+    setUploadingHero(true)
+    try {
+      const r = await uploadAsset(file, 'TENANT_HERO')
+      setHeroAssetId(r.data.ID)
+      setMsg({ text: 'Bild hochgeladen. Vergiss nicht zu speichern.', type: 'success' })
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Upload fehlgeschlagen.', type: 'error' })
+    } finally {
+      setUploadingHero(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const slugValid = slug.trim() === '' || /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(slug.trim().toLowerCase())
+  const slugPreview = slug.trim() ? `/login/${slug.trim().toLowerCase()}` : '/login (generischer Link)'
+
+  return (
+    <div className="admin-block" style={{ marginTop: 24 }}>
+      <h3 className="admin-block-title">Branding für Mandanten-übergreifende Anzeige</h3>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+        Diese Einstellungen gelten für den gesamten Mandanten — unabhängig von der gewählten Firma oben.
+      </p>
+
+      <div className="form-group">
+        <label>Login-URL Slug (Branding-Link)</label>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4 }}>
+          Personalisierter Login-Link für dein Büro. Mitarbeiter erreichen die Login-Seite mit deinem Hintergrundbild über{' '}
+          <code style={{ background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 3 }}>{slugPreview}</code>.
+          Nur Kleinbuchstaben, Zahlen und Bindestriche.
+        </p>
+        <input
+          type="text"
+          value={slug}
+          onChange={e => setSlug(e.target.value)}
+          placeholder="z.B. buero-mueller"
+          maxLength={60}
+          style={{ fontFamily: 'monospace' }}
+        />
+        {!slugValid && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Ungültiges Format. Erlaubt: a-z, 0-9, Bindestrich. 3-60 Zeichen.</div>}
+      </div>
+
+      <div className="form-group" style={{ marginTop: 16 }}>
+        <label>Standard-Theme</label>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4 }}>
+          Farbthema für neue Mitarbeiter. Jeder Mitarbeiter kann individuell überschreiben.
+        </p>
+        <select value={themeDefault} onChange={e => setThemeDefault(e.target.value)}>
+          <option value="">— keine Vorgabe (Light) —</option>
+          <optgroup label="Standard">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </optgroup>
+          <optgroup label="Atmosphäre">
+            <option value="modern">Modern</option>
+            <option value="forest">Forest</option>
+            <option value="earth">Earth</option>
+            <option value="winter">Winter Chill</option>
+          </optgroup>
+          <optgroup label="Branche · Strich">
+            <option value="architecture">Architektur (Strich)</option>
+            <option value="civil">Tiefbau (Strich)</option>
+            <option value="urban">Stadt-/Verkehrsplanung (Strich)</option>
+            <option value="tga">TGA (Strich)</option>
+            <option value="structural">Tragwerksplanung (Strich)</option>
+          </optgroup>
+          <optgroup label="Branche · Foto">
+            <option value="architecture-foto">Architektur (Foto)</option>
+            <option value="civil-foto">Tiefbau (Foto)</option>
+            <option value="urban-foto">Stadt-/Verkehrsplanung (Foto)</option>
+            <option value="tga-foto">TGA (Foto)</option>
+            <option value="structural-foto">Tragwerksplanung (Foto)</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div className="form-group" style={{ marginTop: 16 }}>
+        <label>Eigenes Hintergrundbild</label>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+          Ersetzt das Branchen-Foto auf dem Dashboard und (bei gesetztem Slug) auf der Login-Seite.
+          JPEG/PNG/WebP, max 5&nbsp;MB, mindestens 1600&nbsp;px breit empfohlen.
+        </p>
+        {heroAssetId != null && <HeroPreview assetId={heroAssetId} />}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={e => handleHeroPick(e.target.files?.[0] ?? null)}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingHero}
+          >
+            {uploadingHero ? 'Lädt hoch …' : heroAssetId != null ? 'Anderes Bild wählen' : 'Bild auswählen'}
+          </button>
+          {heroAssetId != null && (
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ color: 'var(--text-3)' }}
+              onClick={() => { setHeroAssetId(null); setMsg({ text: 'Bild entfernt. Vergiss nicht zu speichern.', type: 'success' }) }}
+            >
+              Auf Branchen-Foto zurücksetzen
+            </button>
+          )}
+        </div>
+      </div>
+
+      <Message text={msg?.text ?? null} type={msg?.type} />
+      <button
+        className="btn-primary"
+        style={{ marginTop: 12 }}
+        disabled={saveMut.isPending || !slugValid}
+        onClick={() => { setMsg(null); saveMut.mutate() }}
+        type="button"
+      >
+        {saveMut.isPending ? 'Speichert …' : 'Branding speichern'}
+      </button>
     </div>
   )
 }
@@ -870,10 +1049,6 @@ function VorbelegungenSection() {
   const [bwPcts,         setBwPcts]         = useState('75,90,100')
   const [bwNotifyPm,     setBwNotifyPm]     = useState(true)
   const [bwNotifyBooker, setBwNotifyBooker] = useState(true)
-  const [themeDefault,   setThemeDefault]   = useState('')
-  const [heroAssetId,    setHeroAssetId]    = useState<number | null>(null)
-  const [uploadingHero,  setUploadingHero]  = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -898,9 +1073,6 @@ function VorbelegungenSection() {
     setBwPcts(defData.data.budget_warning_default_pcts ?? '75,90,100')
     setBwNotifyPm(defData.data.budget_warning_notify_pm !== 'false')
     setBwNotifyBooker(defData.data.budget_warning_notify_booker !== 'false')
-    setThemeDefault((defData.data as Record<string, string>)['tenant.theme_default'] ?? '')
-    const heroId = (defData.data as Record<string, string>)['tenant.hero_asset_id']
-    setHeroAssetId(heroId ? parseInt(heroId, 10) : null)
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -919,10 +1091,6 @@ function VorbelegungenSection() {
       await putDefault('budget_warning_default_pcts',  bwPcts.trim() || '75,90,100')
       await putDefault('budget_warning_notify_pm',     bwNotifyPm ? null : 'false')
       await putDefault('budget_warning_notify_booker', bwNotifyBooker ? null : 'false')
-      // Tenant-Default-Theme
-      await putDefault('tenant.theme_default', themeDefault || null)
-      // Tenant-Custom-Hero-Image (asset_id oder null)
-      await putDefault('tenant.hero_asset_id', heroAssetId != null ? String(heroAssetId) : null)
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['defaults'] })
@@ -932,27 +1100,6 @@ function VorbelegungenSection() {
   })
 
   useCtrlS(() => { setMsg(null); saveMut.mutate() }, !isLoading && !saveMut.isPending)
-
-  async function handleHeroPick(file: File | null) {
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setMsg({ text: 'Bitte ein Bild auswählen (JPEG, PNG, WebP).', type: 'error' }); return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setMsg({ text: 'Maximal 5 MB.', type: 'error' }); return
-    }
-    setUploadingHero(true)
-    try {
-      const r = await uploadAsset(file, 'TENANT_HERO')
-      setHeroAssetId(r.data.ID)
-      setMsg({ text: 'Bild hochgeladen. Vergiss nicht zu speichern.', type: 'success' })
-    } catch (e) {
-      setMsg({ text: e instanceof Error ? e.message : 'Upload fehlgeschlagen.', type: 'error' })
-    } finally {
-      setUploadingHero(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
 
   return (
     <div className="admin-section">
@@ -1094,78 +1241,6 @@ function VorbelegungenSection() {
                 />
                 <span>Verursachende Mitarbeiter benachrichtigen</span>
               </label>
-            </div>
-          </div>
-
-          <div className="admin-block">
-            <h3 className="admin-block-title">Erscheinungsbild</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
-              Standard-Farbthema für neue Mitarbeiter. Jeder Mitarbeiter kann individuell überschreiben.
-            </p>
-            <div className="form-group">
-              <label>Standard-Theme</label>
-              <select value={themeDefault} onChange={e => setThemeDefault(e.target.value)}>
-                <option value="">— keine Vorgabe (Light) —</option>
-                <optgroup label="Standard">
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                </optgroup>
-                <optgroup label="Atmosphäre">
-                  <option value="modern">Modern</option>
-                  <option value="forest">Forest</option>
-                  <option value="earth">Earth</option>
-                  <option value="winter">Winter Chill</option>
-                </optgroup>
-                <optgroup label="Branche · Strich">
-                  <option value="architecture">Architektur (Strich)</option>
-                  <option value="civil">Tiefbau (Strich)</option>
-                  <option value="urban">Stadt-/Verkehrsplanung (Strich)</option>
-                  <option value="tga">TGA (Strich)</option>
-                  <option value="structural">Tragwerksplanung (Strich)</option>
-                </optgroup>
-                <optgroup label="Branche · Foto">
-                  <option value="architecture-foto">Architektur (Foto)</option>
-                  <option value="civil-foto">Tiefbau (Foto)</option>
-                  <option value="urban-foto">Stadt-/Verkehrsplanung (Foto)</option>
-                  <option value="tga-foto">TGA (Foto)</option>
-                  <option value="structural-foto">Tragwerksplanung (Foto)</option>
-                </optgroup>
-              </select>
-            </div>
-
-            <div className="form-group" style={{ marginTop: 16 }}>
-              <label>Eigenes Hintergrundbild</label>
-              <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
-                Ersetzt das Branchen-Foto auf dem Dashboard. JPEG/PNG/WebP, max 5&nbsp;MB, mindestens 1600&nbsp;px breit empfohlen.
-              </p>
-              {heroAssetId != null && <HeroPreview assetId={heroAssetId} />}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={e => handleHeroPick(e.target.files?.[0] ?? null)}
-                  style={{ display: 'none' }}
-                />
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingHero}
-                >
-                  {uploadingHero ? 'Lädt hoch …' : heroAssetId != null ? 'Anderes Bild wählen' : 'Bild auswählen'}
-                </button>
-                {heroAssetId != null && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    style={{ color: 'var(--text-3)' }}
-                    onClick={() => { setHeroAssetId(null); setMsg({ text: 'Bild entfernt. Vergiss nicht zu speichern.', type: 'success' }) }}
-                  >
-                    Auf Branchen-Foto zurücksetzen
-                  </button>
-                )}
-              </div>
             </div>
           </div>
 
