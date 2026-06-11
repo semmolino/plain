@@ -1,16 +1,30 @@
 import { useRef, useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
+import { fetchDefaults } from '@/api/stammdaten'
 
 const THEMES = [
-  { id: 'light',  label: 'Light',        swatch: '#2563eb' },
-  { id: 'modern', label: 'Modern',       swatch: '#d4714e' },
-  { id: 'forest', label: 'Forest',       swatch: '#174d38' },
-  { id: 'earth',  label: 'Earth',        swatch: '#464646' },
-  { id: 'winter', label: 'Winter Chill', swatch: '#4f7c82' },
-  { id: 'dark',   label: 'Dark',         swatch: '#7a7ac6' },
+  // Standard
+  { id: 'light',  label: 'Light',                  swatch: '#2563eb', group: 'Standard'   },
+  { id: 'dark',   label: 'Dark',                   swatch: '#7a7ac6', group: 'Standard'   },
+
+  // Atmosphäre
+  { id: 'modern', label: 'Modern',                 swatch: '#d4714e', group: 'Atmosphäre' },
+  { id: 'forest', label: 'Forest',                 swatch: '#174d38', group: 'Atmosphäre' },
+  { id: 'earth',  label: 'Earth',                  swatch: '#464646', group: 'Atmosphäre' },
+  { id: 'winter', label: 'Winter Chill',           swatch: '#4f7c82', group: 'Atmosphäre' },
+
+  // Branche
+  { id: 'architecture', label: 'Architektur',                swatch: '#c97b5a', group: 'Branche' },
+  { id: 'civil',        label: 'Tiefbau',                    swatch: '#c8965a', group: 'Branche' },
+  { id: 'urban',        label: 'Stadt-/Verkehrsplanung',     swatch: '#e9b94c', group: 'Branche' },
+  { id: 'tga',          label: 'Technische Ausrüstung',      swatch: '#c79252', group: 'Branche' },
+  { id: 'structural',   label: 'Tragwerksplanung',           swatch: '#4c6680', group: 'Branche' },
 ] as const
 
-type ThemeId = typeof THEMES[number]['id']
+export type ThemeId = typeof THEMES[number]['id']
+
+const VALID_IDS = new Set<string>(THEMES.map(t => t.id))
 
 function storageKey(employeeId: number | null) {
   return employeeId ? `plain-theme-${employeeId}` : 'plain-theme'
@@ -24,17 +38,33 @@ function applyTheme(id: ThemeId) {
   }
 }
 
+/** Bestimmt das initiale Theme: User-Override (localStorage) > Tenant-Default > 'light'. */
+function pickInitial(userOverride: string | null, tenantDefault: string | null): ThemeId {
+  if (userOverride && VALID_IDS.has(userOverride))   return userOverride as ThemeId
+  if (tenantDefault && VALID_IDS.has(tenantDefault)) return tenantDefault as ThemeId
+  return 'light'
+}
+
 export function ThemeSwitcher() {
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState<ThemeId>('light')
   const wrapRef = useRef<HTMLDivElement>(null)
   const employeeId = useAuthStore(s => s.employeeId)
 
+  const { data: defaultsData } = useQuery({
+    queryKey: ['defaults'],
+    queryFn:  fetchDefaults,
+    staleTime: 60_000,
+    enabled:   !!employeeId,
+  })
+  const tenantDefault = (defaultsData?.data as Record<string, string> | undefined)?.['tenant.theme_default'] ?? null
+
   useEffect(() => {
-    const saved = (localStorage.getItem(storageKey(employeeId)) ?? 'light') as ThemeId
-    setCurrent(saved)
-    applyTheme(saved)
-  }, [employeeId])
+    const userOverride = localStorage.getItem(storageKey(employeeId))
+    const id = pickInitial(userOverride, tenantDefault)
+    setCurrent(id)
+    applyTheme(id)
+  }, [employeeId, tenantDefault])
 
   useEffect(() => {
     if (!open) return
@@ -54,6 +84,9 @@ export function ThemeSwitcher() {
     setOpen(false)
   }
 
+  // Gruppieren fuer die Anzeige
+  const groups = ['Standard', 'Atmosphäre', 'Branche'] as const
+
   return (
     <div className="theme-switcher-wrap" ref={wrapRef}>
       <button
@@ -72,18 +105,26 @@ export function ThemeSwitcher() {
 
       {open && (
         <div className="theme-panel">
-          <div className="theme-panel-header">Farbthema</div>
-          {THEMES.map(t => (
-            <button
-              key={t.id}
-              className={`theme-option${current === t.id ? ' active' : ''}`}
-              onClick={() => select(t.id)}
-            >
-              <span className="theme-swatch" style={{ background: t.swatch }} />
-              {t.label}
-              {current === t.id && <span className="theme-check">✓</span>}
-            </button>
-          ))}
+          {groups.map(g => {
+            const items = THEMES.filter(t => t.group === g)
+            if (items.length === 0) return null
+            return (
+              <div key={g}>
+                <div className="theme-panel-header">{g}</div>
+                {items.map(t => (
+                  <button
+                    key={t.id}
+                    className={`theme-option${current === t.id ? ' active' : ''}`}
+                    onClick={() => select(t.id)}
+                  >
+                    <span className="theme-swatch" style={{ background: t.swatch }} />
+                    {t.label}
+                    {current === t.id && <span className="theme-check">✓</span>}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

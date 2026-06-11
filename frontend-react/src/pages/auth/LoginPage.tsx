@@ -1,4 +1,5 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useState, useEffect, type KeyboardEvent } from 'react'
+import { BranchIllustrationForTheme } from '@/components/theme/BranchIllustrations'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { loginEmployee, requestPasswordReset } from '@/api/auth'
@@ -74,8 +75,23 @@ export function LoginPage() {
     }
   }
 
+  const [activeTheme, setActiveTheme] = useState<string | null>(null)
+  useEffect(() => {
+    const t = document.documentElement.getAttribute('data-theme')
+    setActiveTheme(t)
+    // Auch reagieren wenn sich das Theme nach Login aendert (Switcher / Tenant-Default)
+    const obs = new MutationObserver(() => {
+      setActiveTheme(document.documentElement.getAttribute('data-theme'))
+    })
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => obs.disconnect()
+  }, [])
+
   return (
     <div className="auth-container">
+      <div className="auth-illustration" aria-hidden="true">
+        <BranchIllustrationForTheme theme={activeTheme} />
+      </div>
       <div className="auth-card">
         <div className="auth-logo">PlaIn</div>
         <div className="auth-subtitle">Projektsteuerung</div>

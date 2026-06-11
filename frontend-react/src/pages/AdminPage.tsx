@@ -868,6 +868,7 @@ function VorbelegungenSection() {
   const [bwPcts,         setBwPcts]         = useState('75,90,100')
   const [bwNotifyPm,     setBwNotifyPm]     = useState(true)
   const [bwNotifyBooker, setBwNotifyBooker] = useState(true)
+  const [themeDefault,   setThemeDefault]   = useState('')
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -892,6 +893,7 @@ function VorbelegungenSection() {
     setBwPcts(defData.data.budget_warning_default_pcts ?? '75,90,100')
     setBwNotifyPm(defData.data.budget_warning_notify_pm !== 'false')
     setBwNotifyBooker(defData.data.budget_warning_notify_booker !== 'false')
+    setThemeDefault((defData.data as Record<string, string>)['tenant.theme_default'] ?? '')
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -910,6 +912,8 @@ function VorbelegungenSection() {
       await putDefault('budget_warning_default_pcts',  bwPcts.trim() || '75,90,100')
       await putDefault('budget_warning_notify_pm',     bwNotifyPm ? null : 'false')
       await putDefault('budget_warning_notify_booker', bwNotifyBooker ? null : 'false')
+      // Tenant-Default-Theme
+      await putDefault('tenant.theme_default', themeDefault || null)
     },
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -1059,6 +1063,37 @@ function VorbelegungenSection() {
               </label>
             </div>
           </div>
+
+          <div className="admin-block">
+            <h3 className="admin-block-title">Erscheinungsbild</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+              Standard-Farbthema für neue Mitarbeiter. Jeder Mitarbeiter kann individuell überschreiben.
+            </p>
+            <div className="form-group">
+              <label>Standard-Theme</label>
+              <select value={themeDefault} onChange={e => setThemeDefault(e.target.value)}>
+                <option value="">— keine Vorgabe (Light) —</option>
+                <optgroup label="Standard">
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </optgroup>
+                <optgroup label="Atmosphäre">
+                  <option value="modern">Modern</option>
+                  <option value="forest">Forest</option>
+                  <option value="earth">Earth</option>
+                  <option value="winter">Winter Chill</option>
+                </optgroup>
+                <optgroup label="Branche">
+                  <option value="architecture">Architektur</option>
+                  <option value="civil">Tiefbau</option>
+                  <option value="urban">Stadt-/Verkehrsplanung</option>
+                  <option value="tga">Technische Ausrüstung (TGA)</option>
+                  <option value="structural">Tragwerksplanung</option>
+                </optgroup>
+              </select>
+            </div>
+          </div>
+
           <Message text={msg?.text ?? null} type={msg?.type} />
           <button className="btn-primary" style={{ marginTop: 8 }} disabled={saveMut.isPending} onClick={() => { setMsg(null); saveMut.mutate() }} type="button">
             {saveMut.isPending ? 'Speichert …' : 'Speichern'}

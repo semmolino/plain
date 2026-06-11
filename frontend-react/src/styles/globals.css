@@ -257,6 +257,216 @@
   --dim-2: rgba(255,255,255,0.025);
 }
 
+/* ── Branchen-Themes ────────────────────────────────────────────────────── */
+/* Hell-basiert wie das Default-Theme, aber mit branchen-typischer Palette.
+ * Akzent + Chrome unterscheiden sich vom Default; Tabellen/PDFs bleiben
+ * gut lesbar. */
+
+[data-theme="architecture"] {
+  --bg:        #f5f3ef;
+  --surface:   #ffffff;
+  --surface-2: #f0ede6;
+  --surface-3: #f5f3ef;
+  --text:      #2a2a2e;
+  --text-2:    rgba(42,42,46,0.70);
+  --text-3:    rgba(42,42,46,0.55);
+  --text-4:    rgba(42,42,46,0.45);
+  --text-5:    rgba(42,42,46,0.38);
+  --border:    rgba(42,42,46,0.10);
+  --border-2:  rgba(42,42,46,0.08);
+  --border-3:  rgba(42,42,46,0.06);
+  --border-4:  rgba(42,42,46,0.04);
+  --accent:       #c97b5a;
+  --accent-dark:  #a96245;
+  --accent-bg:    #fbece4;
+  --accent-bg2:   #f6dbcb;
+  --accent-tint:  rgba(201,123,90,0.04);
+  --accent-tint2: rgba(201,123,90,0.08);
+  --accent-tint3: rgba(201,123,90,0.10);
+  --accent-ring:  rgba(201,123,90,0.16);
+  --chrome:          #2a2a2e;
+  --chrome-border:   rgba(255,255,255,0.08);
+  --chrome-shadow-h: 0 2px 12px rgba(42,42,46,0.30);
+  --chrome-shadow-n: 0 -4px 20px rgba(42,42,46,0.30);
+  --chrome-text:     #f5f3ef;
+  --chrome-icon:     rgba(245,243,239,0.65);
+  --chrome-hover-bg: rgba(245,243,239,0.10);
+  --nav-active:   #c97b5a;
+  --nav-inactive: rgba(245,243,239,0.40);
+  --btn:   #2a2a2e;
+  --btn-h: #3a3a3f;
+  --cta:   #c97b5a;
+  --cta-h: #a96245;
+  --notif-badge: #c97b5a;
+  --notif-dot:   #c97b5a;
+  --dim:   rgba(42,42,46,0.04);
+  --dim-2: rgba(42,42,46,0.025);
+}
+
+[data-theme="civil"] {
+  --bg:        #efe8db;
+  --surface:   #ffffff;
+  --surface-2: #e8e0d0;
+  --surface-3: #efe8db;
+  --text:      #3a3530;
+  --text-2:    rgba(58,53,48,0.70);
+  --text-3:    rgba(58,53,48,0.55);
+  --text-4:    rgba(58,53,48,0.45);
+  --text-5:    rgba(58,53,48,0.38);
+  --border:    rgba(58,53,48,0.12);
+  --border-2:  rgba(58,53,48,0.09);
+  --border-3:  rgba(58,53,48,0.06);
+  --border-4:  rgba(58,53,48,0.04);
+  --accent:       #c8965a;
+  --accent-dark:  #a87b46;
+  --accent-bg:    #f9efde;
+  --accent-bg2:   #f1dfba;
+  --accent-tint:  rgba(200,150,90,0.05);
+  --accent-tint2: rgba(200,150,90,0.10);
+  --accent-tint3: rgba(200,150,90,0.13);
+  --accent-ring:  rgba(200,150,90,0.18);
+  --chrome:          #3a3530;
+  --chrome-border:   rgba(255,255,255,0.08);
+  --chrome-shadow-h: 0 2px 12px rgba(58,53,48,0.30);
+  --chrome-shadow-n: 0 -4px 20px rgba(58,53,48,0.30);
+  --chrome-text:     #efe8db;
+  --chrome-icon:     rgba(239,232,219,0.65);
+  --chrome-hover-bg: rgba(239,232,219,0.10);
+  --nav-active:   #c8965a;
+  --nav-inactive: rgba(239,232,219,0.40);
+  --btn:   #3a3530;
+  --btn-h: #4d4640;
+  --cta:   #c8965a;
+  --cta-h: #a87b46;
+  --notif-badge: #c8965a;
+  --notif-dot:   #c8965a;
+  --dim:   rgba(58,53,48,0.04);
+  --dim-2: rgba(58,53,48,0.025);
+}
+
+[data-theme="urban"] {
+  --bg:        #e9eef3;
+  --surface:   #ffffff;
+  --surface-2: #dde4ec;
+  --surface-3: #e9eef3;
+  --text:      #1c2733;
+  --text-2:    rgba(28,39,51,0.70);
+  --text-3:    rgba(28,39,51,0.55);
+  --text-4:    rgba(28,39,51,0.45);
+  --text-5:    rgba(28,39,51,0.38);
+  --border:    rgba(28,39,51,0.10);
+  --border-2:  rgba(28,39,51,0.08);
+  --border-3:  rgba(28,39,51,0.06);
+  --border-4:  rgba(28,39,51,0.04);
+  --accent:       #e9b94c;
+  --accent-dark:  #c69b35;
+  --accent-bg:    #fcf3d8;
+  --accent-bg2:   #f7e6ad;
+  --accent-tint:  rgba(233,185,76,0.06);
+  --accent-tint2: rgba(233,185,76,0.10);
+  --accent-tint3: rgba(233,185,76,0.14);
+  --accent-ring:  rgba(233,185,76,0.18);
+  --chrome:          #1c2733;
+  --chrome-border:   rgba(255,255,255,0.08);
+  --chrome-shadow-h: 0 2px 12px rgba(28,39,51,0.30);
+  --chrome-shadow-n: 0 -4px 20px rgba(28,39,51,0.30);
+  --chrome-text:     #e9eef3;
+  --chrome-icon:     rgba(233,238,243,0.65);
+  --chrome-hover-bg: rgba(233,238,243,0.10);
+  --nav-active:   #e9b94c;
+  --nav-inactive: rgba(233,238,243,0.40);
+  --btn:   #1c2733;
+  --btn-h: #2c3a48;
+  --cta:   #e9b94c;
+  --cta-h: #c69b35;
+  --notif-badge: #e9b94c;
+  --notif-dot:   #e9b94c;
+  --dim:   rgba(28,39,51,0.04);
+  --dim-2: rgba(28,39,51,0.025);
+}
+
+[data-theme="tga"] {
+  --bg:        #e4ebf0;
+  --surface:   #ffffff;
+  --surface-2: #d8e0e6;
+  --surface-3: #e4ebf0;
+  --text:      #1f4e54;
+  --text-2:    rgba(31,78,84,0.70);
+  --text-3:    rgba(31,78,84,0.55);
+  --text-4:    rgba(31,78,84,0.45);
+  --text-5:    rgba(31,78,84,0.38);
+  --border:    rgba(31,78,84,0.12);
+  --border-2:  rgba(31,78,84,0.09);
+  --border-3:  rgba(31,78,84,0.06);
+  --border-4:  rgba(31,78,84,0.04);
+  --accent:       #c79252;
+  --accent-dark:  #a87737;
+  --accent-bg:    #f7eadc;
+  --accent-bg2:   #f0d7b6;
+  --accent-tint:  rgba(199,146,82,0.05);
+  --accent-tint2: rgba(199,146,82,0.10);
+  --accent-tint3: rgba(199,146,82,0.13);
+  --accent-ring:  rgba(199,146,82,0.18);
+  --chrome:          #1f4e54;
+  --chrome-border:   rgba(255,255,255,0.08);
+  --chrome-shadow-h: 0 2px 12px rgba(31,78,84,0.30);
+  --chrome-shadow-n: 0 -4px 20px rgba(31,78,84,0.30);
+  --chrome-text:     #e4ebf0;
+  --chrome-icon:     rgba(228,235,240,0.65);
+  --chrome-hover-bg: rgba(228,235,240,0.10);
+  --nav-active:   #c79252;
+  --nav-inactive: rgba(228,235,240,0.40);
+  --btn:   #1f4e54;
+  --btn-h: #2d6b73;
+  --cta:   #c79252;
+  --cta-h: #a87737;
+  --notif-badge: #c79252;
+  --notif-dot:   #c79252;
+  --dim:   rgba(31,78,84,0.04);
+  --dim-2: rgba(31,78,84,0.025);
+}
+
+[data-theme="structural"] {
+  --bg:        #e9eaed;
+  --surface:   #ffffff;
+  --surface-2: #dde0e4;
+  --surface-3: #e9eaed;
+  --text:      #2c3540;
+  --text-2:    rgba(44,53,64,0.70);
+  --text-3:    rgba(44,53,64,0.55);
+  --text-4:    rgba(44,53,64,0.45);
+  --text-5:    rgba(44,53,64,0.38);
+  --border:    rgba(44,53,64,0.10);
+  --border-2:  rgba(44,53,64,0.08);
+  --border-3:  rgba(44,53,64,0.06);
+  --border-4:  rgba(44,53,64,0.04);
+  --accent:       #4c6680;
+  --accent-dark:  #364e66;
+  --accent-bg:    #e5ecf4;
+  --accent-bg2:   #c8d7e6;
+  --accent-tint:  rgba(76,102,128,0.05);
+  --accent-tint2: rgba(76,102,128,0.10);
+  --accent-tint3: rgba(76,102,128,0.14);
+  --accent-ring:  rgba(76,102,128,0.18);
+  --chrome:          #2c3540;
+  --chrome-border:   rgba(255,255,255,0.08);
+  --chrome-shadow-h: 0 2px 12px rgba(44,53,64,0.30);
+  --chrome-shadow-n: 0 -4px 20px rgba(44,53,64,0.30);
+  --chrome-text:     #e9eaed;
+  --chrome-icon:     rgba(233,234,237,0.65);
+  --chrome-hover-bg: rgba(233,234,237,0.10);
+  --nav-active:   #8aa3c0;
+  --nav-inactive: rgba(233,234,237,0.40);
+  --btn:   #2c3540;
+  --btn-h: #3d4a59;
+  --cta:   #4c6680;
+  --cta-h: #364e66;
+  --notif-badge: #4c6680;
+  --notif-dot:   #4c6680;
+  --dim:   rgba(44,53,64,0.04);
+  --dim-2: rgba(44,53,64,0.025);
+}
+
 /* ── Reset / base ───────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -293,7 +503,52 @@ body {
   min-height: 100vh;
   background: linear-gradient(135deg, var(--accent-bg) 0%, var(--bg) 100%);
   padding: 24px;
+  position: relative;
+  overflow: hidden;
 }
+.auth-illustration {
+  position: absolute;
+  right: 6vw;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text);
+  opacity: 0.45;
+  pointer-events: none;
+  display: none; /* erst ab Desktop sichtbar */
+}
+@media (min-width: 900px) {
+  .auth-illustration { display: block; }
+}
+@media (min-width: 1280px) {
+  .auth-illustration { right: 12vw; opacity: 0.55; }
+}
+
+/* ── Branch Empty State ─────────────────────────────────────────────────── */
+.branch-empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-3);
+}
+.branch-empty-state-illustration {
+  color: var(--text);
+  opacity: 0.55;
+  margin-bottom: 12px;
+}
+.branch-empty-state-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.branch-empty-state-hint {
+  font-size: 12px;
+  color: var(--text-4);
+  margin-bottom: 12px;
+  max-width: 360px;
+  line-height: 1.5;
+}
+.branch-empty-state-action { margin-top: 6px; }
 .auth-card {
   background: var(--surface);
   border-radius: 20px;
