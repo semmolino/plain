@@ -869,6 +869,9 @@ function VorbelegungenSection() {
   const [bwNotifyPm,     setBwNotifyPm]     = useState(true)
   const [bwNotifyBooker, setBwNotifyBooker] = useState(true)
   const [themeDefault,   setThemeDefault]   = useState('')
+  const [heroAssetId,    setHeroAssetId]    = useState<number | null>(null)
+  const [uploadingHero,  setUploadingHero]  = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -894,6 +897,8 @@ function VorbelegungenSection() {
     setBwNotifyPm(defData.data.budget_warning_notify_pm !== 'false')
     setBwNotifyBooker(defData.data.budget_warning_notify_booker !== 'false')
     setThemeDefault((defData.data as Record<string, string>)['tenant.theme_default'] ?? '')
+    const heroId = (defData.data as Record<string, string>)['tenant.hero_asset_id']
+    setHeroAssetId(heroId ? parseInt(heroId, 10) : null)
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -914,12 +919,35 @@ function VorbelegungenSection() {
       await putDefault('budget_warning_notify_booker', bwNotifyBooker ? null : 'false')
       // Tenant-Default-Theme
       await putDefault('tenant.theme_default', themeDefault || null)
+      // Tenant-Custom-Hero-Image (asset_id oder null)
+      await putDefault('tenant.hero_asset_id', heroAssetId != null ? String(heroAssetId) : null)
     },
     onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
   useCtrlS(() => { setMsg(null); saveMut.mutate() }, !isLoading && !saveMut.isPending)
+
+  async function handleHeroPick(file: File | null) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setMsg({ text: 'Bitte ein Bild auswählen (JPEG, PNG, WebP).', type: 'error' }); return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setMsg({ text: 'Maximal 5 MB.', type: 'error' }); return
+    }
+    setUploadingHero(true)
+    try {
+      const r = await uploadAsset(file, 'TENANT_HERO')
+      setHeroAssetId(r.data.ID)
+      setMsg({ text: 'Bild hochgeladen. Vergiss nicht zu speichern.', type: 'success' })
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Upload fehlgeschlagen.', type: 'error' })
+    } finally {
+      setUploadingHero(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   return (
     <div className="admin-section">
@@ -1098,6 +1126,48 @@ function VorbelegungenSection() {
                   <option value="structural-foto">Tragwerksplanung (Foto)</option>
                 </optgroup>
               </select>
+            </div>
+
+            <div className="form-group" style={{ marginTop: 16 }}>
+              <label>Eigenes Hintergrundbild</label>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+                Ersetzt das Branchen-Foto auf dem Dashboard. JPEG/PNG/WebP, max 5&nbsp;MB, mindestens 1600&nbsp;px breit empfohlen.
+              </p>
+              {heroAssetId != null && (
+                <div style={{
+                  height: 80, borderRadius: 8, marginBottom: 8,
+                  backgroundImage: `url(/api/v1/assets/${heroAssetId})`,
+                  backgroundSize: 'cover', backgroundPosition: 'center',
+                  border: '1px solid var(--border)',
+                }} aria-label="Aktuelles Tenant-Hintergrundbild" />
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={e => handleHeroPick(e.target.files?.[0] ?? null)}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingHero}
+                >
+                  {uploadingHero ? 'Lädt hoch …' : heroAssetId != null ? 'Anderes Bild wählen' : 'Bild auswählen'}
+                </button>
+                {heroAssetId != null && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ color: 'var(--text-3)' }}
+                    onClick={() => { setHeroAssetId(null); setMsg({ text: 'Bild entfernt. Vergiss nicht zu speichern.', type: 'success' }) }}
+                  >
+                    Auf Branchen-Foto zurücksetzen
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

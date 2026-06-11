@@ -43,8 +43,8 @@ export const THEME_PHOTOS: Record<string, ThemePhoto> = {
   },
   'tga-foto': {
     src:          '/themes/tga-foto/hero.jpg',
-    alt:          'TGA — Heizungsraum mit Rohren und Manometern',
-    photographer: 'Immo Wegmann (Unsplash)',
+    alt:          'TGA — Sichtbare Rohrtechnik an Sichtbetonfassade',
+    photographer: 'Julia Taubitz (Unsplash)',
   },
   'structural-foto': {
     src:          '/themes/structural-foto/hero.jpg',
