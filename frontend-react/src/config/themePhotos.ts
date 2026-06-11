@@ -22,12 +22,35 @@ export interface ThemePhoto {
 
 // Foto-Variante pro Branche. Die Strich-Variante hat dieselbe Palette aber
 // keinen Eintrag hier -> faellt auf die SVG-Illustration zurueck.
+//
+// Quelle: Unsplash (Lizenz erlaubt kommerzielle Nutzung ohne Attribution,
+// Photograph wird trotzdem genannt -- gute Praxis).
 export const THEME_PHOTOS: Record<string, ThemePhoto> = {
-  'architecture-foto': { src: null, alt: 'Moderne Architektur — Beton- und Glasfassade' },
-  'civil-foto':        { src: null, alt: 'Tiefbau — Tunnel oder Brückenbaustelle' },
-  'urban-foto':        { src: null, alt: 'Stadtplanung — Luftaufnahme einer Kreuzung' },
-  'tga-foto':          { src: null, alt: 'TGA — Industrielle Rohrtechnik' },
-  'structural-foto':   { src: null, alt: 'Tragwerksplanung — Stahlfachwerk' },
+  'architecture-foto': {
+    src:          '/themes/architecture-foto/hero.jpg',
+    alt:          'Moderne Architektur — Betonfassade mit geometrischem Muster',
+    photographer: 'Jisang Jung (Unsplash)',
+  },
+  'civil-foto': {
+    src:          '/themes/civil-foto/hero.jpg',
+    alt:          'Tiefbau — Blick in einen Betontunnel-Schacht',
+    photographer: 'C Cai (Unsplash)',
+  },
+  'urban-foto': {
+    src:          '/themes/urban-foto/hero.jpg',
+    alt:          'Stadt-/Verkehrsplanung — Luftaufnahme eines Autobahnkreuzes',
+    photographer: 'Bernd Dittrich (Unsplash)',
+  },
+  'tga-foto': {
+    src:          '/themes/tga-foto/hero.jpg',
+    alt:          'TGA — Heizungsraum mit Rohren und Manometern',
+    photographer: 'Immo Wegmann (Unsplash)',
+  },
+  'structural-foto': {
+    src:          '/themes/structural-foto/hero.jpg',
+    alt:          'Tragwerksplanung — Stahltragwerk einer Brücke',
+    photographer: 'Li Zhang (Unsplash)',
+  },
 }
 
 /** Lookup-Helfer: Foto-Variante? Rueckgabe enthaelt src (kann null sein wenn
