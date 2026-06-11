@@ -385,6 +385,9 @@ async function deleteProject(req, res, supabase) {
   try {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: "ID fehlt" });
+    const depCheck = require("../services/dependencyCheck");
+    const check = await depCheck.checkProject(supabase, { tenantId: req.tenantId, id });
+    if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
     const { error } = await supabase.from("PROJECT").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ success: true });

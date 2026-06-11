@@ -1079,6 +1079,9 @@ async function patchRolle(req, res, supabase) {
 async function deleteAddress(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
+  const depCheck = require("../services/dependencyCheck");
+  const check = await depCheck.checkAddress(supabase, { tenantId: req.tenantId, id });
+  if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
   const { error } = await supabase.from("ADDRESS").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
@@ -1087,6 +1090,9 @@ async function deleteAddress(req, res, supabase) {
 async function deleteContact(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
+  const depCheck = require("../services/dependencyCheck");
+  const check = await depCheck.checkContact(supabase, { tenantId: req.tenantId, id });
+  if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
   const { error } = await supabase.from("CONTACTS").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
