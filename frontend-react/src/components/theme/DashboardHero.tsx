@@ -38,13 +38,17 @@ export function DashboardHero() {
   const customHeroId    = customHeroIdRaw ? parseInt(customHeroIdRaw, 10) : null
   const customHeroBlobUrl = useAssetBlobUrl(customHeroId)
 
-  // Custom-Bild hat Vorrang. Sonst Theme-Default-Foto.
-  // Wenn customHeroId gesetzt aber Blob noch nicht geladen -> kurz nichts
-  // rendern (vermeidet Flash mit Theme-Foto).
+  // Custom-Bild hat Vorrang, sobald die Blob-URL bereit ist. Solange das
+  // Custom-Bild noch lädt, zeigen wir das Theme-Foto als Fallback (kein
+  // Flash zum Nichts wahrend Defaults-Query und Blob-Fetch durchlaufen).
+  // Sequenz fuer User mit Custom-Bild + Foto-Theme:
+  //   0s    -> Theme-Foto
+  //   ~1s   -> defaults da, customHeroId gesetzt, Blob laedt -> Theme-Foto bleibt
+  //   ~1.5s -> Blob da -> swap auf Custom-Bild
   let src: string | null = null
   let alt = 'Tenant-Hintergrundbild'
-  if (customHeroId) {
-    if (!customHeroBlobUrl) return null
+
+  if (customHeroId && customHeroBlobUrl) {
     src = customHeroBlobUrl
   } else {
     const photo = getThemePhoto(theme)
