@@ -48,7 +48,19 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
     "default_currency_id",
     "budget_warning_enabled",
     "budget_warning_default_pcts",
+    "tenant.hero_asset_id",
   ]);
+
+  // ── 1b) TENANTS.SLUG fuer Login-Branding ─────────────────────────────────
+  let hasSlug = false;
+  try {
+    const { data: tenant } = await supabase
+      .from("TENANTS")
+      .select("SLUG")
+      .eq("ID", tenantId)
+      .maybeSingle();
+    hasSlug = !!(tenant && tenant.SLUG && String(tenant.SLUG).trim().length > 0);
+  } catch (_) { /* TENANTS.SLUG fehlt evtl. -> Migration 0070 nicht gelaufen */ }
 
   // ── 2) Companies pruefen (Adresse vollstaendig) ──────────────────────────
   let hasCompany = false;
@@ -174,6 +186,20 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
       hint: "Pro Mitarbeiter ein Kostensatz hinterlegt",
       href: "/admin?tab=kostensatz",
       done: hasCpRate,
+    },
+    {
+      key:  "branding_slug",
+      label:"Login-URL personalisiert",
+      hint: "Slug für /login/dein-buero — Mitarbeiter sehen euer Branding",
+      href: "/admin?tab=unternehmen",
+      done: hasSlug,
+    },
+    {
+      key:  "branding_hero",
+      label:"Eigenes Hintergrundbild hinterlegt",
+      hint: "Ersetzt das Branchen-Stockfoto auf Dashboard & Login",
+      href: "/admin?tab=unternehmen",
+      done: !!settings.get("tenant.hero_asset_id"),
     },
   ];
 
