@@ -1,5 +1,6 @@
 import { useState, useEffect, type KeyboardEvent } from 'react'
 import { BranchIllustrationForTheme } from '@/components/theme/BranchIllustrations'
+import { getThemePhoto } from '@/config/themePhotos'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { loginEmployee, requestPasswordReset } from '@/api/auth'
@@ -87,11 +88,19 @@ export function LoginPage() {
     return () => obs.disconnect()
   }, [])
 
+  const photo = getThemePhoto(activeTheme)
+  const isPhotoVariant = activeTheme?.endsWith('-foto') ?? false
+
   return (
-    <div className="auth-container">
-      <div className="auth-illustration" aria-hidden="true">
-        <BranchIllustrationForTheme theme={activeTheme} />
-      </div>
+    <div
+      className={`auth-container${isPhotoVariant ? ' auth-container-foto' : ''}`}
+      style={photo?.src ? { backgroundImage: `linear-gradient(135deg, rgba(0,0,0,0.35), rgba(0,0,0,0.10)), url(${photo.src})` } : undefined}
+    >
+      {!isPhotoVariant && (
+        <div className="auth-illustration" aria-hidden="true">
+          <BranchIllustrationForTheme theme={activeTheme} />
+        </div>
+      )}
       <div className="auth-card">
         <div className="auth-logo">PlaIn</div>
         <div className="auth-subtitle">Projektsteuerung</div>

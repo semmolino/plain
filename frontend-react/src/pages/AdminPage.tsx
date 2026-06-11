@@ -1083,12 +1083,19 @@ function VorbelegungenSection() {
                   <option value="earth">Earth</option>
                   <option value="winter">Winter Chill</option>
                 </optgroup>
-                <optgroup label="Branche">
-                  <option value="architecture">Architektur</option>
-                  <option value="civil">Tiefbau</option>
-                  <option value="urban">Stadt-/Verkehrsplanung</option>
-                  <option value="tga">Technische Ausrüstung (TGA)</option>
-                  <option value="structural">Tragwerksplanung</option>
+                <optgroup label="Branche · Strich">
+                  <option value="architecture">Architektur (Strich)</option>
+                  <option value="civil">Tiefbau (Strich)</option>
+                  <option value="urban">Stadt-/Verkehrsplanung (Strich)</option>
+                  <option value="tga">TGA (Strich)</option>
+                  <option value="structural">Tragwerksplanung (Strich)</option>
+                </optgroup>
+                <optgroup label="Branche · Foto">
+                  <option value="architecture-foto">Architektur (Foto)</option>
+                  <option value="civil-foto">Tiefbau (Foto)</option>
+                  <option value="urban-foto">Stadt-/Verkehrsplanung (Foto)</option>
+                  <option value="tga-foto">TGA (Foto)</option>
+                  <option value="structural-foto">Tragwerksplanung (Foto)</option>
                 </optgroup>
               </select>
             </div>

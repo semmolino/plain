@@ -262,7 +262,8 @@
  * Akzent + Chrome unterscheiden sich vom Default; Tabellen/PDFs bleiben
  * gut lesbar. */
 
-[data-theme="architecture"] {
+[data-theme="architecture"],
+[data-theme="architecture-foto"] {
   --bg:        #f5f3ef;
   --surface:   #ffffff;
   --surface-2: #f0ede6;
@@ -303,7 +304,8 @@
   --dim-2: rgba(42,42,46,0.025);
 }
 
-[data-theme="civil"] {
+[data-theme="civil"],
+[data-theme="civil-foto"] {
   --bg:        #efe8db;
   --surface:   #ffffff;
   --surface-2: #e8e0d0;
@@ -344,7 +346,8 @@
   --dim-2: rgba(58,53,48,0.025);
 }
 
-[data-theme="urban"] {
+[data-theme="urban"],
+[data-theme="urban-foto"] {
   --bg:        #e9eef3;
   --surface:   #ffffff;
   --surface-2: #dde4ec;
@@ -385,7 +388,8 @@
   --dim-2: rgba(28,39,51,0.025);
 }
 
-[data-theme="tga"] {
+[data-theme="tga"],
+[data-theme="tga-foto"] {
   --bg:        #e4ebf0;
   --surface:   #ffffff;
   --surface-2: #d8e0e6;
@@ -426,7 +430,8 @@
   --dim-2: rgba(31,78,84,0.025);
 }
 
-[data-theme="structural"] {
+[data-theme="structural"],
+[data-theme="structural-foto"] {
   --bg:        #e9eaed;
   --surface:   #ffffff;
   --surface-2: #dde0e4;
@@ -521,6 +526,22 @@ body {
 }
 @media (min-width: 1280px) {
   .auth-illustration { right: 12vw; opacity: 0.55; }
+}
+
+/* Foto-Variante: Vollbild-Hintergrund, Karte bekommt Blur fuer Lesbarkeit. */
+.auth-container-foto {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.auth-container-foto .auth-card {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
+  box-shadow: 0 16px 60px rgba(0,0,0,0.28);
+}
+[data-theme="dark"] .auth-container-foto .auth-card {
+  background: rgba(28,28,33,0.88);
 }
 
 /* ── Branch Empty State ─────────────────────────────────────────────────── */

@@ -14,12 +14,19 @@ const THEMES = [
   { id: 'earth',  label: 'Earth',                  swatch: '#464646', group: 'Atmosphäre' },
   { id: 'winter', label: 'Winter Chill',           swatch: '#4f7c82', group: 'Atmosphäre' },
 
-  // Branche
-  { id: 'architecture', label: 'Architektur',                swatch: '#c97b5a', group: 'Branche' },
-  { id: 'civil',        label: 'Tiefbau',                    swatch: '#c8965a', group: 'Branche' },
-  { id: 'urban',        label: 'Stadt-/Verkehrsplanung',     swatch: '#e9b94c', group: 'Branche' },
-  { id: 'tga',          label: 'Technische Ausrüstung',      swatch: '#c79252', group: 'Branche' },
-  { id: 'structural',   label: 'Tragwerksplanung',           swatch: '#4c6680', group: 'Branche' },
+  // Branche — Strich (SVG-Illustration auf Login)
+  { id: 'architecture',      label: 'Architektur (Strich)',           swatch: '#c97b5a', group: 'Branche · Strich' },
+  { id: 'civil',             label: 'Tiefbau (Strich)',               swatch: '#c8965a', group: 'Branche · Strich' },
+  { id: 'urban',             label: 'Stadt-/Verkehr (Strich)',        swatch: '#e9b94c', group: 'Branche · Strich' },
+  { id: 'tga',               label: 'TGA (Strich)',                   swatch: '#c79252', group: 'Branche · Strich' },
+  { id: 'structural',        label: 'Tragwerk (Strich)',              swatch: '#4c6680', group: 'Branche · Strich' },
+
+  // Branche — Foto (Stockfoto auf Login; selbe Palette wie Strich-Variante)
+  { id: 'architecture-foto', label: 'Architektur (Foto)',             swatch: '#c97b5a', group: 'Branche · Foto'   },
+  { id: 'civil-foto',        label: 'Tiefbau (Foto)',                 swatch: '#c8965a', group: 'Branche · Foto'   },
+  { id: 'urban-foto',        label: 'Stadt-/Verkehr (Foto)',          swatch: '#e9b94c', group: 'Branche · Foto'   },
+  { id: 'tga-foto',          label: 'TGA (Foto)',                     swatch: '#c79252', group: 'Branche · Foto'   },
+  { id: 'structural-foto',   label: 'Tragwerk (Foto)',                swatch: '#4c6680', group: 'Branche · Foto'   },
 ] as const
 
 export type ThemeId = typeof THEMES[number]['id']
@@ -85,7 +92,7 @@ export function ThemeSwitcher() {
   }
 
   // Gruppieren fuer die Anzeige
-  const groups = ['Standard', 'Atmosphäre', 'Branche'] as const
+  const groups = ['Standard', 'Atmosphäre', 'Branche · Strich', 'Branche · Foto'] as const
 
   return (
     <div className="theme-switcher-wrap" ref={wrapRef}>

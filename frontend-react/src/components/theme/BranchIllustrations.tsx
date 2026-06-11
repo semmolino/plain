@@ -200,9 +200,12 @@ export function StructuralIllustration(p: Props) {
   )
 }
 
-/** Sucht die passende Illustration zum aktuellen data-theme. Fallback: null. */
+/** Sucht die passende Illustration zum aktuellen data-theme. Fallback: null.
+ *  Das "-foto"-Suffix wird gestrippt, damit Empty-States auch unter Foto-
+ *  Varianten die jeweils passende Strichzeichnung zeigen koennen. */
 export function BranchIllustrationForTheme({ theme, small, className }: { theme: string | null } & Props) {
-  switch (theme) {
+  const base = theme?.endsWith('-foto') ? theme.slice(0, -5) : theme
+  switch (base) {
     case 'architecture': return <ArchitectureIllustration small={small} className={className} />
     case 'civil':        return <CivilIllustration       small={small} className={className} />
     case 'urban':        return <UrbanIllustration       small={small} className={className} />
