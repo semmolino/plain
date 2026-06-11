@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getThemePhoto } from '@/config/themePhotos'
 import { fetchDefaults } from '@/api/stammdaten'
+import { useAssetBlobUrl } from '@/hooks/useAssetBlobUrl'
 
 /**
  * Schmaler Foto-Hero fuers Dashboard.
@@ -33,14 +34,18 @@ export function DashboardHero() {
     staleTime: 60_000,
   })
 
-  const customHeroId = (defaultsData?.data as Record<string, string> | undefined)?.['tenant.hero_asset_id']
-  const customHeroUrl = customHeroId ? `/api/v1/assets/${customHeroId}` : null
+  const customHeroIdRaw = (defaultsData?.data as Record<string, string> | undefined)?.['tenant.hero_asset_id']
+  const customHeroId    = customHeroIdRaw ? parseInt(customHeroIdRaw, 10) : null
+  const customHeroBlobUrl = useAssetBlobUrl(customHeroId)
 
   // Custom-Bild hat Vorrang. Sonst Theme-Default-Foto.
+  // Wenn customHeroId gesetzt aber Blob noch nicht geladen -> kurz nichts
+  // rendern (vermeidet Flash mit Theme-Foto).
   let src: string | null = null
   let alt = 'Tenant-Hintergrundbild'
-  if (customHeroUrl) {
-    src = customHeroUrl
+  if (customHeroId) {
+    if (!customHeroBlobUrl) return null
+    src = customHeroBlobUrl
   } else {
     const photo = getThemePhoto(theme)
     if (photo?.src) {

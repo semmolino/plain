@@ -22,6 +22,7 @@ import {
 } from '@/api/stammdaten'
 import { fetchProjectStatuses, type ProjectStatus } from '@/api/projekte'
 import { useCtrlS } from '@/hooks/useCtrlS'
+import { useAssetBlobUrl } from '@/hooks/useAssetBlobUrl'
 import { fetchNumberRanges, saveNumberRanges, fetchNumberRangeTemplates, saveNumberRangeTemplate } from '@/api/numberRanges'
 import {
   fetchMahnungSettings, saveMahnungSettings, fetchTextTemplates, saveTextTemplate,
@@ -855,6 +856,7 @@ function UnternehmenSection() {
 // ── Vorbelegungen ─────────────────────────────────────────────────────────────
 
 function VorbelegungenSection() {
+  const qc = useQueryClient()
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [currencyId,     setCurrencyId]     = useState('')
   const [vatId,          setVatId]          = useState('')
@@ -922,7 +924,10 @@ function VorbelegungenSection() {
       // Tenant-Custom-Hero-Image (asset_id oder null)
       await putDefault('tenant.hero_asset_id', heroAssetId != null ? String(heroAssetId) : null)
     },
-    onSuccess: () => setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['defaults'] })
+      setMsg({ text: 'Vorbelegungen gespeichert ✅', type: 'success' })
+    },
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -1133,14 +1138,7 @@ function VorbelegungenSection() {
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
                 Ersetzt das Branchen-Foto auf dem Dashboard. JPEG/PNG/WebP, max 5&nbsp;MB, mindestens 1600&nbsp;px breit empfohlen.
               </p>
-              {heroAssetId != null && (
-                <div style={{
-                  height: 80, borderRadius: 8, marginBottom: 8,
-                  backgroundImage: `url(/api/v1/assets/${heroAssetId})`,
-                  backgroundSize: 'cover', backgroundPosition: 'center',
-                  border: '1px solid var(--border)',
-                }} aria-label="Aktuelles Tenant-Hintergrundbild" />
-              )}
+              {heroAssetId != null && <HeroPreview assetId={heroAssetId} />}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <input
                   ref={fileInputRef}
@@ -1178,6 +1176,22 @@ function VorbelegungenSection() {
         </>
       )}
     </div>
+  )
+}
+
+function HeroPreview({ assetId }: { assetId: number }) {
+  const url = useAssetBlobUrl(assetId)
+  return (
+    <div
+      style={{
+        height: 80, borderRadius: 8, marginBottom: 8,
+        backgroundImage: url ? `url(${url})` : undefined,
+        backgroundColor: url ? undefined : 'var(--surface-2)',
+        backgroundSize: 'cover', backgroundPosition: 'center',
+        border: '1px solid var(--border)',
+      }}
+      aria-label="Aktuelles Tenant-Hintergrundbild"
+    />
   )
 }
 
