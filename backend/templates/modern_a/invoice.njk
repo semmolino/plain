@@ -226,14 +226,16 @@ body {
   color: #111827;
   background: #f3f4f6;
   border-bottom: 0.5pt solid #9ca3af;
-  padding: 2.5mm 2mm 1.2mm 2mm;
+  padding: 5mm 2mm 1.2mm 2mm;
 }
+.data-table tbody tr.group-row:first-child td { padding-top: 1.5mm; }
 .data-table tr.subtotal-row td {
   font-weight: 600;
   color: #374151;
   border-top: 0.3pt solid #d1d5db;
-  border-bottom: 0.5pt solid #d1d5db;
+  border-bottom: none;
   padding-top: 1mm;
+  padding-bottom: 3mm;
 }
 .data-table .muted { color: #6b7280; font-size: 8.5pt; }
 .data-table .bold  { font-weight: 600; }
@@ -836,7 +838,7 @@ table.data-table thead { display: table-header-group; }
       </tr>
       {% endfor %}
       <tr class="subtotal-row">
-        <td colspan="2">Zwischensumme{% if g.kuerzel %} {{ g.kuerzel }}{% endif %}</td>
+        <td colspan="2">Zwischensumme</td>
         <td class="r">{{ g.sumQty }}</td>
         <td></td>
         <td class="r">{{ g.sumTot | money }}</td>
