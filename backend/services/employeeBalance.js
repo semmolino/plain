@@ -352,11 +352,13 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
   const allTo   = months[months.length - 1].to;
 
   // Fetch employees
+  // Inaktive (ACTIVE=2) NICHT serverseitig ausschliessen: der Report bietet im
+  // Frontend einen Status-Filter (Aktiv/Inaktiv) an. Wuerde der Server inaktive
+  // hart filtern, fehlten sie auch ohne gesetzten Filter.
   let empQ = supabase
     .from('EMPLOYEE')
     .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME, DEPARTMENT_ID')
     .eq('TENANT_ID', tenantId)
-    .neq('ACTIVE', 2)
     .order('SHORT_NAME', { ascending: true });
   if (employeeId) empQ = empQ.eq('ID', employeeId);
   const { data: employees, error: empErr } = await empQ;

@@ -258,11 +258,14 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
   const rows$     = useQuery({ queryKey: ['mahnungen'],       queryFn: () => fetchMahnungen().then(r => r.data) })
   const settings$ = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data) })
-  const emp$      = useQuery({ queryKey: ['employees'],        queryFn: () => fetchEmployeeList().then(r => r.data) })
+  // WICHTIG: gleicher Key ['employees'] wie in MitarbeiterPage/AdminPage ->
+  // identische queryFn + Datenform ({ data }) verwenden, sonst Cache-Kollision
+  // (mal Array, mal Wrapper) -> Mitarbeiter laden sporadisch gar nicht.
+  const emp$      = useQuery({ queryKey: ['employees'],        queryFn: fetchEmployeeList })
 
   const rawData      = rows$.data       ?? []
   const settingsData = settings$.data   ?? []
-  const employees    = emp$.data        ?? []
+  const employees    = emp$.data?.data  ?? []
 
   const settingsByLevel = useMemo(() => {
     const m: Record<number, MahnungSettingsLevel> = {}
