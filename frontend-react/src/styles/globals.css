@@ -776,6 +776,10 @@ input::placeholder { color: var(--text-4); }
 .app-body .app-main { flex: 1; min-width: 0; }
 
 @media (min-width: 1024px) {
+  /* App-Shell auf Viewport-Hoehe fixieren: nur .app-main scrollt (hat bereits
+     overflow-y:auto), Header und Sidebar bleiben statisch sichtbar. Mobile
+     behaelt den Dokument-Scroll + fixe Bottom-Nav. */
+  .app-layout { height: 100vh; overflow: hidden; }
   .side-nav {
     display: flex; flex-direction: column;
     width: 200px; flex-shrink: 0;
