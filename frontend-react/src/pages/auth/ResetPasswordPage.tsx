@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { confirmPasswordReset } from '@/api/auth'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
+import { BrandWordmark } from '@/components/brand/BrandLogo'
 
 export function ResetPasswordPage() {
   const navigate       = useNavigate()
@@ -52,7 +53,7 @@ export function ResetPasswordPage() {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <div className="auth-logo">PlaIn</div>
+        <div className="auth-logo"><BrandWordmark size={34} /></div>
         <div className="auth-subtitle">Projektsteuerung</div>
         <h2 className="auth-title">Neues Passwort setzen</h2>
 

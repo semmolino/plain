@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { signup } from '@/api/auth'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
+import { BrandWordmark } from '@/components/brand/BrandLogo'
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -39,7 +40,7 @@ export function SignupPage() {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <div className="auth-logo">PlaIn</div>
+        <div className="auth-logo"><BrandWordmark size={34} /></div>
         <div className="auth-subtitle">Projektsteuerung</div>
         <h2 className="auth-title">Konto erstellen</h2>
 

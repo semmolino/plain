@@ -5,6 +5,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { usePermissionsStore } from '@/store/permissionsStore'
+import { BrandWordmark } from '@/components/brand/BrandLogo'
 
 interface NavItem {
   to:    string
@@ -32,6 +33,9 @@ export function SideNav() {
   )
   return (
     <nav className="side-nav" aria-label="Hauptnavigation">
+      <div className="side-nav-brand">
+        <BrandWordmark size={22} />
+      </div>
       {visibleItems.map(({ to, icon: Icon, label }) => (
         <NavLink
           key={to}

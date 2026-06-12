@@ -10,6 +10,7 @@ import { NotificationBell } from './NotificationBell'
 import { TimerBar } from './TimerBar'
 import { ThemeSwitcher } from './ThemeSwitcher'
 import { ToastContainer } from '@/components/ui/Toast'
+import { BrandMark } from '@/components/brand/BrandLogo'
 import { fetchDefaults } from '@/api/stammdaten'
 
 function UserMenu() {
@@ -114,6 +115,7 @@ export function AppLayout() {
     <div className="app-layout">
       <header className="app-header">
         <div className="app-header-left">
+          <BrandMark size={26} className="app-header-brand" />
           {timerEnabled && <TimerBar />}
         </div>
         <div className="app-header-right">

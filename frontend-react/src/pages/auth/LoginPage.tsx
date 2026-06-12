@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/authStore'
 import { usePermissionsStore } from '@/store/permissionsStore'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
+import { BrandWordmark } from '@/components/brand/BrandLogo'
 
 const SLUG_CACHE_KEY = 'plain.last-tenant-slug'
 
@@ -130,7 +131,7 @@ export function LoginPage() {
         </div>
       )}
       <div className="auth-card">
-        <div className="auth-logo">PlaIn</div>
+        <div className="auth-logo"><BrandWordmark size={34} /></div>
         <div className="auth-subtitle">
           Projektsteuerung
           {brandingName && <span style={{ marginLeft: 6, color: 'var(--text-3)' }}>· {brandingName}</span>}
