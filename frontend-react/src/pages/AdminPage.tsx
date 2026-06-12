@@ -940,7 +940,7 @@ function TenantBrandingSection() {
       </p>
 
       <div className="form-group">
-        <label>Login-URL Slug (Branding-Link)</label>
+        <label>Login-URL (Branding-Link)</label>
         <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4 }}>
           Personalisierter Login-Link für dein Büro. Mitarbeiter erreichen die Login-Seite mit deinem Hintergrundbild über{' '}
           <code style={{ background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 3 }}>{slugPreview}</code>.
@@ -995,7 +995,7 @@ function TenantBrandingSection() {
       <div className="form-group" style={{ marginTop: 16 }}>
         <label>Eigenes Hintergrundbild</label>
         <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
-          Ersetzt das Branchen-Foto auf dem Dashboard und (bei gesetztem Slug) auf der Login-Seite.
+          Ersetzt das Branchen-Foto auf dem Dashboard und (bei gesetzter URL) auf der Login-Seite.
           JPEG/PNG/WebP, max 5&nbsp;MB, mindestens 1600&nbsp;px breit empfohlen.
         </p>
         {heroAssetId != null && <HeroPreview assetId={heroAssetId} />}

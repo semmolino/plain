@@ -190,7 +190,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
     {
       key:  "branding_slug",
       label:"Login-URL personalisiert",
-      hint: "Slug für /login/dein-buero — Mitarbeiter sehen euer Branding",
+      hint: "URL für /login/dein-buero — Mitarbeiter sehen euer Branding",
       href: "/admin?tab=unternehmen",
       done: hasSlug,
     },

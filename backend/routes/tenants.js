@@ -43,12 +43,12 @@ module.exports = (supabase) => {
 
       if (slug !== null && !SLUG_REGEX.test(slug)) {
         return res.status(400).json({
-          error: "Slug darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten (3-60 Zeichen).",
+          error: "URL darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten (3-60 Zeichen).",
         });
       }
       if (slug !== null && RESERVED_SLUGS.has(slug)) {
         return res.status(400).json({
-          error: `„${slug}" ist ein reservierter Begriff und kann nicht als Slug verwendet werden.`,
+          error: `„${slug}" ist ein reservierter Begriff und kann nicht als URL verwendet werden.`,
         });
       }
 
