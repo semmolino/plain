@@ -464,7 +464,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
 
   async function finish() {
     if (!calcMaster) return
-    if (!fatherId) { setMsg({ text: 'Bitte übergeordnetes Strukturelement wählen', type: 'error' }); return }
+    if (!fatherId) { setMsg({ text: 'Bitte übergeordnetes Projektelement wählen', type: 'error' }); return }
     try {
       const check = await fetchParentChildCheck(Number(fatherId))
       if (check.status === 'blocked') {
@@ -1210,7 +1210,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           {/* Create mode (project): structure selector */}
           {!isEdit && !isOfferMode && (
             <div className="form-group">
-              <label>Übergeordnetes Strukturelement*</label>
+              <label>Übergeordnetes Projektelement*</label>
               <select value={fatherId} onChange={e => setFatherId(e.target.value)}>
                 <option value="">Bitte wählen …</option>
                 {structureNodes.map(s => (
@@ -1219,7 +1219,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                   </option>
                 ))}
               </select>
-              {!basis.PROJECT_ID && <p className="empty-note">Erst Projekt in Schritt 2 wählen, um Strukturelemente zu laden.</p>}
+              {!basis.PROJECT_ID && <p className="empty-note">Erst Projekt in Schritt 2 wählen, um Projektelemente zu laden.</p>}
             </div>
           )}
 

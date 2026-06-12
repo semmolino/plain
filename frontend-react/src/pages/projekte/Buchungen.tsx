@@ -405,12 +405,12 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
             <>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 10, flexWrap: 'wrap' }}>
                 <div className="form-group" style={{ flex: '1 1 260px', minWidth: 200, marginBottom: 0 }}>
-                  <label>Strukturelement</label>
+                  <label>Projektelement</label>
                   <input type="search" className="list-search" placeholder="Elemente filtern …"
                     style={{ marginBottom: 4, fontSize: 12 }}
                     value={structSearch} onChange={e => setStructSearch(e.target.value)} />
                   <select value={filterStruct} onChange={e => setFilterStruct(e.target.value)}>
-                    <option value="">Alle Strukturelemente</option>
+                    <option value="">Alle Projektelemente</option>
                     {filteredStructureForSelect.map(n => (
                       <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
                         {pathCache.get(n.STRUCTURE_ID) ?? n.NAME_SHORT}
@@ -448,7 +448,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Strukturelement</label>
+                    <label>Projektelement</label>
                     <select value={form.STRUCTURE_ID} onChange={setF('STRUCTURE_ID')}>
                       <option value="">—</option>
                       {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}
@@ -584,7 +584,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
             </select>
           </div>
           <div className="form-group">
-            <label>Strukturelement</label>
+            <label>Projektelement</label>
             <select value={editForm.STRUCTURE_ID} onChange={setEF('STRUCTURE_ID')}>
               <option value="">—</option>
               {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}

@@ -552,7 +552,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                 <table className="master-table">
                   <thead>
                     <tr>
-                      <SortTh label="Strukturelement"  field="path"    current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortTh label="Projektelement"  field="path"    current={sortField} dir={sortDir} onSort={toggleSort} />
                       <SortTh label="Honorar Netto"    field="honorar" current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
                       <SortTh label="Lst.stand %"      field="lstPct"  current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
                       <SortTh label="Lst.stand €"      field="lstEur"  current={sortField} dir={sortDir} onSort={toggleSort} className="num" />

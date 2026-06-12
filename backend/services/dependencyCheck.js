@@ -257,7 +257,7 @@ async function checkProject(supabase, { tenantId, id }) {
     const blk = formatRefBlock("partials", partials, p => p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`);
     refs.push({ ...blk, label: blk.count === 1 ? "Abschlag" : "Abschlägen" });
   }
-  if (structure.length > 0)  refs.push({ kind: "structure", count: structure.length,  sample: [], label: structure.length === 1 ? "Strukturelement" : "Strukturelementen" });
+  if (structure.length > 0)  refs.push({ kind: "structure", count: structure.length,  sample: [], label: structure.length === 1 ? "Projektelement" : "Projektelementen" });
   if (e2p.length > 0)        refs.push({ kind: "team",      count: e2p.length,        sample: [], label: e2p.length === 1 ? "Team-Zuordnung" : "Team-Zuordnungen" });
 
   const blocked = refs.length > 0;
@@ -500,7 +500,7 @@ async function checkContract(supabase, { tenantId, id }) {
     refs.push({ ...blk, label: blk.count === 1 ? "Abschlag" : "Abschlägen" });
   }
   if (structure.length > 0) {
-    refs.push({ kind: "structure", count: structure.length, sample: [], label: structure.length === 1 ? "Strukturelement" : "Strukturelementen" });
+    refs.push({ kind: "structure", count: structure.length, sample: [], label: structure.length === 1 ? "Projektelement" : "Projektelementen" });
   }
   const blocked = refs.length > 0;
   return {
@@ -570,7 +570,7 @@ async function checkProjectStructure(supabase, { tenantId, id }) {
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  const entityLabel = `Strukturelement „${s?.NAME_SHORT || `#${id}`}"`;
+  const entityLabel = `Projektelement „${s?.NAME_SHORT || `#${id}`}"`;
 
   const [tec, children] = await Promise.all([
     safeReferences(supabase, "TEC",               "ID", { STRUCTURE_ID: id, TENANT_ID: tenantId }),
@@ -583,7 +583,7 @@ async function checkProjectStructure(supabase, { tenantId, id }) {
   }
   if (children.length > 0) {
     const blk = formatRefBlock("children", children, c => c.NAME_SHORT || `#${c.ID}`);
-    refs.push({ ...blk, label: blk.count === 1 ? "Kind-Strukturelement" : "Kind-Strukturelementen" });
+    refs.push({ ...blk, label: blk.count === 1 ? "Kind-Projektelement" : "Kind-Projektelementen" });
   }
   const blocked = refs.length > 0;
   return {
