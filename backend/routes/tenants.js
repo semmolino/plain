@@ -58,7 +58,7 @@ module.exports = (supabase) => {
         .eq("ID", req.tenantId);
       if (error) {
         if (/duplicate key/i.test(error.message)) {
-          return res.status(409).json({ error: "Dieser Slug ist bereits vergeben." });
+          return res.status(409).json({ error: "Diese URL ist bereits vergeben." });
         }
         return res.status(500).json({ error: error.message });
       }
