@@ -81,8 +81,9 @@
   --fs-modal-title:   16px;
   --fs-section-title: 15px;
   --fs-card-title:    14px;
-  --fs-eyebrow:       12px;
-  --ls-eyebrow:       0.05em;
+  --fs-eyebrow:       12px;    /* Overline / Abschnitts-Label (UPPERCASE) */
+  --fs-label:         11px;    /* Feld-/Kennzahl-Label (UPPERCASE) */
+  --ls-eyebrow:       0.05em;  /* einheitliches Tracking fuer ALLE Versal-Labels */
 }
 
 [data-theme="modern"] {
@@ -860,8 +861,8 @@ input::placeholder { color: var(--text-4); }
   padding: 14px 16px;
   box-shadow: 0 2px 10px rgba(17,24,39,0.06);
 }
-.kpi-label { font-size: 11px; font-weight: 600; color: var(--text-4); margin-bottom: 4px; }
-.kpi-value { font-size: 18px; font-weight: 800; color: var(--text); }
+.kpi-label { font-size: var(--fs-label); font-weight: var(--fw-heading); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); color: var(--text-3); margin-bottom: 4px; }
+.kpi-value { font-size: 18px; font-weight: var(--fw-heading); color: var(--text); }
 .kpi-meta  { font-size: 10px; color: var(--text-5); margin-top: 2px; }
 
 /* Cards */
@@ -999,7 +1000,7 @@ input::placeholder { color: var(--text-4); }
   box-shadow: 0 4px 16px rgba(17,24,39,0.12);
   transform: none;
 }
-.role-card-icon  { font-size: 28px; line-height: 1; }
+.role-card-icon  { display: flex; align-items: center; justify-content: center; color: var(--accent); margin-bottom: 2px; }
 .role-card-title { font-size: var(--fs-card-title); font-weight: var(--fw-heading); color: var(--text); }
 .role-card-desc  { font-size: 11px; color: var(--text-4); line-height: 1.5; }
 
@@ -1176,8 +1177,8 @@ input::placeholder { color: var(--text-4); }
   box-shadow: 0 4px 16px rgba(0,0,0,0.1); min-width: 180px; padding: 6px 0;
 }
 .pl-col-panel-title {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.05em; color: var(--text-3); padding: 4px 14px 6px;
+  font-size: var(--fs-label); font-weight: var(--fw-heading); text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow); color: var(--text-3); padding: 4px 14px 6px;
 }
 .pl-col-option {
   display: flex; align-items: center; gap: 8px;
@@ -1485,8 +1486,8 @@ input::placeholder { color: var(--text-4); }
   display: contents;
 }
 .surcharge-grid-header > span {
-  font-size: 10px; font-weight: 600; color: var(--text-4);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: var(--fs-label); font-weight: var(--fw-heading); color: var(--text-3);
+  text-transform: uppercase; letter-spacing: var(--ls-eyebrow);
   padding-bottom: 4px; border-bottom: 1px solid var(--border);
 }
 .surcharge-grid-row {
@@ -1748,8 +1749,8 @@ input::placeholder { color: var(--text-4); }
   border: 1px solid var(--border);
 }
 .prognose-label {
-  font-size: 10px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.04em; color: var(--text-5);
+  font-size: var(--fs-label); font-weight: var(--fw-heading); text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow); color: var(--text-3);
 }
 .prognose-value {
   font-size: 16px; font-weight: 700; color: var(--text);
@@ -1955,8 +1956,8 @@ input::placeholder { color: var(--text-4); }
   min-width: 0;
 }
 .notif-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--fs-card-title);
+  font-weight: var(--fw-heading);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -2238,8 +2239,8 @@ input::placeholder { color: var(--text-4); }
 }
 .theme-panel-header {
   padding: 10px 14px 8px;
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.05em; color: var(--text-4);
+  font-size: var(--fs-label); font-weight: var(--fw-heading); text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow); color: var(--text-3);
   border-bottom: 1px solid var(--border-3);
 }
 .theme-option {
@@ -2454,7 +2455,7 @@ input::placeholder { color: var(--text-4); }
 .unk-card-icon { flex-shrink: 0; color: var(--accent); margin-top: 2px; }
 .unk-card--na .unk-card-icon { color: var(--text-3); }
 .unk-card-body { flex: 1; min-width: 0; }
-.unk-card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 4px; }
+.unk-card-label { font-size: var(--fs-label); font-weight: var(--fw-heading); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); color: var(--text-3); margin-bottom: 4px; }
 .unk-card-value { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1.2; margin-bottom: 4px; }
 .unk-card-na { font-size: 15px; font-weight: 600; color: var(--text-4); margin-bottom: 4px; }
 .unk-card-formula { font-size: 11px; color: var(--text-3); line-height: 1.4; }
@@ -2575,9 +2576,9 @@ input::placeholder { color: var(--text-4); }
 }
 .recent-list-title {
   display: flex; align-items: center; gap: 6px;
-  font-size: 11px; font-weight: 700;
+  font-size: var(--fs-label); font-weight: var(--fw-heading);
   color: var(--text-3, #6b7280);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  text-transform: uppercase; letter-spacing: var(--ls-eyebrow);
 }
 .recent-list-toggle {
   display: inline-flex;
@@ -2645,8 +2646,8 @@ input::placeholder { color: var(--text-4); }
 .setup-section:first-of-type { border-top: none; padding-top: 4px; }
 .setup-section-title {
   display: flex; align-items: center; justify-content: space-between;
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: var(--fs-label); font-weight: var(--fw-heading);
+  text-transform: uppercase; letter-spacing: var(--ls-eyebrow);
   color: #92400e;
   margin-bottom: 8px;
 }
@@ -2704,8 +2705,8 @@ input::placeholder { color: var(--text-4); }
 }
 .streak-card-body { flex: 1; min-width: 0; }
 .streak-card-label {
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: var(--fs-label); font-weight: var(--fw-heading);
+  text-transform: uppercase; letter-spacing: var(--ls-eyebrow);
   color: #92400e;
 }
 .streak-card-value {
@@ -2713,7 +2714,7 @@ input::placeholder { color: var(--text-4); }
   margin-top: 2px;
 }
 .streak-card-number {
-  font-size: 22px; font-weight: 800;
+  font-size: 22px; font-weight: var(--fw-heading);
   color: #78350f;
   font-variant-numeric: tabular-nums;
 }
@@ -2739,7 +2740,7 @@ input::placeholder { color: var(--text-4); }
 }
 .achievements-title {
   display: flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 700;
+  font-size: var(--fs-card-title); font-weight: var(--fw-heading);
   color: #111827;
 }
 .achievements-count {
@@ -2750,8 +2751,8 @@ input::placeholder { color: var(--text-4); }
   margin-top: 16px;
 }
 .achievements-category-label {
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: var(--fs-label); font-weight: var(--fw-heading);
+  text-transform: uppercase; letter-spacing: var(--ls-eyebrow);
   color: #9ca3af;
   margin-bottom: 8px;
 }
@@ -2866,7 +2867,7 @@ input::placeholder { color: var(--text-4); }
 }
 .mastery-header {
   display: flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 700;
+  font-size: var(--fs-card-title); font-weight: var(--fw-heading);
   color: #111827;
   margin-bottom: 14px;
 }
@@ -2928,8 +2929,8 @@ input::placeholder { color: var(--text-4); }
   flex-shrink: 0;
 }
 .mastery-tip-label {
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: var(--fs-label); font-weight: var(--fw-heading);
+  text-transform: uppercase; letter-spacing: var(--ls-eyebrow);
   color: #92400e;
 }
 .mastery-tip-text {

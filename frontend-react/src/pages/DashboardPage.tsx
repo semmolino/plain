@@ -9,6 +9,7 @@ import {
 } from 'chart.js'
 import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
+import { TrendingUp, Banknote, HardHat, Clock, type LucideIcon } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import {
@@ -555,28 +556,28 @@ function NarrativeBlock({ children }: { children: React.ReactNode }) {
 
 // ── Role selector ─────────────────────────────────────────────────────────────
 
-const ROLES = [
+const ROLES: { id: string; icon: LucideIcon; title: string; desc: string }[] = [
   {
     id:    'geschaeftsleitung',
-    icon:  '📈',
+    icon:  TrendingUp,
     title: 'Geschäftsleitung',
     desc:  'Gesamtüberblick über Honorare, Leistungsstand, Projektportfolio und strategische KPIs.',
   },
   {
     id:    'controller',
-    icon:  '💰',
+    icon:  Banknote,
     title: 'Controller / Buchhaltung',
     desc:  'Rechnungen, Zahlungsstatus, überfällige Forderungen und monatliche Kostenentwicklung.',
   },
   {
     id:    'bereichsleiter',
-    icon:  '🏗',
+    icon:  HardHat,
     title: 'Bereichsleiter',
     desc:  'Projektportfolio, Team-Auslastung, Budget-Gesundheit und Ressourcensteuerung.',
   },
   {
     id:    'mitarbeiter',
-    icon:  '🕐',
+    icon:  Clock,
     title: 'Mitarbeiter',
     desc:  'Eigene Stunden, Zeitkonto-Saldo, heutige Buchungen und Monatsverlauf.',
   },
@@ -588,11 +589,11 @@ function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
       <h2 className="role-selector-title">Wählen Sie Ihre Dashboard-Ansicht</h2>
       <p className="role-selector-sub">Die Auswahl wird lokal gespeichert und kann jederzeit geändert werden.</p>
       <div className="role-selector">
-        {ROLES.map(r => (
-          <button key={r.id} className="role-card" onClick={() => onSelect(r.id)}>
-            <span className="role-card-icon">{r.icon}</span>
-            <span className="role-card-title">{r.title}</span>
-            <span className="role-card-desc">{r.desc}</span>
+        {ROLES.map(({ id, icon: Icon, title, desc }) => (
+          <button key={id} className="role-card" onClick={() => onSelect(id)}>
+            <span className="role-card-icon"><Icon size={28} strokeWidth={1.75} /></span>
+            <span className="role-card-title">{title}</span>
+            <span className="role-card-desc">{desc}</span>
           </button>
         ))}
       </div>
