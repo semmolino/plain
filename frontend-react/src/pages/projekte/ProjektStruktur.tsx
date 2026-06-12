@@ -813,7 +813,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
                         <th style={{ textAlign: 'left' }}>NK %</th>
                         <th className="num">Nebenkosten €</th>
                         <th className="num">Gesamt €</th>
-                        <th style={{ textAlign: 'center', fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>Intern</th>
+                        <th style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>Intern</th>
                         <th></th>
                       </tr>
                     </thead>
