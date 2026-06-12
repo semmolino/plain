@@ -5,6 +5,16 @@ const { requirePermission } = require("../middleware/permissions");
 
 const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
 
+// Wuerden mit Routing oder typischen Konventionen verwechselt werden.
+// Auch wenn Router-mismatching dank /login/:slug Reihenfolge technisch kein
+// Problem ist -- Mitarbeiter erwarten, dass diese Begriffe nicht als
+// Tenant-Slug funktionieren.
+const RESERVED_SLUGS = new Set([
+  "admin", "api", "app", "assets", "auth", "branding", "dashboard",
+  "login", "logout", "me", "public", "reset-password", "signup",
+  "static", "tenant", "tenants", "user", "users", "www",
+]);
+
 module.exports = (supabase) => {
   const router = express.Router();
 
@@ -34,6 +44,11 @@ module.exports = (supabase) => {
       if (slug !== null && !SLUG_REGEX.test(slug)) {
         return res.status(400).json({
           error: "Slug darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten (3-60 Zeichen).",
+        });
+      }
+      if (slug !== null && RESERVED_SLUGS.has(slug)) {
+        return res.status(400).json({
+          error: `„${slug}" ist ein reservierter Begriff und kann nicht als Slug verwendet werden.`,
         });
       }
 

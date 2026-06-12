@@ -920,8 +920,17 @@ function TenantBrandingSection() {
     }
   }
 
-  const slugValid = slug.trim() === '' || /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(slug.trim().toLowerCase())
-  const slugPreview = slug.trim() ? `/login/${slug.trim().toLowerCase()}` : '/login (generischer Link)'
+  // Muss mit der Backend-Logik in routes/tenants.js synchron bleiben.
+  const RESERVED_SLUGS = new Set([
+    'admin', 'api', 'app', 'assets', 'auth', 'branding', 'dashboard',
+    'login', 'logout', 'me', 'public', 'reset-password', 'signup',
+    'static', 'tenant', 'tenants', 'user', 'users', 'www',
+  ])
+  const slugLower = slug.trim().toLowerCase()
+  const slugFormatOk = slugLower === '' || /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(slugLower)
+  const slugIsReserved = slugLower !== '' && RESERVED_SLUGS.has(slugLower)
+  const slugValid = slugFormatOk && !slugIsReserved
+  const slugPreview = slug.trim() ? `/login/${slugLower}` : '/login (generischer Link)'
 
   return (
     <div className="admin-block" style={{ marginTop: 24 }}>
@@ -945,7 +954,8 @@ function TenantBrandingSection() {
           maxLength={60}
           style={{ fontFamily: 'monospace' }}
         />
-        {!slugValid && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Ungültiges Format. Erlaubt: a-z, 0-9, Bindestrich. 3-60 Zeichen.</div>}
+        {!slugFormatOk && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Ungültiges Format. Erlaubt: a-z, 0-9, Bindestrich. 3-60 Zeichen.</div>}
+        {slugFormatOk && slugIsReserved && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>„{slugLower}" ist reserviert und kann nicht verwendet werden.</div>}
       </div>
 
       <div className="form-group" style={{ marginTop: 16 }}>
