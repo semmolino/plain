@@ -9,12 +9,17 @@ on:
     # Daily at 06:00 UTC
     - cron: "0 6 * * *"
 
-# Bei neuem Push/Commit fuer denselben Ref alle laufenden Runs
-# abbrechen — verhindert CI-Stau auf main wenn schnell hintereinander
-# committed wird.
+# Concurrency-Gruppe pro Commit (SHA), NICHT pro Ref, und ohne
+# cancel-in-progress. Hintergrund: GitHub feuert fuer einen einzelnen Push
+# gelegentlich zwei identische Runs (Sekunden auseinander). Mit
+# "cancel-in-progress: true" + ref-Gruppe cancelt der zweite Run den ersten —
+# der Commit hat dann eine ABGEBROCHENE Check-Suite neben der erfolgreichen.
+# Railway ("wait for CI") wertet die abgebrochene Suite als Fehlschlag und
+# deployt nicht. Pro-SHA-Gruppe + kein Cancel => jeder Commit bekommt eine
+# eindeutig gruene Suite; doppelte Runs desselben Commits laufen seriell.
 concurrency:
-  group: tests-${{ github.ref }}
-  cancel-in-progress: true
+  group: tests-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   backend:
