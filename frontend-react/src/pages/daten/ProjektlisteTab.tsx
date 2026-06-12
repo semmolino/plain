@@ -326,10 +326,10 @@ function fmtDateDE(iso: string) {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function ProjectsTimeline({ filter, filterReady }: { filter: DateFilter; filterReady: boolean }) {
+function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFilter; filterReady: boolean; projectIds?: number[] }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['projects-timeline', filter],
-    queryFn:  () => fetchProjectsTimeline(filter),
+    queryKey: ['projects-timeline', filter, projectIds ?? null],
+    queryFn:  () => fetchProjectsTimeline(filter, projectIds),
     enabled:  filterReady,
   })
 
@@ -461,7 +461,7 @@ function ProjectsTimeline({ filter, filterReady }: { filter: DateFilter; filterR
 
   return (
     <div className="timeline-wrap">
-      <h3 className="timeline-title">Gesamtverlauf aller Projekte</h3>
+      <h3 className="timeline-title">{projectIds !== undefined ? 'Gesamtverlauf der gefilterten Projekte' : 'Gesamtverlauf aller Projekte'}</h3>
       <div className="timeline-chart">
         <Line data={chartData} options={options} />
       </div>
@@ -607,6 +607,13 @@ export function ProjektlisteTab() {
 
     return rows
   }, [allRows, search, activeFilters])
+
+  // Projekt-IDs der aktuell angezeigten (gefilterten) Liste — stabil sortiert,
+  // damit sich der Query-Key nur bei Aenderung der Menge (nicht der Sortierung) aendert.
+  const filteredProjectIds = useMemo(
+    () => [...new Set(filtered.map(r => r.PROJECT_ID))].sort((a, b) => a - b),
+    [filtered]
+  )
 
   // Sort
   const sorted = useMemo(() => {
@@ -758,7 +765,7 @@ export function ProjektlisteTab() {
             <p className="empty-note">Keine Treffer für diesen Filter.</p>
           )}
 
-          <ProjectsTimeline filter={filter} filterReady={filterReady} />
+          <ProjectsTimeline filter={filter} filterReady={filterReady} projectIds={hasActiveFilter ? filteredProjectIds : undefined} />
         </>
       )}
 

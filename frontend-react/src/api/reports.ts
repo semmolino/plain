@@ -217,8 +217,11 @@ export const fetchProjectTimeline = (projectId: number, filter: DateFilter = { m
   return apiClient.get<{ data: TimelinePoint[] }>(`/reports/project/${projectId}/timeline${qs ? `?${qs}` : ''}`)
 }
 
-export const fetchProjectsTimeline = (filter: DateFilter = { mode: 'now' }) => {
-  const qs = buildTimelineQs(filter)
+export const fetchProjectsTimeline = (filter: DateFilter = { mode: 'now' }, projectIds?: number[]) => {
+  const params = new URLSearchParams(buildTimelineQs(filter))
+  // projectIds gesetzt (auch leeres Array) => Chart auf diese Projekte einschraenken
+  if (projectIds) params.set('project_ids', projectIds.join(','))
+  const qs = params.toString()
   return apiClient.get<{ data: TimelinePoint[] }>(`/reports/projects/timeline${qs ? `?${qs}` : ''}`)
 }
 

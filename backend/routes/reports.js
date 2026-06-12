@@ -452,12 +452,22 @@ module.exports = (supabase) => {
     const dateFrom = req.query.date_from || null;
     const dateTo   = req.query.date_to   || null;
 
+    // Optional: auf eine Teilmenge von Projekten einschraenken (entspricht den
+    // gesetzten Listen-Filtern). Param vorhanden aber leer => leeres Chart.
+    const hasProjectFilter = req.query.project_ids !== undefined;
+    const projectIds = hasProjectFilter
+      ? String(req.query.project_ids).split(",").map(Number).filter(Number.isFinite)
+      : null;
+    if (hasProjectFilter && projectIds.length === 0) return res.json({ data: [] });
+
     try {
-      // 1. All structures for the entire tenant
-      const { data: structures, error: sErr } = await supabase
+      // 1. Structures for the selected projects (or the entire tenant)
+      let structQ = supabase
         .from("PROJECT_STRUCTURE")
         .select("ID, PROJECT_ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, created_at")
         .eq("TENANT_ID", tenantId);
+      if (projectIds) structQ = structQ.in("PROJECT_ID", projectIds);
+      const { data: structures, error: sErr } = await structQ;
       if (sErr) return res.status(500).json({ error: sErr.message });
       if (!structures || structures.length === 0) return res.json({ data: [] });
 
@@ -484,17 +494,18 @@ module.exports = (supabase) => {
       if (dateTo) tecQ = tecQ.lte("DATE_VOUCHER", dateTo);
       const { data: tecRows } = await tecQ;
 
-      // 4. Partial payments (all tenant projects)
+      // 4. Partial payments (selected projects, or all tenant projects)
       let ppQ = supabase
         .from("PARTIAL_PAYMENT")
         .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
         .eq("TENANT_ID", tenantId)
         .eq("STATUS_ID", 2)
         .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+      if (projectIds) ppQ = ppQ.in("PROJECT_ID", projectIds);
       if (dateTo) ppQ = ppQ.lte("PARTIAL_PAYMENT_DATE", dateTo);
       const { data: ppRows } = await ppQ;
 
-      // 5. Invoices (all tenant projects)
+      // 5. Invoices (selected projects, or all tenant projects)
       let invRows = [];
       try {
         let invQ = supabase
@@ -503,17 +514,19 @@ module.exports = (supabase) => {
           .eq("TENANT_ID", tenantId)
           .eq("STATUS_ID", 2)
           .order("INVOICE_DATE", { ascending: true });
+        if (projectIds) invQ = invQ.in("PROJECT_ID", projectIds);
         if (dateTo) invQ = invQ.lte("INVOICE_DATE", dateTo);
         const { data: inv } = await invQ;
         invRows = inv || [];
       } catch (_) {}
 
-      // 6. Payments (all tenant projects)
+      // 6. Payments (selected projects, or all tenant projects)
       let payQ = supabase
         .from("PAYMENT")
         .select("PAYMENT_DATE, AMOUNT_PAYED_NET")
         .eq("TENANT_ID", tenantId)
         .order("PAYMENT_DATE", { ascending: true });
+      if (projectIds) payQ = payQ.in("PROJECT_ID", projectIds);
       if (dateTo) payQ = payQ.lte("PAYMENT_DATE", dateTo);
       const { data: payRows } = await payQ;
 
