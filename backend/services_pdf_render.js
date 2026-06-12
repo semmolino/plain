@@ -412,11 +412,11 @@ async function loadTecRows({ supabase, docType, docId }) {
     const field = docType === 'INVOICE' ? 'INVOICE_ID' : 'PARTIAL_PAYMENT_ID';
     const { data, error } = await supabase
       .from('TEC')
-      .select('ID, DATE_VOUCHER, EMPLOYEE_ID, QUANTITY_EXT, SP_RATE, SP_TOT, POSTING_DESCRIPTION')
+      .select('ID, DATE_VOUCHER, EMPLOYEE_ID, STRUCTURE_ID, QUANTITY_EXT, SP_RATE, SP_TOT, POSTING_DESCRIPTION')
       .eq(field, docId);
 
     if (error) {
-      if (isTableMissingErr(error, 'tec')) return { rows: [], sumQty: 0, sumTot: 0 };
+      if (isTableMissingErr(error, 'tec')) return { rows: [], groups: [], sumQty: 0, sumTot: 0 };
       throw new Error(error.message);
     }
 
@@ -432,14 +432,27 @@ async function loadTecRows({ supabase, docType, docId }) {
       );
     }
 
+    // Projektelement-Stammdaten (Kuerzel + Bezeichnung) fuer die Gruppierung
+    const structIds = [...new Set(rows.map(r => r.STRUCTURE_ID).filter(Boolean).map(Number).filter(Number.isFinite))];
+    const structMap = new Map();
+    if (structIds.length) {
+      const { data: structs } = await supabase
+        .from('PROJECT_STRUCTURE').select('ID, NAME_SHORT, NAME_LONG').in('ID', structIds);
+      (structs || []).forEach(s =>
+        structMap.set(String(s.ID), { kuerzel: s.NAME_SHORT || '', bezeichnung: s.NAME_LONG || '' })
+      );
+    }
+
     rows.sort((a, b) => String(a.DATE_VOUCHER || '').localeCompare(String(b.DATE_VOUCHER || '')));
 
+    const round2 = n => Math.round(n * 100) / 100;
     let sumQty = 0, sumTot = 0;
     const out = rows.map(r => {
       const qty = Number(r.QUANTITY_EXT || 0);
       const tot = Number(r.SP_TOT      || 0);
       sumQty += qty; sumTot += tot;
       return {
+        structureId:        r.STRUCTURE_ID != null ? Number(r.STRUCTURE_ID) : null,
         dateVoucher:        r.DATE_VOUCHER || '',
         employeeName:       empMap.get(String(r.EMPLOYEE_ID)) || '',
         quantityExt:        qty,
@@ -449,10 +462,39 @@ async function loadTecRows({ supabase, docType, docId }) {
       };
     });
 
-    return { rows: out, sumQty, sumTot };
+    // Nach Projektelement gruppieren; Gruppen alphabetisch nach Kuerzel,
+    // Buchungen ohne Element ans Ende. Pro Gruppe Zwischensumme.
+    const groupMap = new Map();
+    for (const r of out) {
+      const key = r.structureId == null ? '__none__' : String(r.structureId);
+      if (!groupMap.has(key)) {
+        const meta = r.structureId == null ? null : structMap.get(key);
+        groupMap.set(key, {
+          structureId: r.structureId,
+          kuerzel:     meta ? meta.kuerzel : '',
+          bezeichnung: meta ? meta.bezeichnung : '',
+          rows:        [],
+          sumQty:      0,
+          sumTot:      0,
+        });
+      }
+      const g = groupMap.get(key);
+      g.rows.push(r);
+      g.sumQty += r.quantityExt;
+      g.sumTot += r.spTot;
+    }
+    const groups = [...groupMap.values()]
+      .map(g => ({ ...g, sumQty: round2(g.sumQty), sumTot: round2(g.sumTot) }))
+      .sort((a, b) => {
+        if (a.structureId == null) return 1;
+        if (b.structureId == null) return -1;
+        return String(a.kuerzel).localeCompare(String(b.kuerzel), 'de', { numeric: true });
+      });
+
+    return { rows: out, groups, sumQty: round2(sumQty), sumTot: round2(sumTot) };
   } catch (e) {
     console.error('[TEC_LOAD]', e);
-    return { rows: [], sumQty: 0, sumTot: 0 };
+    return { rows: [], groups: [], sumQty: 0, sumTot: 0 };
   }
 }
 

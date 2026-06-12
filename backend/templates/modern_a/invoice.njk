@@ -219,6 +219,22 @@ body {
   border-bottom: none;
   padding-top: 2mm;
 }
+/* Gruppierung nach Projektelement im Leistungsnachweis */
+.data-table tr.group-row { break-after: avoid; }
+.data-table tr.group-row td {
+  font-weight: 700;
+  color: #111827;
+  background: #f3f4f6;
+  border-bottom: 0.5pt solid #9ca3af;
+  padding: 2.5mm 2mm 1.2mm 2mm;
+}
+.data-table tr.subtotal-row td {
+  font-weight: 600;
+  color: #374151;
+  border-top: 0.3pt solid #d1d5db;
+  border-bottom: 0.5pt solid #d1d5db;
+  padding-top: 1mm;
+}
 .data-table .muted { color: #6b7280; font-size: 8.5pt; }
 .data-table .bold  { font-weight: 600; }
 
@@ -805,7 +821,11 @@ table.data-table thead { display: table-header-group; }
       </tr>
     </thead>
     <tbody>
-      {% for t in tec.rows %}
+      {% for g in tec.groups %}
+      <tr class="group-row">
+        <td colspan="6">{% if g.kuerzel or g.bezeichnung %}{{ g.kuerzel }}{% if g.kuerzel and g.bezeichnung %} &ndash; {% endif %}{{ g.bezeichnung }}{% else %}Ohne Projektelement{% endif %}</td>
+      </tr>
+      {% for t in g.rows %}
       <tr>
         <td style="white-space:nowrap;">{{ t.dateVoucher | date_de }}</td>
         <td>{{ t.employeeName }}</td>
@@ -815,8 +835,16 @@ table.data-table thead { display: table-header-group; }
         <td>{{ t.postingDescription }}</td>
       </tr>
       {% endfor %}
+      <tr class="subtotal-row">
+        <td colspan="2">Zwischensumme{% if g.kuerzel %} {{ g.kuerzel }}{% endif %}</td>
+        <td class="r">{{ g.sumQty }}</td>
+        <td></td>
+        <td class="r">{{ g.sumTot | money }}</td>
+        <td></td>
+      </tr>
+      {% endfor %}
       <tr class="sum-row">
-        <td colspan="2">Summe</td>
+        <td colspan="2">Gesamtsumme</td>
         <td class="r">{{ tec.sumQty }}</td>
         <td></td>
         <td class="r">{{ tec.sumTot | money }}</td>
