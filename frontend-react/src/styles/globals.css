@@ -753,7 +753,7 @@ input::placeholder { color: var(--text-4); }
     overflow-y: auto;
   }
   .side-nav-brand {
-    display: flex; align-items: center;
+    display: flex; align-items: center; justify-content: center;
     padding: 6px 16px 14px;
     margin-bottom: 4px;
     border-bottom: 1px solid var(--chrome-border);

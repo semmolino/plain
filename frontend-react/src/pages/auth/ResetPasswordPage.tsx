@@ -54,7 +54,7 @@ export function ResetPasswordPage() {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-logo"><BrandWordmark size={34} /></div>
-        <div className="auth-subtitle">Projektsteuerung</div>
+        <div className="auth-subtitle" />
         <h2 className="auth-title">Neues Passwort setzen</h2>
 
         {!token && (
