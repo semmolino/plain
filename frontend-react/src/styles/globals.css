@@ -1,3 +1,22 @@
+/* ── Brand-Font: Hanken Grotesk (SIL OFL, selbst gehostet) ───────────────────
+   Variable Fonts (Gewicht 100–900) in /public/fonts. Eine Datei pro Stil deckt
+   alle Gewichte ab; font-display: swap zeigt sofort den Fallback und tauscht
+   beim Laden. Lizenz: frontend-react/public/fonts/OFL.txt */
+@font-face {
+  font-family: 'Hanken Grotesk';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/HankenGrotesk-variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Hanken Grotesk';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/HankenGrotesk-variable-italic.woff2') format('woff2');
+}
+
 /* ── Design tokens ───────────────────────────────────────────────────────── */
 :root {
   --bg:         #f4f6fb;
@@ -476,7 +495,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family: 'Hanken Grotesk', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
