@@ -595,7 +595,11 @@ body {
 
 /* ── Marke (plan&simple) ──────────────────────────────────────────────────── */
 .brand-wordmark { display: inline-flex; align-items: center; line-height: 0; }
-.brand-wordmark img { display: block; width: auto; }
+.brand-wordmark img { width: auto; vertical-align: middle; }
+/* Genau EINE Variante sichtbar: color auf hellem, white auf dunklem Theme.
+   display steht nur auf den Varianten-Klassen (keine generische img-Regel),
+   sonst gewinnt die hoehere Spezifitaet und beide Bilder werden gezeigt. */
+.brand-wordmark-color { display: block; }
 .brand-wordmark-white { display: none; }
 [data-theme="dark"] .brand-wordmark-color { display: none; }
 [data-theme="dark"] .brand-wordmark-white { display: block; }
