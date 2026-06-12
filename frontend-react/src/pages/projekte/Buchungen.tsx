@@ -430,71 +430,11 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 </div>
               </div>
 
-              <div className="list-section">
-                <table className="master-table">
-                  <thead>
-                    <tr>
-                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('date')}>Datum{sortIndicator('date')}</th>
-                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('employee')}>Mitarbeiter{sortIndicator('employee')}</th>
-                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('path')}>Strukturpfad{sortIndicator('path')}</th>
-                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('description')}>Beschreibung{sortIndicator('description')}</th>
-                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_int')}>Stunden{sortIndicator('h_int')}</th>
-                      {showRevenue && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_ext')}>Zur Abrechnung{sortIndicator('h_ext')}</th>}
-                      {showCosts && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('cost')}>Kosten €{sortIndicator('cost')}</th>}
-                      {showRevenue && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('revenue')}>Erlös €{sortIndicator('revenue')}</th>}
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleBuchungen.map(b => (
-                      <tr key={b.ID}>
-                        <td>{fmtDate(b.DATE_VOUCHER)}</td>
-                        <td>{b.EMPLOYEE?.SHORT_NAME}</td>
-                        <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.6)' }}>
-                          {b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'}
-                        </td>
-                        <td>{b.POSTING_DESCRIPTION}</td>
-                        <td className="num">{fmtN(b.QUANTITY_INT)}</td>
-                        {showRevenue && <td className="num">{fmtN(b.QUANTITY_EXT)}</td>}
-                        {showCosts && <td className="num">{fmtN(b.CP_TOT)}</td>}
-                        {showRevenue && <td className="num">{fmtN(b.SP_TOT)}</td>}
-                        <td className="doc-actions">
-                          {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
-                            <>
-                              <button className="row-action-btn" onClick={() => openEdit(b)} title="Bearbeiten">
-                                <Pencil size={14} strokeWidth={2} />
-                              </button>
-                              <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => confirmDelete(b)} title="Löschen">
-                                <Trash2 size={14} strokeWidth={2} />
-                              </button>
-                            </>
-                          ) : (
-                            <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.4)', whiteSpace: 'nowrap' }}>abgerechnet</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {!visibleBuchungen.length && <tr><td colSpan={6 + (showRevenue ? 2 : 0) + (showCosts ? 1 : 0)} className="empty-note">Keine Buchungen</td></tr>}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                      <td colSpan={3} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
-                        {visibleBuchungen.length !== buchungen.length
-                          ? `${visibleBuchungen.length} / ${buchungen.length} Einträge`
-                          : `${buchungen.length} Einträge`}
-                      </td>
-                      <td></td>
-                      <td className="num">{fmtN(totalIntH)}</td>
-                      {showRevenue && <td className="num">{fmtN(totalExtH)}</td>}
-                      {showCosts && <td className="num">{fmtN(totalCost)}</td>}
-                      {showRevenue && <td className="num">{fmtN(totalRev)}</td>}
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              <button className="btn-small btn-save" style={{ marginTop: 10 }} onClick={() => { if (!showForm) setExtTouched(false); setShowForm(v => !v); setMsg(null) }}>
+              <button
+                className="btn-primary"
+                style={{ width: 'auto', marginTop: 0, marginBottom: 14 }}
+                onClick={() => { if (!showForm) setExtTouched(false); setShowForm(v => !v); setMsg(null) }}
+              >
                 {showForm ? 'Formular schließen' : '+ Neue Buchung'}
               </button>
 
@@ -564,6 +504,70 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 </form>
               )}
               {!showForm && <Message text={msg?.text ?? null} type={msg?.type} />}
+
+              <div className="list-section">
+                <table className="master-table">
+                  <thead>
+                    <tr>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('date')}>Datum{sortIndicator('date')}</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('employee')}>Mitarbeiter{sortIndicator('employee')}</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('path')}>Strukturpfad{sortIndicator('path')}</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('description')}>Beschreibung{sortIndicator('description')}</th>
+                      <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_int')}>Stunden{sortIndicator('h_int')}</th>
+                      {showRevenue && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_ext')}>Zur Abrechnung{sortIndicator('h_ext')}</th>}
+                      {showCosts && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('cost')}>Kosten €{sortIndicator('cost')}</th>}
+                      {showRevenue && <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('revenue')}>Erlös €{sortIndicator('revenue')}</th>}
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleBuchungen.map(b => (
+                      <tr key={b.ID}>
+                        <td>{fmtDate(b.DATE_VOUCHER)}</td>
+                        <td>{b.EMPLOYEE?.SHORT_NAME}</td>
+                        <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.6)' }}>
+                          {b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'}
+                        </td>
+                        <td>{b.POSTING_DESCRIPTION}</td>
+                        <td className="num">{fmtN(b.QUANTITY_INT)}</td>
+                        {showRevenue && <td className="num">{fmtN(b.QUANTITY_EXT)}</td>}
+                        {showCosts && <td className="num">{fmtN(b.CP_TOT)}</td>}
+                        {showRevenue && <td className="num">{fmtN(b.SP_TOT)}</td>}
+                        <td className="doc-actions">
+                          {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
+                            <>
+                              <button className="row-action-btn" onClick={() => openEdit(b)} title="Bearbeiten">
+                                <Pencil size={14} strokeWidth={2} />
+                              </button>
+                              <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => confirmDelete(b)} title="Löschen">
+                                <Trash2 size={14} strokeWidth={2} />
+                              </button>
+                            </>
+                          ) : (
+                            <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.4)', whiteSpace: 'nowrap' }}>abgerechnet</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {!visibleBuchungen.length && <tr><td colSpan={6 + (showRevenue ? 2 : 0) + (showCosts ? 1 : 0)} className="empty-note">Keine Buchungen</td></tr>}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                      <td colSpan={3} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                        {visibleBuchungen.length !== buchungen.length
+                          ? `${visibleBuchungen.length} / ${buchungen.length} Einträge`
+                          : `${buchungen.length} Einträge`}
+                      </td>
+                      <td></td>
+                      <td className="num">{fmtN(totalIntH)}</td>
+                      {showRevenue && <td className="num">{fmtN(totalExtH)}</td>}
+                      {showCosts && <td className="num">{fmtN(totalCost)}</td>}
+                      {showRevenue && <td className="num">{fmtN(totalRev)}</td>}
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </>
           )}
         </>
