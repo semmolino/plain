@@ -22,6 +22,82 @@ function issueToken(payload) {
   return jwt.sign(payload, jwtSecret(), { expiresIn: "8h" });
 }
 
+/**
+ * Legt fuer einen NEUEN Tenant die Standard-Rollen an (spiegelt Migration 0062)
+ * und weist dem Erst-User die Administrator-Rolle zu.
+ *
+ * Hintergrund: Migration 0062 hat die Default-Rollen nur fuer die damals
+ * existierenden Tenants erzeugt. Ein per Signup neu angelegter Tenant haette
+ * sonst gar keine Rollen -> der Erst-User bekommt keine Permissions und ist
+ * komplett ausgesperrt (kein UI zum Selbst-Zuweisen).
+ *
+ * Best-effort: faengt Fehler ab und blockiert die Registrierung nicht. Fehlt
+ * der PERMISSION-Katalog (RBAC-Migration nicht eingespielt), laeuft die
+ * Permissions-Middleware ohnehin im "unrestricted"-Modus -> No-Op hier.
+ */
+async function seedTenantRbacAndAssignAdmin(supabase, tenantId, employeeId) {
+  try {
+    const { data: perms, error: permErr } = await supabase
+      .from("PERMISSION")
+      .select("ID, KEY, MODULE, CATEGORY");
+    if (permErr || !perms || perms.length === 0) return; // RBAC nicht aktiv -> nichts zu tun
+
+    const uniq      = (arr) => [...new Set(arr)];
+    const allIds    = perms.map(p => p.ID);
+    const byCat     = (cat)  => perms.filter(p => p.CATEGORY === cat).map(p => p.ID);
+    const byModule  = (mods) => perms.filter(p => mods.includes(p.MODULE)).map(p => p.ID);
+    const byKey     = (keys) => perms.filter(p => keys.includes(p.KEY)).map(p => p.ID);
+
+    const roleDefs = [
+      { name: "Administrator",    long: "Voller Zugriff auf alle Funktionen",                          color: "#dc2626", isDefault: false, permIds: allIds },
+      { name: "Geschäftsleitung", long: "Voller Lesezugriff, Rechnungen buchen, keine Konfiguration",  color: "#7c3aed", isDefault: false,
+        permIds: uniq([...byCat("reading"), ...byKey(["invoices.book","invoices.send_email","dunning.send","reports.export"])]) },
+      { name: "Projektleiter",    long: "Projekte/Angebote/Rechnungen voll, keine Mitarbeiterverwaltung", color: "#2563eb", isDefault: false,
+        permIds: byModule(["dashboard","addresses","projects","reports","invoices","dunning","offers"]) },
+      { name: "Buchhaltung",      long: "Rechnungen/Mahnungen voll, Projekte/Angebote nur lesen",       color: "#16a34a", isDefault: false,
+        permIds: uniq([...byModule(["invoices","dunning","reports","addresses","dashboard"]), ...byKey(["projects.view","offers.view","employees.view"])]) },
+      { name: "Mitarbeiter",      long: "Basis-Zugriff: Übersicht + eigene Stunden",                    color: "#6b7280", isDefault: true,
+        permIds: byKey(["dashboard.view","addresses.view","addresses.contacts.view"]) },
+    ];
+
+    let adminRoleId = null;
+    for (const rd of roleDefs) {
+      const { data: role, error: roleErr } = await supabase
+        .from("USER_ROLE")
+        .insert([{ TENANT_ID: tenantId, NAME_SHORT: rd.name, NAME_LONG: rd.long, COLOR: rd.color, IS_SYSTEM: true, IS_DEFAULT: rd.isDefault }])
+        .select("ID")
+        .single();
+      if (roleErr || !role) { console.error("[SIGNUP][ROLE]", rd.name, roleErr?.message); continue; }
+      if (rd.name === "Administrator") adminRoleId = role.ID;
+      if (rd.permIds.length) {
+        const { error: rpErr } = await supabase
+          .from("ROLE_PERMISSION")
+          .insert(rd.permIds.map(pid => ({ ROLE_ID: role.ID, PERMISSION_ID: pid })));
+        if (rpErr) console.error("[SIGNUP][ROLE_PERMISSION]", rd.name, rpErr.message);
+      }
+    }
+
+    // Fallback: Administrator-Rolle nachladen, falls Insert oben fehlschlug
+    if (!adminRoleId) {
+      const { data: existing } = await supabase
+        .from("USER_ROLE").select("ID")
+        .eq("TENANT_ID", tenantId).eq("NAME_SHORT", "Administrator").maybeSingle();
+      adminRoleId = existing?.ID ?? null;
+    }
+
+    if (adminRoleId) {
+      const { error: erErr } = await supabase
+        .from("EMPLOYEE_ROLE")
+        .insert([{ EMPLOYEE_ID: employeeId, ROLE_ID: adminRoleId, ASSIGNED_BY: employeeId }]);
+      if (erErr) console.error("[SIGNUP][EMPLOYEE_ROLE]", erErr.message);
+    } else {
+      console.error("[SIGNUP][EMPLOYEE_ROLE] Administrator-Rolle nicht gefunden — User ohne Rolle!");
+    }
+  } catch (e) {
+    console.error("[SIGNUP][RBAC_SEED]", e?.message || e);
+  }
+}
+
 module.exports = (supabase) => {
   const router = express.Router();
 
@@ -290,18 +366,22 @@ module.exports = (supabase) => {
 
       // 5. Create the first EMPLOYEE so they can log in
       const hashedPw = await bcrypt.hash(password, 10);
-      const { error: empErr } = await supabase.from("EMPLOYEE").insert([{
+      const { data: emp, error: empErr } = await supabase.from("EMPLOYEE").insert([{
         MAIL:       email,
         PASSWORD:   hashedPw,
         SHORT_NAME: shortName.trim().toUpperCase(),
         FIRST_NAME: "Administrator",
         LAST_NAME:  "",
         TENANT_ID:  tenantId,
-      }]);
+      }]).select("ID").single();
       if (empErr) {
         console.error("[SIGNUP][EMPLOYEE]", empErr.message);
         return res.status(500).json({ error: "Mitarbeiter konnte nicht angelegt werden: " + empErr.message });
       }
+
+      // 6. RBAC: Standard-Rollen fuer den neuen Tenant anlegen + Erst-User als
+      // Administrator. Ohne das waere der User komplett ohne Berechtigungen.
+      await seedTenantRbacAndAssignAdmin(supabase, tenantId, emp.ID);
 
       return res.json({ success: true, message: "Konto erstellt. Bitte anmelden." });
     } catch (e) {
