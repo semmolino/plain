@@ -370,8 +370,13 @@ const SETUP_DONE_KEY = 'plain_setup_checklist_done'
 
 function SetupChecklist() {
   const { isFeatureEnabled } = useGamificationConfig()
+  const { tenantId } = useSession()
   const featureOn = isFeatureEnabled('setup_checklist')
-  const [dismissed] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === '1')
+  // "Fertig"-Status PRO TENANT merken. Sonst blendet ein in diesem Browser
+  // bereits eingerichteter Tenant die Checkliste auch fuer frisch angelegte
+  // Tenants aus (globaler Key -> einmal fertig = ueberall ausgeblendet).
+  const doneKey = `${SETUP_DONE_KEY}_${tenantId ?? 'anon'}`
+  const [dismissed] = useState(() => localStorage.getItem(doneKey) === '1')
   const [expanded,  setExpanded]  = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -383,7 +388,7 @@ function SetupChecklist() {
 
   if (!featureOn || dismissed || isLoading || !data?.data) return null
   const sp = data.data
-  if (sp.all_done) { localStorage.setItem(SETUP_DONE_KEY, '1'); return null }
+  if (sp.all_done) { localStorage.setItem(doneKey, '1'); return null }
 
   const pct = Math.round((sp.total_done / sp.total_count) * 100)
 
