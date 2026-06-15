@@ -96,8 +96,11 @@ const rolesRoutes                = require("./routes/roles")(supabase);
 const recentsRoutes              = require("./routes/recents")(supabase);
 const gamificationRoutes         = require("./routes/gamification")(supabase);
 const tenantsRoutes              = require("./routes/tenants")(supabase);
+const licenseRoutes              = require("./routes/license")();
 const { makeMiddleware: makePermissionsMiddleware } = require("./middleware/permissions");
 const permissionsMiddleware = makePermissionsMiddleware(supabase);
+const { makeMiddleware: makeLicenseMiddleware } = require("./middleware/license");
+const licenseMiddleware = makeLicenseMiddleware(supabase);
 const { startDueDateChecker } = require("./services/dueDateChecker");
 const { startMonatsabschlussChecker } = require("./services/monatsabschluss");
 const { startMahnungChecker } = require("./services/mahnungChecker");
@@ -108,7 +111,10 @@ const { startHoursBookingReminderChecker }   = require("./services/hoursBookingR
 // req.permissions + req.hasPermission ab. Soft-fail wenn Migration 0062 fehlt
 // (req._permissionsUnrestricted = true) -- damit bleiben alle Routen ohne
 // Migration voll nutzbar.
-const authChain = [authMiddleware, permissionsMiddleware];
+// Lizenz (L2): licenseMiddleware legt req.license + req.hasFeature ab. Soft-Fail
+// wenn Migration 0070 fehlt / keine TENANT_LICENSE-Zeile -> unrestricted.
+// L2 = nur Bereitstellung + Frontend-Soft-Gating; KEIN hartes Enforcement (das ist L3).
+const authChain = [authMiddleware, permissionsMiddleware, licenseMiddleware];
 
 app.use("/api/v1/stammdaten",        ...authChain, stammdatenRoutes);
 app.use("/api/v1/mitarbeiter",       ...authChain, mitarbeiterRoutes);
@@ -144,6 +150,9 @@ app.use("/api/v1/gamification", ...authChain, gamificationRoutes);
 
 // Tenant-Konfiguration (Slug fuer Login-Branding etc.)
 app.use("/api/v1/tenants", ...authChain, tenantsRoutes);
+
+// Lizenz-Entitlement des eingeloggten Tenants (fuer Frontend Soft-Gating)
+app.use("/api/v1/license", ...authChain, licenseRoutes);
 
 
 

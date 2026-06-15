@@ -7,6 +7,7 @@ import { loginEmployee, requestPasswordReset } from '@/api/auth'
 import { fetchPublicLoginBranding } from '@/api/tenants'
 import { useAuthStore } from '@/store/authStore'
 import { usePermissionsStore } from '@/store/permissionsStore'
+import { useLicenseStore } from '@/store/licenseStore'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 import { BrandWordmark } from '@/components/brand/BrandLogo'
@@ -69,6 +70,8 @@ export function LoginPage() {
       // RBAC: Permissions VOR Navigation laden, sonst zeigt die App
       // beim ersten Render kurz alle Buttons/Spalten (Default: alles versteckt).
       await usePermissionsStore.getState().reload()
+      // Lizenz (L2): Entitlement des Tenants laden (Soft-Gating).
+      await useLicenseStore.getState().reload()
       // Wenn der User einen Slug-URL benutzt hat, fuer naechste Sessions cachen.
       if (urlSlug) {
         try { localStorage.setItem(SLUG_CACHE_KEY, urlSlug) } catch { /* ignore */ }

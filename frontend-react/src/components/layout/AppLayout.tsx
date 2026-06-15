@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import { usePermissionsStore } from '@/store/permissionsStore'
+import { useLicenseStore } from '@/store/licenseStore'
 import { useToast } from '@/store/toastStore'
 import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
@@ -38,6 +39,7 @@ function UserMenu() {
     qc.clear()
     clearAuth()
     usePermissionsStore.getState().clear()
+    useLicenseStore.getState().clear()
     navigate('/login')
   }
 

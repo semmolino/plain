@@ -8,6 +8,7 @@ import {
 import { fetchMe } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
 import { usePermissionsStore } from '@/store/permissionsStore'
+import { useLicenseStore } from '@/store/licenseStore'
 
 export type UrlFlowType = 'invite' | 'recovery' | null
 
@@ -46,9 +47,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Sonst rendern Komponenten mit dem optimistischen Default (unrestricted=true)
           // und zeigen kurz alle Buttons/Spalten, bevor die API antwortet.
           await usePermissionsStore.getState().reload()
+          // Lizenz (L2): Entitlement des Tenants laden (Soft-Gating).
+          await useLicenseStore.getState().reload()
         } catch {
           clearAuth()
           usePermissionsStore.getState().clear()
+          useLicenseStore.getState().clear()
         }
       } else {
         setLoading(false)
