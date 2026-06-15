@@ -38,7 +38,11 @@ app.use(cors({
     if (!origin) return cb(null, true);                 // Same-Origin / Server-zu-Server / curl
     if (allowedOrigins.includes(origin)) return cb(null, true);
     if (!isProd && /^http:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
-    return cb(new Error("Not allowed by CORS"));
+    // NICHT werfen (sonst 500 auf alle Requests inkl. eigener Assets, da Vite
+    // mit crossorigin auch Same-Origin einen Origin-Header sendet). cb(null,false)
+    // = kein ACAO-Header: Same-Origin lädt normal, echte Fremd-Origins werden vom
+    // Browser geblockt. Schutz bleibt, ohne die eigene SPA zu zerstören.
+    return cb(null, false);
   },
   credentials: true,
 }));
