@@ -1,179 +1,167 @@
-# Lizenz-Stufen für PlaIn — Konzept
+# Lizenzierung für PlaIn — Architektur & Konzept
 
-> Status: **Konzeptphase**, noch nicht implementiert.
-> Diese Notiz beschreibt eine pragmatische Architektur, mit der wir PlaIn
-> zukünftig in unterschiedlichen Lizenz-Stufen anbieten können, ohne das
-> existierende RBAC-System brechen zu müssen.
+> **Status (2026-06-15):** Beschlossen. Phase **L0 (Foundation, ohne Enforcement)** wird auf
+> Branch `feature/license-tiers` umgesetzt. Dieses Dokument ist die maßgebliche
+> Beschreibung der Architektur. Der **Funktionskatalog** wird nicht hier von Hand
+> gepflegt, sondern aus dem Code-Manifest generiert → siehe
+> [LICENSE_CAPABILITIES.md](LICENSE_CAPABILITIES.md) (auto-generiert).
+> Der Entwickler-Workflow steht in [LICENSE_DEVELOPMENT_CHECKLIST.md](LICENSE_DEVELOPMENT_CHECKLIST.md).
 
----
-
-## Leitprinzipien
-
-1. **RBAC steuert WAS jemand darf**, Lizenz steuert **OB der Tenant es überhaupt nutzen kann**. Beide Ebenen sind orthogonal.
-2. **Lizenz ist tenantweit**, nicht userweit. Der Tenant kauft, alle User profitieren.
-3. **Soft-Lock statt Hard-Lock**: bei Lizenz-Downgrade nicht Daten löschen, sondern Features deaktivieren und User informieren.
-4. **Klare Mappings**: jedes Feature gehört zu genau einer Lizenz-Stufe.
-5. **Bezahlmodell-agnostisch**: Konzept funktioniert für monatlich / jährlich / per-Seat / Flatrate.
+PlaIn bekommt zusätzlich zum bestehenden **RBAC** (siehe Migration `0062`,
+`docs/RBAC_DEVELOPMENT_CHECKLIST.md`) ein **Lizenz-Layer**. Beide Ebenen sind
+orthogonal und greifen klar definiert ineinander.
 
 ---
 
-## Vorgeschlagene Lizenz-Stufen
+## 1. Leitprinzipien
 
-| Tier | Zielgruppe | Preis (Beispiel) |
-|---|---|---|
-| **Free** | Solo-Architekten, Testphase | 0 € |
-| **Basic** | 1-5 Mitarbeiter, Standardabläufe | ~29 €/Monat/Tenant |
-| **Pro** | 5-25 Mitarbeiter, vollständige Abwicklung | ~99 €/Monat/Tenant |
-| **Enterprise** | 25+ Mitarbeiter, individuelle Anpassungen, SLA | individuell |
-
-Konkrete Feature-Verteilung folgt unten.
+1. **RBAC = WAS darf ein _User_**, **Lizenz = OB der _Tenant_ es überhaupt nutzen kann.** Orthogonal.
+2. **Lizenz ist tenantweit.** Der Tenant kauft, alle User profitieren.
+3. **Soft-Lock statt Hard-Lock.** Downgrade löscht nie Daten — Features werden deaktiviert, Neuanlage gesperrt, Lesezugriff bleibt.
+4. **Server ist die Wahrheit.** Frontend-Gating ist nur UX; durchgesetzt wird ausschließlich serverseitig.
+5. **Quelle der Wahrheit getrennt nach Änderungsrhythmus:**
+   - **Capabilities (was das Produkt kann)** → **Code-Manifest** (versioniert, reviewbar, drift-geprüft).
+   - **Packaging (was in welchem Plan steckt) + Preise** → **DB** (über das Owner-Tool änderbar, **ohne Deploy**).
+   - **Tenant ↔ Plan-Zuordnung** → **DB** (später von Stripe getrieben).
+6. **Bezahlmodell-agnostisch.** Funktioniert für monatlich / jährlich / per-Seat / Flatrate / Add-Ons.
+7. **Fail-safe, nicht fail-open.** Bei nicht auflösbarem Entitlement wird auf das _zuletzt bekannte / sichere_ Niveau zurückgefallen — nie still alles freigeschaltet.
 
 ---
 
-## Daten-Modell
+## 2. Begriffe
+
+| Begriff | Bedeutung |
+|---|---|
+| **Module** | Oberkategorie für die UI-Gruppierung (z. B. „Rechnungen", „E-Rechnung"). Nur Gruppierung. |
+| **Capability** | Feingranulare, lizenzierbare Fähigkeit (z. B. `einvoice.peppol`, `reports.advanced`). **Einzige Enforcement-Granularität.** `boolean` oder `metered` (mit Zahl-Limit). |
+| **Plan** (Stufe/Tier) | Vermarktbares Paket (`free`, `basic`, `pro`, `enterprise`, `full`). Bündel von Capabilities. |
+| **Entitlement** | Die effektiv freigeschalteten Capabilities eines Tenants. |
+| **Override** | Per-Tenant-Ausnahme (`grant`/`revoke`) für Sonderdeals/Add-Ons. |
+| **Permission** | Bestehendes RBAC-Recht (`modul.aktion`). Eine Capability _gated_ ggf. mehrere Permissions. |
+
+---
+
+## 3. Wie RBAC und Lizenz ineinandergreifen
+
+Die Capability-Ebene wirkt **vor** der RBAC-Ebene: nicht lizenzierte Capabilities
+entfernen die zugehörigen Permissions aus dem effektiven Set des Users.
+
+```
+effektiveCapabilities(tenant) =
+    Plan-Capabilities
+  ∪ Override(grant)
+  − Override(revoke)
+
+effektivePermissions(user) =
+    RollenPermissions(user)
+  ∩ { p | p wird von einer lizenzierten Capability freigeschaltet
+          ODER p hängt an keiner Capability (immer erlaubt) }
+
+darfTun(user, perm)      = perm ∈ effektivePermissions(user)
+darfNutzen(tenant, cap)  = cap  ∈ effektiveCapabilities(tenant)
+```
+
+Beispiel: User hat Rolle mit `invoices.create_credit`, Tenant-Plan enthält aber
+nicht die Capability `invoices.credit` → der Tab „Gutschrift" verschwindet **und**
+das Backend antwortet `402 Payment Required`. Die Verknüpfung
+Capability→Permission(s) liegt in `CAPABILITY_PERMISSION`.
+
+> Ungemappte Permissions (keiner Capability zugeordnet) bleiben immer durch RBAC steuerbar.
+> So bricht das Hinzufügen des Lizenz-Layers kein bestehendes Recht.
+
+---
+
+## 4. Datenmodell (Migration `0070`)
 
 ```sql
--- Stufen-Katalog (System-fest, nicht tenant-änderbar)
-CREATE TABLE LICENSE_TIER (
-  ID            SERIAL PRIMARY KEY,
-  KEY           VARCHAR(20) UNIQUE NOT NULL,   -- 'free', 'basic', 'pro', 'enterprise'
-  NAME_DE       TEXT NOT NULL,
-  PRICE_MONTHLY DECIMAL(10,2),
-  PRICE_YEARLY  DECIMAL(10,2),
-  IS_ACTIVE     BOOLEAN NOT NULL DEFAULT TRUE,
-  POSITION      INTEGER NOT NULL DEFAULT 0
-);
-
--- Feature-Katalog (System-fest)
-CREATE TABLE LICENSE_FEATURE (
-  ID         SERIAL PRIMARY KEY,
-  KEY        VARCHAR(80) UNIQUE NOT NULL,   -- 'e-invoice.peppol', 'hoai.calculator', ...
-  LABEL_DE   TEXT NOT NULL,
-  CATEGORY   VARCHAR(50)
-);
-
--- Welche Features sind in welchem Tier? n:m
-CREATE TABLE LICENSE_TIER_FEATURE (
-  TIER_ID    INT REFERENCES LICENSE_TIER(ID) ON DELETE CASCADE,
-  FEATURE_ID INT REFERENCES LICENSE_FEATURE(ID) ON DELETE CASCADE,
-  -- Optionale Numeric-Limits pro Feature in diesem Tier
-  -- (z.B. 'employees.count' Limit, 'projects.count' Limit, 'storage.mb' Limit)
-  NUMERIC_LIMIT INTEGER,
-  PRIMARY KEY (TIER_ID, FEATURE_ID)
-);
-
--- Tenant-Lizenz: was hat der Tenant gerade?
-CREATE TABLE TENANT_LICENSE (
-  TENANT_ID         INT PRIMARY KEY,
-  TIER_ID           INT NOT NULL REFERENCES LICENSE_TIER(ID),
-  STARTS_AT         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  VALID_UNTIL       TIMESTAMPTZ,                 -- NULL = unbegrenzt (z.B. Enterprise)
-  TRIAL_UNTIL       TIMESTAMPTZ,                 -- für Probemonat-Mechanik
-  EXTERNAL_REF      TEXT,                        -- Stripe Subscription ID etc.
-  GRACE_UNTIL       TIMESTAMPTZ,                 -- Zahlung in Verzug? Bis hier weiter nutzbar
-  STATE             VARCHAR(20) NOT NULL DEFAULT 'active',  -- active|trial|past_due|expired
-  UPDATED_AT        TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- (Optional) Verbindung Rollen <-> Features:
--- "Diese Rolle benötigt, dass folgende Features lizensiert sind"
-CREATE TABLE USER_ROLE_FEATURE_REQUIREMENT (
-  ROLE_ID    INT REFERENCES USER_ROLE(ID) ON DELETE CASCADE,
-  FEATURE_ID INT REFERENCES LICENSE_FEATURE(ID) ON DELETE CASCADE,
-  PRIMARY KEY (ROLE_ID, FEATURE_ID)
-);
+LICENSE_MODULE (KEY pk, LABEL_DE, POSITION)
+LICENSE_CAPABILITY (KEY pk, MODULE_KEY→LICENSE_MODULE, LABEL_DE,
+                    TYPE 'boolean'|'metered', UNIT, POSITION)
+LICENSE_PLAN (ID pk, KEY unique, NAME_DE, DESCRIPTION_DE, POSITION,
+              IS_ACTIVE, PRICE_MONTHLY, PRICE_YEARLY, VERSION)
+PLAN_CAPABILITY (PLAN_ID→LICENSE_PLAN, CAPABILITY_KEY→LICENSE_CAPABILITY,
+                 NUMERIC_LIMIT, pk(PLAN_ID,CAPABILITY_KEY))   -- die Matrix
+CAPABILITY_PERMISSION (CAPABILITY_KEY→LICENSE_CAPABILITY,
+                       PERMISSION_KEY→PERMISSION, pk(beide))   -- Layer-Verknüpfung
+TENANT_LICENSE (TENANT_ID pk, PLAN_ID, PLAN_VERSION, STATE,
+                STARTS_AT, VALID_UNTIL, TRIAL_UNTIL, GRACE_UNTIL,
+                EXTERNAL_REF, UPDATED_AT)
+TENANT_ENTITLEMENT_OVERRIDE (ID pk, TENANT_ID, CAPABILITY_KEY,
+                MODE 'grant'|'revoke', NUMERIC_LIMIT, REASON,
+                EXPIRES_AT, CREATED_AT, CREATED_BY)            -- Add-Ons/Sonderdeals
+LICENSE_CHANGE_LOG (ID pk, ACTOR, ENTITY, ENTITY_REF, ACTION,
+                BEFORE jsonb, AFTER jsonb, AT)                 -- Audit Control-Plane
+PLATFORM_ADMIN (ID pk, EMAIL unique, PASSWORD_HASH, TOTP_SECRET,
+                IS_ACTIVE, LAST_LOGIN_AT, CREATED_AT)          -- Owner-Konsole (L1)
 ```
+
+**Quelle-der-Wahrheit-Regel:**
+`LICENSE_MODULE`, `LICENSE_CAPABILITY`, `CAPABILITY_PERMISSION` sind **Spiegel des
+Code-Manifests** und werden aus diesem generiert (Seed `0070b`, Sync-Tooling). Im
+Owner-Tool sind sie **read-only**. Editierbar sind nur `LICENSE_PLAN`,
+`PLAN_CAPABILITY`, `TENANT_*`.
+
+**Plan-Versionierung:** Ein Plan ist ein Snapshot. Ändert man „Pro", gilt das **ab
+jetzt**; bestehende Abonnenten sind über `TENANT_LICENSE.PLAN_VERSION` gepinnt
+(Grandfathering). So ändert eine Packaging-Anpassung nie still den Umfang
+zahlender Kunden.
 
 ---
 
-## Vorgeschlagener Feature-Katalog
+## 5. Capability-Manifest + Drift-Check (der „Zwischen-Layer")
 
-Aus den existierenden Modulen abgeleitet — kann sich entwickeln:
+**Manifest:** `backend/licensing/capabilities.manifest.js` — einzige Quelle der
+Wahrheit für Module + Capabilities + deren `permissions`-Verknüpfung. Versioniert,
+im Review, drift-geprüft.
 
-### Kern (in jedem Tier)
-- `core.projects` — Projekte
-- `core.invoices.basic` — einfache Rechnungen
-- `core.addresses` — Adressbuch
-- `core.bookings` — Stunden buchen
+**Drift-Check** (`backend/licensing/driftCheck.js`, als Jest-Test in CI + CLI
+`npm run license:check`) meldet:
 
-### Erweitert (ab Basic)
-- `invoices.partial` — Abschlagsrechnungen
-- `invoices.final` — Teil-/Schlussrechnung
-- `invoices.credit` — Gutschrift
-- `dunning.basic` — einfache Mahnungen
-- `offers.basic` — Angebote
-- `reports.standard` — Standard-Reports
+1. **Undeklariert** — Code nutzt `requireFeature('x')` / `<HasFeature feature="x">`, aber `x` fehlt im Manifest → **Fehler (CI rot)**.
+2. **Unbekannte Permission** — eine Capability referenziert eine Permission, die nicht im Katalog (`0062`/`0063`) existiert → **Fehler**.
+3. **Nicht paketiert** — Capability im Manifest, aber keinem Plan zugeordnet → **Inbox** im Owner-Tool (= „neue Funktion dazugekommen"-Signal; du entscheidest die Zuordnung).
+4. **Verwaist/tot** — Capability im Manifest, aber im Code nie als Gate referenziert → **Warnung** (erst aktiv, sobald Enforcement existiert).
 
-### Pro
-- `einvoice.xrechnung` — XRechnung-XML
-- `einvoice.zugferd` — ZUGFeRD-Hybrid
-- `einvoice.peppol` — Peppol BIS 3.0
-- `hoai.calculator` — HOAI-Honorarberechnung
-- `security_retention` — Sicherheitseinbehalte
-- `attachments.embed` — Anlagen in E-Rechnung einbetten
-- `dunning.email` — Mahnungen per E-Mail
-- `reports.advanced` — Trends, Projekt-Forecasting, Company-KPIs
-- `cost_rate.calculator` — Kostensatz-Rechner
-- `monatsabschluss.auto` — Automatischer Monatsabschluss
-- `notifications.advanced` — Konfigurierbare Benachrichtigungen
-- `text_templates` — Textvorlagen
-- `arbzg.compliance` — ArbZG-Validierung + Audit
+**Generatoren** (`npm run license:gen`):
+- `backend/licensing/generateSeedSql.js` → `backend/migrations/0070b_license_capabilities_seed.sql` (Module/Capabilities/Permission-Links/Full-Plan).
+- `backend/licensing/generateDocs.js` → `docs/LICENSE_CAPABILITIES.md` (generierter Katalog).
 
-### Enterprise
-- `multi_company` — mehrere Unternehmen pro Tenant
-- `custom_pdf_templates` — eigene Rechnungs-Templates
-- `api.access` — API-Token für externe Systeme
-- `sso.saml` — SAML/OIDC-Login
-- `priority_support` — SLA-basiert
-
-### Numeric Limits (Beispiele)
-Diese werden in `LICENSE_TIER_FEATURE.NUMERIC_LIMIT` abgelegt:
-
-| Tier | Mitarbeiter | Aktive Projekte | Storage |
-|---|---|---|---|
-| Free | 1 | 3 | 100 MB |
-| Basic | 5 | 25 | 1 GB |
-| Pro | 25 | 200 | 10 GB |
-| Enterprise | unbegrenzt | unbegrenzt | individuell |
+So gibt es **keine** Doppelpflege: Manifest ändern → `license:gen` → Seed + Doku sind aktuell, Drift-Check bewacht den Rest.
 
 ---
 
-## Wie greifen RBAC und Lizenz ineinander?
+## 6. Owner-Tool / Control-Plane (separate Konsole — beschlossen)
 
-Pseudocode für Permission-Check ab Lizenz-Phase:
+Eine **eigenständige Admin-Konsole**, strikt von der Tenant-App getrennt:
 
-```
-hasAccess(user, requirement):
-  if requirement is permission_key:
-    return user.permissions.has(requirement)
-  if requirement is feature_key:
-    return tenant.license.features.has(requirement)
-  if requirement is both:
-    return user.permissions.has(perm) AND tenant.license.features.has(feat)
-```
-
-Konkret in Code:
-- **Permissions** entscheiden, ob ein Button gerendert wird (RBAC).
-- **Features** entscheiden, ob die Permission im aktuellen Lizenzstatus überhaupt sinnvoll wäre.
-
-Beispiel: ein User hat `invoices.create_credit` (Permission), aber der Tenant hat nur Free (Feature `invoices.credit` nicht enthalten) → Tab „Gutschrift" wird ausgeblendet UND Backend antwortet 402 Payment Required.
+- **Eigene Identität** `PLATFORM_ADMIN` (kein Tenant-`EMPLOYEE` mit Extra-Rechten — vermeidet Privileg-Vermischung), eigene JWT-Audience, **2FA (TOTP) Pflicht**, kurze Session, optional IP-Allowlist.
+- **Eigener Deploy/Domain** (z. B. `console.…`), greift auf dieselbe Supabase zu.
+- **Funktionen:**
+  - Matrix **Plan × Capability** (Häkchen-Grid; Modul-Häkchen = alle Capabilities des Moduls) → schreibt `PLAN_CAPABILITY`.
+  - **Pläne anlegen/bearbeiten** (`LICENSE_PLAN`) — ohne Deploy.
+  - **Per-Tenant-Overrides & Add-Ons** (`TENANT_ENTITLEMENT_OVERRIDE`).
+  - **Tenant-Lizenz-Übersicht** (Plan, State, Trial/Grace).
+  - **Inbox** ungemappter Capabilities (aus Drift-Check).
+  - **Audit-Log** (`LICENSE_CHANGE_LOG`), idealerweise append-only + Rollback.
+- **Capabilities sind read-only** (kommen aus dem Manifest) — keine Phantom-Features.
 
 ---
 
-## Backend-Architektur
+## 7. Laufzeit-Enforcement (Phasen L2–L3)
 
-**Middleware-Chain** (zusätzlich zu auth + permissions):
+**Backend** — zusätzliche Middleware nach auth + permissions:
 
 ```js
 app.use("/api/v1/...", authMiddleware, permissionsMiddleware, licenseMiddleware, routes);
 ```
 
-`licenseMiddleware`:
-- Lädt `tenant.license` einmal pro Request (gecached via TTL ~60s)
-- Setzt `req.license = { tier, features: Set<string>, limits: Map<string,number> }`
-- Setzt `req.hasFeature(key)` Helper
+`licenseMiddleware` lädt das Tenant-Entitlement **server-seitig pro Request**
+(kurzer TTL-Cache ~60s, **Bump-on-Change** bei Plan-/Override-Mutation — **nicht**
+ins langlebige JWT backen, sonst stale nach Up-/Downgrade) und setzt
+`req.license = { plan, capabilities:Set, limits:Map, state }` + `req.hasFeature(key)`.
 
-**Route-Guards**:
+Route-Guard analog zu `requirePermission`:
+
 ```js
 router.post("/:id/einvoice/peppol",
   requirePermission("invoices.download_xml"),
@@ -181,128 +169,115 @@ router.post("/:id/einvoice/peppol",
   handler);
 ```
 
-`requireFeature` antwortet bei fehlendem Feature mit `402 Payment Required` + JSON-Payload:
+`requireFeature` → bei fehlender Capability `402 Payment Required`:
+
 ```json
-{
-  "error": "Feature nicht in deiner Lizenz enthalten",
-  "feature": "einvoice.peppol",
-  "current_tier": "basic",
-  "upgrade_to": "pro",
-  "upgrade_url": "/admin?tab=lizenz"
-}
+{ "error": "Feature nicht in deiner Lizenz enthalten",
+  "feature": "einvoice.peppol", "current_plan": "basic",
+  "upgrade_to": "pro", "upgrade_url": "/einstellungen/lizenz" }
 ```
 
-**Numeric Limits**:
-- Bei `POST /projekte` prüft Server, ob Tenant noch unter `projects.count` Limit ist
-- Bei Überschreitung: `402` mit Hinweis
+**Metered Limits** (z. B. `limits.projects_active`) werden bei Mutationen geprüft
+(`POST /projekte` → unter Limit?). `NULL` = unbegrenzt.
 
----
+**Fail-safe:** Kann das Entitlement nicht geladen werden → letztes bekanntes
+gecachtes Entitlement; sonst sicheres Minimum des Tenant-Plans — **nie** voll offen,
+**nie** komplett zu (würde zahlende Kunden im Outage aussperren).
 
-## Frontend-Architektur
+**Frontend** — `licenseStore` (Zustand, analog `permissionsStore`):
 
-**LicenseStore** (Zustand-Slice analog PermissionsStore):
 ```ts
-interface LicenseState {
-  tier: 'free' | 'basic' | 'pro' | 'enterprise'
-  features: Set<string>
-  limits: Map<string, number>
-  state: 'active' | 'trial' | 'past_due' | 'expired'
-  validUntil: string | null
-}
+useFeature('einvoice.peppol')   // boolean
+useLimit('limits.projects_active') // { current, max, exceeded }
+<HasFeature feature="hoai.calculator" fallback={<UpgradeHint/>}>…</HasFeature>
 ```
 
-**Hooks**:
-```ts
-useFeature('einvoice.peppol')  // boolean
-useLimit('projects.count')     // { current: 17, max: 25, exceeded: false }
-useLicenseTier()               // tier object
+Kombiniert mit RBAC: `<Can permission="…"><HasFeature feature="…">…</HasFeature></Can>`.
+
+---
+
+## 8. Lizenz-Zustände (State Machine)
+
+`TENANT_LICENSE.STATE`:
+
+```
+trial ──(Kauf)──► active ──(Zahlung überfällig)──► past_due ──► grace ──► expired
+  │                  ▲                                                      │
+  └──(Trial-Ende)────┘◄──────────────────(Reaktivierung)──────────────────┘
 ```
 
-**Wrapper**:
-```tsx
-<HasFeature feature="hoai.calculator" fallback={<UpgradeHint />}>
-  ...content...
-</HasFeature>
-```
-
-**UpgradeHint**: kleines Banner „Diese Funktion gibt es im Pro-Tarif" + CTA zum Upgrade.
-
-**Combined mit Can**:
-```tsx
-<Can permission="invoices.download_xml">
-  <HasFeature feature="einvoice.peppol">
-    <button>Peppol-XML</button>
-  </HasFeature>
-</Can>
-```
+| State | Zugriff |
+|---|---|
+| `trial` | voller Plan-Umfang bis `TRIAL_UNTIL` |
+| `active` | voller Plan-Umfang |
+| `past_due` | voll, aber Banner + Zahlungsaufforderung |
+| `grace` | voll bis `GRACE_UNTIL` (letzte Frist) |
+| `expired` | auf Free/Minimum zurück, Daten bleiben (Soft-Lock) |
 
 ---
 
-## Migration & Rollout
+## 9. Beispiel-Pläne & Packaging
 
-### Phase 5 — Lizenz-Foundation (zukünftig)
-1. DB-Tabellen anlegen
-2. Bestehende Tenants automatisch auf **Pro** (oder höher) — niemand verliert Features
-3. `licenseMiddleware` einbauen, aber `requireFeature` noch nicht angewendet
-4. Admin-UI: Lizenz-Status anzeigen
-5. Stripe / Zahlungs-Integration
+> Konkrete Aufteilung = **kommerzielle Entscheidung im Owner-Tool**, nicht im Code.
+> Das hier ist der Startvorschlag. (Generierter Capability-Katalog:
+> [LICENSE_CAPABILITIES.md](LICENSE_CAPABILITIES.md).)
 
-### Phase 6 — Soft-Enforcement
-1. Frontend `<HasFeature>` an einzelnen Stellen
-2. Upgrade-Hints werden angezeigt
-3. Backend bleibt offen → wer Permission hat, kann nutzen
+| Plan | Zielgruppe | Preis (Beispiel) |
+|---|---|---|
+| **Free** | Solo, Testphase | 0 € |
+| **Basic** | 1–5 MA, Standardabläufe | ~29 €/Monat |
+| **Pro** | 5–25 MA, volle Abwicklung | ~99 €/Monat |
+| **Enterprise** | 25+ MA, individuell, SLA | individuell |
+| **Full** | _interner Start-Plan_ — alle Capabilities; alle Bestands-Tenants in L0 hierauf | — |
 
-### Phase 7 — Hard-Enforcement
-1. Backend antwortet 402 wenn Feature fehlt
-2. Numeric-Limits werden bei Mutations geprüft
-3. Lizenz-Downgrade-Flow: existierende Daten bleiben, Erstellung neuer Items wird gesperrt
-
-### Phase 8 — Zahlungs-Integration
-1. Stripe Webhooks pflegen `TENANT_LICENSE.STATE`
-2. `past_due`-Logik mit Grace-Period
-3. Automatische Mahnung / Suspendierung
+**Bezahlmodelle** (agnostisch): per Plan (Flatrate), per Seat, Mischmodell, Add-Ons.
+Empfehlung: **Plan + Seat-basiert mit Mengenrabatt**.
 
 ---
 
-## Bezahlmodelle
+## 10. Rollout-Phasen
 
-Das Konzept ist absichtlich zahlungsmodell-agnostisch. Mögliche Optionen:
+| Phase | Inhalt | Verhaltensänderung |
+|---|---|---|
+| **L0** | Manifest + DB-Tabellen (`0070`/`0070b`) + Drift-Check (CI) + generierte Doku; alle Tenants auf `full` | **keine** |
+| **L1** | Owner-Konsole: Matrix, Pläne, Overrides, Inbox, Audit | keine (nur Admin-seitig) |
+| **L2** | `licenseMiddleware` lädt Entitlement; Frontend Soft-Gating (`HasFeature`, UpgradeHints) | nur UI |
+| **L3** | Backend Hard-Enforcement (`requireFeature` 402, metered Limits), Fail-safe, Capability→Permission-Filter aktiv | **hart** |
+| **L4** | Stripe → Subscription→Entitlement, Grace/Dunning, Self-Service Up-/Downgrade | Billing |
 
-- **Per Tier** (Flatrate): „Pro für 99 €/Monat, beliebig viele User"
-- **Per Seat**: „Pro für 19 €/Monat/User"
-- **Mischmodell**: Basis-Flatrate + Aufpreis ab gewisser Mitarbeiter-Anzahl
-- **Add-Ons**: Pro + Peppol-Add-On für +20 €/Monat (über `LICENSE_TIER_FEATURE` darstellbar mit eigenem „Bundle"-Tier)
-
-Empfehlung: **Pro Tier + Seat-basiert mit Mengenrabatt**. Skaliert mit Größe des Kunden, einfach zu verstehen.
-
----
-
-## Was ist NICHT Teil dieses Konzepts
-
-- **DSGVO / Datenexport bei Tenant-Löschung**: separates Thema
-- **Geo-Pricing / Mehrere Währungen**: später bei Internationalisierung
-- **Self-Service Tier-Wechsel-Flow**: UI-Teil, separat zu spezifizieren
-- **Discount-Coupons / Promo-Codes**: Stripe-seitig
-- **Multi-Tenant pro User**: erst relevant wenn ein Mensch in mehreren Tenants Mitglied ist
+Risiko wird **zuletzt** eingeführt und ist bis L3 voll reversibel.
 
 ---
 
-## Offene Fragen
+## 11. Sicherheit (Pflicht, weil Lizenz = Geld)
 
-1. **Welche Features konkret in welcher Stufe?** Die obige Aufteilung ist mein Vorschlag — muss kommerziell validiert werden.
-2. **Preise?** Stark vom Wettbewerb abhängig (vergleichbar: Adler-Software, Aboweb, Pirelli-Plan).
-3. **Probemonat?** Wenn ja: wie lang, welcher Tier?
-4. **Wie strikt bei Downgrade?** Verlorene Features sofort weg vs. Grace-Period?
-5. **Hardware-Limits via Stripe-Metering oder eigener Logik?**
+- Enforcement **nur serverseitig**; Frontend = UX.
+- Control-Plane physisch/logisch isoliert (eigene Identität, 2FA, Audit, append-only History, Rollback).
+- Entitlement nicht ins langlebige JWT — TTL-Cache + Bump-on-Change.
+- Fail-safe-Richtung dokumentiert (§7).
+- Idempotente Stripe-Webhooks (L4); Entitlement wird aus Subscription _abgeleitet_, nie ad-hoc gesetzt.
+- **Vor erstem echten Verkauf** die in `CLAUDE.md` gelisteten offenen Lücken schließen: JWT-Secret-Fallback, offenes CORS, fehlendes Rate-Limiting.
 
 ---
 
-## Empfohlene nächste Schritte (wenn implementiert wird)
+## 12. Automatisierung & Pflege
 
-1. **Marktanalyse**: 3-5 ähnliche Tools anschauen, Preise + Feature-Pakete protokollieren
-2. **Feature-Mapping finalisieren**: mit konkreten Permission- und Modul-Bezügen aus dem aktuellen Code
-3. **Erstellt prototypische Stripe-Integration** in einem Sandbox-Tenant
-4. **Phase 5 implementieren** (Foundation, ohne Enforcement) — analog wie wir RBAC ausgerollt haben
-5. **Pricing-Test** mit existierenden Kunden / Beta-Gruppe
+- **Deterministischer Kern in CI:** Drift-Check als Jest-Test (läuft bei jedem Push/PR auf `main`) + `npm run license:check`.
+- **Cowork/geplante Tasks obendrauf** (sobald L0 steht): unzugeordnete Capabilities erklären + Paket-Vorschlag posten, Doku regenerieren, Issue/PR öffnen. Einrichtbar via `/schedule`.
 
-Aufwand für eine erste Phase: ~3-5 Tage Backend + Frontend + Stripe-Anbindung.
+---
+
+## 13. Offene kommerzielle Fragen (nicht-technisch)
+
+1. Konkrete Capability→Plan-Verteilung (im Owner-Tool, nicht im Code).
+2. Preise (wettbewerbsabhängig).
+3. Probemonat: Länge, welcher Plan.
+4. Downgrade-Strenge (sofort vs. Grace).
+5. Metered Limits via Stripe-Metering oder eigene Logik.
+
+---
+
+## 14. Nicht Teil dieses Konzepts
+
+DSGVO/Datenexport bei Tenant-Löschung · Geo-Pricing/Mehrwährung · Discount-Coupons
+(Stripe-seitig) · Multi-Tenant-pro-User.
