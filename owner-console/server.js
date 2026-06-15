@@ -1,6 +1,8 @@
 "use strict";
 
 require("dotenv").config();
+const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -11,7 +13,8 @@ const port = process.env.CONSOLE_PORT || 4000;
 
 // Reverse-Proxy (Railway): echte Client-IP für Rate-Limiting.
 app.set("trust proxy", 1);
-app.use(helmet());
+// CSP aus, da dieser Server auch die gebaute SPA ausliefert (Vite-Bundles).
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 
 // CORS-Allowlist für die Konsolen-UI.
@@ -37,4 +40,14 @@ app.use("/api/console", consoleAuth, require("./routes/catalog"));
 app.use("/api/console", consoleAuth, require("./routes/plans"));
 app.use("/api/console", consoleAuth, require("./routes/tenants"));
 
-app.listen(port, () => console.log(`✅ Owner-Konsole läuft auf Port ${port}`));
+// Gebaute Web-UI ausliefern (ein Server für UI + API). Falls noch nicht gebaut:
+// `npm --prefix web run build`.
+const WEB_DIST = path.join(__dirname, "web", "dist");
+if (fs.existsSync(path.join(WEB_DIST, "index.html"))) {
+  app.use(express.static(WEB_DIST));
+  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(WEB_DIST, "index.html")));
+} else {
+  console.warn("[owner-console] web/dist fehlt — UI nicht gebaut. Nur API verfügbar.");
+}
+
+app.listen(port, () => console.log(`✅ Owner-Konsole läuft auf http://localhost:${port}`));
