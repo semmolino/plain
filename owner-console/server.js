@@ -25,7 +25,9 @@ app.use(cors({
     if (!origin) return cb(null, true);
     if (origins.includes(origin)) return cb(null, true);
     if (!isProd && /^http:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
-    return cb(new Error("Not allowed by CORS"));
+    // Nicht werfen: cb(null,false) liefert kein ACAO -> Same-Origin (eigene SPA)
+    // lädt normal, echte Fremd-Origins werden vom Browser geblockt. Kein 500.
+    return cb(null, false);
   },
   credentials: true,
 }));
