@@ -1,0 +1,4 @@
+# Git-Hooks und Shell-Skripte immer mit LF auschecken — sonst bricht auf Windows
+# der Shebang (\r am Zeilenende -> "bad interpreter").
+.githooks/** text eol=lf
+*.sh text eol=lf
