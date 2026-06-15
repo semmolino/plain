@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { RollenSection } from '@/pages/admin/RollenSection'
 import { useFilterTabs } from '@/store/permissionsStore'
+import { useLicenseFilterTabs } from '@/store/licenseStore'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
@@ -50,18 +51,18 @@ import {
 import { fetchActiveEmployees } from '@/api/projekte'
 import { Modal } from '@/components/ui/Modal'
 
-const PAGE_TABS: { id: string; label: string; permissions: string[] }[] = [
+const PAGE_TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'stammdaten',              label: 'Stammdaten',              permissions: ['settings.basedata.view','settings.basedata.edit'] },
   { id: 'vorbelegungen',           label: 'Vorbelegungen',           permissions: ['settings.defaults.edit'] },
-  { id: 'benachrichtigungen',      label: 'Benachrichtigungen',      permissions: ['settings.notifications.edit'] },
-  { id: 'monatsabschluss',         label: 'Monatsabschluss',         permissions: ['settings.monthly_close.edit'] },
+  { id: 'benachrichtigungen',      label: 'Benachrichtigungen',      permissions: ['settings.notifications.edit'], feature: 'settings.notifications' },
+  { id: 'monatsabschluss',         label: 'Monatsabschluss',         permissions: ['settings.monthly_close.edit'], feature: 'employees.month_close' },
   { id: 'unternehmen',             label: 'Unternehmen',             permissions: ['settings.company.view','settings.company.edit'] },
   { id: 'nummernkreise',           label: 'Nummernkreise',           permissions: ['settings.numbers.edit'] },
-  { id: 'textvorlagen',            label: 'Textvorlagen',            permissions: ['settings.text_templates.edit'] },
-  { id: 'mahnungseinstellungen',   label: 'Mahnungen',               permissions: ['settings.dunning_config.edit'] },
-  { id: 'arbzg',                   label: 'Arbeitszeiten',           permissions: ['settings.work_time.edit'] },
-  { id: 'kostensatz',              label: 'Kostensatz-Rechner',      permissions: ['settings.cost_rate.edit'] },
-  { id: 'rollen',                  label: 'Rollen & Berechtigungen', permissions: ['roles.view'] },
+  { id: 'textvorlagen',            label: 'Textvorlagen',            permissions: ['settings.text_templates.edit'], feature: 'settings.text_templates' },
+  { id: 'mahnungseinstellungen',   label: 'Mahnungen',               permissions: ['settings.dunning_config.edit'], feature: 'settings.dunning_config' },
+  { id: 'arbzg',                   label: 'Arbeitszeiten',           permissions: ['settings.work_time.edit'], feature: 'arbzg.compliance' },
+  { id: 'kostensatz',              label: 'Kostensatz-Rechner',      permissions: ['settings.cost_rate.edit'], feature: 'cost_rate.calculator' },
+  { id: 'rollen',                  label: 'Rollen & Berechtigungen', permissions: ['roles.view'], feature: 'settings.roles' },
   { id: 'engagement',              label: 'Engagement',              permissions: ['settings.notifications.edit'] },
 ]
 
@@ -3384,7 +3385,7 @@ export function AdminPage() {
       <div className="master-page-header">
         <h1 className="master-page-title">Administration</h1>
       </div>
-      <Tabs tabs={useFilterTabs(PAGE_TABS)} active={tab} onChange={setTab} />
+      <Tabs tabs={useLicenseFilterTabs(useFilterTabs(PAGE_TABS))} active={tab} onChange={setTab} />
       <div className="master-section">
         {tab === 'stammdaten'            && (
           <>

@@ -5,6 +5,7 @@ import { FileText, Banknote, Mail, Receipt, Folder, MoreHorizontal, SlidersHoriz
 import { Modal }          from '@/components/ui/Modal'
 import { Message }        from '@/components/ui/Message'
 import { ConfirmModal }   from '@/components/ui/ConfirmModal'
+import { HasFeature }     from '@/components/ui/HasFeature'
 import { RecentList }     from '@/components/recents/RecentList'
 import { trackRecent }    from '@/api/recents'
 import {
@@ -841,11 +842,13 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                           onOpen={() => setMenuOpenId(rowKey(r))}
                           onClose={() => setMenuOpenId(null)}
                         >
-                          <button
-                            className="row-menu-item"
-                            disabled={!r.mahnungId}
-                            onClick={() => { setMenuOpenId(null); r.mahnungId && openEmailFor(r) }}
-                          ><Mail size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />E-Mail senden</button>
+                          <HasFeature feature="dunning.email">
+                            <button
+                              className="row-menu-item"
+                              disabled={!r.mahnungId}
+                              onClick={() => { setMenuOpenId(null); r.mahnungId && openEmailFor(r) }}
+                            ><Mail size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />E-Mail senden</button>
+                          </HasFeature>
                           <button
                             className="row-menu-item"
                             onClick={() => { setMenuOpenId(null); navigate('/rechnungen', { state: { projectSearch: r.number } }) }}
@@ -949,9 +952,11 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                 <button className="btn" onClick={() => detailRow.mahnungId && openMahnungPdf(detailRow.mahnungId)} disabled={!detailRow.mahnungId} title={!detailRow.mahnungId ? 'Zuerst speichern' : undefined}>
                   PDF öffnen
                 </button>
-                <button className="btn" onClick={() => detailRow.mahnungId && openEmailFor(detailRow)} disabled={!detailRow.mahnungId} title={!detailRow.mahnungId ? 'Zuerst speichern' : undefined}>
-                  E-Mail senden
-                </button>
+                <HasFeature feature="dunning.email">
+                  <button className="btn" onClick={() => detailRow.mahnungId && openEmailFor(detailRow)} disabled={!detailRow.mahnungId} title={!detailRow.mahnungId ? 'Zuerst speichern' : undefined}>
+                    E-Mail senden
+                  </button>
+                </HasFeature>
               </div>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 12, fontSize: 13 }}>
