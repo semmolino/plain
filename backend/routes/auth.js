@@ -1,7 +1,11 @@
 const express    = require("express");
 const jwt        = require("jsonwebtoken");
 const bcrypt     = require("bcryptjs");
+const crypto     = require("crypto");
 const { sendMail: _sendMail } = require("../services/emailService");
+const {
+  loginLimiter, passwordLimiter, resetRequestLimiter, resetConfirmLimiter, signupLimiter,
+} = require("../middleware/rateLimit");
 
 // Compatibility shim — auth.js used createMailer() locally; now delegates to emailService
 function createMailer() {
@@ -20,6 +24,16 @@ function jwtSecret() {
 
 function issueToken(payload) {
   return jwt.sign(payload, jwtSecret(), { expiresIn: "8h" });
+}
+
+/**
+ * One-Time-Fingerprint des aktuellen Passwort-Hashes. Wird in den Reset-Token
+ * eingebettet und beim Bestätigen geprüft: ändert sich das Passwort, passt der
+ * Fingerprint nicht mehr -> ein bereits benutzter Reset-Link (und alle anderen
+ * ausstehenden) wird ungültig. Replay-/Wiederverwendungsschutz.
+ */
+function pwdFingerprint(passwordHashOrNull) {
+  return crypto.createHash("sha256").update(String(passwordHashOrNull || "")).digest("hex").slice(0, 16);
 }
 
 /**
@@ -103,7 +117,7 @@ module.exports = (supabase) => {
 
   // ── Login ─────────────────────────────────────────────────────────────────
   // Validates EMPLOYEE.MAIL + EMPLOYEE.PASSWORD and issues a JWT.
-  router.post("/login", async (req, res) => {
+  router.post("/login", loginLimiter, async (req, res) => {
     const { email, password } = req.body || {};
     if (!email) {
       return res.status(400).json({ error: "E-Mail ist erforderlich." });
@@ -203,7 +217,7 @@ module.exports = (supabase) => {
   });
 
   // ── Change password ───────────────────────────────────────────────────────
-  router.patch("/me/password", async (req, res) => {
+  router.patch("/me/password", passwordLimiter, async (req, res) => {
     const token = (req.headers.authorization || "").replace("Bearer ", "").trim();
     if (!token) return res.status(401).json({ error: "Nicht authentifiziert" });
 
@@ -245,13 +259,13 @@ module.exports = (supabase) => {
   });
 
   // ── Password reset request ────────────────────────────────────────────────
-  router.post("/reset-request", async (req, res) => {
+  router.post("/reset-request", resetRequestLimiter, async (req, res) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: "E-Mail ist erforderlich." });
 
     const { data: employee } = await supabase
       .from("EMPLOYEE")
-      .select("ID, MAIL")
+      .select("ID, MAIL, PASSWORD")
       .ilike("MAIL", email.trim())
       .maybeSingle();
 
@@ -260,7 +274,7 @@ module.exports = (supabase) => {
     }
 
     const resetToken = jwt.sign(
-      { employee_id: employee.ID, email: employee.MAIL, purpose: "reset" },
+      { employee_id: employee.ID, email: employee.MAIL, purpose: "reset", pv: pwdFingerprint(employee.PASSWORD) },
       jwtSecret(),
       { expiresIn: "1h" }
     );
@@ -292,7 +306,7 @@ module.exports = (supabase) => {
   });
 
   // ── Password reset confirm ────────────────────────────────────────────────
-  router.post("/reset-confirm", async (req, res) => {
+  router.post("/reset-confirm", resetConfirmLimiter, async (req, res) => {
     const { token, new_password } = req.body || {};
     if (!token || !new_password) {
       return res.status(400).json({ error: "Token und neues Passwort sind erforderlich." });
@@ -311,6 +325,20 @@ module.exports = (supabase) => {
       return res.status(400).json({ error: "Ungültiger Link." });
     }
 
+    // One-Time-Schutz: Fingerprint muss zum AKTUELLEN Passwort passen. Wurde der
+    // Link schon benutzt (Passwort geändert), schlägt das fehl -> kein Replay.
+    const { data: emp } = await supabase
+      .from("EMPLOYEE")
+      .select("ID, PASSWORD")
+      .eq("ID", decoded.employee_id)
+      .maybeSingle();
+    if (!emp) {
+      return res.status(400).json({ error: "Link ist ungültig oder abgelaufen." });
+    }
+    if (decoded.pv !== pwdFingerprint(emp.PASSWORD)) {
+      return res.status(400).json({ error: "Dieser Link wurde bereits verwendet oder ist nicht mehr gültig." });
+    }
+
     const hashed = await bcrypt.hash(new_password, 10);
     const { error: updErr } = await supabase
       .from("EMPLOYEE")
@@ -323,7 +351,7 @@ module.exports = (supabase) => {
 
   // ── Sign up ───────────────────────────────────────────────────────────────
   // Creates a new tenant: TENANT + COMPANY + Supabase Auth user + first EMPLOYEE.
-  router.post("/signup", async (req, res) => {
+  router.post("/signup", signupLimiter, async (req, res) => {
     try {
       const { email, password, companyName, shortName } = req.body || {};
 
@@ -392,3 +420,6 @@ module.exports = (supabase) => {
 
   return router;
 };
+
+// Für Tests exponiert (pure Funktion, kein DB-Bezug).
+module.exports._pwdFingerprint = pwdFingerprint;

@@ -14,6 +14,11 @@ module.exports = (_supabase) => {
 
     try {
       const decoded = jwt.verify(token, secret);
+      // Nur echte Session-Tokens akzeptieren. Spezial-Tokens (z.B. Passwort-Reset
+      // mit purpose:"reset") duerfen NICHT als Sitzung verwendet werden.
+      if (decoded.purpose) {
+        return res.status(401).json({ error: "Ungültiges Token für diese Anfrage." });
+      }
       req.userId     = decoded.employee_id;
       req.employeeId = decoded.employee_id;
       req.tenantId   = decoded.tenant_id;

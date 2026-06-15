@@ -76,6 +76,14 @@ describe("authMiddleware", () => {
     expect(req.tenantId).toBe(42);
   });
 
+  it("rejects with 401 when token carries a non-session purpose (e.g. reset)", () => {
+    const token = signToken({ employee_id: 1, tenant_id: 10, purpose: "reset" });
+    const { req, res, next } = makeReqRes(`Bearer ${token}`);
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("calls next() when Bearer prefix has extra whitespace", () => {
     const token = signToken({ employee_id: 1, tenant_id: 5 });
     const { req, res, next } = makeReqRes(`Bearer  ${token}`);

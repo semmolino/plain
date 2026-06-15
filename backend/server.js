@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express   = require("express");
 const cors      = require("cors");
+const helmet    = require("helmet");
 const bodyParser = require("body-parser");
 const path      = require("path");
 const { createClient } = require("@supabase/supabase-js");
@@ -15,8 +16,30 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "plain-dev-secret-chan
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Hinter Railways Reverse-Proxy: korrekte Client-IP aus X-Forwarded-For lesen.
+// Ohne das landen ALLE Requests im selben Rate-Limit-Bucket (Proxy-IP).
+app.set("trust proxy", 1);
+
+// Security-Header. CSP + COEP bewusst deaktiviert, damit SPA-Bundles und die
+// PDF-/Asset-Auslieferung nicht brechen; HSTS, nosniff, frameguard,
+// Referrer-Policy, X-Powered-By-Entfernung etc. greifen weiterhin.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+// CORS-Allowlist: kommagetrennt via CORS_ORIGINS, sonst FRONTEND_URL. In
+// Nicht-Produktion ist localhost:* zusaetzlich erlaubt (Vite-Dev-Server).
+const allowedOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+const isProd = process.env.NODE_ENV === "production";
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);                 // Same-Origin / Server-zu-Server / curl
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (!isProd && /^http:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
+    return cb(new Error("Not allowed by CORS"));
+  },
   credentials: true,
 }));
 app.use(bodyParser.json());
