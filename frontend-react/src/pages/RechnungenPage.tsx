@@ -8,6 +8,7 @@ import { SchlussrechnungWizard } from '@/pages/rechnungen/SchlussrechnungWizard'
 import { MahnungenListe }        from '@/pages/rechnungen/MahnungenListe'
 import { Sicherheitseinbehalte } from '@/pages/projekte/Sicherheitseinbehalte'
 import { useFilterTabs } from '@/store/permissionsStore'
+import { useLicenseFilterTabs } from '@/store/licenseStore'
 
 type Tab = 'liste' | 'mahnungen' | 'abschlag' | 'rechnung' | 'schluss' | 'gutschrift' | 'se'
 
@@ -25,14 +26,14 @@ export interface DraftResume {
   cashDiscDays:  number
 }
 
-const TABS: { id: Tab; label: string; permissions: string[] }[] = [
+const TABS: { id: Tab; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'liste',      label: 'Rechnungsliste',              permissions: ['invoices.view'] },
-  { id: 'mahnungen',  label: 'Mahnungen',                   permissions: ['dunning.view'] },
-  { id: 'abschlag',   label: 'Abschlagsrechnungen',         permissions: ['invoices.create_partial'] },
+  { id: 'mahnungen',  label: 'Mahnungen',                   permissions: ['dunning.view'], feature: 'dunning.basic' },
+  { id: 'abschlag',   label: 'Abschlagsrechnungen',         permissions: ['invoices.create_partial'], feature: 'invoices.partial' },
   { id: 'rechnung',   label: 'Einzelrechnung',              permissions: ['invoices.create_single'] },
-  { id: 'schluss',    label: 'Teilschluss-/Schlussrechnung',permissions: ['invoices.create_final'] },
-  { id: 'gutschrift', label: 'Gutschrift',                  permissions: ['invoices.create_credit'] },
-  { id: 'se',         label: 'Sicherheitseinbehalte',       permissions: ['security_retention.view'] },
+  { id: 'schluss',    label: 'Teilschluss-/Schlussrechnung',permissions: ['invoices.create_final'], feature: 'invoices.final' },
+  { id: 'gutschrift', label: 'Gutschrift',                  permissions: ['invoices.create_credit'], feature: 'invoices.credit' },
+  { id: 'se',         label: 'Sicherheitseinbehalte',       permissions: ['security_retention.view'], feature: 'invoices.security_retention' },
 ]
 
 export function RechnungenPage() {
@@ -115,7 +116,7 @@ export function RechnungenPage() {
   const wizardTabs: Tab[] = ['abschlag', 'rechnung', 'schluss']
   const showContext = wizardTabs.includes(tab) && editDraft != null
 
-  const visibleTabs = useFilterTabs(TABS)
+  const visibleTabs = useLicenseFilterTabs(useFilterTabs(TABS))
 
   return (
     <div className="master-page">

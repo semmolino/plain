@@ -13,10 +13,11 @@ import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
 import { Budget }          from '@/pages/projekte/Budget'
 import { fetchProjectReportHeader } from '@/api/reports'
 import { useFilterTabs } from '@/store/permissionsStore'
+import { useLicenseFilterTabs } from '@/store/licenseStore'
 
 type Tab = 'liste' | 'anlegen' | 'struktur' | 'leistungsstand' | 'buchungen' | 'budget' | 'mitarbeiter' | 'honorar' | 'vertraege'
 
-const TABS: { id: Tab; label: string; permissions: string[] }[] = [
+const TABS: { id: Tab; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'liste',           label: 'Liste',           permissions: ['projects.view'] },
   { id: 'anlegen',         label: 'Anlegen',         permissions: ['projects.create'] },
   { id: 'struktur',        label: 'Projektstruktur', permissions: ['projects.structure.view'] },
@@ -24,7 +25,7 @@ const TABS: { id: Tab; label: string; permissions: string[] }[] = [
   { id: 'buchungen',       label: 'Buchungen',       permissions: ['projects.bookings.view'] },
   { id: 'budget',          label: 'Interne Budgets', permissions: ['projects.budget.view'] },
   { id: 'mitarbeiter',     label: 'Stundensätze',    permissions: ['projects.hourly_rates.view'] },
-  { id: 'honorar',         label: 'Kalkulationen',   permissions: ['projects.calculations.view'] },
+  { id: 'honorar',         label: 'Kalkulationen',   permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
   { id: 'vertraege',       label: 'Verträge',        permissions: ['projects.contracts.view'] },
 ]
 
@@ -102,7 +103,7 @@ export function ProjektePage() {
     persistProjectId(id ?? undefined)
   }
 
-  const visibleTabs = useFilterTabs(TABS)
+  const visibleTabs = useLicenseFilterTabs(useFilterTabs(TABS))
 
   return (
     <div className="master-page">

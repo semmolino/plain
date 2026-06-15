@@ -76,3 +76,12 @@ export function useFeature(key: string): boolean {
 export function useLicenseLimit(key: string): number | null {
   return useLicenseStore(s => (s.unrestricted ? null : (s.limits.get(key) ?? null)))
 }
+
+/** Filtert Tab-Definitionen anhand einer optionalen `feature`-Eigenschaft.
+ *  Tabs ohne `feature` bleiben immer sichtbar. Analog zu useFilterTabs (RBAC),
+ *  aber für Lizenz-Capabilities. Kombinierbar: useLicenseFilterTabs(useFilterTabs(TABS)). */
+export function useLicenseFilterTabs<T extends { feature?: string }>(tabs: T[]): T[] {
+  const unrestricted = useLicenseStore(s => s.unrestricted)
+  const caps         = useLicenseStore(s => s.capabilities)
+  return tabs.filter(t => !t.feature || unrestricted || caps.has(t.feature))
+}
