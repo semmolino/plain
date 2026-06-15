@@ -33,19 +33,19 @@ app.use(helmet({
 const allowedOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || "http://localhost:5173")
   .split(",").map((s) => s.trim()).filter(Boolean);
 const isProd = process.env.NODE_ENV === "production";
-app.use(cors({
+const corsMw = cors({
   origin(origin, cb) {
     if (!origin) return cb(null, true);                 // Same-Origin / Server-zu-Server / curl
     if (allowedOrigins.includes(origin)) return cb(null, true);
     if (!isProd && /^http:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
-    // NICHT werfen (sonst 500 auf alle Requests inkl. eigener Assets, da Vite
-    // mit crossorigin auch Same-Origin einen Origin-Header sendet). cb(null,false)
-    // = kein ACAO-Header: Same-Origin lädt normal, echte Fremd-Origins werden vom
-    // Browser geblockt. Schutz bleibt, ohne die eigene SPA zu zerstören.
-    return cb(null, false);
+    return cb(null, false);                             // kein ACAO; NIE werfen (sonst 500)
   },
   credentials: true,
-}));
+});
+// WICHTIG: CORS NUR auf die API anwenden — niemals auf die statische SPA/Assets.
+// Sonst kann ein nicht erlaubter Origin (Vite sendet wegen crossorigin auch bei
+// Same-Origin einen Origin-Header) das Ausliefern der eigenen Bundles stoeren.
+app.use("/api", corsMw);
 app.use(bodyParser.json());
 
 const supabase = createClient(
