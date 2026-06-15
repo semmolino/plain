@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# Pre-push-Gate fuer PlaIn.
+#
+# Hintergrund: In Railway ist "Wait for CI" deaktiviert -> jeder Push auf main
+# wird SOFORT live deployt, ohne vorheriges CI-Gate. Dieser Hook ersetzt das
+# Gate lokal: vor einem Push auf main laufen die schnellen CI-Kernchecks
+# (Backend-Jest, Frontend-Typecheck, Frontend-Vitest). Schlaegt etwas fehl,
+# wird der Push abgebrochen, bevor kaputter Code live geht.
+#
+# Hinweis: Playwright-E2E laeuft hier NICHT (zu langsam) -- bei groesseren
+# UI-Aenderungen ggf. manuell:  cd frontend-react && npx playwright test
+#
+# Notausstieg (mit Bedacht):  git push --no-verify
+# Aktivieren (einmalig):      git config core.hooksPath .githooks
+
+protected="refs/heads/main"
+pushing_main=0
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  [ "$remote_ref" = "$protected" ] && pushing_main=1
+done
+
+# Nicht-main-Pushes: kein Gate.
+[ "$pushing_main" -eq 0 ] && exit 0
+
+echo "────────────────────────────────────────────────"
+echo " Pre-push: Push auf main -> lokale CI-Kernchecks"
+echo "────────────────────────────────────────────────"
+
+fail() {
+  echo ""
+  echo "❌ $1 fehlgeschlagen -> Push abgebrochen (kein Deploy)."
+  echo "   Erst beheben. Bewusst umgehen: git push --no-verify"
+  exit 1
+}
+
+echo "▶ Backend-Tests (jest)…"
+npm test --prefix backend -- --no-coverage --silent || fail "Backend-Tests"
+
+echo "▶ Frontend-Typecheck (tsc -b)…"
+( cd frontend-react && npx tsc -b ) || fail "Frontend-Typecheck"
+
+echo "▶ Frontend-Unit-Tests (vitest)…"
+( cd frontend-react && npx vitest run ) || fail "Frontend-Unit-Tests"
+
+echo ""
+echo "✅ Alle Kernchecks gruen -> Push wird ausgefuehrt."
+exit 0
