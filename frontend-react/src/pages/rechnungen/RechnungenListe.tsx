@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, Mail } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
+import { HasFeature } from '@/components/ui/HasFeature'
 import { Modal }        from '@/components/ui/Modal'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -891,10 +892,18 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     )}
                     <RowMenu>
                       <Can permission="invoices.download_xml">
-                        <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
-                        <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
-                        <button className="row-menu-item" onClick={() => openPeppol(row)}>Peppol BIS 3.0</button>
-                        <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
+                        <HasFeature feature="einvoice.xrechnung">
+                          <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
+                        </HasFeature>
+                        <HasFeature feature="einvoice.zugferd">
+                          <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
+                        </HasFeature>
+                        <HasFeature feature="einvoice.peppol">
+                          <button className="row-menu-item" onClick={() => openPeppol(row)}>Peppol BIS 3.0</button>
+                        </HasFeature>
+                        <HasFeature feature="einvoice.zugferd">
+                          <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
+                        </HasFeature>
                       </Can>
                       {row.statusClass === 'booked' && (
                         <Can permission="dunning.view">
