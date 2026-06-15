@@ -48,11 +48,23 @@ npm start                    # Port aus CONSOLE_PORT (default 4000)
 curl localhost:4000/health
 ```
 
-## Nächster Schritt (L1-UI)
+## Web-UI (`owner-console/web/`)
 
-Kleine React/Vite-App (`owner-console/web/`) mit:
-- Login (inkl. 2FA-Code-Feld)
-- Matrix-Grid (Plan × Capability, Häkchen + Limit-Felder)
-- Plan-Verwaltung, Inbox ungemappter Capabilities, Tenant-Overrides, Audit-Log
+React/Vite/TS-App für die Konsole. Dev-Server proxyt `/api/console` → `:4000`.
 
-Danach: **L2** (Entitlement-Laufzeit + Frontend Soft-Gating) in der Hauptanwendung.
+```bash
+cd owner-console/web
+npm install
+npm run dev          # http://localhost:4173  (Backend muss auf :4000 laufen)
+```
+
+Enthalten:
+- **Login** mit 2FA-Feld (erscheint, sobald das Backend `totp_required` meldet)
+- **Matrix** (Plan × Capability, Häkchen + Limit-Felder für metered; speichert je Zelle, auditiert)
+- **Inbox** der nicht paketierten Capabilities
+
+Noch offen (Folge-Iteration): Plan anlegen/bearbeiten-UI, Tenant-Overrides-UI, Audit-Log-Ansicht.
+
+## Nächster Schritt
+
+**L2** in der Hauptanwendung: Entitlement-Laufzeit (`licenseMiddleware`) + Frontend Soft-Gating (`HasFeature`, Upgrade-Hinweise) — siehe `../docs/LICENSE_TIERS_CONCEPT.md`.
