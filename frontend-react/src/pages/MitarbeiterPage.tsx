@@ -10,6 +10,7 @@ import { useToast }    from '@/store/toastStore'
 import { Pencil, Trash2 } from 'lucide-react'
 import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
 import { useFilterTabs } from '@/store/permissionsStore'
+import { useLicenseFilterTabs } from '@/store/licenseStore'
 import { Can } from '@/components/ui/Can'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
@@ -31,12 +32,12 @@ import { updateBuchung, deleteBuchung } from '@/api/projekte'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25
-const TABS: { id: string; label: string; permissions: string[] }[] = [
+const TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'list',      label: 'Mitarbeiterliste',     permissions: ['employees.view'] },
   { id: 'create',    label: 'Anlegen',              permissions: ['employees.create'] },
   { id: 'reporting', label: 'Reporting',            permissions: ['employees.bookings.view_all'] },
-  { id: 'overview',  label: 'Monatsübersicht',      permissions: ['employees.bookings.view_all','employees.month_close.edit'] },
-  { id: 'arbzg',     label: 'Arbeitszeit (Details)',permissions: ['employees.bookings.view_all'] },
+  { id: 'overview',  label: 'Monatsübersicht',      permissions: ['employees.bookings.view_all','employees.month_close.edit'], feature: 'employees.month_close' },
+  { id: 'arbzg',     label: 'Arbeitszeit (Details)',permissions: ['employees.bookings.view_all'], feature: 'arbzg.compliance' },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -1844,7 +1845,7 @@ export function MitarbeiterPage() {
       <div className="master-page-header">
         <h1 className="master-page-title">Mitarbeiter</h1>
       </div>
-      <Tabs tabs={useFilterTabs(TABS)} active={tab} onChange={t => { setTab(t); setCreateMsg(null) }} />
+      <Tabs tabs={useLicenseFilterTabs(useFilterTabs(TABS))} active={tab} onChange={t => { setTab(t); setCreateMsg(null) }} />
 
       <div className="master-section">
         {tab === 'list' && (
