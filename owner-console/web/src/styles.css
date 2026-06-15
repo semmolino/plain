@@ -132,3 +132,27 @@ table.matrix .limit {
 .inbox { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .inbox li { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
 code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; }
+
+/* ── Grid-Tabellen (Pläne, Tenants, Audit) ──────────── */
+table.grid { border-collapse: collapse; width: 100%; font-size: 13px; background: var(--surface); }
+table.grid th, table.grid td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+table.grid thead th { background: #f7f9fe; position: sticky; top: 0; }
+table.grid input { border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px; width: 100%; }
+table.grid input.num { width: 90px; }
+table.grid input[type='checkbox'] { width: 17px; height: 17px; }
+
+.plan-new { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.plan-new input { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.small-btn { padding: 8px 14px; }
+
+.two-col { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.4fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.panel h3 { margin-top: 0; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: #f3f6fd; }
+tr.sel { background: #e7effe; }
+.danger-text { color: var(--danger); }
+.override-form { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.override-form select, .override-form input { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.inbox .link { margin-left: 8px; font-size: 12px; }

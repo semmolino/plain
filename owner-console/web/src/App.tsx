@@ -3,8 +3,19 @@ import { api, ApiError, getToken, setToken } from './api'
 import { Login } from './pages/Login'
 import { MatrixView } from './pages/Matrix'
 import { InboxView } from './pages/Inbox'
+import { PlansView } from './pages/Plans'
+import { TenantsView } from './pages/Tenants'
+import { AuditView } from './pages/Audit'
 
-type Tab = 'matrix' | 'inbox'
+type Tab = 'matrix' | 'plans' | 'tenants' | 'inbox' | 'audit'
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'matrix', label: 'Matrix' },
+  { id: 'plans', label: 'Pläne' },
+  { id: 'tenants', label: 'Tenants' },
+  { id: 'inbox', label: 'Inbox' },
+  { id: 'audit', label: 'Audit' },
+]
 
 export function App() {
   const [authed, setAuthed] = useState<boolean>(!!getToken())
@@ -54,12 +65,11 @@ export function App() {
           plan<span>&amp;</span>simple <small>Owner-Konsole</small>
         </div>
         <nav className="tabs">
-          <button className={tab === 'matrix' ? 'active' : ''} onClick={() => setTab('matrix')}>
-            Matrix
-          </button>
-          <button className={tab === 'inbox' ? 'active' : ''} onClick={() => setTab('inbox')}>
-            Inbox
-          </button>
+          {TABS.map((t) => (
+            <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
         </nav>
         <div className="spacer" />
         <span className="muted email">{email}</span>
@@ -67,7 +77,13 @@ export function App() {
           Abmelden
         </button>
       </header>
-      <main className="content">{tab === 'matrix' ? <MatrixView /> : <InboxView />}</main>
+      <main className="content">
+        {tab === 'matrix' && <MatrixView />}
+        {tab === 'plans' && <PlansView />}
+        {tab === 'tenants' && <TenantsView />}
+        {tab === 'inbox' && <InboxView />}
+        {tab === 'audit' && <AuditView />}
+      </main>
     </div>
   )
 }
