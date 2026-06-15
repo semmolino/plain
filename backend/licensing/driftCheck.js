@@ -59,8 +59,10 @@ function loadCatalogPermissionKeys() {
   } catch {
     return null; // Migrations nicht gefunden → Aufrufer behandelt das tolerant
   }
-  // Matcht die Wertetupel ('key','module','action', …) der PERMISSION-Inserts.
-  const tuple = /\(\s*'([a-z0-9_.]+)'\s*,\s*'[a-z_]+'\s*,\s*'[a-z_]+'\s*,/g;
+  // Matcht die Wertetupel ('modul.aktion','module','action', …) der PERMISSION-Inserts.
+  // Der Key MUSS einen Punkt enthalten -> schliesst MODULE-IN-Listen wie
+  // ('dashboard','addresses',…) in den Rollen-Seeds aus.
+  const tuple = /\(\s*'([a-z0-9_]+(?:\.[a-z0-9_]+)+)'\s*,\s*'[a-z_]+'\s*,\s*'[a-z_]+'\s*,/g;
   for (const f of files) {
     const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, f), "utf8");
     if (!/INTO\s+"PERMISSION"/i.test(sql)) continue;
@@ -131,24 +133,31 @@ function runDriftCheck() {
   if (catalog === null || catalog.size === 0) {
     warnings.push("Permission-Katalog konnte nicht aus Migrationen gelesen werden — Verweis-Prüfung übersprungen.");
   } else {
+    const mapped = new Set();
     for (const { capabilityKey, permissionKey } of registry.capabilityPermissionLinks()) {
+      mapped.add(permissionKey);
       if (!catalog.has(permissionKey)) {
         errors.push(`Capability '${capabilityKey}' verweist auf unbekannte Permission '${permissionKey}' (nicht im Katalog 0062/0063).`);
       }
     }
+    // Abdeckung: RBAC-Rechte (= konkrete Funktionen), die KEINER Capability zugeordnet
+    // sind. Da jede neue Funktion ein Recht bekommt, taucht so jede neu entwickelte
+    // Funktion hier auf, bis sie im Manifest einer Capability zugeordnet wurde.
+    for (const k of catalog) {
+      if (!mapped.has(k)) {
+        warnings.push(`Permission '${k}' ist keiner Capability zugeordnet → noch nicht lizenzierbar (Capability im Manifest ergänzen).`);
+      }
+    }
   }
 
-  // 3) + 4) Code-Gates
+  // 3) Code-Gates: jeder im Code verwendete Feature-Key MUSS im Manifest stehen.
+  // (Kein "tot?"-Check mehr: waehrend des schrittweisen L2-Rollouts sind viele
+  // Capabilities bewusst noch nicht verdrahtet — das ist kein Fehler.)
   const manifestKeys = new Set(registry.allCapabilityKeys());
   const usage = scanFeatureGateUsage();
   for (const [key, locations] of usage) {
     if (!manifestKeys.has(key)) {
       errors.push(`Undeklariertes Feature-Gate '${key}' verwendet in: ${locations.join(", ")} — fehlt im Manifest.`);
-    }
-  }
-  if (usage.size > 0) {
-    for (const key of manifestKeys) {
-      if (!usage.has(key)) warnings.push(`Capability '${key}' ist im Manifest, wird aber nirgends als Gate referenziert (tot?).`);
     }
   }
 

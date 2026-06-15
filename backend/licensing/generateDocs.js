@@ -24,8 +24,9 @@ function loadPermissionLabels() {
   } catch {
     return map;
   }
-  // Matcht ('key','module','action','LABEL_DE', ...)
-  const re = /\(\s*'([a-z0-9_.]+)'\s*,\s*'[a-z_]+'\s*,\s*'[a-z_]+'\s*,\s*'([^']*)'/g;
+  // Matcht ('modul.aktion','module','action','LABEL_DE', ...). Key mit Punkt ->
+  // schliesst MODULE-IN-Listen ('dashboard','addresses',…) aus.
+  const re = /\(\s*'([a-z0-9_]+(?:\.[a-z0-9_]+)+)'\s*,\s*'[a-z_]+'\s*,\s*'[a-z_]+'\s*,\s*'([^']*)'/g;
   for (const f of files) {
     const sql = fs.readFileSync(path.join(dir, f), "utf8");
     if (!/INTO\s+"PERMISSION"/i.test(sql)) continue;
