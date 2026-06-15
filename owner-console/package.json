@@ -1,0 +1,22 @@
+{
+  "name": "owner-console",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PlaIn Lizenz-/Owner-Konsole (Control-Plane, strikt getrennt von der Tenant-App)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "create-admin": "node scripts/createPlatformAdmin.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.76.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "otplib": "^12.0.1"
+  }
+}
