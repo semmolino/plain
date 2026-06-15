@@ -23,10 +23,10 @@ const TABS: { id: Tab; label: string; permissions: string[]; feature?: string }[
   { id: 'struktur',        label: 'Projektstruktur', permissions: ['projects.structure.view'] },
   { id: 'leistungsstand',  label: 'Leistungsstände', permissions: ['projects.performance.view'] },
   { id: 'buchungen',       label: 'Buchungen',       permissions: ['projects.bookings.view'] },
-  { id: 'budget',          label: 'Interne Budgets', permissions: ['projects.budget.view'] },
-  { id: 'mitarbeiter',     label: 'Stundensätze',    permissions: ['projects.hourly_rates.view'] },
+  { id: 'budget',          label: 'Interne Budgets', permissions: ['projects.budget.view'], feature: 'projects.budgets' },
+  { id: 'mitarbeiter',     label: 'Stundensätze',    permissions: ['projects.hourly_rates.view'], feature: 'projects.hourly_rates' },
   { id: 'honorar',         label: 'Kalkulationen',   permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
-  { id: 'vertraege',       label: 'Verträge',        permissions: ['projects.contracts.view'] },
+  { id: 'vertraege',       label: 'Verträge',        permissions: ['projects.contracts.view'], feature: 'projects.contracts' },
 ]
 
 const VALID_TABS: Tab[] = ['liste','anlegen','struktur','leistungsstand','buchungen','budget','mitarbeiter','honorar','vertraege']

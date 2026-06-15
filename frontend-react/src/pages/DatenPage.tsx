@@ -5,14 +5,15 @@ import { ProjektlisteTab }             from '@/pages/daten/ProjektlisteTab'
 import { EinzelprojektTab }            from '@/pages/daten/EinzelprojektTab'
 import { UnternehmenskennzahlenTab }   from '@/pages/daten/UnternehmenskennzahlenTab'
 import { TrendsTab }                   from '@/pages/daten/TrendsTab'
+import { useLicenseFilterTabs }        from '@/store/licenseStore'
 
 type Tab = 'projektliste' | 'einzelprojekt' | 'kennzahlen' | 'trends'
 
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: Tab; label: string; feature?: string }[] = [
   { id: 'projektliste',  label: 'Alle Projekte'          },
   { id: 'einzelprojekt', label: 'Projekt'                },
-  { id: 'kennzahlen',    label: 'Unternehmenskennzahlen' },
-  { id: 'trends',        label: 'Trends'                 },
+  { id: 'kennzahlen',    label: 'Unternehmenskennzahlen', feature: 'reports.advanced' },
+  { id: 'trends',        label: 'Trends',                 feature: 'reports.advanced' },
 ]
 
 export function DatenPage() {
@@ -37,7 +38,7 @@ export function DatenPage() {
   return (
     <div className="master-page">
       <h1 className="master-title">Projektdaten</h1>
-      <Tabs tabs={TABS} active={tab} onChange={handleTabChange} />
+      <Tabs tabs={useLicenseFilterTabs(TABS)} active={tab} onChange={handleTabChange} />
       <div className="master-tab-content">
         {tab === 'projektliste'  && <ProjektlisteTab />}
         {tab === 'einzelprojekt' && <EinzelprojektTab initialProjectId={initProjId} />}
