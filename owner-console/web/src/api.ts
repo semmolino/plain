@@ -137,6 +137,12 @@ export const api = {
     req<{ plan: Plan }>(`/plans/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 
   tenants: () => req<{ tenants: TenantLicense[] }>('/tenants'),
+  setTenantPlan: (tenantId: number, planId: number) =>
+    req<{ tenant_license: TenantLicense }>(`/tenants/${tenantId}/plan`, {
+      method: 'PATCH',
+      body: JSON.stringify({ plan_id: planId }),
+    }),
+  // (dormant — Per-Tenant-Overrides bleiben im Backend für spätere Add-Ons)
   tenantOverrides: (id: number) => req<{ overrides: Override[] }>(`/tenants/${id}/overrides`),
   addOverride: (
     id: number,

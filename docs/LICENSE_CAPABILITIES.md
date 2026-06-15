@@ -5,103 +5,107 @@
 > Architektur: [LICENSE_TIERS_CONCEPT.md](LICENSE_TIERS_CONCEPT.md) ·
 > Workflow: [LICENSE_DEVELOPMENT_CHECKLIST.md](LICENSE_DEVELOPMENT_CHECKLIST.md).
 
-**Stand:** 2026-06-15 · 11 Module · 42 Capabilities · 90 Permission-Verknüpfungen
+**Stand:** 2026-06-15 · 11 Module · 42 Capabilities · 90 Permission-Verknuepfungen
 
-> Die Plan↔Capability-Zuordnung liegt in der DB (`PLAN_CAPABILITY`) und wird über die Owner-Konsole gepflegt — sie ist bewusst **nicht** Teil dieses generierten Katalogs.
+Jede **Capability** ist ein Schalter, den du je Lizenztyp in der Matrix an/aus stellst.
+Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten dahinter liegen
+(= die zugehoerigen RBAC-Rechte). Ein Strich (eigene Funktion) = Feature ohne separates Recht, greift direkt.
+
+> Die Plan-zu-Capability-Zuordnung selbst liegt in der DB (`PLAN_CAPABILITY`) und wird in der Owner-Konsole gepflegt — bewusst **nicht** Teil dieses generierten Katalogs.
 
 ## Kern `core`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `core.dashboard` | Übersicht / Dashboard | boolean | `dashboard.view`, `dashboard.view_switch` |
-| `core.addresses` | Adressbuch & Kontakte | boolean | `addresses.view`, `addresses.create`, `addresses.edit`, `addresses.delete`, `addresses.contacts.view`, `addresses.contacts.create`, `addresses.contacts.edit`, `addresses.contacts.delete` |
-| `core.time_tracking` | Stundenerfassung | boolean | `projects.bookings.view`, `projects.bookings.create`, `projects.bookings.edit`, `projects.bookings.delete` |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Übersicht / Dashboard**<br>`core.dashboard` | boolean | Übersicht sehen; Dashboard-Ansicht wechseln |
+| **Adressbuch & Kontakte**<br>`core.addresses` | boolean | Adressen sehen; Adressen anlegen; Adressen bearbeiten; Adressen löschen; Kontakte sehen; Kontakte anlegen; Kontakte bearbeiten; Kontakte löschen |
+| **Stundenerfassung**<br>`core.time_tracking` | boolean | Buchungen sehen; Buchungen anlegen; Buchungen bearbeiten; Buchungen löschen |
 
 ## Projekte `projects`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `projects.management` | Projektverwaltung & Struktur | boolean | `projects.view`, `projects.create`, `projects.edit`, `projects.delete`, `projects.structure.view`, `projects.structure.edit`, `projects.performance.view`, `projects.performance.edit`, `projects.performance.snapshot` |
-| `projects.budgets` | Interne Budgets | boolean | `projects.budget.view`, `projects.budget.edit` |
-| `projects.cost_revenue_insight` | Kosten- & Erlös-Einblick | boolean | `projects.bookings.revenue.view`, `projects.bookings.costs.view` |
-| `projects.hourly_rates` | Projekt-Stundensätze | boolean | `projects.hourly_rates.view`, `projects.hourly_rates.edit` |
-| `projects.contracts` | Verträge | boolean | `projects.contracts.view`, `projects.contracts.edit`, `projects.contracts.delete` |
-| `hoai.calculator` | HOAI-Honorarberechnung | boolean | `projects.calculations.view`, `projects.calculations.edit`, `projects.calculations.delete` |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Projektverwaltung & Struktur**<br>`projects.management` | boolean | Projekte sehen; Projekte anlegen; Projekte bearbeiten; Projekte löschen; Projektstruktur sehen; Projektstruktur bearbeiten; Leistungsstände sehen; Leistungsstände bearbeiten; Projekt-Snapshot erstellen |
+| **Interne Budgets**<br>`projects.budgets` | boolean | Interne Budgets sehen; Interne Budgets bearbeiten |
+| **Kosten- & Erlös-Einblick**<br>`projects.cost_revenue_insight` | boolean | Buchungen: Erloese sehen; Buchungen: Kosten sehen |
+| **Projekt-Stundensätze**<br>`projects.hourly_rates` | boolean | Stundensätze sehen; Stundensätze bearbeiten |
+| **Verträge**<br>`projects.contracts` | boolean | Verträge sehen; Verträge bearbeiten; Verträge löschen |
+| **HOAI-Honorarberechnung**<br>`hoai.calculator` | boolean | Kalkulationen sehen; Kalkulationen bearbeiten; Kalkulationen löschen |
 
 ## Rechnungen `invoices`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `invoices.basic` | Rechnungen & Zahlungen (Basis) | boolean | `invoices.view`, `invoices.create_single`, `invoices.edit`, `invoices.delete`, `invoices.book`, `invoices.download_pdf`, `invoices.send_email`, `payments.view`, `payments.create`, `payments.edit`, `payments.delete` |
-| `invoices.partial` | Abschlagsrechnungen | boolean | `invoices.create_partial` |
-| `invoices.final` | Teil-/Schlussrechnungen | boolean | `invoices.create_final` |
-| `invoices.credit` | Gutschriften | boolean | `invoices.create_credit` |
-| `invoices.cancel` | Stornierung | boolean | `invoices.cancel` |
-| `invoices.security_retention` | Sicherheitseinbehalte | boolean | `security_retention.view` |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Rechnungen & Zahlungen (Basis)**<br>`invoices.basic` | boolean | Rechnungen sehen; Einzelrechnung anlegen; Rechnungsentwürfe bearbeiten; Rechnungsentwürfe löschen; Rechnungen buchen; Rechnungs-PDF herunterladen; Rechnungen per E-Mail senden; Zahlungen sehen; Zahlungen anlegen; Zahlungen bearbeiten; Zahlungen loeschen |
+| **Abschlagsrechnungen**<br>`invoices.partial` | boolean | Abschlagsrechnung anlegen |
+| **Teil-/Schlussrechnungen**<br>`invoices.final` | boolean | Teil-/Schlussrechnung anlegen |
+| **Gutschriften**<br>`invoices.credit` | boolean | Gutschrift anlegen |
+| **Stornierung**<br>`invoices.cancel` | boolean | Rechnungen stornieren |
+| **Sicherheitseinbehalte**<br>`invoices.security_retention` | boolean | Sicherheitseinbehalte sehen |
 
 ## E-Rechnung `einvoice`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `einvoice.xrechnung` | XRechnung (CII/UBL) | boolean | `invoices.download_xml` |
-| `einvoice.zugferd` | ZUGFeRD-Hybrid | boolean | — |
-| `einvoice.peppol` | Peppol BIS 3.0 | boolean | — |
-| `einvoice.attachments` | Anlagen in E-Rechnung einbetten | boolean | — |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **XRechnung (CII/UBL)**<br>`einvoice.xrechnung` | boolean | E-Rechnungs-XML herunterladen |
+| **ZUGFeRD-Hybrid**<br>`einvoice.zugferd` | boolean | — eigene Funktion |
+| **Peppol BIS 3.0**<br>`einvoice.peppol` | boolean | — eigene Funktion |
+| **Anlagen in E-Rechnung einbetten**<br>`einvoice.attachments` | boolean | — eigene Funktion |
 
 ## Mahnwesen `dunning`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `dunning.basic` | Mahnungen | boolean | `dunning.view`, `dunning.edit` |
-| `dunning.email` | Mahnungen per E-Mail | boolean | `dunning.send` |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Mahnungen**<br>`dunning.basic` | boolean | Mahnungen sehen; Mahnungen bearbeiten |
+| **Mahnungen per E-Mail**<br>`dunning.email` | boolean | Mahnungen versenden |
 
 ## Angebote `offers`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `offers.basic` | Angebote | boolean | `offers.view`, `offers.create`, `offers.edit`, `offers.delete`, `offers.send`, `offers.convert` |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Angebote**<br>`offers.basic` | boolean | Angebote sehen; Angebote anlegen; Angebote bearbeiten; Angebote löschen; Angebote versenden; Angebot in Projekt umwandeln |
 
 ## Reporting `reports`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `reports.standard` | Standard-Reports | boolean | `reports.view` |
-| `reports.advanced` | Erweiterte Auswertungen & Export | boolean | `reports.export`, `reports.scope.all` |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Standard-Reports**<br>`reports.standard` | boolean | Reporting sehen |
+| **Erweiterte Auswertungen & Export**<br>`reports.advanced` | boolean | Reports exportieren; Reporting: alle Projekte |
 
 ## Mitarbeiter `employees`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `employees.management` | Mitarbeiterverwaltung | boolean | `employees.view`, `employees.create`, `employees.edit`, `employees.delete`, `employees.role.assign`, `employees.password.set`, `employees.bookings.view_all` |
-| `employees.salary` | Gehaltsdaten | boolean | `employees.salary.view`, `employees.salary.edit` |
-| `employees.month_close` | Monatsabschluss | boolean | `employees.month_close.edit`, `settings.monthly_close.edit` |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Mitarbeiterverwaltung**<br>`employees.management` | boolean | Mitarbeiter sehen; Mitarbeiter anlegen; Mitarbeiter bearbeiten; Mitarbeiter löschen; Rollen zuweisen; Passwörter setzen; Buchungen aller Mitarbeiter |
+| **Gehaltsdaten**<br>`employees.salary` | boolean | Gehalt sehen; Gehalt bearbeiten |
+| **Monatsabschluss**<br>`employees.month_close` | boolean | Monatsabschluss bearbeiten; Monatsabschluss-Einstellungen |
 
 ## Einstellungen `settings`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `settings.core` | Stammdaten, Unternehmen, Nummernkreise | boolean | `settings.basedata.view`, `settings.basedata.edit`, `settings.defaults.edit`, `settings.company.view`, `settings.company.edit`, `settings.numbers.edit` |
-| `settings.roles` | Rollen & Berechtigungen (RBAC) | boolean | `roles.view`, `roles.create`, `roles.edit`, `roles.delete` |
-| `settings.text_templates` | Textvorlagen | boolean | `settings.text_templates.edit` |
-| `settings.notifications` | Konfigurierbare Benachrichtigungen | boolean | `settings.notifications.edit` |
-| `settings.dunning_config` | Mahnungs-Einstellungen | boolean | `settings.dunning_config.edit` |
-| `cost_rate.calculator` | Kostensatz-Rechner | boolean | `settings.cost_rate.edit` |
-| `arbzg.compliance` | ArbZG-Validierung & Audit | boolean | `settings.work_time.edit` |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Stammdaten, Unternehmen, Nummernkreise**<br>`settings.core` | boolean | Stammdaten sehen; Stammdaten bearbeiten; Vorbelegungen bearbeiten; Unternehmen sehen; Unternehmen bearbeiten; Nummernkreise bearbeiten |
+| **Rollen & Berechtigungen (RBAC)**<br>`settings.roles` | boolean | Rollen sehen; Rollen anlegen; Rollen bearbeiten; Rollen löschen |
+| **Textvorlagen**<br>`settings.text_templates` | boolean | Textvorlagen bearbeiten |
+| **Konfigurierbare Benachrichtigungen**<br>`settings.notifications` | boolean | Benachrichtigungen bearbeiten |
+| **Mahnungs-Einstellungen**<br>`settings.dunning_config` | boolean | Mahnungs-Einstellungen |
+| **Kostensatz-Rechner**<br>`cost_rate.calculator` | boolean | Kostensatz-Rechner |
+| **ArbZG-Validierung & Audit**<br>`arbzg.compliance` | boolean | Arbeitszeit-Einstellungen |
 
 ## Enterprise `enterprise`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `enterprise.multi_company` | Mehrere Unternehmen pro Tenant | boolean | — |
-| `enterprise.custom_pdf_templates` | Eigene PDF-Vorlagen | boolean | — |
-| `enterprise.api_access` | API-Zugang (Token) | boolean | — |
-| `enterprise.sso_saml` | SSO (SAML/OIDC) | boolean | — |
-| `enterprise.priority_support` | Priority Support (SLA) | boolean | — |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Mehrere Unternehmen pro Tenant**<br>`enterprise.multi_company` | boolean | — eigene Funktion |
+| **Eigene PDF-Vorlagen**<br>`enterprise.custom_pdf_templates` | boolean | — eigene Funktion |
+| **API-Zugang (Token)**<br>`enterprise.api_access` | boolean | — eigene Funktion |
+| **SSO (SAML/OIDC)**<br>`enterprise.sso_saml` | boolean | — eigene Funktion |
+| **Priority Support (SLA)**<br>`enterprise.priority_support` | boolean | — eigene Funktion |
 
 ## Mengen-Limits `limits`
 
-| Capability | Bezeichnung | Typ | Gated Permissions |
-|---|---|---|---|
-| `limits.employees` | Maximale Mitarbeiterzahl | metered (Mitarbeiter) | — |
-| `limits.projects_active` | Maximale aktive Projekte | metered (aktive Projekte) | — |
-| `limits.storage_mb` | Speicherplatz | metered (MB) | — |
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Maximale Mitarbeiterzahl**<br>`limits.employees` | metered (Mitarbeiter) | — eigene Funktion |
+| **Maximale aktive Projekte**<br>`limits.projects_active` | metered (aktive Projekte) | — eigene Funktion |
+| **Speicherplatz**<br>`limits.storage_mb` | metered (MB) | — eigene Funktion |

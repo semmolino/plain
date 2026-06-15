@@ -15,6 +15,39 @@ router.get("/tenants", async (_req, res) => {
   res.json({ tenants: data || [] });
 });
 
+// Lizenztyp eines Tenants setzen/wechseln (Kernfall). Pinnt die Plan-Version.
+router.patch("/tenants/:id/plan", async (req, res) => {
+  const tenantId = Number(req.params.id);
+  const { plan_id } = req.body || {};
+  if (!plan_id) return res.status(400).json({ error: "plan_id erforderlich." });
+
+  const { data: plan, error: pErr } = await supabase
+    .from("LICENSE_PLAN").select("ID, VERSION").eq("ID", plan_id).maybeSingle();
+  if (pErr) return res.status(500).json({ error: pErr.message });
+  if (!plan) return res.status(400).json({ error: "Unbekannter Plan." });
+
+  const { data: before } = await supabase
+    .from("TENANT_LICENSE").select("*").eq("TENANT_ID", tenantId).maybeSingle();
+
+  const row = {
+    TENANT_ID:    tenantId,
+    PLAN_ID:      plan.ID,
+    PLAN_VERSION: plan.VERSION ?? 1,
+    STATE:        before?.STATE || "active",
+    STARTS_AT:    before?.STARTS_AT || new Date().toISOString(),
+    UPDATED_AT:   new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from("TENANT_LICENSE").upsert([row], { onConflict: "TENANT_ID" }).select("*").single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  await writeChangeLog({
+    actor: req.adminEmail, entity: "TENANT_LICENSE",
+    entityRef: String(tenantId), action: "update", before, after: data,
+  });
+  res.json({ tenant_license: data });
+});
+
 // Overrides eines Tenants auflisten
 router.get("/tenants/:id/overrides", async (req, res) => {
   const tenantId = Number(req.params.id);
