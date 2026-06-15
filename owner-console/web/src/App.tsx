@@ -6,13 +6,15 @@ import { InboxView } from './pages/Inbox'
 import { PlansView } from './pages/Plans'
 import { TenantsView } from './pages/Tenants'
 import { AuditView } from './pages/Audit'
+import { FunctionsView } from './pages/Functions'
 
-type Tab = 'matrix' | 'plans' | 'tenants' | 'inbox' | 'audit'
+type Tab = 'matrix' | 'plans' | 'tenants' | 'functions' | 'inbox' | 'audit'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'matrix', label: 'Matrix' },
   { id: 'plans', label: 'Pläne' },
   { id: 'tenants', label: 'Tenants' },
+  { id: 'functions', label: 'Funktionen' },
   { id: 'inbox', label: 'Inbox' },
   { id: 'audit', label: 'Audit' },
 ]
@@ -81,6 +83,7 @@ export function App() {
         {tab === 'matrix' && <MatrixView />}
         {tab === 'plans' && <PlansView />}
         {tab === 'tenants' && <TenantsView />}
+        {tab === 'functions' && <FunctionsView />}
         {tab === 'inbox' && <InboxView />}
         {tab === 'audit' && <AuditView />}
       </main>

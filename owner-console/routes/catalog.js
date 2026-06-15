@@ -13,6 +13,24 @@ router.get("/capabilities", (_req, res) => {
   res.json({ modules: registry.getModules(), capabilities: registry.getCapabilities() });
 });
 
+// Detail-Ansicht: pro Capability die konkreten Funktionen (RBAC-Rechte) MIT Labels.
+// read-only (Stufe 1). Labels kommen aus der PERMISSION-Tabelle.
+router.get("/capabilities/functions", async (_req, res) => {
+  const caps = registry.getCapabilities();
+  const keys = [...new Set(caps.flatMap((c) => c.permissions || []))];
+  const labelMap = {};
+  if (keys.length) {
+    const { data, error } = await supabase.from("PERMISSION").select("KEY, LABEL_DE").in("KEY", keys);
+    if (error) return res.status(500).json({ error: error.message });
+    for (const p of data || []) labelMap[p.KEY] = p.LABEL_DE;
+  }
+  const capabilities = caps.map((c) => ({
+    key: c.key, module: c.module, labelDe: c.labelDe, type: c.type, unit: c.unit || null,
+    functions: (c.permissions || []).map((k) => ({ key: k, label: labelMap[k] || k })),
+  }));
+  res.json({ modules: registry.getModules(), capabilities });
+});
+
 // Pläne inkl. zugeordneter Capabilities
 router.get("/plans", async (_req, res) => {
   const { data: plans, error } = await supabase

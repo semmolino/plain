@@ -51,6 +51,8 @@ export interface MatrixCell { plan_id: number; capability_key: string; enabled: 
 export interface MatrixResponse { plans: MatrixPlan[]; capabilities: MatrixCap[]; cells: MatrixCell[] }
 
 export interface Capability { key: string; module: string; labelDe: string; type: 'boolean' | 'metered'; unit: string | null }
+export interface CapabilityWithFunctions extends Capability { functions: { key: string; label: string }[] }
+export interface Module { key: string; labelDe: string }
 
 export interface Plan {
   ID: number
@@ -122,7 +124,8 @@ export const api = {
     }),
   me: () => req<{ admin_id: number; email: string }>('/auth/me'),
 
-  capabilities: () => req<{ modules: { key: string; labelDe: string }[]; capabilities: Capability[] }>('/capabilities'),
+  capabilities: () => req<{ modules: Module[]; capabilities: Capability[] }>('/capabilities'),
+  capabilityFunctions: () => req<{ modules: Module[]; capabilities: CapabilityWithFunctions[] }>('/capabilities/functions'),
   matrix: () => req<MatrixResponse>('/matrix'),
   inbox: () => req<{ unmapped: string[]; count: number }>('/inbox'),
   setCell: (planId: number, capKey: string, enabled: boolean, numericLimit: number | null) =>
