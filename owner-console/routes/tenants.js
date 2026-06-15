@@ -15,6 +15,34 @@ router.get("/tenants", async (_req, res) => {
   res.json({ tenants: data || [] });
 });
 
+// Overrides eines Tenants auflisten
+router.get("/tenants/:id/overrides", async (req, res) => {
+  const tenantId = Number(req.params.id);
+  const { data, error } = await supabase
+    .from("TENANT_ENTITLEMENT_OVERRIDE")
+    .select("ID, CAPABILITY_KEY, MODE, NUMERIC_LIMIT, REASON, EXPIRES_AT, CREATED_AT, CREATED_BY")
+    .eq("TENANT_ID", tenantId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ overrides: data || [] });
+});
+
+// Override entfernen
+router.delete("/tenants/:id/overrides/:capKey", async (req, res) => {
+  const tenantId = Number(req.params.id);
+  const capKey = req.params.capKey;
+  const { error } = await supabase
+    .from("TENANT_ENTITLEMENT_OVERRIDE")
+    .delete()
+    .eq("TENANT_ID", tenantId)
+    .eq("CAPABILITY_KEY", capKey);
+  if (error) return res.status(400).json({ error: error.message });
+  await writeChangeLog({
+    actor: req.adminEmail, entity: "TENANT_ENTITLEMENT_OVERRIDE",
+    entityRef: `${tenantId}:${capKey}`, action: "delete",
+  });
+  res.json({ ok: true });
+});
+
 // Per-Tenant-Override (Add-On / Sonderdeal): grant oder revoke
 router.post("/tenants/:id/overrides", async (req, res) => {
   const tenantId = Number(req.params.id);
