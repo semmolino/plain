@@ -51,8 +51,10 @@ export interface MatrixCell { plan_id: number; capability_key: string; enabled: 
 export interface MatrixResponse { plans: MatrixPlan[]; capabilities: MatrixCap[]; cells: MatrixCell[] }
 
 export interface Capability { key: string; module: string; labelDe: string; type: 'boolean' | 'metered'; unit: string | null }
-export interface CapabilityWithFunctions extends Capability { functions: { key: string; label: string }[] }
 export interface Module { key: string; labelDe: string }
+export interface CapabilityFns extends Capability { permissionKeys: string[] }
+export interface PermissionInfo { key: string; label: string; module: string }
+export interface FunctionsResponse { modules: Module[]; capabilities: CapabilityFns[]; permissions: PermissionInfo[] }
 
 export interface Plan {
   ID: number
@@ -125,7 +127,11 @@ export const api = {
   me: () => req<{ admin_id: number; email: string }>('/auth/me'),
 
   capabilities: () => req<{ modules: Module[]; capabilities: Capability[] }>('/capabilities'),
-  capabilityFunctions: () => req<{ modules: Module[]; capabilities: CapabilityWithFunctions[] }>('/capabilities/functions'),
+  capabilityFunctions: () => req<FunctionsResponse>('/capabilities/functions'),
+  addCapPermission: (capKey: string, permKey: string) =>
+    req<{ ok: true }>(`/capabilities/${encodeURIComponent(capKey)}/permissions/${encodeURIComponent(permKey)}`, { method: 'PUT' }),
+  removeCapPermission: (capKey: string, permKey: string) =>
+    req<{ ok: true }>(`/capabilities/${encodeURIComponent(capKey)}/permissions/${encodeURIComponent(permKey)}`, { method: 'DELETE' }),
   matrix: () => req<MatrixResponse>('/matrix'),
   inbox: () => req<{ unmapped: string[]; count: number }>('/inbox'),
   setCell: (planId: number, capKey: string, enabled: boolean, numericLimit: number | null) =>

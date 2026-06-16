@@ -156,3 +156,9 @@ tr.sel { background: #e7effe; }
 .override-form { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .override-form select, .override-form input { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 .inbox .link { margin-left: 8px; font-size: 12px; }
+
+/* ── Funktionen-Editor (Capability x Recht) ─────────── */
+.fn-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.chip { display: inline-flex; align-items: center; gap: 4px; background: #eef2fb; border: 1px solid var(--border); border-radius: 14px; padding: 3px 6px 3px 10px; font-size: 12px; }
+.chip-x { border: none; background: none; cursor: pointer; color: var(--danger); font-size: 15px; line-height: 1; padding: 0 2px; }
+.fn-add { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; max-width: 360px; }

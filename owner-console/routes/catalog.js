@@ -5,6 +5,7 @@ const path = require("path");
 // Quelle der Wahrheit für Capabilities ist das Manifest der Hauptanwendung.
 const registry = require(path.join(__dirname, "..", "..", "backend", "licensing", "registry"));
 const { supabase } = require("../services/db");
+const { writeChangeLog } = require("../services/audit");
 
 const router = express.Router();
 
@@ -13,22 +14,47 @@ router.get("/capabilities", (_req, res) => {
   res.json({ modules: registry.getModules(), capabilities: registry.getCapabilities() });
 });
 
-// Detail-Ansicht: pro Capability die konkreten Funktionen (RBAC-Rechte) MIT Labels.
-// read-only (Stufe 1). Labels kommen aus der PERMISSION-Tabelle.
+// Detail-Matrix (Stufe 2a, EDITIERBAR): Capability -> Funktionen (RBAC-Rechte).
+// Quelle der Zuordnung ist die DB (CAPABILITY_PERMISSION); das Manifest war nur
+// der Initial-Seed. Liefert zusätzlich den vollen Permission-Katalog (für den Picker).
 router.get("/capabilities/functions", async (_req, res) => {
-  const caps = registry.getCapabilities();
-  const keys = [...new Set(caps.flatMap((c) => c.permissions || []))];
-  const labelMap = {};
-  if (keys.length) {
-    const { data, error } = await supabase.from("PERMISSION").select("KEY, LABEL_DE").in("KEY", keys);
-    if (error) return res.status(500).json({ error: error.message });
-    for (const p of data || []) labelMap[p.KEY] = p.LABEL_DE;
-  }
-  const capabilities = caps.map((c) => ({
+  const { data: perms, error: e1 } = await supabase
+    .from("PERMISSION").select("KEY, LABEL_DE, MODULE").order("POSITION", { ascending: true });
+  if (e1) return res.status(500).json({ error: e1.message });
+  const { data: links, error: e2 } = await supabase
+    .from("CAPABILITY_PERMISSION").select("CAPABILITY_KEY, PERMISSION_KEY");
+  if (e2) return res.status(500).json({ error: e2.message });
+  const byCap = {};
+  for (const l of links || []) (byCap[l.CAPABILITY_KEY] ||= []).push(l.PERMISSION_KEY);
+  const capabilities = registry.getCapabilities().map((c) => ({
     key: c.key, module: c.module, labelDe: c.labelDe, type: c.type, unit: c.unit || null,
-    functions: (c.permissions || []).map((k) => ({ key: k, label: labelMap[k] || k })),
+    permissionKeys: byCap[c.key] || [],
   }));
-  res.json({ modules: registry.getModules(), capabilities });
+  res.json({
+    modules: registry.getModules(),
+    capabilities,
+    permissions: (perms || []).map((p) => ({ key: p.KEY, label: p.LABEL_DE, module: p.MODULE })),
+  });
+});
+
+// Capability <-> Funktion (RBAC-Recht) zuordnen / entfernen (auditiert).
+router.put("/capabilities/:capKey/permissions/:permKey", async (req, res) => {
+  const { capKey, permKey } = req.params;
+  if (!registry.getCapability(capKey)) return res.status(400).json({ error: `Unbekannte Capability: ${capKey}` });
+  const { error } = await supabase.from("CAPABILITY_PERMISSION")
+    .upsert([{ CAPABILITY_KEY: capKey, PERMISSION_KEY: permKey }], { onConflict: "CAPABILITY_KEY,PERMISSION_KEY" });
+  if (error) return res.status(400).json({ error: error.message });
+  await writeChangeLog({ actor: req.adminEmail, entity: "CAPABILITY_PERMISSION", entityRef: `${capKey}:${permKey}`, action: "create", after: { capability: capKey, permission: permKey } });
+  res.json({ ok: true });
+});
+
+router.delete("/capabilities/:capKey/permissions/:permKey", async (req, res) => {
+  const { capKey, permKey } = req.params;
+  const { error } = await supabase.from("CAPABILITY_PERMISSION")
+    .delete().eq("CAPABILITY_KEY", capKey).eq("PERMISSION_KEY", permKey);
+  if (error) return res.status(400).json({ error: error.message });
+  await writeChangeLog({ actor: req.adminEmail, entity: "CAPABILITY_PERMISSION", entityRef: `${capKey}:${permKey}`, action: "delete" });
+  res.json({ ok: true });
 });
 
 // Pläne inkl. zugeordneter Capabilities
