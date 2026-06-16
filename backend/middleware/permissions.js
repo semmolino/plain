@@ -75,11 +75,22 @@ async function loadPermissions(supabase, employeeId) {
   }
 }
 
+const { loadPermissionCapabilityMap, suppressUnlicensed } = require("./license");
+
 function makeMiddleware(supabase) {
   return async function permissionsMiddleware(req, res, next) {
-    const set = await loadPermissions(supabase, req.employeeId);
+    let set = await loadPermissions(supabase, req.employeeId);
     // Wenn null: Migration fehlt oder Loader scheiterte → wir markieren als "unrestricted"
     req._permissionsUnrestricted = (set === null);
+    // Lizenz-Engine (L3): Rechte unlizenzierter Capabilities aus dem effektiven Set
+    // entfernen. req.license stammt aus licenseMiddleware (laeuft DAVOR). Bei
+    // unrestricted (Soft-Fail / keine Lizenz-Migration / Plan 'full') -> keine
+    // Aenderung. Wirkt auf Frontend (Can/Tabs via /permissions/me) UND Backend
+    // (requirePermission) gleichermassen.
+    if (set && req.license && !req._licenseUnrestricted) {
+      const map = await loadPermissionCapabilityMap(supabase);
+      set = suppressUnlicensed(set, req.license.capabilities, map);
+    }
     req.permissions = set || new Set();
     req.hasPermission = (key) => req._permissionsUnrestricted || req.permissions.has(key);
     next();

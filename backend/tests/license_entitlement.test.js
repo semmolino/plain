@@ -1,6 +1,36 @@
 "use strict";
 
-const { computeEntitlement } = require("../middleware/license");
+const { computeEntitlement, suppressUnlicensed } = require("../middleware/license");
+
+describe("suppressUnlicensed (L3-Engine)", () => {
+  const map = new Map([
+    ["invoices.download_xml", new Set(["einvoice.xrechnung"])],
+    ["projects.calculations.view", new Set(["hoai.calculator"])],
+    ["dashboard.view", new Set(["core.dashboard"])],
+  ]);
+
+  it("entfernt Rechte unlizenzierter Capabilities", () => {
+    const out = suppressUnlicensed(
+      new Set(["invoices.download_xml", "projects.calculations.view", "dashboard.view"]),
+      new Set(["core.dashboard"]), // nur Dashboard lizenziert
+      map,
+    );
+    expect(out.has("dashboard.view")).toBe(true);
+    expect(out.has("invoices.download_xml")).toBe(false);
+    expect(out.has("projects.calculations.view")).toBe(false);
+  });
+
+  it("behält Rechte ohne Capability-Zuordnung immer", () => {
+    const out = suppressUnlicensed(new Set(["roles.view"]), new Set(), map);
+    expect(out.has("roles.view")).toBe(true);
+  });
+
+  it("behält ein Recht, wenn EINE seiner Capabilities lizenziert ist", () => {
+    const m = new Map([["x", new Set(["capA", "capB"])]]);
+    expect(suppressUnlicensed(new Set(["x"]), new Set(["capB"]), m).has("x")).toBe(true);
+    expect(suppressUnlicensed(new Set(["x"]), new Set(["capC"]), m).has("x")).toBe(false);
+  });
+});
 
 describe("computeEntitlement", () => {
   it("übernimmt Plan-Capabilities und Limits", () => {

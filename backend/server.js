@@ -114,7 +114,10 @@ const { startHoursBookingReminderChecker }   = require("./services/hoursBookingR
 // Lizenz (L2): licenseMiddleware legt req.license + req.hasFeature ab. Soft-Fail
 // wenn Migration 0070 fehlt / keine TENANT_LICENSE-Zeile -> unrestricted.
 // L2 = nur Bereitstellung + Frontend-Soft-Gating; KEIN hartes Enforcement (das ist L3).
-const authChain = [authMiddleware, permissionsMiddleware, licenseMiddleware];
+// licenseMiddleware MUSS vor permissionsMiddleware laufen: die Permissions-
+// Suppression (L3) braucht req.license. licenseMiddleware haengt nicht von
+// Permissions ab, daher unproblematisch.
+const authChain = [authMiddleware, licenseMiddleware, permissionsMiddleware];
 
 app.use("/api/v1/stammdaten",        ...authChain, stammdatenRoutes);
 app.use("/api/v1/mitarbeiter",       ...authChain, mitarbeiterRoutes);

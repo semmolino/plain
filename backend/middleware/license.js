@@ -18,6 +18,7 @@
 
 const TTL_MS = 60_000;
 const cache = new Map(); // tenantId -> { exp:number, ent: Entitlement|null }
+let capPermCache = { exp: 0, map: null }; // global: permKey -> Set<capKey>
 
 function isSchemaMissing(err) {
   return err && /relation .* does not exist|column .* does not exist/i.test(err.message || "");
@@ -94,6 +95,53 @@ async function loadEntitlement(supabase, tenantId) {
 function clearLicenseCache(tenantId) {
   if (tenantId == null) cache.clear();
   else cache.delete(tenantId);
+  capPermCache = { exp: 0, map: null };
+}
+
+/**
+ * Lädt CAPABILITY_PERMISSION (global, TTL-Cache) -> Map<permKey, Set<capKey>>.
+ * Soft-Fail: bei Fehler/Schema-Mangel leere Map (= keine Suppression).
+ */
+async function loadPermissionCapabilityMap(supabase) {
+  const now = Date.now();
+  if (capPermCache.map && capPermCache.exp > now) return capPermCache.map;
+  try {
+    const { data, error } = await supabase
+      .from("CAPABILITY_PERMISSION").select("CAPABILITY_KEY, PERMISSION_KEY");
+    if (error) {
+      if (isSchemaMissing(error)) { capPermCache = { exp: now + TTL_MS, map: new Map() }; return capPermCache.map; }
+      throw error;
+    }
+    const map = new Map();
+    for (const r of data || []) {
+      if (!map.has(r.PERMISSION_KEY)) map.set(r.PERMISSION_KEY, new Set());
+      map.get(r.PERMISSION_KEY).add(r.CAPABILITY_KEY);
+    }
+    capPermCache = { exp: now + TTL_MS, map };
+    return map;
+  } catch (e) {
+    console.warn("[license] capPerm load failed:", e?.message);
+    return new Map(); // fail-open: keine Suppression
+  }
+}
+
+/**
+ * Reine Funktion (testbar): entfernt Permissions, deren ALLE zugeordneten
+ * Capabilities NICHT lizenziert sind. Permissions ohne Capability-Zuordnung
+ * bleiben immer erhalten (rein RBAC-gesteuert).
+ * @param {Set<string>} permKeys @param {Set<string>} licensedCaps @param {Map<string,Set<string>>} permToCaps
+ * @returns {Set<string>}
+ */
+function suppressUnlicensed(permKeys, licensedCaps, permToCaps) {
+  const out = new Set();
+  for (const p of permKeys) {
+    const caps = permToCaps.get(p);
+    if (!caps || caps.size === 0) { out.add(p); continue; }
+    let licensed = false;
+    for (const c of caps) { if (licensedCaps.has(c)) { licensed = true; break; } }
+    if (licensed) out.add(p);
+  }
+  return out;
 }
 
 function makeMiddleware(supabase) {
@@ -128,4 +176,7 @@ function requireFeature(...keys) {
   };
 }
 
-module.exports = { makeMiddleware, requireFeature, computeEntitlement, loadEntitlement, clearLicenseCache };
+module.exports = {
+  makeMiddleware, requireFeature, computeEntitlement, loadEntitlement, clearLicenseCache,
+  loadPermissionCapabilityMap, suppressUnlicensed,
+};
