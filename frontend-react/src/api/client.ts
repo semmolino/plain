@@ -59,6 +59,13 @@ async function request<T>(
         if (typeof handler === 'function') handler(message)
       } catch { /* ignore */ }
     }
+    // Lizenz: 402 = Funktion nicht im Tarif -> Upgrade-Hinweis-Hook
+    if (res.status === 402) {
+      try {
+        const handler = (globalThis as typeof globalThis & { __onLicenseDenied?: (msg: string) => void }).__onLicenseDenied
+        if (typeof handler === 'function') handler(message)
+      } catch { /* ignore */ }
+    }
     throw new ApiRequestError(res.status, message, payload)
   }
 

@@ -113,6 +113,16 @@ export function AppLayout() {
     return () => { g.__onPermissionDenied = undefined }
   }, [toast, reloadPermissions])
 
+  // Lizenz: globaler 402-Handler -> Upgrade-Hinweis + Entitlement-Refresh
+  useEffect(() => {
+    const g = globalThis as typeof globalThis & { __onLicenseDenied?: (msg: string) => void }
+    g.__onLicenseDenied = (msg: string) => {
+      toast.error(msg || 'Diese Funktion ist in deinem Tarif nicht enthalten.')
+      void useLicenseStore.getState().reload()
+    }
+    return () => { g.__onLicenseDenied = undefined }
+  }, [toast])
+
   return (
     <div className="app-layout">
       <header className="app-header">

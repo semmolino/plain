@@ -87,9 +87,12 @@ function makeMiddleware(supabase) {
     // unrestricted (Soft-Fail / keine Lizenz-Migration / Plan 'full') -> keine
     // Aenderung. Wirkt auf Frontend (Can/Tabs via /permissions/me) UND Backend
     // (requirePermission) gleichermassen.
+    req._licenseSuppressed = new Set();
     if (set && req.license && !req._licenseUnrestricted) {
       const map = await loadPermissionCapabilityMap(supabase);
-      set = suppressUnlicensed(set, req.license.capabilities, map);
+      const filtered = suppressUnlicensed(set, req.license.capabilities, map);
+      for (const k of set) if (!filtered.has(k)) req._licenseSuppressed.add(k); // für 402-Unterscheidung
+      set = filtered;
     }
     req.permissions = set || new Set();
     req.hasPermission = (key) => req._permissionsUnrestricted || req.permissions.has(key);
@@ -105,6 +108,10 @@ function requirePermission(...keys) {
     if (ADMIN_BYPASS && req.permissions.has('*')) return next();
     for (const k of flat) {
       if (!req.permissions.has(k)) {
+        // 402, wenn das Recht NUR wegen fehlender Lizenz weg ist (Upgrade), sonst 403 (RBAC).
+        if (req._licenseSuppressed && req._licenseSuppressed.has(k)) {
+          return res.status(402).json({ error: "Diese Funktion ist in deinem Tarif nicht enthalten.", upgrade: true, permission: k });
+        }
         return res.status(403).json({ error: `Fehlende Berechtigung: ${k}` });
       }
     }
@@ -112,13 +119,17 @@ function requirePermission(...keys) {
   };
 }
 
-/** Route-Guard: 403 falls KEINE der Keys vorhanden ist (OR-Logik). */
+/** Route-Guard: 403 falls KEINE der Keys vorhanden ist (OR-Logik). 402 wenn nur Lizenz fehlt. */
 function requireAnyPermission(...keys) {
   const flat = keys.flat();
   return (req, res, next) => {
     if (req._permissionsUnrestricted) return next();
     if (ADMIN_BYPASS && req.permissions.has('*')) return next();
     if (flat.some(k => req.permissions.has(k))) return next();
+    // Keine vorhanden: 402, wenn mind. eine Option nur an der Lizenz scheitert.
+    if (req._licenseSuppressed && flat.some(k => req._licenseSuppressed.has(k))) {
+      return res.status(402).json({ error: "Diese Funktion ist in deinem Tarif nicht enthalten.", upgrade: true });
+    }
     return res.status(403).json({ error: `Fehlende Berechtigung (eine von): ${flat.join(', ')}` });
   };
 }
