@@ -91,6 +91,12 @@ body {
   line-height: 1.5;
 }
 
+.salutation {
+  font-size: 10pt;
+  margin-bottom: 3mm;
+  line-height: 1.5;
+}
+
 .calc-table {
   width: 100%;
   border-collapse: collapse;
@@ -215,6 +221,9 @@ body { padding-bottom: 4mm; }
     vollständig.
   </div>
   {% endif %}
+
+  {# Anrede — geschlechtsgerechte Briefanrede direkt über dem Kopftext #}
+  {% if salutationLine %}<div class="salutation">{{ salutationLine }}</div>{% endif %}
 
   {# Optional intro text #}
   {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}

@@ -99,6 +99,13 @@ body {
   line-height: 1.5;
 }
 
+/* Briefanrede über dem Kopftext */
+.salutation {
+  font-size: 10pt;
+  margin-bottom: 3mm;
+  line-height: 1.5;
+}
+
 /* ── Calculation table ───────────────────────────────── */
 .calc-table {
   width: 100%;
@@ -369,6 +376,9 @@ table.data-table thead { display: table-header-group; }
 
   {# Document title #}
   <div class="doc-title">{{ docTitle }}</div>
+
+  {# Anrede — geschlechtsgerechte Briefanrede direkt über dem Kopftext #}
+  {% if salutationLine %}<div class="salutation">{{ salutationLine }}</div>{% endif %}
 
   {# Optional intro text #}
   {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}

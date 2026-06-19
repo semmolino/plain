@@ -49,6 +49,17 @@ function fmtDateDE(input) {
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
 }
 
+// ── Salutation (Anrede) ───────────────────────────────────────────────────────
+// Geschlechtsgerechte Briefanrede aus der hinterlegten Anrede (Herr/Frau) +
+// Name der Kontaktperson. Ohne eindeutige Geschlechtsangabe → neutrale Anrede.
+function buildSalutationLine({ salutation, namePart }) {
+  const sal  = String(salutation ?? '').trim();
+  const name = String(namePart ?? '').trim();
+  if (name && /herr/i.test(sal)) return `Sehr geehrter Herr ${name},`;
+  if (name && /frau/i.test(sal)) return `Sehr geehrte Frau ${name},`;
+  return 'Sehr geehrte Damen und Herren,';
+}
+
 // ── EPC / GiroCode QR ────────────────────────────────────────────────────────
 
 async function buildEpcQrDataUri({ bic, iban, name, amount, reference }) {
@@ -273,7 +284,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
 
   const { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, FATHER_ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, PARTIAL_PAYMENTS, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
+    .select('ID, FATHER_ID, BILLING_TYPE_ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, PARTIAL_PAYMENTS, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
     .eq('PROJECT_ID', projectId)
     .order('ID', { ascending: true });
 
@@ -331,13 +342,24 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
     return out;
   }
 
+  // "% erbracht" per leaf: Nachweis-Elemente (BILLING_TYPE_ID = 2) werden nach
+  // tatsächlichem Aufwand abgerechnet — der ausgewiesene Auftragswert IST die
+  // erbrachte Leistung, also immer 100 %. Pauschal-Elemente (BT 1) bemessen den
+  // Fortschritt am bereits abgerechneten Anteil des Festhonorars.
+  const leafPerformed = (l) => {
+    const lFee = Math.round((Number(l.REVENUE || 0) + Number(l.EXTRAS || 0)) * 100) / 100;
+    if (Number(l.BILLING_TYPE_ID) === 2) return lFee;
+    return docType === 'INVOICE' ? Number(l.INVOICED || 0) : Number(l.PARTIAL_PAYMENTS || 0);
+  };
+
   return rows.map(r => {
     const isLeaf = !fatherIds.has(String(r.ID));
-    let revenue, extras, alreadyBilled, thisDocNet;
+    let revenue, extras, alreadyBilled, thisDocNet, performedAmount;
     if (isLeaf) {
       revenue       = Number(r.REVENUE  || 0);
       extras        = Number(r.EXTRAS   || 0);
       alreadyBilled = docType === 'INVOICE' ? Number(r.INVOICED || 0) : Number(r.PARTIAL_PAYMENTS || 0);
+      performedAmount = leafPerformed(r);
       const dr = docMap[r.ID];
       thisDocNet = dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0;
     } else {
@@ -353,6 +375,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
         const dr = docMap[l.ID];
         return s + (dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0);
       }, 0);
+      performedAmount = leaves.reduce((s, l) => s + leafPerformed(l), 0);
     }
     const feeTotal        = Math.round((revenue + extras) * 100) / 100;
     const revenueBasis    = Number(r.REVENUE_BASIS ?? r.REVENUE ?? 0);
@@ -367,7 +390,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
       feeTotal,
       alreadyBilled,
       thisDocNet,
-      performedPct:   feeTotal > 0 ? Math.round((alreadyBilled / feeTotal) * 100) : 0,
+      performedPct:   feeTotal > 0 ? Math.round((performedAmount / feeTotal) * 100) : 0,
       revenueBasis,
       surchargesTotal,
       s1Label: r.SURCHARGE_1_LABEL || null,
@@ -611,6 +634,33 @@ async function buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds
   const text1 = String(rawDoc.TEXT_1 ?? '').trim();
   const text2 = String(rawDoc.TEXT_2 ?? '').trim();
 
+  // Salutation line above TEXT_1 — gender-correct greeting for the invoice contact.
+  // Prefer the precise LAST_NAME (+ TITLE) from CONTACTS; fall back to the frozen
+  // denormalised CONTACT name on the document if the contact is unavailable.
+  let salutationLine;
+  {
+    const contactId = docType === 'INVOICE'
+      ? rawDoc.INVOICE_CONTACT_ID
+      : rawDoc.PARTIAL_PAYMENT_CONTACT_ID;
+    let lastName = '', title = '';
+    if (contactId) {
+      try {
+        const { data: ct } = await supabase
+          .from('CONTACTS').select('LAST_NAME, TITLE').eq('ID', contactId).maybeSingle();
+        if (ct) {
+          lastName = String(ct.LAST_NAME ?? '').trim();
+          title    = String(ct.TITLE     ?? '').trim();
+        }
+      } catch (_) { /* CONTACTS row missing — fall back to denormalised name */ }
+    }
+    if (!lastName) {
+      const parts = String(rawDoc.CONTACT ?? '').trim().split(/\s+/).filter(Boolean);
+      lastName = parts.length ? parts[parts.length - 1] : '';
+    }
+    const namePart = [title, lastName].filter(Boolean).join(' ');
+    salutationLine = buildSalutationLine({ salutation: rawDoc.CONTACT_SALUTATION, namePart });
+  }
+
   // Pre-computed totals for template (Nunjucks can't mutate loop vars)
   const deductionTotals = {
     net:   inv.deductions.reduce((s, d) => s + d.netAmount,   0),
@@ -785,6 +835,7 @@ async function buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds
     buyerName2,
     projectName,
     contractName,
+    salutationLine,
     text1,
     text2,
     projectStructureRows,
