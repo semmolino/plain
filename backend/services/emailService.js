@@ -19,6 +19,12 @@ const dns = require("dns").promises;
 const net = require("net");
 const { sendViaResend } = require("../services_email_resend");
 
+/** Entfernt Whitespace und umschliessende Anfuehrungszeichen aus ENV-Werten. */
+function clean(v) {
+  if (!v) return "";
+  return String(v).trim().replace(/^["']+|["']+$/g, "").trim();
+}
+
 /** Zerlegt "Name <addr@domain>" oder "addr@domain" in { name, address }. */
 function parseFrom(s) {
   if (!s) return { name: "", address: "" };
@@ -137,8 +143,12 @@ async function resolveSender({ supabase, tenantId, requireTenant }) {
   }
 
   // ── A) Resend HTTPS-API (bevorzugt) ───────────────────────────────────────
-  if (process.env.RESEND_API_KEY) {
-    const base = parseFrom(process.env.EMAIL_FROM);
+  // Defensiv saeubern: versehentliche Leerzeichen/Newlines/umschliessende
+  // Anfuehrungszeichen aus den Railway-Variablen entfernen (haeufige Fehlerquelle).
+  const apiKey   = clean(process.env.RESEND_API_KEY);
+  const fromEnv  = clean(process.env.EMAIL_FROM);
+  if (apiKey) {
+    const base = parseFrom(fromEnv);
     if (!base.address) {
       throw { status: 503, message: 'EMAIL_FROM ist nicht gesetzt. Bitte in Railway eine verifizierte Absenderadresse setzen, z.B. "PlaIn <noreply@deine-domain.de>".' };
     }
@@ -149,7 +159,7 @@ async function resolveSender({ supabase, tenantId, requireTenant }) {
       from,
       replyTo,
       send: (msg) => sendViaResend({
-        apiKey:      process.env.RESEND_API_KEY,
+        apiKey,
         from,
         to:          msg.to,
         subject:     msg.subject,

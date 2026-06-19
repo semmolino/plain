@@ -67,9 +67,14 @@ async function sendViaResend({ apiKey, from, to, subject, html, text, replyTo, a
       const j = await res.json();
       if (j && j.message) detail = j.message;
     } catch { /* ignore */ }
-    // 401 = falscher Key, 403 = Domain nicht verifiziert / nicht erlaubt
-    const status = (res.status === 401 || res.status === 403) ? 401 : 502;
-    throw { status, message: `E-Mail-Versand abgelehnt (Resend): ${detail}` };
+
+    if (res.status === 401) {
+      throw { status: 401, message: `E-Mail-Versand abgelehnt (Resend): ${detail}. Pruefe: RESEND_API_KEY in Railway korrekt gespeichert UND danach deployt, ohne Leerzeichen/Anfuehrungszeichen, vollstaendig kopiert, und der Key wurde seit dem Kopieren nicht erneut neu generiert.` };
+    }
+    if (res.status === 403) {
+      throw { status: 403, message: `E-Mail-Versand abgelehnt (Resend): ${detail}. Vermutlich ist die Absender-Domain aus EMAIL_FROM nicht verifiziert — oder du nutzt die Sandbox (onboarding@resend.dev), die nur an die eigene Resend-Konto-Adresse zustellt.` };
+    }
+    throw { status: 502, message: `E-Mail-Versand abgelehnt (Resend): ${detail}` };
   }
 
   try { return await res.json(); }
