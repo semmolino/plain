@@ -130,15 +130,40 @@ async function sendMail({ supabase, tenantId, requireTenant, to, subject, html, 
   if (!resolved) {
     throw { status: 503, message: "SMTP nicht konfiguriert. Bitte SMTP_HOST in den Railway-Umgebungsvariablen setzen." };
   }
-  await resolved.transport.sendMail({
-    from:        resolved.from,
-    to,
-    subject,
-    html:        html || text,
-    text,
-    replyTo:     replyTo || resolved.replyTo,
-    attachments,
-  });
+  try {
+    await resolved.transport.sendMail({
+      from:        resolved.from,
+      to,
+      subject,
+      html:        html || text,
+      text,
+      replyTo:     replyTo || resolved.replyTo,
+      attachments,
+    });
+  } catch (err) {
+    throw enrichSmtpError(err);
+  }
+}
+
+/**
+ * Uebersetzt nodemailer-Fehlercodes in actionable deutsche Meldungen, damit der
+ * Nutzer im UI direkt sieht, was zu tun ist (statt "Connection timeout").
+ */
+function enrichSmtpError(err) {
+  const code = err && err.code;
+  const raw  = (err && err.message) || String(err);
+  switch (code) {
+    case "EAUTH":
+      return { status: 401, message: `Anmeldung am SMTP-Server abgelehnt (Benutzername/Passwort). Bei Gmail/Microsoft 365 ein App-Passwort verwenden, nicht das normale Login-Passwort. [${raw}]` };
+    case "ETIMEDOUT":
+    case "ESOCKET":
+    case "ECONNECTION":
+      return { status: 502, message: `Verbindung zum SMTP-Server fehlgeschlagen. Pruefe Host/Port und das TLS-Haekchen: Port 587 = Haekchen AUS (STARTTLS), Port 465 = Haekchen AN (TLS). Falls beides nicht hilft, blockiert die Hosting-Plattform evtl. ausgehenden SMTP-Verkehr. [${raw}]` };
+    case "EENVELOPE":
+      return { status: 400, message: `Absender- oder Empfaengeradresse wurde abgelehnt. [${raw}]` };
+    default:
+      return { status: err?.status || 502, message: raw };
+  }
 }
 
 module.exports = { sendMail };
