@@ -7,15 +7,6 @@ const {
   loginLimiter, passwordLimiter, resetRequestLimiter, resetConfirmLimiter, signupLimiter,
 } = require("../middleware/rateLimit");
 
-// Compatibility shim — auth.js used createMailer() locally; now delegates to emailService
-function createMailer() {
-  if (!process.env.SMTP_HOST) return null;
-  // Return a duck-typed object so existing sendMail() call sites still work
-  return {
-    sendMail: (opts) => _sendMail(opts),
-  };
-}
-
 function jwtSecret() {
   const s = process.env.JWT_SECRET;
   if (!s) throw new Error("JWT_SECRET environment variable is required");
@@ -281,25 +272,24 @@ module.exports = (supabase) => {
     const baseUrl  = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
 
-    const mailer = createMailer();
-    if (mailer) {
-      const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-      try {
-        await mailer.sendMail({
-          from,
-          to:      employee.MAIL,
-          subject: "PlaIn – Passwort zurücksetzen",
-          text:    `Klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen (gültig 1 Stunde):\n\n${resetUrl}`,
-          html:    `<p>Klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen (gültig 1 Stunde):</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
-        });
-      } catch (mailErr) {
-        console.error("[PASSWORD RESET] Mail error:", mailErr.message);
-        return res.status(500).json({ error: "E-Mail konnte nicht gesendet werden. Bitte Administrator kontaktieren." });
+    try {
+      // System-Mail -> Plattform-Absender (Resend EMAIL_FROM bzw. SMTP-ENV),
+      // bewusst OHNE tenantId. _sendMail wirft {status:503}, wenn gar kein
+      // Versand konfiguriert ist.
+      await _sendMail({
+        to:      employee.MAIL,
+        subject: "PlaIn – Passwort zurücksetzen",
+        text:    `Klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen (gültig 1 Stunde):\n\n${resetUrl}`,
+        html:    `<p>Klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen (gültig 1 Stunde):</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+      });
+    } catch (mailErr) {
+      if (mailErr?.status === 503) {
+        // Kein Versand konfiguriert — Link ins Log fuer Admin-Abruf.
+        console.log(`[PASSWORD RESET] ${employee.MAIL}: ${resetUrl}`);
+        return res.status(500).json({ error: "E-Mail-Versand nicht konfiguriert. Bitte Administrator kontaktieren." });
       }
-    } else {
-      // No SMTP configured — log to console for admin retrieval
-      console.log(`[PASSWORD RESET] ${employee.MAIL}: ${resetUrl}`);
-      return res.status(500).json({ error: "E-Mail-Versand nicht konfiguriert. Bitte Administrator kontaktieren." });
+      console.error("[PASSWORD RESET] Mail error:", mailErr?.message || mailErr);
+      return res.status(500).json({ error: "E-Mail konnte nicht gesendet werden. Bitte Administrator kontaktieren." });
     }
 
     return res.json({ success: true });
