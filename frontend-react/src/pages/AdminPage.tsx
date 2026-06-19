@@ -52,7 +52,8 @@ import { fetchActiveEmployees } from '@/api/projekte'
 import { Modal } from '@/components/ui/Modal'
 import {
   fetchEmailSettings, saveEmailSettings, sendEmailSettingsTest,
-  type EmailSettingsPayload,
+  addEmailDomain, verifyEmailDomain, removeEmailDomain,
+  type EmailSettingsPayload, type EmailSettings, type DomainRecord,
 } from '@/api/emailSettings'
 import { useAuthStore } from '@/store/authStore'
 
@@ -3379,6 +3380,139 @@ function EngagementSection() {
   )
 }
 
+// ── Absender-Domain (Resend-Verifizierung) ─────────────────────────────────────
+
+function DomainStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; bg: string; color: string }> = {
+    verified:          { label: 'Verifiziert',            bg: '#dcfce7', color: '#166534' },
+    pending:           { label: 'Ausstehend',             bg: '#fef9c3', color: '#854d0e' },
+    not_started:       { label: 'Nicht gestartet',        bg: '#f3f4f6', color: '#374151' },
+    failed:            { label: 'Fehlgeschlagen',         bg: '#fee2e2', color: '#991b1b' },
+    temporary_failure: { label: 'Temporär fehlgeschlagen', bg: '#fee2e2', color: '#991b1b' },
+  }
+  const s = map[status] ?? { label: status || '—', bg: '#f3f4f6', color: '#374151' }
+  return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color }}>{s.label}</span>
+}
+
+function DomainBlock({ data }: { data: EmailSettings }) {
+  const qc = useQueryClient()
+  const [domainInput, setDomainInput] = useState('')
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
+
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ['email-settings'] })
+
+  const addMut = useMutation({
+    mutationFn: (d: string) => addEmailDomain(d),
+    onSuccess: () => { setMsg({ text: 'Domain hinzugefügt. Bitte die DNS-Records eintragen und dann „Status prüfen".', type: 'info' }); setDomainInput(''); invalidate() },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+  const verifyMut = useMutation({
+    mutationFn: () => verifyEmailDomain(),
+    onSuccess: (res: EmailSettings) => {
+      setMsg(res.domain_status === 'verified'
+        ? { text: 'Domain verifiziert ✅ — du kannst jetzt aus deiner eigenen Adresse senden.', type: 'success' }
+        : { text: 'Noch nicht verifiziert. DNS-Records brauchen je nach Anbieter einige Minuten bis Stunden. Später erneut prüfen.', type: 'info' })
+      invalidate()
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+  const removeMut = useMutation({
+    mutationFn: () => removeEmailDomain(),
+    onSuccess: () => { setMsg(null); invalidate() },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const hasDomain = !!data.domain_name
+  const verified  = data.domain_status === 'verified'
+
+  return (
+    <div className="admin-block">
+      <h3 className="admin-block-title">Eigene Absender-Domain (optional)</h3>
+
+      {!hasDomain && (
+        <>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+            Standardmäßig versendet PlaIn über die Plattform-Domain. Trage deine eigene Domain ein,
+            um Dokumente aus deiner echten Adresse (z. B. rechnung@deine-domain.de) zu versenden —
+            DKIM-signiert, ohne Postfach-Passwort.
+          </p>
+          <div className="form-row" style={{ alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label>Domain</label>
+              <input type="text" value={domainInput} onChange={e => setDomainInput(e.target.value)} placeholder="z. B. kanzlei-mueller.de" style={{ fontFamily: 'monospace' }} />
+            </div>
+            <button type="button" className="btn-secondary" style={{ marginBottom: 2 }} disabled={addMut.isPending || !domainInput.trim()} onClick={() => { setMsg(null); addMut.mutate(domainInput.trim()) }}>
+              {addMut.isPending ? 'Wird angelegt …' : 'Domain hinzufügen'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {hasDomain && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <strong style={{ fontFamily: 'monospace' }}>{data.domain_name}</strong>
+            <DomainStatusBadge status={data.domain_status} />
+          </div>
+
+          {!verified && (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+                Trage diese DNS-Records bei deinem Domain-Anbieter ein und klicke dann auf „Status prüfen".
+                Die Verifizierung kann je nach Anbieter einige Minuten bis Stunden dauern.
+              </p>
+              {data.domain_records?.length > 0 && (
+                <div style={{ overflowX: 'auto', marginBottom: 10 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', textAlign: 'left' }}>
+                        <th style={{ padding: '4px 8px 4px 0' }}>Typ</th>
+                        <th style={{ padding: '4px 8px' }}>Name</th>
+                        <th style={{ padding: '4px 8px' }}>Wert</th>
+                        <th style={{ padding: '4px 0 4px 8px' }}>Prio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.domain_records.map((r: DomainRecord, i: number) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--surface-2)', verticalAlign: 'top' }}>
+                          <td style={{ padding: '4px 8px 4px 0', whiteSpace: 'nowrap', fontWeight: 600 }}>{r.type}</td>
+                          <td style={{ padding: '4px 8px', fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.name}</td>
+                          <td style={{ padding: '4px 8px', fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.value}</td>
+                          <td style={{ padding: '4px 0 4px 8px' }}>{r.priority ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {verified && (
+            <p style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10 }}>
+              Diese Domain ist verifiziert. Setze oben unter „Absender" eine Adresse auf <strong>@{data.domain_name}</strong>,
+              damit Dokumente daraus versendet werden.
+            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {!verified && (
+              <button type="button" className="btn-secondary" disabled={verifyMut.isPending} onClick={() => { setMsg(null); verifyMut.mutate() }}>
+                {verifyMut.isPending ? 'Prüft …' : 'Status prüfen'}
+              </button>
+            )}
+            <button type="button" className="btn-small btn-danger" disabled={removeMut.isPending} onClick={() => { setMsg(null); removeMut.mutate() }}>
+              {removeMut.isPending ? 'Entfernt …' : 'Domain entfernen'}
+            </button>
+          </div>
+        </>
+      )}
+
+      <Message text={msg?.text ?? null} type={msg?.type} />
+    </div>
+  )
+}
+
 // ── E-Mail-Versand (Per-Tenant SMTP) ───────────────────────────────────────────
 
 const EMPTY_EMAIL_FORM = {
@@ -3466,6 +3600,7 @@ function EmailVersandSection() {
   if (isLoading) return <div className="admin-section"><p className="empty-note">Laden …</p></div>
 
   const apiMode = data?.transport === 'resend'
+  const domainVerified = data?.domain_status === 'verified'
 
   // Status-Banner je nach aktivem Versand-Weg.
   let topBanner: { text: string; type: 'success' | 'info' | 'error' }
@@ -3560,17 +3695,17 @@ function EmailVersandSection() {
 
       <div className="admin-block">
         <h3 className="admin-block-title">Absender</h3>
-        {apiMode && (
+        {apiMode && !domainVerified && (
           <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
-            Die technische Absender-Domain ist die verifizierte Domain des PlaIn-Dienstes. Empfänger sehen
+            Die technische Absender-Domain ist aktuell die verifizierte Domain des PlaIn-Dienstes. Empfänger sehen
             deinen <strong>Anzeigenamen</strong>; klicken sie auf „Antworten", landet die Mail bei deiner
-            <strong> Antwort-Adresse</strong>.
+            <strong> Antwort-Adresse</strong>. Für eine echte eigene Absender-Adresse verifiziere unten deine Domain.
           </p>
         )}
-        {!apiMode && (
+        {(!apiMode || domainVerified) && (
           <div className="form-group">
-            <label>Absender-Adresse (From)</label>
-            <input type="email" value={form.smtp_from} onChange={set('smtp_from')} placeholder="Standard: Benutzername" />
+            <label>Absender-Adresse{apiMode ? ` (auf @${data?.domain_name})` : ' (From)'}</label>
+            <input type="email" value={form.smtp_from} onChange={set('smtp_from')} placeholder={apiMode ? `z. B. rechnung@${data?.domain_name || 'deine-domain.de'}` : 'Standard: Benutzername'} />
           </div>
         )}
         <div className="form-group">
@@ -3582,6 +3717,8 @@ function EmailVersandSection() {
           <input type="email" value={form.reply_to} onChange={set('reply_to')} placeholder="z. B. buero@meine-kanzlei.de" />
         </div>
       </div>
+
+      {apiMode && data && <DomainBlock data={data} />}
 
       {!apiMode && (
         <div className="admin-block">

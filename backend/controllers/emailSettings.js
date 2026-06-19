@@ -42,4 +42,33 @@ async function test(req, res, supabase) {
   }
 }
 
-module.exports = { get, save, test };
+// ── Absender-Domain (Resend) ──────────────────────────────────────────────────
+
+async function addDomain(req, res, supabase) {
+  try {
+    const data = await svc.addTenantDomain(supabase, { tenantId: req.tenantId, domain: req.body?.domain });
+    return res.json(data);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function verifyDomain(req, res, supabase) {
+  try {
+    const data = await svc.verifyTenantDomain(supabase, { tenantId: req.tenantId });
+    return res.json(data);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function removeDomain(req, res, supabase) {
+  try {
+    const data = await svc.removeTenantDomain(supabase, { tenantId: req.tenantId });
+    return res.json(data);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+module.exports = { get, save, test, addDomain, verifyDomain, removeDomain };

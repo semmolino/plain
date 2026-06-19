@@ -14,5 +14,10 @@ module.exports = (supabase) => {
   router.put("/",      (req, res) => ctrl.save(req, res, supabase));
   router.post("/test", (req, res) => ctrl.test(req, res, supabase));
 
+  // Eigene Absender-Domain (Resend-Verifizierung)
+  router.post  ("/domain",        (req, res) => ctrl.addDomain   (req, res, supabase));
+  router.post  ("/domain/verify", (req, res) => ctrl.verifyDomain(req, res, supabase));
+  router.delete("/domain",        (req, res) => ctrl.removeDomain(req, res, supabase));
+
   return router;
 };

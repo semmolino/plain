@@ -149,11 +149,21 @@ async function resolveSender({ supabase, tenantId, requireTenant }) {
   const fromEnv  = clean(process.env.EMAIL_FROM);
   if (apiKey) {
     const base = parseFrom(fromEnv);
-    if (!base.address) {
-      throw { status: 503, message: 'EMAIL_FROM ist nicht gesetzt. Bitte in Railway eine verifizierte Absenderadresse setzen, z.B. "PlaIn <noreply@deine-domain.de>".' };
+    // Hat der Tenant eine EIGENE verifizierte Domain + passende Absenderadresse,
+    // wird daraus gesendet (echte Absender-Identitaet, DKIM-signiert). Sonst
+    // Fallback auf die verifizierte Plattform-Domain (EMAIL_FROM).
+    let fromAddress = base.address;
+    if (identity && identity.domainVerified && identity.from && identity.domainName) {
+      const dom = String(identity.from).split("@")[1];
+      if (dom && dom.toLowerCase() === String(identity.domainName).toLowerCase()) {
+        fromAddress = identity.from;
+      }
+    }
+    if (!fromAddress) {
+      throw { status: 503, message: 'Kein verifizierter Absender vorhanden. Bitte EMAIL_FROM in Railway setzen oder eine eigene Domain verifizieren.' };
     }
     const fromName = (identity && identity.fromName) || base.name || "PlaIn";
-    const from     = `${fromName} <${base.address}>`;
+    const from     = `${fromName} <${fromAddress}>`;
     const replyTo  = (identity && (identity.replyTo || identity.from)) || undefined;
     return {
       from,

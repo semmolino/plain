@@ -13,6 +13,7 @@
  */
 
 const secretCrypto = require("./secretCrypto");
+const resend       = require("../services_email_resend");
 
 const TABLE = "TENANT_EMAIL_SETTINGS";
 
@@ -32,6 +33,25 @@ async function loadRow(supabase, tenantId) {
     throw error;
   }
   return data || null;
+}
+
+/** Update-or-insert eines Teil-Patches fuer die Tenant-Zeile. */
+async function upsertRow(supabase, tenantId, patch) {
+  const existing = await loadRow(supabase, tenantId);
+  if (existing) {
+    const { error } = await supabase.from(TABLE).update(patch).eq("TENANT_ID", tenantId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from(TABLE).insert({ TENANT_ID: tenantId, ...patch });
+    if (error) throw error;
+  }
+}
+
+/** Liefert den bereinigten Resend-API-Key oder wirft, wenn nicht konfiguriert. */
+function requireResendKey() {
+  const key = String(process.env.RESEND_API_KEY || "").trim().replace(/^["']+|["']+$/g, "");
+  if (!key) throw { status: 503, message: "E-Mail-Dienst ist nicht konfiguriert (RESEND_API_KEY fehlt)." };
+  return key;
 }
 
 /**
@@ -55,6 +75,10 @@ async function getSettingsForApi(supabase, { tenantId }) {
     // Aktiver Versand-Weg: 'resend' (HTTPS-API) wenn konfiguriert, sonst 'smtp'.
     transport:                 process.env.RESEND_API_KEY ? "resend" : "smtp",
     provider_ready:            !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
+    // Eigene Absender-Domain des Tenants (Resend-Verifizierung).
+    domain_name:               row?.RESEND_DOMAIN_NAME    || "",
+    domain_status:             row?.RESEND_DOMAIN_STATUS  || "",
+    domain_records:            row?.RESEND_DOMAIN_RECORDS || [],
   };
 }
 
@@ -69,10 +93,67 @@ async function getTenantSenderIdentity(supabase, tenantId) {
   const row = await loadRow(supabase, tenantId);
   if (!row) return null;
   return {
-    from:     row.SMTP_FROM || row.SMTP_USER || undefined,
-    fromName: row.FROM_NAME || undefined,
-    replyTo:  row.REPLY_TO  || undefined,
+    from:           row.SMTP_FROM || row.SMTP_USER || undefined,
+    fromName:       row.FROM_NAME || undefined,
+    replyTo:        row.REPLY_TO  || undefined,
+    domainName:     row.RESEND_DOMAIN_NAME || undefined,
+    domainVerified: row.RESEND_DOMAIN_STATUS === "verified",
   };
+}
+
+// ── Absender-Domain (Resend) ──────────────────────────────────────────────────
+
+const DOMAIN_RE = /^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
+/** Registriert die Domain des Tenants in Resend und speichert ID + DNS-Records. */
+async function addTenantDomain(supabase, { tenantId, domain }) {
+  const key  = requireResendKey();
+  const name = String(domain || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!DOMAIN_RE.test(name)) {
+    throw { status: 400, message: "Bitte eine gueltige Domain eingeben (z.B. kanzlei-mueller.de)." };
+  }
+  const region = String(process.env.RESEND_REGION || "").trim() || undefined;
+  const res = await resend.createDomain(key, name, region);
+  await upsertRow(supabase, tenantId, {
+    RESEND_DOMAIN_ID:      res.id || null,
+    RESEND_DOMAIN_NAME:    res.name || name,
+    RESEND_DOMAIN_STATUS:  res.status || "pending",
+    RESEND_DOMAIN_RECORDS: res.records || null,
+    UPDATED_AT:            new Date().toISOString(),
+  });
+  return getSettingsForApi(supabase, { tenantId });
+}
+
+/** Stoesst die DNS-Verifizierung an und aktualisiert Status + Records. */
+async function verifyTenantDomain(supabase, { tenantId }) {
+  const key = requireResendKey();
+  const row = await loadRow(supabase, tenantId);
+  if (!row || !row.RESEND_DOMAIN_ID) throw { status: 400, message: "Keine Domain hinterlegt." };
+  try { await resend.verifyDomain(key, row.RESEND_DOMAIN_ID); } catch { /* Verify ist nur ein Trigger */ }
+  const fresh = await resend.getDomain(key, row.RESEND_DOMAIN_ID);
+  await upsertRow(supabase, tenantId, {
+    RESEND_DOMAIN_STATUS:  fresh.status  || row.RESEND_DOMAIN_STATUS,
+    RESEND_DOMAIN_RECORDS: fresh.records || row.RESEND_DOMAIN_RECORDS,
+    UPDATED_AT:            new Date().toISOString(),
+  });
+  return getSettingsForApi(supabase, { tenantId });
+}
+
+/** Entfernt die Domain bei Resend und leert die Spalten. */
+async function removeTenantDomain(supabase, { tenantId }) {
+  const key = requireResendKey();
+  const row = await loadRow(supabase, tenantId);
+  if (row && row.RESEND_DOMAIN_ID) {
+    try { await resend.deleteDomain(key, row.RESEND_DOMAIN_ID); } catch { /* evtl. schon weg */ }
+  }
+  await upsertRow(supabase, tenantId, {
+    RESEND_DOMAIN_ID:      null,
+    RESEND_DOMAIN_NAME:    null,
+    RESEND_DOMAIN_STATUS:  null,
+    RESEND_DOMAIN_RECORDS: null,
+    UPDATED_AT:            new Date().toISOString(),
+  });
+  return getSettingsForApi(supabase, { tenantId });
 }
 
 /**
@@ -163,4 +244,7 @@ async function getTenantTransportConfig(supabase, tenantId, { ignoreEnabled = fa
   };
 }
 
-module.exports = { getSettingsForApi, saveSettings, getTenantTransportConfig, getTenantSenderIdentity };
+module.exports = {
+  getSettingsForApi, saveSettings, getTenantTransportConfig, getTenantSenderIdentity,
+  addTenantDomain, verifyTenantDomain, removeTenantDomain,
+};

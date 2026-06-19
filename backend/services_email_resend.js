@@ -15,7 +15,49 @@
  * Node 20 hat global fetch — keine zusaetzliche Abhaengigkeit noetig.
  */
 
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
+const RESEND_BASE     = "https://api.resend.com";
+const RESEND_ENDPOINT = `${RESEND_BASE}/emails`;
+
+/** Generischer Resend-Request fuer die Domains-API. */
+async function resendRequest(method, path, apiKey, body) {
+  let res;
+  try {
+    res = await fetch(`${RESEND_BASE}${path}`, {
+      method,
+      headers: {
+        Authorization:  `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    throw { status: 502, message: `E-Mail-Dienst (Resend) nicht erreichbar: ${e?.message || e}` };
+  }
+  let json = {};
+  try { json = await res.json(); } catch { /* 204 o.ae. */ }
+  if (!res.ok) {
+    const detail = (json && json.message) || `HTTP ${res.status}`;
+    const status = res.status === 401 ? 401 : (res.status === 422 || res.status === 400 ? 400 : 502);
+    throw { status, message: `Resend: ${detail}` };
+  }
+  return json;
+}
+
+/** Registriert eine Domain im Resend-Account. @returns {id,name,status,records,...} */
+const createDomain = (apiKey, name, region) =>
+  resendRequest("POST", "/domains", apiKey, region ? { name, region } : { name });
+
+/** Liest eine Domain inkl. aktuellem Status + DNS-Records. */
+const getDomain = (apiKey, id) =>
+  resendRequest("GET", `/domains/${id}`, apiKey);
+
+/** Stoesst die DNS-Verifizierung an. */
+const verifyDomain = (apiKey, id) =>
+  resendRequest("POST", `/domains/${id}/verify`, apiKey);
+
+/** Entfernt eine Domain aus dem Resend-Account. */
+const deleteDomain = (apiKey, id) =>
+  resendRequest("DELETE", `/domains/${id}`, apiKey);
 
 /**
  * @param {object} opts
@@ -81,4 +123,4 @@ async function sendViaResend({ apiKey, from, to, subject, html, text, replyTo, a
   catch { return {}; }
 }
 
-module.exports = { sendViaResend };
+module.exports = { sendViaResend, createDomain, getDomain, verifyDomain, deleteDomain };
