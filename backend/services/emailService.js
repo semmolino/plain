@@ -13,6 +13,15 @@
  */
 const nodemailer = require("nodemailer");
 
+// Explizite Timeouts: ohne diese wartet nodemailer bei falschem Port/Secure
+// oder geblocktem Egress bis zu ~2 Min und der Aufrufer "haengt". Lieber schnell
+// mit einer aussagekraeftigen Fehlermeldung scheitern.
+const SMTP_TIMEOUTS = {
+  connectionTimeout: 15000, // TCP-Verbindung
+  greetingTimeout:   10000, // SMTP-Begruessung (haeufig bei Port/Secure-Mismatch)
+  socketTimeout:     20000, // Inaktivitaet auf der Verbindung
+};
+
 /** Globaler ENV-Transport (System-Absender). @returns {object|null} */
 function createEnvMailer() {
   if (!process.env.SMTP_HOST) return null;
@@ -24,6 +33,7 @@ function createEnvMailer() {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    ...SMTP_TIMEOUTS,
   });
 }
 
@@ -34,6 +44,7 @@ function createTenantMailer(cfg) {
     port:   cfg.port,
     secure: cfg.secure,
     auth:   cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
+    ...SMTP_TIMEOUTS,
   });
 }
 
