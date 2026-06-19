@@ -1,19 +1,31 @@
 /**
- * Shared email service using nodemailer.
+ * Shared email service mit zwei Versand-Wegen (Provider-Abstraktion):
  *
- * Zwei Transport-Quellen:
- *   1. Per-Tenant SMTP (TENANT_EMAIL_SETTINGS, Migration 0074) — wenn der Aufrufer
- *      `supabase` + `tenantId` uebergibt und der Tenant eigene, aktivierte
- *      Zugangsdaten hinterlegt hat. Dokumente werden dann aus dem EIGENEN
- *      Postfach des Mandanten versendet.
- *   2. Globaler Fallback ueber Railway-ENV-Variablen:
- *      SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM
- *      — genutzt fuer System-Mails (Passwort-Reset, Watchdog) und fuer Tenants
- *      ohne eigene Konfiguration.
+ *   A) Resend HTTPS-API (BEVORZUGT, wenn RESEND_API_KEY gesetzt ist)
+ *      — laeuft ueber Port 443 und funktioniert daher auch dort, wo ausgehender
+ *        SMTP-Verkehr blockiert ist (Railway Free/Hobby). Beste Zustellbarkeit.
+ *      — Absender = verifizierte Plattform-Domain (EMAIL_FROM). Pro Tenant wird
+ *        der Anzeigename (FROM_NAME) und die Antwort-Adresse (REPLY_TO / eigene
+ *        E-Mail) gesetzt, damit Antworten beim Mandanten landen.
+ *
+ *   B) SMTP via nodemailer (Fallback, nur wo Egress erlaubt ist, z.B. Railway Pro
+ *      / Self-Host). Per-Tenant SMTP (TENANT_EMAIL_SETTINGS) oder globale
+ *      SMTP_*-ENV-Variablen.
+ *
+ * Auswahl: RESEND_API_KEY gesetzt -> Resend, sonst SMTP.
  */
 const nodemailer = require("nodemailer");
 const dns = require("dns").promises;
 const net = require("net");
+const { sendViaResend } = require("../services_email_resend");
+
+/** Zerlegt "Name <addr@domain>" oder "addr@domain" in { name, address }. */
+function parseFrom(s) {
+  if (!s) return { name: "", address: "" };
+  const m = /^\s*"?([^"<]*)"?\s*<\s*([^>]+)\s*>\s*$/.exec(s);
+  if (m) return { name: m[1].trim(), address: m[2].trim() };
+  return { name: "", address: String(s).trim() };
+}
 
 // Explizite Timeouts: ohne diese wartet nodemailer bei falschem Port/Secure
 // oder geblocktem Egress bis zu ~2 Min und der Aufrufer "haengt". Lieber schnell
@@ -112,37 +124,87 @@ async function resolveTransport({ supabase, tenantId, requireTenant }) {
 }
 
 /**
+ * Loest einen "Sender" auf — eine Abstraktion ueber Resend ODER SMTP, mit
+ * einheitlicher async `send(msg)`-Methode.
+ * @returns {Promise<{ send: Function, from: string, replyTo?: string }|null>}
+ */
+async function resolveSender({ supabase, tenantId, requireTenant }) {
+  // Tenant-Identitaet (Anzeigename + Antwort-Adresse) laden, falls vorhanden.
+  let identity = null;
+  if (supabase && tenantId) {
+    const { getTenantSenderIdentity } = require("./emailSettingsService");
+    identity = await getTenantSenderIdentity(supabase, tenantId);
+  }
+
+  // ── A) Resend HTTPS-API (bevorzugt) ───────────────────────────────────────
+  if (process.env.RESEND_API_KEY) {
+    const base = parseFrom(process.env.EMAIL_FROM);
+    if (!base.address) {
+      throw { status: 503, message: 'EMAIL_FROM ist nicht gesetzt. Bitte in Railway eine verifizierte Absenderadresse setzen, z.B. "PlaIn <noreply@deine-domain.de>".' };
+    }
+    const fromName = (identity && identity.fromName) || base.name || "PlaIn";
+    const from     = `${fromName} <${base.address}>`;
+    const replyTo  = (identity && (identity.replyTo || identity.from)) || undefined;
+    return {
+      from,
+      replyTo,
+      send: (msg) => sendViaResend({
+        apiKey:      process.env.RESEND_API_KEY,
+        from,
+        to:          msg.to,
+        subject:     msg.subject,
+        html:        msg.html || msg.text,
+        text:        msg.text,
+        replyTo:     msg.replyTo || replyTo,
+        attachments: msg.attachments,
+      }),
+    };
+  }
+
+  // ── B) SMTP (Fallback) ────────────────────────────────────────────────────
+  const t = await resolveTransport({ supabase, tenantId, requireTenant });
+  if (!t) return null;
+  return {
+    from:    t.from,
+    replyTo: t.replyTo,
+    send: async (msg) => {
+      try {
+        await t.transport.sendMail({
+          from:        t.from,
+          to:          msg.to,
+          subject:     msg.subject,
+          html:        msg.html || msg.text,
+          text:        msg.text,
+          replyTo:     msg.replyTo || t.replyTo,
+          attachments: msg.attachments,
+        });
+      } catch (err) {
+        throw enrichSmtpError(err);
+      }
+    },
+  };
+}
+
+/**
  * Send an email.
  * @param {object} opts
- * @param {object}   [opts.supabase]    – Supabase-Client (fuer Per-Tenant-Transport)
- * @param {number}   [opts.tenantId]    – Tenant, dessen SMTP genutzt werden soll
- * @param {boolean}  [opts.requireTenant] – true: NUR Tenant-SMTP (Test), kein ENV-Fallback
+ * @param {object}   [opts.supabase]    – Supabase-Client (fuer Per-Tenant-Identitaet)
+ * @param {number}   [opts.tenantId]    – Tenant, dessen Absender-Identitaet genutzt wird
+ * @param {boolean}  [opts.requireTenant] – true: im SMTP-Modus nur Tenant-SMTP (Test)
  * @param {string}   opts.to            – recipient address
  * @param {string}   opts.subject
  * @param {string}   [opts.html]        – HTML body (preferred)
  * @param {string}   [opts.text]        – plain-text fallback
  * @param {string}   [opts.replyTo]     – Antwort-an (override)
- * @param {Array}    [opts.attachments] – nodemailer attachment objects
+ * @param {Array}    [opts.attachments] – nodemailer-Style attachments
  * @throws {{ status: number, message: string }} when no transport is available
  */
 async function sendMail({ supabase, tenantId, requireTenant, to, subject, html, text, replyTo, attachments }) {
-  const resolved = await resolveTransport({ supabase, tenantId, requireTenant });
-  if (!resolved) {
-    throw { status: 503, message: "SMTP nicht konfiguriert. Bitte SMTP_HOST in den Railway-Umgebungsvariablen setzen." };
+  const sender = await resolveSender({ supabase, tenantId, requireTenant });
+  if (!sender) {
+    throw { status: 503, message: "E-Mail-Versand ist nicht konfiguriert. Bitte RESEND_API_KEY + EMAIL_FROM (empfohlen) oder SMTP_* in Railway setzen." };
   }
-  try {
-    await resolved.transport.sendMail({
-      from:        resolved.from,
-      to,
-      subject,
-      html:        html || text,
-      text,
-      replyTo:     replyTo || resolved.replyTo,
-      attachments,
-    });
-  } catch (err) {
-    throw enrichSmtpError(err);
-  }
+  await sender.send({ to, subject, html, text, replyTo, attachments });
 }
 
 /**

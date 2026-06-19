@@ -52,6 +52,26 @@ async function getSettingsForApi(supabase, { tenantId }) {
     smtp_pass_set:             !!(row && row.SMTP_PASS_ENC),
     encryption_available:      secretCrypto.isConfigured(),
     global_fallback_available: !!process.env.SMTP_HOST,
+    // Aktiver Versand-Weg: 'resend' (HTTPS-API) wenn konfiguriert, sonst 'smtp'.
+    transport:                 process.env.RESEND_API_KEY ? "resend" : "smtp",
+    provider_ready:            !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
+  };
+}
+
+/**
+ * Liefert NUR die Absender-Identitaet eines Tenants (Anzeigename + Antwort-
+ * Adresse), unabhaengig von Host/ENABLED. Genutzt im Resend-Modus, wo keine
+ * SMTP-Zugangsdaten noetig sind.
+ * @returns {Promise<{from?:string, fromName?:string, replyTo?:string}|null>}
+ */
+async function getTenantSenderIdentity(supabase, tenantId) {
+  if (!supabase || !tenantId) return null;
+  const row = await loadRow(supabase, tenantId);
+  if (!row) return null;
+  return {
+    from:     row.SMTP_FROM || row.SMTP_USER || undefined,
+    fromName: row.FROM_NAME || undefined,
+    replyTo:  row.REPLY_TO  || undefined,
   };
 }
 
@@ -143,4 +163,4 @@ async function getTenantTransportConfig(supabase, tenantId, { ignoreEnabled = fa
   };
 }
 
-module.exports = { getSettingsForApi, saveSettings, getTenantTransportConfig };
+module.exports = { getSettingsForApi, saveSettings, getTenantTransportConfig, getTenantSenderIdentity };

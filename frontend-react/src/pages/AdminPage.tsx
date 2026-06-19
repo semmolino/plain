@@ -3465,113 +3465,135 @@ function EmailVersandSection() {
 
   if (isLoading) return <div className="admin-section"><p className="empty-note">Laden …</p></div>
 
-  // Status-Banner aus dem GESPEICHERTEN Zustand (nicht aus dem editierbaren Formular).
-  const statusBanner: { text: string; type: 'success' | 'info' } =
-    data?.enabled && data?.configured
-      ? { text: 'Eigener Versand aktiv — Dokumente und Mahnungen werden über deinen SMTP-Server versendet.', type: 'success' }
-      : data?.global_fallback_available
-        ? { text: 'Aktuell wird der System-Absender (globale Server-Konfiguration) verwendet. Aktiviere unten den eigenen Versand, um aus deinem Postfach zu senden.', type: 'info' }
-        : { text: 'Es ist noch kein E-Mail-Versand konfiguriert. Hinterlege deine SMTP-Zugangsdaten und aktiviere den Versand.', type: 'info' }
+  const apiMode = data?.transport === 'resend'
+
+  // Status-Banner je nach aktivem Versand-Weg.
+  let topBanner: { text: string; type: 'success' | 'info' | 'error' }
+  if (apiMode) {
+    topBanner = data?.provider_ready
+      ? { text: 'Versand läuft über den PlaIn-E-Mail-Dienst (HTTPS) — funktioniert auch dort, wo SMTP blockiert ist. Du musst nur Anzeigename und Antwort-Adresse setzen; SMTP-Felder sind hier nicht nötig.', type: 'success' }
+      : { text: 'E-Mail-Dienst noch nicht vollständig eingerichtet: RESEND_API_KEY und EMAIL_FROM müssen in Railway gesetzt sein (verifizierte Absender-Domain).', type: 'error' }
+  } else {
+    topBanner =
+      data?.enabled && data?.configured
+        ? { text: 'Eigener Versand aktiv — Dokumente und Mahnungen werden über deinen SMTP-Server versendet.', type: 'success' }
+        : data?.global_fallback_available
+          ? { text: 'Aktuell wird der System-Absender (globale Server-Konfiguration) verwendet. Aktiviere unten den eigenen Versand, um aus deinem Postfach zu senden.', type: 'info' }
+          : { text: 'Es ist noch kein E-Mail-Versand konfiguriert. Hinterlege deine SMTP-Zugangsdaten und aktiviere den Versand.', type: 'info' }
+  }
 
   const passPlaceholder = data?.smtp_pass_set && !clearPw ? '•••••••• (gespeichert)' : 'SMTP-Passwort / App-Passwort'
 
   return (
     <div className="admin-section">
-      <Message text={statusBanner.text} type={statusBanner.type} />
+      <Message text={topBanner.text} type={topBanner.type} />
 
-      {data && !data.encryption_available && (
+      {!apiMode && data && !data.encryption_available && (
         <Message
           type="error"
           text="EMAIL_ENC_KEY ist nicht gesetzt — Passwörter können nicht sicher gespeichert werden. Bitte in Railway die Variable setzen: openssl rand -base64 32"
         />
       )}
 
-      <div className="admin-block">
-        <h3 className="admin-block-title">SMTP-Zugangsdaten</h3>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
-          Diese Zugangsdaten gelten nur für deinen Mandanten. Das Passwort wird verschlüsselt
-          gespeichert und nie wieder angezeigt. Für Gmail/Microsoft 365 ist in der Regel ein
-          <strong> App-Passwort</strong> nötig (nicht das normale Login-Passwort).
-        </p>
+      {!apiMode && (
+        <div className="admin-block">
+          <h3 className="admin-block-title">SMTP-Zugangsdaten</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+            Diese Zugangsdaten gelten nur für deinen Mandanten. Das Passwort wird verschlüsselt
+            gespeichert und nie wieder angezeigt. Für Gmail/Microsoft 365 ist in der Regel ein
+            <strong> App-Passwort</strong> nötig (nicht das normale Login-Passwort).
+          </p>
 
-        <div className="form-group">
-          <label>SMTP-Host*</label>
-          <input type="text" value={form.smtp_host} onChange={set('smtp_host')} placeholder="z. B. smtp.gmail.com" />
-        </div>
-
-        <div className="form-row">
           <div className="form-group">
-            <label>Port</label>
-            <input
-              type="number" min={1} max={65535} value={form.smtp_port}
-              onChange={e => setForm(f => ({ ...f, smtp_port: parseInt(e.target.value, 10) || 587 }))}
-            />
+            <label>SMTP-Host*</label>
+            <input type="text" value={form.smtp_host} onChange={set('smtp_host')} placeholder="z. B. smtp.gmail.com" />
           </div>
-          <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Port</label>
               <input
-                type="checkbox" checked={form.smtp_secure}
-                onChange={e => setForm(f => ({ ...f, smtp_secure: e.target.checked }))}
+                type="number" min={1} max={65535} value={form.smtp_port}
+                onChange={e => setForm(f => ({ ...f, smtp_port: parseInt(e.target.value, 10) || 587 }))}
               />
-              <span>TLS/SSL (Port 465)</span>
-            </label>
+            </div>
+            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox" checked={form.smtp_secure}
+                  onChange={e => setForm(f => ({ ...f, smtp_secure: e.target.checked }))}
+                />
+                <span>TLS/SSL (Port 465)</span>
+              </label>
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: -4, marginBottom: 12 }}>
+            Port 587 mit STARTTLS → Häkchen aus. Port 465 mit direktem TLS → Häkchen an.
+          </p>
+
+          <div className="form-group">
+            <label>Benutzername</label>
+            <input type="text" value={form.smtp_user} onChange={set('smtp_user')} placeholder="z. B. buero@meine-kanzlei.de" autoComplete="off" />
+          </div>
+
+          <div className="form-group">
+            <label>Passwort</label>
+            <input
+              type="password"
+              value={clearPw ? '' : passInput}
+              onChange={e => { setPassInput(e.target.value); setClearPw(false) }}
+              placeholder={passPlaceholder}
+              autoComplete="new-password"
+            />
+            {data?.smtp_pass_set && (
+              <button
+                type="button" className="btn-small btn-danger" style={{ marginTop: 6, padding: '2px 8px', fontSize: 11 }}
+                onClick={() => { setPassInput(''); setClearPw(true) }}
+              >
+                Gespeichertes Passwort entfernen
+              </button>
+            )}
+            {clearPw && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Das gespeicherte Passwort wird beim Speichern gelöscht.</div>}
           </div>
         </div>
-        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: -4, marginBottom: 12 }}>
-          Port 587 mit STARTTLS → Häkchen aus. Port 465 mit direktem TLS → Häkchen an.
-        </p>
-
-        <div className="form-group">
-          <label>Benutzername</label>
-          <input type="text" value={form.smtp_user} onChange={set('smtp_user')} placeholder="z. B. buero@meine-kanzlei.de" autoComplete="off" />
-        </div>
-
-        <div className="form-group">
-          <label>Passwort</label>
-          <input
-            type="password"
-            value={clearPw ? '' : passInput}
-            onChange={e => { setPassInput(e.target.value); setClearPw(false) }}
-            placeholder={passPlaceholder}
-            autoComplete="new-password"
-          />
-          {data?.smtp_pass_set && (
-            <button
-              type="button" className="btn-small btn-danger" style={{ marginTop: 6, padding: '2px 8px', fontSize: 11 }}
-              onClick={() => { setPassInput(''); setClearPw(true) }}
-            >
-              Gespeichertes Passwort entfernen
-            </button>
-          )}
-          {clearPw && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Das gespeicherte Passwort wird beim Speichern gelöscht.</div>}
-        </div>
-      </div>
+      )}
 
       <div className="admin-block">
         <h3 className="admin-block-title">Absender</h3>
+        {apiMode && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+            Die technische Absender-Domain ist die verifizierte Domain des PlaIn-Dienstes. Empfänger sehen
+            deinen <strong>Anzeigenamen</strong>; klicken sie auf „Antworten", landet die Mail bei deiner
+            <strong> Antwort-Adresse</strong>.
+          </p>
+        )}
+        {!apiMode && (
+          <div className="form-group">
+            <label>Absender-Adresse (From)</label>
+            <input type="email" value={form.smtp_from} onChange={set('smtp_from')} placeholder="Standard: Benutzername" />
+          </div>
+        )}
         <div className="form-group">
-          <label>Absender-Adresse (From)</label>
-          <input type="email" value={form.smtp_from} onChange={set('smtp_from')} placeholder="Standard: Benutzername" />
-        </div>
-        <div className="form-group">
-          <label>Anzeigename (optional)</label>
+          <label>Anzeigename{apiMode ? '' : ' (optional)'}</label>
           <input type="text" value={form.from_name} onChange={set('from_name')} placeholder="z. B. Architekturbüro Müller" />
         </div>
         <div className="form-group">
-          <label>Antwort-an / Reply-To (optional)</label>
-          <input type="email" value={form.reply_to} onChange={set('reply_to')} placeholder="z. B. buchhaltung@meine-kanzlei.de" />
+          <label>Antwort-an / Reply-To{apiMode ? '' : ' (optional)'}</label>
+          <input type="email" value={form.reply_to} onChange={set('reply_to')} placeholder="z. B. buero@meine-kanzlei.de" />
         </div>
       </div>
 
-      <div className="admin-block">
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
-          <input type="checkbox" checked={form.enabled} onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
-          <span>Eigenen SMTP-Versand aktivieren</span>
-        </label>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0' }}>
-          Solange deaktiviert, wird (falls vorhanden) der System-Absender genutzt.
-        </p>
-      </div>
+      {!apiMode && (
+        <div className="admin-block">
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
+            <input type="checkbox" checked={form.enabled} onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
+            <span>Eigenen SMTP-Versand aktivieren</span>
+          </label>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0' }}>
+            Solange deaktiviert, wird (falls vorhanden) der System-Absender genutzt.
+          </p>
+        </div>
+      )}
 
       <Message text={msg?.text ?? null} type={msg?.type} />
       <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending} type="button">
@@ -3581,8 +3603,7 @@ function EmailVersandSection() {
       <div className="admin-block" style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
         <h3 className="admin-block-title">Testnachricht senden</h3>
         <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
-          Sendet eine Testmail über die <strong>gespeicherten</strong> Zugangsdaten (auch wenn der Versand noch nicht aktiviert ist).
-          Bitte vorher speichern.
+          Sendet eine Testmail mit deinen <strong>gespeicherten</strong> Einstellungen. Bitte vorher speichern.
         </p>
         <div className="form-row" style={{ alignItems: 'flex-end' }}>
           <div className="form-group" style={{ flex: 1 }}>

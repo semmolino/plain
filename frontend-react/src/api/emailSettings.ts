@@ -16,6 +16,8 @@ export interface EmailSettings {
   smtp_pass_set:             boolean   // ob ein verschluesseltes Passwort hinterlegt ist
   encryption_available:      boolean   // ob EMAIL_ENC_KEY gesetzt ist
   global_fallback_available: boolean   // ob globaler ENV-Absender existiert
+  transport:                 'resend' | 'smtp'  // aktiver Versand-Weg
+  provider_ready:            boolean   // im Resend-Modus: RESEND_API_KEY + EMAIL_FROM gesetzt
 }
 
 /** Speicher-Payload. `smtp_pass` nur senden, wenn neu/geaendert. */
