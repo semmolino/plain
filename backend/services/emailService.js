@@ -12,6 +12,8 @@
  *      ohne eigene Konfiguration.
  */
 const nodemailer = require("nodemailer");
+const dns = require("dns").promises;
+const net = require("net");
 
 // Explizite Timeouts: ohne diese wartet nodemailer bei falschem Port/Secure
 // oder geblocktem Egress bis zu ~2 Min und der Aufrufer "haengt". Lieber schnell
@@ -22,29 +24,61 @@ const SMTP_TIMEOUTS = {
   socketTimeout:     20000, // Inaktivitaet auf der Verbindung
 };
 
-/** Globaler ENV-Transport (System-Absender). @returns {object|null} */
-function createEnvMailer() {
-  if (!process.env.SMTP_HOST) return null;
+/**
+ * Loest einen Hostnamen explizit auf eine IPv4-Adresse auf.
+ *
+ * Hintergrund: Auf IPv6-only-Plattformen (z.B. Railway) bevorzugt/erzwingt
+ * nodemailer eine IPv6-Verbindung, die mangels IPv6-Egress mit ENETUNREACH
+ * scheitert. Geben wir nodemailer direkt ein IPv4-Literal als `host`, umgeht es
+ * die eigene (zu strikte) Adressauswahl und verbindet via IPv4-NAT. Der
+ * Original-Hostname wird separat als `servername` fuer SNI/Zertifikat gesetzt.
+ *
+ * @returns {Promise<string|null>} IPv4-Adresse oder null (dann Hostname nutzen).
+ */
+async function resolveIPv4(host) {
+  if (!host || net.isIP(host)) return null; // bereits IP-Literal -> nichts zu tun
+  try {
+    const { address } = await dns.lookup(host, { family: 4 });
+    return address || null;
+  } catch {
+    return null; // keine A-Records -> nodemailer mit Hostnamen versuchen lassen
+  }
+}
+
+/** Baut einen nodemailer-Transport; erzwingt IPv4, behaelt SNI auf dem Hostnamen. */
+async function buildTransport({ host, port, secure, user, pass }) {
+  const ipv4 = await resolveIPv4(host);
   return nodemailer.createTransport({
-    host:   process.env.SMTP_HOST,
-    port:   Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === "true",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+    host:       ipv4 || host,
+    port:       Number(port) || 587,
+    secure:     !!secure,
+    // Bei IPv4-Literal: SNI + Zertifikatspruefung weiterhin gegen den Hostnamen.
+    servername: ipv4 ? host : undefined,
+    auth:       user ? { user, pass } : undefined,
     ...SMTP_TIMEOUTS,
   });
 }
 
-/** Baut einen nodemailer-Transport aus einer aufgeloesten Tenant-Konfiguration. */
+/** Globaler ENV-Transport (System-Absender). @returns {Promise<object|null>} */
+async function createEnvMailer() {
+  if (!process.env.SMTP_HOST) return null;
+  return buildTransport({
+    host:   process.env.SMTP_HOST,
+    port:   process.env.SMTP_PORT,
+    secure: process.env.SMTP_SECURE === "true",
+    user:   process.env.SMTP_USER,
+    pass:   process.env.SMTP_PASS,
+  });
+}
+
+/** Baut einen Transport aus einer aufgeloesten Tenant-Konfiguration. */
 function createTenantMailer(cfg) {
-  return nodemailer.createTransport({
+  return buildTransport({
     host:   cfg.host,
     port:   cfg.port,
     secure: cfg.secure,
-    auth:   cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
-    ...SMTP_TIMEOUTS,
+    user:   cfg.user,
+    pass:   cfg.pass,
   });
 }
 
@@ -60,7 +94,7 @@ async function resolveTransport({ supabase, tenantId, requireTenant }) {
     const cfg = await getTenantTransportConfig(supabase, tenantId, { ignoreEnabled: !!requireTenant });
     if (cfg) {
       const from = cfg.fromName ? `"${cfg.fromName}" <${cfg.from}>` : cfg.from;
-      return { transport: createTenantMailer(cfg), from, replyTo: cfg.replyTo };
+      return { transport: await createTenantMailer(cfg), from, replyTo: cfg.replyTo };
     }
   }
 
@@ -70,7 +104,7 @@ async function resolveTransport({ supabase, tenantId, requireTenant }) {
   }
 
   // 3) Globaler ENV-Fallback (System-Absender)
-  const envMailer = createEnvMailer();
+  const envMailer = await createEnvMailer();
   if (envMailer) {
     return { transport: envMailer, from: process.env.SMTP_FROM || process.env.SMTP_USER };
   }
