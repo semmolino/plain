@@ -473,8 +473,10 @@ async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, em
   const stufeLabel = settings ? settings.LABEL.replace(/\s/g, "_") : `Mahnstufe_${mahnung.MAHNSTUFE}`;
   const filename = `Mahnung_${stufeLabel}_${today}.pdf`;
 
-  // Send
+  // Send (aus dem eigenen Postfach des Mandanten, sofern konfiguriert)
   await sendMail({
+    supabase,
+    tenantId,
     to:      emailTo,
     subject: emailSubject,
     html:    emailBody ? `<pre style="font-family:inherit;white-space:pre-wrap">${emailBody}</pre>` : undefined,

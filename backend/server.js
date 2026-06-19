@@ -96,6 +96,7 @@ const rolesRoutes                = require("./routes/roles")(supabase);
 const recentsRoutes              = require("./routes/recents")(supabase);
 const gamificationRoutes         = require("./routes/gamification")(supabase);
 const tenantsRoutes              = require("./routes/tenants")(supabase);
+const emailSettingsRoutes        = require("./routes/emailSettings")(supabase);
 const licenseRoutes              = require("./routes/license")();
 const { makeMiddleware: makePermissionsMiddleware } = require("./middleware/permissions");
 const permissionsMiddleware = makePermissionsMiddleware(supabase);
@@ -153,6 +154,9 @@ app.use("/api/v1/gamification", ...authChain, gamificationRoutes);
 
 // Tenant-Konfiguration (Slug fuer Login-Branding etc.)
 app.use("/api/v1/tenants", ...authChain, tenantsRoutes);
+
+// Per-Tenant SMTP-/E-Mail-Versand-Einstellungen
+app.use("/api/v1/email-settings", ...authChain, emailSettingsRoutes);
 
 // Lizenz-Entitlement des eingeloggten Tenants (fuer Frontend Soft-Gating)
 app.use("/api/v1/license", ...authChain, licenseRoutes);

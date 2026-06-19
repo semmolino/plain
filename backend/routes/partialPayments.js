@@ -68,6 +68,8 @@ module.exports = (supabase) => {
       const pdfBuffer = Buffer.from(pdf);
       const safeName  = (pp.PARTIAL_PAYMENT_NUMBER || `Anzahlung_${ppId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
       await sendMail({
+        supabase,
+        tenantId,
         to:          emailTo,
         subject:     emailSubject || `Abschlagsrechnung ${pp.PARTIAL_PAYMENT_NUMBER}`,
         html:        emailBody ? `<pre style="font-family:inherit;white-space:pre-wrap">${emailBody}</pre>` : undefined,

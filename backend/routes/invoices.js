@@ -58,6 +58,8 @@ module.exports = (supabase) => {
       const safeName = (inv.INVOICE_NUMBER || `Rechnung_${invoiceId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
       const pdfBuffer = Buffer.from(pdf);
       await sendMail({
+        supabase,
+        tenantId,
         to:          emailTo,
         subject:     emailSubject || `Rechnung ${inv.INVOICE_NUMBER}`,
         html:        emailBody ? `<pre style="font-family:inherit;white-space:pre-wrap">${emailBody}</pre>` : undefined,

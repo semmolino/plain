@@ -50,6 +50,11 @@ import {
 } from '@/api/notificationSchedule'
 import { fetchActiveEmployees } from '@/api/projekte'
 import { Modal } from '@/components/ui/Modal'
+import {
+  fetchEmailSettings, saveEmailSettings, sendEmailSettingsTest,
+  type EmailSettingsPayload,
+} from '@/api/emailSettings'
+import { useAuthStore } from '@/store/authStore'
 
 const PAGE_TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'stammdaten',              label: 'Stammdaten',              permissions: ['settings.basedata.view','settings.basedata.edit'] },
@@ -57,6 +62,7 @@ const PAGE_TABS: { id: string; label: string; permissions: string[]; feature?: s
   { id: 'benachrichtigungen',      label: 'Benachrichtigungen',      permissions: ['settings.notifications.edit'], feature: 'settings.notifications' },
   { id: 'monatsabschluss',         label: 'Monatsabschluss',         permissions: ['settings.monthly_close.edit'], feature: 'employees.month_close' },
   { id: 'unternehmen',             label: 'Unternehmen',             permissions: ['settings.company.view','settings.company.edit'] },
+  { id: 'email',                   label: 'E-Mail-Versand',          permissions: ['settings.email.edit'] },
   { id: 'nummernkreise',           label: 'Nummernkreise',           permissions: ['settings.numbers.edit'] },
   { id: 'textvorlagen',            label: 'Textvorlagen',            permissions: ['settings.text_templates.edit'], feature: 'settings.text_templates' },
   { id: 'mahnungseinstellungen',   label: 'Mahnungen',               permissions: ['settings.dunning_config.edit'], feature: 'settings.dunning_config' },
@@ -3373,6 +3379,230 @@ function EngagementSection() {
   )
 }
 
+// ── E-Mail-Versand (Per-Tenant SMTP) ───────────────────────────────────────────
+
+const EMPTY_EMAIL_FORM = {
+  enabled:     false,
+  smtp_host:   '',
+  smtp_port:   587,
+  smtp_secure: false,
+  smtp_user:   '',
+  smtp_from:   '',
+  from_name:   '',
+  reply_to:    '',
+}
+
+function EmailVersandSection() {
+  const qc = useQueryClient()
+  const authEmail = useAuthStore(s => s.email)
+  const [form, setForm]         = useState({ ...EMPTY_EMAIL_FORM })
+  const [passInput, setPassInput] = useState('')
+  const [clearPw, setClearPw]   = useState(false)
+  const [testTo, setTestTo]     = useState('')
+  const [msg, setMsg]           = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const [testMsg, setTestMsg]   = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  const { data, isLoading } = useQuery({ queryKey: ['email-settings'], queryFn: fetchEmailSettings })
+
+  useEffect(() => {
+    if (!data) return
+    setForm({
+      enabled:     data.enabled,
+      smtp_host:   data.smtp_host,
+      smtp_port:   data.smtp_port || 587,
+      smtp_secure: data.smtp_secure,
+      smtp_user:   data.smtp_user,
+      smtp_from:   data.smtp_from,
+      from_name:   data.from_name,
+      reply_to:    data.reply_to,
+    })
+    setPassInput(''); setClearPw(false)
+  }, [data])
+
+  useEffect(() => {
+    if (!testTo && authEmail) setTestTo(authEmail)
+  }, [authEmail, testTo])
+
+  const saveMut = useMutation({
+    mutationFn: (payload: EmailSettingsPayload) => saveEmailSettings(payload),
+    onSuccess: () => {
+      setMsg({ text: 'E-Mail-Einstellungen gespeichert ✅', type: 'success' })
+      void qc.invalidateQueries({ queryKey: ['email-settings'] })
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const testMut = useMutation({
+    mutationFn: (to: string) => sendEmailSettingsTest(to),
+    onSuccess: () => setTestMsg({ text: 'Testnachricht versendet — bitte Posteingang prüfen.', type: 'success' }),
+    onError:   (e: Error) => setTestMsg({ text: e.message, type: 'error' }),
+  })
+
+  function handleSave() {
+    setMsg(null)
+    if (form.enabled && !form.smtp_host.trim()) {
+      setMsg({ text: 'SMTP-Host ist erforderlich, um den eigenen Versand zu aktivieren.', type: 'error' }); return
+    }
+    const payload: EmailSettingsPayload = {
+      enabled:     form.enabled,
+      smtp_host:   form.smtp_host.trim(),
+      smtp_port:   form.smtp_port,
+      smtp_secure: form.smtp_secure,
+      smtp_user:   form.smtp_user.trim(),
+      smtp_from:   form.smtp_from.trim(),
+      from_name:   form.from_name.trim(),
+      reply_to:    form.reply_to.trim(),
+    }
+    if (clearPw) payload.clear_password = true
+    else if (passInput) payload.smtp_pass = passInput
+    saveMut.mutate(payload)
+  }
+
+  useCtrlS(handleSave, !isLoading)
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+
+  if (isLoading) return <div className="admin-section"><p className="empty-note">Laden …</p></div>
+
+  // Status-Banner aus dem GESPEICHERTEN Zustand (nicht aus dem editierbaren Formular).
+  const statusBanner: { text: string; type: 'success' | 'info' } =
+    data?.enabled && data?.configured
+      ? { text: 'Eigener Versand aktiv — Dokumente und Mahnungen werden über deinen SMTP-Server versendet.', type: 'success' }
+      : data?.global_fallback_available
+        ? { text: 'Aktuell wird der System-Absender (globale Server-Konfiguration) verwendet. Aktiviere unten den eigenen Versand, um aus deinem Postfach zu senden.', type: 'info' }
+        : { text: 'Es ist noch kein E-Mail-Versand konfiguriert. Hinterlege deine SMTP-Zugangsdaten und aktiviere den Versand.', type: 'info' }
+
+  const passPlaceholder = data?.smtp_pass_set && !clearPw ? '•••••••• (gespeichert)' : 'SMTP-Passwort / App-Passwort'
+
+  return (
+    <div className="admin-section">
+      <Message text={statusBanner.text} type={statusBanner.type} />
+
+      {data && !data.encryption_available && (
+        <Message
+          type="error"
+          text="EMAIL_ENC_KEY ist nicht gesetzt — Passwörter können nicht sicher gespeichert werden. Bitte in Railway die Variable setzen: openssl rand -base64 32"
+        />
+      )}
+
+      <div className="admin-block">
+        <h3 className="admin-block-title">SMTP-Zugangsdaten</h3>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+          Diese Zugangsdaten gelten nur für deinen Mandanten. Das Passwort wird verschlüsselt
+          gespeichert und nie wieder angezeigt. Für Gmail/Microsoft 365 ist in der Regel ein
+          <strong> App-Passwort</strong> nötig (nicht das normale Login-Passwort).
+        </p>
+
+        <div className="form-group">
+          <label>SMTP-Host*</label>
+          <input type="text" value={form.smtp_host} onChange={set('smtp_host')} placeholder="z. B. smtp.gmail.com" />
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label>Port</label>
+            <input
+              type="number" min={1} max={65535} value={form.smtp_port}
+              onChange={e => setForm(f => ({ ...f, smtp_port: parseInt(e.target.value, 10) || 587 }))}
+            />
+          </div>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox" checked={form.smtp_secure}
+                onChange={e => setForm(f => ({ ...f, smtp_secure: e.target.checked }))}
+              />
+              <span>TLS/SSL (Port 465)</span>
+            </label>
+          </div>
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: -4, marginBottom: 12 }}>
+          Port 587 mit STARTTLS → Häkchen aus. Port 465 mit direktem TLS → Häkchen an.
+        </p>
+
+        <div className="form-group">
+          <label>Benutzername</label>
+          <input type="text" value={form.smtp_user} onChange={set('smtp_user')} placeholder="z. B. buero@meine-kanzlei.de" autoComplete="off" />
+        </div>
+
+        <div className="form-group">
+          <label>Passwort</label>
+          <input
+            type="password"
+            value={clearPw ? '' : passInput}
+            onChange={e => { setPassInput(e.target.value); setClearPw(false) }}
+            placeholder={passPlaceholder}
+            autoComplete="new-password"
+          />
+          {data?.smtp_pass_set && (
+            <button
+              type="button" className="btn-small btn-danger" style={{ marginTop: 6, padding: '2px 8px', fontSize: 11 }}
+              onClick={() => { setPassInput(''); setClearPw(true) }}
+            >
+              Gespeichertes Passwort entfernen
+            </button>
+          )}
+          {clearPw && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Das gespeicherte Passwort wird beim Speichern gelöscht.</div>}
+        </div>
+      </div>
+
+      <div className="admin-block">
+        <h3 className="admin-block-title">Absender</h3>
+        <div className="form-group">
+          <label>Absender-Adresse (From)</label>
+          <input type="email" value={form.smtp_from} onChange={set('smtp_from')} placeholder="Standard: Benutzername" />
+        </div>
+        <div className="form-group">
+          <label>Anzeigename (optional)</label>
+          <input type="text" value={form.from_name} onChange={set('from_name')} placeholder="z. B. Architekturbüro Müller" />
+        </div>
+        <div className="form-group">
+          <label>Antwort-an / Reply-To (optional)</label>
+          <input type="email" value={form.reply_to} onChange={set('reply_to')} placeholder="z. B. buchhaltung@meine-kanzlei.de" />
+        </div>
+      </div>
+
+      <div className="admin-block">
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
+          <input type="checkbox" checked={form.enabled} onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
+          <span>Eigenen SMTP-Versand aktivieren</span>
+        </label>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0' }}>
+          Solange deaktiviert, wird (falls vorhanden) der System-Absender genutzt.
+        </p>
+      </div>
+
+      <Message text={msg?.text ?? null} type={msg?.type} />
+      <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending} type="button">
+        {saveMut.isPending ? 'Speichert …' : 'Einstellungen speichern'}
+      </button>
+
+      <div className="admin-block" style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+        <h3 className="admin-block-title">Testnachricht senden</h3>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+          Sendet eine Testmail über die <strong>gespeicherten</strong> Zugangsdaten (auch wenn der Versand noch nicht aktiviert ist).
+          Bitte vorher speichern.
+        </p>
+        <div className="form-row" style={{ alignItems: 'flex-end' }}>
+          <div className="form-group" style={{ flex: 1 }}>
+            <label>Empfänger</label>
+            <input type="email" value={testTo} onChange={e => setTestTo(e.target.value)} placeholder="empfaenger@example.com" />
+          </div>
+          <button
+            type="button" className="btn-secondary" style={{ marginBottom: 2 }}
+            disabled={testMut.isPending || !testTo.trim()}
+            onClick={() => { setTestMsg(null); testMut.mutate(testTo.trim()) }}
+          >
+            {testMut.isPending ? 'Sendet …' : 'Test senden'}
+          </button>
+        </div>
+        <Message text={testMsg?.text ?? null} type={testMsg?.type} />
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -3396,6 +3626,7 @@ export function AdminPage() {
         )}
         {tab === 'nummernkreise'         && <NummernkreiseSection />}
         {tab === 'unternehmen'           && <UnternehmenSection />}
+        {tab === 'email'                 && <EmailVersandSection />}
         {tab === 'vorbelegungen'         && <VorbelegungenSection />}
         {tab === 'arbzg'                 && (
           <>
