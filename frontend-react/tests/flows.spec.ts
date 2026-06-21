@@ -64,6 +64,22 @@ async function mockLoggedIn(page: Page) {
       body: JSON.stringify({ keys: [], unrestricted: true }),
     })
   )
+
+  // Lizenz (L2): AuthContext.init() laedt nach den Permissions auch das
+  // Entitlement. Ohne eigenen Mock faellt /license/me auf den Catch-All
+  // ({ data: [] }) zurueck -> licenseStore.unrestricted=false + leere caps,
+  // wodurch SideNav/BottomNav JEDES Item mit `feature` ausfiltern. Daher hier
+  // explizit unrestricted=true, damit die Lizenz-Schicht nichts versteckt.
+  await page.route('/api/v1/license/me', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        unrestricted: true, plan_id: null, state: null,
+        capabilities: [], limits: {},
+      }),
+    })
+  )
 }
 
 /** Navigates to a page and waits for the app shell to be visible.
