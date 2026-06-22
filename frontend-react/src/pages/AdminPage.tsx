@@ -8,6 +8,7 @@ import { Tabs }      from '@/components/ui/Tabs'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 import { InfoHint }  from '@/components/ui/InfoHint'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useToast }  from '@/store/toastStore'
 import {
   fetchCountries, fetchCompanies, createDepartment, createTyp, createRolle,
@@ -1776,6 +1777,19 @@ const EMPTY_PARAMS: EmployeeCalcParams = {
   sick_days_est: 7, training_days: 5, social_contrib_pct: 21, productivity_pct: 85,
 }
 
+function KsStepHead({ n, title, desc, children }: { n: number; title: string; desc: string; children?: React.ReactNode }) {
+  return (
+    <div className="ks-panel-head">
+      <span className="ks-step-num">{n}</span>
+      <div className="ks-panel-head-text">
+        <h3 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h3>
+        <p className="ks-panel-desc">{desc}</p>
+      </div>
+      {children && <div className="ks-panel-actions">{children}</div>}
+    </div>
+  )
+}
+
 function KostensatzSection() {
   const qc   = useQueryClient()
   const year = new Date().getFullYear()
@@ -1974,12 +1988,12 @@ function KostensatzSection() {
 
       {/* Panel 1: Gemeinkosten */}
       <div className="master-section-block" style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Gemeinkosten {selYear}</h3>
+        <KsStepHead n={1} title={`Gemeinkosten ${selYear}`}
+          desc="Fixkosten des Büros pro Jahr — Miete, IT, Versicherungen, Kfz, …">
           <button type="button" className="btn-small" onClick={copyFromPrevYear}>
             Aus {selYear - 1} kopieren
           </button>
-        </div>
+        </KsStepHead>
         {overheadMsg && <Message text={overheadMsg.text} type={overheadMsg.type} />}
 
         <table className="master-table" style={{ fontSize: 13, marginBottom: 10 }}>
@@ -2046,13 +2060,13 @@ function KostensatzSection() {
 
       {/* Panel 2: Mitarbeiter-Parameter */}
       <div className="master-section-block" style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Mitarbeiter-Parameter {selYear}</h3>
+        <KsStepHead n={2} title={`Mitarbeiter-Parameter ${selYear}`}
+          desc="Pro Mitarbeiter: Gehalt, Wochenstunden, Fehlzeiten und Produktivität.">
           <button type="button" className="btn-small btn-save" onClick={saveAllParams}>Alle speichern</button>
-        </div>
+        </KsStepHead>
         {paramsMsg && <Message text={paramsMsg.text} type={paramsMsg.type} />}
-        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10, marginTop: 0 }}>
-          AG-Sozialabgaben (D): KV (Krankenversicherung) ~7,3% · RV (Rentenversicherung) 9,3% · AV (Arbeitslosenversicherung) 1,5% · PV (Pflegeversicherung) ~1,8% · UV (Unfallversicherung) ~1% ≈ 21% gesamt
+        <p style={{ fontSize: 11, color: 'var(--text-4)', marginBottom: 10, marginTop: 0 }}>
+          Richtwert AG-Sozialabgaben (D): KV ~7,3 % · RV 9,3 % · AV 1,5 % · PV ~1,8 % · UV ~1 % ≈ 21 % gesamt
         </p>
         <div className="table-scroll">
           <table className="master-table" style={{ fontSize: 12 }}>
@@ -2116,40 +2130,33 @@ function KostensatzSection() {
 
       {/* Panel 3: Kalkulation */}
       <div className="master-section-block">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Kalkulation & Ergebnis</h3>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <label style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              Gewinnaufschlag
-              <InfoHint align="right" title="Gewinnaufschlag">
-                Prozentualer Aufschlag auf den Vollkostensatz für deine Marge. Ergebnis ist der
-                empfohlene Mindest-Verrechnungssatz. 0 % = reine Kostendeckung.
-              </InfoHint>
-              <input
-                type="number" value={markup} onChange={e => setMarkup(e.target.value)} min={0} max={100} step={0.5}
-                style={{ width: 60, padding: '4px 6px', fontSize: 13, border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)', textAlign: 'right' }}
-              />
-              %
-            </label>
-            <button type="button" className="btn-small btn-save" onClick={runCalculation} disabled={calcLoading}>
-              {calcLoading ? 'Berechne…' : 'Berechnen'}
-            </button>
-          </div>
+        <KsStepHead n={3} title="Berechnen & übernehmen"
+          desc="Vollkostensatz je Mitarbeiter berechnen, prüfen und ab einem Stichtag übernehmen.">
+          <label style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            Gewinnaufschlag
+            <InfoHint align="right" title="Gewinnaufschlag">
+              Prozentualer Aufschlag auf den Vollkostensatz für deine Marge. Ergebnis ist der
+              empfohlene Mindest-Verrechnungssatz. 0 % = reine Kostendeckung.
+            </InfoHint>
+            <input
+              type="number" value={markup} onChange={e => setMarkup(e.target.value)} min={0} max={100} step={0.5}
+              style={{ width: 60, padding: '4px 6px', fontSize: 13, border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)', textAlign: 'right' }}
+            />
+            %
+          </label>
+          <button type="button" className="btn-small btn-save" onClick={runCalculation} disabled={calcLoading}>
+            {calcLoading ? 'Berechne…' : 'Berechnen'}
+          </button>
+        </KsStepHead>
+        <div className="ks-formula">
+          <span className="ks-formula-title">So wird gerechnet</span>
+          <div>Arbeitstage = 365 − 104 Wochenenden − Feiertage − Urlaub − Krankheit − Weiterbildung</div>
+          <div>Nettostunden = Arbeitstage × (Wochenstd. ÷ 5) × Produktiv %</div>
+          <div>Direktkosten/h = Jahresgehalt × (1 + AG-SV %) ÷ Nettostunden</div>
+          <div>Gemeinkosten/h = (Gesamtgemeinkosten × Nettostunden-Anteil) ÷ Nettostunden</div>
+          <div style={{ fontWeight: 700, color: 'var(--text)' }}>Vollkostensatz = Direktkosten/h + Gemeinkosten/h</div>
+          <div>Importrate = Vollkostensatz × (1 + Gewinnaufschlag %)</div>
         </div>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12, marginTop: 0, lineHeight: 1.6 }}>
-          <strong>Formel:</strong>{' '}
-          Arbeitstage = 365 − 104 (Wochenenden) − Feiertage − Urlaubstage − Krankheitstage − Weiterbildungstage
-          {' · '}
-          Nettostunden = Arbeitstage × (Wochenstd. / 5) × Produktivität%
-          {' · '}
-          Direktkosten/h = Jahresgehalt × (1 + AG-SV%) ÷ Nettostunden
-          {' · '}
-          Gemeinkosten/h = (Gesamtgemeinkosten × Nettostunden-Anteil) ÷ Nettostunden
-          {' · '}
-          <strong>Vollkostensatz = Direktkosten/h + Gemeinkosten/h</strong>
-          {' · '}
-          Importrate = Vollkostensatz × (1 + Gewinnaufschlag%)
-        </p>
         {calcMsg && <Message text={calcMsg.text} type={calcMsg.type} />}
 
         {calcResults.length > 0 && (
@@ -2186,7 +2193,9 @@ function KostensatzSection() {
                     return (
                       <Fragment key={r.employee_id}>
                         <tr style={{ cursor: 'pointer' }} onClick={() => toggleExpand(r.employee_id)}>
-                          <td style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: 10 }}>{isExp ? '▼' : '▶'}</td>
+                          <td style={{ textAlign: 'center', color: 'var(--text-4)' }}>
+                            {isExp ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                          </td>
                           <td><strong>{r.short_name}</strong> <span style={{ color: 'var(--text-4)', fontWeight: 400 }}>{r.first_name} {r.last_name}</span></td>
                           <td style={{ textAlign: 'right' }}>{FMT_H_KS(bd.productive_hours)}</td>
                           <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.direct_cost_per_h)}</td>
@@ -2205,16 +2214,25 @@ function KostensatzSection() {
                           <tr key={`${r.employee_id}-detail`} style={{ background: 'var(--dim)' }}>
                             <td></td>
                             <td colSpan={9}>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '6px 24px', padding: '8px 0', fontSize: 12, color: 'var(--text-2)' }}>
-                                <span>📅 Arbeitstage: <strong>{bd.working_days}</strong></span>
-                                <span>🏖 Feiertage: <strong>{bd.public_holidays}</strong></span>
-                                <span>⏱ Nettostunden: <strong>{FMT_H_KS(bd.productive_hours)}</strong></span>
-                                <span>💶 Bruttogehalt: <strong>{FMT_EUR_KS.format(bd.annual_salary)}</strong></span>
-                                <span>🔒 AG-Sozialabgaben: <strong>{FMT_EUR_KS.format(bd.social_contrib_eur)}</strong></span>
-                                <span>= Direktkosten/Jahr: <strong>{FMT_EUR_KS.format(bd.direct_cost_total)}</strong></span>
-                                <span>🏢 Gesamtgemeinkosten: <strong>{FMT_EUR_KS.format(bd.overhead_total)}</strong></span>
-                                <span>📊 Anteil: <strong>{FMT_PCT_KS(bd.overhead_share_pct)}</strong></span>
-                                <span>= Gemeinkosten zugeteilt: <strong>{FMT_EUR_KS.format(bd.overhead_allocated)}</strong></span>
+                              <div className="ks-breakdown">
+                                <div className="ks-breakdown-group">
+                                  <div className="ks-breakdown-label">Zeit</div>
+                                  <div><span>Arbeitstage</span><span><strong>{bd.working_days}</strong></span></div>
+                                  <div><span>Feiertage</span><span><strong>{bd.public_holidays}</strong></span></div>
+                                  <div><span>Nettostunden</span><span><strong>{FMT_H_KS(bd.productive_hours)}</strong></span></div>
+                                </div>
+                                <div className="ks-breakdown-group">
+                                  <div className="ks-breakdown-label">Personalkosten</div>
+                                  <div><span>Bruttogehalt</span><span><strong>{FMT_EUR_KS.format(bd.annual_salary)}</strong></span></div>
+                                  <div><span>AG-Sozialabgaben</span><span><strong>{FMT_EUR_KS.format(bd.social_contrib_eur)}</strong></span></div>
+                                  <div><span>= Direktkosten/Jahr</span><span><strong>{FMT_EUR_KS.format(bd.direct_cost_total)}</strong></span></div>
+                                </div>
+                                <div className="ks-breakdown-group">
+                                  <div className="ks-breakdown-label">Gemeinkosten</div>
+                                  <div><span>Gesamt</span><span><strong>{FMT_EUR_KS.format(bd.overhead_total)}</strong></span></div>
+                                  <div><span>Anteil</span><span><strong>{FMT_PCT_KS(bd.overhead_share_pct)}</strong></span></div>
+                                  <div><span>= zugeteilt</span><span><strong>{FMT_EUR_KS.format(bd.overhead_allocated)}</strong></span></div>
+                                </div>
                               </div>
                             </td>
                           </tr>
