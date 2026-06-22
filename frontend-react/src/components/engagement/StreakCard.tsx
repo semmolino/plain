@@ -3,9 +3,9 @@ import { fetchMyStreak } from '@/api/mitarbeiter'
 import { useGamificationConfig } from '@/hooks/useGamificationConfig'
 import { BrandGlyph } from '@/components/brand/BrandGlyph'
 
-// Streak-Meilensteine (= Achievements streak_5/22/66). Das & füllt sich Richtung
-// der Top-Stufe und sinkt bei Abbruch automatisch mit dem Streak-Wert.
-const STREAK_TARGET = 66
+// Zielwert, ab dem das & voll ist. Es füllt sich Richtung Ziel und sinkt bei
+// Streak-Abbruch automatisch mit dem Streak-Wert.
+const STREAK_TARGET = 50
 
 /**
  * Buchungsstreak-Karte fuer das Mitarbeiter-Dashboard. Zeigt den aktuellen

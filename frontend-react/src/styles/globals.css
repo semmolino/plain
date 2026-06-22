@@ -46,6 +46,7 @@
 
   /* Marken-"&" (BrandGlyph) — Belohnungs-/Fortschritts-Icon. Default = Akzent. */
   --brand-glyph: var(--accent);
+  --brand-glyph-empty: rgba(37,99,235,0.18);
 
   /* Chrome = app-header + bottom-nav background */
   --chrome:          #ffffff;
