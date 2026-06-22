@@ -16,8 +16,19 @@ Ziel: ein **realistisches Beispiel-Architekturbüro** als **separater Demo-Manda
 | Skript | Zweck | Status |
 |---|---|---|
 | `createDemoTenant.js` | Loginbaren Demo-Mandanten anlegen (TENANTS+COMPANY+EMPLOYEE+Rollen, wie Signup) | ✅ vorhanden |
-| `exportTenant.js`     | Alle mandantenbezogenen Daten als wiedereinspielbare Vorlage exportieren (ID-Remap) | ⬜ geplant |
-| `importTenant.js`     | Vorlage in einen (neuen/leeren) Demo-Mandanten einspielen → reproduzierbar/zurücksetzbar | ⬜ geplant |
+| `exportTenant.js`     | **READ-ONLY** Snapshot aller mandantenbezogenen Daten → JSON (IDs 1:1) | ✅ vorhanden |
+| `importTenant.js`     | Demo-Mandant per Wipe + Reinsert auf den Snapshot zurücksetzen (ID-erhaltend) | ⬜ geplant |
+
+> Ansatz „ID-erhaltend": Der Snapshot behält die Original-IDs. `importTenant` löscht
+> später die Mandanten-Zeilen und spielt den Snapshot 1:1 wieder ein → FK-Integrität
+> ohne Remapping. So wird der Demo-Mandant **reproduzierbar zurücksetzbar**.
+
+### Jetzt dran: Export testen (gefahrlos, read-only)
+```bash
+node demo/exportTenant.js --tenant <DEMO_TENANT_ID> --out demo/snapshot.json
+```
+Bitte die **„Erfasst"**- und **„Übersprungen"**-Ausgabe zurückmelden — danach finalisiere
+ich die Tabellenliste und baue das (destruktive) `importTenant.js`.
 
 ## Empfohlener Ablauf (Hybrid)
 1. **`createDemoTenant.js`** ausführen → Demo-Mandant + Login.
