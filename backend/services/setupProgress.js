@@ -76,7 +76,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
   const [
     hasAddress, hasOffer, hasProject, hasAnyEmployee,
     hasWorkingTimeModel, hasMahnungSettings, hasTextTemplate,
-    hasNotificationCfg, hasCpRate, hasNonDefaultRoleAssignment,
+    hasNotificationCfg, hasCpRate, hasDepartment, hasCustomRole,
   ] = await Promise.all([
     existsRow(supabase, "ADDRESS",            { TENANT_ID: tenantId }),
     existsRow(supabase, "OFFER",              { TENANT_ID: tenantId }),
@@ -93,21 +93,91 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
     existsRow(supabase, "TEXT_TEMPLATE",      { TENANT_ID: tenantId }),
     existsRow(supabase, "NOTIFICATION_TYPE_CONFIG", { TENANT_ID: tenantId }),
     existsRow(supabase, "EMPLOYEE_CP_RATE",   { TENANT_ID: tenantId }),
-    // Rollen-Zuweisung an mind. einen Mitarbeiter (egal welche Rolle)
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from("EMPLOYEE_ROLE")
-          .select("EMPLOYEE_ID")
-          .limit(1);
-        return !error && (data || []).length > 0;
-      } catch (_) { return false; }
-    })(),
+    existsRow(supabase, "DEPARTMENT",         { TENANT_ID: tenantId }),
+    // Eigene (nicht-System-)Rolle angelegt bzw. angepasst
+    existsRow(supabase, "USER_ROLE",          { TENANT_ID: tenantId, IS_SYSTEM: false }),
   ]);
 
-  // ── 4) Nummernkreis-Konfiguration ────────────────────────────────────────
-  // Heuristik: existiert eine NUMBER_RANGE-Zeile fuer den Tenant?
-  const hasNumberRange = await existsRow(supabase, "NUMBER_RANGE", { TENANT_ID: tenantId });
+  // ── 3b) Rollen-Zuweisung (tenant-scoped, ueber die Auto-Inhaber-Rolle hinaus)
+  // Der Signup weist dem Inhaber automatisch GENAU EINE Rolle (Administrator)
+  // zu. "Berechtigungen zugewiesen" gilt daher erst als erledigt, wenn es
+  // mind. eine WEITERE Zuweisung gibt (frueher: jede beliebige EMPLOYEE_ROLE-
+  // Zeile -> ab Tag 1 faelschlich erledigt).
+  let hasRoleAssignment = false;
+  try {
+    const { data: emps } = await supabase.from("EMPLOYEE").select("ID").eq("TENANT_ID", tenantId);
+    const empIds = (emps || []).map(e => e.ID);
+    if (empIds.length) {
+      const { count } = await supabase
+        .from("EMPLOYEE_ROLE")
+        .select("EMPLOYEE_ID", { count: "exact", head: true })
+        .in("EMPLOYEE_ID", empIds);
+      hasRoleAssignment = (count || 0) >= 2;
+    }
+  } catch (_) {}
+
+  // ── 3c) Arbeitszeit: eigenes Modell ODER gespeicherte ArbZG-Einstellungen ──
+  // Der Arbeitszeiten-Tab speichert i.d.R. nur arbzg_*-Settings (kein eigenes
+  // WORKING_TIME_MODEL). Beides zaehlt als "eingestellt".
+  let hasArbzgSettings = false;
+  try {
+    const { count } = await supabase
+      .from("TENANT_SETTINGS")
+      .select("KEY", { count: "exact", head: true })
+      .eq("TENANT_ID", tenantId)
+      .like("KEY", "arbzg_%");
+    hasArbzgSettings = (count || 0) > 0;
+  } catch (_) {}
+  const hasWorkingTime = hasWorkingTimeModel || hasArbzgSettings;
+
+  // ── 3d) Eigenes Profil + Profilfoto ───────────────────────────────────────
+  let ownProfileComplete = false;
+  let hasAvatar = false;
+  try {
+    const { data: me } = await supabase
+      .from("EMPLOYEE")
+      .select("FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER")
+      .eq("ID", employeeId).eq("TENANT_ID", tenantId).maybeSingle();
+    if (me) ownProfileComplete = !!(me.FIRST_NAME && me.LAST_NAME && me.MAIL && me.MOBILE && me.PERSONNEL_NUMBER);
+  } catch (_) {}
+  try {
+    // AVATAR_ASSET_ID existiert evtl. noch nicht (Migration 0076).
+    const { data: av, error } = await supabase
+      .from("EMPLOYEE").select("AVATAR_ASSET_ID").eq("ID", employeeId).maybeSingle();
+    if (!error && av) hasAvatar = !!av.AVATAR_ASSET_ID;
+  } catch (_) {}
+
+  // ── 4) Logo: global ODER pro Firma (Unternehmen-Tab speichert co_<id>_logo)
+  let hasCompanyLogo = false;
+  try {
+    const { data } = await supabase
+      .from("TENANT_SETTINGS").select("KEY, VALUE")
+      .eq("TENANT_ID", tenantId).like("KEY", "co_%_logo_asset_id");
+    hasCompanyLogo = (data || []).some(r => r.VALUE && String(r.VALUE).trim().length > 0);
+  } catch (_) {}
+  const hasLogo = !!settings.get("logo_asset_id") || hasCompanyLogo;
+
+  // ── 4b) Nummernkreise: DOCUMENT_NUMBER_RANGE der Firma(en) des Tenants ─────
+  let hasNumberRange = false;
+  try {
+    const { data: comps } = await supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId);
+    const compIds = (comps || []).map(c => c.ID);
+    if (compIds.length) {
+      const { count } = await supabase
+        .from("DOCUMENT_NUMBER_RANGE")
+        .select("COMPANY_ID", { count: "exact", head: true })
+        .in("COMPANY_ID", compIds);
+      hasNumberRange = (count || 0) > 0;
+    }
+  } catch (_) {}
+
+  // ── 4c) Budgetgrenzen: nur erledigt, wenn explizit Schwellen gesetzt ODER
+  // Budget-Warnungen bewusst deaktiviert wurden. Frueher kippte der Schritt
+  // gemeinsam mit "Waehrung & MwSt.", weil die Vorbelegungen-Seite einen
+  // gemeinsamen Speicher-Button hat und Default-Prozente immer mitschrieb.
+  const bwPctsVal  = settings.get("budget_warning_default_pcts");
+  const bwDisabled = settings.get("budget_warning_enabled") === "false";
+  const hasBudget  = bwDisabled || !!(bwPctsVal && String(bwPctsVal).trim().length > 0);
 
   const adminSteps = [
     {
@@ -122,7 +192,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
       label:"Firmenlogo hochgeladen",
       hint: "Wird auf PDFs angezeigt",
       href: "/admin?tab=unternehmen",
-      done: !!settings.get("logo_asset_id"),
+      done: hasLogo,
     },
     {
       key:  "number_ranges",
@@ -141,9 +211,9 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
     {
       key:  "budget_warnings",
       label:"Budgetgrenzen definiert",
-      hint: "Warnschwellen für Projekt-Budgets",
+      hint: "Warnschwellen für Projekt-Budgets (z. B. 75, 90, 100 %)",
       href: "/admin?tab=vorbelegungen",
-      done: settings.get("budget_warning_enabled") !== "false" && !!settings.get("budget_warning_default_pcts"),
+      done: hasBudget,
     },
     {
       key:  "notifications",
@@ -157,7 +227,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
       label:"Arbeitszeitregelungen eingestellt",
       hint: "Wochenstunden, Pausen, Modelle",
       href: "/admin?tab=arbzg",
-      done: hasWorkingTimeModel,
+      done: hasWorkingTime,
     },
     {
       key:  "dunning",
@@ -178,7 +248,21 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
       label:"Berechtigungen geprüft und zugewiesen",
       hint: "Mindestens einem Mitarbeiter eine Rolle gegeben",
       href: "/admin?tab=rollen",
-      done: hasNonDefaultRoleAssignment,
+      done: hasRoleAssignment,
+    },
+    {
+      key:  "custom_role",
+      label:"Eigene Rolle angelegt oder angepasst",
+      hint: "Über die Standard-Systemrollen hinaus",
+      href: "/admin?tab=rollen",
+      done: hasCustomRole,
+    },
+    {
+      key:  "departments",
+      label:"Abteilung angelegt",
+      hint: "Stammdaten für die Mitarbeiter-Zuordnung",
+      href: "/admin?tab=stammdaten",
+      done: hasDepartment,
     },
     {
       key:  "cost_rate",
@@ -231,6 +315,20 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
       hint: "Aus Angebot oder direkt",
       href: "/projekte",
       done: hasProject,
+    },
+    {
+      key:  "profile_complete",
+      label:"Eigenes Profil vervollständigt",
+      hint: "Name, Telefon und Personalnummer hinterlegt",
+      href: "/profil",
+      done: ownProfileComplete,
+    },
+    {
+      key:  "profile_photo",
+      label:"Profilfoto hochgeladen",
+      hint: "Erscheint oben rechts neben deinem Namen",
+      href: "/profil",
+      done: hasAvatar,
     },
   ];
 

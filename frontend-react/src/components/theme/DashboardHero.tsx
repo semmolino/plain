@@ -46,7 +46,7 @@ export function DashboardHero() {
   //   ~1s   -> defaults da, customHeroId gesetzt, Blob laedt -> Theme-Foto bleibt
   //   ~1.5s -> Blob da -> swap auf Custom-Bild
   let src: string | null = null
-  let alt = 'Tenant-Hintergrundbild'
+  let alt = 'Hintergrundbild der Organisation'
 
   if (customHeroId && customHeroBlobUrl) {
     src = customHeroBlobUrl

@@ -301,3 +301,34 @@ export const fetchMonthCloseOverview = () =>
 
 export const setEmployeePassword = (id: number, new_password: string | null) =>
   apiClient.patch<{ success: boolean }>(`/mitarbeiter/${id}/set-password`, { new_password })
+
+// ── Eigenes Profil + Profilfoto (self-service) ────────────────────────────────
+
+export interface MyProfile {
+  ID:               number
+  SHORT_NAME:       string
+  TITLE:            string | null
+  FIRST_NAME:       string
+  LAST_NAME:        string
+  MAIL:             string | null
+  MOBILE:           string | null
+  PERSONNEL_NUMBER: string | null
+  GENDER_ID:        number | null
+  DEPARTMENT_ID:    number | null
+  ACTIVE:           number | null
+  DASHBOARD_ROLE:   string | null
+}
+
+export const fetchMyProfile = () =>
+  apiClient.get<{ data: MyProfile }>('/mitarbeiter/me')
+
+export interface MyAvatar { asset_id: number | null; data_uri: string | null }
+
+export const fetchMyAvatar = () =>
+  apiClient.get<{ data: MyAvatar }>('/mitarbeiter/me/avatar')
+
+export const putMyAvatar = (asset_id: number) =>
+  apiClient.post<{ ok: boolean; asset_id: number; data_uri: string | null }>('/mitarbeiter/me/avatar', { asset_id })
+
+export const deleteMyAvatar = () =>
+  apiClient.delete<{ ok: boolean }>('/mitarbeiter/me/avatar')

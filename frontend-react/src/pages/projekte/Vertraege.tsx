@@ -252,7 +252,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
               value={vatId ?? ''}
               onChange={e => { setVatId(e.target.value ? Number(e.target.value) : null); touch() }}
             >
-              <option value="">— Tenant-Standard verwenden —</option>
+              <option value="">— Organisations-Standard verwenden —</option>
               {(vatListData?.data ?? []).map(v => (
                 <option key={v.ID} value={v.ID}>
                   {v.VAT} ({v.VAT_PERCENT}&nbsp;%)
@@ -261,7 +261,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
             </select>
             <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0' }}>
               Bestimmt den MwSt-Satz für alle Rechnungen aus diesem Vertrag.
-              Bei "Tenant-Standard" wird der Default aus den Vorbelegungen verwendet.
+              Bei "Organisations-Standard" wird der Default aus den Vorbelegungen verwendet.
             </p>
           </div>
 

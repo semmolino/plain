@@ -13,6 +13,7 @@ import { ThemeSwitcher } from './ThemeSwitcher'
 import { ToastContainer } from '@/components/ui/Toast'
 import { BrandMark } from '@/components/brand/BrandLogo'
 import { fetchDefaults } from '@/api/stammdaten'
+import { fetchMyAvatar } from '@/api/mitarbeiter'
 
 function UserMenu() {
   const [open,       setOpen]       = useState(false)
@@ -22,6 +23,8 @@ function UserMenu() {
   const clearAuth = useAuthStore(s => s.clearAuth)
   const navigate  = useNavigate()
   const qc        = useQueryClient()
+  const { data: avatarData } = useQuery({ queryKey: ['my-avatar'], queryFn: fetchMyAvatar, staleTime: 60_000 })
+  const avatarUri = avatarData?.data?.data_uri ?? null
 
   useEffect(() => {
     if (!open) return
@@ -50,10 +53,18 @@ function UserMenu() {
         onClick={() => { setOpen(v => !v); setConfirming(false) }}
         aria-label="Benutzermenü"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="8" r="4"/>
-          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-        </svg>
+        {avatarUri ? (
+          <img
+            src={avatarUri}
+            alt=""
+            style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        )}
         {shortName && <span className="user-menu-name">{shortName}</span>}
       </button>
 

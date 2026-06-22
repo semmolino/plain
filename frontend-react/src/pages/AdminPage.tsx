@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }      from '@/components/ui/Tabs'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
+import { InfoHint }  from '@/components/ui/InfoHint'
 import { useToast }  from '@/store/toastStore'
 import {
   fetchCountries, fetchCompanies, createDepartment, createTyp, createRolle,
@@ -476,6 +477,18 @@ function NummernkreiseSection() {
       {(isLoading || tmplLoading) && <p className="empty-note">Laden …</p>}
       {!isLoading && !tmplLoading && (
         <>
+          <p className="admin-section-hint" style={{ marginTop: 0, display: 'flex', alignItems: 'flex-start' }}>
+            <span>Lege fest, wie Rechnungs-, Projekt- und Angebotsnummern aussehen und bei welchem Zähler sie starten.</span>
+            <InfoHint title="In 3 Schritten zur Nummer">
+              <strong>1. Startzähler</strong> setzen (für den Anfang meist <code>1</code>).<br />
+              <strong>2. Format</strong> über die Bausteine-Chips zusammenklicken. Bausteine in
+              geschweiften Klammern werden automatisch ersetzt:<br />
+              <code>{'{COUNTER:0000}'}</code> → 0001, <code>{'{YEAR4}'}</code> → Jahr,
+              <code>{'{MONTH:00}'}</code> → Monat. Alles andere bleibt als fester Text stehen.<br />
+              <strong>3. Vorschau</strong> prüfen und „Format speichern". <code>{'{COUNTER}'}</code> ist
+              Pflicht, damit jede Nummer eindeutig bleibt.
+            </InfoHint>
+          </p>
           <NrTemplateBlock
             docType="INVOICE"
             label="Rechnungen / Abschlagsrechnungen"
@@ -554,12 +567,24 @@ function NrTemplateBlock({
       <h3 className="admin-block-title">{label} ({year}) — {tokenSnippet}</h3>
 
       <div className="form-group">
-        <label>Nächster Zähler</label>
+        <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+          Nächster Zähler
+          <InfoHint title="Nächster Zähler">
+            Die laufende Nummer, die das nächste {label.toLowerCase()}-Dokument erhält.
+            Bereits vergebene Nummern nicht erneut verwenden — sonst entstehen Dubletten.
+          </InfoHint>
+        </label>
         <input type="number" min={counterMin} max={counterMax} value={counter} onChange={e => onCounter(parseInt(e.target.value, 10) || counterMin)} />
       </div>
 
       <div className="form-group">
-        <label>Nummer-Format (Template)</label>
+        <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+          Nummer-Format (Template)
+          <InfoHint title="Nummer-Format">
+            Das Muster für die Nummer. Klick die Bausteine unten an, statt sie zu tippen.
+            Beispiel: <code>{'RE-{YEAR4}-{COUNTER:0000}'}</code> ergibt <code>RE-2026-0001</code>.
+          </InfoHint>
+        </label>
         <input
           type="text"
           value={template}
@@ -780,6 +805,17 @@ function UnternehmenSection() {
     setSelectedId(c.ID); setForm(companyToForm(c)); setMsg(null)
   }, [])
 
+  // Beim ersten Laden direkt die bestehende Firma oeffnen, statt im leeren
+  // "+ Neue Firma"-Formular zu landen. So fuehrt der Onboarding-Schritt
+  // "Firmendaten/Logo" auf die vorhandene Firma (inkl. Logo-Upload) statt in
+  // den Anlage-Wizard.
+  useEffect(() => {
+    if (selectedId === null && companies.length > 0) {
+      loadCompany(companies[0])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companies.length])
+
   function newCompany() { setSelectedId(null); setForm({ ...EMPTY_COMPANY_FORM }); setMsg(null) }
 
   const onSuccess = () => { void qc.invalidateQueries({ queryKey: ['companies'] }); setMsg({ text: 'Unternehmen gespeichert ✅', type: 'success' }) }
@@ -836,9 +872,28 @@ function UnternehmenSection() {
         <FormField label="BIC"                             id="ubic"  value={form.bic}             onChange={set('bic')} />
         <FormField label="IBAN"                            id="uiban" value={form.iban}            onChange={set('iban')} />
         <FormField label="Gläubiger-Identifikationsnummer" id="ucid"  value={form.creditor_id}     onChange={set('creditor_id')} />
-        <FormField label="Peppol Endpoint-ID (Versender)"   id="upep" value={form.peppol_endpoint_id} onChange={set('peppol_endpoint_id')} />
         <div className="form-group">
-          <label htmlFor="upep-sc">Peppol Scheme-ID (EAS)</label>
+          <label htmlFor="upep" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            Peppol Endpoint-ID (Versender)
+            <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 6 }}>(optional)</span>
+            <InfoHint title="Wofür ist Peppol?">
+              Peppol ist ein europäisches Netzwerk zum elektronischen Versand von
+              E-Rechnungen (XRechnung) direkt an öffentliche Auftraggeber und
+              große Unternehmen. <strong>Du brauchst das nur</strong>, wenn du
+              Rechnungen über das Peppol-Netzwerk zustellen willst — für PDF- oder
+              E-Mail-Rechnungen ist es nicht erforderlich und kann leer bleiben.
+              Die Endpoint-ID ist deine Kennung im Netz (häufig deine USt-IdNr.);
+              das passende Schema (EAS) wählst du unten. Falls du teilnimmst,
+              findest du beide Angaben bei deinem Peppol-Access-Point-Anbieter.
+            </InfoHint>
+          </label>
+          <input id="upep" type="text" value={form.peppol_endpoint_id} onChange={set('peppol_endpoint_id')} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="upep-sc">
+            Peppol Scheme-ID (EAS)
+            <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 6 }}>(optional)</span>
+          </label>
           <select id="upep-sc" value={form.peppol_scheme_id} onChange={e => setForm({ ...form, peppol_scheme_id: e.target.value })}>
             <option value="">— keiner —</option>
             <option value="0088">0088 — GLN</option>
@@ -1064,7 +1119,7 @@ function VorbelegungenSection() {
   const [offerText2,     setOfferText2]     = useState('')
   const [timerEnabled,   setTimerEnabled]   = useState(true)
   const [bwEnabled,      setBwEnabled]      = useState(true)
-  const [bwPcts,         setBwPcts]         = useState('75,90,100')
+  const [bwPcts,         setBwPcts]         = useState('')
   const [bwNotifyPm,     setBwNotifyPm]     = useState(true)
   const [bwNotifyBooker, setBwNotifyBooker] = useState(true)
 
@@ -1088,7 +1143,9 @@ function VorbelegungenSection() {
     setTimerEnabled(defData.data.timer_enabled !== 'false')
     // Budget-Warnungen: Defaults wenn nicht persistiert
     setBwEnabled(defData.data.budget_warning_enabled !== 'false')
-    setBwPcts(defData.data.budget_warning_default_pcts ?? '75,90,100')
+    // Leer lassen, wenn nicht explizit gesetzt -> Platzhalter zeigt den Default.
+    // Erst eine bewusste Eingabe hakt den Onboarding-Schritt "Budgetgrenzen" ab.
+    setBwPcts(defData.data.budget_warning_default_pcts ?? '')
     setBwNotifyPm(defData.data.budget_warning_notify_pm !== 'false')
     setBwNotifyBooker(defData.data.budget_warning_notify_booker !== 'false')
   }, [defData?.data])
@@ -1106,7 +1163,8 @@ function VorbelegungenSection() {
       await putDefault('timer_enabled', timerEnabled ? null : 'false')
       // Budget-Warnungen
       await putDefault('budget_warning_enabled',       bwEnabled ? null : 'false')
-      await putDefault('budget_warning_default_pcts',  bwPcts.trim() || '75,90,100')
+      // Nur persistieren, wenn explizit gesetzt; sonst greift der 75/90/100-Default.
+      await putDefault('budget_warning_default_pcts',  bwPcts.trim() || null)
       await putDefault('budget_warning_notify_pm',     bwNotifyPm ? null : 'false')
       await putDefault('budget_warning_notify_booker', bwNotifyBooker ? null : 'false')
     },
@@ -1283,7 +1341,7 @@ function HeroPreview({ assetId }: { assetId: number }) {
         backgroundSize: 'cover', backgroundPosition: 'center',
         border: '1px solid var(--border)',
       }}
-      aria-label="Aktuelles Tenant-Hintergrundbild"
+      aria-label="Aktuelles Hintergrundbild der Organisation"
     />
   )
 }
@@ -1668,7 +1726,7 @@ function ArbeitszeitmodelleSection() {
                 <div className="form-group">
                   <label>Pausenregel</label>
                   <select value={form.break_rule_id ?? ''} onChange={e => setField('break_rule_id', e.target.value ? Number(e.target.value) : null)}>
-                    <option value="">— Tenant-Standard —</option>
+                    <option value="">— Organisations-Standard —</option>
                     {breakRules.map(br => (
                       <option key={br.ID} value={br.ID}>
                         {br.NAME} ({br.T1_HOURS}h → {br.T1_BREAK_MIN}min, {br.T2_HOURS}h → {br.T2_BREAK_MIN}min)
@@ -1893,12 +1951,38 @@ function KostensatzSection() {
 
   return (
     <div>
+      {/* Step-by-step intro */}
+      <div style={{
+        background: 'var(--accent-tint, rgba(37,99,235,0.04))',
+        border: '1px solid var(--accent-ring, rgba(37,99,235,0.15))',
+        borderRadius: 8, padding: '12px 16px', marginBottom: 24, fontSize: 13, lineHeight: 1.6,
+      }}>
+        <strong style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+          So berechnest du Kostensätze
+          <InfoHint title="Wozu Kostensätze?">
+            Der Kostensatz ist der Stundensatz, den dich ein Mitarbeiter <em>tatsächlich</em> kostet
+            (Gehalt + Sozialabgaben + anteilige Gemeinkosten). Er ist die Grundlage für
+            wirtschaftliche Angebots- und Projektkalkulation. Mit dem Gewinnaufschlag wird daraus
+            der Mindest-Verrechnungssatz.
+          </InfoHint>
+        </strong>
+        <ol style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+          <li><strong>Gemeinkosten</strong> des Büros pro Jahr erfassen (Miete, IT, Versicherungen …).</li>
+          <li><strong>Mitarbeiter-Parameter</strong> pflegen (Gehalt, Wochenstunden, Urlaub, Produktivität …).</li>
+          <li><strong>Berechnen</strong>, Ergebnis prüfen und mit „Übernehmen" als Kostensatz ab einem Stichtag speichern.</li>
+        </ol>
+      </div>
+
       {/* Year selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <span style={{ fontWeight: 600, fontSize: 14 }}>Kalkulationsjahr</span>
         <select value={selYear} onChange={e => setSelYear(Number(e.target.value))} style={{ fontSize: 14, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-2)', background: 'var(--surface)' }}>
           {[year - 1, year, year + 1].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
+        <InfoHint title="Kalkulationsjahr">
+          Gemeinkosten und Parameter werden pro Jahr gepflegt. Mit „Aus Vorjahr kopieren" übernimmst
+          du die Gemeinkosten des Vorjahres als Startpunkt.
+        </InfoHint>
       </div>
 
       {/* Panel 1: Gemeinkosten */}
@@ -1993,8 +2077,21 @@ function KostensatzSection() {
                 <th style={{ textAlign: 'right' }}>Urlaub</th>
                 <th style={{ textAlign: 'right' }}>Krank</th>
                 <th style={{ textAlign: 'right' }}>Weiterbild.</th>
-                <th style={{ textAlign: 'right' }}>AG-SV %</th>
-                <th style={{ textAlign: 'right' }}>Produktiv %</th>
+                <th style={{ textAlign: 'right' }}>
+                  AG-SV %
+                  <InfoHint align="right" title="Arbeitgeber-Sozialabgaben">
+                    Anteil, den du als Arbeitgeber zusätzlich zum Bruttogehalt zahlst (KV, RV, AV,
+                    PV, UV). In Deutschland zusammen ca. <strong>21 %</strong>.
+                  </InfoHint>
+                </th>
+                <th style={{ textAlign: 'right' }}>
+                  Produktiv %
+                  <InfoHint align="right" title="Produktivität">
+                    Anteil der Arbeitszeit, der <strong>fakturierbar</strong> ist (ohne Leerlauf,
+                    Akquise, interne Aufgaben). Realistisch oft 70–85 %. Senkt die Nettostunden und
+                    erhöht damit den Stundensatz.
+                  </InfoHint>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -2037,6 +2134,10 @@ function KostensatzSection() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <label style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
               Gewinnaufschlag
+              <InfoHint align="right" title="Gewinnaufschlag">
+                Prozentualer Aufschlag auf den Vollkostensatz für deine Marge. Ergebnis ist der
+                empfohlene Mindest-Verrechnungssatz. 0 % = reine Kostendeckung.
+              </InfoHint>
               <input
                 type="number" value={markup} onChange={e => setMarkup(e.target.value)} min={0} max={100} step={0.5}
                 style={{ width: 60, padding: '4px 6px', fontSize: 13, border: '1px solid var(--border-2)', borderRadius: 5, background: 'var(--surface)', textAlign: 'right' }}
@@ -2394,7 +2495,7 @@ function PausenregelnSection() {
         <h3 className="admin-block-title">Pausenregeln</h3>
         <p className="admin-section-hint" style={{ marginBottom: 12 }}>
           Definiert ab welcher Tagesarbeitszeit wie viel Pflichtpause gilt (§ 4 ArbZG).
-          Pro Arbeitszeitmodell zuweisbar; "Tenant-Standard" gilt fallweise.
+          Pro Arbeitszeitmodell zuweisbar; "Organisations-Standard" gilt fallweise.
         </p>
 
         {isLoading && <p className="empty-note">Lade…</p>}
@@ -2433,7 +2534,7 @@ function PausenregelnSection() {
 
         {!isLoading && rules.length === 0 && (
           <p className="empty-note" style={{ margin: '4px 0 12px' }}>
-            Keine Pausenregeln. Migrationsstand prüfen — Phase 1 legt zwei Standardregeln pro Tenant an.
+            Keine Pausenregeln. Migrationsstand prüfen — Phase 1 legt zwei Standardregeln pro Organisation an.
           </p>
         )}
 
@@ -2557,7 +2658,7 @@ function ArbzgSettingsSection() {
       <div className="admin-block" style={{ maxWidth: 720 }}>
         <h3 className="admin-block-title">ArbZG-Einstellungen</h3>
         <p className="admin-section-hint" style={{ marginBottom: 12 }}>
-          Tenant-weite Konfiguration für die Stempeluhr-Prüfungen nach
+          Systemweite Konfiguration für die Stempeluhr-Prüfungen nach
           Arbeitszeitgesetz (BAG-Urteil vom 13.09.2022 + ArbZG-Reform 2026).
         </p>
 
@@ -2695,13 +2796,13 @@ function BenachrichtigungenSection() {
 
   function summarizeAudience(c: NotificationTypeConfig): string {
     if (c.defaultAudienceKind === 'managed_by_rule') return 'Pro Regel / Datensatz konfiguriert'
-    if (c.audienceUseDefault) return 'Tenant-Standard (alle Mitarbeiter)'
+    if (c.audienceUseDefault) return 'Organisations-Standard (alle Mitarbeiter)'
     if (c.audienceAllTenant)  return 'Alle Mitarbeiter'
     const parts: string[] = []
     if (c.audienceRoles?.length)       parts.push(`Rollen: ${c.audienceRoles.map(r => DASHBOARD_ROLE_LABELS[r] ?? r).join(', ')}`)
     if (c.audienceDepartments?.length) parts.push(`${c.audienceDepartments.length} Abteilung(en)`)
     if (c.audienceEmployees?.length)   parts.push(`${c.audienceEmployees.length} Mitarbeiter`)
-    return parts.length ? parts.join(' · ') : 'Niemand (Empfaengerliste leer)'
+    return parts.length ? parts.join(' · ') : 'Niemand (Empfängerliste leer)'
   }
 
   if (isLoading) return <p className="empty-note">Lade …</p>
@@ -2855,7 +2956,7 @@ function LeistungsstandReminderBlock() {
     <div className="admin-block" style={{ marginTop: 24 }}>
       <h3 className="admin-block-title">Reminder & Schedules</h3>
       <p className="admin-section-hint">
-        Wiederkehrende Erinnerungen mit eigenem Zeitplan und Empfaengerkonfiguration.
+        Wiederkehrende Erinnerungen mit eigenem Zeitplan und Empfängerkonfiguration.
       </p>
 
       <div style={{
@@ -3198,9 +3299,9 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
               disabled={!enabled}
             />
             <span>
-              <strong>Tenant-Standard</strong>
+              <strong>Organisations-Standard</strong>
               <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
-                Wirkt für alle Mitarbeiter (tenantweit).
+                Wirkt für alle Mitarbeiter (systemweit).
               </span>
             </span>
           </label>
@@ -3324,7 +3425,7 @@ function EngagementSection() {
   })
 
   const features: Array<{ key: Exclude<keyof typeof draft, 'enabled'>; label: string; hint: string }> = [
-    { key: 'setup_checklist', label: 'Setup-Checkliste',     hint: 'Geführte Erstaufgaben für neue Tenants — auf dem Dashboard sichtbar bis erledigt' },
+    { key: 'setup_checklist', label: 'Setup-Checkliste',     hint: 'Geführte Erstaufgaben für neue Organisationen — auf dem Dashboard sichtbar bis erledigt' },
     { key: 'streaks',         label: 'Streaks',              hint: 'Tägliche Buchungs-Streak, Saubere-Woche-Marker — rein persönlich, nicht teamübergreifend' },
     { key: 'achievements',    label: 'Achievements',         hint: 'Persönliche Erfolge wie „Erster Auftrag konvertiert", „10 Projekte abgeschlossen"' },
     { key: 'recaps',          label: 'Recaps & Rückblicke',  hint: 'Wöchentlicher / monatlicher / Jahresrückblick mit Statistik' },

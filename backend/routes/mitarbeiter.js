@@ -1,7 +1,11 @@
 const express      = require("express");
 const bcrypt       = require("bcryptjs");
+const fs           = require("fs");
+const path         = require("path");
 const balanceSvc   = require("../services/employeeBalance");
 const { requirePermission } = require("../middleware/permissions");
+
+const uploadRoot = path.join(__dirname, "..", "uploads");
 
 // Returns an error message string if a duplicate is found, otherwise null.
 // excludeId: skip this employee ID (used on update to ignore self).
@@ -95,6 +99,70 @@ module.exports = (supabase) => {
       .maybeSingle();
     if (error || !data) return res.status(404).json({ error: error?.message || "Profil nicht gefunden" });
     res.json({ data });
+  });
+
+  // ── Profilfoto (self-service, Migration 0076) ────────────────────────────
+  // GET liefert asset_id + base64-Data-URI; das Foto ueberlebt so Redeploys.
+  router.get("/me/avatar", async (req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from("EMPLOYEE")
+        .select("AVATAR_ASSET_ID, AVATAR_DATA_URI")
+        .eq("ID", req.employeeId)
+        .eq("TENANT_ID", req.tenantId)
+        .maybeSingle();
+      // Spalten evtl. noch nicht migriert -> leeres Ergebnis statt Fehler.
+      if (error) return res.json({ data: { asset_id: null, data_uri: null } });
+      res.json({ data: { asset_id: data?.AVATAR_ASSET_ID ?? null, data_uri: data?.AVATAR_DATA_URI ?? null } });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  // POST { asset_id } — Foto vorher ueber /assets/upload (asset_type=AVATAR) hochladen.
+  router.post("/me/avatar", async (req, res) => {
+    try {
+      const assetId = req.body?.asset_id != null ? parseInt(String(req.body.asset_id), 10) : null;
+      if (!assetId || Number.isNaN(assetId)) return res.status(400).json({ error: "asset_id erforderlich" });
+
+      const { data: asset } = await supabase
+        .from("ASSET").select("STORAGE_KEY, MIME_TYPE").eq("ID", assetId).maybeSingle();
+
+      let dataUri = null;
+      if (asset?.STORAGE_KEY && asset?.MIME_TYPE) {
+        try {
+          const filePath = path.join(uploadRoot, asset.STORAGE_KEY);
+          if (fs.existsSync(filePath)) {
+            const b64 = fs.readFileSync(filePath).toString("base64");
+            dataUri = `data:${asset.MIME_TYPE};base64,${b64}`;
+          }
+        } catch (e) { console.error("[ME_AVATAR] base64 cache error:", e.message); }
+      }
+
+      const { error } = await supabase
+        .from("EMPLOYEE")
+        .update({ AVATAR_ASSET_ID: assetId, AVATAR_DATA_URI: dataUri })
+        .eq("ID", req.employeeId)
+        .eq("TENANT_ID", req.tenantId);
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({ ok: true, asset_id: assetId, data_uri: dataUri });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  router.delete("/me/avatar", async (req, res) => {
+    try {
+      const { error } = await supabase
+        .from("EMPLOYEE")
+        .update({ AVATAR_ASSET_ID: null, AVATAR_DATA_URI: null })
+        .eq("ID", req.employeeId)
+        .eq("TENANT_ID", req.tenantId);
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
   });
 
   router.get("/me/work-models", async (req, res) => {
