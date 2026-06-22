@@ -8,19 +8,6 @@ const THEMES = [
   { id: 'light',  label: 'Light',                  swatch: '#2563eb', group: 'Standard'   },
   { id: 'dark',   label: 'Dark',                   swatch: '#7a7ac6', group: 'Standard'   },
 
-  // Atmosphäre
-  { id: 'modern', label: 'Modern',                 swatch: '#d4714e', group: 'Atmosphäre' },
-  { id: 'forest', label: 'Forest',                 swatch: '#174d38', group: 'Atmosphäre' },
-  { id: 'earth',  label: 'Earth',                  swatch: '#464646', group: 'Atmosphäre' },
-  { id: 'winter', label: 'Winter Chill',           swatch: '#4f7c82', group: 'Atmosphäre' },
-
-  // Branche — Strich (SVG-Illustration auf Login)
-  { id: 'architecture',      label: 'Architektur (Strich)',           swatch: '#c97b5a', group: 'Branche · Strich' },
-  { id: 'civil',             label: 'Tiefbau (Strich)',               swatch: '#c8965a', group: 'Branche · Strich' },
-  { id: 'urban',             label: 'Stadt-/Verkehr (Strich)',        swatch: '#e9b94c', group: 'Branche · Strich' },
-  { id: 'tga',               label: 'TGA (Strich)',                   swatch: '#c79252', group: 'Branche · Strich' },
-  { id: 'structural',        label: 'Tragwerk (Strich)',              swatch: '#4c6680', group: 'Branche · Strich' },
-
   // Branche — Foto (Stockfoto auf Login; selbe Palette wie Strich-Variante)
   { id: 'architecture-foto', label: 'Architektur (Foto)',             swatch: '#c97b5a', group: 'Branche · Foto'   },
   { id: 'civil-foto',        label: 'Tiefbau (Foto)',                 swatch: '#c8965a', group: 'Branche · Foto'   },
@@ -92,7 +79,7 @@ export function ThemeSwitcher() {
   }
 
   // Gruppieren fuer die Anzeige
-  const groups = ['Standard', 'Atmosphäre', 'Branche · Strich', 'Branche · Foto'] as const
+  const groups = ['Standard', 'Branche · Foto'] as const
 
   return (
     <div className="theme-switcher-wrap" ref={wrapRef}>

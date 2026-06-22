@@ -193,7 +193,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                       </button>
                     </Can>
                     <button className="btn-small" onClick={() => {
-                      void trackRecent('offer', r.ID, r.NAME_SHORT ?? `#${r.ID}`).catch(() => {})
+                      void trackRecent('offer', r.ID, [r.NAME_SHORT, r.NAME_LONG].filter(Boolean).join(' · ') || `#${r.ID}`).catch(() => {})
                       onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')
                     }} title="Angebotsstruktur öffnen">Öffnen</button>
                     <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">

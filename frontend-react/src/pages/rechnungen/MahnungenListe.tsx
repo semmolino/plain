@@ -461,7 +461,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
     setSaveMsg(null)
     // Recents: identifiziert wird die Mahnung ueber sourceId (Invoice/PP);
     // mahnungId ist null solange noch keine Mahnstufe gesetzt wurde.
-    void trackRecent('mahnung', r.sourceId, r.number).catch(() => {})
+    void trackRecent('mahnung', r.sourceId, [r.number, r.addressName1].filter(Boolean).join(' · ') || r.number).catch(() => {})
   }
   function closeDetail() { setDetailRow(null); setDraft({}) }
 

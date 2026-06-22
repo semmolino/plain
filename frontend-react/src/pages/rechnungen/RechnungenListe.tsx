@@ -877,7 +877,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                       setDetailRow(row)
                       const id = row.source === 'invoice' ? (row.raw as Invoice).ID : (row.raw as PartialPayment).ID
                       const type = row.source === 'invoice' ? 'invoice' : 'partial_payment'
-                      void trackRecent(type, id, row.number ?? `#${id}`).catch(() => {})
+                      void trackRecent(type, id, [row.number, row.address].filter(Boolean).join(' · ') || `#${id}`).catch(() => {})
                     }}>Details</button>
                     <Can permission="invoices.download_pdf">
                       <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>

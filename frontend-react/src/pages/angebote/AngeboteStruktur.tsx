@@ -18,7 +18,7 @@ import type { StructureNode } from '@/api/projekte'
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
-type RowEdit = { nameShort: string; nameLong: string; billingTypeId: string; nk: string; budget: string }
+type RowEdit = { nameShort: string; nameLong: string; billingTypeId: string; nk: string; budget: string; hours: string }
 type AddForm = { NAME_SHORT: string; NAME_LONG: string; BILLING_TYPE_ID: string; FATHER_ID: string; REVENUE: string; EXTRAS_PERCENT: string }
 type SurchargeEdit = {
   s1Label: string; s1Pct: string; s1Cumul: boolean
@@ -233,7 +233,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const saveMut = useMutation({
-    mutationFn: async (rows: Array<{ id: number; nameShort: string; nameLong: string; billingTypeId: string; nk: number; budget: number; changed: Record<string,boolean> }>) => {
+    mutationFn: async (rows: Array<{ id: number; nameShort: string; nameLong: string; billingTypeId: string; nk: number; budget: number; hours: number; changed: Record<string,boolean> }>) => {
       for (const r of rows) {
         const body: Record<string, unknown> = {}
         if (r.changed.nameShort)     body.name_short      = r.nameShort
@@ -241,6 +241,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
         if (r.changed.billingTypeId) body.billing_type_id = Number(r.billingTypeId)
         if (r.changed.nk)            body.extras_percent  = r.nk
         if (r.changed.budget)        body.revenue         = r.budget
+        if (r.changed.hours)         body.quantity        = r.hours
         await updateOfferStructureNode(oid!, r.id, body)
       }
     },
@@ -362,6 +363,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       billingTypeId: String(node?.BILLING_TYPE_ID ?? ''),
       nk:     String(node?.EXTRAS_PERCENT ?? 0),
       budget: isHourly ? '' : String(node?.REVENUE_BASIS ?? node?.REVENUE ?? 0),
+      hours:  isHourly ? String(node?.QUANTITY ?? 0) : '',
     }
   }
 
@@ -384,17 +386,20 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       const origBT  = String(node?.BILLING_TYPE_ID ?? '')
       const origNk  = node?.EXTRAS_PERCENT ?? 0
       const origBudget = node?.REVENUE_BASIS ?? node?.REVENUE ?? 0
+      const origHours  = node?.QUANTITY ?? 0
       const nk     = edit.nk     !== '' ? Number(edit.nk)     : origNk
       const budget = edit.budget !== '' ? Number(edit.budget) : origBudget
+      const hours  = edit.hours  !== '' ? Number(edit.hours)  : origHours
       return {
         id, nameShort: edit.nameShort ?? origNS, nameLong: edit.nameLong ?? origNL,
-        billingTypeId: edit.billingTypeId ?? origBT, nk, budget,
+        billingTypeId: edit.billingTypeId ?? origBT, nk, budget, hours,
         changed: {
           nameShort:    (edit.nameShort    ?? origNS)  !== origNS,
           nameLong:     (edit.nameLong     ?? origNL)  !== origNL,
           billingTypeId: (edit.billingTypeId ?? origBT) !== origBT,
           nk:            nk     !== origNk,
           budget:        budget !== origBudget,
+          hours:         hours  !== origHours,
         },
       }
     }).filter(r => Object.values(r.changed).some(Boolean))
@@ -716,6 +721,8 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                     const btId         = edit?.billingTypeId ?? String(n.BILLING_TYPE_ID ?? '')
                     const nkVal        = edit?.nk            ?? String(n.EXTRAS_PERCENT ?? 0)
                     const budgetVal    = edit?.budget        ?? String(n.REVENUE_BASIS ?? n.REVENUE ?? 0)
+                    const hoursVal     = edit?.hours         ?? String(n.QUANTITY ?? 0)
+                    const hourlyEur    = Number(hoursVal || 0) * Number(n.SP_RATE || 0)
 
                     const hasSurcharges = (n.SURCHARGES_TOTAL ?? 0) > 0
                     const displayRevenueBasis = isParent
@@ -759,9 +766,16 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         <td>
                           <input className="tbl-input" style={{ width: 160 }}
                             value={nameLong} onChange={e => setField(n.ID, 'nameLong', e.target.value)} />
-                          {isHourly && n.QUANTITY != null && !isParent && (
-                            <span className="ls-muted" style={{ marginLeft: 6, fontSize: 11 }}>
-                              {n.QUANTITY}h × {Number(n.SP_RATE || 0).toLocaleString('de-DE')} €/h
+                          {isHourly && !isParent && (
+                            <span className="ls-muted" style={{ marginLeft: 6, fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <input
+                                className="tbl-input" type="number" min={0} step={0.5}
+                                style={{ width: 56, fontSize: 11, padding: '1px 4px', textAlign: 'right' }}
+                                value={hoursVal}
+                                onChange={e => setField(n.ID, 'hours', e.target.value)}
+                                title="Geschätzte Stunden — Honorar = Stunden × Satz"
+                              />
+                              h × {Number(n.SP_RATE || 0).toLocaleString('de-DE')} €/h
                             </span>
                           )}
                         </td>
@@ -772,8 +786,10 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                           </select>
                         </td>
                         <td className="num">
-                          {isParent || isHourly ? (
+                          {isParent ? (
                             <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(displayRevenueBasis)}</span>
+                          ) : isHourly ? (
+                            <span style={{ color: 'rgba(17,24,39,0.55)', fontSize: 12 }} title="Honorar = Stunden × Satz (oben editierbar)">{fmtEur(hourlyEur)}</span>
                           ) : (
                             <input className="tbl-input" type="number" min={0} step={100}
                               style={{ width: 90, textAlign: 'right' }}

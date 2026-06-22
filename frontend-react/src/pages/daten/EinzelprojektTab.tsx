@@ -289,7 +289,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
 
   // Recents: zuletzt im Projekt-Report analysierte Projekte
   const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject?.NAME_SHORT ?? null)
+  useTrackRecent('project', pid, currentProject ? ([currentProject.NAME_SHORT, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
 
   // Sync project input display when pid or projects change
   useEffect(() => {

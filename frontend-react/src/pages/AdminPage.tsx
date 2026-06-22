@@ -1032,19 +1032,6 @@ function TenantBrandingSection() {
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </optgroup>
-          <optgroup label="Atmosphäre">
-            <option value="modern">Modern</option>
-            <option value="forest">Forest</option>
-            <option value="earth">Earth</option>
-            <option value="winter">Winter Chill</option>
-          </optgroup>
-          <optgroup label="Branche · Strich">
-            <option value="architecture">Architektur (Strich)</option>
-            <option value="civil">Tiefbau (Strich)</option>
-            <option value="urban">Stadt-/Verkehrsplanung (Strich)</option>
-            <option value="tga">TGA (Strich)</option>
-            <option value="structural">Tragwerksplanung (Strich)</option>
-          </optgroup>
           <optgroup label="Branche · Foto">
             <option value="architecture-foto">Architektur (Foto)</option>
             <option value="civil-foto">Tiefbau (Foto)</option>
