@@ -9,6 +9,7 @@ import { Modal }       from '@/components/ui/Modal'
 import { Message }     from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FormField }   from '@/components/ui/FormField'
+import { HelpHint }    from '@/components/ui/HelpHint'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useToast }  from '@/store/toastStore'
@@ -121,7 +122,9 @@ function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
             onChange={e => setShowEinvoice(e.target.checked)}
             style={{ width: 16, height: 16, cursor: 'pointer' }}
           />
-          <span style={{ fontWeight: 500 }}>Angaben für E-Rechnung</span>
+          <span style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center' }}>
+            Angaben für E-Rechnung <HelpHint id="einvoice.what" />
+          </span>
         </label>
         {!showEinvoice && (
           <p style={{ fontSize: 12, color: '#6b7280', margin: '6px 0 0 26px' }}>
@@ -130,9 +133,16 @@ function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
         )}
         {showEinvoice && (
           <>
-            <FormField label="Käuferreferenz / Leitweg-ID" id="abr" value={vals.buyer_reference ?? ''} onChange={e => setK('buyer_reference')(e.target.value)} />
             <div className="form-group">
-              <label htmlFor="ape-id">Peppol Endpoint-ID</label>
+              <label htmlFor="abr" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                Käuferreferenz / Leitweg-ID <HelpHint id="einvoice.leitweg" />
+              </label>
+              <input id="abr" type="text" value={vals.buyer_reference ?? ''} onChange={e => setK('buyer_reference')(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="ape-id" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                Peppol Endpoint-ID <HelpHint id="einvoice.peppol" />
+              </label>
               <input id="ape-id" type="text"
                 value={vals.peppol_endpoint_id ?? ''}
                 onChange={e => setK('peppol_endpoint_id')(e.target.value)}
