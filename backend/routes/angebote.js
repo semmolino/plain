@@ -16,7 +16,6 @@ module.exports = (supabase) => {
   router.get('/statuses',                   (req, res) => ctrl.getOfferStatuses(req, res, supabase));
   router.get('/',                           (req, res) => ctrl.listOffers(req, res, supabase));
   router.post('/',                          requirePermission('offers.create'), (req, res) => ctrl.createOffer(req, res, supabase));
-  router.post('/quickstart',                requirePermission('offers.create'), (req, res) => ctrl.quickstartOffer(req, res, supabase));
   router.put('/:id',                        requirePermission('offers.edit'),   (req, res) => ctrl.updateOffer(req, res, supabase));
   router.delete('/:id',                     requirePermission('offers.delete'), (req, res) => ctrl.deleteOffer(req, res, supabase));
   router.get('/:id/structure',              (req, res) => ctrl.getOfferStructure(req, res, supabase));
