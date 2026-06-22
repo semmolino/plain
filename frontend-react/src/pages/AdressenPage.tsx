@@ -527,7 +527,13 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
                   </tr>
                   )
                 })}
-                {!filtered.length && <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">Keine Einträge</td></tr>}
+                {!filtered.length && (
+                  <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">
+                    {addresses.length === 0
+                      ? 'Noch keine Adressen — lege die erste über „+ Neu" an. Adressen sind die Grundlage für Angebote und Rechnungen.'
+                      : 'Keine Treffer für die aktuelle Suche/Filterung.'}
+                  </td></tr>
+                )}
               </tbody>
               <tfoot>
                 <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
