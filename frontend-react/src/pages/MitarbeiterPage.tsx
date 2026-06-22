@@ -4,6 +4,8 @@ import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
 import { Message }     from '@/components/ui/Message'
 import { FormField }   from '@/components/ui/FormField'
+import { HelpHint }    from '@/components/ui/HelpHint'
+import type { HelpId } from '@/help/helpContent'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
@@ -640,10 +642,15 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
     setSearch(''); setDeptFilter(new Set()); setStatusFilter(new Set()); setModelFilter(new Set())
   }
 
-  function NumTh({ label, field }: { label: string; field: string }) {
+  function NumTh({ label, field, help }: { label: string; field: string; help?: HelpId }) {
     return (
       <th className="num sortable-th" onClick={() => toggleSort(field)} style={{ cursor: 'pointer' }}>
         {label}{si(field)}
+        {help && (
+          <span onClick={e => e.stopPropagation()} style={{ cursor: 'default' }}>
+            <HelpHint id={help} align="right" />
+          </span>
+        )}
       </th>
     )
   }
@@ -750,8 +757,8 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                     <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('dept')}>Abteilung{si('dept')}</th>
                     <NumTh label="Soll"            field="required"     />
                     <NumTh label="Ist"             field="actual"       />
-                    <NumTh label="Monatssaldo"     field="balance"      />
-                    <th className="num">Laufender Saldo</th>
+                    <NumTh label="Monatssaldo"     field="balance"      help="mitarbeiter.saldo" />
+                    <th className="num">Laufender Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
                     <NumTh label="Kosten"          field="cost"         />
                     <th className="num" title="Projektstunden (ohne interne) / Alle gebuchten Stunden">Produktivität</th>
                   </tr>
@@ -803,7 +810,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                       <NumTh label="Soll"          field="required"     />
                       <NumTh label="Ist"           field="actual"       />
                       <NumTh label="Monatssaldo"   field="balance"      />
-                      <th className="num">Laufender Saldo</th>
+                      <th className="num">Laufender Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
                       <NumTh label="Kosten"        field="cost"         />
                       <th className="num" title="Projektstunden (ohne interne) / Alle gebuchten Stunden">Produktivität</th>
                     </tr>

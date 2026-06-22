@@ -4,6 +4,7 @@ import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
+import { HelpHint }     from '@/components/ui/HelpHint'
 import { ValidationModal } from '@/components/ui/ValidationModal'
 import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
 import {
@@ -755,10 +756,13 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
 
               {/* Sicherheitseinbehalt */}
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(17,24,39,0.08)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
-                  <input type="checkbox" checked={seEnabled} onChange={e => setSeEnabled(e.target.checked)} />
-                  Sicherheitseinbehalt einbehalten
-                </label>
+                <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={seEnabled} onChange={e => setSeEnabled(e.target.checked)} />
+                    Sicherheitseinbehalt einbehalten
+                  </label>
+                  <HelpHint id="invoice.sicherheitseinbehalt" />
+                </div>
                 {seEnabled && (
                   <div style={{ paddingLeft: 22, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>

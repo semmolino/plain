@@ -1219,7 +1219,9 @@ function VorbelegungenSection() {
             </div>
           </div>
           <div className="admin-block">
-            <h3 className="admin-block-title">Skonto (Vorbelegung für neue Verträge)</h3>
+            <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              Skonto (Vorbelegung für neue Verträge) <HelpHint id="invoice.skonto" />
+            </h3>
             <div className="form-row">
               <div className="form-group">
                 <label>Skonto (%)</label>
