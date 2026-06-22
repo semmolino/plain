@@ -11,7 +11,7 @@ import {
   patchOfferRootSurcharges, openOfferPdf,
   type OfferStructureNode,
 } from '@/api/angebote'
-import { fetchBillingTypes } from '@/api/projekte'
+import { fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
 
@@ -19,7 +19,12 @@ const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'E
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
 type RowEdit = { nameShort: string; nameLong: string; billingTypeId: string; nk: string; budget: string; hours: string }
-type AddForm = { NAME_SHORT: string; NAME_LONG: string; BILLING_TYPE_ID: string; FATHER_ID: string; REVENUE: string; EXTRAS_PERCENT: string }
+type AddForm = {
+  NAME_SHORT: string; NAME_LONG: string; BILLING_TYPE_ID: string; FATHER_ID: string
+  REVENUE: string; EXTRAS_PERCENT: string
+  // Aufwandsschätzung (BILLING_TYPE_ID=2): Menge/Stunden × Rolle/Satz
+  QUANTITY: string; SP_RATE: string; ROLE_ID: string; ROLE_NAME_SHORT: string; ROLE_NAME_LONG: string
+}
 type SurchargeEdit = {
   s1Label: string; s1Pct: string; s1Cumul: boolean
   s2Label: string; s2Pct: string; s2Cumul: boolean
@@ -27,7 +32,10 @@ type SurchargeEdit = {
 }
 
 function emptyAdd(): AddForm {
-  return { NAME_SHORT: '', NAME_LONG: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '' }
+  return {
+    NAME_SHORT: '', NAME_LONG: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '',
+    QUANTITY: '', SP_RATE: '', ROLE_ID: '', ROLE_NAME_SHORT: '', ROLE_NAME_LONG: '',
+  }
 }
 
 interface Props { initialOfferId?: number; onOfferChange?: (id: number | null) => void }
@@ -70,8 +78,10 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     enabled:  oid !== null,
   })
   const { data: btData } = useQuery({ queryKey: ['billing-types'], queryFn: fetchBillingTypes })
+  const { data: rolesData } = useQuery({ queryKey: ['active-roles'], queryFn: fetchActiveRoles })
 
   const offers = offersData?.data ?? []
+  const roles  = rolesData?.data  ?? []
 
   const { data: offerDetailData } = useQuery({
     queryKey: ['offer-detail', oid],
@@ -318,14 +328,28 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   }
 
   const addMut = useMutation({
-    mutationFn: (f: AddForm) => addOfferStructureNode(oid!, {
-      name_short:      f.NAME_SHORT.trim(),
-      name_long:       f.NAME_LONG.trim() || undefined,
-      billing_type_id: Number(f.BILLING_TYPE_ID),
-      father_id:       f.FATHER_ID ? Number(f.FATHER_ID) : null,
-      revenue:         f.REVENUE !== '' ? Number(f.REVENUE) : undefined,
-      extras_percent:  f.EXTRAS_PERCENT !== '' ? Number(f.EXTRAS_PERCENT) : undefined,
-    }),
+    mutationFn: (f: AddForm) => {
+      const isHourly = Number(f.BILLING_TYPE_ID) === 2
+      return addOfferStructureNode(oid!, {
+        name_short:      f.NAME_SHORT.trim(),
+        name_long:       f.NAME_LONG.trim() || undefined,
+        billing_type_id: Number(f.BILLING_TYPE_ID),
+        father_id:       f.FATHER_ID ? Number(f.FATHER_ID) : null,
+        extras_percent:  f.EXTRAS_PERCENT !== '' ? Number(f.EXTRAS_PERCENT) : undefined,
+        ...(isHourly
+          ? {
+              // Aufwandsschätzung: Honorar = Menge/Stunden × Satz
+              quantity:        f.QUANTITY !== '' ? Number(f.QUANTITY) : 0,
+              sp_rate:         f.SP_RATE  !== '' ? Number(f.SP_RATE)  : 0,
+              role_id:         f.ROLE_ID ? Number(f.ROLE_ID) : undefined,
+              role_name_short: f.ROLE_NAME_SHORT || undefined,
+              role_name_long:  f.ROLE_NAME_LONG  || undefined,
+            }
+          : {
+              revenue: f.REVENUE !== '' ? Number(f.REVENUE) : undefined,
+            }),
+      })
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['offer-structure', oid] })
       setSaveMsg({ text: 'Element angelegt ✅', type: 'success' })
@@ -768,6 +792,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                             value={nameLong} onChange={e => setField(n.ID, 'nameLong', e.target.value)} />
                           {isHourly && !isParent && (
                             <span className="ls-muted" style={{ marginLeft: 6, fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              {n.ROLE_NAME_SHORT && <span style={{ fontWeight: 600 }}>{n.ROLE_NAME_SHORT}:</span>}
                               <input
                                 className="tbl-input" type="number" min={0} step={0.5}
                                 style={{ width: 56, fontSize: 11, padding: '1px 4px', textAlign: 'right' }}
@@ -928,12 +953,53 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                 {btypes.map(b => <option key={b.ID} value={b.ID}>{b.NAME_SHORT}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
               </select>
             </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label style={{ fontSize: 11 }}>Honorar €</label>
-              <input type="number" min={0} step={100} style={{ width: 100 }} placeholder="0"
-                value={addForm.REVENUE}
-                onChange={e => setAddForm(f => f && { ...f, REVENUE: e.target.value })} />
-            </div>
+            {Number(addForm.BILLING_TYPE_ID) === 2 ? (
+              <>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: 11 }}>Rolle</label>
+                  <select style={{ fontSize: 12 }} value={addForm.ROLE_ID}
+                    onChange={e => {
+                      const rid = e.target.value
+                      const role = roles.find(r => String(r.ID) === rid)
+                      setAddForm(f => f && {
+                        ...f,
+                        ROLE_ID: rid,
+                        ROLE_NAME_SHORT: role?.NAME_SHORT ?? f.ROLE_NAME_SHORT,
+                        ROLE_NAME_LONG:  role?.NAME_LONG  ?? f.ROLE_NAME_LONG,
+                        SP_RATE: role?.SP_RATE != null ? String(role.SP_RATE) : f.SP_RATE,
+                      })
+                    }}>
+                    <option value="">— frei —</option>
+                    {roles.map(r => <option key={r.ID} value={r.ID}>{r.NAME_SHORT}</option>)}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: 11 }}>Menge / Stunden</label>
+                  <input type="number" min={0} step={0.5} style={{ width: 90 }} placeholder="0"
+                    value={addForm.QUANTITY}
+                    onChange={e => setAddForm(f => f && { ...f, QUANTITY: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: 11 }}>Satz €/h</label>
+                  <input type="number" min={0} step={1} style={{ width: 90 }} placeholder="0"
+                    value={addForm.SP_RATE}
+                    onChange={e => setAddForm(f => f && { ...f, SP_RATE: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: 11 }}>Honorar (berechnet)</label>
+                  <div style={{ fontSize: 13, fontWeight: 600, padding: '6px 0' }}>
+                    {fmtEur((Number(addForm.QUANTITY) || 0) * (Number(addForm.SP_RATE) || 0))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: 11 }}>Honorar €</label>
+                <input type="number" min={0} step={100} style={{ width: 100 }} placeholder="0"
+                  value={addForm.REVENUE}
+                  onChange={e => setAddForm(f => f && { ...f, REVENUE: e.target.value })} />
+              </div>
+            )}
             <div className="form-group" style={{ margin: 0 }}>
               <label style={{ fontSize: 11 }}>NK %</label>
               <input type="number" min={0} max={100} step={0.1} style={{ width: 70 }} placeholder="0"
