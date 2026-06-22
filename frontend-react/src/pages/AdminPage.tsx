@@ -8,6 +8,7 @@ import { Tabs }      from '@/components/ui/Tabs'
 import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 import { InfoHint }  from '@/components/ui/InfoHint'
+import { HelpHint }  from '@/components/ui/HelpHint'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useToast }  from '@/store/toastStore'
 import {
@@ -877,16 +878,7 @@ function UnternehmenSection() {
           <label htmlFor="upep" style={{ display: 'inline-flex', alignItems: 'center' }}>
             Peppol Endpoint-ID (Versender)
             <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 6 }}>(optional)</span>
-            <InfoHint title="Wofür ist Peppol?">
-              Peppol ist ein europäisches Netzwerk zum elektronischen Versand von
-              E-Rechnungen (XRechnung) direkt an öffentliche Auftraggeber und
-              große Unternehmen. <strong>Du brauchst das nur</strong>, wenn du
-              Rechnungen über das Peppol-Netzwerk zustellen willst — für PDF- oder
-              E-Mail-Rechnungen ist es nicht erforderlich und kann leer bleiben.
-              Die Endpoint-ID ist deine Kennung im Netz (häufig deine USt-IdNr.);
-              das passende Schema (EAS) wählst du unten. Falls du teilnimmst,
-              findest du beide Angaben bei deinem Peppol-Access-Point-Anbieter.
-            </InfoHint>
+            <HelpHint id="einvoice.peppol" />
           </label>
           <input id="upep" type="text" value={form.peppol_endpoint_id} onChange={set('peppol_endpoint_id')} />
         </div>
