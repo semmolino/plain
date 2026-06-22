@@ -23,7 +23,6 @@ export function LoginPage() {
   // Branding-Slug: Priorität URL > localStorage-Cache
   const effectiveSlug = urlSlug ?? (typeof window !== 'undefined' ? localStorage.getItem(SLUG_CACHE_KEY) : null)
   const [brandingHero, setBrandingHero] = useState<string | null>(null)
-  const [brandingName, setBrandingName] = useState<string | null>(null)
 
   useEffect(() => {
     if (!effectiveSlug) return
@@ -31,7 +30,6 @@ export function LoginPage() {
     fetchPublicLoginBranding(effectiveSlug).then(b => {
       if (cancelled || !b) return
       setBrandingHero(b.hero_url)
-      setBrandingName(b.tenant_name)
     })
     return () => { cancelled = true }
   }, [effectiveSlug])
@@ -135,7 +133,6 @@ export function LoginPage() {
       )}
       <div className="auth-card">
         <div className="auth-logo"><BrandWordmark size={34} /></div>
-        <div className="auth-subtitle">{brandingName}</div>
 
         {!showReset ? (
           <>
