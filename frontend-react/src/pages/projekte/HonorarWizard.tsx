@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Message } from '@/components/ui/Message'
+import { HelpHint } from '@/components/ui/HelpHint'
 import {
   fetchFeeGroups, fetchFeeMasters, fetchFeeZones,
   fetchFeeCalcMasters, fetchFeeCalcMaster,
@@ -702,7 +703,9 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             </div>
           )}
           <div className="form-group">
-            <label>Honorarzone</label>
+            <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+              Honorarzone <HelpHint id="hoai.zone" />
+            </label>
             <select value={basis.ZONE_ID} onChange={e => setBasis(b => ({ ...b, ZONE_ID: e.target.value }))}>
               <option value="">—</option>
               {zones.map(z => <option key={z.ID} value={z.ID}>{z.NAME_SHORT}{z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}</option>)}
@@ -743,7 +746,9 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       {/* ── Step 3: Leistungsphasen ────────────────────────────────────────────── */}
       {step === 3 && (
         <div className="wizard-step-content">
-          <h3 className="wizard-step-title">{isEdit ? 'Schritt 2' : 'Schritt 3'}: Leistungsphasen</h3>
+          <h3 className="wizard-step-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            {isEdit ? 'Schritt 2' : 'Schritt 3'}: Leistungsphasen <HelpHint id="hoai.lph" />
+          </h3>
           <div className="table-scroll">
             <table className="master-table">
               <thead>
@@ -930,7 +935,9 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       {/* ── Step 5: Zuschläge & Nachlässe ────────────────────────────────────── */}
       {step === 5 && (
         <div className="wizard-step-content">
-          <h3 className="wizard-step-title">{isEdit ? 'Schritt 4' : 'Schritt 5'}: Zuschläge &amp; Nachlässe</h3>
+          <h3 className="wizard-step-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            {isEdit ? 'Schritt 4' : 'Schritt 5'}: Zuschläge &amp; Nachlässe <HelpHint id="hoai.zuschlag" />
+          </h3>
 
           <div className="admin-block" style={{ marginBottom: 12, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <div>

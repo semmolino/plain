@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, FileText, Receipt, FileCheck2, RefreshCcw } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { HelpHint } from '@/components/ui/HelpHint'
 import { fetchBillingSummary } from '@/api/reports'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
@@ -174,11 +175,14 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
         title="Welche Rechnung erstellen?"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 320 }}>
-          <p style={{ margin: 0, fontSize: 13, color: '#374151' }}>
-            Projekt <strong>{picker?.projectName}</strong>
-            {picker && picker.openAmount > 0 && (
-              <> — offener Betrag {fmtEur(picker.openAmount)}</>
-            )}
+          <p style={{ margin: 0, fontSize: 13, color: '#374151', display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>
+              Projekt <strong>{picker?.projectName}</strong>
+              {picker && picker.openAmount > 0 && (
+                <> — offener Betrag {fmtEur(picker.openAmount)}</>
+              )}
+            </span>
+            <HelpHint id="invoice.abschlag_vs_schluss" />
           </p>
           <button className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => handlePick('abschlag')}>

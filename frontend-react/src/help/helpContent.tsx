@@ -91,6 +91,40 @@ export const HELP = {
     ),
   },
 
+  // ── HOAI-Kalkulation ─────────────────────────────────────────────────────
+  'hoai.zone': {
+    title: 'Honorarzone',
+    body: (
+      <>
+        Schwierigkeitsgrad der Leistung (I = sehr gering … V = sehr hoch). Sie
+        bestimmt zusammen mit den anrechenbaren Kosten das Honorar aus der
+        HOAI-Tabelle. Der <strong>Zonenanteil %</strong> erlaubt die Feinjustierung
+        zwischen zwei Tabellenwerten.
+      </>
+    ),
+  },
+  'hoai.lph': {
+    title: 'Leistungsphasen (LPH)',
+    body: (
+      <>
+        Die HOAI teilt die Planung in Leistungsphasen 1–9 (z. B.
+        Grundlagenermittlung, Entwurf, Ausführung). Jede Phase hat einen
+        prozentualen Anteil am Gesamthonorar — hier wählst du, welche Phasen
+        beauftragt sind und mit welchem Anteil sie eingehen.
+      </>
+    ),
+  },
+  'hoai.zuschlag': {
+    title: 'Zuschläge & Nachlässe',
+    body: (
+      <>
+        Prozentuale Auf- oder Abschläge auf das Honorar — z. B. Umbau-/
+        Bestandszuschlag, Komplexitätszuschlag oder ein vereinbarter Nachlass.
+        Mehrere können kumulativ oder jeweils auf die Grundsumme wirken.
+      </>
+    ),
+  },
+
   // ── Reporting / Kennzahlen ───────────────────────────────────────────────
   'report.deckungsbeitrag': {
     title: 'Deckungsbeitrag',

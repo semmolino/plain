@@ -4,6 +4,7 @@ import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
+import { HelpHint }     from '@/components/ui/HelpHint'
 import { ValidationModal } from '@/components/ui/ValidationModal'
 import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
 import {
@@ -893,7 +894,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
             {showSkonto && (
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, paddingLeft: 24 }}>
                 <div className="form-group" style={{ flex: '1 1 120px', minWidth: 120, marginBottom: 0 }}>
-                  <label style={{ fontSize: 12 }}>Skonto (%)</label>
+                  <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center' }}>
+                    Skonto (%) <HelpHint id="invoice.skonto" />
+                  </label>
                   <input type="number" step="0.01" min="0" max="100" value={cashDiscPct}
                     onChange={e => setCashDiscPct(e.target.value)}
                     style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
@@ -1007,7 +1010,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           {/* ── Sicherheitseinbehalt-Auflösung (Phase 2) ───────────────── */}
           {openSeList.length > 0 && (
             <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
-              <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Sicherheitseinbehalt-Auflösung</p>
+              <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, display: 'inline-flex', alignItems: 'center' }}>
+                Sicherheitseinbehalt-Auflösung <HelpHint id="invoice.sicherheitseinbehalt" />
+              </p>
               <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
                 Diese Abschlagsrechnungen haben Sicherheitseinbehalte, die mit dieser Rechnung aufgelöst werden können.
                 Standardmäßig sind alle ausgewählt (komplette Auflösung).
