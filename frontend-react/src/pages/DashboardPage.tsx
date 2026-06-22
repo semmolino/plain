@@ -9,7 +9,8 @@ import {
 } from 'chart.js'
 import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
-import { TrendingUp, Banknote, HardHat, Clock, CheckCircle2, Circle, Check, type LucideIcon } from 'lucide-react'
+import { TrendingUp, Banknote, HardHat, Clock, Check, type LucideIcon } from 'lucide-react'
+import { BrandGlyph } from '@/components/brand/BrandGlyph'
 import { useSession } from '@/hooks/useSession'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import {
@@ -449,8 +450,8 @@ function SetupSectionBlock({ title, section, expanded }: {
       <div className="setup-section-items">
         {itemsToShow.map(item => (
           <div key={item.key} className="setup-checklist-item">
-            <span className="setup-checklist-bullet" style={{ color: item.done ? 'var(--timer-color)' : 'var(--accent)' }}>
-              {item.done ? <CheckCircle2 size={15} strokeWidth={2} /> : <Circle size={14} strokeWidth={2} />}
+            <span className="setup-checklist-bullet">
+              <BrandGlyph size={15} fill={item.done ? 1 : 0} title={item.done ? 'Erledigt' : 'Offen'} />
             </span>
             <div style={{ flex: 1 }}>
               {item.done

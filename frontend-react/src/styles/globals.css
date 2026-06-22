@@ -44,6 +44,9 @@
   --accent-tint3: rgba(37,99,235,0.10);
   --accent-ring:  rgba(37,99,235,0.15);
 
+  /* Marken-"&" (BrandGlyph) — Belohnungs-/Fortschritts-Icon. Default = Akzent. */
+  --brand-glyph: var(--accent);
+
   /* Chrome = app-header + bottom-nav background */
   --chrome:          #ffffff;
   --chrome-border:   rgba(17,24,39,0.08);
@@ -2715,10 +2718,10 @@ input::placeholder { color: var(--text-4); }
   box-shadow: var(--chrome-shadow-h);
 }
 .streak-card-icon {
-  width: 40px; height: 40px;
+  width: 44px; height: 44px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--accent); color: #fff;
-  border-radius: 50%;
+  background: var(--accent-bg);
+  border-radius: 12px;
   flex-shrink: 0;
 }
 .streak-card-body { flex: 1; min-width: 0; }
@@ -2795,16 +2798,9 @@ input::placeholder { color: var(--text-4); }
   opacity: 0.6;
 }
 .achievement-icon {
-  width: 32px; height: 32px;
+  width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 50%;
   flex-shrink: 0;
-  background: var(--dim);
-  color: var(--text-4);
-}
-.achievement-card.earned .achievement-icon {
-  background: var(--accent);
-  color: #fff;
 }
 .achievement-body { flex: 1; min-width: 0; }
 .achievement-title {

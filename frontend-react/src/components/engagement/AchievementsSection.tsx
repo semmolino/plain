@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Trophy, Lock } from 'lucide-react'
 import { fetchMyAchievements, type AchievementItem } from '@/api/mitarbeiter'
 import { useGamificationConfig } from '@/hooks/useGamificationConfig'
+import { BrandGlyph } from '@/components/brand/BrandGlyph'
 
 const CATEGORY_LABEL: Record<string, string> = {
   aktivierung:   'Aktivierung',
@@ -58,7 +58,7 @@ export function AchievementsSection() {
     <div className="achievements-section">
       <div className="achievements-header">
         <div className="achievements-title">
-          <Trophy size={18} strokeWidth={2} /> Meine Erfolge
+          <BrandGlyph size={18} fill={1} /> Meine Erfolge
         </div>
         <div className="achievements-count">{earnedCount} / {totalCount}</div>
       </div>
@@ -70,7 +70,7 @@ export function AchievementsSection() {
             {list.map(a => (
               <div key={a.key} className={`achievement-card ${a.earned ? 'earned' : 'locked'}`}>
                 <div className="achievement-icon">
-                  {a.earned ? <Trophy size={20} strokeWidth={2} /> : <Lock size={18} strokeWidth={2} />}
+                  <BrandGlyph size={28} fill={a.earned ? 1 : 0} title={a.earned ? 'Erreicht' : 'Noch nicht erreicht'} />
                 </div>
                 <div className="achievement-body">
                   <div className="achievement-title">{a.title}</div>

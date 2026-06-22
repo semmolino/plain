@@ -1,7 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { Flame } from 'lucide-react'
 import { fetchMyStreak } from '@/api/mitarbeiter'
 import { useGamificationConfig } from '@/hooks/useGamificationConfig'
+import { BrandGlyph } from '@/components/brand/BrandGlyph'
+
+// Streak-Meilensteine (= Achievements streak_5/22/66). Das & füllt sich Richtung
+// der Top-Stufe und sinkt bei Abbruch automatisch mit dem Streak-Wert.
+const STREAK_TARGET = 66
 
 /**
  * Buchungsstreak-Karte fuer das Mitarbeiter-Dashboard. Zeigt den aktuellen
@@ -41,7 +45,7 @@ export function StreakCard() {
   return (
     <div className="streak-card">
       <div className="streak-card-icon">
-        <Flame size={22} strokeWidth={2} />
+        <BrandGlyph size={26} fill={Math.min(current_streak / STREAK_TARGET, 1)} title={`Streak ${current_streak} Tage`} />
       </div>
       <div className="streak-card-body">
         <div className="streak-card-label">Buchungsstreak</div>
