@@ -166,6 +166,26 @@ export const HELP = {
       </>
     ),
   },
+  'report.leistungsstand': {
+    title: 'Leistungsstand',
+    body: (
+      <>
+        Anteil der bereits erbrachten Leistung am Gesamtauftrag (in % bzw. €).
+        Bestimmt, wie viel bereits abgerechnet werden kann. Wird je
+        Projektelement gepflegt und nach oben aggregiert.
+      </>
+    ),
+  },
+  'report.abrechenbar': {
+    title: 'Abrechenbar',
+    body: (
+      <>
+        Bei aktuellem Leistungsstand noch nicht fakturierter Betrag — also das,
+        was jetzt grundsätzlich in Rechnung gestellt werden kann
+        (Leistungsstand − bereits abgerechnet).
+      </>
+    ),
+  },
   'report.auslastung': {
     title: 'Auslastung',
     body: (

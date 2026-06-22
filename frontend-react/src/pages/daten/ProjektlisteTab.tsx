@@ -1,5 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
+import { HelpHint } from '@/components/ui/HelpHint'
+import type { HelpId } from '@/help/helpContent'
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
@@ -93,6 +95,7 @@ interface ColDef {
   key:            ColKey
   label:          string
   className?:     string
+  help?:          HelpId
   defaultVisible: boolean
   render:         (r: ProjectListRow) => React.ReactNode
   sortValue:      (r: ProjectListRow) => number | string
@@ -144,7 +147,7 @@ const COLUMNS: ColDef[] = [
     renderTotal: rs => fmtEur(sumRows(rs, r => r.BUDGET_TOTAL_NET)),
   },
   {
-    key: 'lstPct', label: 'Lst.%', className: 'num', defaultVisible: true,
+    key: 'lstPct', label: 'Lst.%', className: 'num', help: 'report.leistungsstand', defaultVisible: true,
     render:      r  => fmtPct(r.LEISTUNGSSTAND_PERCENT),
     sortValue:   r  => r.LEISTUNGSSTAND_PERCENT ?? 0,
     renderTotal: rs => {
@@ -160,7 +163,7 @@ const COLUMNS: ColDef[] = [
     renderTotal: rs => fmtEur(sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)),
   },
   {
-    key: 'rest', label: 'Restbudget', className: 'num', defaultVisible: true,
+    key: 'rest', label: 'Restbudget', className: 'num', help: 'report.restbudget', defaultVisible: true,
     render:      r  => fmtEur(r.REMAINING_BUDGET_NET),
     sortValue:   r  => r.REMAINING_BUDGET_NET ?? 0,
     renderTotal: rs => fmtEur(sumRows(rs, r => r.REMAINING_BUDGET_NET)),
@@ -184,7 +187,7 @@ const COLUMNS: ColDef[] = [
     renderTotal: rs => fmtEur(sumRows(rs, r => r.BILLED_NET_TOTAL)),
   },
   {
-    key: 'open', label: 'Abrechenbar', className: 'num', defaultVisible: true,
+    key: 'open', label: 'Abrechenbar', className: 'num', help: 'report.abrechenbar', defaultVisible: true,
     render:      r  => <span className="accent">{fmtEur(r.OPEN_NET_TOTAL)}</span>,
     sortValue:   r  => r.OPEN_NET_TOTAL ?? 0,
     renderTotal: rs => <span className="accent">{fmtEur(sumRows(rs, r => r.OPEN_NET_TOTAL))}</span>,
@@ -196,7 +199,7 @@ const COLUMNS: ColDef[] = [
     renderTotal: rs => fmtEur(sumRows(rs, r => r.PAYED_NET_TOTAL)),
   },
   {
-    key: 'kq', label: 'Kostenquote', className: 'num', defaultVisible: false,
+    key: 'kq', label: 'Kostenquote', className: 'num', help: 'report.kostenquote', defaultVisible: false,
     render:      r  => r.COST_RATIO != null ? fmtPct(r.COST_RATIO * 100) : '—',
     sortValue:   r  => r.COST_RATIO ?? -1,
     renderTotal: rs => {
@@ -301,9 +304,9 @@ function FilterChip({ label, options, active, onChange }: {
 
 // ── SortTh ────────────────────────────────────────────────────────────────────
 
-function SortTh({ label, field, current, dir, onSort, className }: {
+function SortTh({ label, field, current, dir, onSort, className, help }: {
   label: string; field: SortField; current: SortField; dir: 'asc' | 'desc'
-  onSort: (f: SortField) => void; className?: string
+  onSort: (f: SortField) => void; className?: string; help?: HelpId
 }) {
   const active = current === field
   return (
@@ -312,6 +315,11 @@ function SortTh({ label, field, current, dir, onSort, className }: {
       onClick={() => onSort(field)}
     >
       {label}{active ? (dir === 'asc' ? ' ▲' : ' ▼') : ''}
+      {help && (
+        <span onClick={e => e.stopPropagation()} style={{ cursor: 'default' }}>
+          <HelpHint id={help} align="right" />
+        </span>
+      )}
     </th>
   )
 }
@@ -724,7 +732,7 @@ export function ProjektlisteTab() {
                 <tr>
                   <SortTh label="Projekt" field="name" current={sortField} dir={sortDir} onSort={toggleSort} />
                   {visibleCols.map(c => (
-                    <SortTh key={c.key} label={c.label} field={c.key} current={sortField} dir={sortDir} onSort={toggleSort} className={c.className} />
+                    <SortTh key={c.key} label={c.label} field={c.key} current={sortField} dir={sortDir} onSort={toggleSort} className={c.className} help={c.help} />
                   ))}
                 </tr>
               </thead>
