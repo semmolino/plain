@@ -69,7 +69,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
   })
 
   useEffect(() => { if (initialOfferId) { setOid(initialOfferId); setAddrText('') } }, [initialOfferId])
-  useEffect(() => { if (offerData?.data) { setForm(offerToForm(offerData.data)); setAddrText('') } }, [offerData?.data])
+  useEffect(() => { if (offerData?.data) { setForm(offerToForm(offerData.data)); setAddrText(offerData.data.ADDRESS_NAME ?? '') } }, [offerData?.data])
 
   const statuses  = statusData?.data  ?? []
   const managers  = mgrData?.data     ?? []
@@ -225,7 +225,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
       </div>
 
       <Autocomplete label="Adresse / Empfänger*" htmlId="stmd-offer-addr"
-        value={addrText || (offerData?.data?.ADDRESS_ID ? String(offerData.data.ADDRESS_ID) : '')}
+        value={addrText}
         onChange={t => { setAddrText(t); if (!t) { setF('address_id')(''); setF('contact_id')('') } }}
         onSelect={(id, lbl) => { setAddrText(lbl); setF('address_id')(String(id)); setF('contact_id')('') }}
         search={searchAddresses} placeholder="Name eingeben …" />

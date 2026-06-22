@@ -970,7 +970,7 @@ module.exports = (supabase) => {
     if (!tenantId) return;
     const { data, error } = await supabase
       .from("VW_REPORT_PROJECT_DETAIL")
-      .select("PROJECT_ID, NAME_SHORT, PROJECT_MANAGER_ID, PROJECT_MANAGER_DISPLAY, OPEN_NET_TOTAL")
+      .select("PROJECT_ID, NAME_SHORT, NAME_LONG, PROJECT_MANAGER_ID, PROJECT_MANAGER_DISPLAY, OPEN_NET_TOTAL")
       .eq("TENANT_ID", tenantId)
       .gt("OPEN_NET_TOTAL", 0)
       .order("OPEN_NET_TOTAL", { ascending: false });
@@ -978,6 +978,7 @@ module.exports = (supabase) => {
     const projects = (data || []).map(p => ({
       PROJECT_ID:              p.PROJECT_ID,
       NAME_SHORT:              p.NAME_SHORT,
+      NAME_LONG:               p.NAME_LONG,
       PROJECT_MANAGER_DISPLAY: p.PROJECT_MANAGER_DISPLAY,
       OPEN_NET_TOTAL:          Number(p.OPEN_NET_TOTAL) || 0,
     }));

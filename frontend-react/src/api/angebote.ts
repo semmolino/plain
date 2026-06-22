@@ -16,6 +16,7 @@ export interface Offer {
   OFFER_TEXT_1:    string | null
   OFFER_TEXT_2:    string | null
   ADDRESS_ID:      number | null
+  ADDRESS_NAME:    string | null
   CONTACT_ID:      number | null
   OFFER_STATUS_ID: number | null
   COMPANY_ID:      number | null

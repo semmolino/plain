@@ -287,6 +287,7 @@ export interface RiskProject {
 export interface BillingProject {
   PROJECT_ID:              number
   NAME_SHORT:              string
+  NAME_LONG:               string | null
   PROJECT_MANAGER_DISPLAY: string | null
   OPEN_NET_TOTAL:          number
 }

@@ -185,6 +185,15 @@ async function getOffer(supabase, { tenantId, offerId }) {
     .maybeSingle();
   if (error) throw error;
   if (!data) throw { status: 404, message: 'Angebot nicht gefunden' };
+  // Adressname fuer die Anzeige im Bearbeiten-Dialog nachladen (sonst zeigt
+  // das Empfaenger-Feld nur die ADDRESS_ID).
+  if (data.ADDRESS_ID) {
+    const { data: addr } = await supabase
+      .from('ADDRESS').select('ADDRESS_NAME_1').eq('ID', data.ADDRESS_ID).maybeSingle();
+    data.ADDRESS_NAME = addr?.ADDRESS_NAME_1 ?? null;
+  } else {
+    data.ADDRESS_NAME = null;
+  }
   return data;
 }
 

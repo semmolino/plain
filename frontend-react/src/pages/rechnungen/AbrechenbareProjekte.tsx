@@ -17,9 +17,10 @@ interface Props {
 }
 
 interface PickRow {
-  projectId:   number
-  projectName: string
-  openAmount:  number
+  projectId:       number
+  projectName:     string
+  projectNameLong: string | null
+  openAmount:      number
 }
 
 export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abrechenbar-collapsed' }: Props) {
@@ -137,13 +138,21 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
                       className="ls-row clickable-row"
                       style={{ cursor: 'pointer' }}
                       onClick={() => setPicker({
-                        projectId:   p.PROJECT_ID,
-                        projectName: p.NAME_SHORT,
-                        openAmount:  p.OPEN_NET_TOTAL,
+                        projectId:       p.PROJECT_ID,
+                        projectName:     p.NAME_SHORT,
+                        projectNameLong: p.NAME_LONG,
+                        openAmount:      p.OPEN_NET_TOTAL,
                       })}
                       title="Klicken um Rechnung zu erstellen"
                     >
-                      <td className="ls-td"><strong>{p.NAME_SHORT}</strong></td>
+                      <td className="ls-td">
+                        <strong>{p.NAME_SHORT}</strong>
+                        {p.NAME_LONG && (
+                          <span style={{ display: 'block', fontSize: 11, color: '#6b7280', fontWeight: 400 }}>
+                            {p.NAME_LONG}
+                          </span>
+                        )}
+                      </td>
                       <td className="ls-td" style={{ fontSize: 12, color: '#6b7280' }}>
                         {p.PROJECT_MANAGER_DISPLAY ?? '—'}
                       </td>
