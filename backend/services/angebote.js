@@ -490,7 +490,7 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
   const hasSurchargeChange = b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined ||
     b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined ||
     b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined;
-  const hasRevenueChange = isHourly || b.quantity !== undefined || b.revenue !== undefined;
+  const hasRevenueChange = isHourly || b.quantity !== undefined || b.sp_rate !== undefined || b.revenue !== undefined;
 
   if (hasRevenueChange || hasSurchargeChange || patch.EXTRAS_PERCENT !== undefined) {
     const { data: cur } = await supabase

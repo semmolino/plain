@@ -18,7 +18,7 @@ import type { StructureNode } from '@/api/projekte'
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
-type RowEdit = { nameShort: string; nameLong: string; billingTypeId: string; nk: string; budget: string; hours: string }
+type RowEdit = { nameShort: string; nameLong: string; billingTypeId: string; nk: string; budget: string; hours: string; rate: string }
 type AddForm = {
   NAME_SHORT: string; NAME_LONG: string; BILLING_TYPE_ID: string; FATHER_ID: string
   REVENUE: string; EXTRAS_PERCENT: string
@@ -243,7 +243,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const saveMut = useMutation({
-    mutationFn: async (rows: Array<{ id: number; nameShort: string; nameLong: string; billingTypeId: string; nk: number; budget: number; hours: number; changed: Record<string,boolean> }>) => {
+    mutationFn: async (rows: Array<{ id: number; nameShort: string; nameLong: string; billingTypeId: string; nk: number; budget: number; hours: number; rate: number; changed: Record<string,boolean> }>) => {
       for (const r of rows) {
         const body: Record<string, unknown> = {}
         if (r.changed.nameShort)     body.name_short      = r.nameShort
@@ -252,6 +252,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
         if (r.changed.nk)            body.extras_percent  = r.nk
         if (r.changed.budget)        body.revenue         = r.budget
         if (r.changed.hours)         body.quantity        = r.hours
+        if (r.changed.rate)          body.sp_rate         = r.rate
         await updateOfferStructureNode(oid!, r.id, body)
       }
     },
@@ -388,6 +389,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       nk:     String(node?.EXTRAS_PERCENT ?? 0),
       budget: isHourly ? '' : String(node?.REVENUE_BASIS ?? node?.REVENUE ?? 0),
       hours:  isHourly ? String(node?.QUANTITY ?? 0) : '',
+      rate:   isHourly ? String(node?.SP_RATE ?? 0)  : '',
     }
   }
 
@@ -411,12 +413,14 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       const origNk  = node?.EXTRAS_PERCENT ?? 0
       const origBudget = node?.REVENUE_BASIS ?? node?.REVENUE ?? 0
       const origHours  = node?.QUANTITY ?? 0
+      const origRate   = node?.SP_RATE ?? 0
       const nk     = edit.nk     !== '' ? Number(edit.nk)     : origNk
       const budget = edit.budget !== '' ? Number(edit.budget) : origBudget
       const hours  = edit.hours  !== '' ? Number(edit.hours)  : origHours
+      const rate   = edit.rate   !== '' ? Number(edit.rate)   : origRate
       return {
         id, nameShort: edit.nameShort ?? origNS, nameLong: edit.nameLong ?? origNL,
-        billingTypeId: edit.billingTypeId ?? origBT, nk, budget, hours,
+        billingTypeId: edit.billingTypeId ?? origBT, nk, budget, hours, rate,
         changed: {
           nameShort:    (edit.nameShort    ?? origNS)  !== origNS,
           nameLong:     (edit.nameLong     ?? origNL)  !== origNL,
@@ -424,6 +428,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
           nk:            nk     !== origNk,
           budget:        budget !== origBudget,
           hours:         hours  !== origHours,
+          rate:          rate   !== origRate,
         },
       }
     }).filter(r => Object.values(r.changed).some(Boolean))
@@ -746,7 +751,8 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                     const nkVal        = edit?.nk            ?? String(n.EXTRAS_PERCENT ?? 0)
                     const budgetVal    = edit?.budget        ?? String(n.REVENUE_BASIS ?? n.REVENUE ?? 0)
                     const hoursVal     = edit?.hours         ?? String(n.QUANTITY ?? 0)
-                    const hourlyEur    = Number(hoursVal || 0) * Number(n.SP_RATE || 0)
+                    const rateVal      = edit?.rate          ?? String(n.SP_RATE ?? 0)
+                    const hourlyEur    = Number(hoursVal || 0) * Number(rateVal || 0)
 
                     const hasSurcharges = (n.SURCHARGES_TOTAL ?? 0) > 0
                     const displayRevenueBasis = isParent
@@ -800,7 +806,15 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                                 onChange={e => setField(n.ID, 'hours', e.target.value)}
                                 title="Geschätzte Stunden — Honorar = Stunden × Satz"
                               />
-                              h × {Number(n.SP_RATE || 0).toLocaleString('de-DE')} €/h
+                              h ×
+                              <input
+                                className="tbl-input" type="number" min={0} step={1}
+                                style={{ width: 56, fontSize: 11, padding: '1px 4px', textAlign: 'right' }}
+                                value={rateVal}
+                                onChange={e => setField(n.ID, 'rate', e.target.value)}
+                                title="Stundensatz (€/h)"
+                              />
+                              €/h
                             </span>
                           )}
                         </td>
