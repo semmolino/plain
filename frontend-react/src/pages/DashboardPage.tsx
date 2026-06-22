@@ -9,7 +9,7 @@ import {
 } from 'chart.js'
 import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
-import { TrendingUp, Banknote, HardHat, Clock, type LucideIcon } from 'lucide-react'
+import { TrendingUp, Banknote, HardHat, Clock, CheckCircle2, Circle, Check, type LucideIcon } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import {
@@ -397,7 +397,7 @@ function SetupChecklist() {
       <div className="setup-checklist-header">
         <div>
           <strong style={{ fontSize: 13 }}>Einrichtung abschließen</strong>
-          <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>{sp.total_done}/{sp.total_count} Schritte erledigt</div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{sp.total_done}/{sp.total_count} Schritte erledigt</div>
         </div>
         <div className="setup-checklist-progress-wrap">
           <div className="setup-checklist-progress-track">
@@ -433,7 +433,9 @@ function SetupSectionBlock({ title, section, expanded }: {
       <div className="setup-section">
         <div className="setup-section-title">
           {title}
-          <span className="setup-section-count" style={{ color: '#16a34a' }}>✓ alle {section.total}</span>
+          <span className="setup-section-count" style={{ color: 'var(--timer-color)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+            <Check size={12} strokeWidth={2.5} /> alle {section.total}
+          </span>
         </div>
       </div>
     )
@@ -447,7 +449,9 @@ function SetupSectionBlock({ title, section, expanded }: {
       <div className="setup-section-items">
         {itemsToShow.map(item => (
           <div key={item.key} className="setup-checklist-item">
-            <span className="setup-checklist-bullet" style={{ color: item.done ? '#16a34a' : '#d97706' }}>{item.done ? '✓' : '○'}</span>
+            <span className="setup-checklist-bullet" style={{ color: item.done ? 'var(--timer-color)' : 'var(--accent)' }}>
+              {item.done ? <CheckCircle2 size={15} strokeWidth={2} /> : <Circle size={14} strokeWidth={2} />}
+            </span>
             <div style={{ flex: 1 }}>
               {item.done
                 ? <span className="setup-checklist-label-done">{item.label}</span>
