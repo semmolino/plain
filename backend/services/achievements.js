@@ -29,12 +29,13 @@ async function safeCount(supabase, table, filter) {
 }
 
 const CHECKERS = {
-  setup_complete: async (supabase, { tenantId, employeeId }) => {
+  setup_complete: async (supabase, { tenantId, employeeId, hasFeature }) => {
     // Nutzt das gleiche Aggregat wie die SetupChecklist im Dashboard --
-    // ALLE Schritte (Admin + Daten) muessen erledigt sein.
+    // ALLE (lizenzierten) Schritte muessen erledigt sein. hasFeature wird
+    // durchgereicht, damit nicht-freigeschaltete Schritte nicht blockieren.
     try {
       const setupSvc = require("./setupProgress");
-      const sp = await setupSvc.computeSetupProgress(supabase, { tenantId, employeeId });
+      const sp = await setupSvc.computeSetupProgress(supabase, { tenantId, employeeId, hasFeature });
       return { unlocked: !!sp.all_done };
     } catch (_) {
       return { unlocked: false };
@@ -296,6 +297,32 @@ function isoWeekKey(d) {
   return `${date.getUTCFullYear()}-${String(week).padStart(2, "0")}`;
 }
 
+// Lizenz-Gating: Achievement -> Capability. Fehlt sie der Organisation, wird das
+// Achievement ausgeblendet und kann nicht erreicht werden. null = immer sichtbar.
+const ACHIEVEMENT_CAPABILITY = {
+  setup_complete:               null,
+  first_offer:                  "offers.basic",
+  first_project_managed:        "projects.management",
+  first_invoice:                "invoices.basic",
+  bookings_100:                 "core.time_tracking",
+  bookings_1000:                "core.time_tracking",
+  projects_10:                  "projects.management",
+  streak_5:                     "core.time_tracking",
+  streak_22:                    "core.time_tracking",
+  streak_66:                    "core.time_tracking",
+  first_address:                "core.addresses",
+  first_contact:                "core.addresses",
+  first_project_with_structure: "projects.management",
+  first_employee_complete:      "employees.management",
+  first_booking:                "core.time_tracking",
+  first_performance_update:     "projects.management",
+  profile_complete:             null,
+  offer_commissioned:           "offers.basic",
+  complete_work_week:           "core.time_tracking",
+  monthly_close_submitted:      "employees.month_close",
+  clean_dunning_3_months:       "invoices.basic",
+};
+
 /** Liest den vollstaendigen Katalog. */
 async function fetchCatalog(supabase) {
   const { data, error } = await supabase
@@ -342,11 +369,17 @@ async function persistUnlock(supabase, { tenantId, employeeId, key, meta }) {
  * Bewertet alle Checker und persistiert neu erreichte Achievements. Liefert
  * den kombinierten Stand (Katalog + earned-Flag + META) zurueck.
  */
-async function evaluateAndList(supabase, { tenantId, employeeId }) {
-  const [catalog, earnedRows] = await Promise.all([
+async function evaluateAndList(supabase, { tenantId, employeeId, hasFeature }) {
+  const has = typeof hasFeature === "function" ? hasFeature : () => true;
+  const [catalogAll, earnedRows] = await Promise.all([
     fetchCatalog(supabase),
     fetchEarned(supabase, { tenantId, employeeId }),
   ]);
+  // Nicht lizenzierte Achievements ausblenden (null = immer sichtbar).
+  const catalog = catalogAll.filter(a => {
+    const cap = ACHIEVEMENT_CAPABILITY[a.KEY];
+    return !cap || has(cap);
+  });
   const earnedMap = new Map(earnedRows.map(r => [r.ACHIEVEMENT_KEY, r]));
 
   const newlyUnlocked = [];
@@ -354,7 +387,7 @@ async function evaluateAndList(supabase, { tenantId, employeeId }) {
     if (earnedMap.has(a.KEY)) continue;          // schon erhalten
     const checker = CHECKERS[a.KEY];
     if (!checker) continue;                       // Achievement im Katalog aber kein Checker -> Skip
-    const result = await checker(supabase, { tenantId, employeeId });
+    const result = await checker(supabase, { tenantId, employeeId, hasFeature: has });
     if (result?.unlocked) {
       try {
         await persistUnlock(supabase, { tenantId, employeeId, key: a.KEY, meta: result.meta });

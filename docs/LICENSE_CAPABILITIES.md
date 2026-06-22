@@ -5,7 +5,7 @@
 > Architektur: [LICENSE_TIERS_CONCEPT.md](LICENSE_TIERS_CONCEPT.md) ·
 > Workflow: [LICENSE_DEVELOPMENT_CHECKLIST.md](LICENSE_DEVELOPMENT_CHECKLIST.md).
 
-**Stand:** 2026-06-15 · 11 Module · 42 Capabilities · 90 Permission-Verknuepfungen
+**Stand:** 2026-06-15 · 11 Module · 43 Capabilities · 90 Permission-Verknuepfungen
 
 Jede **Capability** ist ein Schalter, den du je Lizenztyp in der Matrix an/aus stellst.
 Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten dahinter liegen
@@ -96,6 +96,7 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 
 | Capability | Typ | Enthaltene Funktionen |
 |---|---|---|
+| **Eigenes Branding (Login-URL & Hintergrundbild)**<br>`enterprise.branding` | boolean | — eigene Funktion |
 | **Mehrere Unternehmen pro Tenant**<br>`enterprise.multi_company` | boolean | — eigene Funktion |
 | **Eigene PDF-Vorlagen**<br>`enterprise.custom_pdf_templates` | boolean | — eigene Funktion |
 | **API-Zugang (Token)**<br>`enterprise.api_access` | boolean | — eigene Funktion |

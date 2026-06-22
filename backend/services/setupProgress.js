@@ -40,7 +40,36 @@ async function settingsMap(supabase, tenantId, keys) {
   } catch (_) { return new Map(); }
 }
 
-async function computeSetupProgress(supabase, { tenantId, employeeId }) {
+// Lizenz-Gating: jeder Schritt haengt an einer Capability; fehlt sie der
+// Organisation, wird der Schritt ausgeblendet (und zaehlt NICHT mit). null =
+// immer sichtbar (Basis-/Eigenprofil-Funktion). hasFeature() unrestricted -> true.
+const STEP_CAPABILITY = {
+  company_data:     "settings.core",
+  logo:             "settings.core",
+  number_ranges:    "settings.core",
+  currency_vat:     "settings.core",
+  budget_warnings:  "projects.budgets",
+  notifications:    "settings.notifications",
+  working_time:     "arbzg.compliance",
+  dunning:          "settings.dunning_config",
+  text_template:    "settings.text_templates",
+  roles:            "settings.roles",
+  custom_role:      "settings.roles",
+  departments:      "settings.core",
+  cost_rate:        "cost_rate.calculator",
+  branding_slug:    "enterprise.branding",
+  branding_hero:    "enterprise.branding",
+  first_employee:   "employees.management",
+  first_address:    "core.addresses",
+  first_offer:      "offers.basic",
+  first_project:    "projects.management",
+  profile_complete: null,
+  profile_photo:    null,
+};
+
+async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature }) {
+  const has = typeof hasFeature === "function" ? hasFeature : () => true;
+  const allow = (s) => { const cap = STEP_CAPABILITY[s.key]; return !cap || has(cap); };
   // ── 1) TENANT_SETTINGS-Bulk: alle relevanten Keys auf einmal ──────────────
   const settings = await settingsMap(supabase, tenantId, [
     "logo_asset_id",
@@ -332,17 +361,21 @@ async function computeSetupProgress(supabase, { tenantId, employeeId }) {
     },
   ];
 
-  const adminDone   = adminSteps.filter(s => s.done).length;
-  const datenDone   = datenSteps.filter(s => s.done).length;
+  // Nicht lizenzierte Schritte ausblenden; nur freigeschaltete zaehlen mit.
+  const adminVisible = adminSteps.filter(allow);
+  const datenVisible = datenSteps.filter(allow);
+
+  const adminDone   = adminVisible.filter(s => s.done).length;
+  const datenDone   = datenVisible.filter(s => s.done).length;
   const totalDone   = adminDone + datenDone;
-  const totalCount  = adminSteps.length + datenSteps.length;
+  const totalCount  = adminVisible.length + datenVisible.length;
 
   return {
-    admin: { steps: adminSteps, done: adminDone, total: adminSteps.length },
-    daten: { steps: datenSteps, done: datenDone, total: datenSteps.length },
+    admin: { steps: adminVisible, done: adminDone, total: adminVisible.length },
+    daten: { steps: datenVisible, done: datenDone, total: datenVisible.length },
     total_done:  totalDone,
     total_count: totalCount,
-    all_done:    totalDone === totalCount,
+    all_done:    totalCount > 0 && totalDone === totalCount,
   };
 }
 

@@ -144,6 +144,8 @@ const capabilities = [
     permissions: ["settings.work_time.edit"], since: SINCE },
 
   // ── Enterprise (noch ohne eigenes RBAC-Recht; reine Lizenz-Gates) ─────────────
+  { key: "enterprise.branding", module: "enterprise", labelDe: "Eigenes Branding (Login-URL & Hintergrundbild)", type: "boolean",
+    permissions: [], since: "2026-06-22" },
   { key: "enterprise.multi_company", module: "enterprise", labelDe: "Mehrere Unternehmen pro Tenant", type: "boolean",
     permissions: [], since: SINCE },
   { key: "enterprise.custom_pdf_templates", module: "enterprise", labelDe: "Eigene PDF-Vorlagen", type: "boolean",

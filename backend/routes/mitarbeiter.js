@@ -223,7 +223,7 @@ module.exports = (supabase) => {
   router.get("/me/achievements", async (req, res) => {
     try {
       const svc = require("../services/achievements");
-      const r = await svc.evaluateAndList(supabase, { tenantId: req.tenantId, employeeId: req.employeeId });
+      const r = await svc.evaluateAndList(supabase, { tenantId: req.tenantId, employeeId: req.employeeId, hasFeature: req.hasFeature });
       res.json({ data: r });
     } catch (e) {
       res.status(e?.status || 500).json({ error: e?.message || String(e) });

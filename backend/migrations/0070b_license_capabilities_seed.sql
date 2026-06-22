@@ -57,14 +57,15 @@ INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","P
   ('settings.dunning_config', 'settings', 'Mahnungs-Einstellungen', 'boolean', NULL, 320),
   ('cost_rate.calculator', 'settings', 'Kostensatz-Rechner', 'boolean', NULL, 330),
   ('arbzg.compliance', 'settings', 'ArbZG-Validierung & Audit', 'boolean', NULL, 340),
-  ('enterprise.multi_company', 'enterprise', 'Mehrere Unternehmen pro Tenant', 'boolean', NULL, 350),
-  ('enterprise.custom_pdf_templates', 'enterprise', 'Eigene PDF-Vorlagen', 'boolean', NULL, 360),
-  ('enterprise.api_access', 'enterprise', 'API-Zugang (Token)', 'boolean', NULL, 370),
-  ('enterprise.sso_saml', 'enterprise', 'SSO (SAML/OIDC)', 'boolean', NULL, 380),
-  ('enterprise.priority_support', 'enterprise', 'Priority Support (SLA)', 'boolean', NULL, 390),
-  ('limits.employees', 'limits', 'Maximale Mitarbeiterzahl', 'metered', 'Mitarbeiter', 400),
-  ('limits.projects_active', 'limits', 'Maximale aktive Projekte', 'metered', 'aktive Projekte', 410),
-  ('limits.storage_mb', 'limits', 'Speicherplatz', 'metered', 'MB', 420)
+  ('enterprise.branding', 'enterprise', 'Eigenes Branding (Login-URL & Hintergrundbild)', 'boolean', NULL, 350),
+  ('enterprise.multi_company', 'enterprise', 'Mehrere Unternehmen pro Tenant', 'boolean', NULL, 360),
+  ('enterprise.custom_pdf_templates', 'enterprise', 'Eigene PDF-Vorlagen', 'boolean', NULL, 370),
+  ('enterprise.api_access', 'enterprise', 'API-Zugang (Token)', 'boolean', NULL, 380),
+  ('enterprise.sso_saml', 'enterprise', 'SSO (SAML/OIDC)', 'boolean', NULL, 390),
+  ('enterprise.priority_support', 'enterprise', 'Priority Support (SLA)', 'boolean', NULL, 400),
+  ('limits.employees', 'limits', 'Maximale Mitarbeiterzahl', 'metered', 'Mitarbeiter', 410),
+  ('limits.projects_active', 'limits', 'Maximale aktive Projekte', 'metered', 'aktive Projekte', 420),
+  ('limits.storage_mb', 'limits', 'Speicherplatz', 'metered', 'MB', 430)
 ON CONFLICT ("KEY") DO UPDATE SET
   "MODULE_KEY" = EXCLUDED."MODULE_KEY",
   "LABEL_DE"   = EXCLUDED."LABEL_DE",
