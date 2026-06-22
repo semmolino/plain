@@ -164,6 +164,98 @@ export const HELP = {
       </>
     ),
   },
+  'arbzg.break_rule': {
+    title: 'Pausenregel',
+    body: (
+      <>
+        Legt fest, ab welcher Arbeitsdauer wie viel Pause Pflicht ist
+        (§ 4 ArbZG: ab <strong>6 h</strong> mind. 30 min, ab <strong>9 h</strong>
+        mind. 45 min). Wird beim Prüfen der Pflichtpause herangezogen und ist pro
+        Arbeitszeitmodell überschreibbar.
+      </>
+    ),
+  },
+
+  // ── Rollen & Berechtigungen ──────────────────────────────────────────────
+  'roles.concept': {
+    title: 'Rollen & Berechtigungen',
+    body: (
+      <>
+        Eine Rolle bündelt Berechtigungen (lesen, bearbeiten, löschen,
+        verwalten). Jeder Mitarbeiter bekommt eine oder mehrere Rollen (Tab
+        Mitarbeiter) und erhält damit deren Rechte. <strong>System-Rollen</strong>
+        sind vordefiniert und nicht löschbar; eigene Rollen legst du per „Neue
+        Rolle" oder Duplizieren an. Die <strong>Default-Rolle</strong> erhalten
+        neu angelegte Mitarbeiter automatisch.
+      </>
+    ),
+  },
+
+  // ── Mahnungen ────────────────────────────────────────────────────────────
+  'dunning.process': {
+    title: 'Wie funktioniert die Mahnung?',
+    body: (
+      <>
+        Bleibt eine Rechnung nach Fälligkeit offen, durchläuft sie gestufte
+        Mahnungen. Pro Stufe legst du Bezeichnung, <strong>Mahngebühr</strong> und
+        den zeitlichen Abstand fest (Stufe 1 ab Fälligkeit, weitere ab der
+        vorherigen Mahnung). Kopf-/Fußtext erscheinen im Mahnungs-PDF. Die Gebühr
+        sollte in angemessenem Verhältnis zum tatsächlichen Aufwand stehen.
+      </>
+    ),
+  },
+
+  // ── Benachrichtigungen ───────────────────────────────────────────────────
+  'notifications.audience': {
+    title: 'Wer bekommt Benachrichtigungen?',
+    body: (
+      <>
+        Pro Typ wählbar: <strong>Organisations-Standard</strong> (alle
+        Mitarbeiter) oder eine gezielte Empfängerliste aus Rollen, Abteilungen
+        und/oder einzelnen Mitarbeitern. Die Listen sind <strong>ODER-verknüpft</strong> —
+        wer in mindestens einer steht, erhält die Nachricht. „Bearbeiten" öffnet
+        die Auswahl je Typ.
+      </>
+    ),
+  },
+
+  // ── Unternehmen / Monatsabschluss ────────────────────────────────────────
+  'company.creditor_id': {
+    title: 'Gläubiger-Identifikationsnummer',
+    body: (
+      <>
+        Eindeutige Kennung für den SEPA-Lastschrifteinzug (Format z. B.{' '}
+        <code>DE98ZZZ09999999999</code>). Nur nötig, wenn du Beträge per
+        Lastschrift einziehst; bei der Deutschen Bundesbank kostenlos zu
+        beantragen.
+      </>
+    ),
+  },
+  'monthclose.concept': {
+    title: 'Was ist der Monatsabschluss?',
+    body: (
+      <>
+        Friert am Monatsende den Stand der Projekte ein (Snapshot der Kennzahlen)
+        für die gewählten Projektstatus — Grundlage für Auswertungen und einen
+        nachvollziehbaren Verlauf über die Zeit. Mitarbeiter können zusätzlich
+        ihre Monatsstunden abschließen.
+      </>
+    ),
+  },
+
+  // ── E-Mail-Versand ───────────────────────────────────────────────────────
+  'email.smtp': {
+    title: 'Eigener E-Mail-Versand (SMTP)',
+    body: (
+      <>
+        Damit Rechnungen/Mahnungen aus <strong>deinem</strong> Postfach versendet
+        werden, hinterlegst du hier deinen Postausgangsserver (SMTP). Für
+        Gmail/Microsoft 365 brauchst du meist ein <strong>App-Passwort</strong>,
+        nicht dein normales Login. Ohne eigene Konfiguration nutzt PlaIn den
+        System-Absender.
+      </>
+    ),
+  },
 
   // ── Einstellungen ────────────────────────────────────────────────────────
   'budget.warnschwellen': {

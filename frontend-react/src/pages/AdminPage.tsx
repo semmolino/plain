@@ -873,7 +873,12 @@ function UnternehmenSection() {
         <FormField label="Steuer-IdNr."                    id="uti"   value={form.tax_id}          onChange={set('tax_id')} />
         <FormField label="BIC"                             id="ubic"  value={form.bic}             onChange={set('bic')} />
         <FormField label="IBAN"                            id="uiban" value={form.iban}            onChange={set('iban')} />
-        <FormField label="Gläubiger-Identifikationsnummer" id="ucid"  value={form.creditor_id}     onChange={set('creditor_id')} />
+        <div className="form-group">
+          <label htmlFor="ucid" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            Gläubiger-Identifikationsnummer <HelpHint id="company.creditor_id" />
+          </label>
+          <input id="ucid" type="text" value={form.creditor_id} onChange={set('creditor_id')} />
+        </div>
         <div className="form-group">
           <label htmlFor="upep" style={{ display: 'inline-flex', alignItems: 'center' }}>
             Peppol Endpoint-ID (Versender)
@@ -1383,7 +1388,9 @@ function MonatsabschlussSection() {
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Monatsabschluss</h2>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, display: 'inline-flex', alignItems: 'center' }}>
+        Monatsabschluss <HelpHint id="monthclose.concept" />
+      </h2>
 
       <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 16, marginBottom: 20 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
@@ -2313,8 +2320,9 @@ function MahnungsEinstellungenSection() {
 
   return (
     <div style={{ maxWidth: 720 }}>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-        Konfigurieren Sie Bezeichnungen, Gebühren und Texte für jede Mahnstufe. Diese Einstellungen gelten für alle Mahnungs-PDFs.
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, display: 'inline-flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <span>Bezeichnungen, Gebühren und Texte für jede Mahnstufe. Diese Einstellungen gelten für alle Mahnungs-PDFs.</span>
+        <HelpHint id="dunning.process" />
       </p>
 
       {levels.map((lv, i) => (
@@ -2709,7 +2717,9 @@ function ArbzgSettingsSection() {
               </select>
             </div>
             <div className="form-group">
-              <label>Standard-Pausenregel</label>
+              <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+                Standard-Pausenregel <HelpHint id="arbzg.break_rule" />
+              </label>
               <select value={merged.defaultBreakRuleId ?? ''}
                 onChange={e => set('defaultBreakRuleId', e.target.value ? Number(e.target.value) : null)}>
                 <option value="">— Inline-Default (6h/9h) —</option>
@@ -2806,9 +2816,10 @@ function BenachrichtigungenSection() {
 
   return (
     <div className="admin-section">
-      <p className="admin-section-hint">
-        Aktiviert/deaktiviert Benachrichtigungstypen und legt fest, wer sie erhalten soll.
-        Neue Typen werden vom System nach und nach hinzugefügt.
+      <p className="admin-section-hint" style={{ display: 'inline-flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <span>Aktiviert/deaktiviert Benachrichtigungstypen und legt fest, wer sie erhalten soll.
+        Neue Typen werden vom System nach und nach hinzugefügt.</span>
+        <HelpHint id="notifications.audience" />
       </p>
 
       {categoryOrder.map(cat => (
@@ -3730,7 +3741,9 @@ function EmailVersandSection() {
 
       {!apiMode && (
         <div className="admin-block">
-          <h3 className="admin-block-title">SMTP-Zugangsdaten</h3>
+          <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            SMTP-Zugangsdaten <HelpHint id="email.smtp" />
+          </h3>
           <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
             Diese Zugangsdaten gelten nur für deinen Mandanten. Das Passwort wird verschlüsselt
             gespeichert und nie wieder angezeigt. Für Gmail/Microsoft 365 ist in der Regel ein

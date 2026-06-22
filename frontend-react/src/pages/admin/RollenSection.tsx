@@ -5,6 +5,7 @@ import { Modal }        from '@/components/ui/Modal'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FormField }    from '@/components/ui/FormField'
+import { HelpHint }     from '@/components/ui/HelpHint'
 import { useToast }     from '@/store/toastStore'
 import {
   fetchRoles, fetchRole, fetchPermissionCatalog,
@@ -68,7 +69,9 @@ export function RollenSection() {
     <div style={{ maxWidth: 920 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Rollen & Berechtigungen</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, display: 'inline-flex', alignItems: 'center' }}>
+            Rollen & Berechtigungen <HelpHint id="roles.concept" />
+          </h2>
           <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 0 0' }}>
             Lege Rollen an und steuere, welche Berechtigungen sie haben. Mitarbeiter werden den Rollen einzeln zugeordnet (Tab Mitarbeiter).
           </p>
