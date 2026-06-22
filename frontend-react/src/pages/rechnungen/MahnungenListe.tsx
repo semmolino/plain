@@ -716,7 +716,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
       {/* ── Table ── */}
       {rows.length === 0
-        ? <p className="empty-note">Keine überfälligen Rechnungen gefunden.</p>
+        ? <p className="empty-note">Aktuell keine überfälligen Rechnungen — hier erscheinen offene Rechnungen, deren Fälligkeit überschritten ist.</p>
         : (
           <div className="table-scroll">
             <table className="master-table">

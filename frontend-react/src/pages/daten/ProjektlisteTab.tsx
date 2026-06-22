@@ -770,7 +770,11 @@ export function ProjektlisteTab() {
           </div>
 
           {sorted.length === 0 && (
-            <p className="empty-note">Keine Treffer für diesen Filter.</p>
+            <p className="empty-note">
+              {allRows.length === 0
+                ? 'Noch keine Projekte — sobald welche angelegt sind, erscheint hier die Auswertung.'
+                : 'Keine Treffer für die aktuelle Filterung.'}
+            </p>
           )}
 
           <ProjectsTimeline filter={filter} filterReady={filterReady} projectIds={hasActiveFilter ? filteredProjectIds : undefined} />

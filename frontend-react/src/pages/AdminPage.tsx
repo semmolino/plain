@@ -2122,7 +2122,7 @@ function KostensatzSection() {
                 )
               })}
               {employees.length === 0 && (
-                <tr><td colSpan={8} className="empty-note">Keine aktiven Mitarbeiter.</td></tr>
+                <tr><td colSpan={8} className="empty-note">Noch keine Mitarbeiter — lege sie unter „Mitarbeiter" an, dann kannst du hier ihre Kostensätze berechnen.</td></tr>
               )}
             </tbody>
           </table>

@@ -264,7 +264,9 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
               ))}
               {!pageRows.length && (
                 <tr><td colSpan={10} className="empty-note">
-                  {rows.length === 0 ? 'Noch keine Angebote vorhanden.' : 'Keine Angebote für diese Filter.'}
+                  {rows.length === 0
+                    ? 'Noch keine Angebote — erstelle dein erstes über den Tab „Anlegen". Aus einem beauftragten Angebot wird per „Beauftragt" ein Projekt.'
+                    : 'Keine Angebote für diese Filter.'}
                 </td></tr>
               )}
             </tbody>

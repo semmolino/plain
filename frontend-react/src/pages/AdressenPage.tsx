@@ -825,7 +825,13 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
                     </td>
                   </tr>
                 ))}
-                {!filtered.length && <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">Keine Einträge</td></tr>}
+                {!filtered.length && (
+                  <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">
+                    {contacts.length === 0
+                      ? 'Noch keine Kontakte — lege Ansprechpartner zu einer Adresse an. Sie werden auf Angeboten und Rechnungen als Empfänger genutzt.'
+                      : 'Keine Treffer für die aktuelle Suche/Filterung.'}
+                  </td></tr>
+                )}
               </tbody>
               <tfoot>
                 <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>

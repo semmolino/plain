@@ -928,7 +928,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                 <tr><td colSpan={3 + visibleCols.length} className="empty-note">
                   {(search.trim() || onlyOpen || activeFilters.status.size > 0 || activeFilters.typ.size > 0)
                     ? 'Keine Rechnungen für diese Filter.'
-                    : 'Noch keine Rechnungen vorhanden.'}
+                    : 'Noch keine Rechnungen — erstelle sie über „Abschlagsrechnungen" / „Einzelrechnung" oder direkt aus „Abrechenbare Projekte".'}
                 </td></tr>
               )}
             </tbody>
