@@ -41,6 +41,15 @@ async function createOffer(req, res, supabase) {
   }
 }
 
+async function quickstartOffer(req, res, supabase) {
+  try {
+    const data = await svc.quickstartOffer(supabase, { tenantId: req.tenantId, employeeId: req.employeeId, body: req.body });
+    return res.json({ data });
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 async function updateOffer(req, res, supabase) {
   try {
     const id = parseInt(req.params.id, 10);
@@ -192,6 +201,7 @@ module.exports = {
   listOffers,
   getOffer,
   createOffer,
+  quickstartOffer,
   updateOffer,
   deleteOffer,
   getOfferStructure,

@@ -1527,8 +1527,87 @@ async function copyOffer(supabase, { offerId, tenantId }) {
 
 // ── exports ───────────────────────────────────────────────────────────────────
 
+// ── Schnellstart: erstes Angebot ohne Müll-/Demodaten ────────────────────────
+// Erzeugt ein ECHTES Angebot (+ optional neue Adresse/Kontakt) in einem Rutsch.
+// Persistenz erfolgt erst hier (der Wizard ruft das erst beim Bestaetigen auf);
+// bei einem Teilfehler werden angelegte Datensaetze wieder entfernt -> kein Muell.
+async function quickstartOffer(supabase, { tenantId, employeeId, body }) {
+  const b = body || {};
+  if (!b.name_long || !String(b.name_long).trim()) throw { status: 400, message: 'Angebotstitel ist erforderlich' };
+  const positions = (Array.isArray(b.positions) ? b.positions : [])
+    .filter(p => p && (String(p.name_long || '').trim() || Number(p.revenue)));
+  if (positions.length === 0) throw { status: 400, message: 'Mindestens eine Position ist erforderlich' };
+
+  const { data: company } = await supabase.from('COMPANY').select('ID').eq('TENANT_ID', tenantId).limit(1).maybeSingle();
+  if (!company) throw { status: 400, message: 'Bitte zuerst Firmendaten anlegen (Einstellungen → Unternehmen).' };
+
+  const { data: status } = await supabase.from('OFFER_STATUS').select('ID').order('ID', { ascending: true }).limit(1).maybeSingle();
+  if (!status) throw { status: 500, message: 'Kein Angebotsstatus im System vorhanden.' };
+
+  const made = { addressId: null, contactId: null, offerId: null };
+  try {
+    // 1) Empfänger-Adresse (bestehend ODER neu)
+    let addressId = b.address_id ? parseInt(String(b.address_id), 10) : null;
+    if (!addressId) {
+      const name = String(b.new_address?.name_1 || '').trim();
+      if (!name) throw { status: 400, message: 'Name des Empfängers ist erforderlich' };
+      let { data: country } = await supabase.from('COUNTRY').select('ID').eq('NAME_SHORT', 'DE').limit(1).maybeSingle();
+      if (!country) ({ data: country } = await supabase.from('COUNTRY').select('ID').order('ID', { ascending: true }).limit(1).maybeSingle());
+      if (!country) throw { status: 500, message: 'Kein Land im System hinterlegt.' };
+      const { data: addr, error: aErr } = await supabase.from('ADDRESS')
+        .insert([{ ADDRESS_NAME_1: name, COUNTRY_ID: country.ID, TENANT_ID: tenantId }]).select('ID').single();
+      if (aErr) throw { status: 500, message: aErr.message };
+      addressId = addr.ID; made.addressId = addressId;
+    }
+
+    // 2) Ansprechpartner (bestehend ODER neu; Anrede/Geschlecht default)
+    let contactId = b.contact_id ? parseInt(String(b.contact_id), 10) : null;
+    if (!contactId) {
+      const last  = String(b.new_contact?.last_name  || '').trim();
+      const first = String(b.new_contact?.first_name || '').trim();
+      if (!last) throw { status: 400, message: 'Nachname des Ansprechpartners ist erforderlich' };
+      const { data: sal } = await supabase.from('SALUTATION').select('ID').order('ID', { ascending: true }).limit(1).maybeSingle();
+      const { data: gen } = await supabase.from('GENDER').select('ID').order('ID', { ascending: true }).limit(1).maybeSingle();
+      if (!sal || !gen) throw { status: 500, message: 'Anrede-/Geschlecht-Stammdaten fehlen.' };
+      const { data: con, error: cErr } = await supabase.from('CONTACTS')
+        .insert([{ FIRST_NAME: first || last, LAST_NAME: last, SALUTATION_ID: sal.ID, GENDER_ID: gen.ID, ADDRESS_ID: addressId, TENANT_ID: tenantId }])
+        .select('ID').single();
+      if (cErr) throw { status: 500, message: cErr.message };
+      contactId = con.ID; made.contactId = contactId;
+    }
+
+    // 3) Angebot + Positionen (BT=1 Pauschal) in einem Rutsch
+    const offer = await createOffer(supabase, { tenantId, body: {
+      name_long:       b.name_long,
+      company_id:      company.ID,
+      offer_status_id: status.ID,
+      employee_id:     employeeId,
+      address_id:      addressId,
+      contact_id:      contactId,
+      offer_structure: positions.map((p, i) => ({
+        NAME_SHORT:      String(i + 1),
+        NAME_LONG:       String(p.name_long || `Position ${i + 1}`).trim(),
+        BILLING_TYPE_ID: 1,
+        REVENUE:         Number(p.revenue) || 0,
+        EXTRAS_PERCENT:  0,
+      })),
+    } });
+    made.offerId = offer.ID;
+
+    return { offer_id: offer.ID, number: offer.NAME_SHORT };
+  } catch (e) {
+    // Teilfehler -> selbst Angelegtes wieder entfernen (keine Müll-/Waisendaten)
+    try { if (made.offerId)   await supabase.from('OFFER_STRUCTURE').delete().eq('OFFER_ID', made.offerId); } catch (_) {}
+    try { if (made.offerId)   await supabase.from('OFFER').delete().eq('ID', made.offerId).eq('TENANT_ID', tenantId); } catch (_) {}
+    try { if (made.contactId) await supabase.from('CONTACTS').delete().eq('ID', made.contactId).eq('TENANT_ID', tenantId); } catch (_) {}
+    try { if (made.addressId) await supabase.from('ADDRESS').delete().eq('ID', made.addressId).eq('TENANT_ID', tenantId); } catch (_) {}
+    throw e;
+  }
+}
+
 module.exports = {
   getOfferStatuses,
+  quickstartOffer,
   listOffers,
   getOffer,
   createOffer,

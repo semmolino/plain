@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { BrandWordmark } from '@/components/brand/BrandLogo'
 import { useSession } from '@/hooks/useSession'
+import { QuickstartOfferModal } from './QuickstartOfferModal'
 
 const WELCOME_KEY = 'plansimple.welcome_dismissed'
 
@@ -20,15 +21,22 @@ export function WelcomeSection() {
   const [open, setOpen] = useState<boolean>(() => {
     try { return localStorage.getItem(key) !== '1' } catch { return true }
   })
+  const [quickOpen, setQuickOpen] = useState(false)
   function dismiss() {
     setOpen(false)
     try { localStorage.setItem(key, '1') } catch { /* ignore */ }
   }
-  if (open) return <WelcomePanel open onClose={dismiss} />
   return (
-    <button type="button" className="welcome-panel-reopen" onClick={() => setOpen(true)}>
-      <HelpCircle size={14} strokeWidth={2} /> Einführung anzeigen
-    </button>
+    <>
+      {open ? (
+        <WelcomePanel open onClose={dismiss} onQuickstart={() => setQuickOpen(true)} />
+      ) : (
+        <button type="button" className="welcome-panel-reopen" onClick={() => setOpen(true)}>
+          <HelpCircle size={14} strokeWidth={2} /> Einführung anzeigen
+        </button>
+      )}
+      <QuickstartOfferModal open={quickOpen} onClose={() => setQuickOpen(false)} />
+    </>
   )
 }
 
@@ -48,7 +56,7 @@ const AREAS: { icon: LucideIcon; label: string; desc: string }[] = [
   { icon: Settings,        label: 'Einstellungen', desc: 'Unternehmen, Nummernkreise, Vorbelegungen …' },
 ]
 
-export function WelcomePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function WelcomePanel({ open, onClose, onQuickstart }: { open: boolean; onClose: () => void; onQuickstart: () => void }) {
   if (!open) return null
   return (
     <div className="welcome-panel">
@@ -83,9 +91,12 @@ export function WelcomePanel({ open, onClose }: { open: boolean; onClose: () => 
 
       <div className="welcome-panel-foot">
         <span className="welcome-panel-hint">
-          <ArrowDown size={14} strokeWidth={2} /> Dein Startpunkt: die Einrichtungs-Checkliste direkt darunter.
+          <ArrowDown size={14} strokeWidth={2} /> Oder die Einrichtungs-Checkliste direkt darunter.
         </span>
-        <button className="btn-primary btn-small" onClick={onClose}>Los geht&rsquo;s</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-small" onClick={onClose}>Später</button>
+          <button className="btn-primary btn-small" onClick={onQuickstart}>Schnellstart: erstes Angebot</button>
+        </div>
       </div>
     </div>
   )

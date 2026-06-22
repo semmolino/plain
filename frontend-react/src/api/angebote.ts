@@ -195,6 +195,18 @@ export const fetchOffer = (id: number) =>
 export const createOffer = (body: CreateOfferPayload) =>
   apiClient.post<{ data: Offer }>('/angebote', body)
 
+export interface QuickstartOfferPayload {
+  name_long:    string
+  address_id?:  number
+  new_address?: { name_1: string }
+  contact_id?:  number
+  new_contact?: { first_name?: string; last_name: string }
+  positions:    { name_long: string; revenue: number }[]
+}
+
+export const quickstartOffer = (body: QuickstartOfferPayload) =>
+  apiClient.post<{ data: { offer_id: number; number: string | null } }>('/angebote/quickstart', body)
+
 export const updateOffer = (id: number, body: UpdateOfferPayload) =>
   apiClient.put<{ data: Offer }>(`/angebote/${id}`, body)
 
