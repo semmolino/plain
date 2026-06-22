@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react'
 import { fetchMe } from '@/api/auth'
+import { BrandWordmark } from '@/components/brand/BrandLogo'
 import { useAuthStore } from '@/store/authStore'
 import { usePermissionsStore } from '@/store/permissionsStore'
 import { useLicenseStore } from '@/store/licenseStore'
@@ -68,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (!ready) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color: '#1a1a2e', marginBottom: 16 }}>PlaIn</div>
+        <div style={{ marginBottom: 16 }}><BrandWordmark size={40} /></div>
         <div style={{ fontSize: 14, color: '#666' }}>Laden …</div>
       </div>
     )

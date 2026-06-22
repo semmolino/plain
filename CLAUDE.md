@@ -1,6 +1,8 @@
-# CLAUDE.md — PlaIn project context
+# CLAUDE.md — plan&simple project context
 
-PlaIn is a **multi-tenant business management tool** for architects and planners: offers, projects, invoices (Abschlags- & Schlussrechnungen), contracts, employees, and address management. It is a German-language product deployed as a public SaaS on Railway.
+**Produktname: „plan&simple"** (kleingeschrieben, mit Ampersand) — so heißt es in der Oberfläche, im Logo und gegenüber Nutzern. Der alte Name „PlaIn" stammt aus der Frühphase; **in jedem user-facing Text „plan&simple" verwenden**. Code-Bezeichner/Ordner (`plain/`, `tenantId`, …) bleiben unverändert.
+
+plan&simple is a **multi-tenant business management tool** for architects and planners: offers, projects, invoices (Abschlags- & Schlussrechnungen), contracts, employees, and address management. It is a German-language product deployed as a public SaaS on Railway.
 
 ---
 

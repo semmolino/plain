@@ -12,6 +12,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { TrendingUp, Banknote, HardHat, Clock, Check, type LucideIcon } from 'lucide-react'
 import { BrandGlyph } from '@/components/brand/BrandGlyph'
 import { useSession } from '@/hooks/useSession'
+import { WelcomeSection } from '@/components/onboarding/WelcomePanel'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import {
   fetchDashboardKpis,
@@ -1735,6 +1736,8 @@ export function DashboardPage() {
       </div>
 
       <DashboardHero />
+
+      <WelcomeSection />
 
       <SetupChecklist />
 

@@ -2626,6 +2626,56 @@ input::placeholder { color: var(--text-4); }
   margin-left: 2px;
 }
 
+/* ── Welcome / Orientierungs-Panel ───────────────────────────────────────── */
+.welcome-panel {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--chrome-shadow-h);
+}
+.welcome-panel-close {
+  position: absolute; top: 10px; right: 10px;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 6px;
+  color: var(--text-3); cursor: pointer;
+}
+.welcome-panel-close:hover { background: var(--chrome-hover-bg); color: var(--text); }
+.welcome-panel-head { margin-bottom: 14px; padding-right: 28px; }
+.welcome-panel-title {
+  margin: 10px 0 4px; font-size: var(--fs-section-title); font-weight: var(--fw-title); color: var(--text);
+}
+.welcome-panel-lead { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-2); max-width: 72ch; }
+.welcome-panel-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px; margin-bottom: 16px;
+}
+.welcome-area {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border-2); border-radius: 10px; background: var(--surface-2);
+}
+.welcome-area-icon {
+  width: 30px; height: 30px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; background: var(--accent-bg); color: var(--accent);
+}
+.welcome-area-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.welcome-area-desc { font-size: 11px; color: var(--text-3); margin-top: 1px; line-height: 1.4; }
+.welcome-panel-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  border-top: 1px solid var(--border-2); padding-top: 12px;
+}
+.welcome-panel-hint { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+.welcome-panel-reopen {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 12px; font-size: 12px; color: var(--text-2); cursor: pointer; margin-bottom: 16px;
+}
+.welcome-panel-reopen:hover { background: var(--chrome-hover-bg); color: var(--text); }
+
 /* ── Setup-Checklist ─────────────────────────────────────────────────────── */
 .setup-checklist {
   background: var(--surface);

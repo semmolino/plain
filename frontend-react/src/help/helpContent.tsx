@@ -28,8 +28,8 @@ export const HELP = {
         Eine E-Rechnung ist eine maschinenlesbare Rechnung im strukturierten
         XML-Format (XRechnung, als CII oder UBL) — kein PDF-Bild, sondern Daten,
         die der Empfänger automatisch einlesen kann. Für öffentliche Auftraggeber
-        (Behörden) ist sie Pflicht; zunehmend auch im B2B-Bereich. PlaIn erzeugt
-        sie serverseitig aus den Rechnungsdaten.
+        (Behörden) ist sie Pflicht; zunehmend auch im B2B-Bereich. plan&simple
+        erzeugt sie serverseitig aus den Rechnungsdaten.
       </>
     ),
   },
@@ -305,8 +305,8 @@ export const HELP = {
         Damit Rechnungen/Mahnungen aus <strong>deinem</strong> Postfach versendet
         werden, hinterlegst du hier deinen Postausgangsserver (SMTP). Für
         Gmail/Microsoft 365 brauchst du meist ein <strong>App-Passwort</strong>,
-        nicht dein normales Login. Ohne eigene Konfiguration nutzt PlaIn den
-        System-Absender.
+        nicht dein normales Login. Ohne eigene Konfiguration nutzt plan&simple
+        den System-Absender.
       </>
     ),
   },
