@@ -1,9 +1,9 @@
 /* Stage A PDF template: modern_a */
 :root{
-  --primary: {{ theme.brand.primaryColor }};
-  --accent: {{ theme.brand.accentColor }};
-  --font: {{ theme.brand.fontFamily }};
-  --scale: {{ theme.brand.fontScale }};
+  --primary: {{ theme.brand.primaryColor or '#1f2937' }};
+  --accent: {{ theme.brand.accentColor or '#2563eb' }};
+  --font: {{ theme.brand.fontFamily or 'Helvetica, Arial' }};
+  --scale: {{ theme.brand.fontScale or 1 }};
 }
 *{ box-sizing:border-box; }
 html,body{ margin:0; padding:0; font-family: var(--font), Arial, sans-serif; font-size: calc(12px * var(--scale)); color:#111827; }

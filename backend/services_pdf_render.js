@@ -30,7 +30,17 @@ function deepMerge(base, patch) {
 
 function defaultTheme() {
   return {
-    header: { showLogo: true, logoMaxHeightMm: 20 },
+    version: 2,
+    // brand.* MUST be present — base.css references --primary/--accent/--font/--scale.
+    // A missing brand block previously rendered `--scale: ;` → invalid calc() →
+    // body font-size fell back to 16px instead of 12px on any code-default template.
+    brand: {
+      primaryColor: '#1f2937',
+      accentColor:  '#2563eb',
+      fontFamily:   'Helvetica, Arial',
+      fontScale:    1,
+    },
+    header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'left' },
     footer: { showPageNumbers: true },
     blocks: { showProjectStructure: true, showTec: true },
   };
