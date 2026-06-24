@@ -396,10 +396,27 @@ nicht rückwirkend.
   invoice.njk gibt die Anhänge via `{% set %}`-Capture in dieser Reihenfolge aus (Fallback hängt
   fehlende Keys an → kein Anhang geht verloren). Vorschau folgt live.
 
-**Nächste Phasen (noch offen):** P6 Felder/Spalten (Meta-/Tabellenspalten wählen), P7 Pro
-(Mehrmarken, eigene Fonts hochladen), echte Drag-Handles statt Pfeile (optional). Bekannte Grenze:
-Logo-Position greift nicht auf das (ungenutzte, legacy) `partial_payment.njk` — Abschläge rendern
-ohnehin über `invoice.njk`. Optional später: echte Webfont-Einbettung (@font-face), damit
+**Runde 5 erledigt (2026-06-24):**
+- ✅ **Vorschau ohne Scrollen**: A4 wird gerendert und per CSS-`transform` passgenau auf die
+  Containerbreite skaliert (ResizeObserver + Höhenmessung).
+- ✅ **Inhalte & Anhänge je Beleg-Kategorie** statt DOC_TYPE: `invoice_rechnung`,
+  `invoice_schluss` (Schluss-/Teilschluss), `invoice_abschlags`, `offer_angebot`. Damit haben
+  Rechnung und Schluss-/Teilschlussrechnung — die denselben DOC_TYPE `INVOICE` teilen — getrennte
+  Anhänge (analog zu den Textvorlagen). Gespeichert als `theme.blocksByCategory`; Renderer wählt
+  per `invoiceType` die Kategorie. Storno + Auftragsbestätigung haben keine Anhang-Seiten.
+- ✅ **Einrichtungs-Checkliste**: neuer Schritt „Dokumentgestaltung angepasst" (erkannt an
+  gespeicherter `DOCUMENT_TEMPLATE`); veralteter Textvorlagen-Link korrigiert.
+
+**P6 (Felder/Spalten) bewusst verworfen.**
+
+**Nächste Phasen (noch offen):** P7 Pro (Mehrmarken pro Mandant, eigene Fonts hochladen), echte
+Drag-Handles statt Pfeile (optional). Bekannte Grenze: Logo-Position greift nicht auf das
+(ungenutzte, legacy) `partial_payment.njk` — Abschläge rendern ohnehin über `invoice.njk`.
+
+> **Neue Implementierungs-Regel:** Wenn ein neuer Belegtyp/eine neue Beleg-Kategorie dazukommt,
+> ist die **Formulargestaltung** (Branding + Inhalte/Anhänge + ggf. Textvorlage) mitzudenken —
+> Kategorie in `APPENDIX_BY_CATEGORY`/`DOC_CATEGORY_LABELS` ergänzen und Render-Mapping
+> (`invoiceTypeToCategory`) pflegen. Optional später: echte Webfont-Einbettung (@font-face), damit
 benannte Schriftarten statt nur Serif/Sans möglich sind; Logo-Position auch für `partial_payment`
 (nutzt `.headerRow .logoBox` statt `.logo-area`).
 
