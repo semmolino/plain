@@ -281,10 +281,13 @@ Blöcke, erlaubte Anhänge}), damit ein neuer Typ = ein Registry-Eintrag, nicht 
 
 ## 10. Pflichten aus CLAUDE.md (mitlaufen lassen)
 
-- **RBAC:** neuer Bereich „Dokumentvorlagen" + Endpoints (`GET/POST/PATCH /document-templates`,
-  `/preview`) → eigene Permission, Vorschlag `templates.manage` (Default: Admin/GL). Anzeige der
-  finalen PDFs braucht keine neue Permission. Vor Anlage: gegen `0062`-Katalog prüfen, sonst
-  Migration `0063+` + `<Can permission="templates.manage">`. → mit dir abzustimmen.
+- **RBAC:** Permission **`settings.document_templates.edit`** (Migration `0078`, Default nur
+  **Administrator** — analog `settings.email.edit`; Geschäftsleitung ist in `0062` bewusst „keine
+  Konfiguration", kann es per Rollenverwaltung erhalten). Konventionskonform im Modul `settings`,
+  abgegrenzt von `settings.text_templates.edit` (Kopf-/Fußtexte). Die `/document-templates`-Routes
+  sind damit gegated; das **PDF-Rendering selbst** liest `DOCUMENT_TEMPLATE` direkt im Render-Service
+  und ist NICHT betroffen (normale Nutzer erzeugen weiter PDFs). Frontend: `<Can
+  permission="settings.document_templates.edit">`.
 - **In-Product-Hilfe:** jede Einstellung im Konfigurator ist erklärungsbedürftig → `helpContent.tsx`
   Einträge `vorlagen.*` (Logo, Akzentfarbe, Bausteine, Anhänge, Platzhalter) via `<HelpHint>`;
   Leerzustand „Noch keine eigene Vorlage — so wirkt der Standard".
@@ -325,16 +328,27 @@ auf der alles Weitere aufsetzt).
 **Ebenfalls entschieden (2026-06-24):**
 - ✅ **Erstes Release = P0 + P1** (Theme-v2-Bugfix + Branding-Tab mit Live-Vorschau). Stil-Vorlagen
   (P2) und Bausteine/Anhänge (P4/P5) folgen danach.
-- ✅ **Neue Permission `templates.manage`** (Default: Admin/GL) für den Vorlagen-Bereich +
-  mutating Endpoints. Eigene Migration `0078_…` + `<Can permission="templates.manage">`.
+- ✅ **Permission `settings.document_templates.edit`** (Default Administrator) — siehe §10.
+- ✅ **Live-Vorschau = synthetisches Demo-View-Model** (im Code hinterlegter Beispiel-Beleg, keine
+  DB-Abhängigkeit, zeigt alle Bausteine).
+
+**Bestandsaufnahme Backend (vorgefunden, nicht neu zu bauen):**
+Es existiert bereits ein **vollständiger CRUD** für `DOCUMENT_TEMPLATE` (`routes/controllers/services
+documentTemplates.js`) mit **Lifecycle DRAFT → PUBLISHED → ARCHIVED**, **Versionierung** (`FAMILY_ID`/
+`VERSION`), `duplicate`, `set-default`. Das deckt die Unveränderlichkeit elegant ab (editieren nur am
+DRAFT, `publish` macht live, `set-default` aktiviert). Bisher **nicht** im Frontend genutzt und war
+**ungegated**. Achtung: dieser Service hat eine **zweite `defaultTheme()`** mit abweichender Form
+(`footer.textLeft/Right`, `blocks.showProject…`) als der Render-Service — beim Frontend-Bau auf die
+**eine kanonische v2-Form** (Render-Service) vereinheitlichen.
 
 **Umsetzungsstand:**
-- ✅ **P0 erledigt** (Branch `feature/pdf-template-customization`): `defaultTheme()` → v2 inkl.
-  `brand`-Defaults; `base.css` mit defensiven Fallbacks (`or …`) → kein ungültiges `calc()` mehr,
-  Schriftgröße rendert wieder korrekt mit 12px.
-- ⏳ **P1 als Nächstes:** Backend `GET/POST/PATCH /document-templates` + `POST /preview`
-  (Demo-Beleg), Permission-Migration `0078`, Frontend „Einstellungen → Dokumentvorlagen" mit
-  Branding-Tab (Logo-Position, Akzentfarbe-Palette, Schriftart/-größe) + Live-Vorschau (HTML-iframe).
+- ✅ **P0 erledigt**: `defaultTheme()` → v2 inkl. `brand`-Defaults; `base.css` defensive `or`-Fallbacks.
+- ✅ **P1-Security erledigt**: Migration `0078` (Permission) + `requirePermission` auf den
+  `/document-templates`-Routes. 52/52 Tests grün.
+- ⏳ **P1 offen:** (a) `POST /document-templates/preview` mit synthetischem Demo-VM; (b) Akzentfarbe
+  + Schrift in `base.css`/Templates verdrahten (sonst kein sichtbarer Branding-Effekt); (c)
+  Frontend „Einstellungen → Dokumentvorlagen" Branding-Tab + Live-Vorschau (HTML-iframe), `<Can>`,
+  `<HelpHint>` (`vorlagen.*`); (d) kanonische `defaultTheme()` vereinheitlichen.
 
 ---
 
