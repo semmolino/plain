@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlignLeft, AlignCenter, AlignRight, Check, ChevronUp, ChevronDown } from 'lucide-react'
 import { Message }  from '@/components/ui/Message'
@@ -36,6 +36,7 @@ const LOGO_POSITIONS: { id: LogoPosition; label: string; Icon: typeof AlignLeft 
 const APPENDIX_LABEL: Record<string, string> = Object.fromEntries(APPENDIX_BLOCKS.map(b => [b.key, b.label]))
 const DOC_TYPES = Object.keys(DOC_TYPE_LABELS) as DocTemplateType[]
 const FONT_GROUP: Record<string, 'sans' | 'serif'> = Object.fromEntries(FONT_OPTIONS.map(f => [f.key, f.group]))
+const A4_PREVIEW_WIDTH = 794 // A4-Breite bei 96dpi — die Vorschau wird darauf gerendert und skaliert
 
 // Mini-Beleg-Vorschau für eine Stil-Vorlage-Karte: zeigt Akzentfarbe (Titel +
 // Summenlinie), Serif/Sans und Logo-Position. Bewusst generische Schrift —
@@ -62,6 +63,10 @@ export function DokumentvorlagenSection() {
   const [loaded, setLoaded] = useState(false)
   const [previewHtml, setPreviewHtml]       = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewScale, setPreviewScale]     = useState(0.5)
+  const [previewContentH, setPreviewContentH] = useState(900)
+  const previewWrapRef = useRef<HTMLDivElement>(null)
+  const previewIframeRef = useRef<HTMLIFrameElement>(null)
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [blocksByType, setBlocksByType] = useState<Record<DocTemplateType, ThemeBlocks>>({
     INVOICE: DEFAULT_THEME.blocks, PARTIAL_PAYMENT: DEFAULT_THEME.blocks, OFFER: DEFAULT_THEME.blocks,
@@ -96,6 +101,23 @@ export function DokumentvorlagenSection() {
     }, 300)
     return () => { cancelled = true; clearTimeout(h) }
   }, [theme, blocksByType, appendixType])
+
+  // Vorschau (A4-Breite) passgenau auf die Containerbreite skalieren -> kein Scrollen.
+  useEffect(() => {
+    const el = previewWrapRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth
+      if (w > 0) setPreviewScale(Math.min(1, w / A4_PREVIEW_WIDTH))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  function handlePreviewLoad() {
+    const doc = previewIframeRef.current?.contentDocument
+    if (doc) setPreviewContentH(doc.documentElement?.scrollHeight || doc.body?.scrollHeight || 900)
+  }
 
   const saveMut = useMutation({
     mutationFn: () => saveBranding(theme, blocksByType),
@@ -362,19 +384,34 @@ export function DokumentvorlagenSection() {
         </div>
 
         {/* ── Live-Vorschau ─────────────────────────────────────────── */}
-        <div style={{ flex: '1 1 360px', minWidth: 320 }}>
+        <div style={{ flex: '1.3 1 360px', minWidth: 320 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>Vorschau</span>
             {previewLoading && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>aktualisiert …</span>}
           </div>
-          <iframe
-            title="Belegvorschau"
-            srcDoc={previewHtml}
+          <div
+            ref={previewWrapRef}
             style={{
-              width: '100%', height: 560, border: '1px solid var(--border)',
-              borderRadius: 8, background: '#fff',
+              width: '100%', border: '1px solid var(--border)', borderRadius: 8,
+              overflow: 'hidden', background: '#fff',
+              height: Math.max(120, Math.round(previewContentH * previewScale)),
             }}
-          />
+          >
+            <iframe
+              ref={previewIframeRef}
+              title="Belegvorschau"
+              srcDoc={previewHtml}
+              scrolling="no"
+              onLoad={handlePreviewLoad}
+              style={{
+                width: A4_PREVIEW_WIDTH, height: previewContentH, border: 'none', display: 'block',
+                transform: `scale(${previewScale})`, transformOrigin: 'top left',
+              }}
+            />
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '6px 0 0', textAlign: 'center' }}>
+            Maßstabsgetreue Vorschau (auf Fensterbreite verkleinert).
+          </p>
         </div>
 
       </div>
