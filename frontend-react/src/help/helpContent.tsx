@@ -58,6 +58,41 @@ export const HELP = {
     ),
   },
 
+  // ── Dokumentvorlagen / Branding ──────────────────────────────────────────
+  'vorlagen.accent': {
+    title: 'Hausfarbe',
+    body: (
+      <>
+        Die Farbe, in der die Überschriften deiner PDF-Dokumente erscheinen (z. B.
+        „Rechnung", „Angebot"). Wähle eine zur Außenwirkung deines Büros passende
+        Farbe oder lege über das Feld <strong>+</strong> eine eigene fest. Die Wirkung
+        siehst du sofort rechts in der Vorschau.
+      </>
+    ),
+  },
+  'vorlagen.font': {
+    title: 'Schrift',
+    body: (
+      <>
+        <strong>Serifenlos</strong> wirkt modern und sachlich, <strong>Serif</strong>
+        klassisch und seriös. Die Schrift gilt für den gesamten Belegtext. Es werden
+        bewusst nur druck­sichere Standard­schriften angeboten, damit das PDF überall
+        identisch aussieht.
+      </>
+    ),
+  },
+  'vorlagen.logo': {
+    title: 'Logo-Position',
+    body: (
+      <>
+        Legt fest, ob dein Firmenlogo oben <strong>links</strong>, <strong>mittig</strong>
+        oder <strong>rechts</strong> steht. Das Logo selbst lädst du unter
+        <strong> Einstellungen → Unternehmen</strong> hoch — ohne hinterlegtes Logo
+        zeigt die Vorschau einen Platzhalter.
+      </>
+    ),
+  },
+
   // ── Rechnungen / Verträge ────────────────────────────────────────────────
   'invoice.abschlag_vs_schluss': {
     title: 'Abschlag, Rechnung oder Schlussrechnung?',

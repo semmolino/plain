@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { RollenSection } from '@/pages/admin/RollenSection'
+import { DokumentvorlagenSection } from '@/pages/admin/DokumentvorlagenSection'
 import { useFilterTabs } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
 import { useSearchParams } from 'react-router-dom'
@@ -69,6 +70,7 @@ const PAGE_TABS: { id: string; label: string; permissions: string[]; feature?: s
   { id: 'email',                   label: 'E-Mail-Versand',          permissions: ['settings.email.edit'] },
   { id: 'nummernkreise',           label: 'Nummernkreise',           permissions: ['settings.numbers.edit'] },
   { id: 'textvorlagen',            label: 'Textvorlagen',            permissions: ['settings.text_templates.edit'], feature: 'settings.text_templates' },
+  { id: 'dokumentvorlagen',        label: 'Dokumentvorlagen',        permissions: ['settings.document_templates.edit'] },
   { id: 'mahnungseinstellungen',   label: 'Mahnungen',               permissions: ['settings.dunning_config.edit'], feature: 'settings.dunning_config' },
   { id: 'arbzg',                   label: 'Arbeitszeiten',           permissions: ['settings.work_time.edit'], feature: 'arbzg.compliance' },
   { id: 'kostensatz',              label: 'Kostensatz-Rechner',      permissions: ['settings.cost_rate.edit'], feature: 'cost_rate.calculator' },
@@ -3910,6 +3912,7 @@ export function AdminPage() {
         {tab === 'kostensatz'            && <KostensatzSection />}
         {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}
         {tab === 'textvorlagen'          && <TextVorlagenSection />}
+        {tab === 'dokumentvorlagen'      && <DokumentvorlagenSection />}
         {tab === 'benachrichtigungen'    && <BenachrichtigungenSection />}
         {tab === 'rollen'                && <RollenSection />}
         {tab === 'engagement'            && <EngagementSection />}

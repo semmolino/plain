@@ -97,13 +97,34 @@ async function setDefaultDocumentTemplate(req, res, supabase) {
 }
 
 // Live-Vorschau fuer den Branding-Tab: rendert einen synthetischen Beispiel-Beleg
-// mit dem uebergebenen Theme und liefert fertiges HTML (fuer <iframe srcdoc>).
+// mit dem uebergebenen Theme und liefert das HTML als JSON (fuer <iframe srcdoc>).
 async function previewDocumentTemplate(req, res, supabase) {
   try {
     const theme = req.body?.theme_json && typeof req.body.theme_json === "object" ? req.body.theme_json : {};
     const { html } = await pdfRender.renderPreviewDoc({ supabase, tenantId: req.tenantId, theme });
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(html);
+    res.json({ html });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || String(err) });
+  }
+}
+
+// ── Branding (vereinfachter Pfad fuer den Branding-Tab) ──────────────────────
+// Eine Marke fuer alle Belegtypen: liest/schreibt das Default-Theme gesammelt.
+async function getBranding(req, res, supabase) {
+  try {
+    const data = await svc.getBrandingTheme(supabase, { tenantId: req.tenantId });
+    res.json({ data });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || String(err) });
+  }
+}
+
+async function saveBranding(req, res, supabase) {
+  try {
+    const data = await svc.saveBrandingTheme(supabase, { tenantId: req.tenantId, theme_json: req.body?.theme_json });
+    res.json({ data });
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json({ error: err.message || String(err) });
@@ -119,4 +140,6 @@ module.exports = {
   archiveDocumentTemplate,
   setDefaultDocumentTemplate,
   previewDocumentTemplate,
+  getBranding,
+  saveBranding,
 };

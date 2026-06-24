@@ -244,6 +244,81 @@ async function setDefaultDocumentTemplate(supabase, { id }) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Branding (vereinfachter Pfad) — eine Marke fuer alle Belegtypen
+// ---------------------------------------------------------------------------
+// Der Branding-Tab soll fuer Nicht-Designer simpel sein: Farbe/Schrift/Logo-
+// Position waehlen -> speichern -> sofort live. Der schwergewichtige Lifecycle
+// (DRAFT/PUBLISHED/ARCHIVED + Versionierung) bleibt fuer eine spaetere
+// Vorlagen-Verwaltung erhalten; hier upserten wir das Default-Theme direkt.
+
+const BRANDING_DOC_TYPES = ["INVOICE", "PARTIAL_PAYMENT", "OFFER"];
+
+async function getBrandingTheme(supabase, { tenantId }) {
+  const companyId = await resolveCompanyId(supabase, tenantId);
+  if (!companyId) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
+
+  // INVOICE-Default als Quelle (Branding gilt gemeinsam fuer alle Belegtypen).
+  const { data, error } = await supabase
+    .from("DOCUMENT_TEMPLATE")
+    .select("THEME_JSON")
+    .eq("COMPANY_ID", companyId)
+    .eq("DOC_TYPE", "INVOICE")
+    .eq("IS_DEFAULT", true)
+    .maybeSingle();
+  if (error && !isTableMissingErr(error, "document_template")) throw error;
+
+  const theme = data && data.THEME_JSON && typeof data.THEME_JSON === "object" ? data.THEME_JSON : defaultTheme();
+  return { theme, companyId };
+}
+
+async function saveBrandingTheme(supabase, { tenantId, theme_json }) {
+  const companyId = await resolveCompanyId(supabase, tenantId);
+  if (!companyId) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
+
+  const theme = theme_json && typeof theme_json === "object" ? theme_json : defaultTheme();
+  const nowIso = new Date().toISOString();
+
+  for (const docType of BRANDING_DOC_TYPES) {
+    const { data: existing, error: exErr } = await supabase
+      .from("DOCUMENT_TEMPLATE")
+      .select("ID")
+      .eq("COMPANY_ID", companyId)
+      .eq("DOC_TYPE", docType)
+      .eq("IS_DEFAULT", true)
+      .maybeSingle();
+    if (exErr) {
+      if (isTableMissingErr(exErr, "document_template")) {
+        throw { status: 501, message: "Missing table DOCUMENT_TEMPLATE. Please run backend/migrations/0002_document_templates.sql" };
+      }
+      throw exErr;
+    }
+
+    if (existing) {
+      const { error } = await supabase
+        .from("DOCUMENT_TEMPLATE")
+        .update({ THEME_JSON: theme, IS_ACTIVE: true, UPDATED_AT: nowIso })
+        .eq("ID", existing.ID);
+      if (error) throw error;
+    } else {
+      const insertRow = {
+        COMPANY_ID: companyId, NAME: "Standard", DOC_TYPE: docType,
+        STATUS: "PUBLISHED", VERSION: 1, FAMILY_ID: null,
+        LAYOUT_KEY: "modern_a", THEME_JSON: theme, LOGO_ASSET_ID: null,
+        IS_DEFAULT: true, IS_ACTIVE: true, PUBLISHED_AT: nowIso, UPDATED_AT: nowIso,
+      };
+      const { data: created, error } = await supabase
+        .from("DOCUMENT_TEMPLATE").insert([insertRow]).select("ID").maybeSingle();
+      if (error) throw error;
+      if (created && created.ID) {
+        await supabase.from("DOCUMENT_TEMPLATE").update({ FAMILY_ID: created.ID }).eq("ID", created.ID);
+      }
+    }
+  }
+
+  return { ok: true, theme };
+}
+
 module.exports = {
   listDocumentTemplates,
   createDocumentTemplate,
@@ -252,4 +327,6 @@ module.exports = {
   publishDocumentTemplate,
   archiveDocumentTemplate,
   setDefaultDocumentTemplate,
+  getBrandingTheme,
+  saveBrandingTheme,
 };
