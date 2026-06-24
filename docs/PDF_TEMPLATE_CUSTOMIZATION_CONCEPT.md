@@ -374,8 +374,22 @@ auf `main` → kein Railway-Deploy (Merge/PR auf Wunsch).
 eingefrorene PDF (Unveränderlichkeit). Branding/Anhänge wirken auf **neue/Entwurf/Vorschau**-Belege,
 nicht rückwirkend.
 
-**Nächste Phasen (noch offen):** P2 Stil-Vorlagen (Karten), P3 Kopf/Fuß + Platzhalter, Bausteine-
-**Reihenfolge** (über an/aus hinaus), P6 Felder/Varianten, P7 Pro (Mehrmarken/eigene Fonts). Optional später: echte Webfont-Einbettung (@font-face), damit
+**Weitere Ausbaustufe erledigt (2026-06-24):**
+- ✅ **Mehr Schriftarten**: 8 echte Webfonts (Inter/Roboto/Open Sans/Montserrat ·
+  Merriweather/Lora/Source Serif/Playfair) als woff2 gebündelt, beim Rendern base64-eingebettet
+  (`services_theme_fonts.js`, `buildThemeHead`) → PDF + Vorschau identisch. `theme.brand.fontFamily`
+  speichert jetzt einen Font-KEY. Dropdown statt 2 Buttons.
+- ✅ **Inhalte & Anhänge pro Belegtyp**: brand/header bleiben unternehmensweit, `blocks` je DOC_TYPE
+  (`blocksByType`, `saveBrandingTheme`/`getBrandingTheme`). Vorschau folgt dem gewählten Typ
+  (`renderPreviewDoc(docType)` → `appendicesOn`/`docTitle`). Angebote: nur HOAI.
+- ✅ **Textvorlagen verlegt**: Kopf-/Fußtexte jetzt im Tab „Dokumentvorlagen" (eigener Tab entfällt;
+  je Teil per `<Can>` gegated, Tab sichtbar bei einer der beiden Permissions). **Angebot-Textvorlagen**
+  ergänzt (`offer_angebot`, `offer_auftragsbestaetigung` + `injectOfferTextTemplate`).
+
+**Nächste Phasen (noch offen):** P2 Stil-Vorlagen (Karten), Platzhalter-Chips in Kopf/Fuß-Texten,
+Bausteine-**Reihenfolge** (Drag), P6 Felder/Spalten, P7 Pro (Mehrmarken). Bekannte Grenze:
+Logo-Position greift nicht auf das (ungenutzte, legacy) `partial_payment.njk` — Abschläge rendern
+ohnehin über `invoice.njk`. Optional später: echte Webfont-Einbettung (@font-face), damit
 benannte Schriftarten statt nur Serif/Sans möglich sind; Logo-Position auch für `partial_payment`
 (nutzt `.headerRow .logoBox` statt `.logo-area`).
 
