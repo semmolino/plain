@@ -341,14 +341,29 @@ DRAFT, `publish` macht live, `set-default` aktiviert). Bisher **nicht** im Front
 (`footer.textLeft/Right`, `blocks.showProject…`) als der Render-Service — beim Frontend-Bau auf die
 **eine kanonische v2-Form** (Render-Service) vereinheitlichen.
 
-**Umsetzungsstand:**
-- ✅ **P0 erledigt**: `defaultTheme()` → v2 inkl. `brand`-Defaults; `base.css` defensive `or`-Fallbacks.
-- ✅ **P1-Security erledigt**: Migration `0078` (Permission) + `requirePermission` auf den
-  `/document-templates`-Routes. 52/52 Tests grün.
-- ⏳ **P1 offen:** (a) `POST /document-templates/preview` mit synthetischem Demo-VM; (b) Akzentfarbe
-  + Schrift in `base.css`/Templates verdrahten (sonst kein sichtbarer Branding-Effekt); (c)
-  Frontend „Einstellungen → Dokumentvorlagen" Branding-Tab + Live-Vorschau (HTML-iframe), `<Can>`,
-  `<HelpHint>` (`vorlagen.*`); (d) kanonische `defaultTheme()` vereinheitlichen.
+**Umsetzungsstand — P0 + P1 KOMPLETT (Branch `feature/pdf-template-customization`):**
+- ✅ **P0**: kanonisches `defaultTheme()` v2 (`services_theme_defaults.js`) — Defaults reproduzieren
+  exakt den heutigen Look (Null-Regression).
+- ✅ **P1-Security**: Migration `0078` (Permission `settings.document_templates.edit`) +
+  `requirePermission`-Gating der `/document-templates`-Routes.
+- ✅ **P1-Backend**: Branding in die ECHTEN Templates verdrahtet (`_theme_head.njk` in
+  invoice/storno/offer/auftragsbestaetigung/partial_payment) → Schrift, Akzentfarbe (`.doc-title`),
+  Logo-Position wirken jetzt real. (`base.css` war toter, nirgends eingebundener Code.) Plus
+  `POST /document-templates/preview` (synthetischer Beispiel-Beleg → JSON `{ html }`) und
+  vereinfachter `GET/PUT /document-templates/branding` (eine Marke für alle Belegtypen).
+- ✅ **P1-Frontend**: Einstellungen-Tab „Dokumentvorlagen" (Hausfarbe, Schrift, Logo-Position) mit
+  Live-Vorschau (iframe), `<HelpHint>` (`vorlagen.*`), gegated via PAGE_TABS-Permission.
+- **Verifiziert:** 52/52 Jest, Preview-Smoke + Template-Compile grün, `npx tsc -b` sauber, voller
+  vite-Build grün.
+
+**Offene To-dos für den Nutzer:** Migration `0078` manuell in Supabase einspielen. Branch ist NICHT
+auf `main` → kein Railway-Deploy (Merge/PR auf Wunsch).
+
+**Nächste Phasen (noch offen):** P2 Stil-Vorlagen (Karten), P3 Kopf/Fuß + Platzhalter, P4 Bausteine
+(an/aus + Reihenfolge), P5 Anhänge (Projektübersicht/Stunden/HOAI), P6 Felder/Varianten,
+P7 Pro (Mehrmarken/eigene Fonts). Optional später: echte Webfont-Einbettung (@font-face), damit
+benannte Schriftarten statt nur Serif/Sans möglich sind; Logo-Position auch für `partial_payment`
+(nutzt `.headerRow .logoBox` statt `.logo-area`).
 
 ---
 
