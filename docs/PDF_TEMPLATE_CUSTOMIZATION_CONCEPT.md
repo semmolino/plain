@@ -386,8 +386,18 @@ nicht rückwirkend.
   je Teil per `<Can>` gegated, Tab sichtbar bei einer der beiden Permissions). **Angebot-Textvorlagen**
   ergänzt (`offer_angebot`, `offer_auftragsbestaetigung` + `injectOfferTextTemplate`).
 
-**Nächste Phasen (noch offen):** P2 Stil-Vorlagen (Karten), Platzhalter-Chips in Kopf/Fuß-Texten,
-Bausteine-**Reihenfolge** (Drag), P6 Felder/Spalten, P7 Pro (Mehrmarken). Bekannte Grenze:
+**Runde 4 erledigt (2026-06-24):**
+- ✅ **Stil-Vorlagen** (Ebene 1): 5 1-Klick-Looks, jetzt als **Vorschaubild-Karten** (Mini-Beleg-
+  Mockup mit Akzent/Serif-Sans/Logo-Position). Plus **Logo-Größe** (Klein/Mittel/Groß).
+- ✅ **Platzhalter-Chips** in Kopf-/Fußtexten: `{{belegnummer}} {{belegdatum}} {{projekt}} {{kunde}}
+  {{firma}}` werden beim Rendern durch Belegwerte ersetzt (Rechnung + Angebot + AB); unbekannte
+  Tokens bleiben stehen → additiv, keine Regression. Chips fügen an Cursorposition ein.
+- ✅ **Anhang-Reihenfolge**: `theme.blocks.order` je Belegtyp, UI mit Hoch/Runter-Pfeilen;
+  invoice.njk gibt die Anhänge via `{% set %}`-Capture in dieser Reihenfolge aus (Fallback hängt
+  fehlende Keys an → kein Anhang geht verloren). Vorschau folgt live.
+
+**Nächste Phasen (noch offen):** P6 Felder/Spalten (Meta-/Tabellenspalten wählen), P7 Pro
+(Mehrmarken, eigene Fonts hochladen), echte Drag-Handles statt Pfeile (optional). Bekannte Grenze:
 Logo-Position greift nicht auf das (ungenutzte, legacy) `partial_payment.njk` — Abschläge rendern
 ohnehin über `invoice.njk`. Optional später: echte Webfont-Einbettung (@font-face), damit
 benannte Schriftarten statt nur Serif/Sans möglich sind; Logo-Position auch für `partial_payment`
