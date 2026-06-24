@@ -6,8 +6,8 @@ import { HelpHint } from '@/components/ui/HelpHint'
 import { InfoHint } from '@/components/ui/InfoHint'
 import {
   fetchBranding, saveBranding, previewBranding,
-  DEFAULT_THEME, FONT_OPTIONS, APPENDIX_BLOCKS,
-  type DocTheme, type LogoPosition, type ThemeBlocks,
+  DEFAULT_THEME, FONT_OPTIONS, APPENDIX_BLOCKS, APPENDIX_BLOCKS_BY_TYPE, DOC_TYPE_LABELS,
+  type DocTheme, type LogoPosition, type ThemeBlocks, type DocTemplateType,
 } from '@/api/documentTemplates'
 
 // Kuratierte, dezent-professionelle Hausfarben + freie Farbwahl.
@@ -32,6 +32,9 @@ const LOGO_POSITIONS: { id: LogoPosition; label: string; Icon: typeof AlignLeft 
   { id: 'right',  label: 'Rechts',  Icon: AlignRight },
 ]
 
+const APPENDIX_LABEL: Record<string, string> = Object.fromEntries(APPENDIX_BLOCKS.map(b => [b.key, b.label]))
+const DOC_TYPES = Object.keys(DOC_TYPE_LABELS) as DocTemplateType[]
+
 export function DokumentvorlagenSection() {
   const qc = useQueryClient()
   const [theme, setTheme]   = useState<DocTheme>(DEFAULT_THEME)
@@ -39,10 +42,23 @@ export function DokumentvorlagenSection() {
   const [previewHtml, setPreviewHtml]       = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [blocksByType, setBlocksByType] = useState<Record<DocTemplateType, ThemeBlocks>>({
+    INVOICE: DEFAULT_THEME.blocks, PARTIAL_PAYMENT: DEFAULT_THEME.blocks, OFFER: DEFAULT_THEME.blocks,
+  })
+  const [appendixType, setAppendixType] = useState<DocTemplateType>('INVOICE')
 
   const { data } = useQuery({ queryKey: ['doc-branding'], queryFn: fetchBranding })
   useEffect(() => {
-    if (data?.data?.theme && !loaded) { setTheme(mergeTheme(data.data.theme)); setLoaded(true) }
+    if (data?.data && !loaded) {
+      setTheme(mergeTheme(data.data.theme))
+      const b = data.data.blocksByType
+      if (b) setBlocksByType({
+        INVOICE:         { ...DEFAULT_THEME.blocks, ...(b.INVOICE ?? {}) },
+        PARTIAL_PAYMENT: { ...DEFAULT_THEME.blocks, ...(b.PARTIAL_PAYMENT ?? {}) },
+        OFFER:           { ...DEFAULT_THEME.blocks, ...(b.OFFER ?? {}) },
+      })
+      setLoaded(true)
+    }
   }, [data, loaded])
 
   // Debounced Live-Vorschau: jedes Mal, wenn sich das Theme aendert, rendert das
@@ -50,17 +66,18 @@ export function DokumentvorlagenSection() {
   useEffect(() => {
     let cancelled = false
     setPreviewLoading(true)
+    const previewTheme = { ...theme, blocks: blocksByType[appendixType] }
     const h = setTimeout(() => {
-      previewBranding(theme)
+      previewBranding(previewTheme, appendixType)
         .then(r => { if (!cancelled) setPreviewHtml(r.html) })
         .catch(() => { if (!cancelled) setPreviewHtml('<p style="font-family:sans-serif;color:#b91c1c;padding:24px">Vorschau nicht verfügbar.</p>') })
         .finally(() => { if (!cancelled) setPreviewLoading(false) })
     }, 300)
     return () => { cancelled = true; clearTimeout(h) }
-  }, [theme])
+  }, [theme, blocksByType, appendixType])
 
   const saveMut = useMutation({
-    mutationFn: () => saveBranding(theme),
+    mutationFn: () => saveBranding(theme, blocksByType),
     onSuccess: () => { setMsg({ text: 'Gestaltung gespeichert ✅', type: 'success' }); void qc.invalidateQueries({ queryKey: ['doc-branding'] }) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
@@ -68,7 +85,7 @@ export function DokumentvorlagenSection() {
   const setAccent  = (c: string)        => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, accentColor: c, primaryColor: c } })) }
   const setFont    = (key: string)      => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, fontFamily: key } })) }
   const setLogoPos = (p: LogoPosition)  => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoPosition: p } })) }
-  const setBlock   = (key: keyof ThemeBlocks, val: boolean) => { setMsg(null); setTheme(t => ({ ...t, blocks: { ...t.blocks, [key]: val } })) }
+  const setBlock   = (key: keyof ThemeBlocks, val: boolean) => { setMsg(null); setBlocksByType(prev => ({ ...prev, [appendixType]: { ...prev[appendixType], [key]: val } })) }
 
   const accentInPalette = ACCENT_PALETTE.includes(theme.brand.accentColor.toLowerCase())
 
@@ -193,25 +210,37 @@ export function DokumentvorlagenSection() {
             </p>
           </div>
 
-          {/* Inhalte & Anhänge */}
+          {/* Inhalte & Anhänge — je Belegtyp einzeln */}
           <div className="admin-block">
             <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
               Inhalte &amp; Anhänge <HelpHint id="vorlagen.anhaenge" />
             </h3>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              {DOC_TYPES.map(dt => (
+                <button
+                  key={dt}
+                  type="button"
+                  onClick={() => { setMsg(null); setAppendixType(dt) }}
+                  className={appendixType === dt ? 'btn-small btn-save' : 'btn-small'}
+                >
+                  {DOC_TYPE_LABELS[dt]}
+                </button>
+              ))}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {APPENDIX_BLOCKS.map(b => (
-                <label key={b.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              {APPENDIX_BLOCKS_BY_TYPE[appendixType].map(key => (
+                <label key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
-                    checked={theme.blocks[b.key] !== false}
-                    onChange={e => setBlock(b.key, e.target.checked)}
+                    checked={blocksByType[appendixType][key] !== false}
+                    onChange={e => setBlock(key, e.target.checked)}
                   />
-                  {b.label}
+                  {APPENDIX_LABEL[key]}
                 </label>
               ))}
             </div>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
-              Anhänge erscheinen nur, wenn dafür auch Daten vorliegen (z. B. erfasste Stunden).
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '10px 0 0' }}>
+              Gilt für <strong>{DOC_TYPE_LABELS[appendixType]}</strong>. Anhänge erscheinen nur, wenn dafür auch Daten vorliegen (z. B. erfasste Stunden).
             </p>
           </div>
 

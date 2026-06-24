@@ -50,6 +50,22 @@ export const APPENDIX_BLOCKS: { key: keyof ThemeBlocks; label: string }[] = [
   { key: 'showPayments',         label: 'Zahlungsübersicht' },
 ]
 
+export type DocTemplateType = 'INVOICE' | 'PARTIAL_PAYMENT' | 'OFFER'
+
+export const DOC_TYPE_LABELS: Record<DocTemplateType, string> = {
+  INVOICE:         'Rechnungen',
+  PARTIAL_PAYMENT: 'Abschlagsrechnungen',
+  OFFER:           'Angebote',
+}
+
+// Welche Anhänge je Belegtyp konfigurierbar sind. Spiegel von
+// backend/services_pdf_render.js (APPENDIX_BY_DOCTYPE).
+export const APPENDIX_BLOCKS_BY_TYPE: Record<DocTemplateType, (keyof ThemeBlocks)[]> = {
+  INVOICE:         ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
+  PARTIAL_PAYMENT: ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
+  OFFER:           ['showHonorar'],
+}
+
 // Schriftauswahl — Keys spiegeln backend/services_theme_fonts.js (FONTS).
 // system-* = generische Familien; alle anderen werden serverseitig als Webfont
 // eingebettet (PDF + Vorschau identisch).
@@ -69,10 +85,10 @@ export const FONT_OPTIONS: { key: string; label: string; group: 'sans' | 'serif'
 // ── API ──────────────────────────────────────────────────────────────────────
 
 export const fetchBranding = () =>
-  apiClient.get<{ data: { theme: DocTheme; companyId: number } }>('/document-templates/branding')
+  apiClient.get<{ data: { theme: DocTheme; blocksByType: Record<DocTemplateType, ThemeBlocks>; companyId: number } }>('/document-templates/branding')
 
-export const saveBranding = (theme_json: DocTheme) =>
-  apiClient.put<{ data: { ok: boolean; theme: DocTheme } }>('/document-templates/branding', { theme_json })
+export const saveBranding = (theme_json: DocTheme, blocks_by_type: Record<DocTemplateType, ThemeBlocks>) =>
+  apiClient.put<{ data: { ok: boolean } }>('/document-templates/branding', { theme_json, blocks_by_type })
 
-export const previewBranding = (theme_json: DocTheme) =>
-  apiClient.post<{ html: string }>('/document-templates/preview', { theme_json })
+export const previewBranding = (theme_json: DocTheme, doc_type: DocTemplateType) =>
+  apiClient.post<{ html: string }>('/document-templates/preview', { theme_json, doc_type })

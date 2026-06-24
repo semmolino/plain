@@ -79,7 +79,7 @@
       </div>
     </div>
 
-    <div class="doc-title">{{ sample.docTitle }}</div>
+    <div class="doc-title">{{ docTitle or sample.docTitle }}</div>
 
     <table class="pos-table">
       <thead>
@@ -114,11 +114,8 @@
 
     <div class="preview-attachments">
       <span class="pa-label">Anhänge:</span>
-      {% if theme.blocks.showProjectStructure != false %}<span class="pa-chip">Projektübersicht</span>{% endif %}
-      {% if theme.blocks.showTec != false %}<span class="pa-chip">Stundennachweis</span>{% endif %}
-      {% if theme.blocks.showHonorar != false %}<span class="pa-chip">HOAI-Kalkulation</span>{% endif %}
-      {% if theme.blocks.showPayments != false %}<span class="pa-chip">Zahlungsübersicht</span>{% endif %}
-      {% if theme.blocks.showProjectStructure == false and theme.blocks.showTec == false and theme.blocks.showHonorar == false and theme.blocks.showPayments == false %}<span class="pa-none">keine</span>{% endif %}
+      {% for a in appendicesOn %}<span class="pa-chip">{{ a }}</span>{% endfor %}
+      {% if appendicesOn.length == 0 %}<span class="pa-none">keine</span>{% endif %}
     </div>
 
     <div class="preview-note">Beispiel-Vorschau · Ihre echten Belege übernehmen diese Gestaltung &amp; Anhänge-Auswahl</div>

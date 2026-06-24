@@ -271,31 +271,51 @@ async function getBrandingTheme(supabase, { tenantId }) {
   const companyId = await resolveCompanyId(supabase, tenantId);
   if (!companyId) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
 
-  // INVOICE-Default als Quelle (Branding gilt gemeinsam fuer alle Belegtypen).
-  const { data, error } = await supabase
-    .from("DOCUMENT_TEMPLATE")
-    .select("THEME_JSON")
-    .eq("COMPANY_ID", companyId)
-    .eq("DOC_TYPE", "INVOICE")
-    .eq("IS_DEFAULT", true)
-    .maybeSingle();
-  if (error && !isTableMissingErr(error, "document_template")) throw error;
+  const def = defaultTheme();
+  const themeByType = {};
+  for (const docType of BRANDING_DOC_TYPES) {
+    const { data, error } = await supabase
+      .from("DOCUMENT_TEMPLATE")
+      .select("THEME_JSON")
+      .eq("COMPANY_ID", companyId)
+      .eq("DOC_TYPE", docType)
+      .eq("IS_DEFAULT", true)
+      .maybeSingle();
+    if (error && !isTableMissingErr(error, "document_template")) throw error;
+    themeByType[docType] = data && data.THEME_JSON && typeof data.THEME_JSON === "object" ? data.THEME_JSON : null;
+  }
 
-  const theme = data && data.THEME_JSON && typeof data.THEME_JSON === "object" ? data.THEME_JSON : defaultTheme();
-  return { theme, companyId };
+  // Gemeinsames Branding (brand/header/footer) aus der INVOICE-Default; Anhänge
+  // (blocks) je Belegtyp separat.
+  const theme = themeByType.INVOICE || def;
+  const blocksByType = {};
+  for (const docType of BRANDING_DOC_TYPES) {
+    const t = themeByType[docType];
+    blocksByType[docType] = (t && t.blocks && typeof t.blocks === "object")
+      ? { ...def.blocks, ...t.blocks }
+      : { ...def.blocks };
+  }
+
+  return { theme, blocksByType, companyId };
 }
 
-async function saveBrandingTheme(supabase, { tenantId, theme_json }) {
+async function saveBrandingTheme(supabase, { tenantId, theme_json, blocks_by_type }) {
   const companyIds = await resolveCompanyIds(supabase, tenantId);
   if (companyIds.length === 0) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
 
-  const theme = theme_json && typeof theme_json === "object" ? theme_json : defaultTheme();
+  const shared = theme_json && typeof theme_json === "object" ? theme_json : defaultTheme();
+  const def = defaultTheme();
+  const bbt = blocks_by_type && typeof blocks_by_type === "object" ? blocks_by_type : {};
   const nowIso = new Date().toISOString();
 
-  // Pro Firma × Belegtyp die Default-Vorlage upserten -> jede Firma erhaelt das
-  // gleiche Branding, egal zu welcher Firma ein Beleg gehoert.
+  // Pro Firma × Belegtyp die Default-Vorlage upserten. brand/header/footer sind
+  // unternehmensweit gleich; blocks (Anhänge) je Belegtyp separat.
   for (const companyId of companyIds) {
     for (const docType of BRANDING_DOC_TYPES) {
+      const blocks = bbt[docType] && typeof bbt[docType] === "object"
+        ? { ...def.blocks, ...bbt[docType] }
+        : { ...def.blocks };
+      const theme = { ...shared, blocks };
       const { data: existing, error: exErr } = await supabase
         .from("DOCUMENT_TEMPLATE")
         .select("ID")
@@ -333,7 +353,7 @@ async function saveBrandingTheme(supabase, { tenantId, theme_json }) {
     }
   }
 
-  return { ok: true, theme };
+  return { ok: true };
 }
 
 module.exports = {

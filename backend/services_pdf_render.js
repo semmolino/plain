@@ -1423,8 +1423,25 @@ const PREVIEW_SAMPLE = {
   net: '22.200,00', vatPct: '19', vat: '4.218,00', gross: '26.418,00',
 };
 
-async function renderPreviewDoc({ supabase, tenantId, theme, asPdf = false }) {
+// Welche Anhänge gibt es je Belegtyp (steuert Vorschau-Chips + UI-Toggles).
+const APPENDIX_LABELS = {
+  showProjectStructure: 'Projektübersicht',
+  showTec:              'Stundennachweis',
+  showHonorar:          'HOAI-/Kalkulationsübersicht',
+  showPayments:         'Zahlungsübersicht',
+};
+const APPENDIX_BY_DOCTYPE = {
+  INVOICE:         ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
+  PARTIAL_PAYMENT: ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
+  OFFER:           ['showHonorar'],
+};
+const PREVIEW_DOC_TITLE = { INVOICE: 'Rechnung', PARTIAL_PAYMENT: 'Abschlagsrechnung', OFFER: 'Angebot' };
+
+async function renderPreviewDoc({ supabase, tenantId, theme, docType = 'INVOICE', asPdf = false }) {
   const mergedTheme = deepMerge(defaultTheme(), theme && typeof theme === 'object' ? theme : {});
+  const dt = APPENDIX_BY_DOCTYPE[docType] ? docType : 'INVOICE';
+  const blocks = mergedTheme.blocks || {};
+  const appendicesOn = APPENDIX_BY_DOCTYPE[dt].filter(k => blocks[k] !== false).map(k => APPENDIX_LABELS[k]);
 
   let logoDataUri = null;
   try {
@@ -1433,7 +1450,10 @@ async function renderPreviewDoc({ supabase, tenantId, theme, asPdf = false }) {
     logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId: co?.ID ?? null });
   } catch (_) { /* Logo optional — Vorschau funktioniert auch ohne */ }
 
-  const context = { theme: mergedTheme, themeHead: buildThemeHead(mergedTheme), logoDataUri, sample: PREVIEW_SAMPLE };
+  const context = {
+    theme: mergedTheme, themeHead: buildThemeHead(mergedTheme), logoDataUri,
+    sample: PREVIEW_SAMPLE, appendicesOn, docTitle: PREVIEW_DOC_TITLE[dt],
+  };
   const html = env().render(path.join('modern_a', 'preview.njk'), context);
   if (!asPdf) return { html };
   const pdf = await renderPdf({ html });
