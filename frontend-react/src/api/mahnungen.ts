@@ -96,6 +96,16 @@ export const TEXT_TEMPLATE_LABELS: Record<TextTemplateType, string> = {
   offer_auftragsbestaetigung: 'Auftragsbestätigung',
 }
 
+// Platzhalter für Kopf-/Fußtexte. Werden beim Rendern durch Belegwerte ersetzt
+// (Spiegel von backend/services_pdf_render.js applyPlaceholders).
+export const TEXT_PLACEHOLDERS: { token: string; label: string }[] = [
+  { token: '{{belegnummer}}', label: 'Belegnummer' },
+  { token: '{{belegdatum}}',  label: 'Belegdatum' },
+  { token: '{{projekt}}',     label: 'Projekt' },
+  { token: '{{kunde}}',       label: 'Kunde' },
+  { token: '{{firma}}',       label: 'Eigene Firma' },
+]
+
 // ── API functions ─────────────────────────────────────────────────────────────
 
 export const fetchMahnungen = () =>

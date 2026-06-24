@@ -898,6 +898,13 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId, preview
 
   // Inject text template (header/footer) if invoice has no manual texts
   await injectTextTemplate(supabase, vm, tenantId);
+  applyPlaceholders(vm, {
+    belegnummer: vm.inv?.number ?? '',
+    belegdatum:  fmtDateDE(vm.inv?.date),
+    projekt:     vm.projectName ?? '',
+    kunde:       vm.inv?.buyer?.name ?? '',
+    firma:       vm.inv?.seller?.name ?? '',
+  });
 
   // EPC / GiroCode QR — only for payable documents (not storno)
   // When SE is in play (withheld or released), use securityRetention.payable so the
@@ -948,6 +955,13 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId, preview
 async function renderOfferPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
   await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_angebot');
+  applyPlaceholders(vm, {
+    belegnummer: vm.offer?.NAME_SHORT ?? '',
+    belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
+    projekt:     vm.offer?.NAME_LONG ?? '',
+    kunde:       vm.buyer?.name ?? '',
+    firma:       vm.seller?.name ?? '',
+  });
 
   const companyId = vm.offer.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
@@ -987,6 +1001,13 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
 async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
   await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_auftragsbestaetigung');
+  applyPlaceholders(vm, {
+    belegnummer: vm.offer?.NAME_SHORT ?? '',
+    belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
+    projekt:     vm.offer?.NAME_LONG ?? '',
+    kunde:       vm.buyer?.name ?? '',
+    firma:       vm.seller?.name ?? '',
+  });
 
   const companyId = vm.offer.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
@@ -1062,6 +1083,23 @@ async function injectOfferTextTemplate(supabase, vm, tenantId, documentType) {
   } catch (e) {
     if (!isTableMissingErr(e, 'text_template')) console.warn('[OFFER_TEXT_TEMPLATE]', e.message);
   }
+}
+
+// ── Platzhalter in Kopf-/Fusstexten ───────────────────────────────────────────
+// Ersetzt {{token}} im Kopf-/Fusstext durch konkrete Belegwerte. Unbekannte
+// Tokens bleiben unveraendert stehen (kein versehentliches Loeschen). Additiv:
+// Texte ohne Platzhalter bleiben exakt gleich -> keine Regression.
+function resolvePlaceholders(text, values) {
+  if (!text || typeof text !== 'string') return text;
+  return text.replace(/\{\{\s*([\wäöüÄÖÜ]+)\s*\}\}/g, (m, key) => {
+    const k = String(key).toLowerCase();
+    return Object.prototype.hasOwnProperty.call(values, k) ? (values[k] == null ? '' : String(values[k])) : m;
+  });
+}
+
+function applyPlaceholders(vm, values) {
+  if (vm.text1) vm.text1 = resolvePlaceholders(vm.text1, values);
+  if (vm.text2) vm.text2 = resolvePlaceholders(vm.text2, values);
 }
 
 // ── Mahnung PDF ───────────────────────────────────────────────────────────────

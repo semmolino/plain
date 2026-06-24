@@ -32,7 +32,7 @@ import { useAssetBlobUrl } from '@/hooks/useAssetBlobUrl'
 import { fetchNumberRanges, saveNumberRanges, fetchNumberRangeTemplates, saveNumberRangeTemplate } from '@/api/numberRanges'
 import {
   fetchMahnungSettings, saveMahnungSettings, fetchTextTemplates, saveTextTemplate,
-  TEXT_TEMPLATE_LABELS,
+  TEXT_TEMPLATE_LABELS, TEXT_PLACEHOLDERS,
   type MahnungSettingsLevel, type TextTemplate, type TextTemplateType,
 } from '@/api/mahnungen'
 import {
@@ -2379,6 +2379,9 @@ function TextVorlagenSection() {
   const [activeType, setActiveType] = useState<TextTemplateType>('invoice_abschlags')
   const [drafts, setDrafts]         = useState<Record<string, TextTemplate>>({})
   const [msg, setMsg]               = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [activeField, setActiveField] = useState<'headerText' | 'footerText'>('headerText')
+  const headerRef = useRef<HTMLTextAreaElement>(null)
+  const footerRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (!raw) return
@@ -2405,6 +2408,19 @@ function TextVorlagenSection() {
 
   const current = drafts[activeType] ?? { documentType: activeType, headerText: null, footerText: null }
 
+  function insertToken(token: string) {
+    const el = activeField === 'headerText' ? headerRef.current : footerRef.current
+    const cur = current[activeField] ?? ''
+    if (el) {
+      const start = el.selectionStart
+      const end   = el.selectionEnd
+      updateDraft(activeField, cur.slice(0, start) + token + cur.slice(end))
+      requestAnimationFrame(() => { el.focus(); const pos = start + token.length; el.setSelectionRange(pos, pos) })
+    } else {
+      updateDraft(activeField, cur + token)
+    }
+  }
+
   if (isLoading) return <p className="empty-note">Lade…</p>
 
   return (
@@ -2427,12 +2443,29 @@ function TextVorlagenSection() {
         ))}
       </div>
 
+      {/* Platzhalter-Chips */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', margin: '12px 0' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Platzhalter einfügen:</span>
+        {TEXT_PLACEHOLDERS.map(p => (
+          <button key={p.token} type="button" className="btn-small" onClick={() => insertToken(p.token)} title={p.token}>
+            {p.label}
+          </button>
+        ))}
+        <InfoHint title="Platzhalter">
+          Diese Felder werden beim Erzeugen des PDFs automatisch durch die echten Werte des Belegs ersetzt
+          (z. B. <code>{'{{belegnummer}}'}</code> → die Rechnungs-/Angebotsnummer). Klicke zuerst in das Kopf-
+          oder Fußtextfeld und dann auf einen Platzhalter — er wird an der Cursorposition eingefügt.
+        </InfoHint>
+      </div>
+
       <div className="form-group">
         <label className="form-label">Kopftext (text1 — erscheint vor der Positionstabelle)</label>
         <textarea
+          ref={headerRef}
           className="form-control"
           rows={5}
           value={current.headerText ?? ''}
+          onFocus={() => setActiveField('headerText')}
           onChange={e => updateDraft('headerText', e.target.value)}
           placeholder="Optional. z.B. Anrede, Hinweistext…"
         />
@@ -2440,9 +2473,11 @@ function TextVorlagenSection() {
       <div className="form-group">
         <label className="form-label">Fußtext (text2 — erscheint nach der Positionstabelle)</label>
         <textarea
+          ref={footerRef}
           className="form-control"
           rows={5}
           value={current.footerText ?? ''}
+          onFocus={() => setActiveField('footerText')}
           onChange={e => updateDraft('footerText', e.target.value)}
           placeholder="Optional. z.B. Zahlungshinweis, Bankdaten, Grußformel…"
         />
