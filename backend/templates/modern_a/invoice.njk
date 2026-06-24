@@ -663,6 +663,7 @@ table.data-table thead { display: table-header-group; }
 {# PAGE 2 – Zahlungsübersicht (all doc types, if project   #}
 {#          has any partial payments)                       #}
 {# ──────────────────────────────────────────────────────── #}
+{% set ap_payments %}
 {% if theme.blocks.showPayments != false and projectPayments and projectPayments.length > 0 %}
 <div class="page">
 
@@ -711,6 +712,8 @@ table.data-table thead { display: table-header-group; }
 {# ──────────────────────────────────────────────────────── #}
 {# PAGE 3 – Leistungsstandsübersicht                       #}
 {# ──────────────────────────────────────────────────────── #}
+{% endset %}
+{% set ap_structure %}
 {% if theme.blocks.showProjectStructure != false and projectStructureRows and projectStructureRows.length > 0 %}
 <div class="page">
 
@@ -811,6 +814,8 @@ table.data-table thead { display: table-header-group; }
 {# ──────────────────────────────────────────────────────── #}
 {# PAGE 4 – Nachweisleistungen (TEC entries)               #}
 {# ──────────────────────────────────────────────────────── #}
+{% endset %}
+{% set ap_tec %}
 {% if theme.blocks.showTec != false and tec.rows and tec.rows.length > 0 %}
 <div class="page">
 
@@ -873,6 +878,8 @@ table.data-table thead { display: table-header-group; }
 {# ──────────────────────────────────────────────────────────────────────── #}
 {# HOAI-Honorarübersicht (one page per Kalkulation – matches standalone honorar.njk) #}
 {# ─────────────────────────────────────────────────────────────────────────────────── #}
+{% endset %}
+{% set ap_honorar %}
 {% if theme.blocks.showHonorar != false and honorarCalcs and honorarCalcs.length > 0 %}
 {% for hc in honorarCalcs %}
 <div class="page">
@@ -1045,7 +1052,16 @@ table.data-table thead { display: table-header-group; }
 </div>
 {% endfor %}
 {% endif %}
+{% endset %}
 
+{# Anhänge in konfigurierbarer Reihenfolge (theme.blocks.order) ausgeben.
+   Jeder ap_*-Block traegt sein eigenes {% if enabled and data %}-Gate; der
+   zweite Loop haengt evtl. nicht in order gelistete Bausteine hinten an, damit
+   nie ein aktivierter Anhang verloren geht. #}
+{% set apOrder = theme.blocks.order or ['showPayments','showProjectStructure','showTec','showHonorar'] %}
+{% set apMap = { 'showPayments': ap_payments, 'showProjectStructure': ap_structure, 'showTec': ap_tec, 'showHonorar': ap_honorar } %}
+{% for k in apOrder %}{{ apMap[k] | safe }}{% endfor %}
+{% for k in ['showPayments','showProjectStructure','showTec','showHonorar'] %}{% if k not in apOrder %}{{ apMap[k] | safe }}{% endif %}{% endfor %}
 
 </body>
 </html>

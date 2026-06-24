@@ -1500,7 +1500,12 @@ async function renderPreviewDoc({ supabase, tenantId, theme, docType = 'INVOICE'
   const mergedTheme = deepMerge(defaultTheme(), theme && typeof theme === 'object' ? theme : {});
   const dt = APPENDIX_BY_DOCTYPE[docType] ? docType : 'INVOICE';
   const blocks = mergedTheme.blocks || {};
-  const appendicesOn = APPENDIX_BY_DOCTYPE[dt].filter(k => blocks[k] !== false).map(k => APPENDIX_LABELS[k]);
+  const order = Array.isArray(blocks.order) ? blocks.order : [];
+  const orderedKeys = APPENDIX_BY_DOCTYPE[dt].slice().sort((a, b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
+  const appendicesOn = orderedKeys.filter(k => blocks[k] !== false).map(k => APPENDIX_LABELS[k]);
 
   let logoDataUri = null;
   try {

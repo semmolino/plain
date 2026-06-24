@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlignLeft, AlignCenter, AlignRight, Check } from 'lucide-react'
+import { AlignLeft, AlignCenter, AlignRight, Check, ChevronUp, ChevronDown } from 'lucide-react'
 import { Message }  from '@/components/ui/Message'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { InfoHint } from '@/components/ui/InfoHint'
@@ -8,7 +8,7 @@ import {
   fetchBranding, saveBranding, previewBranding,
   DEFAULT_THEME, FONT_OPTIONS, APPENDIX_BLOCKS, APPENDIX_BLOCKS_BY_TYPE, DOC_TYPE_LABELS,
   STYLE_PRESETS, LOGO_SIZES,
-  type DocTheme, type LogoPosition, type ThemeBlocks, type DocTemplateType, type StylePreset,
+  type DocTheme, type LogoPosition, type ThemeBlocks, type DocTemplateType, type StylePreset, type AppendixKey,
 } from '@/api/documentTemplates'
 
 // Kuratierte, dezent-professionelle Hausfarben + freie Farbwahl.
@@ -86,7 +86,20 @@ export function DokumentvorlagenSection() {
   const setAccent  = (c: string)        => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, accentColor: c, primaryColor: c } })) }
   const setFont    = (key: string)      => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, fontFamily: key } })) }
   const setLogoPos = (p: LogoPosition)  => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoPosition: p } })) }
-  const setBlock   = (key: keyof ThemeBlocks, val: boolean) => { setMsg(null); setBlocksByType(prev => ({ ...prev, [appendixType]: { ...prev[appendixType], [key]: val } })) }
+  const setBlock   = (key: AppendixKey, val: boolean) => { setMsg(null); setBlocksByType(prev => ({ ...prev, [appendixType]: { ...prev[appendixType], [key]: val } })) }
+  const moveBlock  = (key: AppendixKey, dir: -1 | 1) => {
+    setMsg(null)
+    setBlocksByType(prev => {
+      const cur = prev[appendixType]
+      const avail = APPENDIX_BLOCKS_BY_TYPE[appendixType]
+      const ord = (cur.order ?? DEFAULT_THEME.blocks.order ?? []).slice()
+      for (const k of avail) if (!ord.includes(k)) ord.push(k)
+      const i = ord.indexOf(key), j = i + dir
+      if (i < 0 || j < 0 || j >= ord.length) return prev
+      ;[ord[i], ord[j]] = [ord[j], ord[i]]
+      return { ...prev, [appendixType]: { ...cur, order: ord } }
+    })
+  }
   const setLogoSize = (mm: number) => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoMaxHeightMm: mm } })) }
   const applyPreset = (p: StylePreset) => { setMsg(null); setTheme(t => ({
     ...t,
@@ -95,6 +108,13 @@ export function DokumentvorlagenSection() {
   })) }
 
   const accentInPalette = ACCENT_PALETTE.includes(theme.brand.accentColor.toLowerCase())
+
+  const availableKeys = APPENDIX_BLOCKS_BY_TYPE[appendixType]
+  const blockOrder = blocksByType[appendixType].order ?? DEFAULT_THEME.blocks.order ?? []
+  const orderedKeys = availableKeys.slice().sort((a, b) => {
+    const ia = blockOrder.indexOf(a), ib = blockOrder.indexOf(b)
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib)
+  })
 
   return (
     <div className="admin-section">
@@ -276,20 +296,32 @@ export function DokumentvorlagenSection() {
                 </button>
               ))}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {APPENDIX_BLOCKS_BY_TYPE[appendixType].map(key => (
-                <label key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={blocksByType[appendixType][key] !== false}
-                    onChange={e => setBlock(key, e.target.checked)}
-                  />
-                  {APPENDIX_LABEL[key]}
-                </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {orderedKeys.map((key, idx) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', flex: 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={blocksByType[appendixType][key] !== false}
+                      onChange={e => setBlock(key, e.target.checked)}
+                    />
+                    {APPENDIX_LABEL[key]}
+                  </label>
+                  {orderedKeys.length > 1 && (
+                    <span style={{ display: 'inline-flex', gap: 2 }}>
+                      <button type="button" className="row-action-btn" disabled={idx === 0} onClick={() => moveBlock(key, -1)} title="Nach oben">
+                        <ChevronUp size={14} strokeWidth={2} />
+                      </button>
+                      <button type="button" className="row-action-btn" disabled={idx === orderedKeys.length - 1} onClick={() => moveBlock(key, 1)} title="Nach unten">
+                        <ChevronDown size={14} strokeWidth={2} />
+                      </button>
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '10px 0 0' }}>
-              Gilt für <strong>{DOC_TYPE_LABELS[appendixType]}</strong>. Anhänge erscheinen nur, wenn dafür auch Daten vorliegen (z. B. erfasste Stunden).
+              Gilt für <strong>{DOC_TYPE_LABELS[appendixType]}</strong>. Reihenfolge per Pfeile. Anhänge erscheinen nur, wenn dafür auch Daten vorliegen (z. B. erfasste Stunden).
             </p>
           </div>
 

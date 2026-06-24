@@ -18,11 +18,14 @@ export interface ThemeHeader {
 }
 
 // Schaltbare Anhang-/Inhaltsabschnitte. Spiegel von services_theme_defaults.js.
+export type AppendixKey = 'showProjectStructure' | 'showTec' | 'showHonorar' | 'showPayments'
+
 export interface ThemeBlocks {
   showProjectStructure: boolean
   showTec:              boolean
   showHonorar:          boolean
   showPayments:         boolean
+  order?:               AppendixKey[]
 }
 
 export interface DocTheme {
@@ -38,12 +41,15 @@ export const DEFAULT_THEME: DocTheme = {
   version: 2,
   brand:  { primaryColor: '#111827', accentColor: '#111827', fontFamily: 'system-sans', fontScale: 1 },
   header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right' },
-  blocks: { showProjectStructure: true, showTec: true, showHonorar: true, showPayments: true },
+  blocks: {
+    showProjectStructure: true, showTec: true, showHonorar: true, showPayments: true,
+    order: ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
+  },
   footer: { showPageNumbers: true },
 }
 
 // Reihenfolge + Labels der schaltbaren Anhänge (für den „Inhalte & Anhänge"-Block).
-export const APPENDIX_BLOCKS: { key: keyof ThemeBlocks; label: string }[] = [
+export const APPENDIX_BLOCKS: { key: AppendixKey; label: string }[] = [
   { key: 'showProjectStructure', label: 'Projektübersicht' },
   { key: 'showTec',              label: 'Stundennachweis' },
   { key: 'showHonorar',          label: 'HOAI-/Kalkulationsübersicht' },
@@ -84,7 +90,7 @@ export const DOC_TYPE_LABELS: Record<DocTemplateType, string> = {
 
 // Welche Anhänge je Belegtyp konfigurierbar sind. Spiegel von
 // backend/services_pdf_render.js (APPENDIX_BY_DOCTYPE).
-export const APPENDIX_BLOCKS_BY_TYPE: Record<DocTemplateType, (keyof ThemeBlocks)[]> = {
+export const APPENDIX_BLOCKS_BY_TYPE: Record<DocTemplateType, AppendixKey[]> = {
   INVOICE:         ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
   PARTIAL_PAYMENT: ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
   OFFER:           ['showHonorar'],

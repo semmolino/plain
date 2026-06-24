@@ -28,7 +28,10 @@ function defaultTheme() {
     // Schaltbare Anhang-/Inhaltsabschnitte (Default an → kein Beleg verliert
     // ohne Zutun Inhalte). Templates gaten mit `!= false`, daher robust auch ohne
     // explizit gesetzte Flags.
-    blocks: { showProjectStructure: true, showTec: true, showHonorar: true, showPayments: true },
+    blocks: {
+      showProjectStructure: true, showTec: true, showHonorar: true, showPayments: true,
+      order: ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
+    },
   };
 }
 

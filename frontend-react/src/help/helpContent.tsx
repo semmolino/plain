@@ -115,9 +115,9 @@ export const HELP = {
         <strong> HOAI-/Kalkulationsübersicht</strong> und
         <strong> Zahlungsübersicht</strong> (bisherige Abschläge). Die Auswahl ist
         <strong> je Belegtyp</strong> (Rechnungen, Abschlagsrechnungen, Angebote)
-        getrennt einstellbar. Ein Anhang erscheint nur, wenn er hier aktiv ist
-        <em> und</em> tatsächlich Daten dafür vorliegen. Bereits gebuchte Belege
-        bleiben unverändert.
+        getrennt einstellbar; die <strong>Reihenfolge</strong> legst du über die
+        Pfeile fest. Ein Anhang erscheint nur, wenn er hier aktiv ist <em>und</em>
+        tatsächlich Daten dafür vorliegen. Bereits gebuchte Belege bleiben unverändert.
       </>
     ),
   },
