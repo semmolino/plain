@@ -9,23 +9,10 @@ function isTableMissingErr(err, tableName) {
   return msg.includes("relation") && msg.includes(String(tableName).toLowerCase()) && msg.includes("does not exist");
 }
 
-function defaultTheme() {
-  return {
-    brand: { primaryColor: "#111827", accentColor: "#2563eb", fontFamily: "Inter", fontScale: 1.0 },
-    header: { showLogo: true, logoMaxHeightMm: 18 },
-    footer: { textLeft: "Vielen Dank für Ihren Auftrag.", textRight: "Seite {page} von {pages}", showPageNumbers: true },
-    blocks: {
-      showProject: true,
-      showContract: true,
-      showAddressBlock: true,
-      showContactBlock: true,
-      showPaymentTerms: true,
-      showBankDetails: true,
-      showTaxSummary: true,
-    },
-    table: { showPositionNumbers: true, compactRows: false, showExtrasPercent: true },
-  };
-}
+// Kanonische Theme-Defaults (v2) — gemeinsam mit dem Render-Service, damit die
+// beim Anlegen einer Vorlage gespeicherte Form exakt der entspricht, die der
+// Renderer erwartet (frueher liefen hier zwei abweichende defaultTheme()).
+const { defaultTheme } = require("../services_theme_defaults");
 
 async function resolveCompanyId(supabase, tenantId) {
   const { data, error } = await supabase

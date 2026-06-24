@@ -1,6 +1,7 @@
 "use strict";
 
 const svc = require("../services/documentTemplates");
+const pdfRender = require("../services_pdf_render");
 
 async function listDocumentTemplates(req, res, supabase) {
   const docType = String(req.query.doc_type || "").toUpperCase().trim();
@@ -95,6 +96,20 @@ async function setDefaultDocumentTemplate(req, res, supabase) {
   }
 }
 
+// Live-Vorschau fuer den Branding-Tab: rendert einen synthetischen Beispiel-Beleg
+// mit dem uebergebenen Theme und liefert fertiges HTML (fuer <iframe srcdoc>).
+async function previewDocumentTemplate(req, res, supabase) {
+  try {
+    const theme = req.body?.theme_json && typeof req.body.theme_json === "object" ? req.body.theme_json : {};
+    const { html } = await pdfRender.renderPreviewDoc({ supabase, tenantId: req.tenantId, theme });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || String(err) });
+  }
+}
+
 module.exports = {
   listDocumentTemplates,
   createDocumentTemplate,
@@ -103,4 +118,5 @@ module.exports = {
   publishDocumentTemplate,
   archiveDocumentTemplate,
   setDefaultDocumentTemplate,
+  previewDocumentTemplate,
 };

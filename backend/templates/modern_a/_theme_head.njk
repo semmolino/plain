@@ -1,0 +1,20 @@
+{# ─────────────────────────────────────────────────────────────────────────────
+   Gemeinsames Branding-Partial. Wird am ENDE des <head> eingebunden (nach dem
+   Inline-<style> des jeweiligen Templates), damit diese Regeln gewinnen.
+   Die Defaults entsprechen exakt dem heutigen Aussehen -> ohne eigene Vorlage
+   aendert sich nichts. Greift erst, wenn der Branding-Tab Werte setzt.
+   ───────────────────────────────────────────────────────────────────────────── #}
+<style>
+  :root{
+    --brand-accent:  {{ theme.brand.accentColor  or '#111827' }};
+    --brand-primary: {{ theme.brand.primaryColor or '#111827' }};
+    --brand-font:    {{ theme.brand.fontFamily   or 'Arial, Helvetica, sans-serif' }};
+  }
+  body{ font-family: var(--brand-font) !important; }
+  /* Akzentfarbe = Farbe der Dokument-Ueberschrift (beide gaengigen Title-Klassen) */
+  .doc-title, .metaBlock .title{ color: var(--brand-accent) !important; }
+  /* Logo-Position (Default rechts wie bisher) */
+  .logo-area{
+    justify-content: {% if theme.header.logoPosition == 'left' %}flex-start{% elif theme.header.logoPosition == 'center' %}center{% else %}flex-end{% endif %} !important;
+  }
+</style>

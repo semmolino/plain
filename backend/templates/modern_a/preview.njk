@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1a; line-height: 1.4; }
+  .sheet { padding: 16mm 18mm; }
+
+  .logo-area { display: flex; justify-content: flex-end; margin-bottom: 6mm; min-height: 12mm; align-items: flex-start; }
+  .logo-area img { max-height: {{ (theme.header.logoMaxHeightMm or 20) }}mm; max-width: 70mm; object-fit: contain; }
+  .logo-fallback { color: #9ca3af; font-size: 9pt; border: 1px dashed #d1d5db; padding: 3mm 5mm; border-radius: 4px; }
+
+  .sender-line { font-size: 7.5pt; color: #6b7280; border-bottom: 0.3pt solid #d1d5db; padding-bottom: 1mm; margin-bottom: 6mm; }
+
+  .letter-header { display: flex; gap: 10mm; margin-bottom: 8mm; align-items: flex-start; }
+  .address-col { width: 85mm; flex-shrink: 0; }
+  .address-block { font-size: 10pt; line-height: 1.5; }
+  .address-block .name1 { font-weight: 700; }
+  .meta-col { flex: 1; }
+  .meta-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .meta-table td.ml { color: #6b7280; padding: 0.6mm 0; }
+  .meta-table td.mv { text-align: right; padding: 0.6mm 0; }
+  .meta-table td.mv.bold { font-weight: 700; }
+
+  .doc-title { font-size: 14pt; font-weight: 700; margin-bottom: 5mm; color: #111827; }
+
+  .pos-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; font-size: 9.5pt; }
+  .pos-table th { text-align: left; font-size: 8.5pt; color: #374151; border-bottom: 1pt solid #111827; padding: 2mm 1.5mm; }
+  .pos-table th.num, .pos-table td.num { text-align: right; }
+  .pos-table td { padding: 2mm 1.5mm; border-bottom: 0.3pt solid #e5e7eb; vertical-align: top; }
+
+  .totals { display: flex; justify-content: flex-end; }
+  .totals-table { width: 75mm; border-collapse: collapse; font-size: 9.5pt; }
+  .totals-table td { padding: 1.2mm 0; }
+  .totals-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .totals-table tr.total-row td { font-weight: 700; font-size: 11pt; border-top: 1pt solid #111827; padding-top: 2mm; }
+
+  .preview-note { margin-top: 10mm; font-size: 7.5pt; color: #9ca3af; text-align: center; }
+</style>
+{% include "modern_a/_theme_head.njk" %}
+</head>
+<body>
+  <div class="sheet">
+
+    <div class="logo-area">
+      {% if theme.header.showLogo and logoDataUri %}
+        <img src="{{ logoDataUri }}" alt="Logo">
+      {% else %}
+        <div class="logo-fallback">Ihr Logo</div>
+      {% endif %}
+    </div>
+
+    <div class="sender-line">
+      {{ sample.seller.name }} &middot; {{ sample.seller.street }} &middot; {{ sample.seller.postCode }} {{ sample.seller.city }}
+    </div>
+
+    <div class="letter-header">
+      <div class="address-col">
+        <div class="address-block">
+          <div class="name1">{{ sample.buyer.name }}</div>
+          <div>{{ sample.buyer.street }}</div>
+          <div>{{ sample.buyer.postCode }} {{ sample.buyer.city }}</div>
+        </div>
+      </div>
+      <div class="meta-col">
+        <table class="meta-table">
+          <tr><td class="ml">Kontakt</td><td class="mv">{{ sample.seller.contactName }}</td></tr>
+          <tr><td class="ml">E-Mail</td><td class="mv">{{ sample.seller.contactEmail }}</td></tr>
+          <tr><td class="ml">Telefon</td><td class="mv">{{ sample.seller.contactPhone }}</td></tr>
+          <tr><td class="ml" style="padding-top:3mm">Datum</td><td class="mv" style="padding-top:3mm">{{ sample.date | date_de }}</td></tr>
+          <tr><td class="ml">Rechnungs-Nr.</td><td class="mv bold">{{ sample.number }}</td></tr>
+          <tr><td class="ml">Projekt</td><td class="mv">{{ sample.project }}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-title">{{ sample.docTitle }}</div>
+
+    <table class="pos-table">
+      <thead>
+        <tr>
+          <th style="width:10mm">Pos.</th>
+          <th>Bezeichnung</th>
+          <th class="num" style="width:18mm">Menge</th>
+          <th class="num" style="width:28mm">Einzelpreis</th>
+          <th class="num" style="width:28mm">Betrag</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in sample.lines %}
+        <tr>
+          <td>{{ l.pos }}</td>
+          <td>{{ l.desc }}</td>
+          <td class="num">{{ l.qty }}</td>
+          <td class="num">{{ l.price }} €</td>
+          <td class="num">{{ l.total }} €</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <table class="totals-table">
+        <tr><td>Nettobetrag</td><td>{{ sample.net }} €</td></tr>
+        <tr><td>zzgl. {{ sample.vatPct }} % USt.</td><td>{{ sample.vat }} €</td></tr>
+        <tr class="total-row"><td>Gesamtbetrag</td><td>{{ sample.gross }} €</td></tr>
+      </table>
+    </div>
+
+    <div class="preview-note">Beispiel-Vorschau · Ihre echten Belege übernehmen diese Gestaltung</div>
+
+  </div>
+</body>
+</html>

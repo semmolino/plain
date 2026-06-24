@@ -13,6 +13,7 @@ module.exports = (supabase) => {
   // Nutzer koennen weiterhin PDFs erzeugen, nur die Vorlagen-Pflege ist gegated.
   router.use(requirePermission("settings.document_templates.edit"));
 
+  router.post("/preview",           (req, res) => ctrl.previewDocumentTemplate(req, res, supabase));
   router.get("/",                   (req, res) => ctrl.listDocumentTemplates(req, res, supabase));
   router.post("/",                  (req, res) => ctrl.createDocumentTemplate(req, res, supabase));
   router.patch("/:id",              (req, res) => ctrl.patchDocumentTemplate(req, res, supabase));

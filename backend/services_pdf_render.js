@@ -28,23 +28,8 @@ function deepMerge(base, patch) {
   return out;
 }
 
-function defaultTheme() {
-  return {
-    version: 2,
-    // brand.* MUST be present — base.css references --primary/--accent/--font/--scale.
-    // A missing brand block previously rendered `--scale: ;` → invalid calc() →
-    // body font-size fell back to 16px instead of 12px on any code-default template.
-    brand: {
-      primaryColor: '#1f2937',
-      accentColor:  '#2563eb',
-      fontFamily:   'Helvetica, Arial',
-      fontScale:    1,
-    },
-    header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'left' },
-    footer: { showPageNumbers: true },
-    blocks: { showProjectStructure: true, showTec: true },
-  };
-}
+// Kanonische Theme-Defaults (v2) — gemeinsam mit services/documentTemplates.js.
+const { defaultTheme } = require('./services_theme_defaults');
 
 function fmtMoney(v) {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
@@ -1389,4 +1374,42 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
   return renderPdf({ html });
 }
 
-module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderMahnungPdf, renderHonorarPdf };
+// ── Vorlagen-Vorschau (Branding-Tab) ──────────────────────────────────────────
+// Rendert einen synthetischen Beispiel-Beleg gegen das uebergebene Theme. Keine
+// DB-Belegdaten noetig — so funktioniert die Live-Vorschau ueberall (auch in den
+// Einstellungen ohne offenen Beleg) und zeigt alle Branding-Elemente.
+
+const PREVIEW_SAMPLE = {
+  docTitle: 'Rechnung',
+  number:   'RE-2026-0042',
+  date:     '2026-06-24',
+  seller:   { name: 'Musterplanung GmbH', street: 'Beispielstraße 1', postCode: '10115', city: 'Berlin',
+              contactName: 'Dipl.-Ing. A. Muster', contactEmail: 'info@musterplanung.de', contactPhone: '030 1234567' },
+  buyer:    { name: 'Bauherr Beispiel AG', street: 'Musterallee 7', postCode: '80331', city: 'München' },
+  project:  'P-2026-014 – Neubau Verwaltungsgebäude',
+  lines: [
+    { pos: '1', desc: 'Leistungsphase 2 – Vorplanung',  qty: '1', price: '8.500,00', total: '8.500,00' },
+    { pos: '2', desc: 'Leistungsphase 3 – Entwurfsplanung', qty: '1', price: '12.750,00', total: '12.750,00' },
+    { pos: '3', desc: 'Nebenkosten (pauschal)',          qty: '1', price: '950,00',    total: '950,00' },
+  ],
+  net: '22.200,00', vatPct: '19', vat: '4.218,00', gross: '26.418,00',
+};
+
+async function renderPreviewDoc({ supabase, tenantId, theme, asPdf = false }) {
+  const mergedTheme = deepMerge(defaultTheme(), theme && typeof theme === 'object' ? theme : {});
+
+  let logoDataUri = null;
+  try {
+    const { data: co } = await supabase
+      .from('COMPANY').select('ID').eq('TENANT_ID', tenantId).limit(1).maybeSingle();
+    logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId: co?.ID ?? null });
+  } catch (_) { /* Logo optional — Vorschau funktioniert auch ohne */ }
+
+  const context = { theme: mergedTheme, logoDataUri, sample: PREVIEW_SAMPLE };
+  const html = env().render(path.join('modern_a', 'preview.njk'), context);
+  if (!asPdf) return { html };
+  const pdf = await renderPdf({ html });
+  return { pdf, html };
+}
+
+module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc };
