@@ -65,7 +65,6 @@ const STEP_CAPABILITY = {
   first_offer:      "offers.basic",
   first_project:    "projects.management",
   profile_complete: null,
-  profile_photo:    null,
 };
 
 async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature }) {
@@ -160,16 +159,9 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
   } catch (_) {}
   const hasWorkingTime = hasWorkingTimeModel || hasArbzgSettings;
 
-  // ── 3d) Eigenes Profil + Profilfoto ───────────────────────────────────────
-  let ownProfileComplete = false;
+  // ── 3d) Profilfoto — das Einzige, was der Nutzer auf /profil selbst setzen
+  // kann (Name/Telefon/Personalnummer pflegt die Mitarbeiterverwaltung, nicht er).
   let hasAvatar = false;
-  try {
-    const { data: me } = await supabase
-      .from("EMPLOYEE")
-      .select("FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER")
-      .eq("ID", employeeId).eq("TENANT_ID", tenantId).maybeSingle();
-    if (me) ownProfileComplete = !!(me.FIRST_NAME && me.LAST_NAME && me.MAIL && me.MOBILE && me.PERSONNEL_NUMBER);
-  } catch (_) {}
   try {
     // AVATAR_ASSET_ID existiert evtl. noch nicht (Migration 0076).
     const { data: av, error } = await supabase
@@ -371,15 +363,8 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
     },
     {
       key:  "profile_complete",
-      label:"Eigenes Profil vervollständigt",
-      hint: "Name, Telefon und Personalnummer hinterlegt",
-      href: "/profil",
-      done: ownProfileComplete,
-    },
-    {
-      key:  "profile_photo",
-      label:"Profilfoto hochgeladen",
-      hint: "Erscheint oben rechts neben deinem Namen",
+      label:"Profil vervollständigt",
+      hint: "Profilfoto hinterlegt — erscheint oben rechts neben deinem Namen",
       href: "/profil",
       done: hasAvatar,
     },
