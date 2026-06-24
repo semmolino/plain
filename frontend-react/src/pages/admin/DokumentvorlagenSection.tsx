@@ -35,6 +35,26 @@ const LOGO_POSITIONS: { id: LogoPosition; label: string; Icon: typeof AlignLeft 
 
 const APPENDIX_LABEL: Record<string, string> = Object.fromEntries(APPENDIX_BLOCKS.map(b => [b.key, b.label]))
 const DOC_TYPES = Object.keys(DOC_TYPE_LABELS) as DocTemplateType[]
+const FONT_GROUP: Record<string, 'sans' | 'serif'> = Object.fromEntries(FONT_OPTIONS.map(f => [f.key, f.group]))
+
+// Mini-Beleg-Vorschau für eine Stil-Vorlage-Karte: zeigt Akzentfarbe (Titel +
+// Summenlinie), Serif/Sans und Logo-Position. Bewusst generische Schrift —
+// die echte eingebettete Schrift erscheint in der großen Live-Vorschau rechts.
+function PresetThumb({ accent, serif, logoPosition }: { accent: string; serif: boolean; logoPosition: LogoPosition }) {
+  const justify = logoPosition === 'left' ? 'flex-start' : logoPosition === 'center' ? 'center' : 'flex-end'
+  return (
+    <div style={{ width: 132, height: 92, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 5, fontFamily: serif ? 'Georgia, "Times New Roman", serif' : 'Arial, Helvetica, sans-serif' }}>
+      <div style={{ display: 'flex', justifyContent: justify }}>
+        <div style={{ width: 26, height: 9, background: '#d1d5db', borderRadius: 2 }} />
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: accent, lineHeight: 1.1 }}>Rechnung</div>
+      <div style={{ height: 3, background: '#e5e7eb', borderRadius: 2, width: '90%' }} />
+      <div style={{ height: 3, background: '#eef0f2', borderRadius: 2, width: '70%' }} />
+      <div style={{ height: 3, background: '#eef0f2', borderRadius: 2, width: '80%' }} />
+      <div style={{ marginTop: 'auto', borderTop: `1.5px solid ${accent}`, paddingTop: 3, fontSize: 8, fontWeight: 700, color: accent, textAlign: 'right' }}>26.418,00 €</div>
+    </div>
+  )
+}
 
 export function DokumentvorlagenSection() {
   const qc = useQueryClient()
@@ -141,7 +161,7 @@ export function DokumentvorlagenSection() {
             <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
               Stil-Vorlage <HelpHint id="vorlagen.preset" />
             </h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {STYLE_PRESETS.map(p => {
                 const active = theme.brand.accentColor.toLowerCase() === p.accentColor.toLowerCase()
                   && theme.brand.fontFamily === p.fontFamily
@@ -151,11 +171,15 @@ export function DokumentvorlagenSection() {
                     key={p.id}
                     type="button"
                     onClick={() => applyPreset(p)}
-                    className={active ? 'btn-small btn-save' : 'btn-small'}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    title={p.label}
+                    style={{
+                      padding: 5, borderRadius: 8, cursor: 'pointer', background: 'transparent',
+                      border: active ? '2px solid var(--text-1)' : '1px solid #e5e7eb',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                    }}
                   >
-                    <span style={{ width: 12, height: 12, borderRadius: 3, background: p.accentColor, display: 'inline-block' }} />
-                    {p.label}
+                    <PresetThumb accent={p.accentColor} serif={FONT_GROUP[p.fontFamily] === 'serif'} logoPosition={p.logoPosition} />
+                    <span style={{ fontSize: 12, fontWeight: active ? 700 : 500 }}>{p.label}</span>
                   </button>
                 )
               })}
