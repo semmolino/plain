@@ -285,37 +285,49 @@ async function getBrandingTheme(supabase, { tenantId }) {
     themeByType[docType] = data && data.THEME_JSON && typeof data.THEME_JSON === "object" ? data.THEME_JSON : null;
   }
 
-  // Gemeinsames Branding (brand/header/footer) aus der INVOICE-Default; Anhänge
-  // (blocks) je Belegtyp separat.
+  // Gemeinsames Branding (brand/header/footer) aus der INVOICE-Default.
   const theme = themeByType.INVOICE || def;
-  const blocksByType = {};
-  for (const docType of BRANDING_DOC_TYPES) {
-    const t = themeByType[docType];
-    blocksByType[docType] = (t && t.blocks && typeof t.blocks === "object")
-      ? { ...def.blocks, ...t.blocks }
-      : { ...def.blocks };
-  }
 
-  return { theme, blocksByType, companyId };
+  // Anhänge je BELEG-KATEGORIE. Bevorzugt theme.blocksByCategory; sonst Migration
+  // aus alten per-DOC_TYPE-blocks (INVOICE -> Rechnung+Schluss, PP -> Abschlag,
+  // OFFER -> Angebot), sonst Default.
+  const stored = theme.blocksByCategory && typeof theme.blocksByCategory === "object" ? theme.blocksByCategory : {};
+  const fromTypeBlocks = (dt) => {
+    const t = themeByType[dt];
+    return (t && t.blocks && typeof t.blocks === "object") ? { ...def.blocks, ...t.blocks } : { ...def.blocks };
+  };
+  const pick = (cat, fallbackDt) =>
+    (stored[cat] && typeof stored[cat] === "object") ? { ...def.blocks, ...stored[cat] } : fromTypeBlocks(fallbackDt);
+  const blocksByCategory = {
+    invoice_rechnung:  pick("invoice_rechnung",  "INVOICE"),
+    invoice_schluss:   pick("invoice_schluss",   "INVOICE"),
+    invoice_abschlags: pick("invoice_abschlags", "PARTIAL_PAYMENT"),
+    offer_angebot:     pick("offer_angebot",     "OFFER"),
+  };
+
+  return { theme, blocksByCategory, companyId };
 }
 
-async function saveBrandingTheme(supabase, { tenantId, theme_json, blocks_by_type }) {
+const APPENDIX_CATEGORIES = ['invoice_rechnung', 'invoice_schluss', 'invoice_abschlags', 'offer_angebot'];
+
+async function saveBrandingTheme(supabase, { tenantId, theme_json, blocks_by_category }) {
   const companyIds = await resolveCompanyIds(supabase, tenantId);
   if (companyIds.length === 0) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
 
-  const shared = theme_json && typeof theme_json === "object" ? theme_json : defaultTheme();
   const def = defaultTheme();
-  const bbt = blocks_by_type && typeof blocks_by_type === "object" ? blocks_by_type : {};
+  const shared = theme_json && typeof theme_json === "object" ? theme_json : def;
+  const bbc = blocks_by_category && typeof blocks_by_category === "object" ? blocks_by_category : {};
+  const blocksByCategory = {};
+  for (const cat of APPENDIX_CATEGORIES) {
+    blocksByCategory[cat] = bbc[cat] && typeof bbc[cat] === "object" ? { ...def.blocks, ...bbc[cat] } : { ...def.blocks };
+  }
+  // brand/header global; blocksByCategory identisch in JEDER DOC_TYPE-Default-Vorlage,
+  // damit der Renderer (lädt je DOC_TYPE) immer die richtige Kategorie findet.
+  const theme = { ...shared, blocksByCategory };
   const nowIso = new Date().toISOString();
 
-  // Pro Firma × Belegtyp die Default-Vorlage upserten. brand/header/footer sind
-  // unternehmensweit gleich; blocks (Anhänge) je Belegtyp separat.
   for (const companyId of companyIds) {
     for (const docType of BRANDING_DOC_TYPES) {
-      const blocks = bbt[docType] && typeof bbt[docType] === "object"
-        ? { ...def.blocks, ...bbt[docType] }
-        : { ...def.blocks };
-      const theme = { ...shared, blocks };
       const { data: existing, error: exErr } = await supabase
         .from("DOCUMENT_TEMPLATE")
         .select("ID")

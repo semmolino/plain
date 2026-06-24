@@ -101,8 +101,8 @@ async function setDefaultDocumentTemplate(req, res, supabase) {
 async function previewDocumentTemplate(req, res, supabase) {
   try {
     const theme = req.body?.theme_json && typeof req.body.theme_json === "object" ? req.body.theme_json : {};
-    const docType = String(req.body?.doc_type || "INVOICE").toUpperCase();
-    const { html } = await pdfRender.renderPreviewDoc({ supabase, tenantId: req.tenantId, theme, docType });
+    const category = String(req.body?.category || "invoice_rechnung");
+    const { html } = await pdfRender.renderPreviewDoc({ supabase, tenantId: req.tenantId, theme, category });
     res.json({ html });
   } catch (err) {
     const status = err.status || 500;
@@ -127,7 +127,7 @@ async function saveBranding(req, res, supabase) {
     const data = await svc.saveBrandingTheme(supabase, {
       tenantId: req.tenantId,
       theme_json: req.body?.theme_json,
-      blocks_by_type: req.body?.blocks_by_type,
+      blocks_by_category: req.body?.blocks_by_category,
     });
     res.json({ data });
   } catch (err) {

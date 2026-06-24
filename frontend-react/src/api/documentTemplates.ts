@@ -96,6 +96,25 @@ export const APPENDIX_BLOCKS_BY_TYPE: Record<DocTemplateType, AppendixKey[]> = {
   OFFER:           ['showHonorar'],
 }
 
+// Beleg-Kategorien für „Inhalte & Anhänge" — feiner als DOC_TYPE (INVOICE umfasst
+// Rechnung UND Schluss-/Teilschlussrechnung, die getrennte Inhalte haben).
+// Spiegel von backend/services_pdf_render.js (APPENDIX_BY_CATEGORY).
+export type DocCategory = 'invoice_rechnung' | 'invoice_schluss' | 'invoice_abschlags' | 'offer_angebot'
+
+export const DOC_CATEGORY_LABELS: Record<DocCategory, string> = {
+  invoice_rechnung:  'Rechnung',
+  invoice_schluss:   'Schluss-/Teilschlussrechnung',
+  invoice_abschlags: 'Abschlagsrechnung',
+  offer_angebot:     'Angebot',
+}
+
+export const APPENDIX_BLOCKS_BY_CATEGORY: Record<DocCategory, AppendixKey[]> = {
+  invoice_rechnung:  ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
+  invoice_schluss:   ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
+  invoice_abschlags: ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
+  offer_angebot:     ['showHonorar'],
+}
+
 // Schriftauswahl — Keys spiegeln backend/services_theme_fonts.js (FONTS).
 // system-* = generische Familien; alle anderen werden serverseitig als Webfont
 // eingebettet (PDF + Vorschau identisch).
@@ -115,10 +134,10 @@ export const FONT_OPTIONS: { key: string; label: string; group: 'sans' | 'serif'
 // ── API ──────────────────────────────────────────────────────────────────────
 
 export const fetchBranding = () =>
-  apiClient.get<{ data: { theme: DocTheme; blocksByType: Record<DocTemplateType, ThemeBlocks>; companyId: number } }>('/document-templates/branding')
+  apiClient.get<{ data: { theme: DocTheme; blocksByCategory: Record<DocCategory, ThemeBlocks>; companyId: number } }>('/document-templates/branding')
 
-export const saveBranding = (theme_json: DocTheme, blocks_by_type: Record<DocTemplateType, ThemeBlocks>) =>
-  apiClient.put<{ data: { ok: boolean } }>('/document-templates/branding', { theme_json, blocks_by_type })
+export const saveBranding = (theme_json: DocTheme, blocks_by_category: Record<DocCategory, ThemeBlocks>) =>
+  apiClient.put<{ data: { ok: boolean } }>('/document-templates/branding', { theme_json, blocks_by_category })
 
-export const previewBranding = (theme_json: DocTheme, doc_type: DocTemplateType) =>
-  apiClient.post<{ html: string }>('/document-templates/preview', { theme_json, doc_type })
+export const previewBranding = (theme_json: DocTheme, category: DocCategory) =>
+  apiClient.post<{ html: string }>('/document-templates/preview', { theme_json, category })

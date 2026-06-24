@@ -6,9 +6,9 @@ import { HelpHint } from '@/components/ui/HelpHint'
 import { InfoHint } from '@/components/ui/InfoHint'
 import {
   fetchBranding, saveBranding, previewBranding,
-  DEFAULT_THEME, FONT_OPTIONS, APPENDIX_BLOCKS, APPENDIX_BLOCKS_BY_TYPE, DOC_TYPE_LABELS,
+  DEFAULT_THEME, FONT_OPTIONS, APPENDIX_BLOCKS, APPENDIX_BLOCKS_BY_CATEGORY, DOC_CATEGORY_LABELS,
   STYLE_PRESETS, LOGO_SIZES,
-  type DocTheme, type LogoPosition, type ThemeBlocks, type DocTemplateType, type StylePreset, type AppendixKey,
+  type DocTheme, type LogoPosition, type ThemeBlocks, type DocCategory, type StylePreset, type AppendixKey,
 } from '@/api/documentTemplates'
 
 // Kuratierte, dezent-professionelle Hausfarben + freie Farbwahl.
@@ -34,7 +34,7 @@ const LOGO_POSITIONS: { id: LogoPosition; label: string; Icon: typeof AlignLeft 
 ]
 
 const APPENDIX_LABEL: Record<string, string> = Object.fromEntries(APPENDIX_BLOCKS.map(b => [b.key, b.label]))
-const DOC_TYPES = Object.keys(DOC_TYPE_LABELS) as DocTemplateType[]
+const DOC_CATEGORIES = Object.keys(DOC_CATEGORY_LABELS) as DocCategory[]
 const FONT_GROUP: Record<string, 'sans' | 'serif'> = Object.fromEntries(FONT_OPTIONS.map(f => [f.key, f.group]))
 const A4_PREVIEW_WIDTH = 794 // A4-Breite bei 96dpi — die Vorschau wird darauf gerendert und skaliert
 
@@ -68,20 +68,22 @@ export function DokumentvorlagenSection() {
   const previewWrapRef = useRef<HTMLDivElement>(null)
   const previewIframeRef = useRef<HTMLIFrameElement>(null)
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [blocksByType, setBlocksByType] = useState<Record<DocTemplateType, ThemeBlocks>>({
-    INVOICE: DEFAULT_THEME.blocks, PARTIAL_PAYMENT: DEFAULT_THEME.blocks, OFFER: DEFAULT_THEME.blocks,
+  const [blocksByCategory, setBlocksByCategory] = useState<Record<DocCategory, ThemeBlocks>>({
+    invoice_rechnung: DEFAULT_THEME.blocks, invoice_schluss: DEFAULT_THEME.blocks,
+    invoice_abschlags: DEFAULT_THEME.blocks, offer_angebot: DEFAULT_THEME.blocks,
   })
-  const [appendixType, setAppendixType] = useState<DocTemplateType>('INVOICE')
+  const [appendixCategory, setAppendixCategory] = useState<DocCategory>('invoice_rechnung')
 
   const { data } = useQuery({ queryKey: ['doc-branding'], queryFn: fetchBranding })
   useEffect(() => {
     if (data?.data && !loaded) {
       setTheme(mergeTheme(data.data.theme))
-      const b = data.data.blocksByType
-      if (b) setBlocksByType({
-        INVOICE:         { ...DEFAULT_THEME.blocks, ...(b.INVOICE ?? {}) },
-        PARTIAL_PAYMENT: { ...DEFAULT_THEME.blocks, ...(b.PARTIAL_PAYMENT ?? {}) },
-        OFFER:           { ...DEFAULT_THEME.blocks, ...(b.OFFER ?? {}) },
+      const b = data.data.blocksByCategory
+      if (b) setBlocksByCategory({
+        invoice_rechnung:  { ...DEFAULT_THEME.blocks, ...(b.invoice_rechnung ?? {}) },
+        invoice_schluss:   { ...DEFAULT_THEME.blocks, ...(b.invoice_schluss ?? {}) },
+        invoice_abschlags: { ...DEFAULT_THEME.blocks, ...(b.invoice_abschlags ?? {}) },
+        offer_angebot:     { ...DEFAULT_THEME.blocks, ...(b.offer_angebot ?? {}) },
       })
       setLoaded(true)
     }
@@ -92,15 +94,15 @@ export function DokumentvorlagenSection() {
   useEffect(() => {
     let cancelled = false
     setPreviewLoading(true)
-    const previewTheme = { ...theme, blocks: blocksByType[appendixType] }
+    const previewTheme = { ...theme, blocks: blocksByCategory[appendixCategory] }
     const h = setTimeout(() => {
-      previewBranding(previewTheme, appendixType)
+      previewBranding(previewTheme, appendixCategory)
         .then(r => { if (!cancelled) setPreviewHtml(r.html) })
         .catch(() => { if (!cancelled) setPreviewHtml('<p style="font-family:sans-serif;color:#b91c1c;padding:24px">Vorschau nicht verfügbar.</p>') })
         .finally(() => { if (!cancelled) setPreviewLoading(false) })
     }, 300)
     return () => { cancelled = true; clearTimeout(h) }
-  }, [theme, blocksByType, appendixType])
+  }, [theme, blocksByCategory, appendixCategory])
 
   // Vorschau (A4-Breite) passgenau auf die Containerbreite skalieren -> kein Scrollen.
   useEffect(() => {
@@ -120,7 +122,7 @@ export function DokumentvorlagenSection() {
   }
 
   const saveMut = useMutation({
-    mutationFn: () => saveBranding(theme, blocksByType),
+    mutationFn: () => saveBranding(theme, blocksByCategory),
     onSuccess: () => { setMsg({ text: 'Gestaltung gespeichert ✅', type: 'success' }); void qc.invalidateQueries({ queryKey: ['doc-branding'] }) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
@@ -128,18 +130,18 @@ export function DokumentvorlagenSection() {
   const setAccent  = (c: string)        => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, accentColor: c, primaryColor: c } })) }
   const setFont    = (key: string)      => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, fontFamily: key } })) }
   const setLogoPos = (p: LogoPosition)  => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoPosition: p } })) }
-  const setBlock   = (key: AppendixKey, val: boolean) => { setMsg(null); setBlocksByType(prev => ({ ...prev, [appendixType]: { ...prev[appendixType], [key]: val } })) }
+  const setBlock   = (key: AppendixKey, val: boolean) => { setMsg(null); setBlocksByCategory(prev => ({ ...prev, [appendixCategory]: { ...prev[appendixCategory], [key]: val } })) }
   const moveBlock  = (key: AppendixKey, dir: -1 | 1) => {
     setMsg(null)
-    setBlocksByType(prev => {
-      const cur = prev[appendixType]
-      const avail = APPENDIX_BLOCKS_BY_TYPE[appendixType]
+    setBlocksByCategory(prev => {
+      const cur = prev[appendixCategory]
+      const avail = APPENDIX_BLOCKS_BY_CATEGORY[appendixCategory]
       const ord = (cur.order ?? DEFAULT_THEME.blocks.order ?? []).slice()
       for (const k of avail) if (!ord.includes(k)) ord.push(k)
       const i = ord.indexOf(key), j = i + dir
       if (i < 0 || j < 0 || j >= ord.length) return prev
       ;[ord[i], ord[j]] = [ord[j], ord[i]]
-      return { ...prev, [appendixType]: { ...cur, order: ord } }
+      return { ...prev, [appendixCategory]: { ...cur, order: ord } }
     })
   }
   const setLogoSize = (mm: number) => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoMaxHeightMm: mm } })) }
@@ -151,8 +153,8 @@ export function DokumentvorlagenSection() {
 
   const accentInPalette = ACCENT_PALETTE.includes(theme.brand.accentColor.toLowerCase())
 
-  const availableKeys = APPENDIX_BLOCKS_BY_TYPE[appendixType]
-  const blockOrder = blocksByType[appendixType].order ?? DEFAULT_THEME.blocks.order ?? []
+  const availableKeys = APPENDIX_BLOCKS_BY_CATEGORY[appendixCategory]
+  const blockOrder = blocksByCategory[appendixCategory].order ?? DEFAULT_THEME.blocks.order ?? []
   const orderedKeys = availableKeys.slice().sort((a, b) => {
     const ia = blockOrder.indexOf(a), ib = blockOrder.indexOf(b)
     return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib)
@@ -331,14 +333,14 @@ export function DokumentvorlagenSection() {
               Inhalte &amp; Anhänge <HelpHint id="vorlagen.anhaenge" />
             </h3>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-              {DOC_TYPES.map(dt => (
+              {DOC_CATEGORIES.map(dt => (
                 <button
                   key={dt}
                   type="button"
-                  onClick={() => { setMsg(null); setAppendixType(dt) }}
-                  className={appendixType === dt ? 'btn-small btn-save' : 'btn-small'}
+                  onClick={() => { setMsg(null); setAppendixCategory(dt) }}
+                  className={appendixCategory === dt ? 'btn-small btn-save' : 'btn-small'}
                 >
-                  {DOC_TYPE_LABELS[dt]}
+                  {DOC_CATEGORY_LABELS[dt]}
                 </button>
               ))}
             </div>
@@ -348,7 +350,7 @@ export function DokumentvorlagenSection() {
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', flex: 1 }}>
                     <input
                       type="checkbox"
-                      checked={blocksByType[appendixType][key] !== false}
+                      checked={blocksByCategory[appendixCategory][key] !== false}
                       onChange={e => setBlock(key, e.target.checked)}
                     />
                     {APPENDIX_LABEL[key]}
@@ -367,7 +369,7 @@ export function DokumentvorlagenSection() {
               ))}
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '10px 0 0' }}>
-              Gilt für <strong>{DOC_TYPE_LABELS[appendixType]}</strong>. Reihenfolge per Pfeile. Anhänge erscheinen nur, wenn dafür auch Daten vorliegen (z. B. erfasste Stunden).
+              Gilt für <strong>{DOC_CATEGORY_LABELS[appendixCategory]}</strong>. Reihenfolge per Pfeile. Anhänge erscheinen nur, wenn dafür auch Daten vorliegen (z. B. erfasste Stunden).
             </p>
           </div>
 

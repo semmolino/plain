@@ -891,6 +891,7 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId, preview
   ]);
 
   const vm = await buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds });
+  applyCategoryBlocks(theme, invoiceTypeToCategory(vm.inv && vm.inv.invoiceType, docType));
   vm.theme             = theme;
   vm.themeHead         = buildThemeHead(theme);
   vm.logoDataUri       = logoDataUri;
@@ -990,6 +991,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   }
 
   const honorarTotalSum = honorarCalcs.reduce((sum, hc) => sum + (hc.gesamthonorar || 0), 0);
+  applyCategoryBlocks(theme, 'offer_angebot');
   const context = { ...vm, theme, themeHead: buildThemeHead(theme), logoDataUri, signatureDataUri, honorarCalcs, honorarTotalSum };
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
@@ -1489,19 +1491,41 @@ const APPENDIX_LABELS = {
   showHonorar:          'HOAI-/Kalkulationsübersicht',
   showPayments:         'Zahlungsübersicht',
 };
-const APPENDIX_BY_DOCTYPE = {
-  INVOICE:         ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
-  PARTIAL_PAYMENT: ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
-  OFFER:           ['showHonorar'],
+// Anhänge werden je BELEG-KATEGORIE konfiguriert (nicht je DOC_TYPE), weil der
+// DOC_TYPE INVOICE sowohl Rechnung als auch Schluss-/Teilschlussrechnung umfasst,
+// die bewusst getrennte Inhalte haben (analog zu den Textvorlagen).
+const APPENDIX_BY_CATEGORY = {
+  invoice_rechnung:  ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
+  invoice_schluss:   ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
+  invoice_abschlags: ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
+  offer_angebot:     ['showHonorar'],
 };
-const PREVIEW_DOC_TITLE = { INVOICE: 'Rechnung', PARTIAL_PAYMENT: 'Abschlagsrechnung', OFFER: 'Angebot' };
+const CATEGORY_TITLE = {
+  invoice_rechnung: 'Rechnung', invoice_schluss: 'Schlussrechnung',
+  invoice_abschlags: 'Abschlagsrechnung', offer_angebot: 'Angebot',
+};
 
-async function renderPreviewDoc({ supabase, tenantId, theme, docType = 'INVOICE', asPdf = false }) {
+// Beleg-Kategorie aus invoiceType/docType ableiten (steuert die Anhang-Auswahl).
+function invoiceTypeToCategory(invoiceType, docType) {
+  if (docType === 'PARTIAL_PAYMENT' || invoiceType === 'partial_payment') return 'invoice_abschlags';
+  if (invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung') return 'invoice_schluss';
+  return 'invoice_rechnung'; // rechnung + stornorechnung (Storno hat ohnehin keine Anhänge)
+}
+
+// Kategorie-spezifische Anhang-Flags ins theme.blocks ziehen (Template liest theme.blocks.*).
+function applyCategoryBlocks(theme, category) {
+  const def = defaultTheme().blocks;
+  const cat = theme.blocksByCategory && theme.blocksByCategory[category];
+  theme.blocks = { ...def, ...(cat || theme.blocks || {}) };
+  return theme;
+}
+
+async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice_rechnung', asPdf = false }) {
   const mergedTheme = deepMerge(defaultTheme(), theme && typeof theme === 'object' ? theme : {});
-  const dt = APPENDIX_BY_DOCTYPE[docType] ? docType : 'INVOICE';
+  const cat = APPENDIX_BY_CATEGORY[category] ? category : 'invoice_rechnung';
   const blocks = mergedTheme.blocks || {};
   const order = Array.isArray(blocks.order) ? blocks.order : [];
-  const orderedKeys = APPENDIX_BY_DOCTYPE[dt].slice().sort((a, b) => {
+  const orderedKeys = APPENDIX_BY_CATEGORY[cat].slice().sort((a, b) => {
     const ia = order.indexOf(a), ib = order.indexOf(b);
     return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
   });
@@ -1516,7 +1540,7 @@ async function renderPreviewDoc({ supabase, tenantId, theme, docType = 'INVOICE'
 
   const context = {
     theme: mergedTheme, themeHead: buildThemeHead(mergedTheme), logoDataUri,
-    sample: PREVIEW_SAMPLE, appendicesOn, docTitle: PREVIEW_DOC_TITLE[dt],
+    sample: PREVIEW_SAMPLE, appendicesOn, docTitle: CATEGORY_TITLE[cat],
   };
   const html = env().render(path.join('modern_a', 'preview.njk'), context);
   if (!asPdf) return { html };
