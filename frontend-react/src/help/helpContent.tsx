@@ -94,6 +94,17 @@ export const HELP = {
     ),
   },
 
+  'vorlagen.preset': {
+    title: 'Stil-Vorlage',
+    body: (
+      <>
+        Ein fertiger Look als Startpunkt: ein Klick setzt <strong>Hausfarbe</strong>,
+        <strong> Schrift</strong> und <strong>Logo-Position</strong> gemeinsam. Danach
+        kannst du jedes Detail einzeln anpassen — die Stil-Vorlage ist nur die
+        Ausgangsbasis, keine feste Bindung.
+      </>
+    ),
+  },
   'vorlagen.anhaenge': {
     title: 'Inhalte & Anhänge',
     body: (

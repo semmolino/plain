@@ -50,6 +50,30 @@ export const APPENDIX_BLOCKS: { key: keyof ThemeBlocks; label: string }[] = [
   { key: 'showPayments',         label: 'Zahlungsübersicht' },
 ]
 
+// Stil-Vorlagen (Ebene 1): 1-Klick-Looks, die Farbe + Schrift + Logo-Position
+// gemeinsam setzen. Danach lässt sich alles einzeln nachjustieren.
+export interface StylePreset {
+  id:    string
+  label: string
+  accentColor: string
+  fontFamily:  string
+  logoPosition: LogoPosition
+}
+export const STYLE_PRESETS: StylePreset[] = [
+  { id: 'standard',  label: 'Standard',  accentColor: '#111827', fontFamily: 'system-sans',      logoPosition: 'right'  },
+  { id: 'modern',    label: 'Modern',    accentColor: '#1e3a5f', fontFamily: 'inter',            logoPosition: 'left'   },
+  { id: 'klassisch', label: 'Klassisch', accentColor: '#3f3f46', fontFamily: 'source-serif',     logoPosition: 'right'  },
+  { id: 'elegant',   label: 'Elegant',   accentColor: '#7c2d12', fontFamily: 'playfair-display', logoPosition: 'center' },
+  { id: 'frisch',    label: 'Frisch',    accentColor: '#0f766e', fontFamily: 'montserrat',       logoPosition: 'left'   },
+]
+
+// Logo-Größe (Höhe in mm) — wird in den Templates als max-height genutzt.
+export const LOGO_SIZES: { id: string; label: string; mm: number }[] = [
+  { id: 'klein',  label: 'Klein',  mm: 14 },
+  { id: 'mittel', label: 'Mittel', mm: 20 },
+  { id: 'gross',  label: 'Groß',   mm: 28 },
+]
+
 export type DocTemplateType = 'INVOICE' | 'PARTIAL_PAYMENT' | 'OFFER'
 
 export const DOC_TYPE_LABELS: Record<DocTemplateType, string> = {

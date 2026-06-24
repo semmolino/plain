@@ -7,7 +7,8 @@ import { InfoHint } from '@/components/ui/InfoHint'
 import {
   fetchBranding, saveBranding, previewBranding,
   DEFAULT_THEME, FONT_OPTIONS, APPENDIX_BLOCKS, APPENDIX_BLOCKS_BY_TYPE, DOC_TYPE_LABELS,
-  type DocTheme, type LogoPosition, type ThemeBlocks, type DocTemplateType,
+  STYLE_PRESETS, LOGO_SIZES,
+  type DocTheme, type LogoPosition, type ThemeBlocks, type DocTemplateType, type StylePreset,
 } from '@/api/documentTemplates'
 
 // Kuratierte, dezent-professionelle Hausfarben + freie Farbwahl.
@@ -86,6 +87,12 @@ export function DokumentvorlagenSection() {
   const setFont    = (key: string)      => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, fontFamily: key } })) }
   const setLogoPos = (p: LogoPosition)  => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoPosition: p } })) }
   const setBlock   = (key: keyof ThemeBlocks, val: boolean) => { setMsg(null); setBlocksByType(prev => ({ ...prev, [appendixType]: { ...prev[appendixType], [key]: val } })) }
+  const setLogoSize = (mm: number) => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoMaxHeightMm: mm } })) }
+  const applyPreset = (p: StylePreset) => { setMsg(null); setTheme(t => ({
+    ...t,
+    brand:  { ...t.brand, accentColor: p.accentColor, primaryColor: p.accentColor, fontFamily: p.fontFamily },
+    header: { ...t.header, logoPosition: p.logoPosition },
+  })) }
 
   const accentInPalette = ACCENT_PALETTE.includes(theme.brand.accentColor.toLowerCase())
 
@@ -108,6 +115,35 @@ export function DokumentvorlagenSection() {
 
         {/* ── Steuerung ─────────────────────────────────────────────── */}
         <div style={{ flex: '1 1 300px', minWidth: 280 }}>
+
+          {/* Stil-Vorlage (1-Klick-Look) */}
+          <div className="admin-block">
+            <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              Stil-Vorlage <HelpHint id="vorlagen.preset" />
+            </h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {STYLE_PRESETS.map(p => {
+                const active = theme.brand.accentColor.toLowerCase() === p.accentColor.toLowerCase()
+                  && theme.brand.fontFamily === p.fontFamily
+                  && theme.header.logoPosition === p.logoPosition
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => applyPreset(p)}
+                    className={active ? 'btn-small btn-save' : 'btn-small'}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <span style={{ width: 12, height: 12, borderRadius: 3, background: p.accentColor, display: 'inline-block' }} />
+                    {p.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
+              Setzt Farbe, Schrift und Logo-Position auf einen Schlag — danach frei anpassbar.
+            </p>
+          </div>
 
           {/* Akzentfarbe */}
           <div className="admin-block">
@@ -204,6 +240,19 @@ export function DokumentvorlagenSection() {
                   </button>
                 )
               })}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Größe:</span>
+              {LOGO_SIZES.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setLogoSize(s.mm)}
+                  className={(theme.header.logoMaxHeightMm ?? 20) === s.mm ? 'btn-small btn-save' : 'btn-small'}
+                >
+                  {s.label}
+                </button>
+              ))}
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
               Das Logo selbst lädst du unter <strong>Einstellungen → Unternehmen</strong> hoch.
