@@ -25,6 +25,19 @@ async function resolveCompanyId(supabase, tenantId) {
   return data?.ID ?? null;
 }
 
+// ALLE Firmen des Mandanten — Branding wird fuer jede gespeichert, damit Belege
+// jeder Firma (PROJECT.COMPANY_ID) ihre Default-Vorlage finden. Sonst greift das
+// Branding bei Mehr-Firmen-Mandanten nicht (Render nutzt die Projekt-Firma,
+// gespeichert wurde aber nur unter der ersten Firma).
+async function resolveCompanyIds(supabase, tenantId) {
+  const { data, error } = await supabase
+    .from("COMPANY")
+    .select("ID")
+    .eq("TENANT_ID", tenantId);
+  if (error) throw new Error(error.message);
+  return (data || []).map(r => r.ID).filter(id => id != null);
+}
+
 // ---------------------------------------------------------------------------
 // Service functions
 // ---------------------------------------------------------------------------
@@ -273,45 +286,49 @@ async function getBrandingTheme(supabase, { tenantId }) {
 }
 
 async function saveBrandingTheme(supabase, { tenantId, theme_json }) {
-  const companyId = await resolveCompanyId(supabase, tenantId);
-  if (!companyId) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
+  const companyIds = await resolveCompanyIds(supabase, tenantId);
+  if (companyIds.length === 0) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
 
   const theme = theme_json && typeof theme_json === "object" ? theme_json : defaultTheme();
   const nowIso = new Date().toISOString();
 
-  for (const docType of BRANDING_DOC_TYPES) {
-    const { data: existing, error: exErr } = await supabase
-      .from("DOCUMENT_TEMPLATE")
-      .select("ID")
-      .eq("COMPANY_ID", companyId)
-      .eq("DOC_TYPE", docType)
-      .eq("IS_DEFAULT", true)
-      .maybeSingle();
-    if (exErr) {
-      if (isTableMissingErr(exErr, "document_template")) {
-        throw { status: 501, message: "Missing table DOCUMENT_TEMPLATE. Please run backend/migrations/0002_document_templates.sql" };
-      }
-      throw exErr;
-    }
-
-    if (existing) {
-      const { error } = await supabase
+  // Pro Firma × Belegtyp die Default-Vorlage upserten -> jede Firma erhaelt das
+  // gleiche Branding, egal zu welcher Firma ein Beleg gehoert.
+  for (const companyId of companyIds) {
+    for (const docType of BRANDING_DOC_TYPES) {
+      const { data: existing, error: exErr } = await supabase
         .from("DOCUMENT_TEMPLATE")
-        .update({ THEME_JSON: theme, IS_ACTIVE: true, UPDATED_AT: nowIso })
-        .eq("ID", existing.ID);
-      if (error) throw error;
-    } else {
-      const insertRow = {
-        COMPANY_ID: companyId, NAME: "Standard", DOC_TYPE: docType,
-        STATUS: "PUBLISHED", VERSION: 1, FAMILY_ID: null,
-        LAYOUT_KEY: "modern_a", THEME_JSON: theme, LOGO_ASSET_ID: null,
-        IS_DEFAULT: true, IS_ACTIVE: true, PUBLISHED_AT: nowIso, UPDATED_AT: nowIso,
-      };
-      const { data: created, error } = await supabase
-        .from("DOCUMENT_TEMPLATE").insert([insertRow]).select("ID").maybeSingle();
-      if (error) throw error;
-      if (created && created.ID) {
-        await supabase.from("DOCUMENT_TEMPLATE").update({ FAMILY_ID: created.ID }).eq("ID", created.ID);
+        .select("ID")
+        .eq("COMPANY_ID", companyId)
+        .eq("DOC_TYPE", docType)
+        .eq("IS_DEFAULT", true)
+        .maybeSingle();
+      if (exErr) {
+        if (isTableMissingErr(exErr, "document_template")) {
+          throw { status: 501, message: "Missing table DOCUMENT_TEMPLATE. Please run backend/migrations/0002_document_templates.sql" };
+        }
+        throw exErr;
+      }
+
+      if (existing) {
+        const { error } = await supabase
+          .from("DOCUMENT_TEMPLATE")
+          .update({ THEME_JSON: theme, IS_ACTIVE: true, UPDATED_AT: nowIso })
+          .eq("ID", existing.ID);
+        if (error) throw error;
+      } else {
+        const insertRow = {
+          COMPANY_ID: companyId, NAME: "Standard", DOC_TYPE: docType,
+          STATUS: "PUBLISHED", VERSION: 1, FAMILY_ID: null,
+          LAYOUT_KEY: "modern_a", THEME_JSON: theme, LOGO_ASSET_ID: null,
+          IS_DEFAULT: true, IS_ACTIVE: true, PUBLISHED_AT: nowIso, UPDATED_AT: nowIso,
+        };
+        const { data: created, error } = await supabase
+          .from("DOCUMENT_TEMPLATE").insert([insertRow]).select("ID").maybeSingle();
+        if (error) throw error;
+        if (created && created.ID) {
+          await supabase.from("DOCUMENT_TEMPLATE").update({ FAMILY_ID: created.ID }).eq("ID", created.ID);
+        }
       }
     }
   }

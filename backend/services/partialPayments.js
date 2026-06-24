@@ -739,7 +739,10 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   }
 
   const insertRow = {
-    COMPANY_ID: companyId,
+    // resolvedCompanyId statt der rohen companyId: das Frontend sendet ggf. 0/null
+    // (kein Firmen-Picker im Wizard) -> sonst FK-Verstoss PARTIAL_PAYMENT_COMPANY_ID_fkey.
+    // Spiegelt services/invoices.js (dort bereits korrekt: COMPANY_ID: resolvedCompanyId).
+    COMPANY_ID: resolvedCompanyId,
     EMPLOYEE_ID: employeeId,
     PROJECT_ID: projectId,
     CONTRACT_ID: contractId,
