@@ -53,6 +53,7 @@ const STEP_CAPABILITY = {
   working_time:     "arbzg.compliance",
   dunning:          "settings.dunning_config",
   text_template:    "settings.text_templates",
+  document_template:"settings.core",
   roles:            "settings.roles",
   custom_role:      "settings.roles",
   departments:      "settings.core",
@@ -200,6 +201,22 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
     }
   } catch (_) {}
 
+  // ── 4b2) Dokumentgestaltung: eine gespeicherte DOCUMENT_TEMPLATE der Firma(en)
+  // entsteht erst, wenn der Nutzer im Tab Dokumentvorlagen „Gestaltung speichern"
+  // geklickt hat (Branding/Anhänge).
+  let hasDocTemplate = false;
+  try {
+    const { data: comps } = await supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId);
+    const compIds = (comps || []).map(c => c.ID);
+    if (compIds.length) {
+      const { count } = await supabase
+        .from("DOCUMENT_TEMPLATE")
+        .select("ID", { count: "exact", head: true })
+        .in("COMPANY_ID", compIds);
+      hasDocTemplate = (count || 0) > 0;
+    }
+  } catch (_) {}
+
   // ── 4c) Budgetgrenzen: nur erledigt, wenn explizit Schwellen gesetzt ODER
   // Budget-Warnungen bewusst deaktiviert wurden. Frueher kippte der Schritt
   // gemeinsam mit "Waehrung & MwSt.", weil die Vorbelegungen-Seite einen
@@ -269,8 +286,15 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
       key:  "text_template",
       label:"Erste Textvorlage gespeichert",
       hint: "Kopf-/Fußtexte für Angebote und Rechnungen",
-      href: "/admin?tab=textvorlagen",
+      href: "/admin?tab=dokumentvorlagen",
       done: hasTextTemplate,
+    },
+    {
+      key:  "document_template",
+      label:"Dokumentgestaltung angepasst",
+      hint: "Farbe, Schrift, Logo und Anhänge der PDF-Belege",
+      href: "/admin?tab=dokumentvorlagen",
+      done: hasDocTemplate,
     },
     {
       key:  "roles",
