@@ -30,6 +30,32 @@ function deepMerge(base, patch) {
 
 // Kanonische Theme-Defaults (v2) — gemeinsam mit services/documentTemplates.js.
 const { defaultTheme } = require('./services_theme_defaults');
+const { resolveFont, fontFaceCss } = require('./services_theme_fonts');
+
+// CSS-Farbe absichern (verhindert CSS-Injection ueber gespeicherte Themes).
+function safeColor(c) {
+  return (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c.trim())) ? c.trim() : '#111827';
+}
+
+// Zentrales Branding-<style> (Schrift-Einbettung + Akzent + Logo-Position).
+// Wird als vm.themeHead an die Templates uebergeben; _theme_head.njk gibt es aus.
+function buildThemeHead(theme) {
+  const t = theme || {};
+  const brand = t.brand || {};
+  const header = t.header || {};
+  const font = resolveFont(brand.fontFamily);
+  const accent = safeColor(brand.accentColor);
+  const justify = header.logoPosition === 'left' ? 'flex-start'
+                : header.logoPosition === 'center' ? 'center'
+                : 'flex-end';
+  return `<style>
+${fontFaceCss(brand.fontFamily)}
+:root{ --brand-accent:${accent}; --brand-font:${font.stack}; }
+body{ font-family: var(--brand-font) !important; }
+.doc-title, .metaBlock .title{ color: var(--brand-accent) !important; }
+.logo-area{ justify-content: ${justify} !important; }
+</style>`;
+}
 
 function fmtMoney(v) {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
@@ -866,6 +892,7 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId, preview
 
   const vm = await buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds });
   vm.theme             = theme;
+  vm.themeHead         = buildThemeHead(theme);
   vm.logoDataUri       = logoDataUri;
   vm.signatureDataUri  = signatureDataUri;
 
@@ -948,7 +975,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   }
 
   const honorarTotalSum = honorarCalcs.reduce((sum, hc) => sum + (hc.gesamthonorar || 0), 0);
-  const context = { ...vm, theme, logoDataUri, signatureDataUri, honorarCalcs, honorarTotalSum };
+  const context = { ...vm, theme, themeHead: buildThemeHead(theme), logoDataUri, signatureDataUri, honorarCalcs, honorarTotalSum };
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
 
@@ -970,6 +997,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   const context = {
     ...vm,
     theme,
+    themeHead: buildThemeHead(theme),
     logoDataUri,
     signatureDataUri,
     today: new Date().toISOString().slice(0, 10),
@@ -1405,7 +1433,7 @@ async function renderPreviewDoc({ supabase, tenantId, theme, asPdf = false }) {
     logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId: co?.ID ?? null });
   } catch (_) { /* Logo optional — Vorschau funktioniert auch ohne */ }
 
-  const context = { theme: mergedTheme, logoDataUri, sample: PREVIEW_SAMPLE };
+  const context = { theme: mergedTheme, themeHead: buildThemeHead(mergedTheme), logoDataUri, sample: PREVIEW_SAMPLE };
   const html = env().render(path.join('modern_a', 'preview.njk'), context);
   if (!asPdf) return { html };
   const pdf = await renderPdf({ html });

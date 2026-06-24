@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlignLeft, AlignCenter, AlignRight, Check } from 'lucide-react'
 import { Message }  from '@/components/ui/Message'
@@ -66,14 +66,10 @@ export function DokumentvorlagenSection() {
   })
 
   const setAccent  = (c: string)        => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, accentColor: c, primaryColor: c } })) }
-  const setFont    = (stack: string)    => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, fontFamily: stack } })) }
+  const setFont    = (key: string)      => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, fontFamily: key } })) }
   const setLogoPos = (p: LogoPosition)  => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoPosition: p } })) }
   const setBlock   = (key: keyof ThemeBlocks, val: boolean) => { setMsg(null); setTheme(t => ({ ...t, blocks: { ...t.blocks, [key]: val } })) }
 
-  const currentFontId = useMemo(
-    () => FONT_OPTIONS.find(f => f.stack === theme.brand.fontFamily)?.id ?? 'sans',
-    [theme.brand.fontFamily],
-  )
   const accentInPalette = ACCENT_PALETTE.includes(theme.brand.accentColor.toLowerCase())
 
   return (
@@ -150,22 +146,25 @@ export function DokumentvorlagenSection() {
             <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
               Schrift <HelpHint id="vorlagen.font" />
             </h3>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {FONT_OPTIONS.map(f => {
-                const active = currentFontId === f.id
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setFont(f.stack)}
-                    className={active ? 'btn-small btn-save' : 'btn-small'}
-                    style={{ fontFamily: f.stack, minWidth: 96 }}
-                  >
-                    {f.label}
-                  </button>
-                )
-              })}
-            </div>
+            <select
+              value={theme.brand.fontFamily}
+              onChange={e => setFont(e.target.value)}
+              style={{ minWidth: 220 }}
+            >
+              <optgroup label="Serifenlos">
+                {FONT_OPTIONS.filter(f => f.group === 'sans').map(f => (
+                  <option key={f.key} value={f.key}>{f.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Serif">
+                {FONT_OPTIONS.filter(f => f.group === 'serif').map(f => (
+                  <option key={f.key} value={f.key}>{f.label}</option>
+                ))}
+              </optgroup>
+            </select>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
+              Wirkung sofort rechts in der Vorschau sichtbar.
+            </p>
           </div>
 
           {/* Logo-Position */}

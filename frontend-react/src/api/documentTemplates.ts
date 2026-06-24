@@ -36,7 +36,7 @@ export interface DocTheme {
 // Kanonische Defaults — entsprechen exakt dem heutigen Look (Null-Regression).
 export const DEFAULT_THEME: DocTheme = {
   version: 2,
-  brand:  { primaryColor: '#111827', accentColor: '#111827', fontFamily: 'Arial, Helvetica, sans-serif', fontScale: 1 },
+  brand:  { primaryColor: '#111827', accentColor: '#111827', fontFamily: 'system-sans', fontScale: 1 },
   header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right' },
   blocks: { showProjectStructure: true, showTec: true, showHonorar: true, showPayments: true },
   footer: { showPageNumbers: true },
@@ -50,10 +50,20 @@ export const APPENDIX_BLOCKS: { key: keyof ThemeBlocks; label: string }[] = [
   { key: 'showPayments',         label: 'Zahlungsübersicht' },
 ]
 
-// Generische, immer verfuegbare Schrift-Stacks (keine Webfonts noetig).
-export const FONT_OPTIONS: { id: string; label: string; stack: string }[] = [
-  { id: 'sans',  label: 'Serifenlos', stack: 'Arial, Helvetica, sans-serif' },
-  { id: 'serif', label: 'Serif',      stack: 'Georgia, "Times New Roman", serif' },
+// Schriftauswahl — Keys spiegeln backend/services_theme_fonts.js (FONTS).
+// system-* = generische Familien; alle anderen werden serverseitig als Webfont
+// eingebettet (PDF + Vorschau identisch).
+export const FONT_OPTIONS: { key: string; label: string; group: 'sans' | 'serif' }[] = [
+  { key: 'system-sans',      label: 'Standard (serifenlos)', group: 'sans' },
+  { key: 'inter',            label: 'Inter',            group: 'sans' },
+  { key: 'roboto',           label: 'Roboto',           group: 'sans' },
+  { key: 'open-sans',        label: 'Open Sans',        group: 'sans' },
+  { key: 'montserrat',       label: 'Montserrat',       group: 'sans' },
+  { key: 'system-serif',     label: 'Standard (Serif)', group: 'serif' },
+  { key: 'merriweather',     label: 'Merriweather',     group: 'serif' },
+  { key: 'lora',             label: 'Lora',             group: 'serif' },
+  { key: 'source-serif',     label: 'Source Serif',     group: 'serif' },
+  { key: 'playfair-display', label: 'Playfair Display', group: 'serif' },
 ]
 
 // ── API ──────────────────────────────────────────────────────────────────────

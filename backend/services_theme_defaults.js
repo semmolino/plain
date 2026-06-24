@@ -20,7 +20,7 @@ function defaultTheme() {
     brand: {
       primaryColor: '#111827',
       accentColor:  '#111827',
-      fontFamily:   'Arial, Helvetica, sans-serif',
+      fontFamily:   'system-sans', // Font-KEY (siehe services_theme_fonts.js), nicht CSS-Stack
       fontScale:    1,
     },
     header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right' },

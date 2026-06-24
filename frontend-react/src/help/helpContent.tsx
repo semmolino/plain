@@ -74,9 +74,10 @@ export const HELP = {
     title: 'Schrift',
     body: (
       <>
-        <strong>Serifenlos</strong> wirkt modern und sachlich, <strong>Serif</strong>
-        klassisch und seriös. Die Schrift gilt für den gesamten Belegtext. Es werden
-        bewusst nur druck­sichere Standard­schriften angeboten, damit das PDF überall
+        Die Schrift für den gesamten Belegtext. <strong>Serifenlose</strong> Schriften
+        (Inter, Roboto, Montserrat …) wirken modern und sachlich, <strong>Serif</strong>-
+        Schriften (Merriweather, Lora, Playfair …) klassisch und seriös. Jede Schrift
+        wird fest in das PDF eingebettet, damit der Beleg bei jedem Empfänger und Drucker
         identisch aussieht.
       </>
     ),
