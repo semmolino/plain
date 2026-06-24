@@ -947,6 +947,7 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId, preview
 
 async function renderOfferPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
+  await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_angebot');
 
   const companyId = vm.offer.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
@@ -985,6 +986,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
 
 async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
+  await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_auftragsbestaetigung');
 
   const companyId = vm.offer.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
@@ -1040,6 +1042,25 @@ async function injectTextTemplate(supabase, vm, tenantId) {
   } catch (e) {
     // TEXT_TEMPLATE table may not exist yet (before migration) — silent fail
     if (!isTableMissingErr(e, 'text_template')) console.warn('[TEXT_TEMPLATE]', e.message);
+  }
+}
+
+// Angebot/Auftragsbestaetigung: Standard-Kopf-/Fusstext aus TEXT_TEMPLATE, wenn
+// am Angebot selbst kein eigener Text (OFFER_TEXT_1/2) hinterlegt ist.
+async function injectOfferTextTemplate(supabase, vm, tenantId, documentType) {
+  if (!documentType || !tenantId) return;
+  try {
+    const { data } = await supabase
+      .from('TEXT_TEMPLATE')
+      .select('HEADER_TEXT, FOOTER_TEXT')
+      .eq('TENANT_ID', tenantId)
+      .eq('DOCUMENT_TYPE', documentType)
+      .maybeSingle();
+    if (!data) return;
+    if (!vm.text1 && data.HEADER_TEXT) vm.text1 = data.HEADER_TEXT;
+    if (!vm.text2 && data.FOOTER_TEXT) vm.text2 = data.FOOTER_TEXT;
+  } catch (e) {
+    if (!isTableMissingErr(e, 'text_template')) console.warn('[OFFER_TEXT_TEMPLATE]', e.message);
   }
 }
 

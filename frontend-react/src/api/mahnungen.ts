@@ -84,12 +84,16 @@ export type TextTemplateType =
   | 'invoice_rechnung'
   | 'invoice_schluss'
   | 'invoice_storno'
+  | 'offer_angebot'
+  | 'offer_auftragsbestaetigung'
 
 export const TEXT_TEMPLATE_LABELS: Record<TextTemplateType, string> = {
   invoice_abschlags: 'Abschlags-/Anzahlungsrechnung',
   invoice_rechnung:  'Rechnung',
   invoice_schluss:   'Schluss-/Teilschlussrechnung',
   invoice_storno:    'Stornierung',
+  offer_angebot:              'Angebot',
+  offer_auftragsbestaetigung: 'Auftragsbestätigung',
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────

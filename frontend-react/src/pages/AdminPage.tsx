@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { RollenSection } from '@/pages/admin/RollenSection'
 import { DokumentvorlagenSection } from '@/pages/admin/DokumentvorlagenSection'
+import { Can } from '@/components/ui/Can'
 import { useFilterTabs } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
 import { useSearchParams } from 'react-router-dom'
@@ -69,8 +70,7 @@ const PAGE_TABS: { id: string; label: string; permissions: string[]; feature?: s
   { id: 'unternehmen',             label: 'Unternehmen',             permissions: ['settings.company.view','settings.company.edit'] },
   { id: 'email',                   label: 'E-Mail-Versand',          permissions: ['settings.email.edit'] },
   { id: 'nummernkreise',           label: 'Nummernkreise',           permissions: ['settings.numbers.edit'] },
-  { id: 'textvorlagen',            label: 'Textvorlagen',            permissions: ['settings.text_templates.edit'], feature: 'settings.text_templates' },
-  { id: 'dokumentvorlagen',        label: 'Dokumentvorlagen',        permissions: ['settings.document_templates.edit'] },
+  { id: 'dokumentvorlagen',        label: 'Dokumentvorlagen',        permissions: ['settings.document_templates.edit','settings.text_templates.edit'] },
   { id: 'mahnungseinstellungen',   label: 'Mahnungen',               permissions: ['settings.dunning_config.edit'], feature: 'settings.dunning_config' },
   { id: 'arbzg',                   label: 'Arbeitszeiten',           permissions: ['settings.work_time.edit'], feature: 'arbzg.compliance' },
   { id: 'kostensatz',              label: 'Kostensatz-Rechner',      permissions: ['settings.cost_rate.edit'], feature: 'cost_rate.calculator' },
@@ -2410,8 +2410,8 @@ function TextVorlagenSection() {
   return (
     <div style={{ maxWidth: 720 }}>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-        Hinterlegen Sie Standardtexte für Rechnungs-PDFs. Diese erscheinen als Kopf- und Fußtext auf dem Dokument,
-        sofern beim Erstellen der Rechnung kein eigener Text eingetragen wurde.
+        Hinterlegen Sie Standardtexte für Rechnungs- und Angebots-PDFs. Diese erscheinen als Kopf- und Fußtext
+        auf dem Dokument, sofern beim Erstellen des Belegs kein eigener Text eingetragen wurde.
       </p>
 
       {/* Type selector */}
@@ -3911,8 +3911,16 @@ export function AdminPage() {
         {tab === 'monatsabschluss'       && <MonatsabschlussSection />}
         {tab === 'kostensatz'            && <KostensatzSection />}
         {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}
-        {tab === 'textvorlagen'          && <TextVorlagenSection />}
-        {tab === 'dokumentvorlagen'      && <DokumentvorlagenSection />}
+        {tab === 'dokumentvorlagen'      && (
+          <>
+            <Can permission="settings.document_templates.edit"><DokumentvorlagenSection /></Can>
+            <Can permission="settings.text_templates.edit">
+              <hr style={{ margin: '32px 0', border: 0, borderTop: '1px solid var(--border)' }} />
+              <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 12px' }}>Texte — Kopf- &amp; Fußzeilen</h2>
+              <TextVorlagenSection />
+            </Can>
+          </>
+        )}
         {tab === 'benachrichtigungen'    && <BenachrichtigungenSection />}
         {tab === 'rollen'                && <RollenSection />}
         {tab === 'engagement'            && <EngagementSection />}
