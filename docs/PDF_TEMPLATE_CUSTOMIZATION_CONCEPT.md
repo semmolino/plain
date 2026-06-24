@@ -359,9 +359,23 @@ DRAFT, `publish` macht live, `set-default` aktiviert). Bisher **nicht** im Front
 **Offene To-dos für den Nutzer:** Migration `0078` manuell in Supabase einspielen. Branch ist NICHT
 auf `main` → kein Railway-Deploy (Merge/PR auf Wunsch).
 
-**Nächste Phasen (noch offen):** P2 Stil-Vorlagen (Karten), P3 Kopf/Fuß + Platzhalter, P4 Bausteine
-(an/aus + Reihenfolge), P5 Anhänge (Projektübersicht/Stunden/HOAI), P6 Felder/Varianten,
-P7 Pro (Mehrmarken/eigene Fonts). Optional später: echte Webfont-Einbettung (@font-face), damit
+**Zusätzlich erledigt (über P1 hinaus):**
+- ✅ **Fix Abschlagsrechnung**: `services/partialPayments.js` setzte `COMPANY_ID` auf die rohe
+  Request-`companyId` (Wizard sendet `?? 0`) → FK-Verstoß; jetzt `resolvedCompanyId` (wie invoices.js).
+- ✅ **Branding mehr-firmen-fest**: `saveBrandingTheme` schreibt für ALLE Firmen des Mandanten
+  (`resolveCompanyIds`), nicht nur die erste — sonst greift Branding nicht, wenn Belege an einer
+  anderen Firma hängen.
+- ✅ **Inhalte & Anhänge (P4/P5-Kern)**: vier schaltbare Abschnitte (Projektübersicht,
+  Stundennachweis, HOAI-/Kalkulation, Zahlungsübersicht) via `theme.blocks.*` (Default an, `!= false`-
+  Semantik). Verdrahtet in invoice/offer/partial_payment; Live-Feedback in `preview.njk`; UI-Block
+  „Inhalte & Anhänge" mit Checkboxen + `vorlagen.anhaenge`-Hilfe.
+
+**Wichtig — PDF-Caching:** Gebuchte Belege (`STATUS_ID=2`) mit `DOCUMENT_PDF_ASSET_ID` liefern das
+eingefrorene PDF (Unveränderlichkeit). Branding/Anhänge wirken auf **neue/Entwurf/Vorschau**-Belege,
+nicht rückwirkend.
+
+**Nächste Phasen (noch offen):** P2 Stil-Vorlagen (Karten), P3 Kopf/Fuß + Platzhalter, Bausteine-
+**Reihenfolge** (über an/aus hinaus), P6 Felder/Varianten, P7 Pro (Mehrmarken/eigene Fonts). Optional später: echte Webfont-Einbettung (@font-face), damit
 benannte Schriftarten statt nur Serif/Sans möglich sind; Logo-Position auch für `partial_payment`
 (nutzt `.headerRow .logoBox` statt `.logo-area`).
 
