@@ -93,6 +93,21 @@ export const HELP = {
     ),
   },
 
+  'vorlagen.anhaenge': {
+    title: 'Inhalte & Anhänge',
+    body: (
+      <>
+        Lege fest, welche zusätzlichen Seiten an deine Belege angehängt werden:
+        <strong> Projektübersicht</strong> (Leistungsstand je Projektelement),
+        <strong> Stundennachweis</strong> (erfasste Stunden/TEC),
+        <strong> HOAI-/Kalkulationsübersicht</strong> und
+        <strong> Zahlungsübersicht</strong> (bisherige Abschläge). Ein Anhang
+        erscheint nur, wenn er hier aktiv ist <em>und</em> tatsächlich Daten dafür
+        vorliegen. Bereits gebuchte Belege bleiben unverändert.
+      </>
+    ),
+  },
+
   // ── Rechnungen / Verträge ────────────────────────────────────────────────
   'invoice.abschlag_vs_schluss': {
     title: 'Abschlag, Rechnung oder Schlussrechnung?',

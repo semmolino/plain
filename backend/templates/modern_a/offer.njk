@@ -447,7 +447,7 @@ body {
 </div>
 
 {# ═══════════════════════════════════════ HOAI-HONORARÜBERSICHT (matches honorar.njk) ═══ #}
-{% if honorarCalcs and honorarCalcs.length > 0 %}
+{% if theme.blocks.showHonorar != false and honorarCalcs and honorarCalcs.length > 0 %}
 {% for hc in honorarCalcs %}
 <div class="page page-break">
 

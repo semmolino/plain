@@ -165,6 +165,7 @@ body {
   {% endif %}
 </div>
 
+{% if theme.blocks.showProjectStructure != false %}
 <!-- PAGE 2 -->
 <div class="page">
   <div class="headerRow">
@@ -200,7 +201,9 @@ body {
     </tbody>
   </table>
 </div>
+{% endif %}
 
+{% if theme.blocks.showTec != false %}
 <!-- PAGE 3 -->
 <div class="page">
   <div class="headerRow">
@@ -245,6 +248,7 @@ body {
     </tbody>
   </table>
 </div>
+{% endif %}
 
 </body>
 </html>

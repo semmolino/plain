@@ -6,8 +6,8 @@ import { HelpHint } from '@/components/ui/HelpHint'
 import { InfoHint } from '@/components/ui/InfoHint'
 import {
   fetchBranding, saveBranding, previewBranding,
-  DEFAULT_THEME, FONT_OPTIONS,
-  type DocTheme, type LogoPosition,
+  DEFAULT_THEME, FONT_OPTIONS, APPENDIX_BLOCKS,
+  type DocTheme, type LogoPosition, type ThemeBlocks,
 } from '@/api/documentTemplates'
 
 // Kuratierte, dezent-professionelle Hausfarben + freie Farbwahl.
@@ -22,6 +22,7 @@ function mergeTheme(t?: Partial<DocTheme> | null): DocTheme {
     ...(t ?? {}),
     brand:  { ...DEFAULT_THEME.brand,  ...(t?.brand  ?? {}) },
     header: { ...DEFAULT_THEME.header, ...(t?.header ?? {}) },
+    blocks: { ...DEFAULT_THEME.blocks, ...(t?.blocks ?? {}) },
   }
 }
 
@@ -67,6 +68,7 @@ export function DokumentvorlagenSection() {
   const setAccent  = (c: string)        => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, accentColor: c, primaryColor: c } })) }
   const setFont    = (stack: string)    => { setMsg(null); setTheme(t => ({ ...t, brand: { ...t.brand, fontFamily: stack } })) }
   const setLogoPos = (p: LogoPosition)  => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoPosition: p } })) }
+  const setBlock   = (key: keyof ThemeBlocks, val: boolean) => { setMsg(null); setTheme(t => ({ ...t, blocks: { ...t.blocks, [key]: val } })) }
 
   const currentFontId = useMemo(
     () => FONT_OPTIONS.find(f => f.stack === theme.brand.fontFamily)?.id ?? 'sans',
@@ -189,6 +191,28 @@ export function DokumentvorlagenSection() {
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
               Das Logo selbst lädst du unter <strong>Einstellungen → Unternehmen</strong> hoch.
+            </p>
+          </div>
+
+          {/* Inhalte & Anhänge */}
+          <div className="admin-block">
+            <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              Inhalte &amp; Anhänge <HelpHint id="vorlagen.anhaenge" />
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {APPENDIX_BLOCKS.map(b => (
+                <label key={b.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={theme.blocks[b.key] !== false}
+                    onChange={e => setBlock(b.key, e.target.checked)}
+                  />
+                  {b.label}
+                </label>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
+              Anhänge erscheinen nur, wenn dafür auch Daten vorliegen (z. B. erfasste Stunden).
             </p>
           </div>
 

@@ -36,7 +36,11 @@
   .totals-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
   .totals-table tr.total-row td { font-weight: 700; font-size: 11pt; border-top: 1pt solid #111827; padding-top: 2mm; }
 
-  .preview-note { margin-top: 10mm; font-size: 7.5pt; color: #9ca3af; text-align: center; }
+  .preview-attachments { margin-top: 8mm; padding-top: 3mm; border-top: 0.5pt dashed #d1d5db; font-size: 8pt; color: #6b7280; }
+  .preview-attachments .pa-label { font-weight: 700; color: #374151; margin-right: 4px; }
+  .pa-chip { display: inline-block; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1px 8px; margin: 0 4px 4px 0; font-size: 7.5pt; }
+  .pa-none { color: #9ca3af; font-style: italic; }
+  .preview-note { margin-top: 6mm; font-size: 7.5pt; color: #9ca3af; text-align: center; }
 </style>
 {% include "modern_a/_theme_head.njk" %}
 </head>
@@ -108,7 +112,16 @@
       </table>
     </div>
 
-    <div class="preview-note">Beispiel-Vorschau · Ihre echten Belege übernehmen diese Gestaltung</div>
+    <div class="preview-attachments">
+      <span class="pa-label">Anhänge:</span>
+      {% if theme.blocks.showProjectStructure != false %}<span class="pa-chip">Projektübersicht</span>{% endif %}
+      {% if theme.blocks.showTec != false %}<span class="pa-chip">Stundennachweis</span>{% endif %}
+      {% if theme.blocks.showHonorar != false %}<span class="pa-chip">HOAI-Kalkulation</span>{% endif %}
+      {% if theme.blocks.showPayments != false %}<span class="pa-chip">Zahlungsübersicht</span>{% endif %}
+      {% if theme.blocks.showProjectStructure == false and theme.blocks.showTec == false and theme.blocks.showHonorar == false and theme.blocks.showPayments == false %}<span class="pa-none">keine</span>{% endif %}
+    </div>
+
+    <div class="preview-note">Beispiel-Vorschau · Ihre echten Belege übernehmen diese Gestaltung &amp; Anhänge-Auswahl</div>
 
   </div>
 </body>
