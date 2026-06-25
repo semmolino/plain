@@ -58,6 +58,25 @@ function emptyCreateForm(): CreateEmployeePayload {
   return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '' }
 }
 
+// ID des aktuell gueltigen Eintrags (juengstes VALID_FROM <= heute) aus einer
+// datierten Historie (Kostensatz / Arbeitszeitmodell).
+function latestValidId<T extends { ID: number; VALID_FROM: string }>(items: T[], today: string): number | null {
+  const valid = items.filter(i => i.VALID_FROM <= today)
+  if (!valid.length) return null
+  return valid.reduce((a, b) => (a.VALID_FROM >= b.VALID_FROM ? a : b)).ID
+}
+
+function HistBadge({ kind }: { kind: 'current' | 'planned' }) {
+  const style = kind === 'current'
+    ? { background: '#dcfce7', color: '#166534' }
+    : { background: '#dbeafe', color: '#1e40af' }
+  return (
+    <span style={{ ...style, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 8, marginLeft: 6 }}>
+      {kind === 'current' ? 'aktuell' : 'geplant'}
+    </span>
+  )
+}
+
 // ── FilterChip ────────────────────────────────────────────────────────────────
 
 function FilterChip({ label, options, active, onChange }: {
@@ -235,13 +254,14 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   })
   const runningBalance = runRes?.data?.totalBalance ?? null
 
-  // Aktuell gueltiger Kostensatz = Eintrag mit dem juengsten VALID_FROM <= heute.
+  // Aktuell gueltiger Kostensatz/Modell = Eintrag mit dem juengsten VALID_FROM <= heute.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const currentCpId = useMemo(() => latestValidId(cpRates,   todayStr), [cpRates,   todayStr])
+  const currentWmId = useMemo(() => latestValidId(empWmList, todayStr), [empWmList, todayStr])
   const currentCpRate = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    const valid = cpRates.filter(r => r.VALID_FROM <= today)
-    if (!valid.length) return null
-    return valid.reduce((a, b) => (a.VALID_FROM >= b.VALID_FROM ? a : b)).CP_RATE
-  }, [cpRates])
+    const cur = cpRates.find(r => r.ID === currentCpId)
+    return cur ? cur.CP_RATE : null
+  }, [cpRates, currentCpId])
 
   const [saving, setSaving]   = useState(false)
   const [cpSaving, setCpSaving] = useState(false)
@@ -482,7 +502,10 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                     </>
                   ) : (
                     <>
-                      <td style={{ padding: '3px 8px 3px 0' }}>{r.VALID_FROM}</td>
+                      <td style={{ padding: '3px 8px 3px 0' }}>
+                        {r.VALID_FROM}
+                        {r.ID === currentCpId ? <HistBadge kind="current" /> : r.VALID_FROM > todayStr ? <HistBadge kind="planned" /> : null}
+                      </td>
                       <td style={{ padding: '3px 0 3px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                         {Number(r.CP_RATE).toFixed(2)} €/h
                       </td>
@@ -550,7 +573,10 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                     </>
                   ) : (
                     <>
-                      <td style={{ padding: '3px 8px 3px 0' }}>{wm.VALID_FROM}</td>
+                      <td style={{ padding: '3px 8px 3px 0' }}>
+                        {wm.VALID_FROM}
+                        {wm.ID === currentWmId ? <HistBadge kind="current" /> : wm.VALID_FROM > todayStr ? <HistBadge kind="planned" /> : null}
+                      </td>
                       <td style={{ padding: '3px 0 3px 8px' }}>{wm.model?.NAME ?? `Modell ${wm.MODEL_ID}`}</td>
                       <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => { setEditingWmId(wm.ID); setEditWmForm({ model_id: String(wm.MODEL_ID), valid_from: wm.VALID_FROM }) }}>✎</button>
