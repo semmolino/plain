@@ -18,9 +18,7 @@ import {
   fetchSelectableBookingTypes, createSpecialBuchung, updateSpecialBuchung, BOOKING_KIND_LABEL,
   type BookingKind, type SelectableBookingType,
 } from '@/api/bookingTypes'
-import {
-  fetchTextSnippets, createTextSnippet, deleteTextSnippet, type TextSnippet,
-} from '@/api/textSnippets'
+import { TextSnippetBar } from '@/components/ui/TextSnippetBar'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
@@ -128,18 +126,6 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     queryKey: ['e2p-preset', empId, pid],
     queryFn:  () => fetchEmployee2ProjectPreset(empId!, pid!),
     enabled:  empId !== null && pid !== null && showForm,
-  })
-
-  // Persönliche Buchungstexte (Textbausteine) für die Beschreibung
-  const { data: snippetsData } = useQuery({ queryKey: ['text-snippets'], queryFn: fetchTextSnippets, enabled: showForm })
-  const snippets: TextSnippet[] = snippetsData?.data ?? []
-  const createSnippetMut = useMutation({
-    mutationFn: createTextSnippet,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['text-snippets'] }),
-  })
-  const delSnippetMut = useMutation({
-    mutationFn: deleteTextSnippet,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['text-snippets'] }),
   })
 
   const projects  = projectsData?.data ?? []
@@ -539,29 +525,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <label>Beschreibung*</label>
                     <textarea rows={2} value={form.POSTING_DESCRIPTION} onChange={setF('POSTING_DESCRIPTION')} required
                       style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
-                      <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.5)', display: 'inline-flex', alignItems: 'center' }}>
-                        Textbausteine <HelpHint id="bookings.text_snippets" />
-                      </span>
-                      {snippets.map(s => (
-                        <span key={s.ID} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(99,102,241,0.10)', color: '#3730a3', borderRadius: 999, padding: '2px 4px 2px 10px', fontSize: 12 }}>
-                          <button type="button"
-                            title={s.TEXT}
-                            onClick={() => setForm(f => ({ ...f, POSTING_DESCRIPTION: f.POSTING_DESCRIPTION ? `${f.POSTING_DESCRIPTION} ${s.TEXT}` : s.TEXT }))}
-                            style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 12, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {s.LABEL || s.TEXT}
-                          </button>
-                          <button type="button" title="Baustein löschen" onClick={() => delSnippetMut.mutate(s.ID)}
-                            style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', padding: '0 4px', fontSize: 13, lineHeight: 1 }}>×</button>
-                        </span>
-                      ))}
-                      <button type="button"
-                        disabled={!form.POSTING_DESCRIPTION.trim() || createSnippetMut.isPending}
-                        onClick={() => createSnippetMut.mutate({ text: form.POSTING_DESCRIPTION.trim() })}
-                        className="btn-small" style={{ fontSize: 12, padding: '2px 8px' }}>
-                        ＋ Als Baustein speichern
-                      </button>
-                    </div>
+                    <TextSnippetBar currentText={form.POSTING_DESCRIPTION} onChange={t => setForm(f => ({ ...f, POSTING_DESCRIPTION: t }))} />
                   </div>
                   <Message text={msg?.text ?? null} type={msg?.type} />
                   <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -889,6 +853,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
           <label>Bezeichnung*</label>
           <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} required
             style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+          <TextSnippetBar currentText={description} onChange={setDescription} />
         </div>
 
         {isUnit ? (

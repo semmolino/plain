@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { RollenSection } from '@/pages/admin/RollenSection'
 import { BuchungsartenSection } from '@/pages/admin/BuchungsartenSection'
+import { BuchungstextvorlagenSection } from '@/pages/admin/BuchungstextvorlagenSection'
 import { DokumentvorlagenSection } from '@/pages/admin/DokumentvorlagenSection'
 import { Can } from '@/components/ui/Can'
 import { useFilterTabs } from '@/store/permissionsStore'
@@ -334,6 +335,8 @@ function StammdatenSection() {
       </div>
 
       <BuchungsartenSection />
+
+      <BuchungstextvorlagenSection />
 
       <Message text={msg?.text ?? null} type={msg?.type} />
     </div>

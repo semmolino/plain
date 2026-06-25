@@ -51,6 +51,18 @@ export const HELP = {
       </>
     ),
   },
+  'settings.booking_text_templates': {
+    title: 'Globale Buchungstextvorlagen',
+    body: (
+      <>
+        Wiederkehrende Beschreibungstexte, die <strong>allen</strong> Mitarbeitern beim
+        Buchen als Baustein zur Auswahl stehen (z. B. „Abstimmung mit Bauherr",
+        „Vor-Ort-Termin"). Ergänzend kann jeder Mitarbeiter zusätzlich eigene,
+        private Bausteine anlegen. Beim Buchen erscheinen globale und eigene
+        Bausteine gemeinsam; ein Klick fügt den Text in die Beschreibung ein.
+      </>
+    ),
+  },
   'settings.booking_types': {
     title: 'Katalog der Buchungsarten',
     body: (

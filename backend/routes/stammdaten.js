@@ -3,6 +3,7 @@
 const express = require("express");
 const ctrl = require("../controllers/stammdaten");
 const bookingTypesCtrl = require("../controllers/bookingTypes");
+const textSnippetsCtrl = require("../controllers/textSnippets");
 const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
@@ -56,6 +57,12 @@ module.exports = (supabase) => {
   router.post("/booking-types",                                      requirePermission("settings.booking_types.edit"), (req, res) => bookingTypesCtrl.create(req, res, supabase));
   router.patch("/booking-types/:id",                                 requirePermission("settings.booking_types.edit"), (req, res) => bookingTypesCtrl.patch(req, res, supabase));
   router.delete("/booking-types/:id",                                requirePermission("settings.booking_types.edit"), (req, res) => bookingTypesCtrl.remove(req, res, supabase));
+
+  // Globale Buchungstextvorlagen
+  router.get("/booking-text-templates",                              (req, res) => textSnippetsCtrl.listGlobal(req, res, supabase));
+  router.post("/booking-text-templates",                             requirePermission("settings.booking_text_templates.edit"), (req, res) => textSnippetsCtrl.createGlobal(req, res, supabase));
+  router.patch("/booking-text-templates/:id",                        requirePermission("settings.booking_text_templates.edit"), (req, res) => textSnippetsCtrl.updateGlobal(req, res, supabase));
+  router.delete("/booking-text-templates/:id",                       requirePermission("settings.booking_text_templates.edit"), (req, res) => textSnippetsCtrl.removeGlobal(req, res, supabase));
   router.get("/logo",                                                (req, res) => ctrl.getLogo(req, res, supabase));
   router.put("/logo",                                                requirePermission("settings.company.edit"), (req, res) => ctrl.putLogo(req, res, supabase));
   router.get("/salutations",                                         (req, res) => ctrl.getSalutations(req, res, supabase));
