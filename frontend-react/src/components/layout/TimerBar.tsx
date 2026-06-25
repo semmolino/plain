@@ -11,6 +11,7 @@ import type { ArbzgLimits, BreakConfirmation, BreakConfirmationMap } from '@/api
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
+import { useBackdropClose } from '@/hooks/useBackdropClose'
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ function LeafPicker({
 // ── Start modal ───────────────────────────────────────────────────────────────
 
 function StartModal({ onClose }: { onClose: () => void }) {
+  const backdrop = useBackdropClose(onClose)
   const startSession = useTimerStore(s => s.startSession)
   const { data: empData } = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
   const employees = empData?.data ?? []
@@ -117,7 +119,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
   const ready = !!employeeId && !!structureId
 
   return (
-    <div className="tbm-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="tbm-overlay" {...backdrop}>
       <div className="tbm-modal">
         <div className="tbm-modal-header">
           <span className="tbm-modal-title">▶ Arbeitstag starten</span>
@@ -177,6 +179,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
 // ── Next task modal ───────────────────────────────────────────────────────────
 
 function NextTaskModal({ onClose }: { onClose: () => void }) {
+  const backdrop = useBackdropClose(onClose)
   const { session, nextBlock } = useTimerStore()
   const qc = useQueryClient()
 
@@ -222,7 +225,7 @@ function NextTaskModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="tbm-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="tbm-overlay" {...backdrop}>
       <div className="tbm-modal">
         <div className="tbm-modal-header">
           <span className="tbm-modal-title">⏭ Nächste Aufgabe</span>
@@ -272,6 +275,7 @@ function NextTaskModal({ onClose }: { onClose: () => void }) {
 // ── Finish modal ──────────────────────────────────────────────────────────────
 
 function FinishModal({ onClose }: { onClose: () => void }) {
+  const backdrop = useBackdropClose(onClose)
   const { session, openReview } = useTimerStore()
   const qc = useQueryClient()
 
@@ -310,7 +314,7 @@ function FinishModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="tbm-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="tbm-overlay" {...backdrop}>
       <div className="tbm-modal">
         <div className="tbm-modal-header">
           <span className="tbm-modal-title">⏹ Buchungen abschließen</span>
@@ -362,6 +366,7 @@ interface EditingRow {
 }
 
 function DayReviewModal({ onClose }: { onClose: () => void }) {
+  const backdrop = useBackdropClose(onClose)
   const { session, endSession } = useTimerStore()
   const qc = useQueryClient()
   const employeeId = session?.employeeId
@@ -496,7 +501,7 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="tbm-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="tbm-overlay" {...backdrop}>
       <div className="tbm-modal tbm-modal-wide">
         <div className="tbm-modal-header">
           <span className="tbm-modal-title">📋 Tagesübersicht – {today}</span>
