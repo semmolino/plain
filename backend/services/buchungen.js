@@ -806,10 +806,17 @@ function computeSpecialEncoding(kind, b) {
   } else if (kind === "LUMP_REVENUE") {
     const amount = num(b.AMOUNT);
     if (amount === 0) throw { status: 400, message: "Bitte einen Betrag angeben." };
-    spRate = amount; spTot = fmt2(amount);   // Summe → abrechenbarer Erlös (SP_TOT)
+    // QUANTITY_EXT=1 hält die Invariante SP_TOT = QUANTITY_EXT × SP_RATE
+    // (QUANTITY_INT bleibt 0 → keine Stunden); so greifen auch Abrechnungs-
+    // Pfade, die Menge × Satz nutzen.
+    qtyExt = 1; spRate = amount; spTot = fmt2(amount);
   }
   return { qtyInt, qtyExt, cpRate, cpTot, spRate, spTot, unitLabel };
 }
+
+// Abrechenbare Spezialarten (Erlösseite) müssen auf einem Projektelement liegen,
+// sonst sind sie nirgends abrechenbar (Abrechnung läuft pro Strukturelement).
+const BILLABLE_SPECIAL_KINDS = new Set(["UNIT", "LUMP_REVENUE"]);
 
 async function assertLeafStructure(supabase, structureId) {
   if (!structureId) return;
@@ -826,6 +833,9 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
   if (!SPECIAL_KINDS.has(kind)) throw { status: 400, message: "Ungültige Buchungsart." };
   if (!b.PROJECT_ID || !b.DATE_VOUCHER || !b.POSTING_DESCRIPTION) {
     throw { status: 400, message: "Projekt, Datum und Beschreibung sind erforderlich." };
+  }
+  if (BILLABLE_SPECIAL_KINDS.has(kind) && !b.STRUCTURE_ID) {
+    throw { status: 400, message: "Für abrechenbare Buchungen (Erlös-Pauschale/Stückleistung) ist ein Projektelement erforderlich." };
   }
 
   await assertLeafStructure(supabase, b.STRUCTURE_ID);
@@ -896,6 +906,9 @@ async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
   const kind = existing.BOOKING_KIND; // Art wird beim Bearbeiten nicht gewechselt
   if (!b.DATE_VOUCHER || !b.POSTING_DESCRIPTION) {
     throw { status: 400, message: "Datum und Beschreibung sind erforderlich." };
+  }
+  if (BILLABLE_SPECIAL_KINDS.has(kind) && !b.STRUCTURE_ID) {
+    throw { status: 400, message: "Für abrechenbare Buchungen (Erlös-Pauschale/Stückleistung) ist ein Projektelement erforderlich." };
   }
 
   const newStructureId = b.STRUCTURE_ID ? Number(b.STRUCTURE_ID) : null;

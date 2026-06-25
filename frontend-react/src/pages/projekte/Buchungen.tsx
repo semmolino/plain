@@ -830,10 +830,13 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
+  const billable = isUnit || kind === 'LUMP_REVENUE'
+
   function submit(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
     if (!description.trim()) { setMsg({ text: 'Bitte eine Bezeichnung angeben', type: 'error' }); return }
+    if (billable && !structureId) { setMsg({ text: 'Bitte ein Projektelement wählen — für die Abrechnung erforderlich', type: 'error' }); return }
     if (isUnit) {
       if (num(quantity) <= 0) { setMsg({ text: 'Menge muss größer als 0 sein', type: 'error' }); return }
       if (num(spRate) === 0 && num(cpRate) === 0) { setMsg({ text: 'Bitte Stückpreis und/oder Stückkosten angeben', type: 'error' }); return }
@@ -861,16 +864,16 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
         </div>
 
         <div className="form-group">
-          <label>Projektelement</label>
-          <select value={structureId} onChange={e => setStructureId(e.target.value)}>
+          <label>Projektelement{billable ? '*' : ''}</label>
+          <select value={structureId} onChange={e => setStructureId(e.target.value)} required={billable}>
             <option value="">—</option>
             {leafStructure.map(s => (
               <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? `#${s.STRUCTURE_ID}`}</option>
             ))}
           </select>
-          {kind === 'LUMP_REVENUE' && (
+          {billable && (
             <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.55)', display: 'block', marginTop: 2 }}>
-              Wird auf Stunden-Projektelementen (TEC) wie eine Stundenbuchung abgerechnet.
+              Erforderlich für die Abrechnung — abgerechnet wird auf <strong>Stunden-Elementen (BT=2)</strong> wie eine Stundenbuchung.
             </span>
           )}
         </div>
