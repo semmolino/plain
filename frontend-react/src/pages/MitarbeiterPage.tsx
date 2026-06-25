@@ -1766,12 +1766,27 @@ export function MitarbeiterPage() {
   const { data: rolesData }             = useQuery({ queryKey: ['user-roles'],          queryFn: fetchRoles })
   const { data: empRoleData }           = useQuery({ queryKey: ['employee-role-map'],   queryFn: fetchEmployeeRoleMap })
 
+  // Aktueller Monats-/Laufsaldo je Mitarbeiter fuer die Listenspalte „Saldo".
+  // Nur laden, wenn der Nutzer fremde Buchungen sehen darf.
+  const canViewBookings = usePermission('employees.bookings.view_all')
+  const { data: balData } = useQuery({
+    queryKey: ['emp-report-list', { mode: 'now' }],
+    queryFn:  () => fetchEmployeeReportList({ mode: 'now' }),
+    enabled:  canViewBookings,
+  })
+
   const employees  = listData?.data  ?? []
   const userRoles  = rolesData?.data ?? []
   const empRoleMap = empRoleData?.data ?? []
   const genders    = genData?.data   ?? []
   const departments = deptData?.data ?? []
   const workModels = wtmData?.data   ?? []
+
+  const balByEmp = useMemo(() => {
+    const m = new Map<number, EmployeeReportRow>()
+    for (const row of balData?.data ?? []) m.set(row.EMPLOYEE_ID, row)
+    return m
+  }, [balData])
 
   // Derive filter option lists from data
   const filterOptions = useMemo(() => {
@@ -1926,6 +1941,7 @@ export function MitarbeiterPage() {
             {isLoading && <p className="empty-note">Laden …</p>}
             {!isLoading && (
               <>
+                <div className="table-scroll">
                 <table className="master-table">
                   <thead>
                     <tr>
@@ -1935,6 +1951,9 @@ export function MitarbeiterPage() {
                       <SortTh label="E-Mail"    sortKey="MAIL"       {...sortProps} />
                       <th>Abteilung</th>
                       <th>Modell</th>
+                      {canViewBookings && (
+                        <th className="num">Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
+                      )}
                       <th>Status</th>
                       <th>Rolle</th>
                       <th>Dashboard-Rolle</th>
@@ -1950,6 +1969,18 @@ export function MitarbeiterPage() {
                         <td>{r.MAIL}</td>
                         <td>{r.DEPARTMENT_NAME || <span style={{ color: '#d1d5db' }}>—</span>}</td>
                         <td>{r.CURRENT_MODEL_NAME || <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                        {canViewBookings && (() => {
+                          const bal = balByEmp.get(r.ID)
+                          const run = bal?.RUNNING_BALANCE ?? 0
+                          return (
+                            <td className="num" style={{ fontVariantNumeric: 'tabular-nums' }}
+                                title={bal ? `Monatssaldo (akt. Monat): ${fmtBalance(bal.BALANCE)}` : undefined}>
+                              {bal
+                                ? <span style={{ color: run > 0 ? '#059669' : run < 0 ? '#dc2626' : '#6b7280', fontWeight: 600 }}>{fmtBalance(run)}</span>
+                                : <span style={{ color: '#d1d5db' }}>—</span>}
+                            </td>
+                          )
+                        })()}
                         <td>
                           <span style={{
                             fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 500,
@@ -1983,16 +2014,17 @@ export function MitarbeiterPage() {
                         </td>
                       </tr>
                     ))}
-                    {!pageRows.length && <tr><td colSpan={9} className="empty-note">Keine Einträge</td></tr>}
+                    {!pageRows.length && <tr><td colSpan={canViewBookings ? 10 : 9} className="empty-note">Keine Einträge</td></tr>}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                      <td colSpan={9} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                      <td colSpan={canViewBookings ? 10 : 9} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
                         {processed.length !== employees.length ? `${processed.length} / ${employees.length} Einträge` : `${employees.length} Einträge`}
                       </td>
                     </tr>
                   </tfoot>
                 </table>
+                </div>
                 <div className="pagination">
                   <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}>← Zurück</button>
                   <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>Weiter →</button>
