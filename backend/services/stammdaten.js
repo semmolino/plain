@@ -157,10 +157,17 @@ async function recomputeStructureAggregates(supabase, structureId) {
   if (structureErr) throw new Error(structureErr.message);
   if (!structureRow) return;
 
-  const { data: tecRows, error: tecErr } = await supabase.from("TEC").select("QUANTITY_INT, CP_RATE, SP_TOT").eq("STRUCTURE_ID", structureId);
+  const { data: tecRows, error: tecErr } = await supabase.from("TEC").select("QUANTITY_INT, CP_RATE, CP_TOT, SP_TOT, BOOKING_KIND").eq("STRUCTURE_ID", structureId);
   if (tecErr) throw new Error(tecErr.message);
 
-  const costs = (tecRows || []).reduce((sum, row) => sum + ((Number(row.QUANTITY_INT) || 0) * (Number(row.CP_RATE) || 0)), 0);
+  // Spezialarten (Pauschalen/Stückleistungen) tragen ihren CP_TOT direkt
+  // (QUANTITY_INT=0); Stunden weiter als Menge × Satz.
+  const SPECIAL_KINDS = new Set(["UNIT", "LUMP_COST", "LUMP_REVENUE"]);
+  const costs = (tecRows || []).reduce((sum, row) => sum + (
+    SPECIAL_KINDS.has(row.BOOKING_KIND)
+      ? (Number(row.CP_TOT) || 0)
+      : (Number(row.QUANTITY_INT) || 0) * (Number(row.CP_RATE) || 0)
+  ), 0);
   const updatePayload = { COSTS: costs };
 
   if (Number(structureRow.BILLING_TYPE_ID) === 2) {

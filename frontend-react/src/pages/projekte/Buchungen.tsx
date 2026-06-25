@@ -565,7 +565,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         </td>
                         <td className="num">
                           {b.BOOKING_KIND === 'UNIT'
-                            ? `${fmtN(b.QUANTITY_INT)}${b.UNIT_LABEL ? ' ' + b.UNIT_LABEL : ''}`
+                            ? `${fmtN(b.QUANTITY_EXT)}${b.UNIT_LABEL ? ' ' + b.UNIT_LABEL : ''}`
                             : isSpecialKind(b.BOOKING_KIND) ? '—' : fmtN(b.QUANTITY_INT)}
                         </td>
                         {showRevenue && <td className="num">{isSpecialKind(b.BOOKING_KIND) && b.BOOKING_KIND !== 'UNIT' ? '—' : fmtN(b.QUANTITY_EXT)}</td>}

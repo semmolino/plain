@@ -9,6 +9,17 @@ const budgetWarnings = require("./budgetWarnings");
 
 const fmt2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+// Buchungsarten ohne Stundencharakter (Pauschalen/Stückleistungen).
+const SPECIAL_KINDS = new Set(["UNIT", "LUMP_COST", "LUMP_REVENUE"]);
+
+// Kostenbeitrag einer TEC-Zeile zur Struktur: Stunden = Menge × Satz (unverändert,
+// auch korrekt bei ArbZG-Pausenabzug); Spezialarten tragen ihren CP_TOT direkt
+// (QUANTITY_INT ist dort bewusst 0, damit keine Stundensumme verfälscht wird).
+const tecCostContribution = (r) =>
+  SPECIAL_KINDS.has(r.BOOKING_KIND)
+    ? Number(r.CP_TOT ?? 0)
+    : Number(r.QUANTITY_INT ?? 0) * Number(r.CP_RATE ?? 0);
+
 // Looks up the effective CP_RATE for an employee on a specific date.
 // Returns the rate from EMPLOYEE_CP_RATE where VALID_FROM <= dateStr (most recent).
 // Returns null if no rate exists (caller should treat as 0 and warn).
@@ -42,15 +53,12 @@ async function recomputeStructure(supabase, structureId) {
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("QUANTITY_INT, CP_RATE, SP_TOT")
+    .select("QUANTITY_INT, CP_RATE, CP_TOT, SP_TOT, BOOKING_KIND")
     .eq("STRUCTURE_ID", structureId)
     .neq("STATUS", "DRAFT");
   if (tecErr) throw new Error("Fehler beim Laden der TEC-Daten: " + tecErr.message);
 
-  const newCosts = (tecRows || []).reduce(
-    (acc, r) => acc + Number(r.QUANTITY_INT ?? 0) * Number(r.CP_RATE ?? 0),
-    0
-  );
+  const newCosts = (tecRows || []).reduce((acc, r) => acc + tecCostContribution(r), 0);
   const revenueSum = (tecRows || []).reduce((acc, r) => acc + Number(r.SP_TOT ?? 0), 0);
 
   const { data: structureRow, error: strErr } = await supabase
@@ -714,11 +722,11 @@ async function deleteBuchung(supabase, { id }) {
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("QUANTITY_INT, CP_RATE, SP_TOT")
+    .select("QUANTITY_INT, CP_RATE, CP_TOT, SP_TOT, BOOKING_KIND")
     .eq("STRUCTURE_ID", structureId);
   if (tecErr) throw { status: 500, message: "Fehler beim Laden der TEC-Daten: " + tecErr.message };
 
-  const newCosts = (tecRows || []).reduce((acc, r) => acc + Number(r.QUANTITY_INT ?? 0) * Number(r.CP_RATE ?? 0), 0);
+  const newCosts = (tecRows || []).reduce((acc, r) => acc + tecCostContribution(r), 0);
   const revenueSum = (tecRows || []).reduce((acc, r) => acc + Number(r.SP_TOT ?? 0), 0);
 
   const { data: structureRow, error: strErr } = await supabase
@@ -768,7 +776,6 @@ async function deleteBuchung(supabase, { id }) {
 // EMPLOYEE_ID ist hier reines "gebucht von" (kein Stundenträger); die Zeile
 // wird in den Stundenauswertungen über BOOKING_KIND herausgefiltert.
 // ---------------------------------------------------------------------------
-const SPECIAL_KINDS = new Set(["UNIT", "LUMP_COST", "LUMP_REVENUE"]);
 
 async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
   const b = body || {};
@@ -797,6 +804,10 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
     return Number.isFinite(n) ? n : 0;
   };
 
+  // WICHTIG: QUANTITY_INT bleibt 0 — Spezial-Buchungen sind keine Stunden und
+  // dürfen in keiner Stunden-/Reportsumme (HOURS_TOTAL = SUM(QUANTITY_INT))
+  // mitgezählt werden. Geld steckt in CP_TOT/SP_TOT (so leiten alle Reports
+  // Kosten/Erlös ab); die Struktur-Kostenrechnung nutzt für Spezialarten CP_TOT.
   let qtyInt = 0, cpRate = 0, cpTot = 0, qtyExt = 0, spRate = 0, spTot = 0, unitLabel = null;
 
   if (kind === "UNIT") {
@@ -805,20 +816,18 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
     cpRate = num(b.CP_RATE);
     spRate = num(b.SP_RATE);
     if (cpRate === 0 && spRate === 0) throw { status: 400, message: "Bitte Stückpreis und/oder Stückkosten angeben." };
-    qtyInt = qty; qtyExt = qty;
+    qtyExt = qty;                       // Menge in QUANTITY_EXT (nicht _INT)
     cpTot = fmt2(qty * cpRate);
     spTot = fmt2(qty * spRate);
     unitLabel = (b.UNIT_LABEL || "").trim() || null;
   } else if (kind === "LUMP_COST") {
     const amount = num(b.AMOUNT);
     if (amount === 0) throw { status: 400, message: "Bitte einen Betrag angeben." };
-    // Summe → Kosten: COSTS = Σ(QTY_INT × CP_RATE) ⇒ QTY_INT=1, CP_RATE=Betrag.
-    qtyInt = 1; cpRate = amount; cpTot = fmt2(amount);
+    cpRate = amount; cpTot = fmt2(amount);   // Summe → Kosten (CP_TOT)
   } else if (kind === "LUMP_REVENUE") {
     const amount = num(b.AMOUNT);
     if (amount === 0) throw { status: 400, message: "Bitte einen Betrag angeben." };
-    // Summe → abrechenbarer Erlös: REVENUE = Σ(SP_TOT).
-    qtyExt = 1; spRate = amount; spTot = fmt2(amount);
+    spRate = amount; spTot = fmt2(amount);   // Summe → abrechenbarer Erlös (SP_TOT)
   }
 
   const insertRow = {

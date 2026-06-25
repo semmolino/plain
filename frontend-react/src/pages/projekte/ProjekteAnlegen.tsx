@@ -9,6 +9,7 @@ import {
 } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
+import { fetchBookingTypes, BOOKING_KIND_LABEL, type BookingType } from '@/api/bookingTypes'
 
 // ── Wizard state ──────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
   const [addrText, setAddrText]   = useState('')
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<number>>(new Set())
   const [e2p, setE2p]             = useState<E2PState>({})
+  const [bookingPrices, setBookingPrices] = useState<{ [typeId: number]: { sp: string; cp: string } }>({})
   const [msg, setMsg]             = useState<{ text: string; type: 'success'|'error'|'info' } | null>(null)
 
   const { data: deptData    } = useQuery({ queryKey: ['departments'],        queryFn: fetchDepartments      })
@@ -61,6 +63,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
   const { data: empData     } = useQuery({ queryKey: ['active-employees'],  queryFn: fetchActiveEmployees  })
   const { data: roleData    } = useQuery({ queryKey: ['active-roles'],      queryFn: fetchActiveRoles      })
   const { data: companyData } = useQuery({ queryKey: ['companies'],         queryFn: fetchCompanies        })
+  const { data: bookingTypeData } = useQuery({ queryKey: ['booking-types'], queryFn: () => fetchBookingTypes({ activeOnly: true }) })
   const addressId = basic.address_id ? Number(basic.address_id) : null
   const { data: contactData } = useQuery({
     queryKey: ['contacts-by-address', addressId],
@@ -76,6 +79,8 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
   const roles     = roleData?.data    ?? []
   const contacts  = contactData?.data ?? []
   const companies = companyData?.data ?? []
+  // Nur globale Buchungsarten lassen sich vor der Anlage projektbezogen bepreisen.
+  const bookingTypes = (bookingTypeData?.data ?? []).filter((t: BookingType) => t.SCOPE === 'global')
 
   // Auto-select company when there is exactly one
   if (companies.length === 1 && !basic.company_id) {
@@ -165,6 +170,10 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
       sp_rate:        e2p[empId]?.sp_rate        || undefined,
     }))
 
+    const priceRows = Object.entries(bookingPrices)
+      .map(([typeId, v]) => ({ booking_type_id: Number(typeId), sp_rate: v.sp || undefined, cp_rate: v.cp || undefined }))
+      .filter(r => r.sp_rate !== undefined || r.cp_rate !== undefined)
+
     createMut.mutate({
       name_long:          basic.name_long,
       company_id:         basic.company_id || 0,
@@ -175,6 +184,14 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
       address_id:         Number(basic.address_id),
       contact_id:         Number(basic.contact_id),
       employee2project:   e2pRows.length ? e2pRows : undefined,
+      booking_prices:     priceRows.length ? priceRows : undefined,
+    })
+  }
+
+  function setPrice(typeId: number, field: 'sp' | 'cp', value: string) {
+    setBookingPrices(prev => {
+      const cur = prev[typeId] ?? { sp: '', cp: '' }
+      return { ...prev, [typeId]: { ...cur, [field]: value } }
     })
   }
 
@@ -314,6 +331,41 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {bookingTypes.length > 0 && (
+            <div style={{ marginTop: 22 }}>
+              <h4 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 2px' }}>Buchungsarten-Preise (optional)</h4>
+              <p style={{ fontSize: 12, color: 'var(--text-3, #6b7280)', margin: '0 0 8px' }}>
+                Standardpreise aus den Stammdaten; hier optional projektbezogen überschreiben. Leer = Standardpreis gilt.
+              </p>
+              <div className="table-scroll">
+                <table className="master-table">
+                  <thead>
+                    <tr>
+                      <th>Art</th>
+                      <th>Buchungsart</th>
+                      <th>Standard VK</th>
+                      <th>Projekt VK</th>
+                      <th>Projekt Kosten</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bookingTypes.map(t => (
+                      <tr key={t.ID}>
+                        <td style={{ fontSize: 12, color: 'var(--text-3, #6b7280)' }}>{BOOKING_KIND_LABEL[t.KIND]}</td>
+                        <td>{t.NAME_SHORT}{t.NAME_LONG ? <span style={{ color: 'var(--text-3, #6b7280)' }}> – {t.NAME_LONG}</span> : null}</td>
+                        <td style={{ fontVariantNumeric: 'tabular-nums' }}>{t.DEFAULT_SP_RATE != null ? `${t.DEFAULT_SP_RATE} €` : '—'}</td>
+                        <td><input className="tbl-input" style={{ width: 80 }} type="number" step="0.01" placeholder="Standard"
+                          value={bookingPrices[t.ID]?.sp ?? ''} onChange={e => setPrice(t.ID, 'sp', e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 80 }} type="number" step="0.01" placeholder="Standard"
+                          value={bookingPrices[t.ID]?.cp ?? ''} onChange={e => setPrice(t.ID, 'cp', e.target.value)} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

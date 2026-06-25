@@ -91,6 +91,13 @@ export interface CreateProjectPayload {
   contact_id:          string | number
   employee2project?:   E2PRow[]
   project_structure?:  StructureDraftRow[]
+  booking_prices?:     BookingPriceRow[]
+}
+
+export interface BookingPriceRow {
+  booking_type_id: number
+  sp_rate?:        string | number
+  cp_rate?:        string | number
 }
 
 // ── Lookups ───────────────────────────────────────────────────────────────────

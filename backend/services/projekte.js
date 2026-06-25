@@ -156,6 +156,25 @@ async function createProject(supabase, { body, tenantId }) {
     }
   }
 
+  // PROJECT_BOOKING_PRICE rows (projektbezogene Buchungsart-Preise aus dem Wizard)
+  if (Array.isArray(b.booking_prices) && b.booking_prices.length) {
+    const toNum = (v) => (v === "" || v === undefined || v === null ? null : Number(v));
+    const priceRows = b.booking_prices
+      .map((p) => ({
+        TENANT_ID:       project.TENANT_ID,
+        PROJECT_ID:      project.ID,
+        BOOKING_TYPE_ID: Number(p.booking_type_id),
+        SP_RATE:         toNum(p.sp_rate),
+        CP_RATE:         toNum(p.cp_rate),
+      }))
+      .filter((r) => r.BOOKING_TYPE_ID && (r.SP_RATE != null || r.CP_RATE != null));
+    if (priceRows.length) {
+      const { error: bpErr } = await supabase.from("PROJECT_BOOKING_PRICE").insert(priceRows);
+      // Soft-fail: Projekt steht; Preise sind optional und in Preislisten nachpflegbar.
+      if (bpErr) console.warn("[createProject] PROJECT_BOOKING_PRICE insert failed:", bpErr.message || bpErr);
+    }
+  }
+
   // PROJECT_STRUCTURE rows
   if (Array.isArray(b.project_structure) && b.project_structure.length) {
     const draft = b.project_structure;
