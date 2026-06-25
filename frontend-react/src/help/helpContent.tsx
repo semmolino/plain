@@ -40,6 +40,17 @@ export const HELP = {
       </>
     ),
   },
+  'bookings.text_snippets': {
+    title: 'Textbausteine',
+    body: (
+      <>
+        Persönliche, wiederkehrende Beschreibungstexte für deine Stunden-Buchungen.
+        Mit „Als Baustein speichern" sicherst du den aktuellen Beschreibungstext;
+        ein Klick auf einen Baustein fügt ihn in die Beschreibung ein. Die Bausteine
+        sind privat (nur für dich sichtbar).
+      </>
+    ),
+  },
   'settings.booking_types': {
     title: 'Katalog der Buchungsarten',
     body: (

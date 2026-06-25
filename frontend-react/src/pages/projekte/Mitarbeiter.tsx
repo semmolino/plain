@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
+import { Modal }       from '@/components/ui/Modal'
+import { FormField }   from '@/components/ui/FormField'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, Plus } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import {
   fetchProjectsShort, fetchActiveEmployees, fetchActiveRoles,
@@ -11,8 +13,10 @@ import {
   type E2PEntry,
 } from '@/api/projekte'
 import {
-  fetchProjectBookingPrices, upsertProjectBookingPrice, BOOKING_KIND_LABEL,
-  type ProjectBookingPrice,
+  fetchProjectBookingPrices, upsertProjectBookingPrice,
+  createProjectBookingType, deleteProjectBookingType,
+  BOOKING_KIND_LABEL,
+  type ProjectBookingPrice, type BookingKind, type BookingTypePayload,
 } from '@/api/bookingTypes'
 import { HelpHint } from '@/components/ui/HelpHint'
 
@@ -364,6 +368,8 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
   const [editId, setEditId] = useState<number | null>(null)
   const [editSp, setEditSp] = useState('')
   const [editCp, setEditCp] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [delConfirm, setDelConfirm] = useState<{ id: number; label: string } | null>(null)
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -371,6 +377,17 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
     queryFn:  () => fetchProjectBookingPrices(projectId),
   })
   const rows = data?.data ?? []
+
+  function invalidate() {
+    void qc.invalidateQueries({ queryKey: ['project-booking-prices', projectId] })
+    void qc.invalidateQueries({ queryKey: ['booking-types-selectable', projectId] })
+  }
+
+  const delTypeMut = useMutation({
+    mutationFn: (id: number) => deleteProjectBookingType(id),
+    onSuccess: () => { invalidate(); setMsg({ text: 'Projektbezogene Buchungsart gelöscht', type: 'success' }) },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
 
   const saveMut = useMutation({
     mutationFn: (r: ProjectBookingPrice) => upsertProjectBookingPrice({
@@ -397,11 +414,19 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
 
   return (
     <div style={{ marginTop: 22 }}>
-      <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', display: 'inline-flex', alignItems: 'center' }}>
-        Buchungsarten-Preise <HelpHint id="settings.booking_types" />
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', display: 'inline-flex', alignItems: 'center' }}>
+          Buchungsarten-Preise <HelpHint id="settings.booking_types" />
+        </h3>
+        <Can permission="projects.hourly_rates.edit">
+          <button className="btn-small" onClick={() => setCreateOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Plus size={13} strokeWidth={2} /> Projektbezogene Buchungsart
+          </button>
+        </Can>
+      </div>
       <p style={{ fontSize: 12, color: 'rgba(17,24,39,0.55)', margin: '0 0 8px' }}>
         Standardpreise aus den Stammdaten; hier optional projektbezogen überschreiben. Leer = Standardpreis gilt.
+        Projektbezogene Buchungsarten gelten nur in diesem Projekt.
       </p>
 
       {msg && <div style={{ marginBottom: 8 }}><Message type={msg.type} text={msg.text} /></div>}
@@ -455,6 +480,12 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
                             <button className="row-action-btn" onClick={() => startEdit(r)} title="Projektpreis setzen">
                               <Pencil size={14} strokeWidth={2} />
                             </button>
+                            {r.SCOPE === 'project' && (
+                              <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                                onClick={() => setDelConfirm({ id: r.BOOKING_TYPE_ID, label: r.NAME_SHORT })} title="Projektbezogene Buchungsart löschen">
+                                <Trash2 size={14} strokeWidth={2} />
+                              </button>
+                            )}
                           </Can>
                         </td>
                       </>
@@ -466,6 +497,106 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
           </table>
         </div>
       )}
+
+      {createOpen && (
+        <ProjectBookingTypeModal
+          projectId={projectId}
+          onClose={() => setCreateOpen(false)}
+          onSaved={() => { setCreateOpen(false); invalidate(); setMsg({ text: 'Projektbezogene Buchungsart angelegt ✅', type: 'success' }) }}
+        />
+      )}
+
+      <ConfirmModal
+        open={delConfirm !== null}
+        title="Buchungsart löschen"
+        message={`Projektbezogene Buchungsart „${delConfirm?.label ?? ''}" löschen? Bereits erfasste Buchungen bleiben erhalten.`}
+        confirmLabel="Löschen"
+        confirmClass="danger"
+        onConfirm={() => { if (delConfirm) delTypeMut.mutate(delConfirm.id); setDelConfirm(null) }}
+        onCancel={() => setDelConfirm(null)}
+      />
     </div>
+  )
+}
+
+// ── Projektbezogene Buchungsart anlegen ────────────────────────────────────────
+
+function ProjectBookingTypeModal({ projectId, onClose, onSaved }: { projectId: number; onClose: () => void; onSaved: () => void }) {
+  const [kind, setKind] = useState<BookingKind>('UNIT')
+  const [nameShort, setNameShort] = useState('')
+  const [nameLong,  setNameLong]  = useState('')
+  const [unitLabel, setUnitLabel] = useState('')
+  const [sp, setSp] = useState('')
+  const [cp, setCp] = useState('')
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const isUnit = kind === 'UNIT'
+
+  const saveMut = useMutation({
+    mutationFn: () => {
+      const payload: BookingTypePayload & { project_id: number } = {
+        project_id:      projectId,
+        kind,
+        name_short:      nameShort.trim(),
+        name_long:       nameLong.trim() || null,
+        unit_label:      isUnit ? (unitLabel.trim() || null) : null,
+        // Bei Pauschalen ist der Betrag der Standardwert: Kosten→CP, Erlös→SP.
+        default_sp_rate: (isUnit || kind === 'LUMP_REVENUE') && sp !== '' ? Number(sp) : null,
+        default_cp_rate: (isUnit || kind === 'LUMP_COST')    && cp !== '' ? Number(cp) : null,
+      }
+      return createProjectBookingType(payload)
+    },
+    onSuccess: onSaved,
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  function handleSave() {
+    if (!nameShort.trim()) { setMsg({ text: 'Kürzel erforderlich', type: 'error' }); return }
+    setMsg(null); saveMut.mutate()
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Projektbezogene Buchungsart">
+      <div className="master-form">
+        <div className="form-group">
+          <label>Art*</label>
+          <select value={kind} onChange={e => setKind(e.target.value as BookingKind)}>
+            <option value="UNIT">{BOOKING_KIND_LABEL.UNIT}</option>
+            <option value="LUMP_COST">{BOOKING_KIND_LABEL.LUMP_COST}</option>
+            <option value="LUMP_REVENUE">{BOOKING_KIND_LABEL.LUMP_REVENUE}</option>
+          </select>
+        </div>
+        <div className="form-row">
+          <FormField label="Kürzel*"     id="pbt-short" value={nameShort} onChange={e => setNameShort(e.target.value)} required />
+          <FormField label="Bezeichnung" id="pbt-long"  value={nameLong}  onChange={e => setNameLong(e.target.value)} />
+        </div>
+        {isUnit ? (
+          <>
+            <div className="form-row">
+              <FormField label="Einheit" id="pbt-unit" value={unitLabel} onChange={e => setUnitLabel(e.target.value)} placeholder="z. B. Stk, m²" />
+            </div>
+            <div className="form-row">
+              <FormField label="Stückpreis (€)"  id="pbt-sp" type="number" step="0.01" value={sp} onChange={e => setSp(e.target.value)} />
+              <FormField label="Stückkosten (€)" id="pbt-cp" type="number" step="0.01" value={cp} onChange={e => setCp(e.target.value)} />
+            </div>
+          </>
+        ) : (
+          <div className="form-row">
+            <FormField
+              label={kind === 'LUMP_COST' ? 'Standard-Betrag Kosten (€)' : 'Standard-Betrag Erlös (€)'}
+              id="pbt-amount" type="number" step="0.01"
+              value={kind === 'LUMP_COST' ? cp : sp}
+              onChange={e => (kind === 'LUMP_COST' ? setCp(e.target.value) : setSp(e.target.value))}
+            />
+          </div>
+        )}
+        <Message text={msg?.text ?? null} type={msg?.type} />
+        <div className="modal-actions">
+          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
+            {saveMut.isPending ? 'Speichert …' : 'Anlegen'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }

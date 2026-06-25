@@ -51,6 +51,28 @@ async function upsertProjectPrice(req, res, supabase) {
   }
 }
 
+// Projektbezogene Buchungsart aus dem Projekt-Kontext (Preislisten) anlegen.
+async function createProjectType(req, res, supabase) {
+  try {
+    const projectId = req.body?.project_id ? Number(req.body.project_id) : null;
+    if (!projectId) return res.status(400).json({ error: "project_id ist erforderlich" });
+    const body = { ...(req.body || {}), scope: "project", project_id: projectId };
+    const data = await svc.createBookingType(supabase, { tenantId: req.tenantId, body });
+    res.json({ data });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function deleteProjectType(req, res, supabase) {
+  try {
+    await svc.deleteProjectBookingType(supabase, { tenantId: req.tenantId, id: req.params.id });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 async function create(req, res, supabase) {
   try {
     const data = await svc.createBookingType(supabase, { tenantId: req.tenantId, body: req.body || {} });
@@ -78,4 +100,4 @@ async function remove(req, res, supabase) {
   }
 }
 
-module.exports = { list, listSelectable, listProjectPrices, upsertProjectPrice, create, patch, remove };
+module.exports = { list, listSelectable, listProjectPrices, upsertProjectPrice, createProjectType, deleteProjectType, create, patch, remove };

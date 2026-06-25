@@ -11,6 +11,11 @@ class InvoiceDataError extends Error {
   constructor(msg) { super(msg); this.name = 'InvoiceDataError'; this.status = 422; }
 }
 
+// Buchungsarten ohne Stundencharakter (Pauschalen/Stückleistungen) — solche
+// Positionen werden in der E-Rechnung als Pauschalposition (LS) ausgewiesen,
+// nicht als Stunden (HUR).
+const EINVOICE_SPECIAL_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE']);
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function toNum(v) {
@@ -269,15 +274,19 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       if (bt2StructIds.length > 0) {
         const { data: tecRows } = await supabase
           .from('TEC')
-          .select('STRUCTURE_ID, QUANTITY_INT, SP_RATE, SP_TOT')
+          .select('STRUCTURE_ID, QUANTITY_INT, SP_RATE, SP_TOT, BOOKING_KIND')
           .eq('INVOICE_ID', docId)
           .in('STRUCTURE_ID', bt2StructIds);
         for (const t of (tecRows || [])) {
           const sid = t.STRUCTURE_ID;
-          const agg = tecAggByStructure.get(sid) || { hours: 0, totalNet: 0, distinctRates: new Set() };
+          const agg = tecAggByStructure.get(sid) || { hours: 0, totalNet: 0, distinctRates: new Set(), hasSpecial: false };
           agg.hours    += toNum(t.QUANTITY_INT);
           agg.totalNet += toNum(t.SP_TOT);
           if (t.SP_RATE != null) agg.distinctRates.add(Number(t.SP_RATE));
+          // Pauschalen/Stückleistungen (BOOKING_KIND ∈ UNIT/LUMP_*) sind keine
+          // Stunden → eine HUR-Position wäre irreführend; solche Strukturen
+          // werden als Pauschalposition (LS) ausgewiesen.
+          if (EINVOICE_SPECIAL_KINDS.has(t.BOOKING_KIND)) agg.hasSpecial = true;
           tecAggByStructure.set(sid, agg);
         }
       }
@@ -297,7 +306,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
         // Stundenrechnung: wenn BT2 und Stunden gebucht
         const tecAgg = tecAggByStructure.get(row.STRUCTURE_ID);
-        if (Number(ps.BILLING_TYPE_ID) === 2 && tecAgg && tecAgg.hours > 0) {
+        if (Number(ps.BILLING_TYPE_ID) === 2 && tecAgg && tecAgg.hours > 0 && !tecAgg.hasSpecial) {
           const hours = fmt2(tecAgg.hours);
           unitCode  = 'HUR';
           quantity  = hours;
@@ -347,18 +356,19 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
         : { col: 'INVOICE_ID',          val: docId };
       const { data: tecRows } = await supabase
         .from('TEC')
-        .select('QUANTITY_INT, SP_RATE, SP_TOT')
+        .select('QUANTITY_INT, SP_RATE, SP_TOT, BOOKING_KIND')
         .eq(tecFilter.col, tecFilter.val);
       if (tecRows && tecRows.length > 0) {
-        let hours = 0, totalNetTec = 0;
+        let hours = 0, totalNetTec = 0, hasSpecial = false;
         const distinctRates = new Set();
         for (const t of tecRows) {
           hours       += toNum(t.QUANTITY_INT);
           totalNetTec += toNum(t.SP_TOT);
           if (t.SP_RATE != null) distinctRates.add(Number(t.SP_RATE));
+          if (EINVOICE_SPECIAL_KINDS.has(t.BOOKING_KIND)) hasSpecial = true;
         }
-        // Akzeptanz: TEC-Summe deckt amountNet (Toleranz 1 Cent).
-        if (hours > 0 && Math.abs(fmt2(totalNetTec) - amountNet) <= 0.01) {
+        // Akzeptanz: reine Stunden (keine Pauschalen/Stück) und TEC-Summe deckt amountNet.
+        if (hours > 0 && !hasSpecial && Math.abs(fmt2(totalNetTec) - amountNet) <= 0.01) {
           const h = fmt2(hours);
           unitCode  = 'HUR';
           quantity  = h;

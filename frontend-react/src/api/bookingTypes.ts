@@ -97,6 +97,17 @@ export interface CreateSpecialBuchungPayload {
 export const createSpecialBuchung = (body: CreateSpecialBuchungPayload) =>
   apiClient.post<{ success: boolean }>('/buchungen/special', body)
 
+export const updateSpecialBuchung = (id: number, body: CreateSpecialBuchungPayload) =>
+  apiClient.patch<{ success: boolean }>(`/buchungen/special/${id}`, body)
+
+// ── Projektbezogene Buchungsarten (Preislisten) ───────────────────────────────
+
+export const createProjectBookingType = (body: BookingTypePayload & { project_id: number }) =>
+  apiClient.post<{ data: BookingType }>('/buchungen/booking-types', body)
+
+export const deleteProjectBookingType = (id: number) =>
+  apiClient.delete<{ success: boolean }>(`/buchungen/booking-types/${id}`)
+
 // ── Projektpreise (Preislisten) ───────────────────────────────────────────────
 
 export interface ProjectBookingPrice {

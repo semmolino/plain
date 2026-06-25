@@ -15,9 +15,12 @@ import {
 import { fetchActiveEmployees } from '@/api/projekte'
 import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
 import {
-  fetchSelectableBookingTypes, createSpecialBuchung, BOOKING_KIND_LABEL,
+  fetchSelectableBookingTypes, createSpecialBuchung, updateSpecialBuchung, BOOKING_KIND_LABEL,
   type BookingKind, type SelectableBookingType,
 } from '@/api/bookingTypes'
+import {
+  fetchTextSnippets, createTextSnippet, deleteTextSnippet, type TextSnippet,
+} from '@/api/textSnippets'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
@@ -87,6 +90,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const showCosts   = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.costs.view'))
   const canSpecial  = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.special.create'))
   const [specialKind, setSpecialKind] = useState<BookingKind | null>(null)
+  const [editSpecial, setEditSpecial] = useState<Buchung | null>(null)
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
   // Notification-Klick mit neuem Projekt soll umschalten.
   useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
@@ -124,6 +128,18 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     queryKey: ['e2p-preset', empId, pid],
     queryFn:  () => fetchEmployee2ProjectPreset(empId!, pid!),
     enabled:  empId !== null && pid !== null && showForm,
+  })
+
+  // Persönliche Buchungstexte (Textbausteine) für die Beschreibung
+  const { data: snippetsData } = useQuery({ queryKey: ['text-snippets'], queryFn: fetchTextSnippets, enabled: showForm })
+  const snippets: TextSnippet[] = snippetsData?.data ?? []
+  const createSnippetMut = useMutation({
+    mutationFn: createTextSnippet,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['text-snippets'] }),
+  })
+  const delSnippetMut = useMutation({
+    mutationFn: deleteTextSnippet,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['text-snippets'] }),
   })
 
   const projects  = projectsData?.data ?? []
@@ -523,6 +539,29 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <label>Beschreibung*</label>
                     <textarea rows={2} value={form.POSTING_DESCRIPTION} onChange={setF('POSTING_DESCRIPTION')} required
                       style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+                      <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.5)', display: 'inline-flex', alignItems: 'center' }}>
+                        Textbausteine <HelpHint id="bookings.text_snippets" />
+                      </span>
+                      {snippets.map(s => (
+                        <span key={s.ID} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(99,102,241,0.10)', color: '#3730a3', borderRadius: 999, padding: '2px 4px 2px 10px', fontSize: 12 }}>
+                          <button type="button"
+                            title={s.TEXT}
+                            onClick={() => setForm(f => ({ ...f, POSTING_DESCRIPTION: f.POSTING_DESCRIPTION ? `${f.POSTING_DESCRIPTION} ${s.TEXT}` : s.TEXT }))}
+                            style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 12, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {s.LABEL || s.TEXT}
+                          </button>
+                          <button type="button" title="Baustein löschen" onClick={() => delSnippetMut.mutate(s.ID)}
+                            style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', padding: '0 4px', fontSize: 13, lineHeight: 1 }}>×</button>
+                        </span>
+                      ))}
+                      <button type="button"
+                        disabled={!form.POSTING_DESCRIPTION.trim() || createSnippetMut.isPending}
+                        onClick={() => createSnippetMut.mutate({ text: form.POSTING_DESCRIPTION.trim() })}
+                        className="btn-small" style={{ fontSize: 12, padding: '2px 8px' }}>
+                        ＋ Als Baustein speichern
+                      </button>
+                    </div>
                   </div>
                   <Message text={msg?.text ?? null} type={msg?.type} />
                   <button className="btn-primary" type="submit" disabled={createMut.isPending}>
@@ -574,11 +613,9 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         <td className="doc-actions">
                           {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
                             <>
-                              {!isSpecialKind(b.BOOKING_KIND) && (
-                                <button className="row-action-btn" onClick={() => openEdit(b)} title="Bearbeiten">
-                                  <Pencil size={14} strokeWidth={2} />
-                                </button>
-                              )}
+                              <button className="row-action-btn" onClick={() => isSpecialKind(b.BOOKING_KIND) ? setEditSpecial(b) : openEdit(b)} title="Bearbeiten">
+                                <Pencil size={14} strokeWidth={2} />
+                              </button>
                               <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => confirmDelete(b)} title="Löschen">
                                 <Trash2 size={14} strokeWidth={2} />
                               </button>
@@ -682,6 +719,23 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
         />
       )}
 
+      {editSpecial !== null && pid !== null && (
+        <SpecialBookingModal
+          projectId={pid}
+          kind={(editSpecial.BOOKING_KIND ?? 'UNIT') as BookingKind}
+          existing={editSpecial}
+          leafStructure={leafStructure.map(s => ({ STRUCTURE_ID: s.STRUCTURE_ID }))}
+          pathCache={pathCache}
+          showCosts={showCosts}
+          onClose={() => setEditSpecial(null)}
+          onSaved={() => {
+            setEditSpecial(null)
+            setMsg({ text: 'Buchung aktualisiert ✅', type: 'success' })
+            void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
+          }}
+        />
+      )}
+
       <ConfirmModal
         open={confirmState !== null}
         title={confirmState?.title ?? ''}
@@ -703,21 +757,26 @@ interface SpecialBookingModalProps {
   leafStructure: { STRUCTURE_ID: number }[]
   pathCache:     Map<number, string>
   showCosts:     boolean
+  existing?:     Buchung
   onClose:       () => void
   onSaved:       () => void
 }
 
-function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCosts, onClose, onSaved }: SpecialBookingModalProps) {
+function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCosts, existing, onClose, onSaved }: SpecialBookingModalProps) {
   const isUnit = kind === 'UNIT'
-  const [bookingTypeId, setBookingTypeId] = useState<string>('')   // '' = Freitext
-  const [structureId,   setStructureId]   = useState<string>('')
-  const [date,          setDate]          = useState<string>(todayIso())
-  const [description,   setDescription]   = useState<string>('')
-  const [quantity,      setQuantity]      = useState<string>('')
-  const [unitLabel,     setUnitLabel]     = useState<string>('')
-  const [spRate,        setSpRate]        = useState<string>('')
-  const [cpRate,        setCpRate]        = useState<string>('')
-  const [amount,        setAmount]        = useState<string>('')
+  const isEdit = existing != null
+  const [bookingTypeId, setBookingTypeId] = useState<string>(existing?.BOOKING_TYPE_ID != null ? String(existing.BOOKING_TYPE_ID) : '')
+  const [structureId,   setStructureId]   = useState<string>(existing?.STRUCTURE_ID != null ? String(existing.STRUCTURE_ID) : '')
+  const [date,          setDate]          = useState<string>(existing ? fmtDate(existing.DATE_VOUCHER) : todayIso())
+  const [description,   setDescription]   = useState<string>(existing?.POSTING_DESCRIPTION ?? '')
+  const [quantity,      setQuantity]      = useState<string>(existing && kind === 'UNIT' ? String(existing.QUANTITY_EXT ?? '') : '')
+  const [unitLabel,     setUnitLabel]     = useState<string>(existing?.UNIT_LABEL ?? '')
+  const [spRate,        setSpRate]        = useState<string>(existing && kind === 'UNIT' && existing.SP_RATE != null ? String(existing.SP_RATE) : '')
+  const [cpRate,        setCpRate]        = useState<string>(existing && kind === 'UNIT' && existing.CP_RATE != null ? String(existing.CP_RATE) : '')
+  const [amount,        setAmount]        = useState<string>(
+    existing && kind === 'LUMP_COST'    ? String(existing.CP_TOT ?? '') :
+    existing && kind === 'LUMP_REVENUE' ? String(existing.SP_TOT ?? '') : ''
+  )
   const [msg,           setMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -753,17 +812,20 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
   const previewCost = isUnit ? num(quantity) * num(cpRate) : (kind === 'LUMP_COST' ? num(amount) : 0)
 
   const saveMut = useMutation({
-    mutationFn: () => createSpecialBuchung({
-      BOOKING_KIND:        kind,
-      PROJECT_ID:          projectId,
-      STRUCTURE_ID:        structureId ? Number(structureId) : undefined,
-      DATE_VOUCHER:        date,
-      BOOKING_TYPE_ID:     bookingTypeId ? Number(bookingTypeId) : undefined,
-      POSTING_DESCRIPTION: description,
-      ...(isUnit
-        ? { QUANTITY: num(quantity), UNIT_LABEL: unitLabel || undefined, SP_RATE: num(spRate), CP_RATE: num(cpRate) }
-        : { AMOUNT: num(amount) }),
-    }),
+    mutationFn: () => {
+      const payload = {
+        BOOKING_KIND:        kind,
+        PROJECT_ID:          projectId,
+        STRUCTURE_ID:        structureId ? Number(structureId) : undefined,
+        DATE_VOUCHER:        date,
+        BOOKING_TYPE_ID:     bookingTypeId ? Number(bookingTypeId) : undefined,
+        POSTING_DESCRIPTION: description,
+        ...(isUnit
+          ? { QUANTITY: num(quantity), UNIT_LABEL: unitLabel || undefined, SP_RATE: num(spRate), CP_RATE: num(cpRate) }
+          : { AMOUNT: num(amount) }),
+      }
+      return isEdit ? updateSpecialBuchung(existing!.ID, payload) : createSpecialBuchung(payload)
+    },
     onSuccess: onSaved,
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
@@ -784,7 +846,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
   useCtrlS(() => formRef.current?.requestSubmit(), true)
 
   return (
-    <Modal open onClose={onClose} title={BOOKING_KIND_LABEL[kind]}>
+    <Modal open onClose={onClose} title={`${BOOKING_KIND_LABEL[kind]}${isEdit ? ' bearbeiten' : ''}`}>
       <form ref={formRef} onSubmit={submit} className="master-form">
         <div className="form-group">
           <label>Aus Katalog (optional)</label>

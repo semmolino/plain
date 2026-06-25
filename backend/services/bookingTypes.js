@@ -187,6 +187,19 @@ async function patchBookingType(supabase, { tenantId, id, body }) {
   return data;
 }
 
+// Löschen einer projektbezogenen Buchungsart (aus dem Projekt-Kontext / Preislisten).
+async function deleteProjectBookingType(supabase, { tenantId, id }) {
+  const { data: row, error } = await supabase
+    .from("BOOKING_TYPE").select("ID, SCOPE").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  if (error) throw { status: 500, message: error.message };
+  if (!row) throw { status: 404, message: "Buchungsart nicht gefunden." };
+  if (row.SCOPE !== "project") {
+    throw { status: 400, message: "Globale Buchungsarten werden in den Stammdaten verwaltet." };
+  }
+  const { error: delErr } = await supabase.from("BOOKING_TYPE").delete().eq("ID", id).eq("TENANT_ID", tenantId);
+  if (delErr) throw { status: 500, message: delErr.message };
+}
+
 async function deleteBookingType(supabase, { tenantId, id }) {
   // Bereits gebuchte TEC-Zeilen verweisen per BOOKING_TYPE_ID, behalten aber
   // ihre Werte (Snapshot in QUANTITY/RATE). Löschen des Katalog-Eintrags ist
@@ -204,4 +217,5 @@ module.exports = {
   createBookingType,
   patchBookingType,
   deleteBookingType,
+  deleteProjectBookingType,
 };

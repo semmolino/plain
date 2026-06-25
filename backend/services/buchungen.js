@@ -777,37 +777,16 @@ async function deleteBuchung(supabase, { id }) {
 // wird in den Stundenauswertungen über BOOKING_KIND herausgefiltert.
 // ---------------------------------------------------------------------------
 
-async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
-  const b = body || {};
-  const kind = String(b.BOOKING_KIND || "").trim();
-  if (!SPECIAL_KINDS.has(kind)) throw { status: 400, message: "Ungültige Buchungsart." };
-  if (!b.PROJECT_ID || !b.DATE_VOUCHER || !b.POSTING_DESCRIPTION) {
-    throw { status: 400, message: "Projekt, Datum und Beschreibung sind erforderlich." };
-  }
-
-  // Buchungen nur auf Blatt-Elemente (wie bei Stundenbuchungen).
-  if (b.STRUCTURE_ID) {
-    const { data: childCheck } = await supabase
-      .from("PROJECT_STRUCTURE").select("ID").eq("FATHER_ID", b.STRUCTURE_ID).limit(1);
-    if (childCheck && childCheck.length > 0) {
-      throw { status: 400, message: "Buchungen können nur auf Blatt-Elemente (ohne Unterpositionen) gebucht werden" };
-    }
-  }
-
-  const { data: projRow, error: projErr } = await supabase
-    .from("PROJECT").select("TENANT_ID").eq("ID", b.PROJECT_ID).maybeSingle();
-  if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
-  const resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
-
+// Berechnet die TEC-Felder einer Spezial-Buchung aus dem Request-Body.
+// WICHTIG: QUANTITY_INT bleibt 0 — Spezial-Buchungen sind keine Stunden und
+// dürfen in keiner Stunden-/Reportsumme (HOURS_TOTAL = SUM(QUANTITY_INT))
+// mitgezählt werden. Geld steckt in CP_TOT/SP_TOT (so leiten alle Reports
+// Kosten/Erlös ab); die Struktur-Kostenrechnung nutzt für Spezialarten CP_TOT.
+function computeSpecialEncoding(kind, b) {
   const num = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
   };
-
-  // WICHTIG: QUANTITY_INT bleibt 0 — Spezial-Buchungen sind keine Stunden und
-  // dürfen in keiner Stunden-/Reportsumme (HOURS_TOTAL = SUM(QUANTITY_INT))
-  // mitgezählt werden. Geld steckt in CP_TOT/SP_TOT (so leiten alle Reports
-  // Kosten/Erlös ab); die Struktur-Kostenrechnung nutzt für Spezialarten CP_TOT.
   let qtyInt = 0, cpRate = 0, cpTot = 0, qtyExt = 0, spRate = 0, spTot = 0, unitLabel = null;
 
   if (kind === "UNIT") {
@@ -829,6 +808,34 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
     if (amount === 0) throw { status: 400, message: "Bitte einen Betrag angeben." };
     spRate = amount; spTot = fmt2(amount);   // Summe → abrechenbarer Erlös (SP_TOT)
   }
+  return { qtyInt, qtyExt, cpRate, cpTot, spRate, spTot, unitLabel };
+}
+
+async function assertLeafStructure(supabase, structureId) {
+  if (!structureId) return;
+  const { data: childCheck } = await supabase
+    .from("PROJECT_STRUCTURE").select("ID").eq("FATHER_ID", structureId).limit(1);
+  if (childCheck && childCheck.length > 0) {
+    throw { status: 400, message: "Buchungen können nur auf Blatt-Elemente (ohne Unterpositionen) gebucht werden" };
+  }
+}
+
+async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
+  const b = body || {};
+  const kind = String(b.BOOKING_KIND || "").trim();
+  if (!SPECIAL_KINDS.has(kind)) throw { status: 400, message: "Ungültige Buchungsart." };
+  if (!b.PROJECT_ID || !b.DATE_VOUCHER || !b.POSTING_DESCRIPTION) {
+    throw { status: 400, message: "Projekt, Datum und Beschreibung sind erforderlich." };
+  }
+
+  await assertLeafStructure(supabase, b.STRUCTURE_ID);
+
+  const { data: projRow, error: projErr } = await supabase
+    .from("PROJECT").select("TENANT_ID").eq("ID", b.PROJECT_ID).maybeSingle();
+  if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
+  const resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
+
+  const { qtyInt, qtyExt, cpRate, cpTot, spRate, spTot, unitLabel } = computeSpecialEncoding(kind, b);
 
   const insertRow = {
     TENANT_ID:           resolvedTenantId,
@@ -870,6 +877,69 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
   return inserted;
 }
 
+async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
+  const b = body || {};
+  const { data: existing, error: exErr } = await supabase
+    .from("TEC")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, TENANT_ID, BOOKING_KIND, PARTIAL_PAYMENT_ID, INVOICE_ID")
+    .eq("ID", id)
+    .eq("TENANT_ID", tenantId)
+    .single();
+  if (exErr || !existing) throw { status: 404, message: "Buchung nicht gefunden." };
+  if (!SPECIAL_KINDS.has(existing.BOOKING_KIND)) {
+    throw { status: 400, message: "Diese Buchung ist keine Pauschale/Stückleistung." };
+  }
+  if (existing.PARTIAL_PAYMENT_ID != null || existing.INVOICE_ID != null) {
+    throw { status: 409, message: "Bereits abgerechnete Buchungen können nicht bearbeitet werden." };
+  }
+
+  const kind = existing.BOOKING_KIND; // Art wird beim Bearbeiten nicht gewechselt
+  if (!b.DATE_VOUCHER || !b.POSTING_DESCRIPTION) {
+    throw { status: 400, message: "Datum und Beschreibung sind erforderlich." };
+  }
+
+  const newStructureId = b.STRUCTURE_ID ? Number(b.STRUCTURE_ID) : null;
+  await assertLeafStructure(supabase, newStructureId);
+
+  const { qtyExt, cpRate, cpTot, spRate, spTot, unitLabel } = computeSpecialEncoding(kind, b);
+
+  const updateRow = {
+    BOOKING_TYPE_ID:     b.BOOKING_TYPE_ID ? Number(b.BOOKING_TYPE_ID) : null,
+    UNIT_LABEL:          unitLabel,
+    DATE_VOUCHER:        b.DATE_VOUCHER,
+    QUANTITY_INT:        0,
+    CP_RATE:             cpRate,
+    CP_TOT:              cpTot,
+    QUANTITY_EXT:        qtyExt,
+    SP_RATE:             spRate,
+    SP_TOT:              spTot,
+    POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
+    STRUCTURE_ID:        newStructureId,
+  };
+
+  const { error: updErr } = await supabase.from("TEC").update(updateRow).eq("ID", id).eq("TENANT_ID", tenantId);
+  if (updErr) throw { status: 500, message: "Fehler beim Aktualisieren: " + updErr.message };
+
+  const affected = new Set([existing.STRUCTURE_ID, newStructureId].filter((v) => v != null).map(Number));
+  for (const sid of affected) await recomputeStructure(supabase, sid);
+
+  try {
+    if (existing.PROJECT_ID && affected.size > 0) {
+      await budgetWarnings.evaluateAfterTecChange(supabase, {
+        tenantId: existing.TENANT_ID ?? tenantId,
+        projectId: Number(existing.PROJECT_ID),
+        structureIds: affected,
+        triggerEmployeeId: null,
+        triggerTecId: Number(id),
+      });
+    }
+  } catch (e) {
+    console.warn(`[BUDGET_WARNING] updateSpecialBuchung eval failed: ${e?.message || e}`);
+  }
+
+  return { id: Number(id) };
+}
+
 async function listBuchungenByProject(supabase, { projectId, tenantId }) {
   const { data, error } = await supabase
     .from("TEC")
@@ -894,6 +964,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
 module.exports = {
   createBuchung,
   createSpecialBuchung,
+  updateSpecialBuchung,
   patchBuchung,
   deleteBuchung,
   listBuchungenByProject,
