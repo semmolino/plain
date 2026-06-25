@@ -44,7 +44,7 @@ const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 
 type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'MAIL'
-type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'rolle' | 'passwort'
+type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'rolle' | 'passwort'
 
 function fmtH(n: number) {
   return n.toFixed(2).replace('.', ',') + ' h'
@@ -184,6 +184,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 }) {
   const qc = useQueryClient()
   const canAssignRoles = usePermission('employees.role.assign')
+  const canViewBookings = usePermission('employees.bookings.view_all')
   const [section,  setSection]  = useState<EmpSection>(initialSection)
   const [editForm, setEditForm] = useState<UpdateEmployeePayload>({
     short_name:       employee.SHORT_NAME ?? '',
@@ -324,6 +325,9 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         <button type="button" style={sectionBtnStyle('stammdaten')}  onClick={() => setSection('stammdaten')}>Stammdaten</button>
         <button type="button" style={sectionBtnStyle('kostensatz')}  onClick={() => setSection('kostensatz')}>Kostensatz</button>
         <button type="button" style={sectionBtnStyle('arbeitszeit')} onClick={() => setSection('arbeitszeit')}>Arbeitszeit</button>
+        {canViewBookings && (
+          <button type="button" style={sectionBtnStyle('zeitkonto')} onClick={() => setSection('zeitkonto')}>Zeitkonto</button>
+        )}
         {canAssignRoles && (
           <button type="button" style={sectionBtnStyle('rolle')}     onClick={() => setSection('rolle')}>Rolle &amp; Rechte</button>
         )}
@@ -514,6 +518,10 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
           </div>
           <Message text={wmMsg?.text ?? null} type={wmMsg?.type} />
         </div>
+      )}
+
+      {section === 'zeitkonto' && canViewBookings && (
+        <EmployeeTimeAccount empId={employee.ID} />
       )}
 
       {section === 'rolle' && canAssignRoles && (
@@ -951,13 +959,11 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
   )
 }
 
-// ── Reporting Tab ─────────────────────────────────────────────────────────────
+// ── Employee Time Account (Monat/Verlauf, wiederverwendbar) ─────────────────────
 
-function ReportingTab({ employees }: { employees: Employee[] }) {
+function EmployeeTimeAccount({ empId }: { empId: number }) {
   const qc = useQueryClient()
   const toast = useToast()
-  const [subTab,   setSubTab]   = useState<'list' | 'single'>('list')
-  const [empId,    setEmpId]    = useState<number | null>(null)
   const [year,     setYear]     = useState(new Date().getFullYear())
   const [month,    setMonth]    = useState(new Date().getMonth() + 1)
   const [viewMode, setViewMode] = useState<'month' | 'running'>('month')
@@ -1053,18 +1059,17 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
 
   const { data: monthRes, isLoading: loadingMonth } = useQuery({
     queryKey: ['emp-balance-month', empId, year, month],
-    queryFn:  () => fetchMonthBalance(empId!, year, month),
-    enabled:  empId !== null && viewMode === 'month',
+    queryFn:  () => fetchMonthBalance(empId, year, month),
+    enabled:  viewMode === 'month',
   })
   const { data: runningRes, isLoading: loadingRunning } = useQuery({
     queryKey: ['emp-balance-running', empId],
-    queryFn:  () => fetchRunningBalance(empId!),
-    enabled:  empId !== null && viewMode === 'running',
+    queryFn:  () => fetchRunningBalance(empId),
+    enabled:  viewMode === 'running',
   })
   const { data: closeStatusRes, refetch: refetchClose } = useQuery({
     queryKey: ['month-close-status', empId, year, month],
-    queryFn:  () => fetchMonthCloseStatus(empId!, year, month),
-    enabled:  empId !== null,
+    queryFn:  () => fetchMonthCloseStatus(empId, year, month),
   })
 
   const monthData: MonthBalance | undefined = monthRes?.data
@@ -1074,7 +1079,6 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
   const balanceColor = (n: number) => n > 0 ? '#059669' : n < 0 ? '#dc2626' : '#6b7280'
 
   async function toggleMonthClose() {
-    if (!empId) return
     setCloseLoading(true)
     try {
       if (isClosed) {
@@ -1093,25 +1097,8 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
 
   return (
     <div>
-      <div className="daten-filter-modes" style={{ marginBottom: 20 }}>
-        <button className={`daten-filter-mode-btn${subTab === 'list'   ? ' active' : ''}`} onClick={() => setSubTab('list')}>Alle Mitarbeiter</button>
-        <button className={`daten-filter-mode-btn${subTab === 'single' ? ' active' : ''}`} onClick={() => setSubTab('single')}>Mitarbeiter</button>
-      </div>
-
-      {subTab === 'list' && <EmployeeListReport employees={employees} />}
-
-      {subTab === 'single' && (
-      <div style={{ maxWidth: 760 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 20 }}>
-        <div className="form-group" style={{ marginBottom: 0, minWidth: 220 }}>
-          <label style={{ fontSize: 12 }}>Mitarbeiter</label>
-          <select value={empId ?? ''} onChange={e => setEmpId(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">— Mitarbeiter wählen —</option>
-            {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
-          </select>
-        </div>
-
-        {empId && viewMode === 'month' && (
+        {viewMode === 'month' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <button type="button" className="btn-small" onClick={prevMonth}>◀</button>
             <span style={{ fontWeight: 600, minWidth: 110, textAlign: 'center', fontSize: 14 }}>
@@ -1120,20 +1107,13 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
             <button type="button" className="btn-small" onClick={nextMonth}>▶</button>
           </div>
         )}
-
-        {empId && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button type="button" className={`btn-small${viewMode === 'month'   ? ' btn-save' : ''}`} onClick={() => setViewMode('month')}>Monat</button>
-            <button type="button" className={`btn-small${viewMode === 'running' ? ' btn-save' : ''}`} onClick={() => setViewMode('running')}>Verlauf</button>
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button type="button" className={`btn-small${viewMode === 'month'   ? ' btn-save' : ''}`} onClick={() => setViewMode('month')}>Monat</button>
+          <button type="button" className={`btn-small${viewMode === 'running' ? ' btn-save' : ''}`} onClick={() => setViewMode('running')}>Verlauf</button>
+        </div>
       </div>
 
-      {!empId && (
-        <p className="empty-note">Mitarbeiter auswählen, um das Reporting anzuzeigen.</p>
-      )}
-
-      {empId && viewMode === 'month' && (
+      {viewMode === 'month' && (
         <>
           {loadingMonth && <p className="empty-note">Laden …</p>}
           {monthData && (
@@ -1248,7 +1228,7 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
         </>
       )}
 
-      {empId && viewMode === 'running' && (
+      {viewMode === 'running' && (
         <>
           {loadingRunning && <p className="empty-note">Laden …</p>}
           {runningData && runningData.months.length === 0 && (
@@ -1284,8 +1264,6 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
             </>
           )}
         </>
-      )}
-      </div>
       )}
 
       <Modal open={editBooking !== null} onClose={() => setEditBooking(null)}
@@ -1381,6 +1359,43 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
           </div>
         )}
       </Modal>
+    </div>
+  )
+}
+
+// ── Reporting Tab ─────────────────────────────────────────────────────────────
+
+function ReportingTab({ employees }: { employees: Employee[] }) {
+  const [subTab, setSubTab] = useState<'list' | 'single'>('list')
+  const [empId,  setEmpId]  = useState<number | null>(null)
+
+  return (
+    <div>
+      <div className="daten-filter-modes" style={{ marginBottom: 20 }}>
+        <button className={`daten-filter-mode-btn${subTab === 'list'   ? ' active' : ''}`} onClick={() => setSubTab('list')}>Alle Mitarbeiter</button>
+        <button className={`daten-filter-mode-btn${subTab === 'single' ? ' active' : ''}`} onClick={() => setSubTab('single')}>Mitarbeiter</button>
+      </div>
+
+      {subTab === 'list' && <EmployeeListReport employees={employees} />}
+
+      {subTab === 'single' && (
+        <div style={{ maxWidth: 760 }}>
+          <div style={{ marginBottom: 20 }}>
+            <div className="form-group" style={{ marginBottom: 0, minWidth: 220 }}>
+              <label style={{ fontSize: 12 }}>Mitarbeiter</label>
+              <select value={empId ?? ''} onChange={e => setEmpId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">— Mitarbeiter wählen —</option>
+                {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {!empId && (
+            <p className="empty-note">Mitarbeiter auswählen, um das Reporting anzuzeigen.</p>
+          )}
+          {empId && <EmployeeTimeAccount empId={empId} />}
+        </div>
+      )}
     </div>
   )
 }
