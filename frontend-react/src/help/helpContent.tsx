@@ -52,16 +52,15 @@ export const HELP = {
     ),
   },
   'settings.booking_text_templates': {
-    title: 'Globale Buchungstextvorlagen',
+    title: 'Textvorlagen für Stundenleistungen',
     body: (
       <>
         Wiederkehrende Beschreibungstexte, die <strong>allen</strong> Mitarbeitern beim
-        Buchen als Baustein zur Auswahl stehen (z. B. „Abstimmung mit Bauherr",
-        „Vor-Ort-Termin"). Über den <strong>Bezug</strong> lässt sich steuern, wann ein
-        Baustein erscheint: allgemein (überall), nur bei Stundenleistungen, bei einer
-        ganzen Art (z. B. alle Stückleistungen) oder nur bei einer konkreten
-        Buchungsart. Ergänzend legt jeder Mitarbeiter eigene, private Bausteine an
-        (immer überall sichtbar). Ein Klick fügt den Text in die Beschreibung ein.
+        Buchen von <strong>Stundenleistungen</strong> als Baustein zur Auswahl stehen
+        (z. B. „Abstimmung mit Bauherr", „Vor-Ort-Termin"). Texte für Pauschalen oder
+        Stückleistungen werden direkt bei der jeweiligen <strong>Buchungsart</strong>
+        gepflegt. Ergänzend legt jeder Mitarbeiter eigene, private Bausteine an. Ein
+        Klick fügt den Text in die Beschreibung ein.
       </>
     ),
   },
