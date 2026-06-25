@@ -1912,7 +1912,7 @@ export function MitarbeiterPage() {
               </span>
               <Can permission="employees.create">
                 <button
-                  className="btn-primary"
+                  className="btn-primary btn-small"
                   style={{ marginLeft: 'auto' }}
                   onClick={() => {
                     setForm(emptyCreateForm())
