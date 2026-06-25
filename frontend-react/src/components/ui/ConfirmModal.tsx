@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { useRef } from 'react'
 
 interface Props {
   open:          boolean
@@ -16,10 +17,20 @@ export function ConfirmModal({
   confirmClass = 'btn-danger',
   onConfirm, onCancel,
 }: Props) {
+  // Nur schließen, wenn Klick auf dem Backdrop beginnt UND endet (kein Drag von innen).
+  const downOnBackdrop = useRef(false)
   if (!open) return null
   return createPortal(
-    <div className="modal-backdrop modal-backdrop--confirm" onClick={onCancel}>
-      <div className="modal-card" onClick={e => e.stopPropagation()}>
+    <div
+      className="modal-backdrop modal-backdrop--confirm"
+      onMouseDown={e => { downOnBackdrop.current = e.target === e.currentTarget }}
+      onClick={e => {
+        const intentional = e.target === e.currentTarget && downOnBackdrop.current
+        downOnBackdrop.current = false
+        if (intentional) onCancel()
+      }}
+    >
+      <div className="modal-card">
         <div className="modal-header">
           <span className="modal-title">{title}</span>
           <button className="modal-close" onClick={onCancel} aria-label="Schließen">✕</button>

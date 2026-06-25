@@ -975,13 +975,54 @@ module.exports = (supabase) => {
       .gt("OPEN_NET_TOTAL", 0)
       .order("OPEN_NET_TOTAL", { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
-    const projects = (data || []).map(p => ({
-      PROJECT_ID:              p.PROJECT_ID,
-      NAME_SHORT:              p.NAME_SHORT,
-      NAME_LONG:               p.NAME_LONG,
-      PROJECT_MANAGER_DISPLAY: p.PROJECT_MANAGER_DISPLAY,
-      OPEN_NET_TOTAL:          Number(p.OPEN_NET_TOTAL) || 0,
-    }));
+
+    // Interne Positionen (IS_INTERNAL) sind nicht abrechenbar — der Rechnungs-
+    // Wizard schließt sie aus, die View VW_REPORT_PROJECT_DETAIL zählt sie aber
+    // noch mit. Daher hier den Fertigstellungswert interner Blatt-Elemente vom
+    // offenen Betrag abziehen: open_ohne_intern = open − Fertigstellung(intern).
+    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    const projectIds = [...new Set((data || []).map((p) => p.PROJECT_ID))];
+    const internalByProject = new Map();
+    if (projectIds.length) {
+      const { data: structs } = await supabase
+        .from("PROJECT_STRUCTURE")
+        .select("ID, PROJECT_ID, FATHER_ID, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_COMPLETION, IS_INTERNAL")
+        .eq("TENANT_ID", tenantId)
+        .in("PROJECT_ID", projectIds);
+      const all = structs || [];
+      const parentIds = new Set(all.filter((s) => s.FATHER_ID != null).map((s) => String(s.FATHER_ID)));
+      const internalLeaves = all.filter((s) => s.IS_INTERNAL && !parentIds.has(String(s.ID)));
+      // BT=2-Blätter: Erlös = Σ TEC.SP_TOT; BT=1-Blätter: REVENUE_COMPLETION + EXTRAS_COMPLETION.
+      const bt2Ids = internalLeaves.filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
+      const spBySid = new Map();
+      if (bt2Ids.length) {
+        const { data: tec } = await supabase
+          .from("TEC").select("STRUCTURE_ID, SP_TOT").in("STRUCTURE_ID", bt2Ids).neq("STATUS", "DRAFT");
+        for (const t of tec || []) {
+          const k = String(t.STRUCTURE_ID);
+          spBySid.set(k, (spBySid.get(k) || 0) + Number(t.SP_TOT || 0));
+        }
+      }
+      for (const s of internalLeaves) {
+        const val = Number(s.BILLING_TYPE_ID) === 2
+          ? (spBySid.get(String(s.ID)) || 0)
+          : (Number(s.REVENUE_COMPLETION || 0) + Number(s.EXTRAS_COMPLETION || 0));
+        const k = String(s.PROJECT_ID);
+        internalByProject.set(k, (internalByProject.get(k) || 0) + val);
+      }
+    }
+
+    const projects = (data || [])
+      .map((p) => ({
+        PROJECT_ID:              p.PROJECT_ID,
+        NAME_SHORT:              p.NAME_SHORT,
+        NAME_LONG:               p.NAME_LONG,
+        PROJECT_MANAGER_DISPLAY: p.PROJECT_MANAGER_DISPLAY,
+        OPEN_NET_TOTAL:          round2(Math.max(0, (Number(p.OPEN_NET_TOTAL) || 0) - (internalByProject.get(String(p.PROJECT_ID)) || 0))),
+      }))
+      .filter((p) => p.OPEN_NET_TOTAL > 0.005)
+      .sort((a, b) => b.OPEN_NET_TOTAL - a.OPEN_NET_TOTAL);
+
     const byPlMap = {};
     for (const p of projects) {
       const name = p.PROJECT_MANAGER_DISPLAY || "(Unbekannt)";

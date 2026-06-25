@@ -461,9 +461,9 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 <button
                   className="btn-primary"
                   style={{ width: 'auto', marginTop: 0 }}
-                  onClick={() => { if (!showForm) setExtTouched(false); setShowForm(v => !v); setMsg(null) }}
+                  onClick={() => { setExtTouched(false); setForm(emptyForm()); setShowForm(true); setMsg(null) }}
                 >
-                  {showForm ? 'Formular schließen' : '+ Stundenbuchung'}
+                  + Stundenbuchung
                 </button>
                 {canSpecial && (
                   <>
@@ -481,8 +481,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 )}
               </div>
 
-              {showForm && (
-                <form ref={formRef} onSubmit={submitForm} className="master-form" style={{ marginTop: 12 }}>
+              <Modal open={showForm} onClose={() => setShowForm(false)} title="Neue Stundenbuchung">
+                <form ref={formRef} onSubmit={submitForm} className="master-form">
                   <div className="form-group">
                     <label>Mitarbeiter*</label>
                     <select value={form.EMPLOYEE_ID} onChange={setF('EMPLOYEE_ID')} required>
@@ -564,11 +564,14 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     </div>
                   </div>
                   <Message text={msg?.text ?? null} type={msg?.type} />
-                  <button className="btn-primary" type="submit" disabled={createMut.isPending}>
-                    {createMut.isPending ? 'Speichert …' : 'Buchung speichern'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <button className="btn-primary" type="submit" disabled={createMut.isPending}>
+                      {createMut.isPending ? 'Speichert …' : 'Buchung speichern'}
+                    </button>
+                    <button type="button" className="btn-small" onClick={() => setShowForm(false)}>Abbrechen</button>
+                  </div>
                 </form>
-              )}
+              </Modal>
               {!showForm && <Message text={msg?.text ?? null} type={msg?.type} />}
 
               <div className="list-section">
