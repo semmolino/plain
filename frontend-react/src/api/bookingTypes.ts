@@ -96,3 +96,26 @@ export interface CreateSpecialBuchungPayload {
 
 export const createSpecialBuchung = (body: CreateSpecialBuchungPayload) =>
   apiClient.post<{ success: boolean }>('/buchungen/special', body)
+
+// ── Projektpreise (Preislisten) ───────────────────────────────────────────────
+
+export interface ProjectBookingPrice {
+  BOOKING_TYPE_ID:   number
+  KIND:              BookingKind
+  NAME_SHORT:        string
+  NAME_LONG:         string | null
+  UNIT_LABEL:        string | null
+  SCOPE:             'global' | 'project'
+  DEFAULT_SP_RATE:   number | null
+  DEFAULT_CP_RATE:   number | null
+  PROJECT_SP_RATE:   number | null
+  PROJECT_CP_RATE:   number | null
+  EFFECTIVE_SP_RATE: number | null
+  EFFECTIVE_CP_RATE: number | null
+}
+
+export const fetchProjectBookingPrices = (projectId: number) =>
+  apiClient.get<{ data: ProjectBookingPrice[] }>(`/buchungen/booking-prices?project_id=${projectId}`)
+
+export const upsertProjectBookingPrice = (body: { project_id: number; booking_type_id: number; sp_rate: number | null; cp_rate: number | null }) =>
+  apiClient.put<{ success: boolean }>('/buchungen/booking-prices', body)

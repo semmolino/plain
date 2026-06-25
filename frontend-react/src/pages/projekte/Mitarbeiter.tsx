@@ -10,6 +10,11 @@ import {
   fetchE2PByProject, createE2P, updateE2P, deleteE2P,
   type E2PEntry,
 } from '@/api/projekte'
+import {
+  fetchProjectBookingPrices, upsertProjectBookingPrice, BOOKING_KIND_LABEL,
+  type ProjectBookingPrice,
+} from '@/api/bookingTypes'
+import { HelpHint } from '@/components/ui/HelpHint'
 
 interface Props {
   initialProjectId?: number
@@ -218,7 +223,9 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
       {pid && isError   && <p className="empty-note" style={{ color: 'var(--color-danger)' }}>Fehler beim Laden.</p>}
 
       {pid && !isLoading && !isError && (
-        <div className="table-scroll" style={{ marginTop: 12 }}>
+        <>
+        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '8px 0 0' }}>Mitarbeiter-Stundensätze</h3>
+        <div className="table-scroll" style={{ marginTop: 8 }}>
           <table className="master-table">
             <thead>
               <tr>
@@ -328,6 +335,9 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
             </tfoot>
           </table>
         </div>
+
+        <BookingPriceBlock projectId={pid} />
+        </>
       )}
 
       <ConfirmModal
@@ -339,6 +349,123 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />
+    </div>
+  )
+}
+
+// ── Buchungsarten-Preise je Projekt ────────────────────────────────────────────
+
+function fmtRateOpt(v: number | null | undefined) {
+  return v == null ? '—' : FMT_EUR.format(v) + ' €'
+}
+
+function BookingPriceBlock({ projectId }: { projectId: number }) {
+  const qc = useQueryClient()
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editSp, setEditSp] = useState('')
+  const [editCp, setEditCp] = useState('')
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['project-booking-prices', projectId],
+    queryFn:  () => fetchProjectBookingPrices(projectId),
+  })
+  const rows = data?.data ?? []
+
+  const saveMut = useMutation({
+    mutationFn: (r: ProjectBookingPrice) => upsertProjectBookingPrice({
+      project_id:      projectId,
+      booking_type_id: r.BOOKING_TYPE_ID,
+      sp_rate:         editSp !== '' ? Number(editSp) : null,
+      cp_rate:         editCp !== '' ? Number(editCp) : null,
+    }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['project-booking-prices', projectId] })
+      void qc.invalidateQueries({ queryKey: ['booking-types-selectable', projectId] })
+      setMsg({ text: 'Projektpreis gespeichert ✅', type: 'success' })
+      setEditId(null)
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  function startEdit(r: ProjectBookingPrice) {
+    setEditId(r.BOOKING_TYPE_ID)
+    setEditSp(r.PROJECT_SP_RATE != null ? String(r.PROJECT_SP_RATE) : '')
+    setEditCp(r.PROJECT_CP_RATE != null ? String(r.PROJECT_CP_RATE) : '')
+    setMsg(null)
+  }
+
+  return (
+    <div style={{ marginTop: 22 }}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', display: 'inline-flex', alignItems: 'center' }}>
+        Buchungsarten-Preise <HelpHint id="settings.booking_types" />
+      </h3>
+      <p style={{ fontSize: 12, color: 'rgba(17,24,39,0.55)', margin: '0 0 8px' }}>
+        Standardpreise aus den Stammdaten; hier optional projektbezogen überschreiben. Leer = Standardpreis gilt.
+      </p>
+
+      {msg && <div style={{ marginBottom: 8 }}><Message type={msg.type} text={msg.text} /></div>}
+      {isLoading && <p className="empty-note">Lade Buchungsarten …</p>}
+      {!isLoading && rows.length === 0 && (
+        <p className="empty-note">Noch keine Buchungsarten definiert (Einstellungen → Stammdaten → Buchungsarten).</p>
+      )}
+
+      {rows.length > 0 && (
+        <div className="table-scroll">
+          <table className="master-table">
+            <thead>
+              <tr>
+                <th>Art</th>
+                <th>Buchungsart</th>
+                <th>Einheit</th>
+                <th className="num">Standard VK</th>
+                <th className="num">Standard Kosten</th>
+                <th className="num">Projekt VK</th>
+                <th className="num">Projekt Kosten</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => {
+                const isEditing = editId === r.BOOKING_TYPE_ID
+                return (
+                  <tr key={r.BOOKING_TYPE_ID}>
+                    <td style={{ fontSize: 12, color: 'rgba(17,24,39,0.6)' }}>{BOOKING_KIND_LABEL[r.KIND]}{r.SCOPE === 'project' ? ' · Projekt' : ''}</td>
+                    <td>{r.NAME_SHORT}{r.NAME_LONG ? <span style={{ color: 'rgba(17,24,39,0.5)' }}> – {r.NAME_LONG}</span> : null}</td>
+                    <td>{r.KIND === 'UNIT' ? (r.UNIT_LABEL || '—') : '—'}</td>
+                    <td className="num">{fmtRateOpt(r.DEFAULT_SP_RATE)}</td>
+                    <td className="num">{fmtRateOpt(r.DEFAULT_CP_RATE)}</td>
+                    {isEditing ? (
+                      <>
+                        <td className="num"><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" value={editSp} onChange={e => setEditSp(e.target.value)} placeholder="Standard" /></td>
+                        <td className="num"><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" value={editCp} onChange={e => setEditCp(e.target.value)} placeholder="Standard" /></td>
+                        <td className="doc-actions">
+                          <button className="btn-small btn-save" disabled={saveMut.isPending} onClick={() => saveMut.mutate(r)}>
+                            {saveMut.isPending ? '…' : 'Speichern'}
+                          </button>
+                          <button className="btn-small" onClick={() => setEditId(null)}>Abbrechen</button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="num" style={{ fontWeight: r.PROJECT_SP_RATE != null ? 600 : 400 }}>{r.PROJECT_SP_RATE != null ? FMT_EUR.format(r.PROJECT_SP_RATE) + ' €' : '—'}</td>
+                        <td className="num" style={{ fontWeight: r.PROJECT_CP_RATE != null ? 600 : 400 }}>{r.PROJECT_CP_RATE != null ? FMT_EUR.format(r.PROJECT_CP_RATE) + ' €' : '—'}</td>
+                        <td className="doc-actions">
+                          <Can permission="projects.hourly_rates.edit">
+                            <button className="row-action-btn" onClick={() => startEdit(r)} title="Projektpreis setzen">
+                              <Pencil size={14} strokeWidth={2} />
+                            </button>
+                          </Can>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

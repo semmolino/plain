@@ -24,6 +24,33 @@ async function listSelectable(req, res, supabase) {
   }
 }
 
+// ── Projektpreise (Preislisten) ──────────────────────────────────────────────
+async function listProjectPrices(req, res, supabase) {
+  try {
+    const projectId = req.query.project_id ? Number(req.query.project_id) : null;
+    const data = await svc.listProjectPriceList(supabase, { tenantId: req.tenantId, projectId });
+    res.json({ data });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function upsertProjectPrice(req, res, supabase) {
+  try {
+    const b = req.body || {};
+    const data = await svc.upsertProjectPrice(supabase, {
+      tenantId: req.tenantId,
+      projectId: b.project_id,
+      bookingTypeId: b.booking_type_id,
+      spRate: b.sp_rate,
+      cpRate: b.cp_rate,
+    });
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 async function create(req, res, supabase) {
   try {
     const data = await svc.createBookingType(supabase, { tenantId: req.tenantId, body: req.body || {} });
@@ -51,4 +78,4 @@ async function remove(req, res, supabase) {
   }
 }
 
-module.exports = { list, listSelectable, create, patch, remove };
+module.exports = { list, listSelectable, listProjectPrices, upsertProjectPrice, create, patch, remove };

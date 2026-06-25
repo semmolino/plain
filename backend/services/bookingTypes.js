@@ -60,8 +60,21 @@ async function listBookingTypes(supabase, { tenantId, projectId = null, activeOn
   return data || [];
 }
 
+// Lädt die projektbezogenen Preis-Overrides als Map BOOKING_TYPE_ID → {sp,cp}.
+async function loadProjectPriceMap(supabase, tenantId, projectId) {
+  if (projectId == null) return new Map();
+  const { data, error } = await supabase
+    .from("PROJECT_BOOKING_PRICE")
+    .select("BOOKING_TYPE_ID, SP_RATE, CP_RATE")
+    .eq("TENANT_ID", tenantId)
+    .eq("PROJECT_ID", projectId);
+  if (error) throw { status: 500, message: error.message };
+  return new Map((data || []).map((r) => [Number(r.BOOKING_TYPE_ID), r]));
+}
+
 // Auswahlliste beim Buchen: globale + (falls Projekt) dessen projektbezogene,
-// nur aktive. Projektbezogene Einträge stehen vorn.
+// nur aktive. Projektbezogene Preis-Overrides werden eingerechnet (DEFAULT_*_RATE
+// spiegelt den effektiven Projektpreis). Projektbezogene Einträge stehen vorn.
 async function listSelectableForBooking(supabase, { tenantId, projectId = null }) {
   const { data, error } = await supabase
     .from("BOOKING_TYPE")
@@ -75,9 +88,83 @@ async function listSelectableForBooking(supabase, { tenantId, projectId = null }
   const rows = (data || []).filter(
     (r) => r.SCOPE === "global" || (projectId != null && Number(r.PROJECT_ID) === Number(projectId))
   );
+
+  const priceMap = await loadProjectPriceMap(supabase, tenantId, projectId);
+  for (const r of rows) {
+    const ov = priceMap.get(Number(r.ID));
+    if (ov) {
+      if (ov.SP_RATE != null) r.DEFAULT_SP_RATE = Number(ov.SP_RATE);
+      if (ov.CP_RATE != null) r.DEFAULT_CP_RATE = Number(ov.CP_RATE);
+    }
+  }
   // Projektbezogene zuerst.
   rows.sort((a, b) => (a.SCOPE === "project" ? 0 : 1) - (b.SCOPE === "project" ? 0 : 1));
   return rows;
+}
+
+// Preisliste eines Projekts: alle für das Projekt relevanten Buchungsarten
+// (global + projektbezogen) mit Standardpreis, evtl. Override und effektivem Preis.
+async function listProjectPriceList(supabase, { tenantId, projectId }) {
+  if (!projectId) throw { status: 400, message: "projectId ist erforderlich" };
+  const { data, error } = await supabase
+    .from("BOOKING_TYPE")
+    .select("ID, KIND, NAME_SHORT, NAME_LONG, UNIT_LABEL, DEFAULT_SP_RATE, DEFAULT_CP_RATE, SCOPE, PROJECT_ID, ACTIVE")
+    .eq("TENANT_ID", tenantId)
+    .eq("ACTIVE", 1)
+    .order("SORT_ORDER", { ascending: true })
+    .order("NAME_SHORT", { ascending: true });
+  if (error) throw { status: 500, message: error.message };
+
+  const rows = (data || []).filter(
+    (r) => r.SCOPE === "global" || Number(r.PROJECT_ID) === Number(projectId)
+  );
+  const priceMap = await loadProjectPriceMap(supabase, tenantId, projectId);
+
+  return rows.map((r) => {
+    const ov = priceMap.get(Number(r.ID));
+    return {
+      BOOKING_TYPE_ID:   r.ID,
+      KIND:              r.KIND,
+      NAME_SHORT:        r.NAME_SHORT,
+      NAME_LONG:         r.NAME_LONG,
+      UNIT_LABEL:        r.UNIT_LABEL,
+      SCOPE:             r.SCOPE,
+      DEFAULT_SP_RATE:   r.DEFAULT_SP_RATE,
+      DEFAULT_CP_RATE:   r.DEFAULT_CP_RATE,
+      PROJECT_SP_RATE:   ov && ov.SP_RATE != null ? Number(ov.SP_RATE) : null,
+      PROJECT_CP_RATE:   ov && ov.CP_RATE != null ? Number(ov.CP_RATE) : null,
+      EFFECTIVE_SP_RATE: ov && ov.SP_RATE != null ? Number(ov.SP_RATE) : r.DEFAULT_SP_RATE,
+      EFFECTIVE_CP_RATE: ov && ov.CP_RATE != null ? Number(ov.CP_RATE) : r.DEFAULT_CP_RATE,
+    };
+  });
+}
+
+async function upsertProjectPrice(supabase, { tenantId, projectId, bookingTypeId, spRate, cpRate }) {
+  if (!projectId || !bookingTypeId) throw { status: 400, message: "projectId und bookingTypeId sind erforderlich" };
+  const sp = spRate === "" || spRate == null ? null : Number(spRate);
+  const cp = cpRate === "" || cpRate == null ? null : Number(cpRate);
+
+  const { data: existing } = await supabase
+    .from("PROJECT_BOOKING_PRICE").select("ID")
+    .eq("TENANT_ID", tenantId).eq("PROJECT_ID", projectId).eq("BOOKING_TYPE_ID", bookingTypeId).maybeSingle();
+
+  if (sp == null && cp == null) {
+    // Beide leer → Override entfernen (zurück auf Standardpreis).
+    if (existing) await supabase.from("PROJECT_BOOKING_PRICE").delete().eq("ID", existing.ID).eq("TENANT_ID", tenantId);
+    return { removed: true };
+  }
+
+  if (existing) {
+    const { error } = await supabase.from("PROJECT_BOOKING_PRICE")
+      .update({ SP_RATE: sp, CP_RATE: cp }).eq("ID", existing.ID).eq("TENANT_ID", tenantId);
+    if (error) throw { status: 500, message: error.message };
+    return { id: existing.ID };
+  }
+  const { data, error } = await supabase.from("PROJECT_BOOKING_PRICE")
+    .insert([{ TENANT_ID: tenantId, PROJECT_ID: Number(projectId), BOOKING_TYPE_ID: Number(bookingTypeId), SP_RATE: sp, CP_RATE: cp }])
+    .select("ID").single();
+  if (error) throw { status: 500, message: error.message };
+  return { id: data.ID };
 }
 
 async function createBookingType(supabase, { tenantId, body }) {
@@ -112,6 +199,8 @@ module.exports = {
   VALID_KINDS,
   listBookingTypes,
   listSelectableForBooking,
+  listProjectPriceList,
+  upsertProjectPrice,
   createBookingType,
   patchBookingType,
   deleteBookingType,

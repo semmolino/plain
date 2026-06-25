@@ -9,6 +9,8 @@ module.exports = (supabase) => {
   const router = express.Router();
 
   router.get("/booking-types",        requirePermission("projects.bookings.view"),          (req, res) => bookingTypesCtrl.listSelectable(req, res, supabase));
+  router.get("/booking-prices",       requirePermission("projects.hourly_rates.view"),      (req, res) => bookingTypesCtrl.listProjectPrices(req, res, supabase));
+  router.put("/booking-prices",       requirePermission("projects.hourly_rates.edit"),      (req, res) => bookingTypesCtrl.upsertProjectPrice(req, res, supabase));
   router.post("/special",             requirePermission("projects.bookings.special.create"), (req, res) => ctrl.createSpecialBuchung(req, res, supabase));
   router.post("/",                    requirePermission("projects.bookings.create"), (req, res) => ctrl.createBuchung(req, res, supabase));
   router.patch("/:id",                requirePermission("projects.bookings.edit"),   (req, res) => ctrl.patchBuchung(req, res, supabase));
