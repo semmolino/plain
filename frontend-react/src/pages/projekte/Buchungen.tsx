@@ -525,7 +525,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                     <label>Beschreibung*</label>
                     <textarea rows={2} value={form.POSTING_DESCRIPTION} onChange={setF('POSTING_DESCRIPTION')} required
                       style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
-                    <TextSnippetBar currentText={form.POSTING_DESCRIPTION} onChange={t => setForm(f => ({ ...f, POSTING_DESCRIPTION: t }))} />
+                    <TextSnippetBar currentText={form.POSTING_DESCRIPTION} onChange={t => setForm(f => ({ ...f, POSTING_DESCRIPTION: t }))} kind="WORK" />
                   </div>
                   <Message text={msg?.text ?? null} type={msg?.type} />
                   <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -853,7 +853,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
           <label>Bezeichnung*</label>
           <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} required
             style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
-          <TextSnippetBar currentText={description} onChange={setDescription} />
+          <TextSnippetBar currentText={description} onChange={setDescription} kind={kind} bookingTypeId={bookingTypeId ? Number(bookingTypeId) : undefined} />
         </div>
 
         {isUnit ? (

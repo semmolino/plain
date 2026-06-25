@@ -2,15 +2,26 @@ import { apiClient } from './client'
 
 // ── Buchungstextvorlagen (global + persönlich) ────────────────────────────────
 
+export type SnippetKind = 'WORK' | 'UNIT' | 'LUMP_COST' | 'LUMP_REVENUE'
+
 export interface TextSnippet {
-  ID:         number
-  LABEL:      string | null
-  TEXT:       string
-  SORT_ORDER: number | null
-  SCOPE:      'global' | 'employee'
+  ID:              number
+  LABEL:           string | null
+  TEXT:            string
+  SORT_ORDER:      number | null
+  SCOPE:           'global' | 'employee'
+  KIND:            SnippetKind | null
+  BOOKING_TYPE_ID: number | null
 }
 
-export interface TextSnippetPayload { label?: string | null; text: string; sort_order?: number }
+export interface TextSnippetPayload {
+  label?:           string | null
+  text:             string
+  sort_order?:      number
+  // Bezug (nur globale): KIND ODER konkrete Buchungsart; beide leer = allgemein
+  kind?:            SnippetKind | null
+  booking_type_id?: number | null
+}
 
 // Auswahl beim Buchen: globale + eigene persönliche.
 export const fetchTextSnippets = () =>

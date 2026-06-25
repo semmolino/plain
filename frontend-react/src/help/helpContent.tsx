@@ -57,9 +57,11 @@ export const HELP = {
       <>
         Wiederkehrende Beschreibungstexte, die <strong>allen</strong> Mitarbeitern beim
         Buchen als Baustein zur Auswahl stehen (z. B. „Abstimmung mit Bauherr",
-        „Vor-Ort-Termin"). Ergänzend kann jeder Mitarbeiter zusätzlich eigene,
-        private Bausteine anlegen. Beim Buchen erscheinen globale und eigene
-        Bausteine gemeinsam; ein Klick fügt den Text in die Beschreibung ein.
+        „Vor-Ort-Termin"). Über den <strong>Bezug</strong> lässt sich steuern, wann ein
+        Baustein erscheint: allgemein (überall), nur bei Stundenleistungen, bei einer
+        ganzen Art (z. B. alle Stückleistungen) oder nur bei einer konkreten
+        Buchungsart. Ergänzend legt jeder Mitarbeiter eigene, private Bausteine an
+        (immer überall sichtbar). Ein Klick fügt den Text in die Beschreibung ein.
       </>
     ),
   },

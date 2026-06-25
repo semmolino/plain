@@ -2,7 +2,7 @@ import { type CSSProperties } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HelpHint } from '@/components/ui/HelpHint'
 import {
-  fetchTextSnippets, createTextSnippet, deleteTextSnippet, type TextSnippet,
+  fetchTextSnippets, createTextSnippet, deleteTextSnippet, type TextSnippet, type SnippetKind,
 } from '@/api/textSnippets'
 
 const insertBtn: CSSProperties = {
@@ -15,10 +15,23 @@ const insertBtn: CSSProperties = {
  * Zeigt globale (admin) + eigene persönliche Bausteine; Klick fügt den Text an,
  * „＋ Als Baustein speichern" legt einen persönlichen an, × löscht persönliche.
  */
-export function TextSnippetBar({ currentText, onChange }: { currentText: string; onChange: (text: string) => void }) {
+export function TextSnippetBar({ currentText, onChange, kind, bookingTypeId }: {
+  currentText: string
+  onChange: (text: string) => void
+  /** Kontext der aktuellen Buchung — filtert kontextbezogene globale Vorlagen ein. */
+  kind?: SnippetKind
+  bookingTypeId?: number | null
+}) {
   const qc = useQueryClient()
   const { data } = useQuery({ queryKey: ['text-snippets'], queryFn: fetchTextSnippets })
-  const snippets: TextSnippet[] = data?.data ?? []
+  const all: TextSnippet[] = data?.data ?? []
+  // Anwendbar: allgemein (kein Bezug) | passende Art | passende konkrete Buchungsart
+  const snippets = all.filter(s => {
+    if (!s.KIND && !s.BOOKING_TYPE_ID) return true
+    if (bookingTypeId && s.BOOKING_TYPE_ID === bookingTypeId) return true
+    if (s.KIND && !s.BOOKING_TYPE_ID && s.KIND === kind) return true
+    return false
+  })
 
   const createMut = useMutation({
     mutationFn: createTextSnippet,

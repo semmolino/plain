@@ -7,7 +7,8 @@
 // Beim Buchen sieht ein Mitarbeiter: globale ∪ eigene.
 // ---------------------------------------------------------------------------
 
-const COLS = "ID, LABEL, TEXT, SORT_ORDER, SCOPE";
+const COLS = "ID, LABEL, TEXT, SORT_ORDER, SCOPE, KIND, BOOKING_TYPE_ID";
+const VALID_KINDS = new Set(["WORK", "UNIT", "LUMP_COST", "LUMP_REVENUE"]);
 
 function cleanRow(body) {
   const text = (body.text || "").trim();
@@ -17,6 +18,16 @@ function cleanRow(body) {
     TEXT:       text,
     SORT_ORDER: Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 0,
   };
+}
+
+// Bezug (Kontext) einer globalen Vorlage: entweder KIND ODER konkrete Buchungsart
+// (BOOKING_TYPE_ID) — beide NULL = allgemein.
+function contextFields(body) {
+  const typeId = body.booking_type_id ? Number(body.booking_type_id) : null;
+  if (typeId) return { KIND: null, BOOKING_TYPE_ID: typeId };
+  const kind = body.kind ? String(body.kind).trim() : null;
+  if (kind && !VALID_KINDS.has(kind)) throw { status: 400, message: "Ungültiger Bezug (kind)." };
+  return { KIND: kind, BOOKING_TYPE_ID: null };
 }
 
 // ── Auswahl beim Buchen: globale + eigene persönliche ────────────────────────
@@ -84,7 +95,7 @@ async function listGlobal(supabase, { tenantId }) {
 }
 
 async function createGlobal(supabase, { tenantId, body }) {
-  const row = { ...cleanRow(body), TENANT_ID: tenantId, EMPLOYEE_ID: null, SCOPE: "global" };
+  const row = { ...cleanRow(body), ...contextFields(body), TENANT_ID: tenantId, EMPLOYEE_ID: null, SCOPE: "global" };
   const { data, error } = await supabase.from("BOOKING_TEXT_SNIPPET").insert([row]).select(COLS).single();
   if (error) throw { status: 500, message: error.message };
   return data;
@@ -103,6 +114,7 @@ async function updateGlobal(supabase, { tenantId, id, body }) {
     update.TEXT = t;
   }
   if (body.sort_order !== undefined) update.SORT_ORDER = Number(body.sort_order) || 0;
+  if ("kind" in body || "booking_type_id" in body) Object.assign(update, contextFields(body));
   const { data, error } = await supabase
     .from("BOOKING_TEXT_SNIPPET").update(update)
     .eq("ID", id).eq("TENANT_ID", tenantId).eq("SCOPE", "global").select(COLS).single();
