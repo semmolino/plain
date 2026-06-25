@@ -20,6 +20,42 @@ export interface HelpEntry {
 }
 
 export const HELP = {
+  // ── Buchungsarten: Pauschalen & Stückleistungen ──────────────────────────
+  'bookings.special': {
+    title: 'Pauschalen & Stückleistungen',
+    body: (
+      <>
+        Neben Stunden lassen sich auch nicht-stundenbasierte Kosten/Leistungen auf
+        ein Projekt buchen:
+        <br /><strong>Stückleistung</strong> = Menge × Stückpreis (z. B. 50 Pläne ×
+        12 €), optional mit Stückkosten.
+        <br /><strong>Pauschale (Kosten)</strong> = feste Summe, die das Projekt
+        belastet (z. B. eine erhaltene Lieferantenrechnung).
+        <br /><strong>Pauschale (Erlös)</strong> = feste, abrechenbare Summe.
+        <br />Erlös-Positionen werden auf Stunden-Projektelementen genauso
+        abgerechnet wie Stundenbuchungen. Diese Buchungen zählen <em>nicht</em> als
+        Arbeitszeit (kein Einfluss auf Saldo/Produktivität). Vordefinierte
+        Buchungsarten kommen aus dem Katalog (Einstellungen → Stammdaten); per
+        „Freitext" geht es auch ohne Katalog-Eintrag.
+      </>
+    ),
+  },
+  'settings.booking_types': {
+    title: 'Katalog der Buchungsarten',
+    body: (
+      <>
+        Vordefinierte Pauschalen und Stückleistungen mit Standardpreis — das Pendant
+        zu den Mitarbeiter-Rollen mit Stundensätzen. Beim Buchen werden sie
+        ausgewählt und füllen Bezeichnung und Preis vor.
+        <br /><strong>Stückleistung</strong>: Standard-Stückpreis (Verkauf) und
+        optional Stückkosten, dazu eine Einheit (Stk, m², …).
+        <br /><strong>Pauschale</strong>: ein Standardbetrag (Kosten- oder
+        Erlös-Pauschale). Einträge mit Geltung „global" stehen in allen Projekten
+        zur Auswahl.
+      </>
+    ),
+  },
+
   // ── E-Rechnung / Peppol ──────────────────────────────────────────────────
   'einvoice.what': {
     title: 'Was ist eine E-Rechnung?',

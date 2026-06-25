@@ -2,6 +2,7 @@
 
 const express = require("express");
 const ctrl = require("../controllers/stammdaten");
+const bookingTypesCtrl = require("../controllers/bookingTypes");
 const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
@@ -49,6 +50,12 @@ module.exports = (supabase) => {
   router.get("/rollen",                                              (req, res) => ctrl.getRollen(req, res, supabase));
   router.patch("/rolle/:id",                                         requirePermission("settings.basedata.edit"), (req, res) => ctrl.patchRolle(req, res, supabase));
   router.delete("/rolle/:id",                                        requirePermission("settings.basedata.edit"), (req, res) => ctrl.deleteRolle(req, res, supabase));
+
+  // Buchungsarten-Katalog (Pauschalen / Stückleistungen)
+  router.get("/booking-types",                                       (req, res) => bookingTypesCtrl.list(req, res, supabase));
+  router.post("/booking-types",                                      requirePermission("settings.booking_types.edit"), (req, res) => bookingTypesCtrl.create(req, res, supabase));
+  router.patch("/booking-types/:id",                                 requirePermission("settings.booking_types.edit"), (req, res) => bookingTypesCtrl.patch(req, res, supabase));
+  router.delete("/booking-types/:id",                                requirePermission("settings.booking_types.edit"), (req, res) => bookingTypesCtrl.remove(req, res, supabase));
   router.get("/logo",                                                (req, res) => ctrl.getLogo(req, res, supabase));
   router.put("/logo",                                                requirePermission("settings.company.edit"), (req, res) => ctrl.putLogo(req, res, supabase));
   router.get("/salutations",                                         (req, res) => ctrl.getSalutations(req, res, supabase));

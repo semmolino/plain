@@ -12,6 +12,20 @@ async function createBuchung(req, res, supabase) {
   }
 }
 
+async function createSpecialBuchung(req, res, supabase) {
+  try {
+    const data = await svc.createSpecialBuchung(supabase, {
+      body: req.body,
+      tenantId: req.tenantId,
+      employeeId: req.employeeId,
+    });
+    res.json({ success: true, data });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || err });
+  }
+}
+
 async function patchBuchung(req, res, supabase) {
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "ID fehlt" });
@@ -179,6 +193,7 @@ async function getWorkstartStatus(req, res, supabase) {
 
 module.exports = {
   createBuchung,
+  createSpecialBuchung,
   patchBuchung,
   deleteBuchung,
   listBuchungenByProject,

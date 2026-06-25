@@ -71,12 +71,18 @@ function addDays(d, n) {
   return r;
 }
 
+// Buchungsarten, die KEINE Arbeitszeit sind (Pauschalen, Stückleistungen) und
+// daher nicht in Stundenauswertungen (Saldo, Produktivität, Kosten) zählen.
+// Stunden ('WORK') und Pausen ('BREAK') sowie Altzeilen (NULL) zählen normal.
+const NON_HOURS_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE']);
+const isNonHoursKind = (k) => NON_HOURS_KINDS.has(k);
+
 async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
   const { data, error } = await supabase
     .from('TEC')
     .select(`
       ID, DATE_VOUCHER, TIME_START, TIME_FINISH, QUANTITY_INT, POSTING_DESCRIPTION,
-      PROJECT_ID, STRUCTURE_ID,
+      PROJECT_ID, STRUCTURE_ID, BOOKING_KIND,
       PROJECT:PROJECT_ID(NAME_SHORT),
       STRUCTURE:STRUCTURE_ID(NAME_SHORT)
     `)
@@ -93,6 +99,7 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
   const bookingsMap = new Map();
 
   for (const row of data || []) {
+    if (isNonHoursKind(row.BOOKING_KIND)) continue;
     const d = row.DATE_VOUCHER;
     const h = Number(row.QUANTITY_INT || 0);
     sumMap.set(d, (sumMap.get(d) || 0) + h);
@@ -262,7 +269,7 @@ async function buildRunningBalances(supabase, tenantId, empIds, upToDate) {
 
   const { data: tecRows } = await supabase
     .from('TEC')
-    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT')
+    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, BOOKING_KIND')
     .eq('TENANT_ID', tenantId)
     .in('EMPLOYEE_ID', empIds)
     .eq('STATUS', 'CONFIRMED')
@@ -271,6 +278,7 @@ async function buildRunningBalances(supabase, tenantId, empIds, upToDate) {
 
   const actualByEmp = new Map();
   for (const row of tecRows || []) {
+    if (isNonHoursKind(row.BOOKING_KIND)) continue;
     const id = row.EMPLOYEE_ID;
     actualByEmp.set(id, (actualByEmp.get(id) || 0) + Number(row.QUANTITY_INT || 0));
   }
@@ -374,13 +382,17 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
   // Bulk TEC (CONFIRMED only)
   const { data: tecRows, error: tecErr } = await supabase
     .from('TEC')
-    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_TOT, STRUCTURE_ID')
+    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_TOT, STRUCTURE_ID, BOOKING_KIND')
     .eq('TENANT_ID', tenantId)
     .in('EMPLOYEE_ID', empIds)
     .eq('STATUS', 'CONFIRMED')
     .gte('DATE_VOUCHER', allFrom)
     .lte('DATE_VOUCHER', allTo);
   if (tecErr) throw { status: 500, message: tecErr.message };
+
+  // Pauschalen/Stückleistungen sind keine Arbeitszeit → aus der Stunden-/
+  // Kosten-/Produktivitätsauswertung der Mitarbeiter ausnehmen.
+  const tecRowsHours = (tecRows || []).filter(r => !isNonHoursKind(r.BOOKING_KIND));
 
   // Build sets of internal structure IDs and internal project IDs for Produktivität
   const internalStructureIds = new Set();
@@ -413,7 +425,7 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
   } catch (_) { /* soft-fail: Produktivität will show as null */ }
 
   const tecIdx = new Map();
-  for (const row of tecRows || []) {
+  for (const row of tecRowsHours) {
     const y = parseInt(row.DATE_VOUCHER.slice(0, 4), 10);
     const m = parseInt(row.DATE_VOUCHER.slice(5, 7), 10);
     const k = `${row.EMPLOYEE_ID}-${y}-${m}`;

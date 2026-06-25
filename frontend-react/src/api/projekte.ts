@@ -305,6 +305,9 @@ export interface Buchung {
   SP_RATE:             number
   SP_TOT:              number
   POSTING_DESCRIPTION:  string
+  BOOKING_KIND?:        string | null
+  UNIT_LABEL?:          string | null
+  BOOKING_TYPE_ID?:     number | null
   PARTIAL_PAYMENT_ID:   number | null
   INVOICE_ID:           number | null
   EMPLOYEE:             { SHORT_NAME: string } | null

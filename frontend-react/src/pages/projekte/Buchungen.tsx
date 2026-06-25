@@ -14,6 +14,11 @@ import {
 } from '@/api/projekte'
 import { fetchActiveEmployees } from '@/api/projekte'
 import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
+import {
+  fetchSelectableBookingTypes, createSpecialBuchung, BOOKING_KIND_LABEL,
+  type BookingKind, type SelectableBookingType,
+} from '@/api/bookingTypes'
+import { HelpHint } from '@/components/ui/HelpHint'
 import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
@@ -23,6 +28,10 @@ import { trackRecent } from '@/api/recents'
 const FMT_NUM = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
 const fmtN    = (v: number | null | undefined) => v == null ? '—' : FMT_NUM.format(v)
 const fmtDate = (v: string | null) => v ? v.slice(0, 10) : ''
+
+const SPECIAL_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE'])
+const isSpecialKind = (k?: string | null) => !!k && SPECIAL_KINDS.has(k)
+const KIND_BADGE: Record<string, string> = { UNIT: 'Stück', LUMP_COST: 'Pauschale K', LUMP_REVENUE: 'Pauschale E' }
 
 function todayIso() { return new Date().toISOString().slice(0, 10) }
 
@@ -76,6 +85,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   // Phase 6: Sichtbarkeit Erloese / Kosten
   const showRevenue = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.revenue.view'))
   const showCosts   = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.costs.view'))
+  const canSpecial  = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.special.create'))
+  const [specialKind, setSpecialKind] = useState<BookingKind | null>(null)
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
   // Notification-Klick mit neuem Projekt soll umschalten.
   useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
@@ -243,8 +254,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
     return rows
   }, [buchungen, filterDescendants, search, sortCol, sortDir, pathCache])
 
-  const totalIntH = visibleBuchungen.reduce((s, b) => s + (Number(b.QUANTITY_INT) || 0), 0)
-  const totalExtH = visibleBuchungen.reduce((s, b) => s + (Number(b.QUANTITY_EXT) || 0), 0)
+  const totalIntH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) ? 0 : Number(b.QUANTITY_INT) || 0), 0)
+  const totalExtH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) ? 0 : Number(b.QUANTITY_EXT) || 0), 0)
   const totalCost = visibleBuchungen.reduce((s, b) => s + (Number(b.CP_TOT) || 0), 0)
   const totalRev  = visibleBuchungen.reduce((s, b) => s + (Number(b.SP_TOT) || 0), 0)
 
@@ -430,13 +441,29 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                 </div>
               </div>
 
-              <button
-                className="btn-primary"
-                style={{ width: 'auto', marginTop: 0, marginBottom: 14 }}
-                onClick={() => { if (!showForm) setExtTouched(false); setShowForm(v => !v); setMsg(null) }}
-              >
-                {showForm ? 'Formular schließen' : '+ Neue Buchung'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+                <button
+                  className="btn-primary"
+                  style={{ width: 'auto', marginTop: 0 }}
+                  onClick={() => { if (!showForm) setExtTouched(false); setShowForm(v => !v); setMsg(null) }}
+                >
+                  {showForm ? 'Formular schließen' : '+ Stundenbuchung'}
+                </button>
+                {canSpecial && (
+                  <>
+                    <button className="btn-small" style={{ width: 'auto' }} onClick={() => { setSpecialKind('UNIT'); setMsg(null) }}>
+                      + Stückleistung
+                    </button>
+                    <button className="btn-small" style={{ width: 'auto' }} onClick={() => { setSpecialKind('LUMP_COST'); setMsg(null) }}>
+                      + Pauschale (Kosten)
+                    </button>
+                    <button className="btn-small" style={{ width: 'auto' }} onClick={() => { setSpecialKind('LUMP_REVENUE'); setMsg(null) }}>
+                      + Pauschale (Erlös)
+                    </button>
+                    <HelpHint id="bookings.special" />
+                  </>
+                )}
+              </div>
 
               {showForm && (
                 <form ref={formRef} onSubmit={submitForm} className="master-form" style={{ marginTop: 12 }}>
@@ -528,17 +555,30 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
                         <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.6)' }}>
                           {b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'}
                         </td>
-                        <td>{b.POSTING_DESCRIPTION}</td>
-                        <td className="num">{fmtN(b.QUANTITY_INT)}</td>
-                        {showRevenue && <td className="num">{fmtN(b.QUANTITY_EXT)}</td>}
+                        <td>
+                          {isSpecialKind(b.BOOKING_KIND) && (
+                            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: '#3730a3', background: '#e0e7ff', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>
+                              {KIND_BADGE[b.BOOKING_KIND!]}
+                            </span>
+                          )}
+                          {b.POSTING_DESCRIPTION}
+                        </td>
+                        <td className="num">
+                          {b.BOOKING_KIND === 'UNIT'
+                            ? `${fmtN(b.QUANTITY_INT)}${b.UNIT_LABEL ? ' ' + b.UNIT_LABEL : ''}`
+                            : isSpecialKind(b.BOOKING_KIND) ? '—' : fmtN(b.QUANTITY_INT)}
+                        </td>
+                        {showRevenue && <td className="num">{isSpecialKind(b.BOOKING_KIND) && b.BOOKING_KIND !== 'UNIT' ? '—' : fmtN(b.QUANTITY_EXT)}</td>}
                         {showCosts && <td className="num">{fmtN(b.CP_TOT)}</td>}
                         {showRevenue && <td className="num">{fmtN(b.SP_TOT)}</td>}
                         <td className="doc-actions">
                           {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
                             <>
-                              <button className="row-action-btn" onClick={() => openEdit(b)} title="Bearbeiten">
-                                <Pencil size={14} strokeWidth={2} />
-                              </button>
+                              {!isSpecialKind(b.BOOKING_KIND) && (
+                                <button className="row-action-btn" onClick={() => openEdit(b)} title="Bearbeiten">
+                                  <Pencil size={14} strokeWidth={2} />
+                                </button>
+                              )}
                               <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => confirmDelete(b)} title="Löschen">
                                 <Trash2 size={14} strokeWidth={2} />
                               </button>
@@ -626,6 +666,22 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
         </form>
       </Modal>
 
+      {specialKind !== null && pid !== null && (
+        <SpecialBookingModal
+          projectId={pid}
+          kind={specialKind}
+          leafStructure={leafStructure.map(s => ({ STRUCTURE_ID: s.STRUCTURE_ID }))}
+          pathCache={pathCache}
+          showCosts={showCosts}
+          onClose={() => setSpecialKind(null)}
+          onSaved={() => {
+            setSpecialKind(null)
+            setMsg({ text: 'Buchung gespeichert ✅', type: 'success' })
+            void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
+          }}
+        />
+      )}
+
       <ConfirmModal
         open={confirmState !== null}
         title={confirmState?.title ?? ''}
@@ -636,5 +692,173 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
         onCancel={() => setConfirmState(null)}
       />
     </div>
+  )
+}
+
+// ── Spezial-Buchung: Pauschalen & Stückleistungen ──────────────────────────────
+
+interface SpecialBookingModalProps {
+  projectId:     number
+  kind:          BookingKind
+  leafStructure: { STRUCTURE_ID: number }[]
+  pathCache:     Map<number, string>
+  showCosts:     boolean
+  onClose:       () => void
+  onSaved:       () => void
+}
+
+function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCosts, onClose, onSaved }: SpecialBookingModalProps) {
+  const isUnit = kind === 'UNIT'
+  const [bookingTypeId, setBookingTypeId] = useState<string>('')   // '' = Freitext
+  const [structureId,   setStructureId]   = useState<string>('')
+  const [date,          setDate]          = useState<string>(todayIso())
+  const [description,   setDescription]   = useState<string>('')
+  const [quantity,      setQuantity]      = useState<string>('')
+  const [unitLabel,     setUnitLabel]     = useState<string>('')
+  const [spRate,        setSpRate]        = useState<string>('')
+  const [cpRate,        setCpRate]        = useState<string>('')
+  const [amount,        setAmount]        = useState<string>('')
+  const [msg,           setMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  const { data: typesData } = useQuery({
+    queryKey: ['booking-types-selectable', projectId],
+    queryFn:  () => fetchSelectableBookingTypes(projectId),
+  })
+  const types: SelectableBookingType[] = useMemo(
+    () => (typesData?.data ?? []).filter(t => t.KIND === kind),
+    [typesData, kind],
+  )
+
+  function applyType(id: string) {
+    setBookingTypeId(id)
+    const t = types.find(x => String(x.ID) === id)
+    if (!t) return
+    setDescription(t.NAME_LONG || t.NAME_SHORT)
+    if (isUnit) {
+      setUnitLabel(t.UNIT_LABEL || '')
+      if (t.DEFAULT_SP_RATE != null) setSpRate(String(t.DEFAULT_SP_RATE))
+      if (t.DEFAULT_CP_RATE != null) setCpRate(String(t.DEFAULT_CP_RATE))
+    } else if (kind === 'LUMP_COST') {
+      if (t.DEFAULT_CP_RATE != null) setAmount(String(t.DEFAULT_CP_RATE))
+    } else if (kind === 'LUMP_REVENUE') {
+      if (t.DEFAULT_SP_RATE != null) setAmount(String(t.DEFAULT_SP_RATE))
+    }
+  }
+
+  const num = (v: string) => { const n = Number(v.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
+  const previewTotal = isUnit
+    ? num(quantity) * num(spRate)
+    : num(amount)
+  const previewCost = isUnit ? num(quantity) * num(cpRate) : (kind === 'LUMP_COST' ? num(amount) : 0)
+
+  const saveMut = useMutation({
+    mutationFn: () => createSpecialBuchung({
+      BOOKING_KIND:        kind,
+      PROJECT_ID:          projectId,
+      STRUCTURE_ID:        structureId ? Number(structureId) : undefined,
+      DATE_VOUCHER:        date,
+      BOOKING_TYPE_ID:     bookingTypeId ? Number(bookingTypeId) : undefined,
+      POSTING_DESCRIPTION: description,
+      ...(isUnit
+        ? { QUANTITY: num(quantity), UNIT_LABEL: unitLabel || undefined, SP_RATE: num(spRate), CP_RATE: num(cpRate) }
+        : { AMOUNT: num(amount) }),
+    }),
+    onSuccess: onSaved,
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setMsg(null)
+    if (!description.trim()) { setMsg({ text: 'Bitte eine Bezeichnung angeben', type: 'error' }); return }
+    if (isUnit) {
+      if (num(quantity) <= 0) { setMsg({ text: 'Menge muss größer als 0 sein', type: 'error' }); return }
+      if (num(spRate) === 0 && num(cpRate) === 0) { setMsg({ text: 'Bitte Stückpreis und/oder Stückkosten angeben', type: 'error' }); return }
+    } else if (num(amount) === 0) {
+      setMsg({ text: 'Bitte einen Betrag angeben', type: 'error' }); return
+    }
+    saveMut.mutate()
+  }
+
+  useCtrlS(() => formRef.current?.requestSubmit(), true)
+
+  return (
+    <Modal open onClose={onClose} title={BOOKING_KIND_LABEL[kind]}>
+      <form ref={formRef} onSubmit={submit} className="master-form">
+        <div className="form-group">
+          <label>Aus Katalog (optional)</label>
+          <select value={bookingTypeId} onChange={e => applyType(e.target.value)}>
+            <option value="">— Freitext (ohne Katalog) —</option>
+            {types.map(t => (
+              <option key={t.ID} value={t.ID}>
+                {t.NAME_SHORT}{t.NAME_LONG ? ` – ${t.NAME_LONG}` : ''}{t.SCOPE === 'project' ? ' (Projekt)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Projektelement</label>
+          <select value={structureId} onChange={e => setStructureId(e.target.value)}>
+            <option value="">—</option>
+            {leafStructure.map(s => (
+              <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? `#${s.STRUCTURE_ID}`}</option>
+            ))}
+          </select>
+          {kind === 'LUMP_REVENUE' && (
+            <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.55)', display: 'block', marginTop: 2 }}>
+              Wird auf Stunden-Projektelementen (TEC) wie eine Stundenbuchung abgerechnet.
+            </span>
+          )}
+        </div>
+
+        <div className="form-row">
+          <FormField label="Datum*" id="sb-date" type="date" value={date} onChange={e => setDate(e.target.value)} required />
+        </div>
+
+        <div className="form-group">
+          <label>Bezeichnung*</label>
+          <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} required
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+        </div>
+
+        {isUnit ? (
+          <>
+            <div className="form-row">
+              <FormField label="Menge*"   id="sb-qty"  type="number" value={quantity}  onChange={e => setQuantity(e.target.value)} step="0.01" required />
+              <FormField label="Einheit"  id="sb-unit" value={unitLabel} onChange={e => setUnitLabel(e.target.value)} placeholder="z. B. Stk, m²" />
+            </div>
+            <div className="form-row">
+              <FormField label="Stückpreis (€)" id="sb-sp" type="number" value={spRate} onChange={e => setSpRate(e.target.value)} step="0.01" />
+              {showCosts && (
+                <FormField label="Stückkosten (€)" id="sb-cp" type="number" value={cpRate} onChange={e => setCpRate(e.target.value)} step="0.01" />
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="form-row">
+            <FormField label={kind === 'LUMP_COST' ? 'Betrag Kosten (€)*' : 'Betrag Erlös (€)*'}
+              id="sb-amount" type="number" value={amount} onChange={e => setAmount(e.target.value)} step="0.01" required />
+          </div>
+        )}
+
+        <div style={{ fontSize: 13, color: 'rgba(17,24,39,0.7)', margin: '4px 0 8px' }}>
+          {kind === 'LUMP_COST'
+            ? <>Belastet das Projekt mit <strong>{FMT_NUM.format(previewCost)} €</strong> Kosten.</>
+            : kind === 'LUMP_REVENUE'
+              ? <>Abrechenbarer Erlös: <strong>{FMT_NUM.format(previewTotal)} €</strong>.</>
+              : <>Erlös: <strong>{FMT_NUM.format(previewTotal)} €</strong>{showCosts ? <> · Kosten: <strong>{FMT_NUM.format(previewCost)} €</strong></> : null}</>}
+        </div>
+
+        <Message text={msg?.text ?? null} type={msg?.type} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <button className="btn-primary" type="submit" disabled={saveMut.isPending}>
+            {saveMut.isPending ? 'Speichert …' : 'Buchung speichern'}
+          </button>
+          <button type="button" className="btn-small" onClick={onClose}>Abbrechen</button>
+        </div>
+      </form>
+    </Modal>
   )
 }

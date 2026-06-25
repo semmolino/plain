@@ -7,6 +7,8 @@ const budgetWarnings = require("./budgetWarnings");
 // Helpers
 // ---------------------------------------------------------------------------
 
+const fmt2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
 // Looks up the effective CP_RATE for an employee on a specific date.
 // Returns the rate from EMPLOYEE_CP_RATE where VALID_FROM <= dateStr (most recent).
 // Returns null if no rate exists (caller should treat as 0 and warn).
@@ -563,7 +565,7 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
 
   const { data: existing, error: exErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_RATE, SP_RATE")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_RATE, SP_RATE, BOOKING_KIND")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .single();
@@ -571,6 +573,10 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   if (exErr || !existing) {
     throw { status: 404, message: "Buchung nicht gefunden: " + (exErr?.message || "") };
   }
+
+  // Pauschalen/Stückleistungen bekommen ihre Sätze NICHT aus Rolle/Mitarbeiter
+  // vorbelegt — sie tragen eigene Werte. Preset-Übernahme nur für Stunden.
+  const isSpecial = SPECIAL_KINDS.has(existing.BOOKING_KIND);
 
   const oldStructureId = existing.STRUCTURE_ID ?? null;
 
@@ -635,19 +641,21 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   const effectiveEmployeeId = newEmployeeId !== undefined ? newEmployeeId : existing.EMPLOYEE_ID;
   const effectiveProjectId  = newProjectId  !== undefined ? newProjectId  : existing.PROJECT_ID;
 
-  let preset = null;
-  try {
-    preset = await loadEmployee2Project(supabase, Number(effectiveEmployeeId), Number(effectiveProjectId));
-  } catch (e) {
-    throw { status: 500, message: "Fehler beim Laden EMPLOYEE2PROJECT: " + e.message };
-  }
+  if (!isSpecial) {
+    let preset = null;
+    try {
+      preset = await loadEmployee2Project(supabase, Number(effectiveEmployeeId), Number(effectiveProjectId));
+    } catch (e) {
+      throw { status: 500, message: "Fehler beim Laden EMPLOYEE2PROJECT: " + e.message };
+    }
 
-  if (preset && preset.SP_RATE != null) {
-    updateTec.ROLE_ID = preset.ROLE_ID ?? null;
-    updateTec.ROLE_NAME_SHORT = preset.ROLE_NAME_SHORT ?? null;
-    updateTec.ROLE_NAME_LONG = preset.ROLE_NAME_LONG ?? null;
-    updateTec.SP_RATE = Number(preset.SP_RATE);
-    updateTec.SP_TOT = Math.round(effQtyExt * Number(preset.SP_RATE) * 100) / 100;
+    if (preset && preset.SP_RATE != null) {
+      updateTec.ROLE_ID = preset.ROLE_ID ?? null;
+      updateTec.ROLE_NAME_SHORT = preset.ROLE_NAME_SHORT ?? null;
+      updateTec.ROLE_NAME_LONG = preset.ROLE_NAME_LONG ?? null;
+      updateTec.SP_RATE = Number(preset.SP_RATE);
+      updateTec.SP_TOT = Math.round(effQtyExt * Number(preset.SP_RATE) * 100) / 100;
+    }
   }
 
   const { data: updatedTec, error: updErr } = await supabase
@@ -752,6 +760,107 @@ async function deleteBuchung(supabase, { id }) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Sonstige Buchungsarten: Pauschalen & Stückleistungen (nicht stundenbasiert)
+//   UNIT          Menge × Stückpreis (SP) bzw. × Stückkosten (CP)
+//   LUMP_COST     Pauschalsumme → Kosten (COSTS), z. B. Lieferantenrechnung
+//   LUMP_REVENUE  Pauschalsumme → abrechenbarer Erlös
+// EMPLOYEE_ID ist hier reines "gebucht von" (kein Stundenträger); die Zeile
+// wird in den Stundenauswertungen über BOOKING_KIND herausgefiltert.
+// ---------------------------------------------------------------------------
+const SPECIAL_KINDS = new Set(["UNIT", "LUMP_COST", "LUMP_REVENUE"]);
+
+async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
+  const b = body || {};
+  const kind = String(b.BOOKING_KIND || "").trim();
+  if (!SPECIAL_KINDS.has(kind)) throw { status: 400, message: "Ungültige Buchungsart." };
+  if (!b.PROJECT_ID || !b.DATE_VOUCHER || !b.POSTING_DESCRIPTION) {
+    throw { status: 400, message: "Projekt, Datum und Beschreibung sind erforderlich." };
+  }
+
+  // Buchungen nur auf Blatt-Elemente (wie bei Stundenbuchungen).
+  if (b.STRUCTURE_ID) {
+    const { data: childCheck } = await supabase
+      .from("PROJECT_STRUCTURE").select("ID").eq("FATHER_ID", b.STRUCTURE_ID).limit(1);
+    if (childCheck && childCheck.length > 0) {
+      throw { status: 400, message: "Buchungen können nur auf Blatt-Elemente (ohne Unterpositionen) gebucht werden" };
+    }
+  }
+
+  const { data: projRow, error: projErr } = await supabase
+    .from("PROJECT").select("TENANT_ID").eq("ID", b.PROJECT_ID).maybeSingle();
+  if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
+  const resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
+
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  let qtyInt = 0, cpRate = 0, cpTot = 0, qtyExt = 0, spRate = 0, spTot = 0, unitLabel = null;
+
+  if (kind === "UNIT") {
+    const qty = num(b.QUANTITY);
+    if (qty <= 0) throw { status: 400, message: "Menge muss größer als 0 sein." };
+    cpRate = num(b.CP_RATE);
+    spRate = num(b.SP_RATE);
+    if (cpRate === 0 && spRate === 0) throw { status: 400, message: "Bitte Stückpreis und/oder Stückkosten angeben." };
+    qtyInt = qty; qtyExt = qty;
+    cpTot = fmt2(qty * cpRate);
+    spTot = fmt2(qty * spRate);
+    unitLabel = (b.UNIT_LABEL || "").trim() || null;
+  } else if (kind === "LUMP_COST") {
+    const amount = num(b.AMOUNT);
+    if (amount === 0) throw { status: 400, message: "Bitte einen Betrag angeben." };
+    // Summe → Kosten: COSTS = Σ(QTY_INT × CP_RATE) ⇒ QTY_INT=1, CP_RATE=Betrag.
+    qtyInt = 1; cpRate = amount; cpTot = fmt2(amount);
+  } else if (kind === "LUMP_REVENUE") {
+    const amount = num(b.AMOUNT);
+    if (amount === 0) throw { status: 400, message: "Bitte einen Betrag angeben." };
+    // Summe → abrechenbarer Erlös: REVENUE = Σ(SP_TOT).
+    qtyExt = 1; spRate = amount; spTot = fmt2(amount);
+  }
+
+  const insertRow = {
+    TENANT_ID:           resolvedTenantId,
+    STATUS:              "CONFIRMED",
+    BOOKING_KIND:        kind,
+    BOOKING_TYPE_ID:     b.BOOKING_TYPE_ID ? Number(b.BOOKING_TYPE_ID) : null,
+    UNIT_LABEL:          unitLabel,
+    EMPLOYEE_ID:         employeeId ?? (b.EMPLOYEE_ID ?? null),
+    DATE_VOUCHER:        b.DATE_VOUCHER,
+    QUANTITY_INT:        qtyInt,
+    CP_RATE:             cpRate,
+    CP_TOT:              cpTot,
+    QUANTITY_EXT:        qtyExt,
+    SP_RATE:             spRate,
+    SP_TOT:              spTot,
+    POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
+    PROJECT_ID:          Number(b.PROJECT_ID),
+    STRUCTURE_ID:        b.STRUCTURE_ID ? Number(b.STRUCTURE_ID) : null,
+  };
+
+  const { data: inserted, error: insErr } = await supabase.from("TEC").insert([insertRow]).select("ID").single();
+  if (insErr) throw { status: 500, message: "Fehler beim Speichern der Buchung: " + insErr.message };
+
+  if (insertRow.STRUCTURE_ID) {
+    await recomputeStructure(supabase, insertRow.STRUCTURE_ID);
+    try {
+      await budgetWarnings.evaluateAfterTecChange(supabase, {
+        tenantId: resolvedTenantId,
+        projectId: Number(b.PROJECT_ID),
+        structureIds: new Set([Number(insertRow.STRUCTURE_ID)]),
+        triggerEmployeeId: insertRow.EMPLOYEE_ID,
+        triggerTecId: inserted?.ID ?? null,
+      });
+    } catch (e) {
+      console.warn(`[BUDGET_WARNING] createSpecialBuchung eval failed: ${e?.message || e}`);
+    }
+  }
+
+  return inserted;
+}
+
 async function listBuchungenByProject(supabase, { projectId, tenantId }) {
   const { data, error } = await supabase
     .from("TEC")
@@ -761,6 +870,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
       QUANTITY_INT, CP_RATE, CP_TOT,
       QUANTITY_EXT, SP_RATE, SP_TOT,
       POSTING_DESCRIPTION,
+      BOOKING_KIND, UNIT_LABEL, BOOKING_TYPE_ID,
       PARTIAL_PAYMENT_ID, INVOICE_ID,
       EMPLOYEE:EMPLOYEE_ID(SHORT_NAME)
     `)
@@ -774,6 +884,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
 
 module.exports = {
   createBuchung,
+  createSpecialBuchung,
   patchBuchung,
   deleteBuchung,
   listBuchungenByProject,

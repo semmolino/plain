@@ -2,11 +2,14 @@
 
 const express = require("express");
 const ctrl = require("../controllers/buchungen");
+const bookingTypesCtrl = require("../controllers/bookingTypes");
 const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
 
+  router.get("/booking-types",        requirePermission("projects.bookings.view"),          (req, res) => bookingTypesCtrl.listSelectable(req, res, supabase));
+  router.post("/special",             requirePermission("projects.bookings.special.create"), (req, res) => ctrl.createSpecialBuchung(req, res, supabase));
   router.post("/",                    requirePermission("projects.bookings.create"), (req, res) => ctrl.createBuchung(req, res, supabase));
   router.patch("/:id",                requirePermission("projects.bookings.edit"),   (req, res) => ctrl.patchBuchung(req, res, supabase));
   router.delete("/:id",               requirePermission("projects.bookings.delete"), (req, res) => ctrl.deleteBuchung(req, res, supabase));
