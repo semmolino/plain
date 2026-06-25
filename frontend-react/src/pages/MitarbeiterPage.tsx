@@ -11,7 +11,7 @@ import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
 import { Pencil, Trash2 } from 'lucide-react'
 import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
-import { useFilterTabs } from '@/store/permissionsStore'
+import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
 import { Can } from '@/components/ui/Can'
 import {
@@ -36,7 +36,6 @@ import { updateBuchung, deleteBuchung } from '@/api/projekte'
 const PAGE_SIZE = 25
 const TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'list',      label: 'Mitarbeiterliste',     permissions: ['employees.view'] },
-  { id: 'create',    label: 'Anlegen',              permissions: ['employees.create'] },
   { id: 'reporting', label: 'Reporting',            permissions: ['employees.bookings.view_all'] },
   { id: 'overview',  label: 'Monatsübersicht',      permissions: ['employees.bookings.view_all','employees.month_close.edit'], feature: 'employees.month_close' },
   { id: 'arbzg',     label: 'Arbeitszeit (Details)',permissions: ['employees.bookings.view_all'], feature: 'arbzg.compliance' },
@@ -45,6 +44,7 @@ const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 
 type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'MAIL'
+type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'rolle' | 'passwort'
 
 function fmtH(n: number) {
   return n.toFixed(2).replace('.', ',') + ' h'
@@ -109,17 +109,82 @@ function SortTh({ label, sortKey, current, dir, onClick }: {
   )
 }
 
+// ── Rolle-Sektion (innerhalb der Mitarbeiter-Akte) ───────────────────────────
+
+function RoleSection({ employeeId, roles, mapping }: {
+  employeeId: number
+  roles:   UserRole[]
+  mapping: EmployeeRoleMapping[]
+}) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const currentIds = mapping.filter(m => m.EMPLOYEE_ID === employeeId).map(m => m.ROLE_ID)
+  const [selected, setSelected] = useState<Set<number>>(new Set(currentIds))
+
+  const saveMut = useMutation({
+    mutationFn: () => setEmployeeRoles(employeeId, Array.from(selected)),
+    onSuccess: () => {
+      toast.success('Rollen aktualisiert')
+      void qc.invalidateQueries({ queryKey: ['employee-role-map'] })
+      void qc.invalidateQueries({ queryKey: ['user-roles'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <div>
+      <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+        Mehrere Rollen sind möglich — der Mitarbeiter erhält die Vereinigungsmenge der Berechtigungen.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
+        {roles.map(r => {
+          const on = selected.has(r.ID)
+          return (
+            <label key={r.ID} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+              border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
+              background: on ? '#f0f9ff' : 'transparent',
+            }}>
+              <input type="checkbox" checked={on} onChange={() => setSelected(prev => {
+                const next = new Set(prev)
+                if (next.has(r.ID)) next.delete(r.ID); else next.add(r.ID)
+                return next
+              })} />
+              <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || '#6b7280' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{r.NAME_SHORT}</div>
+                {r.NAME_LONG && <div style={{ fontSize: 11, color: '#6b7280' }}>{r.NAME_LONG}</div>}
+              </div>
+              {r.IS_SYSTEM && <span style={{ fontSize: 10, color: '#6b7280' }}>SYSTEM</span>}
+            </label>
+          )
+        })}
+        {!roles.length && <p className="empty-note">Noch keine Rollen definiert.</p>}
+      </div>
+      <div className="modal-actions">
+        <button className="btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+          {saveMut.isPending ? 'Speichert …' : 'Rollen speichern'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Employee Edit Modal ───────────────────────────────────────────────────────
 
-function EmployeeEditModal({ employee, onClose, genders, departments, workModels }: {
+function EmployeeEditModal({ employee, onClose, genders, departments, workModels, roles, mapping, initialSection = 'stammdaten' }: {
   employee:    Employee
   onClose:     () => void
   genders:     Array<{ ID: number; GENDER: string }>
   departments: StammdatenItem[]
   workModels:  WorkingTimeModel[]
+  roles:       UserRole[]
+  mapping:     EmployeeRoleMapping[]
+  initialSection?: EmpSection
 }) {
   const qc = useQueryClient()
-  const [section,  setSection]  = useState<'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'passwort'>('stammdaten')
+  const canAssignRoles = usePermission('employees.role.assign')
+  const [section,  setSection]  = useState<EmpSection>(initialSection)
   const [editForm, setEditForm] = useState<UpdateEmployeePayload>({
     short_name:       employee.SHORT_NAME ?? '',
     title:            employee.TITLE ?? '',
@@ -259,6 +324,9 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         <button type="button" style={sectionBtnStyle('stammdaten')}  onClick={() => setSection('stammdaten')}>Stammdaten</button>
         <button type="button" style={sectionBtnStyle('kostensatz')}  onClick={() => setSection('kostensatz')}>Kostensatz</button>
         <button type="button" style={sectionBtnStyle('arbeitszeit')} onClick={() => setSection('arbeitszeit')}>Arbeitszeit</button>
+        {canAssignRoles && (
+          <button type="button" style={sectionBtnStyle('rolle')}     onClick={() => setSection('rolle')}>Rolle &amp; Rechte</button>
+        )}
         <button type="button" style={sectionBtnStyle('passwort')}    onClick={() => setSection('passwort')}>Passwort</button>
       </div>
 
@@ -446,6 +514,10 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
           </div>
           <Message text={wmMsg?.text ?? null} type={wmMsg?.type} />
         </div>
+      )}
+
+      {section === 'rolle' && canAssignRoles && (
+        <RoleSection employeeId={employee.ID} roles={roles} mapping={mapping} />
       )}
 
       {section === 'passwort' && (
@@ -1645,67 +1717,6 @@ function EmployeeRoleBadge({ employeeId, roles, mapping, onClick }: {
   )
 }
 
-function EmployeeRoleEditModal({ employeeId, roles, mapping, onClose }: {
-  employeeId: number
-  roles:   UserRole[]
-  mapping: EmployeeRoleMapping[]
-  onClose: () => void
-}) {
-  const qc = useQueryClient()
-  const toast = useToast()
-  const currentIds = mapping.filter(m => m.EMPLOYEE_ID === employeeId).map(m => m.ROLE_ID)
-  const [selected, setSelected] = useState<Set<number>>(new Set(currentIds))
-
-  const saveMut = useMutation({
-    mutationFn: () => setEmployeeRoles(employeeId, Array.from(selected)),
-    onSuccess: () => {
-      toast.success('Rollen aktualisiert')
-      void qc.invalidateQueries({ queryKey: ['employee-role-map'] })
-      void qc.invalidateQueries({ queryKey: ['user-roles'] })
-      onClose()
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  return (
-    <Modal open onClose={onClose} title="Rolle zuweisen">
-      <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
-        Mehrere Rollen sind möglich — der Mitarbeiter erhält die Vereinigungsmenge der Berechtigungen.
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 380, overflowY: 'auto' }}>
-        {roles.map(r => {
-          const on = selected.has(r.ID)
-          return (
-            <label key={r.ID} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-              border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
-              background: on ? '#f0f9ff' : 'transparent',
-            }}>
-              <input type="checkbox" checked={on} onChange={() => setSelected(prev => {
-                const next = new Set(prev)
-                if (next.has(r.ID)) next.delete(r.ID); else next.add(r.ID)
-                return next
-              })} />
-              <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || '#6b7280' }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{r.NAME_SHORT}</div>
-                {r.NAME_LONG && <div style={{ fontSize: 11, color: '#6b7280' }}>{r.NAME_LONG}</div>}
-              </div>
-              {r.IS_SYSTEM && <span style={{ fontSize: 10, color: '#6b7280' }}>SYSTEM</span>}
-            </label>
-          )
-        })}
-      </div>
-      <div className="modal-actions">
-        <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
-        <button className="btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
-          {saveMut.isPending ? 'Speichert …' : 'Speichern'}
-        </button>
-      </div>
-    </Modal>
-  )
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function MitarbeiterPage() {
@@ -1720,7 +1731,8 @@ export function MitarbeiterPage() {
   const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>(() => lsGet<'asc'|'desc'>(`${ML}:sortDir`, 'asc'))
   const [page,      setPage]     = useState(1)
   const [editRow,   setEditRow]  = useState<Employee | null>(null)
-  const [editRoleEmpId, setEditRoleEmpId] = useState<number | null>(null)
+  const [editInitialSection, setEditInitialSection] = useState<EmpSection>('stammdaten')
+  const [showCreate, setShowCreate] = useState(false)
   const [form,      setForm]     = useState<CreateEmployeePayload>(emptyCreateForm)
   const [createWmModelId,    setCreateWmModelId]    = useState('')
   const [createWmValidFrom,  setCreateWmValidFrom]  = useState('')
@@ -1827,10 +1839,11 @@ export function MitarbeiterPage() {
       await createEmployeeWorkModel(empId, { model_id: Number(createWmModelId), valid_from: createWmValidFrom })
       await createEmployeeCpRate(empId, { cp_rate: parseFloat(createCpRate), valid_from: createCpValidFrom })
       void qc.invalidateQueries({ queryKey: ['employees'] })
-      setCreateMsg({ text: 'Mitarbeiter gespeichert ✅', type: 'success' })
+      toast.success('Mitarbeiter angelegt')
       setForm(emptyCreateForm())
       setCreateWmModelId(''); setCreateWmValidFrom('')
       setCreateCpRate(''); setCreateCpValidFrom('')
+      setShowCreate(false)
     } catch (e: unknown) {
       setCreateMsg({ text: (e as Error).message, type: 'error' })
     } finally {
@@ -1838,7 +1851,7 @@ export function MitarbeiterPage() {
     }
   }
 
-  useCtrlS(() => createFormRef.current?.requestSubmit(), tab === 'create')
+  useCtrlS(() => createFormRef.current?.requestSubmit(), showCreate)
 
   const setF = (k: keyof CreateEmployeePayload) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
@@ -1867,6 +1880,21 @@ export function MitarbeiterPage() {
               <span className="list-info">
                 {processed.length} Mitarbeiter · Seite {safePage}/{totalPages}
               </span>
+              <Can permission="employees.create">
+                <button
+                  className="btn-primary"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => {
+                    setForm(emptyCreateForm())
+                    setCreateWmModelId(''); setCreateWmValidFrom('')
+                    setCreateCpRate(''); setCreateCpValidFrom('')
+                    setCreateMsg(null)
+                    setShowCreate(true)
+                  }}
+                >
+                  + Neuer Mitarbeiter
+                </button>
+              </Can>
             </div>
 
             <div className="pl-filter-chips">
@@ -1920,7 +1948,7 @@ export function MitarbeiterPage() {
                           <Can permission="employees.role.assign" fallback={
                             <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => {}} />
                           }>
-                            <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => setEditRoleEmpId(r.ID)} />
+                            <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => { setEditInitialSection('rolle'); setEditRow(r) }} />
                           </Can>
                         </td>
                         <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
@@ -1928,7 +1956,7 @@ export function MitarbeiterPage() {
                         </td>
                         <td className="doc-actions">
                           <Can permission="employees.edit">
-                            <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
+                            <button className="row-action-btn" onClick={() => { setEditInitialSection('stammdaten'); setEditRow(r) }} title="Bearbeiten">
                               <Pencil size={14} strokeWidth={2} />
                             </button>
                           </Can>
@@ -1959,62 +1987,6 @@ export function MitarbeiterPage() {
           </>
         )}
 
-        {tab === 'create' && (
-          <form ref={createFormRef} onSubmit={submitCreate} className="master-form">
-            <FormField label="Kürzel*"     id="mku" value={form.short_name}          onChange={setF('short_name')} required />
-            <FormField label="Titel"       id="mti" value={form.title ?? ''}          onChange={setF('title')} />
-            <div className="form-row">
-              <FormField label="Vorname*"  id="mfn" value={form.first_name}          onChange={setF('first_name')} required />
-              <FormField label="Nachname*" id="mln" value={form.last_name}           onChange={setF('last_name')} required />
-            </div>
-            <FormField label="E-Mail"      id="mem" value={form.email ?? ''}          onChange={setF('email')} type="email" />
-            <FormField label="Mobil"       id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
-            <FormField label="Personalnr." id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
-            <FormField label="Passwort"    id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" autoComplete="new-password" />
-            <div className="form-group">
-              <label htmlFor="mge">Geschlecht*</label>
-              <select id="mge" value={String(form.gender_id)} onChange={setF('gender_id')} required>
-                <option value="">Bitte wählen …</option>
-                {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
-              </select>
-            </div>
-
-            <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />
-            <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Arbeitszeitmodell*</p>
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="mwm">Modell*</label>
-                <select id="mwm" value={createWmModelId} onChange={e => setCreateWmModelId(e.target.value)} required>
-                  <option value="">Bitte wählen …</option>
-                  {workModels.map(m => <option key={m.ID} value={m.ID}>{m.NAME}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="mwmvf">Gültig ab*</label>
-                <input id="mwmvf" type="date" value={createWmValidFrom} onChange={e => setCreateWmValidFrom(e.target.value)} required />
-              </div>
-            </div>
-
-            <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />
-            <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Kostensatz*</p>
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="mcr">Kostensatz (€/h)*</label>
-                <input id="mcr" type="number" step="0.01" min="0" value={createCpRate} onChange={e => setCreateCpRate(e.target.value)} placeholder="z. B. 85.00" required />
-              </div>
-              <div className="form-group">
-                <label htmlFor="mcrvf">Gültig ab*</label>
-                <input id="mcrvf" type="date" value={createCpValidFrom} onChange={e => setCreateCpValidFrom(e.target.value)} required />
-              </div>
-            </div>
-
-            <Message text={createMsg?.text ?? null} type={createMsg?.type} />
-            <button className="btn-primary" type="submit" disabled={creating}>
-              {creating ? 'Speichert …' : 'Speichern'}
-            </button>
-          </form>
-        )}
-
         {tab === 'reporting' && (
           <ReportingTab employees={employees} />
         )}
@@ -2036,8 +2008,70 @@ export function MitarbeiterPage() {
             genders={genders}
             departments={departments}
             workModels={workModels}
+            roles={userRoles}
+            mapping={empRoleMap}
+            initialSection={editInitialSection}
           />
         )}
+      </Modal>
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Neuer Mitarbeiter">
+        <form ref={createFormRef} onSubmit={submitCreate} className="master-form">
+          <FormField label="Kürzel*"     id="mku" value={form.short_name}          onChange={setF('short_name')} required />
+          <FormField label="Titel"       id="mti" value={form.title ?? ''}          onChange={setF('title')} />
+          <div className="form-row">
+            <FormField label="Vorname*"  id="mfn" value={form.first_name}          onChange={setF('first_name')} required />
+            <FormField label="Nachname*" id="mln" value={form.last_name}           onChange={setF('last_name')} required />
+          </div>
+          <FormField label="E-Mail"      id="mem" value={form.email ?? ''}          onChange={setF('email')} type="email" />
+          <FormField label="Mobil"       id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
+          <FormField label="Personalnr." id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
+          <FormField label="Passwort"    id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" autoComplete="new-password" />
+          <div className="form-group">
+            <label htmlFor="mge">Geschlecht*</label>
+            <select id="mge" value={String(form.gender_id)} onChange={setF('gender_id')} required>
+              <option value="">Bitte wählen …</option>
+              {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
+            </select>
+          </div>
+
+          <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />
+          <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Arbeitszeitmodell*</p>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="mwm">Modell*</label>
+              <select id="mwm" value={createWmModelId} onChange={e => setCreateWmModelId(e.target.value)} required>
+                <option value="">Bitte wählen …</option>
+                {workModels.map(m => <option key={m.ID} value={m.ID}>{m.NAME}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="mwmvf">Gültig ab*</label>
+              <input id="mwmvf" type="date" value={createWmValidFrom} onChange={e => setCreateWmValidFrom(e.target.value)} required />
+            </div>
+          </div>
+
+          <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />
+          <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Kostensatz*</p>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="mcr">Kostensatz (€/h)*</label>
+              <input id="mcr" type="number" step="0.01" min="0" value={createCpRate} onChange={e => setCreateCpRate(e.target.value)} placeholder="z. B. 85.00" required />
+            </div>
+            <div className="form-group">
+              <label htmlFor="mcrvf">Gültig ab*</label>
+              <input id="mcrvf" type="date" value={createCpValidFrom} onChange={e => setCreateCpValidFrom(e.target.value)} required />
+            </div>
+          </div>
+
+          <Message text={createMsg?.text ?? null} type={createMsg?.type} />
+          <div className="modal-actions">
+            <button className="btn-primary" type="submit" disabled={creating}>
+              {creating ? 'Speichert …' : 'Speichern'}
+            </button>
+            <button type="button" onClick={() => setShowCreate(false)}>Abbrechen</button>
+          </div>
+        </form>
       </Modal>
 
       <ConfirmModal
@@ -2049,15 +2083,6 @@ export function MitarbeiterPage() {
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />
-
-      {editRoleEmpId !== null && (
-        <EmployeeRoleEditModal
-          employeeId={editRoleEmpId}
-          roles={userRoles}
-          mapping={empRoleMap}
-          onClose={() => setEditRoleEmpId(null)}
-        />
-      )}
     </div>
   )
 }
