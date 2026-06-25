@@ -12,6 +12,9 @@ import {
   fetchBookingTypes, createBookingType, updateBookingType, deleteBookingType,
   BOOKING_KIND_LABEL, type BookingType, type BookingKind, type BookingTypePayload,
 } from '@/api/bookingTypes'
+import {
+  fetchGlobalSnippets, createGlobalSnippet, deleteGlobalSnippet, type TextSnippet,
+} from '@/api/textSnippets'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtEur = (v: number | null) => v == null ? '—' : FMT_EUR.format(v) + ' €'
@@ -226,6 +229,17 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
           Aktiv (zur Auswahl beim Buchen)
         </label>
 
+        {!isCreate && (
+          <Can permission="settings.booking_text_templates.edit">
+            <TypeTextTemplates typeId={existing!.ID} />
+          </Can>
+        )}
+        {isCreate && (
+          <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0' }}>
+            Textvorlagen für diese Buchungsart kannst du nach dem Speichern (beim Bearbeiten) hinterlegen.
+          </p>
+        )}
+
         <Message text={msg?.text ?? null} type={msg?.type} />
         <div className="modal-actions">
           <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
@@ -235,5 +249,59 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
         </div>
       </div>
     </Modal>
+  )
+}
+
+// ── Textvorlagen direkt an einer Buchungsart pflegen ───────────────────────────
+function TypeTextTemplates({ typeId }: { typeId: number }) {
+  const qc = useQueryClient()
+  const [label, setLabel] = useState('')
+  const [text,  setText]  = useState('')
+
+  const { data } = useQuery({ queryKey: ['booking-text-templates-global'], queryFn: fetchGlobalSnippets })
+  const rows = (data?.data ?? []).filter((s: TextSnippet) => s.BOOKING_TYPE_ID === typeId)
+
+  function invalidate() {
+    void qc.invalidateQueries({ queryKey: ['booking-text-templates-global'] })
+    void qc.invalidateQueries({ queryKey: ['text-snippets'] })
+  }
+  const addMut = useMutation({
+    mutationFn: () => createGlobalSnippet({ label: label.trim() || null, text: text.trim(), booking_type_id: typeId }),
+    onSuccess: () => { invalidate(); setLabel(''); setText('') },
+  })
+  const delMut = useMutation({ mutationFn: deleteGlobalSnippet, onSuccess: invalidate })
+
+  return (
+    <div style={{ marginTop: 8, padding: 10, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+      <strong style={{ fontSize: 13 }}>Textvorlagen für diese Buchungsart</strong>
+      <p style={{ fontSize: 11, color: '#6b7280', margin: '2px 0 8px' }}>
+        Erscheinen beim Buchen dieser Buchungsart als Baustein.
+      </p>
+
+      {rows.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+          {rows.map(r => (
+            <div key={r.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+              {r.LABEL && <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.LABEL}:</span>}
+              <span style={{ color: '#374151', flex: 1, whiteSpace: 'pre-line' }}>{r.TEXT}</span>
+              <button type="button" className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                onClick={() => delMut.mutate(r.ID)} title="Löschen">
+                <Trash2 size={12} strokeWidth={2.5} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <input className="tbl-input" style={{ width: 110 }} value={label} onChange={e => setLabel(e.target.value)} placeholder="Kürzel (optional)" />
+        <textarea rows={2} value={text} onChange={e => setText(e.target.value)} placeholder="Textbaustein …"
+          style={{ flex: 1, minWidth: 180, padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+        <button type="button" className="btn-small btn-save" disabled={!text.trim() || addMut.isPending}
+          onClick={() => addMut.mutate()}>
+          {addMut.isPending ? '…' : 'Hinzufügen'}
+        </button>
+      </div>
+    </div>
   )
 }
