@@ -226,6 +226,23 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const cpRates:   EmployeeCpRate[]    = cpRatesRes?.data   ?? []
   const empWmList: EmployeeWorkModel[] = workModelsRes?.data ?? []
 
+  // Laufender Saldo fuer den Akten-Kopf (gleicher Query-Key wie das Zeitkonto
+  // -> nach einer Buchungsaenderung aktualisiert sich der Kopf automatisch).
+  const { data: runRes } = useQuery({
+    queryKey: ['emp-balance-running', employee.ID],
+    queryFn:  () => fetchRunningBalance(employee.ID),
+    enabled:  canViewBookings,
+  })
+  const runningBalance = runRes?.data?.totalBalance ?? null
+
+  // Aktuell gueltiger Kostensatz = Eintrag mit dem juengsten VALID_FROM <= heute.
+  const currentCpRate = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const valid = cpRates.filter(r => r.VALID_FROM <= today)
+    if (!valid.length) return null
+    return valid.reduce((a, b) => (a.VALID_FROM >= b.VALID_FROM ? a : b)).CP_RATE
+  }, [cpRates])
+
   const [saving, setSaving]   = useState(false)
   const [cpSaving, setCpSaving] = useState(false)
   const [wmSaving, setWmSaving] = useState(false)
@@ -319,8 +336,56 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     color: section === s ? '#fff' : '#374151',
   })
 
+  const seed = employee.SHORT_NAME || employee.LAST_NAME || 'x'
+  const avatarHue = [...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 0)
+  const avatarBg = `hsl(${avatarHue}, 50%, 45%)`
+  const initials = `${employee.FIRST_NAME?.[0] ?? ''}${employee.LAST_NAME?.[0] ?? ''}`.toUpperCase() || '?'
+  const balColor = (n: number) => n > 0 ? '#059669' : n < 0 ? '#dc2626' : '#6b7280'
+
   return (
     <>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+        padding: '0 0 14px', marginBottom: 14, borderBottom: '1px solid #e5e7eb',
+      }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+          background: avatarBg, color: '#fff', fontWeight: 700, fontSize: 15,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>{initials}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, fontSize: 14 }}>{employee.FIRST_NAME} {employee.LAST_NAME}</span>
+            <span style={{ fontSize: 11, color: '#6b7280' }}>{employee.SHORT_NAME}</span>
+            <span style={{
+              fontSize: 11, padding: '1px 7px', borderRadius: 10, fontWeight: 500,
+              background: employee.ACTIVE === 2 ? '#fee2e2' : '#dcfce7',
+              color:      employee.ACTIVE === 2 ? '#b91c1c' : '#166534',
+            }}>{employee.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+            {employee.DEPARTMENT_NAME || '—'} · {employee.CURRENT_MODEL_NAME || 'kein Modell'}
+          </div>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, textAlign: 'right' }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>Kostensatz</div>
+            <div style={{ fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
+              {currentCpRate != null ? `${currentCpRate.toFixed(2)} €/h` : '—'}
+            </div>
+          </div>
+          {canViewBookings && (
+            <div>
+              <div style={{ fontSize: 11, color: '#6b7280' }}>Saldo (laufend)</div>
+              <div style={{ fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums',
+                            color: runningBalance != null ? balColor(runningBalance) : '#9ca3af' }}>
+                {runningBalance != null ? fmtBalance(runningBalance) : '…'}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div style={{ display: 'flex', marginBottom: 16, flexWrap: 'wrap', gap: 4 }}>
         <button type="button" style={sectionBtnStyle('stammdaten')}  onClick={() => setSection('stammdaten')}>Stammdaten</button>
         <button type="button" style={sectionBtnStyle('kostensatz')}  onClick={() => setSection('kostensatz')}>Kostensatz</button>
