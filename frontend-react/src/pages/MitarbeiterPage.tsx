@@ -9,7 +9,7 @@ import type { HelpId } from '@/help/helpContent'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, Download } from 'lucide-react'
 import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
@@ -75,6 +75,21 @@ function HistBadge({ kind }: { kind: 'current' | 'planned' }) {
       {kind === 'current' ? 'aktuell' : 'geplant'}
     </span>
   )
+}
+
+// CSV-Export (clientseitig): deutsches Excel-Format (Semikolon, UTF-8-BOM).
+function csvEscape(v: string | number): string {
+  const s = String(v)
+  return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+function downloadCsv(filename: string, rows: (string | number)[][]) {
+  const body = rows.map(r => r.map(csvEscape).join(';')).join('\r\n')
+  const blob = new Blob([String.fromCharCode(0xFEFF) + body], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click(); a.remove()
+  URL.revokeObjectURL(url)
 }
 
 // ── FilterChip ────────────────────────────────────────────────────────────────
@@ -813,6 +828,27 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
     setSearch(''); setDeptFilter(new Set()); setStatusFilter(new Set()); setModelFilter(new Set())
   }
 
+  function exportCsv() {
+    const num = (n: number) => n.toFixed(2).replace('.', ',')
+    const head = isPeriod
+      ? ['Kürzel', 'Vorname', 'Nachname', 'Abteilung', 'Jahr', 'Monat', 'Soll (h)', 'Ist (h)', 'Monatssaldo (h)', 'Kosten (EUR)', 'Produktivität (%)']
+      : ['Kürzel', 'Vorname', 'Nachname', 'Abteilung', 'Soll (h)', 'Ist (h)', 'Monatssaldo (h)', 'Laufender Saldo (h)', 'Kosten (EUR)', 'Produktivität (%)']
+    const rows: (string | number)[][] = [head]
+    const sorted = isPeriod
+      ? [...filtered].sort((a, b) => a.SHORT_NAME.localeCompare(b.SHORT_NAME) || a.YEAR - b.YEAR || a.MONTH - b.MONTH)
+      : sortFlat(filtered)
+    for (const r of sorted) {
+      const base = [r.SHORT_NAME, r.FIRST_NAME, r.LAST_NAME, r.DEPARTMENT_NAME || '']
+      const prod = r.PRODUCTIVITY_PCT != null ? num(r.PRODUCTIVITY_PCT) : ''
+      const cost = r.COST > 0 ? num(r.COST) : ''
+      rows.push(isPeriod
+        ? [...base, r.YEAR, r.MONTH, num(r.REQUIRED), num(r.ACTUAL), num(r.BALANCE), cost, prod]
+        : [...base, num(r.REQUIRED), num(r.ACTUAL), num(r.BALANCE), r.RUNNING_BALANCE != null ? num(r.RUNNING_BALANCE) : '', cost, prod])
+    }
+    const stamp = mode === 'period' ? `${dateFrom}_bis_${dateTo}` : mode === 'as_of' ? asOfDate : new Date().toISOString().slice(0, 10)
+    downloadCsv(`mitarbeiter-auswertung_${stamp}.csv`, rows)
+  }
+
   function NumTh({ label, field, help }: { label: string; field: string; help?: HelpId }) {
     return (
       <th className="num sortable-th" onClick={() => toggleSort(field)} style={{ cursor: 'pointer' }}>
@@ -907,6 +943,16 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
               <FilterChip label="Modell"    options={modelOptions}   active={modelFilter}  onChange={setModelFilter}  />
               {hasFilter && <button className="pl-clear-btn" onClick={clearFilters}>Alle Filter löschen</button>}
             </div>
+            <button
+              type="button"
+              className="btn-small"
+              style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              disabled={filtered.length === 0}
+              onClick={exportCsv}
+              title="Gefilterte Auswertung als CSV (Excel) exportieren"
+            >
+              <Download size={13} strokeWidth={2} /> CSV-Export
+            </button>
           </div>
 
           {hasFilter && (
