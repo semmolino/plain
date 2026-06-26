@@ -1496,6 +1496,8 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
 function MonthsOverviewTab() {
   const qc = useQueryClient()
   const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState<{ title: string; message: string; run: () => Promise<void> } | null>(null)
   const { data: overviewRes, isLoading } = useQuery({
     queryKey: ['month-close-overview'],
     queryFn:  fetchMonthCloseOverview,
@@ -1515,20 +1517,109 @@ function MonthsOverviewTab() {
     }
   }
 
+  // Offene (noch nicht abgeschlossene) Eintraege sammeln — gesamt oder je Spalte.
+  type Target = { empId: number; year: number; month: number }
+  const openTotal = useMemo(
+    () => rows.reduce((s, e) => s + e.months.filter(m => !m.closed).length, 0),
+    [rows],
+  )
+  function openInColumn(year: number, month: number) {
+    return rows.reduce((s, e) => s + (e.months.some(m => m.year === year && m.month === month && !m.closed) ? 1 : 0), 0)
+  }
+  function collectAll(): Target[] {
+    const t: Target[] = []
+    for (const e of rows) for (const m of e.months) if (!m.closed) t.push({ empId: e.ID, year: m.year, month: m.month })
+    return t
+  }
+  function collectColumn(year: number, month: number): Target[] {
+    const t: Target[] = []
+    for (const e of rows) {
+      const m = e.months.find(x => x.year === year && x.month === month)
+      if (m && !m.closed) t.push({ empId: e.ID, year, month })
+    }
+    return t
+  }
+
+  async function closeMany(targets: Target[]) {
+    setBusy(true)
+    try {
+      for (const t of targets) await closeMonth(t.empId, t.year, t.month)
+      void qc.invalidateQueries({ queryKey: ['month-close-overview'] })
+      void qc.invalidateQueries({ queryKey: ['month-close-status'] })
+      toast.success(`${targets.length} Monat${targets.length === 1 ? '' : 'e'} abgeschlossen`)
+    } catch (e: unknown) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function askCloseAll() {
+    const t = collectAll()
+    if (!t.length) return
+    setConfirm({
+      title: 'Alle offenen Monate abschließen',
+      message: `${t.length} offene Monatsabschnitte über alle Mitarbeiter abschließen?`,
+      run: () => closeMany(t),
+    })
+  }
+  function askCloseColumn(year: number, month: number) {
+    const t = collectColumn(year, month)
+    if (!t.length) return
+    setConfirm({
+      title: `${MONTH_NAMES[month - 1]} ${year} abschließen`,
+      message: `${t.length} offene Einträge für ${MONTH_NAMES[month - 1]} ${year} abschließen?`,
+      run: () => closeMany(t),
+    })
+  }
+
   if (isLoading) return <p className="empty-note">Laden …</p>
   if (!rows.length) return <p className="empty-note">Keine aktiven Mitarbeiter.</p>
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+          {openTotal === 0 ? 'Alle Monate abgeschlossen' : `${openTotal} offene${openTotal === 1 ? 'r' : ''} Monat${openTotal === 1 ? '' : 'e'}`}
+        </span>
+        <button
+          type="button"
+          className="btn-small btn-save"
+          style={{ marginLeft: 'auto' }}
+          disabled={busy || openTotal === 0}
+          onClick={askCloseAll}
+        >
+          {busy ? 'Schließt ab …' : 'Alle offenen abschließen'}
+        </button>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
       <table className="master-table" style={{ fontSize: 12 }}>
         <thead>
           <tr>
             <th style={{ textAlign: 'left', paddingRight: 16, whiteSpace: 'nowrap' }}>Mitarbeiter</th>
-            {months.map(m => (
-              <th key={`${m.year}-${m.month}`} style={{ textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 500, color: '#6b7280' }}>
-                {MONTH_NAMES[m.month - 1].slice(0, 3)}<br />{m.year}
-              </th>
-            ))}
+            {months.map(m => {
+              const open = openInColumn(m.year, m.month)
+              return (
+                <th key={`${m.year}-${m.month}`} style={{ textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 500, color: '#6b7280' }}>
+                  {MONTH_NAMES[m.month - 1].slice(0, 3)}<br />{m.year}
+                  <div style={{ marginTop: 3, minHeight: 18 }}>
+                    {open > 0 && (
+                      <button
+                        type="button"
+                        className="btn-small"
+                        style={{ fontSize: 10, padding: '0 6px' }}
+                        disabled={busy}
+                        title={`${open} offene Einträge für ${MONTH_NAMES[m.month - 1]} ${m.year} abschließen`}
+                        onClick={() => askCloseColumn(m.year, m.month)}
+                      >
+                        alle ✓
+                      </button>
+                    )}
+                  </div>
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
@@ -1541,11 +1632,12 @@ function MonthsOverviewTab() {
                 <td key={`${m.year}-${m.month}`} style={{ textAlign: 'center', padding: '4px 8px' }}>
                   <button
                     type="button"
+                    disabled={busy}
                     title={m.closed
                       ? `Abgeschlossen am ${new Date(m.closed_at!).toLocaleDateString('de-DE')} – klicken zum Öffnen`
                       : 'Offen – klicken zum Abschließen'}
                     style={{
-                      background: 'none', border: 'none', cursor: 'pointer', fontSize: 16,
+                      background: 'none', border: 'none', cursor: busy ? 'default' : 'pointer', fontSize: 16,
                       color: m.closed ? '#059669' : '#d1d5db', lineHeight: 1,
                     }}
                     onClick={() => toggle(emp, m.year, m.month, m.closed)}
@@ -1558,9 +1650,19 @@ function MonthsOverviewTab() {
           ))}
         </tbody>
       </table>
+      </div>
       <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
-        ✓ Abgeschlossen &nbsp;·&nbsp; ○ Offen &nbsp;·&nbsp; Klicken zum Umschalten
+        ✓ Abgeschlossen &nbsp;·&nbsp; ○ Offen &nbsp;·&nbsp; Einzelne Zelle klicken zum Umschalten &nbsp;·&nbsp; „alle ✓" schließt eine ganze Monatsspalte ab
       </p>
+
+      <ConfirmModal
+        open={confirm !== null}
+        title={confirm?.title ?? ''}
+        message={confirm?.message ?? ''}
+        confirmLabel="Abschließen"
+        onConfirm={() => { const c = confirm; setConfirm(null); void c?.run() }}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   )
 }
