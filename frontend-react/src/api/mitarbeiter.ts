@@ -269,6 +269,21 @@ export const fetchEmployeeReportList = (params: {
   return apiClient.get<{ data: EmployeeReportRow[] }>(`/mitarbeiter/report-list?${p}`)
 }
 
+// ── Projekte eines Mitarbeiters ───────────────────────────────────────────────
+
+export interface EmployeeProject {
+  ID:              number
+  PROJECT_ID:      number
+  PROJECT_NUMBER:  string | null
+  PROJECT_NAME:    string | null
+  STATUS_NAME:     string | null
+  ROLE_NAME_SHORT: string | null
+  SP_RATE:         number | null
+}
+
+export const fetchEmployeeProjects = (id: number) =>
+  apiClient.get<{ data: EmployeeProject[] }>(`/employee2project/employee/${id}`)
+
 // ── Month close ───────────────────────────────────────────────────────────────
 
 export interface MonthClose {

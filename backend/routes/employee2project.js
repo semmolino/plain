@@ -65,6 +65,45 @@ module.exports = (supabase) => {
     res.json({ data: enriched });
   });
 
+  // GET /employee/:employeeId — list all projects an employee is assigned to
+  router.get("/employee/:employeeId", async (req, res) => {
+    const employeeId = Number(req.params.employeeId);
+    if (!employeeId) return res.status(400).json({ error: "employeeId fehlt" });
+
+    const { data: e2pRows, error } = await supabase
+      .from("EMPLOYEE2PROJECT")
+      .select("ID, PROJECT_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
+      .eq("EMPLOYEE_ID", employeeId)
+      .eq("TENANT_ID", req.tenantId)
+      .order("ID");
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!e2pRows || !e2pRows.length) return res.json({ data: [] });
+
+    const projectIds = [...new Set(e2pRows.map(r => r.PROJECT_ID).filter(Boolean))];
+    const { data: projects } = await supabase
+      .from("PROJECT")
+      .select("ID, NAME_SHORT, NAME_LONG, STATUS:PROJECT_STATUS_ID(NAME_SHORT)")
+      .in("ID", projectIds)
+      .eq("TENANT_ID", req.tenantId);
+
+    const projMap = Object.fromEntries((projects || []).map(p => [p.ID, p]));
+
+    const enriched = e2pRows
+      .filter(r => projMap[r.PROJECT_ID])
+      .map(r => ({
+        ID:              r.ID,
+        PROJECT_ID:      r.PROJECT_ID,
+        PROJECT_NUMBER:  projMap[r.PROJECT_ID]?.NAME_SHORT ?? null,
+        PROJECT_NAME:    projMap[r.PROJECT_ID]?.NAME_LONG  ?? null,
+        STATUS_NAME:     projMap[r.PROJECT_ID]?.STATUS?.NAME_SHORT ?? null,
+        ROLE_NAME_SHORT: r.ROLE_NAME_SHORT ?? null,
+        SP_RATE:         r.SP_RATE ?? null,
+      }));
+
+    res.json({ data: enriched });
+  });
+
   // POST /project/:projectId — add employee to project
   router.post("/project/:projectId", async (req, res) => {
     const projectId = Number(req.params.projectId);

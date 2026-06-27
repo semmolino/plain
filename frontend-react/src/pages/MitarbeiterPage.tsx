@@ -20,10 +20,10 @@ import {
   fetchEmployeeCpRates, createEmployeeCpRate, updateEmployeeCpRate, deleteEmployeeCpRate,
   fetchMonthBalance, fetchRunningBalance,
   fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword,
-  fetchEmployeeReportList,
+  fetchEmployeeReportList, fetchEmployeeProjects,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
   type EmployeeWorkModel, type EmployeeCpRate, type MonthBalance, type RunningMonth,
-  type MonthCloseOverviewEmployee, type DayBooking, type EmployeeReportRow,
+  type MonthCloseOverviewEmployee, type DayBooking, type EmployeeReportRow, type EmployeeProject,
 } from '@/api/mitarbeiter'
 import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
 import { RecentList } from '@/components/recents/RecentList'
@@ -44,7 +44,7 @@ const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 
 type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'MAIL'
-type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'rolle' | 'passwort'
+type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'projekte' | 'rolle' | 'passwort'
 
 function fmtH(n: number) {
   return n.toFixed(2).replace('.', ',') + ' h'
@@ -201,6 +201,47 @@ function RoleSection({ employeeId, roles, mapping }: {
         </button>
       </div>
     </div>
+  )
+}
+
+// ── Projekte-Sektion (innerhalb der Mitarbeiter-Akte) ────────────────────────
+
+function EmployeeProjectsSection({ employeeId }: { employeeId: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['emp-projects', employeeId],
+    queryFn:  () => fetchEmployeeProjects(employeeId),
+  })
+  const rows: EmployeeProject[] = data?.data ?? []
+
+  if (isLoading) return <p className="empty-note">Laden …</p>
+  if (!rows.length) return <p className="empty-note">Dieser Mitarbeiter ist keinem Projekt zugeordnet.</p>
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <thead>
+        <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontSize: 12 }}>
+          <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Projekt</th>
+          <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Status</th>
+          <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Rolle</th>
+          <th style={{ textAlign: 'right', padding: '3px 0 4px 8px' }}>Stundensatz</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(r => (
+          <tr key={r.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+            <td style={{ padding: '4px 8px 4px 0' }}>
+              <strong>{r.PROJECT_NUMBER || '—'}</strong>
+              {r.PROJECT_NAME ? <span style={{ color: '#6b7280' }}> · {r.PROJECT_NAME}</span> : null}
+            </td>
+            <td style={{ padding: '4px 8px 4px 0' }}>{r.STATUS_NAME || '—'}</td>
+            <td style={{ padding: '4px 8px 4px 0' }}>{r.ROLE_NAME_SHORT || '—'}</td>
+            <td style={{ padding: '4px 0 4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+              {r.SP_RATE != null ? `${Number(r.SP_RATE).toFixed(2)} €/h` : '—'}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
@@ -428,6 +469,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         {canViewBookings && (
           <button type="button" style={sectionBtnStyle('zeitkonto')} onClick={() => setSection('zeitkonto')}>Zeitkonto</button>
         )}
+        <button type="button" style={sectionBtnStyle('projekte')} onClick={() => setSection('projekte')}>Projekte</button>
         {canAssignRoles && (
           <button type="button" style={sectionBtnStyle('rolle')}     onClick={() => setSection('rolle')}>Rolle &amp; Rechte</button>
         )}
@@ -628,6 +670,10 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 
       {section === 'zeitkonto' && canViewBookings && (
         <EmployeeTimeAccount empId={employee.ID} />
+      )}
+
+      {section === 'projekte' && (
+        <EmployeeProjectsSection employeeId={employee.ID} />
       )}
 
       {section === 'rolle' && canAssignRoles && (
@@ -2166,7 +2212,7 @@ export function MitarbeiterPage() {
               </Can>
             </div>
 
-            <div className="pl-filter-chips">
+            <div className="pl-filter-chips" style={{ marginBottom: 12 }}>
               <FilterChip label="Abteilung" options={filterOptions.abt}    active={activeAbt}    onChange={v => { setActiveAbt(v);    setPage(1) }} />
               <FilterChip label="Status"    options={filterOptions.status}  active={activeStatus}  onChange={v => { setActiveStatus(v); setPage(1) }} />
               <FilterChip label="Modell"    options={filterOptions.model}   active={activeModel}   onChange={v => { setActiveModel(v);  setPage(1) }} />
