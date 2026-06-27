@@ -1721,6 +1721,23 @@ input::placeholder { color: var(--text-4); }
   font-size: 0.85rem; background: var(--surface); color: var(--text);
 }
 
+/* ── SegmentNav (einheitlicher Umschalter) ─────────────────────────────────── */
+.seg-nav {
+  display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 16px;
+}
+.seg-nav-btn {
+  padding: 6px 14px; font-size: 13px; font-weight: 500;
+  border: none; background: transparent; color: var(--text-3);
+  border-radius: 7px; cursor: pointer; white-space: nowrap;
+}
+.seg-nav-btn:hover { color: var(--text); background: var(--chrome-hover-bg, rgba(0,0,0,0.04)); }
+.seg-nav-btn.active {
+  background: var(--surface); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
 .daten-kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

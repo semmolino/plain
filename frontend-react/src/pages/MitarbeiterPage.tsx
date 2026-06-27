@@ -12,7 +12,7 @@ import { useToast }    from '@/store/toastStore'
 import { Pencil, Trash2, Download } from 'lucide-react'
 import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
-import { useLicenseFilterTabs } from '@/store/licenseStore'
+import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
 import { Can } from '@/components/ui/Can'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
@@ -35,10 +35,9 @@ import { updateBuchung, deleteBuchung } from '@/api/projekte'
 
 const PAGE_SIZE = 25
 const TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
-  { id: 'list',      label: 'Mitarbeiterliste',     permissions: ['employees.view'] },
-  { id: 'reporting', label: 'Reporting',            permissions: ['employees.bookings.view_all'] },
-  { id: 'overview',  label: 'Monatsübersicht',      permissions: ['employees.bookings.view_all','employees.month_close.edit'], feature: 'employees.month_close' },
-  { id: 'arbzg',     label: 'Arbeitszeit (Details)',permissions: ['employees.bookings.view_all'], feature: 'arbzg.compliance' },
+  { id: 'list',          label: 'Mitarbeiter',           permissions: ['employees.view'] },
+  { id: 'zeitwirtschaft', label: 'Zeitwirtschaft',       permissions: ['employees.bookings.view_all','employees.month_close.edit'] },
+  { id: 'arbzg',         label: 'Arbeitszeit (Details)', permissions: ['employees.bookings.view_all'], feature: 'arbzg.compliance' },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -90,6 +89,31 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
   a.href = url; a.download = filename
   document.body.appendChild(a); a.click(); a.remove()
   URL.revokeObjectURL(url)
+}
+
+// ── SegmentNav ────────────────────────────────────────────────────────────────
+// Einheitlicher Umschalter (Segment-Control) fuer Unter-Navigation/Sektionen.
+
+function SegmentNav<T extends string>({ items, active, onChange, style }: {
+  items:    { id: T; label: string }[]
+  active:   T
+  onChange: (id: T) => void
+  style?:   React.CSSProperties
+}) {
+  return (
+    <div className="seg-nav" style={style}>
+      {items.map(it => (
+        <button
+          key={it.id}
+          type="button"
+          className={`seg-nav-btn${active === it.id ? ' active' : ''}`}
+          onClick={() => onChange(it.id)}
+        >
+          {it.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 // ── FilterChip ────────────────────────────────────────────────────────────────
@@ -411,12 +435,15 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     } catch (e: unknown) { setWmMsg({ text: (e as Error).message, type: 'error' }) }
   }
 
-  const sectionBtnStyle = (s: string) => ({
-    padding: '4px 14px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-    border: '1px solid #d1d5db', borderRadius: 4, marginRight: 4,
-    background: section === s ? '#1d4ed8' : '#fff',
-    color: section === s ? '#fff' : '#374151',
-  })
+  const sectionItems: { id: EmpSection; label: string }[] = [
+    { id: 'stammdaten',  label: 'Stammdaten' },
+    { id: 'kostensatz',  label: 'Kostensatz' },
+    { id: 'arbeitszeit', label: 'Arbeitszeit' },
+    ...(canViewBookings ? [{ id: 'zeitkonto' as EmpSection, label: 'Zeitkonto' }] : []),
+    { id: 'projekte',    label: 'Projekte' },
+    ...(canAssignRoles  ? [{ id: 'rolle' as EmpSection, label: 'Rolle & Rechte' }] : []),
+    { id: 'passwort',    label: 'Passwort' },
+  ]
 
   const seed = employee.SHORT_NAME || employee.LAST_NAME || 'x'
   const avatarHue = [...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 0)
@@ -472,19 +499,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         </div>
       </div>
 
-      <div style={{ display: 'flex', marginBottom: 16, flexWrap: 'wrap', gap: 4 }}>
-        <button type="button" style={sectionBtnStyle('stammdaten')}  onClick={() => setSection('stammdaten')}>Stammdaten</button>
-        <button type="button" style={sectionBtnStyle('kostensatz')}  onClick={() => setSection('kostensatz')}>Kostensatz</button>
-        <button type="button" style={sectionBtnStyle('arbeitszeit')} onClick={() => setSection('arbeitszeit')}>Arbeitszeit</button>
-        {canViewBookings && (
-          <button type="button" style={sectionBtnStyle('zeitkonto')} onClick={() => setSection('zeitkonto')}>Zeitkonto</button>
-        )}
-        <button type="button" style={sectionBtnStyle('projekte')} onClick={() => setSection('projekte')}>Projekte</button>
-        {canAssignRoles && (
-          <button type="button" style={sectionBtnStyle('rolle')}     onClick={() => setSection('rolle')}>Rolle &amp; Rechte</button>
-        )}
-        <button type="button" style={sectionBtnStyle('passwort')}    onClick={() => setSection('passwort')}>Passwort</button>
-      </div>
+      <SegmentNav items={sectionItems} active={section} onChange={setSection} />
 
       {section === 'stammdaten' && (
         <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
@@ -1556,18 +1571,27 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
   )
 }
 
-// ── Reporting Tab ─────────────────────────────────────────────────────────────
+// ── Zeitwirtschaft Tab (Auswertung · Einzel-Mitarbeiter · Monatsabschluss) ─────
 
-function ReportingTab({ employees }: { employees: Employee[] }) {
-  const [subTab, setSubTab] = useState<'list' | 'single'>('list')
+type ZwSub = 'list' | 'single' | 'close'
+
+function ZeitwirtschaftTab({ employees }: { employees: Employee[] }) {
+  const canCloseMonths = usePermission('employees.month_close.edit')
+  const hasMonthClose  = useFeature('employees.month_close')
+  const showClose      = canCloseMonths && hasMonthClose
+
+  const [subTab, setSubTab] = useState<ZwSub>('list')
   const [empId,  setEmpId]  = useState<number | null>(null)
+
+  const items: { id: ZwSub; label: string }[] = [
+    { id: 'list',   label: 'Auswertung' },
+    { id: 'single', label: 'Einzelne/r Mitarbeiter' },
+    ...(showClose ? [{ id: 'close' as ZwSub, label: 'Monatsabschluss' }] : []),
+  ]
 
   return (
     <div>
-      <div className="daten-filter-modes" style={{ marginBottom: 20 }}>
-        <button className={`daten-filter-mode-btn${subTab === 'list'   ? ' active' : ''}`} onClick={() => setSubTab('list')}>Alle Mitarbeiter</button>
-        <button className={`daten-filter-mode-btn${subTab === 'single' ? ' active' : ''}`} onClick={() => setSubTab('single')}>Mitarbeiter</button>
-      </div>
+      <SegmentNav items={items} active={subTab} onChange={setSubTab} />
 
       {subTab === 'list' && <EmployeeListReport employees={employees} />}
 
@@ -1589,6 +1613,8 @@ function ReportingTab({ employees }: { employees: Employee[] }) {
           {empId && <EmployeeTimeAccount empId={empId} />}
         </div>
       )}
+
+      {subTab === 'close' && showClose && <MonthsOverviewTab />}
     </div>
   )
 }
@@ -2329,12 +2355,8 @@ export function MitarbeiterPage() {
           </>
         )}
 
-        {tab === 'reporting' && (
-          <ReportingTab employees={employees} />
-        )}
-
-        {tab === 'overview' && (
-          <MonthsOverviewTab />
+        {tab === 'zeitwirtschaft' && (
+          <ZeitwirtschaftTab employees={employees} />
         )}
 
         {tab === 'arbzg' && (
