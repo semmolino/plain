@@ -165,6 +165,26 @@ module.exports = (supabase) => {
     }
   });
 
+  // GET /:id/avatar — Profilfoto eines beliebigen Mitarbeiters (Akten-Ansicht).
+  // Read-only, tenant-gescoped; nach /me/avatar registriert, daher kein Konflikt.
+  router.get("/:id/avatar", async (req, res) => {
+    try {
+      const id = parseInt(String(req.params.id), 10);
+      if (!id || Number.isNaN(id)) return res.status(400).json({ error: "id erforderlich" });
+      const { data, error } = await supabase
+        .from("EMPLOYEE")
+        .select("AVATAR_DATA_URI")
+        .eq("ID", id)
+        .eq("TENANT_ID", req.tenantId)
+        .maybeSingle();
+      // Spalten evtl. noch nicht migriert -> leeres Ergebnis statt Fehler.
+      if (error) return res.json({ data: { data_uri: null } });
+      res.json({ data: { data_uri: data?.AVATAR_DATA_URI ?? null } });
+    } catch (e) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
   router.get("/me/work-models", async (req, res) => {
     const { data, error } = await supabase
       .from("EMPLOYEE_WORK_MODEL")

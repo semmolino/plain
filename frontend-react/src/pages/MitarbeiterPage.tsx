@@ -20,7 +20,7 @@ import {
   fetchEmployeeCpRates, createEmployeeCpRate, updateEmployeeCpRate, deleteEmployeeCpRate,
   fetchMonthBalance, fetchRunningBalance,
   fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword,
-  fetchEmployeeReportList, fetchEmployeeProjects,
+  fetchEmployeeReportList, fetchEmployeeProjects, fetchEmployeeAvatar,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
   type EmployeeWorkModel, type EmployeeCpRate, type MonthBalance, type RunningMonth,
   type MonthCloseOverviewEmployee, type DayBooking, type EmployeeReportRow, type EmployeeProject,
@@ -310,6 +310,12 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   })
   const runningBalance = runRes?.data?.totalBalance ?? null
 
+  const { data: avatarRes } = useQuery({
+    queryKey: ['emp-avatar', employee.ID],
+    queryFn:  () => fetchEmployeeAvatar(employee.ID),
+  })
+  const avatarUri = avatarRes?.data?.data_uri ?? null
+
   // Aktuell gueltiger Kostensatz/Modell = Eintrag mit dem juengsten VALID_FROM <= heute.
   const todayStr = new Date().toISOString().slice(0, 10)
   const currentCpId = useMemo(() => latestValidId(cpRates,   todayStr), [cpRates,   todayStr])
@@ -425,10 +431,14 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         padding: '0 0 14px', marginBottom: 14, borderBottom: '1px solid #e5e7eb',
       }}>
         <div style={{
-          width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+          width: 44, height: 44, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
           background: avatarBg, color: '#fff', fontWeight: 700, fontSize: 15,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>{initials}</div>
+        }}>
+          {avatarUri
+            ? <img src={avatarUri} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : initials}
+        </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: 14 }}>{employee.FIRST_NAME} {employee.LAST_NAME}</span>

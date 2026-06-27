@@ -284,6 +284,10 @@ export interface EmployeeProject {
 export const fetchEmployeeProjects = (id: number) =>
   apiClient.get<{ data: EmployeeProject[] }>(`/employee2project/employee/${id}`)
 
+// Profilfoto eines beliebigen Mitarbeiters (read-only, fuer die Akten-Ansicht).
+export const fetchEmployeeAvatar = (id: number) =>
+  apiClient.get<{ data: { data_uri: string | null } }>(`/mitarbeiter/${id}/avatar`)
+
 // ── Month close ───────────────────────────────────────────────────────────────
 
 export interface MonthClose {
