@@ -54,7 +54,7 @@ function fmtBalance(n: number) {
 }
 
 function emptyCreateForm(): CreateEmployeePayload {
-  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '' }
+  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '', entry_date: '' }
 }
 
 // ID des aktuell gueltigen Eintrags (juengstes VALID_FROM <= heute) aus einer
@@ -295,6 +295,8 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     personnel_number: employee.PERSONNEL_NUMBER ?? '',
     gender_id:        employee.GENDER_ID ?? 0,
     department_id:    employee.DEPARTMENT_ID ?? null,
+    entry_date:       employee.ENTRY_DATE ?? '',
+    exit_date:        employee.EXIT_DATE ?? '',
     active:           employee.ACTIVE ?? 1,
     dashboard_role:   employee.DASHBOARD_ROLE ?? null,
   })
@@ -478,6 +480,8 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
           </div>
           <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
             {employee.DEPARTMENT_NAME || '—'} · {employee.CURRENT_MODEL_NAME || 'kein Modell'}
+            {employee.ENTRY_DATE && ` · seit ${new Date(employee.ENTRY_DATE).toLocaleDateString('de-DE')}`}
+            {employee.EXIT_DATE && ` · bis ${new Date(employee.EXIT_DATE).toLocaleDateString('de-DE')}`}
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, textAlign: 'right' }}>
@@ -525,6 +529,16 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
               <option value="">— keine —</option>
               {departments.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
             </select>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="eentry">Eintrittsdatum</label>
+              <input id="eentry" type="date" value={editForm.entry_date ?? ''} onChange={setE('entry_date')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="eexit">Austrittsdatum</label>
+              <input id="eexit" type="date" value={editForm.exit_date ?? ''} onChange={setE('exit_date')} />
+            </div>
           </div>
           <div className="form-group">
             <label htmlFor="edashrole">Dashboard-Rolle</label>
@@ -1315,10 +1329,12 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
             <button type="button" className="btn-small" onClick={nextMonth}>▶</button>
           </div>
         )}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button type="button" className={`btn-small${viewMode === 'month'   ? ' btn-save' : ''}`} onClick={() => setViewMode('month')}>Monat</button>
-          <button type="button" className={`btn-small${viewMode === 'running' ? ' btn-save' : ''}`} onClick={() => setViewMode('running')}>Verlauf</button>
-        </div>
+        <SegmentNav
+          items={[{ id: 'month', label: 'Monat' }, { id: 'running', label: 'Verlauf' }]}
+          active={viewMode}
+          onChange={setViewMode}
+          style={{ marginBottom: 0 }}
+        />
       </div>
 
       {viewMode === 'month' && (
@@ -2283,7 +2299,7 @@ export function MitarbeiterPage() {
                   </thead>
                   <tbody>
                     {pageRows.map(r => (
-                      <tr key={r.ID}>
+                      <tr key={r.ID} className="clickable-row" onClick={() => { setEditInitialSection('stammdaten'); setEditRow(r) }}>
                         <td>{r.SHORT_NAME}</td>
                         <td>{r.FIRST_NAME}</td>
                         <td>{r.LAST_NAME}</td>
@@ -2311,7 +2327,7 @@ export function MitarbeiterPage() {
                             {r.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}
                           </span>
                         </td>
-                        <td>
+                        <td onClick={e => e.stopPropagation()}>
                           <Can permission="employees.role.assign" fallback={
                             <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => {}} />
                           }>
@@ -2321,7 +2337,7 @@ export function MitarbeiterPage() {
                         <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
                           {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
                         </td>
-                        <td className="doc-actions">
+                        <td className="doc-actions" onClick={e => e.stopPropagation()}>
                           <Can permission="employees.edit">
                             <button className="row-action-btn" onClick={() => { setEditInitialSection('stammdaten'); setEditRow(r) }} title="Bearbeiten">
                               <Pencil size={14} strokeWidth={2} />
@@ -2390,6 +2406,10 @@ export function MitarbeiterPage() {
           <FormField label="E-Mail"      id="mem" value={form.email ?? ''}          onChange={setF('email')} type="email" />
           <FormField label="Mobil"       id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
           <FormField label="Personalnr." id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
+          <div className="form-group">
+            <label htmlFor="mentry">Eintrittsdatum</label>
+            <input id="mentry" type="date" value={form.entry_date ?? ''} onChange={setF('entry_date')} />
+          </div>
           <FormField label="Passwort"    id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" autoComplete="new-password" />
           <div className="form-group">
             <label htmlFor="mge">Geschlecht*</label>

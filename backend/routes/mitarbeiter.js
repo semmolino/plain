@@ -304,6 +304,8 @@ module.exports = (supabase) => {
         "MOBILE": body.mobile,
         "PERSONNEL_NUMBER": body.personnel_number,
         "GENDER_ID": body.gender_id,
+        "ENTRY_DATE": body.entry_date || null,
+        "EXIT_DATE": body.exit_date || null,
         "ACTIVE": 1,
         "TENANT_ID": req.tenantId ?? null,
       }])
@@ -355,7 +357,7 @@ router.get("/", async (req, res) => {
 
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE, DASHBOARD_ROLE")
+      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ENTRY_DATE, EXIT_DATE, ACTIVE, DASHBOARD_ROLE")
       .eq("TENANT_ID", req.tenantId)
       .order("SHORT_NAME", { ascending: true })
       .limit(limit);
@@ -445,6 +447,8 @@ router.get("/", async (req, res) => {
       PERSONNEL_NUMBER: body.personnel_number || null,
       GENDER_ID:        body.gender_id,
       DEPARTMENT_ID:  body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
+      ENTRY_DATE:     body.entry_date !== undefined ? (body.entry_date || null) : undefined,
+      EXIT_DATE:      body.exit_date  !== undefined ? (body.exit_date  || null) : undefined,
       ACTIVE:         body.active != null ? Number(body.active) : undefined,
       DASHBOARD_ROLE: body.dashboard_role !== undefined ? (body.dashboard_role || null) : undefined,
     };

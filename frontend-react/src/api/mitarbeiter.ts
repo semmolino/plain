@@ -14,6 +14,8 @@ export interface Employee {
   NAME:                string
   DEPARTMENT_ID:       number | null
   DEPARTMENT_NAME:     string
+  ENTRY_DATE:          string | null
+  EXIT_DATE:           string | null
   ACTIVE:              number | null
   CURRENT_MODEL_ID:    number | null
   CURRENT_MODEL_NAME:  string
@@ -32,6 +34,8 @@ export interface CreateEmployeePayload {
   mobile?:           string
   personnel_number?: string
   gender_id:         string | number
+  entry_date?:       string | null
+  exit_date?:        string | null
 }
 
 export interface UpdateEmployeePayload {
@@ -44,6 +48,8 @@ export interface UpdateEmployeePayload {
   personnel_number?: string
   gender_id:         number
   department_id?:    number | null
+  entry_date?:       string | null
+  exit_date?:        string | null
   active?:           number
   dashboard_role?:   string | null
 }
