@@ -2806,7 +2806,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const DASHBOARD_ROLE_LABELS: Record<string, string> = {
   geschaeftsleitung: 'Geschäftsleitung',
   controller:        'Controller',
-  bereichsleiter:    'Bereichsleiter',
+  bereichsleiter:    'Projektleiter',
 }
 
 function BenachrichtigungenSection() {

@@ -727,7 +727,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
               <option value="">— Standard (Nutzer wählt selbst) —</option>
               <option value="geschaeftsleitung">Geschäftsleitung</option>
               <option value="controller">Controller / Buchhaltung</option>
-              <option value="bereichsleiter">Bereichsleiter</option>
+              <option value="bereichsleiter">Projektleiter</option>
               <option value="mitarbeiter">Mitarbeiter</option>
             </select>
           </div>
@@ -2520,7 +2520,7 @@ export function MitarbeiterPage() {
                           </Can>
                         </td>
                         <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
-                          {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Bereichsleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
+                          {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Projektleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
                         </td>
                         <td className="doc-actions" onClick={e => e.stopPropagation()}>
                           <Can permission="employees.edit">

@@ -804,7 +804,10 @@ module.exports = (supabase) => {
   router.get("/dashboard/risk-projects", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
-    const { data, error } = await supabase
+    // scope=own → nur Projekte, in denen der eingeloggte Nutzer Projektleiter ist
+    // (Projektleiter-Dashboard). Sonst: alle Projekte des Mandanten.
+    const scopeOwn = req.query.scope === "own";
+    let query = supabase
       .from("VW_REPORT_PROJECT_DETAIL")
       .select([
         "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
@@ -814,8 +817,12 @@ module.exports = (supabase) => {
         "BUDGET_TOTAL_NET", "LEISTUNGSSTAND_PERCENT", "LEISTUNGSSTAND_VALUE",
         "COST_TOTAL", "COST_RATIO", "BILLED_NET_TOTAL", "OPEN_NET_TOTAL",
       ].join(", "))
-      .eq("TENANT_ID", tenantId)
-      .order("BUDGET_TOTAL_NET", { ascending: false });
+      .eq("TENANT_ID", tenantId);
+    if (scopeOwn) {
+      if (!req.employeeId) return res.json({ data: [] });
+      query = query.eq("PROJECT_MANAGER_ID", req.employeeId);
+    }
+    const { data, error } = await query.order("BUDGET_TOTAL_NET", { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
 
     // Add parent-level surcharges per project (leaf-based view misses these)
@@ -1032,6 +1039,127 @@ module.exports = (supabase) => {
     }
     const byPl = Object.values(byPlMap).sort((a, b) => b.total - a.total);
     res.json({ data: { projects, byPl } });
+  });
+
+  // Größte offene Posten: unbezahlte Rechnungen + Abschlagsrechnungen
+  // (finalisiert, nicht storniert, offener Brutto-Betrag = Brutto − Zahlungen > 0),
+  // absteigend nach offenem Betrag. Query: ?limit=10
+  router.get("/dashboard/open-invoices", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "10", 10)));
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const [{ data: invs, error: ie }, { data: pps, error: pe }] = await Promise.all([
+        supabase.from("INVOICE")
+          .select("ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID")
+          .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
+          .neq("INVOICE_TYPE", "stornorechnung").neq("INVOICE_TYPE", "storno_partial"),
+        supabase.from("PARTIAL_PAYMENT")
+          .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID")
+          .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
+          .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+      ]);
+      if (ie) throw ie;
+      if (pe) throw pe;
+
+      const invIds = (invs || []).map(r => r.ID);
+      const ppIds  = (pps  || []).map(r => r.ID);
+      const invPay = {}, ppPay = {};
+      if (invIds.length) {
+        const { data: pays } = await supabase.from("PAYMENT")
+          .select("INVOICE_ID, AMOUNT_PAYED_GROSS").in("INVOICE_ID", invIds);
+        for (const p of (pays || [])) invPay[p.INVOICE_ID] = (invPay[p.INVOICE_ID] || 0) + parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
+      }
+      if (ppIds.length) {
+        const { data: pays } = await supabase.from("PAYMENT")
+          .select("PARTIAL_PAYMENT_ID, AMOUNT_PAYED_GROSS").in("PARTIAL_PAYMENT_ID", ppIds);
+        for (const p of (pays || [])) ppPay[p.PARTIAL_PAYMENT_ID] = (ppPay[p.PARTIAL_PAYMENT_ID] || 0) + parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
+      }
+
+      const daysOverdue = (due) => (due && due < today) ? Math.floor((new Date(today) - new Date(due)) / 86400000) : 0;
+      const posten = [];
+      for (const inv of (invs || [])) {
+        const open = round2(Math.max(0, Number(inv.TOTAL_AMOUNT_GROSS || 0) - (invPay[inv.ID] || 0)));
+        if (open <= 0.005) continue;
+        posten.push({
+          sourceType: "invoice", sourceId: inv.ID, number: inv.INVOICE_NUMBER || `#${inv.ID}`,
+          date: inv.INVOICE_DATE, dueDate: inv.DUE_DATE || null, addressName: inv.ADDRESS_NAME_1 || null,
+          projectId: inv.PROJECT_ID || null, openAmount: open, daysOverdue: daysOverdue(inv.DUE_DATE),
+        });
+      }
+      for (const pp of (pps || [])) {
+        const open = round2(Math.max(0, Number(pp.TOTAL_AMOUNT_GROSS || 0) - (ppPay[pp.ID] || 0)));
+        if (open <= 0.005) continue;
+        posten.push({
+          sourceType: "pp", sourceId: pp.ID, number: pp.PARTIAL_PAYMENT_NUMBER || `#${pp.ID}`,
+          date: pp.PARTIAL_PAYMENT_DATE, dueDate: pp.DUE_DATE || null, addressName: pp.ADDRESS_NAME_1 || null,
+          projectId: pp.PROJECT_ID || null, openAmount: open, daysOverdue: daysOverdue(pp.DUE_DATE),
+        });
+      }
+      posten.sort((a, b) => b.openAmount - a.openAmount);
+      res.json({ data: posten.slice(0, limit) });
+    } catch (e) {
+      res.status(500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  // Company snapshot für Dashboard-KPIs: gleitende 12 Monate (Umsatz/Stunden/MA)
+  // plus aktueller Auftragsbestand. Liefert Auftragsreichweite, Umsatz pro
+  // Mitarbeiter und Anteil Projektmitarbeiter — offen (kein reports.view nötig),
+  // damit das Dashboard sie ohne Reporting-Recht nutzen kann.
+  router.get("/dashboard/company-snapshot", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    try {
+      const periodMonths = 12;
+      const todayD = new Date();
+      const to   = todayD.toISOString().slice(0, 10);
+      const fromD = new Date(todayD); fromD.setMonth(fromD.getMonth() - periodMonths);
+      const from = fromD.toISOString().slice(0, 10);
+
+      const [invoiceRes, ppRes, tecRes, empRes, backlogRes] = await Promise.all([
+        supabase.from("INVOICE").select("TOTAL_AMOUNT_NET")
+          .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
+          .gte("INVOICE_DATE", from).lte("INVOICE_DATE", to)
+          .neq("INVOICE_TYPE", "stornorechnung").neq("INVOICE_TYPE", "storno_partial"),
+        supabase.from("PARTIAL_PAYMENT").select("AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
+          .gte("PARTIAL_PAYMENT_DATE", from).lte("PARTIAL_PAYMENT_DATE", to)
+          .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+        supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT, CP_TOT")
+          .eq("TENANT_ID", tenantId).gte("DATE_VOUCHER", from).lte("DATE_VOUCHER", to),
+        supabase.from("EMPLOYEE").select("ID")
+          .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
+        supabase.from("VW_REPORT_PROJECT_LIST_ROOT").select("BUDGET_TOTAL_NET, BILLED_NET_TOTAL")
+          .eq("TENANT_ID", tenantId),
+      ]);
+      for (const r of [invoiceRes, ppRes, tecRes, empRes, backlogRes]) if (r.error) throw r.error;
+
+      const invoiceRevenue = (invoiceRes.data || []).reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0);
+      const ppRevenue      = (ppRes.data || []).reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0);
+      const revenue        = round2(invoiceRevenue + ppRevenue);
+      const tecRows        = tecRes.data || [];
+      const totalHours     = round2(tecRows.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0));
+      const directCosts    = round2(tecRows.reduce((s, r) => s + Number(r.CP_TOT || 0), 0));
+      const projectEmployeeCount = new Set(tecRows.map(r => r.EMPLOYEE_ID)).size;
+      const employeeCount  = (empRes.data || []).length;
+      const backlog        = round2((backlogRes.data || []).reduce((s, r) =>
+        s + Math.max(0, Number(r.BUDGET_TOTAL_NET || 0) - Number(r.BILLED_NET_TOTAL || 0)), 0));
+
+      const monthlyRevenue           = revenue / periodMonths;
+      const umsatzProMitarbeiter     = employeeCount > 0 ? Math.round(revenue / employeeCount) : null;
+      const anteilProjektmitarbeiter = employeeCount > 0 ? Math.round((projectEmployeeCount / employeeCount) * 1000) / 10 : null;
+      const auftragsreichweite       = monthlyRevenue > 0 ? Math.round((backlog / monthlyRevenue) * 10) / 10 : null;
+
+      res.json({ data: {
+        periodMonths,
+        raw: { revenue, directCosts, totalHours, employeeCount, projectEmployeeCount, backlog },
+        kpis: { umsatzProMitarbeiter, anteilProjektmitarbeiter, auftragsreichweite },
+      }});
+    } catch (e) {
+      res.status(500).json({ error: e?.message || String(e) });
+    }
   });
 
   // Team hours: TEC confirmed hours per employee per month (date-range aware)

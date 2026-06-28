@@ -361,11 +361,51 @@ export interface TeamHoursData {
   months:    string[]
 }
 
-export const fetchRiskProjects = () =>
-  apiClient.get<{ data: RiskProject[] }>('/reports/dashboard/risk-projects')
+// scope='own' → nur Projekte, in denen der eingeloggte Nutzer Projektleiter ist
+export const fetchRiskProjects = (scope?: 'own') =>
+  apiClient.get<{ data: RiskProject[] }>(`/reports/dashboard/risk-projects${scope ? `?scope=${scope}` : ''}`)
 
 export const fetchBillingSummary = () =>
   apiClient.get<{ data: BillingSummaryData }>('/reports/dashboard/billing-summary')
+
+// ── Größte offene Posten (unbezahlte Rechnungen + Abschlagsrechnungen) ─────────
+
+export interface OpenPosten {
+  sourceType:  'invoice' | 'pp'
+  sourceId:    number
+  number:      string
+  date:        string | null
+  dueDate:     string | null
+  addressName: string | null
+  projectId:   number | null
+  openAmount:  number   // offener Brutto-Betrag
+  daysOverdue: number
+}
+
+export const fetchDashboardOpenInvoices = (limit = 10) =>
+  apiClient.get<{ data: OpenPosten[] }>(`/reports/dashboard/open-invoices?limit=${limit}`)
+
+// ── Company snapshot (gleitende 12 Monate + aktueller Auftragsbestand) ─────────
+
+export interface CompanySnapshot {
+  periodMonths: number
+  raw: {
+    revenue:              number
+    directCosts:          number
+    totalHours:           number
+    employeeCount:        number
+    projectEmployeeCount: number
+    backlog:              number
+  }
+  kpis: {
+    umsatzProMitarbeiter:     number | null
+    anteilProjektmitarbeiter: number | null  // %
+    auftragsreichweite:       number | null  // Monate
+  }
+}
+
+export const fetchDashboardCompanySnapshot = () =>
+  apiClient.get<{ data: CompanySnapshot }>('/reports/dashboard/company-snapshot')
 
 export const fetchTeamHours = (dateFrom?: string, dateTo?: string) => {
   const qs = dateFrom && dateTo ? `?date_from=${dateFrom}&date_to=${dateTo}` : ''

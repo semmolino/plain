@@ -22,10 +22,11 @@ import {
   fetchProjectsTimeline,
   fetchDashboardAlerts,
   fetchOverdueInvoices,
-  fetchTeamUtilization,
   fetchRiskProjects,
   fetchBillingSummary,
   fetchTeamHours,
+  fetchDashboardOpenInvoices,
+  fetchDashboardCompanySnapshot,
   type DashboardKpis,
   type DashboardProject,
   type DashboardMonthly,
@@ -33,11 +34,15 @@ import {
   type TimelinePoint,
   type DashboardAlert,
   type OverdueInvoice,
-  type TeamMemberUtilization,
   type RiskProject,
   type BillingSummaryData,
+  type BillingProject,
   type TeamHoursData,
+  type OpenPosten,
+  type CompanySnapshot,
 } from '@/api/reports'
+import { fetchOffers, fetchOfferStatuses, type OfferListItem } from '@/api/angebote'
+import { InfoHint } from '@/components/ui/InfoHint'
 import { Modal } from '@/components/ui/Modal'
 import {
   fetchMonthBalance, fetchRunningBalance,
@@ -69,14 +74,11 @@ const MONTHS_DE = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt',
 function fmtEur(v: number | null | undefined)   { return v == null ? '—' : FMT_EUR.format(v) }
 function fmtH(v: number | null | undefined)     { return v == null ? '—' : FMT_HOURS.format(v) + ' h' }
 function fmtPct(v: number)                      { return FMT_NUM.format(v) + ' %' }
+function fmtMonths(v: number | null | undefined) { return v == null ? '—' : FMT_NUM.format(v) + ' Mon.' }
 function fmtSaldo(v: number | null | undefined) {
   if (v == null) return '—'
   const abs = FMT_NUM.format(Math.abs(v)) + ' h'
   return v >= 0 ? `+${abs}` : `−${abs}`
-}
-function monthLabel(yyyymm: string) {
-  const m = parseInt(yyyymm.split('-')[1], 10)
-  return MONTHS_DE[m - 1] ?? yyyymm
 }
 function fmtDateDE(iso: string) {
   const d = new Date(iso + 'T00:00:00')
@@ -116,40 +118,65 @@ function computeDateRange(z: ZeitraumKey): { dateFrom: string; dateTo: string } 
 
 // ── Shared sub-components ────────────────────────────────────────────────────
 
-function KpiCard({ label, value, meta, accent }: { label: string; value: string; meta?: string; accent?: boolean }) {
+function KpiCard({ label, value, meta, accent, hint }: { label: string; value: string; meta?: string; accent?: boolean; hint?: React.ReactNode }) {
   return (
     <div className={`kpi-card${accent ? ' kpi-card-accent' : ''}`}>
-      <div className="kpi-label">{label}</div>
+      <div className="kpi-label" style={hint ? { display: 'flex', alignItems: 'center', gap: 4 } : undefined}>
+        {label}{hint && <InfoHint>{hint}</InfoHint>}
+      </div>
       <div className="kpi-value">{value}</div>
       {meta && <div className="kpi-meta">{meta}</div>}
     </div>
   )
 }
 
-function MonthlyChart({ data }: { data: DashboardMonthly[] }) {
-  const labels = data.map(r => monthLabel(r.MONTH))
-  const hours  = data.map(r => Number(r.HOURS_TOTAL) || 0)
-  const costs  = data.map(r => Number(r.COST_TOTAL)  || 0)
+// ── Sortable table header (matches ProjektlisteTab convention) ─────────────────
+
+type SortDir = 'asc' | 'desc'
+
+function SortTh<T extends string>({ label, field, current, dir, onSort, className, title }: {
+  label: React.ReactNode; field: T; current: T | null; dir: SortDir
+  onSort: (f: T) => void; className?: string; title?: string
+}) {
+  const active = current === field
   return (
-    <Bar
-      data={{
-        labels,
-        datasets: [
-          { label: 'Stunden (h)', data: hours, backgroundColor: 'rgba(59,130,246,0.65)', borderRadius: 5, yAxisID: 'yH' },
-          { label: 'Kosten (€)',  data: costs,  backgroundColor: 'rgba(249,115,22,0.55)',  borderRadius: 5, yAxisID: 'yC' },
-        ],
-      }}
-      options={{
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 10 } } },
-        scales: {
-          yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
-          yC: { type: 'linear', position: 'right', ticks: { font: { size: 10 }, callback: v => fmtEur(v as number) }, grid: { display: false } },
-          x:  { ticks: { font: { size: 11 } }, grid: { display: false } },
-        },
-      }}
-    />
+    <th
+      className={`sortable${className ? ' ' + className : ''}${active ? ' sorted' : ''}`}
+      onClick={() => onSort(field)}
+      title={title}
+      aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      {label}{active ? (dir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  )
+}
+
+function useSort<T extends string>(initialField: T, initialDir: SortDir = 'asc') {
+  const [field, setField] = useState<T>(initialField)
+  const [dir,   setDir]   = useState<SortDir>(initialDir)
+  function toggle(f: T) {
+    if (field === f) setDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setField(f); setDir('asc') }
+  }
+  function sort<R>(rows: R[], value: (r: R, f: T) => string | number): R[] {
+    return [...rows].sort((a, b) => {
+      const va = value(a, field), vb = value(b, field)
+      if (va < vb) return dir === 'asc' ? -1 : 1
+      if (va > vb) return dir === 'asc' ?  1 : -1
+      return 0
+    })
+  }
+  return { field, dir, toggle, sort }
+}
+
+// ── Card title with optional inline help ──────────────────────────────────────
+
+function CardTitle({ children, hint, style }: { children: React.ReactNode; hint?: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div className="dash-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6, ...style }}>
+      {children}
+      {hint && <InfoHint title={typeof children === 'string' ? children : undefined}>{hint}</InfoHint>}
+    </div>
   )
 }
 
@@ -178,115 +205,6 @@ function DonutChart({ billed, open, remaining }: { billed: number; open: number;
         })}
       </div>
     </div>
-  )
-}
-
-function deriveRiskFromProject(p: DashboardProject): RiskProject {
-  const budget    = Number(p.BUDGET_TOTAL_NET    || 0)
-  const costs     = Number(p.COST_TOTAL          || 0)
-  const leistung  = Number(p.LEISTUNGSSTAND_VALUE || 0)
-  const openNet   = Number(p.OPEN_NET_TOTAL       || 0)
-  const costRatio = budget > 0 ? costs / budget : 0
-  const db        = leistung - costs
-  const cpi = costs > 100 && leistung > 0 ? leistung / costs : null
-  const flags: string[] = []
-  if (budget > 0 && costRatio >= 0.9)                     flags.push('budget_kritisch')
-  if (db < 0 && (costs > 500 || leistung > 500))          flags.push('db_negativ')
-  if (budget > 0 && costRatio >= 0.75 && costRatio < 0.9) flags.push('budget_warn')
-  if (openNet > 5000)                                      flags.push('abrechnung_potential')
-  if (cpi != null && cpi < 0.80 && !flags.includes('budget_kritisch')) flags.push('cpi_warn')
-  let ampel: 'rot' | 'orange' | 'gelb' | 'gruen' = 'gruen'
-  if (flags.includes('budget_kritisch') || flags.includes('db_negativ')) ampel = 'rot'
-  else if (flags.includes('budget_warn'))                                 ampel = 'orange'
-  else if (flags.includes('abrechnung_potential'))                        ampel = 'gelb'
-  return {
-    PROJECT_ID:                Number(p.PROJECT_ID || 0),
-    NAME_SHORT:                p.NAME_SHORT ?? '',
-    NAME_LONG:                 p.NAME_LONG,
-    PROJECT_STATUS_ID:         p.PROJECT_STATUS_ID,
-    PROJECT_STATUS_NAME_SHORT: p.PROJECT_STATUS_NAME_SHORT,
-    PROJECT_MANAGER_ID:        p.PROJECT_MANAGER_ID,
-    PROJECT_MANAGER_DISPLAY:   p.PROJECT_MANAGER_DISPLAY,
-    DEPARTMENT_ID:             p.DEPARTMENT_ID,
-    DEPARTMENT_NAME:           p.DEPARTMENT_NAME,
-    BUDGET_TOTAL_NET:          budget,
-    LEISTUNGSSTAND_PERCENT:    p.LEISTUNGSSTAND_PERCENT,
-    LEISTUNGSSTAND_VALUE:      leistung,
-    COST_TOTAL:                costs,
-    COST_RATIO:                costRatio,
-    BILLED_NET_TOTAL:          Number(p.BILLED_NET_TOTAL || 0),
-    OPEN_NET_TOTAL:            openNet,
-    ampel, flags, db,
-  }
-}
-
-function budgetHealthClass(cost: number | null, budget: number | null): string {
-  if (!budget || budget <= 0) return ''
-  const ratio = Number(cost || 0) / Number(budget)
-  if (ratio >= 0.9) return 'budget-red'
-  if (ratio >= 0.8) return 'budget-amber'
-  return 'budget-green'
-}
-
-function ProjectTable({ projects, maxRows }: { projects: DashboardProject[]; maxRows?: number }) {
-  const navigate = useNavigate()
-  const rows = maxRows ? projects.slice(0, maxRows) : projects
-  if (!rows.length) return <p className="empty-note">Keine Projekte gefunden.</p>
-  return (
-    <table className="dash-table dash-table-clickable">
-      <thead>
-        <tr>
-          <th>Projekt</th>
-          <th className="num">Budget</th>
-          <th className="num">Leistungsstand</th>
-          <th className="num">Stunden</th>
-          <th className="num">Kosten</th>
-          <th className="num col-hide-mobile" style={{ width: 56 }} title="CPI (Cost-Performance-Index): Kosten-Leistung-Index">CPI</th>
-          <th className="col-hide-mobile" style={{ width: 80 }}>Budget %</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((p, i) => {
-          const healthCls = budgetHealthClass(p.COST_TOTAL, p.BUDGET_TOTAL_NET)
-          const budgetRatio = (Number(p.BUDGET_TOTAL_NET) > 0)
-            ? Math.min(Number(p.COST_TOTAL || 0) / Number(p.BUDGET_TOTAL_NET), 1)
-            : 0
-          const barColor = budgetRatio >= 0.9 ? 'var(--danger,#c0392b)' : budgetRatio >= 0.8 ? '#b45309' : 'var(--success,#2e7d32)'
-          return (
-            <tr
-              key={i}
-              className={`${healthCls} ${p.PROJECT_ID ? 'clickable-row' : ''}`.trim()}
-              onClick={() => p.PROJECT_ID && navigate('/daten', { state: { tab: 'einzelprojekt', projectId: p.PROJECT_ID } })}
-              title={p.PROJECT_ID ? 'Projektbericht öffnen' : undefined}
-            >
-              <td>{p.NAME_SHORT || p.NAME_LONG || '—'}</td>
-              <td className="num">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
-              <td className="num">{fmtEur(p.LEISTUNGSSTAND_VALUE)}</td>
-              <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
-              <td className="num">{fmtEur(p.COST_TOTAL)}</td>
-              <td className="num col-hide-mobile">
-                {(() => {
-                  const evm = computeEvm(p)
-                  if (evm.cpi == null) return <span style={{ color: 'var(--text-4)' }}>–</span>
-                  const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
-                  return <span style={{ color, fontWeight: 600, fontSize: 12 }}>{fmtCpi(evm.cpi)}</span>
-                })()}
-              </td>
-              <td className="col-hide-mobile">
-                {Number(p.BUDGET_TOTAL_NET) > 0 ? (
-                  <div className="budget-bar-wrap">
-                    <div className="budget-bar-track">
-                      <div className="budget-bar-fill" style={{ width: `${Math.round(budgetRatio * 100)}%`, background: barColor }} />
-                    </div>
-                    <span className="budget-bar-pct">{Math.round(budgetRatio * 100)}%</span>
-                  </div>
-                ) : <span style={{ color: 'var(--text-4)', fontSize: 11 }}>—</span>}
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
   )
 }
 
@@ -488,35 +406,13 @@ function AlertStrip({ alerts }: { alerts: DashboardAlert[] }) {
   )
 }
 
-// ── Team utilization chart ────────────────────────────────────────────────────
-
-function TeamUtilizationChart({ data }: { data: TeamMemberUtilization[] }) {
-  if (!data.length) return <p className="empty-note">Keine Buchungen in den letzten 28 Tagen.</p>
-  const sorted = [...data].sort((a, b) => b.hours_4weeks - a.hours_4weeks)
-  const values = sorted.map(e => e.hours_4weeks)
-  const maxH   = Math.max(...values, 1)
-  return (
-    <div className="util-bar-chart">
-      {sorted.map((e, i) => {
-        const pct = Math.round((e.hours_4weeks / maxH) * 100)
-        return (
-          <div key={i} className="util-bar-row">
-            <span className="util-bar-label">{e.short_name}</span>
-            <div className="util-bar-track">
-              <div className="util-bar-fill" style={{ width: `${pct}%` }} />
-            </div>
-            <span className="util-bar-value">{fmtH(e.hours_4weeks)}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 // ── Overdue invoices table ────────────────────────────────────────────────────
+
+type OverdueSortField = 'num' | 'invdate' | 'due' | 'days' | 'amount'
 
 function OverdueInvoicesTable({ invoices }: { invoices: OverdueInvoice[] }) {
   const navigate = useNavigate()
+  const { field, dir, toggle, sort } = useSort<OverdueSortField>('days', 'desc')
   if (!invoices.length) {
     return (
       <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
@@ -524,19 +420,29 @@ function OverdueInvoicesTable({ invoices }: { invoices: OverdueInvoice[] }) {
       </div>
     )
   }
+  const rows = sort(invoices, (inv, f) => {
+    switch (f) {
+      case 'num':     return (inv.INVOICE_NUMBER || String(inv.ID)).toLowerCase()
+      case 'invdate': return inv.INVOICE_DATE || ''
+      case 'due':     return inv.DUE_DATE || ''
+      case 'days':    return Number(inv.days_overdue || 0)
+      case 'amount':  return Number(inv.TOTAL_AMOUNT_NET || 0)
+      default:        return 0
+    }
+  })
   return (
     <table className="dash-table dash-table-clickable">
       <thead>
         <tr>
-          <th>Nr.</th>
-          <th>Rechnungsdatum</th>
-          <th>Fälligkeit</th>
-          <th className="num">Tage überfällig</th>
-          <th className="num">Betrag</th>
+          <SortTh label="Nr."             field="num"     current={field} dir={dir} onSort={toggle} />
+          <SortTh label="Rechnungsdatum"  field="invdate" current={field} dir={dir} onSort={toggle} />
+          <SortTh label="Fälligkeit"      field="due"     current={field} dir={dir} onSort={toggle} />
+          <SortTh label="Tage überfällig" field="days"    current={field} dir={dir} onSort={toggle} className="num" />
+          <SortTh label="Betrag"          field="amount"  current={field} dir={dir} onSort={toggle} className="num" />
         </tr>
       </thead>
       <tbody>
-        {invoices.map(inv => {
+        {rows.map(inv => {
           const dClass = inv.days_overdue > 30 ? 'overdue-red' : inv.days_overdue > 14 ? 'overdue-amber' : ''
           const invoiceNum = inv.INVOICE_NUMBER || String(inv.ID)
           return (
@@ -583,8 +489,8 @@ const ROLES: { id: string; icon: LucideIcon; title: string; desc: string }[] = [
   {
     id:    'bereichsleiter',
     icon:  HardHat,
-    title: 'Bereichsleiter',
-    desc:  'Projektportfolio, Team-Auslastung, Budget-Gesundheit und Ressourcensteuerung.',
+    title: 'Projektleiter',
+    desc:  'Ampel-Übersicht der eigenen Projekte: Budget, Kosten, Deckungsbeitrag und Abrechnungspotenzial.',
   },
   {
     id:    'mitarbeiter',
@@ -615,11 +521,12 @@ function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
 // ── Role views ────────────────────────────────────────────────────────────────
 
 function GeschaeftsleitungView({
-  projects, byStatus, alerts, riskProjects, billingSummary, teamHours, dateFrom, dateTo,
+  projects, byStatus, alerts, riskProjects, billingSummary, openPosten, snapshot, teamHours, dateFrom, dateTo,
   subPage, onSubPageChange,
 }: {
   projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
-  riskProjects: RiskProject[]; billingSummary: BillingSummaryData | null; teamHours: TeamHoursData | null;
+  riskProjects: RiskProject[]; billingSummary: BillingSummaryData | null;
+  openPosten: OpenPosten[]; snapshot: CompanySnapshot | null; teamHours: TeamHoursData | null;
   dateFrom: string; dateTo: string;
   subPage: 'uebersicht' | 'risiko' | 'abrechnung' | 'personal';
   onSubPageChange: (id: string) => void;
@@ -639,7 +546,7 @@ function GeschaeftsleitungView({
           { id: 'uebersicht',  label: 'Übersicht'     },
           { id: 'risiko',      label: 'Projekte'       },
           { id: 'abrechnung',  label: 'Abrechnung'     },
-          { id: 'personal',    label: 'Personal'       },
+          { id: 'personal',    label: 'Mitarbeiter'    },
         ]}
         active={subPage}
         onChange={onSubPageChange}
@@ -653,6 +560,13 @@ function GeschaeftsleitungView({
           <KpiCard label="Offene Leistung"  value={fmtEur(offeneLeist)} />
           <KpiCard label="Leistungsstand"   value={fmtEur(leistung)}   meta={`${fmtPct(leistPct)} des Honorars`} />
           <KpiCard label="Aktive Projekte"  value={String(activeCount)} />
+          <KpiCard
+            label="Auftragsreichweite"
+            value={fmtMonths(snapshot?.kpis.auftragsreichweite ?? null)}
+            meta="Auftragsbestand ÷ Ø Monatsumsatz"
+            accent={snapshot?.kpis.auftragsreichweite != null && snapshot.kpis.auftragsreichweite < 3}
+            hint={<>Wie viele Monate der aktuelle Auftragsbestand (Budget − Abgerechnet aller Projekte) bei durchschnittlichem Monatsumsatz der letzten 12 Monate noch reicht. Unter 3 Mon. = knappe Auslastung, ab 6 Mon. = komfortabel.</>}
+          />
           {(() => {
             const cpi = portfolioCpi(projects)
             const vacTotal = projects.reduce((s, p) => { const v = computeEvm(p).vac; return s + (v ?? 0) }, 0)
@@ -674,10 +588,7 @@ function GeschaeftsleitungView({
         <DashboardTimeline dateFrom={dateFrom} dateTo={dateTo} />
 
         <div className="dash-two-col">
-          <div className="dash-card">
-            <div className="dash-card-title">Top-Projekte</div>
-            <ProjectTable projects={projects} maxRows={5} />
-          </div>
+          <TopOpenOffersCard />
           <div className="dash-card">
             <div className="dash-card-title">Leistungsverteilung</div>
             <DonutChart
@@ -692,8 +603,8 @@ function GeschaeftsleitungView({
       </>)}
 
       {subPage === 'risiko'     && <RisikoView projects={riskProjects} />}
-      {subPage === 'abrechnung' && <AbrechnungView billing={billingSummary} />}
-      {subPage === 'personal'   && <PersonalView teamHours={teamHours} dateFrom={dateFrom} dateTo={dateTo} />}
+      {subPage === 'abrechnung' && <AbrechnungView billing={billingSummary} openPosten={openPosten} />}
+      {subPage === 'personal'   && <PersonalView teamHours={teamHours} snapshot={snapshot} dateFrom={dateFrom} dateTo={dateTo} />}
     </>
   )
 }
@@ -814,10 +725,10 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
 }
 
 function ControllerView({
-  kpis, monthly, alerts, overdueInvoices, mahnStats,
+  kpis, monthly, alerts, overdueInvoices, mahnStats, billingSummary,
 }: {
   kpis: DashboardKpis; monthly: DashboardMonthly[]; alerts: DashboardAlert[];
-  overdueInvoices: OverdueInvoice[]; mahnStats: MahnungStats | null;
+  overdueInvoices: OverdueInvoice[]; mahnStats: MahnungStats | null; billingSummary: BillingSummaryData | null;
 }) {
   const openSeQ = useQuery({
     queryKey: ['dashboard', 'open-se'],
@@ -908,81 +819,27 @@ function ControllerView({
       {mahnStats && <MahnungsStatusCard stats={mahnStats} />}
 
       <div className="dash-card">
-        <div className="dash-card-title">Stunden &amp; Kosten (letzte Monate)</div>
-        <div className="chart-wrap">
-          <MonthlyChart data={monthly} />
-        </div>
+        <CardTitle hint="Erbrachte, aber noch nicht fakturierte Leistung je Projekt (offener Netto-Betrag) — Potenzial für die nächste Rechnung.">
+          Abrechenbare Projekte
+        </CardTitle>
+        {billingSummary
+          ? <BillingPotentialTable projects={billingSummary.projects} />
+          : <p className="empty-note">Laden …</p>}
       </div>
     </>
   )
 }
 
-function BereichsleiterView({
-  projects, byStatus, alerts, teamUtil, riskProjects, teamHours, monthly, dateFrom, dateTo,
-  subPage, onSubPageChange,
-}: {
-  projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
-  teamUtil: TeamMemberUtilization[]; riskProjects: RiskProject[]; teamHours: TeamHoursData | null;
-  monthly: DashboardMonthly[]; dateFrom: string; dateTo: string;
-  subPage: 'uebersicht' | 'risiko' | 'personal';
-  onSubPageChange: (id: string) => void;
-}) {
-  const budgetHealthy = projects.filter(p =>
-    Number(p.BUDGET_TOTAL_NET) > 0 &&
-    Number(p.COST_TOTAL) / Number(p.BUDGET_TOTAL_NET) < 0.8
-  ).length
-  const budgetHealthPct = projects.length > 0 ? Math.round((budgetHealthy / projects.length) * 100) : 0
-  const totalHours4w    = teamUtil.reduce((s, e) => s + e.hours_4weeks, 0)
-  const offeneLeist     = projects.reduce((s, p) => s + Number(p.OPEN_NET_TOTAL || 0), 0)
-  const stundenZeitraum = monthly.reduce((s, m) => s + Number(m.HOURS_TOTAL || 0), 0)
-
+// Projektleiter-Dashboard: nur die Projekte, in denen der eingeloggte Nutzer
+// Projektleiter ist (server-seitig per scope=own gefiltert) — reine Projekt-Ampel,
+// keine Abteilung-/Projektleiter-Filter, keine Übersicht/Mitarbeiter-Tabs.
+function ProjektleiterView({ riskProjects }: { riskProjects: RiskProject[] }) {
   return (
     <>
-      <SubNav
-        options={[
-          { id: 'uebersicht', label: 'Übersicht'     },
-          { id: 'risiko',     label: 'Projekte'       },
-          { id: 'personal',   label: 'Personal'       },
-        ]}
-        active={subPage}
-        onChange={onSubPageChange}
-      />
-
-      {subPage === 'uebersicht' && (<>
-        <AlertStrip alerts={alerts} />
-
-        <div className="kpi-grid">
-          <KpiCard label="Aktive Projekte"    value={String(projects.length)}              />
-          <KpiCard label="Stunden (Zeitraum)" value={fmtH(stundenZeitraum)}               />
-          <KpiCard label="Budget-Gesundheit"  value={fmtPct(budgetHealthPct)}              meta={`${budgetHealthy} von ${projects.length} im grünen Bereich`} />
-          <KpiCard label="Offene Leistung"    value={fmtEur(offeneLeist)}                 />
-        </div>
-
-        <NarrativeBlock>
-          Team-Stunden letzte 4 Wochen: <strong>{fmtH(totalHours4w)}</strong> gesamt über {teamUtil.length} Mitarbeiter.{' '}
-          <strong>{budgetHealthy}</strong> von <strong>{projects.length}</strong> Projekt{projects.length !== 1 ? 'en' : ''} im grünen Bereich (unter 80% Budget).
-          {budgetHealthPct < 60 && ' Mehrere Projekte benötigen Fokus.'}
-        </NarrativeBlock>
-
-        <div className="dash-two-col">
-          <div className="dash-card">
-            <div className="dash-card-title">Team-Auslastung (letzte 4 Wochen)</div>
-            <TeamUtilizationChart data={teamUtil} />
-          </div>
-          <div className="dash-card">
-            <div className="dash-card-title">Projekte nach Status</div>
-            <StatusList items={byStatus} />
-          </div>
-        </div>
-
-        <div className="dash-card">
-          <div className="dash-card-title">Projektportfolio</div>
-          <ProjectTable projects={projects} />
-        </div>
-      </>)}
-
-      {subPage === 'risiko'   && <RisikoView projects={riskProjects} />}
-      {subPage === 'personal' && <PersonalView teamHours={teamHours} dateFrom={dateFrom} dateTo={dateTo} />}
+      <div style={{ fontSize: 12, color: 'var(--text-4)', margin: '2px 0 12px' }}>
+        Projekte, in denen du als Projektleiter eingetragen bist — bewertet nach aktuellem Gesamtstand.
+      </div>
+      <RisikoView projects={riskProjects} />
     </>
   )
 }
@@ -1290,9 +1147,24 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
 
 type AmpelFilter = 'alle' | 'rot' | 'orange' | 'gelb' | 'gruen'
 
+type RiskSortField = 'name' | 'budget' | 'cost' | 'budgetpct' | 'cpi' | 'open' | 'ampel'
+
+const AMPEL_ORDER: Record<string, number> = { rot: 0, orange: 1, gelb: 2, gruen: 3 }
+
+const AMPEL_HINT = (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 5, lineHeight: 1.45 }}>
+    <span>Bewertung nach aktuellem Gesamtstand (kumuliert) — <strong>unabhängig vom Zeitraum-Filter</strong>.</span>
+    <span>{ampelDot('rot')} <strong>Kritisch:</strong> Kosten ≥ 90 % des Budgets oder Kosten &gt; Leistungsstand (negativer Deckungsbeitrag).</span>
+    <span>{ampelDot('orange')} <strong>Warnung:</strong> Kosten 75–90 % des Budgets.</span>
+    <span>{ampelDot('gelb')} <strong>Fokus:</strong> über 5.000 € offene, abrechenbare Leistung.</span>
+    <span>{ampelDot('gruen')} <strong>OK:</strong> keine dieser Bedingungen.</span>
+  </div>
+)
+
 function RisikoView({ projects }: { projects: RiskProject[] }) {
   const [ampelFilter, setAmpelFilter] = useState<AmpelFilter>('alle')
   const [selected, setSelected]       = useState<RiskProject | null>(null)
+  const { field, dir, toggle, sort }  = useSort<RiskSortField>('ampel', 'asc')
 
   const counts = {
     rot:    projects.filter(p => p.ampel === 'rot').length,
@@ -1301,20 +1173,27 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
     gruen:  projects.filter(p => p.ampel === 'gruen').length,
   }
 
-  const AMPEL_ORDER: Record<string, number> = { rot: 0, orange: 1, gelb: 2, gruen: 3 }
-  const filtered = (ampelFilter === 'alle' ? projects : projects.filter(p => p.ampel === ampelFilter))
-    .slice()
-    .sort((a, b) => (AMPEL_ORDER[a.ampel] ?? 4) - (AMPEL_ORDER[b.ampel] ?? 4))
+  const base = ampelFilter === 'alle' ? projects : projects.filter(p => p.ampel === ampelFilter)
+  const filtered = sort(base, (p, f) => {
+    switch (f) {
+      case 'name':      return (p.NAME_SHORT || '').toLowerCase()
+      case 'budget':    return Number(p.BUDGET_TOTAL_NET || 0)
+      case 'cost':      return Number(p.COST_TOTAL || 0)
+      case 'budgetpct': return Number(p.COST_RATIO || 0)
+      case 'cpi':       return computeEvm(p).cpi ?? -1
+      case 'open':      return Number(p.OPEN_NET_TOTAL || 0)
+      case 'ampel':     return AMPEL_ORDER[p.ampel] ?? 4
+      default:          return 0
+    }
+  })
 
   return (
     <>
       {selected && <ProjektDetailModal project={selected} onClose={() => setSelected(null)} />}
 
-      <div className="kpi-grid">
-        <KpiCard label="Projekte gesamt"   value={String(projects.length)}   />
-        <KpiCard label="Kritisch (rot)"    value={String(counts.rot)}    accent={counts.rot > 0} />
-        <KpiCard label="Warnung (orange)"  value={String(counts.orange)} />
-        <KpiCard label="OK (grün)"         value={String(counts.gruen)}  />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '2px 0 10px' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>Projekt-Ampel</span>
+        <InfoHint title="Wie wird die Ampel bewertet?">{AMPEL_HINT}</InfoHint>
       </div>
 
       <div className="dash-ampel-filter">
@@ -1325,7 +1204,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
             onClick={() => setAmpelFilter(a)}
           >
             {a === 'alle'
-              ? 'Alle'
+              ? `Alle (${projects.length})`
               : <>{ampelDot(a)} {AMPEL_LABELS[a]} ({counts[a as keyof typeof counts]})</>
             }
           </button>
@@ -1340,13 +1219,13 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
               <thead>
                 <tr>
                   <th style={{ width: 4, padding: 0 }}></th>
-                  <th>Projekt</th>
-                  <th className="num col-hide-mobile">Honorar</th>
-                  <th className="num">Kosten</th>
-                  <th className="num col-hide-mobile">Budget %</th>
-                  <th className="num col-hide-mobile" title="CPI (Cost-Performance-Index): Kosten-Leistung-Index">CPI</th>
-                  <th className="num col-hide-mobile">Offen</th>
-                  <th>Hinweis</th>
+                  <SortTh label="Projekt"  field="name"      current={field} dir={dir} onSort={toggle} />
+                  <SortTh label="Honorar"  field="budget"    current={field} dir={dir} onSort={toggle} className="num col-hide-mobile" />
+                  <SortTh label="Kosten"   field="cost"      current={field} dir={dir} onSort={toggle} className="num" />
+                  <SortTh label="Budget %" field="budgetpct" current={field} dir={dir} onSort={toggle} className="num col-hide-mobile" />
+                  <SortTh label="CPI"      field="cpi"       current={field} dir={dir} onSort={toggle} className="num col-hide-mobile" title="CPI (Cost-Performance-Index): Leistung ÷ Kosten" />
+                  <SortTh label="Offen"    field="open"      current={field} dir={dir} onSort={toggle} className="num col-hide-mobile" />
+                  <SortTh label="Hinweis"  field="ampel"     current={field} dir={dir} onSort={toggle} title="Sortiert nach Ampel-Stufe (kritisch zuerst)" />
                 </tr>
               </thead>
               <tbody>
@@ -1400,89 +1279,171 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
   )
 }
 
-// ── Abrechnung view ───────────────────────────────────────────────────────────
+// ── Abrechnung: shared cards ──────────────────────────────────────────────────
 
-function AbrechnungView({ billing }: { billing: BillingSummaryData | null }) {
+const OPEN_OFFERS_LIMIT = 5
+
+// GL → Übersicht: die 5 größten noch offenen Angebote (noch kein Projekt, nicht
+// abgelehnt), absteigend nach Angebotssumme.
+function TopOpenOffersCard() {
   const navigate  = useNavigate()
-  if (!billing) return <p className="empty-note">Laden …</p>
+  const offersQ   = useQuery({ queryKey: ['dashboard', 'top-open-offers'], queryFn: fetchOffers,        staleTime: 300000 })
+  const statusesQ = useQuery({ queryKey: ['offer-statuses'],               queryFn: fetchOfferStatuses, staleTime: 600000 })
 
-  const totalOpen = billing.projects.reduce((s, p) => s + p.OPEN_NET_TOTAL, 0)
-  const maxPl     = Math.max(...billing.byPl.map(p => p.total), 1)
+  const rejectedId = statusesQ.data?.data?.find(s => s.NAME_SHORT === 'Abgelehnt')?.ID ?? null
+  const offers: OfferListItem[] = offersQ.data?.data ?? []
+  const open = offers
+    .filter(o => o.PROJECT_ID === null && (rejectedId === null || o.OFFER_STATUS_ID !== rejectedId))
+    .sort((a, b) => Number(b.TOTAL_AMOUNT || 0) - Number(a.TOTAL_AMOUNT || 0))
+    .slice(0, OPEN_OFFERS_LIMIT)
 
   return (
-    <>
-      <div className="kpi-grid">
-        <KpiCard label="Zur Abrechnung gesamt"       value={fmtEur(totalOpen)}                   accent={totalOpen > 0} />
-        <KpiCard label="Projekte mit offenem Betrag" value={String(billing.projects.length)}      />
-        <KpiCard label="Projektleiter involviert"    value={String(billing.byPl.length)}          />
-      </div>
-
-      {billing.projects.length === 0 ? (
-        <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
-          Kein Abrechnungspotenzial erkannt. Alle Projekte sind vollständig fakturiert.
-        </div>
-      ) : (
-        <div className="dash-two-col">
-          <div className="dash-card">
-            <div className="dash-card-title">Top Projektleiter (offene Beträge)</div>
-            {billing.byPl.length === 0
-              ? <p className="empty-note">Keine Daten.</p>
-              : (
-                <div className="util-bar-chart">
-                  {billing.byPl.slice(0, 10).map((pl, i) => {
-                    const pct = Math.round((pl.total / maxPl) * 100)
-                    return (
-                      <div key={i} className="util-bar-row">
-                        <span className="util-bar-label">{pl.name}</span>
-                        <div className="util-bar-track">
-                          <div className="util-bar-fill" style={{ width: `${pct}%`, background: 'rgba(139,92,246,0.65)' }} />
-                        </div>
-                        <span className="util-bar-value">{fmtEur(pl.total)}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            }
-          </div>
-
-          <div className="dash-card">
-            <div className="dash-card-title">Projekte mit Abrechnungspotenzial</div>
+    <div className="dash-card">
+      <CardTitle hint="Angebote ohne beauftragtes Projekt und nicht als „Abgelehnt“ markiert, absteigend nach Angebotssumme.">
+        Größte offene Angebote
+      </CardTitle>
+      {offersQ.isLoading
+        ? <p className="empty-note">Laden …</p>
+        : open.length === 0
+          ? <p className="empty-note">Keine offenen Angebote.</p>
+          : (
             <table className="dash-table dash-table-clickable">
               <thead>
-                <tr>
-                  <th>Projekt</th>
-                  <th className="num">Zur Abrechnung</th>
-                </tr>
+                <tr><th>Angebot</th><th className="col-hide-mobile">Empfänger</th><th className="num">Summe</th></tr>
               </thead>
               <tbody>
-                {billing.projects.slice(0, 10).map((p, i) => (
-                  <tr
-                    key={i}
-                    className="clickable-row"
-                    onClick={() => navigate('/rechnungen', { state: { projectSearch: p.NAME_SHORT } })}
-                  >
-                    <td>
-                      <div style={{ fontWeight: 500 }}>{p.NAME_SHORT}</div>
-                      {p.PROJECT_MANAGER_DISPLAY && (
-                        <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
-                      )}
-                    </td>
-                    <td className="num" style={{ fontWeight: 600, color: '#1d4ed8' }}>{fmtEur(p.OPEN_NET_TOTAL)}</td>
+                {open.map(o => (
+                  <tr key={o.ID} className="clickable-row" onClick={() => navigate('/angebote')} title="Zu den Angeboten">
+                    <td>{o.NAME_SHORT || o.NAME_LONG || '—'}</td>
+                    <td className="col-hide-mobile" style={{ color: 'var(--text-3)' }}>{o.ADDRESS_NAME || '—'}</td>
+                    <td className="num">{fmtEur(o.TOTAL_AMOUNT)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          )
+      }
+    </div>
+  )
+}
+
+// Größte offene Posten: unbezahlte Rechnungen/Abschläge (GL → Abrechnung, Controller)
+function OpenPostenTable({ posten }: { posten: OpenPosten[] }) {
+  const navigate = useNavigate()
+  if (!posten.length) {
+    return (
+      <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
+        Keine offenen Posten. Alle Rechnungen sind bezahlt.
+      </div>
+    )
+  }
+  return (
+    <table className="dash-table dash-table-clickable">
+      <thead>
+        <tr>
+          <th>Nr.</th>
+          <th className="col-hide-mobile">Empfänger</th>
+          <th className="col-hide-mobile">Fällig</th>
+          <th className="num">Offen (brutto)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {posten.map(p => (
+          <tr
+            key={`${p.sourceType}-${p.sourceId}`}
+            className="clickable-row"
+            onClick={() => navigate('/rechnungen', { state: { projectSearch: p.number } })}
+            title="Rechnung in der Rechnungsliste öffnen"
+          >
+            <td>
+              <div style={{ fontWeight: 500 }}>{p.number}</div>
+              {p.sourceType === 'pp' && <div style={{ fontSize: 11, color: 'var(--text-4)' }}>Abschlag</div>}
+            </td>
+            <td className="col-hide-mobile">{p.addressName || '—'}</td>
+            <td className="col-hide-mobile">
+              {p.dueDate ? fmtDateDE(p.dueDate) : '—'}
+              {p.daysOverdue > 0 && <span style={{ color: '#b91c1c', fontSize: 11, marginLeft: 4 }}>+{p.daysOverdue}d</span>}
+            </td>
+            <td className="num" style={{ fontWeight: 600 }}>{fmtEur(p.openAmount)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+// Projekte mit Abrechnungspotenzial (GL → Abrechnung, Controller)
+function BillingPotentialTable({ projects, maxRows = 10 }: { projects: BillingProject[]; maxRows?: number }) {
+  const navigate = useNavigate()
+  if (!projects.length) {
+    return (
+      <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
+        Kein Abrechnungspotenzial erkannt. Alle Projekte sind vollständig fakturiert.
+      </div>
+    )
+  }
+  return (
+    <table className="dash-table dash-table-clickable">
+      <thead>
+        <tr><th>Projekt</th><th className="num">Zur Abrechnung</th></tr>
+      </thead>
+      <tbody>
+        {projects.slice(0, maxRows).map((p, i) => (
+          <tr
+            key={i}
+            className="clickable-row"
+            onClick={() => navigate('/rechnungen', { state: { projectSearch: p.NAME_SHORT } })}
+          >
+            <td>
+              <div style={{ fontWeight: 500 }}>{p.NAME_SHORT}</div>
+              {p.PROJECT_MANAGER_DISPLAY && (
+                <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
+              )}
+            </td>
+            <td className="num" style={{ fontWeight: 600, color: '#1d4ed8' }}>{fmtEur(p.OPEN_NET_TOTAL)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+// ── Abrechnung view ───────────────────────────────────────────────────────────
+
+function AbrechnungView({ billing, openPosten }: { billing: BillingSummaryData | null; openPosten: OpenPosten[] }) {
+  if (!billing) return <p className="empty-note">Laden …</p>
+
+  const totalOpen = billing.projects.reduce((s, p) => s + p.OPEN_NET_TOTAL, 0)
+
+  return (
+    <>
+      <div className="kpi-grid">
+        <KpiCard label="Zur Abrechnung gesamt"       value={fmtEur(totalOpen)}               accent={totalOpen > 0} />
+        <KpiCard label="Projekte mit offenem Betrag" value={String(billing.projects.length)} />
+      </div>
+
+      <div className="dash-two-col">
+        <div className="dash-card">
+          <CardTitle hint="Finalisierte, noch nicht (voll) bezahlte Rechnungen und Abschlagsrechnungen — nach offenem Bruttobetrag. Zeigt die größten unbezahlten Forderungen.">
+            Größte offene Posten
+          </CardTitle>
+          <OpenPostenTable posten={openPosten} />
         </div>
-      )}
+
+        <div className="dash-card">
+          <CardTitle hint="Erbrachte, aber noch nicht fakturierte Leistung je Projekt (offener Netto-Betrag) — Potenzial für die nächste Rechnung.">
+            Projekte mit Abrechnungspotenzial
+          </CardTitle>
+          <BillingPotentialTable projects={billing.projects} />
+        </div>
+      </div>
     </>
   )
 }
 
 // ── Personal / HR analytics view ──────────────────────────────────────────────
 
-function PersonalView({ teamHours, dateFrom, dateTo }: { teamHours: TeamHoursData | null; dateFrom: string; dateTo: string }) {
+function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: TeamHoursData | null; snapshot: CompanySnapshot | null; dateFrom: string; dateTo: string }) {
   if (!teamHours) return <p className="empty-note">Laden …</p>
   const { employees, months } = teamHours
   const periodLabel = months.length > 0
@@ -1515,9 +1476,24 @@ function PersonalView({ teamHours, dateFrom, dateTo }: { teamHours: TeamHoursDat
   return (
     <>
       <div className="kpi-grid">
-        <KpiCard label={`Gesamtstunden (${months.length} Mon.)`} value={fmtH(totalHours)}         />
-        <KpiCard label="Ø pro Mitarbeiter"                       value={fmtH(avgHours)}           />
-        <KpiCard label="Aktive Mitarbeiter"                      value={String(employees.length)} />
+        <KpiCard
+          label="Anteil Projektmitarbeiter"
+          value={snapshot?.kpis.anteilProjektmitarbeiter != null ? fmtPct(snapshot.kpis.anteilProjektmitarbeiter) : '—'}
+          meta="der aktiven Mitarbeiter mit Buchungen"
+          hint={<>Anteil der aktiven Mitarbeiter mit Projekt-Zeitbuchungen in den letzten 12 Monaten (Mitarbeiter mit Buchungen ÷ aktive Mitarbeiter). Ersetzt den „Projektstundenanteil“, der ohne Erfassung der Bürostunden nicht berechenbar ist.</>}
+        />
+        <KpiCard
+          label="Umsatz pro Mitarbeiter"
+          value={fmtEur(snapshot?.kpis.umsatzProMitarbeiter ?? null)}
+          meta="letzte 12 Monate"
+          hint={<>Umsatz (Rechnungen + Abschlagszahlungen) der letzten 12 Monate ÷ Anzahl aktiver Mitarbeiter.</>}
+        />
+        <KpiCard
+          label="Ø Stunden je Mitarbeiter"
+          value={fmtH(avgHours)}
+          meta={`Zeitraum · ${employees.length} mit Buchungen`}
+          hint={<>Gebuchte Projektstunden im gewählten Zeitraum ÷ Mitarbeiter mit Buchungen.</>}
+        />
       </div>
 
       <div className="dash-card">
@@ -1587,7 +1563,12 @@ function DashboardFilterBar({
   return (
     <div className="dash-filter-bar">
       <div className="dash-filter-group">
-        <span className="dash-filter-label">Zeitraum</span>
+        <span className="dash-filter-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          Zeitraum
+          <InfoHint title="Was beeinflusst der Zeitraum?">
+            Begrenzt Kosten, Stunden und Leistungsstand auf den gewählten Zeitraum (Übersicht &amp; Mitarbeiter). Honorar bzw. Budget bleiben das volle Projektvolumen. Die Projekt-Ampel rechnet immer kumuliert (Stand heute) und ist vom Zeitraum unabhängig.
+          </InfoHint>
+        </span>
         <select className="inline-select" value={filters.zeitraum}
           onChange={e => onChange({ zeitraum: e.target.value as ZeitraumKey })}>
           {ZEITRAUM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -1650,49 +1631,56 @@ export function DashboardPage() {
 
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [glSubPage, setGlSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
-  const [blSubPage, setBlSubPage] = useState<'uebersicht' | 'risiko' | 'personal'>('uebersicht')
 
   const isMitarbeiter = dashboardRole === 'mitarbeiter'
   const isController  = dashboardRole === 'controller'
   const isGl          = dashboardRole === 'geschaeftsleitung'
-  const isBl          = dashboardRole === 'bereichsleiter'
+  const isBl          = dashboardRole === 'bereichsleiter'   // Projektleiter-Ansicht
 
   // dateRange computed before useQueries so it can drive query keys + fns
   const dateRange = useMemo(() => computeDateRange(filters.zeitraum), [filters.zeitraum])
 
-  const [kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, teamQ, mahnungenQ, , billingQ, teamHoursQ] = useQueries({
+  const [
+    kpisQ, projectsQ, monthlyQ, byStatusQ, alertsQ, overdueQ, mahnungenQ,
+    riskQ, billingQ, teamHoursQ, snapshotQ, openInvQ,
+  ] = useQueries({
     queries: [
-      { queryKey: ['dashboard', 'kpis'],                                       queryFn: fetchDashboardKpis,       staleTime: 300000, enabled: isController },
-      { queryKey: ['dashboard', 'projects', dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchDashboardProjects(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'monthly',  dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchDashboardMonthly(dateRange.dateFrom, dateRange.dateTo),  staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'by-status'],                                  queryFn: fetchDashboardByStatus,  staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'alerts'],                                     queryFn: fetchDashboardAlerts,    staleTime: 120000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'overdue-invoices'],                           queryFn: fetchOverdueInvoices,    staleTime: 120000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'team-utilization'],                           queryFn: fetchTeamUtilization,    staleTime: 300000, enabled: !isMitarbeiter },
-      { queryKey: ['dashboard', 'mahnung-stats'],                              queryFn: fetchMahnungStats,       staleTime: 120000, enabled: isController },
-      { queryKey: ['dashboard', 'risk-projects'],                              queryFn: fetchRiskProjects,       staleTime: 300000, enabled: false },
-      { queryKey: ['dashboard', 'billing-summary'],                            queryFn: fetchBillingSummary,     staleTime: 300000, enabled: isGl },
-      { queryKey: ['dashboard', 'team-hours', dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchTeamHours(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: isGl || isBl },
+      { queryKey: ['dashboard', 'kpis'],                                            queryFn: fetchDashboardKpis,              staleTime: 300000, enabled: isController },
+      { queryKey: ['dashboard', 'projects', dateRange.dateFrom, dateRange.dateTo],   queryFn: () => fetchDashboardProjects(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: isGl },
+      { queryKey: ['dashboard', 'monthly',  dateRange.dateFrom, dateRange.dateTo],   queryFn: () => fetchDashboardMonthly(dateRange.dateFrom, dateRange.dateTo),  staleTime: 300000, enabled: isController },
+      { queryKey: ['dashboard', 'by-status'],                                        queryFn: fetchDashboardByStatus,          staleTime: 300000, enabled: isGl },
+      { queryKey: ['dashboard', 'alerts'],                                           queryFn: fetchDashboardAlerts,            staleTime: 120000, enabled: isGl || isController },
+      { queryKey: ['dashboard', 'overdue-invoices'],                                 queryFn: fetchOverdueInvoices,            staleTime: 120000, enabled: isController },
+      { queryKey: ['dashboard', 'mahnung-stats'],                                    queryFn: fetchMahnungStats,               staleTime: 120000, enabled: isController },
+      { queryKey: ['dashboard', 'risk-projects', isBl ? 'own' : 'all'],              queryFn: () => fetchRiskProjects(isBl ? 'own' : undefined), staleTime: 300000, enabled: isGl || isBl },
+      { queryKey: ['dashboard', 'billing-summary'],                                  queryFn: fetchBillingSummary,             staleTime: 300000, enabled: isGl || isController },
+      { queryKey: ['dashboard', 'team-hours', dateRange.dateFrom, dateRange.dateTo], queryFn: () => fetchTeamHours(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: isGl },
+      { queryKey: ['dashboard', 'company-snapshot'],                                 queryFn: fetchDashboardCompanySnapshot,   staleTime: 300000, enabled: isGl },
+      { queryKey: ['dashboard', 'open-invoices'],                                    queryFn: () => fetchDashboardOpenInvoices(10), staleTime: 120000, enabled: isGl },
     ],
   })
 
   const kpis           = kpisQ.data?.data
-  const projects       = projectsQ.data?.data   ?? []
-  const monthly        = monthlyQ.data?.data    ?? []
-  const byStatus       = byStatusQ.data?.data   ?? []
-  const alerts         = alertsQ.data?.data     ?? []
-  const overdue        = overdueQ.data?.data    ?? []
-  const teamUtil       = teamQ.data?.data       ?? []
-  const mahnStats      = mahnungenQ.data?.data  ?? null
-
+  const projects       = projectsQ.data?.data    ?? []
+  const monthly        = monthlyQ.data?.data     ?? []
+  const byStatus       = byStatusQ.data?.data    ?? []
+  const alerts         = alertsQ.data?.data      ?? []
+  const overdue        = overdueQ.data?.data     ?? []
+  const mahnStats      = mahnungenQ.data?.data   ?? null
+  const riskProjects   = riskQ.data?.data        ?? []
   const billingSummary = billingQ.data?.data     ?? null
-  const teamHours      = teamHoursQ.data?.data  ?? null
+  const teamHours      = teamHoursQ.data?.data   ?? null
+  const snapshot       = snapshotQ.data?.data    ?? null
+  const openPosten     = openInvQ.data?.data     ?? []
 
-  const isLoading = projectsQ.isLoading || monthlyQ.isLoading || (isController && kpisQ.isLoading)
+  const isLoading =
+    (isGl         && projectsQ.isLoading) ||
+    (isController && kpisQ.isLoading)     ||
+    (isBl         && riskQ.isLoading)
 
   // ── Filter computations ──
 
-  // Dimension filter options from date-filtered projects (now has all dimension fields)
+  // Dimension filter options from the GL project list (has all dimension fields)
   const abteilungen = useMemo(() =>
     [...new Set(projects.map(p => p.DEPARTMENT_NAME).filter(Boolean))].sort() as string[],
     [projects])
@@ -1703,7 +1691,7 @@ export function DashboardPage() {
     [...new Set(projects.map(p => p.PROJECT_STATUS_NAME_SHORT).filter(Boolean))].sort() as string[],
     [projects])
 
-  // Client-side dimension filter on server-time-filtered project list
+  // Client-side dimension filter on the GL project list (Übersicht KPIs)
   const filteredProjects = useMemo(() =>
     projects
       .filter(p => !filters.abteilung     || p.DEPARTMENT_NAME          === filters.abteilung)
@@ -1711,8 +1699,14 @@ export function DashboardPage() {
       .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
     [projects, filters.abteilung, filters.projektleiter, filters.status])
 
-  // Derive risk flags from the already time+dimension-filtered projects (no separate endpoint needed)
-  const derivedRiskProjects = useMemo(() => filteredProjects.map(deriveRiskFromProject), [filteredProjects])
+  // Same dimension filter on the cumulative (Stand heute) risk projects for the
+  // GL Projekte-Ampel — unabhängig vom Zeitraum.
+  const filteredRiskProjects = useMemo(() =>
+    riskProjects
+      .filter(p => !filters.abteilung     || p.DEPARTMENT_NAME          === filters.abteilung)
+      .filter(p => !filters.projektleiter || p.PROJECT_MANAGER_DISPLAY  === filters.projektleiter)
+      .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
+    [riskProjects, filters.abteilung, filters.projektleiter, filters.status])
 
   const roleLabel = ROLES.find(r => r.id === dashboardRole)?.title ?? ''
 
@@ -1743,14 +1737,14 @@ export function DashboardPage() {
 
       <RecentMixedList limit={8} />
 
-      {dashboardRole && !isMitarbeiter && (
+      {dashboardRole && (isGl || isController) && (
         <DashboardFilterBar
           filters={filters}
           onChange={patch => setFilters(f => ({ ...f, ...patch }))}
           abteilungen={abteilungen}
           plOptions={plOptions}
           statusOptions={statusOptions}
-          showDimensions={isGl || isBl}
+          showDimensions={isGl}
         />
       )}
 
@@ -1761,23 +1755,19 @@ export function DashboardPage() {
       {!isLoading && dashboardRole === 'geschaeftsleitung' && (
         <GeschaeftsleitungView
           projects={filteredProjects} byStatus={byStatus} alerts={alerts}
-          riskProjects={derivedRiskProjects} billingSummary={billingSummary} teamHours={teamHours}
+          riskProjects={filteredRiskProjects} billingSummary={billingSummary}
+          openPosten={openPosten} snapshot={snapshot} teamHours={teamHours}
           dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
           subPage={glSubPage} onSubPageChange={id => setGlSubPage(id as typeof glSubPage)}
         />
       )}
 
       {!isLoading && kpis && dashboardRole === 'controller' && (
-        <ControllerView kpis={kpis} monthly={monthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} />
+        <ControllerView kpis={kpis} monthly={monthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} billingSummary={billingSummary} />
       )}
 
       {!isLoading && dashboardRole === 'bereichsleiter' && (
-        <BereichsleiterView
-          projects={filteredProjects} byStatus={byStatus} alerts={alerts}
-          teamUtil={teamUtil} riskProjects={derivedRiskProjects} teamHours={teamHours}
-          monthly={monthly} dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
-          subPage={blSubPage} onSubPageChange={id => setBlSubPage(id as typeof blSubPage)}
-        />
+        <ProjektleiterView riskProjects={riskProjects} />
       )}
 
       {isMitarbeiter && employeeId !== null && (
