@@ -30,6 +30,11 @@ import { RecentList } from '@/components/recents/RecentList'
 import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeverity } from '@/api/arbzg'
 import { updateBuchung, deleteBuchung } from '@/api/projekte'
+import {
+  fetchAbsenceTypes, fetchAbsences, fetchVacationBalance,
+  createAbsence, decideAbsence, cancelAbsence, deleteAbsence,
+  type Absence, type AbsenceStatus,
+} from '@/api/abwesenheit'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -43,7 +48,7 @@ const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 
 type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'MAIL'
-type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'projekte' | 'rolle' | 'passwort'
+type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'abwesenheit' | 'projekte' | 'rolle' | 'passwort'
 
 function fmtH(n: number) {
   return n.toFixed(2).replace('.', ',') + ' h'
@@ -269,6 +274,180 @@ function EmployeeProjectsSection({ employeeId }: { employeeId: number }) {
   )
 }
 
+// ── Abwesenheits-Sektion (innerhalb der Mitarbeiter-Akte) ────────────────────
+
+function fmtDateShort(d: string) {
+  return new Date(`${d}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function AbsenceStatusBadge({ status }: { status: AbsenceStatus }) {
+  const map: Record<AbsenceStatus, { label: string; bg: string; color: string }> = {
+    REQUESTED: { label: 'Beantragt',  bg: '#fef3c7', color: '#92400e' },
+    APPROVED:  { label: 'Genehmigt',  bg: '#dcfce7', color: '#166534' },
+    REJECTED:  { label: 'Abgelehnt',  bg: '#fee2e2', color: '#b91c1c' },
+    CANCELLED: { label: 'Storniert',  bg: '#f3f4f6', color: '#6b7280' },
+  }
+  const s = map[status]
+  return <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10 }}>{s.label}</span>
+}
+
+function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const canManage  = usePermission('absence.manage')
+  const canApprove = usePermission('absence.approve')
+  const year = new Date().getFullYear()
+
+  const { data: typesRes }            = useQuery({ queryKey: ['absence-types'],                queryFn: fetchAbsenceTypes })
+  const { data: absRes, isLoading }   = useQuery({ queryKey: ['absences', employeeId],         queryFn: () => fetchAbsences({ employee_id: employeeId }) })
+  const { data: balRes }              = useQuery({ queryKey: ['vacation-balance', employeeId, year], queryFn: () => fetchVacationBalance(employeeId, year) })
+
+  const types     = (typesRes?.data ?? []).filter(t => t.ACTIVE)
+  const absences  = absRes?.data ?? []
+  const bal       = balRes?.data
+
+  const [showForm, setShowForm] = useState(false)
+  const [fType, setFType] = useState('')
+  const [fFrom, setFFrom] = useState('')
+  const [fTo,   setFTo]   = useState('')
+  const [fHalf, setFHalf] = useState(false)
+  const [fNote, setFNote] = useState('')
+
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['absences', employeeId] })
+    void qc.invalidateQueries({ queryKey: ['vacation-balance', employeeId] })
+  }
+
+  const createMut = useMutation({
+    mutationFn: () => createAbsence({
+      employee_id: employeeId, absence_type_id: Number(fType),
+      date_from: fFrom, date_to: fTo || fFrom, half_day: fHalf && (!fTo || fTo === fFrom), note: fNote,
+    }),
+    onSuccess: () => { toast.success('Abwesenheit erfasst'); setShowForm(false); setFType(''); setFFrom(''); setFTo(''); setFHalf(false); setFNote(''); invalidate() },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  const decideMut = useMutation({
+    mutationFn: (v: { id: number; decision: 'APPROVED' | 'REJECTED' }) => decideAbsence(v.id, v.decision),
+    onSuccess: () => { toast.success('Entscheidung gespeichert'); invalidate() },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  const cancelMut = useMutation({ mutationFn: (id: number) => cancelAbsence(id), onSuccess: () => { toast.success('Storniert'); invalidate() }, onError: (e: Error) => toast.error(e.message) })
+  const deleteMut = useMutation({ mutationFn: (id: number) => deleteAbsence(id), onSuccess: () => { toast.success('Gelöscht'); invalidate() }, onError: (e: Error) => toast.error(e.message) })
+
+  const singleDay = !!fFrom && (!fTo || fTo === fFrom)
+  const stat = (label: string, value: string, color?: string) => (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontWeight: 700, fontSize: 16, color: color ?? 'inherit' }}>{value}</div>
+    </div>
+  )
+
+  return (
+    <div>
+      {/* Urlaubssaldo */}
+      <div style={{ display: 'flex', gap: 18, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        {stat('Anspruch', bal ? `${bal.entitled} T` : '…')}
+        {stat('Übertrag', bal ? `${bal.carryover} T` : '…')}
+        {stat('Genommen', bal ? `${bal.taken} T` : '…')}
+        {stat('Resturlaub', bal ? `${bal.remaining} T` : '…', bal && bal.remaining < 0 ? '#dc2626' : '#059669')}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>Urlaub {year} (Übertrag automatisch)</span>
+      </div>
+
+      {canManage && (
+        <div style={{ marginBottom: 12 }}>
+          {!showForm
+            ? <button type="button" className="btn-small btn-save" onClick={() => setShowForm(true)}>+ Abwesenheit erfassen</button>
+            : (
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 12 }}>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Art</label>
+                    <select value={fType} onChange={e => setFType(e.target.value)}>
+                      <option value="">Bitte wählen …</option>
+                      {types.map(t => <option key={t.ID} value={t.ID}>{t.NAME}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Von</label>
+                    <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label>Bis</label>
+                    <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} />
+                  </div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: singleDay ? 'var(--text-2)' : '#9ca3af', margin: '4px 0 8px' }}>
+                  <input type="checkbox" checked={fHalf} disabled={!singleDay} onChange={e => setFHalf(e.target.checked)} />
+                  Halber Tag (nur bei eintägiger Abwesenheit)
+                </label>
+                <div className="form-group">
+                  <label>Notiz</label>
+                  <input type="text" value={fNote} onChange={e => setFNote(e.target.value)} placeholder="optional" />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn-small btn-save" disabled={!fType || !fFrom || createMut.isPending}
+                    onClick={() => createMut.mutate()}>{createMut.isPending ? 'Speichert …' : 'Speichern'}</button>
+                  <button type="button" className="btn-small" onClick={() => setShowForm(false)}>Abbrechen</button>
+                </div>
+              </div>
+            )}
+        </div>
+      )}
+
+      {isLoading && <p className="empty-note">Laden …</p>}
+      {!isLoading && absences.length === 0 && <p className="empty-note">Noch keine Abwesenheiten erfasst.</p>}
+
+      {absences.length > 0 && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontSize: 12 }}>
+              <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Zeitraum</th>
+              <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Art</th>
+              <th style={{ textAlign: 'right', padding: '3px 8px 4px 0' }}>Tage</th>
+              <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {absences.map((a: Absence) => (
+              <tr key={a.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <td style={{ padding: '5px 8px 5px 0', whiteSpace: 'nowrap' }}>
+                  {fmtDateShort(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDateShort(a.DATE_TO)}` : ''}
+                  {a.HALF_DAY && <span style={{ color: '#6b7280' }}> (½)</span>}
+                </td>
+                <td style={{ padding: '5px 8px 5px 0' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />
+                  {a.TYPE_NAME || '—'}
+                </td>
+                <td style={{ padding: '5px 8px 5px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{a.DAYS}</td>
+                <td style={{ padding: '5px 8px 5px 0' }}><AbsenceStatusBadge status={a.STATUS} /></td>
+                <td style={{ padding: '5px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  {canApprove && a.STATUS === 'REQUESTED' && (
+                    <>
+                      <button type="button" className="btn-small btn-save" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
+                        disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'APPROVED' })}>Genehmigen</button>
+                      <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
+                        disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'REJECTED' })}>Ablehnen</button>
+                    </>
+                  )}
+                  {canManage && a.STATUS === 'APPROVED' && (
+                    <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
+                      disabled={cancelMut.isPending} onClick={() => cancelMut.mutate(a.ID)}>Stornieren</button>
+                  )}
+                  {canManage && (
+                    <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }}
+                      disabled={deleteMut.isPending} onClick={() => deleteMut.mutate(a.ID)}>×</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 // ── Employee Edit Modal ───────────────────────────────────────────────────────
 
 function EmployeeEditModal({ employee, onClose, genders, departments, workModels, roles, mapping, initialSection = 'stammdaten' }: {
@@ -284,6 +463,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const qc = useQueryClient()
   const canAssignRoles = usePermission('employees.role.assign')
   const canViewBookings = usePermission('employees.bookings.view_all')
+  const canViewAbsence = usePermission('absence.view')
   const [section,  setSection]  = useState<EmpSection>(initialSection)
   const [editForm, setEditForm] = useState<UpdateEmployeePayload>({
     short_name:       employee.SHORT_NAME ?? '',
@@ -442,6 +622,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     { id: 'kostensatz',  label: 'Kostensatz' },
     { id: 'arbeitszeit', label: 'Arbeitszeit' },
     ...(canViewBookings ? [{ id: 'zeitkonto' as EmpSection, label: 'Zeitkonto' }] : []),
+    ...(canViewAbsence  ? [{ id: 'abwesenheit' as EmpSection, label: 'Abwesenheit' }] : []),
     { id: 'projekte',    label: 'Projekte' },
     ...(canAssignRoles  ? [{ id: 'rolle' as EmpSection, label: 'Rolle & Rechte' }] : []),
     { id: 'passwort',    label: 'Passwort' },
@@ -709,6 +890,10 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 
       {section === 'zeitkonto' && canViewBookings && (
         <EmployeeTimeAccount empId={employee.ID} />
+      )}
+
+      {section === 'abwesenheit' && canViewAbsence && (
+        <EmployeeAbsenceSection employeeId={employee.ID} />
       )}
 
       {section === 'projekte' && (
