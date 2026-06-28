@@ -19,7 +19,7 @@ interface SingleProps {
 }
 
 const TYPE_DEFAULT_PATH: Record<RecentEntityType, (id: number) => string> = {
-  project:                     (id) => `/projekte?selected=${id}`,
+  project:                     (id) => `/projekte?tab=buchungen&projectId=${id}`,
   invoice:                     (id) => `/rechnungen?selected=${id}`,
   partial_payment:             (id) => `/rechnungen?pp=${id}`,
   offer:                       (id) => `/angebote?selected=${id}`,
