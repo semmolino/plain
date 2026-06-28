@@ -66,7 +66,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_vac_entitlement
 INSERT INTO "ABSENCE_TYPE"
   ("TENANT_ID","NAME","COLOR","COUNTS_AS_WORKED","REDUCES_VACATION","REQUIRES_APPROVAL","IS_PAID","SORT_ORDER")
 SELECT t."ID", v.name, v.color, v.worked, v.reduces, v.approval, v.paid, v.ord
-FROM "TENANT" t
+FROM "TENANTS" t
 CROSS JOIN (VALUES
   ('Urlaub',              '#2563eb', TRUE,  TRUE,  TRUE,  TRUE,  10),
   ('Krankheit',           '#dc2626', TRUE,  FALSE, FALSE, TRUE,  20),
