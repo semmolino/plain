@@ -33,6 +33,8 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
   const [addrText, setAddrText]           = useState('')
   const [msg, setMsg]                     = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [createdOfferId, setCreatedOfferId] = useState<number | null>(null)
+  // true, sobald „Gültig bis" manuell gesetzt wurde → Standard-Dauer nicht mehr überschreiben
+  const [validUntilTouched, setValidUntilTouched] = useState(false)
 
   const { data: statusData  } = useQuery({ queryKey: ['offer-statuses'],   queryFn: fetchOfferStatuses  })
   const { data: mgrData     } = useQuery({ queryKey: ['project-managers'], queryFn: fetchProjectManagers })
@@ -53,11 +55,16 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
   if (companies.length === 1 && !basic.company_id)
     setBasic(f => ({ ...f, company_id: String(companies[0].ID) }))
 
+  // Standard-Angebotsdauer aus den Vorbelegungen: „Gültig bis" = Angebotsdatum
+  // + N Tage. Greift beim Laden der Vorbelegung UND bei jeder Änderung des
+  // Angebotsdatums — außer der Nutzer hat „Gültig bis" selbst überschrieben.
   useEffect(() => {
+    if (validUntilTouched) return
     const days = parseInt(defData?.data?.offer_valid_days ?? '', 10)
     if (!Number.isFinite(days) || days <= 0) return
-    setBasic(f => ({ ...f, valid_until: addDays(f.offer_date || todayIso(), days) }))
-  }, [defData?.data?.offer_valid_days])
+    const next = addDays(basic.offer_date || todayIso(), days)
+    setBasic(f => (f.valid_until === next ? f : { ...f, valid_until: next }))
+  }, [defData?.data?.offer_valid_days, basic.offer_date, validUntilTouched])
 
   useEffect(() => {
     const t1 = defData?.data?.offer_text_1 ?? ''
@@ -93,7 +100,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
 
   function resetAll() {
     setStep(1); setBasic(emptyBasic()); setAddrText('')
-    setCreatedOfferId(null); setMsg(null)
+    setCreatedOfferId(null); setMsg(null); setValidUntilTouched(false)
   }
 
   const setB = (k: keyof BasicForm) => (v: string) => setBasic(f => ({ ...f, [k]: v }))
@@ -172,7 +179,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
             </div>
             <div className="form-group">
               <label>Gültig bis</label>
-              <input type="date" value={basic.valid_until} onChange={e => setB('valid_until')(e.target.value)} />
+              <input type="date" value={basic.valid_until} onChange={e => { setValidUntilTouched(true); setB('valid_until')(e.target.value) }} />
             </div>
             <div className="form-group">
               <label>Wahrscheinlichkeit (%)</label>

@@ -14,7 +14,7 @@ import {
   type FeeCalcMaster, type FeePhaseRow, type FeeCalcSurcharge, type FeeSurchargeGlobal, type FeeCalcBl, type BlAmountType,
 } from '@/api/fee'
 import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from '@/api/projekte'
-import { fetchOfferStructure, type OfferStructureNode } from '@/api/angebote'
+import { fetchOffer, fetchOfferStructure, type OfferStructureNode } from '@/api/angebote'
 
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
@@ -24,6 +24,23 @@ type KX = typeof KX_OPTIONS[number]
 function fmtN(v: number | null | undefined) {
   if (v == null) return ''
   return String(v)
+}
+
+/** Auf 2 Nachkommastellen runden (fmt2). */
+function r2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/** Geldbetrag mit deutschem Komma und 2 Nachkommastellen, ohne €-Zeichen. */
+function fmtMoney2(v: number | null | undefined) {
+  if (v == null) return ''
+  return r2(Number(v)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** Prozentwert mit deutschem Komma, ohne Float-Rauschen. */
+function fmtPct(v: number | null | undefined) {
+  if (v == null) return ''
+  return (Math.round(Number(v) * 100) / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })
 }
 
 function toNum(v: string): number | null {
@@ -48,7 +65,7 @@ function revenueByKx(row: FeeCalcMaster, kx: KX): number | null {
 
 function phaseRevenue(base: number | null, pct: number | null): number | null {
   if (base == null || pct == null) return null
-  return (pct * base) / 100
+  return r2((pct * base) / 100)
 }
 
 /** Compute effective base and amount for each surcharge row, honouring LPH filter + calc mode + BL filter */
@@ -210,9 +227,26 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
 
   const { data: groupsData }   = useQuery({ queryKey: ['fee-groups'],     queryFn: fetchFeeGroups })
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
+  // Im Angebots-Modus den Angebotsnamen laden — statt der globalen, tenant-
+  // übergreifenden OFFER-ID die nutzerseitige Angebotsnummer + den Titel zeigen.
+  const { data: offerData } = useQuery({
+    queryKey: ['offer', offerId],
+    queryFn:  () => fetchOffer(offerId!),
+    enabled:  !!offerId,
+  })
+  const offerLabel = offerData?.data
+    ? [offerData.data.NAME_SHORT, offerData.data.NAME_LONG].filter(Boolean).join(' – ')
+    : 'Angebot'
 
   const groups   = groupsData?.data   ?? []
   const projects = projectsData?.data ?? []
+
+  // Abbruch-Schutz: Eine im Wizard angelegte (noch nicht abgeschlossene)
+  // Kalkulation darf beim Schließen des Fensters NICHT bestehen bleiben.
+  // committedRef wird auf true gesetzt, sobald die Kalkulation regulär
+  // fertiggestellt (oder bereits manuell gelöscht) wurde.
+  const committedRef     = useRef(false)
+  const calcMasterIdRef  = useRef<number | null>(null)
 
   const totalPhaseRev = phases.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
 
@@ -255,6 +289,21 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       .then(r => setOfferStructureNodes(r.data ?? []))
       .catch(() => setOfferStructureNodes([]))
   }, [offerId])
+
+  // Keep the in-progress calc ID in a ref for the unmount cleanup below
+  useEffect(() => { calcMasterIdRef.current = calcMaster?.ID ?? null }, [calcMaster])
+
+  // On unmount: if a NEW calc was created in the wizard but never completed
+  // (window closed, backdrop click, navigated away …), delete it so it is not
+  // silently persisted. Edit mode and completed calcs are left untouched.
+  useEffect(() => {
+    return () => {
+      if (isEdit) return
+      if (committedRef.current) return
+      const id = calcMasterIdRef.current
+      if (id) void deleteFeeCalcMaster(id).catch(() => {})
+    }
+  }, [isEdit])
 
   // In edit mode: load existing calc on mount
   useEffect(() => {
@@ -505,6 +554,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       })
       // Immediately create OFFER_STRUCTURE entries under the selected parent
       const res = await attachFeeToOfferStructure(calcMaster.ID, Number(fatherId))
+      committedRef.current = true   // erfolgreich verknüpft → nicht beim Schließen löschen
       if (calcMaster.OFFER_ID != null) {
         void qc.invalidateQueries({ queryKey: ['offer-structure', calcMaster.OFFER_ID] })
       }
@@ -521,6 +571,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   }
 
   function resetWizard() {
+    committedRef.current = true   // regulär abgeschlossen → Kalkulation behalten
     setStep(firstStep); setCalcMaster(null); setPhases([]); setBlItems([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
     setBasis({ NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '', K0: '', K1: '', K2: '', K3: '', K4: '' })
@@ -529,6 +580,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   }
 
   async function cancelAndDelete() {
+    committedRef.current = true   // wir löschen hier selbst → Unmount-Cleanup überspringen
     if (!isEdit && calcMaster) {
       try { await deleteFeeCalcMaster(calcMaster.ID) } catch { /* ignore */ }
     }
@@ -654,7 +706,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           {isOfferMode && (
             <div className="form-group">
               <label>Angebot</label>
-              <input readOnly value={`Angebot #${offerId ?? '?'} (festgelegt)`} style={{ background: '#f9fafb', color: '#6b7280' }} />
+              <input readOnly value={`${offerLabel} (festgelegt)`} style={{ background: '#f9fafb', color: '#6b7280' }} />
             </div>
           )}
           <div className="form-group">
@@ -691,7 +743,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           {isOfferMode ? (
             <div className="form-group">
               <label>Angebot</label>
-              <input readOnly value={`Angebot #${offerId ?? '?'} (festgelegt)`} style={{ background: '#f9fafb', color: '#6b7280' }} />
+              <input readOnly value={`${offerLabel} (festgelegt)`} style={{ background: '#f9fafb', color: '#6b7280' }} />
             </div>
           ) : (
             <div className="form-group">
@@ -789,7 +841,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                           value={fmtN(p.FEE_PERCENT)} onChange={e => updatePhasePct(p.ID, e.target.value)} />
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <input className="tbl-input" readOnly style={{ width: 90 }} value={fmtN(p.PHASE_REVENUE)} />
+                        <input className="tbl-input" readOnly style={{ width: 90, textAlign: 'right' }} value={fmtMoney2(p.PHASE_REVENUE)} />
                       </td>
                     </tr>
                   )
@@ -798,8 +850,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               <tfoot>
                 <tr>
                   <th colSpan={5}>Grundhonorar</th>
-                  <th style={{ textAlign: 'right' }}>{fmtN(totalPhasePct)}</th>
-                  <th style={{ textAlign: 'right' }}>{fmtN(totalPhaseRev)}</th>
+                  <th style={{ textAlign: 'right' }}>{fmtPct(totalPhasePct)}</th>
+                  <th style={{ textAlign: 'right' }}>{fmtMoney2(totalPhaseRev)}</th>
                 </tr>
               </tfoot>
             </table>

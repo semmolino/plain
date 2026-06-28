@@ -88,14 +88,13 @@ async function listOffers(supabase, { tenantId }) {
   const contactIds = [...new Set(rows.map(r => r.CONTACT_ID).filter(Boolean))];
   const projectIds = [...new Set(rows.map(r => r.PROJECT_ID).filter(Boolean))];
 
-  const [statusRes, empRes, addrRes, contactRes, structRes, projectRes, feeCalcMasterRes] = await Promise.all([
+  const [statusRes, empRes, addrRes, contactRes, structRes, projectRes] = await Promise.all([
     statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, NAME_SHORT').in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
     contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
     supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
     projectIds.length ? supabase.from('PROJECT').select('ID, NAME_SHORT').in('ID', projectIds) : Promise.resolve({ data: [] }),
-    supabase.from('FEE_CALCULATION_MASTER').select('ID, OFFER_ID').in('OFFER_ID', offerIds).eq('TENANT_ID', tenantId),
   ]);
 
   const statusMap  = new Map((statusRes.data  || []).map(r => [r.ID, r]));
@@ -121,33 +120,12 @@ async function listOffers(supabase, { tenantId }) {
     }
   }
 
-  // Add HOAI fee-calculation totals (phases + BL + surcharges) per offer
-  const feeCalcMasters = feeCalcMasterRes.data || [];
-  if (feeCalcMasters.length) {
-    const masterIds = feeCalcMasters.map(m => m.ID);
-    const masterToOffer = new Map(feeCalcMasters.map(m => [m.ID, m.OFFER_ID]));
-    const [phaseRes, hoaiBLRes, surRes] = await Promise.all([
-      supabase.from('FEE_CALCULATION_PHASE').select('FEE_MASTER_ID, PHASE_REVENUE').in('FEE_MASTER_ID', masterIds),
-      supabase.from('FEE_CALCULATION_BL').select('FEE_CALC_MASTER_ID, AMOUNT').in('FEE_CALC_MASTER_ID', masterIds).eq('TENANT_ID', tenantId),
-      supabase.from('FEE_CALCULATION_SURCHARGES').select('FEE_CALC_MASTER_ID, AMOUNT').in('FEE_CALC_MASTER_ID', masterIds).eq('TENANT_ID', tenantId),
-    ]);
-    const hoaiTotal = new Map();
-    for (const p of (phaseRes.data || [])) {
-      const oId = masterToOffer.get(p.FEE_MASTER_ID);
-      if (oId) hoaiTotal.set(oId, (hoaiTotal.get(oId) || 0) + (Number(p.PHASE_REVENUE) || 0));
-    }
-    for (const b of (hoaiBLRes.data || [])) {
-      const oId = masterToOffer.get(b.FEE_CALC_MASTER_ID);
-      if (oId) hoaiTotal.set(oId, (hoaiTotal.get(oId) || 0) + (Number(b.AMOUNT) || 0));
-    }
-    for (const s of (surRes.data || [])) {
-      const oId = masterToOffer.get(s.FEE_CALC_MASTER_ID);
-      if (oId) hoaiTotal.set(oId, (hoaiTotal.get(oId) || 0) + (Number(s.AMOUNT) || 0));
-    }
-    for (const [oId, total] of hoaiTotal) {
-      totalMap.set(oId, fmt2((totalMap.get(oId) || 0) + total));
-    }
-  }
+  // NB: HOAI fee-calculations attached to an offer are materialised as
+  // OFFER_STRUCTURE rows (siehe attachFeeCalcToOfferStructure), d. h. ihre
+  // Leistungsphasen sind bereits in der Leaf-Summe oben enthalten. Sie hier
+  // zusätzlich direkt aus FEE_CALCULATION_PHASE/BL/SURCHARGES aufzusummieren
+  // zählte die Honorare doppelt. Die Angebotssumme entspricht jetzt – wie im
+  // Angebots-PDF – ausschließlich der OFFER_STRUCTURE.
 
   return rows.map(r => {
     const emp     = empMap.get(r.EMPLOYEE_ID);

@@ -439,6 +439,12 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     if (phaseDefsErr) return res.status(500).json({ error: phaseDefsErr.message });
     const phaseMap = new Map((phaseDefs || []).map((row) => [row.ID, row]));
 
+    // In LPH-Reihenfolge sortieren (statt FEE_PHASE_ID), damit die angelegten
+    // Projektelemente die gleiche Reihenfolge wie der Wizard haben.
+    activePhases.sort((a, b) =>
+      svc.feePhaseSortKey(phaseMap.get(a.FEE_PHASE_ID)?.NAME_SHORT) - svc.feePhaseSortKey(phaseMap.get(b.FEE_PHASE_ID)?.NAME_SHORT)
+      || (Number(a.FEE_PHASE_ID) - Number(b.FEE_PHASE_ID)));
+
     const extrasPercent = Number(father.EXTRAS_PERCENT ?? 0) || 0;
 
     // Load surcharges + BL items to compute per-phase and per-BL allocation (soft-fail)

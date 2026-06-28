@@ -104,7 +104,18 @@ function calculatePhaseRevenue(feePercent, revenueBase) {
   const pct = toNumberOrNull(feePercent);
   const base = toNumberOrNull(revenueBase);
   if (pct === null || base === null) return null;
-  return (pct * base) / 100;
+  // Auf 2 Nachkommastellen runden (fmt2) — sonst entstehen Werte wie
+  // 1788.045 / 25543.500000000004, die sich in Summen und PDF fortpflanzen.
+  return Math.round(((pct * base) / 100) * 100) / 100;
+}
+
+// Sortierschlüssel für Leistungsphasen: führende Zahl aus NAME_SHORT
+// ("LPH 1" → 1). Ohne diesen Schlüssel werden Phasen nach FEE_PHASE_ID
+// sortiert — bei Leistungsbildern, deren Phasen nicht in LPH-Reihenfolge
+// angelegt wurden (z. B. Bauleitplanung), erscheint dann "LPH 2, LPH 3, LPH 1".
+function feePhaseSortKey(nameShort) {
+  const m = String(nameShort || "").match(/\d+/);
+  return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
 }
 
 async function loadPhaseRowsWithLabels(supabase, calcMasterId) {
@@ -123,14 +134,20 @@ async function loadPhaseRowsWithLabels(supabase, calcMasterId) {
     phaseMap = new Map((phases || []).map((p) => [p.ID, p]));
   }
 
-  return (phaseRows || []).map((row) => {
-    const phase = phaseMap.get(row.FEE_PHASE_ID) || {};
-    return {
-      ...row,
-      PHASE_LABEL: `${phase.NAME_SHORT || ""}: ${phase.NAME_LONG || ""}`.replace(/:\s*$/, ""),
-      FEE_PERCENT_BASE: row.FEE_PERCENT_BASE ?? phase.FEE_PERCENT ?? null,
-    };
-  });
+  return (phaseRows || [])
+    .map((row) => {
+      const phase = phaseMap.get(row.FEE_PHASE_ID) || {};
+      return {
+        ...row,
+        PHASE_LABEL: `${phase.NAME_SHORT || ""}: ${phase.NAME_LONG || ""}`.replace(/:\s*$/, ""),
+        FEE_PERCENT_BASE: row.FEE_PERCENT_BASE ?? phase.FEE_PERCENT ?? null,
+      };
+    })
+    .sort((a, b) => {
+      const ka = feePhaseSortKey(phaseMap.get(a.FEE_PHASE_ID)?.NAME_SHORT);
+      const kb = feePhaseSortKey(phaseMap.get(b.FEE_PHASE_ID)?.NAME_SHORT);
+      return ka - kb || (Number(a.FEE_PHASE_ID) - Number(b.FEE_PHASE_ID));
+    });
 }
 
 function buildProjectProgressRow(structureRow) {
@@ -191,6 +208,7 @@ module.exports = {
   calculateRevenueFields,
   getRevenueByKx,
   calculatePhaseRevenue,
+  feePhaseSortKey,
   loadPhaseRowsWithLabels,
   buildProjectProgressRow,
   recomputeStructureAggregates,
