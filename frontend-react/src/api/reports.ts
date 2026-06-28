@@ -225,6 +225,17 @@ export const fetchProjectsTimeline = (filter: DateFilter = { mode: 'now' }, proj
   return apiClient.get<{ data: TimelinePoint[] }>(`/reports/projects/timeline${qs ? `?${qs}` : ''}`)
 }
 
+// Offener Dashboard-Verlauf (kein reports.view nötig). scope='own' → nur Projekte,
+// in denen der eingeloggte Nutzer Projektleiter ist (Projektleiter-Dashboard).
+export const fetchDashboardProjectsTimeline = (scope: 'own' | undefined, dateFrom?: string, dateTo?: string) => {
+  const params = new URLSearchParams()
+  if (scope)    params.set('scope', scope)
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo)   params.set('date_to',   dateTo)
+  const qs = params.toString()
+  return apiClient.get<{ data: TimelinePoint[] }>(`/reports/dashboard/projects-timeline${qs ? `?${qs}` : ''}`)
+}
+
 // ── Dashboard alerts & role-specific data ─────────────────────────────────────
 
 export interface DashboardAlert {

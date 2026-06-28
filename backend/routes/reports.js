@@ -139,6 +139,153 @@ module.exports = (supabase) => {
   }
   const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 
+  // Aggregierter Projektverlauf (kumulierte Honorar/Leistung/Kosten/Abgerechnet/
+  // Bezahlt-Kurven über die Zeit). projectIds = Array (Teilmenge) ODER null (alle
+  // Projekte des Mandanten). Wird von /projects/timeline UND /dashboard/projects-
+  // timeline genutzt. Gibt ein (ggf. leeres) Array zurück.
+  async function buildProjectsTimeline(tenantId, dateFrom, dateTo, projectIds) {
+    let structQ = supabase
+      .from("PROJECT_STRUCTURE")
+      .select("ID, PROJECT_ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, created_at")
+      .eq("TENANT_ID", tenantId);
+    if (projectIds) structQ = structQ.in("PROJECT_ID", projectIds);
+    const { data: structures, error: sErr } = await structQ;
+    if (sErr) throw sErr;
+    if (!structures || structures.length === 0) return [];
+
+    const fatherIds = new Set(structures.map(s => s.FATHER_ID).filter(Boolean));
+    const leaves    = structures.filter(s => !fatherIds.has(s.ID));
+    const leafIds   = leaves.map(s => s.ID);
+    if (leafIds.length === 0) return [];
+
+    const { data: progressRows } = await supabase
+      .from("PROJECT_PROGRESS")
+      .select("STRUCTURE_ID, REVENUE, EXTRAS, REVENUE_COMPLETION, EXTRAS_COMPLETION, created_at")
+      .eq("TENANT_ID", tenantId)
+      .in("STRUCTURE_ID", leafIds)
+      .order("created_at", { ascending: true });
+
+    let tecQ = supabase
+      .from("TEC")
+      .select("STRUCTURE_ID, DATE_VOUCHER, CP_TOT, SP_TOT")
+      .eq("TENANT_ID", tenantId)
+      .in("STRUCTURE_ID", leafIds)
+      .order("DATE_VOUCHER", { ascending: true });
+    if (dateTo) tecQ = tecQ.lte("DATE_VOUCHER", dateTo);
+    const { data: tecRows } = await tecQ;
+
+    let ppQ = supabase
+      .from("PARTIAL_PAYMENT")
+      .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+      .eq("TENANT_ID", tenantId)
+      .eq("STATUS_ID", 2)
+      .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+    if (projectIds) ppQ = ppQ.in("PROJECT_ID", projectIds);
+    if (dateTo) ppQ = ppQ.lte("PARTIAL_PAYMENT_DATE", dateTo);
+    const { data: ppRows } = await ppQ;
+
+    let invRows = [];
+    try {
+      let invQ = supabase
+        .from("INVOICE")
+        .select("INVOICE_DATE, TOTAL_AMOUNT_NET")
+        .eq("TENANT_ID", tenantId)
+        .eq("STATUS_ID", 2)
+        .order("INVOICE_DATE", { ascending: true });
+      if (projectIds) invQ = invQ.in("PROJECT_ID", projectIds);
+      if (dateTo) invQ = invQ.lte("INVOICE_DATE", dateTo);
+      const { data: inv } = await invQ;
+      invRows = inv || [];
+    } catch (_) {}
+
+    let payQ = supabase
+      .from("PAYMENT")
+      .select("PAYMENT_DATE, AMOUNT_PAYED_NET")
+      .eq("TENANT_ID", tenantId)
+      .order("PAYMENT_DATE", { ascending: true });
+    if (projectIds) payQ = payQ.in("PROJECT_ID", projectIds);
+    if (dateTo) payQ = payQ.lte("PAYMENT_DATE", dateTo);
+    const { data: payRows } = await payQ;
+
+    const dateSet = new Set();
+    (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
+    (tecRows      || []).forEach(r => { if (r.DATE_VOUCHER) dateSet.add(r.DATE_VOUCHER); });
+    (ppRows       || []).forEach(r => { if (r.PARTIAL_PAYMENT_DATE) dateSet.add(r.PARTIAL_PAYMENT_DATE); });
+    invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
+    (payRows      || []).forEach(r => { if (r.PAYMENT_DATE) dateSet.add(r.PAYMENT_DATE); });
+
+    if (!dateTo) dateSet.add(new Date().toISOString().substring(0, 10));
+
+    let sortedDates = [...dateSet].sort();
+    if (dateFrom) sortedDates = sortedDates.filter(d => d >= dateFrom);
+    if (dateTo)   sortedDates = sortedDates.filter(d => d <= dateTo);
+    if (sortedDates.length === 0) return [];
+
+    const distinctProjectIds = [...new Set(structures.map(s => s.PROJECT_ID).filter(Boolean))];
+    const parentSurchargesMap = await loadParentSurchargesByProject(distinctProjectIds);
+    let totalParentSurcharges = 0;
+    for (const v of parentSurchargesMap.values()) totalParentSurcharges += v;
+
+    return sortedDates.map(date => {
+      let honorar = 0;
+      let leistungsstand = 0;
+
+      for (const leaf of leaves) {
+        const leafProg = (progressRows || []).filter(r =>
+          r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
+        );
+        const leafTec = (tecRows || []).filter(r =>
+          r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date
+        );
+
+        if (leaf.BILLING_TYPE_ID === 2) {
+          const sp = leafTec.reduce((s, r) => s + +(r.SP_TOT || 0), 0);
+          honorar        += sp;
+          leistungsstand += sp;
+        } else {
+          const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
+          if (lastBudget) {
+            honorar += +(lastBudget.REVENUE || 0) + +(lastBudget.EXTRAS || 0);
+          } else {
+            honorar += +(leaf.REVENUE || 0) + +(leaf.EXTRAS || 0);
+          }
+          const lastCompl = [...leafProg].reverse().find(r => r.REVENUE_COMPLETION != null);
+          if (lastCompl) {
+            leistungsstand += +(lastCompl.REVENUE_COMPLETION || 0) + +(lastCompl.EXTRAS_COMPLETION || 0);
+          }
+        }
+      }
+
+      if (totalParentSurcharges) {
+        const ratio = honorar > 0 ? Math.min(1, leistungsstand / honorar) : 0;
+        honorar        += totalParentSurcharges;
+        leistungsstand += totalParentSurcharges * ratio;
+      }
+
+      const kosten = (tecRows || [])
+        .filter(r => r.DATE_VOUCHER <= date)
+        .reduce((s, r) => s + +(r.CP_TOT || 0), 0);
+
+      const abgerechnet =
+        (ppRows || []).filter(r => r.PARTIAL_PAYMENT_DATE <= date)
+          .reduce((s, r) => s + +(r.AMOUNT_NET || 0) + +(r.AMOUNT_EXTRAS_NET || 0), 0) +
+        invRows.filter(r => r.INVOICE_DATE <= date)
+          .reduce((s, r) => s + +(r.TOTAL_AMOUNT_NET || 0), 0);
+
+      const bezahlt = (payRows || []).filter(r => r.PAYMENT_DATE <= date)
+        .reduce((s, r) => s + +(r.AMOUNT_PAYED_NET || 0), 0);
+
+      return {
+        DATE:                 date,
+        HONORAR_NET:          round2(honorar),
+        LEISTUNGSSTAND_VALUE: round2(leistungsstand),
+        KOSTEN_TOTAL:         round2(kosten),
+        ABGERECHNET_NET:      round2(abgerechnet),
+        BEZAHLT_NET:          round2(bezahlt),
+      };
+    });
+  }
+
   // Header KPIs (one row per project)
   router.get("/project/:projectId/header", async (req, res) => {
     const tenantId = requireTenantId(req, res);
@@ -461,157 +608,8 @@ module.exports = (supabase) => {
     if (hasProjectFilter && projectIds.length === 0) return res.json({ data: [] });
 
     try {
-      // 1. Structures for the selected projects (or the entire tenant)
-      let structQ = supabase
-        .from("PROJECT_STRUCTURE")
-        .select("ID, PROJECT_ID, FATHER_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, created_at")
-        .eq("TENANT_ID", tenantId);
-      if (projectIds) structQ = structQ.in("PROJECT_ID", projectIds);
-      const { data: structures, error: sErr } = await structQ;
-      if (sErr) return res.status(500).json({ error: sErr.message });
-      if (!structures || structures.length === 0) return res.json({ data: [] });
-
-      const fatherIds = new Set(structures.map(s => s.FATHER_ID).filter(Boolean));
-      const leaves    = structures.filter(s => !fatherIds.has(s.ID));
-      const leafIds   = leaves.map(s => s.ID);
-      if (leafIds.length === 0) return res.json({ data: [] });
-
-      // 2. PROJECT_PROGRESS for all leaves (full history)
-      const { data: progressRows } = await supabase
-        .from("PROJECT_PROGRESS")
-        .select("STRUCTURE_ID, REVENUE, EXTRAS, REVENUE_COMPLETION, EXTRAS_COMPLETION, created_at")
-        .eq("TENANT_ID", tenantId)
-        .in("STRUCTURE_ID", leafIds)
-        .order("created_at", { ascending: true });
-
-      // 3. TEC for all leaves (up to dateTo)
-      let tecQ = supabase
-        .from("TEC")
-        .select("STRUCTURE_ID, DATE_VOUCHER, CP_TOT, SP_TOT")
-        .eq("TENANT_ID", tenantId)
-        .in("STRUCTURE_ID", leafIds)
-        .order("DATE_VOUCHER", { ascending: true });
-      if (dateTo) tecQ = tecQ.lte("DATE_VOUCHER", dateTo);
-      const { data: tecRows } = await tecQ;
-
-      // 4. Partial payments (selected projects, or all tenant projects)
-      let ppQ = supabase
-        .from("PARTIAL_PAYMENT")
-        .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
-        .eq("TENANT_ID", tenantId)
-        .eq("STATUS_ID", 2)
-        .order("PARTIAL_PAYMENT_DATE", { ascending: true });
-      if (projectIds) ppQ = ppQ.in("PROJECT_ID", projectIds);
-      if (dateTo) ppQ = ppQ.lte("PARTIAL_PAYMENT_DATE", dateTo);
-      const { data: ppRows } = await ppQ;
-
-      // 5. Invoices (selected projects, or all tenant projects)
-      let invRows = [];
-      try {
-        let invQ = supabase
-          .from("INVOICE")
-          .select("INVOICE_DATE, TOTAL_AMOUNT_NET")
-          .eq("TENANT_ID", tenantId)
-          .eq("STATUS_ID", 2)
-          .order("INVOICE_DATE", { ascending: true });
-        if (projectIds) invQ = invQ.in("PROJECT_ID", projectIds);
-        if (dateTo) invQ = invQ.lte("INVOICE_DATE", dateTo);
-        const { data: inv } = await invQ;
-        invRows = inv || [];
-      } catch (_) {}
-
-      // 6. Payments (selected projects, or all tenant projects)
-      let payQ = supabase
-        .from("PAYMENT")
-        .select("PAYMENT_DATE, AMOUNT_PAYED_NET")
-        .eq("TENANT_ID", tenantId)
-        .order("PAYMENT_DATE", { ascending: true });
-      if (projectIds) payQ = payQ.in("PROJECT_ID", projectIds);
-      if (dateTo) payQ = payQ.lte("PAYMENT_DATE", dateTo);
-      const { data: payRows } = await payQ;
-
-      // 7. Collect event dates
-      const dateSet = new Set();
-      (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
-      (tecRows      || []).forEach(r => { if (r.DATE_VOUCHER) dateSet.add(r.DATE_VOUCHER); });
-      (ppRows       || []).forEach(r => { if (r.PARTIAL_PAYMENT_DATE) dateSet.add(r.PARTIAL_PAYMENT_DATE); });
-      invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
-      (payRows      || []).forEach(r => { if (r.PAYMENT_DATE) dateSet.add(r.PAYMENT_DATE); });
-
-      if (!dateTo) dateSet.add(new Date().toISOString().substring(0, 10));
-
-      let sortedDates = [...dateSet].sort();
-      if (dateFrom) sortedDates = sortedDates.filter(d => d >= dateFrom);
-      if (dateTo)   sortedDates = sortedDates.filter(d => d <= dateTo);
-
-      if (sortedDates.length === 0) return res.json({ data: [] });
-
-      // Parent-level surcharges across all projects in this aggregation
-      const distinctProjectIds = [...new Set(structures.map(s => s.PROJECT_ID).filter(Boolean))];
-      const parentSurchargesMap = await loadParentSurchargesByProject(distinctProjectIds);
-      let totalParentSurcharges = 0;
-      for (const v of parentSurchargesMap.values()) totalParentSurcharges += v;
-
-      const result = sortedDates.map(date => {
-        let honorar = 0;
-        let leistungsstand = 0;
-
-        for (const leaf of leaves) {
-          const leafProg = (progressRows || []).filter(r =>
-            r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
-          );
-          const leafTec = (tecRows || []).filter(r =>
-            r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date
-          );
-
-          if (leaf.BILLING_TYPE_ID === 2) {
-            const sp = leafTec.reduce((s, r) => s + +(r.SP_TOT || 0), 0);
-            honorar        += sp;
-            leistungsstand += sp;
-          } else {
-            const lastBudget = [...leafProg].reverse().find(r => r.REVENUE != null);
-            if (lastBudget) {
-              honorar += +(lastBudget.REVENUE || 0) + +(lastBudget.EXTRAS || 0);
-            } else {
-              honorar += +(leaf.REVENUE || 0) + +(leaf.EXTRAS || 0);
-            }
-            const lastCompl = [...leafProg].reverse().find(r => r.REVENUE_COMPLETION != null);
-            if (lastCompl) {
-              leistungsstand += +(lastCompl.REVENUE_COMPLETION || 0) + +(lastCompl.EXTRAS_COMPLETION || 0);
-            }
-          }
-        }
-
-        if (totalParentSurcharges) {
-          const ratio = honorar > 0 ? Math.min(1, leistungsstand / honorar) : 0;
-          honorar        += totalParentSurcharges;
-          leistungsstand += totalParentSurcharges * ratio;
-        }
-
-        const kosten = (tecRows || [])
-          .filter(r => r.DATE_VOUCHER <= date)
-          .reduce((s, r) => s + +(r.CP_TOT || 0), 0);
-
-        const abgerechnet =
-          (ppRows || []).filter(r => r.PARTIAL_PAYMENT_DATE <= date)
-            .reduce((s, r) => s + +(r.AMOUNT_NET || 0) + +(r.AMOUNT_EXTRAS_NET || 0), 0) +
-          invRows.filter(r => r.INVOICE_DATE <= date)
-            .reduce((s, r) => s + +(r.TOTAL_AMOUNT_NET || 0), 0);
-
-        const bezahlt = (payRows || []).filter(r => r.PAYMENT_DATE <= date)
-          .reduce((s, r) => s + +(r.AMOUNT_PAYED_NET || 0), 0);
-
-        return {
-          DATE:                 date,
-          HONORAR_NET:          round2(honorar),
-          LEISTUNGSSTAND_VALUE: round2(leistungsstand),
-          KOSTEN_TOTAL:         round2(kosten),
-          ABGERECHNET_NET:      round2(abgerechnet),
-          BEZAHLT_NET:          round2(bezahlt),
-        };
-      });
-
-      res.json({ data: result });
+      const data = await buildProjectsTimeline(tenantId, dateFrom, dateTo, projectIds);
+      res.json({ data });
     } catch (e) {
       res.status(500).json({ error: e.message || String(e) });
     }
@@ -1157,6 +1155,31 @@ module.exports = (supabase) => {
         raw: { revenue, directCosts, totalHours, employeeCount, projectEmployeeCount, backlog },
         kpis: { umsatzProMitarbeiter, anteilProjektmitarbeiter, auftragsreichweite },
       }});
+    } catch (e) {
+      res.status(500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  // Aggregierter Projektverlauf fürs Dashboard (offen, kein reports.view nötig).
+  // scope=own → nur Projekte, in denen der Nutzer Projektleiter ist (Projektleiter-
+  // Dashboard). date_from/date_to optional (Period-Achse).
+  router.get("/dashboard/projects-timeline", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const dateFrom = req.query.date_from || null;
+    const dateTo   = req.query.date_to   || null;
+    try {
+      let projectIds = null;
+      if (req.query.scope === "own") {
+        if (!req.employeeId) return res.json({ data: [] });
+        const { data: own } = await supabase
+          .from("PROJECT").select("ID")
+          .eq("TENANT_ID", tenantId).eq("PROJECT_MANAGER_ID", req.employeeId);
+        projectIds = (own || []).map(r => r.ID);
+        if (projectIds.length === 0) return res.json({ data: [] });
+      }
+      const data = await buildProjectsTimeline(tenantId, dateFrom, dateTo, projectIds);
+      res.json({ data });
     } catch (e) {
       res.status(500).json({ error: e?.message || String(e) });
     }

@@ -27,6 +27,7 @@ import {
   fetchTeamHours,
   fetchDashboardOpenInvoices,
   fetchDashboardCompanySnapshot,
+  fetchDashboardProjectsTimeline,
   type DashboardKpis,
   type DashboardProject,
   type DashboardMonthly,
@@ -234,10 +235,12 @@ function StatusList({ items }: { items: DashboardByStatus[] }) {
 
 // ── Timeline chart ────────────────────────────────────────────────────────────
 
-function DashboardTimeline({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; dateTo: string; scope?: 'own' }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['projects-timeline', dateFrom, dateTo],
-    queryFn:  () => fetchProjectsTimeline({ mode: 'period', dateFrom, dateTo }),
+    queryKey: ['projects-timeline', scope ?? 'all', dateFrom, dateTo],
+    queryFn:  () => scope
+      ? fetchDashboardProjectsTimeline(scope, dateFrom, dateTo)
+      : fetchProjectsTimeline({ mode: 'period', dateFrom, dateTo }),
     staleTime: 300000,
   })
 
@@ -833,13 +836,14 @@ function ControllerView({
 // Projektleiter-Dashboard: nur die Projekte, in denen der eingeloggte Nutzer
 // Projektleiter ist (server-seitig per scope=own gefiltert) — reine Projekt-Ampel,
 // keine Abteilung-/Projektleiter-Filter, keine Übersicht/Mitarbeiter-Tabs.
-function ProjektleiterView({ riskProjects }: { riskProjects: RiskProject[] }) {
+function ProjektleiterView({ riskProjects, dateFrom, dateTo }: { riskProjects: RiskProject[]; dateFrom: string; dateTo: string }) {
   return (
     <>
       <div style={{ fontSize: 12, color: 'var(--text-4)', margin: '2px 0 12px' }}>
         Projekte, in denen du als Projektleiter eingetragen bist — bewertet nach aktuellem Gesamtstand.
       </div>
       <RisikoView projects={riskProjects} />
+      <DashboardTimeline dateFrom={dateFrom} dateTo={dateTo} scope="own" />
     </>
   )
 }
@@ -1566,7 +1570,7 @@ function DashboardFilterBar({
         <span className="dash-filter-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           Zeitraum
           <InfoHint title="Was beeinflusst der Zeitraum?">
-            Begrenzt Kosten, Stunden und Leistungsstand auf den gewählten Zeitraum (Übersicht &amp; Mitarbeiter). Honorar bzw. Budget bleiben das volle Projektvolumen. Die Projekt-Ampel rechnet immer kumuliert (Stand heute) und ist vom Zeitraum unabhängig.
+            Begrenzt Kosten, Stunden, Leistungsstand und die Verlaufsgrafik auf den gewählten Zeitraum. Honorar bzw. Budget bleiben das volle Projektvolumen. Die Projekt-Ampel rechnet immer kumuliert (Stand heute) und ist vom Zeitraum unabhängig.
           </InfoHint>
         </span>
         <select className="inline-select" value={filters.zeitraum}
@@ -1737,7 +1741,7 @@ export function DashboardPage() {
 
       <RecentMixedList limit={8} />
 
-      {dashboardRole && (isGl || isController) && (
+      {dashboardRole && (isGl || isController || isBl) && (
         <DashboardFilterBar
           filters={filters}
           onChange={patch => setFilters(f => ({ ...f, ...patch }))}
@@ -1767,7 +1771,7 @@ export function DashboardPage() {
       )}
 
       {!isLoading && dashboardRole === 'bereichsleiter' && (
-        <ProjektleiterView riskProjects={riskProjects} />
+        <ProjektleiterView riskProjects={riskProjects} dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo} />
       )}
 
       {isMitarbeiter && employeeId !== null && (
