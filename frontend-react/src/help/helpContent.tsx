@@ -20,6 +20,73 @@ export interface HelpEntry {
 }
 
 export const HELP = {
+  // ── Geführter Datenimport (Onboarding) ───────────────────────────────────
+  'import.overview': {
+    title: 'Geführter Datenimport',
+    body: (
+      <>
+        Übernimm bestehende Daten aus Excel/CSV, statt alles neu zu tippen. Der Import läuft in drei
+        Schritten: <strong>Vorlage füllen → hochladen & prüfen → importieren</strong>. Es wird nichts
+        gespeichert, bevor du die Vorschau bestätigt hast. Jeder Import ist ein nachvollziehbarer
+        „Stapel", den du als Ganzes wieder zurücksetzen kannst.
+      </>
+    ),
+  },
+  'import.template': {
+    title: 'Vorlage verwenden',
+    body: (
+      <>
+        Die heruntergeladene Excel-Vorlage hat genau die richtigen Spalten (Pflichtfelder mit
+        <code> *</code>) und eine Beispielzeile. Wenn du sie nutzt, ordnet das System die Spalten
+        automatisch korrekt zu und es entstehen kaum Fehler. Eigene Dateien gehen auch — dann ggf. die
+        Zuordnung im nächsten Schritt anpassen.
+      </>
+    ),
+  },
+  'import.mapping': {
+    title: 'Spalten zuordnen',
+    body: (
+      <>
+        Jedes Feld in plan&simple wird einer Spalte deiner Datei zugeordnet. Die Zuordnung wird anhand
+        der Spaltenüberschriften automatisch vorgeschlagen. Stimmt etwas nicht, hier per Auswahlfeld
+        korrigieren — die Vorschau aktualisiert sich sofort. Nicht benötigte Felder auf
+        „nicht importieren" stellen.
+      </>
+    ),
+  },
+  'import.preview': {
+    title: 'Vorschau & Status',
+    body: (
+      <>
+        Jede Zeile bekommt einen Status: <strong>OK</strong> (wird importiert),
+        <strong> Dublette</strong> (gibt es schon — wird standardmäßig übersprungen) oder
+        <strong> Fehler</strong> (Pflichtangabe fehlt/ungültig — wird übersprungen, mit Hinweis).
+        Importiert werden nur OK-Zeilen. Fehlerhafte Zeilen in der Datei korrigieren und erneut
+        hochladen.
+      </>
+    ),
+  },
+  'import.duplicates': {
+    title: 'Dubletten',
+    body: (
+      <>
+        Eine Dublette ist ein Datensatz, den es bereits gibt oder der doppelt in der Datei steht
+        (erkannt z. B. an Name + PLZ). Standardmäßig werden Dubletten übersprungen, damit nichts
+        doppelt entsteht. Nur aktivieren, wenn du sie bewusst zusätzlich anlegen willst.
+      </>
+    ),
+  },
+  'import.rollback': {
+    title: 'Import zurücksetzen',
+    body: (
+      <>
+        Jeder Import lässt sich vollständig rückgängig machen — alle damit angelegten Datensätze werden
+        gelöscht. <strong>Schutz:</strong> Hängt inzwischen andere Arbeit daran (z. B. ein Projekt an
+        einer importierten Adresse), wird das Zurücksetzen blockiert und nennt dir, was im Weg steht.
+      </>
+    ),
+  },
+
   // ── Buchungsarten: Pauschalen & Stückleistungen ──────────────────────────
   'bookings.special': {
     title: 'Pauschalen & Stückleistungen',

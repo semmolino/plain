@@ -3,6 +3,7 @@ import { RollenSection } from '@/pages/admin/RollenSection'
 import { BuchungsartenSection } from '@/pages/admin/BuchungsartenSection'
 import { BuchungstextvorlagenSection } from '@/pages/admin/BuchungstextvorlagenSection'
 import { DokumentvorlagenSection } from '@/pages/admin/DokumentvorlagenSection'
+import { ImportSection } from '@/pages/admin/ImportSection'
 import { Can } from '@/components/ui/Can'
 import { useFilterTabs } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
@@ -66,6 +67,7 @@ import { useAuthStore } from '@/store/authStore'
 
 const PAGE_TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'stammdaten',              label: 'Stammdaten',              permissions: ['settings.basedata.view','settings.basedata.edit'] },
+  { id: 'datenimport',             label: 'Datenimport',             permissions: ['import.manage'] },
   { id: 'vorbelegungen',           label: 'Vorbelegungen',           permissions: ['settings.defaults.edit'] },
   { id: 'benachrichtigungen',      label: 'Benachrichtigungen',      permissions: ['settings.notifications.edit'], feature: 'settings.notifications' },
   { id: 'monatsabschluss',         label: 'Monatsabschluss',         permissions: ['settings.monthly_close.edit'], feature: 'employees.month_close' },
@@ -3912,6 +3914,7 @@ export function AdminPage() {
             <ArbeitszeitmodelleSection />
           </>
         )}
+        {tab === 'datenimport'           && <ImportSection />}
         {tab === 'nummernkreise'         && <NummernkreiseSection />}
         {tab === 'unternehmen'           && <UnternehmenSection />}
         {tab === 'email'                 && <EmailVersandSection />}
