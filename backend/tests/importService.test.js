@@ -7,9 +7,11 @@ const {
   parseBuffer,
   buildAutoMapping,
   buildPreview,
+  parseAmountDE,
   buildAddressEntry,
   buildEmployeeEntry,
   buildProjectEntry,
+  buildProjectFeeEntry,
 } = require("../services/importService");
 
 // Hilfs-Context für die Adress-Validierung (kein supabase nötig).
@@ -316,5 +318,84 @@ describe("buildPreview (project, dedup by number)", () => {
     expect(pv.summary.ok).toBe(1);
     expect(pv.summary.duplicate).toBe(2);
     expect(pv.summary.error).toBe(0);
+  });
+});
+
+// ── parseAmountDE ─────────────────────────────────────────────────────────────
+describe("parseAmountDE", () => {
+  it("parses plain and grouped numbers", () => {
+    expect(parseAmountDE("80000").value).toBe(80000);
+    expect(parseAmountDE("80.000").value).toBe(80000);
+    expect(parseAmountDE("1.234.567").value).toBe(1234567);
+  });
+  it("parses decimals (DE comma and EN dot)", () => {
+    expect(parseAmountDE("80.000,50").value).toBe(80000.5);
+    expect(parseAmountDE("1.234,56").value).toBe(1234.56);
+    expect(parseAmountDE("80000.50").value).toBe(80000.5);
+    expect(parseAmountDE("80,5").value).toBe(80.5);
+  });
+  it("handles currency symbol and blanks/garbage", () => {
+    expect(parseAmountDE("80.000 €").value).toBe(80000);
+    expect(parseAmountDE("").value).toBeNull();
+    expect(parseAmountDE("abc").invalid).toBe(true);
+  });
+});
+
+// ── Projekt-Honorar ───────────────────────────────────────────────────────────
+function makeFeeCtx() {
+  return {
+    projectsByNumber: new Map([
+      ["p-2024-012", { id: 1, name: "Neubau Kita", addressId: 40, contactId: 50 }],
+      ["p-2024-013", { id: 2, name: "Sanierung",   addressId: 41, contactId: 51 }],
+    ]),
+    existingKeys: new Set(["p-2024-013"]), // hat schon Struktur
+    defaults: {},
+  };
+}
+
+describe("buildProjectFeeEntry", () => {
+  const ctx = makeFeeCtx();
+
+  it("resolves the project, parses the fee, defaults to Pauschal", () => {
+    const e = buildProjectFeeEntry({ project_number: "P-2024-012", fee: "80.000,00" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.projectId).toBe(1);
+    expect(e.dbRow.fee).toBe(80000);
+    expect(e.dbRow.billingTypeId).toBe(1);
+    expect(e.dbRow.addressId).toBe(40);
+  });
+
+  it("flags an unknown project as error", () => {
+    const e = buildProjectFeeEntry({ project_number: "P-9999", fee: "1000" }, ctx);
+    expect(e.ok).toBe(false);
+  });
+
+  it("flags an invalid fee as error", () => {
+    const e = buildProjectFeeEntry({ project_number: "P-2024-012", fee: "achtzigtausend" }, ctx);
+    expect(e.ok).toBe(false);
+  });
+
+  it("detects hourly billing", () => {
+    const e = buildProjectFeeEntry({ project_number: "P-2024-012", fee: "5000", billing: "Stunden" }, ctx);
+    expect(e.dbRow.billingTypeId).toBe(2);
+  });
+});
+
+describe("buildPreview (project_fee)", () => {
+  const ctx = makeFeeCtx();
+  const headers = ["Projektnummer", "Honorarsumme (netto)"];
+  function preview(rows) {
+    const parsed = { headers, rows: rows.map(r => ({ "Projektnummer": r[0], "Honorarsumme (netto)": r[1] })) };
+    return buildPreview({ domainKey: "project_fee", parsed, mapping: null, ctx });
+  }
+  it("ok for fresh project, duplicate when project already has structure, error when unknown", () => {
+    const pv = preview([
+      ["P-2024-012", "80000"],   // ok
+      ["P-2024-013", "50000"],   // duplicate (already has structure)
+      ["P-9999",     "1000"],    // error (unknown project)
+    ]);
+    expect(pv.summary.ok).toBe(1);
+    expect(pv.summary.duplicate).toBe(1);
+    expect(pv.summary.error).toBe(1);
   });
 });

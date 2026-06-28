@@ -9,7 +9,7 @@ import { useToast } from '@/store/toastStore'
 import {
   fetchImportDomains, fetchImportBatches, downloadImportTemplate,
   previewImport, commitImport, rollbackImportBatch,
-  type ImportPreview, type DuplicateMode, type ImportRowStatus, type ImportBatch,
+  type ImportPreview, type DuplicateMode, type StructureMode, type ImportRowStatus, type ImportBatch,
 } from '@/api/import'
 
 // ── Status-Darstellung ─────────────────────────────────────────────────────────
@@ -44,6 +44,7 @@ export function ImportSection() {
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [duplicateMode, setDuplicateMode] = useState<DuplicateMode>('skip')
+  const [structureMode, setStructureMode] = useState<StructureMode>('single')
   const [err, setErr] = useState<string | null>(null)
   const [done, setDone] = useState<{ inserted: number } | null>(null)
   const [confirmRollback, setConfirmRollback] = useState<ImportBatch | null>(null)
@@ -70,7 +71,7 @@ export function ImportSection() {
   })
 
   const commitMut = useMutation({
-    mutationFn: () => commitImport(domainKey, file!, mapping, duplicateMode),
+    mutationFn: () => commitImport(domainKey, file!, mapping, duplicateMode, domainKey === 'project_fee' ? structureMode : undefined),
     onSuccess: (res) => {
       setDone({ inserted: res.data.inserted })
       toast.success(`${res.data.inserted} Datensätze importiert`)
@@ -169,10 +170,18 @@ export function ImportSection() {
           <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
             Hinweis: Es werden <strong>Projekt-Stammdaten</strong> angelegt (Nummer, Name, Status, Typ,
             Projektleiter, Bauherr). Leistungsstruktur, Verträge und Honorarsummen fügst du anschließend
-            hinzu (z. B. über den HOAI-Assistenten). Status, Projektleiter und Bauherr werden über den
-            Namen zugeordnet — am besten Mitarbeiter und Adressen <em>vorher</em> importieren. Tipp: den
-            Projekt-Nummernkreis (Einstellungen → Nummernkreise) auf einen Zähler oberhalb deiner
-            höchsten importierten Nummer setzen.
+            hinzu (z. B. über den HOAI-Assistenten oder den Import „Projekt-Honorar"). Status, Projektleiter
+            und Bauherr werden über den Namen zugeordnet und sind Pflicht — daher Mitarbeiter und Adressen
+            <em> vorher</em> importieren. Tipp: den Projekt-Nummernkreis (Einstellungen → Nummernkreise) auf
+            einen Zähler oberhalb deiner höchsten importierten Nummer setzen.
+          </p>
+        )}
+        {domainKey === 'project_fee' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
+            Hinweis: Setzt die <strong>Honorarsumme</strong> auf bestehende Projekte (Zuordnung über die
+            Projektnummer) und erzeugt dabei Leistungsstruktur + Vertrag. Die Projekte müssen also
+            <em> vorher</em> importiert/angelegt sein. Projekte, die bereits eine Struktur haben, werden als
+            Dublette übersprungen.
           </p>
         )}
       </div>
@@ -268,6 +277,22 @@ export function ImportSection() {
               </table>
             </div>
             {preview.truncated && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>Nur die ersten 200 Zeilen werden angezeigt; importiert werden alle.</p>}
+
+            {domainKey === 'project_fee' && (
+              <div style={{ margin: '4px 0 12px', padding: 10, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2, #f8fafc)' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'inline-flex', alignItems: 'center' }}>
+                  Leistungsstruktur erzeugen als <HelpHint id="import.structure_mode" />
+                </div>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 4 }}>
+                  <input type="radio" name="structmode" checked={structureMode === 'single'} onChange={() => setStructureMode('single')} />
+                  Eine Honorar-Position (Pauschal) — Summe als ein Posten
+                </label>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                  <input type="radio" name="structmode" checked={structureMode === 'hoai'} onChange={() => setStructureMode('hoai')} />
+                  HOAI-Leistungsphasen LP1–9 — Summe nach §34-Standardprozenten verteilt
+                </label>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
               <button type="button" className="btn-primary" disabled={commitMut.isPending || previewMut.isPending || importableCount === 0}

@@ -76,6 +76,22 @@ export const HELP = {
       </>
     ),
   },
+  'import.structure_mode': {
+    title: 'Leistungsstruktur beim Honorar-Import',
+    body: (
+      <>
+        Die Honorarsumme wird als Leistungsstruktur am Projekt gespeichert. Du wählst, wie:
+        <br /><strong>Eine Honorar-Position</strong> — die volle Summe als ein Pauschal-Posten. Einfach,
+        immer korrekt, sofort abrechenbar; eine Aufteilung in Leistungsphasen ist später im
+        HOAI-Assistenten möglich.
+        <br /><strong>HOAI-Leistungsphasen LP1–9</strong> — die Summe wird nach den Standard-Prozentsätzen
+        des §34 (Gebäude) auf neun Phasen verteilt. Vollständiger, aber schematisch — bei real nur
+        teilweise erbrachten Altprojekten meist nachzubearbeiten.
+        <br />Für stundenbasierte Projekte (Abrechnungsart „Stunden") wird die Struktur ohne festen
+        Erlös angelegt (die Summe dient dann als Budget-Orientierung).
+      </>
+    ),
+  },
   'import.rollback': {
     title: 'Import zurücksetzen',
     body: (

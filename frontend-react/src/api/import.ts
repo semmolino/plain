@@ -69,6 +69,7 @@ export interface ImportBatch {
 }
 
 export type DuplicateMode = 'skip' | 'import'
+export type StructureMode = 'single' | 'hoai'
 
 // ── Calls ─────────────────────────────────────────────────────────────────────
 
@@ -78,19 +79,20 @@ export const fetchImportDomains = () =>
 export const downloadImportTemplate = (domain: string) =>
   downloadWithAuth(`/import/${domain}/template`, `plan-und-simple_Vorlage_${domain}.xlsx`)
 
-function buildForm(file: File, mapping?: Record<string, string> | null, duplicateMode?: DuplicateMode) {
+function buildForm(file: File, mapping?: Record<string, string> | null, duplicateMode?: DuplicateMode, structureMode?: StructureMode) {
   const fd = new FormData()
   fd.append('file', file)
   if (mapping && Object.keys(mapping).length) fd.append('mapping', JSON.stringify(mapping))
   if (duplicateMode) fd.append('duplicateMode', duplicateMode)
+  if (structureMode) fd.append('structureMode', structureMode)
   return fd
 }
 
 export const previewImport = (domain: string, file: File, mapping?: Record<string, string> | null) =>
   apiClient.post<{ data: ImportPreview }>(`/import/${domain}/preview`, buildForm(file, mapping))
 
-export const commitImport = (domain: string, file: File, mapping: Record<string, string>, duplicateMode: DuplicateMode) =>
-  apiClient.post<{ data: ImportCommitResult }>(`/import/${domain}/commit`, buildForm(file, mapping, duplicateMode))
+export const commitImport = (domain: string, file: File, mapping: Record<string, string>, duplicateMode: DuplicateMode, structureMode?: StructureMode) =>
+  apiClient.post<{ data: ImportCommitResult }>(`/import/${domain}/commit`, buildForm(file, mapping, duplicateMode, structureMode))
 
 export const fetchImportBatches = () =>
   apiClient.get<{ data: ImportBatch[] }>('/import/batches')

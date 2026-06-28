@@ -38,6 +38,18 @@ function parseDateISO(v) {
   if (m) return { value: `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` };
   return { value: null, invalid: true };
 }
+/** Währungsbetrag (DE/EN) → Zahl. Komma = Dezimaltrenner; reine 1.234.567-Gruppen = Tausender. */
+function parseAmountDE(v) {
+  let t = s(v).replace(/[€\s]/g, "");
+  if (!t) return { value: null };
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+  const n = Number(t);
+  if (!Number.isFinite(n)) return { value: null, invalid: true };
+  return { value: Math.round(n * 100) / 100 };
+}
+/** kaufmännisch auf 2 Nachkommastellen runden. */
+function fmt2(n) { return Math.round(n * 100) / 100; }
 
 // ── Domänen-Registry ─────────────────────────────────────────────────────────
 // Jede Domäne: table, fields (key/header/required/example/aliases), dependents
@@ -314,6 +326,153 @@ function buildProjectEntry(mapped, ctx) {
   return { ok, messages, dbRow, matchKey, display };
 }
 
+// ── Domäne: Projekt-Honorar (Leistungsstruktur + Vertrag) ────────────────────
+// HOAI §34 Gebäude — Standard-Prozentsätze der Leistungsphasen (Summe 100).
+const HOAI_LP = [
+  { code: "LP1", name: "Grundlagenermittlung",       pct: 2 },
+  { code: "LP2", name: "Vorplanung",                 pct: 7 },
+  { code: "LP3", name: "Entwurfsplanung",            pct: 15 },
+  { code: "LP4", name: "Genehmigungsplanung",        pct: 3 },
+  { code: "LP5", name: "Ausführungsplanung",         pct: 25 },
+  { code: "LP6", name: "Vorbereitung der Vergabe",   pct: 10 },
+  { code: "LP7", name: "Mitwirkung bei der Vergabe", pct: 4 },
+  { code: "LP8", name: "Objektüberwachung",          pct: 31 },
+  { code: "LP9", name: "Objektbetreuung",            pct: 3 },
+];
+
+const PROJECT_FEE_FIELDS = [
+  { key: "project_number", header: "Projektnummer",                  required: true,  example: "P-2024-012", aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
+  { key: "fee",            header: "Honorarsumme (netto)",           required: true,  example: "80000",      aliases: ["honorar", "honorarsumme", "summe", "betrag", "nettohonorar", "auftragssumme", "fee", "amount"] },
+  { key: "billing",        header: "Abrechnungsart (Pauschal/Stunden)", required: false, example: "Pauschal", aliases: ["abrechnungsart", "abrechnung", "billing", "billingtype", "art"] },
+];
+
+async function loadProjectFeeContext(supabase, tenantId) {
+  const { data: projects } = await supabase
+    .from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000);
+  const projectsByNumber = new Map();
+  const idToNumber = new Map();
+  for (const p of projects || []) {
+    if (!p.NAME_SHORT) continue;
+    projectsByNumber.set(norm(p.NAME_SHORT), { id: p.ID, name: p.NAME_LONG || p.NAME_SHORT, addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null });
+    idToNumber.set(p.ID, p.NAME_SHORT);
+  }
+  // Projekte, die bereits eine Leistungsstruktur haben → Honorar gilt als gesetzt (Dublette).
+  const { data: structs } = await supabase.from("PROJECT_STRUCTURE").select("PROJECT_ID").eq("TENANT_ID", tenantId).limit(100000);
+  const withStructure = new Set((structs || []).map((r) => r.PROJECT_ID));
+  const existingKeys = new Set();
+  for (const [id, num] of idToNumber) if (withStructure.has(id)) existingKeys.add(norm(num));
+  // Tenant-Defaults für den Vertrag (Währung/MwSt).
+  const { data: settingsRows } = await supabase.from("TENANT_SETTINGS").select("KEY, VALUE").eq("TENANT_ID", tenantId);
+  const defaults = {};
+  for (const r of settingsRows || []) defaults[r.KEY] = r.VALUE;
+  return { projectsByNumber, existingKeys, defaults };
+}
+
+function buildProjectFeeEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const number = s(mapped.project_number);
+  let proj = null;
+  if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
+  else {
+    proj = ctx.projectsByNumber.get(norm(number));
+    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}" nicht gefunden — zuerst das Projekt importieren/anlegen` }); ok = false; }
+  }
+
+  const feeRaw = s(mapped.fee);
+  const amount = parseAmountDE(feeRaw);
+  if (!feeRaw) { messages.push({ level: "error", text: "Honorarsumme fehlt (Pflichtfeld)" }); ok = false; }
+  else if (amount.invalid || amount.value == null) { messages.push({ level: "error", text: `Honorarsumme „${feeRaw}" ist keine gültige Zahl` }); ok = false; }
+  else if (amount.value < 0) { messages.push({ level: "error", text: "Honorarsumme darf nicht negativ sein" }); ok = false; }
+
+  const bin = norm(mapped.billing);
+  const billingTypeId = (bin.includes("stund") || bin.includes("tec") || bin.includes("zeit") || bin === "2") ? 2 : 1;
+
+  const dbRow = proj ? {
+    projectId: proj.id, projectNumber: number, projectName: proj.name,
+    addressId: proj.addressId, contactId: proj.contactId,
+    fee: amount.value ?? 0, billingTypeId,
+  } : null;
+
+  const matchKey = norm(number);
+  const display = {
+    number, name: proj ? proj.name : "",
+    fee: amount.value != null ? amount.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : feeRaw,
+    billing: billingTypeId === 2 ? "Stunden" : "Pauschal",
+  };
+  return { ok, messages, dbRow, matchKey, display };
+}
+
+// Custom-Commit: pro Projekt Struktur (1 Position ODER LP1–9) + Fortschritt + Vertrag,
+// alles mit IMPORT_BATCH_ID getaggt.
+async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, options }) {
+  const mode = options?.structureMode === "hoai" ? "hoai" : "single";
+  const defaults = ctx.defaults || {};
+  let done = 0;
+
+  for (const r of rows) {
+    const e = r._dbRow;
+    const isPauschal = e.billingTypeId === 1;
+
+    // 1) Struktur-Knoten
+    let nodes;
+    if (mode === "hoai") {
+      let allocated = 0;
+      nodes = HOAI_LP.map((lp) => {
+        const rev = isPauschal ? fmt2(e.fee * lp.pct / 100) : 0;
+        allocated = fmt2(allocated + rev);
+        return { NAME_SHORT: lp.code, NAME_LONG: lp.name, REVENUE: rev };
+      });
+      if (isPauschal) {
+        const diff = fmt2(e.fee - allocated);          // Rundungsrest auf LP8 (größte Phase)
+        if (diff !== 0) nodes[7].REVENUE = fmt2(nodes[7].REVENUE + diff);
+      }
+    } else {
+      nodes = [{ NAME_SHORT: "Honorar", NAME_LONG: isPauschal ? "Honorar (Pauschal)" : "Honorar (Stunden)", REVENUE: isPauschal ? fmt2(e.fee) : 0 }];
+    }
+
+    const structRows = nodes.map((n) => ({
+      NAME_SHORT: n.NAME_SHORT, NAME_LONG: n.NAME_LONG, PROJECT_ID: e.projectId,
+      BILLING_TYPE_ID: e.billingTypeId, FATHER_ID: null, REVENUE: n.REVENUE,
+      EXTRAS_PERCENT: 0, EXTRAS: 0, COSTS: 0,
+      REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+      TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+    }));
+    const { data: created, error: psErr } = await supabase
+      .from("PROJECT_STRUCTURE").insert(structRows).select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT");
+    if (psErr) throw { status: 500, message: `Struktur für Projekt ${e.projectNumber} fehlgeschlagen: ${psErr.message}` };
+
+    // 2) Fortschritt
+    const progRows = (created || []).map((n) => ({
+      STRUCTURE_ID: n.ID, TENANT_ID: tenantId, REVENUE: n.REVENUE ?? 0,
+      EXTRAS_PERCENT: n.EXTRAS_PERCENT ?? 0, EXTRAS: n.EXTRAS ?? 0,
+      REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+      IMPORT_BATCH_ID: batchId,
+    }));
+    if (progRows.length) {
+      const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert(progRows);
+      if (prErr) throw { status: 500, message: `Fortschritt für Projekt ${e.projectNumber} fehlgeschlagen: ${prErr.message}` };
+    }
+
+    // 3) Vertrag (nur wenn noch keiner existiert)
+    const { data: existing } = await supabase.from("CONTRACT").select("ID").eq("TENANT_ID", tenantId).eq("PROJECT_ID", e.projectId).limit(1);
+    if (!existing || existing.length === 0) {
+      const contractRow = {
+        NAME_SHORT: e.projectNumber, NAME_LONG: e.projectName, PROJECT_ID: e.projectId,
+        INVOICE_ADDRESS_ID: e.addressId, INVOICE_CONTACT_ID: e.contactId,
+        TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+        ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
+        ...(defaults.default_vat_id ? { VAT_ID: Number(defaults.default_vat_id) } : {}),
+      };
+      const { error: cErr } = await supabase.from("CONTRACT").insert([contractRow]);
+      if (cErr) throw { status: 500, message: `Vertrag für Projekt ${e.projectNumber} fehlgeschlagen: ${cErr.message}` };
+    }
+    done++;
+  }
+  return { inserted: done };
+}
+
 const DOMAINS = {
   address: {
     key: "address",
@@ -358,6 +517,34 @@ const DOMAINS = {
     ],
     loadContext: loadProjectContext,
     buildEntry: buildProjectEntry,
+  },
+  project_fee: {
+    key: "project_fee",
+    label: "Projekt-Honorar",
+    table: "PROJECT_STRUCTURE",          // primäre Tabelle (für Rollback-Zählung)
+    matchLabel: "Projektnummer",
+    fields: PROJECT_FEE_FIELDS,
+    loadContext: loadProjectFeeContext,
+    buildEntry: buildProjectFeeEntry,
+    commitRows: commitProjectFeeRows,
+    rollbackTables: ["PROJECT_PROGRESS", "PROJECT_STRUCTURE", "CONTRACT"], // PROGRESS vor STRUCTURE (FK)
+    async computeBlockers({ supabase, tenantId, batchId }) {
+      const { data: structs } = await supabase
+        .from("PROJECT_STRUCTURE").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+      const projectIds = [...new Set((structs || []).map((r) => r.PROJECT_ID).filter(Boolean))];
+      if (!projectIds.length) return [];
+      const blockers = [];
+      for (const dep of [{ table: "INVOICE", label: "Rechnung(en)" }, { table: "TEC", label: "Buchung(en)" }, { table: "PARTIAL_PAYMENT", label: "Abschlagszahlung(en)" }]) {
+        const { count, error } = await supabase
+          .from(dep.table).select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
+        if (error) {
+          if (/relation .* does not exist|column .* does not exist/i.test(error.message)) continue;
+          throw { status: 500, message: error.message };
+        }
+        if (count > 0) blockers.push(`${count}× ${dep.label}`);
+      }
+      return blockers;
+    },
   },
 };
 
@@ -536,15 +723,17 @@ async function rollback({ batchId, supabase, tenantId }) {
   if (batch.STATUS !== "committed") throw { status: 400, message: "Dieser Import wurde bereits zurückgesetzt" };
 
   const def = getDomain(batch.DOMAIN);
-  const { data: idRows, error: idErr } = await supabase
-    .from(def.table).select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
-  if (idErr) throw { status: 500, message: idErr.message };
-  const ids = (idRows || []).map((r) => r.ID);
 
-  if (ids.length) {
-    // Schutz: hängen Live-Daten an den importierten Zeilen? Dann blockieren.
-    const blockers = [];
-    for (const dep of def.dependents || []) {
+  // Schutz: hängen Live-Daten an den importierten Datensätzen? Dann blockieren.
+  let blockers = [];
+  if (def.computeBlockers) {
+    blockers = await def.computeBlockers({ supabase, tenantId, batchId });
+  } else {
+    const { data: idRows, error: idErr } = await supabase
+      .from(def.table).select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+    if (idErr) throw { status: 500, message: idErr.message };
+    const ids = (idRows || []).map((r) => r.ID);
+    for (const dep of (ids.length ? def.dependents || [] : [])) {
       const { count, error: dErr } = await supabase
         .from(dep.table).select("ID", { count: "exact", head: true })
         .eq("TENANT_ID", tenantId).in(dep.column, ids);
@@ -554,21 +743,28 @@ async function rollback({ batchId, supabase, tenantId }) {
       }
       if (count > 0) blockers.push(`${count}× ${dep.label}`);
     }
-    if (blockers.length) {
-      throw { status: 409, message: `Rollback nicht möglich: An importierten Datensätzen hängen bereits ${blockers.join(", ")}. Bitte diese zuerst entfernen.` };
-    }
+  }
+  if (blockers.length) {
+    throw { status: 409, message: `Rollback nicht möglich: An importierten Datensätzen hängen bereits ${blockers.join(", ")}. Bitte diese zuerst entfernen.` };
+  }
 
-    for (let i = 0; i < ids.length; i += 500) {
-      const chunk = ids.slice(i, i + 500);
-      const { error: delErr } = await supabase.from(def.table).delete().eq("TENANT_ID", tenantId).in("ID", chunk);
-      if (delErr) throw { status: 500, message: delErr.message };
+  // Löschen: je Tabelle nach IMPORT_BATCH_ID (Reihenfolge beachtet FK-Abhängigkeiten).
+  const tables = def.rollbackTables || [def.table];
+  let deleted = 0;
+  for (const t of tables) {
+    const { data: del, error: delErr } = await supabase
+      .from(t).delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId).select("ID");
+    if (delErr) {
+      if (/relation .* does not exist|column .* does not exist/i.test(delErr.message)) continue;
+      throw { status: 500, message: delErr.message };
     }
+    if (t === def.table) deleted = (del || []).length;
   }
 
   await supabase.from("IMPORT_BATCH")
     .update({ STATUS: "rolled_back", ROLLED_BACK_AT: new Date().toISOString() })
     .eq("ID", batchId).eq("TENANT_ID", tenantId);
-  return { rolledBack: true, deleted: ids.length };
+  return { rolledBack: true, deleted };
 }
 
 /** Leere Excel-Vorlage einer Domäne (Header + Beispielzeile) als Buffer. */
@@ -591,8 +787,8 @@ function listDomains() {
 
 module.exports = {
   // rein / testbar
-  s, norm, normHeader, parseDateISO, parseBuffer, buildAutoMapping, buildPreview,
-  buildAddressEntry, buildEmployeeEntry, buildProjectEntry,
+  s, norm, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
+  buildAddressEntry, buildEmployeeEntry, buildProjectEntry, buildProjectFeeEntry,
   // orchestriert
   preview, commit, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
 };

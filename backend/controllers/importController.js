@@ -44,6 +44,7 @@ async function postCommit(req, res, supabase) {
     const data = await svc.commit({
       domainKey: req.params.domain, buffer: req.file.buffer, filename: req.file.originalname,
       mapping: parseMapping(req), duplicateMode: req.body?.duplicateMode || "skip",
+      structureMode: req.body?.structureMode || "single",
       supabase, tenantId: req.tenantId, employeeId: req.employeeId,
     });
     res.json({ data });
