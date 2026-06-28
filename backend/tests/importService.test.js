@@ -9,6 +9,7 @@ const {
   buildPreview,
   buildAddressEntry,
   buildEmployeeEntry,
+  buildProjectEntry,
 } = require("../services/importService");
 
 // Hilfs-Context für die Adress-Validierung (kein supabase nötig).
@@ -237,5 +238,74 @@ describe("buildPreview (employee, multi-key dedup)", () => {
     expect(pv.summary.ok).toBe(1);
     expect(pv.summary.duplicate).toBe(3);
     expect(pv.summary.error).toBe(0);
+  });
+});
+
+// ── Projekte ──────────────────────────────────────────────────────────────────
+function makeProjCtx() {
+  return {
+    companyId: 7,
+    statusByName: new Map([["in bearbeitung", 10], ["abgeschlossen", 11]]),
+    typeByName: new Map([["neubau", 20]]),
+    empByName: new Map([["mmu", 30], ["maria muster", 30]]),
+    addrByName: new Map([["stadt musterhausen", 40]]),
+    existingKeys: new Set(["p-2023-001"]),
+  };
+}
+
+describe("buildAutoMapping (project)", () => {
+  it("maps project headers and aliases", () => {
+    const map = buildAutoMapping(["Projektnummer", "Projektname", "Status", "Projektleiter (Kürzel)", "Bauherr/Auftraggeber"], "project");
+    expect(map.project_number).toBe("Projektnummer");
+    expect(map.name_long).toBe("Projektname");
+    expect(map.manager).toBe("Projektleiter (Kürzel)");
+    expect(map.client).toBe("Bauherr/Auftraggeber");
+  });
+});
+
+describe("buildProjectEntry", () => {
+  const ctx = makeProjCtx();
+
+  it("keeps the project number, resolves FKs and sets company", () => {
+    const e = buildProjectEntry({ project_number: "P-2024-012", name_long: "Neubau Kita", status: "in Bearbeitung", project_type: "Neubau", manager: "MMu", client: "Stadt Musterhausen" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.NAME_SHORT).toBe("P-2024-012");
+    expect(e.dbRow.COMPANY_ID).toBe(7);
+    expect(e.dbRow.PROJECT_STATUS_ID).toBe(10);
+    expect(e.dbRow.PROJECT_TYPE_ID).toBe(20);
+    expect(e.dbRow.PROJECT_MANAGER_ID).toBe(30);
+    expect(e.dbRow.ADDRESS_ID).toBe(40);
+  });
+
+  it("flags missing number/name as errors", () => {
+    const e = buildProjectEntry({ project_number: "", name_long: "" }, ctx);
+    expect(e.ok).toBe(false);
+    expect(e.messages.filter(m => m.level === "error").length).toBe(2);
+  });
+
+  it("warns (not errors) on unknown status/manager and leaves them empty", () => {
+    const e = buildProjectEntry({ project_number: "P-9", name_long: "X", status: "Phantasie", manager: "ZZZ" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.PROJECT_STATUS_ID).toBeNull();
+    expect(e.dbRow.PROJECT_MANAGER_ID).toBeNull();
+    expect(e.messages.filter(m => m.level === "warn").length).toBe(2);
+  });
+});
+
+describe("buildPreview (project, dedup by number)", () => {
+  const ctx = makeProjCtx();
+  const headers = ["Projektnummer", "Projektname"];
+  function preview(rows) {
+    const parsed = { headers, rows: rows.map(r => ({ "Projektnummer": r[0], "Projektname": r[1] })) };
+    return buildPreview({ domainKey: "project", parsed, mapping: null, ctx });
+  }
+  it("flags existing and in-file duplicate project numbers", () => {
+    const pv = preview([
+      ["P-2024-100", "Neu A"],   // ok
+      ["P-2023-001", "Alt"],     // duplicate vs existing
+      ["P-2024-100", "Neu B"],   // duplicate in-file
+    ]);
+    expect(pv.summary.ok).toBe(1);
+    expect(pv.summary.duplicate).toBe(2);
   });
 });

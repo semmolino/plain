@@ -24,6 +24,8 @@ const DISPLAY_LABELS: Record<string, string> = {
   city: 'Ort', country: 'Land',
   short_name: 'Kürzel', first_name: 'Vorname', last_name: 'Nachname',
   gender: 'Geschlecht', mail: 'E-Mail',
+  number: 'Projektnummer', name: 'Projektname', status: 'Status',
+  manager: 'Projektleiter', client: 'Bauherr',
 }
 function prettify(key: string): string {
   return DISPLAY_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -172,6 +174,16 @@ export function ImportSection() {
           <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
             Hinweis: Importierte Mitarbeiter werden als Stammdaten angelegt — <strong>ohne Login und ohne Rolle</strong>.
             Zugang (Passwort) und Berechtigungen vergibst du anschließend unter <em>Mitarbeiter</em>.
+          </p>
+        )}
+        {domainKey === 'project' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
+            Hinweis: Es werden <strong>Projekt-Stammdaten</strong> angelegt (Nummer, Name, Status, Typ,
+            Projektleiter, Bauherr). Leistungsstruktur, Verträge und Honorarsummen fügst du anschließend
+            hinzu (z. B. über den HOAI-Assistenten). Status, Projektleiter und Bauherr werden über den
+            Namen zugeordnet — am besten Mitarbeiter und Adressen <em>vorher</em> importieren. Tipp: den
+            Projekt-Nummernkreis (Einstellungen → Nummernkreise) auf einen Zähler oberhalb deiner
+            höchsten importierten Nummer setzen.
           </p>
         )}
       </div>

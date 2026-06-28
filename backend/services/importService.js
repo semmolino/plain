@@ -225,6 +225,87 @@ function buildEmployeeEntry(mapped, ctx) {
   return { ok, messages, dbRow, matchKey, display };
 }
 
+// ── Domäne: Projekte (Stammdaten/Kopf) ───────────────────────────────────────
+const PROJECT_FIELDS = [
+  { key: "project_number", header: "Projektnummer",            required: true,  example: "P-2024-012",                aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
+  { key: "name_long",      header: "Projektname",              required: true,  example: "Neubau Kita Sonnenschein",  aliases: ["projektname", "name", "namelong", "bezeichnung", "projectname"] },
+  { key: "status",         header: "Status",                   required: false, example: "in Bearbeitung",            aliases: ["status", "projektstatus", "projectstatus"] },
+  { key: "project_type",   header: "Projekttyp",               required: false, example: "Neubau",                    aliases: ["projekttyp", "typ", "type", "projecttype", "art"] },
+  { key: "manager",        header: "Projektleiter (Kürzel)",   required: false, example: "MMu",                       aliases: ["projektleiter", "pl", "manager", "leiter", "verantwortlich", "projektverantwortlicher"] },
+  { key: "client",         header: "Bauherr/Auftraggeber",     required: false, example: "Stadt Musterhausen",        aliases: ["bauherr", "auftraggeber", "kunde", "adresse", "client"] },
+];
+
+async function loadProjectContext(supabase, tenantId) {
+  const [companyRes, statusRes, typeRes, empRes, addrRes, projRes] = await Promise.all([
+    supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).order("ID", { ascending: true }).limit(1),
+    supabase.from("PROJECT_STATUS").select("ID, NAME_SHORT"),                          // global
+    supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId),
+    supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT").select("NAME_SHORT").eq("TENANT_ID", tenantId).limit(100000),
+  ]);
+
+  const companyId = companyRes.data?.[0]?.ID ?? null;
+  const statusByName = new Map();
+  for (const r of statusRes.data || []) if (r.NAME_SHORT) statusByName.set(norm(r.NAME_SHORT), r.ID);
+  const typeByName = new Map();
+  for (const r of typeRes.data || []) if (r.NAME_SHORT) typeByName.set(norm(r.NAME_SHORT), r.ID);
+  const empByName = new Map();
+  for (const e of empRes.data || []) {
+    if (e.SHORT_NAME) empByName.set(norm(e.SHORT_NAME), e.ID);
+    const full = norm(`${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`);
+    if (full) empByName.set(full, e.ID);
+  }
+  const addrByName = new Map();
+  for (const a of addrRes.data || []) if (a.ADDRESS_NAME_1) addrByName.set(norm(a.ADDRESS_NAME_1), a.ID);
+  const existingKeys = new Set();
+  for (const p of projRes.data || []) if (p.NAME_SHORT) existingKeys.add(norm(p.NAME_SHORT));
+
+  return { companyId, statusByName, typeByName, empByName, addrByName, existingKeys };
+}
+
+function buildProjectEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const number = s(mapped.project_number);
+  const name   = s(mapped.name_long);
+  if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
+  if (!name)   { messages.push({ level: "error", text: "Projektname fehlt (Pflichtfeld)" }); ok = false; }
+
+  // Optionale FKs: per Name auflösen; gesetzt-aber-unbekannt → Warnung (Feld bleibt leer).
+  const resolve = (val, map, label) => {
+    const v = s(val);
+    if (!v) return null;
+    const hit = map.get(norm(v));
+    if (hit == null) messages.push({ level: "warn", text: `${label} „${v}" nicht gefunden — bleibt leer` });
+    return hit ?? null;
+  };
+  const statusId  = resolve(mapped.status,       ctx.statusByName, "Status");
+  const typeId    = resolve(mapped.project_type, ctx.typeByName,   "Projekttyp");
+  const managerId = resolve(mapped.manager,      ctx.empByName,    "Projektleiter");
+  const addressId = resolve(mapped.client,       ctx.addrByName,   "Bauherr/Adresse");
+
+  const dbRow = {
+    NAME_SHORT:         number || null,   // alte Projektnummer beibehalten
+    NAME_LONG:          name || null,
+    COMPANY_ID:         ctx.companyId,
+    PROJECT_STATUS_ID:  statusId,
+    PROJECT_TYPE_ID:    typeId,
+    PROJECT_MANAGER_ID: managerId,
+    ADDRESS_ID:         addressId,
+  };
+
+  const matchKey = norm(number);
+  const display = {
+    number, name,
+    status:  statusId  != null ? s(mapped.status)  : "",
+    manager: managerId != null ? s(mapped.manager) : "",
+    client:  addressId != null ? s(mapped.client)  : "",
+  };
+  return { ok, messages, dbRow, matchKey, display };
+}
+
 const DOMAINS = {
   address: {
     key: "address",
@@ -252,6 +333,23 @@ const DOMAINS = {
     ],
     loadContext: loadEmployeeContext,
     buildEntry: buildEmployeeEntry,
+  },
+  project: {
+    key: "project",
+    label: "Projekte",
+    table: "PROJECT",
+    matchLabel: "Projektnummer",
+    fields: PROJECT_FIELDS,
+    dependents: [
+      { table: "PROJECT_STRUCTURE", column: "PROJECT_ID", label: "Leistungsstruktur" },
+      { table: "EMPLOYEE2PROJECT",  column: "PROJECT_ID", label: "Mitarbeiterzuordnung(en)" },
+      { table: "CONTRACT",          column: "PROJECT_ID", label: "Vertrag/Verträge" },
+      { table: "INVOICE",           column: "PROJECT_ID", label: "Rechnung(en)" },
+      { table: "TEC",               column: "PROJECT_ID", label: "Buchung(en)" },
+      { table: "OFFER",             column: "PROJECT_ID", label: "verknüpfte(s) Angebot(e)" },
+    ],
+    loadContext: loadProjectContext,
+    buildEntry: buildProjectEntry,
   },
 };
 
@@ -465,7 +563,7 @@ function listDomains() {
 module.exports = {
   // rein / testbar
   s, norm, normHeader, parseDateISO, parseBuffer, buildAutoMapping, buildPreview,
-  buildAddressEntry, buildEmployeeEntry,
+  buildAddressEntry, buildEmployeeEntry, buildProjectEntry,
   // orchestriert
   preview, commit, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
 };
