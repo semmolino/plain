@@ -3,10 +3,12 @@
 const XLSX = require("xlsx");
 const {
   normHeader,
+  parseDateISO,
   parseBuffer,
   buildAutoMapping,
   buildPreview,
   buildAddressEntry,
+  buildEmployeeEntry,
 } = require("../services/importService");
 
 // Hilfs-Context für die Adress-Validierung (kein supabase nötig).
@@ -131,5 +133,109 @@ describe("buildPreview (address)", () => {
     const pv = preview([["", "", ""], ["Acme GmbH", "10115", ""]]);
     expect(pv.summary.total).toBe(1);
     expect(pv.summary.ok).toBe(1);
+  });
+});
+
+// ── parseDateISO ──────────────────────────────────────────────────────────────
+describe("parseDateISO", () => {
+  it("passes through ISO dates and pads", () => {
+    expect(parseDateISO("2022-03-01").value).toBe("2022-03-01");
+    expect(parseDateISO("2022-3-1").value).toBe("2022-03-01");
+  });
+  it("converts German dd.mm.yyyy", () => {
+    expect(parseDateISO("1.3.2022").value).toBe("2022-03-01");
+    expect(parseDateISO("01.03.2022").value).toBe("2022-03-01");
+  });
+  it("returns null for blank, invalid flag for garbage", () => {
+    expect(parseDateISO("").value).toBeNull();
+    expect(parseDateISO("foo").invalid).toBe(true);
+  });
+});
+
+// ── Mitarbeiter ───────────────────────────────────────────────────────────────
+function makeEmpCtx() {
+  return {
+    genders: {
+      byName: new Map([
+        ["weiblich", 1], ["w", 1], ["frau", 1],
+        ["männlich", 2], ["maennlich", 2], ["m", 2],
+        ["divers", 3], ["d", 3],
+      ]),
+      byId: new Map([[1, "weiblich"], [2, "männlich"], [3, "divers"]]),
+      default: 3,
+    },
+    existingKeys: new Set(["mail:alt@buero.de", "short:abc"]),
+  };
+}
+
+describe("buildAutoMapping (employee)", () => {
+  it("maps employee headers and aliases", () => {
+    const map = buildAutoMapping(["Kürzel", "Vorname", "Nachname", "Geschlecht", "E-Mail", "Personalnummer"], "employee");
+    expect(map.short_name).toBe("Kürzel");
+    expect(map.first_name).toBe("Vorname");
+    expect(map.gender).toBe("Geschlecht");
+    expect(map.email).toBe("E-Mail");
+    expect(map.personnel_number).toBe("Personalnummer");
+  });
+});
+
+describe("buildEmployeeEntry", () => {
+  const ctx = makeEmpCtx();
+
+  it("accepts a valid row and resolves gender + date", () => {
+    const e = buildEmployeeEntry({ short_name: "MMu", first_name: "Maria", last_name: "Muster", gender: "weiblich", entry_date: "01.03.2022" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.GENDER_ID).toBe(1);
+    expect(e.dbRow.ENTRY_DATE).toBe("2022-03-01");
+    expect(e.dbRow.ACTIVE).toBe(1);
+    expect(e.matchKey).toContain("short:mmu");
+  });
+
+  it("defaults gender when blank (neutral default present)", () => {
+    const e = buildEmployeeEntry({ short_name: "X", first_name: "A", last_name: "B", gender: "" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.GENDER_ID).toBe(3);
+  });
+
+  it("flags missing required fields", () => {
+    const e = buildEmployeeEntry({ short_name: "", first_name: "", last_name: "B", gender: "w" }, ctx);
+    expect(e.ok).toBe(false);
+    expect(e.messages.filter(m => m.level === "error").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("flags an unknown gender", () => {
+    const e = buildEmployeeEntry({ short_name: "Y", first_name: "A", last_name: "B", gender: "Hamster" }, ctx);
+    expect(e.ok).toBe(false);
+  });
+
+  it("warns (not errors) on invalid date and bad email", () => {
+    const e = buildEmployeeEntry({ short_name: "Z", first_name: "A", last_name: "B", gender: "m", email: "noatsign", entry_date: "kaputt" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.messages.some(m => m.level === "warn")).toBe(true);
+  });
+});
+
+describe("buildPreview (employee, multi-key dedup)", () => {
+  const ctx = makeEmpCtx();
+  const headers = ["Kürzel", "Vorname", "Nachname", "Geschlecht", "E-Mail"];
+
+  function preview(dataRows) {
+    const parsed = {
+      headers,
+      rows: dataRows.map(r => ({ "Kürzel": r[0], "Vorname": r[1], "Nachname": r[2], "Geschlecht": r[3], "E-Mail": r[4] ?? "" })),
+    };
+    return buildPreview({ domainKey: "employee", parsed, mapping: null, ctx });
+  }
+
+  it("detects duplicates by mail OR short_name, plus in-file", () => {
+    const pv = preview([
+      ["NEU", "A", "B", "w", "neu@buero.de"],   // ok
+      ["XYZ", "C", "D", "m", "alt@buero.de"],   // duplicate (existing mail)
+      ["ABC", "E", "F", "d", "frisch@buero.de"],// duplicate (existing short 'abc')
+      ["NEU", "G", "H", "w", "anders@buero.de"],// duplicate in-file (short 'neu')
+    ]);
+    expect(pv.summary.ok).toBe(1);
+    expect(pv.summary.duplicate).toBe(3);
+    expect(pv.summary.error).toBe(0);
   });
 });

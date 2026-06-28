@@ -22,6 +22,8 @@ const STATUS_META: Record<ImportRowStatus, { label: string; color: string; bg: s
 const DISPLAY_LABELS: Record<string, string> = {
   name_1: 'Name 1', name_2: 'Name 2', street: 'Straße', post_code: 'PLZ',
   city: 'Ort', country: 'Land',
+  short_name: 'Kürzel', first_name: 'Vorname', last_name: 'Nachname',
+  gender: 'Geschlecht', mail: 'E-Mail',
 }
 function prettify(key: string): string {
   return DISPLAY_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -166,6 +168,12 @@ export function ImportSection() {
           </button>
           {file && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{file.name}</span>}
         </div>
+        {domainKey === 'employee' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
+            Hinweis: Importierte Mitarbeiter werden als Stammdaten angelegt — <strong>ohne Login und ohne Rolle</strong>.
+            Zugang (Passwort) und Berechtigungen vergibst du anschließend unter <em>Mitarbeiter</em>.
+          </p>
+        )}
       </div>
 
       {done && !preview && (

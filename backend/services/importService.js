@@ -28,6 +28,16 @@ function norm(v) {
 function normHeader(h) {
   return s(h).toLowerCase().replace(/[^a-z0-9]/gi, "");
 }
+/** Datum aus DE-/ISO-Schreibweise → 'YYYY-MM-DD'. {invalid:true} wenn nicht parsebar. */
+function parseDateISO(v) {
+  const t = s(v);
+  if (!t) return { value: null };
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return { value: `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` };
+  m = t.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
+  if (m) return { value: `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` };
+  return { value: null, invalid: true };
+}
 
 // ── Domänen-Registry ─────────────────────────────────────────────────────────
 // Jede Domäne: table, fields (key/header/required/example/aliases), dependents
@@ -109,6 +119,112 @@ function buildAddressEntry(mapped, ctx) {
   return { ok, messages, dbRow, matchKey, display };
 }
 
+// ── Domäne: Mitarbeiter ──────────────────────────────────────────────────────
+const EMPLOYEE_FIELDS = [
+  { key: "short_name",       header: "Kürzel",         required: true,  example: "MMu",               aliases: ["kuerzel", "kurzzeichen", "shortname", "initialen", "krzl"] },
+  { key: "first_name",       header: "Vorname",        required: true,  example: "Maria",             aliases: ["vorname", "firstname"] },
+  { key: "last_name",        header: "Nachname",       required: true,  example: "Muster",            aliases: ["nachname", "name", "lastname", "familienname", "surname"] },
+  { key: "gender",           header: "Geschlecht",     required: true,  example: "weiblich",          aliases: ["geschlecht", "gender"] },
+  { key: "title",            header: "Titel",          required: false, example: "Dipl.-Ing.",        aliases: ["titel", "title"] },
+  { key: "email",            header: "E-Mail",         required: false, example: "m.muster@buero.de", aliases: ["email", "mail", "emailadresse", "mailadresse"] },
+  { key: "mobile",           header: "Telefon/Mobil",  required: false, example: "+49 170 1234567",   aliases: ["mobil", "telefon", "mobile", "phone", "tel", "handy", "telefonnummer"] },
+  { key: "personnel_number", header: "Personalnummer", required: false, example: "P-001",             aliases: ["personalnummer", "persnr", "personalnr", "personnelnumber", "mitarbeiternummer", "pnr"] },
+  { key: "entry_date",       header: "Eintrittsdatum", required: false, example: "2022-03-01",        aliases: ["eintritt", "eintrittsdatum", "entrydate", "startdatum", "eingestelltam"] },
+  { key: "exit_date",        header: "Austrittsdatum", required: false, example: "",                  aliases: ["austritt", "austrittsdatum", "exitdate"] },
+];
+
+async function loadEmployeeContext(supabase, tenantId) {
+  // Geschlecht (global, kein TENANT_ID): Name/Kurzform → ID. Default = neutrales
+  // Geschlecht (divers/keine Angabe), falls vorhanden.
+  const { data: genders } = await supabase.from("GENDER").select("ID, GENDER");
+  const byName = new Map();
+  const byId = new Map();
+  let def = null;
+  for (const g of genders || []) {
+    const t = norm(g.GENDER);
+    byId.set(g.ID, g.GENDER);
+    if (t) byName.set(t, g.ID);
+    if (t.startsWith("männ") || t.startsWith("maen") || t === "m") {
+      byName.set("m", g.ID); byName.set("männlich", g.ID); byName.set("maennlich", g.ID); byName.set("herr", g.ID);
+    }
+    if (t.startsWith("weib") || t === "w") {
+      byName.set("w", g.ID); byName.set("weiblich", g.ID); byName.set("frau", g.ID);
+    }
+    if (t.startsWith("div") || t === "d") {
+      byName.set("d", g.ID); byName.set("divers", g.ID); def = g.ID;
+    }
+    if (t.includes("keine") || t.includes("unbekannt") || t.includes("angabe")) def = g.ID;
+  }
+
+  // Bestand für Dubletten: pro Mitarbeiter mehrere Schlüssel (Mail/Kürzel/Pers.-Nr.)
+  const existingKeys = new Set();
+  const { data: emps } = await supabase
+    .from("EMPLOYEE").select("SHORT_NAME, MAIL, PERSONNEL_NUMBER").eq("TENANT_ID", tenantId).limit(100000);
+  for (const e of emps || []) {
+    if (e.MAIL) existingKeys.add("mail:" + norm(e.MAIL));
+    if (e.SHORT_NAME) existingKeys.add("short:" + norm(e.SHORT_NAME));
+    if (e.PERSONNEL_NUMBER) existingKeys.add("pnr:" + norm(e.PERSONNEL_NUMBER));
+  }
+  return { genders: { byName, byId, default: def }, existingKeys };
+}
+
+function buildEmployeeEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const short = s(mapped.short_name);
+  const first = s(mapped.first_name);
+  const last  = s(mapped.last_name);
+  if (!short) { messages.push({ level: "error", text: "Kürzel fehlt (Pflichtfeld)" }); ok = false; }
+  if (!first) { messages.push({ level: "error", text: "Vorname fehlt (Pflichtfeld)" }); ok = false; }
+  if (!last)  { messages.push({ level: "error", text: "Nachname fehlt (Pflichtfeld)" }); ok = false; }
+
+  // Geschlecht (Pflicht, FK auf GENDER)
+  let genderId = null;
+  const gin = s(mapped.gender);
+  if (!gin) {
+    if (ctx.genders.default != null) genderId = ctx.genders.default;
+    else { messages.push({ level: "error", text: "Geschlecht fehlt (Pflichtfeld)" }); ok = false; }
+  } else {
+    const found = ctx.genders.byName.get(norm(gin));
+    if (found != null) genderId = found;
+    else { messages.push({ level: "error", text: `Geschlecht „${gin}" nicht erkannt (z. B. weiblich/männlich/divers)` }); ok = false; }
+  }
+
+  const email = s(mapped.email);
+  if (email && !email.includes("@")) messages.push({ level: "warn", text: "E-Mail sieht ungültig aus (kein @)" });
+
+  const entry = parseDateISO(mapped.entry_date);
+  if (entry.invalid) messages.push({ level: "warn", text: "Eintrittsdatum nicht erkannt — übersprungen (Format JJJJ-MM-TT oder TT.MM.JJJJ)" });
+  const exit = parseDateISO(mapped.exit_date);
+  if (exit.invalid) messages.push({ level: "warn", text: "Austrittsdatum nicht erkannt — übersprungen" });
+
+  const dbRow = {
+    SHORT_NAME:       short || null,
+    TITLE:            s(mapped.title) || null,
+    FIRST_NAME:       first || null,
+    LAST_NAME:        last || null,
+    MAIL:             email || null,
+    MOBILE:           s(mapped.mobile) || null,
+    PERSONNEL_NUMBER: s(mapped.personnel_number) || null,
+    GENDER_ID:        genderId,
+    ENTRY_DATE:       entry.value,
+    EXIT_DATE:        exit.value,
+    ACTIVE:           1,
+  };
+
+  const matchKey = [];
+  if (email) matchKey.push("mail:" + norm(email));
+  if (short) matchKey.push("short:" + norm(short));
+  if (s(mapped.personnel_number)) matchKey.push("pnr:" + norm(mapped.personnel_number));
+
+  const display = {
+    short_name: short, first_name: first, last_name: last,
+    gender: genderId != null ? (ctx.genders.byId.get(genderId) || gin) : gin, mail: email,
+  };
+  return { ok, messages, dbRow, matchKey, display };
+}
+
 const DOMAINS = {
   address: {
     key: "address",
@@ -122,6 +238,20 @@ const DOMAINS = {
     ],
     loadContext: loadAddressContext,
     buildEntry: buildAddressEntry,
+  },
+  employee: {
+    key: "employee",
+    label: "Mitarbeiter",
+    table: "EMPLOYEE",
+    matchLabel: "E-Mail / Kürzel / Personalnummer",
+    fields: EMPLOYEE_FIELDS,
+    dependents: [
+      { table: "TEC",              column: "EMPLOYEE_ID", label: "Buchung(en)" },
+      { table: "EMPLOYEE2PROJECT", column: "EMPLOYEE_ID", label: "Projektzuordnung(en)" },
+      { table: "ABSENCE",          column: "EMPLOYEE_ID", label: "Abwesenheit(en)" },
+    ],
+    loadContext: loadEmployeeContext,
+    buildEntry: buildEmployeeEntry,
   },
 };
 
@@ -179,12 +309,15 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
     const messages = [...entry.messages];
 
     if (status === "ok") {
-      if (seen.has(entry.matchKey)) {
+      // matchKey kann ein String oder mehrere Schlüssel sein (z. B. Mitarbeiter:
+      // Mail/Kürzel/Pers.-Nr.) — Treffer auf EINEN Schlüssel = Dublette.
+      const keys = Array.isArray(entry.matchKey) ? entry.matchKey : [entry.matchKey];
+      if (keys.some((k) => seen.has(k))) {
         status = "duplicate"; messages.push({ level: "warn", text: "Dublette innerhalb der Datei" });
-      } else if (ctx.existingKeys.has(entry.matchKey)) {
+      } else if (keys.some((k) => ctx.existingKeys.has(k))) {
         status = "duplicate"; messages.push({ level: "warn", text: "Bereits im System vorhanden" });
       }
-      seen.add(entry.matchKey);
+      keys.forEach((k) => seen.add(k));
     }
 
     if (status === "ok") ok++; else if (status === "duplicate") duplicate++; else error++;
@@ -331,7 +464,8 @@ function listDomains() {
 
 module.exports = {
   // rein / testbar
-  s, norm, normHeader, parseBuffer, buildAutoMapping, buildPreview, buildAddressEntry,
+  s, norm, normHeader, parseDateISO, parseBuffer, buildAutoMapping, buildPreview,
+  buildAddressEntry, buildEmployeeEntry,
   // orchestriert
   preview, commit, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
 };
