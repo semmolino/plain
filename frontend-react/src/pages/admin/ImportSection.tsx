@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Download, Upload, RotateCcw, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { Download, Upload, RotateCcw, CheckCircle2, AlertTriangle, Copy, XCircle } from 'lucide-react'
 import { Message } from '@/components/ui/Message'
 import { InfoHint } from '@/components/ui/InfoHint'
 import { HelpHint } from '@/components/ui/HelpHint'
@@ -15,20 +15,9 @@ import {
 // ── Status-Darstellung ─────────────────────────────────────────────────────────
 const STATUS_META: Record<ImportRowStatus, { label: string; color: string; bg: string }> = {
   ok:        { label: 'OK',       color: '#047857', bg: '#ecfdf5' },
-  duplicate: { label: 'Dublette', color: '#b45309', bg: '#fffbeb' },
+  warning:   { label: 'Warnung',  color: '#b45309', bg: '#fffbeb' },
+  duplicate: { label: 'Dublette', color: '#475569', bg: '#f1f5f9' },
   error:     { label: 'Fehler',   color: '#b91c1c', bg: '#fef2f2' },
-}
-
-const DISPLAY_LABELS: Record<string, string> = {
-  name_1: 'Name 1', name_2: 'Name 2', street: 'Straße', post_code: 'PLZ',
-  city: 'Ort', country: 'Land',
-  short_name: 'Kürzel', first_name: 'Vorname', last_name: 'Nachname',
-  gender: 'Geschlecht', mail: 'E-Mail',
-  number: 'Projektnummer', name: 'Projektname', status: 'Status',
-  manager: 'Projektleiter', client: 'Bauherr',
-}
-function prettify(key: string): string {
-  return DISPLAY_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 function StatusBadge({ status }: { status: ImportRowStatus }) {
@@ -120,7 +109,7 @@ export function ImportSection() {
   }
 
   const s = preview?.summary
-  const importableCount = s ? (s.ok + (duplicateMode === 'import' ? s.duplicate : 0)) : 0
+  const importableCount = s ? (s.ok + s.warning + (duplicateMode === 'import' ? s.duplicate : 0)) : 0
 
   return (
     <div className="admin-section">
@@ -227,8 +216,9 @@ export function ImportSection() {
 
             {/* Summen-Chips */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-              <SummaryChip icon={<CheckCircle2 size={13} />} label="importierbar" value={s?.ok ?? 0} color="#047857" bg="#ecfdf5" />
-              <SummaryChip icon={<AlertTriangle size={13} />} label="Dubletten" value={s?.duplicate ?? 0} color="#b45309" bg="#fffbeb" />
+              <SummaryChip icon={<CheckCircle2 size={13} />} label="sauber" value={s?.ok ?? 0} color="#047857" bg="#ecfdf5" />
+              <SummaryChip icon={<AlertTriangle size={13} />} label="mit Warnung" value={s?.warning ?? 0} color="#b45309" bg="#fffbeb" />
+              <SummaryChip icon={<Copy size={13} />} label="Dubletten" value={s?.duplicate ?? 0} color="#475569" bg="#f1f5f9" />
               <SummaryChip icon={<XCircle size={13} />} label="Fehler" value={s?.error ?? 0} color="#b91c1c" bg="#fef2f2" />
               <span style={{ fontSize: 12, color: 'var(--text-3)', alignSelf: 'center' }}>von {s?.total ?? 0} Zeilen</span>
             </div>
@@ -241,31 +231,39 @@ export function ImportSection() {
               </label>
             )}
 
-            <div style={{ overflowX: 'auto', maxHeight: 360, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            {/* Kompakte Vorschau: feste Spaltenbreiten, kein Horizontal-Scroll;
+                Felder + Hinweise pro Zeile zusammengefasst. */}
+            <div style={{ maxHeight: 420, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+              <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 12 }}>
+                <colgroup>
+                  <col style={{ width: 44 }} />
+                  <col style={{ width: 92 }} />
+                  <col style={{ width: '42%' }} />
+                  <col />
+                </colgroup>
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, background: 'var(--surface-1, #fff)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
                     <th style={{ textAlign: 'left', padding: '6px 8px' }}>Zeile</th>
                     <th style={{ textAlign: 'left', padding: '6px 8px' }}>Status</th>
-                    {preview.rows[0] && Object.keys(preview.rows[0].display).map(k => (
-                      <th key={k} style={{ textAlign: 'left', padding: '6px 8px' }}>{prettify(k)}</th>
-                    ))}
-                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Hinweis</th>
+                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Datensatz</th>
+                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Hinweise</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {preview.rows.map(r => (
-                    <tr key={r.row} style={{ borderBottom: '1px solid var(--border-subtle, #f3f4f6)' }}>
-                      <td style={{ padding: '5px 8px', color: 'var(--text-3)' }}>{r.row}</td>
-                      <td style={{ padding: '5px 8px' }}><StatusBadge status={r.status} /></td>
-                      {Object.keys(r.display).map(k => (
-                        <td key={k} style={{ padding: '5px 8px' }}>{r.display[k] ?? ''}</td>
-                      ))}
-                      <td style={{ padding: '5px 8px', color: r.status === 'error' ? '#b91c1c' : 'var(--text-3)' }}>
-                        {r.messages.map(m => m.text).join('; ')}
-                      </td>
-                    </tr>
-                  ))}
+                  {preview.rows.map(r => {
+                    const data = Object.values(r.display).map(v => (v ?? '').toString().trim()).filter(Boolean).join('  ·  ')
+                    const hasErr = r.messages.some(m => m.level === 'error')
+                    const hasWarn = r.messages.some(m => m.level === 'warn')
+                    const noteColor = hasErr ? '#b91c1c' : hasWarn ? '#b45309' : 'var(--text-3)'
+                    return (
+                      <tr key={r.row} style={{ borderBottom: '1px solid var(--border-subtle, #f3f4f6)', verticalAlign: 'top' }}>
+                        <td style={{ padding: '6px 8px', color: 'var(--text-3)' }}>{r.row}</td>
+                        <td style={{ padding: '6px 8px' }}><StatusBadge status={r.status} /></td>
+                        <td style={{ padding: '6px 8px', wordBreak: 'break-word' }}>{data || '—'}</td>
+                        <td style={{ padding: '6px 8px', color: noteColor, wordBreak: 'break-word' }}>{r.messages.map(m => m.text).join('  ·  ') || '—'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

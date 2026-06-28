@@ -229,10 +229,10 @@ function buildEmployeeEntry(mapped, ctx) {
 const PROJECT_FIELDS = [
   { key: "project_number", header: "Projektnummer",            required: true,  example: "P-2024-012",                aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
   { key: "name_long",      header: "Projektname",              required: true,  example: "Neubau Kita Sonnenschein",  aliases: ["projektname", "name", "namelong", "bezeichnung", "projectname"] },
-  { key: "status",         header: "Status",                   required: false, example: "in Bearbeitung",            aliases: ["status", "projektstatus", "projectstatus"] },
+  { key: "status",         header: "Status",                   required: true,  example: "in Bearbeitung",            aliases: ["status", "projektstatus", "projectstatus"] },
   { key: "project_type",   header: "Projekttyp",               required: false, example: "Neubau",                    aliases: ["projekttyp", "typ", "type", "projecttype", "art"] },
-  { key: "manager",        header: "Projektleiter (Kürzel)",   required: false, example: "MMu",                       aliases: ["projektleiter", "pl", "manager", "leiter", "verantwortlich", "projektverantwortlicher"] },
-  { key: "client",         header: "Bauherr/Auftraggeber",     required: false, example: "Stadt Musterhausen",        aliases: ["bauherr", "auftraggeber", "kunde", "adresse", "client"] },
+  { key: "manager",        header: "Projektleiter (Kürzel)",   required: true,  example: "MMu",                       aliases: ["projektleiter", "pl", "manager", "leiter", "verantwortlich", "projektverantwortlicher"] },
+  { key: "client",         header: "Bauherr/Auftraggeber",     required: true,  example: "Stadt Musterhausen",        aliases: ["bauherr", "auftraggeber", "kunde", "adresse", "client"] },
 ];
 
 async function loadProjectContext(supabase, tenantId) {
@@ -273,18 +273,26 @@ function buildProjectEntry(mapped, ctx) {
   if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
   if (!name)   { messages.push({ level: "error", text: "Projektname fehlt (Pflichtfeld)" }); ok = false; }
 
-  // Optionale FKs: per Name auflösen; gesetzt-aber-unbekannt → Warnung (Feld bleibt leer).
-  const resolve = (val, map, label) => {
+  // Pflicht-FKs: müssen gesetzt UND auflösbar sein, sonst Fehler (nicht importierbar).
+  const resolveReq = (val, map, label, hint) => {
+    const v = s(val);
+    if (!v) { messages.push({ level: "error", text: `${label} fehlt (Pflichtfeld)` }); ok = false; return null; }
+    const hit = map.get(norm(v));
+    if (hit == null) { messages.push({ level: "error", text: `${label} „${v}" nicht gefunden${hint ? ` — ${hint}` : ""}` }); ok = false; return null; }
+    return hit;
+  };
+  // Optionale FKs: gesetzt-aber-unbekannt → Warnung (Feld bleibt leer, Zeile bleibt importierbar).
+  const resolveOpt = (val, map, label) => {
     const v = s(val);
     if (!v) return null;
     const hit = map.get(norm(v));
-    if (hit == null) messages.push({ level: "warn", text: `${label} „${v}" nicht gefunden — bleibt leer` });
-    return hit ?? null;
+    if (hit == null) { messages.push({ level: "warn", text: `${label} „${v}" nicht gefunden — bleibt leer` }); return null; }
+    return hit;
   };
-  const statusId  = resolve(mapped.status,       ctx.statusByName, "Status");
-  const typeId    = resolve(mapped.project_type, ctx.typeByName,   "Projekttyp");
-  const managerId = resolve(mapped.manager,      ctx.empByName,    "Projektleiter");
-  const addressId = resolve(mapped.client,       ctx.addrByName,   "Bauherr/Adresse");
+  const statusId  = resolveReq(mapped.status,  ctx.statusByName, "Status",        "Status-Bezeichnung prüfen (Einstellungen → Stammdaten)");
+  const typeId    = resolveOpt(mapped.project_type, ctx.typeByName, "Projekttyp");
+  const managerId = resolveReq(mapped.manager, ctx.empByName,    "Projektleiter", "zuerst Mitarbeiter importieren (Kürzel)");
+  const addressId = resolveReq(mapped.client,  ctx.addrByName,   "Bauherr/Adresse", "zuerst Adressen importieren");
 
   const dbRow = {
     NAME_SHORT:         number || null,   // alte Projektnummer beibehalten
@@ -394,7 +402,7 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
   const map = mapping && Object.keys(mapping).length ? mapping : buildAutoMapping(parsed.headers, domainKey);
   const seen = new Set();
   const rows = [];
-  let ok = 0, duplicate = 0, error = 0;
+  let ok = 0, warning = 0, duplicate = 0, error = 0;
 
   parsed.rows.forEach((raw, i) => {
     const mapped = {};
@@ -403,26 +411,35 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
     if (def.fields.every((f) => !s(mapped[f.key]))) return;
 
     const entry = def.buildEntry(mapped, ctx);
-    let status = entry.ok ? "ok" : "error";
     const messages = [...entry.messages];
+    let status;
 
-    if (status === "ok") {
-      // matchKey kann ein String oder mehrere Schlüssel sein (z. B. Mitarbeiter:
-      // Mail/Kürzel/Pers.-Nr.) — Treffer auf EINEN Schlüssel = Dublette.
+    if (!entry.ok) {
+      // Pflichtfeld fehlt oder ist ungültig → NICHT importierbar.
+      status = "error";
+    } else {
+      // Importierbar. Dublette schlägt Warnung; Warnung (optionale Hinweise)
+      // schlägt "sauber". matchKey kann ein String oder mehrere Schlüssel sein
+      // (z. B. Mitarbeiter: Mail/Kürzel/Pers.-Nr.).
       const keys = Array.isArray(entry.matchKey) ? entry.matchKey : [entry.matchKey];
       if (keys.some((k) => seen.has(k))) {
         status = "duplicate"; messages.push({ level: "warn", text: "Dublette innerhalb der Datei" });
       } else if (keys.some((k) => ctx.existingKeys.has(k))) {
         status = "duplicate"; messages.push({ level: "warn", text: "Bereits im System vorhanden" });
+      } else {
+        status = messages.some((m) => m.level === "warn") ? "warning" : "ok";
       }
       keys.forEach((k) => seen.add(k));
     }
 
-    if (status === "ok") ok++; else if (status === "duplicate") duplicate++; else error++;
+    if (status === "ok") ok++;
+    else if (status === "warning") warning++;
+    else if (status === "duplicate") duplicate++;
+    else error++;
     rows.push({ row: i + 2, status, messages, display: entry.display, _dbRow: entry.dbRow });
   });
 
-  return { mapping: map, summary: { total: rows.length, ok, duplicate, error }, rows };
+  return { mapping: map, summary: { total: rows.length, ok, warning, duplicate, error }, rows };
 }
 
 // ── Orchestrierung (mit supabase) ────────────────────────────────────────────
@@ -444,14 +461,14 @@ async function preview({ domainKey, buffer, filename, mapping, supabase, tenantI
   };
 }
 
-async function commit({ domainKey, buffer, filename, mapping, duplicateMode, supabase, tenantId, employeeId }) {
+async function commit({ domainKey, buffer, filename, mapping, duplicateMode, structureMode, supabase, tenantId, employeeId }) {
   const def = getDomain(domainKey);
   const parsed = parseBuffer(buffer);
   const ctx = await def.loadContext(supabase, tenantId);
   const pv = buildPreview({ domainKey, parsed, mapping, ctx });
 
-  // Importiert werden gültige Zeilen; Dubletten nur bei duplicateMode='import'.
-  const wanted = pv.rows.filter((r) => r.status === "ok" || (r.status === "duplicate" && duplicateMode === "import"));
+  // Importiert werden gültige Zeilen (sauber + mit Warnung); Dubletten nur bei duplicateMode='import'.
+  const wanted = pv.rows.filter((r) => r.status === "ok" || r.status === "warning" || (r.status === "duplicate" && duplicateMode === "import"));
   if (!wanted.length) throw { status: 400, message: "Keine importierbaren Zeilen (alle leer, fehlerhaft oder Dubletten)." };
 
   // 1) Stapel anlegen
@@ -459,12 +476,24 @@ async function commit({ domainKey, buffer, filename, mapping, duplicateMode, sup
     TENANT_ID: tenantId, DOMAIN: def.key, STATUS: "committed", SOURCE_FILENAME: filename || null,
     MAPPING_JSON: pv.mapping, ROW_TOTAL: pv.summary.total, ROW_OK: pv.summary.ok,
     ROW_SKIPPED: pv.summary.duplicate, ROW_ERROR: pv.summary.error,
-    SUMMARY_JSON: pv.summary, CREATED_BY: employeeId || null,
+    SUMMARY_JSON: { ...pv.summary, structureMode: structureMode || null }, CREATED_BY: employeeId || null,
   }]).select("ID").single();
   if (bErr) throw { status: 500, message: "Import-Stapel konnte nicht angelegt werden: " + bErr.message };
   const batchId = batch.ID;
 
-  // 2) Zeilen schreiben (gechunkt), jede mit IMPORT_BATCH_ID
+  // 2a) Domänen mit eigener Schreiblogik (z. B. Projekt-Honorar: Struktur +
+  //     Fortschritt + Vertrag pro Projekt) — alles mit IMPORT_BATCH_ID getaggt.
+  if (def.commitRows) {
+    try {
+      const { inserted } = await def.commitRows(wanted, { supabase, tenantId, batchId, ctx, options: { structureMode } });
+      return { batchId, inserted, summary: pv.summary };
+    } catch (e) {
+      await supabase.from("IMPORT_BATCH").update({ ROW_OK: 0 }).eq("ID", batchId).eq("TENANT_ID", tenantId);
+      throw { status: e?.status || 500, message: `${e?.message || e} Stapel #${batchId} kann zurückgesetzt werden.` };
+    }
+  }
+
+  // 2b) Standard: ein Insert pro Zeile in die Domänen-Tabelle (gechunkt).
   const dbRows = wanted.map((r) => ({ ...r._dbRow, TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
   let inserted = 0;
   try {

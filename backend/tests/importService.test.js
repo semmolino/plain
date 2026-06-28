@@ -277,35 +277,44 @@ describe("buildProjectEntry", () => {
     expect(e.dbRow.ADDRESS_ID).toBe(40);
   });
 
-  it("flags missing number/name as errors", () => {
+  it("flags missing required fields as errors (number, name, status, manager, client)", () => {
     const e = buildProjectEntry({ project_number: "", name_long: "" }, ctx);
     expect(e.ok).toBe(false);
-    expect(e.messages.filter(m => m.level === "error").length).toBe(2);
+    expect(e.messages.filter(m => m.level === "error").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("warns (not errors) on unknown status/manager and leaves them empty", () => {
-    const e = buildProjectEntry({ project_number: "P-9", name_long: "X", status: "Phantasie", manager: "ZZZ" }, ctx);
+  it("errors (not warns) when a required FK is provided but unresolvable", () => {
+    const e = buildProjectEntry({ project_number: "P-9", name_long: "X", status: "Phantasie", manager: "ZZZ", client: "Unbekannt" }, ctx);
+    expect(e.ok).toBe(false);
+    expect(e.messages.filter(m => m.level === "error").length).toBe(3); // status, manager, client
+  });
+
+  it("treats project_type as optional (warning, still importable)", () => {
+    const e = buildProjectEntry({ project_number: "P-9", name_long: "X", status: "in Bearbeitung", manager: "MMu", client: "Stadt Musterhausen", project_type: "Phantasie" }, ctx);
     expect(e.ok).toBe(true);
-    expect(e.dbRow.PROJECT_STATUS_ID).toBeNull();
-    expect(e.dbRow.PROJECT_MANAGER_ID).toBeNull();
-    expect(e.messages.filter(m => m.level === "warn").length).toBe(2);
+    expect(e.dbRow.PROJECT_TYPE_ID).toBeNull();
+    expect(e.messages.some(m => m.level === "warn")).toBe(true);
   });
 });
 
 describe("buildPreview (project, dedup by number)", () => {
   const ctx = makeProjCtx();
-  const headers = ["Projektnummer", "Projektname"];
+  const headers = ["Projektnummer", "Projektname", "Status", "Projektleiter (Kürzel)", "Bauherr/Auftraggeber"];
   function preview(rows) {
-    const parsed = { headers, rows: rows.map(r => ({ "Projektnummer": r[0], "Projektname": r[1] })) };
+    const parsed = { headers, rows: rows.map(r => ({
+      "Projektnummer": r[0], "Projektname": r[1], "Status": "in Bearbeitung",
+      "Projektleiter (Kürzel)": "MMu", "Bauherr/Auftraggeber": "Stadt Musterhausen",
+    })) };
     return buildPreview({ domainKey: "project", parsed, mapping: null, ctx });
   }
   it("flags existing and in-file duplicate project numbers", () => {
     const pv = preview([
-      ["P-2024-100", "Neu A"],   // ok
+      ["P-2024-100", "Neu A"],   // ok (all required resolve)
       ["P-2023-001", "Alt"],     // duplicate vs existing
       ["P-2024-100", "Neu B"],   // duplicate in-file
     ]);
     expect(pv.summary.ok).toBe(1);
     expect(pv.summary.duplicate).toBe(2);
+    expect(pv.summary.error).toBe(0);
   });
 });

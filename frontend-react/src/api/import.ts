@@ -16,7 +16,7 @@ export interface ImportDomain {
   fields:     ImportFieldDef[]
 }
 
-export type ImportRowStatus = 'ok' | 'duplicate' | 'error'
+export type ImportRowStatus = 'ok' | 'warning' | 'duplicate' | 'error'
 
 export interface ImportRowMessage {
   level: 'error' | 'warn'
@@ -33,6 +33,7 @@ export interface ImportPreviewRow {
 export interface ImportSummary {
   total:     number
   ok:        number
+  warning:   number
   duplicate: number
   error:     number
 }
