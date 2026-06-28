@@ -1191,6 +1191,15 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
     }
   })
 
+  // Summenzeile über die aktuell sichtbaren (gefilterten) Projekte
+  const sumBudget = filtered.reduce((s, p) => s + Number(p.BUDGET_TOTAL_NET || 0), 0)
+  const sumCost   = filtered.reduce((s, p) => s + Number(p.COST_TOTAL || 0), 0)
+  const sumLeist  = filtered.reduce((s, p) => s + Number(p.LEISTUNGSSTAND_VALUE || 0), 0)
+  const sumOpen   = filtered.reduce((s, p) => s + Number(p.OPEN_NET_TOTAL || 0), 0)
+  const sumBudgetPct = sumBudget > 0 ? (sumCost / sumBudget) * 100 : null
+  const sumCpi       = sumCost > 100 ? sumLeist / sumCost : null
+  const sumCell: React.CSSProperties = { fontWeight: 700, borderTop: '2px solid var(--border)' }
+
   return (
     <>
       {selected && <ProjektDetailModal project={selected} onClose={() => setSelected(null)} />}
@@ -1223,7 +1232,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
               <thead>
                 <tr>
                   <th style={{ width: 4, padding: 0 }}></th>
-                  <SortTh label="Projekt"  field="name"      current={field} dir={dir} onSort={toggle} />
+                  <SortTh label="Projekte" field="name"      current={field} dir={dir} onSort={toggle} />
                   <SortTh label="Honorar"  field="budget"    current={field} dir={dir} onSort={toggle} className="num col-hide-mobile" />
                   <SortTh label="Kosten"   field="cost"      current={field} dir={dir} onSort={toggle} className="num" />
                   <SortTh label="Budget %" field="budgetpct" current={field} dir={dir} onSort={toggle} className="num col-hide-mobile" />
@@ -1275,6 +1284,18 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td style={{ padding: 0 }}></td>
+                  <td style={sumCell}>Summe · {filtered.length} {filtered.length === 1 ? 'Projekt' : 'Projekte'}</td>
+                  <td className="num col-hide-mobile" style={sumCell}>{fmtEur(sumBudget)}</td>
+                  <td className="num" style={sumCell}>{fmtEur(sumCost)}</td>
+                  <td className="num col-hide-mobile" style={sumCell}>{sumBudgetPct != null ? fmtPct(sumBudgetPct) : '—'}</td>
+                  <td className="num col-hide-mobile" style={sumCell}>{sumCpi != null ? fmtCpi(sumCpi) : '–'}</td>
+                  <td className="num col-hide-mobile" style={sumCell}>{sumOpen > 0 ? fmtEur(sumOpen) : '—'}</td>
+                  <td style={sumCell}></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )
