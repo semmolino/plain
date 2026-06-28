@@ -1,8 +1,8 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
-  X, ArrowDown, HelpCircle,
-  LayoutDashboard, BookUser, FileSignature, FolderOpen,
-  Receipt, BarChart3, Users, Settings, type LucideIcon,
+  X, ArrowDown, ArrowRight, HelpCircle,
+  BookUser, FileSignature, FolderOpen, Receipt, type LucideIcon,
 } from 'lucide-react'
 import { BrandWordmark } from '@/components/brand/BrandLogo'
 import { useSession } from '@/hooks/useSession'
@@ -35,17 +35,15 @@ export function WelcomeSection() {
 /**
  * Orientierungs-Panel für neue Nutzer (erstes Login, dismissbar, über das
  * Dashboard wieder aufrufbar). Bewusst ruhig statt geführte Klick-Tour:
- * erklärt den Aufbau + Nutzen und verweist auf die Einrichtungs-Checkliste.
+ * zeigt den durchgängigen Arbeitsablauf (Adresse → Angebot → Projekt →
+ * Rechnung) als Einstiegs-Mentalmodell und verweist auf die Checkliste.
+ * Die einzelnen Schritte sind anklickbar und führen direkt in den Bereich.
  */
-const AREAS: { icon: LucideIcon; label: string; desc: string }[] = [
-  { icon: LayoutDashboard, label: 'Übersicht',     desc: 'Kennzahlen & offene Aufgaben auf einen Blick' },
-  { icon: BookUser,        label: 'Adressen',      desc: 'Kunden & Kontakte — Basis für Angebote und Rechnungen' },
-  { icon: FileSignature,   label: 'Angebote',      desc: 'HOAI- oder Pauschal-Angebote, per Klick zum Projekt' },
-  { icon: FolderOpen,      label: 'Projekte',      desc: 'Struktur, Budget, Leistungsstand, Stunden' },
-  { icon: Receipt,         label: 'Rechnungen',    desc: 'Abschlags-, Schluss- & Einzelrechnungen, E-Rechnung' },
-  { icon: BarChart3,       label: 'Reporting',     desc: 'Auswertungen zu Projekten & Mitarbeitern' },
-  { icon: Users,           label: 'Mitarbeiter',   desc: 'Team, Rollen, Stunden, Kostensätze' },
-  { icon: Settings,        label: 'Einstellungen', desc: 'Unternehmen, Nummernkreise, Vorbelegungen …' },
+const WORKFLOW: { icon: LucideIcon; label: string; sub: string; href: string }[] = [
+  { icon: BookUser,      label: 'Adresse',  sub: 'Kunde anlegen',        href: '/adressen' },
+  { icon: FileSignature, label: 'Angebot',  sub: 'daraus erstellen',     href: '/angebote' },
+  { icon: FolderOpen,    label: 'Projekt',  sub: 'per Klick übernehmen',  href: '/projekte' },
+  { icon: Receipt,       label: 'Rechnung', sub: 'aus dem Projekt',      href: '/rechnungen' },
 ]
 
 export function WelcomePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -60,22 +58,28 @@ export function WelcomePanel({ open, onClose }: { open: boolean; onClose: () => 
         <BrandWordmark size={28} />
         <h2 className="welcome-panel-title">Willkommen!</h2>
         <p className="welcome-panel-lead">
-          plan&simple bildet deinen Büroalltag an einem Ort ab — von der ersten Adresse über Angebot
-          und Projekt bis zur Rechnung. Hier eine kurze Orientierung; danach führt dich die
-          Einrichtungs-Checkliste Schritt für Schritt.
+          In plan&simple baut alles aufeinander auf: aus einer Adresse wird ein Angebot,
+          daraus per Klick ein Projekt und daraus die Rechnung. So sieht dein Ablauf aus –
+          du musst nichts doppelt erfassen.
         </p>
       </div>
 
-      <div className="welcome-panel-grid">
-        {AREAS.map(a => {
-          const Icon = a.icon
+      <div className="welcome-flow">
+        {WORKFLOW.map((step, i) => {
+          const Icon = step.icon
           return (
-            <div className="welcome-area" key={a.label}>
-              <span className="welcome-area-icon"><Icon size={18} strokeWidth={1.75} /></span>
-              <div>
-                <div className="welcome-area-label">{a.label}</div>
-                <div className="welcome-area-desc">{a.desc}</div>
-              </div>
+            <div className="welcome-flow-row" key={step.label}>
+              <Link to={step.href} className="welcome-flow-step" onClick={onClose}>
+                <span className="welcome-flow-num">{i + 1}</span>
+                <span className="welcome-flow-icon"><Icon size={18} strokeWidth={1.75} /></span>
+                <span className="welcome-flow-text">
+                  <span className="welcome-flow-label">{step.label}</span>
+                  <span className="welcome-flow-sub">{step.sub}</span>
+                </span>
+              </Link>
+              {i < WORKFLOW.length - 1 && (
+                <ArrowRight className="welcome-flow-arrow" size={16} strokeWidth={2} aria-hidden />
+              )}
             </div>
           )
         })}
