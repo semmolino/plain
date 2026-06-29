@@ -18,6 +18,7 @@ const XLSX = require("xlsx");
 const ppSvc = require("./partialPayments");
 const invSvc = require("./invoices");
 const { insertProgressSnapshot } = require("./projectProgress");
+const { recomputeStructure } = require("./buchungen");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 /** String-Wert sicher trimmen (null/undefined → ""). */
@@ -892,6 +893,109 @@ async function rollbackOpeningBalance({ supabase, tenantId, batchId }) {
   return { deleted };
 }
 
+// ── Domäne: Kosten-Anfangsbestände (Kostenblöcke) ────────────────────────────
+// Für (v. a. Stunden-/TEC-)Projekte: aggregierte, bereits angefallene Kosten je
+// Projekt als EINE LUMP_COST-Buchung — KEINE Einzelbuchungen. Speist
+// Deckungsbeitrag/Wirtschaftlichkeit ab Tag 1.
+const OPENING_COST_FIELDS = [
+  { key: "project_number", header: "Projektnummer",                      required: true,  example: "P-2024-012",                aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
+  { key: "cost",           header: "Bereits angefallene Kosten (netto)", required: true,  example: "45000",                     aliases: ["kosten", "kostenblock", "kostensumme", "aufwand", "betrag", "costs", "cost"] },
+  { key: "description",    header: "Bezeichnung (optional)",             required: false, example: "Personalkosten bis 06/2026", aliases: ["bezeichnung", "beschreibung", "text", "description", "kommentar"] },
+];
+
+async function loadOpeningCostContext(supabase, tenantId) {
+  const [projRes, structRes, tecRes] = await Promise.all([
+    supabase.from("PROJECT").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("TEC").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("BOOKING_KIND", "LUMP_COST").not("IMPORT_BATCH_ID", "is", null).limit(100000),
+  ]);
+
+  // Blatt-Knoten je Projekt ermitteln (kein anderer Knoten hat ihn als FATHER); BT2 bevorzugt.
+  const fatherIds = new Set();
+  for (const st of structRes.data || []) if (st.FATHER_ID != null) fatherIds.add(st.FATHER_ID);
+  const leafByProject = new Map();
+  for (const st of structRes.data || []) {
+    if (fatherIds.has(st.ID)) continue;
+    const cur = leafByProject.get(st.PROJECT_ID);
+    if (!cur || (Number(st.BILLING_TYPE_ID) === 2 && Number(cur.BILLING_TYPE_ID) !== 2)) leafByProject.set(st.PROJECT_ID, st);
+  }
+
+  const byNumber = new Map();
+  const idToNumber = new Map();
+  for (const p of projRes.data || []) {
+    if (!p.NAME_SHORT) continue;
+    byNumber.set(norm(p.NAME_SHORT), { projectId: p.ID, structureId: leafByProject.get(p.ID)?.ID ?? null });
+    idToNumber.set(p.ID, p.NAME_SHORT);
+  }
+  const importedCostProjects = new Set();
+  for (const r of tecRes.data || []) if (r.PROJECT_ID != null) importedCostProjects.add(r.PROJECT_ID);
+  const existingKeys = new Set();
+  for (const [id, numv] of idToNumber) if (importedCostProjects.has(id)) existingKeys.add(norm(numv));
+
+  return { byNumber, existingKeys };
+}
+
+function buildOpeningCostEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const number = s(mapped.project_number);
+  let proj = null;
+  if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
+  else {
+    proj = ctx.byNumber.get(norm(number)) || null;
+    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}" nicht gefunden` }); ok = false; }
+  }
+
+  const costRaw = s(mapped.cost);
+  const cost = parseAmountDE(costRaw);
+  if (!costRaw) { messages.push({ level: "error", text: "Kostenbetrag fehlt (Pflichtfeld)" }); ok = false; }
+  else if (cost.invalid || cost.value == null) { messages.push({ level: "error", text: `Kosten „${costRaw}" ist keine gültige Zahl` }); ok = false; }
+  else if (cost.value <= 0) { messages.push({ level: "error", text: "Kostenbetrag muss größer als 0 sein" }); ok = false; }
+
+  if (proj && ok && proj.structureId == null) messages.push({ level: "warn", text: "Projekt ohne Leistungsstruktur — Kosten werden auf Projektebene gebucht" });
+
+  const description = s(mapped.description) || "Anfangsbestand Kosten (Import)";
+  const dbRow = (proj && ok) ? { projectId: proj.projectId, projectNumber: number, structureId: proj.structureId, cost: cost.value, description } : null;
+  const matchKey = norm(number);
+  const display = { number, cost: cost.value != null ? cost.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : costRaw };
+  return { ok, messages, dbRow, matchKey, display };
+}
+
+async function commitOpeningCostRows(rows, { supabase, tenantId, batchId, employeeId }) {
+  const today = new Date().toISOString().slice(0, 10);
+  let done = 0;
+  for (const r of rows) {
+    const e = r._dbRow;
+    try {
+      // LUMP_COST: QUANTITY_INT=0 (keine Stunden), Betrag in CP_RATE/CP_TOT (Kosten).
+      const insertRow = {
+        TENANT_ID: tenantId, STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_COST",
+        BOOKING_TYPE_ID: null, EMPLOYEE_ID: employeeId ?? null, DATE_VOUCHER: today,
+        QUANTITY_INT: 0, CP_RATE: e.cost, CP_TOT: fmt2(e.cost), QUANTITY_EXT: 0, SP_RATE: 0, SP_TOT: 0,
+        POSTING_DESCRIPTION: e.description, PROJECT_ID: e.projectId, STRUCTURE_ID: e.structureId,
+        IMPORT_BATCH_ID: batchId,
+      };
+      const { error } = await supabase.from("TEC").insert([insertRow]);
+      if (error) throw { status: 500, message: error.message };
+      if (e.structureId) await recomputeStructure(supabase, e.structureId);
+      done++;
+    } catch (err) {
+      throw { status: err?.status || 500, message: `Kosten-Anfangsbestand für ${e.projectNumber} fehlgeschlagen: ${err?.message || err}` };
+    }
+  }
+  return { inserted: done };
+}
+
+async function rollbackOpeningCost({ supabase, tenantId, batchId }) {
+  const { data: tec } = await supabase.from("TEC").select("ID, STRUCTURE_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  const rows = tec || [];
+  const structureIds = [...new Set(rows.map((r) => r.STRUCTURE_ID).filter((x) => x != null))];
+  await supabase.from("TEC").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  for (const sid of structureIds) { try { await recomputeStructure(supabase, sid); } catch (_) { /* COSTS-Recompute soft-fail */ } }
+  return { deleted: rows.length };
+}
+
 const DOMAINS = {
   address: {
     key: "address",
@@ -991,6 +1095,17 @@ const DOMAINS = {
     buildEntry: buildOpeningBalanceEntry,
     commitRows: commitOpeningBalanceRows,
     rollbackExecute: rollbackOpeningBalance,
+  },
+  opening_cost: {
+    key: "opening_cost",
+    label: "Kosten-Anfangsbestände",
+    table: "TEC",
+    matchLabel: "Projektnummer",
+    fields: OPENING_COST_FIELDS,
+    loadContext: loadOpeningCostContext,
+    buildEntry: buildOpeningCostEntry,
+    commitRows: commitOpeningCostRows,
+    rollbackExecute: rollbackOpeningCost,
   },
 };
 
@@ -1244,7 +1359,7 @@ function listDomains() {
 module.exports = {
   // rein / testbar
   s, norm, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
-  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildOpeningBalanceEntry,
+  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildOpeningBalanceEntry, buildOpeningCostEntry,
   // orchestriert
   preview, commit, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
 };

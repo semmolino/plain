@@ -975,6 +975,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
 }
 
 module.exports = {
+  recomputeStructure,
   createBuchung,
   createSpecialBuchung,
   updateSpecialBuchung,

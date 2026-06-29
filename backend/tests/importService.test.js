@@ -14,6 +14,7 @@ const {
   buildProjectEntry,
   buildProjectFeeEntry,
   buildOpeningBalanceEntry,
+  buildOpeningCostEntry,
 } = require("../services/importService");
 
 // Hilfs-Context für die Adress-Validierung (kein supabase nötig).
@@ -526,6 +527,61 @@ describe("buildPreview (opening_balance)", () => {
     const pv = preview([
       ["P-2024-012", "30000"], // ok
       ["p-booked",   "10000"], // duplicate (existing booked)
+      ["P-9999",     "1000"],  // error
+    ]);
+    expect(pv.summary.ok).toBe(1);
+    expect(pv.summary.duplicate).toBe(1);
+    expect(pv.summary.error).toBe(1);
+  });
+});
+
+// ── Kosten-Anfangsbestände ────────────────────────────────────────────────────
+function makeOpeningCostCtx() {
+  return {
+    byNumber: new Map([
+      ["p-2024-012", { projectId: 1, structureId: 301 }],
+      ["p-nostruct", { projectId: 2, structureId: null }],
+      ["p-hadcost",  { projectId: 3, structureId: 303 }],
+    ]),
+    existingKeys: new Set(["p-hadcost"]),
+  };
+}
+
+describe("buildOpeningCostEntry", () => {
+  const ctx = makeOpeningCostCtx();
+
+  it("accepts a cost on a known project and targets the leaf structure", () => {
+    const e = buildOpeningCostEntry({ project_number: "P-2024-012", cost: "45.000,00" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.cost).toBe(45000);
+    expect(e.dbRow.structureId).toBe(301);
+  });
+
+  it("is importable with a warning when the project has no structure (project-level cost)", () => {
+    const e = buildOpeningCostEntry({ project_number: "p-nostruct", cost: "1000" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.structureId).toBeNull();
+    expect(e.messages.some(m => m.level === "warn")).toBe(true);
+  });
+
+  it("errors on unknown project or invalid cost", () => {
+    expect(buildOpeningCostEntry({ project_number: "P-9999", cost: "1000" }, ctx).ok).toBe(false);
+    expect(buildOpeningCostEntry({ project_number: "P-2024-012", cost: "0" }, ctx).ok).toBe(false);
+    expect(buildOpeningCostEntry({ project_number: "P-2024-012", cost: "abc" }, ctx).ok).toBe(false);
+  });
+});
+
+describe("buildPreview (opening_cost)", () => {
+  const ctx = makeOpeningCostCtx();
+  const headers = ["Projektnummer", "Bereits angefallene Kosten (netto)"];
+  function preview(rows) {
+    const parsed = { headers, rows: rows.map(r => ({ "Projektnummer": r[0], "Bereits angefallene Kosten (netto)": r[1] })) };
+    return buildPreview({ domainKey: "opening_cost", parsed, mapping: null, ctx });
+  }
+  it("ok / duplicate (cost already imported) / error (unknown)", () => {
+    const pv = preview([
+      ["P-2024-012", "45000"], // ok
+      ["p-hadcost",  "10000"], // duplicate (existing imported cost)
       ["P-9999",     "1000"],  // error
     ]);
     expect(pv.summary.ok).toBe(1);

@@ -54,7 +54,7 @@ export function ImportSection() {
   const batches = batchesData?.data ?? []
 
   // Empfohlene Reihenfolge der Bereiche + bereits importierte (für die Schritt-Übersicht).
-  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_fee', 'opening_balance']
+  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_fee', 'opening_balance', 'opening_cost']
   const orderedDomains = [...domains].sort((a, b) => {
     const ia = DOMAIN_ORDER.indexOf(a.key), ib = DOMAIN_ORDER.indexOf(b.key)
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
@@ -212,6 +212,14 @@ export function ImportSection() {
             Projekt + <em>Projekt-Honorar</em> (Struktur/Vertrag) sind importiert und ein Ansprechpartner ist
             vorhanden. Optional kann „bereits bezahlt" mitgegeben werden (wird als echte Zahlung gebucht).
             Projekte mit bereits gebuchten Belegen werden übersprungen.
+          </p>
+        )}
+        {domainKey === 'opening_cost' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
+            Hinweis: Trägt <strong>bereits angefallene Kosten</strong> je Projekt als einen Kostenblock
+            (Pauschalkosten-Buchung) ein — <em>keine</em> Einzelbuchungen. Besonders für Stunden-/TEC-Projekte,
+            damit Deckungsbeitrag und Wirtschaftlichkeit ab Tag 1 stimmen. Voraussetzung: das Projekt ist
+            importiert/angelegt.
           </p>
         )}
         {domainKey === 'project' && (
