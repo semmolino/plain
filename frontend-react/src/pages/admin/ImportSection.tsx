@@ -166,6 +166,13 @@ export function ImportSection() {
             Zugang (Passwort) und Berechtigungen vergibst du anschließend unter <em>Mitarbeiter</em>.
           </p>
         )}
+        {domainKey === 'contact' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
+            Hinweis: Kontakte (Ansprechpartner) gehören zu einer <strong>Adresse/Firma</strong> — diese also
+            <em> vorher</em> importieren. Anrede ist Pflicht; das Geschlecht wird, wenn keine eigene Spalte
+            vorhanden ist, aus der Anrede (Herr/Frau) abgeleitet.
+          </p>
+        )}
         {domainKey === 'project' && (
           <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
             Hinweis: Es werden <strong>Projekt-Stammdaten</strong> angelegt (Nummer, Name, Status, Typ,

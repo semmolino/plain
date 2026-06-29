@@ -10,6 +10,7 @@ const {
   parseAmountDE,
   buildAddressEntry,
   buildEmployeeEntry,
+  buildContactEntry,
   buildProjectEntry,
   buildProjectFeeEntry,
 } = require("../services/importService");
@@ -393,6 +394,73 @@ describe("buildPreview (project_fee)", () => {
       ["P-2024-012", "80000"],   // ok
       ["P-2024-013", "50000"],   // duplicate (already has structure)
       ["P-9999",     "1000"],    // error (unknown project)
+    ]);
+    expect(pv.summary.ok).toBe(1);
+    expect(pv.summary.duplicate).toBe(1);
+    expect(pv.summary.error).toBe(1);
+  });
+});
+
+// ── Kontakte ──────────────────────────────────────────────────────────────────
+function makeContactCtx() {
+  return {
+    addrByName: new Map([["stadt musterhausen", 40], ["acme gmbh", 41]]),
+    salByName: new Map([["herr", 1], ["frau", 2]]),
+    genders: { byName: new Map([["männlich", 10], ["maennlich", 10], ["weiblich", 11], ["divers", 12]]), default: 12 },
+    existingKeys: new Set(["40|hans meier"]),
+  };
+}
+
+describe("buildAutoMapping (contact)", () => {
+  it("maps contact headers and aliases", () => {
+    const map = buildAutoMapping(["Firma", "Anrede", "Vorname", "Nachname", "E-Mail"], "contact");
+    expect(map.address).toBe("Firma");
+    expect(map.salutation).toBe("Anrede");
+    expect(map.first_name).toBe("Vorname");
+    expect(map.email).toBe("E-Mail");
+  });
+});
+
+describe("buildContactEntry", () => {
+  const ctx = makeContactCtx();
+
+  it("resolves address + salutation and derives gender from Anrede", () => {
+    const e = buildContactEntry({ address: "Stadt Musterhausen", salutation: "Herr", first_name: "Thomas", last_name: "Beispiel" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.ADDRESS_ID).toBe(40);
+    expect(e.dbRow.SALUTATION_ID).toBe(1);
+    expect(e.dbRow.GENDER_ID).toBe(10);   // aus "Herr" abgeleitet
+  });
+
+  it("uses an explicit gender column when present", () => {
+    const e = buildContactEntry({ address: "Acme GmbH", salutation: "Frau", first_name: "A", last_name: "B", gender: "divers" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.GENDER_ID).toBe(12);
+  });
+
+  it("errors on unknown address (required)", () => {
+    const e = buildContactEntry({ address: "Unbekannt GmbH", salutation: "Herr", first_name: "X", last_name: "Y" }, ctx);
+    expect(e.ok).toBe(false);
+  });
+
+  it("errors on missing salutation (required)", () => {
+    const e = buildContactEntry({ address: "Acme GmbH", salutation: "", first_name: "X", last_name: "Y" }, ctx);
+    expect(e.ok).toBe(false);
+  });
+});
+
+describe("buildPreview (contact)", () => {
+  const ctx = makeContactCtx();
+  const headers = ["Firma", "Anrede", "Vorname", "Nachname"];
+  function preview(rows) {
+    const parsed = { headers, rows: rows.map(r => ({ "Firma": r[0], "Anrede": r[1], "Vorname": r[2], "Nachname": r[3] })) };
+    return buildPreview({ domainKey: "contact", parsed, mapping: null, ctx });
+  }
+  it("ok / duplicate (existing) / error (unknown address)", () => {
+    const pv = preview([
+      ["Stadt Musterhausen", "Herr", "Thomas", "Beispiel"], // ok
+      ["Stadt Musterhausen", "Herr", "Hans", "Meier"],      // duplicate (existing 40|hans meier)
+      ["Unbekannt GmbH",     "Herr", "X", "Y"],             // error
     ]);
     expect(pv.summary.ok).toBe(1);
     expect(pv.summary.duplicate).toBe(1);

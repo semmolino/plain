@@ -237,6 +237,114 @@ function buildEmployeeEntry(mapped, ctx) {
   return { ok, messages, dbRow, matchKey, display };
 }
 
+// ── Domäne: Kontakte (Ansprechpartner) ───────────────────────────────────────
+const CONTACT_FIELDS = [
+  { key: "address",    header: "Firma/Adresse (Zugehörigkeit)", required: true,  example: "Stadt Musterhausen", aliases: ["firma", "adresse", "unternehmen", "kunde", "bauherr", "company", "addressname"] },
+  { key: "salutation", header: "Anrede",                        required: true,  example: "Herr",               aliases: ["anrede", "salutation"] },
+  { key: "first_name", header: "Vorname",                       required: true,  example: "Thomas",             aliases: ["vorname", "firstname"] },
+  { key: "last_name",  header: "Nachname",                      required: true,  example: "Beispiel",           aliases: ["nachname", "name", "lastname", "familienname", "surname"] },
+  { key: "gender",     header: "Geschlecht",                    required: false, example: "männlich",           aliases: ["geschlecht", "gender"] },
+  { key: "title",      header: "Titel",                         required: false, example: "Dr.",                aliases: ["titel", "title"] },
+  { key: "email",      header: "E-Mail",                        required: false, example: "t.beispiel@muster.de", aliases: ["email", "mail", "emailadresse", "mailadresse"] },
+  { key: "mobile",     header: "Telefon/Mobil",                 required: false, example: "+49 170 1234567",    aliases: ["mobil", "telefon", "mobile", "phone", "tel", "handy", "telefonnummer"] },
+];
+
+function deriveGenderFromSalutation(salText, genders) {
+  const t = norm(salText);
+  if (t.includes("herr")) return genders.byName.get("männlich") ?? genders.byName.get("maennlich") ?? null;
+  if (t.includes("frau")) return genders.byName.get("weiblich") ?? null;
+  return null;
+}
+
+async function loadContactContext(supabase, tenantId) {
+  const [addrRes, salRes, genderRes, contactRes] = await Promise.all([
+    supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("SALUTATION").select("ID, SALUTATION"),   // global
+    supabase.from("GENDER").select("ID, GENDER"),            // global
+    supabase.from("CONTACTS").select("ADDRESS_ID, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
+  ]);
+
+  const addrByName = new Map();
+  for (const a of addrRes.data || []) if (a.ADDRESS_NAME_1) addrByName.set(norm(a.ADDRESS_NAME_1), a.ID);
+
+  const salByName = new Map();
+  for (const sa of salRes.data || []) if (sa.SALUTATION) salByName.set(norm(sa.SALUTATION), sa.ID);
+
+  const gByName = new Map();
+  let gDefault = null;
+  for (const g of genderRes.data || []) {
+    const t = norm(g.GENDER);
+    if (t) gByName.set(t, g.ID);
+    if (t.startsWith("männ") || t.startsWith("maen")) { gByName.set("männlich", g.ID); gByName.set("maennlich", g.ID); gByName.set("m", g.ID); }
+    if (t.startsWith("weib")) { gByName.set("weiblich", g.ID); gByName.set("w", g.ID); }
+    if (t.startsWith("div")) { gByName.set("divers", g.ID); gDefault = g.ID; }
+    if (t.includes("keine") || t.includes("unbekannt") || t.includes("angabe")) gDefault = g.ID;
+  }
+
+  const existingKeys = new Set();
+  for (const c of contactRes.data || []) {
+    existingKeys.add(`${c.ADDRESS_ID}|` + norm(`${c.FIRST_NAME || ""} ${c.LAST_NAME || ""}`));
+  }
+  return { addrByName, salByName, genders: { byName: gByName, default: gDefault }, existingKeys };
+}
+
+function buildContactEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const first = s(mapped.first_name);
+  const last  = s(mapped.last_name);
+  if (!first) { messages.push({ level: "error", text: "Vorname fehlt (Pflichtfeld)" }); ok = false; }
+  if (!last)  { messages.push({ level: "error", text: "Nachname fehlt (Pflichtfeld)" }); ok = false; }
+
+  // Adresse (Pflicht): Kontakt gehört zu einer Firma/Adresse.
+  let addressId = null;
+  const ain = s(mapped.address);
+  if (!ain) { messages.push({ level: "error", text: "Firma/Adresse fehlt (Pflichtfeld)" }); ok = false; }
+  else {
+    addressId = ctx.addrByName.get(norm(ain)) ?? null;
+    if (addressId == null) { messages.push({ level: "error", text: `Firma/Adresse „${ain}" nicht gefunden — zuerst Adressen importieren` }); ok = false; }
+  }
+
+  // Anrede (Pflicht).
+  let salutationId = null;
+  const sin = s(mapped.salutation);
+  if (!sin) { messages.push({ level: "error", text: "Anrede fehlt (Pflichtfeld, z. B. Herr/Frau)" }); ok = false; }
+  else {
+    salutationId = ctx.salByName.get(norm(sin)) ?? null;
+    if (salutationId == null) { messages.push({ level: "error", text: `Anrede „${sin}" nicht gefunden (z. B. Herr/Frau)` }); ok = false; }
+  }
+
+  // Geschlecht (Pflicht in der App): aus Spalte, sonst aus Anrede ableiten, sonst Default.
+  let genderId = null;
+  const gin = s(mapped.gender);
+  if (gin) {
+    genderId = ctx.genders.byName.get(norm(gin)) ?? null;
+    if (genderId == null) messages.push({ level: "warn", text: `Geschlecht „${gin}" nicht erkannt — aus Anrede abgeleitet` });
+  }
+  if (genderId == null) genderId = deriveGenderFromSalutation(sin, ctx.genders);
+  if (genderId == null) genderId = ctx.genders.default;
+  if (genderId == null) { messages.push({ level: "error", text: "Geschlecht nicht ermittelbar (Spalte Geschlecht oder Anrede Herr/Frau angeben)" }); ok = false; }
+
+  const email = s(mapped.email);
+  if (email && !email.includes("@")) messages.push({ level: "warn", text: "E-Mail sieht ungültig aus (kein @)" });
+
+  const dbRow = {
+    TITLE:         s(mapped.title) || null,
+    FIRST_NAME:    first || null,
+    LAST_NAME:     last || null,
+    EMAIL:         email || null,
+    MOBILE:        s(mapped.mobile) || null,
+    SALUTATION_ID: salutationId,
+    GENDER_ID:     genderId,
+    ADDRESS_ID:    addressId,
+  };
+
+  const matchKey = addressId != null ? `${addressId}|` + norm(`${first} ${last}`) : norm(`${first} ${last}`);
+  const display = { address: ain, salutation: sin, name: `${first} ${last}`.trim(), email };
+  return { ok, messages, dbRow, matchKey, display };
+}
+
 // ── Domäne: Projekte (Stammdaten/Kopf) ───────────────────────────────────────
 const PROJECT_FIELDS = [
   { key: "project_number", header: "Projektnummer",            required: true,  example: "P-2024-012",                aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
@@ -500,6 +608,22 @@ const DOMAINS = {
     ],
     loadContext: loadEmployeeContext,
     buildEntry: buildEmployeeEntry,
+  },
+  contact: {
+    key: "contact",
+    label: "Kontakte",
+    table: "CONTACTS",
+    matchLabel: "Adresse + Name",
+    fields: CONTACT_FIELDS,
+    dependents: [
+      { table: "PROJECT",         column: "CONTACT_ID",         label: "Projekt(e)" },
+      { table: "CONTRACT",        column: "INVOICE_CONTACT_ID", label: "Vertrag/Verträge" },
+      { table: "OFFER",           column: "CONTACT_ID",         label: "Angebot(e)" },
+      { table: "INVOICE",         column: "CONTACT_ID",         label: "Rechnung(en)" },
+      { table: "PARTIAL_PAYMENT", column: "CONTACT_ID",         label: "Abschlagsrechnung(en)" },
+    ],
+    loadContext: loadContactContext,
+    buildEntry: buildContactEntry,
   },
   project: {
     key: "project",
@@ -788,7 +912,7 @@ function listDomains() {
 module.exports = {
   // rein / testbar
   s, norm, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
-  buildAddressEntry, buildEmployeeEntry, buildProjectEntry, buildProjectFeeEntry,
+  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry,
   // orchestriert
   preview, commit, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
 };
