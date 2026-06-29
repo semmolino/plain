@@ -76,6 +76,20 @@ export const HELP = {
       </>
     ),
   },
+  'import.doc_type': {
+    title: 'Beleg-Art des Anfangsbestands',
+    body: (
+      <>
+        „Bereits berechnet" wird als echter, gebuchter Beleg am Projekt hinterlegt (ohne PDF/E-Rechnung),
+        damit Reporting und offene Posten korrekt sind. Du wählst die Art:
+        <br /><strong>Abschlagsrechnung</strong> — für laufende Projekte, bei denen noch eine
+        Schlussrechnung folgt. Der Betrag wird bei der späteren Schlussrechnung automatisch abgezogen.
+        <br /><strong>Rechnung</strong> — für bereits einzeln/abschließend berechnete Beträge.
+        <br />Der Betrag darf die Honorarsumme des Projekts nicht übersteigen. Zahlungen
+        („bereits bezahlt") werden separat erfasst.
+      </>
+    ),
+  },
   'import.structure_mode': {
     title: 'Leistungsstruktur beim Honorar-Import',
     body: (

@@ -45,6 +45,7 @@ async function postCommit(req, res, supabase) {
       domainKey: req.params.domain, buffer: req.file.buffer, filename: req.file.originalname,
       mapping: parseMapping(req), duplicateMode: req.body?.duplicateMode || "skip",
       structureMode: req.body?.structureMode || "single",
+      docType: req.body?.docType || "partial",
       supabase, tenantId: req.tenantId, employeeId: req.employeeId,
     });
     res.json({ data });

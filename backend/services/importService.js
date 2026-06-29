@@ -13,6 +13,11 @@
  */
 
 const XLSX = require("xlsx");
+// Phase 3: Anfangsbestände werden über die bewährten Beleg-Services gebucht
+// (init → Struktur → book(skipDocuments)) statt von Hand geschrieben.
+const ppSvc = require("./partialPayments");
+const invSvc = require("./invoices");
+const { insertProgressSnapshot } = require("./projectProgress");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 /** String-Wert sicher trimmen (null/undefined → ""). */
@@ -50,6 +55,8 @@ function parseAmountDE(v) {
 }
 /** kaufmännisch auf 2 Nachkommastellen runden. */
 function fmt2(n) { return Math.round(n * 100) / 100; }
+/** Zahl sicher coercen (NaN/null → 0). */
+function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
 // ── Domänen-Registry ─────────────────────────────────────────────────────────
 // Jede Domäne: table, fields (key/header/required/example/aliases), dependents
@@ -581,6 +588,218 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
   return { inserted: done };
 }
 
+// ── Domäne: Anfangsbestände / Altrechnungen ──────────────────────────────────
+// „bereits berechnet" je Projekt → echter, gebuchter Referenz-Beleg (Abschlags-
+// rechnung ODER Rechnung), damit der Wert das Self-Healing-Recompute überlebt.
+// Erzeugt über die App-Pipeline init → Belegstruktur → book(skipDocuments).
+const OPENING_BALANCE_FIELDS = [
+  { key: "project_number", header: "Projektnummer",            required: true,  example: "P-2024-012",  aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
+  { key: "amount",         header: "Bereits berechnet (netto)", required: true,  example: "30000",       aliases: ["berechnet", "bereitsberechnet", "rechnungsbetrag", "betrag", "summe", "fakturiert", "invoiced"] },
+  { key: "doc_number",     header: "Belegnummer (optional)",    required: false, example: "RE-2023-044", aliases: ["belegnummer", "rechnungsnummer", "docnumber"] },
+];
+
+async function loadOpeningBalanceContext(supabase, tenantId) {
+  const [projRes, contractRes, structRes, ppRes, invRes] = await Promise.all([
+    supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("CONTRACT").select("ID, PROJECT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PARTIAL_PAYMENT").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("STATUS_ID", 2).limit(100000),
+    supabase.from("INVOICE").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("STATUS_ID", 2).limit(100000),
+  ]);
+
+  const contractByProject = new Map();
+  for (const c of contractRes.data || []) if (!contractByProject.has(c.PROJECT_ID)) contractByProject.set(c.PROJECT_ID, c);
+
+  const btByProject = new Map();
+  for (const s of structRes.data || []) {
+    if (Number(s.BILLING_TYPE_ID) !== 1 || num(s.REVENUE) <= 0) continue;
+    if (!btByProject.has(s.PROJECT_ID)) btByProject.set(s.PROJECT_ID, []);
+    btByProject.get(s.PROJECT_ID).push({ id: s.ID, revenue: num(s.REVENUE), extrasPercent: num(s.EXTRAS_PERCENT) });
+  }
+
+  const bookedProjects = new Set();
+  for (const r of ppRes.data || [])  if (r.PROJECT_ID != null) bookedProjects.add(r.PROJECT_ID);
+  for (const r of invRes.data || []) if (r.PROJECT_ID != null) bookedProjects.add(r.PROJECT_ID);
+
+  const byNumber = new Map();
+  const existingKeys = new Set();
+  for (const p of projRes.data || []) {
+    if (!p.NAME_SHORT) continue;
+    const contract = contractByProject.get(p.ID) || null;
+    const btStructures = btByProject.get(p.ID) || [];
+    byNumber.set(norm(p.NAME_SHORT), {
+      projectId: p.ID, name: p.NAME_LONG || p.NAME_SHORT, companyId: p.COMPANY_ID ?? null,
+      addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null,
+      contract, btStructures,
+    });
+    if (bookedProjects.has(p.ID)) existingKeys.add(norm(p.NAME_SHORT));
+  }
+  return { byNumber, existingKeys };
+}
+
+function buildOpeningBalanceEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const number = s(mapped.project_number);
+  let proj = null;
+  if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
+  else {
+    proj = ctx.byNumber.get(norm(number)) || null;
+    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}" nicht gefunden` }); ok = false; }
+    else {
+      if (!proj.contract) { messages.push({ level: "error", text: "Projekt hat keinen Vertrag — zuerst „Projekt-Honorar“ importieren" }); ok = false; }
+      if (!proj.btStructures.length) { messages.push({ level: "error", text: "Keine abrechenbare Pauschal-Struktur (nur Pauschal-Projekte)" }); ok = false; }
+    }
+  }
+
+  const feeRaw = s(mapped.amount);
+  const amount = parseAmountDE(feeRaw);
+  if (!feeRaw) { messages.push({ level: "error", text: "Betrag fehlt (Pflichtfeld)" }); ok = false; }
+  else if (amount.invalid || amount.value == null) { messages.push({ level: "error", text: `Betrag „${feeRaw}" ist keine gültige Zahl` }); ok = false; }
+  else if (amount.value <= 0) { messages.push({ level: "error", text: "Betrag muss größer als 0 sein" }); ok = false; }
+  else if (proj && proj.btStructures.length) {
+    const sumRev = proj.btStructures.reduce((a, n) => a + n.revenue, 0);
+    if (amount.value > sumRev + 0.01) { messages.push({ level: "error", text: `Betrag übersteigt die Honorarsumme (max. ${sumRev.toFixed(2)})` }); ok = false; }
+  }
+
+  const dbRow = (proj && ok) ? {
+    projectId: proj.projectId, projectNumber: number, projectName: proj.name, companyId: proj.companyId,
+    contractId: proj.contract.ID, invoiceAddressId: proj.contract.INVOICE_ADDRESS_ID ?? proj.addressId,
+    invoiceContactId: proj.contract.INVOICE_CONTACT_ID ?? proj.contactId, addressId: proj.addressId,
+    amount: amount.value, docNumber: s(mapped.doc_number) || null, btStructures: proj.btStructures,
+  } : null;
+
+  const matchKey = norm(number);
+  const display = {
+    number, name: proj ? proj.name : "",
+    amount: amount.value != null ? amount.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : feeRaw,
+  };
+  return { ok, messages, dbRow, matchKey, display };
+}
+
+// Verteilt den Betrag proportional zur REVENUE über die BT1-Knoten (Rest auf den ersten).
+function distributeOpening(amount, btStructures) {
+  const sumRev = btStructures.reduce((a, n) => a + n.revenue, 0);
+  let allocated = 0;
+  const dist = btStructures.map((n) => {
+    const amt = sumRev > 0 ? fmt2(amount * n.revenue / sumRev) : fmt2(amount / btStructures.length);
+    allocated = fmt2(allocated + amt);
+    return { id: n.id, extrasPercent: n.extrasPercent, amt };
+  });
+  const diff = fmt2(amount - allocated);
+  if (diff !== 0 && dist.length) dist[0].amt = fmt2(dist[0].amt + diff);
+  return dist;
+}
+
+async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, options, employeeId }) {
+  const docType = options?.docType === "invoice" ? "invoice" : "partial";
+  let done = 0;
+
+  for (const r of rows) {
+    const e = r._dbRow;
+    try {
+      // 1) Vertrag braucht Rechnungsadresse + Kontakt (sonst wirft init…). Kontakt
+      //    bei Bedarf aus erstem Kontakt der (Bauherr-)Adresse ableiten.
+      let contactId = e.invoiceContactId;
+      const addressId = e.invoiceAddressId || e.addressId;
+      if (!addressId) throw { status: 400, message: `Projekt ${e.projectNumber}: keine Rechnungsadresse am Vertrag` };
+      if (!contactId) {
+        const { data: cts } = await supabase.from("CONTACTS").select("ID").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", addressId).order("ID", { ascending: true }).limit(1);
+        contactId = cts?.[0]?.ID ?? null;
+        if (!contactId) throw { status: 400, message: `Projekt ${e.projectNumber}: kein Ansprechpartner zur Adresse — bitte Kontakt importieren` };
+      }
+      await supabase.from("CONTRACT").update({ INVOICE_ADDRESS_ID: addressId, INVOICE_CONTACT_ID: contactId }).eq("ID", e.contractId).eq("TENANT_ID", tenantId);
+      if (!e.invoiceContactId) await supabase.from("PROJECT").update({ CONTACT_ID: contactId }).eq("ID", e.projectId).eq("TENANT_ID", tenantId).is("CONTACT_ID", null);
+
+      const dist = distributeOpening(e.amount, e.btStructures);
+
+      if (docType === "invoice") {
+        const { id } = await invSvc.initInvoice(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId, invoiceType: null });
+        const upd = { IMPORT_BATCH_ID: batchId }; if (e.docNumber) upd.INVOICE_NUMBER = e.docNumber;
+        await supabase.from("INVOICE").update(upd).eq("ID", id);
+        const isRows = dist.map((d) => ({ INVOICE_ID: id, STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * d.extrasPercent / 100), TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
+        await invSvc.writeInvoiceStructureRows(supabase, { invoiceId: id, rows: isRows, deleteStructureIds: dist.map((d) => d.id) });
+        await invSvc.recomputeInvoiceTotals(supabase, id);
+        const { data: inv } = await supabase.from("INVOICE").select("*").eq("ID", id).single();
+        await invSvc.bookInvoice(supabase, { id, inv, tenantId, force: true, skipDocuments: true });
+      } else {
+        const { id } = await ppSvc.initPartialPayment(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId });
+        const upd = { IMPORT_BATCH_ID: batchId }; if (e.docNumber) upd.PARTIAL_PAYMENT_NUMBER = e.docNumber;
+        await supabase.from("PARTIAL_PAYMENT").update(upd).eq("ID", id);
+        const psRows = dist.map((d) => ({ PARTIAL_PAYMENT_ID: id, STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * d.extrasPercent / 100), TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
+        await ppSvc.writePpsRows(supabase, { partialPaymentId: id, structureIds: dist.map((d) => d.id), rows: psRows });
+        await ppSvc.recomputePartialPaymentTotals(supabase, id);
+        const { data: pp } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", id).single();
+        await ppSvc.bookPartialPayment(supabase, { id, pp, tenantId, force: true, skipDocuments: true });
+      }
+      done++;
+    } catch (err) {
+      throw { status: err?.status || 500, message: `Anfangsbestand für ${e.projectNumber} fehlgeschlagen: ${err?.message || err}` };
+    }
+  }
+  return { inserted: done };
+}
+
+// Rollback: reversiert die gebuchten Aggregate je Beleg-Art und löscht die Belege.
+async function reverseOpeningDocs(supabase, tenantId, batchId, kind) {
+  const docTable    = kind === "partial" ? "PARTIAL_PAYMENT" : "INVOICE";
+  const structTable = kind === "partial" ? "PARTIAL_PAYMENT_STRUCTURE" : "INVOICE_STRUCTURE";
+  const projCol     = kind === "partial" ? "PARTIAL_PAYMENTS" : "INVOICED";
+
+  const { data: docs } = await supabase.from(docTable).select("ID, PROJECT_ID, TOTAL_AMOUNT_NET").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  if (!docs || !docs.length) return 0;
+  const { data: structs } = await supabase.from(structTable).select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+
+  // Projekt-Aggregat
+  const byProject = new Map();
+  for (const d of docs) byProject.set(d.PROJECT_ID, fmt2((byProject.get(d.PROJECT_ID) || 0) + num(d.TOTAL_AMOUNT_NET)));
+  for (const [pid, total] of byProject) {
+    const { data: pr } = await supabase.from("PROJECT").select(projCol).eq("ID", pid).maybeSingle();
+    await supabase.from("PROJECT").update({ [projCol]: fmt2(num(pr?.[projCol]) - total) }).eq("ID", pid);
+  }
+
+  // Struktur-Aggregat + kompensierende PROGRESS-Snapshots
+  const byStruct = new Map();
+  for (const r of structs || []) byStruct.set(r.STRUCTURE_ID, fmt2((byStruct.get(r.STRUCTURE_ID) || 0) + num(r.AMOUNT_NET) + num(r.AMOUNT_EXTRAS_NET)));
+  const progRows = [];
+  for (const [sid, delta] of byStruct) {
+    const { data: ps } = await supabase.from("PROJECT_STRUCTURE").select(projCol).eq("ID", sid).maybeSingle();
+    await supabase.from("PROJECT_STRUCTURE").update({ [projCol]: fmt2(num(ps?.[projCol]) - delta) }).eq("ID", sid);
+    progRows.push({ TENANT_ID: tenantId, STRUCTURE_ID: sid, [projCol]: fmt2(-delta) });
+  }
+  if (progRows.length) { try { await insertProgressSnapshot(supabase, progRows); } catch (_) { /* Ledger-Kompensation soft-fail */ } }
+
+  await supabase.from(structTable).delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  await supabase.from(docTable).delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  return docs.length;
+}
+
+async function rollbackOpeningBalance({ supabase, tenantId, batchId }) {
+  // Betroffene Projekte
+  const projectIds = new Set();
+  for (const t of ["PARTIAL_PAYMENT", "INVOICE"]) {
+    const { data } = await supabase.from(t).select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+    for (const r of data || []) if (r.PROJECT_ID != null) projectIds.add(r.PROJECT_ID);
+  }
+  const ids = [...projectIds];
+  if (ids.length) {
+    // Schutz: an den Projekten hängen weitere gebuchte Belege außerhalb dieses Stapels.
+    const blockers = [];
+    for (const t of [{ table: "PARTIAL_PAYMENT", label: "Abschlagsrechnung(en)" }, { table: "INVOICE", label: "Rechnung(en)" }]) {
+      const { data, error } = await supabase.from(t.table).select("ID, IMPORT_BATCH_ID").eq("TENANT_ID", tenantId).eq("STATUS_ID", 2).in("PROJECT_ID", ids);
+      if (error) continue;
+      const live = (data || []).filter((r) => r.IMPORT_BATCH_ID !== batchId).length;
+      if (live > 0) blockers.push(`${live}× ${t.label}`);
+    }
+    if (blockers.length) throw { status: 409, message: `Rollback nicht möglich: An den Projekten hängen weitere gebuchte Belege (${blockers.join(", ")}). Diese zuerst stornieren.` };
+  }
+  let deleted = 0;
+  deleted += await reverseOpeningDocs(supabase, tenantId, batchId, "partial");
+  deleted += await reverseOpeningDocs(supabase, tenantId, batchId, "invoice");
+  return { deleted };
+}
+
 const DOMAINS = {
   address: {
     key: "address",
@@ -669,6 +888,17 @@ const DOMAINS = {
       }
       return blockers;
     },
+  },
+  opening_balance: {
+    key: "opening_balance",
+    label: "Anfangsbestände (Altrechnungen)",
+    table: "PARTIAL_PAYMENT",
+    matchLabel: "Projektnummer",
+    fields: OPENING_BALANCE_FIELDS,
+    loadContext: loadOpeningBalanceContext,
+    buildEntry: buildOpeningBalanceEntry,
+    commitRows: commitOpeningBalanceRows,
+    rollbackExecute: rollbackOpeningBalance,
   },
 };
 
@@ -772,7 +1002,7 @@ async function preview({ domainKey, buffer, filename, mapping, supabase, tenantI
   };
 }
 
-async function commit({ domainKey, buffer, filename, mapping, duplicateMode, structureMode, supabase, tenantId, employeeId }) {
+async function commit({ domainKey, buffer, filename, mapping, duplicateMode, structureMode, docType, supabase, tenantId, employeeId }) {
   const def = getDomain(domainKey);
   const parsed = parseBuffer(buffer);
   const ctx = await def.loadContext(supabase, tenantId);
@@ -787,7 +1017,7 @@ async function commit({ domainKey, buffer, filename, mapping, duplicateMode, str
     TENANT_ID: tenantId, DOMAIN: def.key, STATUS: "committed", SOURCE_FILENAME: filename || null,
     MAPPING_JSON: pv.mapping, ROW_TOTAL: pv.summary.total, ROW_OK: pv.summary.ok,
     ROW_SKIPPED: pv.summary.duplicate, ROW_ERROR: pv.summary.error,
-    SUMMARY_JSON: { ...pv.summary, structureMode: structureMode || null }, CREATED_BY: employeeId || null,
+    SUMMARY_JSON: { ...pv.summary, structureMode: structureMode || null, docType: docType || null }, CREATED_BY: employeeId || null,
   }]).select("ID").single();
   if (bErr) throw { status: 500, message: "Import-Stapel konnte nicht angelegt werden: " + bErr.message };
   const batchId = batch.ID;
@@ -796,7 +1026,7 @@ async function commit({ domainKey, buffer, filename, mapping, duplicateMode, str
   //     Fortschritt + Vertrag pro Projekt) — alles mit IMPORT_BATCH_ID getaggt.
   if (def.commitRows) {
     try {
-      const { inserted } = await def.commitRows(wanted, { supabase, tenantId, batchId, ctx, options: { structureMode } });
+      const { inserted } = await def.commitRows(wanted, { supabase, tenantId, batchId, ctx, options: { structureMode, docType }, employeeId });
       return { batchId, inserted, summary: pv.summary };
     } catch (e) {
       await supabase.from("IMPORT_BATCH").update({ ROW_OK: 0 }).eq("ID", batchId).eq("TENANT_ID", tenantId);
@@ -847,6 +1077,16 @@ async function rollback({ batchId, supabase, tenantId }) {
   if (batch.STATUS !== "committed") throw { status: 400, message: "Dieser Import wurde bereits zurückgesetzt" };
 
   const def = getDomain(batch.DOMAIN);
+
+  // Domänen mit eigener Rollback-Logik (z. B. Anfangsbestände: gebuchte Finanz-
+  // Aggregate reversieren statt nur Zeilen löschen).
+  if (def.rollbackExecute) {
+    const r = await def.rollbackExecute({ supabase, tenantId, batchId });
+    await supabase.from("IMPORT_BATCH")
+      .update({ STATUS: "rolled_back", ROLLED_BACK_AT: new Date().toISOString() })
+      .eq("ID", batchId).eq("TENANT_ID", tenantId);
+    return { rolledBack: true, deleted: r?.deleted ?? 0 };
+  }
 
   // Schutz: hängen Live-Daten an den importierten Datensätzen? Dann blockieren.
   let blockers = [];
@@ -912,7 +1152,7 @@ function listDomains() {
 module.exports = {
   // rein / testbar
   s, norm, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
-  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry,
+  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildOpeningBalanceEntry,
   // orchestriert
   preview, commit, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
 };

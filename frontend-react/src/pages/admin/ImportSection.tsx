@@ -9,7 +9,7 @@ import { useToast } from '@/store/toastStore'
 import {
   fetchImportDomains, fetchImportBatches, downloadImportTemplate,
   previewImport, commitImport, rollbackImportBatch,
-  type ImportPreview, type DuplicateMode, type StructureMode, type ImportRowStatus, type ImportBatch,
+  type ImportPreview, type DuplicateMode, type StructureMode, type DocType, type ImportRowStatus, type ImportBatch,
 } from '@/api/import'
 
 // ── Status-Darstellung ─────────────────────────────────────────────────────────
@@ -45,6 +45,7 @@ export function ImportSection() {
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [duplicateMode, setDuplicateMode] = useState<DuplicateMode>('skip')
   const [structureMode, setStructureMode] = useState<StructureMode>('single')
+  const [docType, setDocType] = useState<DocType>('partial')
   const [err, setErr] = useState<string | null>(null)
   const [done, setDone] = useState<{ inserted: number } | null>(null)
   const [confirmRollback, setConfirmRollback] = useState<ImportBatch | null>(null)
@@ -71,7 +72,9 @@ export function ImportSection() {
   })
 
   const commitMut = useMutation({
-    mutationFn: () => commitImport(domainKey, file!, mapping, duplicateMode, domainKey === 'project_fee' ? structureMode : undefined),
+    mutationFn: () => commitImport(domainKey, file!, mapping, duplicateMode,
+      domainKey === 'project_fee' ? structureMode : undefined,
+      domainKey === 'opening_balance' ? docType : undefined),
     onSuccess: (res) => {
       setDone({ inserted: res.data.inserted })
       toast.success(`${res.data.inserted} Datensätze importiert`)
@@ -171,6 +174,14 @@ export function ImportSection() {
             Hinweis: Kontakte (Ansprechpartner) gehören zu einer <strong>Adresse/Firma</strong> — diese also
             <em> vorher</em> importieren. Anrede ist Pflicht; das Geschlecht wird, wenn keine eigene Spalte
             vorhanden ist, aus der Anrede (Herr/Frau) abgeleitet.
+          </p>
+        )}
+        {domainKey === 'opening_balance' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
+            Hinweis: Trägt „bereits berechnet" als <strong>echten, gebuchten Beleg</strong> je Projekt ein
+            (ohne PDF/E-Rechnung) — so stimmen Reporting und offene Posten ab Tag 1. Voraussetzung:
+            Projekt + <em>Projekt-Honorar</em> (Struktur/Vertrag) sind importiert und ein Ansprechpartner ist
+            vorhanden. Projekte mit bereits gebuchten Belegen werden übersprungen.
           </p>
         )}
         {domainKey === 'project' && (
@@ -284,6 +295,22 @@ export function ImportSection() {
               </table>
             </div>
             {preview.truncated && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>Nur die ersten 200 Zeilen werden angezeigt; importiert werden alle.</p>}
+
+            {domainKey === 'opening_balance' && (
+              <div style={{ margin: '4px 0 12px', padding: 10, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2, #f8fafc)' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'inline-flex', alignItems: 'center' }}>
+                  Anfangsbestand anlegen als <HelpHint id="import.doc_type" />
+                </div>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 4 }}>
+                  <input type="radio" name="doctype" checked={docType === 'partial'} onChange={() => setDocType('partial')} />
+                  Abschlagsrechnung (laufendes Projekt, weitere Rechnungen folgen)
+                </label>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                  <input type="radio" name="doctype" checked={docType === 'invoice'} onChange={() => setDocType('invoice')} />
+                  Rechnung (abgeschlossen/einzeln berechnet)
+                </label>
+              </div>
+            )}
 
             {domainKey === 'project_fee' && (
               <div style={{ margin: '4px 0 12px', padding: 10, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2, #f8fafc)' }}>

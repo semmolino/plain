@@ -13,6 +13,7 @@ const {
   buildContactEntry,
   buildProjectEntry,
   buildProjectFeeEntry,
+  buildOpeningBalanceEntry,
 } = require("../services/importService");
 
 // Hilfs-Context für die Adress-Validierung (kein supabase nötig).
@@ -461,6 +462,64 @@ describe("buildPreview (contact)", () => {
       ["Stadt Musterhausen", "Herr", "Thomas", "Beispiel"], // ok
       ["Stadt Musterhausen", "Herr", "Hans", "Meier"],      // duplicate (existing 40|hans meier)
       ["Unbekannt GmbH",     "Herr", "X", "Y"],             // error
+    ]);
+    expect(pv.summary.ok).toBe(1);
+    expect(pv.summary.duplicate).toBe(1);
+    expect(pv.summary.error).toBe(1);
+  });
+});
+
+// ── Anfangsbestände ───────────────────────────────────────────────────────────
+function makeOpeningCtx() {
+  return {
+    byNumber: new Map([
+      ["p-2024-012", { projectId: 1, name: "Neubau Kita", companyId: 7, addressId: 40, contactId: 50, contract: { ID: 200, INVOICE_ADDRESS_ID: 40, INVOICE_CONTACT_ID: 50 }, btStructures: [{ id: 301, revenue: 80000, extrasPercent: 0 }] }],
+      ["p-booked",   { projectId: 4, name: "Schon gebucht", companyId: 7, addressId: 44, contactId: 54, contract: { ID: 204, INVOICE_ADDRESS_ID: 44, INVOICE_CONTACT_ID: 54 }, btStructures: [{ id: 304, revenue: 60000, extrasPercent: 0 }] }],
+      ["p-nostruct", { projectId: 2, name: "Ohne Struktur", companyId: 7, addressId: 41, contactId: 51, contract: { ID: 201, INVOICE_ADDRESS_ID: 41, INVOICE_CONTACT_ID: 51 }, btStructures: [] }],
+      ["p-nocontract", { projectId: 3, name: "Ohne Vertrag", companyId: 7, addressId: 42, contactId: 52, contract: null, btStructures: [{ id: 303, revenue: 50000, extrasPercent: 0 }] }],
+    ]),
+    existingKeys: new Set(["p-booked"]),
+  };
+}
+
+describe("buildOpeningBalanceEntry", () => {
+  const ctx = makeOpeningCtx();
+
+  it("accepts a valid amount on a project with contract + structure", () => {
+    const e = buildOpeningBalanceEntry({ project_number: "P-2024-012", amount: "30.000,00" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.amount).toBe(30000);
+    expect(e.dbRow.contractId).toBe(200);
+    expect(e.dbRow.btStructures).toHaveLength(1);
+  });
+
+  it("errors when the project is unknown", () => {
+    expect(buildOpeningBalanceEntry({ project_number: "P-9999", amount: "1000" }, ctx).ok).toBe(false);
+  });
+
+  it("errors without a contract or without billable structure", () => {
+    expect(buildOpeningBalanceEntry({ project_number: "p-nocontract", amount: "1000" }, ctx).ok).toBe(false);
+    expect(buildOpeningBalanceEntry({ project_number: "p-nostruct", amount: "1000" }, ctx).ok).toBe(false);
+  });
+
+  it("errors on invalid amount or amount above the fee", () => {
+    expect(buildOpeningBalanceEntry({ project_number: "P-2024-012", amount: "abc" }, ctx).ok).toBe(false);
+    expect(buildOpeningBalanceEntry({ project_number: "P-2024-012", amount: "90000" }, ctx).ok).toBe(false); // > 80.000
+  });
+});
+
+describe("buildPreview (opening_balance)", () => {
+  const ctx = makeOpeningCtx();
+  const headers = ["Projektnummer", "Bereits berechnet (netto)"];
+  function preview(rows) {
+    const parsed = { headers, rows: rows.map(r => ({ "Projektnummer": r[0], "Bereits berechnet (netto)": r[1] })) };
+    return buildPreview({ domainKey: "opening_balance", parsed, mapping: null, ctx });
+  }
+  it("ok / duplicate (already booked) / error (unknown)", () => {
+    const pv = preview([
+      ["P-2024-012", "30000"], // ok
+      ["p-booked",   "10000"], // duplicate (existing booked)
+      ["P-9999",     "1000"],  // error
     ]);
     expect(pv.summary.ok).toBe(1);
     expect(pv.summary.duplicate).toBe(1);
