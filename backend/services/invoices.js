@@ -966,13 +966,15 @@ async function deleteInvoice(supabase, { id, tenantId }) {
   if (delErr) throw new Error(delErr.message);
 }
 
-async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = null, force = false }) {
+async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = null, force = false, skipDocuments = false }) {
+  // skipDocuments (z. B. Datenimport von Anfangsbeständen): überspringt
+  // Vorprüfung + PDF + XRechnung; Nummer/Status/Aggregate bleiben unverändert.
   // ── E-Rechnung Vorpruefung (Branch 6) ─────────────────────────────────────
   // Validiert gegen die EN16931 Business-Rules BEVOR irgendetwas persistiert
   // wird (SE-Auflosung, PDF, XML, Status-Update). Bei Fehlern wirft die
   // Funktion mit status 422 + Validierungs-Details; Frontend kann mit
   // force=true uebersteuern (z.B. Notbuchung).
-  try {
+  if (!skipDocuments) try {
     const data = await loadInvoiceData(supabase, parseInt(id, 10), "INVOICE", tenantId);
     const v = validateEInvoiceData(data);
     if (!v.ok && !force) {
@@ -1069,7 +1071,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
   }
 
   let pdfAsset = null, tpl = null, theme = null;
-  try {
+  if (!skipDocuments) try {
     const r = await renderDocumentPdf({
       supabase,
       docType: "INVOICE",
@@ -1086,7 +1088,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
   }
 
   let xmlAsset = null;
-  try {
+  if (!skipDocuments) try {
     const { data: invFull, error: invFullErr } = await supabase.from("INVOICE").select("*").eq("ID", id).maybeSingle();
     if (invFullErr || !invFull) throw new Error(invFullErr?.message || "INVOICE konnte nicht vollstaendig geladen werden");
 

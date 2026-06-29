@@ -829,9 +829,11 @@ async function deletePartialPayment(supabase, { id, tenantId }) {
   if (delErr) throw new Error(delErr.message);
 }
 
-async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = false }) {
+async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = false, skipDocuments = false }) {
   // ── E-Rechnung Vorpruefung (Branch 6) ─────────────────────────────────────
-  try {
+  // skipDocuments (z. B. Datenimport von Anfangsbeständen): überspringt
+  // Vorprüfung + PDF + XRechnung; Nummer/Status/Aggregate bleiben unverändert.
+  if (!skipDocuments) try {
     const data = await loadInvoiceData(supabase, parseInt(id, 10), "PARTIAL_PAYMENT", tenantId || pp.TENANT_ID);
     const v = validateEInvoiceData(data);
     if (!v.ok && !force) {
@@ -869,7 +871,7 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
   const totalGross = round2(totalNet + taxAmountNet);
 
   let pdfAsset = null, tpl = null, theme = null;
-  try {
+  if (!skipDocuments) try {
     const r = await renderDocumentPdf({
       supabase,
       docType: "PARTIAL_PAYMENT",
@@ -886,7 +888,7 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
   }
 
   let xmlAsset = null;
-  try {
+  if (!skipDocuments) try {
     const { data: ppFull, error: ppFullErr } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", id).maybeSingle();
     if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "PARTIAL_PAYMENT nicht gefunden");
 
