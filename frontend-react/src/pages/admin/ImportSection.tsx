@@ -53,6 +53,14 @@ export function ImportSection() {
   const { data: batchesData } = useQuery({ queryKey: ['import-batches'], queryFn: fetchImportBatches })
   const batches = batchesData?.data ?? []
 
+  // Empfohlene Reihenfolge der Bereiche + bereits importierte (für die Schritt-Übersicht).
+  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_fee', 'opening_balance']
+  const orderedDomains = [...domains].sort((a, b) => {
+    const ia = DOMAIN_ORDER.indexOf(a.key), ib = DOMAIN_ORDER.indexOf(b.key)
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+  })
+  const importedDomains = new Set(batches.filter(b => b.status === 'committed').map(b => b.domain))
+
   // Nach Import/Rollback betroffene Listen + Onboarding-Fortschritt auffrischen.
   function invalidateAffected() {
     void qc.invalidateQueries({ queryKey: ['import-batches'] })
@@ -140,12 +148,33 @@ export function ImportSection() {
           <HelpHint id="import.overview" />
         </h3>
 
-        {domains.length > 1 && (
-          <div className="form-group" style={{ maxWidth: 320 }}>
-            <label htmlFor="imp-domain">Datenbereich</label>
-            <select id="imp-domain" value={domainKey} onChange={e => { setDomainKey(e.target.value); resetWizard(); setDone(null) }}>
-              {domains.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
-            </select>
+        {orderedDomains.length > 1 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Empfohlene Reihenfolge — Bereich wählen:</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {orderedDomains.map((d, i) => {
+                const active = d.key === domainKey
+                const imported = importedDomains.has(d.key)
+                return (
+                  <button
+                    key={d.key}
+                    type="button"
+                    onClick={() => { setDomainKey(d.key); resetWizard(); setDone(null) }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px',
+                      borderRadius: 999, fontSize: 12, cursor: 'pointer', fontWeight: active ? 600 : 500,
+                      border: '1px solid ' + (active ? 'var(--accent, #2563eb)' : 'var(--border)'),
+                      background: active ? 'var(--accent, #2563eb)' : (imported ? '#ecfdf5' : 'var(--surface-1, #fff)'),
+                      color: active ? '#fff' : (imported ? '#047857' : 'var(--text-2)'),
+                    }}
+                  >
+                    <span style={{ opacity: 0.7 }}>{i + 1}.</span>
+                    {imported && !active && <CheckCircle2 size={13} strokeWidth={2} />}
+                    {d.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
 
