@@ -11,7 +11,6 @@ import { Can } from '@/components/ui/Can'
 import type { StructureNode } from '@/api/projekte'
 import { Message } from '@/components/ui/Message'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
-import { RecentList } from '@/components/recents/RecentList'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -20,16 +19,14 @@ const fmtP    = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.fo
 
 interface Props {
   initialProjectId?: number
-  onProjectChange?: (id: number | null) => void
 }
 
-export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
+export function Leistungsstand({ initialProjectId }: Props) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [pid,  setPid]  = useState<number | null>(initialProjectId ?? null)
-  // Aenderung von aussen (z.B. Notification-Klick mit anderem Projekt)
-  // soll das aktuelle Projekt umschalten.
-  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
+  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
+  useEffect(() => { setPid(initialProjectId ?? null); setMsg(null); setSnapMsg(null) }, [initialProjectId])
   const [vals, setVals] = useState<Record<number, string>>({})
   const [msg,           setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [snapMsg,       setSnapMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -146,38 +143,11 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
     setMsg(null)
   }
 
-  function handleProjectChange(id: number | null) {
-    setPid(id)
-    onProjectChange?.(id)
-    setMsg(null)
-    setSnapMsg(null)
-  }
-
   const currentProject = projects.find(p => p.ID === pid)
   useTrackRecent('project', pid, currentProject ? ([currentProject.NAME_SHORT, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
 
   return (
     <div className="ls-wrap">
-      <RecentList
-        type="project"
-        title="Zuletzt verwendete Projekte"
-        onSelect={(e) => handleProjectChange(e.ENTITY_ID)}
-      />
-
-      <div className="ls-toolbar">
-        <label className="ls-label">Projekt</label>
-        <select
-          className="ls-select"
-          value={pid ?? ''}
-          onChange={e => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">— Projekt wählen —</option>
-          {projects.map(p => (
-            <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>
-          ))}
-        </select>
-      </div>
-
       {pid !== null && currentProject && (
         <div className="proj-jump-bar">
           <span className="proj-jump-label">{currentProject.NAME_SHORT}</span>
@@ -196,7 +166,7 @@ export function Leistungsstand({ initialProjectId, onProjectChange }: Props) {
         </div>
       )}
 
-      {!pid && <p className="ls-empty">Bitte ein Projekt auswählen.</p>}
+      {!pid && <p className="ls-empty">Bitte oben ein Projekt auswählen.</p>}
       {pid && isLoading && <p className="ls-empty">Lade Daten…</p>}
       {pid && isError   && <p className="ls-empty" style={{ color: 'var(--color-danger)' }}>Fehler beim Laden.</p>}
 

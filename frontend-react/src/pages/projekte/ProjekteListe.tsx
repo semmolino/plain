@@ -9,6 +9,7 @@ import { ConfirmModal }  from '@/components/ui/ConfirmModal'
 import { useToast }      from '@/store/toastStore'
 import { Autocomplete }  from '@/components/ui/Autocomplete'
 import { useCtrlS }      from '@/hooks/useCtrlS'
+import { ProjekteAnlegen } from '@/pages/projekte/ProjekteAnlegen'
 import {
   fetchProjectListFull, updateProject, deleteProject, fetchContractByProject, patchContract,
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers, fetchDepartments,
@@ -82,12 +83,13 @@ function SortTh({ label, k, sortKey, dir, onClick }: {
 type ContactOption = { ID: number; FIRST_NAME: string; LAST_NAME: string }
 type ContractConfirm = { contractId: number; addressId: number | null; contactId: number | null }
 
-export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: number) => void }) {
+export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectProject?: (id: number) => void; onProjectCreated?: (id: number) => void }) {
   const qc       = useQueryClient()
   const navigate = useNavigate()
   const toast    = useToast()
 
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
 
   // list state
   const [search,        setSearch]        = useState('')
@@ -399,6 +401,11 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
         <span className="list-info">
           {processed.length}{processed.length !== projects.length ? ` / ${projects.length}` : ''} Projekte · Seite {safePage}/{totalPages}
         </span>
+        <Can permission="projects.create">
+          <button className="btn-primary btn-small" style={{ marginLeft: 'auto' }} onClick={() => setShowCreate(true)}>
+            + Neues Projekt
+          </button>
+        </Can>
       </div>
 
       {hasActiveFilter && (() => {
@@ -485,7 +492,7 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
                 ))}
                 {!pageRows.length && (
                   <tr><td colSpan={5 + visibleOptCols.length + actionColSpan} className="empty-note">
-                    {hasActiveFilter ? 'Keine Projekte für diese Filter.' : 'Noch keine Projekte angelegt.'}
+                    {hasActiveFilter ? 'Keine Projekte für diese Filter.' : 'Noch keine Projekte angelegt. Lege oben rechts mit „+ Neues Projekt" das erste an.'}
                   </td></tr>
                 )}
               </tbody>
@@ -609,6 +616,10 @@ export function ProjekteListe({ onSelectProject }: { onSelectProject?: (id: numb
             </div>
           </form>
         )}
+      </Modal>
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Neues Projekt anlegen" className="modal-wide">
+        <ProjekteAnlegen onProjectCreated={id => { setShowCreate(false); onProjectCreated?.(id) }} />
       </Modal>
     </>
   )

@@ -51,7 +51,7 @@ function depthOf(id: string, parentMap: Map<string, string | null>): number {
   return d
 }
 
-export function ProjektStruktur({ initialProjectId, onProjectChange }: { initialProjectId?: number; onProjectChange?: (id: number | null) => void }) {
+export function ProjektStruktur({ initialProjectId }: { initialProjectId?: number }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [selectedPid, setSelectedPidState] = useState<number | null>(() => {
@@ -83,12 +83,9 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const [kalkFatherId, setKalkFatherId]     = useState<number | null>(null)
   const [projectSurchargePanel, setProjectSurchargePanel] = useState<boolean>(false)
   const [projectSurchargeEdit,  setProjectSurchargeEdit]  = useState<SurchargeEdit | null>(null)
-  const [projectInput, setProjectInput]           = useState('')
-  const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [elementSearch, setElementSearch]         = useState('')
   const [contextMenu, setContextMenu]             = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
   const contextMenuRef                            = useRef<HTMLDivElement>(null)
-  const projectAcRef                              = useRef<HTMLDivElement>(null)
   const longPressRef                              = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
@@ -110,7 +107,8 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   const btypes    = btData?.data       ?? []
 
   useEffect(() => { setEdits({}); setAddForm(null); setSelectedIds(new Set()) }, [selectedPid])
-  useEffect(() => { if (initialProjectId) setSelectedPid(initialProjectId) }, [initialProjectId])
+  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
+  useEffect(() => { setSelectedPid(initialProjectId ?? null) }, [initialProjectId])
 
   const flatTree = structure.length ? flattenTree(buildStructureTree(structure)) : []
   // String keys avoid bigint vs number mismatches at runtime
@@ -155,15 +153,6 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
   })()
 
   // These depend on parentMap and aggMap — declared AFTER them to avoid TDZ crash
-  const filteredProjects = useMemo(() => {
-    if (!projectDropdownOpen) return projects
-    const sq = projectInput.toLowerCase().trim()
-    if (!sq) return projects
-    return projects.filter(p =>
-      p.NAME_SHORT.toLowerCase().includes(sq) || (p.NAME_LONG?.toLowerCase().includes(sq) ?? false)
-    )
-  }, [projects, projectInput, projectDropdownOpen])
-
   const filteredFlatTree = useMemo(() => {
     if (!elementSearch) return flatTree
     const sq = elementSearch.toLowerCase()
@@ -192,39 +181,6 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
     return () => document.removeEventListener('mousedown', onDown)
   }, [contextMenu])
 
-  // Sync project input display value when selectedPid or projects change
-  useEffect(() => {
-    if (selectedPid && projects.length > 0) {
-      const p = projects.find(proj => proj.ID === selectedPid)
-      if (p) setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
-    } else if (!selectedPid) {
-      setProjectInput('')
-    }
-  }, [selectedPid, projects])
-
-  // Close project autocomplete on outside click, restoring display name
-  useEffect(() => {
-    if (!projectDropdownOpen) return
-    function onDown(e: MouseEvent) {
-      if (projectAcRef.current && !projectAcRef.current.contains(e.target as Node)) {
-        setProjectDropdownOpen(false)
-        if (selectedPid) {
-          const p = projects.find(proj => proj.ID === selectedPid)
-          if (p) setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
-        }
-      }
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [projectDropdownOpen, selectedPid, projects])
-
-  function selectProject(id: number) {
-    const p = projects.find(proj => proj.ID === id)
-    setSelectedPid(id)
-    onProjectChange?.(id)
-    if (p) setProjectInput(p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
-    setProjectDropdownOpen(false)
-  }
 
   function nodeDefault(structId: number): RowEdit {
     const node = structure.find(n => n.STRUCTURE_ID === structId)
@@ -715,35 +671,7 @@ export function ProjektStruktur({ initialProjectId, onProjectChange }: { initial
 
   return (
     <div>
-      <div className="form-group" style={{ maxWidth: 440, marginBottom: 12 }}>
-        <label>Projekt</label>
-        <div ref={projectAcRef} style={{ position: 'relative' }}>
-          <input
-            type="text" className="list-search" placeholder="Projekt suchen …"
-            style={{ width: '100%', fontSize: 13 }}
-            value={projectInput}
-            onChange={e => { setProjectInput(e.target.value); setProjectDropdownOpen(true) }}
-            onFocus={() => setProjectDropdownOpen(true)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') { const first = filteredProjects[0]; if (first) selectProject(first.ID); e.preventDefault() }
-              if (e.key === 'Escape') setProjectDropdownOpen(false)
-            }}
-          />
-          {projectDropdownOpen && filteredProjects.length > 0 && (
-            <div className="project-ac-dropdown">
-              {filteredProjects.slice(0, 30).map(p => (
-                <button key={p.ID}
-                  className={`project-ac-option${p.ID === selectedPid ? ' active' : ''}`}
-                  onMouseDown={ev => { ev.preventDefault(); selectProject(p.ID) }}
-                >
-                  <span className="project-ac-short">{p.NAME_SHORT}</span>
-                  {p.NAME_LONG && <span className="project-ac-long">{p.NAME_LONG}</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      {selectedPid === null && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
 
       {selectedPid !== null && currentProject && (
         <div className="proj-jump-bar">

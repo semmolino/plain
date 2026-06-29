@@ -9,18 +9,17 @@ import { Message } from '@/components/ui/Message'
 
 interface Props {
   initialProjectId?: number
-  onProjectChange?: (id: number | null) => void
 }
 
 type ContactOpt = { ID: number; FIRST_NAME: string; LAST_NAME: string }
 
-export function Vertraege({ initialProjectId, onProjectChange }: Props) {
+export function Vertraege({ initialProjectId }: Props) {
   const qc       = useQueryClient()
   const navigate = useNavigate()
 
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
-  // Notification-Klick mit neuem Projekt soll umschalten.
-  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
+  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
+  useEffect(() => { setPid(initialProjectId ?? null); setMsg(null); setDirty(false) }, [initialProjectId])
   const [nameShort,    setNameShort]    = useState('')
   const [nameLong,     setNameLong]     = useState('')
   const [addressId,    setAddressId]    = useState<number | null>(null)
@@ -131,12 +130,6 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
     } catch { /* ignore */ }
   }
 
-  function handleProjectChange(id: number | null) {
-    setPid(id)
-    onProjectChange?.(id)
-    setMsg(null)
-    setDirty(false)
-  }
 
   function touch() { setDirty(true); setMsg(null) }
 
@@ -166,21 +159,6 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
 
   return (
     <div className="list-section" style={{ maxWidth: 600 }}>
-      {/* Project selector toolbar */}
-      <div className="list-toolbar" style={{ marginBottom: 8 }}>
-        <select
-          className="list-search"
-          style={{ maxWidth: 400 }}
-          value={pid ?? ''}
-          onChange={e => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">— Projekt wählen —</option>
-          {projects.map(p => (
-            <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>
-          ))}
-        </select>
-      </div>
-
       {/* Jump bar */}
       {pid && (
         <div className="proj-jump-bar">
@@ -196,7 +174,7 @@ export function Vertraege({ initialProjectId, onProjectChange }: Props) {
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
 
-      {!pid && <p className="empty-note">Bitte ein Projekt auswählen.</p>}
+      {!pid && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
       {pid && isLoading && <p className="empty-note">Lade Vertragsdaten…</p>}
       {pid && isError   && <p className="empty-note" style={{ color: 'var(--color-danger)' }}>Fehler beim Laden.</p>}
       {pid && !isLoading && !contract && !isError && (

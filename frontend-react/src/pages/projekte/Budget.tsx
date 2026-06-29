@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, X, Plus, BellOff, Bell } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { fetchProjectsShort, fetchActiveEmployees } from '@/api/projekte'
+import { fetchActiveEmployees } from '@/api/projekte'
 import {
   fetchBudgetOverview,
   createBudgetRule,
@@ -22,7 +22,6 @@ const fmtDate = (s: string | null | undefined) => {
 
 interface Props {
   initialProjectId?: number
-  onProjectChange?: (id: number | null) => void
 }
 
 interface RuleDraft {
@@ -34,7 +33,7 @@ interface RuleDraft {
   muted:          boolean
 }
 
-export function Budget({ initialProjectId, onProjectChange }: Props) {
+export function Budget({ initialProjectId }: Props) {
   const [pid, setPid] = useState<number | null>(initialProjectId ?? null)
   const [editingRule, setEditingRule] = useState<BudgetWarningRule | null>(null)
   const [creating, setCreating] = useState(false)
@@ -47,10 +46,10 @@ export function Budget({ initialProjectId, onProjectChange }: Props) {
     muted:         false,
   })
 
-  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
+  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
+  useEffect(() => { setPid(initialProjectId ?? null) }, [initialProjectId])
 
   const qc = useQueryClient()
-  const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }      = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
   const { data: ovData, isLoading } = useQuery({
     queryKey: ['budget-overview', pid],
@@ -58,13 +57,8 @@ export function Budget({ initialProjectId, onProjectChange }: Props) {
     enabled:  pid !== null,
   })
 
-  const projects = projectsData?.data ?? []
   const employees = empData?.data ?? []
   const overview = ovData?.data ?? null
-
-  function handleProjectChange(id: number | null) {
-    setPid(id); onProjectChange?.(id)
-  }
 
   function invalidate() { qc.invalidateQueries({ queryKey: ['budget-overview', pid] }) }
 
@@ -142,16 +136,7 @@ export function Budget({ initialProjectId, onProjectChange }: Props) {
 
   return (
     <div className="ls-wrap">
-      <div className="ls-toolbar" style={{ marginBottom: 16 }}>
-        <label className="ls-label">Projekt</label>
-        <select className="ls-select" value={pid ?? ''}
-          onChange={e => handleProjectChange(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">— Projekt wählen —</option>
-          {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
-        </select>
-      </div>
-
-      {!pid && <p className="ls-empty">Bitte ein Projekt auswählen.</p>}
+      {!pid && <p className="ls-empty">Bitte oben ein Projekt auswählen.</p>}
       {pid && isLoading && <p className="ls-empty">Lade …</p>}
 
       {pid && !isLoading && overview && (

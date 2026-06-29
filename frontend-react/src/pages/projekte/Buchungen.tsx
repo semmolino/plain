@@ -76,9 +76,9 @@ function buchungToForm(b: Buchung): BuchungForm {
 type SortCol = 'date' | 'employee' | 'path' | 'description' | 'h_int' | 'h_ext' | 'cost' | 'revenue'
 type SortDir = 'asc' | 'desc'
 
-interface Props { initialProjectId?: number; onProjectChange?: (id: number | null) => void }
+interface Props { initialProjectId?: number }
 
-export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
+export function Buchungen({ initialProjectId }: Props = {}) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const formRef = useRef<HTMLFormElement>(null)
@@ -90,8 +90,8 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const [specialKind, setSpecialKind] = useState<BookingKind | null>(null)
   const [editSpecial, setEditSpecial] = useState<Buchung | null>(null)
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
-  // Notification-Klick mit neuem Projekt soll umschalten.
-  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
+  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
+  useEffect(() => { setPid(initialProjectId ?? null) }, [initialProjectId])
   const [showForm,     setShowForm]     = useState(false)
   const [form,         setForm]         = useState<BuchungForm>(emptyForm)
   const [msg,          setMsg]          = useState<{ text: string; type: 'success'|'error' } | null>(null)
@@ -131,18 +131,26 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
   const projects  = projectsData?.data ?? []
   const employees = empData?.data      ?? []
 
+  // SP_RATE (Stundensatz) aus Mitarbeiter/Projekt-Zuordnung vorbelegen.
+  // `showForm` muss in den Deps stehen: beim erneuten Öffnen liefert React Query
+  // dieselbe gecachte presetData-Referenz, sodass der Effect sonst nicht erneut
+  // läuft und das von emptyForm() geleerte Feld leer bliebe → "Pflichtfeld fehlt".
   useEffect(() => {
-    if (!presetData) return
+    if (!presetData || !showForm) return
     setForm(f => ({ ...f, SP_RATE: presetData.found && presetData.SP_RATE != null ? String(presetData.SP_RATE) : f.SP_RATE }))
-  }, [presetData])
+  }, [presetData, showForm])
 
+  // CP_RATE (Kostensatz) aus dem Kostensatz-Verlauf laden. Ebenfalls an `showForm`
+  // gekoppelt, sonst feuert der Effect beim erneuten Öffnen (gleicher empId/Datum)
+  // nicht und der von emptyForm() geleerte Wert würde als 0 gespeichert.
   useEffect(() => {
+    if (!showForm) return
     if (!empId || !form.DATE_VOUCHER) { setForm(f => ({ ...f, CP_RATE: '' })); setCpRateFound(null); return }
     fetchEmployeeCpRateForDate(empId, form.DATE_VOUCHER)
       .then(res => { setForm(f => ({ ...f, CP_RATE: String(res.data.rate) })); setCpRateFound(res.data.found) })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empId, form.DATE_VOUCHER])
+  }, [empId, form.DATE_VOUCHER, showForm])
 
   useEffect(() => { setFilterStruct(''); setSearch('') }, [pid])
 
@@ -385,19 +393,7 @@ export function Buchungen({ initialProjectId, onProjectChange }: Props = {}) {
 
   return (
     <div>
-      <RecentList
-        type="project"
-        title="Zuletzt verwendete Projekte"
-        onSelect={(e) => { setPid(e.ENTITY_ID); onProjectChange?.(e.ENTITY_ID); setMsg(null); setShowForm(false) }}
-      />
-
-      <div className="form-group" style={{ maxWidth: 400, marginBottom: 12 }}>
-        <label>Projekt</label>
-        <select value={pid ?? ''} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; setPid(id); onProjectChange?.(id); setMsg(null); setShowForm(false) }}>
-          <option value="">Bitte wählen …</option>
-          {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
-        </select>
-      </div>
+      {pid === null && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
 
       {pid !== null && currentProject && (
         <div className="proj-jump-bar">

@@ -22,7 +22,6 @@ import { HelpHint } from '@/components/ui/HelpHint'
 
 interface Props {
   initialProjectId?: number
-  onProjectChange?: (id: number | null) => void
 }
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -53,13 +52,13 @@ function emptyAdd(): { employee_id: string; role_id: string; role_name_short: st
   return { employee_id: '', role_id: '', role_name_short: '', role_name_long: '', sp_rate: '' }
 }
 
-export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
+export function Mitarbeiter({ initialProjectId }: Props) {
   const qc       = useQueryClient()
   const navigate = useNavigate()
 
   const [pid,       setPid]       = useState<number | null>(initialProjectId ?? null)
-  // Notification-Klick mit neuem Projekt soll umschalten.
-  useEffect(() => { if (initialProjectId) setPid(initialProjectId) }, [initialProjectId])
+  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
+  useEffect(() => { setPid(initialProjectId ?? null); setEditingId(null); setMsg(null); setAddForm(emptyAdd()) }, [initialProjectId])
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm,  setEditForm]  = useState<EditState>({ role_id: '', role_name_short: '', role_name_long: '', sp_rate: '' })
   const [addForm,      setAddForm]      = useState(emptyAdd())
@@ -87,13 +86,6 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
   const assignedIds = new Set(rows.map(r => r.EMPLOYEE_ID))
   const unassigned  = employees.filter(e => !assignedIds.has(e.ID))
 
-  function handleProjectChange(id: number | null) {
-    setPid(id)
-    onProjectChange?.(id)
-    setEditingId(null)
-    setMsg(null)
-    setAddForm(emptyAdd())
-  }
 
   function startEdit(row: E2PEntry) {
     setEditingId(row.ID)
@@ -192,21 +184,6 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
 
   return (
     <div className="list-section">
-      {/* Project selector toolbar */}
-      <div className="list-toolbar" style={{ marginBottom: 8 }}>
-        <select
-          className="list-search"
-          style={{ maxWidth: 400 }}
-          value={pid ?? ''}
-          onChange={e => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">— Projekt wählen —</option>
-          {projects.map(p => (
-            <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>
-          ))}
-        </select>
-      </div>
-
       {/* Jump bar */}
       {pid && (
         <div className="proj-jump-bar">
@@ -222,7 +199,7 @@ export function Mitarbeiter({ initialProjectId, onProjectChange }: Props) {
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
 
-      {!pid && <p className="empty-note">Bitte ein Projekt auswählen.</p>}
+      {!pid && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
       {pid && isLoading && <p className="empty-note">Lade Mitarbeiterdaten…</p>}
       {pid && isError   && <p className="empty-note" style={{ color: 'var(--color-danger)' }}>Fehler beim Laden.</p>}
 

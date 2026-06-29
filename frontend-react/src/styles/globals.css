@@ -1576,6 +1576,23 @@ input::placeholder { color: var(--text-4); }
 .project-ac-short { font-size: 13px; font-weight: 600; color: var(--text); }
 .project-ac-long  { font-size: 11px; color: var(--text-4); }
 
+/* Zentrale Projekt-Suchbox */
+.project-picker { position: relative; flex: 1 1 320px; min-width: 220px; max-width: 460px; }
+.project-picker .list-search { width: 100%; font-size: 13px; }
+.project-ac-section {
+  padding: 6px 12px 2px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-4); background: var(--surface);
+  position: sticky; top: 0;
+}
+.project-ac-empty { padding: 10px 12px; font-size: 12px; color: var(--text-4); }
+.project-ac-tolist {
+  display: block; width: 100%; text-align: left; padding: 8px 12px;
+  border: none; border-top: 1px solid var(--border); background: var(--surface-2);
+  font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer;
+  position: sticky; bottom: 0;
+}
+.project-ac-tolist:hover { background: var(--surface); color: var(--text); }
+
 /* Wizard layout */
 .wizard-wrap { max-width: 100%; }
 .wizard-steps {
@@ -3185,4 +3202,60 @@ input::placeholder { color: var(--text-4); }
 }
 .ks-breakdown-group > div { display: flex; justify-content: space-between; gap: 12px; }
 .ks-breakdown-group > div span:last-child { font-variant-numeric: tabular-nums; }
+
+/* ── Service-Bereich (Vorschläge · Feedback · Unterstützung) ───────────────── */
+.service-page { padding-bottom: 80px; }
+.service-page-head { margin-bottom: 14px; }
+.service-page-head h1 { margin: 0 0 2px; }
+.service-page-sub { color: var(--text-3); font-size: 13px; margin: 0; }
+
+.service-tab { margin-top: 16px; }
+.service-tab-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.service-tab-head h2 { margin: 0; font-size: 17px; }
+.service-tab-lead { color: var(--text-3); font-size: 13px; max-width: 720px; line-height: 1.5; margin: 0 0 16px; }
+
+/* Produkt-Sprecher-Karte / generische Service-Karte */
+.service-card {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  padding: 14px 16px; margin-bottom: 18px; max-width: 720px;
+}
+.service-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.service-card-head strong { font-size: 14px; }
+.service-card-current { font-size: 13px; color: var(--text-2); margin: 0 0 10px; }
+.service-delegate-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.service-hint-muted { font-size: 12px; color: var(--text-4); margin: 4px 0 0; }
+
+/* Platzhalter / Leerzustand */
+.service-empty {
+  border: 1px dashed var(--border); border-radius: 12px; background: var(--surface-2, var(--surface));
+  padding: 32px 20px; text-align: center; max-width: 720px;
+}
+.service-empty-icon { color: var(--text-4); display: flex; justify-content: center; margin-bottom: 8px; }
+.service-empty h3 { margin: 0 0 4px; font-size: 15px; }
+.service-empty p { margin: 0 auto 12px; font-size: 13px; color: var(--text-3); max-width: 460px; line-height: 1.5; }
+.service-empty-badge {
+  display: inline-block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-3); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px 10px;
+}
+
+/* ── Zugangs-Gate (Haftungs-/Nutzungsbestätigung) ─────────────────────────── */
+.consent-gate { display: flex; justify-content: center; padding: 8px 0 80px; }
+.consent-card {
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  padding: 22px 24px; max-width: 640px; width: 100%;
+}
+.consent-head { display: flex; align-items: center; gap: 8px; color: var(--text); margin-bottom: 12px; }
+.consent-head h2 { margin: 0; font-size: 17px; }
+.consent-intro { font-size: 13px; color: var(--text-2); margin: 0 0 12px; line-height: 1.5; }
+.consent-list { margin: 0 0 16px; padding-left: 20px; }
+.consent-list li { font-size: 13px; color: var(--text-2); line-height: 1.55; margin-bottom: 8px; }
+.consent-check {
+  display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--text-2);
+  line-height: 1.5; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); margin-bottom: 14px; cursor: pointer;
+}
+.consent-check input { margin-top: 2px; width: 18px; height: 18px; flex-shrink: 0; cursor: pointer; }
+.consent-actions { display: flex; justify-content: flex-end; }
+.consent-error { color: var(--danger, #dc2626); font-size: 12px; margin: 0 0 10px; }
 
