@@ -189,3 +189,36 @@ In der founder-led Pilotphase (GTM Phase 1) ist „Starthilfe" v. a. Lern-Kanal,
 - Einbindung in Onboarding-Checkliste + SideNav/Settings (hinter `<Can permission="import.manage">`).
 - `help/helpContent.tsx`: Einträge `import.*`.
 ```
+
+---
+
+## 10  Phase 3 — Anfangsbestände/Altrechnungen: Befund & Entscheidung (offen)
+
+**Ziel:** „offene Posten ab Tag 1" — pro Projekt *bereits berechnet* / *bereits bezahlt* / *Restforderung*
+als Anfangsbestand, ohne Alt-PDFs/XRechnung nachzubauen.
+
+**Technischer Befund (Code-Recherche 2026-06-29):**
+- `PROJECT(_STRUCTURE).INVOICED` ist ein **Akkumulator** (Rechnungsbuchung: `INVOICED = current + add`).
+- `PROJECT(_STRUCTURE).PAYED` wird aus `PAYMENT_STRUCTURE` **neu summiert** (partialPayments.js).
+- **Kritisch:** `finalInvoices.js` macht ein *„self-healing recompute of INVOICED + PARTIAL_PAYMENTS
+  per structure from raw INVOICE_STRUCTURE / PARTIAL_PAYMENT_STRUCTURE"*. → Ein **direkt gesetzter**
+  Anfangsbestand wird beim **ersten Schlussrechnungslauf überschrieben**.
+
+**Konsequenz:** Robuste Anfangsbestände gehen **nur über echte Referenz-Datensätze**
+(INVOICE + INVOICE_STRUCTURE, ggf. PARTIAL_PAYMENT/PAYMENT + *_STRUCTURE), nicht über das bloße Setzen
+der Aggregat-Spalten.
+
+**Optionen:**
+- **A — Referenz-Altrechnung je Projekt (robust, empfohlen):** pro Projekt eine vereinfachte INVOICE
+  (+ INVOICE_STRUCTURE-Summenposten) über „bereits berechnet", optional als bezahlt markiert via
+  PARTIAL_PAYMENT/PAYMENT. Kein PDF/XRechnung, keine Einzelpositionen. Überlebt das Recompute, Reporting
+  korrekt. **Aufwand hoch** (INVOICE-Schema genau treffen) und Gelddaten → sorgfältig + idealerweise
+  gegen echte DB verifizieren.
+- **B — nur Aggregat setzen (einfach, aber fragil):** `INVOICED` direkt setzen. Wird vom Self-Healing
+  überschrieben → **nicht empfohlen**.
+- **C — geführte manuelle Erfassung:** kein Importcode; Nutzer legt je Projekt eine echte
+  Abschlagsrechnung über den bestehenden Wizard an (Anleitung/Leerzustand). Geringes Risiko, mehr
+  Handarbeit beim Nutzer.
+
+**Status:** Entscheidung beim Nutzer offen. Empfehlung **A** (einziger robuster Self-Service-Weg), bewusst
+als eigenes, sorgfältig getestetes Teilprojekt — nicht „blind" mitlaufen lassen.
