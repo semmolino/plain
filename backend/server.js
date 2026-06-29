@@ -65,6 +65,12 @@ app.use("/api/v1/auth", authRoutes);
 const webhookRoutes = require("./routes/webhooks");
 app.use("/api/v1/webhooks", webhookRoutes);
 
+// Öffentliche, cookieless Landing-Page-Analytics (KEINE Auth, vor authChain).
+// First-Party-Erfassung anonymer Besucher-Ereignisse der Marketing-Seite.
+// Siehe routes/tracking.js, Migration 0084, docs/marketing/Analytics_Setup.md.
+const trackingRoutes = require("./routes/tracking")(supabase);
+app.use("/api/v1/track", trackingRoutes);
+
 // Public branding routes (no JWT -- liefert Login-Hero-Info via Slug)
 const brandingRoutes = require("./routes/branding")(supabase);
 app.use("/api/v1/branding", brandingRoutes);
@@ -99,6 +105,7 @@ const gamificationRoutes         = require("./routes/gamification")(supabase);
 const tenantsRoutes              = require("./routes/tenants")(supabase);
 const emailSettingsRoutes        = require("./routes/emailSettings")(supabase);
 const importRoutes               = require("./routes/import")(supabase);
+const serviceRoutes              = require("./routes/service")(supabase);
 const licenseRoutes              = require("./routes/license")();
 const { makeMiddleware: makePermissionsMiddleware } = require("./middleware/permissions");
 const permissionsMiddleware = makePermissionsMiddleware(supabase);
@@ -163,6 +170,9 @@ app.use("/api/v1/email-settings", ...authChain, emailSettingsRoutes);
 
 // Geführter Datenimport (Onboarding) — alle Endpunkte via requirePermission('import.manage')
 app.use("/api/v1/import", ...authChain, importRoutes);
+
+// Service-Bereich (Vorschläge · Feedback · Unterstützung) — Phase 0: Consent-Gate + Sprecher
+app.use("/api/v1/service", ...authChain, serviceRoutes);
 
 // Lizenz-Entitlement des eingeloggten Tenants (fuer Frontend Soft-Gating)
 app.use("/api/v1/license", ...authChain, licenseRoutes);

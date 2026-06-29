@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>plan&amp;simple — Bürosoftware für Architektur- und Ingenieurbüros</title>
+<meta name="description" content="Die einfache Bürosoftware für kleine Architektur- und Ingenieurbüros: HOAI-Abrechnung, Zeiterfassung, Projektwirtschaftlichkeit und E-Rechnung in einem Werkzeug. In Tagen produktiv.">
+<style>
+  :root{
+    --navy:#1F3864; --blue:#2E5496; --blue-2:#3B6BB5; --light:#EEF3FB; --light-2:#D9E2F3;
+    --ink:#1c2330; --muted:#5b6472; --line:#e2e8f2; --white:#fff; --ok:#1a7a3c; --no:#b3261e;
+    --radius:14px; --maxw:1120px;
+    --shadow:0 8px 30px rgba(31,56,100,.08); --shadow-sm:0 2px 10px rgba(31,56,100,.06);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);line-height:1.6;background:var(--white);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  a{color:var(--blue);text-decoration:none}
+  h1,h2,h3{line-height:1.2;color:var(--navy);margin:0 0 .5em}
+  h2{font-size:clamp(1.5rem,3.2vw,2.1rem);letter-spacing:-.01em}
+  h3{font-size:1.15rem}
+  p{margin:0 0 1rem}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  .eyebrow{text-transform:uppercase;letter-spacing:.12em;font-size:.78rem;font-weight:700;color:var(--blue);margin-bottom:.6rem}
+  .btn{display:inline-flex;align-items:center;gap:.5rem;font-weight:600;border-radius:10px;padding:14px 22px;
+    font-size:1rem;cursor:pointer;border:1px solid transparent;transition:.15s;min-height:48px;white-space:nowrap}
+  .btn-primary{background:var(--blue);color:#fff;box-shadow:var(--shadow-sm)}
+  .btn-primary:hover{background:var(--navy)}
+  .btn-ghost{background:transparent;color:var(--navy);border-color:var(--light-2)}
+  .btn-ghost:hover{background:var(--light)}
+  .btn-white{background:#fff;color:var(--navy)}
+  .btn-white:hover{background:var(--light)}
+  section{padding:64px 0}
+  .center{text-align:center}
+  .lead-muted{color:var(--muted);font-size:1.08rem;max-width:680px}
+  .center .lead-muted{margin-left:auto;margin-right:auto}
+
+  /* header */
+  header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:66px}
+  .brand{font-weight:800;font-size:1.3rem;color:var(--navy);letter-spacing:-.02em}
+  .brand b{color:var(--blue)}
+  .nav-links{display:flex;align-items:center;gap:26px}
+  .nav-links a{color:var(--ink);font-weight:500;font-size:.95rem}
+  .nav-links a:hover{color:var(--blue)}
+  .nav-cta{display:flex;align-items:center;gap:14px}
+  .menu-btn{display:none;background:none;border:0;cursor:pointer;padding:8px;color:var(--navy)}
+
+  /* hero */
+  .hero{background:linear-gradient(180deg,var(--light) 0%,#fff 100%);padding:74px 0 56px}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+  .hero h1{font-size:clamp(2rem,4.6vw,3.1rem);letter-spacing:-.02em}
+  .hero p.sub{font-size:1.18rem;color:var(--muted);max-width:560px}
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap;margin:26px 0 16px}
+  .trust{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:.9rem}
+  .trust span{display:inline-flex;align-items:center;gap:6px}
+  .hero-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:22px;transform:rotate(0)}
+  .mini-row{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:10px;
+    background:var(--light);margin-bottom:10px}
+  .mini-row:last-child{margin-bottom:0}
+  .mini-label{display:flex;align-items:center;gap:10px;font-weight:600;font-size:.92rem}
+  .bar{height:8px;border-radius:6px;background:var(--light-2);overflow:hidden;width:120px}
+  .bar i{display:block;height:100%;background:var(--blue)}
+  .tag-ok{font-size:.78rem;font-weight:700;color:var(--ok)}
+  .tag-warn{font-size:.78rem;font-weight:700;color:#b8860b}
+
+  /* problem */
+  .problem{background:#fff}
+  .quote{border-left:4px solid var(--blue);background:var(--light);padding:18px 22px;border-radius:0 10px 10px 0;
+    font-size:1.12rem;color:var(--navy);font-style:italic;max-width:780px;margin:0 auto 30px}
+  .prob-list{display:grid;grid-template-columns:1fr 1fr;gap:14px 30px;max-width:880px;margin:0 auto}
+  .prob-list li{list-style:none;display:flex;gap:12px;align-items:flex-start;color:var(--ink)}
+  .prob-list .x{flex:0 0 auto;color:var(--no);margin-top:3px}
+
+  /* pillars */
+  .pillars{background:var(--light)}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow-sm)}
+  .ic{width:48px;height:48px;border-radius:12px;background:var(--light);display:flex;align-items:center;
+    justify-content:center;color:var(--blue);margin-bottom:14px}
+  .card h3{margin-bottom:.35em}
+  .card p{color:var(--muted);margin:0}
+
+  /* features */
+  .feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .feat{display:flex;gap:12px;align-items:flex-start;padding:16px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .feat .fi{flex:0 0 auto;color:var(--blue);margin-top:2px}
+  .feat b{display:block;color:var(--navy);font-size:.98rem}
+  .feat span{color:var(--muted);font-size:.86rem}
+
+  /* onboarding */
+  .onb{background:var(--navy);color:#fff}
+  .onb h2{color:#fff}
+  .onb .lead-muted{color:#cdd9ee}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:34px}
+  .step{position:relative;padding-top:8px}
+  .step .num{width:38px;height:38px;border-radius:50%;background:var(--blue-2);color:#fff;font-weight:700;
+    display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+  .step h3{color:#fff;font-size:1.02rem;margin-bottom:.3em}
+  .step p{color:#bcc9e2;font-size:.9rem;margin:0}
+
+  /* comparison */
+  .cmp-wrap{overflow-x:auto}
+  table.cmp{width:100%;border-collapse:collapse;min-width:560px;background:#fff;border:1px solid var(--line);
+    border-radius:var(--radius);overflow:hidden}
+  table.cmp th,table.cmp td{padding:15px 18px;text-align:left;border-bottom:1px solid var(--line)}
+  table.cmp thead th{background:var(--light);color:var(--navy);font-size:.92rem}
+  table.cmp thead th:last-child{background:var(--navy);color:#fff}
+  table.cmp td:first-child{color:var(--muted);font-weight:600}
+  table.cmp td:last-child{font-weight:600;color:var(--navy)}
+  table.cmp tr:last-child td{border-bottom:0}
+
+  /* pricing */
+  .pricing{background:var(--light)}
+  .price-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;align-items:stretch}
+  .plan{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:24px;display:flex;
+    flex-direction:column;box-shadow:var(--shadow-sm)}
+  .plan.feat-plan{border:2px solid var(--blue);box-shadow:var(--shadow);position:relative}
+  .badge{position:absolute;top:-12px;left:24px;background:var(--blue);color:#fff;font-size:.72rem;font-weight:700;
+    padding:4px 12px;border-radius:20px;letter-spacing:.04em}
+  .plan h3{margin-bottom:.1em}
+  .plan .who{color:var(--muted);font-size:.86rem;min-height:34px}
+  .price{font-size:1.9rem;font-weight:800;color:var(--navy);margin:8px 0 0}
+  .price small{font-size:.85rem;font-weight:500;color:var(--muted)}
+  .price-note{font-size:.78rem;color:var(--muted);margin:2px 0 14px}
+  .plan ul{list-style:none;padding:0;margin:0 0 18px;flex:1}
+  .plan ul li{display:flex;gap:9px;align-items:flex-start;font-size:.9rem;margin-bottom:9px;color:var(--ink)}
+  .plan ul li svg{flex:0 0 auto;color:var(--blue);margin-top:3px}
+  .plan .btn{width:100%;justify-content:center}
+  .price-foot{text-align:center;color:var(--muted);font-size:.9rem;margin-top:22px;font-style:italic}
+
+  /* proof */
+  .proof .grid-3{align-items:stretch}
+  .testi{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow-sm)}
+  .testi .stars{color:#e8a400;margin-bottom:10px;letter-spacing:2px}
+  .testi p{font-size:1.02rem;color:var(--ink)}
+  .testi .who{color:var(--muted);font-size:.86rem;font-style:normal}
+  .placeholder{border:1px dashed var(--light-2);background:var(--light)}
+
+  /* einvoice band */
+  .einvoice{background:linear-gradient(120deg,var(--navy),var(--blue));color:#fff}
+  .ei-grid{display:grid;grid-template-columns:1.3fr .9fr;gap:36px;align-items:center}
+  .einvoice h2{color:#fff}
+  .einvoice p{color:#d7e1f3}
+  .ei-cta{display:flex;flex-direction:column;gap:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
+    border-radius:var(--radius);padding:24px}
+  .ei-cta b{font-size:1.05rem}
+
+  /* faq */
+  .faq-list{max-width:780px;margin:24px auto 0}
+  details{background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden}
+  details summary{cursor:pointer;padding:18px 20px;font-weight:600;color:var(--navy);list-style:none;
+    display:flex;justify-content:space-between;align-items:center;gap:12px}
+  details summary::-webkit-details-marker{display:none}
+  details summary .chev{transition:.2s;flex:0 0 auto;color:var(--blue)}
+  details[open] summary .chev{transform:rotate(180deg)}
+  details .ans{padding:0 20px 18px;color:var(--muted)}
+
+  /* final cta */
+  .final{background:var(--light);text-align:center}
+  .final .btn{margin-top:8px}
+
+  /* footer */
+  footer{background:#fff;border-top:1px solid var(--line);padding:34px 0;color:var(--muted);font-size:.86rem}
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+  .foot .brand{font-size:1.05rem}
+  .disclaimer{font-size:.74rem;color:#9aa3b2;margin-top:14px;line-height:1.5}
+
+  /* responsive */
+  @media (max-width:900px){
+    .nav-links{display:none}
+    .menu-btn{display:inline-flex}
+    .nav-cta .btn-ghost{display:none}
+    .hero-grid{grid-template-columns:1fr;gap:34px}
+    .hero-card{order:2}
+    .grid-3,.feat-grid,.steps,.price-grid{grid-template-columns:1fr 1fr}
+    .ei-grid{grid-template-columns:1fr;gap:22px}
+    .prob-list{grid-template-columns:1fr}
+  }
+  @media (max-width:560px){
+    section{padding:48px 0}
+    .grid-3,.feat-grid,.steps,.price-grid{grid-template-columns:1fr}
+    .hero-cta .btn{width:100%;justify-content:center}
+    .plan.feat-plan{order:-1}
+    .foot{flex-direction:column;text-align:center}
+  }
+  /* mobile menu */
+  .mobile-menu{display:none;border-bottom:1px solid var(--line);background:#fff}
+  .mobile-menu.open{display:block}
+  .mobile-menu a{display:block;padding:14px 22px;color:var(--ink);font-weight:500;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="wrap nav">
+    <div class="brand">plan<b>&amp;</b>simple</div>
+    <nav class="nav-links">
+      <a href="#funktionen">Funktionen</a>
+      <a href="#umstieg">Umstieg</a>
+      <a href="#preise">Preise</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-ghost" href="#preise" data-track="header_preise">Preise ansehen</a>
+      <a class="btn btn-primary" href="#start" data-track="header_trial">Kostenlos testen</a>
+      <button class="menu-btn" aria-label="Menü" onclick="document.getElementById('mm').classList.toggle('open')">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-menu" id="mm">
+    <a href="#funktionen" onclick="document.getElementById('mm').classList.remove('open')">Funktionen</a>
+    <a href="#umstieg" onclick="document.getElementById('mm').classList.remove('open')">Umstieg</a>
+    <a href="#preise" onclick="document.getElementById('mm').classList.remove('open')">Preise</a>
+    <a href="#faq" onclick="document.getElementById('mm').classList.remove('open')">FAQ</a>
+    <a href="#start" onclick="document.getElementById('mm').classList.remove('open')">Kostenlos testen</a>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero" id="start">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">Bürosoftware für Architektur- &amp; Ingenieurbüros</div>
+      <h1>Endlich sehen, ob Ihre Projekte Geld verdienen.</h1>
+      <p class="sub">plan&amp;simple vereint HOAI-Abrechnung, Zeiterfassung, Projektwirtschaftlichkeit und E-Rechnung in einem Werkzeug. In Tagen produktiv — nicht in Monaten.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#preise" data-track="hero_trial">30 Tage kostenlos testen
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></a>
+        <a class="btn btn-ghost" href="#funktionen" data-track="hero_tour">Produkttour ansehen</a>
+      </div>
+      <div class="trust">
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Ohne Kreditkarte</span>
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Excel-Daten übernehmen wir</span>
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Monatlich kündbar</span>
+      </div>
+    </div>
+    <div class="hero-card" aria-hidden="true">
+      <div class="mini-row">
+        <span class="mini-label">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E5496" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Projekt EFH Lindenstraße</span>
+        <span class="tag-ok">+12 % Marge</span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-label">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E5496" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+          Honorarausschöpfung LP 1–5</span>
+        <span class="bar"><i style="width:72%"></i></span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-label">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b8860b" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>
+          Projekt Bürohaus Nord</span>
+        <span class="tag-warn">Budget knapp</span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-label">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E5496" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Schlussrechnung &middot; XRechnung</span>
+        <span class="tag-ok">versandbereit</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section class="problem">
+  <div class="wrap">
+    <h2 class="center">Kennen Sie das?</h2>
+    <p class="quote">„Stunden in Excel, Angebote in Word, Rechnungen im Buchhaltungstool — und am Ende des Projekts die Frage: Hat sich das eigentlich gerechnet?“</p>
+    <ul class="prob-list">
+      <li><span class="x"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span> Honorare werden „nach Gefühl“ kalkuliert, weil belastbare Stundendaten fehlen.</li>
+      <li><span class="x"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span> Dieselben Daten werden dreimal gepflegt — jede Übertragung ein möglicher Fehler.</li>
+      <li><span class="x"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span> Ob ein Projekt wirtschaftlich läuft, sehen Sie erst, wenn es zu spät ist.</li>
+      <li><span class="x"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span> HOAI-konform und rechtssicher abrechnen ist mit Office kaum machbar.</li>
+      <li><span class="x"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span> Ab 2027/2028 müssen Sie E-Rechnungen ausstellen — können es aber noch nicht.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- PILLARS -->
+<section class="pillars">
+  <div class="wrap">
+    <div class="center">
+      <div class="eyebrow">Die Lösung</div>
+      <h2>Ein Werkzeug. Drei Dinge, die sofort besser werden.</h2>
+    </div>
+    <div class="grid-3" style="margin-top:34px">
+      <div class="card">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></div>
+        <h3>Einfachheit</h3>
+        <p>Produktiv ab Tag 1 — ohne Schulung. Eine Oberfläche, die sich von selbst erklärt. Ihre Excel-Daten übernehmen wir beim Start für Sie.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+        <h3>Wirtschaftlichkeit</h3>
+        <p>Echtzeit-Blick auf Honorarausschöpfung und Deckungsbeitrag je Leistungsphase. Gegensteuern, solange das Projekt noch zu retten ist.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 5-3.5 7.5-8.5 9C7.5 19.5 4 17 4 12V6l8-3 8 3z" /></svg></div>
+        <h3>Pflicht erfüllt</h3>
+        <p>HOAI-konforme Honorarermittlung über Leistungsphasen und anrechenbare Kosten (DIN 276). E-Rechnung und DATEV-Export ab Werk — ohne Aufpreis.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="funktionen">
+  <div class="wrap">
+    <div class="center">
+      <div class="eyebrow">Funktionen</div>
+      <h2>Alles, was ein kleines Büro braucht — nichts, was es überfordert.</h2>
+    </div>
+    <div class="feat-grid" style="margin-top:34px">
+      <div class="feat"><span class="fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span><div><b>Angebote</b><span>HOAI-Honorarermittlung, Vorlagen, in Minuten versandfertig</span></div></div>
+      <div class="feat"><span class="fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><rect x="7" y="9" width="3" height="9"/><rect x="14" y="5" width="3" height="13"/></svg></span><div><b>Projekte</b><span>Struktur nach Leistungsphasen, Soll/Ist, Fortschritt</span></div></div>
+      <div class="feat"><span class="fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span><div><b>Zeiterfassung</b><span>Schnell gebucht, automatisch der Leistungsphase zugeordnet</span></div></div>
+      <div class="feat"><span class="fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><div><b>Rechnungen</b><span>Abschlags- &amp; Schlussrechnungen, automatischer Abzug</span></div></div>
+      <div class="feat"><span class="fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15h6"/></svg></span><div><b>E-Rechnung</b><span>XRechnung &amp; ZUGFeRD inkl. Leitweg-ID</span></div></div>
+      <div class="feat"><span class="fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><div><b>Wirtschaftlichkeit</b><span>Deckungsbeitrag, Honorarausschöpfung je Projekt</span></div></div>
+      <div class="feat"><span class="fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-3-3.87"/><path d="M4 21v-2a4 4 0 0 1 3-3.87"/><circle cx="12" cy="7" r="4"/></svg></span><div><b>Adressen &amp; Verträge</b><span>Stammdaten, Kontakte und Verträge an einem Ort</span></div></div>
+      <div class="feat"><span class="fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span><div><b>Mitarbeiter</b><span>Rollen und Rechte, sauber getrennt</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ONBOARDING -->
+<section class="onb" id="umstieg">
+  <div class="wrap">
+    <div class="center">
+      <div class="eyebrow" style="color:#9fc0ff">Umstieg</div>
+      <h2>Der Umstieg ist kein Projekt. Er ist ein Nachmittag.</h2>
+      <p class="lead-muted">Die größte Sorge beim Wechsel ist nicht der Preis — es ist die Zeit. Deshalb nehmen wir Ihnen den Umstieg ab.</p>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><h3>Geführter Excel-Import</h3><p>Projekt-, Stunden- und Stammdaten aus Ihren Tabellen — wir helfen beim Übertragen.</p></div>
+      <div class="step"><div class="num">2</div><h3>Vorlagen ab Werk</h3><p>HOAI-Leistungsbilder und DIN-276-Strukturen sind sofort da.</p></div>
+      <div class="step"><div class="num">3</div><h3>Begleiteter Start</h3><p>Klarer Umstieg mit einem Pilotprojekt statt monatelangem Parallelbetrieb.</p></div>
+      <div class="step"><div class="num">4</div><h3>Ihre Daten bleiben Ihre</h3><p>Export jederzeit möglich. Kein Lock-in.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON -->
+<section>
+  <div class="wrap">
+    <div class="center">
+      <div class="eyebrow">Positionierung</div>
+      <h2>Warum nicht die „großen“ Programme?</h2>
+      <p class="lead-muted">Die etablierten Suiten sind für Büros ab 10–15 Mitarbeitern gebaut: mächtig, aber teuer, komplex und monatelang in der Einführung. plan&amp;simple ist bewusst anders.</p>
+    </div>
+    <div class="cmp-wrap" style="margin-top:30px">
+      <table class="cmp">
+        <thead><tr><th>&nbsp;</th><th>Etablierte Suiten</th><th>plan&amp;simple</th></tr></thead>
+        <tbody>
+          <tr><td>Zielgröße</td><td>ab 10–15 Mitarbeiter</td><td>2–10 Mitarbeiter</td></tr>
+          <tr><td>Einführung</td><td>2–6 Monate</td><td>Tage</td></tr>
+          <tr><td>Preis</td><td>„auf Anfrage“, modular</td><td>öffentlich, all-inclusive</td></tr>
+          <tr><td>Anspruch</td><td>maximale Funktionstiefe</td><td>fachlich tief, aber einfach</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="preise">
+  <div class="wrap">
+    <div class="center">
+      <div class="eyebrow">Preise</div>
+      <h2>Ein fairer Preis, der öffentlich steht.</h2>
+      <p class="lead-muted">E-Rechnung und HOAI sind in jedem bezahlten Plan enthalten — gesetzliche Pflicht und Fachhandwerk gibt es nicht gegen Aufpreis.</p>
+    </div>
+    <div class="price-grid" style="margin-top:36px">
+      <div class="plan">
+        <h3>Free</h3>
+        <div class="who">Zum Ausprobieren</div>
+        <div class="price">0 €</div>
+        <div class="price-note">30 Tage voller Funktionsumfang</div>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> Alle Funktionen testen</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> Ohne Kreditkarte</li>
+        </ul>
+        <a class="btn btn-ghost" href="#start" data-track="pricing_free">Kostenlos starten</a>
+      </div>
+      <div class="plan feat-plan">
+        <div class="badge">Beliebt</div>
+        <h3>Basic</h3>
+        <div class="who">Für Büros mit 2–5 Personen</div>
+        <div class="price">25 € <small>/ Nutzer / Monat</small></div>
+        <div class="price-note">jährlich · 29 € monatlich</div>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> HOAI-Abrechnung &amp; Zeiterfassung</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> Angebote &amp; Projekte</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> E-Rechnung &amp; DATEV-Export</li>
+        </ul>
+        <a class="btn btn-primary" href="#start" data-track="pricing_basic">30 Tage testen</a>
+      </div>
+      <div class="plan">
+        <h3>Pro</h3>
+        <div class="who">Für Büros mit 6–10 Personen</div>
+        <div class="price">39 € <small>/ Nutzer / Monat</small></div>
+        <div class="price-note">jährlich · 45 € monatlich</div>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> Alles aus Basic</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> Erweitertes Controlling</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> Liquiditäts- &amp; Kapazitätsplanung</li>
+        </ul>
+        <a class="btn btn-ghost" href="#start" data-track="pricing_pro">30 Tage testen</a>
+      </div>
+      <div class="plan">
+        <h3>Enterprise</h3>
+        <div class="who">Ab 25 Personen</div>
+        <div class="price">individuell</div>
+        <div class="price-note">mit SLA &amp; Sonderschnittstellen</div>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> Individuelle Konditionen</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg> SLA &amp; Priorisierter Support</li>
+        </ul>
+        <a class="btn btn-ghost" href="#kontakt" data-track="pricing_enterprise">Kontakt aufnehmen</a>
+      </div>
+    </div>
+    <p class="price-foot">Vorläufige Preisstruktur (v1) — vor dem öffentlichen Launch final zu bestätigen.</p>
+  </div>
+</section>
+
+<!-- PROOF -->
+<section class="proof">
+  <div class="wrap">
+    <div class="center">
+      <div class="eyebrow">Aus der Praxis</div>
+      <h2>Was kleine Büros sagen.</h2>
+    </div>
+    <div class="grid-3" style="margin-top:32px">
+      <div class="testi placeholder">
+        <div class="stars">★★★★★</div>
+        <p>„[Zitat Pilotbüro — konkrete Zahl, z. B. Rechnungslauf von drei Tagen auf einen Nachmittag.]“</p>
+        <div class="who">— [Name], [Büro], [Ort]</div>
+      </div>
+      <div class="testi placeholder">
+        <div class="stars">★★★★★</div>
+        <p>„[Zitat zum Aha-Moment Wirtschaftlichkeit.]“</p>
+        <div class="who">— [Name], [Büro], [Ort]</div>
+      </div>
+      <div class="testi placeholder">
+        <div class="stars">★★★★★</div>
+        <p>„[Zitat zum einfachen Umstieg / Onboarding.]“</p>
+        <div class="who">— [Name], [Büro], [Ort]</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- EINVOICE BAND -->
+<section class="einvoice">
+  <div class="wrap ei-grid">
+    <div>
+      <div class="eyebrow" style="color:#9fc0ff">E-Rechnungspflicht</div>
+      <h2>Was auf Ihr Büro zukommt.</h2>
+      <p>Seit 2025 muss jedes Büro E-Rechnungen empfangen können. Ab 2027 (über 800.000 € Umsatz) bzw. 2028 (alle anderen) müssen Sie E-Rechnungen auch ausstellen. PDF und Papier zählen dann nicht mehr als Rechnung. plan&amp;simple erstellt XRechnung und ZUGFeRD von Anfang an.</p>
+    </div>
+    <div class="ei-cta">
+      <b>Kostenloser E-Rechnungspflicht-Check</b>
+      <span style="color:#d7e1f3;font-size:.92rem">Fristen, gültige Formate und eine Checkliste für Planungsbüros — auf einer Seite.</span>
+      <a class="btn btn-white" href="E-Rechnungspflicht-Check_Planungsbueros.pdf" data-track="leadmagnet_download">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Check herunterladen</a>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="wrap">
+    <div class="center"><div class="eyebrow">Häufige Fragen</div><h2>Gut zu wissen</h2></div>
+    <div class="faq-list">
+      <details open>
+        <summary>Muss ich meine Daten mühsam übertragen?
+          <span class="chev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span></summary>
+        <div class="ans">Nein. Wir importieren Ihre bestehenden Excel-Daten beim Start gemeinsam mit Ihnen.</div>
+      </details>
+      <details>
+        <summary>Wie lange dauert die Einführung?
+          <span class="chev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span></summary>
+        <div class="ans">Tage, nicht Monate. Sie können noch in der Testphase produktiv mit einem echten Projekt arbeiten.</div>
+      </details>
+      <details>
+        <summary>Ist die HOAI-Abrechnung rechtssicher abgebildet?
+          <span class="chev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span></summary>
+        <div class="ans">Ja — Leistungsphasen, Honorarzonen und anrechenbare Kosten nach DIN 276 sind durchgängig hinterlegt.</div>
+      </details>
+      <details>
+        <summary>Kann ich E-Rechnungen an öffentliche Auftraggeber stellen?
+          <span class="chev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span></summary>
+        <div class="ans">Ja, inklusive Leitweg-ID. XRechnung und ZUGFeRD sind enthalten.</div>
+      </details>
+      <details>
+        <summary>Was passiert mit meinen Daten, wenn ich kündige?
+          <span class="chev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span></summary>
+        <div class="ans">Sie exportieren sie jederzeit. Es gibt keinen Lock-in. Und Sie sind monatlich kündbar.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final" id="kontakt">
+  <div class="wrap center">
+    <h2>Probieren Sie es aus — mit einem echten Projekt.</h2>
+    <p class="lead-muted">30 Tage kostenlos, ohne Kreditkarte. Ihre Excel-Daten bringen wir mit.</p>
+    <a class="btn btn-primary" href="#start" data-track="final_trial">Jetzt kostenlos starten
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div class="brand">plan<b>&amp;</b>simple</div>
+      <div>B&uuml;rosoftware f&uuml;r Architektur- und Ingenieurb&uuml;ros</div>
+      <div>&copy; 2026 &middot; <a href="#">Impressum</a> &middot; <a href="#">Datenschutz</a></div>
+    </div>
+    <p class="disclaimer">Hinweis: Angaben zur E-Rechnungspflicht dienen der allgemeinen Orientierung (Stand Juni 2026) und ersetzen keine steuerliche Beratung. Preise sind eine vorl&auml;ufige Struktur und vor dem &ouml;ffentlichen Launch zu best&auml;tigen.</p>
+  </div>
+</footer>
+
+<!-- plan&simple - Cookieless, banner-freie First-Party-Analytics.
+     Kein Cookie, kein localStorage, kein persistenter Identifier; respektiert DNT/GPC.
+     Rechtsgrundlage: berechtigtes Interesse (Reichweitenmessung) - in der
+     Datenschutzerklaerung nennen. Doku: docs/marketing/Analytics_Setup.md -->
+<script>
+(function(){
+  "use strict";
+
+  /* KONFIG: echte Backend-URL eintragen.
+     - Marketing-Seite auf eigener Domain -> volle URL, z.B.
+       "https://app.plan-simple.de/api/v1/track"
+     - same-origin mit Backend -> "/api/v1/track" genuegt.
+     Domain in CORS_ORIGINS aufnehmen; fuer sendBeacon (text/plain) ist kein
+     Preflight noetig. */
+  var ENDPOINT = "/api/v1/track";
+
+  // Privacy: Do-Not-Track / Global Privacy Control -> gar nicht tracken.
+  var dnt = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+  if (dnt === "1" || dnt === "yes" || navigator.globalPrivacyControl === true) return;
+
+  // Session-Schluessel nur im Arbeitsspeicher (nicht persistent).
+  var sessionKey = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : (String(Date.now()) + Math.random().toString(36).slice(2));
+
+  function deviceType(){
+    var w = window.innerWidth || document.documentElement.clientWidth;
+    return w < 600 ? "mobile" : (w < 1024 ? "tablet" : "desktop");
+  }
+  function qp(n){ try { return new URLSearchParams(location.search).get(n) || null; } catch(e){ return null; } }
+
+  var base = {
+    sessionKey: sessionKey,
+    path: location.pathname,
+    referrer: document.referrer || null,
+    device: deviceType(),
+    viewportW: window.innerWidth || null,
+    language: navigator.language || null,
+    utmSource: qp("utm_source"),
+    utmMedium: qp("utm_medium"),
+    utmCampaign: qp("utm_campaign")
+  };
+
+  var queue = [];
+  function flush(){
+    if (!queue.length) return;
+    var payload = Object.assign({}, base, { events: queue.splice(0, queue.length) });
+    var body = JSON.stringify(payload);
+    try {
+      if (navigator.sendBeacon){
+        navigator.sendBeacon(ENDPOINT, new Blob([body], { type: "text/plain" }));
+      } else {
+        fetch(ENDPOINT, { method:"POST", body:body, headers:{ "Content-Type":"text/plain" }, keepalive:true, mode:"cors" });
+      }
+    } catch(e){}
+  }
+  function track(ev){ queue.push(ev); if (queue.length >= 10) flush(); }
+  setInterval(flush, 5000);
+
+  // page_view
+  track({ type:"page_view" });
+
+  // Klicks (data-track bevorzugt, sonst Sektion + Text)
+  document.addEventListener("click", function(e){
+    var el = e.target.closest ? e.target.closest("[data-track],a,button") : null;
+    if (!el) return;
+    var label = el.getAttribute("data-track");
+    if (!label){
+      var sec = el.closest("section");
+      var ctx = (sec && sec.id) ? sec.id : "page";
+      var txt = (el.textContent || "").replace(/\s+/g," ").trim().slice(0,40);
+      label = ctx + ":" + (txt || el.tagName.toLowerCase());
+    }
+    track({ type:"click", label: label });
+  }, true);
+
+  // Scroll-Tiefe 25/50/75/100 (je einmal)
+  var marks = [25,50,75,100], seen = {};
+  window.addEventListener("scroll", function(){
+    var d = document.documentElement;
+    var scrollable = d.scrollHeight - d.clientHeight;
+    if (scrollable <= 0) return;
+    var pct = Math.min(100, Math.round(((d.scrollTop || window.pageYOffset) / scrollable) * 100));
+    for (var i=0;i<marks.length;i++){
+      if (pct >= marks[i] && !seen[marks[i]]){ seen[marks[i]] = 1; track({ type:"scroll_depth", scroll: marks[i] }); }
+    }
+  }, { passive:true });
+
+  // Sektions-Sichtbarkeit (je Sektion einmal)
+  try {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting){
+          var sObj = en.target, h = sObj.querySelector("h2");
+          var name = sObj.id || (h ? h.textContent.trim().slice(0,40) : "section");
+          track({ type:"section_view", label: name });
+          io.unobserve(sObj);
+        }
+      });
+    }, { threshold: 0.5 });
+    document.querySelectorAll("section").forEach(function(sObj){ io.observe(sObj); });
+  } catch(e){}
+
+  // Aktive Verweildauer (pausiert, wenn Tab versteckt)
+  var engagedMs = 0, last = Date.now(), active = !document.hidden;
+  function startT(){ if(!active){ active = true; last = Date.now(); } }
+  function stopT(){ if(active){ engagedMs += Date.now() - last; active = false; } }
+  window.addEventListener("focus", startT);
+  window.addEventListener("blur", stopT);
+  function sendEngagement(){
+    stopT();
+    if (engagedMs > 0){ track({ type:"engagement", engagedMs: engagedMs }); engagedMs = 0; }
+    startT();
+    flush();
+  }
+  document.addEventListener("visibilitychange", function(){ if (document.hidden) sendEngagement(); else startT(); });
+  window.addEventListener("pagehide", sendEngagement);
+})();
+</script>
+
+</body>
+</html>

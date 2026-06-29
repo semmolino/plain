@@ -546,6 +546,39 @@ export const HELP = {
       </>
     ),
   },
+
+  // ── Service-Bereich (Vorschläge · Feedback · Unterstützung) ───────────────
+  'service.vorschlaege': {
+    title: 'Vorschläge für Funktionen',
+    body: (
+      <>
+        Reichen Sie Funktionswünsche ein. Nach einer Prüfung durch plan&simple erscheinen sie im Portal,
+        wo der <strong>Produkt-Sprecher</strong> Ihrer Organisation abstimmen kann. Aus Datenschutzgründen
+        sehen andere Anwender dabei <strong>nie</strong> Ihren Namen, Ihre E-Mail oder Ihre Organisation —
+        nur den (von plan&simple geprüften) Inhalt, den Status und die Stimmenzahl.
+      </>
+    ),
+  },
+  'service.feedback': {
+    title: 'Feedback & Kontakt',
+    body: (
+      <>
+        Eine direkte Nachricht an plan&simple — für Lob, Kritik oder Fragen. Organisation, Name und
+        E-Mail aus Ihrem Login sind vorbelegt. Die Nachricht ist <strong>privat</strong> und für andere
+        Anwender nicht sichtbar.
+      </>
+    ),
+  },
+  'service.unterstuetzung': {
+    title: 'Unterstützung anfragen',
+    body: (
+      <>
+        Hilfe bei einer konkreten Aufgabe, z. B. der Übernahme Ihrer Altdaten. Wählen Sie eine Kategorie —
+        passende Antworten zeigen wir vorab. Bleibt etwas offen, geht Ihre Anfrage <strong>privat</strong>{' '}
+        an plan&simple und Sie können ihren Status verfolgen.
+      </>
+    ),
+  },
 } satisfies Record<string, HelpEntry>
 
 export type HelpId = keyof typeof HELP

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, BookUser, FolderOpen, BarChart3,
-  Receipt, FileSignature, Users, Settings,
+  Receipt, FileSignature, Users, Settings, LifeBuoy,
   type LucideIcon,
 } from 'lucide-react'
 import { usePermissionsStore } from '@/store/permissionsStore'
@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/rechnungen',  icon: Receipt,         label: 'Rechnungen',    permissions: ['invoices.view','dunning.view','security_retention.view'], feature: 'invoices.basic' },
   { to: '/angebote',    icon: FileSignature,   label: 'Angebote',      permissions: ['offers.view'], feature: 'offers.basic' },
   { to: '/mitarbeiter', icon: Users,           label: 'Mitarbeiter',   permissions: ['employees.view'], feature: 'employees.management' },
+  { to: '/service',     icon: LifeBuoy,        label: 'Service',       permissions: ['service.suggestions.view','service.feedback.use','service.support.use'] },
   { to: '/admin',       icon: Settings,        label: 'Einstellungen', permissions: ['settings.basedata.view','settings.basedata.edit','settings.defaults.edit','settings.notifications.edit','settings.monthly_close.edit','settings.company.view','settings.company.edit','settings.numbers.edit','settings.text_templates.edit','settings.dunning_config.edit','settings.work_time.edit','settings.cost_rate.edit','roles.view'], feature: 'settings.core' },
 ]
 
