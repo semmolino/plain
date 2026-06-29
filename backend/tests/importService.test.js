@@ -506,6 +506,13 @@ describe("buildOpeningBalanceEntry", () => {
     expect(buildOpeningBalanceEntry({ project_number: "P-2024-012", amount: "abc" }, ctx).ok).toBe(false);
     expect(buildOpeningBalanceEntry({ project_number: "P-2024-012", amount: "90000" }, ctx).ok).toBe(false); // > 80.000
   });
+
+  it("accepts optional paid (≤ amount) and rejects paid > amount", () => {
+    const ok = buildOpeningBalanceEntry({ project_number: "P-2024-012", amount: "30000", paid: "20000" }, ctx);
+    expect(ok.ok).toBe(true);
+    expect(ok.dbRow.paid).toBe(20000);
+    expect(buildOpeningBalanceEntry({ project_number: "P-2024-012", amount: "30000", paid: "40000" }, ctx).ok).toBe(false);
+  });
 });
 
 describe("buildPreview (opening_balance)", () => {

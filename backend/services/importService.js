@@ -595,6 +595,7 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
 const OPENING_BALANCE_FIELDS = [
   { key: "project_number", header: "Projektnummer",            required: true,  example: "P-2024-012",  aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
   { key: "amount",         header: "Bereits berechnet (netto)", required: true,  example: "30000",       aliases: ["berechnet", "bereitsberechnet", "rechnungsbetrag", "betrag", "summe", "fakturiert", "invoiced"] },
+  { key: "paid",           header: "Bereits bezahlt (netto, optional)", required: false, example: "30000", aliases: ["bezahlt", "bereitsbezahlt", "zahlung", "zahlbetrag", "payed", "paid", "eingegangen"] },
   { key: "doc_number",     header: "Belegnummer (optional)",    required: false, example: "RE-2023-044", aliases: ["belegnummer", "rechnungsnummer", "docnumber"] },
 ];
 
@@ -663,17 +664,29 @@ function buildOpeningBalanceEntry(mapped, ctx) {
     if (amount.value > sumRev + 0.01) { messages.push({ level: "error", text: `Betrag übersteigt die Honorarsumme (max. ${sumRev.toFixed(2)})` }); ok = false; }
   }
 
+  // Optional: bereits bezahlt (netto) — darf den berechneten Betrag nicht übersteigen.
+  let paidVal = 0;
+  const paidRaw = s(mapped.paid);
+  if (paidRaw) {
+    const paid = parseAmountDE(paidRaw);
+    if (paid.invalid || paid.value == null) { messages.push({ level: "error", text: `Bezahlt „${paidRaw}" ist keine gültige Zahl` }); ok = false; }
+    else if (paid.value < 0) { messages.push({ level: "error", text: "Bezahlt darf nicht negativ sein" }); ok = false; }
+    else if (amount.value != null && paid.value > amount.value + 0.01) { messages.push({ level: "error", text: "Bezahlt darf den berechneten Betrag nicht übersteigen" }); ok = false; }
+    else paidVal = paid.value;
+  }
+
   const dbRow = (proj && ok) ? {
     projectId: proj.projectId, projectNumber: number, projectName: proj.name, companyId: proj.companyId,
     contractId: proj.contract.ID, invoiceAddressId: proj.contract.INVOICE_ADDRESS_ID ?? proj.addressId,
     invoiceContactId: proj.contract.INVOICE_CONTACT_ID ?? proj.contactId, addressId: proj.addressId,
-    amount: amount.value, docNumber: s(mapped.doc_number) || null, btStructures: proj.btStructures,
+    amount: amount.value, paid: paidVal, docNumber: s(mapped.doc_number) || null, btStructures: proj.btStructures,
   } : null;
 
   const matchKey = norm(number);
   const display = {
     number, name: proj ? proj.name : "",
     amount: amount.value != null ? amount.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : feeRaw,
+    paid: paidVal ? paidVal.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : "",
   };
   return { ok, messages, dbRow, matchKey, display };
 }
@@ -713,6 +726,7 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
       if (!e.invoiceContactId) await supabase.from("PROJECT").update({ CONTACT_ID: contactId }).eq("ID", e.projectId).eq("TENANT_ID", tenantId).is("CONTACT_ID", null);
 
       const dist = distributeOpening(e.amount, e.btStructures);
+      let docId = null, vatPercent = 0;
 
       if (docType === "invoice") {
         const { id } = await invSvc.initInvoice(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId, invoiceType: null });
@@ -723,6 +737,7 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
         await invSvc.recomputeInvoiceTotals(supabase, id);
         const { data: inv } = await supabase.from("INVOICE").select("*").eq("ID", id).single();
         await invSvc.bookInvoice(supabase, { id, inv, tenantId, force: true, skipDocuments: true });
+        docId = id; vatPercent = num(inv.VAT_PERCENT);
       } else {
         const { id } = await ppSvc.initPartialPayment(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId });
         const upd = { IMPORT_BATCH_ID: batchId }; if (e.docNumber) upd.PARTIAL_PAYMENT_NUMBER = e.docNumber;
@@ -732,6 +747,12 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
         await ppSvc.recomputePartialPaymentTotals(supabase, id);
         const { data: pp } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", id).single();
         await ppSvc.bookPartialPayment(supabase, { id, pp, tenantId, force: true, skipDocuments: true });
+        docId = id; vatPercent = num(pp.VAT_PERCENT);
+      }
+
+      // Optional: „bereits bezahlt" als echte Zahlung gegen den Beleg buchen.
+      if (e.paid > 0) {
+        await recordOpeningPayment(supabase, { tenantId, batchId, docType, docId, projectId: e.projectId, contractId: e.contractId, paidNet: e.paid, vatPercent, dist });
       }
       done++;
     } catch (err) {
@@ -739,6 +760,75 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
     }
   }
   return { inserted: done };
+}
+
+// Bucht „bereits bezahlt" als echte Zahlung gegen den Beleg (spiegelt routes/payments.js).
+async function recordOpeningPayment(supabase, { tenantId, batchId, docType, docId, projectId, contractId, paidNet, vatPercent, dist }) {
+  const gross = fmt2(paidNet * (1 + num(vatPercent) / 100));
+  const vat = fmt2(gross - paidNet);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const payRow = {
+    PARTIAL_PAYMENT_ID: docType === "partial" ? docId : null,
+    INVOICE_ID:         docType === "invoice" ? docId : null,
+    AMOUNT_PAYED_GROSS: gross, AMOUNT_PAYED_NET: paidNet, AMOUNT_PAYED_VAT: vat,
+    PAYMENT_DATE: today, PROJECT_ID: projectId, CONTRACT_ID: contractId,
+    PURPOSE_OF_PAYMENT: "Anfangsbestand (Import)", COMMENT: null,
+    TENANT_ID: tenantId, AMOUNT_PAYED_EXTRAS_NET: null, IMPORT_BATCH_ID: batchId,
+  };
+  const { data: created, error } = await supabase.from("PAYMENT").insert([payRow]).select("ID").single();
+  if (error) throw { status: 500, message: `Zahlung fehlgeschlagen: ${error.message}` };
+
+  const { data: pr } = await supabase.from("PROJECT").select("PAYED").eq("ID", projectId).maybeSingle();
+  await supabase.from("PROJECT").update({ PAYED: fmt2(num(pr?.PAYED) + paidNet) }).eq("ID", projectId);
+
+  const totalDist = dist.reduce((a, d) => a + d.amt, 0);
+  let allocated = 0;
+  const psRows = dist.map((d) => {
+    const share = totalDist > 0 ? fmt2(paidNet * d.amt / totalDist) : fmt2(paidNet / dist.length);
+    allocated = fmt2(allocated + share);
+    return {
+      PAYMENT_ID: created.ID, PARTIAL_PAYMENT_ID: docType === "partial" ? docId : null,
+      INVOICE_ID: docType === "invoice" ? docId : null, STRUCTURE_ID: d.id,
+      AMOUNT_PAYED_NET: share, AMOUNT_PAYED_EXTRAS_NET: 0, TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+    };
+  });
+  const diff = fmt2(paidNet - allocated);
+  if (diff !== 0 && psRows.length) psRows[0].AMOUNT_PAYED_NET = fmt2(psRows[0].AMOUNT_PAYED_NET + diff);
+  const { error: psErr } = await supabase.from("PAYMENT_STRUCTURE").insert(psRows);
+  if (psErr) throw { status: 500, message: `Zahlungs-Struktur fehlgeschlagen: ${psErr.message}` };
+  try { await insertProgressSnapshot(supabase, psRows.map((r) => ({ TENANT_ID: tenantId, STRUCTURE_ID: r.STRUCTURE_ID, PAYED: r.AMOUNT_PAYED_NET }))); } catch (_) { /* soft-fail */ }
+}
+
+// Rollback der importierten Zahlungen (vor den Belegen, da sie diese referenzieren).
+async function reverseOpeningPayments(supabase, tenantId, batchId) {
+  const { data: pays } = await supabase.from("PAYMENT").select("ID, PROJECT_ID, AMOUNT_PAYED_NET").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  if (!pays || !pays.length) return;
+  const { data: ps } = await supabase.from("PAYMENT_STRUCTURE").select("STRUCTURE_ID, AMOUNT_PAYED_NET").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+
+  const byProject = new Map();
+  for (const p of pays) byProject.set(p.PROJECT_ID, fmt2((byProject.get(p.PROJECT_ID) || 0) + num(p.AMOUNT_PAYED_NET)));
+  for (const [pid, total] of byProject) {
+    const { data: pr } = await supabase.from("PROJECT").select("PAYED").eq("ID", pid).maybeSingle();
+    await supabase.from("PROJECT").update({ PAYED: fmt2(num(pr?.PAYED) - total) }).eq("ID", pid);
+  }
+
+  const affected = [...new Set((ps || []).map((r) => r.STRUCTURE_ID))];
+  const progRows = [];
+  const byStruct = new Map();
+  for (const r of ps || []) byStruct.set(r.STRUCTURE_ID, fmt2((byStruct.get(r.STRUCTURE_ID) || 0) + num(r.AMOUNT_PAYED_NET)));
+  for (const [sid, delta] of byStruct) progRows.push({ TENANT_ID: tenantId, STRUCTURE_ID: sid, PAYED: fmt2(-delta) });
+  if (progRows.length) { try { await insertProgressSnapshot(supabase, progRows); } catch (_) { /* soft-fail */ } }
+
+  await supabase.from("PAYMENT_STRUCTURE").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  await supabase.from("PAYMENT").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+
+  // PROJECT_STRUCTURE.PAYED je betroffenem Knoten aus Rest-Zahlungen neu summieren (App-Parität).
+  for (const sid of affected) {
+    const { data: rem } = await supabase.from("PAYMENT_STRUCTURE").select("AMOUNT_PAYED_NET").eq("TENANT_ID", tenantId).eq("STRUCTURE_ID", sid);
+    const sum = fmt2((rem || []).reduce((a, r) => a + num(r.AMOUNT_PAYED_NET), 0));
+    await supabase.from("PROJECT_STRUCTURE").update({ PAYED: sum }).eq("ID", sid);
+  }
 }
 
 // Rollback: reversiert die gebuchten Aggregate je Beleg-Art und löscht die Belege.
@@ -794,6 +884,8 @@ async function rollbackOpeningBalance({ supabase, tenantId, batchId }) {
     }
     if (blockers.length) throw { status: 409, message: `Rollback nicht möglich: An den Projekten hängen weitere gebuchte Belege (${blockers.join(", ")}). Diese zuerst stornieren.` };
   }
+  // Zahlungen zuerst (referenzieren die Belege), dann die Belege.
+  await reverseOpeningPayments(supabase, tenantId, batchId);
   let deleted = 0;
   deleted += await reverseOpeningDocs(supabase, tenantId, batchId, "partial");
   deleted += await reverseOpeningDocs(supabase, tenantId, batchId, "invoice");

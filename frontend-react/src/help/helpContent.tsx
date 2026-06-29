@@ -85,8 +85,9 @@ export const HELP = {
         <br /><strong>Abschlagsrechnung</strong> — für laufende Projekte, bei denen noch eine
         Schlussrechnung folgt. Der Betrag wird bei der späteren Schlussrechnung automatisch abgezogen.
         <br /><strong>Rechnung</strong> — für bereits einzeln/abschließend berechnete Beträge.
-        <br />Der Betrag darf die Honorarsumme des Projekts nicht übersteigen. Zahlungen
-        („bereits bezahlt") werden separat erfasst.
+        <br />Der Betrag darf die Honorarsumme des Projekts nicht übersteigen. Optional kann in der
+        Spalte „Bereits bezahlt" der bereits gezahlte Anteil mitgegeben werden — er wird als echte
+        Zahlung gegen den Beleg gebucht, sodass die offenen Posten ab Tag 1 stimmen.
       </>
     ),
   },

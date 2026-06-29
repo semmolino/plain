@@ -181,7 +181,8 @@ export function ImportSection() {
             Hinweis: Trägt „bereits berechnet" als <strong>echten, gebuchten Beleg</strong> je Projekt ein
             (ohne PDF/E-Rechnung) — so stimmen Reporting und offene Posten ab Tag 1. Voraussetzung:
             Projekt + <em>Projekt-Honorar</em> (Struktur/Vertrag) sind importiert und ein Ansprechpartner ist
-            vorhanden. Projekte mit bereits gebuchten Belegen werden übersprungen.
+            vorhanden. Optional kann „bereits bezahlt" mitgegeben werden (wird als echte Zahlung gebucht).
+            Projekte mit bereits gebuchten Belegen werden übersprungen.
           </p>
         )}
         {domainKey === 'project' && (
