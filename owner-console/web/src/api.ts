@@ -178,6 +178,32 @@ export interface AttachmentRow {
   size_bytes: number
 }
 
+// ── Auswertungen ─────────────────────────────────────────────────────────────
+export type CountMap = Record<string, number>
+export interface MonthPoint { month: string; count: number }
+export interface TopSuggestion { id: number; title: string; votes: number; lifecycle_status: string }
+export interface Analytics {
+  suggestions: {
+    total: number
+    pending: number
+    published: number
+    by_moderation: CountMap
+    by_lifecycle: CountMap
+    by_category: CountMap
+    orgs_participating: number
+    per_month: MonthPoint[]
+    top: TopSuggestion[]
+  }
+  requests: {
+    total: number
+    open: number
+    by_kind: CountMap
+    by_status: CountMap
+    by_category: CountMap
+    per_month: MonthPoint[]
+  }
+}
+
 /** Lädt eine Datei mit Auth-Header und öffnet sie in einem neuen Tab. */
 export async function openConsoleFile(path: string): Promise<void> {
   const token = getToken()
@@ -278,4 +304,6 @@ export const api = {
     req<{ ok: true }>(`/requests/${id}/reply`, { method: 'POST', body: JSON.stringify({ body }) }),
   setRequestStatus: (id: number, status: ReqStatus) =>
     req<{ ok: true }>(`/requests/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+
+  analytics: () => req<Analytics>('/analytics'),
 }

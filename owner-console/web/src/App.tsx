@@ -9,8 +9,9 @@ import { AuditView } from './pages/Audit'
 import { FunctionsView } from './pages/Functions'
 import { SuggestionsView } from './pages/Suggestions'
 import { RequestsView } from './pages/Requests'
+import { AnalyticsView } from './pages/Analytics'
 
-type Tab = 'matrix' | 'plans' | 'tenants' | 'functions' | 'suggestions' | 'requests' | 'inbox' | 'audit'
+type Tab = 'matrix' | 'plans' | 'tenants' | 'functions' | 'suggestions' | 'requests' | 'analytics' | 'inbox' | 'audit'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'matrix', label: 'Matrix' },
@@ -19,6 +20,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'functions', label: 'Funktionen' },
   { id: 'suggestions', label: 'Vorschläge' },
   { id: 'requests', label: 'Anfragen' },
+  { id: 'analytics', label: 'Auswertung' },
   { id: 'inbox', label: 'Inbox' },
   { id: 'audit', label: 'Audit' },
 ]
@@ -90,6 +92,7 @@ export function App() {
         {tab === 'functions' && <FunctionsView />}
         {tab === 'suggestions' && <SuggestionsView />}
         {tab === 'requests' && <RequestsView />}
+        {tab === 'analytics' && <AnalyticsView />}
         {tab === 'inbox' && <InboxView />}
         {tab === 'audit' && <AuditView />}
       </main>

@@ -1,12 +1,11 @@
 # Konzept — Service-Bereich (Vorschläge · Feedback · Unterstützung)
 
-> **Status:** Konzept beschlossen + **Phasen 0–4 implementiert** (Fundament · Vorschläge · Feedback &
-> Unterstützung · Jira + E-Mail · Anhänge/Screenshots) (2026-06-29/30).
+> **Status:** Feature-vollständig — **Phasen 0–5 implementiert** (Fundament · Vorschläge · Feedback &
+> Unterstützung · Jira + E-Mail · Anhänge/Screenshots · Auswertungen) (2026-06-29/30).
 > Entscheidungen: Kommentare **moderiert & pseudonym** · Reject-Label **„Aktuell nicht geplant"** ·
 > Jira **Phase 3** · Consent für **alle** Anwender · Rückruf-Option **ja**.
-> Offen/optional: Auswertungen/Reports in der Owner-Konsole.
-> **Migrationen 0096 + 0097 manuell in Supabase einspielen.** E-Mail-Versand ist no-op, bis Resend
-> (`RESEND_API_KEY` + `EMAIL_FROM`) konfiguriert ist.
+> **Migrationen 0096 + 0097 sind in Supabase eingespielt (2026-06-30).** E-Mail-Versand ist no-op, bis Resend
+> (`RESEND_API_KEY` + `EMAIL_FROM`) konfiguriert ist; Jira aktiv, sobald `JIRA_*` gesetzt sind.
 > **Ziel:** Ein neuer Top-Level-Bereich **„Service"** (auf Ebene von Projekte/Rechnungen/Einstellungen),
 > über den Anwender direkt aus der Software Funktionswünsche, Feedback und Unterstützungsanfragen an
 > plan&simple richten können — **ohne Drittanbieter, ohne zweiten Login, datenschutzkonform**.
@@ -514,6 +513,14 @@ Drei neue Permissions (Format exakt wie `0088_rbac_import.sql`):
   (Öffnen/Löschen) in „Meine/Unsere", Detail (eigene Org) und Anfrage-Thread.
 - **Owner-Konsole**: Anhänge in Vorschlags- + Anfrage-Editor sichtbar, Stream-Route + `openConsoleFile`.
 - Verifiziert: Main-FE `tsc -b` (0), Owner-Konsole `tsc -b` (0), Backend-Jest (108 grün)
+
+**Phase 5 (Auswertungen) — fertig (2026-06-30):**
+- Owner-Konsole `routes/analytics.js` (`GET /analytics`, read-only, Aggregation in JS) + Tab **„Auswertung"**
+  (`web/src/pages/Analytics.tsx`): KPIs (Vorschläge gesamt/zu prüfen/veröffentlicht/beteiligte Orgs;
+  Anfragen gesamt/offen), Verteilungen (Status/Moderation/Bereich · Art/Status/Kategorie) als Balken,
+  Aktivität pro Monat, **Top-Wünsche** nach Stimmen.
+- **Datenschutz:** keine Identitäten in Kennzahlen — Organisationen nur als anonyme Anzahl.
+- Verifiziert: Owner-Konsole `tsc -b` (0)
 
 ---
 

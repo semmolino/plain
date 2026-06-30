@@ -44,6 +44,7 @@ app.use("/api/console", consoleAuth, require("./routes/tenants"));
 app.use("/api/console", consoleAuth, require("./routes/audit"));
 app.use("/api/console", consoleAuth, require("./routes/suggestions"));
 app.use("/api/console", consoleAuth, require("./routes/serviceRequests"));
+app.use("/api/console", consoleAuth, require("./routes/analytics"));
 
 // Gebaute Web-UI ausliefern (ein Server für UI + API). Falls noch nicht gebaut:
 // `npm --prefix web run build`.
