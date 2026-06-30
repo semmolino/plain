@@ -146,6 +146,30 @@ export interface SuggestionPatch {
   category?: string
 }
 
+// ── Feedback & Unterstützung (Inbox) ─────────────────────────────────────────
+export type ReqStatus = 'new' | 'in_progress' | 'waiting' | 'resolved' | 'closed'
+export interface ModRequest {
+  id: number
+  org_name: string
+  submitter_name: string
+  contact_name: string | null
+  contact_email: string | null
+  kind: 'feedback' | 'support'
+  category: string | null
+  subject: string
+  body: string
+  status: ReqStatus
+  urgency: string | null
+  wants_reply: boolean
+  created_at: string
+}
+export interface ReqMessage {
+  id: number
+  body: string
+  author_kind: 'user' | 'vendor'
+  created_at: string
+}
+
 export interface NewPlan {
   key: string
   name_de: string
@@ -224,4 +248,14 @@ export const api = {
   pendingComments: () => req<{ comments: PendingComment[] }>('/suggestion-comments?state=pending'),
   moderateComment: (id: number, action: 'publish' | 'decline') =>
     req<{ ok: true }>(`/suggestion-comments/${id}/${action}`, { method: 'POST', body: '{}' }),
+
+  // Feedback & Unterstützung (Inbox)
+  serviceRequests: (kind: string = '', status: string = 'all') =>
+    req<{ requests: ModRequest[] }>(`/requests?kind=${kind}&status=${status}`),
+  serviceRequestDetail: (id: number) =>
+    req<{ request: ModRequest; messages: ReqMessage[] }>(`/requests/${id}`),
+  replyRequest: (id: number, body: string) =>
+    req<{ ok: true }>(`/requests/${id}/reply`, { method: 'POST', body: JSON.stringify({ body }) }),
+  setRequestStatus: (id: number, status: ReqStatus) =>
+    req<{ ok: true }>(`/requests/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
 }

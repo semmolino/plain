@@ -8,8 +8,9 @@ import { TenantsView } from './pages/Tenants'
 import { AuditView } from './pages/Audit'
 import { FunctionsView } from './pages/Functions'
 import { SuggestionsView } from './pages/Suggestions'
+import { RequestsView } from './pages/Requests'
 
-type Tab = 'matrix' | 'plans' | 'tenants' | 'functions' | 'suggestions' | 'inbox' | 'audit'
+type Tab = 'matrix' | 'plans' | 'tenants' | 'functions' | 'suggestions' | 'requests' | 'inbox' | 'audit'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'matrix', label: 'Matrix' },
@@ -17,6 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'tenants', label: 'Tenants' },
   { id: 'functions', label: 'Funktionen' },
   { id: 'suggestions', label: 'Vorschläge' },
+  { id: 'requests', label: 'Anfragen' },
   { id: 'inbox', label: 'Inbox' },
   { id: 'audit', label: 'Audit' },
 ]
@@ -87,6 +89,7 @@ export function App() {
         {tab === 'tenants' && <TenantsView />}
         {tab === 'functions' && <FunctionsView />}
         {tab === 'suggestions' && <SuggestionsView />}
+        {tab === 'requests' && <RequestsView />}
         {tab === 'inbox' && <InboxView />}
         {tab === 'audit' && <AuditView />}
       </main>

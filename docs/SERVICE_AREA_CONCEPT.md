@@ -1,9 +1,11 @@
 # Konzept — Service-Bereich (Vorschläge · Feedback · Unterstützung)
 
-> **Status:** Konzept beschlossen + **Phase 0 (Fundament) und Phase 1 (Vorschläge end-to-end) implementiert** (2026-06-29/30).
+> **Status:** Konzept beschlossen + **Phasen 0–2 implementiert** (Fundament · Vorschläge · Feedback &
+> Unterstützung) (2026-06-29/30).
 > Entscheidungen: Kommentare **moderiert & pseudonym** · Reject-Label **„Aktuell nicht geplant"** ·
 > Jira **Phase 3** · Consent für **alle** Anwender · Rückruf-Option **ja**.
-> Nächster Schritt: Phase 2 (Feedback & Unterstützung). **Migrationen 0096 + 0097 manuell in Supabase einspielen.**
+> Nächster Schritt: Phase 3 (Jira-Übergabe, Anhänge/Screenshots, E-Mail-Benachrichtigungen, Auswertungen).
+> **Migrationen 0096 + 0097 manuell in Supabase einspielen.**
 > **Ziel:** Ein neuer Top-Level-Bereich **„Service"** (auf Ebene von Projekte/Rechnungen/Einstellungen),
 > über den Anwender direkt aus der Software Funktionswünsche, Feedback und Unterstützungsanfragen an
 > plan&simple richten können — **ohne Drittanbieter, ohne zweiten Login, datenschutzkonform**.
@@ -476,6 +478,17 @@ Drei neue Permissions (Format exakt wie `0088_rbac_import.sql`):
   Text (`PUBLIC_*`), Freigeben/Ablehnen/Zusammenführen, Status setzen, offizielle/private Antwort,
   Kommentar-Freigabe — alles auditiert (`writeChangeLog`). Identitäten nur hier sichtbar.
 - Verifiziert: Main-FE `tsc -b` (exit 0), Owner-Konsole `tsc -b` (exit 0), Backend-Jest (102 grün)
+
+**Phase 2 (Feedback & Unterstützung) — fertig (2026-06-30):**
+- Backend `routes/service.js`: `GET /service/requests/contact` (Vorbelegung Name/E-Mail/Org aus Login),
+  `POST /requests` (Feedback/Support, Permission je nach `kind`), `GET /requests/mine?kind=`,
+  `GET /requests/:id` (+ Nachrichten-Thread), `POST /requests/:id/messages`
+- Frontend: `FeedbackTab` (Art/Betreff/Nachricht, Vorbelegung, Antwort-erwünscht) + `UnterstuetzungTab`
+  (Kategorie-Kacheln → **FAQ-Deflection** → Formular mit Dringlichkeit + **Rückruf-Option** bei
+  Datenimport) + gemeinsame `requestShared.tsx` („Meine Anfragen"-Liste + Thread-Modal)
+- **Owner-Konsole** `routes/serviceRequests.js` + Tab **„Anfragen"** (`web/src/pages/Requests.tsx`):
+  Inbox mit Art-/Status-Filter, Detail-Thread, **Antworten** (setzt Status `waiting`), Status setzen — auditiert
+- Verifiziert: Main-FE `tsc -b` (0), Owner-Konsole `tsc -b` (0), Backend-Jest (102 grün)
 
 ---
 

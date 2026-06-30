@@ -341,5 +341,119 @@ module.exports = (supabase) => {
     res.json({ ok: true, pending: true });
   });
 
+  // ── Feedback & Unterstützung (SERVICE_REQUEST, privat: Org ↔ plan&simple) ───
+  const REQUEST_KINDS = ["feedback", "support"];
+  const FEEDBACK_CATEGORIES = ["lob", "kritik", "frage", "sonstiges"];
+  const SUPPORT_CATEGORIES = ["datenimport", "ersteinrichtung", "rechnungen", "projekte", "benutzer", "technik", "sonstiges"];
+  const URGENCIES = ["question", "impaired", "blocker"];
+
+  function permForKind(kind) {
+    return kind === "feedback" ? "service.feedback.use" : "service.support.use";
+  }
+
+  // GET /requests/contact — Vorbelegung aus Login (Name, E-Mail, Organisation)
+  router.get("/requests/contact", async (req, res) => {
+    const [{ data: emp }, { data: comp }] = await Promise.all([
+      supabase.from("EMPLOYEE").select("FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL").eq("ID", req.employeeId).eq("TENANT_ID", req.tenantId).maybeSingle(),
+      supabase.from("COMPANY").select("COMPANY_NAME_1").eq("TENANT_ID", req.tenantId).order("ID", { ascending: true }).limit(1).maybeSingle(),
+    ]);
+    res.json({
+      name:  emp ? ([emp.FIRST_NAME, emp.LAST_NAME].filter(Boolean).join(" ").trim() || emp.SHORT_NAME || "") : "",
+      email: emp?.MAIL || "",
+      org:   comp?.COMPANY_NAME_1 || "",
+    });
+  });
+
+  // POST /requests — Feedback- oder Support-Anfrage anlegen
+  router.post("/requests", async (req, res) => {
+    const b = req.body || {};
+    const kind = REQUEST_KINDS.includes(b.kind) ? b.kind : null;
+    if (!kind) return res.status(400).json({ error: "Ungültige Anfrageart" });
+    if (!req.hasPermission(permForKind(kind)))
+      return res.status(403).json({ error: `Fehlende Berechtigung: ${permForKind(kind)}` });
+
+    const subject = String(b.subject || "").trim();
+    const body    = String(b.body || "").trim();
+    if (!subject || !body) return res.status(400).json({ error: "Betreff und Nachricht sind erforderlich" });
+
+    const allowedCats = kind === "feedback" ? FEEDBACK_CATEGORIES : SUPPORT_CATEGORIES;
+    const category = allowedCats.includes(b.category) ? b.category : null;
+    const urgency  = kind === "support" && URGENCIES.includes(b.urgency) ? b.urgency : null;
+
+    const { data, error } = await supabase.from("SERVICE_REQUEST").insert([{
+      TENANT_ID:     req.tenantId,
+      EMPLOYEE_ID:   req.employeeId,
+      KIND:          kind,
+      CATEGORY:      category,
+      SUBJECT:       subject.slice(0, 200),
+      BODY:          body,
+      CONTACT_NAME:  b.contact_name ? String(b.contact_name).slice(0, 200) : null,
+      CONTACT_EMAIL: b.contact_email ? String(b.contact_email).slice(0, 200) : null,
+      WANTS_REPLY:   b.wants_reply !== false,
+      URGENCY:       urgency,
+      STATUS:        "new",
+    }]).select("ID").single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ data });
+  });
+
+  // GET /requests/mine?kind= — eigene Anfragen
+  router.get("/requests/mine", async (req, res) => {
+    const kind = REQUEST_KINDS.includes(req.query.kind) ? req.query.kind : null;
+    // Sichtbar nur, wenn man das jeweilige Recht hat (Feedback/Support).
+    let q = supabase.from("SERVICE_REQUEST").select("*")
+      .eq("TENANT_ID", req.tenantId).eq("EMPLOYEE_ID", req.employeeId);
+    if (kind) q = q.eq("KIND", kind);
+    const { data, error } = await q.order("CREATED_AT", { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({
+      data: (data || []).map(r => ({
+        id: r.ID, kind: r.KIND, category: r.CATEGORY, subject: r.SUBJECT, body: r.BODY,
+        status: r.STATUS, urgency: r.URGENCY, wants_reply: r.WANTS_REPLY, created_at: r.CREATED_AT,
+      })),
+    });
+  });
+
+  // GET /requests/:id — eigene Anfrage inkl. Nachrichten-Thread
+  router.get("/requests/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const { data: r } = await supabase.from("SERVICE_REQUEST").select("*")
+      .eq("ID", id).eq("TENANT_ID", req.tenantId).eq("EMPLOYEE_ID", req.employeeId).maybeSingle();
+    if (!r) return res.status(404).json({ error: "Nicht gefunden" });
+    const { data: msgs } = await supabase.from("SERVICE_REQUEST_MESSAGE")
+      .select("AUTHOR_KIND, BODY, CREATED_AT").eq("REQUEST_ID", id).order("CREATED_AT", { ascending: true });
+    res.json({
+      data: {
+        id: r.ID, kind: r.KIND, category: r.CATEGORY, subject: r.SUBJECT, body: r.BODY,
+        status: r.STATUS, urgency: r.URGENCY, created_at: r.CREATED_AT,
+        messages: (msgs || []).map(m => ({
+          body: m.BODY,
+          author: m.AUTHOR_KIND === "vendor" ? "plan&simple Team" : "Sie",
+          is_vendor: m.AUTHOR_KIND === "vendor",
+          created_at: m.CREATED_AT,
+        })),
+      },
+    });
+  });
+
+  // POST /requests/:id/messages — Nachricht zum eigenen Vorgang hinzufügen
+  router.post("/requests/:id/messages", async (req, res) => {
+    const id = Number(req.params.id);
+    const body = String(req.body?.body || "").trim();
+    if (!body) return res.status(400).json({ error: "Nachricht darf nicht leer sein" });
+    const { data: r } = await supabase.from("SERVICE_REQUEST").select("ID")
+      .eq("ID", id).eq("TENANT_ID", req.tenantId).eq("EMPLOYEE_ID", req.employeeId).maybeSingle();
+    if (!r) return res.status(404).json({ error: "Nicht gefunden" });
+    const { error } = await supabase.from("SERVICE_REQUEST_MESSAGE").insert([{
+      REQUEST_ID: id, AUTHOR_KIND: "user", EMPLOYEE_ID: req.employeeId, BODY: body,
+    }]);
+    if (error) return res.status(500).json({ error: error.message });
+    // Anwender meldet sich erneut → Vorgang wieder „offen" (waiting/resolved -> new), aber nicht closed reaktivieren.
+    await supabase.from("SERVICE_REQUEST")
+      .update({ STATUS: "new", UPDATED_AT: new Date().toISOString() })
+      .eq("ID", id).in("STATUS", ["waiting", "resolved"]);
+    res.json({ ok: true });
+  });
+
   return router;
 };

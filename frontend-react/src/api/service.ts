@@ -122,3 +122,68 @@ export const unvoteSuggestion = (id: number) =>
 
 export const commentSuggestion = (id: number, body: string) =>
   apiClient.post<{ ok: boolean; pending: boolean }>(`/service/suggestions/${id}/comments`, { body })
+
+// ── Feedback & Unterstützung (Phase 2) ───────────────────────────────────────
+
+export type ServiceRequestKind   = 'feedback' | 'support'
+export type ServiceRequestStatus = 'new' | 'in_progress' | 'waiting' | 'resolved' | 'closed'
+export type Urgency              = 'question' | 'impaired' | 'blocker'
+
+export interface ContactPrefill { name: string; email: string; org: string }
+
+export interface MyRequest {
+  id:          number
+  kind:        ServiceRequestKind
+  category:    string | null
+  subject:     string
+  body:        string
+  status:      ServiceRequestStatus
+  urgency:     Urgency | null
+  wants_reply: boolean
+  created_at:  string
+}
+
+export interface RequestMessage {
+  body:       string
+  author:     string
+  is_vendor:  boolean
+  created_at: string
+}
+
+export interface RequestDetail {
+  id:         number
+  kind:       ServiceRequestKind
+  category:   string | null
+  subject:    string
+  body:       string
+  status:     ServiceRequestStatus
+  urgency:    Urgency | null
+  created_at: string
+  messages:   RequestMessage[]
+}
+
+export interface SubmitRequestPayload {
+  kind:           ServiceRequestKind
+  category?:      string | null
+  subject:        string
+  body:           string
+  contact_name?:  string
+  contact_email?: string
+  wants_reply?:   boolean
+  urgency?:       Urgency | null
+}
+
+export const fetchContactPrefill = () =>
+  apiClient.get<ContactPrefill>('/service/requests/contact')
+
+export const submitRequest = (payload: SubmitRequestPayload) =>
+  apiClient.post<{ data: { ID: number } }>('/service/requests', payload)
+
+export const fetchMyRequests = (kind: ServiceRequestKind) =>
+  apiClient.get<{ data: MyRequest[] }>(`/service/requests/mine?kind=${kind}`)
+
+export const fetchRequest = (id: number) =>
+  apiClient.get<{ data: RequestDetail }>(`/service/requests/${id}`)
+
+export const postRequestMessage = (id: number, body: string) =>
+  apiClient.post<{ ok: boolean }>(`/service/requests/${id}/messages`, { body })

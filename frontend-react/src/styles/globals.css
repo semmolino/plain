@@ -3333,3 +3333,28 @@ input::placeholder { color: var(--text-4); }
 .sg-comment-form { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
 .sg-comment-form .sg-textarea { width: 100%; }
 
+/* ── Feedback & Unterstützung (Anfragen) ──────────────────────────────────── */
+.sg-section-title { margin: 22px 0 0; font-size: 15px; }
+.sg-prefill { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--text-3); padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.sg-checkrow { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.sg-checkrow input { width: 16px; height: 16px; cursor: pointer; }
+
+/* Kategorie-Kacheln (Unterstützung) */
+.sg-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; max-width: 680px; margin-top: 4px; }
+.sg-cat-tile {
+  text-align: left; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.sg-cat-tile:hover { border-color: var(--nav-active); }
+.sg-cat-tile.active { border-color: var(--nav-active); background: #eff6ff; color: #1d4ed8; }
+
+/* FAQ-Deflection */
+.sg-faq { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 8px 12px; }
+.sg-faq-head { font-size: 12px; font-weight: 700; color: var(--text-3); margin-bottom: 4px; }
+.sg-faq-item { border-top: 1px solid var(--border); padding: 6px 0; }
+.sg-faq-item:first-of-type { border-top: none; }
+.sg-faq-item summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.sg-faq-a { font-size: 13px; color: var(--text-3); line-height: 1.5; margin-top: 5px; }
+.sg-callback { display: flex; flex-direction: column; gap: 6px; }
+
