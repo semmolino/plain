@@ -1,10 +1,10 @@
 # Konzept — Service-Bereich (Vorschläge · Feedback · Unterstützung)
 
-> **Status:** Konzept beschlossen + **Phasen 0–3 implementiert** (Fundament · Vorschläge · Feedback &
-> Unterstützung · Jira-Übergabe + E-Mail-Benachrichtigung) (2026-06-29/30).
+> **Status:** Konzept beschlossen + **Phasen 0–4 implementiert** (Fundament · Vorschläge · Feedback &
+> Unterstützung · Jira + E-Mail · Anhänge/Screenshots) (2026-06-29/30).
 > Entscheidungen: Kommentare **moderiert & pseudonym** · Reject-Label **„Aktuell nicht geplant"** ·
 > Jira **Phase 3** · Consent für **alle** Anwender · Rückruf-Option **ja**.
-> Offen/optional: Screenshot-/Datei-Anhänge (Upload + EXIF-Strip), Auswertungen in der Owner-Konsole.
+> Offen/optional: Auswertungen/Reports in der Owner-Konsole.
 > **Migrationen 0096 + 0097 manuell in Supabase einspielen.** E-Mail-Versand ist no-op, bis Resend
 > (`RESEND_API_KEY` + `EMAIL_FROM`) konfiguriert ist.
 > **Ziel:** Ein neuer Top-Level-Bereich **„Service"** (auf Ebene von Projekte/Rechnungen/Einstellungen),
@@ -502,6 +502,18 @@ Drei neue Permissions (Format exakt wie `0088_rbac_import.sql`):
 - ENV (Owner-Konsole): `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY`,
   `JIRA_ISSUE_TYPE` (Default `Task`), `RESEND_API_KEY`, `EMAIL_FROM`. Main-Backend optional `SERVICE_NOTIFY_EMAIL`.
 - Verifiziert: Owner-Konsole `tsc -b` (0), Backend-Jest (102 grün)
+
+**Phase 4 (Anhänge / Screenshots) — fertig (2026-06-30):**
+- **Datenschutz:** Anhänge sind NIE öffentlich — nur eigene Org + plan&simple. Nur PNG/JPEG, max. 5 MB,
+  max. 3 je Eintrag. **EXIF/Metadaten werden serverseitig entfernt** (`backend/services/imageStrip.js`,
+  dependency-free JPEG-APPn-/PNG-Chunk-Strip; 6 Jest-Tests).
+- Backend `routes/service.js`: generische Endpunkte für Vorschläge UND Anfragen — `POST …/attachments`
+  (Eigentümer, multer memoryStorage → strip → `uploads/<tenant>/service/`), `GET …/attachments` (Liste,
+  eigene Org), `GET …/attachments/:attId/file` (Stream, eigene Org), `DELETE …/attachments/:attId`.
+- Frontend: `AttachmentPicker` (Auswahl + Hinweis) in Einreich-/Feedback-/Support-Formular; `AttachmentStrip`
+  (Öffnen/Löschen) in „Meine/Unsere", Detail (eigene Org) und Anfrage-Thread.
+- **Owner-Konsole**: Anhänge in Vorschlags- + Anfrage-Editor sichtbar, Stream-Route + `openConsoleFile`.
+- Verifiziert: Main-FE `tsc -b` (0), Owner-Konsole `tsc -b` (0), Backend-Jest (108 grün)
 
 ---
 

@@ -6,12 +6,28 @@
 // Siehe docs/SERVICE_AREA_CONCEPT.md §4.
 
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
 const { supabase } = require("../services/db");
 const { writeChangeLog } = require("../services/audit");
 const { createIssue, browseUrl } = require("../services/jira");
 const { notify } = require("../services/notify");
 
 const router = express.Router();
+const UPLOAD_ROOT = path.join(__dirname, "..", "..", "backend", "uploads");
+
+// Streamt einen Anhang aus dem Upload-Verzeichnis des Haupt-Backends.
+// `table`/`fk` legen fest, ob Vorschlags- oder Anfrage-Anhang.
+async function streamAttachment(res, { table, fk, parentId, attId }) {
+  const { data: att } = await supabase.from(table)
+    .select("STORAGE_KEY, MIME_TYPE, FILENAME").eq("ID", attId).eq(fk, parentId).maybeSingle();
+  if (!att) return res.status(404).json({ error: "Nicht gefunden" });
+  const filePath = path.join(UPLOAD_ROOT, att.STORAGE_KEY);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Datei fehlt" });
+  res.setHeader("Content-Type", att.MIME_TYPE || "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(att.FILENAME || "anhang")}"`);
+  fs.createReadStream(filePath).pipe(res);
+}
 
 const LIFECYCLE = ["new", "reviewing", "planned", "in_progress", "shipped", "not_planned"];
 
@@ -93,6 +109,9 @@ router.get("/suggestions/:id", async (req, res) => {
     cEmpMap = Object.fromEntries((ce || []).map((e) => [e.ID, [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(" ").trim() || e.SHORT_NAME]));
   }
 
+  const { data: atts } = await supabase.from("SUGGESTION_ATTACHMENT")
+    .select("ID, FILENAME, MIME_TYPE, SIZE_BYTES").eq("SUGGESTION_ID", id).order("CREATED_AT", { ascending: true });
+
   res.json({
     suggestion: shape(r, orgMap, empMap),
     comments: (comments || []).map((c) => ({
@@ -104,8 +123,13 @@ router.get("/suggestions/:id", async (req, res) => {
       author_name: c.AUTHOR_KIND === "vendor" ? "plan&simple" : (cEmpMap[c.EMPLOYEE_ID] || `#${c.EMPLOYEE_ID}`),
       created_at: c.CREATED_AT,
     })),
+    attachments: (atts || []).map((a) => ({ id: a.ID, filename: a.FILENAME, mime_type: a.MIME_TYPE, size_bytes: a.SIZE_BYTES })),
   });
 });
+
+// GET /suggestions/:id/attachments/:attId/file — Anhang anzeigen (plan&simple sieht alle)
+router.get("/suggestions/:id/attachments/:attId/file", (req, res) =>
+  streamAttachment(res, { table: "SUGGESTION_ATTACHMENT", fk: "SUGGESTION_ID", parentId: Number(req.params.id), attId: Number(req.params.attId) }));
 
 // PATCH /suggestions/:id — kuratierten Text / Status / Kategorie bearbeiten
 router.patch("/suggestions/:id", async (req, res) => {

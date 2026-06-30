@@ -3358,3 +3358,22 @@ input::placeholder { color: var(--text-4); }
 .sg-faq-a { font-size: 13px; color: var(--text-3); line-height: 1.5; margin-top: 5px; }
 .sg-callback { display: flex; flex-direction: column; gap: 6px; }
 
+/* ── Anhänge / Screenshots ─────────────────────────────────────────────────── */
+.att-picker { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.att-list, .att-view { display: flex; flex-wrap: wrap; gap: 6px; }
+.att-view { margin-top: 8px; }
+.att-chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px; max-width: 100%;
+}
+.att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.att-open {
+  display: inline-flex; align-items: center; gap: 5px; background: none; border: none; padding: 0;
+  color: var(--nav-active); font: inherit; font-size: 12px; cursor: pointer; max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.att-open:hover { text-decoration: underline; }
+.att-x { display: inline-flex; background: none; border: none; color: var(--text-4); cursor: pointer; padding: 0; }
+.att-x:hover { color: var(--danger, #dc2626); }
+.att-warn { font-size: 11px; color: var(--text-4); line-height: 1.45; margin: 0; max-width: 560px; }
+

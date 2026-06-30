@@ -5,6 +5,7 @@ import {
   fetchMyRequests, fetchRequest, postRequestMessage,
   type ServiceRequestKind, type ServiceRequestStatus, type MyRequest,
 } from '@/api/service'
+import { AttachmentStrip } from './attachments'
 
 export const REQUEST_STATUS: Record<ServiceRequestStatus, { label: string; cls: string }> = {
   new:         { label: 'Offen',          cls: 'sg-st-reviewing' },
@@ -91,6 +92,7 @@ export function RequestThreadModal({ id, onClose }: { id: number; onClose: () =>
             <div className="sg-comment">
               <div className="sg-comment-author">Sie · {new Date(d.created_at).toLocaleString('de-DE')}</div>
               <div className="sg-comment-body">{d.body}</div>
+              <AttachmentStrip kind="requests" id={d.id} />
             </div>
             {d.messages.map((m, i) => (
               <div key={i} className={`sg-comment${m.is_vendor ? ' official' : ''}`}>

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { submitRequest, type Urgency } from '@/api/service'
 import { MyRequestsList } from './requestShared'
+import { AttachmentPicker, uploadAttachments } from './attachments'
 
 interface Cat { value: string; label: string; faq: { q: string; a: ReactNode }[] }
 
@@ -63,15 +64,17 @@ export function UnterstuetzungTab() {
   const [urgency, setUrgency] = useState<Urgency>('question')
   const [callback, setCallback] = useState(false)
   const [callbackTime, setCallbackTime] = useState('')
+  const [files, setFiles] = useState<File[]>([])
 
   const submit = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const extra = callback ? `\n\n[Rückruf zur Datenübernahme gewünscht${callbackTime ? `: ${callbackTime}` : ''}]` : ''
-      return submitRequest({ kind: 'support', category: cat?.value, subject, body: body + extra, urgency })
+      const res = await submitRequest({ kind: 'support', category: cat?.value, subject, body: body + extra, urgency })
+      if (files.length) await uploadAttachments('requests', res.data.ID, files)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['service', 'requests', 'support'] })
-      setSubject(''); setBody(''); setCallback(false); setCallbackTime('')
+      setSubject(''); setBody(''); setCallback(false); setCallbackTime(''); setFiles([])
     },
   })
 
@@ -143,6 +146,10 @@ export function UnterstuetzungTab() {
               </div>
             )}
 
+            <label className="sg-field">
+              <span>Screenshots (optional)</span>
+              <AttachmentPicker files={files} onChange={setFiles} />
+            </label>
             {submit.isError && <p className="consent-error">Senden fehlgeschlagen. Bitte erneut versuchen.</p>}
             {submit.isSuccess && <p className="service-hint-muted">Danke! Ihre Anfrage ist eingegangen — Sie finden sie unten unter „Meine Anfragen".</p>}
             <div className="consent-actions">

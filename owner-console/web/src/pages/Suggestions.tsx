@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
-  api, ApiError,
-  type ModSuggestion, type ModComment, type PendingComment, type SgLifecycle,
+  api, ApiError, openConsoleFile,
+  type ModSuggestion, type ModComment, type PendingComment, type SgLifecycle, type AttachmentRow,
 } from '../api'
 
 const STATES: { id: string; label: string }[] = [
@@ -123,6 +123,7 @@ export function SuggestionsView() {
 function Editor({ id, onChanged, onClose }: { id: number; onChanged: () => void; onClose: () => void }) {
   const [sug, setSug] = useState<ModSuggestion | null>(null)
   const [comments, setComments] = useState<ModComment[]>([])
+  const [attachments, setAttachments] = useState<AttachmentRow[]>([])
   const [pubTitle, setPubTitle] = useState('')
   const [pubBody, setPubBody] = useState('')
   const [lifecycle, setLifecycle] = useState<SgLifecycle>('new')
@@ -136,6 +137,7 @@ function Editor({ id, onChanged, onClose }: { id: number; onChanged: () => void;
     const d = await api.suggestionDetail(id)
     setSug(d.suggestion)
     setComments(d.comments)
+    setAttachments(d.attachments || [])
     setPubTitle(d.suggestion.public_title ?? d.suggestion.title)
     setPubBody(d.suggestion.public_body ?? d.suggestion.body)
     setLifecycle(d.suggestion.lifecycle_status)
@@ -174,6 +176,16 @@ function Editor({ id, onChanged, onClose }: { id: number; onChanged: () => void;
         <strong>{sug.title}</strong>
         <div>{sug.body}</div>
       </div>
+
+      {attachments.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <span className="muted">Anhänge: </span>
+          {attachments.map((a) => (
+            <button key={a.id} className="link" style={{ marginRight: 10 }}
+              onClick={() => openConsoleFile(`/suggestions/${id}/attachments/${a.id}/file`)}>{a.filename}</button>
+          ))}
+        </div>
+      )}
 
       <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
         <label className="muted">Öffentlicher Titel

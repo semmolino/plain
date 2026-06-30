@@ -12,6 +12,7 @@ import {
   SUGGESTION_CATEGORIES,
   type BoardItem, type MineItem, type LifecycleStatus, type PriorityHint,
 } from '@/api/service'
+import { AttachmentPicker, AttachmentStrip, uploadAttachments } from './attachments'
 
 // ── Status-/Kategorie-Helfer ─────────────────────────────────────────────────
 const LIFECYCLE: Record<LifecycleStatus, { label: string; cls: string }> = {
@@ -209,6 +210,7 @@ function MineView() {
                     ))}
                   </div>
                 )}
+                <AttachmentStrip kind="suggestions" id={m.id} canDelete={m.is_mine} />
               </div>
             </div>
           ))}
@@ -225,9 +227,13 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
   const [body, setBody] = useState('')
   const [category, setCategory] = useState('sonstiges')
   const [priority, setPriority] = useState<PriorityHint | ''>('')
+  const [files, setFiles] = useState<File[]>([])
 
   const submit = useMutation({
-    mutationFn: () => submitSuggestion({ title, body, category, priority_hint: priority || null }),
+    mutationFn: async () => {
+      const res = await submitSuggestion({ title, body, category, priority_hint: priority || null })
+      if (files.length) await uploadAttachments('suggestions', res.data.ID, files)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['service', 'mine'] })
       onClose()
@@ -261,6 +267,10 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
               <button key={v} type="button" className={`seg-nav-btn${priority === v ? ' active' : ''}`} onClick={() => setPriority(v as PriorityHint | '')}>{l}</button>
             ))}
           </div>
+        </label>
+        <label className="sg-field">
+          <span>Screenshots (optional)</span>
+          <AttachmentPicker files={files} onChange={setFiles} />
         </label>
         <p className="service-hint-muted">
           Bitte keine personenbezogenen Daten Dritter oder vertrauliche Geschäftsdaten eingeben.
@@ -315,6 +325,8 @@ function DetailModal({ id, onClose }: { id: number; onClose: () => void }) {
             </div>
           </div>
           <div className="sg-detail-body">{d.body}</div>
+
+          {d.is_own_org && <AttachmentStrip kind="suggestions" id={id} />}
 
           <h4 className="sg-comments-title">Kommentare</h4>
           {d.comments.length === 0 ? (

@@ -171,6 +171,23 @@ export interface ReqMessage {
   created_at: string
 }
 
+export interface AttachmentRow {
+  id: number
+  filename: string
+  mime_type: string
+  size_bytes: number
+}
+
+/** Lädt eine Datei mit Auth-Header und öffnet sie in einem neuen Tab. */
+export async function openConsoleFile(path: string): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`${BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (!res.ok) throw new ApiError(res.status, `Download fehlgeschlagen (HTTP ${res.status})`)
+  const url = URL.createObjectURL(await res.blob())
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
 export interface NewPlan {
   key: string
   name_de: string
@@ -235,7 +252,7 @@ export const api = {
 
   // Vorschläge (Moderation)
   suggestions: (state: string = 'all') => req<{ suggestions: ModSuggestion[] }>(`/suggestions?state=${state}`),
-  suggestionDetail: (id: number) => req<{ suggestion: ModSuggestion; comments: ModComment[] }>(`/suggestions/${id}`),
+  suggestionDetail: (id: number) => req<{ suggestion: ModSuggestion; comments: ModComment[]; attachments: AttachmentRow[] }>(`/suggestions/${id}`),
   patchSuggestion: (id: number, patch: SuggestionPatch) =>
     req<{ ok: true }>(`/suggestions/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   publishSuggestion: (id: number) => req<{ ok: true }>(`/suggestions/${id}/publish`, { method: 'POST', body: '{}' }),
@@ -256,7 +273,7 @@ export const api = {
   serviceRequests: (kind: string = '', status: string = 'all') =>
     req<{ requests: ModRequest[] }>(`/requests?kind=${kind}&status=${status}`),
   serviceRequestDetail: (id: number) =>
-    req<{ request: ModRequest; messages: ReqMessage[] }>(`/requests/${id}`),
+    req<{ request: ModRequest; messages: ReqMessage[]; attachments: AttachmentRow[] }>(`/requests/${id}`),
   replyRequest: (id: number, body: string) =>
     req<{ ok: true }>(`/requests/${id}/reply`, { method: 'POST', body: JSON.stringify({ body }) }),
   setRequestStatus: (id: number, status: ReqStatus) =>

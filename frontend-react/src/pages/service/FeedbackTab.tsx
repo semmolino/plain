@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { fetchContactPrefill, submitRequest } from '@/api/service'
 import { MyRequestsList } from './requestShared'
+import { AttachmentPicker, uploadAttachments } from './attachments'
 
 const ARTEN: { value: string; label: string }[] = [
   { value: 'lob', label: 'Lob' },
@@ -21,17 +22,21 @@ export function FeedbackTab() {
   const [wantsReply, setWantsReply] = useState(true)
   const [email, setEmail] = useState('')
   const [emailTouched, setEmailTouched] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
 
   const effectiveEmail = emailTouched ? email : (prefill.data?.email ?? '')
 
   const submit = useMutation({
-    mutationFn: () => submitRequest({
-      kind: 'feedback', category, subject, body,
-      contact_name: prefill.data?.name, contact_email: effectiveEmail, wants_reply: wantsReply,
-    }),
+    mutationFn: async () => {
+      const res = await submitRequest({
+        kind: 'feedback', category, subject, body,
+        contact_name: prefill.data?.name, contact_email: effectiveEmail, wants_reply: wantsReply,
+      })
+      if (files.length) await uploadAttachments('requests', res.data.ID, files)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['service', 'requests', 'feedback'] })
-      setSubject(''); setBody('')
+      setSubject(''); setBody(''); setFiles([])
     },
   })
 
@@ -83,6 +88,10 @@ export function FeedbackTab() {
             </label>
           )}
 
+          <label className="sg-field">
+            <span>Anhang (optional)</span>
+            <AttachmentPicker files={files} onChange={setFiles} />
+          </label>
           {submit.isError && <p className="consent-error">Senden fehlgeschlagen. Bitte erneut versuchen.</p>}
           {submit.isSuccess && <p className="service-hint-muted">Danke! Ihre Nachricht ist bei uns eingegangen.</p>}
           <div className="consent-actions">

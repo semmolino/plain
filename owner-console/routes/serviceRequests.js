@@ -5,11 +5,26 @@
 // Siehe docs/SERVICE_AREA_CONCEPT.md §7/§8.
 
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
 const { supabase } = require("../services/db");
 const { writeChangeLog } = require("../services/audit");
 const { notify } = require("../services/notify");
 
 const router = express.Router();
+const UPLOAD_ROOT = path.join(__dirname, "..", "..", "backend", "uploads");
+
+// Streamt einen Anfrage-Anhang aus dem Upload-Verzeichnis des Haupt-Backends.
+async function streamAttachment(res, { parentId, attId }) {
+  const { data: att } = await supabase.from("SERVICE_REQUEST_ATTACHMENT")
+    .select("STORAGE_KEY, MIME_TYPE, FILENAME").eq("ID", attId).eq("REQUEST_ID", parentId).maybeSingle();
+  if (!att) return res.status(404).json({ error: "Nicht gefunden" });
+  const filePath = path.join(UPLOAD_ROOT, att.STORAGE_KEY);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Datei fehlt" });
+  res.setHeader("Content-Type", att.MIME_TYPE || "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(att.FILENAME || "anhang")}"`);
+  fs.createReadStream(filePath).pipe(res);
+}
 
 const STATUSES = ["new", "in_progress", "waiting", "resolved", "closed"];
 
@@ -71,8 +86,15 @@ router.get("/requests/:id", async (req, res) => {
     messages: (msgs || []).map((m) => ({
       id: m.ID, body: m.BODY, author_kind: m.AUTHOR_KIND, created_at: m.CREATED_AT,
     })),
+    attachments: (await supabase.from("SERVICE_REQUEST_ATTACHMENT")
+      .select("ID, FILENAME, MIME_TYPE, SIZE_BYTES").eq("REQUEST_ID", id).order("CREATED_AT", { ascending: true }))
+      .data?.map((a) => ({ id: a.ID, filename: a.FILENAME, mime_type: a.MIME_TYPE, size_bytes: a.SIZE_BYTES })) || [],
   });
 });
+
+// GET /requests/:id/attachments/:attId/file — Anhang anzeigen (plan&simple sieht alle)
+router.get("/requests/:id/attachments/:attId/file", (req, res) =>
+  streamAttachment(res, { table: "SERVICE_REQUEST_ATTACHMENT", fk: "REQUEST_ID", parentId: Number(req.params.id), attId: Number(req.params.attId) }));
 
 // POST /requests/:id/reply { body } — Antwort an den Anwender (setzt Status 'waiting')
 router.post("/requests/:id/reply", async (req, res) => {

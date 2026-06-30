@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, openPdfWithAuth } from './client'
 
 // ── Service-Bereich (Vorschläge · Feedback · Unterstützung) ──────────────────
 // Phase 0: Zugangs-Gate (Haftungs-/Nutzungsbestätigung) + Produkt-Sprecher.
@@ -187,3 +187,33 @@ export const fetchRequest = (id: number) =>
 
 export const postRequestMessage = (id: number, body: string) =>
   apiClient.post<{ ok: boolean }>(`/service/requests/${id}/messages`, { body })
+
+// ── Anhänge / Screenshots (Phase 4) ──────────────────────────────────────────
+// Nur PNG/JPEG, max. 5 MB, max. 3 je Eintrag. Metadaten werden serverseitig
+// entfernt. Nie öffentlich — sichtbar nur für die eigene Org + plan&simple.
+
+export type AttachmentKind = 'suggestions' | 'requests'
+
+export interface AttachmentMeta {
+  id:         number
+  filename:   string
+  mime_type:  string
+  size_bytes: number
+  created_at?: string
+}
+
+export const fetchAttachments = (kind: AttachmentKind, id: number) =>
+  apiClient.get<{ data: AttachmentMeta[] }>(`/service/${kind}/${id}/attachments`)
+
+export const uploadAttachment = (kind: AttachmentKind, id: number, file: File) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return apiClient.post<{ data: AttachmentMeta }>(`/service/${kind}/${id}/attachments`, fd)
+}
+
+export const deleteAttachment = (kind: AttachmentKind, id: number, attId: number) =>
+  apiClient.delete<{ ok: boolean }>(`/service/${kind}/${id}/attachments/${attId}`)
+
+/** Öffnet den Anhang (mit Auth-Header) in einem neuen Tab. */
+export const openAttachment = (kind: AttachmentKind, id: number, attId: number) =>
+  openPdfWithAuth(`/service/${kind}/${id}/attachments/${attId}/file`)

@@ -1,7 +1,12 @@
 "use strict";
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
+const multer = require("multer");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 const { sendMail } = require("../services/emailService");
+const { stripImageMetadata } = require("../services/imageStrip");
 
 // ── Routen: Service-Bereich (Phase 0 — Fundament) ─────────────────────────────
 // Liefert das Zugangs-Gate (Haftungs-/Nutzungsbestätigung) und die Verwaltung
@@ -470,6 +475,119 @@ module.exports = (supabase) => {
       .eq("ID", id).in("STATUS", ["waiting", "resolved"]);
     res.json({ ok: true });
   });
+
+  // ── Anhänge (Screenshots) — NIE öffentlich, nur eigene Org + plan&simple ────
+  // Nur Bilder (png/jpeg), max. 5 MB, max. 3 je Eintrag. Metadaten werden beim
+  // Upload entfernt (EXIF/GPS-Strip). Siehe docs/SERVICE_AREA_CONCEPT.md §1.2.
+  const ATT_ALLOWED = new Set(["image/png", "image/jpeg"]);
+  const ATT_MAX_BYTES = 5 * 1024 * 1024;
+  const ATT_MAX_COUNT = 3;
+  const uploadRoot = path.join(__dirname, "..", "uploads");
+
+  const attUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: ATT_MAX_BYTES, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      if (ATT_ALLOWED.has(file.mimetype)) cb(null, true);
+      else cb(Object.assign(new Error("Nur PNG- oder JPEG-Bilder erlaubt."), { status: 400 }));
+    },
+  });
+  // Multer-Fehler (z. B. zu groß / falscher Typ) sauber als 400 zurückgeben.
+  function withUpload(handler) {
+    return (req, res) => attUpload.single("file")(req, res, (err) => {
+      if (err) return res.status(err.status || 400).json({ error: err.message || "Upload fehlgeschlagen" });
+      handler(req, res).catch((e) => res.status(e?.status || 500).json({ error: e?.message || String(e) }));
+    });
+  }
+
+  const ATT = {
+    suggestion: { parent: "SUGGESTION", child: "SUGGESTION_ATTACHMENT", fk: "SUGGESTION_ID" },
+    request:    { parent: "SERVICE_REQUEST", child: "SERVICE_REQUEST_ATTACHMENT", fk: "REQUEST_ID" },
+  };
+
+  // Lädt den Eltern-Datensatz, sofern er zur eigenen Organisation gehört.
+  async function loadParent(kind, id, req, ownerOnly) {
+    const cfg = ATT[kind];
+    const { data } = await supabase.from(cfg.parent).select("ID, TENANT_ID, EMPLOYEE_ID").eq("ID", id).maybeSingle();
+    if (!data || data.TENANT_ID !== req.tenantId) return null;
+    if (ownerOnly && data.EMPLOYEE_ID !== req.employeeId) return null;
+    return data;
+  }
+
+  function makeAttachmentRoutes(kind, basePath) {
+    const cfg = ATT[kind];
+
+    // POST upload (nur Eigentümer)
+    router.post(`${basePath}/:id/attachments`, withUpload(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!req.file) return res.status(400).json({ error: "Datei fehlt" });
+      const parent = await loadParent(kind, id, req, true);
+      if (!parent) return res.status(404).json({ error: "Nicht gefunden" });
+
+      const { data: existing } = await supabase.from(cfg.child).select("ID").eq(cfg.fk, id);
+      if ((existing || []).length >= ATT_MAX_COUNT)
+        return res.status(400).json({ error: `Maximal ${ATT_MAX_COUNT} Anhänge je Eintrag.` });
+
+      // Metadaten entfernen, dann unter uploads/<tenant>/service/<uuid>.<ext> ablegen.
+      const cleaned = stripImageMetadata(req.file.buffer, req.file.mimetype);
+      const ext = req.file.mimetype === "image/png" ? ".png" : ".jpg";
+      const relDir = path.join(String(req.tenantId), "service");
+      fs.mkdirSync(path.join(uploadRoot, relDir), { recursive: true });
+      const storageKey = path.join(relDir, `${crypto.randomUUID()}${ext}`).replace(/\\/g, "/");
+      fs.writeFileSync(path.join(uploadRoot, storageKey), cleaned);
+
+      const { data, error } = await supabase.from(cfg.child).insert([{
+        [cfg.fk]: id, TENANT_ID: req.tenantId, STORAGE_KEY: storageKey,
+        FILENAME: (req.file.originalname || "screenshot").slice(0, 200),
+        MIME_TYPE: req.file.mimetype, SIZE_BYTES: cleaned.length, CREATED_BY: req.employeeId,
+      }]).select("ID, FILENAME, MIME_TYPE, SIZE_BYTES").single();
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({ data: { id: data.ID, filename: data.FILENAME, mime_type: data.MIME_TYPE, size_bytes: data.SIZE_BYTES } });
+    }));
+
+    // GET Liste (eigene Org — Sichtbarkeit erzwingt loadParent)
+    router.get(`${basePath}/:id/attachments`, async (req, res) => {
+      const id = Number(req.params.id);
+      const parent = await loadParent(kind, id, req, false);
+      if (!parent) return res.json({ data: [] });
+      const { data } = await supabase.from(cfg.child)
+        .select("ID, FILENAME, MIME_TYPE, SIZE_BYTES, CREATED_AT").eq(cfg.fk, id).order("CREATED_AT", { ascending: true });
+      res.json({ data: (data || []).map(a => ({ id: a.ID, filename: a.FILENAME, mime_type: a.MIME_TYPE, size_bytes: a.SIZE_BYTES, created_at: a.CREATED_AT })) });
+    });
+
+    // GET Datei (eigene Org) — streamt das Bild
+    router.get(`${basePath}/:id/attachments/:attId/file`, async (req, res) => {
+      const id = Number(req.params.id);
+      const attId = Number(req.params.attId);
+      const parent = await loadParent(kind, id, req, false);
+      if (!parent) return res.status(404).json({ error: "Nicht gefunden" });
+      const { data: att } = await supabase.from(cfg.child)
+        .select("STORAGE_KEY, MIME_TYPE, FILENAME, TENANT_ID").eq("ID", attId).eq(cfg.fk, id).maybeSingle();
+      if (!att || att.TENANT_ID !== req.tenantId) return res.status(404).json({ error: "Nicht gefunden" });
+      const filePath = path.join(uploadRoot, att.STORAGE_KEY);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Datei fehlt" });
+      res.setHeader("Content-Type", att.MIME_TYPE || "application/octet-stream");
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(att.FILENAME || "anhang")}"`);
+      fs.createReadStream(filePath).pipe(res);
+    });
+
+    // DELETE (nur Eigentümer)
+    router.delete(`${basePath}/:id/attachments/:attId`, async (req, res) => {
+      const id = Number(req.params.id);
+      const attId = Number(req.params.attId);
+      const parent = await loadParent(kind, id, req, true);
+      if (!parent) return res.status(404).json({ error: "Nicht gefunden" });
+      const { data: att } = await supabase.from(cfg.child).select("STORAGE_KEY").eq("ID", attId).eq(cfg.fk, id).maybeSingle();
+      if (att?.STORAGE_KEY) {
+        try { fs.unlinkSync(path.join(uploadRoot, att.STORAGE_KEY)); } catch { /* Datei evtl. schon weg */ }
+      }
+      await supabase.from(cfg.child).delete().eq("ID", attId).eq(cfg.fk, id).eq("TENANT_ID", req.tenantId);
+      res.json({ ok: true });
+    });
+  }
+
+  makeAttachmentRoutes("suggestion", "/suggestions");
+  makeAttachmentRoutes("request", "/requests");
 
   return router;
 };

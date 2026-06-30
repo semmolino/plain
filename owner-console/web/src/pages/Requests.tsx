@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError, type ModRequest, type ReqMessage, type ReqStatus } from '../api'
+import { api, ApiError, openConsoleFile, type ModRequest, type ReqMessage, type ReqStatus, type AttachmentRow } from '../api'
 
 const STATUS: { id: string; label: string }[] = [
   { id: 'new', label: 'Offen' },
@@ -84,6 +84,7 @@ export function RequestsView() {
 function RequestEditor({ id, onChanged, onClose }: { id: number; onChanged: () => void; onClose: () => void }) {
   const [req, setReq] = useState<ModRequest | null>(null)
   const [msgs, setMsgs] = useState<ReqMessage[]>([])
+  const [attachments, setAttachments] = useState<AttachmentRow[]>([])
   const [reply, setReply] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -92,6 +93,7 @@ function RequestEditor({ id, onChanged, onClose }: { id: number; onChanged: () =
     const d = await api.serviceRequestDetail(id)
     setReq(d.request)
     setMsgs(d.messages)
+    setAttachments(d.attachments || [])
   }
   useEffect(() => {
     void load()
@@ -117,6 +119,16 @@ function RequestEditor({ id, onChanged, onClose }: { id: number; onChanged: () =
         {req.org_name} · {req.submitter_name} {req.contact_email ? `· ${req.contact_email}` : ''} · {req.kind}{req.category ? ` / ${req.category}` : ''}{req.urgency ? ` · ${req.urgency}` : ''}
       </div>
       {err && <div className="error">{err}</div>}
+
+      {attachments.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <span className="muted">Anhänge: </span>
+          {attachments.map((a) => (
+            <button key={a.id} className="link" style={{ marginRight: 10 }}
+              onClick={() => openConsoleFile(`/requests/${id}/attachments/${a.id}/file`)}>{a.filename}</button>
+          ))}
+        </div>
+      )}
 
       <div className="sg-thread" style={{ marginTop: 10, display: 'grid', gap: 6 }}>
         <div style={{ borderLeft: '3px solid #cbd5e1', padding: '4px 8px', whiteSpace: 'pre-line' }}>
