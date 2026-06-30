@@ -121,6 +121,7 @@ export interface ModSuggestion {
   merged_into_id: number | null
   vote_count: number
   jira_issue_key: string | null
+  jira_url: string | null
   created_at: string
   published_at: string | null
 }
@@ -245,6 +246,8 @@ export const api = {
     req<{ ok: true }>(`/suggestions/${id}/merge`, { method: 'POST', body: JSON.stringify({ into_id: intoId }) }),
   respondSuggestion: (id: number, body: string, visibility: 'public' | 'vendor_only') =>
     req<{ ok: true }>(`/suggestions/${id}/respond`, { method: 'POST', body: JSON.stringify({ body, visibility }) }),
+  createJiraIssue: (id: number) =>
+    req<{ key: string; url: string | null }>(`/suggestions/${id}/jira`, { method: 'POST', body: '{}' }),
   pendingComments: () => req<{ comments: PendingComment[] }>('/suggestion-comments?state=pending'),
   moderateComment: (id: number, action: 'publish' | 'decline') =>
     req<{ ok: true }>(`/suggestion-comments/${id}/${action}`, { method: 'POST', body: '{}' }),

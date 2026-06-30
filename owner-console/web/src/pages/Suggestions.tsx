@@ -205,6 +205,19 @@ function Editor({ id, onChanged, onClose }: { id: number; onChanged: () => void;
           <input style={{ width: 120 }} placeholder="Ziel-#" value={mergeInto} onChange={(e) => setMergeInto(e.target.value)} />
           <button disabled={busy || !mergeInto} onClick={() => run(() => api.mergeSuggestion(id, Number(mergeInto)))}>Als Duplikat zusammenführen</button>
         </div>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {sug.jira_issue_key ? (
+            <span className="muted">
+              Jira:{' '}
+              {sug.jira_url
+                ? <a href={sug.jira_url} target="_blank" rel="noreferrer">{sug.jira_issue_key}</a>
+                : <strong>{sug.jira_issue_key}</strong>}
+            </span>
+          ) : (
+            <button disabled={busy} onClick={() => run(() => api.createJiraIssue(id))}>Als Jira-Ticket anlegen</button>
+          )}
+        </div>
       </div>
 
       <h4 style={{ marginBottom: 6 }}>Kommunikation</h4>

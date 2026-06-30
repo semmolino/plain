@@ -1,6 +1,7 @@
 "use strict";
 const express = require("express");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
+const { sendMail } = require("../services/emailService");
 
 // ── Routen: Service-Bereich (Phase 0 — Fundament) ─────────────────────────────
 // Liefert das Zugangs-Gate (Haftungs-/Nutzungsbestätigung) und die Verwaltung
@@ -42,6 +43,19 @@ module.exports = (supabase) => {
 
   const CATEGORIES = ["projekte", "rechnungen", "angebote", "reporting", "adressen", "mitarbeiter", "import", "einvoice", "sonstiges"];
   const PRIORITIES = ["nice", "important", "blocker"];
+
+  // Best-effort interne Benachrichtigung an plan&simple bei neuen Einträgen.
+  // Nur aktiv, wenn SERVICE_NOTIFY_EMAIL gesetzt ist; bricht nie die Anfrage ab.
+  function notifyVendorNewItem({ kind, subject, category }) {
+    const to = String(process.env.SERVICE_NOTIFY_EMAIL || "").trim();
+    if (!to) return;
+    sendMail({
+      supabase,
+      to,
+      subject: `[plan&simple Service] Neu: ${kind} — ${subject}`,
+      text: `Es ist ein neuer Eintrag im Service-Bereich eingegangen.\n\nArt: ${kind}\nKategorie: ${category || "-"}\nBetreff/Titel: ${subject}\n\nBitte in der Owner-Konsole bearbeiten.`,
+    }).catch((e) => console.warn("[service] vendor notify failed:", e?.message || e));
+  }
 
   // ── Zugangs-Gate: Haftungs-/Nutzungsbestätigung ─────────────────────────────
   // GET /consent → ob der aktuelle Mitarbeiter die aktuelle Textversion akzeptiert hat
@@ -155,6 +169,7 @@ module.exports = (supabase) => {
       LIFECYCLE_STATUS: "new",
     }]).select("*").single();
     if (error) return res.status(500).json({ error: error.message });
+    notifyVendorNewItem({ kind: "Vorschlag", subject: title, category });
     res.json({ data });
   });
 
@@ -394,6 +409,7 @@ module.exports = (supabase) => {
       STATUS:        "new",
     }]).select("ID").single();
     if (error) return res.status(500).json({ error: error.message });
+    notifyVendorNewItem({ kind: kind === "feedback" ? "Feedback" : "Unterstützung", subject, category });
     res.json({ data });
   });
 

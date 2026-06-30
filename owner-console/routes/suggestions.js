@@ -8,6 +8,8 @@
 const express = require("express");
 const { supabase } = require("../services/db");
 const { writeChangeLog } = require("../services/audit");
+const { createIssue, browseUrl } = require("../services/jira");
+const { notify } = require("../services/notify");
 
 const router = express.Router();
 
@@ -56,6 +58,7 @@ function shape(r, orgMap, empMap) {
     merged_into_id: r.MERGED_INTO_ID,
     vote_count: r.VOTE_COUNT,
     jira_issue_key: r.JIRA_ISSUE_KEY,
+    jira_url: browseUrl(r.JIRA_ISSUE_KEY),
     created_at: r.CREATED_AT,
     published_at: r.PUBLISHED_AT,
   };
@@ -201,7 +204,51 @@ router.post("/suggestions/:id/respond", async (req, res) => {
   }]);
   if (error) return res.status(400).json({ error: error.message });
   await writeChangeLog({ actor: req.adminEmail, entity: "SUGGESTION_COMMENT", entityRef: id, action: "respond", after: { visibility } });
+
+  // Best-effort: Einreicher per E-Mail über die Antwort informieren (kein await-Block).
+  (async () => {
+    const { data: s } = await supabase.from("SUGGESTION").select("EMPLOYEE_ID, TENANT_ID, TITLE, PUBLIC_TITLE").eq("ID", id).maybeSingle();
+    if (!s) return;
+    const { data: emp } = await supabase.from("EMPLOYEE").select("MAIL").eq("ID", s.EMPLOYEE_ID).eq("TENANT_ID", s.TENANT_ID).maybeSingle();
+    if (!emp?.MAIL) return;
+    const title = s.PUBLIC_TITLE || s.TITLE || "Ihr Vorschlag";
+    await notify({
+      to: emp.MAIL,
+      subject: `Antwort zu Ihrem Vorschlag: ${title}`,
+      text: `Hallo,\n\nzu Ihrem Vorschlag „${title}" gibt es eine Antwort von plan&simple:\n\n${body}\n\nSie sehen den aktuellen Stand jederzeit im Service-Bereich von plan&simple unter „Vorschläge → Meine/Unsere".\n`,
+    });
+  })().catch((e) => console.warn("[suggestions] notify failed:", e?.message || e));
+
   res.json({ ok: true });
+});
+
+// POST /suggestions/:id/jira — Vorschlag als Jira-Issue in die Roadmap übernehmen
+router.post("/suggestions/:id/jira", async (req, res) => {
+  const id = Number(req.params.id);
+  const { data: s } = await supabase.from("SUGGESTION").select("*").eq("ID", id).maybeSingle();
+  if (!s) return res.status(404).json({ error: "Nicht gefunden" });
+  if (s.JIRA_ISSUE_KEY) return res.status(400).json({ error: `Bereits als ${s.JIRA_ISSUE_KEY} in Jira angelegt.` });
+
+  // Bewusst die kuratierten PUBLIC_*-Felder bevorzugen — kein versehentliches Kunden-PII in Jira.
+  const summary = String(s.PUBLIC_TITLE || s.TITLE || `Vorschlag #${s.ID}`);
+  const description = [
+    s.PUBLIC_BODY || s.BODY || "",
+    "",
+    `Kategorie: ${s.CATEGORY || "-"}`,
+    `Stimmen: ${s.VOTE_COUNT}`,
+    `Quelle: plan&simple Vorschlagsportal (Vorschlag #${s.ID})`,
+  ].join("\n");
+
+  let result;
+  try {
+    result = await createIssue({ summary, description, labels: ["plan-and-simple", `kat-${s.CATEGORY || "sonstiges"}`] });
+  } catch (e) {
+    return res.status(e?.status || 502).json({ error: e?.message || "Jira-Fehler" });
+  }
+
+  await supabase.from("SUGGESTION").update({ JIRA_ISSUE_KEY: result.key, UPDATED_AT: new Date().toISOString() }).eq("ID", id);
+  await writeChangeLog({ actor: req.adminEmail, entity: "SUGGESTION", entityRef: id, action: "jira", after: { key: result.key } });
+  res.json({ key: result.key, url: result.url });
 });
 
 // GET /suggestion-comments?state=pending — Anwender-Kommentare zur Moderation

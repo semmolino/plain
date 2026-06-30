@@ -1,11 +1,12 @@
 # Konzept — Service-Bereich (Vorschläge · Feedback · Unterstützung)
 
-> **Status:** Konzept beschlossen + **Phasen 0–2 implementiert** (Fundament · Vorschläge · Feedback &
-> Unterstützung) (2026-06-29/30).
+> **Status:** Konzept beschlossen + **Phasen 0–3 implementiert** (Fundament · Vorschläge · Feedback &
+> Unterstützung · Jira-Übergabe + E-Mail-Benachrichtigung) (2026-06-29/30).
 > Entscheidungen: Kommentare **moderiert & pseudonym** · Reject-Label **„Aktuell nicht geplant"** ·
 > Jira **Phase 3** · Consent für **alle** Anwender · Rückruf-Option **ja**.
-> Nächster Schritt: Phase 3 (Jira-Übergabe, Anhänge/Screenshots, E-Mail-Benachrichtigungen, Auswertungen).
-> **Migrationen 0096 + 0097 manuell in Supabase einspielen.**
+> Offen/optional: Screenshot-/Datei-Anhänge (Upload + EXIF-Strip), Auswertungen in der Owner-Konsole.
+> **Migrationen 0096 + 0097 manuell in Supabase einspielen.** E-Mail-Versand ist no-op, bis Resend
+> (`RESEND_API_KEY` + `EMAIL_FROM`) konfiguriert ist.
 > **Ziel:** Ein neuer Top-Level-Bereich **„Service"** (auf Ebene von Projekte/Rechnungen/Einstellungen),
 > über den Anwender direkt aus der Software Funktionswünsche, Feedback und Unterstützungsanfragen an
 > plan&simple richten können — **ohne Drittanbieter, ohne zweiten Login, datenschutzkonform**.
@@ -489,6 +490,18 @@ Drei neue Permissions (Format exakt wie `0088_rbac_import.sql`):
 - **Owner-Konsole** `routes/serviceRequests.js` + Tab **„Anfragen"** (`web/src/pages/Requests.tsx`):
   Inbox mit Art-/Status-Filter, Detail-Thread, **Antworten** (setzt Status `waiting`), Status setzen — auditiert
 - Verifiziert: Main-FE `tsc -b` (0), Owner-Konsole `tsc -b` (0), Backend-Jest (102 grün)
+
+**Phase 3 (Jira-Übergabe + E-Mail-Benachrichtigung) — fertig (2026-06-30):**
+- **Jira** (Owner-Konsole, einseitig): `services/jira.js` (REST API v2, Basic-Auth, env-konfiguriert),
+  Endpoint `POST /suggestions/:id/jira` (nutzt `PUBLIC_*` → kein Kunden-PII), speichert `JIRA_ISSUE_KEY`,
+  Button/Link „Als Jira-Ticket anlegen" im Vorschlags-Editor. Inaktiv mit klarer Meldung ohne Konfiguration.
+- **E-Mail** (`services/notify.js`, Resend, **best-effort/no-op** ohne Konfiguration — wirft nie):
+  Anwender wird benachrichtigt bei Antwort auf seine **Anfrage** (`/requests/:id/reply`) und auf seinen
+  **Vorschlag** (`/suggestions/:id/respond`). Zusätzlich optionale interne Benachrichtigung an plan&simple
+  bei neuem Eintrag (Main-Backend, `SERVICE_NOTIFY_EMAIL`).
+- ENV (Owner-Konsole): `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY`,
+  `JIRA_ISSUE_TYPE` (Default `Task`), `RESEND_API_KEY`, `EMAIL_FROM`. Main-Backend optional `SERVICE_NOTIFY_EMAIL`.
+- Verifiziert: Owner-Konsole `tsc -b` (0), Backend-Jest (102 grün)
 
 ---
 

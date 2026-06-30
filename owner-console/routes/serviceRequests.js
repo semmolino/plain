@@ -7,6 +7,7 @@
 const express = require("express");
 const { supabase } = require("../services/db");
 const { writeChangeLog } = require("../services/audit");
+const { notify } = require("../services/notify");
 
 const router = express.Router();
 
@@ -84,6 +85,25 @@ router.post("/requests/:id/reply", async (req, res) => {
   if (e1) return res.status(400).json({ error: e1.message });
   await supabase.from("SERVICE_REQUEST").update({ STATUS: "waiting", UPDATED_AT: new Date().toISOString() }).eq("ID", id);
   await writeChangeLog({ actor: req.adminEmail, entity: "SERVICE_REQUEST", entityRef: id, action: "reply" });
+
+  // Best-effort: Anwender per E-Mail über die Antwort informieren (kein await-Block).
+  (async () => {
+    const { data: r } = await supabase.from("SERVICE_REQUEST")
+      .select("SUBJECT, CONTACT_EMAIL, WANTS_REPLY, EMPLOYEE_ID, TENANT_ID").eq("ID", id).maybeSingle();
+    if (!r || r.WANTS_REPLY === false) return;
+    let to = r.CONTACT_EMAIL;
+    if (!to) {
+      const { data: emp } = await supabase.from("EMPLOYEE").select("MAIL").eq("ID", r.EMPLOYEE_ID).eq("TENANT_ID", r.TENANT_ID).maybeSingle();
+      to = emp?.MAIL || null;
+    }
+    if (!to) return;
+    await notify({
+      to,
+      subject: `Antwort zu Ihrer Anfrage: ${r.SUBJECT}`,
+      text: `Hallo,\n\nzu Ihrer Anfrage „${r.SUBJECT}" hat plan&simple geantwortet:\n\n${body}\n\nSie können direkt im Service-Bereich von plan&simple antworten (Service → Feedback bzw. Unterstützung → „Meine Anfragen").\n`,
+    });
+  })().catch((e) => console.warn("[requests] notify failed:", e?.message || e));
+
   res.json({ ok: true });
 });
 
