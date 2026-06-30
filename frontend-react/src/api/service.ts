@@ -27,3 +27,98 @@ export const fetchDelegate = () =>
 
 export const saveDelegate = (employeeId: number | null) =>
   apiClient.put<{ employee_id: number | null }>('/service/delegate', { employee_id: employeeId })
+
+// ── Vorschläge (Phase 1) ─────────────────────────────────────────────────────
+
+export type LifecycleStatus = 'new' | 'reviewing' | 'planned' | 'in_progress' | 'shipped' | 'not_planned'
+export type ModerationState = 'pending' | 'published' | 'declined' | 'merged'
+export type PriorityHint    = 'nice' | 'important' | 'blocker'
+
+export const SUGGESTION_CATEGORIES: { value: string; label: string }[] = [
+  { value: 'projekte',    label: 'Projekte' },
+  { value: 'rechnungen',  label: 'Rechnungen' },
+  { value: 'angebote',    label: 'Angebote' },
+  { value: 'reporting',   label: 'Reporting' },
+  { value: 'adressen',    label: 'Adressen' },
+  { value: 'mitarbeiter', label: 'Mitarbeiter' },
+  { value: 'import',      label: 'Datenimport' },
+  { value: 'einvoice',    label: 'E-Rechnung' },
+  { value: 'sonstiges',   label: 'Sonstiges' },
+]
+
+export interface BoardItem {
+  id:               number
+  title:            string
+  body:             string
+  category:         string
+  lifecycle_status: LifecycleStatus
+  vote_count:       number
+  comment_count:    number
+  has_my_vote:      boolean
+  published_at:     string | null
+}
+
+export interface MineItem {
+  id:               number
+  title:            string
+  body:             string
+  category:         string
+  priority_hint:    PriorityHint | null
+  moderation_state: ModerationState
+  lifecycle_status: LifecycleStatus
+  vote_count:       number
+  created_at:       string
+  submitter:        string | null
+  is_mine:          boolean
+  vendor_responses: { body: string; created_at: string }[]
+}
+
+export interface SuggestionComment {
+  body:        string
+  author:      string
+  is_official: boolean
+  created_at:  string
+}
+
+export interface SuggestionDetail {
+  id:               number
+  title:            string
+  body:             string
+  category:         string
+  lifecycle_status: LifecycleStatus
+  moderation_state: ModerationState
+  vote_count:       number
+  has_my_vote:      boolean
+  can_vote:         boolean
+  is_own_org:       boolean
+  comments:         SuggestionComment[]
+  created_at:       string
+}
+
+export interface SubmitSuggestionPayload {
+  title:          string
+  body:           string
+  category:       string
+  priority_hint?: PriorityHint | null
+}
+
+export const fetchBoard = (sort: 'popular' | 'new' = 'popular') =>
+  apiClient.get<{ can_vote: boolean; data: BoardItem[] }>(`/service/suggestions/board?sort=${sort}`)
+
+export const fetchMineSuggestions = () =>
+  apiClient.get<{ org_view: boolean; data: MineItem[] }>('/service/suggestions/mine')
+
+export const fetchSuggestion = (id: number) =>
+  apiClient.get<{ data: SuggestionDetail }>(`/service/suggestions/${id}`)
+
+export const submitSuggestion = (payload: SubmitSuggestionPayload) =>
+  apiClient.post<{ data: { ID: number } }>('/service/suggestions', payload)
+
+export const voteSuggestion = (id: number) =>
+  apiClient.post<{ has_my_vote: boolean; vote_count: number }>(`/service/suggestions/${id}/vote`, {})
+
+export const unvoteSuggestion = (id: number) =>
+  apiClient.delete<{ has_my_vote: boolean; vote_count: number }>(`/service/suggestions/${id}/vote`)
+
+export const commentSuggestion = (id: number, body: string) =>
+  apiClient.post<{ ok: boolean; pending: boolean }>(`/service/suggestions/${id}/comments`, { body })

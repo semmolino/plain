@@ -100,6 +100,52 @@ export interface AuditEntry {
   AT: string
 }
 
+// ── Vorschläge (Moderation) ──────────────────────────────────────────────────
+export type SgModerationState = 'pending' | 'published' | 'declined' | 'merged'
+export type SgLifecycle = 'new' | 'reviewing' | 'planned' | 'in_progress' | 'shipped' | 'not_planned'
+
+export interface ModSuggestion {
+  id: number
+  tenant_id: number
+  org_name: string
+  submitter_name: string
+  submitter_mail: string | null
+  title: string
+  body: string
+  public_title: string | null
+  public_body: string | null
+  category: string
+  priority_hint: string | null
+  moderation_state: SgModerationState
+  lifecycle_status: SgLifecycle
+  merged_into_id: number | null
+  vote_count: number
+  jira_issue_key: string | null
+  created_at: string
+  published_at: string | null
+}
+export interface ModComment {
+  id: number
+  body: string
+  author_kind: 'user' | 'vendor'
+  visibility: 'public' | 'vendor_only'
+  moderation_state: SgModerationState
+  author_name: string
+  created_at: string
+}
+export interface PendingComment {
+  id: number
+  suggestion_id: number
+  body: string
+  created_at: string
+}
+export interface SuggestionPatch {
+  public_title?: string
+  public_body?: string
+  lifecycle_status?: SgLifecycle
+  category?: string
+}
+
 export interface NewPlan {
   key: string
   name_de: string
@@ -161,4 +207,21 @@ export const api = {
     req<{ ok: true }>(`/tenants/${id}/overrides/${encodeURIComponent(capKey)}`, { method: 'DELETE' }),
 
   audit: () => req<{ entries: AuditEntry[] }>('/audit'),
+
+  // Vorschläge (Moderation)
+  suggestions: (state: string = 'all') => req<{ suggestions: ModSuggestion[] }>(`/suggestions?state=${state}`),
+  suggestionDetail: (id: number) => req<{ suggestion: ModSuggestion; comments: ModComment[] }>(`/suggestions/${id}`),
+  patchSuggestion: (id: number, patch: SuggestionPatch) =>
+    req<{ ok: true }>(`/suggestions/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  publishSuggestion: (id: number) => req<{ ok: true }>(`/suggestions/${id}/publish`, { method: 'POST', body: '{}' }),
+  declineSuggestion: (id: number) => req<{ ok: true }>(`/suggestions/${id}/decline`, { method: 'POST', body: '{}' }),
+  setSuggestionLifecycle: (id: number, status: SgLifecycle) =>
+    req<{ ok: true }>(`/suggestions/${id}/lifecycle`, { method: 'POST', body: JSON.stringify({ lifecycle_status: status }) }),
+  mergeSuggestion: (id: number, intoId: number) =>
+    req<{ ok: true }>(`/suggestions/${id}/merge`, { method: 'POST', body: JSON.stringify({ into_id: intoId }) }),
+  respondSuggestion: (id: number, body: string, visibility: 'public' | 'vendor_only') =>
+    req<{ ok: true }>(`/suggestions/${id}/respond`, { method: 'POST', body: JSON.stringify({ body, visibility }) }),
+  pendingComments: () => req<{ comments: PendingComment[] }>('/suggestion-comments?state=pending'),
+  moderateComment: (id: number, action: 'publish' | 'decline') =>
+    req<{ ok: true }>(`/suggestion-comments/${id}/${action}`, { method: 'POST', body: '{}' }),
 }

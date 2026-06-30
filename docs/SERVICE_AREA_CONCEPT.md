@@ -1,9 +1,9 @@
 # Konzept — Service-Bereich (Vorschläge · Feedback · Unterstützung)
 
-> **Status:** Konzept beschlossen + **Phase 0 (Fundament) implementiert** (2026-06-29).
+> **Status:** Konzept beschlossen + **Phase 0 (Fundament) und Phase 1 (Vorschläge end-to-end) implementiert** (2026-06-29/30).
 > Entscheidungen: Kommentare **moderiert & pseudonym** · Reject-Label **„Aktuell nicht geplant"** ·
 > Jira **Phase 3** · Consent für **alle** Anwender · Rückruf-Option **ja**.
-> Nächster Schritt: Phase 1 (Vorschläge end-to-end). **Migrationen 0096 + 0097 manuell in Supabase einspielen.**
+> Nächster Schritt: Phase 2 (Feedback & Unterstützung). **Migrationen 0096 + 0097 manuell in Supabase einspielen.**
 > **Ziel:** Ein neuer Top-Level-Bereich **„Service"** (auf Ebene von Projekte/Rechnungen/Einstellungen),
 > über den Anwender direkt aus der Software Funktionswünsche, Feedback und Unterstützungsanfragen an
 > plan&simple richten können — **ohne Drittanbieter, ohne zweiten Login, datenschutzkonform**.
@@ -464,6 +464,18 @@ Drei neue Permissions (Format exakt wie `0088_rbac_import.sql`):
   für Vorschläge/Feedback/Unterstützung; Hilfe-Einträge in `helpContent.tsx`
 - Verifiziert: `tsc -b --force` (exit 0), Backend-Jest (102 Tests grün)
 - ⚠️ Die Nav erscheint erst, wenn `0096` in Supabase läuft (vorher hat keine Rolle die `service.*`-Rechte).
+
+**Phase 1 (Vorschläge end-to-end) — fertig (2026-06-30):**
+- Backend `routes/service.js`: `POST /service/suggestions` (einreichen), `GET /suggestions/mine`
+  (eigene bzw. org-weit für Sprecher/Admin), `GET /suggestions/board` (veröffentlicht, **pseudonym**,
+  sort popular/new), `GET /suggestions/:id` (Detail + Kommentare), `POST/DELETE …/vote` (nur Sprecher,
+  `UNIQUE`-gesichert), `POST …/comments` (nur Sprecher, moderiert)
+- Frontend `VorschlaegeTab`: Board mit Vote-Buttons, „Meine/Unsere", Einreich-Modal, Detail-Modal mit
+  Kommentaren; Produkt-Sprecher-Karte hierher gezogen; Status-Badges, Such-/Bereichsfilter, Leerzustände
+- **Owner-Konsole** `routes/suggestions.js` + Tab **„Vorschläge"**: Moderations-Eingang, kuratierter
+  Text (`PUBLIC_*`), Freigeben/Ablehnen/Zusammenführen, Status setzen, offizielle/private Antwort,
+  Kommentar-Freigabe — alles auditiert (`writeChangeLog`). Identitäten nur hier sichtbar.
+- Verifiziert: Main-FE `tsc -b` (exit 0), Owner-Konsole `tsc -b` (exit 0), Backend-Jest (102 grün)
 
 ---
 
