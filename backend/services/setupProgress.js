@@ -55,7 +55,7 @@ const STEP_CAPABILITY = {
   text_template:    "settings.text_templates",
   document_template:"settings.core",
   roles:            "settings.roles",
-  custom_role:      "settings.roles",
+  custom_role:      "settings.core",
   departments:      "settings.core",
   cost_rate:        "cost_rate.calculator",
   branding_slug:    "enterprise.branding",
@@ -105,7 +105,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
   const [
     hasAddress, hasOffer, hasProject, hasAnyEmployee,
     hasWorkingTimeModel, hasMahnungSettings, hasTextTemplate,
-    hasNotificationCfg, hasCpRate, hasDepartment, hasCustomRole,
+    hasNotificationCfg, hasCpRate, hasDepartment, hasRoleWithRate,
   ] = await Promise.all([
     existsRow(supabase, "ADDRESS",            { TENANT_ID: tenantId }),
     existsRow(supabase, "OFFER",              { TENANT_ID: tenantId }),
@@ -123,8 +123,18 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
     existsRow(supabase, "NOTIFICATION_TYPE_CONFIG", { TENANT_ID: tenantId }),
     existsRow(supabase, "EMPLOYEE_CP_RATE",   { TENANT_ID: tenantId }),
     existsRow(supabase, "DEPARTMENT",         { TENANT_ID: tenantId }),
-    // Eigene (nicht-System-)Rolle angelegt bzw. angepasst
-    existsRow(supabase, "USER_ROLE",          { TENANT_ID: tenantId, IS_SYSTEM: false }),
+    // Stammdaten-Rolle (Tätigkeitsprofil) mit hinterlegtem Standard-Stundensatz
+    // angelegt — Einstellungen → Stammdaten → Rollen. NICHT die RBAC-Rolle.
+    (async () => {
+      try {
+        const { count } = await supabase
+          .from("ROLE")
+          .select("ID", { count: "exact", head: true })
+          .eq("TENANT_ID", tenantId)
+          .gt("SP_RATE", 0);
+        return (count || 0) > 0;
+      } catch (_) { return false; }
+    })(),
   ]);
 
   // ── 3b) Rollen-Zuweisung (tenant-scoped, ueber die Auto-Inhaber-Rolle hinaus)
@@ -297,10 +307,10 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
     },
     {
       key:  "custom_role",
-      label:"Eigene Rolle angelegt oder angepasst",
-      hint: "Über die Standard-Systemrollen hinaus",
-      href: "/admin?tab=rollen",
-      done: hasCustomRole,
+      label:"Rolle mit Stundensatz angelegt",
+      hint: "Tätigkeitsprofil mit Standard-Stundensatz unter Stammdaten",
+      href: "/admin?tab=stammdaten",
+      done: hasRoleWithRate,
     },
     {
       key:  "departments",
