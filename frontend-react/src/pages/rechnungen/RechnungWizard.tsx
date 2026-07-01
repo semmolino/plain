@@ -6,6 +6,7 @@ import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
 import { ValidationModal } from '@/components/ui/ValidationModal'
 import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
+import { BuchungsauswahlTable } from '@/components/rechnungen/BuchungsauswahlTable'
 import {
   searchContracts,
   initInvoice, patchInvoice, getInvoiceBillingProposal,
@@ -22,7 +23,6 @@ import { API_BASE }     from '@/api/client'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
-const fmtDate = (v: string | null | undefined) => v ? v.slice(0, 10) : '—'
 function todayIso() { return new Date().toISOString().slice(0, 10) }
 
 const STEPS = ['Init', 'Details', 'Beträge', 'Buchen']
@@ -374,18 +374,6 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
     }})
   }
 
-  function toggleTec(id: number) {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  function toggleAllTec() {
-    setSelected(selected.size === tecList.length ? new Set() : new Set(tecList.map(t => t.ID)))
-  }
-
   async function handleWeiterStep2() {
     setMsg(null)
     if (!draftId) return
@@ -575,7 +563,6 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
         const liveNet        = perfAmt + selectedTecSum
         const vatFactor      = 1 + (proposal?.vat_percent ?? 0) / 100
         const liveGross      = liveNet * vatFactor
-        const allSelected    = tecList.length > 0 && selected.size === tecList.length
         return (
           <div className="wizard-step-content">
             <p className="wizard-step-title">Beträge & Leistungsnachweise</p>
@@ -593,36 +580,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                 value={perfInput} onChange={e => setPerfInput(e.target.value)} step="0.01" />
             </div>
             {hasBt2 && (
-              <>
-                <p style={{ margin: '14px 0 6px', fontWeight: 700, fontSize: 14 }}>Buchungen zuweisen</p>
-                {tecList.length === 0 ? (
-                  <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.45)', margin: '4px 0 8px' }}>
-                    Keine offenen Buchungen für dieses Projekt vorhanden.
-                  </p>
-                ) : (
-                  <div className="list-section table-scroll">
-                    <table className="master-table">
-                      <thead>
-                        <tr>
-                          <th><input type="checkbox" checked={allSelected} onChange={toggleAllTec} /></th>
-                          <th>Datum</th><th>Mitarbeiter</th><th>Beschreibung</th><th className="num">Betrag €</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tecList.map(t => (
-                          <tr key={t.ID}>
-                            <td><input type="checkbox" checked={selected.has(t.ID)} onChange={() => toggleTec(t.ID)} /></td>
-                            <td>{fmtDate(t.DATE_VOUCHER)}</td>
-                            <td>{t.EMPLOYEE_SHORT_NAME ?? '—'}</td>
-                            <td>{t.POSTING_DESCRIPTION}</td>
-                            <td className="num">{fmtEur(t.SP_TOT)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
+              <BuchungsauswahlTable tecList={tecList} selected={selected} setSelected={setSelected} />
             )}
             <Message text={msg?.text ?? null} type={msg?.type} />
             <div className="wizard-nav">
