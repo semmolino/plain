@@ -1,6 +1,83 @@
 "use strict";
 const express = require("express");
 const { requirePermission } = require("../middleware/permissions");
+const { sendMail } = require("../services/emailService");
+
+// ── E-Mail-Benachrichtigungen (fire-and-forget, nie blockierend) ──────────────
+
+function fmtRangeDe(a) {
+  const f = (d) => new Date(`${d}T00:00:00`).toLocaleDateString("de-DE");
+  return a.DATE_FROM === a.DATE_TO
+    ? f(a.DATE_FROM) + (a.HALF_DAY ? " (halber Tag)" : "")
+    : `${f(a.DATE_FROM)} – ${f(a.DATE_TO)}`;
+}
+
+async function loadEmp(supabase, tenantId, empId) {
+  try {
+    const { data } = await supabase.from("EMPLOYEE")
+      .select("SHORT_NAME, FIRST_NAME, LAST_NAME, MAIL")
+      .eq("ID", empId).eq("TENANT_ID", tenantId).maybeSingle();
+    return data || null;
+  } catch (_) { return null; }
+}
+
+async function loadTypeName(supabase, tenantId, typeId) {
+  try {
+    const { data } = await supabase.from("ABSENCE_TYPE")
+      .select("NAME").eq("ID", typeId).eq("TENANT_ID", tenantId).maybeSingle();
+    return data?.NAME || "Abwesenheit";
+  } catch (_) { return "Abwesenheit"; }
+}
+
+// E-Mails aller aktiven Mitarbeiter eines Tenants, deren Rolle permKey traegt.
+async function mailsWithPermission(supabase, tenantId, permKey) {
+  try {
+    const { data: perm } = await supabase.from("PERMISSION").select("ID").eq("KEY", permKey).maybeSingle();
+    if (!perm) return [];
+    const { data: rps } = await supabase.from("ROLE_PERMISSION").select("ROLE_ID").eq("PERMISSION_ID", perm.ID);
+    const roleIds = [...new Set((rps || []).map(r => r.ROLE_ID).filter(Boolean))];
+    if (!roleIds.length) return [];
+    const { data: roles } = await supabase.from("USER_ROLE").select("ID").eq("TENANT_ID", tenantId).in("ID", roleIds);
+    const tenantRoleIds = (roles || []).map(r => r.ID);
+    if (!tenantRoleIds.length) return [];
+    const { data: ers } = await supabase.from("EMPLOYEE_ROLE").select("EMPLOYEE_ID").in("ROLE_ID", tenantRoleIds);
+    const empIds = [...new Set((ers || []).map(e => e.EMPLOYEE_ID).filter(Boolean))];
+    if (!empIds.length) return [];
+    const { data: emps } = await supabase.from("EMPLOYEE").select("MAIL").in("ID", empIds).eq("TENANT_ID", tenantId).neq("ACTIVE", 2);
+    return [...new Set((emps || []).map(e => e.MAIL).filter(Boolean))];
+  } catch (_) { return []; }
+}
+
+async function notifyAbsenceRequest(supabase, tenantId, absence) {
+  try {
+    const mails = await mailsWithPermission(supabase, tenantId, "absence.approve");
+    if (!mails.length) return;
+    const emp = await loadEmp(supabase, tenantId, absence.EMPLOYEE_ID);
+    const typeName = await loadTypeName(supabase, tenantId, absence.ABSENCE_TYPE_ID);
+    const who = emp ? `${emp.FIRST_NAME} ${emp.LAST_NAME} (${emp.SHORT_NAME})` : `Mitarbeiter #${absence.EMPLOYEE_ID}`;
+    const subject = `Neuer Abwesenheitsantrag: ${who}`;
+    const html = `<p>${who} hat eine Abwesenheit beantragt:</p>
+<ul><li><strong>Art:</strong> ${typeName}</li><li><strong>Zeitraum:</strong> ${fmtRangeDe(absence)}</li>${absence.NOTE ? `<li><strong>Notiz:</strong> ${absence.NOTE}</li>` : ""}</ul>
+<p>Zum Genehmigen: Mitarbeiter → Zeitwirtschaft → Abwesenheiten → Anträge.</p>`;
+    for (const to of mails) {
+      try { await sendMail({ supabase, tenantId, to, subject, html }); } catch (_) { /* Config/Provider-Fehler ignorieren */ }
+    }
+  } catch (_) { /* niemals werfen */ }
+}
+
+async function notifyAbsenceDecision(supabase, tenantId, absence, decision) {
+  try {
+    const emp = await loadEmp(supabase, tenantId, absence.EMPLOYEE_ID);
+    if (!emp || !emp.MAIL) return;
+    const typeName = await loadTypeName(supabase, tenantId, absence.ABSENCE_TYPE_ID);
+    const decided = decision === "APPROVED" ? "genehmigt" : "abgelehnt";
+    const subject = `Abwesenheitsantrag ${decided}`;
+    const html = `<p>Hallo ${emp.FIRST_NAME},</p>
+<p>dein Antrag wurde <strong>${decided}</strong>:</p>
+<ul><li><strong>Art:</strong> ${typeName}</li><li><strong>Zeitraum:</strong> ${fmtRangeDe(absence)}</li></ul>`;
+    try { await sendMail({ supabase, tenantId, to: emp.MAIL, subject, html }); } catch (_) { /* ignorieren */ }
+  } catch (_) { /* niemals werfen */ }
+}
 
 // ── Routen: Urlaub / Abwesenheit (Phase 1) ────────────────────────────────────
 // Tenant-Isolation: jede Query filtert auf req.tenantId.
@@ -164,6 +241,8 @@ module.exports = (supabase) => {
       DECIDED_AT:      decided ? new Date().toISOString() : null,
     }]).select("*").single();
     if (error) return res.status(500).json({ error: error.message });
+    // Nur bei echtem Antrag (REQUESTED) die Genehmiger benachrichtigen.
+    if (data && data.STATUS === "REQUESTED") notifyAbsenceRequest(supabase, req.tenantId, data).catch(() => {});
     res.json({ data });
   });
 
@@ -202,13 +281,14 @@ module.exports = (supabase) => {
     const decision = String(req.body?.decision || "").toUpperCase();
     if (!["APPROVED", "REJECTED"].includes(decision))
       return res.status(400).json({ error: "decision muss APPROVED oder REJECTED sein" });
-    const { error } = await supabase.from("ABSENCE").update({
+    const { data: row, error } = await supabase.from("ABSENCE").update({
       STATUS:        decision,
       DECIDED_BY:    req.employeeId,
       DECIDED_AT:    new Date().toISOString(),
       DECISION_NOTE: req.body?.note || null,
-    }).eq("ID", id).eq("TENANT_ID", req.tenantId);
+    }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
+    if (row) notifyAbsenceDecision(supabase, req.tenantId, row, decision).catch(() => {});
     res.json({ success: true });
   });
 
