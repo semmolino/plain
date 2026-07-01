@@ -95,6 +95,7 @@ export interface DayBalance {
   balance:   number
   isHoliday: boolean
   bookings:  DayBooking[]
+  absence?:  { name: string; fraction: number; hours: number } | null
 }
 
 export interface MonthBalance {

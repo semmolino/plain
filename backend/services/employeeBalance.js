@@ -120,6 +120,60 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
 }
 
 /**
+ * Liefert je Mitarbeiter eine Map<dateStr, {fraction, name}> der GENEHMIGTEN
+ * Abwesenheiten, deren Art als Arbeitszeit zaehlt (COUNTS_AS_WORKED). Solche
+ * Tage werden im Saldo als Soll-erfuellt gutgeschrieben (fraction 0.5 = halber
+ * Tag). Soft-fail: fehlt Migration 0086 (ABSENCE-Tabellen), liefert leere Map,
+ * damit die Saldo-Berechnung ohne Abwesenheits-Feature normal funktioniert.
+ */
+async function buildAbsenceCreditMap(supabase, tenantId, empIds, dateFrom, dateTo) {
+  const byEmp = new Map();
+  if (!empIds || !empIds.length) return byEmp;
+  try {
+    const { data: types, error: tErr } = await supabase
+      .from('ABSENCE_TYPE')
+      .select('ID, NAME')
+      .eq('TENANT_ID', tenantId)
+      .eq('COUNTS_AS_WORKED', true);
+    if (tErr) return byEmp;
+    const typeName = new Map((types || []).map(t => [t.ID, t.NAME]));
+    const typeIds = [...typeName.keys()];
+    if (!typeIds.length) return byEmp;
+
+    const { data: rows, error: aErr } = await supabase
+      .from('ABSENCE')
+      .select('EMPLOYEE_ID, ABSENCE_TYPE_ID, DATE_FROM, DATE_TO, HALF_DAY')
+      .eq('TENANT_ID', tenantId)
+      .in('EMPLOYEE_ID', empIds)
+      .eq('STATUS', 'APPROVED')
+      .in('ABSENCE_TYPE_ID', typeIds)
+      .gte('DATE_TO', dateFrom)
+      .lte('DATE_FROM', dateTo);
+    if (aErr) return byEmp;
+
+    for (const r of rows || []) {
+      const frac = r.HALF_DAY ? 0.5 : 1;
+      const name = typeName.get(r.ABSENCE_TYPE_ID) || 'Abwesenheit';
+      const from = r.DATE_FROM < dateFrom ? dateFrom : r.DATE_FROM;
+      const to   = r.DATE_TO   > dateTo   ? dateTo   : r.DATE_TO;
+      if (!byEmp.has(r.EMPLOYEE_ID)) byEmp.set(r.EMPLOYEE_ID, new Map());
+      const dmap = byEmp.get(r.EMPLOYEE_ID);
+      let cur = new Date(from + 'T00:00:00');
+      const end = new Date(to + 'T00:00:00');
+      while (cur <= end) {
+        const ds = isoDate(cur);
+        const prev = dmap.get(ds);
+        if (!prev || frac > prev.fraction) dmap.set(ds, { fraction: frac, name });
+        cur = addDays(cur, 1);
+      }
+    }
+    return byEmp;
+  } catch (_) {
+    return byEmp;
+  }
+}
+
+/**
  * Calculate working-time balance for a single calendar month.
  * Returns { year, month, required, actual, balance, days }
  * where days is an array of per-day detail objects.
@@ -136,6 +190,8 @@ async function calculateMonthBalance(supabase, tenantId, employeeId, year, month
   }
 
   const { sumMap: tecMap, bookingsMap } = await buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo);
+  const absByEmp = await buildAbsenceCreditMap(supabase, tenantId, [employeeId], dateFrom, dateTo);
+  const absMap = absByEmp.get(employeeId) || new Map();
 
   // Collect unique country/state combos used in this month to fetch holidays efficiently
   const combos = new Set();
@@ -175,11 +231,17 @@ async function calculateMonthBalance(supabase, tenantId, employeeId, year, month
       required     = isHoliday ? 0 : Number(model[WEEKDAY_COLS[weekday]] || 0);
     }
 
-    const actual   = getActualHours(tecMap, ds);
-    const balance  = actual - required;
+    const booked   = getActualHours(tecMap, ds);
+    const abs      = absMap.get(ds) || null;
+    const credited = abs ? Math.round(required * abs.fraction * 100) / 100 : 0;
+    const actual   = Math.round((booked + credited) * 100) / 100;
+    const balance  = Math.round((actual - required) * 100) / 100;
     const bookings = bookingsMap.get(ds) || [];
 
-    days.push({ date: ds, weekday, required, actual, balance, isHoliday, bookings });
+    days.push({
+      date: ds, weekday, required, actual, balance, isHoliday, bookings,
+      absence: abs ? { name: abs.name, fraction: abs.fraction, hours: credited } : null,
+    });
     totalRequired += required;
     totalActual   += actual;
     cursor = addDays(cursor, 1);
@@ -298,10 +360,14 @@ async function buildRunningBalances(supabase, tenantId, empIds, upToDate) {
     for (const h of hols || []) holidayKey.add(`${cs}|${h.HOLIDAY_DATE}`);
   }
 
+  const absByEmp = await buildAbsenceCreditMap(supabase, tenantId, empIds, globalStart, upToDate);
+
   const result = new Map();
   for (const [empId, empAssigns] of assignByEmp.entries()) {
     const firstDate = empAssigns[0].VALID_FROM;
+    const absMap = absByEmp.get(empId) || new Map();
     let required = 0;
+    let credited = 0;
     let cur = new Date(firstDate + 'T00:00:00');
     const end = new Date(upToDate + 'T00:00:00');
     while (cur <= end) {
@@ -311,11 +377,13 @@ async function buildRunningBalances(supabase, tenantId, empIds, upToDate) {
         const dayH = Number(model[WEEKDAY_COLS[cur.getDay()]]) || 0;
         if (dayH > 0 && !holidayKey.has(`${model.COUNTRY_CODE}|${model.STATE_CODE || ''}|${ds}`)) {
           required += dayH;
+          const abs = absMap.get(ds);
+          if (abs) credited += dayH * abs.fraction;
         }
       }
       cur = addDays(cur, 1);
     }
-    const actual = actualByEmp.get(empId) || 0;
+    const actual = (actualByEmp.get(empId) || 0) + credited;
     result.set(empId, Math.round((actual - required) * 100) / 100);
   }
   for (const id of empIds) {
@@ -485,14 +553,18 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
     for (const h of hols || []) holidayKey.add(`${cs}|${h.HOLIDAY_DATE}`);
   }
 
+  const absByEmp = await buildAbsenceCreditMap(supabase, tenantId, empIds, allFrom, allTo);
+
   // Build result rows
   const result = [];
   for (const emp of employees) {
     const empAssigns = assignByEmp.get(emp.ID) || [];
+    const absMap = absByEmp.get(emp.ID) || new Map();
     for (const mo of months) {
       const tec = tecIdx.get(`${emp.ID}-${mo.year}-${mo.month}`) || { hoursInt: 0, hoursExt: 0, cost: 0 };
 
       let required = 0;
+      let credited = 0;
       let cur = new Date(mo.from + 'T00:00:00');
       const end = new Date(mo.to + 'T00:00:00');
       while (cur <= end) {
@@ -502,11 +574,17 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
           const dayH = Number(model[WEEKDAY_COLS[cur.getDay()]]) || 0;
           if (dayH > 0 && !holidayKey.has(`${model.COUNTRY_CODE}|${model.STATE_CODE || ''}|${ds}`)) {
             required += dayH;
+            const abs = absMap.get(ds);
+            if (abs) credited += dayH * abs.fraction;
           }
         }
         cur = addDays(cur, 1);
       }
 
+      // Ist = gebuchte Stunden + gutgeschriebene Abwesenheit (Urlaub/Krank etc.),
+      // damit der Saldo an Abwesenheitstagen neutral bleibt. Produktivitaet
+      // bleibt auf gebuchten Stunden (Abwesenheit zaehlt nicht als produktiv).
+      const actual = Math.round((tec.hoursInt + credited) * 100) / 100;
       const totalHours = tec.hoursInt || 0;
       const productiveHours = tec.hoursExtNonInternal || 0;
       const productivityPct = totalHours > 0 ? Math.round((productiveHours / totalHours) * 1000) / 10 : null;
@@ -518,9 +596,9 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
         DEPARTMENT_NAME: deptMap.get(emp.DEPARTMENT_ID) || '',
         YEAR:            mo.year,
         MONTH:           mo.month,
-        REQUIRED:        Math.round(required      * 100) / 100,
-        ACTUAL:          Math.round(tec.hoursInt  * 100) / 100,
-        BALANCE:         Math.round((tec.hoursInt - required) * 100) / 100,
+        REQUIRED:        Math.round(required * 100) / 100,
+        ACTUAL:          actual,
+        BALANCE:         Math.round((actual - required) * 100) / 100,
         HOURS_EXT:       Math.round(tec.hoursExt  * 100) / 100,
         COST:            Math.round(tec.cost       * 100) / 100,
         PRODUCTIVITY_PCT: productivityPct,

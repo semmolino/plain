@@ -1655,6 +1655,11 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
                             </td>
                             <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {d.actual > 0 ? fmtH(d.actual) : <span style={{ color: '#d1d5db' }}>—</span>}
+                              {d.absence && (
+                                <div style={{ fontSize: 10, fontWeight: 600, color: '#7c3aed' }} title={`${d.absence.name} — als Soll gutgeschrieben`}>
+                                  {d.absence.name}{d.absence.fraction === 0.5 ? ' ½' : ''}
+                                </div>
+                              )}
                             </td>
                             <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: d.required > 0 ? balanceColor(d.balance) : '#d1d5db', fontWeight: d.required > 0 ? 600 : 400 }}>
                               {d.required > 0 ? fmtBalance(d.balance) : '—'}
