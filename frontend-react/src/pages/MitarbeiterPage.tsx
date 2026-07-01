@@ -31,7 +31,7 @@ import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeverity } from '@/api/arbzg'
 import { updateBuchung, deleteBuchung } from '@/api/projekte'
 import {
-  fetchAbsenceTypes, fetchAbsences, fetchVacationBalance,
+  fetchAbsenceTypes, fetchAbsences, fetchVacationBalance, fetchEntitlements, putEntitlement,
   createAbsence, decideAbsence, cancelAbsence, deleteAbsence,
   type Absence, type AbsenceStatus,
 } from '@/api/abwesenheit'
@@ -301,10 +301,34 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
   const { data: typesRes }            = useQuery({ queryKey: ['absence-types'],                queryFn: fetchAbsenceTypes })
   const { data: absRes, isLoading }   = useQuery({ queryKey: ['absences', employeeId],         queryFn: () => fetchAbsences({ employee_id: employeeId }) })
   const { data: balRes }              = useQuery({ queryKey: ['vacation-balance', employeeId, year], queryFn: () => fetchVacationBalance(employeeId, year) })
+  const { data: entRes }              = useQuery({ queryKey: ['entitlements', employeeId, year],     queryFn: () => fetchEntitlements(employeeId, year), enabled: canManage })
 
   const types     = (typesRes?.data ?? []).filter(t => t.ACTIVE)
   const absences  = absRes?.data ?? []
   const bal       = balRes?.data
+  const entThisYear = (entRes?.data ?? []).find(e => e.YEAR === year)
+
+  const [editEnt, setEditEnt] = useState(false)
+  const [entDays,  setEntDays]  = useState('')
+  const [entCarry, setEntCarry] = useState('')
+  function openEntEditor() {
+    setEntDays(entThisYear ? String(entThisYear.DAYS_ENTITLED) : (bal ? String(bal.entitled) : '0'))
+    setEntCarry(entThisYear?.CARRYOVER_OVERRIDE != null ? String(entThisYear.CARRYOVER_OVERRIDE) : '')
+    setEditEnt(true)
+  }
+  const entMut = useMutation({
+    mutationFn: () => putEntitlement({
+      employee_id: employeeId, year,
+      days_entitled: Number(entDays.replace(',', '.')) || 0,
+      carryover_override: entCarry.trim() === '' ? null : Number(entCarry.replace(',', '.')),
+    }),
+    onSuccess: () => {
+      toast.success('Urlaubsanspruch gespeichert'); setEditEnt(false)
+      void qc.invalidateQueries({ queryKey: ['entitlements', employeeId] })
+      void qc.invalidateQueries({ queryKey: ['vacation-balance', employeeId] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   const [showForm, setShowForm] = useState(false)
   const [fType, setFType] = useState('')
@@ -352,6 +376,35 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
         {stat('Resturlaub', bal ? `${bal.remaining} T` : '…', bal && bal.remaining < 0 ? '#dc2626' : '#059669')}
         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>Urlaub {year} (Übertrag automatisch)</span>
       </div>
+
+      {canManage && !editEnt && (
+        <button type="button" className="btn-small" style={{ marginBottom: 14 }} onClick={openEntEditor}>
+          Urlaubsanspruch {year} bearbeiten
+        </button>
+      )}
+      {canManage && editEnt && (
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 12, marginBottom: 14 }}>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Anspruch {year} (Tage)</label>
+              <input type="number" step="0.5" min="0" value={entDays} onChange={e => setEntDays(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Übertrag manuell (optional)</label>
+              <input type="number" step="0.5" value={entCarry} onChange={e => setEntCarry(e.target.value)} placeholder="automatisch" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn-small btn-save" disabled={entMut.isPending} onClick={() => entMut.mutate()}>
+              {entMut.isPending ? 'Speichert …' : 'Speichern'}
+            </button>
+            <button type="button" className="btn-small" onClick={() => setEditEnt(false)}>Abbrechen</button>
+          </div>
+          <p style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
+            Übertrag leer lassen = automatisch aus dem Resturlaub des Vorjahres.
+          </p>
+        </div>
+      )}
 
       {canManage && (
         <div style={{ marginBottom: 12 }}>
