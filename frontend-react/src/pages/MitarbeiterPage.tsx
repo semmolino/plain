@@ -41,7 +41,7 @@ import {
 const PAGE_SIZE = 25
 const TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'list',          label: 'Mitarbeiter',           permissions: ['employees.view'] },
-  { id: 'zeitwirtschaft', label: 'Zeitwirtschaft',       permissions: ['employees.bookings.view_all','employees.month_close.edit'] },
+  { id: 'zeitwirtschaft', label: 'Zeitwirtschaft',       permissions: ['employees.bookings.view_all','employees.month_close.edit','absence.view'] },
   { id: 'arbzg',         label: 'Arbeitszeit (Details)', permissions: ['employees.bookings.view_all'], feature: 'arbzg.compliance' },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -1832,12 +1832,170 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
 
 // ── Zeitwirtschaft Tab (Auswertung · Einzel-Mitarbeiter · Monatsabschluss) ─────
 
-type ZwSub = 'list' | 'single' | 'close'
+// ── Abwesenheiten-Tab (Genehmigungs-Postfach + Team-Kalender) ─────────────────
+
+type AbsSub = 'inbox' | 'calendar'
+
+function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const canApprove = usePermission('absence.approve')
+  const [sub, setSub] = useState<AbsSub>('inbox')
+  const now = new Date()
+  const [year, setYear]   = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+
+  const { data: inboxRes, isLoading: inboxLoading } = useQuery({
+    queryKey: ['absences-inbox'],
+    queryFn:  () => fetchAbsences({ status: 'REQUESTED' }),
+  })
+  const inbox = inboxRes?.data ?? []
+
+  const monthFrom = `${year}-${String(month).padStart(2, '0')}-01`
+  const monthTo   = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
+  const { data: calRes } = useQuery({
+    queryKey: ['absences-calendar', year, month],
+    queryFn:  () => fetchAbsences({ from: monthFrom, to: monthTo }),
+    enabled:  sub === 'calendar',
+  })
+
+  const decideMut = useMutation({
+    mutationFn: (v: { id: number; decision: 'APPROVED' | 'REJECTED' }) => decideAbsence(v.id, v.decision),
+    onSuccess: () => {
+      toast.success('Entscheidung gespeichert')
+      void qc.invalidateQueries({ queryKey: ['absences-inbox'] })
+      void qc.invalidateQueries({ queryKey: ['absences-calendar'] })
+      void qc.invalidateQueries({ queryKey: ['absences'] })
+      void qc.invalidateQueries({ queryKey: ['vacation-balance'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  function prevMonth() { if (month === 1) { setMonth(12); setYear(y => y - 1) } else setMonth(m => m - 1) }
+  function nextMonth() { if (month === 12) { setMonth(1); setYear(y => y + 1) } else setMonth(m => m + 1) }
+
+  return (
+    <div>
+      <SegmentNav
+        items={[{ id: 'inbox', label: `Anträge${inbox.length ? ` (${inbox.length})` : ''}` }, { id: 'calendar', label: 'Kalender' }]}
+        active={sub}
+        onChange={setSub}
+      />
+
+      {sub === 'inbox' && (
+        <>
+          {inboxLoading && <p className="empty-note">Laden …</p>}
+          {!inboxLoading && inbox.length === 0 && <p className="empty-note">Keine offenen Anträge.</p>}
+          {inbox.length > 0 && (
+            <div className="table-scroll">
+              <table className="master-table">
+                <thead><tr>
+                  <th>Mitarbeiter</th><th>Zeitraum</th><th>Art</th><th className="num">Tage</th><th>Notiz</th><th></th>
+                </tr></thead>
+                <tbody>
+                  {inbox.map((a: Absence) => (
+                    <tr key={a.ID}>
+                      <td><strong>{a.EMPLOYEE_SHORT_NAME}</strong> {a.EMPLOYEE_FIRST_NAME} {a.EMPLOYEE_LAST_NAME}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDateShort(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDateShort(a.DATE_TO)}` : ''}{a.HALF_DAY ? ' (½)' : ''}</td>
+                      <td><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />{a.TYPE_NAME}</td>
+                      <td className="num">{a.DAYS}</td>
+                      <td style={{ fontSize: 12, color: '#6b7280' }}>{a.NOTE || '—'}</td>
+                      <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                        {canApprove ? (
+                          <>
+                            <button className="btn-small btn-save" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }} disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'APPROVED' })}>Genehmigen</button>
+                            <button className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'REJECTED' })}>Ablehnen</button>
+                          </>
+                        ) : <span style={{ fontSize: 11, color: '#9ca3af' }}>—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {sub === 'calendar' && (() => {
+        const daysInMonth = new Date(year, month, 0).getDate()
+        const dayList = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+        const cal = calRes?.data ?? []
+        const byEmp = new Map<number, Map<number, { color: string; status: AbsenceStatus; name: string; half: boolean }>>()
+        for (const a of cal) {
+          if (a.STATUS === 'REJECTED' || a.STATUS === 'CANCELLED') continue
+          const d = new Date(`${a.DATE_FROM}T00:00:00`)
+          const to = new Date(`${a.DATE_TO}T00:00:00`)
+          while (d <= to) {
+            if (d.getFullYear() === year && d.getMonth() + 1 === month) {
+              if (!byEmp.has(a.EMPLOYEE_ID)) byEmp.set(a.EMPLOYEE_ID, new Map())
+              byEmp.get(a.EMPLOYEE_ID)!.set(d.getDate(), { color: a.TYPE_COLOR || '#9ca3af', status: a.STATUS, name: a.TYPE_NAME || '', half: a.HALF_DAY })
+            }
+            d.setDate(d.getDate() + 1)
+          }
+        }
+        const activeEmployees = employees.filter(e => e.ACTIVE !== 2)
+        return (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <button type="button" className="btn-small" onClick={prevMonth}>◀</button>
+              <span style={{ fontWeight: 600, minWidth: 120, textAlign: 'center' }}>{MONTH_NAMES[month - 1]} {year}</span>
+              <button type="button" className="btn-small" onClick={nextMonth}>▶</button>
+            </div>
+            <div className="table-scroll">
+              <table className="master-table" style={{ fontSize: 11 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>Mitarbeiter</th>
+                    {dayList.map(day => {
+                      const we = [0, 6].includes(new Date(year, month - 1, day).getDay())
+                      return <th key={day} style={{ textAlign: 'center', padding: '2px 3px', color: we ? '#d1d5db' : '#6b7280', fontWeight: 500 }}>{day}</th>
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeEmployees.map(emp => {
+                    const dm = byEmp.get(emp.ID)
+                    return (
+                      <tr key={emp.ID}>
+                        <td style={{ whiteSpace: 'nowrap' }}><strong>{emp.SHORT_NAME}</strong></td>
+                        {dayList.map(day => {
+                          const cell = dm?.get(day)
+                          const we = [0, 6].includes(new Date(year, month - 1, day).getDay())
+                          return (
+                            <td key={day}
+                              title={cell ? `${cell.name}${cell.status === 'REQUESTED' ? ' (beantragt)' : ''}${cell.half ? ' ½' : ''}` : ''}
+                              style={{ textAlign: 'center', padding: 0, height: 22, borderLeft: '1px solid #f3f4f6',
+                                background: cell ? cell.color : (we ? '#f9fafb' : undefined),
+                                opacity: cell && cell.status === 'REQUESTED' ? 0.45 : 1 }}>
+                              {cell && cell.status === 'REQUESTED' ? <span style={{ color: '#fff', fontSize: 9 }}>?</span> : ''}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
+                  {activeEmployees.length === 0 && <tr><td colSpan={dayList.length + 1} className="empty-note">Keine aktiven Mitarbeiter.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+              Farbe = Abwesenheitsart · blass mit „?" = beantragt (offen) · voll = genehmigt
+            </p>
+          </>
+        )
+      })()}
+    </div>
+  )
+}
+
+type ZwSub = 'list' | 'single' | 'close' | 'absence'
 
 function ZeitwirtschaftTab({ employees }: { employees: Employee[] }) {
   const canCloseMonths = usePermission('employees.month_close.edit')
   const hasMonthClose  = useFeature('employees.month_close')
   const showClose      = canCloseMonths && hasMonthClose
+  const canViewAbsence = usePermission('absence.view')
 
   const [subTab, setSubTab] = useState<ZwSub>('list')
   const [empId,  setEmpId]  = useState<number | null>(null)
@@ -1845,7 +2003,8 @@ function ZeitwirtschaftTab({ employees }: { employees: Employee[] }) {
   const items: { id: ZwSub; label: string }[] = [
     { id: 'list',   label: 'Auswertung' },
     { id: 'single', label: 'Einzelne/r Mitarbeiter' },
-    ...(showClose ? [{ id: 'close' as ZwSub, label: 'Monatsabschluss' }] : []),
+    ...(showClose      ? [{ id: 'close'   as ZwSub, label: 'Monatsabschluss' }] : []),
+    ...(canViewAbsence ? [{ id: 'absence' as ZwSub, label: 'Abwesenheiten' }] : []),
   ]
 
   return (
@@ -1874,6 +2033,8 @@ function ZeitwirtschaftTab({ employees }: { employees: Employee[] }) {
       )}
 
       {subTab === 'close' && showClose && <MonthsOverviewTab />}
+
+      {subTab === 'absence' && canViewAbsence && <AbwesenheitenTab employees={employees} />}
     </div>
   )
 }
