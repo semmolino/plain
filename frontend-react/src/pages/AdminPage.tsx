@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'rea
 import { RollenSection } from '@/pages/admin/RollenSection'
 import { BuchungsartenSection } from '@/pages/admin/BuchungsartenSection'
 import { BuchungstextvorlagenSection } from '@/pages/admin/BuchungstextvorlagenSection'
+import { AbwesenheitsartenSection } from '@/pages/admin/AbwesenheitsartenSection'
 import { DokumentvorlagenSection } from '@/pages/admin/DokumentvorlagenSection'
 import { ImportSection } from '@/pages/admin/ImportSection'
 import { Can } from '@/components/ui/Can'
@@ -339,6 +340,8 @@ function StammdatenSection() {
       <BuchungsartenSection />
 
       <BuchungstextvorlagenSection />
+
+      <AbwesenheitsartenSection />
 
       <Message text={msg?.text ?? null} type={msg?.type} />
     </div>

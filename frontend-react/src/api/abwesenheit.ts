@@ -74,18 +74,21 @@ export interface CreateAbsencePayload {
 export const fetchAbsenceTypes = () =>
   apiClient.get<{ data: AbsenceType[] }>('/abwesenheit/types')
 
-export const createAbsenceType = (body: Partial<AbsenceType> & { name: string }) =>
-  apiClient.post<{ data: AbsenceType }>('/abwesenheit/types', {
-    name:              body.NAME,
-    color:             body.COLOR,
-    counts_as_worked:  body.COUNTS_AS_WORKED,
-    reduces_vacation:  body.REDUCES_VACATION,
-    requires_approval: body.REQUIRES_APPROVAL,
-    is_paid:           body.IS_PAID,
-    sort_order:        body.SORT_ORDER,
-  })
+export interface AbsenceTypePayload {
+  name:               string
+  color?:             string | null
+  counts_as_worked?:  boolean
+  reduces_vacation?:  boolean
+  requires_approval?: boolean
+  is_paid?:           boolean
+  active?:            number
+  sort_order?:        number
+}
 
-export const updateAbsenceType = (id: number, body: Record<string, unknown>) =>
+export const createAbsenceType = (body: AbsenceTypePayload) =>
+  apiClient.post<{ data: AbsenceType }>('/abwesenheit/types', body)
+
+export const updateAbsenceType = (id: number, body: Partial<AbsenceTypePayload>) =>
   apiClient.patch<{ success: boolean }>(`/abwesenheit/types/${id}`, body)
 
 export const deleteAbsenceType = (id: number) =>
