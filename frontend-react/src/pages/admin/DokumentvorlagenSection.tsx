@@ -4,6 +4,9 @@ import { AlignLeft, AlignCenter, AlignRight, Check, ChevronUp, ChevronDown } fro
 import { Message }  from '@/components/ui/Message'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { InfoHint } from '@/components/ui/InfoHint'
+import { AssetUploadBlock } from '@/components/admin/AssetUploadBlock'
+import { useToast } from '@/store/toastStore'
+import { fetchCompanies, fetchCompanyAssets, putCompanyLogo } from '@/api/stammdaten'
 import {
   fetchBranding, saveBranding, previewBranding,
   DEFAULT_THEME, FONT_OPTIONS, APPENDIX_BLOCKS, APPENDIX_BLOCKS_BY_CATEGORY, DOC_CATEGORY_LABELS,
@@ -53,6 +56,75 @@ function PresetThumb({ accent, serif, logoPosition }: { accent: string; serif: b
       <div style={{ height: 3, background: '#eef0f2', borderRadius: 2, width: '70%' }} />
       <div style={{ height: 3, background: '#eef0f2', borderRadius: 2, width: '80%' }} />
       <div style={{ marginTop: 'auto', borderTop: `1.5px solid ${accent}`, paddingTop: 3, fontSize: 8, fontWeight: 700, color: accent, textAlign: 'right' }}>26.418,00 €</div>
+    </div>
+  )
+}
+
+// Logo je Unternehmen — der eigentliche Bild-Upload. Position/Größe (im
+// Logo-Block darüber) gelten tenant-weit für alle Belege; das Logo selbst ist
+// pro Gesellschaft hinterlegbar. Backend bevorzugt beim PDF-Rendern das
+// Company-Logo (resolveLogoDataUri) und fällt sonst auf das Tenant-Logo zurück.
+function CompanyLogoBlock() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [companyId, setCompanyId] = useState<number | null>(null)
+
+  const { data: companiesData } = useQuery({ queryKey: ['companies'], queryFn: fetchCompanies })
+  const companies = companiesData?.data ?? []
+
+  // Erste Gesellschaft vorauswählen, sobald geladen.
+  useEffect(() => {
+    if (companyId === null && companies.length > 0) setCompanyId(companies[0].ID)
+  }, [companies, companyId])
+
+  const assetsKey = ['company-assets', companyId]
+  const { data: assetsData } = useQuery({
+    queryKey: assetsKey,
+    queryFn: () => fetchCompanyAssets(companyId as number),
+    enabled: companyId !== null,
+  })
+  const assets = assetsData?.data
+
+  const logoMut = useMutation({
+    mutationFn: (assetId: number | null) => putCompanyLogo(companyId as number, assetId),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: assetsKey }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (companies.length === 0) {
+    return (
+      <p className="empty-note" style={{ margin: '4px 0 10px' }}>
+        Noch kein Unternehmen angelegt — hinterlege zuerst unter <strong>Einstellungen → Unternehmen</strong> deine
+        Firmendaten, dann kannst du hier ein Logo hochladen.
+      </p>
+    )
+  }
+
+  return (
+    <div>
+      {companies.length > 1 && (
+        <div className="admin-company-selector" style={{ marginBottom: 12 }}>
+          {companies.map(c => (
+            <button
+              key={c.ID}
+              type="button"
+              className={`admin-company-btn${companyId === c.ID ? ' active' : ''}`}
+              onClick={() => setCompanyId(c.ID)}
+            >
+              {c.COMPANY_NAME_1}
+            </button>
+          ))}
+        </div>
+      )}
+      <AssetUploadBlock
+        label={companies.length > 1 ? 'Logo dieser Gesellschaft' : 'Firmenlogo'}
+        assetId={assets?.logo_asset_id ?? null}
+        dataUri={assets?.logo_data_uri ?? null}
+        onSave={id => logoMut.mutate(id)}
+        onRemove={() => logoMut.mutate(null)}
+        isPending={logoMut.isPending}
+        assetType="LOGO"
+      />
     </div>
   )
 }
@@ -164,14 +236,16 @@ export function DokumentvorlagenSection() {
     <div className="admin-section">
       <p className="admin-section-hint" style={{ marginTop: 0, display: 'flex', alignItems: 'flex-start' }}>
         <span>
-          Lege fest, wie deine PDF-Dokumente aussehen — Hausfarbe, Schrift und Logo-Position.
+          Lege fest, wie deine PDF-Dokumente aussehen — Logo, Hausfarbe, Schrift und Logo-Position.
           Die Gestaltung gilt für alle Belege (Rechnungen, Abschlags-/Schlussrechnungen, Angebote,
-          Auftragsbestätigungen). Bereits gebuchte Belege bleiben unverändert.
+          Auftragsbestätigungen); das Logo lässt sich je Unternehmen hinterlegen.
+          Bereits gebuchte Belege bleiben unverändert.
         </span>
         <InfoHint title="So funktioniert's">
-          <strong>1.</strong> Links Farbe, Schrift und Logo-Position wählen.<br />
+          <strong>1.</strong> Links Logo hochladen sowie Farbe, Schrift und Logo-Position wählen.<br />
           <strong>2.</strong> Rechts in der Vorschau live sehen, wie ein echter Beleg damit aussieht.<br />
-          <strong>3.</strong> „Gestaltung speichern" — gilt ab dem nächsten neuen Beleg.
+          <strong>3.</strong> „Gestaltung speichern" — gilt ab dem nächsten neuen Beleg.<br />
+          <em>Hinweis:</em> Das Logo-Bild wird sofort beim Hochladen gespeichert, Farbe/Schrift/Position erst mit „Gestaltung speichern".
         </InfoHint>
       </p>
 
@@ -288,10 +362,13 @@ export function DokumentvorlagenSection() {
             </p>
           </div>
 
-          {/* Logo-Position */}
+          {/* Logo (Upload je Unternehmen) */}
+          <CompanyLogoBlock />
+
+          {/* Logo-Position & -Größe */}
           <div className="admin-block">
             <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
-              Logo-Position <HelpHint id="vorlagen.logo" />
+              Logo-Position &amp; -Größe <HelpHint id="vorlagen.logo" />
             </h3>
             <div style={{ display: 'flex', gap: 8 }}>
               {LOGO_POSITIONS.map(({ id, label, Icon }) => {
@@ -323,7 +400,8 @@ export function DokumentvorlagenSection() {
               ))}
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
-              Das Logo selbst lädst du unter <strong>Einstellungen → Unternehmen</strong> hoch.
+              Position und Größe gelten für alle Belege und Gesellschaften. Das Logo-Bild selbst
+              lädst du oben je Unternehmen hoch.
             </p>
           </div>
 

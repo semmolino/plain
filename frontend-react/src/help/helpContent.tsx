@@ -257,13 +257,14 @@ export const HELP = {
     ),
   },
   'vorlagen.logo': {
-    title: 'Logo-Position',
+    title: 'Logo-Position & -Größe',
     body: (
       <>
         Legt fest, ob dein Firmenlogo oben <strong>links</strong>, <strong>mittig</strong>
-        oder <strong>rechts</strong> steht. Das Logo selbst lädst du unter
-        <strong> Einstellungen → Unternehmen</strong> hoch — ohne hinterlegtes Logo
-        zeigt die Vorschau einen Platzhalter.
+        oder <strong>rechts</strong> steht und wie groß es erscheint. Position und Größe
+        gelten für <strong>alle Belege und Gesellschaften</strong>. Das Logo-Bild selbst
+        lädst du direkt darüber hoch — bei mehreren Gesellschaften je Unternehmen einzeln.
+        Ohne hinterlegtes Logo zeigt die Vorschau einen Platzhalter.
       </>
     ),
   },

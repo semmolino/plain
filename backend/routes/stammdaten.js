@@ -4,7 +4,7 @@ const express = require("express");
 const ctrl = require("../controllers/stammdaten");
 const bookingTypesCtrl = require("../controllers/bookingTypes");
 const textSnippetsCtrl = require("../controllers/textSnippets");
-const { requirePermission } = require("../middleware/permissions");
+const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -44,7 +44,7 @@ module.exports = (supabase) => {
   router.post("/company",                                            requirePermission("settings.company.edit"), (req, res) => ctrl.postCompany(req, res, supabase));
   router.put("/company/:id",                                         requirePermission("settings.company.edit"), (req, res) => ctrl.putCompany(req, res, supabase));
   router.get("/companies/:id/assets",                                (req, res) => ctrl.getCompanyAssets(req, res, supabase));
-  router.put("/companies/:id/logo",                                  requirePermission("settings.company.edit"), (req, res) => ctrl.putCompanyLogo(req, res, supabase));
+  router.put("/companies/:id/logo",                                  requireAnyPermission("settings.company.edit", "settings.document_templates.edit"), (req, res) => ctrl.putCompanyLogo(req, res, supabase));
   router.put("/companies/:id/signature",                             requirePermission("settings.company.edit"), (req, res) => ctrl.putCompanySignature(req, res, supabase));
   router.post("/address",                                            requirePermission("addresses.create"), (req, res) => ctrl.postAddress(req, res, supabase));
   router.post("/rollen",                                             requirePermission("settings.basedata.edit"), (req, res) => ctrl.postRollen(req, res, supabase));

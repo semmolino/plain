@@ -15,6 +15,7 @@ import { Message }   from '@/components/ui/Message'
 import { FormField } from '@/components/ui/FormField'
 import { InfoHint }  from '@/components/ui/InfoHint'
 import { HelpHint }  from '@/components/ui/HelpHint'
+import { AssetUploadBlock } from '@/components/admin/AssetUploadBlock'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useToast }  from '@/store/toastStore'
 import {
@@ -23,7 +24,7 @@ import {
   fetchDepartments, deleteDepartment, updateDepartment,
   fetchTypen, deleteTyp, updateTyp,
   fetchRollen, deleteRolle, updateRolle,
-  fetchCompanyAssets, putCompanyLogo, putCompanySignature, uploadAsset,
+  fetchCompanyAssets, putCompanySignature, uploadAsset,
   fetchMonatsabschluss, putMonatsabschluss, runMonatsabschlussNow, openMonatsabschlussPdf,
   fetchWorkingTimeModels, createWorkingTimeModel, updateWorkingTimeModel, deleteWorkingTimeModel,
   fetchCountryStates,
@@ -705,63 +706,6 @@ function companyToForm(c: Company) {
   }
 }
 
-function AssetUploadBlock({ label, hint, assetId, dataUri, onSave, onRemove, isPending, assetType }: {
-  label: string
-  hint?: string
-  assetId: number | null
-  dataUri: string | null
-  onSave: (id: number) => void
-  onRemove: () => void
-  isPending: boolean
-  assetType: string
-}) {
-  const [uploading, setUploading] = useState(false)
-  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return
-    setMsg(null); setUploading(true)
-    try {
-      const res = await uploadAsset(file, assetType)
-      onSave(res.data.ID)
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'Upload fehlgeschlagen', type: 'error' })
-    } finally {
-      setUploading(false)
-      if (inputRef.current) inputRef.current.value = ''
-    }
-  }
-
-  return (
-    <div className="admin-block">
-      <h3 className="admin-block-title">{label}</h3>
-      {assetId ? (
-        <div style={{ marginBottom: 10 }}>
-          <img
-            src={dataUri ?? `/api/v1/assets/${assetId}`}
-            alt={label}
-            style={{ maxHeight: 60, maxWidth: 220, objectFit: 'contain', display: 'block', marginBottom: 8, border: '1px solid #e5e7eb', borderRadius: 4, padding: 4, background: '#fafafa' }}
-          />
-          <button type="button" className="btn-small btn-danger" onClick={onRemove} disabled={isPending}>
-            Entfernen
-          </button>
-        </div>
-      ) : (
-        <p className="empty-note" style={{ margin: '4px 0 10px' }}>Kein Bild gesetzt.</p>
-      )}
-      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/svg+xml,image/webp" style={{ display: 'none' }} onChange={e => void handleFile(e)} />
-        <button type="button" className="btn-small" onClick={() => inputRef.current?.click()} disabled={uploading || isPending}>
-          {uploading ? 'Wird hochgeladen …' : assetId ? 'Ersetzen' : 'Hochladen'}
-        </button>
-        <span style={{ fontSize: 11, color: '#6b7280' }}>{hint ?? 'PNG, JPG, SVG · max. 10 MB'}</span>
-      </label>
-      <Message text={msg?.text ?? null} type={msg?.type} />
-    </div>
-  )
-}
-
 function CompanyAssetsSection({ companyId }: { companyId: number }) {
   const qc = useQueryClient()
   const toast = useToast()
@@ -769,11 +713,6 @@ function CompanyAssetsSection({ companyId }: { companyId: number }) {
   const { data } = useQuery({ queryKey, queryFn: () => fetchCompanyAssets(companyId) })
   const assets = data?.data
 
-  const logoMut = useMutation({
-    mutationFn: (assetId: number | null) => putCompanyLogo(companyId, assetId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey }),
-    onError: (e: Error) => toast.error(e.message),
-  })
   const sigMut = useMutation({
     mutationFn: (assetId: number | null) => putCompanySignature(companyId, assetId),
     onSuccess: () => void qc.invalidateQueries({ queryKey }),
@@ -782,15 +721,6 @@ function CompanyAssetsSection({ companyId }: { companyId: number }) {
 
   return (
     <div style={{ marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
-      <AssetUploadBlock
-        label="Firmenlogo (für PDF-Dokumente)"
-        assetId={assets?.logo_asset_id ?? null}
-        dataUri={assets?.logo_data_uri ?? null}
-        onSave={id => logoMut.mutate(id)}
-        onRemove={() => logoMut.mutate(null)}
-        isPending={logoMut.isPending}
-        assetType="LOGO"
-      />
       <AssetUploadBlock
         label="Unterschrift (Angebot + Auftragsbestätigung)"
         hint="PNG, JPG · Empfehlung: weißer oder transparenter Hintergrund"
@@ -801,6 +731,9 @@ function CompanyAssetsSection({ companyId }: { companyId: number }) {
         isPending={sigMut.isPending}
         assetType="SIGNATURE"
       />
+      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
+        Das <strong>Firmenlogo</strong> lädst du unter <strong>Einstellungen → Dokumentenvorlagen</strong> hoch — dort auch je Unternehmen.
+      </p>
     </div>
   )
 }

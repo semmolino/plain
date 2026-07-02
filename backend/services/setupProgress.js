@@ -179,7 +179,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
     if (!error && av) hasAvatar = !!av.AVATAR_ASSET_ID;
   } catch (_) {}
 
-  // ── 4) Logo: global ODER pro Firma (Unternehmen-Tab speichert co_<id>_logo)
+  // ── 4) Logo: global ODER pro Firma (Dokumentenvorlagen-Tab speichert co_<id>_logo)
   let hasCompanyLogo = false;
   try {
     const { data } = await supabase
@@ -239,7 +239,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
       key:  "logo",
       label:"Firmenlogo hochgeladen",
       hint: "Wird auf PDFs angezeigt",
-      href: "/admin?tab=unternehmen",
+      href: "/admin?tab=dokumentvorlagen",
       done: hasLogo,
     },
     {
