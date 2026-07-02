@@ -23,6 +23,24 @@ async function enrichBaseType(supabase, rows) {
 }
 
 // ---------------------------------------------------------------------------
+// Soft-Fail-Helfer für additive Spalten (Migration 0099 evtl. noch nicht drin).
+// Erkennt „column ... does not exist"-Fehler, damit neue Felder das Bestehende
+// nicht brechen, solange die Migration noch aussteht.
+// ---------------------------------------------------------------------------
+function isMissingColumnError(error) {
+  return !!error && /column .* does not exist/i.test(String(error.message || ""));
+}
+
+// Führt eine SELECT-Query mit vollem Spaltensatz aus; fällt bei fehlender
+// Spalte auf den Basis-Spaltensatz zurück. `makeQuery(cols)` muss eine frische,
+// gefilterte Supabase-Query liefern.
+async function selectWithFallback(makeQuery, fullCols, baseCols) {
+  let res = await makeQuery(fullCols);
+  if (isMissingColumnError(res.error)) res = await makeQuery(baseCols);
+  return res;
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/stammdaten/status
 // ---------------------------------------------------------------------------
 async function postStatus(req, res, supabase) {
@@ -675,8 +693,45 @@ async function putCompany(req, res, supabase) {
 // ---------------------------------------------------------------------------
 // POST /api/stammdaten/address
 // ---------------------------------------------------------------------------
+// Additive ADDRESS-Spalten (Migration 0061 = Peppol, 0099 = Rest). Werden nur
+// gesetzt, wenn im Body vorhanden — und bei fehlender Spalte weggelassen.
+const ADDR_OPTIONAL_DB_COLS = [
+  "PEPPOL_ENDPOINT_ID", "PEPPOL_SCHEME_ID",
+  "ADDRESS_TYPE", "TAX_NUMBER", "PHONE", "EMAIL", "WEBSITE", "NOTES",
+];
+
+// Baut aus dem Request-Body das Set optionaler Adress-Spalten.
+function buildAddrOptionalCols(body) {
+  const { peppol_endpoint_id, peppol_scheme_id, address_type, tax_number, phone, email, website, notes } = body || {};
+  const cols = {};
+  if (peppol_endpoint_id !== undefined) cols.PEPPOL_ENDPOINT_ID = (peppol_endpoint_id || "").toString().trim() || null;
+  if (peppol_scheme_id   !== undefined) cols.PEPPOL_SCHEME_ID   = (peppol_scheme_id   || "").toString().trim() || null;
+  if (address_type       !== undefined) {
+    const n = parseInt(address_type, 10);
+    cols.ADDRESS_TYPE = (address_type === "" || address_type === null || Number.isNaN(n)) ? null : n;
+  }
+  if (tax_number !== undefined) cols.TAX_NUMBER = (tax_number || "").toString().trim() || null;
+  if (phone      !== undefined) cols.PHONE      = (phone      || "").toString().trim() || null;
+  if (email      !== undefined) cols.EMAIL      = (email      || "").toString().trim() || null;
+  if (website    !== undefined) cols.WEBSITE    = (website    || "").toString().trim() || null;
+  if (notes      !== undefined) cols.NOTES      = (notes      || "").toString().trim() || null;
+  return cols;
+}
+
+// Führt insert/update aus und lässt bei fehlender additiver Spalte
+// (Migration noch nicht eingespielt) alle optionalen Felder weg und retryt.
+async function writeWithOptionalCols(runWrite, row, optionalKeys) {
+  let res = await runWrite(row);
+  if (isMissingColumnError(res.error)) {
+    const base = { ...row };
+    for (const k of optionalKeys) delete base[k];
+    res = await runWrite(base);
+  }
+  return res;
+}
+
 async function postAddress(req, res, supabase) {
-  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference, peppol_endpoint_id, peppol_scheme_id } = req.body || {};
+  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference } = req.body || {};
   if (!address_name_1 || typeof address_name_1 !== "string") return res.status(400).json({ error: "address_name_1 is required" });
 
   const parsedCountryId = typeof country_id === "number" ? country_id : parseInt(country_id, 10);
@@ -694,16 +749,13 @@ async function postAddress(req, res, supabase) {
     "TAX-ID": (tax_id || "").trim() || null,
     BUYER_REFERENCE: (buyer_reference || "").trim() || null,
     TENANT_ID: req.tenantId ?? null,
+    ...buildAddrOptionalCols(req.body),
   };
-  if (peppol_endpoint_id !== undefined) insertRow.PEPPOL_ENDPOINT_ID = (peppol_endpoint_id || "").trim() || null;
-  if (peppol_scheme_id   !== undefined) insertRow.PEPPOL_SCHEME_ID   = (peppol_scheme_id   || "").trim() || null;
 
-  let { data, error } = await supabase.from("ADDRESS").insert([insertRow]);
-  if (error && /column .*PEPPOL_/i.test(String(error.message))) {
-    delete insertRow.PEPPOL_ENDPOINT_ID;
-    delete insertRow.PEPPOL_SCHEME_ID;
-    ({ data, error } = await supabase.from("ADDRESS").insert([insertRow]));
-  }
+  const { data, error } = await writeWithOptionalCols(
+    (row) => supabase.from("ADDRESS").insert([row]),
+    insertRow, ADDR_OPTIONAL_DB_COLS,
+  );
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -771,23 +823,30 @@ async function searchAddresses(req, res, supabase) {
 // ---------------------------------------------------------------------------
 // GET /api/stammdaten/addresses/list
 // ---------------------------------------------------------------------------
+// Basis- und Voll-Spaltensatz für ADDRESS-Reads (Voll enthält additive Spalten
+// aus 0061/0099 — bei fehlender Migration wird auf Basis zurückgefallen).
+const ADDR_BASE_SELECT = 'ID, ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, CUSTOMER_NUMBER, "TAX-ID", BUYER_REFERENCE';
+const ADDR_FULL_SELECT = ADDR_BASE_SELECT + ', PEPPOL_ENDPOINT_ID, PEPPOL_SCHEME_ID, ADDRESS_TYPE, TAX_NUMBER, PHONE, EMAIL, WEBSITE, NOTES';
+
+// Normalisiert eine ADDRESS-Row: TAX_ID-Alias + Land-Name auflösen.
+function normalizeAddress(r, countryMap) {
+  return { ...r, TAX_ID: r["TAX-ID"] ?? null, COUNTRY: countryMap.get(String(r.COUNTRY_ID)) || "" };
+}
+
 async function listAddresses(req, res, supabase) {
   const limit = Math.min(parseInt(req.query.limit || "2000", 10) || 2000, 5000);
 
-  const { data: addresses, error: aErr } = await supabase
-    .from("ADDRESS")
-    .select('ID, ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, CUSTOMER_NUMBER, "TAX-ID", BUYER_REFERENCE')
-    .eq("TENANT_ID", req.tenantId)
-    .order("ADDRESS_NAME_1", { ascending: true })
-    .limit(limit);
+  const { data: addresses, error: aErr } = await selectWithFallback(
+    (cols) => supabase.from("ADDRESS").select(cols).eq("TENANT_ID", req.tenantId).order("ADDRESS_NAME_1", { ascending: true }).limit(limit),
+    ADDR_FULL_SELECT, ADDR_BASE_SELECT,
+  );
   if (aErr) return res.status(500).json({ error: aErr.message });
 
   const { data: countries, error: cErr } = await supabase.from("COUNTRY").select("ID, NAME_LONG, NAME_SHORT").order("NAME_LONG", { ascending: true }).limit(5000);
   if (cErr) return res.status(500).json({ error: cErr.message });
 
   const countryMap = new Map((countries || []).map((c) => [String(c.ID), (c.NAME_LONG || c.NAME_SHORT || "").toString()]));
-  const normalized = (addresses || []).map((r) => ({ ...r, TAX_ID: r["TAX-ID"] ?? null, COUNTRY: countryMap.get(String(r.COUNTRY_ID)) || "" }));
-  res.json({ data: normalized });
+  res.json({ data: (addresses || []).map((r) => normalizeAddress(r, countryMap)) });
 }
 
 // ---------------------------------------------------------------------------
@@ -795,7 +854,7 @@ async function listAddresses(req, res, supabase) {
 // ---------------------------------------------------------------------------
 async function patchAddress(req, res, supabase) {
   const id = req.params.id;
-  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference, peppol_endpoint_id, peppol_scheme_id } = req.body || {};
+  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference } = req.body || {};
   if (!address_name_1 || !country_id) return res.status(400).json({ error: "ADDRESS_NAME_1 und COUNTRY_ID sind erforderlich" });
 
   const update = {
@@ -803,18 +862,13 @@ async function patchAddress(req, res, supabase) {
     STREET: street || null, POST_CODE: post_code || null, CITY: city || null,
     POST_OFFICE_BOX: post_office_box || null, COUNTRY_ID: parseInt(country_id, 10),
     CUSTOMER_NUMBER: customer_number || null, "TAX-ID": tax_id || null, BUYER_REFERENCE: buyer_reference || null,
+    ...buildAddrOptionalCols(req.body),
   };
-  // Branch 11: Peppol — nur setzen wenn explizit gesendet (Migration 0061 evtl. nicht da)
-  if (peppol_endpoint_id !== undefined) update.PEPPOL_ENDPOINT_ID = peppol_endpoint_id || null;
-  if (peppol_scheme_id   !== undefined) update.PEPPOL_SCHEME_ID   = peppol_scheme_id   || null;
 
-  let { data, error } = await supabase.from("ADDRESS").update(update).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single();
-  // Soft-fail wenn Migration 0061 noch nicht durch: retry ohne PEPPOL-Felder
-  if (error && /column .*PEPPOL_/i.test(String(error.message))) {
-    delete update.PEPPOL_ENDPOINT_ID;
-    delete update.PEPPOL_SCHEME_ID;
-    ({ data, error } = await supabase.from("ADDRESS").update(update).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single());
-  }
+  const { data, error } = await writeWithOptionalCols(
+    (row) => supabase.from("ADDRESS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single(),
+    update, ADDR_OPTIONAL_DB_COLS,
+  );
   if (error) return res.status(500).json({ error: error.message });
 
   let countryName = "";
@@ -822,6 +876,65 @@ async function patchAddress(req, res, supabase) {
   if (cData) countryName = cData.NAME_LONG || cData.NAME_SHORT || "";
 
   res.json({ data: { ...data, TAX_ID: data["TAX-ID"] ?? null, COUNTRY: countryName } });
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/stammdaten/addresses/:id  — 360°-Detail (Stammdaten + Kontakte +
+// verknüpfte Projekte/Angebote/Rechnungen/Abschläge)
+// ---------------------------------------------------------------------------
+async function getAddressDetail(req, res, supabase) {
+  const id = parseInt(req.params.id, 10);
+  if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  const tenantId = req.tenantId;
+
+  const { data: addr, error: aErr } = await selectWithFallback(
+    (cols) => supabase.from("ADDRESS").select(cols).eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle(),
+    ADDR_FULL_SELECT, ADDR_BASE_SELECT,
+  );
+  if (aErr) return res.status(500).json({ error: aErr.message });
+  if (!addr) return res.status(404).json({ error: "Adresse nicht gefunden" });
+
+  // Land-Name auflösen
+  let countryName = "";
+  if (addr.COUNTRY_ID != null) {
+    const { data: cData } = await supabase.from("COUNTRY").select("NAME_LONG, NAME_SHORT").eq("ID", addr.COUNTRY_ID).maybeSingle();
+    if (cData) countryName = cData.NAME_LONG || cData.NAME_SHORT || "";
+  }
+
+  // Verknüpfte Entitäten (nur wenn die jeweilige Tabelle/Spalte existiert — sonst still leer)
+  const safe = async (p) => { try { const r = await p; return r.error ? [] : (r.data || []); } catch { return []; } };
+  const contactBase = "ID, TITLE, FIRST_NAME, LAST_NAME, EMAIL, MOBILE, SALUTATION_ID, GENDER_ID, ADDRESS_ID";
+  const contactFull = contactBase + ", POSITION, DEPARTMENT, PHONE, IS_PRIMARY, NOTES";
+
+  const [contactsRes, projects, offers, invoices, partials, salutations, genders] = await Promise.all([
+    selectWithFallback(
+      (cols) => supabase.from("CONTACTS").select(cols).eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id).order("LAST_NAME", { ascending: true }),
+      contactFull, contactBase,
+    ),
+    safe(supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
+    safe(supabase.from("OFFER").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
+    safe(supabase.from("INVOICE").select("ID, INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
+    safe(supabase.from("PARTIAL_PAYMENT").select("ID, PARTIAL_PAYMENT_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
+    safe(supabase.from("SALUTATION").select("ID, SALUTATION").limit(5000)),
+    safe(supabase.from("GENDER").select("ID, GENDER").limit(5000)),
+  ]);
+
+  const salMap = new Map((salutations || []).map((s) => [String(s.ID), (s.SALUTATION || "").toString()]));
+  const genMap = new Map((genders || []).map((g) => [String(g.ID), (g.GENDER || "").toString()]));
+  const contacts = (contactsRes.data || []).map((c) => ({
+    ...c,
+    NAME: `${c.FIRST_NAME || ""} ${c.LAST_NAME || ""}`.trim(),
+    SALUTATION: salMap.get(String(c.SALUTATION_ID)) || "",
+    GENDER: genMap.get(String(c.GENDER_ID)) || "",
+  }));
+
+  res.json({
+    data: {
+      address: { ...addr, TAX_ID: addr["TAX-ID"] ?? null, COUNTRY: countryName },
+      contacts,
+      projects, offers, invoices, partials,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -861,10 +974,29 @@ async function getContactsByAddress(req, res, supabase) {
 // ---------------------------------------------------------------------------
 // GET /api/stammdaten/contacts/list
 // ---------------------------------------------------------------------------
+// Additive CONTACTS-Spalten (Migration 0099). Nur setzen, wenn im Body vorhanden.
+const CONTACT_OPTIONAL_DB_COLS = ["POSITION", "DEPARTMENT", "PHONE", "IS_PRIMARY", "NOTES"];
+const CONTACT_BASE_SELECT = "ID, TITLE, FIRST_NAME, LAST_NAME, EMAIL, MOBILE, SALUTATION_ID, GENDER_ID, ADDRESS_ID";
+const CONTACT_FULL_SELECT = CONTACT_BASE_SELECT + ", POSITION, DEPARTMENT, PHONE, IS_PRIMARY, NOTES";
+
+function buildContactOptionalCols(body) {
+  const { position, department, phone, is_primary, notes } = body || {};
+  const cols = {};
+  if (position   !== undefined) cols.POSITION   = (position   || "").toString().trim() || null;
+  if (department !== undefined) cols.DEPARTMENT = (department || "").toString().trim() || null;
+  if (phone      !== undefined) cols.PHONE      = (phone      || "").toString().trim() || null;
+  if (notes      !== undefined) cols.NOTES      = (notes      || "").toString().trim() || null;
+  if (is_primary !== undefined) cols.IS_PRIMARY = (is_primary === true || is_primary === 1 || is_primary === "1" || is_primary === "true") ? 1 : 0;
+  return cols;
+}
+
 async function listContacts(req, res, supabase) {
   const limit = Math.min(parseInt(req.query.limit || "2000", 10) || 2000, 5000);
 
-  const { data: contacts, error: cErr } = await supabase.from("CONTACTS").select("ID, TITLE, FIRST_NAME, LAST_NAME, EMAIL, MOBILE, SALUTATION_ID, GENDER_ID, ADDRESS_ID").eq("TENANT_ID", req.tenantId).order("LAST_NAME", { ascending: true }).limit(limit);
+  const { data: contacts, error: cErr } = await selectWithFallback(
+    (cols) => supabase.from("CONTACTS").select(cols).eq("TENANT_ID", req.tenantId).order("LAST_NAME", { ascending: true }).limit(limit),
+    CONTACT_FULL_SELECT, CONTACT_BASE_SELECT,
+  );
   if (cErr) return res.status(500).json({ error: cErr.message });
 
   const [{ data: salutations, error: sErr }, { data: genders, error: gErr }, { data: addresses, error: aErr }] = await Promise.all([
@@ -891,11 +1023,16 @@ async function patchContact(req, res, supabase) {
   const { title, first_name, last_name, email, mobile, salutation_id, gender_id, address_id } = req.body || {};
   if (!first_name || !last_name || !salutation_id || !gender_id || !address_id) return res.status(400).json({ error: "Vorname, Nachname, Anrede, Geschlecht und Adresse sind erforderlich" });
 
-  const { data, error } = await supabase.from("CONTACTS").update({
+  const updateRow = {
     TITLE: title || null, FIRST_NAME: first_name, LAST_NAME: last_name,
     EMAIL: email || null, MOBILE: mobile || null,
     SALUTATION_ID: parseInt(salutation_id, 10), GENDER_ID: parseInt(gender_id, 10), ADDRESS_ID: parseInt(address_id, 10),
-  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single();
+    ...buildContactOptionalCols(req.body),
+  };
+  const { data, error } = await writeWithOptionalCols(
+    (row) => supabase.from("CONTACTS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single(),
+    updateRow, CONTACT_OPTIONAL_DB_COLS,
+  );
   if (error) return res.status(500).json({ error: error.message });
 
   const [{ data: s }, { data: g }, { data: a }] = await Promise.all([
@@ -991,12 +1128,17 @@ async function postContact(req, res, supabase) {
   if (!parsedGenderId || Number.isNaN(parsedGenderId)) return res.status(400).json({ error: "gender_id is required" });
   if (!parsedAddressId || Number.isNaN(parsedAddressId)) return res.status(400).json({ error: "address_id is required" });
 
-  const { data, error } = await supabase.from("CONTACTS").insert([{
+  const insertRow = {
     TITLE: (title || "").trim() || null, FIRST_NAME: first_name.trim(), LAST_NAME: last_name.trim(),
     EMAIL: (email || "").trim() || null, MOBILE: (mobile || "").trim() || null,
     SALUTATION_ID: parsedSalutationId, GENDER_ID: parsedGenderId, ADDRESS_ID: parsedAddressId,
     TENANT_ID: req.tenantId ?? null,
-  }]);
+    ...buildContactOptionalCols(req.body),
+  };
+  const { data, error } = await writeWithOptionalCols(
+    (row) => supabase.from("CONTACTS").insert([row]),
+    insertRow, CONTACT_OPTIONAL_DB_COLS,
+  );
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -1783,7 +1925,7 @@ module.exports = {
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure, postFeeCalcAddToOfferStructure, syncFeeCalcToStructure,
   getCompanies, postCompany, putCompany, postAddress, postRollen,
-  getSalutations, getGenders, searchAddresses, listAddresses, patchAddress,
+  getSalutations, getGenders, searchAddresses, listAddresses, patchAddress, getAddressDetail,
   searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, searchPaymentMeans, postContact,
   getCurrencies, getVat, getDefaults, putDefault,
   getDepartments, deleteDepartment, patchDepartment,

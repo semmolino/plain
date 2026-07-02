@@ -232,6 +232,40 @@ export const HELP = {
     ),
   },
 
+  // ── Adressen & Kontakte ──────────────────────────────────────────────────
+  'addresses.type': {
+    title: 'Kategorie der Adresse',
+    body: (
+      <>
+        Ordnet die Adresse fachlich ein — <strong>Kunde/Bauherr</strong>, <strong>Fachplaner</strong>,
+        <strong> Behörde</strong>, <strong>Nachunternehmer</strong>, <strong>Lieferant</strong> oder
+        <strong> Sonstige</strong>. Rein organisatorisch: die Kategorie hilft beim Filtern und Sortieren
+        des Adressbuchs und hat keine Auswirkung auf Angebote oder Rechnungen. Kann leer bleiben.
+      </>
+    ),
+  },
+  'addresses.ustid': {
+    title: 'USt-IdNr. vs. Steuernummer',
+    body: (
+      <>
+        Die <strong>USt-IdNr.</strong> (Umsatzsteuer-Identifikationsnummer, Format z. B.
+        <code> DE123456789</code>) ist die für den B2B- und EU-Geschäftsverkehr relevante Kennung — sie
+        wird u. a. für E-Rechnungen und die Reverse-Charge-Prüfung benötigt. Die <strong>Steuernummer</strong>
+        ist die nationale Nummer des Finanzamts. Beide sind optional; für Rechnungen an Unternehmen ist die
+        USt-IdNr. meist die wichtigere Angabe.
+      </>
+    ),
+  },
+  'addresses.notes': {
+    title: 'Notizen',
+    body: (
+      <>
+        Interner Freitext zu dieser Adresse (z. B. Zahlungsmoral, Zuständigkeiten, Besonderheiten). Nur
+        intern sichtbar — erscheint <strong>nicht</strong> auf Angeboten, Rechnungen oder E-Rechnungen.
+      </>
+    ),
+  },
+
   // ── Dokumentvorlagen / Branding ──────────────────────────────────────────
   'vorlagen.accent': {
     title: 'Hausfarbe',

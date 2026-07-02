@@ -69,6 +69,7 @@ module.exports = (supabase) => {
   router.get("/genders",                                             (req, res) => ctrl.getGenders(req, res, supabase));
   router.get("/addresses/search",                                    requirePermission("addresses.view"),   (req, res) => ctrl.searchAddresses(req, res, supabase));
   router.get("/addresses/list",                                      requirePermission("addresses.view"),   (req, res) => ctrl.listAddresses(req, res, supabase));
+  router.get("/addresses/:id",                                       requirePermission("addresses.view"),   (req, res) => ctrl.getAddressDetail(req, res, supabase));
   router.patch("/addresses/:id",                                     requirePermission("addresses.edit"),   (req, res) => ctrl.patchAddress(req, res, supabase));
   router.delete("/addresses/:id",                                    requirePermission("addresses.delete"), (req, res) => ctrl.deleteAddress(req, res, supabase));
   router.get("/contacts/search",                                     requirePermission("addresses.contacts.view"), (req, res) => ctrl.searchContacts(req, res, supabase));

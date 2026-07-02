@@ -16,6 +16,7 @@ import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
 // App pages — lazy-loaded per route
 const DashboardPage   = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const AdressenPage    = lazy(() => import('@/pages/AdressenPage').then(m => ({ default: m.AdressenPage })))
+const AddressDetailPage = lazy(() => import('@/pages/adressen/AddressDetailPage').then(m => ({ default: m.AddressDetailPage })))
 const MitarbeiterPage = lazy(() => import('@/pages/MitarbeiterPage').then(m => ({ default: m.MitarbeiterPage })))
 const AdminPage       = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })))
 const ProjektePage    = lazy(() => import('@/pages/ProjektePage').then(m => ({ default: m.ProjektePage })))
@@ -63,6 +64,7 @@ export default function App() {
             >
               <Route path="/"            element={<ProtectedRoute anyOf={['dashboard.view']}><Suspense fallback={<PageLoader />}><DashboardPage /></Suspense></ProtectedRoute>} />
               <Route path="/adressen"    element={<ProtectedRoute anyOf={['addresses.view']}><Suspense fallback={<PageLoader />}><AdressenPage /></Suspense></ProtectedRoute>} />
+              <Route path="/adressen/:id" element={<ProtectedRoute anyOf={['addresses.view']}><Suspense fallback={<PageLoader />}><AddressDetailPage /></Suspense></ProtectedRoute>} />
               <Route path="/projekte"    element={<ProtectedRoute anyOf={['projects.view']}><Suspense fallback={<PageLoader />}><ProjektePage /></Suspense></ProtectedRoute>} />
               <Route path="/daten"       element={<ProtectedRoute anyOf={['reports.view']}><Suspense fallback={<PageLoader />}><DatenPage /></Suspense></ProtectedRoute>} />
               <Route path="/rechnungen"  element={<ProtectedRoute anyOf={['invoices.view','dunning.view','security_retention.view']}><Suspense fallback={<PageLoader />}><RechnungenPage /></Suspense></ProtectedRoute>} />

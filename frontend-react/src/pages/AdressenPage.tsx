@@ -2,48 +2,32 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useStickyState, useStickySet } from '@/hooks/useStickyState'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { SlidersHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { SlidersHorizontal, Pencil, Trash2, Plus, Download, Star } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import { useFilterTabs } from '@/store/permissionsStore'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
-import { Message }     from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { FormField }   from '@/components/ui/FormField'
-import { HelpHint }    from '@/components/ui/HelpHint'
-import { Autocomplete } from '@/components/ui/Autocomplete'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useToast }  from '@/store/toastStore'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
+import { AddrForm, ContactForm, emptyAddr, emptyContact, addressToPayload, contactToPayload } from '@/pages/adressen/addressForms'
+import { downloadCsv, downloadText, contactVCard } from '@/utils/exportData'
 import {
   fetchCountries, fetchSalutations, fetchGenders,
   fetchAddressList, searchAddressesApi, createAddress, updateAddress, deleteAddress,
   fetchContactList, createContact, updateContact, deleteContact,
+  addressTypeLabel,
   type Address, type Contact, type AddressPayload, type ContactPayload,
 } from '@/api/stammdaten'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Page-level tabs ─────────────────────────────────────────────────────────
 
-const ADDR_TABS: { id: string; label: string; permissions?: string[] }[] = [
-  { id: 'list',   label: 'Adressen' },
-  { id: 'create', label: 'Neue Adresse', permissions: ['addresses.create'] },
-]
-const CON_TABS: { id: string; label: string; permissions?: string[] }[] = [
-  { id: 'list',   label: 'Kontakte' },
-  { id: 'create', label: 'Neuer Kontakt', permissions: ['addresses.contacts.create'] },
-]
 const PAGE_TABS: { id: string; label: string; permissions: string[] }[] = [
   { id: 'adressen', label: 'Adressen',  permissions: ['addresses.view'] },
   { id: 'kontakte', label: 'Kontakte',  permissions: ['addresses.contacts.view'] },
 ]
-
-function emptyAddr(): AddressPayload {
-  return { address_name_1: '', address_name_2: '', street: '', post_code: '', city: '', country_id: '', customer_number: '', tax_id: '', buyer_reference: '', peppol_endpoint_id: '', peppol_scheme_id: '' }
-}
-function emptyContact(): ContactPayload {
-  return { title: '', first_name: '', last_name: '', email: '', mobile: '', salutation_id: '', gender_id: '', address_id: '' }
-}
 
 // ── Filter chip ───────────────────────────────────────────────────────────────
 
@@ -80,175 +64,40 @@ function FilterChip({ label, options, active, onChange }: {
   )
 }
 
-// ── AddrForm (top-level to preserve focus) ────────────────────────────────────
-
-interface AddrFormProps {
-  vals:        AddressPayload
-  setK:        (k: keyof AddressPayload) => (v: string) => void
-  msg:         { text: string; type: 'success' | 'error' } | null
-  countries:   { ID: number | string; NAME_LONG?: string; NAME_SHORT?: string }[]
-}
-
-function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
-  // E-Rechnungs-Angaben (Kauferreferenz / Peppol) standardmaessig versteckt —
-  // wird automatisch aufgeklappt, wenn beim Bearbeiten bereits Werte vorhanden sind.
-  const hasEinvoiceData = !!(vals.buyer_reference || vals.peppol_endpoint_id || vals.peppol_scheme_id)
-  const [showEinvoice, setShowEinvoice] = useState(hasEinvoiceData)
-
-  return (
-    <div className="master-form">
-      <FormField label="Name 1*"        id="an1" value={vals.address_name_1}       onChange={e => setK('address_name_1')(e.target.value)} />
-      <FormField label="Name 2"         id="an2" value={vals.address_name_2 ?? ''} onChange={e => setK('address_name_2')(e.target.value)} />
-      <FormField label="Straße"         id="ast" value={vals.street ?? ''}         onChange={e => setK('street')(e.target.value)} />
-      <div className="form-row">
-        <FormField label="PLZ"          id="apc" value={vals.post_code ?? ''}      onChange={e => setK('post_code')(e.target.value)} />
-        <FormField label="Ort"          id="aci" value={vals.city ?? ''}           onChange={e => setK('city')(e.target.value)} />
-      </div>
-      <div className="form-group">
-        <label htmlFor="aco">Land*</label>
-        <select id="aco" value={vals.country_id ?? ''} onChange={e => setK('country_id')(e.target.value)} required>
-          <option value="">Bitte wählen …</option>
-          {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.NAME_SHORT || c.ID}</option>)}
-        </select>
-      </div>
-      <FormField label="Kundennr."      id="acn" value={vals.customer_number ?? ''} onChange={e => setK('customer_number')(e.target.value)} />
-      <FormField label="Steuernummer"   id="ati" value={vals.tax_id ?? ''}          onChange={e => setK('tax_id')(e.target.value)} />
-
-      {/* E-Rechnungs-Angaben — aufklappbar */}
-      <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 14, marginTop: 4 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: showEinvoice ? 12 : 0 }}>
-          <input
-            type="checkbox"
-            checked={showEinvoice}
-            onChange={e => setShowEinvoice(e.target.checked)}
-            style={{ width: 16, height: 16, cursor: 'pointer' }}
-          />
-          <span style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center' }}>
-            Angaben für E-Rechnung <HelpHint id="einvoice.what" />
-          </span>
-        </label>
-        {!showEinvoice && (
-          <p style={{ fontSize: 12, color: '#6b7280', margin: '6px 0 0 26px' }}>
-            Käuferreferenz / Leitweg-ID und Peppol-Endpoint — nur bei öffentlichen Auftraggebern oder Kunden im Peppol-Netz nötig.
-          </p>
-        )}
-        {showEinvoice && (
-          <>
-            <div className="form-group">
-              <label htmlFor="abr" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                Käuferreferenz / Leitweg-ID <HelpHint id="einvoice.leitweg" />
-              </label>
-              <input id="abr" type="text" value={vals.buyer_reference ?? ''} onChange={e => setK('buyer_reference')(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="ape-id" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                Peppol Endpoint-ID <HelpHint id="einvoice.peppol" />
-              </label>
-              <input id="ape-id" type="text"
-                value={vals.peppol_endpoint_id ?? ''}
-                onChange={e => setK('peppol_endpoint_id')(e.target.value)}
-                placeholder="z.B. DE123456789 oder GLN" />
-            </div>
-            <div className="form-group">
-              <label htmlFor="ape-sc">Peppol Scheme-ID (EAS)</label>
-              <select id="ape-sc" value={vals.peppol_scheme_id ?? ''} onChange={e => setK('peppol_scheme_id')(e.target.value)}>
-                <option value="">— keiner —</option>
-                <option value="0088">0088 — GLN</option>
-                <option value="9930">9930 — DE USt-IdNr.</option>
-                <option value="9931">9931 — AT VAT</option>
-                <option value="9957">9957 — FR SIRET</option>
-                <option value="9959">9959 — BE Enterprise</option>
-                <option value="0184">0184 — DK CVR</option>
-                <option value="0192">0192 — NO Org.nr</option>
-                <option value="EM">EM — E-Mail</option>
-              </select>
-            </div>
-          </>
-        )}
-      </div>
-
-      <Message text={m?.text ?? null} type={m?.type} />
-    </div>
-  )
-}
-
-// ── ContactForm (top-level to preserve focus) ─────────────────────────────────
-
-interface ContactFormProps {
-  vals:         ContactPayload
-  setK:         (k: keyof ContactPayload) => (v: string) => void
-  addrTxt:      string
-  setAddrTxt:   (v: string) => void
-  msg:          { text: string; type: 'success' | 'error' } | null
-  isEdit?:      boolean
-  salutations:  { ID: number | string; SALUTATION: string }[]
-  genders:      { ID: number | string; GENDER: string }[]
-  searchAddresses: (q: string) => Promise<{ id: number; label: string }[]>
-}
-
-function ContactForm({ vals, setK, addrTxt, setAddrTxt, msg: m, isEdit = false, salutations, genders, searchAddresses }: ContactFormProps) {
-  const formId = isEdit ? 'e' : 'c'
-  return (
-    <>
-      <FormField label="Titel"       id={`${formId}-ct`} value={vals.title ?? ''} onChange={e => setK('title')(e.target.value)} />
-      <div className="form-row">
-        <FormField label="Vorname*"  id={`${formId}-fn`} value={vals.first_name} onChange={e => setK('first_name')(e.target.value)} required />
-        <FormField label="Nachname*" id={`${formId}-ln`} value={vals.last_name}  onChange={e => setK('last_name')(e.target.value)} required />
-      </div>
-      <FormField label="E-Mail"      id={`${formId}-em`} value={vals.email ?? ''} onChange={e => setK('email')(e.target.value)} type="email" />
-      <FormField label="Mobil"       id={`${formId}-mo`} value={vals.mobile ?? ''} onChange={e => setK('mobile')(e.target.value)} />
-      <div className="form-group">
-        <label htmlFor={`${formId}-sal`}>Anrede*</label>
-        <select id={`${formId}-sal`} value={String(vals.salutation_id ?? '')} onChange={e => setK('salutation_id')(e.target.value)} required>
-          <option value="">Bitte wählen …</option>
-          {salutations.map(s => <option key={s.ID} value={s.ID}>{s.SALUTATION}</option>)}
-        </select>
-      </div>
-      <div className="form-group">
-        <label htmlFor={`${formId}-gen`}>Geschlecht*</label>
-        <select id={`${formId}-gen`} value={String(vals.gender_id ?? '')} onChange={e => setK('gender_id')(e.target.value)} required>
-          <option value="">Bitte wählen …</option>
-          {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
-        </select>
-      </div>
-      <Autocomplete
-        label="Adresse*"
-        htmlId={`${formId}-addr`}
-        value={addrTxt}
-        onChange={(t) => { setAddrTxt(t); if (!t) setK('address_id')('') }}
-        onSelect={(id, lbl) => { setAddrTxt(lbl); setK('address_id')(String(id)) }}
-        search={searchAddresses}
-        placeholder="Name eingeben …"
-        required
-      />
-      <Message text={m?.text ?? null} type={m?.type} />
-    </>
-  )
-}
-
 // ── Address sort + opt cols ───────────────────────────────────────────────────
 
 type AddrSortKey = 'ADDRESS_NAME_1' | 'CITY' | 'COUNTRY' | 'CUSTOMER_NUMBER'
-type AddrOptColKey = 'ADDRESS_NAME_2' | 'STREET' | 'TAX_ID' | 'BUYER_REFERENCE'
+type AddrOptColKey = 'ADDRESS_TYPE' | 'ADDRESS_NAME_2' | 'STREET' | 'PHONE' | 'EMAIL' | 'TAX_ID' | 'BUYER_REFERENCE'
 
 interface AddrOptColDef { key: AddrOptColKey; label: string }
 const ADDR_OPT_COLS: AddrOptColDef[] = [
+  { key: 'ADDRESS_TYPE',   label: 'Kategorie'      },
   { key: 'ADDRESS_NAME_2', label: 'Name 2'         },
   { key: 'STREET',         label: 'Straße'          },
-  { key: 'TAX_ID',         label: 'Steuernummer'    },
+  { key: 'PHONE',          label: 'Telefon'         },
+  { key: 'EMAIL',          label: 'E-Mail'          },
+  { key: 'TAX_ID',         label: 'USt-IdNr.'       },
   { key: 'BUYER_REFERENCE',label: 'Käuferreferenz'  },
 ]
+
+function addrOptCell(a: Address, key: AddrOptColKey): string {
+  if (key === 'ADDRESS_TYPE') return addressTypeLabel(a.ADDRESS_TYPE) || '—'
+  return (a[key as keyof Address] as string | null | undefined) ?? '—'
+}
 
 // ── Contact sort + opt cols ───────────────────────────────────────────────────
 
 type ConSortKey  = 'NAME' | 'SALUTATION' | 'GENDER' | 'ADDRESS'
-type ConOptColKey = 'TITLE' | 'EMAIL' | 'MOBILE'
+type ConOptColKey = 'POSITION' | 'DEPARTMENT' | 'TITLE' | 'EMAIL' | 'MOBILE' | 'PHONE'
 
 interface ConOptColDef { key: ConOptColKey; label: string }
 const CON_OPT_COLS: ConOptColDef[] = [
-  { key: 'TITLE',  label: 'Titel'   },
-  { key: 'EMAIL',  label: 'E-Mail'  },
-  { key: 'MOBILE', label: 'Mobil'   },
+  { key: 'POSITION',   label: 'Funktion'  },
+  { key: 'DEPARTMENT', label: 'Abteilung' },
+  { key: 'TITLE',      label: 'Titel'     },
+  { key: 'EMAIL',      label: 'E-Mail'    },
+  { key: 'MOBILE',     label: 'Mobil'     },
+  { key: 'PHONE',      label: 'Festnetz'  },
 ]
 
 function SortTh<K extends string>({ label, k, sortKey, dir, onClick }: {
@@ -272,7 +121,8 @@ interface AdressenSectionProps {
 function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: AdressenSectionProps) {
   const qc = useQueryClient()
   const toast = useToast()
-  const [tab,          setTab]          = useState('list')
+  const navigate = useNavigate()
+  const [createOpen,   setCreateOpen]   = useState(false)
   const [search,       setSearch]       = useState(initialSearch ?? '')
   const [sortKey,      setSortKey]      = useStickyState<AddrSortKey>('adressen.sortKey', 'ADDRESS_NAME_1')
   const [sortDir,      setSortDir]      = useStickyState<'asc'|'desc'>('adressen.sortDir', 'asc')
@@ -284,6 +134,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   // Filter + columns state
+  const [activeTyp,      setActiveTyp]      = useStickySet('adressen.typ')
   const [activeLand,     setActiveLand]     = useStickySet('adressen.land')
   const [activeStadt,    setActiveStadt]    = useStickySet('adressen.stadt')
   const [hiddenCols,     setHiddenCols]     = useStickyState<Set<AddrOptColKey>>(
@@ -333,6 +184,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   }, [colPanelOpen])
 
   const filterOptions = useMemo(() => ({
+    typ:   [...new Set(addresses.map(a => addressTypeLabel(a.ADDRESS_TYPE)).filter((v): v is string => !!v))].sort(),
     land:  [...new Set(addresses.map(a => a.COUNTRY).filter((v): v is string => v != null && v !== ''))].sort(),
     stadt: [...new Set(addresses.map(a => a.CITY).filter((v): v is string => v != null && v !== ''))].sort(),
   }), [addresses])
@@ -352,10 +204,11 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
     const q = search.trim().toLowerCase()
     let rows = q
       ? addresses.filter(a =>
-          `${a.ADDRESS_NAME_1 ?? ''} ${a.ADDRESS_NAME_2 ?? ''} ${a.POST_CODE ?? ''} ${a.CITY ?? ''} ${a.COUNTRY ?? ''} ${a.CUSTOMER_NUMBER ?? ''}`
+          `${a.ADDRESS_NAME_1 ?? ''} ${a.ADDRESS_NAME_2 ?? ''} ${a.POST_CODE ?? ''} ${a.CITY ?? ''} ${a.COUNTRY ?? ''} ${a.CUSTOMER_NUMBER ?? ''} ${a.EMAIL ?? ''} ${a.PHONE ?? ''}`
             .toLowerCase().includes(q)
         )
       : addresses
+    if (activeTyp.size   > 0) rows = rows.filter(a => activeTyp.has(addressTypeLabel(a.ADDRESS_TYPE)))
     if (activeLand.size  > 0) rows = rows.filter(a => a.COUNTRY && activeLand.has(a.COUNTRY))
     if (activeStadt.size > 0) rows = rows.filter(a => a.CITY    && activeStadt.has(a.CITY))
     return [...rows].sort((a, b) => {
@@ -364,7 +217,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
       const cmp = av.localeCompare(bv, 'de', { sensitivity: 'base', numeric: true })
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [addresses, search, sortKey, sortDir, activeLand])
+  }, [addresses, search, sortKey, sortDir, activeTyp, activeLand, activeStadt])
 
   const createMut = useMutation({
     mutationFn: createAddress,
@@ -402,19 +255,15 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
 
   function openEdit(a: Address) {
     void trackRecent('address', a.ID, a.ADDRESS_NAME_1 ?? `#${a.ID}`).catch(() => {})
-    setEditForm({
-      address_name_1:  a.ADDRESS_NAME_1  ?? '',
-      address_name_2:  a.ADDRESS_NAME_2  ?? '',
-      street:          a.STREET          ?? '',
-      post_code:       a.POST_CODE        ?? '',
-      city:            a.CITY            ?? '',
-      country_id:      a.COUNTRY_ID      ?? '',
-      customer_number: a.CUSTOMER_NUMBER ?? '',
-      tax_id:          a.TAX_ID          ?? '',
-      buyer_reference: a.BUYER_REFERENCE ?? '',
-    })
+    setEditForm(addressToPayload(a))
     setEditMsg(null)
     setEditAddr(a)
+  }
+
+  function openCreate() {
+    setForm(emptyAddr())
+    setMsg(null)
+    setCreateOpen(true)
   }
 
   function submitCreate(e: React.FormEvent) {
@@ -433,133 +282,153 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
     updateMut.mutate({ id: editAddr.ID, body: editForm })
   }
 
+  function exportCsv() {
+    downloadCsv(
+      'adressen.csv',
+      ['Kategorie', 'Name 1', 'Name 2', 'Straße', 'PLZ', 'Ort', 'Land', 'Telefon', 'E-Mail', 'Website', 'Kundennr.', 'USt-IdNr.', 'Steuernummer'],
+      filtered.map(a => [
+        addressTypeLabel(a.ADDRESS_TYPE), a.ADDRESS_NAME_1, a.ADDRESS_NAME_2, a.STREET, a.POST_CODE, a.CITY, a.COUNTRY,
+        a.PHONE, a.EMAIL, a.WEBSITE, a.CUSTOMER_NUMBER, a.TAX_ID, a.TAX_NUMBER,
+      ]),
+    )
+  }
+
   const set  = useCallback((k: keyof AddressPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v })), [])
   const setE = useCallback((k: keyof AddressPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v })), [])
 
   const createAddrFormRef = useRef<HTMLFormElement>(null)
   const editAddrFormRef   = useRef<HTMLFormElement>(null)
-  useCtrlS(() => createAddrFormRef.current?.requestSubmit(), tab === 'create')
+  useCtrlS(() => createAddrFormRef.current?.requestSubmit(), createOpen)
   useCtrlS(() => editAddrFormRef.current?.requestSubmit(),   editAddr !== null)
 
-  const hasActiveFilter = activeLand.size > 0 || activeStadt.size > 0 || search.trim() !== ''
+  const hasActiveFilter = activeTyp.size > 0 || activeLand.size > 0 || activeStadt.size > 0 || search.trim() !== ''
 
   return (
     <>
-      <Tabs tabs={useFilterTabs(ADDR_TABS)} active={tab} onChange={setTab} />
-
-      {tab === 'list' && (
-        <div className="list-section">
-          <RecentList
-            type="address"
-            title="Zuletzt verwendete Adressen"
-            onSelect={(e) => {
-              const found = addresses.find(a => a.ID === e.ENTITY_ID)
-              if (found) openEdit(found)
-              else       setSearch(e.LABEL ?? '')
-            }}
-          />
-          <div className="pl-toolbar">
-            <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
-            <div className="pl-filter-chips">
-              <FilterChip label="Land"  options={filterOptions.land}  active={activeLand}  onChange={setActiveLand}  />
-              <FilterChip label="Stadt" options={filterOptions.stadt} active={activeStadt} onChange={setActiveStadt} />
-              {hasActiveFilter && (
-                <button className="pl-clear-btn" onClick={() => { setActiveLand(new Set()); setActiveStadt(new Set()); setSearch('') }}>
-                  Filter löschen
-                </button>
-              )}
-            </div>
-            <div ref={colPanelRef} className="pl-col-wrap">
-              <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
-              {colPanelOpen && (
-                <div className="pl-col-panel">
-                  <div className="pl-col-panel-title">Optionale Spalten</div>
-                  {ADDR_OPT_COLS.map(c => (
-                    <label key={c.key} className="pl-col-option">
-                      <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
-                      {c.label}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            <span className="list-info">
-              {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length}` : `${addresses.length}`} Einträge
-            </span>
+      <div className="list-section">
+        <RecentList
+          type="address"
+          title="Zuletzt verwendete Adressen"
+          onSelect={(e) => {
+            const found = addresses.find(a => a.ID === e.ENTITY_ID)
+            if (found) openEdit(found)
+            else       setSearch(e.LABEL ?? '')
+          }}
+        />
+        <div className="pl-toolbar">
+          <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="pl-filter-chips">
+            <FilterChip label="Kategorie" options={filterOptions.typ}   active={activeTyp}   onChange={setActiveTyp}   />
+            <FilterChip label="Land"      options={filterOptions.land}  active={activeLand}  onChange={setActiveLand}  />
+            <FilterChip label="Stadt"     options={filterOptions.stadt} active={activeStadt} onChange={setActiveStadt} />
+            {hasActiveFilter && (
+              <button className="pl-clear-btn" onClick={() => { setActiveTyp(new Set()); setActiveLand(new Set()); setActiveStadt(new Set()); setSearch('') }}>
+                Filter löschen
+              </button>
+            )}
           </div>
-          {isLoading && <p className="empty-note">Laden …</p>}
-          {!isLoading && (
-            <table className="master-table">
-              <thead>
-                <tr>
-                  <SortTh label="Name"      k="ADDRESS_NAME_1"  sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  <SortTh label="Ort"       k="CITY"            sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  <SortTh label="Land"      k="COUNTRY"         sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  <SortTh label="Kundennr." k="CUSTOMER_NUMBER" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  {visibleOptCols.map(c => <th key={c.key}>{c.label}</th>)}
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(a => {
-                  const cnt = contactCountByAddr[a.ID] ?? 0
-                  return (
-                  <tr key={a.ID}>
-                    <td>{a.ADDRESS_NAME_1}</td>
-                    <td>{[a.POST_CODE, a.CITY].filter(Boolean).join(' ')}</td>
-                    <td>{a.COUNTRY}</td>
-                    <td>{a.CUSTOMER_NUMBER}</td>
-                    {visibleOptCols.map(c => <td key={c.key}>{(a[c.key as keyof Address] as string | null | undefined) ?? '—'}</td>)}
-                    <td className="doc-actions">
-                      <button
-                        className="btn-small"
-                        onClick={() => onShowKontakte?.(a.ADDRESS_NAME_1, a.ID)}
-                        title="Kontakte dieser Adresse anzeigen"
-                      >
-                        Kontakte{cnt > 0 ? ` (${cnt})` : ''}
+          <div ref={colPanelRef} className="pl-col-wrap">
+            <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
+            {colPanelOpen && (
+              <div className="pl-col-panel">
+                <div className="pl-col-panel-title">Optionale Spalten</div>
+                {ADDR_OPT_COLS.map(c => (
+                  <label key={c.key} className="pl-col-option">
+                    <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <button className="pl-col-btn" onClick={exportCsv} title="Gefilterte Liste als CSV exportieren"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }} disabled={filtered.length === 0}>
+            <Download size={13} strokeWidth={2} />CSV
+          </button>
+          <span className="list-info">
+            {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length}` : `${addresses.length}`} Einträge
+          </span>
+          <Can permission="addresses.create">
+            <button className="btn-primary" onClick={openCreate} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={15} strokeWidth={2.25} />Neu
+            </button>
+          </Can>
+        </div>
+        {isLoading && <p className="empty-note">Laden …</p>}
+        {!isLoading && (
+          <table className="master-table">
+            <thead>
+              <tr>
+                <SortTh label="Name"      k="ADDRESS_NAME_1"  sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortTh label="Ort"       k="CITY"            sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortTh label="Land"      k="COUNTRY"         sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortTh label="Kundennr." k="CUSTOMER_NUMBER" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                {visibleOptCols.map(c => <th key={c.key}>{c.label}</th>)}
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(a => {
+                const cnt = contactCountByAddr[a.ID] ?? 0
+                return (
+                <tr key={a.ID} className="clickable-row" onClick={() => navigate(`/adressen/${a.ID}`)} style={{ cursor: 'pointer' }}>
+                  <td>{a.ADDRESS_NAME_1}</td>
+                  <td>{[a.POST_CODE, a.CITY].filter(Boolean).join(' ')}</td>
+                  <td>{a.COUNTRY}</td>
+                  <td>{a.CUSTOMER_NUMBER}</td>
+                  {visibleOptCols.map(c => <td key={c.key}>{addrOptCell(a, c.key)}</td>)}
+                  <td className="doc-actions" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="btn-small"
+                      onClick={() => onShowKontakte?.(a.ADDRESS_NAME_1, a.ID)}
+                      title="Kontakte dieser Adresse anzeigen"
+                    >
+                      Kontakte{cnt > 0 ? ` (${cnt})` : ''}
+                    </button>
+                    <Can permission="addresses.edit">
+                      <button className="row-action-btn" onClick={() => openEdit(a)} title="Bearbeiten">
+                        <Pencil size={14} strokeWidth={2} />
                       </button>
-                      <Can permission="addresses.edit">
-                        <button className="row-action-btn" onClick={() => openEdit(a)} title="Bearbeiten">
-                          <Pencil size={14} strokeWidth={2} />
-                        </button>
-                      </Can>
-                      <Can permission="addresses.delete">
-                        <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(a)} title="Löschen">
-                          <Trash2 size={14} strokeWidth={2} />
-                        </button>
-                      </Can>
-                    </td>
-                  </tr>
-                  )
-                })}
-                {!filtered.length && (
-                  <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">
-                    {addresses.length === 0
-                      ? 'Noch keine Adressen — lege die erste über „+ Neu" an. Adressen sind die Grundlage für Angebote und Rechnungen.'
-                      : 'Keine Treffer für die aktuelle Suche/Filterung.'}
-                  </td></tr>
-                )}
-              </tbody>
-              <tfoot>
-                <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                  <td colSpan={5 + visibleOptCols.length} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
-                    {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length} Einträge` : `${addresses.length} Einträge`}
+                    </Can>
+                    <Can permission="addresses.delete">
+                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(a)} title="Löschen">
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
+                    </Can>
                   </td>
                 </tr>
-              </tfoot>
-            </table>
-          )}
-        </div>
-      )}
+                )
+              })}
+              {!filtered.length && (
+                <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">
+                  {addresses.length === 0
+                    ? 'Noch keine Adressen — lege die erste über „+ Neu" an. Adressen sind die Grundlage für Angebote und Rechnungen.'
+                    : 'Keine Treffer für die aktuelle Suche/Filterung.'}
+                </td></tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                <td colSpan={5 + visibleOptCols.length} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                  {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length} Einträge` : `${addresses.length} Einträge`}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
 
-      {tab === 'create' && (
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Neue Adresse">
         <form ref={createAddrFormRef} onSubmit={submitCreate} className="master-form">
           <AddrForm vals={form} setK={set} msg={msg} countries={countries} />
-          <button className="btn-primary" type="submit" disabled={createMut.isPending}>
-            {createMut.isPending ? 'Speichert …' : 'Speichern'}
-          </button>
+          <div className="modal-actions">
+            <button className="btn-primary" type="submit" disabled={createMut.isPending}>
+              {createMut.isPending ? 'Speichert …' : 'Speichern'}
+            </button>
+            <button type="button" onClick={() => setCreateOpen(false)}>Schließen</button>
+          </div>
         </form>
-      )}
+      </Modal>
 
       <Modal open={editAddr !== null} onClose={() => setEditAddr(null)} title="Adresse bearbeiten">
         <form ref={editAddrFormRef} onSubmit={submitEdit} className="master-form">
@@ -597,7 +466,7 @@ interface KontakteSectionProps {
 function KontakteSection({ initialSearch, initialAddressId, initialAddressName }: KontakteSectionProps) {
   const qc       = useQueryClient()
   const navigate = useNavigate()
-  const [tab,          setTab]          = useState('list')
+  const [createOpen,   setCreateOpen]   = useState(false)
   const [search,       setSearch]       = useState(initialSearch ?? '')
   const [sortKey,      setSortKey]      = useStickyState<ConSortKey>('kontakte.sortKey', 'NAME')
   const [sortDir,      setSortDir]      = useStickyState<'asc'|'desc'>('kontakte.sortDir', 'asc')
@@ -666,7 +535,7 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
     const q = search.trim().toLowerCase()
     let rows = q
       ? contacts.filter(c =>
-          `${c.FIRST_NAME} ${c.LAST_NAME} ${c.ADDRESS ?? ''} ${c.SALUTATION ?? ''} ${c.GENDER ?? ''} ${c.EMAIL ?? ''} ${c.MOBILE ?? ''}`
+          `${c.FIRST_NAME} ${c.LAST_NAME} ${c.ADDRESS ?? ''} ${c.SALUTATION ?? ''} ${c.GENDER ?? ''} ${c.EMAIL ?? ''} ${c.MOBILE ?? ''} ${c.POSITION ?? ''} ${c.DEPARTMENT ?? ''}`
             .toLowerCase().includes(q)
         )
       : contacts
@@ -720,19 +589,17 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
   }
 
   function openEdit(c: Contact) {
-    setEditForm({
-      title:         c.TITLE         ?? '',
-      first_name:    c.FIRST_NAME,
-      last_name:     c.LAST_NAME,
-      email:         c.EMAIL         ?? '',
-      mobile:        c.MOBILE        ?? '',
-      salutation_id: c.SALUTATION_ID ?? '',
-      gender_id:     c.GENDER_ID     ?? '',
-      address_id:    c.ADDRESS_ID    ?? '',
-    })
+    setEditForm(contactToPayload(c))
     setEditAddrText(c.ADDRESS ?? '')
     setEditMsg(null)
     setEditContact(c)
+  }
+
+  function openCreate() {
+    setForm({ ...emptyContact(), address_id: initialAddressId ?? '' })
+    setAddrText(initialAddressName ?? '')
+    setMsg(null)
+    setCreateOpen(true)
   }
 
   function submitCreate(e: React.FormEvent) {
@@ -751,125 +618,150 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
     updateMut.mutate({ id: editContact.ID, body: editForm })
   }
 
+  function exportCsv() {
+    downloadCsv(
+      'kontakte.csv',
+      ['Anrede', 'Titel', 'Vorname', 'Nachname', 'Funktion', 'Abteilung', 'E-Mail', 'Mobil', 'Festnetz', 'Adresse'],
+      filtered.map(c => [c.SALUTATION, c.TITLE, c.FIRST_NAME, c.LAST_NAME, c.POSITION, c.DEPARTMENT, c.EMAIL, c.MOBILE, c.PHONE, c.ADDRESS]),
+    )
+  }
+
   const set  = useCallback((k: keyof ContactPayload) => (v: string) => setForm(f    => ({ ...f, [k]: v })), [])
   const setE = useCallback((k: keyof ContactPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v })), [])
+  const setPrimary     = useCallback((v: boolean) => setForm(f     => ({ ...f, is_primary: v })), [])
+  const setEditPrimary = useCallback((v: boolean) => setEditForm(f => ({ ...f, is_primary: v })), [])
 
   const createConFormRef = useRef<HTMLFormElement>(null)
   const editConFormRef   = useRef<HTMLFormElement>(null)
-  useCtrlS(() => createConFormRef.current?.requestSubmit(), tab === 'create')
+  useCtrlS(() => createConFormRef.current?.requestSubmit(), createOpen)
   useCtrlS(() => editConFormRef.current?.requestSubmit(),   editContact !== null)
 
   const hasActiveFilter = activeAdresse.size > 0 || search.trim() !== ''
 
   return (
     <>
-      <Tabs tabs={useFilterTabs(CON_TABS)} active={tab} onChange={setTab} />
-
-      {tab === 'list' && (
-        <div className="list-section">
-          <div className="pl-toolbar">
-            <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
-            <div className="pl-filter-chips">
-              <FilterChip label="Adresse" options={filterOptions.adresse} active={activeAdresse} onChange={setActiveAdresse} />
-              {hasActiveFilter && (
-                <button className="pl-clear-btn" onClick={() => { setActiveAdresse(new Set()); setSearch('') }}>
-                  Filter löschen
-                </button>
-              )}
-            </div>
-            <div ref={colPanelRef} className="pl-col-wrap">
-              <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
-              {colPanelOpen && (
-                <div className="pl-col-panel">
-                  <div className="pl-col-panel-title">Optionale Spalten</div>
-                  {CON_OPT_COLS.map(c => (
-                    <label key={c.key} className="pl-col-option">
-                      <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
-                      {c.label}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            <span className="list-info">
-              {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length}` : `${contacts.length}`} Einträge
-            </span>
+      <div className="list-section">
+        <div className="pl-toolbar">
+          <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="pl-filter-chips">
+            <FilterChip label="Adresse" options={filterOptions.adresse} active={activeAdresse} onChange={setActiveAdresse} />
+            {hasActiveFilter && (
+              <button className="pl-clear-btn" onClick={() => { setActiveAdresse(new Set()); setSearch('') }}>
+                Filter löschen
+              </button>
+            )}
           </div>
-          {isLoading && <p className="empty-note">Laden …</p>}
-          {!isLoading && (
-            <table className="master-table">
-              <thead>
-                <tr>
-                  <SortTh label="Name"       k="NAME"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  <SortTh label="Anrede"     k="SALUTATION" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  <SortTh label="Geschlecht" k="GENDER"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  <SortTh label="Adresse"    k="ADDRESS"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  {visibleOptCols.map(c => <th key={c.key}>{c.label}</th>)}
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(c => (
-                  <tr key={c.ID}>
-                    <td>{c.FIRST_NAME} {c.LAST_NAME}</td>
-                    <td>{c.SALUTATION}</td>
-                    <td>{c.GENDER}</td>
-                    <td>{c.ADDRESS_ID ? (
-                      <button className="link-cell" onClick={() => navigate('/adressen', { state: { openAddressId: c.ADDRESS_ID } })}>
-                        {c.ADDRESS}
-                      </button>
-                    ) : (c.ADDRESS ?? '—')}</td>
-                    {visibleOptCols.map(col => <td key={col.key}>{(c[col.key as keyof Contact] as string | null | undefined) ?? '—'}</td>)}
-                    <td className="doc-actions">
-                      <Can permission="addresses.contacts.edit">
-                        <button className="row-action-btn" onClick={() => openEdit(c)} title="Bearbeiten">
-                          <Pencil size={14} strokeWidth={2} />
-                        </button>
-                      </Can>
-                      <Can permission="addresses.contacts.delete">
-                        <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDeleteContact(c)} title="Löschen">
-                          <Trash2 size={14} strokeWidth={2} />
-                        </button>
-                      </Can>
-                    </td>
-                  </tr>
+          <div ref={colPanelRef} className="pl-col-wrap">
+            <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
+            {colPanelOpen && (
+              <div className="pl-col-panel">
+                <div className="pl-col-panel-title">Optionale Spalten</div>
+                {CON_OPT_COLS.map(c => (
+                  <label key={c.key} className="pl-col-option">
+                    <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
+                    {c.label}
+                  </label>
                 ))}
-                {!filtered.length && (
-                  <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">
-                    {contacts.length === 0
-                      ? 'Noch keine Kontakte — lege Ansprechpartner zu einer Adresse an. Sie werden auf Angeboten und Rechnungen als Empfänger genutzt.'
-                      : 'Keine Treffer für die aktuelle Suche/Filterung.'}
-                  </td></tr>
-                )}
-              </tbody>
-              <tfoot>
-                <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                  <td colSpan={5 + visibleOptCols.length} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
-                    {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length} Einträge` : `${contacts.length} Einträge`}
+              </div>
+            )}
+          </div>
+          <button className="pl-col-btn" onClick={exportCsv} title="Gefilterte Liste als CSV exportieren"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }} disabled={filtered.length === 0}>
+            <Download size={13} strokeWidth={2} />CSV
+          </button>
+          <span className="list-info">
+            {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length}` : `${contacts.length}`} Einträge
+          </span>
+          <Can permission="addresses.contacts.create">
+            <button className="btn-primary" onClick={openCreate} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={15} strokeWidth={2.25} />Neu
+            </button>
+          </Can>
+        </div>
+        {isLoading && <p className="empty-note">Laden …</p>}
+        {!isLoading && (
+          <table className="master-table">
+            <thead>
+              <tr>
+                <SortTh label="Name"       k="NAME"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortTh label="Anrede"     k="SALUTATION" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortTh label="Geschlecht" k="GENDER"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortTh label="Adresse"    k="ADDRESS"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                {visibleOptCols.map(c => <th key={c.key}>{c.label}</th>)}
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(c => (
+                <tr key={c.ID}>
+                  <td>
+                    {!!c.IS_PRIMARY && <Star size={12} strokeWidth={2} fill="currentColor" style={{ color: '#f59e0b', marginRight: 4, verticalAlign: 'middle' }} aria-label="Hauptansprechpartner" />}
+                    {c.FIRST_NAME} {c.LAST_NAME}
+                  </td>
+                  <td>{c.SALUTATION}</td>
+                  <td>{c.GENDER}</td>
+                  <td>{c.ADDRESS_ID ? (
+                    <button className="link-cell" onClick={() => navigate(`/adressen/${c.ADDRESS_ID}`)}>
+                      {c.ADDRESS}
+                    </button>
+                  ) : (c.ADDRESS ?? '—')}</td>
+                  {visibleOptCols.map(col => <td key={col.key}>{(c[col.key as keyof Contact] as string | null | undefined) ?? '—'}</td>)}
+                  <td className="doc-actions">
+                    <button className="row-action-btn" title="Als vCard exportieren"
+                      onClick={() => downloadText(`${c.FIRST_NAME}_${c.LAST_NAME}.vcf`.replace(/\s+/g, '_'), contactVCard(c), 'text/vcard')}>
+                      <Download size={14} strokeWidth={2} />
+                    </button>
+                    <Can permission="addresses.contacts.edit">
+                      <button className="row-action-btn" onClick={() => openEdit(c)} title="Bearbeiten">
+                        <Pencil size={14} strokeWidth={2} />
+                      </button>
+                    </Can>
+                    <Can permission="addresses.contacts.delete">
+                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDeleteContact(c)} title="Löschen">
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
+                    </Can>
                   </td>
                 </tr>
-              </tfoot>
-            </table>
-          )}
-        </div>
-      )}
+              ))}
+              {!filtered.length && (
+                <tr><td colSpan={5 + visibleOptCols.length} className="empty-note">
+                  {contacts.length === 0
+                    ? 'Noch keine Kontakte — lege Ansprechpartner zu einer Adresse an. Sie werden auf Angeboten und Rechnungen als Empfänger genutzt.'
+                    : 'Keine Treffer für die aktuelle Suche/Filterung.'}
+                </td></tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+                <td colSpan={5 + visibleOptCols.length} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                  {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length} Einträge` : `${contacts.length} Einträge`}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
 
-      {tab === 'create' && (
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Neuer Kontakt">
         <form ref={createConFormRef} onSubmit={submitCreate} className="master-form">
           <ContactForm
-            vals={form} setK={set} addrTxt={addrText} setAddrTxt={setAddrText}
+            vals={form} setK={set} onPrimaryChange={setPrimary} addrTxt={addrText} setAddrTxt={setAddrText}
             msg={msg} salutations={salutations} genders={genders} searchAddresses={searchAddresses}
           />
-          <button className="btn-primary" type="submit" disabled={createMut.isPending}>
-            {createMut.isPending ? 'Speichert …' : 'Speichern'}
-          </button>
+          <div className="modal-actions">
+            <button className="btn-primary" type="submit" disabled={createMut.isPending}>
+              {createMut.isPending ? 'Speichert …' : 'Speichern'}
+            </button>
+            <button type="button" onClick={() => setCreateOpen(false)}>Schließen</button>
+          </div>
         </form>
-      )}
+      </Modal>
 
       <Modal open={editContact !== null} onClose={() => setEditContact(null)} title="Kontakt bearbeiten">
         <form ref={editConFormRef} onSubmit={submitEdit} className="master-form">
           <ContactForm
-            vals={editForm} setK={setE} addrTxt={editAddrText} setAddrTxt={setEditAddrText}
+            vals={editForm} setK={setE} onPrimaryChange={setEditPrimary} addrTxt={editAddrText} setAddrTxt={setEditAddrText}
             msg={editMsg} isEdit salutations={salutations} genders={genders} searchAddresses={searchAddresses}
           />
           <div className="modal-actions">

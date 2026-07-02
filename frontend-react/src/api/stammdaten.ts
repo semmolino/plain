@@ -20,6 +20,12 @@ export interface Address {
   BUYER_REFERENCE:  string | null
   PEPPOL_ENDPOINT_ID: string | null
   PEPPOL_SCHEME_ID:   string | null
+  ADDRESS_TYPE:     number | null
+  TAX_NUMBER:       string | null
+  PHONE:            string | null
+  EMAIL:            string | null
+  WEBSITE:          string | null
+  NOTES:            string | null
   COUNTRY:          string
 }
 
@@ -33,6 +39,11 @@ export interface Contact {
   SALUTATION_ID: number | null
   GENDER_ID:     number | null
   ADDRESS_ID:    number | null
+  POSITION:      string | null
+  DEPARTMENT:    string | null
+  PHONE:         string | null
+  IS_PRIMARY:    number | null
+  NOTES:         string | null
   SALUTATION:    string
   GENDER:        string
   ADDRESS:       string
@@ -52,6 +63,12 @@ export interface AddressPayload {
   buyer_reference?: string
   peppol_endpoint_id?: string
   peppol_scheme_id?:   string
+  address_type?: string
+  tax_number?: string
+  phone?: string
+  email?: string
+  website?: string
+  notes?: string
 }
 
 export interface ContactPayload {
@@ -63,7 +80,39 @@ export interface ContactPayload {
   salutation_id: string | number
   gender_id: string | number
   address_id: string | number
+  position?: string
+  department?: string
+  phone?: string
+  is_primary?: boolean
+  notes?: string
 }
+
+/** Fester Katalog der Adress-Kategorien (spiegelt Migration 0099 / ADDRESS_TYPE). */
+export const ADDRESS_TYPES: { id: number; label: string }[] = [
+  { id: 1, label: 'Kunde / Bauherr' },
+  { id: 2, label: 'Fachplaner' },
+  { id: 3, label: 'Behörde' },
+  { id: 4, label: 'Nachunternehmer' },
+  { id: 5, label: 'Lieferant' },
+  { id: 6, label: 'Sonstige' },
+]
+
+export const addressTypeLabel = (id: number | null | undefined): string =>
+  ADDRESS_TYPES.find(t => t.id === id)?.label ?? ''
+
+// ── Address 360°-Detail ─────────────────────────────────────────────────────
+
+export interface AddressDetail {
+  address:  Address
+  contacts: Contact[]
+  projects: Array<{ ID: number; NAME_SHORT: string | null; NAME_LONG: string | null }>
+  offers:   Array<{ ID: number; NAME_SHORT: string | null }>
+  invoices: Array<{ ID: number; INVOICE_NUMBER: string | null }>
+  partials: Array<{ ID: number; PARTIAL_PAYMENT_NUMBER: string | null }>
+}
+
+export const fetchAddressDetail = (id: number) =>
+  apiClient.get<{ data: AddressDetail }>(`/stammdaten/addresses/${id}`)
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
 
