@@ -313,6 +313,7 @@ export interface Buchung {
   SP_TOT:              number
   POSTING_DESCRIPTION:  string
   BOOKING_KIND?:        string | null
+  ENTRY_KIND?:          string | null
   UNIT_LABEL?:          string | null
   BOOKING_TYPE_ID?:     number | null
   PARTIAL_PAYMENT_ID:   number | null
@@ -329,9 +330,11 @@ export interface CreateBuchungPayload {
   TIME_FINISH?:        string
   QUANTITY_INT:        number
   CP_RATE?:            number
-  QUANTITY_EXT:        number
-  SP_RATE:             number
-  POSTING_DESCRIPTION: string
+  QUANTITY_EXT?:       number
+  SP_RATE?:            number
+  POSTING_DESCRIPTION?: string
+  // 'BREAK' bucht eine kostenneutrale Pause (ohne Projektelement/Sätze).
+  ENTRY_KIND?:         'WORK' | 'BREAK'
 }
 
 export const fetchBuchungen = (projectId: number) =>

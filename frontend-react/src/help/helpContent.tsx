@@ -138,6 +138,22 @@ export const HELP = {
       </>
     ),
   },
+  'bookings.pause': {
+    title: 'Pause buchen',
+    body: (
+      <>
+        Trägt eine <strong>Pause</strong> nachträglich manuell ein — z. B. wenn morgens
+        nicht per Timer eingestempelt wurde und der Tag am Ende vollständig erfasst wird.
+        <br />Eine Pause ist <strong>kostenneutral</strong> (kein Kostensatz, kein Erlös,
+        kein Projektelement) und zählt <em>nicht</em> als Arbeitszeit im Zeitkonto.
+        <br />Sie erfüllt aber die <strong>Pausenpflicht nach § 4 ArbZG</strong>: ab 6 h
+        Arbeit sind 30 min, ab 9 h sind 45 min Pause vorgeschrieben.
+        <br /><strong>So erfasst du einen ganzen Tag:</strong> die geleistete
+        (Netto-)Arbeitszeit als Stundenbuchung auf das Projekt buchen und die Pause
+        separat hier eintragen — Von/Bis füllt die Dauer automatisch.
+      </>
+    ),
+  },
   'bookings.text_snippets': {
     title: 'Textbausteine',
     body: (

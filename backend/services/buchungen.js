@@ -441,8 +441,61 @@ async function patchDraftDescription(supabase, { id, description, time_start, ti
   if (error) throw error;
 }
 
+// Manuelle Pause-Buchung: kostenneutrale TEC-Zeile (ENTRY_KIND='BREAK'), nicht
+// projektbezogen im fachlichen Sinn — sie wird aber am aktuellen Projekt gehängt,
+// damit sie in der Projekt-Buchungsliste sichtbar/löschbar bleibt (PROJECT_ID
+// dient nur als Anzeige-Container, STRUCTURE_ID bleibt leer → keine Kosten).
+// Zählt für die ArbZG-Pausenpflicht (§ 4), NICHT als Arbeitszeit im Zeitkonto.
+async function createBreakBuchung(supabase, { body, tenantId }) {
+  const b = body;
+  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || b.QUANTITY_INT == null) {
+    throw { status: 400, message: "Mitarbeiter, Datum und Dauer sind erforderlich." };
+  }
+  const quantityInt = Number(b.QUANTITY_INT || 0);
+  if (!(quantityInt > 0)) throw { status: 400, message: "Die Pausendauer muss größer als 0 sein." };
+
+  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
+
+  // Tenant über das (optionale) Projekt auflösen, sonst aus dem JWT.
+  let resolvedTenantId = tenantId ?? null;
+  if (b.PROJECT_ID) {
+    const { data: projRow, error: projErr } = await supabase
+      .from("PROJECT").select("TENANT_ID").eq("ID", b.PROJECT_ID).maybeSingle();
+    if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
+    resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
+  }
+
+  const insertRow = {
+    TENANT_ID:           resolvedTenantId,
+    STATUS:              "CONFIRMED",
+    ENTRY_KIND:          "BREAK",
+    EMPLOYEE_ID:         b.EMPLOYEE_ID,
+    DATE_VOUCHER:        b.DATE_VOUCHER,
+    TIME_START:          b.TIME_START  || null,
+    TIME_FINISH:         b.TIME_FINISH || null,
+    QUANTITY_INT:        quantityInt,
+    CP_RATE: 0, CP_TOT: 0, QUANTITY_EXT: 0, SP_RATE: 0, SP_TOT: 0,
+    POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "Pause",
+    PROJECT_ID:          b.PROJECT_ID ?? null,
+    STRUCTURE_ID:        null,
+  };
+
+  const { error: insErr } = await supabase.from("TEC").insert([insertRow]);
+  if (insErr) {
+    if (/ENTRY_KIND/i.test(insErr.message)) {
+      throw { status: 400, message: "Pausen-Buchung nicht möglich: Migration 0051 (ENTRY_KIND) fehlt in dieser Umgebung." };
+    }
+    throw { status: 500, message: "Fehler beim Speichern der Pause: " + insErr.message };
+  }
+}
+
 async function createBuchung(supabase, { body, tenantId }) {
   const b = body;
+
+  // Pause-Buchung läuft über einen eigenen, kostenneutralen Pfad.
+  if (b.ENTRY_KIND === 'BREAK') {
+    return createBreakBuchung(supabase, { body: b, tenantId });
+  }
 
   if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || b.QUANTITY_INT == null ||
       b.QUANTITY_EXT == null || b.SP_RATE == null || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
@@ -573,7 +626,7 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
 
   const { data: existing, error: exErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_RATE, SP_RATE, BOOKING_KIND")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_RATE, SP_RATE, BOOKING_KIND, ENTRY_KIND")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .single();
@@ -582,9 +635,11 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
     throw { status: 404, message: "Buchung nicht gefunden: " + (exErr?.message || "") };
   }
 
-  // Pauschalen/Stückleistungen bekommen ihre Sätze NICHT aus Rolle/Mitarbeiter
-  // vorbelegt — sie tragen eigene Werte. Preset-Übernahme nur für Stunden.
-  const isSpecial = SPECIAL_KINDS.has(existing.BOOKING_KIND);
+  // Pauschalen/Stückleistungen und Pausen bekommen ihre Sätze NICHT aus Rolle/
+  // Mitarbeiter vorbelegt — Preset-Übernahme nur für echte Stundenbuchungen.
+  // Pausen bleiben kostenneutral (CP/SP = 0).
+  const isBreak   = existing.ENTRY_KIND === 'BREAK';
+  const isSpecial = SPECIAL_KINDS.has(existing.BOOKING_KIND) || isBreak;
 
   const oldStructureId = existing.STRUCTURE_ID ?? null;
 
@@ -962,7 +1017,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
       QUANTITY_INT, CP_RATE, CP_TOT,
       QUANTITY_EXT, SP_RATE, SP_TOT,
       POSTING_DESCRIPTION,
-      BOOKING_KIND, UNIT_LABEL, BOOKING_TYPE_ID,
+      BOOKING_KIND, ENTRY_KIND, UNIT_LABEL, BOOKING_TYPE_ID,
       PARTIAL_PAYMENT_ID, INVOICE_ID,
       EMPLOYEE:EMPLOYEE_ID(SHORT_NAME)
     `)

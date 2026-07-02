@@ -12,7 +12,7 @@ import {
   fetchEmployee2ProjectPreset,
   type Buchung, type UpdateBuchungPayload,
 } from '@/api/projekte'
-import { fetchActiveEmployees } from '@/api/projekte'
+import { fetchActiveEmployees, type ActiveEmployee } from '@/api/projekte'
 import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
 import {
   fetchSelectableBookingTypes, createSpecialBuchung, updateSpecialBuchung, BOOKING_KIND_LABEL,
@@ -32,6 +32,7 @@ const fmtDate = (v: string | null) => v ? v.slice(0, 10) : ''
 
 const SPECIAL_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE'])
 const isSpecialKind = (k?: string | null) => !!k && SPECIAL_KINDS.has(k)
+const isBreakRow = (b?: Buchung | null) => b?.ENTRY_KIND === 'BREAK'
 const KIND_BADGE: Record<string, string> = { UNIT: 'Stück', LUMP_COST: 'Pauschale K', LUMP_REVENUE: 'Pauschale E' }
 
 function todayIso() { return new Date().toISOString().slice(0, 10) }
@@ -89,6 +90,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   const canSpecial  = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.special.create'))
   const [specialKind, setSpecialKind] = useState<BookingKind | null>(null)
   const [editSpecial, setEditSpecial] = useState<Buchung | null>(null)
+  const [pauseModal,  setPauseModal]  = useState<{ mode: 'create' | 'edit'; row?: Buchung } | null>(null)
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
   // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
   useEffect(() => { setPid(initialProjectId ?? null) }, [initialProjectId])
@@ -264,8 +266,8 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     return rows
   }, [buchungen, filterDescendants, search, sortCol, sortDir, pathCache])
 
-  const totalIntH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) ? 0 : Number(b.QUANTITY_INT) || 0), 0)
-  const totalExtH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) ? 0 : Number(b.QUANTITY_EXT) || 0), 0)
+  const totalIntH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) || isBreakRow(b) ? 0 : Number(b.QUANTITY_INT) || 0), 0)
+  const totalExtH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) || isBreakRow(b) ? 0 : Number(b.QUANTITY_EXT) || 0), 0)
   const totalCost = visibleBuchungen.reduce((s, b) => s + (Number(b.CP_TOT) || 0), 0)
   const totalRev  = visibleBuchungen.reduce((s, b) => s + (Number(b.SP_TOT) || 0), 0)
 
@@ -447,6 +449,14 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                 >
                   + Stundenbuchung
                 </button>
+                <button
+                  className="btn-small"
+                  style={{ width: 'auto' }}
+                  onClick={() => { setPauseModal({ mode: 'create' }); setMsg(null) }}
+                >
+                  + Pause
+                </button>
+                <HelpHint id="bookings.pause" />
                 {canSpecial && (
                   <>
                     <button className="btn-small" style={{ width: 'auto' }} onClick={() => { setSpecialKind('UNIT'); setMsg(null) }}>
@@ -563,6 +573,11 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                               {KIND_BADGE[b.BOOKING_KIND!]}
                             </span>
                           )}
+                          {isBreakRow(b) && (
+                            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: '#92400e', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>
+                              Pause
+                            </span>
+                          )}
                           {b.POSTING_DESCRIPTION}
                         </td>
                         <td className="num">
@@ -576,7 +591,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                         <td className="doc-actions">
                           {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
                             <>
-                              <button className="row-action-btn" onClick={() => isSpecialKind(b.BOOKING_KIND) ? setEditSpecial(b) : openEdit(b)} title="Bearbeiten">
+                              <button className="row-action-btn" onClick={() => isBreakRow(b) ? setPauseModal({ mode: 'edit', row: b }) : isSpecialKind(b.BOOKING_KIND) ? setEditSpecial(b) : openEdit(b)} title="Bearbeiten">
                                 <Pencil size={14} strokeWidth={2} />
                               </button>
                               <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => confirmDelete(b)} title="Löschen">
@@ -694,6 +709,20 @@ export function Buchungen({ initialProjectId }: Props = {}) {
           onSaved={() => {
             setEditSpecial(null)
             setMsg({ text: 'Buchung aktualisiert ✅', type: 'success' })
+            void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
+          }}
+        />
+      )}
+
+      {pauseModal !== null && pid !== null && (
+        <PauseBookingModal
+          projectId={pid}
+          employees={employees}
+          existing={pauseModal.mode === 'edit' ? pauseModal.row : undefined}
+          onClose={() => setPauseModal(null)}
+          onSaved={(text) => {
+            setPauseModal(null)
+            setMsg({ text, type: 'success' })
             void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
           }}
         />
@@ -884,6 +913,117 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
           <button className="btn-primary" type="submit" disabled={saveMut.isPending}>
             {saveMut.isPending ? 'Speichert …' : 'Buchung speichern'}
+          </button>
+          <button type="button" className="btn-small" onClick={onClose}>Abbrechen</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// ── Pause-Buchung (kostenneutral, ENTRY_KIND='BREAK') ──────────────────────────
+
+interface PauseBookingModalProps {
+  projectId: number
+  employees: ActiveEmployee[]
+  existing?: Buchung
+  onClose:   () => void
+  onSaved:   (msg: string) => void
+}
+
+function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }: PauseBookingModalProps) {
+  const isEdit = existing != null
+  const [employeeId,  setEmployeeId]  = useState<string>(existing ? String(existing.EMPLOYEE_ID) : String(useAuthStore.getState().employeeId ?? ''))
+  const [date,        setDate]        = useState<string>(existing ? fmtDate(existing.DATE_VOUCHER) : todayIso())
+  const [timeStart,   setTimeStart]   = useState<string>(existing?.TIME_START?.slice(0, 5) ?? '')
+  const [timeFinish,  setTimeFinish]  = useState<string>(existing?.TIME_FINISH?.slice(0, 5) ?? '')
+  const [hours,       setHours]       = useState<string>(existing ? String(existing.QUANTITY_INT ?? '') : '')
+  const [description, setDescription] = useState<string>(existing?.POSTING_DESCRIPTION ?? '')
+  const [msg,         setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  // Dauer aus Von/Bis ableiten, sobald beide gesetzt sind.
+  function recompute(start: string, finish: string) {
+    if (!start || !finish) return
+    const [sh, sm] = start.split(':').map(Number)
+    const [fh, fm] = finish.split(':').map(Number)
+    const diffMin = Math.max(0, fh * 60 + fm - (sh * 60 + sm))
+    setHours(String(Math.round(diffMin / 60 * 100) / 100))
+  }
+
+  const qty = Number(String(hours).replace(',', '.'))
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const ts = timeStart  ? timeStart  + ':00' : undefined
+      const tf = timeFinish ? timeFinish + ':00' : undefined
+      if (isEdit) {
+        await updateBuchung(existing!.ID, {
+          EMPLOYEE_ID:         Number(employeeId),
+          DATE_VOUCHER:        date,
+          TIME_START:          ts,
+          TIME_FINISH:         tf,
+          QUANTITY_INT:        qty,
+          POSTING_DESCRIPTION: description || 'Pause',
+        })
+        return
+      }
+      await createBuchung({
+        PROJECT_ID:          projectId,
+        EMPLOYEE_ID:         Number(employeeId),
+        DATE_VOUCHER:        date,
+        TIME_START:          ts,
+        TIME_FINISH:         tf,
+        QUANTITY_INT:        qty,
+        POSTING_DESCRIPTION: description || 'Pause',
+        ENTRY_KIND:          'BREAK',
+      })
+    },
+    onSuccess: () => onSaved(isEdit ? 'Pause aktualisiert ✅' : 'Pause gebucht ✅'),
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setMsg(null)
+    if (!employeeId) { setMsg({ text: 'Bitte einen Mitarbeiter wählen', type: 'error' }); return }
+    if (!date)       { setMsg({ text: 'Bitte ein Datum wählen', type: 'error' }); return }
+    if (!(qty > 0))  { setMsg({ text: 'Bitte eine Dauer größer als 0 angeben', type: 'error' }); return }
+    saveMut.mutate()
+  }
+
+  useCtrlS(() => formRef.current?.requestSubmit(), true)
+
+  return (
+    <Modal open onClose={onClose} title={isEdit ? 'Pause bearbeiten' : 'Pause buchen'}>
+      <form ref={formRef} onSubmit={submit} className="master-form">
+        <div className="form-group">
+          <label>Mitarbeiter*</label>
+          <select value={employeeId} onChange={e => setEmployeeId(e.target.value)} required>
+            <option value="">Bitte wählen …</option>
+            {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+          </select>
+        </div>
+        <div className="form-row">
+          <FormField label="Datum*" id="pb-date" type="date" value={date} onChange={e => setDate(e.target.value)} required />
+          <FormField label="Von" id="pb-ts" type="time" value={timeStart}  onChange={e => { setTimeStart(e.target.value);  recompute(e.target.value, timeFinish) }} />
+          <FormField label="Bis" id="pb-tf" type="time" value={timeFinish} onChange={e => { setTimeFinish(e.target.value); recompute(timeStart, e.target.value) }} />
+        </div>
+        <div className="form-row">
+          <FormField label="Dauer (Std.)*" id="pb-h" type="number" value={hours} onChange={e => setHours(e.target.value)} step="0.25" required />
+        </div>
+        <div className="form-group">
+          <label>Beschreibung</label>
+          <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Pause"
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+        </div>
+        <div style={{ fontSize: 13, color: 'rgba(17,24,39,0.7)', margin: '4px 0 8px' }}>
+          Kostenneutral · zählt zur Pausenpflicht (§ 4 ArbZG), <strong>nicht</strong> als Arbeitszeit im Zeitkonto.
+        </div>
+        <Message text={msg?.text ?? null} type={msg?.type} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <button className="btn-primary" type="submit" disabled={saveMut.isPending}>
+            {saveMut.isPending ? 'Speichert …' : (isEdit ? 'Speichern' : 'Pause buchen')}
           </button>
           <button type="button" className="btn-small" onClick={onClose}>Abbrechen</button>
         </div>
