@@ -264,14 +264,14 @@
   --border-2:  #2e2e35;
   --border-3:  rgba(255,255,255,0.06);
   --border-4:  rgba(255,255,255,0.04);
-  --accent:       #7a7ac6;
-  --accent-dark:  #8888d0;
-  --accent-bg:    rgba(122,122,198,0.14);
-  --accent-bg2:   rgba(122,122,198,0.10);
-  --accent-tint:  rgba(122,122,198,0.05);
-  --accent-tint2: rgba(122,122,198,0.10);
-  --accent-tint3: rgba(122,122,198,0.14);
-  --accent-ring:  rgba(122,122,198,0.20);
+  --accent:       #2563eb;
+  --accent-dark:  #3b82f6;
+  --accent-bg:    rgba(37,99,235,0.14);
+  --accent-bg2:   rgba(37,99,235,0.10);
+  --accent-tint:  rgba(37,99,235,0.05);
+  --accent-tint2: rgba(37,99,235,0.10);
+  --accent-tint3: rgba(37,99,235,0.14);
+  --accent-ring:  rgba(37,99,235,0.20);
   --chrome:          #0e0e12;
   --chrome-border:   #2e2e35;
   --chrome-shadow-h: 0 2px 12px rgba(0,0,0,0.35);
@@ -279,14 +279,14 @@
   --chrome-text:     #e8e8e8;
   --chrome-icon:     #808080;
   --chrome-hover-bg: rgba(255,255,255,0.06);
-  --nav-active:   #7a7ac6;
+  --nav-active:   #2563eb;
   --nav-inactive: #666666;
-  --btn:   #7a7ac6;
-  --btn-h: #8888d0;
-  --cta:   #7a7ac6;
-  --cta-h: #8888d0;
-  --notif-badge: #7a7ac6;
-  --notif-dot:   #7a7ac6;
+  --btn:   #2563eb;
+  --btn-h: #3b82f6;
+  --cta:   #2563eb;
+  --cta-h: #3b82f6;
+  --notif-badge: #2563eb;
+  --notif-dot:   #2563eb;
   --overlay:     rgba(0,0,0,0.65);
   --timer-color: #4ade80;
   --dim:   rgba(255,255,255,0.04);
@@ -2313,14 +2313,14 @@ input::placeholder { color: var(--text-4); }
 
 /* Dark theme status badge overrides (semantic color inversion) */
 [data-theme="dark"] .status-badge.booked    { background: rgba(22,163,74,0.14);  color: #4ade80; border: 1px solid rgba(22,163,74,0.30); }
-[data-theme="dark"] .status-badge.draft     { background: rgba(122,122,198,0.12); color: #a5a5e0; border: 1px solid rgba(122,122,198,0.30); }
+[data-theme="dark"] .status-badge.draft     { background: rgba(37,99,235,0.12); color: #93c5fd; border: 1px solid rgba(37,99,235,0.30); }
 [data-theme="dark"] .status-badge.cancelled { background: rgba(220,38,38,0.14);  color: #f87171; border: 1px solid rgba(220,38,38,0.30); }
 [data-theme="dark"] .status-badge.overdue   { background: rgba(220,38,38,0.14);  color: #f87171; border: 1px solid rgba(220,38,38,0.30); }
 
 /* Dark theme message overrides */
 [data-theme="dark"] .message.success { background: rgba(22,163,74,0.18);   color: #4ade80; border: 1px solid rgba(22,163,74,0.30); }
 [data-theme="dark"] .message.error   { background: rgba(220,38,38,0.18);   color: #f87171; border: 1px solid rgba(220,38,38,0.30); }
-[data-theme="dark"] .message.info    { background: rgba(122,122,198,0.18); color: #a5a5e0; border: 1px solid rgba(122,122,198,0.30); }
+[data-theme="dark"] .message.info    { background: rgba(37,99,235,0.18); color: #93c5fd; border: 1px solid rgba(37,99,235,0.30); }
 
 /* Dark theme timer delta */
 [data-theme="dark"] .ls-delta-pos { color: #4ade80; }

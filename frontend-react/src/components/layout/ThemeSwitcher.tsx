@@ -6,7 +6,7 @@ import { fetchDefaults } from '@/api/stammdaten'
 const THEMES = [
   // Standard
   { id: 'light',  label: 'Light',                  swatch: '#2563eb', group: 'Standard'   },
-  { id: 'dark',   label: 'Dark',                   swatch: '#7a7ac6', group: 'Standard'   },
+  { id: 'dark',   label: 'Dark',                   swatch: '#131316', group: 'Standard'   },
 
   // Branche — Foto (Stockfoto auf Login; selbe Palette wie Strich-Variante)
   { id: 'architecture-foto', label: 'Architektur (Foto)',             swatch: '#c97b5a', group: 'Branche · Foto'   },
