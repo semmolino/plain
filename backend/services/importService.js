@@ -58,6 +58,26 @@ function parseAmountDE(v) {
 function fmt2(n) { return Math.round(n * 100) / 100; }
 /** Zahl sicher coercen (NaN/null → 0). */
 function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+/** „Ja/Wahr"-artige Werte → true (für Flags wie Hauptkontakt). Leer/unklar → false. */
+function parseBool(v) {
+  const t = norm(v);
+  if (!t) return false;
+  return ["1", "ja", "j", "x", "true", "wahr", "yes", "y", "primär", "primar", "haupt", "hauptkontakt", "standard"].includes(t);
+}
+
+// Fester Katalog der Adress-Kategorien (spiegelt Migration 0099 / ADDRESS_TYPE
+// bzw. ADDRESS_TYPES in stammdaten.ts). Text/Zahl → Code, tolerant gegenüber
+// Schreibweisen; unbekannt → null (Feld bleibt leer, Zeile bleibt importierbar).
+const ADDRESS_TYPE_ALIASES = [
+  { code: 1, label: "Kunde / Bauherr", aliases: ["kunde / bauherr", "kunde/bauherr", "kunde", "bauherr", "auftraggeber", "client", "1"] },
+  { code: 2, label: "Fachplaner",      aliases: ["fachplaner", "planer", "2"] },
+  { code: 3, label: "Behörde",         aliases: ["behörde", "behoerde", "amt", "authority", "3"] },
+  { code: 4, label: "Nachunternehmer", aliases: ["nachunternehmer", "subunternehmer", "nachunternehmen", "nu", "sub", "4"] },
+  { code: 5, label: "Lieferant",       aliases: ["lieferant", "supplier", "5"] },
+  { code: 6, label: "Sonstige",        aliases: ["sonstige", "sonstiges", "andere", "other", "6"] },
+];
+const addressTypeByText = new Map();
+for (const t of ADDRESS_TYPE_ALIASES) for (const a of t.aliases) addressTypeByText.set(norm(a), t.code);
 
 // ── Domänen-Registry ─────────────────────────────────────────────────────────
 // Jede Domäne: table, fields (key/header/required/example/aliases), dependents
@@ -68,14 +88,20 @@ function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 const ADDRESS_FIELDS = [
   { key: "address_name_1",   header: "Name 1 (Firma/Nachname)", required: true,  example: "Mustermann Architekten GmbH", aliases: ["name", "name1", "firma", "company", "adressname", "nachname"] },
   { key: "address_name_2",   header: "Name 2 (Zusatz)",         required: false, example: "z. Hd. Herr Muster",          aliases: ["name2", "zusatz", "namenszusatz", "adresszusatz"] },
+  { key: "address_type",     header: "Kategorie",                required: false, example: "Kunde / Bauherr",            aliases: ["kategorie", "typ", "art", "adresstyp", "adressart", "addresstype", "category", "gruppe"] },
   { key: "street",           header: "Straße",                   required: false, example: "Musterstraße 12",            aliases: ["strasse", "street", "adresse"] },
   { key: "post_code",        header: "PLZ",                      required: false, example: "10115",                      aliases: ["plz", "postleitzahl", "postcode", "zip"] },
   { key: "city",             header: "Ort",                      required: false, example: "Berlin",                     aliases: ["ort", "stadt", "city"] },
   { key: "post_office_box",  header: "Postfach",                 required: false, example: "",                           aliases: ["postfach", "pob", "postbox"] },
   { key: "country",          header: "Land",                     required: false, example: "Deutschland",                aliases: ["land", "country", "staat"] },
   { key: "customer_number",  header: "Kundennummer",             required: false, example: "K-1001",                     aliases: ["kundennummer", "kundennr", "kundenr", "customer", "customernumber"] },
-  { key: "tax_id",           header: "USt-IdNr.",                required: false, example: "DE123456789",                aliases: ["ustid", "ustidnr", "umsatzsteuer", "vat", "vatid", "taxid", "steuernummer"] },
+  { key: "tax_id",           header: "USt-IdNr.",                required: false, example: "DE123456789",                aliases: ["ustid", "ustidnr", "umsatzsteuer", "vat", "vatid", "taxid"] },
+  { key: "tax_number",       header: "Steuernummer",             required: false, example: "12/345/67890",               aliases: ["steuernummer", "steuernr", "stnr", "taxnumber"] },
   { key: "buyer_reference",  header: "Leitweg-ID",               required: false, example: "",                           aliases: ["leitweg", "leitwegid", "buyerreference", "kaeuferreferenz"] },
+  { key: "phone",            header: "Telefon",                  required: false, example: "+49 30 1234567",             aliases: ["telefon", "tel", "phone", "festnetz", "telefonnummer"] },
+  { key: "email",            header: "E-Mail",                   required: false, example: "info@buero.de",              aliases: ["email", "mail", "emailadresse", "mailadresse"] },
+  { key: "website",          header: "Webseite",                 required: false, example: "www.buero.de",               aliases: ["website", "webseite", "web", "homepage", "url", "internet"] },
+  { key: "notes",            header: "Notizen",                  required: false, example: "",                           aliases: ["notizen", "notiz", "bemerkung", "bemerkungen", "anmerkung", "kommentar", "notes"] },
 ];
 
 async function loadAddressContext(supabase, tenantId) {
@@ -118,9 +144,22 @@ function buildAddressEntry(mapped, ctx) {
     else { messages.push({ level: "error", text: `Land „${cin}" nicht gefunden` }); ok = false; }
   }
 
+  // Kategorie (optional, fester Katalog): unbekannt → Warnung, Feld bleibt leer.
+  let addressType = null;
+  const atin = s(mapped.address_type);
+  if (atin) {
+    const hit = addressTypeByText.get(norm(atin));
+    if (hit != null) addressType = hit;
+    else messages.push({ level: "warn", text: `Kategorie „${atin}" nicht erkannt — bleibt leer (z. B. Kunde/Bauherr, Fachplaner, Behörde, Nachunternehmer, Lieferant, Sonstige)` });
+  }
+
+  const email = s(mapped.email);
+  if (email && !email.includes("@")) messages.push({ level: "warn", text: "E-Mail sieht ungültig aus (kein @)" });
+
   const dbRow = {
     ADDRESS_NAME_1:  name1 || null,
     ADDRESS_NAME_2:  s(mapped.address_name_2) || null,
+    ADDRESS_TYPE:    addressType,
     STREET:          s(mapped.street) || null,
     POST_CODE:       s(mapped.post_code) || null,
     CITY:            s(mapped.city) || null,
@@ -128,12 +167,18 @@ function buildAddressEntry(mapped, ctx) {
     COUNTRY_ID:      countryId,
     CUSTOMER_NUMBER: s(mapped.customer_number) || null,
     "TAX-ID":        s(mapped.tax_id) || null,
+    TAX_NUMBER:      s(mapped.tax_number) || null,
     BUYER_REFERENCE: s(mapped.buyer_reference) || null,
+    PHONE:           s(mapped.phone) || null,
+    EMAIL:           email || null,
+    WEBSITE:         s(mapped.website) || null,
+    NOTES:           s(mapped.notes) || null,
   };
 
   const matchKey = norm(name1) + "|" + norm(mapped.post_code);
+  const catLabel = addressType != null ? (ADDRESS_TYPE_ALIASES.find((t) => t.code === addressType)?.label || "") : "";
   const display = {
-    name_1: name1, name_2: dbRow.ADDRESS_NAME_2, street: dbRow.STREET,
+    name_1: name1, name_2: dbRow.ADDRESS_NAME_2, category: catLabel, street: dbRow.STREET,
     post_code: dbRow.POST_CODE, city: dbRow.CITY, country: cin || "Deutschland",
   };
   return { ok, messages, dbRow, matchKey, display };
@@ -253,8 +298,13 @@ const CONTACT_FIELDS = [
   { key: "last_name",  header: "Nachname",                      required: true,  example: "Beispiel",           aliases: ["nachname", "name", "lastname", "familienname", "surname"] },
   { key: "gender",     header: "Geschlecht",                    required: false, example: "männlich",           aliases: ["geschlecht", "gender"] },
   { key: "title",      header: "Titel",                         required: false, example: "Dr.",                aliases: ["titel", "title"] },
+  { key: "position",   header: "Funktion/Position",             required: false, example: "Bauleiter",          aliases: ["funktion", "position", "rolle", "jobtitle", "role", "taetigkeit"] },
+  { key: "department", header: "Abteilung",                     required: false, example: "Hochbau",            aliases: ["abteilung", "department", "bereich", "team"] },
   { key: "email",      header: "E-Mail",                        required: false, example: "t.beispiel@muster.de", aliases: ["email", "mail", "emailadresse", "mailadresse"] },
   { key: "mobile",     header: "Telefon/Mobil",                 required: false, example: "+49 170 1234567",    aliases: ["mobil", "telefon", "mobile", "phone", "tel", "handy", "telefonnummer"] },
+  { key: "phone",      header: "Festnetz",                      required: false, example: "+49 30 1234567",     aliases: ["festnetz", "festnetznummer", "landline", "telefonfestnetz"] },
+  { key: "is_primary", header: "Hauptkontakt (ja/nein)",        required: false, example: "ja",                 aliases: ["hauptkontakt", "primär", "primar", "primary", "isprimary", "haupt", "standardkontakt"] },
+  { key: "notes",      header: "Notizen",                       required: false, example: "",                   aliases: ["notizen", "notiz", "bemerkung", "bemerkungen", "anmerkung", "kommentar", "notes"] },
 ];
 
 function deriveGenderFromSalutation(salText, genders) {
@@ -337,6 +387,7 @@ function buildContactEntry(mapped, ctx) {
   const email = s(mapped.email);
   if (email && !email.includes("@")) messages.push({ level: "warn", text: "E-Mail sieht ungültig aus (kein @)" });
 
+  const position = s(mapped.position);
   const dbRow = {
     TITLE:         s(mapped.title) || null,
     FIRST_NAME:    first || null,
@@ -346,10 +397,15 @@ function buildContactEntry(mapped, ctx) {
     SALUTATION_ID: salutationId,
     GENDER_ID:     genderId,
     ADDRESS_ID:    addressId,
+    POSITION:      position || null,
+    DEPARTMENT:    s(mapped.department) || null,
+    PHONE:         s(mapped.phone) || null,
+    IS_PRIMARY:    parseBool(mapped.is_primary) ? 1 : 0,
+    NOTES:         s(mapped.notes) || null,
   };
 
   const matchKey = addressId != null ? `${addressId}|` + norm(`${first} ${last}`) : norm(`${first} ${last}`);
-  const display = { address: ain, salutation: sin, name: `${first} ${last}`.trim(), email };
+  const display = { address: ain, salutation: sin, name: `${first} ${last}`.trim(), position, email };
   return { ok, messages, dbRow, matchKey, display };
 }
 

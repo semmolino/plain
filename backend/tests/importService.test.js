@@ -106,6 +106,48 @@ describe("buildAddressEntry", () => {
     const e = buildAddressEntry({ address_name_1: "X", country: "Atlantis" }, ctx);
     expect(e.ok).toBe(false);
   });
+
+  it("maps the extended fields (Kategorie/Steuernummer/Kommunikation/Notizen)", () => {
+    const e = buildAddressEntry({
+      address_name_1: "Acme GmbH", post_code: "10115", address_type: "Fachplaner",
+      tax_number: "12/345/67890", phone: "+49 30 111", email: "info@acme.de",
+      website: "www.acme.de", notes: "Bestandskunde",
+    }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.ADDRESS_TYPE).toBe(2);
+    expect(e.dbRow.TAX_NUMBER).toBe("12/345/67890");
+    expect(e.dbRow.PHONE).toBe("+49 30 111");
+    expect(e.dbRow.EMAIL).toBe("info@acme.de");
+    expect(e.dbRow.WEBSITE).toBe("www.acme.de");
+    expect(e.dbRow.NOTES).toBe("Bestandskunde");
+    expect(e.display.category).toBe("Fachplaner");
+  });
+
+  it("resolves the category from a numeric code and by loose text", () => {
+    expect(buildAddressEntry({ address_name_1: "A", address_type: "1" }, ctx).dbRow.ADDRESS_TYPE).toBe(1);
+    expect(buildAddressEntry({ address_name_1: "A", address_type: "bauherr" }, ctx).dbRow.ADDRESS_TYPE).toBe(1);
+    expect(buildAddressEntry({ address_name_1: "A", address_type: "Lieferant" }, ctx).dbRow.ADDRESS_TYPE).toBe(5);
+  });
+
+  it("warns (still importable) on an unknown category and keeps it empty", () => {
+    const e = buildAddressEntry({ address_name_1: "A", address_type: "Phantasie" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.ADDRESS_TYPE).toBeNull();
+    expect(e.messages.some((m) => m.level === "warn")).toBe(true);
+  });
+});
+
+describe("buildAutoMapping (address, extended fields)", () => {
+  it("maps the new columns and routes Steuernummer to tax_number (not tax_id)", () => {
+    const map = buildAutoMapping(["Kategorie", "USt-IdNr.", "Steuernummer", "Telefon", "E-Mail", "Webseite", "Notizen"], "address");
+    expect(map.address_type).toBe("Kategorie");
+    expect(map.tax_id).toBe("USt-IdNr.");
+    expect(map.tax_number).toBe("Steuernummer");
+    expect(map.phone).toBe("Telefon");
+    expect(map.email).toBe("E-Mail");
+    expect(map.website).toBe("Webseite");
+    expect(map.notes).toBe("Notizen");
+  });
 });
 
 // ── buildPreview ──────────────────────────────────────────────────────────────
@@ -448,6 +490,37 @@ describe("buildContactEntry", () => {
   it("errors on missing salutation (required)", () => {
     const e = buildContactEntry({ address: "Acme GmbH", salutation: "", first_name: "X", last_name: "Y" }, ctx);
     expect(e.ok).toBe(false);
+  });
+
+  it("maps the extended fields (Funktion/Abteilung/Festnetz/Notizen) and the primary flag", () => {
+    const e = buildContactEntry({
+      address: "Acme GmbH", salutation: "Herr", first_name: "Thomas", last_name: "Beispiel",
+      position: "Bauleiter", department: "Hochbau", phone: "+49 30 999", is_primary: "ja", notes: "Direktkontakt",
+    }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.POSITION).toBe("Bauleiter");
+    expect(e.dbRow.DEPARTMENT).toBe("Hochbau");
+    expect(e.dbRow.PHONE).toBe("+49 30 999");
+    expect(e.dbRow.IS_PRIMARY).toBe(1);
+    expect(e.dbRow.NOTES).toBe("Direktkontakt");
+    expect(e.display.position).toBe("Bauleiter");
+  });
+
+  it("defaults the primary flag to 0 when blank/falsey", () => {
+    expect(buildContactEntry({ address: "Acme GmbH", salutation: "Herr", first_name: "A", last_name: "B" }, ctx).dbRow.IS_PRIMARY).toBe(0);
+    expect(buildContactEntry({ address: "Acme GmbH", salutation: "Herr", first_name: "A", last_name: "B", is_primary: "nein" }, ctx).dbRow.IS_PRIMARY).toBe(0);
+  });
+});
+
+describe("buildAutoMapping (contact, extended fields)", () => {
+  it("maps the new columns; Festnetz → phone, Telefon/Mobil → mobile", () => {
+    const map = buildAutoMapping(["Funktion", "Abteilung", "Telefon", "Festnetz", "Hauptkontakt", "Notizen"], "contact");
+    expect(map.position).toBe("Funktion");
+    expect(map.department).toBe("Abteilung");
+    expect(map.mobile).toBe("Telefon");   // bestehende Semantik bleibt: „Telefon" → Mobil
+    expect(map.phone).toBe("Festnetz");
+    expect(map.is_primary).toBe("Hauptkontakt");
+    expect(map.notes).toBe("Notizen");
   });
 });
 
