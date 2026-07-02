@@ -349,8 +349,8 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
             {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length}` : `${addresses.length}`} Einträge
           </span>
           <Can permission="addresses.create">
-            <button className="btn-primary" onClick={openCreate} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={15} strokeWidth={2.25} />Neu
+            <button className="btn-primary btn-small" onClick={openCreate} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Plus size={13} strokeWidth={2.25} />Neu
             </button>
           </Can>
         </div>
@@ -673,8 +673,8 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
             {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length}` : `${contacts.length}`} Einträge
           </span>
           <Can permission="addresses.contacts.create">
-            <button className="btn-primary" onClick={openCreate} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={15} strokeWidth={2.25} />Neu
+            <button className="btn-primary btn-small" onClick={openCreate} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Plus size={13} strokeWidth={2.25} />Neu
             </button>
           </Can>
         </div>

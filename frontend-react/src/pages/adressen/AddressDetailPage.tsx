@@ -249,8 +249,8 @@ export function AddressDetailPage() {
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <Can permission="addresses.edit">
-            <button className="btn-primary" onClick={openEdit} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Pencil size={14} strokeWidth={2} /> Bearbeiten
+            <button className="btn-primary btn-small" onClick={openEdit} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Pencil size={13} strokeWidth={2} /> Bearbeiten
             </button>
           </Can>
           <Can permission="addresses.delete">
