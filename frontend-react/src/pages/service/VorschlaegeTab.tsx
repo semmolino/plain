@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useStickyState } from '@/hooks/useStickyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Lightbulb, Megaphone, ChevronUp, MessageSquare, Plus, X } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -81,9 +82,9 @@ export function VorschlaegeTab() {
 // ── Board (veröffentlicht, pseudonym) ────────────────────────────────────────
 function BoardView({ onOpen }: { onOpen: (id: number) => void }) {
   const qc = useQueryClient()
-  const [sort, setSort] = useState<'popular' | 'new'>('popular')
+  const [sort, setSort] = useStickyState<'popular' | 'new'>('service.vorschlaege.sort', 'popular')
   const [search, setSearch] = useState('')
-  const [cat, setCat] = useState('')
+  const [cat, setCat] = useStickyState<string>('service.vorschlaege.cat', '')
 
   const boardQuery = useQuery({ queryKey: ['service', 'board', sort], queryFn: () => fetchBoard(sort) })
 

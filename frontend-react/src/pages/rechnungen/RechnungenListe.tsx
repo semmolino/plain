@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useStickyState } from '@/hooks/useStickyState'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
 import { createPortal } from 'react-dom'
@@ -353,10 +354,20 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   const navigate = useNavigate()
 
   const [search,        setSearch]        = useState(initialSearch ?? '')
-  const [onlyOpen,      setOnlyOpen]      = useState(false)
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(emptyFilters())
-  const [hiddenCols,    setHiddenCols]    = useState<Set<ColKey>>(
-    new Set(COLUMNS.filter(c => !c.defaultVisible).map(c => c.key))
+  const [onlyOpen,      setOnlyOpen]      = useStickyState<boolean>('rechnungen.onlyOpen', false)
+  const [activeFilters, setActiveFilters] = useStickyState<ActiveFilters>('rechnungen.filters', emptyFilters, {
+    serialize:   f => ({ status: [...f.status], typ: [...f.typ] }),
+    deserialize: raw => {
+      const r = emptyFilters(); const o = (raw ?? {}) as Record<string, unknown>
+      if (Array.isArray(o.status)) r.status = new Set(o.status as string[])
+      if (Array.isArray(o.typ))    r.typ    = new Set(o.typ as string[])
+      return r
+    },
+  })
+  const [hiddenCols,    setHiddenCols]    = useStickyState<Set<ColKey>>(
+    'rechnungen.cols',
+    () => new Set(COLUMNS.filter(c => !c.defaultVisible).map(c => c.key)),
+    { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as ColKey[] : []) },
   )
   const [colPanelOpen,  setColPanelOpen]  = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
@@ -375,8 +386,8 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   function setDimFilter(dim: FilterDim, vals: Set<string>) { setActiveFilters(prev => ({ ...prev, [dim]: vals })) }
   function toggleCol(key: ColKey) { setHiddenCols(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s }) }
   const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key))
-  const [sortKey, setSortKey] = useState<SortKey>('date')
-  const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
+  const [sortKey, setSortKey] = useStickyState<SortKey>('rechnungen.sortKey', 'date')
+  const [sortDir, setSortDir] = useStickyState<'asc'|'desc'>('rechnungen.sortDir', 'desc')
 
   const toast = useToast()
   const [detailRow,     setDetailRow]     = useState<UnifiedRow | null>(null)

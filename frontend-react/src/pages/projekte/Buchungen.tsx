@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
@@ -100,8 +101,8 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   const [filterStruct,  setFilterStruct]  = useState<string>('')
   const [search,        setSearch]        = useState('')
   const [structSearch,  setStructSearch]  = useState('')
-  const [sortCol,      setSortCol]      = useState<SortCol>('date')
-  const [sortDir,      setSortDir]      = useState<SortDir>('asc')
+  const [sortCol,      setSortCol]      = useStickyState<SortCol>('buchungen.sortCol', 'date')
+  const [sortDir,      setSortDir]      = useStickyState<SortDir>('buchungen.sortDir', 'asc')
   const [editRow,      setEditRow]      = useState<Buchung | null>(null)
   const [editForm,     setEditForm]     = useState<BuchungForm>(emptyForm)
   const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success'|'error' } | null>(null)

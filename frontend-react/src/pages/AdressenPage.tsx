@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useStickyState, useStickySet } from '@/hooks/useStickyState'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Pencil, Trash2 } from 'lucide-react'
@@ -273,8 +274,8 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   const toast = useToast()
   const [tab,          setTab]          = useState('list')
   const [search,       setSearch]       = useState(initialSearch ?? '')
-  const [sortKey,      setSortKey]      = useState<AddrSortKey>('ADDRESS_NAME_1')
-  const [sortDir,      setSortDir]      = useState<'asc'|'desc'>('asc')
+  const [sortKey,      setSortKey]      = useStickyState<AddrSortKey>('adressen.sortKey', 'ADDRESS_NAME_1')
+  const [sortDir,      setSortDir]      = useStickyState<'asc'|'desc'>('adressen.sortDir', 'asc')
   const [editAddr,     setEditAddr]     = useState<Address | null>(null)
   const [form,         setForm]         = useState<AddressPayload>(emptyAddr)
   const [editForm,     setEditForm]     = useState<AddressPayload>(emptyAddr)
@@ -283,9 +284,13 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   // Filter + columns state
-  const [activeLand,     setActiveLand]     = useState<Set<string>>(new Set())
-  const [activeStadt,    setActiveStadt]    = useState<Set<string>>(new Set())
-  const [hiddenCols,     setHiddenCols]     = useState<Set<AddrOptColKey>>(new Set(ADDR_OPT_COLS.map(c => c.key)))
+  const [activeLand,     setActiveLand]     = useStickySet('adressen.land')
+  const [activeStadt,    setActiveStadt]    = useStickySet('adressen.stadt')
+  const [hiddenCols,     setHiddenCols]     = useStickyState<Set<AddrOptColKey>>(
+    'adressen.cols',
+    () => new Set(ADDR_OPT_COLS.map(c => c.key)),
+    { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as AddrOptColKey[] : []) },
+  )
   const [colPanelOpen,   setColPanelOpen]   = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
 
@@ -594,8 +599,8 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
   const navigate = useNavigate()
   const [tab,          setTab]          = useState('list')
   const [search,       setSearch]       = useState(initialSearch ?? '')
-  const [sortKey,      setSortKey]      = useState<ConSortKey>('NAME')
-  const [sortDir,      setSortDir]      = useState<'asc'|'desc'>('asc')
+  const [sortKey,      setSortKey]      = useStickyState<ConSortKey>('kontakte.sortKey', 'NAME')
+  const [sortDir,      setSortDir]      = useStickyState<'asc'|'desc'>('kontakte.sortDir', 'asc')
   const [editContact,  setEditContact]  = useState<Contact | null>(null)
   const [form,         setForm]         = useState<ContactPayload>(() => ({ ...emptyContact(), address_id: initialAddressId ?? '' }))
   const [editForm,     setEditForm]     = useState<ContactPayload>(emptyContact)
@@ -618,8 +623,12 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
   }, [initialAddressId, initialAddressName])
 
   // Filter + column state
-  const [activeAdresse,  setActiveAdresse]  = useState<Set<string>>(new Set())
-  const [hiddenCols,     setHiddenCols]     = useState<Set<ConOptColKey>>(new Set(CON_OPT_COLS.map(c => c.key)))
+  const [activeAdresse,  setActiveAdresse]  = useStickySet('kontakte.adresse')
+  const [hiddenCols,     setHiddenCols]     = useStickyState<Set<ConOptColKey>>(
+    'kontakte.cols',
+    () => new Set(CON_OPT_COLS.map(c => c.key)),
+    { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as ConOptColKey[] : []) },
+  )
   const [colPanelOpen,   setColPanelOpen]   = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
 

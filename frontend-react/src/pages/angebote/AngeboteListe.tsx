@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignature } from 'lucide-react'
@@ -33,7 +34,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
   const navigate = useNavigate()
   const [search,        setSearch]        = useState('')
   const [page,          setPage]          = useState(1)
-  const [onlyOpen,      setOnlyOpen]      = useState(false)
+  const [onlyOpen,      setOnlyOpen]      = useStickyState<boolean>('angebote.onlyOpen', false)
   const [msg,           setMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [beauftragtRow, setBeauftragtRow] = useState<OfferListItem | null>(null)
   const [convertErr,    setConvertErr]    = useState<string | null>(null)

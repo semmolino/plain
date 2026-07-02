@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Pencil, Copy, Trash2 } from 'lucide-react'
@@ -93,15 +94,26 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
 
   // list state
   const [search,        setSearch]        = useState('')
-  const [sortKey,       setSortKey]       = useState<SortKey>('NAME_SHORT')
-  const [sortDir,       setSortDir]       = useState<'asc'|'desc'>('asc')
+  const [sortKey,       setSortKey]       = useStickyState<SortKey>('projekte.sortKey', 'NAME_SHORT')
+  const [sortDir,       setSortDir]       = useStickyState<'asc'|'desc'>('projekte.sortDir', 'asc')
   const [page,          setPage]          = useState(1)
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(emptyFilters())
-  const [hiddenCols,    setHiddenCols]    = useState<Set<OptColKey>>(
-    new Set(OPT_COLS.filter(c => !c.defaultVisible).map(c => c.key))
+  const [activeFilters, setActiveFilters] = useStickyState<ActiveFilters>('projekte.filters', emptyFilters, {
+    serialize:   f => ({ status: [...f.status], typ: [...f.typ], manager: [...f.manager] }),
+    deserialize: raw => {
+      const r = emptyFilters(); const o = (raw ?? {}) as Record<string, unknown>
+      if (Array.isArray(o.status))  r.status  = new Set(o.status as string[])
+      if (Array.isArray(o.typ))     r.typ     = new Set(o.typ as string[])
+      if (Array.isArray(o.manager)) r.manager = new Set(o.manager as string[])
+      return r
+    },
+  })
+  const [hiddenCols,    setHiddenCols]    = useStickyState<Set<OptColKey>>(
+    'projekte.cols',
+    () => new Set(OPT_COLS.filter(c => !c.defaultVisible).map(c => c.key)),
+    { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as OptColKey[] : []) },
   )
   const [colPanelOpen,    setColPanelOpen]    = useState(false)
-  const [internalFilter,  setInternalFilter]  = useState<InternalFilter>(null)
+  const [internalFilter,  setInternalFilter]  = useStickyState<InternalFilter>('projekte.internal', null)
   const colPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
