@@ -1,20 +1,13 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Camera, Trash2, AlertTriangle } from 'lucide-react'
+import { Camera, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { changePassword } from '@/api/auth'
 import { uploadAsset } from '@/api/stammdaten'
 import { fetchMyAvatar, putMyAvatar, deleteMyAvatar } from '@/api/mitarbeiter'
 import { AchievementsSection } from '@/components/engagement/AchievementsSection'
 import { MasterySection }      from '@/components/engagement/MasterySection'
-import { usePermission }       from '@/store/permissionsStore'
-import { useToast }            from '@/store/toastStore'
-import {
-  fetchAbsenceTypes, fetchAbsences, fetchVacationBalance,
-  createAbsence, updateAbsence, cancelAbsence, deleteAbsence,
-  type Absence, type AbsenceStatus,
-} from '@/api/abwesenheit'
 
 export function ProfilePage() {
   const navigate   = useNavigate()
@@ -91,9 +84,6 @@ export function ProfilePage() {
 
       {/* Achievements */}
       <AchievementsSection />
-
-      {/* Meine Abwesenheiten (Self-Service) */}
-      <MyAbsencesSection />
 
       {/* Password change form */}
       <div style={{
@@ -193,161 +183,6 @@ export function initialsFrom(shortName: string | null, email: string | null): st
   return cleaned.slice(0, 2).toUpperCase()
 }
 
-// ── Meine Abwesenheiten (Self-Service) ────────────────────────────────────────
-
-function fmtDe(d: string) {
-  return new Date(`${d}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
-const ABSENCE_STATUS: Record<AbsenceStatus, { label: string; bg: string; color: string }> = {
-  REQUESTED: { label: 'Beantragt', bg: '#fef3c7', color: '#92400e' },
-  APPROVED:  { label: 'Genehmigt', bg: '#dcfce7', color: '#166534' },
-  REJECTED:  { label: 'Abgelehnt', bg: '#fee2e2', color: '#b91c1c' },
-  CANCELLED: { label: 'Storniert', bg: '#f3f4f6', color: '#6b7280' },
-}
-
-function MyAbsencesSection() {
-  const qc = useQueryClient()
-  const toast = useToast()
-  const employeeId = useAuthStore(s => s.employeeId)
-  const canRequest = usePermission('absence.request')
-  const year = new Date().getFullYear()
-
-  const { data: typesRes } = useQuery({ queryKey: ['absence-types'], queryFn: fetchAbsenceTypes, enabled: canRequest })
-  const { data: balRes }   = useQuery({ queryKey: ['my-vacation-balance', year], queryFn: () => fetchVacationBalance(employeeId!, year), enabled: canRequest && employeeId != null })
-  const { data: absRes, isLoading } = useQuery({ queryKey: ['my-absences'], queryFn: () => fetchAbsences({ employee_id: employeeId! }), enabled: canRequest && employeeId != null })
-
-  const types     = (typesRes?.data ?? []).filter(t => t.ACTIVE)
-  const bal       = balRes?.data
-  const absences  = absRes?.data ?? []
-
-  const [showForm, setShowForm] = useState(false)
-  const [editId, setEditId] = useState<number | null>(null)
-  const [fType, setFType] = useState('')
-  const [fFrom, setFFrom] = useState('')
-  const [fTo,   setFTo]   = useState('')
-  const [fHalf, setFHalf] = useState(false)
-  const [fNote, setFNote] = useState('')
-  const [msg,   setMsg]   = useState<string | null>(null)
-
-  const resetForm = () => { setShowForm(false); setEditId(null); setFType(''); setFFrom(''); setFTo(''); setFHalf(false); setFNote(''); setMsg(null) }
-  const openNew  = () => { resetForm(); setShowForm(true) }
-  const openEdit = (a: Absence) => {
-    setEditId(a.ID); setFType(String(a.ABSENCE_TYPE_ID)); setFFrom(a.DATE_FROM)
-    setFTo(a.DATE_TO !== a.DATE_FROM ? a.DATE_TO : ''); setFHalf(a.HALF_DAY); setFNote(a.NOTE ?? '')
-    setMsg(null); setShowForm(true)
-  }
-
-  const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ['my-absences'] })
-    void qc.invalidateQueries({ queryKey: ['my-vacation-balance'] })
-    void qc.invalidateQueries({ queryKey: ['absences-inbox'] })
-  }
-  const saveMut = useMutation({
-    mutationFn: async () => {
-      const payload = { absence_type_id: Number(fType), date_from: fFrom, date_to: fTo || fFrom, half_day: fHalf && (!fTo || fTo === fFrom), note: fNote }
-      if (editId != null) await updateAbsence(editId, payload)
-      else                await createAbsence(payload)
-    },
-    onSuccess: () => { toast.success(editId != null ? 'Antrag aktualisiert' : 'Antrag eingereicht'); resetForm(); invalidate() },
-    onError: (e: Error) => setMsg(e.message),
-  })
-  const withdrawMut = useMutation({ mutationFn: (id: number) => deleteAbsence(id), onSuccess: () => { toast.success('Antrag zurückgezogen'); invalidate() }, onError: (e: Error) => toast.error(e.message) })
-  const cancelMut   = useMutation({ mutationFn: (id: number) => cancelAbsence(id), onSuccess: () => { toast.success('Storniert'); invalidate() }, onError: (e: Error) => toast.error(e.message) })
-
-  if (!canRequest || employeeId == null) return null
-
-  const singleDay = !!fFrom && (!fTo || fTo === fFrom)
-
-  return (
-    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '18px 20px', marginBottom: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 14 }}>
-          Meine Abwesenheiten
-          {bal && <span style={{ fontWeight: 400, fontSize: 12, color: '#6b7280', marginLeft: 10 }}>Resturlaub {year}: <strong style={{ color: bal.remaining < 0 ? '#dc2626' : '#059669' }}>{bal.remaining} T</strong> (von {Math.round((bal.entitled + bal.carryover) * 10) / 10} T)</span>}
-        </div>
-        {!showForm && <button type="button" className="btn-small btn-save" onClick={openNew}>+ Antrag stellen</button>}
-      </div>
-
-      {bal && !!bal.atRisk && bal.atRisk > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginBottom: 12 }}>
-          <AlertTriangle size={14} strokeWidth={2} />
-          {bal.atRisk} Tage Resturlaub-Übertrag verfallen am {bal.carryoverExpiryLabel ?? '31.03.'} — rechtzeitig einplanen.
-        </div>
-      )}
-
-      {showForm && (
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 12, marginBottom: 12 }}>
-          <div className="form-row">
-            <div className="form-group">
-              <label>Art</label>
-              <select value={fType} onChange={e => setFType(e.target.value)}>
-                <option value="">Bitte wählen …</option>
-                {types.map(t => <option key={t.ID} value={t.ID}>{t.NAME}</option>)}
-              </select>
-            </div>
-            <div className="form-group"><label>Von</label><input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} /></div>
-            <div className="form-group"><label>Bis</label><input type="date" value={fTo} onChange={e => setFTo(e.target.value)} /></div>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: singleDay ? '#374151' : '#9ca3af', margin: '4px 0 8px' }}>
-            <input type="checkbox" checked={fHalf} disabled={!singleDay} onChange={e => setFHalf(e.target.checked)} />
-            Halber Tag (nur bei eintägiger Abwesenheit)
-          </label>
-          <div className="form-group"><label>Notiz</label><input type="text" value={fNote} onChange={e => setFNote(e.target.value)} placeholder="optional" /></div>
-          {msg && <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 8 }}>{msg}</div>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn-small btn-save" disabled={!fType || !fFrom || saveMut.isPending} onClick={() => saveMut.mutate()}>
-              {saveMut.isPending ? 'Speichert …' : (editId != null ? 'Änderungen speichern' : 'Antrag einreichen')}
-            </button>
-            <button type="button" className="btn-small" onClick={resetForm}>Abbrechen</button>
-          </div>
-        </div>
-      )}
-
-      {isLoading && <p style={{ fontSize: 12, color: '#6b7280' }}>Laden …</p>}
-      {!isLoading && absences.length === 0 && <p style={{ fontSize: 12, color: '#6b7280' }}>Noch keine Abwesenheiten.</p>}
-
-      {absences.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <tbody>
-            {absences.map((a: Absence) => {
-              const s = ABSENCE_STATUS[a.STATUS]
-              return (
-                <tr key={a.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ padding: '6px 8px 6px 0', whiteSpace: 'nowrap' }}>
-                    {fmtDe(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDe(a.DATE_TO)}` : ''}{a.HALF_DAY ? ' (½)' : ''}
-                  </td>
-                  <td style={{ padding: '6px 8px 6px 0' }}>
-                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />
-                    {a.TYPE_NAME}
-                  </td>
-                  <td style={{ padding: '6px 8px 6px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#6b7280' }}>{a.DAYS} T</td>
-                  <td style={{ padding: '6px 8px 6px 0' }}>
-                    <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10 }}>{s.label}</span>
-                    {a.STATUS === 'REQUESTED' && a.DECISION_NOTE && (
-                      <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>Rückfrage: {a.DECISION_NOTE}</div>
-                    )}
-                  </td>
-                  <td style={{ padding: '6px 0', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {a.STATUS === 'REQUESTED' && (
-                      <>
-                        <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }} onClick={() => openEdit(a)}>Bearbeiten</button>
-                        <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} disabled={withdrawMut.isPending} onClick={() => withdrawMut.mutate(a.ID)}>Zurückziehen</button>
-                      </>
-                    )}
-                    {a.STATUS === 'APPROVED' && (
-                      <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} disabled={cancelMut.isPending} onClick={() => cancelMut.mutate(a.ID)}>Stornieren</button>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      )}
-    </div>
-  )
-}
 
 function ProfileAvatar({ shortName, email }: { shortName: string | null; email: string | null }) {
   const qc = useQueryClient()

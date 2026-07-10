@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
@@ -14,6 +15,7 @@ import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
 import { Can } from '@/components/ui/Can'
+import { MyAbsencesPanel, ClarificationThread } from '@/components/mitarbeiter/MyAbsencesPanel'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
@@ -41,7 +43,8 @@ import {
 const PAGE_SIZE = 25
 const TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'list',          label: 'Mitarbeiter',           permissions: ['employees.view'] },
-  { id: 'zeitwirtschaft', label: 'Zeitwirtschaft',       permissions: ['employees.bookings.view_all','employees.month_close.edit','absence.view'] },
+  { id: 'zeitwirtschaft', label: 'Stundencontrolling',   permissions: ['employees.bookings.view_all','employees.month_close.edit'] },
+  { id: 'abwesenheiten', label: 'Abwesenheiten',         permissions: ['absence.view','absence.request'] },
   { id: 'arbzg',         label: 'Arbeitszeit (Details)', permissions: ['employees.bookings.view_all'], feature: 'arbzg.compliance' },
 ]
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -515,9 +518,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
                 <td style={{ padding: '5px 8px 5px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{a.DAYS}</td>
                 <td style={{ padding: '5px 8px 5px 0' }}>
                   <AbsenceStatusBadge status={a.STATUS} />
-                  {a.STATUS === 'REQUESTED' && a.DECISION_NOTE && (
-                    <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>Rückfrage: {a.DECISION_NOTE}</div>
-                  )}
+                  <ClarificationThread a={a} />
                 </td>
                 <td style={{ padding: '5px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
                   {canApprove && a.STATUS === 'REQUESTED' && (
@@ -1886,13 +1887,15 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
 
 // ── Abwesenheiten-Tab (Genehmigungs-Postfach + Team-Kalender) ─────────────────
 
-type AbsSub = 'inbox' | 'calendar'
+type AbsSub = 'inbox' | 'calendar' | 'my'
 
 function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
   const qc = useQueryClient()
   const toast = useToast()
   const canApprove = usePermission('absence.approve')
-  const [sub, setSub] = useState<AbsSub>('inbox')
+  const canView    = usePermission('absence.view')
+  const canRequest = usePermission('absence.request')
+  const [sub, setSub] = useState<AbsSub>(canView ? 'inbox' : 'my')
   const now = new Date()
   const [year, setYear]   = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -1901,6 +1904,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
   const { data: inboxRes, isLoading: inboxLoading } = useQuery({
     queryKey: ['absences-inbox'],
     queryFn:  () => fetchAbsences({ status: 'REQUESTED' }),
+    enabled:  canView,
   })
   const inbox = inboxRes?.data ?? []
 
@@ -1909,8 +1913,17 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
   const { data: calRes } = useQuery({
     queryKey: ['absences-calendar', year, month],
     queryFn:  () => fetchAbsences({ from: monthFrom, to: monthTo }),
-    enabled:  sub === 'calendar',
+    enabled:  sub === 'calendar' && canView,
   })
+
+  const subItems: { id: AbsSub; label: string }[] = [
+    ...(canView    ? [{ id: 'inbox'    as AbsSub, label: `Anträge${inbox.length ? ` (${inbox.length})` : ''}` }, { id: 'calendar' as AbsSub, label: 'Kalender' }] : []),
+    ...(canRequest ? [{ id: 'my'       as AbsSub, label: 'Meine Anträge' }] : []),
+  ]
+  useEffect(() => {
+    if (subItems.length && !subItems.some(s => s.id === sub)) setSub(subItems[0].id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subItems.map(s => s.id).join(',')])
 
   const decideMut = useMutation({
     mutationFn: (v: { id: number; decision: 'APPROVED' | 'REJECTED' }) => decideAbsence(v.id, v.decision),
@@ -1929,13 +1942,11 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
 
   return (
     <div>
-      <SegmentNav
-        items={[{ id: 'inbox', label: `Anträge${inbox.length ? ` (${inbox.length})` : ''}` }, { id: 'calendar', label: 'Kalender' }]}
-        active={sub}
-        onChange={setSub}
-      />
+      <SegmentNav items={subItems} active={sub} onChange={setSub} />
 
-      {sub === 'inbox' && (
+      {sub === 'my' && <MyAbsencesPanel />}
+
+      {sub === 'inbox' && canView && (
         <>
           {inboxLoading && <p className="empty-note">Laden …</p>}
           {!inboxLoading && inbox.length === 0 && <p className="empty-note">Keine offenen Anträge.</p>}
@@ -1954,7 +1965,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                       <td className="num">{a.DAYS}</td>
                       <td style={{ fontSize: 12, color: '#6b7280' }}>
                         {a.NOTE || '—'}
-                        {a.DECISION_NOTE && <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>Rückfrage: {a.DECISION_NOTE}</div>}
+                        <ClarificationThread a={a} />
                       </td>
                       <td className="num" style={{ whiteSpace: 'nowrap' }}>
                         {canApprove ? (
@@ -1974,7 +1985,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
         </>
       )}
 
-      {sub === 'calendar' && (() => {
+      {sub === 'calendar' && canView && (() => {
         const daysInMonth = new Date(year, month, 0).getDate()
         const dayList = Array.from({ length: daysInMonth }, (_, i) => i + 1)
         const cal = calRes?.data ?? []
@@ -2055,13 +2066,86 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
   )
 }
 
-type ZwSub = 'list' | 'single' | 'close' | 'absence'
+// Einheitliche Mitarbeiter-Suchbox (analog ProjectPicker): tippen filtert,
+// optional Sprung „Zur Mitarbeiterliste →". Nutzt die project-picker-Styles.
+function MitarbeiterPicker({ employees, selectedId, onSelect, onGoToList, placeholder = 'Mitarbeiter suchen …' }: {
+  employees: Employee[]; selectedId: number | null; onSelect: (id: number) => void; onGoToList?: () => void; placeholder?: string
+}) {
+  const [input, setInput] = useState('')
+  const [open, setOpen]   = useState(false)
+  const acRef = useRef<HTMLDivElement>(null)
 
-function ZeitwirtschaftTab({ employees }: { employees: Employee[] }) {
+  const nameOf = (e: Employee) => `${e.SHORT_NAME} – ${e.FIRST_NAME} ${e.LAST_NAME}`
+  const selectedName = useMemo(() => {
+    const e = selectedId != null ? employees.find(x => x.ID === selectedId) : undefined
+    return e ? nameOf(e) : ''
+  }, [selectedId, employees])
+  useEffect(() => { setInput(selectedName) }, [selectedName])
+
+  const query = input.toLowerCase().trim()
+  const isFiltering = query.length > 0 && query !== selectedName.toLowerCase()
+  const filtered = useMemo(() => {
+    const list = [...employees].sort((a, b) => (a.SHORT_NAME || '').localeCompare(b.SHORT_NAME || ''))
+    if (!isFiltering) return list
+    return list.filter(e =>
+      (e.SHORT_NAME || '').toLowerCase().includes(query) ||
+      (e.FIRST_NAME || '').toLowerCase().includes(query) ||
+      (e.LAST_NAME  || '').toLowerCase().includes(query))
+  }, [employees, query, isFiltering])
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(ev: MouseEvent) {
+      if (acRef.current && !acRef.current.contains(ev.target as Node)) { setOpen(false); setInput(selectedName) }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open, selectedName])
+
+  function pick(id: number) {
+    onSelect(id)
+    const e = employees.find(x => x.ID === id)
+    setInput(e ? nameOf(e) : ''); setOpen(false)
+  }
+
+  return (
+    <div ref={acRef} className="project-picker">
+      <input type="text" className="list-search" placeholder={placeholder} value={input}
+        onChange={e => { setInput(e.target.value); setOpen(true) }}
+        onFocus={e => { setOpen(true); e.currentTarget.select() }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { if (filtered[0]) pick(filtered[0].ID); e.preventDefault() }
+          if (e.key === 'Escape') { setOpen(false); setInput(selectedName) }
+        }} />
+      {open && (
+        <div className="project-ac-dropdown">
+          {filtered.length === 0 && <div className="project-ac-empty">Keine Mitarbeiter gefunden</div>}
+          {filtered.slice(0, 50).map(e => (
+            <button key={e.ID} type="button"
+              className={`project-ac-option${e.ID === selectedId ? ' active' : ''}`}
+              onMouseDown={ev => { ev.preventDefault(); pick(e.ID) }}>
+              <span className="project-ac-short">{e.SHORT_NAME}</span>
+              <span className="project-ac-long">{e.FIRST_NAME} {e.LAST_NAME}{e.ACTIVE === 2 ? ' (inaktiv)' : ''}</span>
+            </button>
+          ))}
+          {onGoToList && (
+            <button type="button" className="project-ac-tolist"
+              onMouseDown={ev => { ev.preventDefault(); setOpen(false); onGoToList() }}>
+              Zur Mitarbeiterliste →
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+type ZwSub = 'list' | 'single' | 'close'
+
+function ZeitwirtschaftTab({ employees, onGoToList }: { employees: Employee[]; onGoToList?: () => void }) {
   const canCloseMonths = usePermission('employees.month_close.edit')
   const hasMonthClose  = useFeature('employees.month_close')
   const showClose      = canCloseMonths && hasMonthClose
-  const canViewAbsence = usePermission('absence.view')
 
   const [subTab, setSubTab] = useState<ZwSub>('list')
   const [empId,  setEmpId]  = useState<number | null>(null)
@@ -2070,7 +2154,6 @@ function ZeitwirtschaftTab({ employees }: { employees: Employee[] }) {
     { id: 'list',   label: 'Auswertung' },
     { id: 'single', label: 'Einzelne/r Mitarbeiter' },
     ...(showClose      ? [{ id: 'close'   as ZwSub, label: 'Monatsabschluss' }] : []),
-    ...(canViewAbsence ? [{ id: 'absence' as ZwSub, label: 'Abwesenheiten' }] : []),
   ]
 
   return (
@@ -2082,12 +2165,9 @@ function ZeitwirtschaftTab({ employees }: { employees: Employee[] }) {
       {subTab === 'single' && (
         <div style={{ maxWidth: 760 }}>
           <div style={{ marginBottom: 20 }}>
-            <div className="form-group" style={{ marginBottom: 0, minWidth: 220 }}>
-              <label style={{ fontSize: 12 }}>Mitarbeiter</label>
-              <select value={empId ?? ''} onChange={e => setEmpId(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">— Mitarbeiter wählen —</option>
-                {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
-              </select>
+            <label style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>Mitarbeiter</label>
+            <div style={{ maxWidth: 360 }}>
+              <MitarbeiterPicker employees={employees} selectedId={empId} onSelect={setEmpId} onGoToList={onGoToList} />
             </div>
           </div>
 
@@ -2099,8 +2179,6 @@ function ZeitwirtschaftTab({ employees }: { employees: Employee[] }) {
       )}
 
       {subTab === 'close' && showClose && <MonthsOverviewTab />}
-
-      {subTab === 'absence' && canViewAbsence && <AbwesenheitenTab employees={employees} />}
     </div>
   )
 }
@@ -2544,7 +2622,8 @@ function EmployeeRoleBadge({ employeeId, roles, mapping, onClick }: {
 export function MitarbeiterPage() {
   const qc = useQueryClient()
   const ML = 'plain:filt:mitarb-list'
-  const [tab,       setTab]      = useState('list')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [tab,       setTab]      = useState(() => searchParams.get('tab') || 'list')
   const [search,    setSearch]   = useState('')
   const [activeAbt,    setActiveAbt]    = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:dept`,   [])))
   // Default: nur aktive Mitarbeiter (greift nur bei frischem Storage; eine
@@ -2568,12 +2647,16 @@ export function MitarbeiterPage() {
   const toast = useToast()
   const createFormRef = useRef<HTMLFormElement>(null)
 
-  const { data: listData,   isLoading } = useQuery({ queryKey: ['employees'],           queryFn: fetchEmployeeList      })
-  const { data: genData }               = useQuery({ queryKey: ['emp-genders'],         queryFn: fetchEmployeeGenders   })
-  const { data: deptData }              = useQuery({ queryKey: ['departments'],         queryFn: fetchDepartments       })
-  const { data: wtmData }               = useQuery({ queryKey: ['working-time-models'], queryFn: fetchWorkingTimeModels })
-  const { data: rolesData }             = useQuery({ queryKey: ['user-roles'],          queryFn: fetchRoles })
-  const { data: empRoleData }           = useQuery({ queryKey: ['employee-role-map'],   queryFn: fetchEmployeeRoleMap })
+  // Diese Queries brauchen employees.view. Nutzer, die nur eigene Abwesenheiten
+  // beantragen (absence.request), erreichen die Seite ebenfalls — fuer sie
+  // gaten wir ab, sonst loesen die 403 den globalen Fehler-Toast aus.
+  const canViewEmployees = usePermission('employees.view')
+  const { data: listData,   isLoading } = useQuery({ queryKey: ['employees'],           queryFn: fetchEmployeeList,      enabled: canViewEmployees })
+  const { data: genData }               = useQuery({ queryKey: ['emp-genders'],         queryFn: fetchEmployeeGenders,   enabled: canViewEmployees })
+  const { data: deptData }              = useQuery({ queryKey: ['departments'],         queryFn: fetchDepartments,       enabled: canViewEmployees })
+  const { data: wtmData }               = useQuery({ queryKey: ['working-time-models'], queryFn: fetchWorkingTimeModels, enabled: canViewEmployees })
+  const { data: rolesData }             = useQuery({ queryKey: ['user-roles'],          queryFn: fetchRoles,             enabled: canViewEmployees })
+  const { data: empRoleData }           = useQuery({ queryKey: ['employee-role-map'],   queryFn: fetchEmployeeRoleMap,   enabled: canViewEmployees })
 
   // Aktueller Monats-/Laufsaldo je Mitarbeiter fuer die Listenspalte „Saldo".
   // Nur laden, wenn der Nutzer fremde Buchungen sehen darf.
@@ -2699,12 +2782,28 @@ export function MitarbeiterPage() {
 
   const hasActiveFilter = activeAbt.size > 0 || activeStatus.size > 0 || activeModel.size > 0
 
+  const visibleTabs = useLicenseFilterTabs(useFilterTabs(TABS))
+  // Aktuellen Tab an verfügbare Tabs + ?tab=-Deeplink angleichen.
+  useEffect(() => {
+    if (!visibleTabs.length) return
+    const urlTab = searchParams.get('tab')
+    if (urlTab && visibleTabs.some(t => t.id === urlTab)) { setTab(urlTab); return }
+    setTab(cur => (visibleTabs.some(t => t.id === cur) ? cur : visibleTabs[0].id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleTabs.map(t => t.id).join(','), searchParams])
+  function changeTab(t: string) {
+    setTab(t); setCreateMsg(null)
+    const p = new URLSearchParams(searchParams)
+    if (t === 'list') p.delete('tab'); else p.set('tab', t)
+    setSearchParams(p, { replace: true })
+  }
+
   return (
     <div className="master-page">
       <div className="master-page-header">
         <h1 className="master-page-title">Mitarbeiter</h1>
       </div>
-      <Tabs tabs={useLicenseFilterTabs(useFilterTabs(TABS))} active={tab} onChange={t => { setTab(t); setCreateMsg(null) }} />
+      <Tabs tabs={visibleTabs} active={tab} onChange={changeTab} />
 
       <div className="master-section">
         {tab === 'list' && (
@@ -2844,7 +2943,11 @@ export function MitarbeiterPage() {
         )}
 
         {tab === 'zeitwirtschaft' && (
-          <ZeitwirtschaftTab employees={employees} />
+          <ZeitwirtschaftTab employees={employees} onGoToList={() => changeTab('list')} />
+        )}
+
+        {tab === 'abwesenheiten' && (
+          <AbwesenheitenTab employees={employees} />
         )}
 
         {tab === 'arbzg' && (

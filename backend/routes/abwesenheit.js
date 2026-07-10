@@ -210,8 +210,44 @@ async function notifyAbsenceRequest(supabase, tenantId, absence) {
       try {
         await createNotification(supabase, {
           tenantId, userId: String(empId), type: "absence_request",
-          title, body, link: "/mitarbeiter",
+          title, body, link: "/mitarbeiter?tab=abwesenheiten",
           metadata: { absenceId: absence.ID, employeeId: absence.EMPLOYEE_ID },
+        });
+      } catch (_) { /* einzelne Fehler schlucken */ }
+    }
+  } catch (_) { /* niemals werfen */ }
+}
+
+// Haengt einen Eintrag an den Rueckfrage-Verlauf (CLARIFICATION_LOG) an.
+// Best-effort: faellt weich aus, wenn die Spalte (Migration 0101) fehlt.
+async function appendClarification(supabase, tenantId, id, entry) {
+  try {
+    const { data, error } = await supabase.from("ABSENCE")
+      .select("CLARIFICATION_LOG").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+    if (error) return false;
+    const log = Array.isArray(data?.CLARIFICATION_LOG) ? data.CLARIFICATION_LOG : [];
+    log.push(entry);
+    const { error: upErr } = await supabase.from("ABSENCE")
+      .update({ CLARIFICATION_LOG: log }).eq("ID", id).eq("TENANT_ID", tenantId);
+    return !upErr;
+  } catch (_) { return false; }
+}
+
+// In-App-Benachrichtigung an alle Genehmiger: Antragsteller hat auf eine
+// Rueckfrage geantwortet. Nutzt denselben Typ wie ein neuer Antrag.
+async function notifyAbsenceReply(supabase, tenantId, absence) {
+  try {
+    const approverIds = await employeeIdsWithPermission(supabase, tenantId, "absence.approve");
+    if (!approverIds.length) return;
+    const emp = await loadEmp(supabase, tenantId, absence.EMPLOYEE_ID);
+    const who = emp ? `${emp.FIRST_NAME} ${emp.LAST_NAME} (${emp.SHORT_NAME})` : `Mitarbeiter #${absence.EMPLOYEE_ID}`;
+    for (const empId of approverIds) {
+      if (empId === absence.EMPLOYEE_ID) continue;
+      try {
+        await createNotification(supabase, {
+          tenantId, userId: String(empId), type: "absence_request",
+          title: "Antwort auf Rückfrage", body: `${who} hat auf eine Rückfrage geantwortet.`,
+          link: "/mitarbeiter?tab=abwesenheiten", metadata: { absenceId: absence.ID, employeeId: absence.EMPLOYEE_ID },
         });
       } catch (_) { /* einzelne Fehler schlucken */ }
     }
@@ -458,7 +494,29 @@ module.exports = (supabase) => {
       .select("*").maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
     if (!row) return res.status(404).json({ error: "Offener Antrag nicht gefunden" });
+    await appendClarification(supabase, req.tenantId, id, {
+      role: "approver", by: req.employeeId, at: new Date().toISOString(), text: note,
+    });
     notifyAbsenceDecision(supabase, req.tenantId, row, "CLARIFICATION").catch(() => {});
+    res.json({ success: true });
+  });
+
+  // POST /:id/reply — Antwort des Antragstellers auf eine Rueckfrage.
+  // Antrag bleibt offen; die Genehmiger werden benachrichtigt.
+  router.post("/:id/reply", async (req, res) => {
+    const id = Number(req.params.id);
+    const note = String(req.body?.note || "").trim();
+    if (!note) return res.status(400).json({ error: "Bitte eine Antwort eingeben" });
+    const { data: row } = await supabase.from("ABSENCE").select("*").eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+    if (!row) return res.status(404).json({ error: "Nicht gefunden" });
+    const isOwner = row.EMPLOYEE_ID === req.employeeId;
+    if (!isOwner && !req.hasPermission("absence.manage")) return res.status(403).json({ error: "Keine Berechtigung" });
+    if (row.STATUS !== "REQUESTED") return res.status(400).json({ error: "Antworten sind nur bei offenen Anträgen möglich" });
+    const ok = await appendClarification(supabase, req.tenantId, id, {
+      role: "requester", by: req.employeeId, at: new Date().toISOString(), text: note,
+    });
+    if (!ok) return res.status(400).json({ error: "Antworten benötigt Migration 0101 (CLARIFICATION_LOG)" });
+    notifyAbsenceReply(supabase, req.tenantId, row).catch(() => {});
     res.json({ success: true });
   });
 

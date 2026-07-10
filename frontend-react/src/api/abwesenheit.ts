@@ -16,6 +16,13 @@ export interface AbsenceType {
 
 export type AbsenceStatus = 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
 
+export interface ClarificationEntry {
+  role: 'approver' | 'requester'
+  by:   number
+  at:   string
+  text: string
+}
+
 export interface Absence {
   ID:                  number
   EMPLOYEE_ID:         number
@@ -30,6 +37,7 @@ export interface Absence {
   DECIDED_BY:          number | null
   DECIDED_AT:          string | null
   DECISION_NOTE:       string | null
+  CLARIFICATION_LOG:   ClarificationEntry[] | null
   // angereichert vom Backend
   DAYS:                number
   TYPE_NAME:           string | null
@@ -125,9 +133,13 @@ export const updateAbsence = (id: number, body: Partial<CreateAbsencePayload>) =
 export const decideAbsence = (id: number, decision: 'APPROVED' | 'REJECTED', note?: string) =>
   apiClient.post<{ success: boolean }>(`/abwesenheit/${id}/decision`, { decision, note })
 
-// Rückfrage stellen — Antrag bleibt offen, Antragsteller wird benachrichtigt.
+// Rückfrage stellen (Genehmiger) — Antrag bleibt offen, Antragsteller wird benachrichtigt.
 export const clarifyAbsence = (id: number, note: string) =>
   apiClient.post<{ success: boolean }>(`/abwesenheit/${id}/clarify`, { note })
+
+// Antwort des Antragstellers auf eine Rückfrage — Genehmiger werden benachrichtigt.
+export const replyAbsence = (id: number, note: string) =>
+  apiClient.post<{ success: boolean }>(`/abwesenheit/${id}/reply`, { note })
 
 export const cancelAbsence = (id: number) =>
   apiClient.post<{ success: boolean }>(`/abwesenheit/${id}/cancel`, {})

@@ -23,7 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/daten',      icon: BarChart3,       label: 'Reporting',     permissions: ['reports.view'], feature: 'reports.standard' },
   { to: '/rechnungen', icon: Receipt,         label: 'Rechnungen',    permissions: ['invoices.view','dunning.view','security_retention.view'], feature: 'invoices.basic' },
   { to: '/admin',      icon: Settings,        label: 'Einstellungen', permissions: ['settings.basedata.view','settings.basedata.edit','settings.defaults.edit','settings.notifications.edit','settings.monthly_close.edit','settings.company.view','settings.company.edit','settings.numbers.edit','settings.text_templates.edit','settings.dunning_config.edit','settings.work_time.edit','settings.cost_rate.edit','roles.view'], feature: 'settings.core' },
-  { to: '/mitarbeiter',icon: Users,           label: 'Mitarbeiter',   permissions: ['employees.view'], feature: 'employees.management' },
+  { to: '/mitarbeiter',icon: Users,           label: 'Mitarbeiter',   permissions: ['employees.view','absence.view','absence.request'], feature: 'employees.management' },
   { to: '/angebote',   icon: FileSignature,   label: 'Angebote',      permissions: ['offers.view'], feature: 'offers.basic' },
   { to: '/service',    icon: LifeBuoy,        label: 'Service',       permissions: ['service.suggestions.view','service.feedback.use','service.support.use'] },
 ]
