@@ -2481,7 +2481,9 @@ export function MitarbeiterPage() {
   const [tab,       setTab]      = useState('list')
   const [search,    setSearch]   = useState('')
   const [activeAbt,    setActiveAbt]    = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:dept`,   [])))
-  const [activeStatus, setActiveStatus] = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:status`,[])))
+  // Default: nur aktive Mitarbeiter (greift nur bei frischem Storage; eine
+  // bewusst gespeicherte Auswahl – auch die leere „alle" – bleibt erhalten).
+  const [activeStatus, setActiveStatus] = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:status`, ['Aktiv'])))
   const [activeModel,  setActiveModel]  = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:model`, [])))
   const [sortKey,   setSortKey]  = useState<SortKey>(() => lsGet<SortKey>(`${ML}:sortKey`, 'SHORT_NAME'))
   const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>(() => lsGet<'asc'|'desc'>(`${ML}:sortDir`, 'asc'))
