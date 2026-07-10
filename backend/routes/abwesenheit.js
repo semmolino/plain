@@ -1,7 +1,7 @@
 "use strict";
 const express = require("express");
 const { requirePermission } = require("../middleware/permissions");
-const { sendMail } = require("../services/emailService");
+const { createNotification } = require("../services/notifications");
 const { getEmployeeCountryState } = require("../services/costRateCalc");
 
 // ── Feiertage ─────────────────────────────────────────────────────────────────
@@ -175,8 +175,8 @@ async function loadTypeName(supabase, tenantId, typeId) {
   } catch (_) { return "Abwesenheit"; }
 }
 
-// E-Mails aller aktiven Mitarbeiter eines Tenants, deren Rolle permKey traegt.
-async function mailsWithPermission(supabase, tenantId, permKey) {
+// empIds aller aktiven Mitarbeiter eines Tenants, deren Rolle permKey traegt.
+async function employeeIdsWithPermission(supabase, tenantId, permKey) {
   try {
     const { data: perm } = await supabase.from("PERMISSION").select("ID").eq("KEY", permKey).maybeSingle();
     if (!perm) return [];
@@ -189,39 +189,53 @@ async function mailsWithPermission(supabase, tenantId, permKey) {
     const { data: ers } = await supabase.from("EMPLOYEE_ROLE").select("EMPLOYEE_ID").in("ROLE_ID", tenantRoleIds);
     const empIds = [...new Set((ers || []).map(e => e.EMPLOYEE_ID).filter(Boolean))];
     if (!empIds.length) return [];
-    const { data: emps } = await supabase.from("EMPLOYEE").select("MAIL").in("ID", empIds).eq("TENANT_ID", tenantId).neq("ACTIVE", 2);
-    return [...new Set((emps || []).map(e => e.MAIL).filter(Boolean))];
+    const { data: emps } = await supabase.from("EMPLOYEE").select("ID").in("ID", empIds).eq("TENANT_ID", tenantId).neq("ACTIVE", 2);
+    return (emps || []).map(e => e.ID);
   } catch (_) { return []; }
 }
 
+// In-App-Benachrichtigung an alle Genehmiger (absence.approve): neuer Antrag.
+// Fire-and-forget, nie blockierend. Nutzt den zentralen Notification-Service.
 async function notifyAbsenceRequest(supabase, tenantId, absence) {
   try {
-    const mails = await mailsWithPermission(supabase, tenantId, "absence.approve");
-    if (!mails.length) return;
+    const approverIds = await employeeIdsWithPermission(supabase, tenantId, "absence.approve");
+    if (!approverIds.length) return;
     const emp = await loadEmp(supabase, tenantId, absence.EMPLOYEE_ID);
     const typeName = await loadTypeName(supabase, tenantId, absence.ABSENCE_TYPE_ID);
     const who = emp ? `${emp.FIRST_NAME} ${emp.LAST_NAME} (${emp.SHORT_NAME})` : `Mitarbeiter #${absence.EMPLOYEE_ID}`;
-    const subject = `Neuer Abwesenheitsantrag: ${who}`;
-    const html = `<p>${who} hat eine Abwesenheit beantragt:</p>
-<ul><li><strong>Art:</strong> ${typeName}</li><li><strong>Zeitraum:</strong> ${fmtRangeDe(absence)}</li>${absence.NOTE ? `<li><strong>Notiz:</strong> ${absence.NOTE}</li>` : ""}</ul>
-<p>Zum Genehmigen: Mitarbeiter → Zeitwirtschaft → Abwesenheiten → Anträge.</p>`;
-    for (const to of mails) {
-      try { await sendMail({ supabase, tenantId, to, subject, html }); } catch (_) { /* Config/Provider-Fehler ignorieren */ }
+    const title = "Neuer Abwesenheitsantrag";
+    const body  = `${who}: ${typeName}, ${fmtRangeDe(absence)}`;
+    for (const empId of approverIds) {
+      if (empId === absence.EMPLOYEE_ID) continue; // sich selbst nicht benachrichtigen
+      try {
+        await createNotification(supabase, {
+          tenantId, userId: String(empId), type: "absence_request",
+          title, body, link: "/mitarbeiter",
+          metadata: { absenceId: absence.ID, employeeId: absence.EMPLOYEE_ID },
+        });
+      } catch (_) { /* einzelne Fehler schlucken */ }
     }
   } catch (_) { /* niemals werfen */ }
 }
 
-async function notifyAbsenceDecision(supabase, tenantId, absence, decision) {
+// In-App-Benachrichtigung an den Antragsteller: Entscheidung oder Rueckfrage.
+// outcome: 'APPROVED' | 'REJECTED' | 'CLARIFICATION'.
+async function notifyAbsenceDecision(supabase, tenantId, absence, outcome) {
   try {
-    const emp = await loadEmp(supabase, tenantId, absence.EMPLOYEE_ID);
-    if (!emp || !emp.MAIL) return;
     const typeName = await loadTypeName(supabase, tenantId, absence.ABSENCE_TYPE_ID);
-    const decided = decision === "APPROVED" ? "genehmigt" : "abgelehnt";
-    const subject = `Abwesenheitsantrag ${decided}`;
-    const html = `<p>Hallo ${emp.FIRST_NAME},</p>
-<p>dein Antrag wurde <strong>${decided}</strong>:</p>
-<ul><li><strong>Art:</strong> ${typeName}</li><li><strong>Zeitraum:</strong> ${fmtRangeDe(absence)}</li></ul>`;
-    try { await sendMail({ supabase, tenantId, to: emp.MAIL, subject, html }); } catch (_) { /* ignorieren */ }
+    const MAP = {
+      APPROVED:      "Abwesenheitsantrag genehmigt",
+      REJECTED:      "Abwesenheitsantrag abgelehnt",
+      CLARIFICATION: "Rückfrage zu deinem Antrag",
+    };
+    const title = MAP[outcome] || MAP.APPROVED;
+    let body = `${typeName}, ${fmtRangeDe(absence)}`;
+    if (absence.DECISION_NOTE) body += ` — ${absence.DECISION_NOTE}`;
+    await createNotification(supabase, {
+      tenantId, userId: String(absence.EMPLOYEE_ID), type: "absence_decision",
+      title, body, link: "/profil",
+      metadata: { absenceId: absence.ID, outcome },
+    });
   } catch (_) { /* niemals werfen */ }
 }
 
@@ -428,6 +442,23 @@ module.exports = (supabase) => {
     }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
     if (row) notifyAbsenceDecision(supabase, req.tenantId, row, decision).catch(() => {});
+    res.json({ success: true });
+  });
+
+  // POST /:id/clarify — Rueckfrage stellen (Antrag bleibt offen/REQUESTED).
+  // Genehmiger schickt eine Notiz; der Antragsteller wird benachrichtigt und
+  // kann seinen Antrag anpassen. STATUS und DECIDED_* bleiben unveraendert.
+  router.post("/:id/clarify", requirePermission("absence.approve"), async (req, res) => {
+    const id = Number(req.params.id);
+    const note = String(req.body?.note || "").trim();
+    if (!note) return res.status(400).json({ error: "Bitte eine Rückfrage/Notiz angeben" });
+    const { data: row, error } = await supabase.from("ABSENCE")
+      .update({ DECISION_NOTE: note })
+      .eq("ID", id).eq("TENANT_ID", req.tenantId).eq("STATUS", "REQUESTED")
+      .select("*").maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!row) return res.status(404).json({ error: "Offener Antrag nicht gefunden" });
+    notifyAbsenceDecision(supabase, req.tenantId, row, "CLARIFICATION").catch(() => {});
     res.json({ success: true });
   });
 

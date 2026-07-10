@@ -32,7 +32,7 @@ import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeve
 import { updateBuchung, deleteBuchung } from '@/api/projekte'
 import {
   fetchAbsenceTypes, fetchAbsences, fetchVacationBalance, fetchEntitlements, putEntitlement,
-  createAbsence, decideAbsence, cancelAbsence, deleteAbsence,
+  createAbsence, decideAbsence, clarifyAbsence, cancelAbsence, deleteAbsence,
   type Absence, type AbsenceStatus,
 } from '@/api/abwesenheit'
 
@@ -291,6 +291,37 @@ function AbsenceStatusBadge({ status }: { status: AbsenceStatus }) {
   return <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10 }}>{s.label}</span>
 }
 
+// Rückfrage-Modal (Genehmiger) — Antrag bleibt offen, Antragsteller wird benachrichtigt.
+function ClarifyModal({ absenceId, onClose, onDone }: { absenceId: number; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const [note, setNote] = useState('')
+  const mut = useMutation({
+    mutationFn: () => clarifyAbsence(absenceId, note.trim()),
+    onSuccess: () => { toast.success('Rückfrage gesendet'); onDone() },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  return (
+    <Modal open onClose={onClose} title="Rückfrage zum Antrag">
+      <div className="master-form">
+        <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 8px' }}>
+          Der Antrag bleibt offen. Der Antragsteller wird benachrichtigt und kann seinen Antrag anpassen.
+        </p>
+        <div className="form-group">
+          <label>Rückfrage / Notiz</label>
+          <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
+            placeholder="Was soll geklärt werden?" style={{ width: '100%', resize: 'vertical' }} />
+        </div>
+        <div className="modal-actions">
+          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button className="btn-primary" disabled={!note.trim() || mut.isPending} onClick={() => mut.mutate()}>
+            {mut.isPending ? 'Sendet …' : 'Rückfrage senden'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
   const qc = useQueryClient()
   const toast = useToast()
@@ -336,6 +367,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
   const [fTo,   setFTo]   = useState('')
   const [fHalf, setFHalf] = useState(false)
   const [fNote, setFNote] = useState('')
+  const [clarifyId, setClarifyId] = useState<number | null>(null)
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['absences', employeeId] })
@@ -481,7 +513,12 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
                   {a.TYPE_NAME || '—'}
                 </td>
                 <td style={{ padding: '5px 8px 5px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{a.DAYS}</td>
-                <td style={{ padding: '5px 8px 5px 0' }}><AbsenceStatusBadge status={a.STATUS} /></td>
+                <td style={{ padding: '5px 8px 5px 0' }}>
+                  <AbsenceStatusBadge status={a.STATUS} />
+                  {a.STATUS === 'REQUESTED' && a.DECISION_NOTE && (
+                    <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>Rückfrage: {a.DECISION_NOTE}</div>
+                  )}
+                </td>
                 <td style={{ padding: '5px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
                   {canApprove && a.STATUS === 'REQUESTED' && (
                     <>
@@ -489,6 +526,8 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
                         disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'APPROVED' })}>Genehmigen</button>
                       <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
                         disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'REJECTED' })}>Ablehnen</button>
+                      <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
+                        onClick={() => setClarifyId(a.ID)}>Rückfrage</button>
                     </>
                   )}
                   {canManage && a.STATUS === 'APPROVED' && (
@@ -504,6 +543,11 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
             ))}
           </tbody>
         </table>
+      )}
+
+      {clarifyId != null && (
+        <ClarifyModal absenceId={clarifyId} onClose={() => setClarifyId(null)}
+          onDone={() => { setClarifyId(null); invalidate() }} />
       )}
     </div>
   )
@@ -1852,6 +1896,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
   const now = new Date()
   const [year, setYear]   = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
+  const [clarifyId, setClarifyId] = useState<number | null>(null)
 
   const { data: inboxRes, isLoading: inboxLoading } = useQuery({
     queryKey: ['absences-inbox'],
@@ -1907,12 +1952,16 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                       <td style={{ whiteSpace: 'nowrap' }}>{fmtDateShort(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDateShort(a.DATE_TO)}` : ''}{a.HALF_DAY ? ' (½)' : ''}</td>
                       <td><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />{a.TYPE_NAME}</td>
                       <td className="num">{a.DAYS}</td>
-                      <td style={{ fontSize: 12, color: '#6b7280' }}>{a.NOTE || '—'}</td>
+                      <td style={{ fontSize: 12, color: '#6b7280' }}>
+                        {a.NOTE || '—'}
+                        {a.DECISION_NOTE && <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>Rückfrage: {a.DECISION_NOTE}</div>}
+                      </td>
                       <td className="num" style={{ whiteSpace: 'nowrap' }}>
                         {canApprove ? (
                           <>
                             <button className="btn-small btn-save" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }} disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'APPROVED' })}>Genehmigen</button>
-                            <button className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'REJECTED' })}>Ablehnen</button>
+                            <button className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }} disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'REJECTED' })}>Ablehnen</button>
+                            <button className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} onClick={() => setClarifyId(a.ID)}>Rückfrage</button>
                           </>
                         ) : <span style={{ fontSize: 11, color: '#9ca3af' }}>—</span>}
                       </td>
@@ -1993,6 +2042,15 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
           </>
         )
       })()}
+
+      {clarifyId != null && (
+        <ClarifyModal absenceId={clarifyId} onClose={() => setClarifyId(null)}
+          onDone={() => {
+            setClarifyId(null)
+            void qc.invalidateQueries({ queryKey: ['absences-inbox'] })
+            void qc.invalidateQueries({ queryKey: ['absences'] })
+          }} />
+      )}
     </div>
   )
 }

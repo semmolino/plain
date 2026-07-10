@@ -12,7 +12,7 @@ import { usePermission }       from '@/store/permissionsStore'
 import { useToast }            from '@/store/toastStore'
 import {
   fetchAbsenceTypes, fetchAbsences, fetchVacationBalance,
-  createAbsence, cancelAbsence, deleteAbsence,
+  createAbsence, updateAbsence, cancelAbsence, deleteAbsence,
   type Absence, type AbsenceStatus,
 } from '@/api/abwesenheit'
 
@@ -222,6 +222,7 @@ function MyAbsencesSection() {
   const absences  = absRes?.data ?? []
 
   const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState<number | null>(null)
   const [fType, setFType] = useState('')
   const [fFrom, setFFrom] = useState('')
   const [fTo,   setFTo]   = useState('')
@@ -229,14 +230,26 @@ function MyAbsencesSection() {
   const [fNote, setFNote] = useState('')
   const [msg,   setMsg]   = useState<string | null>(null)
 
+  const resetForm = () => { setShowForm(false); setEditId(null); setFType(''); setFFrom(''); setFTo(''); setFHalf(false); setFNote(''); setMsg(null) }
+  const openNew  = () => { resetForm(); setShowForm(true) }
+  const openEdit = (a: Absence) => {
+    setEditId(a.ID); setFType(String(a.ABSENCE_TYPE_ID)); setFFrom(a.DATE_FROM)
+    setFTo(a.DATE_TO !== a.DATE_FROM ? a.DATE_TO : ''); setFHalf(a.HALF_DAY); setFNote(a.NOTE ?? '')
+    setMsg(null); setShowForm(true)
+  }
+
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['my-absences'] })
     void qc.invalidateQueries({ queryKey: ['my-vacation-balance'] })
     void qc.invalidateQueries({ queryKey: ['absences-inbox'] })
   }
-  const createMut = useMutation({
-    mutationFn: () => createAbsence({ absence_type_id: Number(fType), date_from: fFrom, date_to: fTo || fFrom, half_day: fHalf && (!fTo || fTo === fFrom), note: fNote }),
-    onSuccess: () => { toast.success('Antrag eingereicht'); setShowForm(false); setFType(''); setFFrom(''); setFTo(''); setFHalf(false); setFNote(''); setMsg(null); invalidate() },
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const payload = { absence_type_id: Number(fType), date_from: fFrom, date_to: fTo || fFrom, half_day: fHalf && (!fTo || fTo === fFrom), note: fNote }
+      if (editId != null) await updateAbsence(editId, payload)
+      else                await createAbsence(payload)
+    },
+    onSuccess: () => { toast.success(editId != null ? 'Antrag aktualisiert' : 'Antrag eingereicht'); resetForm(); invalidate() },
     onError: (e: Error) => setMsg(e.message),
   })
   const withdrawMut = useMutation({ mutationFn: (id: number) => deleteAbsence(id), onSuccess: () => { toast.success('Antrag zurückgezogen'); invalidate() }, onError: (e: Error) => toast.error(e.message) })
@@ -253,7 +266,7 @@ function MyAbsencesSection() {
           Meine Abwesenheiten
           {bal && <span style={{ fontWeight: 400, fontSize: 12, color: '#6b7280', marginLeft: 10 }}>Resturlaub {year}: <strong style={{ color: bal.remaining < 0 ? '#dc2626' : '#059669' }}>{bal.remaining} T</strong> (von {Math.round((bal.entitled + bal.carryover) * 10) / 10} T)</span>}
         </div>
-        {!showForm && <button type="button" className="btn-small btn-save" onClick={() => { setMsg(null); setShowForm(true) }}>+ Antrag stellen</button>}
+        {!showForm && <button type="button" className="btn-small btn-save" onClick={openNew}>+ Antrag stellen</button>}
       </div>
 
       {bal && !!bal.atRisk && bal.atRisk > 0 && (
@@ -283,10 +296,10 @@ function MyAbsencesSection() {
           <div className="form-group"><label>Notiz</label><input type="text" value={fNote} onChange={e => setFNote(e.target.value)} placeholder="optional" /></div>
           {msg && <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 8 }}>{msg}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn-small btn-save" disabled={!fType || !fFrom || createMut.isPending} onClick={() => createMut.mutate()}>
-              {createMut.isPending ? 'Sendet …' : 'Antrag einreichen'}
+            <button type="button" className="btn-small btn-save" disabled={!fType || !fFrom || saveMut.isPending} onClick={() => saveMut.mutate()}>
+              {saveMut.isPending ? 'Speichert …' : (editId != null ? 'Änderungen speichern' : 'Antrag einreichen')}
             </button>
-            <button type="button" className="btn-small" onClick={() => setShowForm(false)}>Abbrechen</button>
+            <button type="button" className="btn-small" onClick={resetForm}>Abbrechen</button>
           </div>
         </div>
       )}
@@ -311,10 +324,16 @@ function MyAbsencesSection() {
                   <td style={{ padding: '6px 8px 6px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#6b7280' }}>{a.DAYS} T</td>
                   <td style={{ padding: '6px 8px 6px 0' }}>
                     <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10 }}>{s.label}</span>
+                    {a.STATUS === 'REQUESTED' && a.DECISION_NOTE && (
+                      <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>Rückfrage: {a.DECISION_NOTE}</div>
+                    )}
                   </td>
                   <td style={{ padding: '6px 0', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {a.STATUS === 'REQUESTED' && (
-                      <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} disabled={withdrawMut.isPending} onClick={() => withdrawMut.mutate(a.ID)}>Zurückziehen</button>
+                      <>
+                        <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }} onClick={() => openEdit(a)}>Bearbeiten</button>
+                        <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} disabled={withdrawMut.isPending} onClick={() => withdrawMut.mutate(a.ID)}>Zurückziehen</button>
+                      </>
                     )}
                     {a.STATUS === 'APPROVED' && (
                       <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} disabled={cancelMut.isPending} onClick={() => cancelMut.mutate(a.ID)}>Stornieren</button>

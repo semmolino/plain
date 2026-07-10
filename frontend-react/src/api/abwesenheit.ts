@@ -125,6 +125,10 @@ export const updateAbsence = (id: number, body: Partial<CreateAbsencePayload>) =
 export const decideAbsence = (id: number, decision: 'APPROVED' | 'REJECTED', note?: string) =>
   apiClient.post<{ success: boolean }>(`/abwesenheit/${id}/decision`, { decision, note })
 
+// Rückfrage stellen — Antrag bleibt offen, Antragsteller wird benachrichtigt.
+export const clarifyAbsence = (id: number, note: string) =>
+  apiClient.post<{ success: boolean }>(`/abwesenheit/${id}/clarify`, { note })
+
 export const cancelAbsence = (id: number) =>
   apiClient.post<{ success: boolean }>(`/abwesenheit/${id}/cancel`, {})
 
