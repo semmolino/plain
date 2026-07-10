@@ -17,7 +17,7 @@ Ziel: ein **realistisches Beispiel-Architekturbüro** als **separater Demo-Manda
 |---|---|---|
 | `createDemoTenant.js` | Loginbaren Demo-Mandanten anlegen (TENANTS+COMPANY+EMPLOYEE+Rollen, wie Signup) | ✅ vorhanden |
 | `exportTenant.js`     | **READ-ONLY** Snapshot aller mandantenbezogenen Daten → JSON (IDs 1:1) | ✅ vorhanden |
-| `seed/`               | **Bewegungsdaten-Generator**: erzeugt mehrjährigen Verlauf (Buchungen, Leistungsstände, später Rechnungen/Zahlungen/Abwesenheiten) auf Basis der manuell angelegten Stammdaten, über die echten Services. Siehe [`seed/README.md`](./seed/README.md) | 🟡 Buchungen + Leistungsstände fertig |
+| `seed/`               | **Bewegungsdaten-Generator**: erzeugt mehrjährigen Verlauf (Buchungen, Leistungsstände, Abschlagsrechnungen + Zahlungen; Schlussrechnung/Abwesenheiten folgen) auf Basis der manuell angelegten Stammdaten, über die echten Services. Siehe [`seed/README.md`](./seed/README.md) | 🟡 Buchungen, Leistungsstände, Abschläge + Zahlungen |
 | `importTenant.js`     | Demo-Mandant per Wipe + Reinsert auf den Snapshot zurücksetzen (ID-erhaltend) | ⬜ geplant |
 
 > Ansatz „ID-erhaltend": Der Snapshot behält die Original-IDs. `importTenant` löscht

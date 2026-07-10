@@ -60,6 +60,9 @@ module.exports = {
   invoicing: {
     // Abschlagsrechnungen etwa alle N Tage über die Projektlaufzeit.
     partialEveryDays: 75,
+    // Pauschal-Abschläge nie über diesen %-Anteil des Fixhonorars hinaus stellen —
+    // der Rest bleibt der Schlussrechnung vorbehalten.
+    partialCapPct: 90,
     // Schlussrechnung, sobald das Projekt laut Timeline abgeschlossen ist.
     finalWhenClosed: true,
     // Zahlungsverhalten der Kunden.
