@@ -2,6 +2,65 @@
 const express = require("express");
 const { requirePermission } = require("../middleware/permissions");
 const { sendMail } = require("../services/emailService");
+const { getEmployeeCountryState } = require("../services/costRateCalc");
+
+// ── Feiertage ─────────────────────────────────────────────────────────────────
+// Laedt die Feiertage (Land/Bundesland) im Bereich [from,to] als Set von
+// 'YYYY-MM-DD'. Feiertage werden nicht als Urlaubs-/Abwesenheitstage gezaehlt.
+// Soft-Fail: fehlt die Tabelle oder ein Eintrag, verhaelt es sich wie zuvor
+// (Tag zaehlt als Werktag).
+async function loadHolidaySet(supabase, countryCode, stateCode, from, to) {
+  try {
+    let q = supabase.from("PUBLIC_HOLIDAY").select("HOLIDAY_DATE")
+      .eq("COUNTRY_CODE", countryCode || "DE")
+      .gte("HOLIDAY_DATE", from).lte("HOLIDAY_DATE", to);
+    q = stateCode ? q.or(`STATE_CODE.is.null,STATE_CODE.eq.${stateCode}`) : q.is("STATE_CODE", null);
+    const { data } = await q;
+    return new Set((data || []).map(r => String(r.HOLIDAY_DATE).slice(0, 10)));
+  } catch (_) { return new Set(); }
+}
+
+// Baut einen Resolver empId -> Feiertags-Set. Land/Bundesland kommt je
+// Mitarbeiter aus dem Arbeitszeitmodell; Feiertage werden pro Land/Bundesland-
+// Kombination nur einmal geladen (typischerweise genau eine Query).
+async function buildHolidayResolver(supabase, tenantId, empIds, from, to) {
+  const csByEmp  = new Map();
+  const combos   = new Map(); // "COUNTRY|STATE" -> { countryCode, stateCode }
+  for (const id of empIds) {
+    const cs = await getEmployeeCountryState(supabase, tenantId, id);
+    csByEmp.set(id, cs);
+    combos.set(`${cs.countryCode}|${cs.stateCode ?? ""}`, cs);
+  }
+  const setByCombo = new Map();
+  for (const [key, cs] of combos) {
+    setByCombo.set(key, await loadHolidaySet(supabase, cs.countryCode, cs.stateCode, from, to));
+  }
+  return (empId) => {
+    const cs = csByEmp.get(empId);
+    return (cs && setByCombo.get(`${cs.countryCode}|${cs.stateCode ?? ""}`)) || null;
+  };
+}
+
+// Werktage (Mo–Fr) im Zeitraum ohne Wochenenden und Feiertage; halber Tag nur
+// bei Eintagesabwesenheit. `holidays` ist ein optionales Set von 'YYYY-MM-DD';
+// fehlt es, werden nur Wochenenden ausgenommen.
+function workdayCount(from, to, halfDay, holidays) {
+  const a = new Date(`${from}T00:00:00`);
+  const b = new Date(`${to}T00:00:00`);
+  if (isNaN(a.getTime()) || isNaN(b.getTime()) || b < a) return 0;
+  const pad = (n) => String(n).padStart(2, "0");
+  const key = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const isFree = (d) => {
+    const wd = d.getDay();
+    return wd === 0 || wd === 6 || (holidays && holidays.has(key(d)));
+  };
+  if (halfDay && from === to) return isFree(a) ? 0 : 0.5;
+  let days = 0;
+  for (const d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+    if (!isFree(d)) days++;
+  }
+  return days;
+}
 
 // ── E-Mail-Benachrichtigungen (fire-and-forget, nie blockierend) ──────────────
 
@@ -86,21 +145,6 @@ async function notifyAbsenceDecision(supabase, tenantId, absence, decision) {
 //         pflegen, fuer andere erfassen).
 module.exports = (supabase) => {
   const router = express.Router();
-
-  // Werktage (Mo–Fr) im Zeitraum; halber Tag nur bei Eintagesabwesenheit.
-  // Phase 1 ohne Feiertags-Beruecksichtigung (Naeherung — spaeter verfeinern).
-  function workdayCount(from, to, halfDay) {
-    const a = new Date(`${from}T00:00:00`);
-    const b = new Date(`${to}T00:00:00`);
-    if (isNaN(a.getTime()) || isNaN(b.getTime()) || b < a) return 0;
-    if (halfDay && from === to) return 0.5;
-    let days = 0;
-    for (const d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
-      const wd = d.getDay();
-      if (wd !== 0 && wd !== 6) days++;
-    }
-    return days;
-  }
 
   // ── ABSENCE_TYPE (Katalog) ──────────────────────────────────────────────────
   router.get("/types", async (req, res) => {
@@ -191,9 +235,17 @@ module.exports = (supabase) => {
     const typeMap = Object.fromEntries((typesRes.data || []).map(t => [t.ID, t]));
     const empMap  = Object.fromEntries((empsRes.data  || []).map(e => [e.ID, e]));
 
+    // Feiertage fuer die Tage-Zaehlung (min–max-Zeitraum, je Mitarbeiter-Bundesland).
+    let holidaysFor = () => null;
+    if (rows.length) {
+      const minFrom = rows.reduce((m, r) => (r.DATE_FROM < m ? r.DATE_FROM : m), rows[0].DATE_FROM);
+      const maxTo   = rows.reduce((m, r) => (r.DATE_TO   > m ? r.DATE_TO   : m), rows[0].DATE_TO);
+      holidaysFor = await buildHolidayResolver(supabase, req.tenantId, empIds, minFrom, maxTo);
+    }
+
     const enriched = rows.map(r => ({
       ...r,
-      DAYS:                workdayCount(r.DATE_FROM, r.DATE_TO, r.HALF_DAY),
+      DAYS:                workdayCount(r.DATE_FROM, r.DATE_TO, r.HALF_DAY, holidaysFor(r.EMPLOYEE_ID)),
       TYPE_NAME:           typeMap[r.ABSENCE_TYPE_ID]?.NAME  ?? null,
       TYPE_COLOR:          typeMap[r.ABSENCE_TYPE_ID]?.COLOR ?? null,
       REDUCES_VACATION:    typeMap[r.ABSENCE_TYPE_ID]?.REDUCES_VACATION ?? false,
@@ -369,10 +421,22 @@ module.exports = (supabase) => {
           .eq("TENANT_ID", req.tenantId).eq("EMPLOYEE_ID", empId).eq("STATUS", "APPROVED").in("ABSENCE_TYPE_ID", vacTypeIds)
       : { data: [] };
 
+    // Feiertage im relevanten Zeitraum (fruehester Antrag bis Jahresende) einmalig laden.
+    let holidays = null;
+    if ((absences || []).length) {
+      let spanFrom = `${year}-01-01`, spanTo = `${year}-12-31`;
+      for (const a of absences) {
+        if (a.DATE_FROM < spanFrom) spanFrom = a.DATE_FROM;
+        if (a.DATE_TO   > spanTo)   spanTo   = a.DATE_TO;
+      }
+      const cs = await getEmployeeCountryState(supabase, req.tenantId, empId);
+      holidays = await loadHolidaySet(supabase, cs.countryCode, cs.stateCode, spanFrom, spanTo);
+    }
+
     const takenByYear = {};
     for (const a of absences || []) {
       const y = Number(String(a.DATE_FROM).slice(0, 4));
-      takenByYear[y] = (takenByYear[y] || 0) + workdayCount(a.DATE_FROM, a.DATE_TO, a.HALF_DAY);
+      takenByYear[y] = (takenByYear[y] || 0) + workdayCount(a.DATE_FROM, a.DATE_TO, a.HALF_DAY, holidays);
     }
     const entByYear = {};
     for (const e of entitlements || []) entByYear[e.YEAR] = e;
@@ -398,3 +462,6 @@ module.exports = (supabase) => {
 
   return router;
 };
+
+// Fuer Unit-Tests exportiert (reine Funktion, kein DB-Zugriff).
+module.exports.workdayCount = workdayCount;
