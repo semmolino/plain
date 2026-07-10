@@ -55,7 +55,7 @@ node demo/seed/index.js --tenant <DEMO_TENANT_ID> --reset --apply --force
 | `bookings` | ✅ | Zeit-Buchungen (TEC) über die Laufzeit, verteilt auf Mitarbeiter/Blätter, Kostensatz-Historie optional |
 | `progress` | ✅ | Leistungsstände: BT1 geplanter Fertigstellungsverlauf, BT2 Erlös-Snapshots (`PROJECT_PROGRESS`) |
 | `invoicing` | 🟡 | Abschlagsrechnungen (BT1 nach Leistungsstand, BT2 nach Buchungen) + Zahlungseingänge — über die echten Services. **Schlussrechnung folgt.** |
-| `hr` | ⬜ geplant | Abwesenheiten/Urlaub (Migration 0086), konsistent mit Zeitkonto |
+| `hr` | ✅ | Abwesenheiten/Urlaub + Urlaubsanspruch (Migration 0086): pro MA/Jahr Urlaubsblöcke + Krankheitstage, APPROVED, im Beschäftigungsfenster |
 
 ## Stellschrauben
 
