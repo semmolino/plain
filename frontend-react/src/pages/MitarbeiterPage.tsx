@@ -34,6 +34,7 @@ import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeve
 import { updateBuchung, deleteBuchung } from '@/api/projekte'
 import {
   fetchAbsenceTypes, fetchAbsences, fetchVacationBalance, fetchEntitlements, putEntitlement,
+  fetchAllEntitlements, putEntitlementsBulk,
   createAbsence, decideAbsence, clarifyAbsence, cancelAbsence, deleteAbsence,
   type Absence, type AbsenceStatus,
 } from '@/api/abwesenheit'
@@ -1887,7 +1888,7 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
 
 // ── Abwesenheiten-Tab (Genehmigungs-Postfach + Team-Kalender) ─────────────────
 
-type AbsSub = 'inbox' | 'calendar' | 'my'
+type AbsSub = 'inbox' | 'calendar' | 'my' | 'entitlements'
 
 function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
   const qc = useQueryClient()
@@ -1895,6 +1896,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
   const canApprove = usePermission('absence.approve')
   const canView    = usePermission('absence.view')
   const canRequest = usePermission('absence.request')
+  const canManage  = usePermission('absence.manage')
   const [sub, setSub] = useState<AbsSub>(canView ? 'inbox' : 'my')
   const now = new Date()
   const [year, setYear]   = useState(now.getFullYear())
@@ -1916,9 +1918,29 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
     enabled:  sub === 'calendar' && canView,
   })
 
+  // Überschneidungen: alle Abwesenheiten im Zeitfenster der offenen Anträge laden,
+  // um beim Genehmigen zu sehen, wer gleichzeitig (bereits genehmigt) abwesend ist.
+  const inboxRange = useMemo(() => {
+    if (!inbox.length) return null
+    let f = inbox[0].DATE_FROM, t = inbox[0].DATE_TO
+    for (const a of inbox) { if (a.DATE_FROM < f) f = a.DATE_FROM; if (a.DATE_TO > t) t = a.DATE_TO }
+    return { from: f, to: t }
+  }, [inbox])
+  const { data: overlapRes } = useQuery({
+    queryKey: ['absences-overlap', inboxRange?.from, inboxRange?.to],
+    queryFn:  () => fetchAbsences({ from: inboxRange!.from, to: inboxRange!.to }),
+    enabled:  canView && sub === 'inbox' && !!inboxRange,
+  })
+  const overlapPool = overlapRes?.data ?? []
+  const overlapsFor = (a: Absence): Absence[] =>
+    overlapPool.filter(o =>
+      o.ID !== a.ID && o.EMPLOYEE_ID !== a.EMPLOYEE_ID && o.STATUS === 'APPROVED' &&
+      o.DATE_FROM <= a.DATE_TO && o.DATE_TO >= a.DATE_FROM)
+
   const subItems: { id: AbsSub; label: string }[] = [
     ...(canView    ? [{ id: 'inbox'    as AbsSub, label: `Anträge${inbox.length ? ` (${inbox.length})` : ''}` }, { id: 'calendar' as AbsSub, label: 'Kalender' }] : []),
     ...(canRequest ? [{ id: 'my'       as AbsSub, label: 'Meine Anträge' }] : []),
+    ...(canManage  ? [{ id: 'entitlements' as AbsSub, label: 'Urlaubsansprüche' }] : []),
   ]
   useEffect(() => {
     if (subItems.length && !subItems.some(s => s.id === sub)) setSub(subItems[0].id)
@@ -1946,6 +1968,8 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
 
       {sub === 'my' && <MyAbsencesPanel />}
 
+      {sub === 'entitlements' && canManage && <EntitlementsBulkEditor employees={employees} />}
+
       {sub === 'inbox' && canView && (
         <>
           {inboxLoading && <p className="empty-note">Laden …</p>}
@@ -1960,7 +1984,18 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                   {inbox.map((a: Absence) => (
                     <tr key={a.ID}>
                       <td><strong>{a.EMPLOYEE_SHORT_NAME}</strong> {a.EMPLOYEE_FIRST_NAME} {a.EMPLOYEE_LAST_NAME}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDateShort(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDateShort(a.DATE_TO)}` : ''}{a.HALF_DAY ? ' (½)' : ''}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {fmtDateShort(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDateShort(a.DATE_TO)}` : ''}{a.HALF_DAY ? ' (½)' : ''}
+                        {(() => {
+                          const ov = overlapsFor(a)
+                          return ov.length > 0 ? (
+                            <div style={{ fontSize: 11, color: '#b45309', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'normal' }}
+                              title={`Gleichzeitig abwesend: ${ov.map(o => `${o.EMPLOYEE_SHORT_NAME} (${o.TYPE_NAME})`).join(', ')}`}>
+                              <AlertTriangle size={11} strokeWidth={2} /> {ov.length} gleichzeitig: {ov.map(o => o.EMPLOYEE_SHORT_NAME).filter(Boolean).join(', ')}
+                            </div>
+                          ) : null
+                        })()}
+                      </td>
                       <td><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />{a.TYPE_NAME}</td>
                       <td className="num">{a.DAYS}</td>
                       <td style={{ fontSize: 12, color: '#6b7280' }}>
@@ -2061,6 +2096,113 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
             void qc.invalidateQueries({ queryKey: ['absences-inbox'] })
             void qc.invalidateQueries({ queryKey: ['absences'] })
           }} />
+      )}
+    </div>
+  )
+}
+
+// ── Urlaubsansprüche (Bulk-Editor je Jahr) ────────────────────────────────────
+function EntitlementsBulkEditor({ employees }: { employees: Employee[] }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [days,  setDays]  = useState<Record<number, string>>({})
+  const [carry, setCarry] = useState<Record<number, string>>({})
+  const [bulkVal, setBulkVal] = useState('')
+
+  const { data: entRes, isLoading } = useQuery({ queryKey: ['entitlements-all', year], queryFn: () => fetchAllEntitlements(year) })
+
+  const active = useMemo(
+    () => employees.filter(e => e.ACTIVE !== 2).sort((a, b) => (a.SHORT_NAME || '').localeCompare(b.SHORT_NAME || '')),
+    [employees])
+
+  useEffect(() => {
+    const byEmp = new Map((entRes?.data ?? []).map(e => [e.EMPLOYEE_ID, e]))
+    const d: Record<number, string> = {}, c: Record<number, string> = {}
+    for (const e of active) {
+      const ent = byEmp.get(e.ID)
+      d[e.ID] = ent ? String(ent.DAYS_ENTITLED) : ''
+      c[e.ID] = ent && ent.CARRYOVER_OVERRIDE != null ? String(ent.CARRYOVER_OVERRIDE) : ''
+    }
+    setDays(d); setCarry(c)
+  }, [entRes, active])
+
+  const saveMut = useMutation({
+    mutationFn: () => putEntitlementsBulk(year, active.map(e => ({
+      employee_id: e.ID,
+      days_entitled: Number((days[e.ID] || '0').replace(',', '.')) || 0,
+      carryover_override: carry[e.ID]?.trim() ? Number(carry[e.ID].replace(',', '.')) : null,
+    }))),
+    onSuccess: (r) => {
+      toast.success(`${r.count} Urlaubsansprüche gespeichert`)
+      void qc.invalidateQueries({ queryKey: ['entitlements-all'] })
+      void qc.invalidateQueries({ queryKey: ['entitlements'] })
+      void qc.invalidateQueries({ queryKey: ['vacation-balance'] })
+      void qc.invalidateQueries({ queryKey: ['my-vacation-balance'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  function applyBulk() {
+    const v = bulkVal.trim()
+    if (v === '') return
+    setDays(prev => { const n = { ...prev }; for (const e of active) n[e.ID] = v; return n })
+  }
+
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <button type="button" className="btn-small" onClick={() => setYear(y => y - 1)}>◀</button>
+        <span style={{ fontWeight: 600, minWidth: 60, textAlign: 'center' }}>{year}</span>
+        <button type="button" className="btn-small" onClick={() => setYear(y => y + 1)}>▶</button>
+        <span style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <input type="number" step="0.5" min="0" className="tbl-input" style={{ width: 80 }}
+            placeholder="Tage" value={bulkVal} onChange={e => setBulkVal(e.target.value)} />
+          <button type="button" className="btn-small" onClick={applyBulk}>Allen zuweisen</button>
+        </span>
+      </div>
+      <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 10px' }}>
+        Jahres-Urlaubsanspruch je Mitarbeiter für {year}. „Übertrag manuell" überschreibt den automatischen
+        Übertrag aus dem Vorjahr (leer = automatisch).
+      </p>
+
+      {isLoading && <p className="empty-note">Laden …</p>}
+      {!isLoading && active.length === 0 && (
+        <p className="empty-note">Keine aktiven Mitarbeiter. (Der Editor benötigt das Recht „Mitarbeiter ansehen".)</p>
+      )}
+
+      {active.length > 0 && (
+        <>
+          <div className="table-scroll">
+            <table className="master-table">
+              <thead><tr>
+                <th style={{ textAlign: 'left' }}>Mitarbeiter</th>
+                <th className="num">Anspruch (Tage)</th>
+                <th className="num">Übertrag manuell</th>
+              </tr></thead>
+              <tbody>
+                {active.map(e => (
+                  <tr key={e.ID}>
+                    <td><strong>{e.SHORT_NAME}</strong> {e.FIRST_NAME} {e.LAST_NAME}</td>
+                    <td className="num">
+                      <input type="number" step="0.5" min="0" className="tbl-input" style={{ width: 90 }}
+                        value={days[e.ID] ?? ''} onChange={ev => setDays(p => ({ ...p, [e.ID]: ev.target.value }))} />
+                    </td>
+                    <td className="num">
+                      <input type="number" step="0.5" className="tbl-input" style={{ width: 90 }}
+                        placeholder="auto" value={carry[e.ID] ?? ''} onChange={ev => setCarry(p => ({ ...p, [e.ID]: ev.target.value }))} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <button type="button" className="btn-primary btn-small" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+              {saveMut.isPending ? 'Speichert …' : `Ansprüche ${year} speichern`}
+            </button>
+          </div>
+        </>
       )}
     </div>
   )

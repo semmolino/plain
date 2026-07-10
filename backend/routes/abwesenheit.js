@@ -579,6 +579,45 @@ module.exports = (supabase) => {
     res.json({ data: result.data });
   });
 
+  // GET /entitlements/all?year= — alle Anspruchszeilen eines Jahres (Bulk-Editor)
+  router.get("/entitlements/all", requirePermission("absence.manage"), async (req, res) => {
+    const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+    const { data, error } = await supabase.from("VACATION_ENTITLEMENT")
+      .select("*").eq("TENANT_ID", req.tenantId).eq("YEAR", year);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ data: data || [] });
+  });
+
+  // PUT /entitlements/bulk — Anspruch fuer mehrere Mitarbeiter/ein Jahr setzen.
+  // Body: { year, items: [{ employee_id, days_entitled, carryover_override? }] }.
+  // Update erhaelt bestehende NOTE (nur Tage/Uebertrag werden gesetzt).
+  router.put("/entitlements/bulk", requirePermission("absence.manage"), async (req, res) => {
+    const b = req.body || {};
+    const year = Number(b.year);
+    const items = Array.isArray(b.items) ? b.items : [];
+    if (!year || !items.length) return res.status(400).json({ error: "year und items erforderlich" });
+
+    const { data: existing } = await supabase.from("VACATION_ENTITLEMENT")
+      .select("ID, EMPLOYEE_ID").eq("TENANT_ID", req.tenantId).eq("YEAR", year);
+    const idByEmp = new Map((existing || []).map(e => [e.EMPLOYEE_ID, e.ID]));
+
+    let count = 0;
+    for (const it of items) {
+      const empId = Number(it.employee_id);
+      if (!empId) continue;
+      const days  = it.days_entitled != null ? Number(it.days_entitled) : 0;
+      const carry = it.carryover_override != null && it.carryover_override !== "" ? Number(it.carryover_override) : null;
+      const existingId = idByEmp.get(empId);
+      const q = existingId
+        ? await supabase.from("VACATION_ENTITLEMENT")
+            .update({ DAYS_ENTITLED: days, CARRYOVER_OVERRIDE: carry }).eq("ID", existingId).eq("TENANT_ID", req.tenantId)
+        : await supabase.from("VACATION_ENTITLEMENT")
+            .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, YEAR: year, DAYS_ENTITLED: days, CARRYOVER_OVERRIDE: carry }]);
+      if (!q.error) count++;
+    }
+    res.json({ success: true, count });
+  });
+
   // GET /vacation-balance?employee_id=&year= — Anspruch + Auto-Uebertrag - genommen
   router.get("/vacation-balance", async (req, res) => {
     const empId = req.query.employee_id ? Number(req.query.employee_id) : req.employeeId;

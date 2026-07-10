@@ -164,6 +164,14 @@ export const fetchEntitlements = (employeeId: number, year?: number) => {
 export const putEntitlement = (body: { employee_id: number; year: number; days_entitled: number; carryover_override?: number | null; note?: string }) =>
   apiClient.put<{ data: VacationEntitlement }>('/abwesenheit/entitlements', body)
 
+// Alle Anspruchszeilen eines Jahres (Bulk-Editor)
+export const fetchAllEntitlements = (year: number) =>
+  apiClient.get<{ data: VacationEntitlement[] }>(`/abwesenheit/entitlements/all?year=${year}`)
+
+export interface BulkEntitlementItem { employee_id: number; days_entitled: number; carryover_override?: number | null }
+export const putEntitlementsBulk = (year: number, items: BulkEntitlementItem[]) =>
+  apiClient.put<{ success: boolean; count: number }>('/abwesenheit/entitlements/bulk', { year, items })
+
 // ── Settings (Verfallsfrist des Uebertrags) ──────────────────────────────────
 
 export const fetchAbsenceSettings = () =>

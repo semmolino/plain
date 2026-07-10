@@ -43,6 +43,7 @@ import {
   type CompanySnapshot,
 } from '@/api/reports'
 import { fetchOffers, fetchOfferStatuses, type OfferListItem } from '@/api/angebote'
+import { fetchAbsences, type Absence } from '@/api/abwesenheit'
 import { InfoHint } from '@/components/ui/InfoHint'
 import { Modal } from '@/components/ui/Modal'
 import {
@@ -821,6 +822,8 @@ function ControllerView({
 
       {mahnStats && <MahnungsStatusCard stats={mahnStats} />}
 
+      <AbsenceOverviewCard />
+
       <div className="dash-card">
         <CardTitle hint="Erbrachte, aber noch nicht fakturierte Leistung je Projekt (offener Netto-Betrag) — Potenzial für die nächste Rechnung.">
           Abrechenbare Projekte
@@ -830,6 +833,62 @@ function ControllerView({
           : <p className="empty-note">Laden …</p>}
       </div>
     </>
+  )
+}
+
+// Dashboard-Kachel „Wer ist abwesend" — genehmigte Abwesenheiten heute + in den
+// naechsten 14 Tagen. Nur fuer Nutzer mit absence.view (Team-Sicht).
+function AbsenceOverviewCard() {
+  const navigate = useNavigate()
+  const canView = usePermission('absence.view')
+  const today = new Date().toISOString().slice(0, 10)
+  const in14 = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
+
+  const { data } = useQuery({
+    queryKey: ['dashboard', 'absences', today],
+    queryFn:  () => fetchAbsences({ from: today, to: in14, status: 'APPROVED' }),
+    enabled:  canView,
+    staleTime: 300000,
+  })
+  if (!canView) return null
+
+  const rows = (data?.data ?? []).slice().sort((a, b) => a.DATE_FROM.localeCompare(b.DATE_FROM))
+  const nameOf = (a: Absence) => `${a.EMPLOYEE_SHORT_NAME ?? ''}`.trim() || `#${a.EMPLOYEE_ID}`
+  const fmtRange = (a: Absence) => {
+    const f = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+    return a.DATE_FROM === a.DATE_TO ? f(a.DATE_FROM) + (a.HALF_DAY ? ' (½)' : '') : `${f(a.DATE_FROM)}–${f(a.DATE_TO)}`
+  }
+  const heute = rows.filter(a => a.DATE_FROM <= today && a.DATE_TO >= today)
+  const kommend = rows.filter(a => a.DATE_FROM > today)
+
+  const line = (a: Absence) => (
+    <div key={a.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0' }}>
+      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af' }} />
+      <strong style={{ minWidth: 44 }}>{nameOf(a)}</strong>
+      <span style={{ color: '#6b7280' }}>{a.TYPE_NAME}</span>
+      <span style={{ marginLeft: 'auto', color: '#6b7280', whiteSpace: 'nowrap' }}>{fmtRange(a)}</span>
+    </div>
+  )
+
+  return (
+    <div className="dash-card">
+      <CardTitle style={{ cursor: 'pointer' }}>
+        <span onClick={() => navigate('/mitarbeiter?tab=abwesenheiten')} title="Zu Abwesenheiten">Wer ist abwesend</span>
+      </CardTitle>
+      {rows.length === 0 && <p className="empty-note">Niemand ist in den nächsten 14 Tagen abwesend.</p>}
+      {heute.length > 0 && (
+        <div style={{ marginBottom: kommend.length ? 10 : 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 }}>Heute abwesend</div>
+          {heute.map(line)}
+        </div>
+      )}
+      {kommend.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 }}>Demnächst (14 Tage)</div>
+          {kommend.slice(0, 8).map(line)}
+        </div>
+      )}
+    </div>
   )
 }
 
