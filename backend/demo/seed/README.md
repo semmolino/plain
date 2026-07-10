@@ -54,7 +54,7 @@ node demo/seed/index.js --tenant <DEMO_TENANT_ID> --reset --apply --force
 |---|---|---|
 | `bookings` | ✅ | Zeit-Buchungen (TEC) über die Laufzeit, verteilt auf Mitarbeiter/Blätter, Kostensatz-Historie optional |
 | `progress` | ✅ | Leistungsstände: BT1 geplanter Fertigstellungsverlauf, BT2 Erlös-Snapshots (`PROJECT_PROGRESS`) |
-| `invoicing` | 🟡 | Abschlagsrechnungen (BT1 nach Leistungsstand, BT2 nach Buchungen) + Zahlungseingänge — über die echten Services. **Schlussrechnung folgt.** |
+| `invoicing` | ✅ | Abschlagsrechnungen (BT1 nach Leistungsstand, BT2 nach Buchungen) + Schlussrechnung für abgeschlossene Projekte (Phasen − Abschlags-Abzüge) + Zahlungseingänge — über die echten Services. ⚠️ Schlussrechnung rendert PDF (Playwright); via `config.invoicing.finalInvoices:false` abschaltbar. |
 | `hr` | ✅ | Abwesenheiten/Urlaub + Urlaubsanspruch (Migration 0086): pro MA/Jahr Urlaubsblöcke + Krankheitstage, APPROVED, im Beschäftigungsfenster |
 
 ## Stellschrauben

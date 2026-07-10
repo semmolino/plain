@@ -70,9 +70,15 @@ module.exports = {
       payRatio: 0.9, // Anteil gestellter Rechnungen, die (bis heute) bezahlt sind
       delayDays: { min: 7, max: 45 }, // Zahlungsziel-Streuung ab Rechnungsdatum
     },
-    // Skip Playwright-PDF-Rendering beim Buchen (schnell + kein Chromium nötig).
+    // Skip Playwright-PDF-Rendering beim Buchen der ABSCHLÄGE (schnell + kein Chromium).
     // Für echte Beispiel-PDFs später einzelne Belege in der App neu rendern.
     skipDocuments: true,
+    // Schlussrechnung für abgeschlossene Projekte (Timeline closed:true).
+    // ACHTUNG: bookFinalInvoice rendert IMMER PDF + XRechnung (kein Skip möglich) →
+    // braucht funktionierendes Playwright/Chromium + Beleg-Template. Bei Problemen
+    // hier auf false setzen; Abschläge/Zahlungen bleiben davon unberührt.
+    finalInvoices: true,
+    payFinalRatio: 0.8, // Anteil der Schlussrechnungen, die (bis heute) bezahlt sind
   },
 
   // ── HR-Bewegungen ───────────────────────────────────────────────────────

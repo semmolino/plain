@@ -23,6 +23,8 @@
  */
 
 const pp = require("../../../services/partialPayments");
+const invoices = require("../../../services/invoices");
+const finalInvoices = require("../../../services/finalInvoices");
 const { insertProgressSnapshot } = require("../../../services/projectProgress");
 const cal = require("../lib/calendar");
 
@@ -55,29 +57,31 @@ function billingDates(startISO, endISO, everyDays) {
   return out;
 }
 
-// Zahlung für eine gebuchte AR verbuchen — gespiegelt aus routes/payments.js (POST).
-async function recordPayment({ supabase, tenantId, ppRow, paymentDateISO }) {
-  const gross = toNum(ppRow.TOTAL_AMOUNT_GROSS);
+// Zahlung für eine gebuchte AR ODER Rechnung verbuchen — gespiegelt aus routes/payments.js (POST).
+// docType: "PARTIAL_PAYMENT" | "INVOICE"
+async function recordPayment({ supabase, tenantId, docType, docRow, paymentDateISO }) {
+  const isInvoice = docType === "INVOICE";
+  const gross = toNum(docRow.TOTAL_AMOUNT_GROSS);
   if (gross <= 0) return false;
-  const vatPercent = toNum(ppRow.VAT_PERCENT);
+  const vatPercent = toNum(docRow.VAT_PERCENT);
   const net = round2(gross / (1 + vatPercent / 100));
   const vat = round2(gross - net);
-  const projectId = ppRow.PROJECT_ID;
-  const contractId = ppRow.CONTRACT_ID;
+  const projectId = docRow.PROJECT_ID;
+  const contractId = docRow.CONTRACT_ID;
 
   const { data: created, error: insErr } = await supabase
     .from("PAYMENT")
     .insert([
       {
-        PARTIAL_PAYMENT_ID: ppRow.ID,
-        INVOICE_ID: null,
+        PARTIAL_PAYMENT_ID: isInvoice ? null : docRow.ID,
+        INVOICE_ID: isInvoice ? docRow.ID : null,
         AMOUNT_PAYED_GROSS: gross,
         AMOUNT_PAYED_NET: net,
         AMOUNT_PAYED_VAT: vat,
         PAYMENT_DATE: paymentDateISO,
         PROJECT_ID: projectId,
         CONTRACT_ID: contractId,
-        PURPOSE_OF_PAYMENT: ppRow.PARTIAL_PAYMENT_NUMBER || null,
+        PURPOSE_OF_PAYMENT: (isInvoice ? docRow.INVOICE_NUMBER : docRow.PARTIAL_PAYMENT_NUMBER) || null,
         COMMENT: null,
         TENANT_ID: tenantId,
         AMOUNT_PAYED_EXTRAS_NET: null,
@@ -94,11 +98,13 @@ async function recordPayment({ supabase, tenantId, ppRow, paymentDateISO }) {
     .update({ PAYED: round2(toNum(projRow?.PAYED) + net) })
     .eq("ID", projectId);
 
-  // Verteilung auf Strukturelemente
+  // Verteilung auf Strukturelemente (Quelle je nach Belegart)
+  const structTable = isInvoice ? "INVOICE_STRUCTURE" : "PARTIAL_PAYMENT_STRUCTURE";
+  const structFilter = isInvoice ? "INVOICE_ID" : "PARTIAL_PAYMENT_ID";
   const { data: structureRows } = await supabase
-    .from("PARTIAL_PAYMENT_STRUCTURE")
+    .from(structTable)
     .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
-    .eq("PARTIAL_PAYMENT_ID", ppRow.ID);
+    .eq(structFilter, docRow.ID);
 
   if (structureRows && structureRows.length > 0) {
     const totalAllocated = structureRows.reduce((s, r) => s + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET), 0);
@@ -107,8 +113,8 @@ async function recordPayment({ supabase, tenantId, ppRow, paymentDateISO }) {
       const share = totalAllocated !== 0 ? round2((net * rowTotal) / totalAllocated) : round2(net / structureRows.length);
       return {
         PAYMENT_ID: created.ID,
-        PARTIAL_PAYMENT_ID: ppRow.ID,
-        INVOICE_ID: null,
+        PARTIAL_PAYMENT_ID: isInvoice ? null : docRow.ID,
+        INVOICE_ID: isInvoice ? docRow.ID : null,
         STRUCTURE_ID: r.STRUCTURE_ID,
         AMOUNT_PAYED_NET: share,
         AMOUNT_PAYED_EXTRAS_NET: 0,
@@ -239,7 +245,7 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
           .select("ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_GROSS, VAT_PERCENT, PARTIAL_PAYMENT_NUMBER")
           .eq("ID", id)
           .maybeSingle();
-        const paid = await recordPayment({ supabase, tenantId: md.tenantId, ppRow: booked, paymentDateISO: payDate });
+        const paid = await recordPayment({ supabase, tenantId: md.tenantId, docType: "PARTIAL_PAYMENT", docRow: booked, paymentDateISO: payDate });
         if (paid) stats.paid++;
       }
     }
@@ -256,8 +262,85 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
   }
 }
 
+// Schlussrechnung (INVOICE, INVOICE_TYPE='schlussrechnung') für ein abgeschlossenes Projekt:
+// volle erbrachte Leistung als Phasen, alle gebuchten Abschläge als Abzüge.
+// ACHTUNG: bookFinalInvoice rendert IMMER PDF + XRechnung (Playwright).
+async function makeFinalInvoice({ supabase, md, project, tl, cfg, rng, stats, log }) {
+  const contractId = project.contract.ID;
+  const employeeId = project.PROJECT_MANAGER_ID || project.assignments[0]?.EMPLOYEE_ID || md.employees[0]?.ID;
+  const companyId = md.companyId || project.COMPANY_ID;
+  if (!employeeId || !companyId) return;
+
+  // Aktuelle Struktur (mit REVENUE_COMPLETION/EXTRAS_PERCENT nach der Generierung)
+  const structures = await pp.loadProjectStructuresForContext(supabase, { contractId, projectId: project.ID });
+  if (!structures || structures.length === 0) return;
+  const leafIds = structures.map((s) => s.ID);
+  const fullEarned = round2(
+    structures.reduce((s, x) => {
+      const rev = toNum(x.REVENUE_COMPLETION);
+      const ext = round2((rev * toNum(x.EXTRAS_PERCENT)) / 100);
+      return s + rev + ext;
+    }, 0),
+  );
+
+  // Gebuchte Abschläge des Projekts (netto inkl. Nebenkosten) → Abzüge
+  const { data: booked } = await supabase
+    .from("PARTIAL_PAYMENT")
+    .select("ID, TOTAL_AMOUNT_NET")
+    .eq("TENANT_ID", md.tenantId)
+    .eq("PROJECT_ID", project.ID)
+    .eq("STATUS_ID", 2);
+  const deductTotal = round2((booked || []).reduce((s, p) => s + toNum(p.TOTAL_AMOUNT_NET), 0));
+  if (round2(fullEarned - deductTotal) <= 0.5) return; // nichts mehr offen → keine Schlussrechnung
+
+  const { id } = await invoices.initInvoice(supabase, {
+    companyId,
+    employeeId,
+    projectId: project.ID,
+    contractId,
+    invoiceType: "schlussrechnung",
+  });
+
+  try {
+    await finalInvoices.savePhases(supabase, { id, tenantId: md.tenantId, structureIds: leafIds });
+    const items = (booked || []).map((p) => ({ partial_payment_id: p.ID, deduction_amount_net: toNum(p.TOTAL_AMOUNT_NET) }));
+    await finalInvoices.saveDeductions(supabase, { id, tenantId: md.tenantId, items });
+
+    let invDate = cal.addDays(tl.end, 7);
+    if (invDate > cal.todayISO()) invDate = cal.todayISO();
+    await supabase.from("INVOICE").update({ INVOICE_DATE: invDate, DUE_DATE: cal.addDays(invDate, 30) }).eq("ID", id);
+
+    await finalInvoices.bookFinalInvoice(supabase, { id, tenantId: md.tenantId, releasePpIds: [], force: true });
+    stats.finalBooked++;
+
+    // Zahlung der Schlussrechnung (mit Verzug, nie in Zukunft)
+    if (rng.chance(cfg.invoicing.payFinalRatio)) {
+      const delay = rng.int(cfg.invoicing.payment.delayDays.min, cfg.invoicing.payment.delayDays.max);
+      const payDate = cal.addDays(invDate, delay);
+      if (payDate <= cal.todayISO()) {
+        const { data: invRow } = await supabase
+          .from("INVOICE")
+          .select("ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_GROSS, VAT_PERCENT, INVOICE_NUMBER")
+          .eq("ID", id)
+          .maybeSingle();
+        const paid = await recordPayment({ supabase, tenantId: md.tenantId, docType: "INVOICE", docRow: invRow, paymentDateISO: payDate });
+        if (paid) stats.finalPaid++;
+      }
+    }
+  } catch (e) {
+    stats.errors++;
+    if (stats.errors <= 8) log(`  ⚠︎ Schlussrechnung P${project.ID}: ${e?.message || e}`);
+    try {
+      const { data: chk } = await supabase.from("INVOICE").select("STATUS_ID").eq("ID", id).maybeSingle();
+      if (chk && String(chk.STATUS_ID) !== "2") await invoices.deleteInvoice(supabase, { id, tenantId: md.tenantId });
+    } catch (_) {
+      /* ignore cleanup errors */
+    }
+  }
+}
+
 async function generate({ supabase, md, timeline, cfg, rng, log, apply }) {
-  const stats = { booked: 0, paid: 0, skipped: 0, errors: 0, planned: 0 };
+  const stats = { booked: 0, paid: 0, finalBooked: 0, finalPaid: 0, skipped: 0, errors: 0, planned: 0, plannedFinal: 0 };
   const today = cal.todayISO();
 
   for (const project of md.projects) {
@@ -269,6 +352,7 @@ async function generate({ supabase, md, timeline, cfg, rng, log, apply }) {
     const winEnd = tl.end < today ? tl.end : today;
     const dates = billingDates(tl.start, winEnd, cfg.invoicing.partialEveryDays);
     stats.planned += dates.length;
+    if (tl.closed && cfg.invoicing.finalInvoices) stats.plannedFinal++;
 
     if (!apply) continue; // Dry-Run: nur planen
 
@@ -278,16 +362,27 @@ async function generate({ supabase, md, timeline, cfg, rng, log, apply }) {
       await makePartialPayment({ supabase, md, project, tl, dateISO: d, prevDateISO: prevDate, cfg, rng: projRng, stats, log });
       prevDate = d;
     }
+
+    // Schlussrechnung für abgeschlossene Projekte
+    if (tl.closed && cfg.invoicing.finalInvoices) {
+      await makeFinalInvoice({ supabase, md, project, tl, cfg, rng: projRng.derive("final"), stats, log });
+    }
   }
 
   if (!apply) {
-    log(`  Abschlagsrechnungen (geplant): ~${stats.planned} über ${md.projects.filter((p) => p.contract).length} Projekte mit Vertrag`);
+    log(
+      `  Abschlagsrechnungen (geplant): ~${stats.planned} über ${md.projects.filter((p) => p.contract).length} Projekte mit Vertrag` +
+        (cfg.invoicing.finalInvoices ? `; Schlussrechnungen: ~${stats.plannedFinal} (abgeschlossene Projekte, rendern PDF)` : ""),
+    );
   } else {
     log(
       `  Abschlagsrechnungen: ${stats.booked} gebucht, ${stats.paid} bezahlt` +
         (stats.skipped ? `, ${stats.skipped} ohne Vertrag/Firma übersprungen` : "") +
         (stats.errors ? `, ${stats.errors} Fehler` : ""),
     );
+    if (cfg.invoicing.finalInvoices) {
+      log(`  Schlussrechnungen: ${stats.finalBooked} gebucht, ${stats.finalPaid} bezahlt`);
+    }
   }
   return stats;
 }
