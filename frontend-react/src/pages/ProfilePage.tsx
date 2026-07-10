@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Camera, Trash2 } from 'lucide-react'
+import { Camera, Trash2, AlertTriangle } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { changePassword } from '@/api/auth'
 import { uploadAsset } from '@/api/stammdaten'
@@ -255,6 +255,13 @@ function MyAbsencesSection() {
         </div>
         {!showForm && <button type="button" className="btn-small btn-save" onClick={() => { setMsg(null); setShowForm(true) }}>+ Antrag stellen</button>}
       </div>
+
+      {bal && !!bal.atRisk && bal.atRisk > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginBottom: 12 }}>
+          <AlertTriangle size={14} strokeWidth={2} />
+          {bal.atRisk} Tage Resturlaub-Übertrag verfallen am {bal.carryoverExpiryLabel ?? '31.03.'} — rechtzeitig einplanen.
+        </div>
+      )}
 
       {showForm && (
         <div style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 12, marginBottom: 12 }}>

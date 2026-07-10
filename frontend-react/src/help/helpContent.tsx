@@ -630,6 +630,20 @@ export const HELP = {
       </>
     ),
   },
+
+  // ── Abwesenheit ──────────────────────────────────────────────────────────
+  'absence.carryover_expiry': {
+    title: 'Verfall des Resturlaub-Übertrags',
+    body: (
+      <>
+        Ist der Verfall aktiv, muss nicht genommener <strong>Übertrag aus dem Vorjahr</strong> bis zum
+        Stichtag (Vorgabe <strong>31.03.</strong>, gesetzlicher Standard nach BUrlG) genutzt sein — danach
+        verfällt der Rest. Der Übertrag wird dabei <strong>zuerst</strong> verbraucht, erst dann der
+        Anspruch des laufenden Jahres. Vor dem Stichtag zieht der Saldo noch nichts ab, sondern weist die
+        gefährdeten Tage als Hinweis aus. Ist der Verfall aus, wird der Übertrag unbegrenzt vorgetragen.
+      </>
+    ),
+  },
 } satisfies Record<string, HelpEntry>
 
 export type HelpId = keyof typeof HELP

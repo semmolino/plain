@@ -45,10 +45,20 @@ export interface VacationBalanceYear {
   carryover: number
   entitled:  number
   taken:     number
+  forfeited?: number   // am Stichtag verfallener Uebertrag (nur bei aktivem Verfall)
+  atRisk?:    number   // Uebertrag, der zum kommenden Stichtag verfällt, falls ungenutzt
   remaining: number
 }
 export interface VacationBalance extends VacationBalanceYear {
+  carryoverExpires?:     boolean
+  carryoverExpiryDate?:  string   // 'MM-DD'
+  carryoverExpiryLabel?: string   // 'TT.MM.'
   breakdown: VacationBalanceYear[]
+}
+
+export interface AbsenceSettings {
+  carryoverExpires:    boolean
+  carryoverExpiryDate: string     // 'MM-DD'
 }
 
 export interface VacationEntitlement {
@@ -137,3 +147,11 @@ export const fetchEntitlements = (employeeId: number, year?: number) => {
 
 export const putEntitlement = (body: { employee_id: number; year: number; days_entitled: number; carryover_override?: number | null; note?: string }) =>
   apiClient.put<{ data: VacationEntitlement }>('/abwesenheit/entitlements', body)
+
+// ── Settings (Verfallsfrist des Uebertrags) ──────────────────────────────────
+
+export const fetchAbsenceSettings = () =>
+  apiClient.get<{ data: AbsenceSettings }>('/abwesenheit/settings')
+
+export const putAbsenceSettings = (body: Partial<AbsenceSettings>) =>
+  apiClient.put<{ data: AbsenceSettings }>('/abwesenheit/settings', body)

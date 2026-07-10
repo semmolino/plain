@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, type CSSProperties } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Trash2, Plus, Check } from 'lucide-react'
 import { Modal }        from '@/components/ui/Modal'
@@ -6,9 +6,12 @@ import { Message }      from '@/components/ui/Message'
 import { FormField }    from '@/components/ui/FormField'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Can }          from '@/components/ui/Can'
+import { HelpHint }     from '@/components/ui/HelpHint'
 import { useToast }     from '@/store/toastStore'
+import { usePermission } from '@/store/permissionsStore'
 import {
   fetchAbsenceTypes, createAbsenceType, updateAbsenceType, deleteAbsenceType,
+  fetchAbsenceSettings, putAbsenceSettings,
   type AbsenceType, type AbsenceTypePayload,
 } from '@/api/abwesenheit'
 
@@ -58,6 +61,8 @@ export function AbwesenheitsartenSection() {
   const editing = editId != null ? rows.find(r => r.ID === editId) ?? null : null
 
   return (
+    <>
+    <VerfallSettingsCard />
     <div className="admin-block">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <h3 className="admin-block-title" style={{ margin: 0 }}>Abwesenheitsarten</h3>
@@ -138,6 +143,83 @@ export function AbwesenheitsartenSection() {
         onConfirm={() => { if (confirmState) delMut.mutate(confirmState.id); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />
+    </div>
+    </>
+  )
+}
+
+// ── Verfall des Resturlaub-Übertrags (mandantenweit) ──────────────────────────
+function VerfallSettingsCard() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const canManage = usePermission('absence.manage')
+  const { data } = useQuery({ queryKey: ['absence-settings'], queryFn: fetchAbsenceSettings })
+  const s = data?.data
+
+  const [expires, setExpires] = useState(false)
+  const [mm, setMm] = useState('03')
+  const [dd, setDd] = useState('31')
+
+  useEffect(() => {
+    if (!s) return
+    setExpires(s.carryoverExpires)
+    const [m, d] = (s.carryoverExpiryDate || '03-31').split('-')
+    if (m) setMm(m); if (d) setDd(d)
+  }, [s])
+
+  const saveMut = useMutation({
+    mutationFn: () => putAbsenceSettings({ carryoverExpires: expires, carryoverExpiryDate: `${mm}-${dd}` }),
+    onSuccess: () => {
+      toast.success('Einstellung gespeichert')
+      void qc.invalidateQueries({ queryKey: ['absence-settings'] })
+      void qc.invalidateQueries({ queryKey: ['vacation-balance'] })
+      void qc.invalidateQueries({ queryKey: ['my-vacation-balance'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const MONTHS = ['01','02','03','04','05','06','07','08','09','10','11','12']
+  const DAYS   = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
+  const selStyle: CSSProperties = { height: 34, padding: '0 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }
+
+  return (
+    <div className="admin-block">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <h3 className="admin-block-title" style={{ margin: 0 }}>Urlaubsübertrag &amp; Verfall</h3>
+        <HelpHint id="absence.carryover_expiry" />
+      </div>
+      <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 10px' }}>
+        Legt fest, ob nicht genommener Resturlaub-Übertrag aus dem Vorjahr zu einem Stichtag verfällt.
+        Standardmäßig aus — der Übertrag wird dann unbegrenzt vorgetragen.
+      </p>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: canManage ? 'pointer' : 'default' }}>
+        <input type="checkbox" checked={expires} disabled={!canManage}
+          onChange={e => setExpires(e.target.checked)} />
+        Resturlaub-Übertrag verfällt zum Stichtag
+      </label>
+
+      {expires && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '10px 0 0' }}>
+          <span style={{ color: '#374151' }}>Stichtag (jährlich):</span>
+          <select value={dd} disabled={!canManage} onChange={e => setDd(e.target.value)} style={selStyle}>
+            {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <span>.</span>
+          <select value={mm} disabled={!canManage} onChange={e => setMm(e.target.value)} style={selStyle}>
+            {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <span style={{ color: '#9ca3af' }}>(Vorgabe 31.03.)</span>
+        </div>
+      )}
+
+      <Can permission="absence.manage">
+        <div style={{ marginTop: 12 }}>
+          <button className="btn-primary btn-small" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+          </button>
+        </div>
+      </Can>
     </div>
   )
 }

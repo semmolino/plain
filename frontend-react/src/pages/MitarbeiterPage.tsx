@@ -9,7 +9,7 @@ import type { HelpId } from '@/help/helpContent'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
-import { Pencil, Trash2, Download } from 'lucide-react'
+import { Pencil, Trash2, Download, AlertTriangle } from 'lucide-react'
 import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
@@ -373,8 +373,16 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
         {stat('Anspruch', bal ? `${bal.entitled} T` : '…')}
         {stat('Übertrag', bal ? `${bal.carryover} T` : '…')}
         {stat('Genommen', bal ? `${bal.taken} T` : '…')}
+        {bal && !!bal.forfeited && bal.forfeited > 0 && stat('Verfallen', `${bal.forfeited} T`, '#dc2626')}
         {stat('Resturlaub', bal ? `${bal.remaining} T` : '…', bal && bal.remaining < 0 ? '#dc2626' : '#059669')}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>Urlaub {year} (Übertrag automatisch)</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af', textAlign: 'right' }}>
+          Urlaub {year} ({bal?.carryoverExpires ? `Übertrag verfällt ${bal.carryoverExpiryLabel ?? '31.03.'}` : 'Übertrag automatisch'})
+          {bal && !!bal.atRisk && bal.atRisk > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', color: '#d97706', marginTop: 2 }}>
+              <AlertTriangle size={12} strokeWidth={2} /> {bal.atRisk} T Übertrag verfallen am {bal.carryoverExpiryLabel ?? '31.03.'}
+            </span>
+          )}
+        </span>
       </div>
 
       {canManage && !editEnt && (

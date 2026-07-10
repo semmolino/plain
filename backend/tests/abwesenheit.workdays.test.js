@@ -1,6 +1,6 @@
 "use strict";
 
-const { workdayCount } = require("../routes/abwesenheit");
+const { workdayCount, computeVacationBreakdown } = require("../routes/abwesenheit");
 
 // Referenzkalender (2026):
 //   Do 2026-01-01 (Neujahr, Feiertag), Fr 01-02, Sa 01-03, So 01-04, Mo 01-05 … Fr 01-09
@@ -41,5 +41,60 @@ describe("workdayCount", () => {
 
   it("gibt 0 fuer ungueltige Datumswerte zurueck", () => {
     expect(workdayCount("nonsense", "2026-01-05", false)).toBe(0);
+  });
+});
+
+describe("computeVacationBreakdown", () => {
+  it("ohne Verfall: Uebertrag fließt ueber die Jahre", () => {
+    const { breakdown, current } = computeVacationBreakdown({
+      entByYear:   { 2025: { DAYS_ENTITLED: 30 }, 2026: { DAYS_ENTITLED: 30 } },
+      takenByYear: { 2025: 20, 2026: 5 },
+      minYear: 2025, year: 2026, expires: false,
+    });
+    expect(breakdown[0].remaining).toBe(10);  // 30 - 20
+    expect(current.remaining).toBe(35);       // 10 Uebertrag + 30 - 5
+    expect(current.forfeited).toBe(0);
+    expect(current.atRisk).toBe(0);
+  });
+
+  it("Verfall, Stichtag vorbei: nicht genutzter Uebertrag verfällt", () => {
+    const { current } = computeVacationBreakdown({
+      entByYear:         { 2026: { DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: 10 } },
+      takenByYear:       { 2026: 8 },
+      takenBeforeByYear: { 2026: 3 },
+      takenAfterByYear:  { 2026: 5 },
+      minYear: 2026, year: 2026, expires: true, expiryDate: "03-31",
+      todayStr: "2026-06-01",
+    });
+    expect(current.forfeited).toBe(7);   // 10 Uebertrag - 3 genutzt
+    expect(current.atRisk).toBe(0);
+    expect(current.remaining).toBe(25);  // 30 - 0 (Anspruch vor Stichtag) - 5 (nach)
+  });
+
+  it("Verfall, Stichtag noch offen: Uebertrag ist 'gefährdet', kein Abzug", () => {
+    const { current } = computeVacationBreakdown({
+      entByYear:         { 2026: { DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: 10 } },
+      takenByYear:       { 2026: 2 },
+      takenBeforeByYear: { 2026: 2 },
+      takenAfterByYear:  { 2026: 0 },
+      minYear: 2026, year: 2026, expires: true, expiryDate: "03-31",
+      todayStr: "2026-02-01",
+    });
+    expect(current.forfeited).toBe(0);
+    expect(current.atRisk).toBe(8);      // 10 Uebertrag - 2 genutzt
+    expect(current.remaining).toBe(38);  // 10 + 30 - 2 (unveraendert bis Stichtag)
+  });
+
+  it("Verfall wirkt nicht auf negativen Uebertrag (Schuld bleibt erhalten)", () => {
+    const { current } = computeVacationBreakdown({
+      entByYear:         { 2026: { DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: -5 } },
+      takenByYear:       { 2026: 10 },
+      takenBeforeByYear: { 2026: 4 },
+      takenAfterByYear:  { 2026: 6 },
+      minYear: 2026, year: 2026, expires: true, expiryDate: "03-31",
+      todayStr: "2026-06-01",
+    });
+    expect(current.forfeited).toBe(0);
+    expect(current.remaining).toBe(15); // -5 + 30 - 10, wie ohne Verfall
   });
 });

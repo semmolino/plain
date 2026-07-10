@@ -62,6 +62,93 @@ function workdayCount(from, to, halfDay, holidays) {
   return days;
 }
 
+// ── Abwesenheits-Settings (TENANT_SETTINGS, key/value) ───────────────────────
+// Verfall des Resturlaub-Uebertrags: pro Mandant abschaltbar, Default AUS
+// (aendert bestehende Salden nicht ungefragt). Stichtag als 'MM-DD'.
+const ABSENCE_SETTING_DEFAULTS = {
+  absence_carryover_expires:     "false",
+  absence_carryover_expiry_date: "03-31",
+};
+
+async function getAbsenceSettings(supabase, tenantId) {
+  const { data } = await supabase.from("TENANT_SETTINGS")
+    .select("KEY, VALUE").eq("TENANT_ID", tenantId).in("KEY", Object.keys(ABSENCE_SETTING_DEFAULTS));
+  const map = Object.fromEntries((data || []).map(r => [r.KEY, r.VALUE]));
+  const merged = { ...ABSENCE_SETTING_DEFAULTS, ...map };
+  let expiryDate = String(merged.absence_carryover_expiry_date || "03-31");
+  if (!/^\d{2}-\d{2}$/.test(expiryDate)) expiryDate = "03-31";
+  return {
+    carryoverExpires:     String(merged.absence_carryover_expires) === "true",
+    carryoverExpiryDate:  expiryDate, // 'MM-DD'
+  };
+}
+
+async function saveAbsenceSettings(supabase, tenantId, patch) {
+  const now = new Date().toISOString();
+  const upserts = [];
+  if (patch.carryoverExpires !== undefined)
+    upserts.push({ TENANT_ID: tenantId, KEY: "absence_carryover_expires", VALUE: patch.carryoverExpires ? "true" : "false", UPDATED_AT: now });
+  if (patch.carryoverExpiryDate !== undefined) {
+    const d = String(patch.carryoverExpiryDate || "");
+    if (!/^\d{2}-\d{2}$/.test(d)) throw { status: 400, message: "Stichtag muss das Format MM-TT haben (z. B. 03-31)" };
+    upserts.push({ TENANT_ID: tenantId, KEY: "absence_carryover_expiry_date", VALUE: d, UPDATED_AT: now });
+  }
+  if (!upserts.length) return;
+  const { error } = await supabase.from("TENANT_SETTINGS").upsert(upserts, { onConflict: "TENANT_ID,KEY" });
+  if (error) throw { status: 500, message: error.message };
+}
+
+// Reine Urlaubssaldo-Berechnung ueber die Jahre (Auto-Uebertrag; optionaler
+// Verfall zum Stichtag). Getrennt fuer Unit-Tests, kein DB-Zugriff.
+//   entByYear[y]         -> { DAYS_ENTITLED, CARRYOVER_OVERRIDE? }
+//   takenByYear[y]       -> genommene Urlaubstage im Jahr y (gesamt)
+//   takenBeforeByYear[y] -> davon bis einschl. Stichtag (nur bei Verfall genutzt)
+//   takenAfterByYear[y]  -> davon nach dem Stichtag
+// Verfall-Logik: Uebertrag wird zuerst verbraucht; nach dem Stichtag verfaellt
+// nicht genutzter Uebertrag. Vor dem Stichtag (laufendes Jahr) wird nichts
+// abgezogen, sondern als `atRisk` ausgewiesen.
+function computeVacationBreakdown(opts) {
+  const {
+    entByYear = {}, takenByYear = {}, takenBeforeByYear = {}, takenAfterByYear = {},
+    minYear, year, expires = false, expiryDate = "03-31", todayStr,
+  } = opts;
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const today = todayStr || new Date().toISOString().slice(0, 10);
+
+  let carryover = 0;
+  const breakdown = [];
+  for (let y = minYear; y <= year; y++) {
+    const ent = entByYear[y];
+    const override = ent && ent.CARRYOVER_OVERRIDE != null ? Number(ent.CARRYOVER_OVERRIDE) : null;
+    const startCarry = override != null ? override : carryover;
+    const entitled = ent ? Number(ent.DAYS_ENTITLED) : 0;
+    const taken = takenByYear[y] || 0;
+
+    let forfeited = 0, atRisk = 0, remaining;
+    if (!expires) {
+      remaining = round2(startCarry + entitled - taken);
+    } else {
+      const cutoff = `${y}-${expiryDate}`;            // 'YYYY-MM-DD'
+      const cutoffPassed = today > cutoff;            // Stichtag inklusiv nutzbar
+      const takenBefore = takenBeforeByYear[y] || 0;
+      const carryUsed   = Math.min(startCarry, takenBefore);
+      const unusedCarry = Math.max(0, startCarry - carryUsed);
+      if (cutoffPassed) {
+        forfeited = round2(unusedCarry);
+        remaining = round2(entitled - Math.max(0, takenBefore - startCarry) - (takenAfterByYear[y] || 0));
+      } else {
+        atRisk = round2(unusedCarry);
+        remaining = round2(startCarry + entitled - taken);
+      }
+    }
+    breakdown.push({ year: y, carryover: round2(startCarry), entitled, taken, forfeited, atRisk, remaining });
+    carryover = remaining;
+  }
+  const current = breakdown[breakdown.length - 1] ||
+    { year, carryover: 0, entitled: 0, taken: 0, forfeited: 0, atRisk: 0, remaining: 0 };
+  return { breakdown, current };
+}
+
 // ── E-Mail-Benachrichtigungen (fire-and-forget, nie blockierend) ──────────────
 
 function fmtRangeDe(a) {
@@ -433,10 +520,26 @@ module.exports = (supabase) => {
       holidays = await loadHolidaySet(supabase, cs.countryCode, cs.stateCode, spanFrom, spanTo);
     }
 
-    const takenByYear = {};
+    const settings = await getAbsenceSettings(supabase, req.tenantId);
+    const expires    = settings.carryoverExpires;
+    const expiryDate = settings.carryoverExpiryDate; // 'MM-DD'
+
+    // Genommene Urlaubstage je Jahr; bei aktivem Verfall zusaetzlich nach
+    // Stichtag getrennt (der Uebertrag muss bis zum Stichtag genutzt sein).
+    const takenByYear = {}, takenBeforeByYear = {}, takenAfterByYear = {};
     for (const a of absences || []) {
       const y = Number(String(a.DATE_FROM).slice(0, 4));
-      takenByYear[y] = (takenByYear[y] || 0) + workdayCount(a.DATE_FROM, a.DATE_TO, a.HALF_DAY, holidays);
+      const total = workdayCount(a.DATE_FROM, a.DATE_TO, a.HALF_DAY, holidays);
+      takenByYear[y] = (takenByYear[y] || 0) + total;
+      if (expires) {
+        const cutoff = `${y}-${expiryDate}`;
+        let before;
+        if (a.DATE_TO <= cutoff)        before = total;                                        // ganz vor Stichtag
+        else if (a.DATE_FROM > cutoff)  before = 0;                                            // ganz nach Stichtag
+        else                            before = workdayCount(a.DATE_FROM, cutoff, false, holidays); // ueber Stichtag -> splitten
+        takenBeforeByYear[y] = (takenBeforeByYear[y] || 0) + before;
+        takenAfterByYear[y]  = (takenAfterByYear[y]  || 0) + Math.round((total - before) * 100) / 100;
+      }
     }
     const entByYear = {};
     for (const e of entitlements || []) entByYear[e.YEAR] = e;
@@ -444,24 +547,38 @@ module.exports = (supabase) => {
     const knownYears = [...new Set([...Object.keys(entByYear), ...Object.keys(takenByYear)].map(Number))];
     const minYear = knownYears.length ? Math.min(Math.min(...knownYears), year) : year;
 
-    let carryover = 0;
-    const breakdown = [];
-    for (let y = minYear; y <= year; y++) {
-      const ent = entByYear[y];
-      const override = ent && ent.CARRYOVER_OVERRIDE != null ? Number(ent.CARRYOVER_OVERRIDE) : null;
-      const startCarry = override != null ? override : carryover;
-      const entitled = ent ? Number(ent.DAYS_ENTITLED) : 0;
-      const taken = takenByYear[y] || 0;
-      const remaining = Math.round((startCarry + entitled - taken) * 100) / 100;
-      breakdown.push({ year: y, carryover: startCarry, entitled, taken, remaining });
-      carryover = remaining;
-    }
-    const cur = breakdown[breakdown.length - 1] || { year, carryover: 0, entitled: 0, taken: 0, remaining: 0 };
-    res.json({ data: { year: cur.year, entitled: cur.entitled, carryover: cur.carryover, taken: cur.taken, remaining: cur.remaining, breakdown } });
+    const { breakdown, current: cur } = computeVacationBreakdown({
+      entByYear, takenByYear, takenBeforeByYear, takenAfterByYear,
+      minYear, year, expires, expiryDate,
+    });
+
+    const [mm, dd] = expiryDate.split("-");
+    res.json({ data: {
+      year: cur.year, entitled: cur.entitled, carryover: cur.carryover,
+      taken: cur.taken, forfeited: cur.forfeited, atRisk: cur.atRisk, remaining: cur.remaining,
+      carryoverExpires: expires,
+      carryoverExpiryDate: expiryDate,
+      carryoverExpiryLabel: `${dd}.${mm}.`,
+      breakdown,
+    } });
+  });
+
+  // ── Settings (Verfallsfrist) ────────────────────────────────────────────────
+  router.get("/settings", async (req, res) => {
+    try { res.json({ data: await getAbsenceSettings(supabase, req.tenantId) }); }
+    catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
+  });
+
+  router.put("/settings", requirePermission("absence.manage"), async (req, res) => {
+    try {
+      await saveAbsenceSettings(supabase, req.tenantId, req.body || {});
+      res.json({ data: await getAbsenceSettings(supabase, req.tenantId) });
+    } catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
   });
 
   return router;
 };
 
-// Fuer Unit-Tests exportiert (reine Funktion, kein DB-Zugriff).
+// Fuer Unit-Tests exportiert (reine Funktionen, kein DB-Zugriff).
 module.exports.workdayCount = workdayCount;
+module.exports.computeVacationBreakdown = computeVacationBreakdown;
