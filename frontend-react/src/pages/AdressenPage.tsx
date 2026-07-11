@@ -492,7 +492,10 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
   }, [initialAddressId, initialAddressName])
 
   // Filter + column state
-  const [activeAdresse,  setActiveAdresse]  = useStickySet('kontakte.adresse')
+  const [activeAdresse,   setActiveAdresse]   = useStickySet('kontakte.adresse')
+  const [activeFunktion,  setActiveFunktion]  = useStickySet('kontakte.funktion')
+  const [activeAbteilung, setActiveAbteilung] = useStickySet('kontakte.abteilung')
+  const [onlyPrimary,     setOnlyPrimary]     = useStickyState<boolean>('kontakte.primary', false)
   const [hiddenCols,     setHiddenCols]     = useStickyState<Set<ConOptColKey>>(
     'kontakte.cols',
     () => new Set(CON_OPT_COLS.map(c => c.key)),
@@ -517,7 +520,9 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
   }, [colPanelOpen])
 
   const filterOptions = useMemo(() => ({
-    adresse: [...new Set(contacts.map(c => c.ADDRESS).filter((v): v is string => v != null && v !== ''))].sort(),
+    adresse:   [...new Set(contacts.map(c => c.ADDRESS).filter((v): v is string => v != null && v !== ''))].sort((a, b) => a.localeCompare(b, 'de')),
+    funktion:  [...new Set(contacts.map(c => c.POSITION).filter((v): v is string => v != null && v !== ''))].sort((a, b) => a.localeCompare(b, 'de')),
+    abteilung: [...new Set(contacts.map(c => c.DEPARTMENT).filter((v): v is string => v != null && v !== ''))].sort((a, b) => a.localeCompare(b, 'de')),
   }), [contacts])
 
   function toggleSort(k: ConSortKey) {
@@ -539,14 +544,17 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
             .toLowerCase().includes(q)
         )
       : contacts
-    if (activeAdresse.size > 0) rows = rows.filter(c => c.ADDRESS && activeAdresse.has(c.ADDRESS))
+    if (activeAdresse.size   > 0) rows = rows.filter(c => c.ADDRESS    && activeAdresse.has(c.ADDRESS))
+    if (activeFunktion.size  > 0) rows = rows.filter(c => c.POSITION   && activeFunktion.has(c.POSITION))
+    if (activeAbteilung.size > 0) rows = rows.filter(c => c.DEPARTMENT && activeAbteilung.has(c.DEPARTMENT))
+    if (onlyPrimary)              rows = rows.filter(c => !!c.IS_PRIMARY)
     return [...rows].sort((a, b) => {
       const av = String(sortKey === 'NAME' ? `${a.LAST_NAME ?? ''} ${a.FIRST_NAME ?? ''}` : (a[sortKey as keyof Contact] ?? ''))
       const bv = String(sortKey === 'NAME' ? `${b.LAST_NAME ?? ''} ${b.FIRST_NAME ?? ''}` : (b[sortKey as keyof Contact] ?? ''))
       const cmp = av.localeCompare(bv, 'de', { sensitivity: 'base', numeric: true })
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [contacts, search, sortKey, sortDir, activeAdresse])
+  }, [contacts, search, sortKey, sortDir, activeAdresse, activeFunktion, activeAbteilung, onlyPrimary])
 
   const searchAddresses = useCallback(async (q: string) => {
     const res = await searchAddressesApi(q)
@@ -636,7 +644,12 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
   useCtrlS(() => createConFormRef.current?.requestSubmit(), createOpen)
   useCtrlS(() => editConFormRef.current?.requestSubmit(),   editContact !== null)
 
-  const hasActiveFilter = activeAdresse.size > 0 || search.trim() !== ''
+  const hasActiveFilter = activeAdresse.size > 0 || activeFunktion.size > 0 || activeAbteilung.size > 0 || onlyPrimary || search.trim() !== ''
+
+  function resetFilters() {
+    setActiveAdresse(new Set()); setActiveFunktion(new Set()); setActiveAbteilung(new Set())
+    setOnlyPrimary(false); setSearch('')
+  }
 
   return (
     <>
@@ -644,9 +657,21 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
         <div className="pl-toolbar">
           <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
           <div className="pl-filter-chips">
-            <FilterChip label="Adresse" options={filterOptions.adresse} active={activeAdresse} onChange={setActiveAdresse} />
+            <FilterChip label="Adresse"   options={filterOptions.adresse}   active={activeAdresse}   onChange={setActiveAdresse}   />
+            <FilterChip label="Funktion"  options={filterOptions.funktion}  active={activeFunktion}  onChange={setActiveFunktion}  />
+            <FilterChip label="Abteilung" options={filterOptions.abteilung} active={activeAbteilung} onChange={setActiveAbteilung} />
+            <button
+              className={`filter-chip-btn${onlyPrimary ? ' active' : ''}`}
+              onClick={() => setOnlyPrimary(v => !v)}
+              title="Nur Hauptansprechpartner anzeigen"
+              aria-pressed={onlyPrimary}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            >
+              <Star size={12} strokeWidth={2} fill={onlyPrimary ? 'currentColor' : 'none'} />
+              Hauptansprechpartner
+            </button>
             {hasActiveFilter && (
-              <button className="pl-clear-btn" onClick={() => { setActiveAdresse(new Set()); setSearch('') }}>
+              <button className="pl-clear-btn" onClick={resetFilters}>
                 Filter löschen
               </button>
             )}
