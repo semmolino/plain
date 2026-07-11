@@ -1879,6 +1879,8 @@ module.exports = {
   getProjectStructure,
   patchStructureCompletionPercents,
   progressSnapshot,
+  recalcParent,
+  propagateUpwards,
   getTecSum,
   checkParentForChild,
   createStructureNode,

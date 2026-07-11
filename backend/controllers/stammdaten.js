@@ -575,6 +575,15 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
       }
     }
 
+    // Aggregierte Werte des Vaters (REVENUE_BASIS, REVENUE inkl. Zuschläge, EXTRAS)
+    // und aller übergeordneten Elemente neu berechnen. Ohne diesen Schritt bleibt
+    // die Spalte „Honorar + Zuschl." des Vaters nach dem Anlegen der LPH-/BL-Elemente
+    // leer, weil dessen REVENUE nie aus den neuen Kind-Elementen aggregiert wird.
+    // Gleiche Logik wie beim manuellen Anlegen via createStructureNode → propagateUpwards.
+    if (firstCreated) {
+      await require('../services/projekte').propagateUpwards(supabase, { structureId: firstCreated.ID });
+    }
+
     const fatherName = [father.NAME_SHORT, father.NAME_LONG].filter(Boolean).join(": ");
     const message = movedTecCount > 0
       ? `${createdRows.length} Elemente wurden angelegt. ${movedTecCount} Buchungen wurden von ${fatherName || `#${fatherId}`} nach ${movedToName || `#${firstCreated?.ID}`} verschoben.`
@@ -1771,7 +1780,7 @@ async function syncFeeCalcToStructure(req, res, supabase) {
     let blStructRows = [], blItems = [];
     try {
       const [blStructRes, blItemsRes] = await Promise.all([
-        supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FEE_CALC_BL_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
+        supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FATHER_ID, FEE_CALC_BL_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
         supabase.from("FEE_CALCULATION_BL").select("ID, NAME_SHORT, NAME, AMOUNT").eq("FEE_CALC_MASTER_ID", id).order("SORT_ORDER", { ascending: true }),
       ]);
       blStructRows = blStructRes.data || [];
@@ -1860,6 +1869,22 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       } catch (blCreateErr) {
         console.warn('[sync BL create] Soft-fail:', blCreateErr?.message);
       }
+    }
+
+    // Aggregierte Werte der betroffenen Väter (und ihrer übergeordneten Elemente)
+    // neu berechnen — sonst bleibt die Spalte „Honorar + Zuschl." des Vaters nach
+    // dem erneuten Sync stale/leer. Wir sammeln alle distinct FATHER_IDs der
+    // aktualisierten LPH-/BL-Elemente und rechnen jeden Vater samt Kette neu.
+    const { recalcParent, propagateUpwards } = require('../services/projekte');
+    const touchedFathers = new Set(
+      [...(structRows || []), ...(blStructRows || [])]
+        .map(r => r.FATHER_ID)
+        .filter(fid => fid !== null && fid !== undefined)
+        .map(fid => String(fid))
+    );
+    for (const fatherId of touchedFathers) {
+      await recalcParent(supabase, { parentId: fatherId });
+      await propagateUpwards(supabase, { structureId: fatherId });
     }
 
     return res.json({
