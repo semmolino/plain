@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Pencil, Trash2, Plus, Download, Star } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
-import { useFilterTabs } from '@/store/permissionsStore'
+import { useFilterTabs, usePermission } from '@/store/permissionsStore'
+import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
 import { Tabs }        from '@/components/ui/Tabs'
 import { Modal }       from '@/components/ui/Modal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -18,9 +19,12 @@ import {
   fetchCountries, fetchSalutations, fetchGenders,
   fetchAddressList, searchAddressesApi, createAddress, updateAddress, deleteAddress,
   fetchContactList, createContact, updateContact, deleteContact,
-  addressTypeLabel,
+  addressTypeLabel, ADDRESS_TYPES,
   type Address, type Contact, type AddressPayload, type ContactPayload,
 } from '@/api/stammdaten'
+
+// Inline-Optionen für die Adress-Kategorie (spiegelt den ADDRESS_TYPE-Katalog).
+const CATEGORY_OPTS: InlineOption[] = ADDRESS_TYPES.map(t => ({ value: String(t.id), label: t.label }))
 
 // ── Page-level tabs ─────────────────────────────────────────────────────────
 
@@ -245,6 +249,14 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // ── Inline-Edit (Kategorie direkt in der Liste) ──
+  const canEdit = usePermission('addresses.edit')
+  const inlineMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: AddressPayload }) => updateAddress(id, body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['addresses'] }),
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   function handleDelete(a: Address) {
     setConfirmState({
       title: 'Adresse löschen',
@@ -376,7 +388,17 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
                   <td>{[a.POST_CODE, a.CITY].filter(Boolean).join(' ')}</td>
                   <td>{a.COUNTRY}</td>
                   <td>{a.CUSTOMER_NUMBER}</td>
-                  {visibleOptCols.map(c => <td key={c.key}>{addrOptCell(a, c.key)}</td>)}
+                  {visibleOptCols.map(c => (
+                    c.key === 'ADDRESS_TYPE'
+                      ? <td key={c.key} onClick={e => e.stopPropagation()}>
+                          <InlineSelect
+                            value={a.ADDRESS_TYPE} options={CATEGORY_OPTS} placeholder="—"
+                            readOnly={!canEdit} ariaLabel="Kategorie"
+                            onChange={v => inlineMut.mutate({ id: a.ID, body: { ...addressToPayload(a), address_type: v } })}
+                          />
+                        </td>
+                      : <td key={c.key}>{addrOptCell(a, c.key)}</td>
+                  ))}
                   <td className="doc-actions" onClick={e => e.stopPropagation()}>
                     <button
                       className="btn-small"
@@ -580,6 +602,16 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // ── Inline-Edit (Anrede / Geschlecht direkt in der Liste) ──
+  const canEdit = usePermission('addresses.contacts.edit')
+  const salOpts:    InlineOption[] = useMemo(() => salutations.map(s => ({ value: String(s.ID), label: s.SALUTATION })), [salutations])
+  const genderOpts: InlineOption[] = useMemo(() => genders.map(g    => ({ value: String(g.ID), label: g.GENDER })),     [genders])
+  const inlineMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: ContactPayload }) => updateContact(id, body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['contacts'] }),
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   function handleDeleteContact(c: Contact) {
     setConfirmState({
       title: 'Kontakt löschen',
@@ -698,8 +730,20 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
                     {!!c.IS_PRIMARY && <Star size={12} strokeWidth={2} fill="currentColor" style={{ color: '#f59e0b', marginRight: 4, verticalAlign: 'middle' }} aria-label="Hauptansprechpartner" />}
                     {c.FIRST_NAME} {c.LAST_NAME}
                   </td>
-                  <td>{c.SALUTATION}</td>
-                  <td>{c.GENDER}</td>
+                  <td>
+                    <InlineSelect
+                      value={c.SALUTATION_ID} options={salOpts} allowEmpty={false} placeholder="—"
+                      readOnly={!canEdit} ariaLabel="Anrede" fallbackLabel={c.SALUTATION || undefined}
+                      onChange={v => v && inlineMut.mutate({ id: c.ID, body: { ...contactToPayload(c), salutation_id: v } })}
+                    />
+                  </td>
+                  <td>
+                    <InlineSelect
+                      value={c.GENDER_ID} options={genderOpts} allowEmpty={false} placeholder="—"
+                      readOnly={!canEdit} ariaLabel="Geschlecht" fallbackLabel={c.GENDER || undefined}
+                      onChange={v => v && inlineMut.mutate({ id: c.ID, body: { ...contactToPayload(c), gender_id: v } })}
+                    />
+                  </td>
                   <td>{c.ADDRESS_ID ? (
                     <button className="link-cell" onClick={() => navigate(`/adressen/${c.ADDRESS_ID}`)}>
                       {c.ADDRESS}

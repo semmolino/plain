@@ -14,6 +14,7 @@ import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
 import { Can } from '@/components/ui/Can'
+import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
@@ -60,6 +61,33 @@ function fmtBalance(n: number) {
 
 function emptyCreateForm(): CreateEmployeePayload {
   return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '', entry_date: '' }
+}
+
+// Inline-Status-Optionen (Liste). Aktiv=1, Inaktiv=2.
+const EMP_STATUS_OPTS: InlineOption[] = [
+  { value: '1', label: 'Aktiv' },
+  { value: '2', label: 'Inaktiv' },
+]
+
+// Baut aus einer Mitarbeiter-Zeile das vollständige Update-Payload (das Backend
+// erwartet die Pflichtfelder) und überschreibt die inline geänderten Felder.
+function employeeRowToPayload(r: Employee, override: Partial<UpdateEmployeePayload>): UpdateEmployeePayload {
+  return {
+    short_name:       r.SHORT_NAME,
+    title:            r.TITLE ?? '',
+    first_name:       r.FIRST_NAME,
+    last_name:        r.LAST_NAME,
+    mail:             r.MAIL ?? '',
+    mobile:           r.MOBILE ?? '',
+    personnel_number: r.PERSONNEL_NUMBER ?? '',
+    gender_id:        r.GENDER_ID ?? 0,
+    department_id:    r.DEPARTMENT_ID ?? null,
+    entry_date:       r.ENTRY_DATE ?? '',
+    exit_date:        r.EXIT_DATE ?? '',
+    active:           r.ACTIVE ?? 1,
+    dashboard_role:   r.DASHBOARD_ROLE ?? null,
+    ...override,
+  }
 }
 
 // ID des aktuell gueltigen Eintrags (juengstes VALID_FROM <= heute) aus einer
@@ -2591,6 +2619,18 @@ export function MitarbeiterPage() {
   const departments = deptData?.data ?? []
   const workModels = wtmData?.data   ?? []
 
+  // ── Inline-Edit (Abteilung / Status direkt in der Liste) ──
+  const canEditEmp = usePermission('employees.edit')
+  const deptOpts: InlineOption[] = useMemo(
+    () => departments.map(d => ({ value: String(d.ID), label: d.NAME_SHORT })),
+    [departments],
+  )
+  const empInlineMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: UpdateEmployeePayload }) => updateEmployee(id, body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['employees'] }),
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const balByEmp = useMemo(() => {
     const m = new Map<number, EmployeeReportRow>()
     for (const row of balData?.data ?? []) m.set(row.EMPLOYEE_ID, row)
@@ -2776,7 +2816,13 @@ export function MitarbeiterPage() {
                         <td>{r.FIRST_NAME}</td>
                         <td>{r.LAST_NAME}</td>
                         <td>{r.MAIL}</td>
-                        <td>{r.DEPARTMENT_NAME || <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                        <td onClick={e => e.stopPropagation()}>
+                          <InlineSelect
+                            value={r.DEPARTMENT_ID} options={deptOpts} placeholder="—"
+                            readOnly={!canEditEmp} ariaLabel="Abteilung" fallbackLabel={r.DEPARTMENT_NAME || undefined}
+                            onChange={v => empInlineMut.mutate({ id: r.ID, body: employeeRowToPayload(r, { department_id: v ? Number(v) : null }) })}
+                          />
+                        </td>
                         <td>{r.CURRENT_MODEL_NAME || <span style={{ color: '#d1d5db' }}>—</span>}</td>
                         {canViewBookings && (() => {
                           const bal = balByEmp.get(r.ID)
@@ -2790,14 +2836,13 @@ export function MitarbeiterPage() {
                             </td>
                           )
                         })()}
-                        <td>
-                          <span style={{
-                            fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 500,
-                            background: r.ACTIVE === 2 ? '#fee2e2' : '#dcfce7',
-                            color:      r.ACTIVE === 2 ? '#b91c1c' : '#166534',
-                          }}>
-                            {r.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}
-                          </span>
+                        <td onClick={e => e.stopPropagation()}>
+                          <InlineSelect
+                            value={r.ACTIVE ?? 1} options={EMP_STATUS_OPTS} allowEmpty={false}
+                            readOnly={!canEditEmp} ariaLabel="Status"
+                            tone={r.ACTIVE === 2 ? { bg: '#fee2e2', color: '#b91c1c' } : { bg: '#dcfce7', color: '#166534' }}
+                            onChange={v => empInlineMut.mutate({ id: r.ID, body: employeeRowToPayload(r, { active: Number(v) }) })}
+                          />
                         </td>
                         <td onClick={e => e.stopPropagation()}>
                           <Can permission="employees.role.assign" fallback={

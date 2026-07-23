@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Pencil, Copy, Trash2 } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
+import { usePermission } from '@/store/permissionsStore'
+import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
 import { Modal }         from '@/components/ui/Modal'
 import { Message }       from '@/components/ui/Message'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
@@ -150,6 +152,19 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   const types       = typeData?.data   ?? []
   const managers    = mgrData?.data    ?? []
   const departments = deptData?.data   ?? []
+
+  // ── Inline-Edit (Status / Leitung / Typ / Abteilung direkt in der Liste) ──
+  const canEdit = usePermission('projects.edit')
+  const statusOpts:  InlineOption[] = useMemo(() => statuses.map(s    => ({ value: String(s.ID), label: s.NAME_SHORT })), [statuses])
+  const typeOpts:    InlineOption[] = useMemo(() => types.map(t       => ({ value: String(t.ID), label: t.NAME_SHORT })), [types])
+  const managerOpts: InlineOption[] = useMemo(() => managers.map(m    => ({ value: String(m.ID), label: m.SHORT_NAME })), [managers])
+  const deptOpts:    InlineOption[] = useMemo(() => departments.map(d => ({ value: String(d.ID), label: d.NAME_SHORT })), [departments])
+
+  const inlineMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Parameters<typeof updateProject>[1] }) => updateProject(id, body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['projects-full'] }),
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   const filterOptions = useMemo(() => {
     const uniq = (fn: (p: Project) => string | null | undefined) =>
@@ -462,11 +477,43 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                       {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6, fontSize: 10 }}>intern</span>}
                     </td>
                     <td>{p.NAME_LONG}</td>
-                    <td>{p.STATUS_NAME}</td>
-                    <td>{p.MANAGER_NAME}</td>
+                    <td>
+                      <InlineSelect
+                        value={p.PROJECT_STATUS_ID} options={statusOpts} allowEmpty={false}
+                        readOnly={!canEdit} ariaLabel="Status" fallbackLabel={p.STATUS_NAME || undefined}
+                        onChange={v => v && inlineMut.mutate({ id: p.ID, body: { project_status_id: Number(v) } })}
+                      />
+                    </td>
+                    <td>
+                      <InlineSelect
+                        value={p.PROJECT_MANAGER_ID} options={managerOpts} allowEmpty={false}
+                        readOnly={!canEdit} ariaLabel="Projektleitung" fallbackLabel={p.MANAGER_NAME || undefined}
+                        onChange={v => v && inlineMut.mutate({ id: p.ID, body: { project_manager_id: Number(v) } })}
+                      />
+                    </td>
                     {visibleOptCols.map(c => {
-                      if (c.key === 'ADDRESS_NAME' && p.ADDRESS_ID) {
-                        return <td key={c.key}><button className="link-cell" onClick={() => navigate('/adressen', { state: { openAddressId: p.ADDRESS_ID } })}>{p.ADDRESS_NAME ?? '—'}</button></td>
+                      if (c.key === 'ADDRESS_NAME') {
+                        return p.ADDRESS_ID
+                          ? <td key={c.key}><button className="link-cell" onClick={() => navigate('/adressen', { state: { openAddressId: p.ADDRESS_ID } })}>{p.ADDRESS_NAME ?? '—'}</button></td>
+                          : <td key={c.key}>{p.ADDRESS_NAME ?? '—'}</td>
+                      }
+                      if (c.key === 'TYPE_NAME') {
+                        return <td key={c.key}>
+                          <InlineSelect
+                            value={p.PROJECT_TYPE_ID} options={typeOpts} placeholder="—"
+                            readOnly={!canEdit} ariaLabel="Typ" fallbackLabel={p.TYPE_NAME || undefined}
+                            onChange={v => inlineMut.mutate({ id: p.ID, body: { project_type_id: v ? Number(v) : null } })}
+                          />
+                        </td>
+                      }
+                      if (c.key === 'DEPARTMENT_NAME') {
+                        return <td key={c.key}>
+                          <InlineSelect
+                            value={p.DEPARTMENT_ID} options={deptOpts} placeholder="—"
+                            readOnly={!canEdit} ariaLabel="Abteilung" fallbackLabel={p.DEPARTMENT_NAME || undefined}
+                            onChange={v => inlineMut.mutate({ id: p.ID, body: { department_id: v ? Number(v) : null } })}
+                          />
+                        </td>
                       }
                       return <td key={c.key}>{p[c.key] ?? '—'}</td>
                     })}

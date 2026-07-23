@@ -2368,6 +2368,28 @@ input::placeholder { color: var(--text-4); }
 .pl-filter-chips .inline-date-input,
 .list-toolbar .inline-date-input { height: 36px; padding: 6px 10px; border-radius: 10px; font-size: 13px; }
 
+/* ── Inline-Edit in Listen (components/ui/InlineEdit) ───────────────────────── */
+/* Dezentes Dropdown: wirkt wie Text, zeigt beim Hover/Fokus, dass es editierbar ist. */
+.inline-edit-select {
+  max-width: 100%; height: 28px; padding: 2px 6px;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--text);
+  font-size: 12px; font-family: inherit; cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.inline-edit-select:hover   { border-color: var(--border); background: var(--surface); }
+.inline-edit-select:focus   { outline: none; border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 2px var(--accent-ring); }
+.inline-edit-select.is-empty { color: var(--text-muted); }
+.inline-edit-static          { font-size: 12px; color: var(--text); }
+.inline-edit-static.is-empty { color: var(--text-muted); }
+.inline-num-input {
+  width: 72px; height: 32px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  font-size: 13px; font-family: inherit; outline: none; text-align: right;
+}
+.inline-num-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(var(--accent-rgb,59,130,246),0.15); }
+
 /* Row action buttons (MahnungenListe + RechnungenListe) */
 .row-actions     { white-space: nowrap; padding: 0 4px; }
 .row-action-btn  { background: none; border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: 14px; padding: 4px 6px; min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; transition: background 0.1s; color: var(--text-2); }
