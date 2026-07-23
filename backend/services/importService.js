@@ -1073,6 +1073,7 @@ const DOMAINS = {
     matchLabel: "E-Mail / Kürzel / Personalnummer",
     fields: EMPLOYEE_FIELDS,
     dependents: [
+      { table: "PROJECT",          column: "PROJECT_MANAGER_ID", label: "Projekt(e) als Projektleiter" },
       { table: "TEC",              column: "EMPLOYEE_ID", label: "Buchung(en)" },
       { table: "EMPLOYEE2PROJECT", column: "EMPLOYEE_ID", label: "Projektzuordnung(en)" },
       { table: "ABSENCE",          column: "EMPLOYEE_ID", label: "Abwesenheit(en)" },

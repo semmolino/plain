@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate }    from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { FileText, Banknote, Mail, Receipt, Folder, MoreHorizontal, SlidersHorizontal } from 'lucide-react'
@@ -290,8 +291,10 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
   const [filters,  setFilters]  = useState<FilterState>(loadFilters)
   const [sortKey,  setSortKey]  = useState<SortKey>('dueDate')
   const [sortDir,  setSortDir]  = useState<'asc'|'desc'>('asc')
-  const [hiddenCols, setHiddenCols] = useState<Set<OptColKey>>(
-    new Set(OPT_COLS.filter(c => !c.defaultVisible).map(c => c.key))
+  const [hiddenCols, setHiddenCols] = useStickyState<Set<OptColKey>>(
+    'mahnungen.cols',
+    () => new Set(OPT_COLS.filter(c => !c.defaultVisible).map(c => c.key)),
+    { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as OptColKey[] : []) },
   )
   const [colPanelOpen, setColPanelOpen] = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)

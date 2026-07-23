@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignature } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
+import { usePermission } from '@/store/permissionsStore'
+import { InlineSelect, InlineDate, InlineNumber, type InlineOption } from '@/components/ui/InlineEdit'
 import { Message } from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { RecentList }  from '@/components/recents/RecentList'
@@ -11,7 +13,7 @@ import { trackRecent } from '@/api/recents'
 import {
   fetchOffers, deleteOffer, openOfferPdf, openAuftragsbestaetigungPdf, fetchOfferStructure, convertOffer, updateOffer,
   fetchOfferStatuses,
-  type OfferListItem, type ConvertOfferPayload,
+  type OfferListItem, type ConvertOfferPayload, type UpdateOfferPayload,
 } from '@/api/angebote'
 import { BeauftragtModal } from './BeauftragtModal'
 
@@ -19,13 +21,6 @@ const PAGE_SIZE = 25
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
-
-function fmtDate(s: string | null | undefined) {
-  if (!s) return '—'
-  const d = new Date(s)
-  if (isNaN(d.getTime())) return s
-  return d.toLocaleDateString('de-DE')
-}
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -91,6 +86,18 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
   })
 
   const rows = data?.data ?? []
+
+  // ── Inline-Edit (Status / Wahrscheinlichkeit / Datumsfelder direkt in der Liste) ──
+  const canEdit = usePermission('offers.edit')
+  const statusOpts: InlineOption[] = useMemo(
+    () => (statusData?.data ?? []).map(s => ({ value: String(s.ID), label: s.NAME_SHORT })),
+    [statusData],
+  )
+  const inlineMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: UpdateOfferPayload }) => updateOffer(id, body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['offers'] }),
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
 
   const filtered = useMemo(() => {
     let result = rows
@@ -180,13 +187,35 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                 <tr key={r.ID}>
                   <td style={{ whiteSpace: 'nowrap' }}>{r.NAME_SHORT ?? '—'}</td>
                   <td>{r.NAME_LONG}</td>
-                  <td>{r.STATUS_NAME ?? '—'}</td>
+                  <td>
+                    <InlineSelect
+                      value={r.OFFER_STATUS_ID} options={statusOpts} allowEmpty={false}
+                      readOnly={!canEdit} ariaLabel="Status" fallbackLabel={r.STATUS_NAME ?? undefined}
+                      onChange={v => v && inlineMut.mutate({ id: r.ID, body: { offer_status_id: Number(v) } })}
+                    />
+                  </td>
                   <td>{r.EMPLOYEE_NAME ?? '—'}</td>
                   <td>{r.ADDRESS_NAME ?? '—'}</td>
                   <td className="num">{fmtEur(r.TOTAL_AMOUNT)}</td>
-                  <td className="num">{r.PROBABILITY != null ? `${r.PROBABILITY} %` : '—'}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.OFFER_DATE ?? r.CREATED_AT)}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.VALID_UNTIL)}</td>
+                  <td className="num">
+                    <InlineNumber
+                      value={r.PROBABILITY} suffix=" %" min={0} max={100} step={5}
+                      readOnly={!canEdit}
+                      onSave={v => inlineMut.mutate({ id: r.ID, body: { probability: v } })}
+                    />
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <InlineDate
+                      value={r.OFFER_DATE} readOnly={!canEdit}
+                      onSave={v => inlineMut.mutate({ id: r.ID, body: { offer_date: v || null } })}
+                    />
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <InlineDate
+                      value={r.VALID_UNTIL} readOnly={!canEdit}
+                      onSave={v => inlineMut.mutate({ id: r.ID, body: { valid_until: v || null } })}
+                    />
+                  </td>
                   <td className="doc-actions" onClick={e => e.stopPropagation()}>
                     <Can permission="offers.edit">
                       <button className="row-action-btn" onClick={() => onEditStammdaten?.(r.ID)} title="Angebotsdaten bearbeiten">

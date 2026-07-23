@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+import { useStickyState } from '@/hooks/useStickyState'
 import { SlidersHorizontal } from 'lucide-react'
 import { HelpHint } from '@/components/ui/HelpHint'
 import type { HelpId } from '@/help/helpContent'
@@ -492,8 +493,10 @@ export function ProjektlisteTab() {
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(() =>
     deserializeFilters(lsGet<Record<string, string[]>>(`${PL_KEY}:filters`, {}))
   )
-  const [hiddenCols,    setHiddenCols]    = useState<Set<ColKey>>(
-    new Set(COLUMNS.filter(c => !c.defaultVisible).map(c => c.key))
+  const [hiddenCols,    setHiddenCols]    = useStickyState<Set<ColKey>>(
+    'report.projektliste.cols',
+    () => new Set(COLUMNS.filter(c => !c.defaultVisible).map(c => c.key)),
+    { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as ColKey[] : []) },
   )
   const [colPanelOpen, setColPanelOpen] = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
