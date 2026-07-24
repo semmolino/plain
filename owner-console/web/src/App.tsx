@@ -10,6 +10,7 @@ import { FunctionsView } from './pages/Functions'
 import { SuggestionsView } from './pages/Suggestions'
 import { RequestsView } from './pages/Requests'
 import { AnalyticsView } from './pages/Analytics'
+import { SecurityView } from './pages/Security'
 
 type Tab =
   | 'inbox' | 'matrix' | 'plans' | 'tenants' | 'functions'
@@ -46,6 +47,8 @@ export function App() {
   const [email, setEmail] = useState<string>('')
   const [route, setRoute] = useState(readHash())
   const [checking, setChecking] = useState<boolean>(!!getToken())
+  const [showSecurity, setShowSecurity] = useState(false)
+  const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null)
 
   // Tab-Zustand in der URL (Reload-fest, Deep-Links aus der Inbox).
   useEffect(() => {
@@ -69,6 +72,7 @@ export function App() {
       .me()
       .then((me) => {
         setEmail(me.email)
+        setTotpEnabled(!!me.totp_enabled)
         setAuthed(true)
       })
       .catch((e: unknown) => {
@@ -96,6 +100,8 @@ export function App() {
       <Login
         onSuccess={(em) => {
           setEmail(em)
+          setShowSecurity(false)
+          api.me().then((me) => setTotpEnabled(!!me.totp_enabled)).catch(() => {})
           setAuthed(true)
         }}
       />
@@ -126,11 +132,24 @@ export function App() {
         </nav>
         <div className="spacer" />
         <span className="muted email">{email}</span>
+        <button className="link" onClick={() => setShowSecurity(true)} title="Konto & Sicherheit">
+          Konto{totpEnabled === false ? ' ⚠' : ''}
+        </button>
         <button className="link" onClick={logout}>
           Abmelden
         </button>
       </header>
+      {totpEnabled === false && !showSecurity && (
+        <div className="nag-bar">
+          2FA ist für dein Konto nicht aktiv. Diese Konsole steuert alle Mandanten —{' '}
+          <button className="link" onClick={() => setShowSecurity(true)}>jetzt einrichten</button>.
+        </div>
+      )}
       <main className="content">
+        {showSecurity ? (
+          <SecurityView onClose={() => setShowSecurity(false)} onSessionInvalidated={logout} />
+        ) : (
+          <>
         {tab === 'inbox' && <InboxView onNavigate={navigate} />}
         {tab === 'matrix' && <MatrixView focusRef={ref} />}
         {tab === 'plans' && <PlansView />}
@@ -140,6 +159,8 @@ export function App() {
         {tab === 'suggestions' && <SuggestionsView />}
         {tab === 'requests' && <RequestsView />}
         {tab === 'analytics' && <AnalyticsView />}
+          </>
+        )}
       </main>
     </div>
   )

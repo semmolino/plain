@@ -352,7 +352,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, password, totp }),
     }),
-  me: () => req<{ admin_id: number; email: string }>('/auth/me'),
+  me: () =>
+    req<{
+      admin_id: number
+      email: string
+      totp_enabled?: boolean
+      require_totp?: boolean
+      last_login_at?: string | null
+    }>('/auth/me'),
+  totpSetup: () => req<{ secret: string; otpauth: string }>('/auth/totp/setup', { method: 'POST', body: '{}' }),
+  totpConfirm: (code: string) =>
+    req<{ ok: true }>('/auth/totp/confirm', { method: 'POST', body: JSON.stringify({ code }) }),
+  totpDisable: (code: string) =>
+    req<{ ok: true }>('/auth/totp/disable', { method: 'POST', body: JSON.stringify({ code }) }),
+  logoutAll: () => req<{ ok: true }>('/auth/logout-all', { method: 'POST', body: '{}' }),
 
   capabilities: () => req<{ modules: Module[]; capabilities: Capability[] }>('/capabilities'),
   capabilityFunctions: () => req<FunctionsResponse>('/capabilities/functions'),
