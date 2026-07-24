@@ -84,7 +84,7 @@ export function AnalyticsView() {
   return (
     <div>
       <h2>Auswertung</h2>
-      <p className="muted">Plan&simple-weite Kennzahlen. Ohne personenbezogene Daten — Organisationen zählen nur anonym.</p>
+      <p className="muted">plan&amp;simple-weite Kennzahlen. Ohne personenbezogene Daten — Organisationen zählen nur anonym.</p>
 
       <h3 style={{ marginBottom: 8 }}>Vorschläge</h3>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>

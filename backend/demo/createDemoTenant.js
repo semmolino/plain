@@ -113,6 +113,19 @@ async function main() {
   // 6) Rollen + Admin
   await seedRolesAndAssignAdmin(supabase, tenantId, emp.ID);
 
+  // 7) Lizenz: Standard-Plan zuweisen (sonst fehlt der Mandant in der
+  // Owner-Konsole und gilt als "unbeschränkt"). Best-effort.
+  try {
+    let { data: plan } = await supabase.from("LICENSE_PLAN").select("ID, VERSION").eq("IS_DEFAULT", true).maybeSingle();
+    if (!plan) { const fb = await supabase.from("LICENSE_PLAN").select("ID, VERSION").eq("KEY", "full").maybeSingle(); plan = fb.data || null; }
+    if (plan) {
+      await supabase.from("TENANT_LICENSE").insert([{
+        TENANT_ID: tenantId, PLAN_ID: plan.ID, PLAN_VERSION: plan.VERSION ?? 1,
+        STATE: "active", STARTS_AT: new Date().toISOString(),
+      }]);
+    }
+  } catch (e) { console.warn("[demo] Lizenzzuweisung übersprungen:", e?.message || e); }
+
   console.log("✅ Demo-Mandant angelegt.");
   console.log(`   TENANT_ID : ${tenantId}`);
   console.log(`   Firma     : ${company}`);

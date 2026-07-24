@@ -10,6 +10,13 @@ const STATUS: { id: string; label: string }[] = [
   { id: 'all', label: 'Alle' },
 ]
 const STATUS_OPTS: ReqStatus[] = ['new', 'in_progress', 'waiting', 'resolved', 'closed']
+const REQ_STATUS_LABEL: Record<string, string> = {
+  new: 'Offen',
+  in_progress: 'In Bearbeitung',
+  waiting: 'Wartet auf Anwender',
+  resolved: 'Gelöst',
+  closed: 'Geschlossen',
+}
 
 export function RequestsView() {
   const [kind, setKind] = useState<string>('')
@@ -67,7 +74,7 @@ export function RequestsView() {
                 <td>{r.org_name}</td>
                 <td>{r.submitter_name}</td>
                 <td>{r.subject}</td>
-                <td>{r.status}</td>
+                <td><span className={`status-tag st-${r.status}`}>{REQ_STATUS_LABEL[r.status] ?? r.status}</span></td>
                 <td>{new Date(r.created_at).toLocaleDateString('de-DE')}</td>
               </tr>
             ))}
