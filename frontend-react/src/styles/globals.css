@@ -3399,3 +3399,27 @@ input::placeholder { color: var(--text-4); }
 .att-x:hover { color: var(--danger, #dc2626); }
 .att-warn { font-size: 11px; color: var(--text-4); line-height: 1.45; margin: 0; max-width: 560px; }
 
+
+/* Nur-Lese-Banner bei abgelaufener Lizenz (License-STATE-Enforcement) */
+.license-readonly-banner {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Mengenlimit-Anzeige (License-Limits) */
+.limit-note {
+  font-size: 12px;
+  color: var(--text-3, #6b7280);
+  padding: 4px 0 8px;
+}
+.limit-note.near { color: #b45309; font-weight: 500; }
+.limit-note.reached {
+  background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5;
+  border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px;
+}

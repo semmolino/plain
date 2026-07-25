@@ -103,6 +103,43 @@ async function seedTenantRbacAndAssignAdmin(supabase, tenantId, employeeId) {
   }
 }
 
+/**
+ * Weist einem frisch registrierten Mandanten den Standard-Lizenzplan zu.
+ *
+ * Ohne TENANT_LICENSE-Zeile behandelt middleware/license.js den Mandanten als
+ * "unrestricted" (Soft-Fail) und die Owner-Konsole zeigte ihn frueher gar
+ * nicht an. Der Standard-Plan traegt LICENSE_PLAN.IS_DEFAULT (Migration 0102);
+ * fehlt er, wird ersatzweise der interne 'full'-Plan verwendet — damit bleibt
+ * das Verhalten wie bisher (alles frei), nur eben explizit.
+ *
+ * Best-effort: Fehler blockieren die Registrierung nicht.
+ */
+async function assignDefaultLicense(supabase, tenantId) {
+  try {
+    let { data: plan } = await supabase
+      .from("LICENSE_PLAN").select("ID, VERSION").eq("IS_DEFAULT", true).maybeSingle();
+    if (!plan) {
+      const fb = await supabase
+        .from("LICENSE_PLAN").select("ID, VERSION").eq("KEY", "full").maybeSingle();
+      plan = fb.data || null;
+    }
+    if (!plan) return; // Lizenz-Layer nicht eingespielt -> No-Op (wie bisher)
+
+    const { error } = await supabase.from("TENANT_LICENSE").insert([{
+      TENANT_ID: tenantId,
+      PLAN_ID: plan.ID,
+      PLAN_VERSION: plan.VERSION ?? 1,
+      STATE: "active",
+      STARTS_AT: new Date().toISOString(),
+    }]);
+    if (error && !/duplicate key/i.test(error.message)) {
+      console.error("[SIGNUP][LICENSE]", error.message);
+    }
+  } catch (e) {
+    console.error("[SIGNUP][LICENSE]", e?.message || e);
+  }
+}
+
 module.exports = (supabase) => {
   const router = express.Router();
 
@@ -400,6 +437,12 @@ module.exports = (supabase) => {
       // 6. RBAC: Standard-Rollen fuer den neuen Tenant anlegen + Erst-User als
       // Administrator. Ohne das waere der User komplett ohne Berechtigungen.
       await seedTenantRbacAndAssignAdmin(supabase, tenantId, emp.ID);
+
+      // 7. Lizenz: Standard-Plan zuweisen. Ohne diese Zeile faellt die
+      // Lizenzpruefung auf "unbeschraenkt" zurueck (Soft-Fail in
+      // middleware/license.js) UND der Mandant fehlt in der Owner-Konsole.
+      // Best-effort: eine fehlende Lizenz darf die Registrierung nicht kippen.
+      await assignDefaultLicense(supabase, tenantId);
 
       return res.json({ success: true, message: "Konto erstellt. Bitte anmelden." });
     } catch (e) {

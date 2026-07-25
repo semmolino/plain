@@ -21,6 +21,14 @@ export class ApiError extends Error {
   }
 }
 
+// Globaler 401-Handler: eine abgelaufene Sitzung soll überall (nicht nur beim
+// ersten me()-Call) zum Login zurückführen, statt die Seite auf „Lädt…" oder
+// einer Fehlermeldung hängen zu lassen.
+let unauthorizedHandler: (() => void) | null = null
+export function onUnauthorized(fn: () => void): void {
+  unauthorizedHandler = fn
+}
+
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -39,6 +47,10 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const msg = (data as { error?: string } | null)?.error || `HTTP ${res.status}`
+    if (res.status === 401 && path !== '/auth/login') {
+      setToken(null)
+      unauthorizedHandler?.()
+    }
     throw new ApiError(res.status, msg, data)
   }
   return data as T
@@ -48,13 +60,37 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
 export interface MatrixPlan { ID: number; KEY: string; NAME_DE: string; POSITION: number }
 export interface MatrixCap { key: string; module: string; labelDe: string; type: 'boolean' | 'metered'; unit: string | null }
 export interface MatrixCell { plan_id: number; capability_key: string; enabled: boolean; numeric_limit: number | null }
-export interface MatrixResponse { plans: MatrixPlan[]; capabilities: MatrixCap[]; cells: MatrixCell[] }
+export interface MatrixResponse { plans: MatrixPlan[]; modules: Module[]; capabilities: MatrixCap[]; cells: MatrixCell[] }
 
 export interface Capability { key: string; module: string; labelDe: string; type: 'boolean' | 'metered'; unit: string | null }
 export interface Module { key: string; labelDe: string }
-export interface CapabilityFns extends Capability { permissionKeys: string[] }
-export interface PermissionInfo { key: string; label: string; module: string }
+export interface CapabilityFns extends Capability { permissionKeys: string[]; since?: string | null }
+export interface PermissionInfo { key: string; label: string; module: string; capabilityKeys?: string[] }
 export interface FunctionsResponse { modules: Module[]; capabilities: CapabilityFns[]; permissions: PermissionInfo[] }
+
+// ── Inbox (offene Lizenz-Aufgaben) ───────────────────────────────────────────
+export type InboxSeverity = 'kritisch' | 'hoch' | 'mittel' | 'niedrig'
+export type InboxTab = 'functions' | 'matrix' | 'tenants' | 'inbox'
+export interface InboxItem {
+  id: string
+  kind: string
+  severity: InboxSeverity
+  ref: string
+  title: string
+  detail: string
+  action: string
+  targetTab: InboxTab
+  position: number
+}
+export interface InboxResponse {
+  items: InboxItem[]
+  counts: Record<string, number>
+  bySeverity: Partial<Record<InboxSeverity, number>>
+  total: number
+  warnings: string[]
+  kindLabels: Record<string, string>
+  checkedAt: string
+}
 
 export interface Plan {
   ID: number
@@ -63,21 +99,72 @@ export interface Plan {
   DESCRIPTION_DE: string | null
   POSITION: number
   IS_ACTIVE: boolean
+  IS_DEFAULT?: boolean
   PRICE_MONTHLY: number | null
   PRICE_YEARLY: number | null
   VERSION: number
   capabilities: { capability_key: string; numeric_limit: number | null }[]
+  tenant_count?: number
 }
+
+export type LicenseState = 'trial' | 'active' | 'past_due' | 'grace' | 'expired'
 
 export interface TenantLicense {
   TENANT_ID: number
-  PLAN_ID: number
-  PLAN_VERSION: number
-  STATE: string
+  NAME: string | null
+  SLUG: string | null
+  EMPLOYEE_COUNT: number
+  OVERRIDE_COUNT: number
+  HAS_LICENSE: boolean
+  PLAN_ID: number | null
+  PLAN_NAME: string | null
+  PLAN_KEY: string | null
+  PLAN_VERSION: number | null
+  PLAN_VERSION_CURRENT: number | null
+  PLAN_OUTDATED: boolean
+  STATE: LicenseState | null
   STARTS_AT: string | null
   VALID_UNTIL: string | null
   TRIAL_UNTIL: string | null
   GRACE_UNTIL: string | null
+  UPDATED_AT: string | null
+}
+
+export interface OverrideRow {
+  id: number
+  tenant_id: number
+  tenant_name: string | null
+  capability_key: string
+  capability_label: string
+  mode: 'grant' | 'revoke'
+  numeric_limit: number | null
+  reason: string | null
+  expires_at: string | null
+  expired: boolean
+  is_grandfather: boolean
+  created_at: string
+  created_by: string | null
+}
+
+export interface TenantEntitlement {
+  unrestricted: boolean
+  reason?: string
+  plan_id?: number
+  plan_version?: number
+  state?: string
+  capabilities: string[]
+  limits: Record<string, number>
+  overrides: Override[]
+  missing?: string[]
+}
+
+export interface TenantLicensePatch {
+  plan_id?: number
+  state?: LicenseState
+  valid_until?: string | null
+  trial_until?: string | null
+  grace_until?: string | null
+  repin_version?: boolean
 }
 
 export interface Override {
@@ -91,6 +178,7 @@ export interface Override {
   CREATED_BY: string | null
 }
 
+export interface AuditDiff { field: string; label: string; before: unknown; after: unknown }
 export interface AuditEntry {
   ID: number
   ACTOR: string | null
@@ -98,6 +186,31 @@ export interface AuditEntry {
   ENTITY_REF: string | null
   ACTION: string
   AT: string
+  BEFORE?: Record<string, unknown> | null
+  AFTER?: Record<string, unknown> | null
+  CONTEXT?: Record<string, unknown> | null
+  IP?: string | null
+  ACTION_LABEL: string
+  ENTITY_LABEL: string
+  OBJECT_LABEL: string
+  DIFF: AuditDiff[]
+}
+export interface AuditResponse {
+  entries: AuditEntry[]
+  total: number
+  limit: number
+  offset: number
+  filters: { entities: { key: string; label: string }[]; actions: { key: string; label: string }[] }
+  warning?: string
+}
+export interface AuditQuery {
+  entity?: string
+  action?: string
+  actor?: string
+  from?: string
+  to?: string
+  limit?: number
+  offset?: number
 }
 
 // ── Vorschläge (Moderation) ──────────────────────────────────────────────────
@@ -214,6 +327,21 @@ export async function openConsoleFile(path: string): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
+/** Lädt eine Datei mit Auth-Header und speichert sie unter `filename`. */
+export async function downloadConsoleFile(path: string, filename: string): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`${BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (!res.ok) throw new ApiError(res.status, `Download fehlgeschlagen (HTTP ${res.status})`)
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
 export interface NewPlan {
   key: string
   name_de: string
@@ -229,6 +357,8 @@ export interface PlanPatch {
   price_yearly?: number | null
   position?: number
   is_active?: boolean
+  is_default?: boolean
+  force?: boolean
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────
@@ -238,7 +368,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, password, totp }),
     }),
-  me: () => req<{ admin_id: number; email: string }>('/auth/me'),
+  me: () =>
+    req<{
+      admin_id: number
+      email: string
+      totp_enabled?: boolean
+      require_totp?: boolean
+      last_login_at?: string | null
+    }>('/auth/me'),
+  totpSetup: () => req<{ secret: string; otpauth: string }>('/auth/totp/setup', { method: 'POST', body: '{}' }),
+  totpConfirm: (code: string) =>
+    req<{ ok: true }>('/auth/totp/confirm', { method: 'POST', body: JSON.stringify({ code }) }),
+  totpDisable: (code: string) =>
+    req<{ ok: true }>('/auth/totp/disable', { method: 'POST', body: JSON.stringify({ code }) }),
+  logoutAll: () => req<{ ok: true }>('/auth/logout-all', { method: 'POST', body: '{}' }),
 
   capabilities: () => req<{ modules: Module[]; capabilities: Capability[] }>('/capabilities'),
   capabilityFunctions: () => req<FunctionsResponse>('/capabilities/functions'),
@@ -246,35 +389,90 @@ export const api = {
     req<{ ok: true }>(`/capabilities/${encodeURIComponent(capKey)}/permissions/${encodeURIComponent(permKey)}`, { method: 'PUT' }),
   removeCapPermission: (capKey: string, permKey: string) =>
     req<{ ok: true }>(`/capabilities/${encodeURIComponent(capKey)}/permissions/${encodeURIComponent(permKey)}`, { method: 'DELETE' }),
+  addCapPermissions: (capKey: string, permKeys: string[]) =>
+    req<{ ok: true; added: number }>(`/capabilities/${encodeURIComponent(capKey)}/permissions`, {
+      method: 'POST',
+      body: JSON.stringify({ permission_keys: permKeys }),
+    }),
   matrix: () => req<MatrixResponse>('/matrix'),
-  inbox: () => req<{ unmapped: string[]; count: number }>('/inbox'),
+  inbox: () => req<InboxResponse>('/inbox'),
   setCell: (planId: number, capKey: string, enabled: boolean, numericLimit: number | null) =>
     req<{ ok: true }>(`/plans/${planId}/capabilities/${encodeURIComponent(capKey)}`, {
       method: 'PUT',
       body: JSON.stringify({ enabled, numeric_limit: numericLimit }),
+    }),
+  setCells: (planId: number, changes: { capability_key: string; enabled: boolean; numeric_limit?: number | null }[]) =>
+    req<{ ok: true; added: number; removed: number }>(`/plans/${planId}/capabilities`, {
+      method: 'PUT',
+      body: JSON.stringify({ changes }),
+    }),
+  // Grandfathering: wen trifft das Entfernen einer Capability aus dem Plan?
+  removalImpact: (planId: number, capKey: string) =>
+    req<{ affected: { tenant_id: number; name: string | null }[]; count: number }>(
+      `/plans/${planId}/capabilities/${encodeURIComponent(capKey)}/impact`,
+    ),
+  // Zelle entfernen und dabei Bestandskunden per grant-Override schützen.
+  removeCellGrandfathered: (planId: number, capKey: string, tenantIds: number[]) =>
+    req<{ ok: true; grandfathered: number }>(`/plans/${planId}/capabilities/${encodeURIComponent(capKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: false, grandfather_tenant_ids: tenantIds }),
     }),
 
   plans: () => req<{ plans: Plan[] }>('/plans'),
   createPlan: (p: NewPlan) => req<{ plan: Plan }>('/plans', { method: 'POST', body: JSON.stringify(p) }),
   updatePlan: (id: number, patch: PlanPatch) =>
     req<{ plan: Plan }>(`/plans/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deletePlan: (id: number) => req<{ ok: true }>(`/plans/${id}`, { method: 'DELETE' }),
+  duplicatePlan: (id: number, key: string, nameDe: string) =>
+    req<{ plan: Plan; copied_capabilities: number }>(`/plans/${id}/duplicate`, {
+      method: 'POST',
+      body: JSON.stringify({ key, name_de: nameDe }),
+    }),
 
-  tenants: () => req<{ tenants: TenantLicense[] }>('/tenants'),
+  tenants: () => req<{ tenants: TenantLicense[]; unlicensed: number }>('/tenants'),
   setTenantPlan: (tenantId: number, planId: number) =>
     req<{ tenant_license: TenantLicense }>(`/tenants/${tenantId}/plan`, {
       method: 'PATCH',
       body: JSON.stringify({ plan_id: planId }),
     }),
+  patchTenantLicense: (tenantId: number, patch: TenantLicensePatch) =>
+    req<{ tenant_license: TenantLicense }>(`/tenants/${tenantId}/plan`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  tenantEntitlement: (tenantId: number) => req<TenantEntitlement>(`/tenants/${tenantId}/entitlement`),
+  allOverrides: () => req<{ overrides: OverrideRow[] }>('/overrides'),
   // (dormant — Per-Tenant-Overrides bleiben im Backend für spätere Add-Ons)
   tenantOverrides: (id: number) => req<{ overrides: Override[] }>(`/tenants/${id}/overrides`),
   addOverride: (
     id: number,
-    body: { capability_key: string; mode: 'grant' | 'revoke'; numeric_limit?: number | null; reason?: string },
+    body: {
+      capability_key: string
+      mode: 'grant' | 'revoke'
+      numeric_limit?: number | null
+      reason?: string
+      expires_at?: string | null
+    },
   ) => req<{ override: Override }>(`/tenants/${id}/overrides`, { method: 'POST', body: JSON.stringify(body) }),
   deleteOverride: (id: number, capKey: string) =>
     req<{ ok: true }>(`/tenants/${id}/overrides/${encodeURIComponent(capKey)}`, { method: 'DELETE' }),
 
-  audit: () => req<{ entries: AuditEntry[] }>('/audit'),
+  audit: (q: AuditQuery = {}) => {
+    const p = new URLSearchParams()
+    Object.entries(q).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') p.set(k, String(v))
+    })
+    const qs = p.toString()
+    return req<AuditResponse>(`/audit${qs ? `?${qs}` : ''}`)
+  },
+  auditExportUrl: (q: AuditQuery = {}) => {
+    const p = new URLSearchParams()
+    Object.entries(q).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') p.set(k, String(v))
+    })
+    const qs = p.toString()
+    return `/audit/export${qs ? `?${qs}` : ''}`
+  },
 
   // Vorschläge (Moderation)
   suggestions: (state: string = 'all') => req<{ suggestions: ModSuggestion[] }>(`/suggestions?state=${state}`),

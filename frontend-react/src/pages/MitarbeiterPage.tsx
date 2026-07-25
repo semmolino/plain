@@ -17,6 +17,7 @@ import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
 import { Can } from '@/components/ui/Can'
 import { MyAbsencesPanel, ClarificationThread } from '@/components/mitarbeiter/MyAbsencesPanel'
 import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
+import { LimitBanner } from '@/components/ui/LimitBanner'
 import {
   fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
@@ -2943,6 +2944,7 @@ export function MitarbeiterPage() {
       await createEmployeeWorkModel(empId, { model_id: Number(createWmModelId), valid_from: createWmValidFrom })
       await createEmployeeCpRate(empId, { cp_rate: parseFloat(createCpRate), valid_from: createCpValidFrom })
       void qc.invalidateQueries({ queryKey: ['employees'] })
+      void qc.invalidateQueries({ queryKey: ['license-usage'] })
       toast.success('Mitarbeiter angelegt')
       setForm(emptyCreateForm())
       setCreateWmModelId(''); setCreateWmValidFrom('')
@@ -2990,6 +2992,7 @@ export function MitarbeiterPage() {
       <div className="master-section">
         {tab === 'list' && (
           <>
+            <LimitBanner capability="limits.employees" />
             <div className="list-toolbar">
               <input
                 className="list-search"

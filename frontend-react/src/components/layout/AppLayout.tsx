@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import { usePermissionsStore } from '@/store/permissionsStore'
-import { useLicenseStore } from '@/store/licenseStore'
+import { useLicenseStore, useLicenseReadOnly } from '@/store/licenseStore'
 import { useToast } from '@/store/toastStore'
 import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
@@ -151,10 +151,23 @@ export function AppLayout() {
         <SideNav />
         <main className="app-main">
           <ToastContainer />
+          <LicenseReadOnlyBanner />
           <Outlet />
         </main>
       </div>
       <BottomNav />
+    </div>
+  )
+}
+
+/** Hinweis-Banner bei abgelaufener Lizenz (Nur-Lese-Modus). */
+function LicenseReadOnlyBanner() {
+  const readOnly = useLicenseReadOnly()
+  if (!readOnly) return null
+  return (
+    <div className="license-readonly-banner" role="status">
+      Deine Lizenz ist abgelaufen — du hast derzeit nur Lesezugriff. Deine Daten bleiben erhalten.
+      Bitte wende dich an plan&amp;simple, um die Lizenz zu verlängern.
     </div>
   )
 }

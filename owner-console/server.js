@@ -7,6 +7,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const { consoleAuth } = require("./middleware/consoleAuth");
+const { writeLimiter } = require("./middleware/rateLimit");
 
 const app = express();
 const port = process.env.CONSOLE_PORT || 4000;
@@ -37,14 +38,15 @@ app.get("/health", (_req, res) => res.json({ ok: true, service: "owner-console" 
 // Öffentlich: nur Login
 app.use("/api/console/auth", require("./routes/auth"));
 
-// Geschützt: gültiges Konsolen-Token erforderlich
-app.use("/api/console", consoleAuth, require("./routes/catalog"));
-app.use("/api/console", consoleAuth, require("./routes/plans"));
-app.use("/api/console", consoleAuth, require("./routes/tenants"));
-app.use("/api/console", consoleAuth, require("./routes/audit"));
-app.use("/api/console", consoleAuth, require("./routes/suggestions"));
-app.use("/api/console", consoleAuth, require("./routes/serviceRequests"));
-app.use("/api/console", consoleAuth, require("./routes/analytics"));
+// Geschützt: gültiges Konsolen-Token erforderlich. writeLimiter deckelt
+// mutierende Requests (GET zählt nicht mit).
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/catalog"));
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/plans"));
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/tenants"));
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/audit"));
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/suggestions"));
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/serviceRequests"));
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/analytics"));
 
 // Gebaute Web-UI ausliefern (ein Server für UI + API). Falls noch nicht gebaut:
 // `npm --prefix web run build`.

@@ -19,6 +19,7 @@ interface LicenseState {
   unrestricted: boolean
   planId:       number | null
   state:        string | null
+  restriction:  'read_only' | null
   loaded:       boolean
   loading:      boolean
   reload:       () => Promise<void>
@@ -32,6 +33,7 @@ export const useLicenseStore = create<LicenseState>((set, get) => ({
   unrestricted: true,   // L2: im Zweifel anzeigen (additive Schicht)
   planId:       null,
   state:        null,
+  restriction:  null,
   loaded:       false,
   loading:      false,
 
@@ -46,6 +48,7 @@ export const useLicenseStore = create<LicenseState>((set, get) => ({
         unrestricted: !!res.unrestricted,
         planId:       res.plan_id ?? null,
         state:        res.state ?? null,
+        restriction:  res.restriction ?? null,
         loaded:       true,
         loading:      false,
       })
@@ -58,7 +61,7 @@ export const useLicenseStore = create<LicenseState>((set, get) => ({
 
   clear: () => set({
     capabilities: new Set(), limits: new Map(),
-    unrestricted: true, planId: null, state: null, loaded: false,
+    unrestricted: true, planId: null, state: null, restriction: null, loaded: false,
   }),
 
   has: (key: string) => {
@@ -75,6 +78,11 @@ export function useFeature(key: string): boolean {
 /** Numerisches Limit einer metered Capability (null = unbegrenzt / unrestricted). */
 export function useLicenseLimit(key: string): number | null {
   return useLicenseStore(s => (s.unrestricted ? null : (s.limits.get(key) ?? null)))
+}
+
+/** Nur-Lese-Modus wegen abgelaufener Lizenz? Für Banner + Ausblenden von Aktionen. */
+export function useLicenseReadOnly(): boolean {
+  return useLicenseStore(s => !s.unrestricted && s.restriction === 'read_only')
 }
 
 /** Filtert Tab-Definitionen anhand einer optionalen `feature`-Eigenschaft.

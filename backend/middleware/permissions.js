@@ -75,7 +75,7 @@ async function loadPermissions(supabase, employeeId) {
   }
 }
 
-const { loadPermissionCapabilityMap, suppressUnlicensed } = require("./license");
+const { loadPermissionCapabilityMap, suppressUnlicensed, loadPermissionActionMap, restrictToReadOnly } = require("./license");
 
 function makeMiddleware(supabase) {
   return async function permissionsMiddleware(req, res, next) {
@@ -88,11 +88,21 @@ function makeMiddleware(supabase) {
     // Aenderung. Wirkt auf Frontend (Can/Tabs via /permissions/me) UND Backend
     // (requirePermission) gleichermassen.
     req._licenseSuppressed = new Set();
+    req._licenseStateBlocked = new Set();
     if (set && req.license && !req._licenseUnrestricted) {
       const map = await loadPermissionCapabilityMap(supabase);
       const filtered = suppressUnlicensed(set, req.license.capabilities, map);
       for (const k of set) if (!filtered.has(k)) req._licenseSuppressed.add(k); // für 402-Unterscheidung
       set = filtered;
+
+      // Nur-Lese-Modus bei abgelaufener Lizenz: schreibende Rechte entziehen.
+      // Daten bleiben lesbar (kein Verlust, DSGVO-Export weiter möglich).
+      if (req.license.restriction === "read_only") {
+        const actions = await loadPermissionActionMap(supabase);
+        const readOnly = restrictToReadOnly(set, actions);
+        for (const k of set) if (!readOnly.has(k)) req._licenseStateBlocked.add(k);
+        set = readOnly;
+      }
     }
     req.permissions = set || new Set();
     req.hasPermission = (key) => req._permissionsUnrestricted || req.permissions.has(key);
@@ -108,6 +118,10 @@ function requirePermission(...keys) {
     if (ADMIN_BYPASS && req.permissions.has('*')) return next();
     for (const k of flat) {
       if (!req.permissions.has(k)) {
+        // Reihenfolge: abgelaufene Lizenz (nur Lesen) vor Tarif-Upgrade vor RBAC.
+        if (req._licenseStateBlocked && req._licenseStateBlocked.has(k)) {
+          return res.status(402).json({ error: "Deine Lizenz ist abgelaufen — nur Lesezugriff möglich.", expired: true, permission: k });
+        }
         // 402, wenn das Recht NUR wegen fehlender Lizenz weg ist (Upgrade), sonst 403 (RBAC).
         if (req._licenseSuppressed && req._licenseSuppressed.has(k)) {
           return res.status(402).json({ error: "Diese Funktion ist in deinem Tarif nicht enthalten.", upgrade: true, permission: k });
@@ -126,7 +140,10 @@ function requireAnyPermission(...keys) {
     if (req._permissionsUnrestricted) return next();
     if (ADMIN_BYPASS && req.permissions.has('*')) return next();
     if (flat.some(k => req.permissions.has(k))) return next();
-    // Keine vorhanden: 402, wenn mind. eine Option nur an der Lizenz scheitert.
+    // Keine vorhanden: abgelaufene Lizenz vor Tarif-Upgrade vor RBAC.
+    if (req._licenseStateBlocked && flat.some(k => req._licenseStateBlocked.has(k))) {
+      return res.status(402).json({ error: "Deine Lizenz ist abgelaufen — nur Lesezugriff möglich.", expired: true });
+    }
     if (req._licenseSuppressed && flat.some(k => req._licenseSuppressed.has(k))) {
       return res.status(402).json({ error: "Diese Funktion ist in deinem Tarif nicht enthalten.", upgrade: true });
     }

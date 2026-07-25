@@ -5,7 +5,7 @@
 > Architektur: [LICENSE_TIERS_CONCEPT.md](LICENSE_TIERS_CONCEPT.md) ·
 > Workflow: [LICENSE_DEVELOPMENT_CHECKLIST.md](LICENSE_DEVELOPMENT_CHECKLIST.md).
 
-**Stand:** 2026-06-15 · 12 Module · 44 Capabilities · 98 Permission-Verknuepfungen
+**Stand:** 2026-06-15 · 12 Module · 43 Capabilities · 98 Permission-Verknuepfungen
 
 Jede **Capability** ist ein Schalter, den du je Lizenztyp in der Matrix an/aus stellst.
 Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten dahinter liegen
@@ -114,5 +114,4 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 | Capability | Typ | Enthaltene Funktionen |
 |---|---|---|
 | **Maximale Mitarbeiterzahl**<br>`limits.employees` | metered (Mitarbeiter) | — eigene Funktion |
-| **Maximale aktive Projekte**<br>`limits.projects_active` | metered (aktive Projekte) | — eigene Funktion |
 | **Speicherplatz**<br>`limits.storage_mb` | metered (MB) | — eigene Funktion |

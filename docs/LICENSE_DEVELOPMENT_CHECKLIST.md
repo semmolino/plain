@@ -122,3 +122,47 @@ Neues sichtbares Feature gemerged, aber keine Capability im Manifest? Das ist ei
 Bug — der Drift-Check fängt undeklarierte Code-Gates ab, aber **neue ungenutzte
 Fähigkeiten ohne Gate** rutschen sonst durch und sind später nicht monetarisierbar.
 Vor Merge nachholen.
+
+---
+
+## Owner-Konsole: Inbox als Sicherheitsnetz
+
+Der CLI-Drift-Check läuft nur in CI. Damit **du** den offenen Bedarf ohne Terminal
+siehst, zeigt die **Inbox** der Owner-Konsole jetzt genau diese Lücken live an
+(Regeln: `backend/licensing/inboxRules.js`, getestet in
+`backend/tests/license_inbox.test.js`):
+
+| Aufgabenart | Bedeutung | Wo lösen |
+|---|---|---|
+| **Neue Funktion ohne Lizenz-Zuordnung** | RBAC-Recht ohne Capability → in jedem Plan aktiv, nicht lizenzierbar | Tab „Funktionen" |
+| **Capability in keinem verkaufbaren Plan** | Nur im internen `full`-Plan → kein Kunde bekommt sie | Tab „Matrix" |
+| **Capability fehlt in der DB** | Manifest erweitert, `0070b` nicht eingespielt → Matrix-Klick scheitert am FK | `npm run license:gen` + einspielen |
+| **Verwaiste Capability / Zuordnung** | DB kennt etwas, das Manifest nicht (mehr) | Manifest oder DB angleichen |
+| **Zuordnung nur in DB / nur im Manifest** | Divergenz — erneutes `0070b` würde Handarbeit überschreiben | ins Manifest übernehmen |
+| **Zuordnung zeigt auf unbekanntes Recht** | `CAPABILITY_PERMISSION` verweist auf gelöschte Permission | entfernen/anlegen |
+| **Capability ohne Wirkung** | weder Gate noch Recht → Lizenzschalter wirkungslos | Gate/Recht ergänzen |
+| **Mandant ohne Lizenz** | keine `TENANT_LICENSE`-Zeile → Soft-Fail „unbeschränkt" | Tab „Tenants" |
+| **Aktiver Plan ohne Capabilities** | Kunden auf diesem Plan hätten keine Funktionen | Matrix oder deaktivieren |
+
+> **Der frühere Fehler:** Die Inbox meldete nur „Capability in keinem Plan".
+> Da der interne `full`-Plan per `CROSS JOIN` **alle** Capabilities enthält, war
+> die Bedingung nie erfüllt → die Inbox blieb dauerhaft leer, während seit Monaten
+> neue Funktionen (`absence.*`, `import.manage`, `service.*`, …) ohne Zuordnung
+> aufliefen. Jetzt tauchen sie auf.
+
+### Voraussetzung: Migration 0102
+
+`backend/migrations/0102_license_console_hardening.sql` **manuell in Supabase
+einspielen**. Sie:
+- weist neuen Registrierungen automatisch den Standard-Plan zu
+  (`LICENSE_PLAN.IS_DEFAULT`) und zieht Bestands-Mandanten ohne Lizenz nach,
+- setzt Fremdschlüssel `TENANT_LICENSE`/`TENANT_ENTITLEMENT_OVERRIDE → TENANTS`,
+- zählt `LICENSE_PLAN.VERSION` bei jeder Inhaltsänderung hoch (Grundlage für das
+  Versions-Pinning bestehender Kundenlizenzen),
+- erweitert das Änderungsprotokoll um Kontext, IP und Anmelde-Ereignisse.
+
+> **Bekannt (kosmetisch):** Die Nummern `0070`/`0071` sind doppelt vergeben
+> (`_license_foundation`/`_tenant_slug` bzw. `_seed_example_plans`/`_tenant_slug_lowercase_check`).
+> Der Migrations-Runner trackt nach vollständigem Dateinamen, beide Dateien
+> werden angewendet — **nicht umbenennen** (das würde eine erneute Ausführung
+> auslösen).

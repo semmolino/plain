@@ -19,6 +19,41 @@
 const TTL_MS = 60_000;
 const cache = new Map(); // tenantId -> { exp:number, ent: Entitlement|null }
 let capPermCache = { exp: 0, map: null }; // global: permKey -> Set<capKey>
+let permActionCache = { exp: 0, map: null }; // global: permKey -> ACTION
+
+// Aktionen, die im Nur-Lese-Modus (Lizenz abgelaufen) erlaubt bleiben. Alles
+// andere (create/edit/delete/send/book/cancel/admin) wird entzogen. Unbekannte
+// Aktion -> als schreibend behandelt (konservativ). Quelle: PERMISSION.ACTION.
+const READ_ACTIONS = new Set(["view", "export"]);
+
+// STATE-Enforcement kann per Env abgeschaltet werden, ohne Code-Änderung.
+const STATE_ENFORCEMENT_ENABLED = process.env.LICENSE_STATE_ENFORCEMENT !== "off";
+
+/**
+ * Welche Einschränkung ergibt sich aus dem Lizenz-Zustand? (pure, testbar)
+ * expired -> nur Lesezugriff. trial/active/past_due/grace -> keine (Kulanz;
+ * die Vorwarnung passiert im Frontend-Banner, nicht durch Funktionsentzug).
+ * @returns {'read_only'|null}
+ */
+function stateRestriction(state) {
+  if (!STATE_ENFORCEMENT_ENABLED) return null;
+  return state === "expired" ? "read_only" : null;
+}
+
+/**
+ * Reduziert ein Permission-Set auf reine Lese-Rechte (für den Nur-Lese-Modus).
+ * (pure, testbar)
+ * @param {Set<string>} permKeys @param {Map<string,string>} actionByPerm
+ * @returns {Set<string>}
+ */
+function restrictToReadOnly(permKeys, actionByPerm) {
+  const out = new Set();
+  for (const p of permKeys) {
+    const action = actionByPerm.get(p);
+    if (action && READ_ACTIONS.has(action)) out.add(p);
+  }
+  return out;
+}
 
 function isSchemaMissing(err) {
   return err && /relation .* does not exist|column .* does not exist/i.test(err.message || "");
@@ -84,7 +119,10 @@ async function loadEntitlement(supabase, tenantId) {
       nowMs: Date.now(),
     });
 
-    return { unrestricted: false, planId: lic.PLAN_ID, state: lic.STATE, capabilities, limits };
+    return {
+      unrestricted: false, planId: lic.PLAN_ID, state: lic.STATE,
+      restriction: stateRestriction(lic.STATE), capabilities, limits,
+    };
   } catch (e) {
     console.warn("[license] load failed:", e?.message);
     return null; // Soft-Fail: kein Enforcement bei Lade-Fehler
@@ -96,6 +134,29 @@ function clearLicenseCache(tenantId) {
   if (tenantId == null) cache.clear();
   else cache.delete(tenantId);
   capPermCache = { exp: 0, map: null };
+  permActionCache = { exp: 0, map: null };
+}
+
+/**
+ * Lädt PERMISSION.KEY -> ACTION (global, TTL-Cache) für den Nur-Lese-Modus.
+ * Soft-Fail: bei Fehler/Schema-Mangel leere Map (= keine Einschränkung).
+ */
+async function loadPermissionActionMap(supabase) {
+  const now = Date.now();
+  if (permActionCache.map && permActionCache.exp > now) return permActionCache.map;
+  try {
+    const { data, error } = await supabase.from("PERMISSION").select("KEY, ACTION");
+    if (error) {
+      if (isSchemaMissing(error)) { permActionCache = { exp: now + TTL_MS, map: new Map() }; return permActionCache.map; }
+      throw error;
+    }
+    const map = new Map((data || []).map((r) => [r.KEY, r.ACTION]));
+    permActionCache = { exp: now + TTL_MS, map };
+    return map;
+  } catch (e) {
+    console.warn("[license] permAction load failed:", e?.message);
+    return new Map(); // fail-open: keine Einschränkung
+  }
 }
 
 /**
@@ -156,7 +217,7 @@ function makeMiddleware(supabase) {
     }
     const ent = cached.ent;
     req._licenseUnrestricted = ent === null;
-    req.license = ent || { unrestricted: true, planId: null, state: null, capabilities: new Set(), limits: new Map() };
+    req.license = ent || { unrestricted: true, planId: null, state: null, restriction: null, capabilities: new Set(), limits: new Map() };
     req.hasFeature = (key) => req._licenseUnrestricted || req.license.capabilities.has(key);
     next();
   };
@@ -179,4 +240,5 @@ function requireFeature(...keys) {
 module.exports = {
   makeMiddleware, requireFeature, computeEntitlement, loadEntitlement, clearLicenseCache,
   loadPermissionCapabilityMap, suppressUnlicensed,
+  stateRestriction, restrictToReadOnly, loadPermissionActionMap, READ_ACTIONS,
 };
