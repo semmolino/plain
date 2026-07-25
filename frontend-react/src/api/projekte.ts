@@ -4,7 +4,7 @@ import { apiClient } from './client'
 
 export interface ProjectStatus     { ID: number; NAME_SHORT: string }
 export interface ProjectType       { ID: number; NAME_SHORT: string }
-export interface ProjectManager    { ID: number; SHORT_NAME: string }
+export interface ProjectManager    { ID: number; SHORT_NAME: string; FIRST_NAME?: string | null; LAST_NAME?: string | null }
 export interface Department        { ID: number; NAME_SHORT: string; NAME_LONG: string }
 export interface ActiveEmployee { ID: number; SHORT_NAME: string; FIRST_NAME: string; LAST_NAME: string }
 export interface ActiveRole     { ID: number; NAME_SHORT: string; NAME_LONG: string; SP_RATE: number | null }

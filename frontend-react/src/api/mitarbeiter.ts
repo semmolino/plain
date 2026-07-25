@@ -34,6 +34,7 @@ export interface CreateEmployeePayload {
   mobile?:           string
   personnel_number?: string
   gender_id:         string | number
+  department_id?:    number | null
   entry_date?:       string | null
   exit_date?:        string | null
 }

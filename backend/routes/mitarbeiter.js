@@ -305,6 +305,7 @@ module.exports = (supabase) => {
         "MOBILE": body.mobile,
         "PERSONNEL_NUMBER": body.personnel_number,
         "GENDER_ID": body.gender_id,
+        "DEPARTMENT_ID": body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
         "ENTRY_DATE": body.entry_date || null,
         "EXIT_DATE": body.exit_date || null,
         "ACTIVE": 1,

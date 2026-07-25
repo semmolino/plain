@@ -116,6 +116,12 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
     })
   }
 
+  function toggleAllEmps() {
+    setSelectedEmpIds(prev =>
+      prev.size === employees.length ? new Set() : new Set(employees.map(e => e.ID))
+    )
+  }
+
   function setE2pField(empId: number, field: string, value: string) {
     setE2p(prev => {
       const current = prev[empId] ?? { role_id: '', role_name_short: '', role_name_long: '', sp_rate: '' }
@@ -246,7 +252,10 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
             <label>Projektleitung*</label>
             <select value={basic.project_manager_id} onChange={e => setB('project_manager_id')(e.target.value)}>
               <option value="">Bitte wählen …</option>
-              {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
+              {managers.map(m => {
+                const full = `${m.FIRST_NAME ?? ''} ${m.LAST_NAME ?? ''}`.trim()
+                return <option key={m.ID} value={m.ID}>{m.SHORT_NAME}{full ? `: ${full}` : ''}</option>
+              })}
             </select>
           </div>
           <Autocomplete label="Rechnungsadresse*" htmlId="prj-addr"
@@ -277,6 +286,20 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
         <div className="wizard-step-content">
           <h3 className="wizard-step-title">Schritt 2: Mitarbeiter auswählen</h3>
           <table className="master-table">
+            <thead>
+              <tr>
+                <th style={{ width: 32 }}>
+                  <input
+                    type="checkbox"
+                    ref={el => { if (el) el.indeterminate = selectedEmpIds.size > 0 && selectedEmpIds.size < employees.length }}
+                    checked={employees.length > 0 && selectedEmpIds.size === employees.length}
+                    onChange={toggleAllEmps}
+                    title="Alle an-/abwählen"
+                  />
+                </th>
+                <th>Mitarbeiter{selectedEmpIds.size > 0 ? ` (${selectedEmpIds.size} ausgewählt)` : ''}</th>
+              </tr>
+            </thead>
             <tbody>
               {employees.map(emp => (
                 <tr key={emp.ID}>

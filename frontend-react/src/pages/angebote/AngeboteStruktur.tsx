@@ -631,7 +631,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
 
           {dragIds.size > 0 && (
             <div ref={rootZoneRef} className={`struct-root-drop${dragOverId === 'root' ? ' drag-over' : ''}`}>
-              Hier ablegen → Root-Element
+              Hier ablegen → Projektlevel
             </div>
           )}
 
@@ -1031,7 +1031,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                     ...(parent ? { BILLING_TYPE_ID: String(parent.BILLING_TYPE_ID ?? f.BILLING_TYPE_ID), EXTRAS_PERCENT: String(parent.EXTRAS_PERCENT ?? f.EXTRAS_PERCENT) } : {}),
                   })
                 }}>
-                <option value="">(Root)</option>
+                <option value="">Projektlevel</option>
                 {flatTree.map(({ node }) => {
                   const n = node as unknown as OfferStructureNode
                   return <option key={n.ID} value={n.ID}>{n.NAME_SHORT}{n.NAME_LONG ? ' – ' + n.NAME_LONG : ''}</option>

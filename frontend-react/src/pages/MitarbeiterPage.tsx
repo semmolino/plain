@@ -65,7 +65,7 @@ function fmtBalance(n: number) {
 }
 
 function emptyCreateForm(): CreateEmployeePayload {
-  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '', entry_date: '' }
+  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '', department_id: null, entry_date: '' }
 }
 
 // Inline-Status-Optionen (Liste). Aktiv=1, Inaktiv=2.
@@ -3176,12 +3176,22 @@ export function MitarbeiterPage() {
             <input id="mentry" type="date" value={form.entry_date ?? ''} onChange={setF('entry_date')} />
           </div>
           <FormField label="Passwort"    id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" autoComplete="new-password" />
-          <div className="form-group">
-            <label htmlFor="mge">Geschlecht*</label>
-            <select id="mge" value={String(form.gender_id)} onChange={setF('gender_id')} required>
-              <option value="">Bitte wählen …</option>
-              {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
-            </select>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="mge">Geschlecht*</label>
+              <select id="mge" value={String(form.gender_id)} onChange={setF('gender_id')} required>
+                <option value="">Bitte wählen …</option>
+                {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="mdept">Abteilung</label>
+              <select id="mdept" value={form.department_id ?? ''}
+                onChange={e => setForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}>
+                <option value="">—</option>
+                {departments.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
+              </select>
+            </div>
           </div>
 
           <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />

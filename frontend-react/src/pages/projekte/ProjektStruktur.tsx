@@ -712,7 +712,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                   ref={rootZoneRef}
                   className={`struct-root-drop${dragOverId === 'root' ? ' drag-over' : ''}`}
                 >
-                  Hier ablegen → Root-Element
+                  Hier ablegen → Projektlevel
                 </div>
               )}
 
@@ -1098,7 +1098,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                     } : {}),
                   })
                 }}>
-                <option value="">(Root)</option>
+                <option value="">Projektlevel</option>
                 {flatTree.map(({ node }) => (
                   <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
                     {node.NAME_SHORT}{node.NAME_LONG ? ' – ' + node.NAME_LONG : ''}

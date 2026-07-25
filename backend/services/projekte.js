@@ -42,7 +42,7 @@ async function getTypes(supabase, { tenantId }) {
 async function getManagers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from("EMPLOYEE")
-    .select("ID, SHORT_NAME")
+    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
     .eq("TENANT_ID", tenantId);
   if (error) throw error;
   return data;
