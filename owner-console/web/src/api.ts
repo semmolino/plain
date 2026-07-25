@@ -418,7 +418,13 @@ export const api = {
   tenantOverrides: (id: number) => req<{ overrides: Override[] }>(`/tenants/${id}/overrides`),
   addOverride: (
     id: number,
-    body: { capability_key: string; mode: 'grant' | 'revoke'; numeric_limit?: number | null; reason?: string },
+    body: {
+      capability_key: string
+      mode: 'grant' | 'revoke'
+      numeric_limit?: number | null
+      reason?: string
+      expires_at?: string | null
+    },
   ) => req<{ override: Override }>(`/tenants/${id}/overrides`, { method: 'POST', body: JSON.stringify(body) }),
   deleteOverride: (id: number, capKey: string) =>
     req<{ ok: true }>(`/tenants/${id}/overrides/${encodeURIComponent(capKey)}`, { method: 'DELETE' }),

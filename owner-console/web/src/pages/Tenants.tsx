@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   api, ApiError,
   type TenantLicense, type Plan, type LicenseState, type TenantEntitlement,
+  type Capability, type Module,
 } from '../api'
 
 const STATE_LABEL: Record<LicenseState, string> = {
@@ -27,6 +28,8 @@ export function TenantsView({ focusRef }: Props) {
   const [tenants, setTenants] = useState<TenantLicense[] | null>(null)
   const [unlicensed, setUnlicensed] = useState(0)
   const [plans, setPlans] = useState<Plan[]>([])
+  const [caps, setCaps] = useState<Capability[]>([])
+  const [modules, setModules] = useState<Module[]>([])
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState<number | null>(null)
@@ -37,13 +40,23 @@ export function TenantsView({ focusRef }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [t, p] = await Promise.all([api.tenants(), api.plans()])
+      const [t, p, c] = await Promise.all([api.tenants(), api.plans(), api.capabilities()])
       setTenants(t.tenants)
       setUnlicensed(t.unlicensed)
       setPlans(p.plans)
+      setCaps(c.capabilities)
+      setModules(c.modules)
       setError(null)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Laden fehlgeschlagen.')
+    }
+  }, [])
+
+  const refreshEntitlement = useCallback(async (tenantId: number) => {
+    try {
+      setEntitlement(await api.tenantEntitlement(tenantId))
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Entitlement konnte nicht geladen werden.')
     }
   }, [])
 
@@ -91,11 +104,7 @@ export function TenantsView({ focusRef }: Props) {
     }
     setDetail(tenantId)
     setEntitlement(null)
-    try {
-      setEntitlement(await api.tenantEntitlement(tenantId))
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Entitlement konnte nicht geladen werden.')
-    }
+    await refreshEntitlement(tenantId)
   }
 
   if (!tenants) return <div className="muted">Lädt…</div>
@@ -277,21 +286,17 @@ export function TenantsView({ focusRef }: Props) {
                                 </div>
                               </div>
                             )}
-                            {!!entitlement.overrides.length && (
-                              <div>
-                                <h4>Ausnahmen</h4>
-                                <ul className="plain-list">
-                                  {entitlement.overrides.map((o) => (
-                                    <li key={o.CAPABILITY_KEY}>
-                                      <code>{o.CAPABILITY_KEY}</code> ·{' '}
-                                      {o.MODE === 'grant' ? 'zusätzlich freigeschaltet' : 'entzogen'}
-                                      {o.REASON ? ` — ${o.REASON}` : ''}
-                                      {o.EXPIRES_AT ? ` (bis ${fmtDate(o.EXPIRES_AT)})` : ''}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
+                            <OverrideEditor
+                              tenantId={t.TENANT_ID}
+                              tenantName={t.NAME}
+                              overrides={entitlement.overrides}
+                              caps={caps}
+                              modules={modules}
+                              onChanged={async () => {
+                                await refreshEntitlement(t.TENANT_ID)
+                                await load()
+                              }}
+                            />
                           </div>
                         )}
                       </td>
@@ -301,6 +306,165 @@ export function TenantsView({ focusRef }: Props) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Per-Tenant-Ausnahmen (Add-Ons / Sonderdeals) anzeigen und pflegen.
+ * grant = Capability zusätzlich freischalten, revoke = aus dem Plan entziehen.
+ * Optional mit Limit (bei mengenbasierten Capabilities), Begründung und Ablaufdatum.
+ */
+function OverrideEditor({
+  tenantId,
+  tenantName,
+  overrides,
+  caps,
+  modules,
+  onChanged,
+}: {
+  tenantId: number
+  tenantName: string | null
+  overrides: TenantEntitlement['overrides']
+  caps: Capability[]
+  modules: Module[]
+  onChanged: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [capKey, setCapKey] = useState('')
+  const [mode, setMode] = useState<'grant' | 'revoke'>('grant')
+  const [limit, setLimit] = useState('')
+  const [reason, setReason] = useState('')
+  const [expires, setExpires] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const capLabel = useMemo(() => new Map(caps.map((c) => [c.key, c.labelDe])), [caps])
+  const selectedCap = caps.find((c) => c.key === capKey)
+
+  async function save() {
+    if (!capKey) return
+    setBusy(true)
+    setErr(null)
+    try {
+      await api.addOverride(tenantId, {
+        capability_key: capKey,
+        mode,
+        numeric_limit: mode === 'grant' && selectedCap?.type === 'metered' && limit.trim() !== '' ? Number(limit) : null,
+        reason: reason.trim() || undefined,
+        expires_at: expires || null,
+      })
+      setCapKey('')
+      setLimit('')
+      setReason('')
+      setExpires('')
+      setOpen(false)
+      await onChanged()
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(cap: string) {
+    if (!window.confirm(`Ausnahme für „${capLabel.get(cap) || cap}" aufheben?`)) return
+    setBusy(true)
+    setErr(null)
+    try {
+      await api.deleteOverride(tenantId, cap)
+      await onChanged()
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Löschen fehlgeschlagen.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="override-block">
+      <h4>
+        Ausnahmen ({overrides.length}){' '}
+        <button className="link" onClick={() => setOpen((o) => !o)}>
+          {open ? 'Formular schließen' : '+ Ausnahme'}
+        </button>
+      </h4>
+      <p className="muted small" style={{ marginTop: -4 }}>
+        Add-Ons und Sonderabsprachen für {tenantName || `Mandant #${tenantId}`} — wirken zusätzlich zum Plan.
+      </p>
+
+      {err && <div className="error">{err}</div>}
+
+      {overrides.length > 0 && (
+        <ul className="plain-list">
+          {overrides.map((o) => (
+            <li key={o.CAPABILITY_KEY}>
+              <code>{capLabel.get(o.CAPABILITY_KEY) || o.CAPABILITY_KEY}</code> ·{' '}
+              {o.MODE === 'grant' ? 'zusätzlich freigeschaltet' : 'entzogen'}
+              {o.NUMERIC_LIMIT != null ? ` · max ${o.NUMERIC_LIMIT}` : ''}
+              {o.REASON ? ` — ${o.REASON}` : ''}
+              {o.EXPIRES_AT ? ` (bis ${fmtDate(o.EXPIRES_AT)})` : ''}{' '}
+              <button className="link danger" disabled={busy} onClick={() => void remove(o.CAPABILITY_KEY)}>
+                aufheben
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {open && (
+        <div className="override-form">
+          <div className="sec-inline">
+            <select value={mode} onChange={(e) => setMode(e.target.value as 'grant' | 'revoke')}>
+              <option value="grant">Freischalten (grant)</option>
+              <option value="revoke">Entziehen (revoke)</option>
+            </select>
+            <select value={capKey} onChange={(e) => setCapKey(e.target.value)}>
+              <option value="">Capability wählen …</option>
+              {modules.map((m) => {
+                const list = caps.filter((c) => c.module === m.key)
+                if (!list.length) return null
+                return (
+                  <optgroup key={m.key} label={m.labelDe}>
+                    {list.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.labelDe}
+                        {c.type === 'metered' ? ` (${c.unit ?? 'Limit'})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+              })}
+            </select>
+            {mode === 'grant' && selectedCap?.type === 'metered' && (
+              <input
+                className="list-search"
+                type="number"
+                min={0}
+                placeholder={selectedCap.unit ?? 'Limit'}
+                value={limit}
+                onChange={(e) => setLimit(e.target.value)}
+                style={{ maxWidth: 120 }}
+              />
+            )}
+          </div>
+          <div className="sec-inline">
+            <input
+              className="list-search"
+              placeholder="Begründung (z.B. Sonderdeal, Testverlängerung)"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <label className="muted small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              läuft ab
+              <input className="inline-date-input" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
+            </label>
+            <button className="primary small-btn" disabled={busy || !capKey} onClick={() => void save()}>
+              Speichern
+            </button>
+          </div>
         </div>
       )}
     </div>
