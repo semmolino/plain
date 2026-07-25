@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Message } from '@/components/ui/Message'
 import { uploadAsset } from '@/api/stammdaten'
 
@@ -21,6 +22,7 @@ export function AssetUploadBlock({ label, hint, assetId, dataUri, onSave, onRemo
   const [uploading, setUploading] = useState(false)
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const qc = useQueryClient()
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return
@@ -28,6 +30,8 @@ export function AssetUploadBlock({ label, hint, assetId, dataUri, onSave, onRemo
     try {
       const res = await uploadAsset(file, assetType)
       onSave(res.data.ID)
+      // Speicher-Anzeige aktualisieren (falls ein Limit gesetzt ist).
+      void qc.invalidateQueries({ queryKey: ['license-usage'] })
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : 'Upload fehlgeschlagen', type: 'error' })
     } finally {
