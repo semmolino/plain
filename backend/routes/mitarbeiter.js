@@ -4,6 +4,7 @@ const fs           = require("fs");
 const path         = require("path");
 const balanceSvc   = require("../services/employeeBalance");
 const { requirePermission } = require("../middleware/permissions");
+const { enforceLimit } = require("../middleware/limits");
 
 const uploadRoot = path.join(__dirname, "..", "uploads");
 
@@ -276,7 +277,7 @@ module.exports = (supabase) => {
   });
 
   // POST /api/mitarbeiter
-  router.post("/", requirePermission("employees.create"), async (req, res) => {
+  router.post("/", requirePermission("employees.create"), enforceLimit(supabase, "limits.employees"), async (req, res) => {
     const body = req.body;
     if (!body.short_name || !body.first_name || !body.last_name || !body.gender_id) {
       return res.status(400).json({ error: "Pflichtfelder fehlen" });
