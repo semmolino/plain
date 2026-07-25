@@ -64,8 +64,7 @@ INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","P
   ('enterprise.sso_saml', 'enterprise', 'SSO (SAML/OIDC)', 'boolean', NULL, 390),
   ('enterprise.priority_support', 'enterprise', 'Priority Support (SLA)', 'boolean', NULL, 400),
   ('limits.employees', 'limits', 'Maximale Mitarbeiterzahl', 'metered', 'Mitarbeiter', 410),
-  ('limits.projects_active', 'limits', 'Maximale aktive Projekte', 'metered', 'aktive Projekte', 420),
-  ('limits.storage_mb', 'limits', 'Speicherplatz', 'metered', 'MB', 430)
+  ('limits.storage_mb', 'limits', 'Speicherplatz', 'metered', 'MB', 420)
 ON CONFLICT ("KEY") DO UPDATE SET
   "MODULE_KEY" = EXCLUDED."MODULE_KEY",
   "LABEL_DE"   = EXCLUDED."LABEL_DE",

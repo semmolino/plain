@@ -36,7 +36,8 @@ describe("Mengenlimit — enforceLimit-Guard", () => {
     from() { return this; },
     select() { return this; },
     eq() { return this; },
-    // letztes eq() gibt das Ergebnis zurück -> wir lösen über then auf
+    neq() { return this; },
+    // letztes Kettenglied liefert das Ergebnis -> wir lösen über then auf
     then(resolve) { resolve({ count, error: null }); },
   });
 
@@ -89,10 +90,12 @@ describe("Mengenlimit — enforceLimit-Guard", () => {
     expect(res.statusCode).toBe(null);
   });
 
-  it("LIMIT_META deckt alle metered Capabilities ab", () => {
-    for (const k of ["limits.employees", "limits.projects_active", "limits.storage_mb"]) {
+  it("LIMIT_META deckt die metered Capabilities ab (kein Projekt-Limit)", () => {
+    for (const k of ["limits.employees", "limits.storage_mb"]) {
       expect(LIMIT_META[k]).toBeTruthy();
     }
+    // Auf Projekte gibt es bewusst kein Limit.
+    expect(LIMIT_META["limits.projects_active"]).toBeUndefined();
     expect(typeof getUsage).toBe("function");
   });
 });

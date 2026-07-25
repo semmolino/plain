@@ -67,11 +67,11 @@ describe("computeEntitlement", () => {
 
   it("grant-Override setzt/überschreibt das Limit", () => {
     const { limits } = computeEntitlement({
-      planCapabilities: [{ key: "limits.projects_active", limit: 10 }],
-      overrides: [{ key: "limits.projects_active", mode: "grant", limit: 99, expiresAtMs: null }],
+      planCapabilities: [{ key: "limits.employees", limit: 10 }],
+      overrides: [{ key: "limits.employees", mode: "grant", limit: 99, expiresAtMs: null }],
       nowMs: 1000,
     });
-    expect(limits.get("limits.projects_active")).toBe(99);
+    expect(limits.get("limits.employees")).toBe(99);
   });
 });
 

@@ -158,10 +158,10 @@ const capabilities = [
     permissions: [], since: SINCE },
 
   // ── Mengen-Limits (metered) ──────────────────────────────────────────────────
+  // Hinweis: Auf Projekte gibt es bewusst KEIN Limit (Owner-Entscheidung
+  // 2026-07-25) — daher hier keine 'limits.projects_active'-Capability.
   { key: "limits.employees", module: "limits", labelDe: "Maximale Mitarbeiterzahl", type: "metered",
     unit: "Mitarbeiter", permissions: [], since: SINCE },
-  { key: "limits.projects_active", module: "limits", labelDe: "Maximale aktive Projekte", type: "metered",
-    unit: "aktive Projekte", permissions: [], since: SINCE },
   { key: "limits.storage_mb", module: "limits", labelDe: "Speicherplatz", type: "metered",
     unit: "MB", permissions: [], since: SINCE },
 ];

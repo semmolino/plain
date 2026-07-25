@@ -21,24 +21,27 @@
 /** Registry: Capability-Key -> async (supabase, tenantId) => aktueller IST-Wert. */
 const COUNTERS = {
   "limits.employees": async (supabase, tenantId) => {
+    // Nur AKTIVE Mitarbeiter zählen — ein ausgetretener/deaktivierter Mitarbeiter
+    // gibt seinen Sitz wieder frei. „Aktiv" = NICHT deaktiviert (ACTIVE != 2),
+    // konsistent mit dem Rest der App (z.B. mitarbeiter.js month-close-overview).
+    // Bewusst neq(2) statt eq(1): Alt-Daten ohne gesetztes ACTIVE gelten als
+    // aktiv und werden mitgezählt (kein Unterlaufen des Limits).
     const { count, error } = await supabase
       .from("EMPLOYEE")
       .select("ID", { count: "exact", head: true })
       .eq("TENANT_ID", tenantId)
-      .eq("ACTIVE", 1);
+      .neq("ACTIVE", 2);
     if (error) throw error;
     return count || 0;
   },
-  // Weitere metered Capabilities anschließen, sobald die Zähldefinition
-  // feststeht (limits.projects_active: „aktive" Projekte je PROJECT_STATUS;
-  // limits.storage_mb: Summe der Upload-Größen). Absichtlich noch nicht
-  // verdrahtet — ohne saubere Definition würde falsch gezählt.
+  // limits.storage_mb ist vorbereitet, aber noch nicht verdrahtet (Summe der
+  // Upload-Größen braucht einen laufenden Zähler). limits.projects_active gibt
+  // es nicht mehr — auf Projekte gibt es bewusst kein Limit.
 };
 
 /** Anzeige-Metadaten (Label/Einheit) je Limit — für /license/usage. */
 const LIMIT_META = {
   "limits.employees": { label: "Mitarbeiter", unit: "Mitarbeiter" },
-  "limits.projects_active": { label: "Aktive Projekte", unit: "aktive Projekte" },
   "limits.storage_mb": { label: "Speicherplatz", unit: "MB" },
 };
 
