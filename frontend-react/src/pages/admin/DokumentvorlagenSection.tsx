@@ -4,6 +4,7 @@ import { AlignLeft, AlignCenter, AlignRight, Check, ChevronUp, ChevronDown } fro
 import { Message }  from '@/components/ui/Message'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { InfoHint } from '@/components/ui/InfoHint'
+import { LimitBanner } from '@/components/ui/LimitBanner'
 import { AssetUploadBlock } from '@/components/admin/AssetUploadBlock'
 import { useToast } from '@/store/toastStore'
 import { fetchCompanies, fetchCompanyAssets, putCompanyLogo } from '@/api/stammdaten'
@@ -234,6 +235,7 @@ export function DokumentvorlagenSection() {
 
   return (
     <div className="admin-section">
+      <LimitBanner capability="limits.storage_mb" />
       <p className="admin-section-hint" style={{ marginTop: 0, display: 'flex', alignItems: 'flex-start' }}>
         <span>
           Lege fest, wie deine PDF-Dokumente aussehen — Logo, Hausfarbe, Schrift und Logo-Position.

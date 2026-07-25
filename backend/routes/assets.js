@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
+const { checkStorageLimit } = require("../middleware/limits");
 
 function isTableMissingErr(err, tableName) {
   const msg = String(err?.message || "").toLowerCase();
@@ -72,6 +73,23 @@ module.exports = (supabase) => {
         return res.status(500).json({ error: e.message });
       }
       if (!companyId) return res.status(404).json({ error: "Kein Unternehmen für diesen Mandanten gefunden." });
+
+      // Speicherlimit (metered): inkrementell prüfen, bevor die Datei registriert
+      // wird. Bei Überschreitung die bereits auf Platte liegende Temp-Datei wieder
+      // entfernen, damit sie nicht ungezählt liegen bleibt.
+      const storageCheck = await checkStorageLimit(supabase, req, req.file.size);
+      if (!storageCheck.allowed) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(402).json({
+          error:
+            `Speicherlimit erreicht: ${storageCheck.limitMb} MB (belegt: ${storageCheck.usedMb} MB, ` +
+            `diese Datei: ${storageCheck.incomingMb} MB). Für mehr bitte den Tarif erweitern.`,
+          limit_reached: true,
+          capability: "limits.storage_mb",
+          limit: storageCheck.limitMb,
+          used: storageCheck.usedMb,
+        });
+      }
 
       const assetType = String(req.body.asset_type || "OTHER").toUpperCase().trim();
 

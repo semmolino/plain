@@ -18,6 +18,30 @@
  * testbar (backend/tests/license_limits.test.js).
  */
 
+const MB = 1024 * 1024;
+
+/**
+ * Belegter Speicher eines Tenants in Bytes = Summe aller ASSET.FILE_SIZE.
+ * ASSET ist der zentrale Datei-Store: Logos, Signaturen, Mitarbeiter-Avatare und
+ * Branding-Bilder laufen alle über POST /assets/upload. ASSET hängt an COMPANY,
+ * COMPANY an TENANT — daher der Zwischenschritt über die Firmen des Tenants.
+ *
+ * Bewusst On-Demand statt laufendem Zähler: Uploads sind selten und die Zahl der
+ * Assets je Tenant klein, die Summe ist damit billig UND immer exakt (kein Drift).
+ * Wenn künftig weitere persistente Datei-Stores dazukommen, hier ergänzen.
+ */
+async function tenantStorageBytes(supabase, tenantId) {
+  const { data: comps, error: e1 } = await supabase
+    .from("COMPANY").select("ID").eq("TENANT_ID", tenantId);
+  if (e1) throw e1;
+  const ids = (comps || []).map((c) => c.ID);
+  if (!ids.length) return 0;
+  const { data: assets, error: e2 } = await supabase
+    .from("ASSET").select("FILE_SIZE").in("COMPANY_ID", ids);
+  if (e2) throw e2;
+  return (assets || []).reduce((sum, a) => sum + (Number(a.FILE_SIZE) || 0), 0);
+}
+
 /** Registry: Capability-Key -> async (supabase, tenantId) => aktueller IST-Wert. */
 const COUNTERS = {
   "limits.employees": async (supabase, tenantId) => {
@@ -34,9 +58,14 @@ const COUNTERS = {
     if (error) throw error;
     return count || 0;
   },
-  // limits.storage_mb ist vorbereitet, aber noch nicht verdrahtet (Summe der
-  // Upload-Größen braucht einen laufenden Zähler). limits.projects_active gibt
-  // es nicht mehr — auf Projekte gibt es bewusst kein Limit.
+  // Anzeige-Wert (MB, 1 Nachkommastelle). Die harte Durchsetzung passiert nicht
+  // über den generischen Guard, sondern inkrementell beim Upload (checkStorageLimit),
+  // weil dort die Größe der neuen Datei bekannt ist.
+  "limits.storage_mb": async (supabase, tenantId) => {
+    const bytes = await tenantStorageBytes(supabase, tenantId);
+    return Math.round((bytes / MB) * 10) / 10;
+  },
+  // limits.projects_active gibt es nicht mehr — auf Projekte gibt es bewusst kein Limit.
 };
 
 /** Anzeige-Metadaten (Label/Einheit) je Limit — für /license/usage. */
@@ -90,6 +119,37 @@ function enforceLimit(supabase, capKey) {
   };
 }
 
+/** Pur & testbar: passt der Upload noch ins Limit? (used + incoming <= limit). */
+function fitsStorage(usedBytes, incomingBytes, limitMb) {
+  if (limitMb == null) return true;
+  return usedBytes + incomingBytes <= limitMb * MB;
+}
+
+/**
+ * Prüft VOR dem Speichern eines Uploads, ob er das Speicherlimit sprengt.
+ * Inkrementell (belegt + neue Datei), damit das harte Limit exakt greift und
+ * nicht erst der ÜBERnächste Upload blockiert.
+ * Soft-Fail: bei DB-Fehler wird der Upload zugelassen (nicht blockiert).
+ * @returns {Promise<{allowed:boolean, usedMb:number, limitMb:number|null, incomingMb:number}>}
+ */
+async function checkStorageLimit(supabase, req, incomingBytes) {
+  const limitMb = limitFor(req, "limits.storage_mb");
+  const incomingMb = Math.round((incomingBytes / MB) * 100) / 100;
+  if (limitMb == null) return { allowed: true, usedMb: 0, limitMb: null, incomingMb };
+  try {
+    const usedBytes = await tenantStorageBytes(supabase, req.tenantId);
+    return {
+      allowed: fitsStorage(usedBytes, incomingBytes, limitMb),
+      usedMb: Math.round((usedBytes / MB) * 100) / 100,
+      limitMb,
+      incomingMb,
+    };
+  } catch (e) {
+    console.warn("[limits] storage check failed:", e?.message || e);
+    return { allowed: true, usedMb: 0, limitMb, incomingMb };
+  }
+}
+
 /** Aktuelle Nutzung aller (zählbaren) metered Capabilities des Tenants. */
 async function getUsage(supabase, req) {
   const out = [];
@@ -109,4 +169,7 @@ async function getUsage(supabase, req) {
   return out;
 }
 
-module.exports = { enforceLimit, getUsage, isOverLimit, COUNTERS, LIMIT_META };
+module.exports = {
+  enforceLimit, getUsage, isOverLimit, COUNTERS, LIMIT_META,
+  tenantStorageBytes, checkStorageLimit, fitsStorage,
+};

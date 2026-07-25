@@ -1,6 +1,6 @@
 "use strict";
 
-const { isOverLimit, enforceLimit, getUsage, LIMIT_META } = require("../middleware/limits");
+const { isOverLimit, enforceLimit, getUsage, LIMIT_META, fitsStorage, checkStorageLimit } = require("../middleware/limits");
 
 describe("Mengenlimit — isOverLimit (pur)", () => {
   it("unbegrenzt (null) blockt nie", () => {
@@ -96,6 +96,58 @@ describe("Mengenlimit — enforceLimit-Guard", () => {
     }
     // Auf Projekte gibt es bewusst kein Limit.
     expect(LIMIT_META["limits.projects_active"]).toBeUndefined();
+    void checkStorageLimit;
     expect(typeof getUsage).toBe("function");
+  });
+});
+
+describe("Speicherlimit — fitsStorage (pur)", () => {
+  const MB = 1024 * 1024;
+  it("unbegrenzt (null) passt immer", () => {
+    expect(fitsStorage(999 * MB, 50 * MB, null)).toBe(true);
+  });
+  it("inkrementell: belegt + neue Datei <= Grenze", () => {
+    expect(fitsStorage(90 * MB, 5 * MB, 100)).toBe(true);   // 95 <= 100
+    expect(fitsStorage(90 * MB, 10 * MB, 100)).toBe(true);  // 100 <= 100 (Gleichheit erlaubt)
+    expect(fitsStorage(90 * MB, 11 * MB, 100)).toBe(false); // 101 > 100
+  });
+  it("bereits über der Grenze -> jede weitere Datei blockt", () => {
+    expect(fitsStorage(120 * MB, 1, 100)).toBe(false);
+  });
+});
+
+describe("Speicherlimit — checkStorageLimit-Integration", () => {
+  const MB = 1024 * 1024;
+  // Fake-Supabase: COMPANY -> [{ID:1}], ASSET -> Summe der gelieferten Größen.
+  const fakeSupabase = (assetSizes) => ({
+    _table: null,
+    from(t) { this._table = t; return this; },
+    select() { return this; },
+    eq() { return this; },
+    in() { return this; },
+    then(resolve) {
+      if (this._table === "COMPANY") resolve({ data: [{ ID: 1 }], error: null });
+      else resolve({ data: assetSizes.map((s) => ({ FILE_SIZE: s })), error: null });
+    },
+  });
+
+  it("ohne Limit -> erlaubt", async () => {
+    const req = makeReq({ limits: {} });
+    const r = await checkStorageLimit(fakeSupabase([50 * MB]), req, 5 * MB);
+    expect(r.allowed).toBe(true);
+    expect(r.limitMb).toBe(null);
+  });
+
+  it("Upload passt noch -> erlaubt", async () => {
+    const req = makeReq({ limits: { "limits.storage_mb": 100 } });
+    const r = await checkStorageLimit(fakeSupabase([90 * MB]), req, 5 * MB);
+    expect(r.allowed).toBe(true);
+    expect(r.usedMb).toBe(90);
+  });
+
+  it("Upload sprengt Limit -> blockiert", async () => {
+    const req = makeReq({ limits: { "limits.storage_mb": 100 } });
+    const r = await checkStorageLimit(fakeSupabase([98 * MB]), req, 5 * MB);
+    expect(r.allowed).toBe(false);
   });
 });
