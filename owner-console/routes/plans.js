@@ -167,12 +167,69 @@ router.put("/plans/:id/capabilities/:capKey", async (req, res) => {
     await writeChangeLog({ actor: req.adminEmail, entity: "PLAN_CAPABILITY", entityRef: ref, action: "update",
       after: { plan_id: planId, capability_key: capKey, numeric_limit: numeric_limit ?? null }, context, req });
   } else {
+    // Bestandsschutz (Grandfathering): Vor dem Entfernen aus dem Plan für die
+    // genannten Bestandskunden einen grant-Override anlegen, damit sie die
+    // Funktion behalten. Neukunden auf dem Plan bekommen sie nicht mehr.
+    const gfIds = Array.isArray(req.body?.grandfather_tenant_ids)
+      ? req.body.grandfather_tenant_ids.filter((n) => Number.isInteger(n)) : [];
+    let grandfathered = 0;
+    if (gfIds.length) {
+      // Aktuelles Plan-Limit übernehmen (bei metered Capabilities relevant).
+      const { data: cur } = await supabase.from("PLAN_CAPABILITY")
+        .select("NUMERIC_LIMIT").eq("PLAN_ID", planId).eq("CAPABILITY_KEY", capKey).maybeSingle();
+      const lim = cur?.NUMERIC_LIMIT ?? null;
+      const reason = `Bestandsschutz: „${cap.labelDe}" aus „${plan.NAME_DE}" entfernt`;
+      const rows = gfIds.map((tid) => ({
+        TENANT_ID: tid, CAPABILITY_KEY: capKey, MODE: "grant",
+        NUMERIC_LIMIT: lim, REASON: reason, CREATED_BY: req.adminEmail, EXPIRES_AT: null,
+      }));
+      const { error: gErr } = await supabase.from("TENANT_ENTITLEMENT_OVERRIDE")
+        .upsert(rows, { onConflict: "TENANT_ID,CAPABILITY_KEY" });
+      if (gErr) return res.status(400).json({ error: `Bestandsschutz fehlgeschlagen: ${gErr.message}` });
+      grandfathered = gfIds.length;
+      await writeChangeLog({
+        actor: req.adminEmail, entity: "TENANT_ENTITLEMENT_OVERRIDE", entityRef: ref, action: "create",
+        context: { ...context, grandfather: true, tenant_count: grandfathered }, req,
+      });
+    }
     const { error } = await supabase.from("PLAN_CAPABILITY").delete().eq("PLAN_ID", planId).eq("CAPABILITY_KEY", capKey);
     if (error) return res.status(400).json({ error: error.message });
     await writeChangeLog({ actor: req.adminEmail, entity: "PLAN_CAPABILITY", entityRef: ref, action: "delete",
-      before: { plan_id: planId, capability_key: capKey }, context, req });
+      before: { plan_id: planId, capability_key: capKey }, context: { ...context, grandfathered }, req });
+    return res.json({ ok: true, grandfathered });
   }
   res.json({ ok: true });
+});
+
+/**
+ * Auswirkung des Entfernens einer Capability aus einem Plan: welche
+ * Bestandskunden verlieren sie? = Tenants auf diesem Plan, die (noch) keinen
+ * eigenen Override für die Capability haben (die hätten sie unabhängig vom Plan).
+ * Powert den Bestandsschutz-Dialog in der Matrix.
+ */
+router.get("/plans/:id/capabilities/:capKey/impact", async (req, res) => {
+  const planId = intParam(req.params.id);
+  if (!planId) return res.status(400).json({ error: "Ungültige Plan-ID." });
+  const capKey = req.params.capKey;
+
+  const { data: lics, error } = await supabase
+    .from("TENANT_LICENSE").select("TENANT_ID").eq("PLAN_ID", planId);
+  if (error) return res.status(500).json({ error: error.message });
+  const tenantIds = (lics || []).map((l) => l.TENANT_ID);
+  if (!tenantIds.length) return res.json({ affected: [], count: 0 });
+
+  const { data: ovs } = await supabase.from("TENANT_ENTITLEMENT_OVERRIDE")
+    .select("TENANT_ID").eq("CAPABILITY_KEY", capKey).in("TENANT_ID", tenantIds);
+  const hasOverride = new Set((ovs || []).map((o) => o.TENANT_ID));
+  const affectedIds = tenantIds.filter((id) => !hasOverride.has(id));
+
+  const { data: tenants } = await supabase
+    .from("TENANTS").select("ID, TENANT").in("ID", affectedIds.length ? affectedIds : [-1]);
+  const nameById = new Map((tenants || []).map((t) => [t.ID, t.TENANT]));
+  res.json({
+    affected: affectedIds.map((id) => ({ tenant_id: id, name: nameById.get(id) || null })),
+    count: affectedIds.length,
+  });
 });
 
 /**

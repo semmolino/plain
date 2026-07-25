@@ -78,6 +78,43 @@ router.get("/tenants", async (_req, res) => {
 });
 
 /**
+ * Alle Ausnahmen (Overrides) tenantübergreifend — Bestandsschutz-Überblick.
+ * Beantwortet „wer hat welche Abweichung vom Plan?" an einer Stelle.
+ */
+router.get("/overrides", async (_req, res) => {
+  const { data: ovs, error } = await supabase
+    .from("TENANT_ENTITLEMENT_OVERRIDE")
+    .select("ID, TENANT_ID, CAPABILITY_KEY, MODE, NUMERIC_LIMIT, REASON, EXPIRES_AT, CREATED_AT, CREATED_BY")
+    .order("CREATED_AT", { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+
+  const tenantIds = [...new Set((ovs || []).map((o) => o.TENANT_ID))];
+  const { data: tenants } = tenantIds.length
+    ? await supabase.from("TENANTS").select("ID, TENANT").in("ID", tenantIds)
+    : { data: [] };
+  const nameById = new Map((tenants || []).map((t) => [t.ID, t.TENANT]));
+  const now = Date.now();
+
+  res.json({
+    overrides: (ovs || []).map((o) => ({
+      id: o.ID,
+      tenant_id: o.TENANT_ID,
+      tenant_name: nameById.get(o.TENANT_ID) || null,
+      capability_key: o.CAPABILITY_KEY,
+      capability_label: registry.getCapability(o.CAPABILITY_KEY)?.labelDe || o.CAPABILITY_KEY,
+      mode: o.MODE,
+      numeric_limit: o.NUMERIC_LIMIT,
+      reason: o.REASON,
+      expires_at: o.EXPIRES_AT,
+      expired: !!(o.EXPIRES_AT && new Date(o.EXPIRES_AT).getTime() < now),
+      is_grandfather: typeof o.REASON === "string" && o.REASON.startsWith("Bestandsschutz:"),
+      created_at: o.CREATED_AT,
+      created_by: o.CREATED_BY,
+    })),
+  });
+});
+
+/**
  * Lizenz eines Tenants setzen: Plan, Zustand und Fristen.
  * Pinnt die aktuelle Plan-VERSION, damit spätere Paketänderungen bestehende
  * Kunden nicht stillschweigend verändern (Grandfathering, siehe Migration 0102).

@@ -1,5 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { api, ApiError, type MatrixResponse, type MatrixCap } from '../api'
+import { api, ApiError, type MatrixResponse, type MatrixCap, type MatrixPlan } from '../api'
+
+interface RemovalState {
+  plan: MatrixPlan
+  cap: MatrixCap
+  limit: number | null
+  affected: { tenant_id: number; name: string | null }[]
+}
 
 interface Props {
   /** Vorauswahl aus der Inbox (Capability-Key). */
@@ -13,6 +20,7 @@ export function MatrixView({ focusRef }: Props) {
   const [saving, setSaving] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [onlyType, setOnlyType] = useState<'alle' | 'boolean' | 'metered'>('alle')
+  const [removal, setRemoval] = useState<RemovalState | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -55,7 +63,13 @@ export function MatrixView({ focusRef }: Props) {
     return m
   }, [data, search, onlyType, moduleLabel])
 
-  async function save(planId: number, capKey: string, enabled: boolean, limit: number | null) {
+  async function save(
+    planId: number,
+    capKey: string,
+    enabled: boolean,
+    limit: number | null,
+    grandfatherIds?: number[],
+  ) {
     const key = `${planId}:${capKey}`
     setSaving((prev) => new Set(prev).add(key))
     setActionError(null)
@@ -68,7 +82,11 @@ export function MatrixView({ focusRef }: Props) {
       return { ...prev, cells }
     })
     try {
-      await api.setCell(planId, capKey, enabled, limit)
+      if (!enabled && grandfatherIds && grandfatherIds.length) {
+        await api.removeCellGrandfathered(planId, capKey, grandfatherIds)
+      } else {
+        await api.setCell(planId, capKey, enabled, limit)
+      }
     } catch (e) {
       setActionError(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.')
       await load() // Serverzustand wiederherstellen
@@ -78,6 +96,26 @@ export function MatrixView({ focusRef }: Props) {
         next.delete(key)
         return next
       })
+    }
+  }
+
+  // Toggle einer Zelle. Beim ENTFERNEN aus einem Plan zuerst prüfen, wen das
+  // trifft (Bestandskunden), und ggf. den Bestandsschutz-Dialog öffnen — statt
+  // ihnen die Funktion still zu entziehen.
+  async function requestToggle(plan: MatrixPlan, cap: MatrixCap, nextEnabled: boolean, limit: number | null) {
+    if (nextEnabled) {
+      void save(plan.ID, cap.key, true, limit)
+      return
+    }
+    try {
+      const impact = await api.removalImpact(plan.ID, cap.key)
+      if (impact.count === 0) {
+        void save(plan.ID, cap.key, false, limit)
+      } else {
+        setRemoval({ plan, cap, limit, affected: impact.affected })
+      }
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Prüfung fehlgeschlagen.')
     }
   }
 
@@ -174,7 +212,7 @@ export function MatrixView({ focusRef }: Props) {
                               type="checkbox"
                               checked={!!c?.enabled}
                               disabled={busy}
-                              onChange={() => save(p.ID, cap.key, !c?.enabled, c?.limit ?? null)}
+                              onChange={() => requestToggle(p, cap, !c?.enabled, c?.limit ?? null)}
                             />
                             {cap.type === 'metered' && c?.enabled && (
                               <LimitInput
@@ -193,6 +231,70 @@ export function MatrixView({ focusRef }: Props) {
             )}
           </tbody>
         </table>
+      </div>
+
+      {removal && (
+        <RemovalDialog
+          state={removal}
+          onCancel={() => setRemoval(null)}
+          onProtect={() => {
+            const ids = removal.affected.map((a) => a.tenant_id)
+            void save(removal.plan.ID, removal.cap.key, false, removal.limit, ids)
+            setRemoval(null)
+          }}
+          onRemoveAnyway={() => {
+            void save(removal.plan.ID, removal.cap.key, false, removal.limit)
+            setRemoval(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** Bestandsschutz-Dialog beim Entfernen einer genutzten Capability aus einem Plan. */
+function RemovalDialog({
+  state,
+  onCancel,
+  onProtect,
+  onRemoveAnyway,
+}: {
+  state: RemovalState
+  onCancel: () => void
+  onProtect: () => void
+  onRemoveAnyway: () => void
+}) {
+  const { plan, cap, affected } = state
+  return (
+    <div className="dialog-backdrop" onClick={onCancel}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+        <h3>„{cap.labelDe}" aus „{plan.NAME_DE}" entfernen?</h3>
+        <p>
+          <strong>{affected.length} Bestandskunde{affected.length === 1 ? '' : 'n'}</strong> auf diesem Plan
+          {affected.length === 1 ? ' hat' : ' haben'} diese Funktion aktuell. Entfernst du sie ohne Schutz,
+          {affected.length === 1 ? ' verliert er' : ' verlieren sie'} die Funktion sofort.
+        </p>
+        <p className="muted small">
+          Empfohlen: <strong>schützen</strong> — dann behalten die {affected.length} Bestandskunden die Funktion
+          (als Ausnahme), Neukunden auf „{plan.NAME_DE}" bekommen sie nicht mehr.
+        </p>
+        <ul className="dialog-list">
+          {affected.slice(0, 8).map((a) => (
+            <li key={a.tenant_id}>{a.name || `Mandant #${a.tenant_id}`}</li>
+          ))}
+          {affected.length > 8 && <li className="muted">… und {affected.length - 8} weitere</li>}
+        </ul>
+        <div className="dialog-actions">
+          <button className="primary small-btn" onClick={onProtect}>
+            Bestandskunden schützen &amp; entfernen
+          </button>
+          <button className="small-btn danger" onClick={onRemoveAnyway}>
+            Ohne Schutz entfernen
+          </button>
+          <button className="link" onClick={onCancel}>
+            Abbrechen
+          </button>
+        </div>
       </div>
     </div>
   )

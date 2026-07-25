@@ -331,6 +331,21 @@ table.grid select, table.grid input:not([type='checkbox']):not([type='radio']) {
 button.small-btn { min-height: 36px; }
 button.small-btn.danger { color: var(--danger); border-color: #fca5a5; }
 
+/* Dialog (Bestandsschutz beim Entfernen) */
+.dialog-backdrop {
+  position: fixed; inset: 0; background: rgba(20, 27, 46, 0.45);
+  display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50;
+}
+.dialog {
+  background: var(--surface); border-radius: 14px; padding: 22px; max-width: 480px; width: 100%;
+  box-shadow: 0 20px 60px rgba(20, 27, 46, 0.3);
+}
+.dialog h3 { margin: 0 0 10px; }
+.dialog p { margin: 0 0 10px; font-size: 14px; }
+.dialog-list { margin: 8px 0 14px; padding-left: 18px; font-size: 13px; max-height: 160px; overflow-y: auto; }
+.dialog-list li { margin-bottom: 2px; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px; }
+
 /* Konto & Sicherheit */
 .nag-bar { background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--warn-border); padding: 8px 20px; font-size: 13px; text-align: center; }
 .nag-bar .link { color: inherit; font-weight: 600; }

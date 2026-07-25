@@ -130,6 +130,22 @@ export interface TenantLicense {
   UPDATED_AT: string | null
 }
 
+export interface OverrideRow {
+  id: number
+  tenant_id: number
+  tenant_name: string | null
+  capability_key: string
+  capability_label: string
+  mode: 'grant' | 'revoke'
+  numeric_limit: number | null
+  reason: string | null
+  expires_at: string | null
+  expired: boolean
+  is_grandfather: boolean
+  created_at: string
+  created_by: string | null
+}
+
 export interface TenantEntitlement {
   unrestricted: boolean
   reason?: string
@@ -390,6 +406,17 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ changes }),
     }),
+  // Grandfathering: wen trifft das Entfernen einer Capability aus dem Plan?
+  removalImpact: (planId: number, capKey: string) =>
+    req<{ affected: { tenant_id: number; name: string | null }[]; count: number }>(
+      `/plans/${planId}/capabilities/${encodeURIComponent(capKey)}/impact`,
+    ),
+  // Zelle entfernen und dabei Bestandskunden per grant-Override schützen.
+  removeCellGrandfathered: (planId: number, capKey: string, tenantIds: number[]) =>
+    req<{ ok: true; grandfathered: number }>(`/plans/${planId}/capabilities/${encodeURIComponent(capKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: false, grandfather_tenant_ids: tenantIds }),
+    }),
 
   plans: () => req<{ plans: Plan[] }>('/plans'),
   createPlan: (p: NewPlan) => req<{ plan: Plan }>('/plans', { method: 'POST', body: JSON.stringify(p) }),
@@ -414,6 +441,7 @@ export const api = {
       body: JSON.stringify(patch),
     }),
   tenantEntitlement: (tenantId: number) => req<TenantEntitlement>(`/tenants/${tenantId}/entitlement`),
+  allOverrides: () => req<{ overrides: OverrideRow[] }>('/overrides'),
   // (dormant — Per-Tenant-Overrides bleiben im Backend für spätere Add-Ons)
   tenantOverrides: (id: number) => req<{ overrides: Override[] }>(`/tenants/${id}/overrides`),
   addOverride: (
