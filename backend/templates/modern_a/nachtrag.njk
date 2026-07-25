@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1a; line-height: 1.4; }
+
+.logo-area { display: flex; justify-content: flex-end; margin-bottom: 6mm; min-height: 4mm; }
+.logo-area img { max-height: 20mm; max-width: 70mm; object-fit: contain; }
+
+.sender-line {
+  font-size: 7.5pt; color: #6b7280; border-bottom: 0.3pt solid #d1d5db;
+  padding-bottom: 1mm; margin-bottom: 5mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.letter-header { display: flex; gap: 10mm; margin-bottom: 8mm; align-items: flex-start; }
+.address-col { width: 85mm; flex-shrink: 0; }
+.address-block { font-size: 10pt; line-height: 1.5; min-height: 30mm; }
+.address-block .name1 { font-weight: 600; }
+
+.meta-col { flex: 1; }
+.meta-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.meta-table td { padding: 0.8mm 0; vertical-align: top; }
+.meta-table td.ml { color: #6b7280; width: 30mm; padding-right: 2mm; }
+.meta-table td.mv { font-weight: 500; }
+.meta-table td.mv.bold { font-weight: 700; }
+
+.doc-title { font-size: 14pt; font-weight: 700; margin-bottom: 4mm; color: #111827; }
+
+.info-line { font-size: 9.5pt; margin-bottom: 2mm; }
+.info-line .info-label { color: #6b7280; }
+
+.text-block { font-size: 10pt; margin: 3mm 0 5mm 0; white-space: pre-line; line-height: 1.5; }
+
+.pos-table { width: 100%; border-collapse: collapse; margin: 4mm 0 6mm 0; font-size: 9.5pt; }
+.pos-table th { text-align: left; font-weight: 600; color: #374151; border-bottom: 0.5pt solid #9ca3af; padding: 1.5mm 2mm 1.5mm 0; }
+.pos-table th.r { text-align: right; padding-left: 3mm; }
+.pos-table td { padding: 1.5mm 2mm 1.5mm 0; border-bottom: 0.3pt solid #e5e7eb; vertical-align: top; }
+.pos-table td.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 3mm; }
+.pos-table tr.parent-row td { font-weight: 600; background: #f9fafb; }
+.pos-table .sub-info { font-size: 8.5pt; color: #6b7280; }
+
+.calc-table { width: 100%; border-collapse: collapse; margin: 4mm 0 6mm 0; }
+.calc-table td { padding: 1.5mm 0; font-size: 10pt; vertical-align: baseline; }
+.calc-table td.label { color: #374151; }
+.calc-table td.amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 6mm; }
+.calc-table tr.sep td { padding: 0; height: 2mm; }
+.calc-table tr.sep td.line-cell { border-top: 0.5pt solid #9ca3af; }
+.calc-table tr.total-row td { font-weight: 700; font-size: 11pt; padding-top: 2mm; border-top: 1pt solid #1a1a1a; }
+
+.closing { margin-top: 8mm; font-size: 10pt; }
+.closing p { margin-bottom: 8mm; }
+.closing .signature { max-height: 18mm; max-width: 60mm; object-fit: contain; display: block; margin-bottom: 1mm; }
+.closing .sign-name { font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="logo-area">{% if logoDataUri %}<img src="{{ logoDataUri }}" alt="">{% endif %}</div>
+
+  <div class="sender-line">{{ seller.name }}{% if seller.street %} · {{ seller.street }}{% endif %}{% if seller.postCode %} · {{ seller.postCode }} {{ seller.city }}{% endif %}</div>
+
+  <div class="letter-header">
+    <div class="address-col">
+      <div class="address-block">
+        <div class="name1">{{ buyer.name }}</div>
+        {% if buyer.name2 %}<div>{{ buyer.name2 }}</div>{% endif %}
+        {% if contact %}<div>{{ contact.FIRST_NAME }} {{ contact.LAST_NAME }}</div>{% endif %}
+        {% if buyer.street %}<div>{{ buyer.street }}</div>{% endif %}
+        {% if buyer.postCode or buyer.city %}<div>{{ buyer.postCode }} {{ buyer.city }}</div>{% endif %}
+      </div>
+    </div>
+    <div class="meta-col">
+      <table class="meta-table">
+        <tr><td class="ml">Nachtrag-Nr.</td><td class="mv bold">{{ nachtrag.NAME_SHORT }}</td></tr>
+        <tr><td class="ml">Datum</td><td class="mv">{{ (nachtrag.SUBMITTED_DATE or nachtrag.CREATED_AT) | date_de }}</td></tr>
+        {% if projectName %}<tr><td class="ml">Projekt</td><td class="mv">{{ projectName }}</td></tr>{% endif %}
+        {% if categoryLabel %}<tr><td class="ml">Kategorie</td><td class="mv">{{ categoryLabel }}</td></tr>{% endif %}
+        {% if employeeName %}<tr><td class="ml">Bearbeiter</td><td class="mv">{{ employeeName }}</td></tr>{% endif %}
+      </table>
+    </div>
+  </div>
+
+  <div class="doc-title">Nachtrag: {{ nachtrag.NAME_LONG }}</div>
+
+  {% if nachtrag.CLAIM_BASIS %}<div class="info-line"><span class="info-label">Anspruchsgrundlage:</span> {{ nachtrag.CLAIM_BASIS }}</div>{% endif %}
+  {% if nachtrag.REASON %}<div class="text-block">{{ nachtrag.REASON }}</div>{% endif %}
+
+  <table class="pos-table">
+    <thead>
+      <tr>
+        <th>Bezeichnung</th>
+        {% if hasExtras %}<th class="r">Nebenkosten</th>{% endif %}
+        <th class="r">Betrag (netto)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in structureRows %}
+        <tr class="{{ 'leaf-row' if row.isLeaf else 'parent-row' }}">
+          <td style="padding-left: {{ row.depth * 5 }}mm;">
+            {% if row.nameShort %}<strong>{{ row.nameShort }}</strong> {% endif %}{{ row.nameLong }}
+            {% if row.isHourly and row.isLeaf %}<div class="sub-info">{{ row.quantity }} h × {{ row.spRate | money }}</div>{% endif %}
+          </td>
+          {% if hasExtras %}<td class="r">{% if row.isLeaf %}{{ row.extras | money }}{% endif %}</td>{% endif %}
+          <td class="r">{% if row.isLeaf %}{{ row.revenue | money }}{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <table class="calc-table">
+    <tr><td class="label">Nettobetrag Nachtrag</td><td class="amount">{{ totals.revenue | money }}</td></tr>
+    {% if totals.extras > 0 %}<tr><td class="label">Nebenkosten</td><td class="amount">{{ totals.extras | money }}</td></tr>{% endif %}
+    <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    <tr><td class="label">Summe netto</td><td class="amount">{{ totals.total | money }}</td></tr>
+    {% if vatPercent > 0 %}<tr><td class="label">zzgl. {{ vatPercent }} % USt.</td><td class="amount">{{ vatAmount | money }}</td></tr>{% endif %}
+    <tr class="total-row"><td class="label">Nachtragssumme{% if vatPercent > 0 %} (brutto){% endif %}</td><td class="amount">{{ grossTotal | money }}</td></tr>
+  </table>
+
+  <div class="closing">
+    <p>Wir bitten um Prüfung und Beauftragung dieses Nachtrags.</p>
+    {% if signatureDataUri %}<img class="signature" src="{{ signatureDataUri }}" alt="">{% endif %}
+    <div class="sign-name">{{ seller.name }}</div>
+  </div>
+</body>
+</html>

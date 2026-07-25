@@ -10,12 +10,13 @@ import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
 import { Vertraege }      from '@/pages/projekte/Vertraege'
 import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
 import { Budget }          from '@/pages/projekte/Budget'
+import { NachtraegeListe } from '@/pages/nachtraege/NachtraegeListe'
 import { ProjectPicker }  from '@/components/projekte/ProjectPicker'
 import { fetchProjectsShort } from '@/api/projekte'
 import { useFilterTabs } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
 
-type Tab = 'liste' | 'struktur' | 'leistungsstand' | 'buchungen' | 'budget' | 'mitarbeiter' | 'honorar' | 'vertraege'
+type Tab = 'liste' | 'struktur' | 'leistungsstand' | 'buchungen' | 'budget' | 'mitarbeiter' | 'honorar' | 'vertraege' | 'nachtraege'
 
 const TABS: { id: Tab; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'liste',           label: 'Liste',           permissions: ['projects.view'] },
@@ -26,9 +27,10 @@ const TABS: { id: Tab; label: string; permissions: string[]; feature?: string }[
   { id: 'mitarbeiter',     label: 'Preislisten',     permissions: ['projects.hourly_rates.view'], feature: 'projects.hourly_rates' },
   { id: 'honorar',         label: 'Kalkulationen',   permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
   { id: 'vertraege',       label: 'Verträge',        permissions: ['projects.contracts.view'], feature: 'projects.contracts' },
+  { id: 'nachtraege',      label: 'Nachträge',       permissions: ['nachtraege.view'], feature: 'nachtraege.management' },
 ]
 
-const VALID_TABS: Tab[] = ['liste','struktur','leistungsstand','buchungen','budget','mitarbeiter','honorar','vertraege']
+const VALID_TABS: Tab[] = ['liste','struktur','leistungsstand','buchungen','budget','mitarbeiter','honorar','vertraege','nachtraege']
 function parseTab(s: string | null): Tab | null {
   return s && (VALID_TABS as string[]).includes(s) ? (s as Tab) : null
 }
@@ -127,6 +129,7 @@ export function ProjektePage() {
         {tab === 'vertraege'      && <Vertraege      initialProjectId={selectedProjectId} />}
         {tab === 'budget'         && <Budget         initialProjectId={selectedProjectId} />}
         {tab === 'mitarbeiter'    && <Mitarbeiter    initialProjectId={selectedProjectId} />}
+        {tab === 'nachtraege'     && <NachtraegeListe projectId={selectedProjectId} />}
       </div>
     </div>
   )

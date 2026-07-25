@@ -5,7 +5,7 @@
 > Architektur: [LICENSE_TIERS_CONCEPT.md](LICENSE_TIERS_CONCEPT.md) ·
 > Workflow: [LICENSE_DEVELOPMENT_CHECKLIST.md](LICENSE_DEVELOPMENT_CHECKLIST.md).
 
-**Stand:** 2026-06-15 · 11 Module · 43 Capabilities · 90 Permission-Verknuepfungen
+**Stand:** 2026-06-15 · 12 Module · 44 Capabilities · 98 Permission-Verknuepfungen
 
 Jede **Capability** ist ein Schalter, den du je Lizenztyp in der Matrix an/aus stellst.
 Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten dahinter liegen
@@ -64,6 +64,12 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 | Capability | Typ | Enthaltene Funktionen |
 |---|---|---|
 | **Angebote**<br>`offers.basic` | boolean | Angebote sehen; Angebote anlegen; Angebote bearbeiten; Angebote löschen; Angebote versenden; Angebot in Projekt umwandeln |
+
+## Nachträge `nachtraege`
+
+| Capability | Typ | Enthaltene Funktionen |
+|---|---|---|
+| **Nachträge**<br>`nachtraege.management` | boolean | Nachträge sehen; Nachträge anlegen; Nachträge bearbeiten; Nachträge einreichen; Nachträge prüfen; Nachträge freigeben; Nachträge versenden; Nachträge löschen |
 
 ## Reporting `reports`
 

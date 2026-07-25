@@ -41,6 +41,7 @@ const modules = [
   { key: "einvoice", labelDe: "E-Rechnung", position: 40 },
   { key: "dunning", labelDe: "Mahnwesen", position: 50 },
   { key: "offers", labelDe: "Angebote", position: 60 },
+  { key: "nachtraege", labelDe: "Nachträge", position: 65 },
   { key: "reports", labelDe: "Reporting", position: 70 },
   { key: "employees", labelDe: "Mitarbeiter", position: 80 },
   { key: "settings", labelDe: "Einstellungen", position: 90 },
@@ -110,6 +111,11 @@ const capabilities = [
   // ── Angebote ─────────────────────────────────────────────────────────────────
   { key: "offers.basic", module: "offers", labelDe: "Angebote", type: "boolean",
     permissions: ["offers.view", "offers.create", "offers.edit", "offers.delete", "offers.send", "offers.convert"], since: SINCE },
+
+  // ── Nachträge ────────────────────────────────────────────────────────────────
+  { key: "nachtraege.management", module: "nachtraege", labelDe: "Nachträge", type: "boolean",
+    permissions: ["nachtraege.view", "nachtraege.create", "nachtraege.edit", "nachtraege.submit",
+      "nachtraege.review", "nachtraege.release", "nachtraege.send", "nachtraege.delete"], since: "2026-07-25" },
 
   // ── Reporting ───────────────────────────────────────────────────────────────
   { key: "reports.standard", module: "reports", labelDe: "Standard-Reports", type: "boolean",

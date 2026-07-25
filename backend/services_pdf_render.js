@@ -5,6 +5,7 @@ const fs   = require('fs');
 const nunjucks = require('nunjucks');
 const { loadInvoiceData } = require('./services_einvoice_data');
 const angeboteSvc = require('./services/angebote');
+const nachtraegeSvc = require('./services/nachtraege');
 const monatsabschlussSvc = require('./services/monatsabschluss');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1004,6 +1005,21 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   return { pdf, offer: vm.offer };
 }
 
+async function renderNachtragPdf({ supabase, nachtragId, tenantId }) {
+  const vm = await nachtraegeSvc.buildNachtragPdfViewModel(supabase, { nachtragId, tenantId });
+  const companyId = vm.nachtrag.COMPANY_ID;
+  const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
+  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const [logoDataUri, signatureDataUri] = await Promise.all([
+    resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
+    resolveSignatureDataUri({ supabase, tenantId, companyId }),
+  ]);
+  const context = { ...vm, theme, themeHead: buildThemeHead(theme), logoDataUri, signatureDataUri };
+  const html = env().render(path.join('modern_a', 'nachtrag.njk'), context);
+  const pdf = await renderPdf({ html });
+  return { pdf, nachtrag: vm.nachtrag };
+}
+
 async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
   await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_auftragsbestaetigung');
@@ -1552,4 +1568,4 @@ async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice
   return { pdf, html };
 }
 
-module.exports = { renderDocumentPdf, renderOfferPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc };
+module.exports = { renderDocumentPdf, renderOfferPdf, renderNachtragPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc };

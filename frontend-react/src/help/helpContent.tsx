@@ -644,6 +644,76 @@ export const HELP = {
       </>
     ),
   },
+
+  // ── Nachträge ────────────────────────────────────────────────────────────
+  'nachtrag.overview': {
+    title: 'Was ist ein Nachtrag?',
+    body: (
+      <>
+        Ein Nachtrag hält eine <strong>Änderung oder Ergänzung des beauftragten Leistungs- und
+        Vergütungsumfangs</strong> fest — z. B. geänderte oder zusätzliche Leistungen (§ 650b BGB,
+        § 10 HOAI). Er wird geprüft, ganz oder teilweise <strong>ins Projekt freigegeben</strong> und ist
+        danach ganz normal buch- und abrechenbar. So wächst der Auftragswert kontrolliert und nachvollziehbar.
+      </>
+    ),
+  },
+  'nachtrag.kategorie': {
+    title: 'Kategorie',
+    body: (
+      <>
+        Ordnet den Anlass ein: <strong>geänderte</strong> Leistung (Bauherr ändert das Ziel),
+        <strong> zusätzliche</strong> Leistung (außerhalb des Solls), <strong>Mengen-/Umfangsänderung</strong>,
+        <strong> besondere</strong> Leistung, <strong>gestörter Bauablauf</strong> sowie Bauinhalts- vs.
+        Bauumstandsnachtrag. Die Kategorie steuert Auswertung und Wording — nicht die Berechnung.
+      </>
+    ),
+  },
+  'nachtrag.anspruchsgrundlage': {
+    title: 'Anspruchsgrundlage',
+    body: (
+      <>
+        Die rechtliche Basis des Mehr-/Änderungsanspruchs, z. B. <strong>§ 650b/c BGB</strong>,
+        <strong> § 10 HOAI</strong> (geänderte/zusätzliche Leistungen) oder <strong>VOB/B § 2</strong>. Eine
+        klar benannte Grundlage plus nachvollziehbare Begründung ist Voraussetzung dafür, dass der Nachtrag
+        <strong> prüffähig</strong> ist und anerkannt wird.
+      </>
+    ),
+  },
+  'nachtrag.fristen': {
+    title: 'Fristen & Prüffrist',
+    body: (
+      <>
+        Nachträge sind fristgebunden: idealerweise <strong>vor Ausführung angekündigt</strong>, fristgerecht
+        vorgelegt und innerhalb der <strong>Prüf-/Entscheidungsfrist</strong> beschieden. Versäumte Fristen
+        sind ein häufiger Grund für verlorene Ansprüche — die Prüffrist hält den nächsten fälligen Schritt
+        sichtbar.
+      </>
+    ),
+  },
+  'nachtrag.pruefbarkeit': {
+    title: 'Prüfbarkeit',
+    body: (
+      <>
+        Vor der Freigabe wird geprüft, ob der Nachtrag <strong>formell</strong> (fristgerecht, Form und
+        Ankündigung gewahrt), <strong>inhaltlich</strong> (Anspruchsgrundlage schlüssig und nachgewiesen)
+        und <strong>rechnerisch</strong> (Mengen und Preise nachvollziehbar) tragfähig ist. Ergebnis ist
+        ein <strong>Prüfvermerk</strong> mit Empfehlung (anerkennen, kürzen, ablehnen, Rückfrage) — die
+        Grundlage für eine begründete Freigabe-Entscheidung.
+      </>
+    ),
+  },
+  'nachtrag.freigabe': {
+    title: 'Freigabe ins Projekt',
+    body: (
+      <>
+        Bei der Freigabe werden die <strong>anerkannten Positionen ins Projekt übernommen</strong> (unter dem
+        Sammelknoten „Nachträge") und damit buch- und abrechenbar; der Auftragswert steigt entsprechend.
+        Möglich sind <strong>Teilfreigaben</strong> (nur bestimmte Positionen), Kürzungen „der Höhe nach"
+        (anerkannter Betrag&nbsp;&lt;&nbsp;gefordert) und eine <strong>vorläufige Anordnung</strong>, wenn schon
+        vor der endgültigen Einigung gearbeitet werden soll. Jede Freigabe wird protokolliert.
+      </>
+    ),
+  },
 } satisfies Record<string, HelpEntry>
 
 export type HelpId = keyof typeof HELP

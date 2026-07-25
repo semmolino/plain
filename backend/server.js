@@ -93,6 +93,7 @@ const reportsRoutes          = require("./routes/reports")(supabase);
 const finalInvoicesRoutes    = require("./routes/finalInvoices")(supabase);
 const notificationsRoutes    = require("./routes/notifications")(supabase);
 const angeboteRoutes         = require("./routes/angebote")(supabase);
+const nachtraegeRoutes       = require("./routes/nachtraege")(supabase);
 const kostensatzRoutes       = require("./routes/kostensatz")(supabase);
 const mahnungenRoutes        = require("./routes/mahnungen")(supabase);
 const arbzgRoutes            = require("./routes/arbzg")(supabase);
@@ -116,6 +117,7 @@ const { startMonatsabschlussChecker } = require("./services/monatsabschluss");
 const { startMahnungChecker } = require("./services/mahnungChecker");
 const { startLeistungsstandReminderChecker } = require("./services/leistungsstandReminderChecker");
 const { startHoursBookingReminderChecker }   = require("./services/hoursBookingReminderChecker");
+const { startNachtragFristenChecker }        = require("./services/nachtragFristenChecker");
 
 // RBAC: permissionsMiddleware laeuft global nach authMiddleware und legt
 // req.permissions + req.hasPermission ab. Soft-fail wenn Migration 0062 fehlt
@@ -146,6 +148,7 @@ app.use("/api/v1/reports",           ...authChain, reportsRoutes);
 app.use("/api/v1/final-invoices",    ...authChain, finalInvoicesRoutes);
 app.use("/api/v1/notifications",     ...authChain, notificationsRoutes);
 app.use("/api/v1/angebote",          ...authChain, angeboteRoutes);
+app.use("/api/v1/nachtraege",        ...authChain, nachtraegeRoutes);
 app.use("/api/v1/kostensatz",        ...authChain, kostensatzRoutes);
 app.use("/api/v1/mahnungen",         ...authChain, mahnungenRoutes);
 app.use("/api/v1/arbzg",             ...authChain, arbzgRoutes);
@@ -215,4 +218,5 @@ app.listen(port, () => {
   try { startMahnungChecker(supabase); }              catch (e) { console.error("startMahnungChecker:", e?.message || e); }
   try { startLeistungsstandReminderChecker(supabase); } catch (e) { console.error("startLeistungsstandReminderChecker:", e?.message || e); }
   try { startHoursBookingReminderChecker(supabase); }    catch (e) { console.error("startHoursBookingReminderChecker:", e?.message || e); }
+  try { startNachtragFristenChecker(supabase); }         catch (e) { console.error("startNachtragFristenChecker:", e?.message || e); }
 });
