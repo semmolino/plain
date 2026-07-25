@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useStickyState } from '@/hooks/useStickyState'
+import { useStickyState, useStickySet } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
@@ -35,6 +35,28 @@ const SPECIAL_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE'])
 const isSpecialKind = (k?: string | null) => !!k && SPECIAL_KINDS.has(k)
 const isBreakRow = (b?: Buchung | null) => b?.ENTRY_KIND === 'BREAK'
 const KIND_BADGE: Record<string, string> = { UNIT: 'Stück', LUMP_COST: 'Pauschale K', LUMP_REVENUE: 'Pauschale E' }
+
+/** Zeigt an, ob eine Buchung bereits einer Rechnung/Abschlag zugeordnet (abgerechnet) ist. */
+const isBilled = (b: Buchung) => b.PARTIAL_PAYMENT_ID != null || b.INVOICE_ID != null
+
+/** Hat die Buchung einen abrechenbaren (externen) Anteil? Für „0 extern ausblenden". */
+function hasBillable(b: Buchung): boolean {
+  if (isBreakRow(b))              return false            // Pause: kostenneutral
+  if (b.BOOKING_KIND === 'LUMP_COST')    return false    // reine Kostenpauschale
+  if (b.BOOKING_KIND === 'LUMP_REVENUE') return (Number(b.SP_TOT) || 0) !== 0
+  return (Number(b.QUANTITY_EXT) || 0) !== 0             // Stunden & Stückleistungen
+}
+
+/** Menschlicher Buchungstyp-Name für Filter & Anzeige. */
+function bookingTypeLabel(b: Buchung): string {
+  if (isBreakRow(b)) return 'Pause'
+  switch (b.BOOKING_KIND) {
+    case 'UNIT':         return 'Stück'
+    case 'LUMP_COST':    return 'Pauschale K'
+    case 'LUMP_REVENUE': return 'Pauschale E'
+    default:             return 'Stunden'
+  }
+}
 
 function todayIso() { return new Date().toISOString().slice(0, 10) }
 
@@ -100,7 +122,12 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   const [msg,          setMsg]          = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [filterStruct,  setFilterStruct]  = useState<string>('')
   const [search,        setSearch]        = useState('')
-  const [structSearch,  setStructSearch]  = useState('')
+  const [filterEmp,     setFilterEmp]     = useStickySet('buchungen.emp')
+  const [filterKind,    setFilterKind]    = useStickySet('buchungen.kind')
+  const [filterStatus,  setFilterStatus]  = useStickySet('buchungen.status')
+  const [hideZeroExt,   setHideZeroExt]   = useStickyState<boolean>('buchungen.hideZeroExt', false)
+  const [dateFrom,      setDateFrom]      = useState('')
+  const [dateTo,        setDateTo]        = useState('')
   const [sortCol,      setSortCol]      = useStickyState<SortCol>('buchungen.sortCol', 'date')
   const [sortDir,      setSortDir]      = useStickyState<SortDir>('buchungen.sortDir', 'asc')
   const [editRow,      setEditRow]      = useState<Buchung | null>(null)
@@ -155,7 +182,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empId, form.DATE_VOUCHER, showForm])
 
-  useEffect(() => { setFilterStruct(''); setSearch('') }, [pid])
+  useEffect(() => { setFilterStruct(''); setSearch(''); setDateFrom(''); setDateTo('') }, [pid])
 
   const buchungen = buchData?.data   ?? []
   const structure = structData?.data ?? []
@@ -217,20 +244,26 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     return m
   }, [structure, nodeById])
 
-  const filteredStructureForSelect = useMemo(() => {
-    if (!structSearch.trim()) return allStructureSorted
-    const sq = structSearch.toLowerCase()
-    return allStructureSorted.filter(n =>
-      n.NAME_SHORT.toLowerCase().includes(sq) ||
-      (n.NAME_LONG?.toLowerCase().includes(sq) ?? false) ||
-      (pathCache.get(n.STRUCTURE_ID) ?? '').toLowerCase().includes(sq)
-    )
-  }, [allStructureSorted, structSearch, pathCache])
-
   const filterDescendants = useMemo(() => {
     if (!filterStruct) return null
     return getDescendantIds(Number(filterStruct))
   }, [filterStruct, childrenMap])
+
+  // Filter-Optionen aus den geladenen Daten ableiten (keine harten Listen).
+  const empOptions = useMemo(
+    () => [...new Set(buchungen.map(b => b.EMPLOYEE?.SHORT_NAME).filter((n): n is string => !!n))]
+      .sort((a, b) => a.localeCompare(b, 'de')),
+    [buchungen],
+  )
+  const kindOptions = useMemo(
+    () => ['Stunden', 'Pause', 'Stück', 'Pauschale K', 'Pauschale E']
+      .filter(k => buchungen.some(b => bookingTypeLabel(b) === k)),
+    [buchungen],
+  )
+  const statusOptions = useMemo(
+    () => ['Offen', 'Abgerechnet'].filter(s => buchungen.some(b => (isBilled(b) ? 'Abgerechnet' : 'Offen') === s)),
+    [buchungen],
+  )
 
   const visibleBuchungen = useMemo(() => {
     let rows = buchungen
@@ -238,6 +271,13 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     if (filterDescendants !== null) {
       rows = rows.filter(b => b.STRUCTURE_ID != null && filterDescendants.has(b.STRUCTURE_ID))
     }
+
+    if (filterEmp.size)    rows = rows.filter(b => !!b.EMPLOYEE?.SHORT_NAME && filterEmp.has(b.EMPLOYEE.SHORT_NAME))
+    if (filterKind.size)   rows = rows.filter(b => filterKind.has(bookingTypeLabel(b)))
+    if (filterStatus.size) rows = rows.filter(b => filterStatus.has(isBilled(b) ? 'Abgerechnet' : 'Offen'))
+    if (hideZeroExt)       rows = rows.filter(hasBillable)
+    if (dateFrom)          rows = rows.filter(b => fmtDate(b.DATE_VOUCHER) >= dateFrom)
+    if (dateTo)            rows = rows.filter(b => fmtDate(b.DATE_VOUCHER) <= dateTo)
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
@@ -265,7 +305,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     })
 
     return rows
-  }, [buchungen, filterDescendants, search, sortCol, sortDir, pathCache])
+  }, [buchungen, filterDescendants, filterEmp, filterKind, filterStatus, hideZeroExt, dateFrom, dateTo, search, sortCol, sortDir, pathCache])
 
   const totalIntH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) || isBreakRow(b) ? 0 : Number(b.QUANTITY_INT) || 0), 0)
   const totalExtH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) || isBreakRow(b) ? 0 : Number(b.QUANTITY_EXT) || 0), 0)
@@ -315,7 +355,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   function submitForm(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
-    if (!pid || !form.EMPLOYEE_ID || !form.DATE_VOUCHER || !form.QUANTITY_INT || !form.QUANTITY_EXT || form.SP_RATE === '' || !form.POSTING_DESCRIPTION) {
+    if (!pid || !form.EMPLOYEE_ID || !form.STRUCTURE_ID || !form.DATE_VOUCHER || !form.QUANTITY_INT || !form.QUANTITY_EXT || form.SP_RATE === '' || !form.POSTING_DESCRIPTION) {
       setMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
     // Recents: zuletzt gebuchte Strukturelemente pro Projekt mitschreiben
@@ -343,7 +383,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     e.preventDefault()
     if (!editRow) return
     setEditMsg(null)
-    if (!editForm.EMPLOYEE_ID || !editForm.DATE_VOUCHER || !editForm.QUANTITY_INT || editForm.CP_RATE === '' || !editForm.QUANTITY_EXT || editForm.SP_RATE === '' || !editForm.POSTING_DESCRIPTION) {
+    if (!editForm.EMPLOYEE_ID || !editForm.STRUCTURE_ID || !editForm.DATE_VOUCHER || !editForm.QUANTITY_INT || editForm.CP_RATE === '' || !editForm.QUANTITY_EXT || editForm.SP_RATE === '' || !editForm.POSTING_DESCRIPTION) {
       setEditMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
     patchMut.mutate({
@@ -391,6 +431,12 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     })
   }
 
+  const anyFilter = !!(search || filterStruct || filterEmp.size || filterKind.size || filterStatus.size || hideZeroExt || dateFrom || dateTo)
+  function resetFilters() {
+    setSearch(''); setFilterStruct(''); setFilterEmp(new Set()); setFilterKind(new Set())
+    setFilterStatus(new Set()); setHideZeroExt(false); setDateFrom(''); setDateTo('')
+  }
+
   const currentProject = projects.find(p => p.ID === pid)
   useTrackRecent('project', pid, currentProject ? ([currentProject.NAME_SHORT, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
 
@@ -415,31 +461,48 @@ export function Buchungen({ initialProjectId }: Props = {}) {
           {isLoading && <p className="empty-note">Laden …</p>}
           {!isLoading && (
             <>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 10, flexWrap: 'wrap' }}>
-                <div className="form-group" style={{ flex: '1 1 260px', minWidth: 200, marginBottom: 0 }}>
-                  <label>Projektelement</label>
-                  <input type="search" className="list-search" placeholder="Elemente filtern …"
-                    style={{ marginBottom: 4, fontSize: 12 }}
-                    value={structSearch} onChange={e => setStructSearch(e.target.value)} />
-                  <select value={filterStruct} onChange={e => setFilterStruct(e.target.value)}>
-                    <option value="">Alle Projektelemente</option>
-                    {filteredStructureForSelect.map(n => (
-                      <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
-                        {pathCache.get(n.STRUCTURE_ID) ?? n.NAME_SHORT}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ flex: '1 1 220px', minWidth: 180, paddingBottom: 2 }}>
-                  <input
-                    className="list-search"
-                    type="search"
-                    placeholder="Suchen …"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                </div>
+              <div className="list-toolbar">
+                <input
+                  className="list-search"
+                  type="search"
+                  placeholder="Suchen …"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+
+                <select value={filterStruct} onChange={e => setFilterStruct(e.target.value)}
+                  title="Nach Projektelement filtern" style={{ maxWidth: 260 }}>
+                  <option value="">Alle Projektelemente</option>
+                  {allStructureSorted.map(n => (
+                    <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
+                      {pathCache.get(n.STRUCTURE_ID) ?? n.NAME_SHORT}
+                    </option>
+                  ))}
+                </select>
+
+                <FilterChip label="Mitarbeiter" options={empOptions}    selected={filterEmp}    onChange={setFilterEmp} />
+                <FilterChip label="Buchungstyp" options={kindOptions}   selected={filterKind}   onChange={setFilterKind} />
+                <FilterChip label="Status"      options={statusOptions} selected={filterStatus} onChange={setFilterStatus} />
+
+                <label className="filter-daterange" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'rgba(17,24,39,0.7)' }}>
+                  Zeitraum
+                  <input type="date" className="inline-date-input" value={dateFrom} max={dateTo || undefined}
+                    onChange={e => setDateFrom(e.target.value)} title="Von" />
+                  <span>–</span>
+                  <input type="date" className="inline-date-input" value={dateTo} min={dateFrom || undefined}
+                    onChange={e => setDateTo(e.target.value)} title="Bis" />
+                </label>
+
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'rgba(17,24,39,0.7)' }}>
+                  <input type="checkbox" checked={hideZeroExt} onChange={e => setHideZeroExt(e.target.checked)} />
+                  0 zur Abrechnung ausblenden
+                </label>
+
+                {anyFilter && (
+                  <button type="button" className="btn-small" style={{ width: 'auto' }} onClick={resetFilters}>
+                    Zurücksetzen
+                  </button>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
@@ -484,9 +547,9 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Projektelement</label>
-                    <select value={form.STRUCTURE_ID} onChange={setF('STRUCTURE_ID')}>
-                      <option value="">—</option>
+                    <label>Projektelement*</label>
+                    <select value={form.STRUCTURE_ID} onChange={setF('STRUCTURE_ID')} required>
+                      <option value="">Bitte wählen …</option>
                       {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}
                     </select>
                     <RecentList
@@ -640,9 +703,9 @@ export function Buchungen({ initialProjectId }: Props = {}) {
             </select>
           </div>
           <div className="form-group">
-            <label>Projektelement</label>
-            <select value={editForm.STRUCTURE_ID} onChange={setEF('STRUCTURE_ID')}>
-              <option value="">—</option>
+            <label>Projektelement*</label>
+            <select value={editForm.STRUCTURE_ID} onChange={setEF('STRUCTURE_ID')} required>
+              <option value="">Bitte wählen …</option>
               {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}
             </select>
           </div>
@@ -1030,5 +1093,66 @@ function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }:
         </div>
       </form>
     </Modal>
+  )
+}
+
+// ── Mehrfach-Auswahl-Filter (Chip) ─────────────────────────────────────────────
+
+function FilterChip({ label, options, selected, onChange }: {
+  label:    string
+  options:  string[]
+  selected: Set<string>
+  onChange: (next: Set<string>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function toggle(v: string) {
+    const next = new Set(selected)
+    if (next.has(v)) next.delete(v); else next.add(v)
+    onChange(next)
+  }
+
+  const hasFilter = selected.size > 0
+  return (
+    <div className="filter-chip-wrap" ref={ref}>
+      <button
+        type="button"
+        className={`filter-chip-btn${hasFilter ? ' active' : ''}`}
+        onClick={() => setOpen(o => !o)}
+      >
+        {label}{hasFilter ? ` (${selected.size})` : ''} ▾
+      </button>
+      {open && (
+        <div className="filter-chip-dropdown">
+          {options.map(v => (
+            <label key={v} className="filter-chip-option">
+              <input type="checkbox" checked={selected.has(v)} onChange={() => toggle(v)} />
+              {v}
+            </label>
+          ))}
+          {options.length === 0 && (
+            <span style={{ padding: '6px 10px', fontSize: 12, color: '#9ca3af', display: 'block' }}>Keine Optionen</span>
+          )}
+          {hasFilter && (
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
+              <button type="button" className="filter-chip-option" style={{ color: '#dc2626', width: '100%', textAlign: 'left' }}
+                onClick={() => { onChange(new Set()); setOpen(false) }}>
+                Zurücksetzen
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
