@@ -15,6 +15,8 @@ module.exports = () => {
       unrestricted: !!req._licenseUnrestricted,
       plan_id: lic.planId ?? null,
       state: lic.state ?? null,
+      // 'read_only' -> Frontend zeigt Banner + versteckt Schreib-Aktionen.
+      restriction: lic.restriction ?? null,
       capabilities: [...(lic.capabilities || [])],
       limits: Object.fromEntries(lic.limits || []),
     });

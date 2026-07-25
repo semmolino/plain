@@ -74,3 +74,46 @@ describe("computeEntitlement", () => {
     expect(limits.get("limits.projects_active")).toBe(99);
   });
 });
+
+const { stateRestriction, restrictToReadOnly, READ_ACTIONS } = require("../middleware/license");
+
+describe("STATE-Enforcement (Nur-Lese bei abgelaufener Lizenz)", () => {
+  it("nur 'expired' erzwingt read_only", () => {
+    expect(stateRestriction("expired")).toBe("read_only");
+    for (const s of ["active", "trial", "past_due", "grace", null, undefined]) {
+      expect(stateRestriction(s)).toBe(null);
+    }
+  });
+
+  it("READ_ACTIONS enthält nur lesende Aktionen", () => {
+    expect(READ_ACTIONS.has("view")).toBe(true);
+    expect(READ_ACTIONS.has("export")).toBe(true);
+    for (const w of ["create", "edit", "delete", "send", "book", "cancel", "admin"]) {
+      expect(READ_ACTIONS.has(w)).toBe(false);
+    }
+  });
+
+  it("restrictToReadOnly behält Lese-Rechte, entfernt Schreib-Rechte", () => {
+    const actions = new Map([
+      ["invoices.view", "view"],
+      ["reports.export", "export"],
+      ["invoices.create_single", "create"],
+      ["invoices.edit", "edit"],
+      ["invoices.book", "book"],
+    ]);
+    const out = restrictToReadOnly(
+      new Set(["invoices.view", "reports.export", "invoices.create_single", "invoices.edit", "invoices.book"]),
+      actions,
+    );
+    expect(out.has("invoices.view")).toBe(true);
+    expect(out.has("reports.export")).toBe(true);
+    expect(out.has("invoices.create_single")).toBe(false);
+    expect(out.has("invoices.edit")).toBe(false);
+    expect(out.has("invoices.book")).toBe(false);
+  });
+
+  it("unbekannte Aktion gilt als schreibend (konservativ)", () => {
+    const out = restrictToReadOnly(new Set(["mystery.perm"]), new Map());
+    expect(out.has("mystery.perm")).toBe(false);
+  });
+});
