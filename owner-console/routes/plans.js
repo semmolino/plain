@@ -1,10 +1,9 @@
 "use strict";
 
 const express = require("express");
-const path = require("path");
-const registry = require(path.join(__dirname, "..", "..", "backend", "licensing", "registry"));
 const { supabase } = require("../services/db");
 const { writeChangeLog } = require("../services/audit");
+const { getCapability, allCapabilityKeys } = require("../services/catalog");
 
 const router = express.Router();
 
@@ -13,10 +12,6 @@ const KEY_RE = /^[a-z][a-z0-9_]{1,39}$/;
 function intParam(value) {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 ? n : null;
-}
-
-function capLabel(key) {
-  return registry.getCapability(key)?.labelDe || key;
 }
 
 // Plan anlegen
@@ -146,8 +141,8 @@ router.put("/plans/:id/capabilities/:capKey", async (req, res) => {
   const capKey = req.params.capKey;
   const { enabled, numeric_limit } = req.body || {};
 
-  // Kein Phantom-Mapping: Capability muss im Manifest existieren.
-  const cap = registry.getCapability(capKey);
+  // Kein Phantom-Mapping: Capability muss im (DB-)Katalog existieren.
+  const cap = await getCapability(capKey);
   if (!cap) return res.status(400).json({ error: `Unbekannte Capability: ${capKey}` });
   if (numeric_limit != null && (!Number.isInteger(Number(numeric_limit)) || Number(numeric_limit) < 0)) {
     return res.status(400).json({ error: "Limit muss eine ganze Zahl ≥ 0 sein." });
@@ -243,7 +238,8 @@ router.put("/plans/:id/capabilities", async (req, res) => {
   if (!changes?.length) return res.status(400).json({ error: "changes (Array) erforderlich." });
   if (changes.length > 500) return res.status(400).json({ error: "Zu viele Änderungen auf einmal." });
 
-  const unknown = changes.map((c) => c.capability_key).filter((k) => !registry.getCapability(k));
+  const known = new Set(await allCapabilityKeys());
+  const unknown = changes.map((c) => c.capability_key).filter((k) => !known.has(k));
   if (unknown.length) return res.status(400).json({ error: `Unbekannte Capabilities: ${unknown.join(", ")}` });
 
   const { data: plan } = await supabase.from("LICENSE_PLAN").select("ID, NAME_DE").eq("ID", planId).maybeSingle();

@@ -1,10 +1,9 @@
 "use strict";
 
 const express = require("express");
-const path = require("path");
-const registry = require(path.join(__dirname, "..", "..", "backend", "licensing", "registry"));
 const { supabase } = require("../services/db");
 const { writeChangeLog } = require("../services/audit");
+const { readCatalog, getCapability, allCapabilityKeys } = require("../services/catalog");
 
 const router = express.Router();
 
@@ -93,6 +92,8 @@ router.get("/overrides", async (_req, res) => {
     ? await supabase.from("TENANTS").select("ID, TENANT").in("ID", tenantIds)
     : { data: [] };
   const nameById = new Map((tenants || []).map((t) => [t.ID, t.TENANT]));
+  const cat = await readCatalog();
+  const capLabelByKey = new Map(cat.capabilities.map((c) => [c.key, c.labelDe]));
   const now = Date.now();
 
   res.json({
@@ -101,7 +102,7 @@ router.get("/overrides", async (_req, res) => {
       tenant_id: o.TENANT_ID,
       tenant_name: nameById.get(o.TENANT_ID) || null,
       capability_key: o.CAPABILITY_KEY,
-      capability_label: registry.getCapability(o.CAPABILITY_KEY)?.labelDe || o.CAPABILITY_KEY,
+      capability_label: capLabelByKey.get(o.CAPABILITY_KEY) || o.CAPABILITY_KEY,
       mode: o.MODE,
       numeric_limit: o.NUMERIC_LIMIT,
       reason: o.REASON,
@@ -183,7 +184,7 @@ router.get("/tenants/:id/entitlement", async (req, res) => {
     return res.json({
       unrestricted: true,
       reason: "Keine Lizenzzeile — die Lizenzprüfung lässt alles zu (Soft-Fail).",
-      capabilities: registry.allCapabilityKeys(), limits: {}, overrides: [],
+      capabilities: await allCapabilityKeys(), limits: {}, overrides: [],
     });
   }
 
@@ -216,7 +217,7 @@ router.get("/tenants/:id/entitlement", async (req, res) => {
     unrestricted: false,
     plan_id: lic.PLAN_ID, plan_version: lic.PLAN_VERSION, state: lic.STATE,
     capabilities: [...caps].sort(), limits, overrides: ov || [],
-    missing: registry.allCapabilityKeys().filter((k) => !caps.has(k)).sort(),
+    missing: (await allCapabilityKeys()).filter((k) => !caps.has(k)).sort(),
   });
 });
 
@@ -260,7 +261,8 @@ router.post("/tenants/:id/overrides", async (req, res) => {
   if (!capability_key || !["grant", "revoke"].includes(mode)) {
     return res.status(400).json({ error: "capability_key und mode (grant|revoke) erforderlich." });
   }
-  if (!registry.getCapability(capability_key)) {
+  const cap = await getCapability(capability_key);
+  if (!cap) {
     return res.status(400).json({ error: `Unbekannte Capability: ${capability_key}` });
   }
   const { data: tenant } = await supabase.from("TENANTS").select("ID, TENANT").eq("ID", tenantId).maybeSingle();
@@ -281,7 +283,7 @@ router.post("/tenants/:id/overrides", async (req, res) => {
   await writeChangeLog({
     actor: req.adminEmail, entity: "TENANT_ENTITLEMENT_OVERRIDE",
     entityRef: `${tenantId}:${capability_key}`, action: before ? "update" : "create", before, after: data,
-    context: { tenant_name: tenant.TENANT, capability_label: registry.getCapability(capability_key)?.labelDe }, req,
+    context: { tenant_name: tenant.TENANT, capability_label: cap.labelDe }, req,
   });
   res.json({ override: data });
 });

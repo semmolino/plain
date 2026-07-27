@@ -29,6 +29,11 @@ function build() {
   L.push("-- NICHT VON HAND EDITIEREN. Quelle: backend/licensing/capabilities.manifest.js");
   L.push("-- Neu erzeugen mit:  npm run license:gen  (--prefix backend)");
   L.push("-- Voraussetzung: Migration 0070 (Tabellen + Plan 'full') ist eingespielt.");
+  L.push("--");
+  L.push("-- Der Katalog (Module/Capabilities) ist ab dem Capability-Management in der");
+  L.push("-- DB editierbar (Owner-Konsole). Darum INSERT ... ON CONFLICT DO NOTHING:");
+  L.push("-- ein erneuter Seed legt NUR fehlende Zeilen an und überschreibt KEINE in der");
+  L.push("-- Konsole vorgenommenen Änderungen (Label/Modul/Position/Einheit).");
   L.push("-- ─────────────────────────────────────────────────────────────────────────────");
   L.push("");
 
@@ -37,7 +42,7 @@ function build() {
   L.push('INSERT INTO "LICENSE_MODULE" ("KEY","LABEL_DE","POSITION") VALUES');
   L.push(
     modules.map((m) => `  (${q(m.key)}, ${q(m.labelDe)}, ${m.position || 0})`).join(",\n") + "\n" +
-    'ON CONFLICT ("KEY") DO UPDATE SET "LABEL_DE" = EXCLUDED."LABEL_DE", "POSITION" = EXCLUDED."POSITION";'
+    'ON CONFLICT ("KEY") DO NOTHING;'
   );
   L.push("");
 
@@ -48,12 +53,7 @@ function build() {
     caps.map((c, i) =>
       `  (${q(c.key)}, ${q(c.module)}, ${q(c.labelDe)}, ${q(c.type)}, ${qn(c.unit || null)}, ${(i + 1) * 10})`
     ).join(",\n") + "\n" +
-    'ON CONFLICT ("KEY") DO UPDATE SET\n' +
-    '  "MODULE_KEY" = EXCLUDED."MODULE_KEY",\n' +
-    '  "LABEL_DE"   = EXCLUDED."LABEL_DE",\n' +
-    '  "TYPE"       = EXCLUDED."TYPE",\n' +
-    '  "UNIT"       = EXCLUDED."UNIT",\n' +
-    '  "POSITION"   = EXCLUDED."POSITION";'
+    'ON CONFLICT ("KEY") DO NOTHING;'
   );
   L.push("");
 

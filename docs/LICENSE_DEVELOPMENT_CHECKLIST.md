@@ -29,6 +29,22 @@ Reine Lookups (Dropdown-Daten) brauchen weder Permission noch Capability.
 Quelle der Wahrheit: **`backend/licensing/capabilities.manifest.js`**.
 Generierter Überblick: `docs/LICENSE_CAPABILITIES.md`.
 
+> **Katalog ist zusätzlich in der Konsole editierbar (Tab „Katalog").** Seit dem
+> Capability-Management ist die **DB** die editierbare Quelle für Präsentation +
+> Bestand: Module/Capabilities **anlegen, umbenennen (Label), umgruppieren,
+> sortieren, löschen** ohne Deploy. Der Seed `0070b` legt nur noch fehlende
+> Zeilen an (`ON CONFLICT DO NOTHING`) und überschreibt Konsolen-Edits nicht mehr.
+>
+> Das Manifest bleibt trotzdem Pflicht für alles, was **im Code gegatet** wird:
+> - Der **Key ist unveränderlich** (Code-Gates + Rechte hängen daran) — umbenennen
+>   heißt „neu anlegen + migrieren", nicht Key ändern.
+> - Ein im Code via `requireFeature`/`<HasFeature>` genutzter Key **muss** im
+>   Manifest stehen (Drift-Check „undeklariert"). In der Konsole angelegte
+>   Capabilities ohne Manifest-Eintrag taugen daher nur als reine Paket-Gates
+>   (oder via Rechte-Zuordnung) — die Inbox weist sie als „nur in der Konsole"
+>   (deploy-fest machen?) aus.
+> - Löschen einer **code-referenzierten** Capability wird in der Konsole geblockt.
+
 Key-Format: `modul.fähigkeit` (z. B. `einvoice.peppol`, `reports.advanced`,
 `limits.projects_active`). Typ `boolean` (an/aus) oder `metered` (Zahl-Limit).
 

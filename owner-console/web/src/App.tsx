@@ -7,6 +7,7 @@ import { PlansView } from './pages/Plans'
 import { TenantsView } from './pages/Tenants'
 import { AuditView } from './pages/Audit'
 import { FunctionsView } from './pages/Functions'
+import { CatalogView } from './pages/Catalog'
 import { OverridesView } from './pages/Overrides'
 import { SuggestionsView } from './pages/Suggestions'
 import { RequestsView } from './pages/Requests'
@@ -14,7 +15,7 @@ import { AnalyticsView } from './pages/Analytics'
 import { SecurityView } from './pages/Security'
 
 type Tab =
-  | 'inbox' | 'matrix' | 'plans' | 'tenants' | 'functions' | 'overrides'
+  | 'inbox' | 'matrix' | 'plans' | 'tenants' | 'functions' | 'catalog' | 'overrides'
   | 'audit' | 'suggestions' | 'requests' | 'analytics'
 
 interface TabDef { id: Tab; label: string; group: 'license' | 'service' }
@@ -27,6 +28,7 @@ const TABS: TabDef[] = [
   { id: 'plans', label: 'Pläne', group: 'license' },
   { id: 'tenants', label: 'Tenants', group: 'license' },
   { id: 'functions', label: 'Funktionen', group: 'license' },
+  { id: 'catalog', label: 'Katalog', group: 'license' },
   { id: 'overrides', label: 'Ausnahmen', group: 'license' },
   { id: 'audit', label: 'Protokoll', group: 'license' },
   { id: 'suggestions', label: 'Vorschläge', group: 'service' },
@@ -157,6 +159,7 @@ export function App() {
         {tab === 'plans' && <PlansView />}
         {tab === 'tenants' && <TenantsView focusRef={ref} />}
         {tab === 'functions' && <FunctionsView focusRef={ref} />}
+        {tab === 'catalog' && <CatalogView />}
         {tab === 'overrides' && <OverridesView />}
         {tab === 'audit' && <AuditView />}
         {tab === 'suggestions' && <SuggestionsView />}
