@@ -4,6 +4,11 @@
 -- NICHT VON HAND EDITIEREN. Quelle: backend/licensing/capabilities.manifest.js
 -- Neu erzeugen mit:  npm run license:gen  (--prefix backend)
 -- Voraussetzung: Migration 0070 (Tabellen + Plan 'full') ist eingespielt.
+--
+-- Der Katalog (Module/Capabilities) ist ab dem Capability-Management in der
+-- DB editierbar (Owner-Konsole). Darum INSERT ... ON CONFLICT DO NOTHING:
+-- ein erneuter Seed legt NUR fehlende Zeilen an und überschreibt KEINE in der
+-- Konsole vorgenommenen Änderungen (Label/Modul/Position/Einheit).
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- 1. Module
@@ -20,7 +25,7 @@ INSERT INTO "LICENSE_MODULE" ("KEY","LABEL_DE","POSITION") VALUES
   ('settings', 'Einstellungen', 90),
   ('enterprise', 'Enterprise', 100),
   ('limits', 'Mengen-Limits', 110)
-ON CONFLICT ("KEY") DO UPDATE SET "LABEL_DE" = EXCLUDED."LABEL_DE", "POSITION" = EXCLUDED."POSITION";
+ON CONFLICT ("KEY") DO NOTHING;
 
 -- 2. Capabilities
 INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","POSITION") VALUES
@@ -67,12 +72,7 @@ INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","P
   ('enterprise.priority_support', 'enterprise', 'Priority Support (SLA)', 'boolean', NULL, 410),
   ('limits.employees', 'limits', 'Maximale Mitarbeiterzahl', 'metered', 'Mitarbeiter', 420),
   ('limits.storage_mb', 'limits', 'Speicherplatz', 'metered', 'MB', 430)
-ON CONFLICT ("KEY") DO UPDATE SET
-  "MODULE_KEY" = EXCLUDED."MODULE_KEY",
-  "LABEL_DE"   = EXCLUDED."LABEL_DE",
-  "TYPE"       = EXCLUDED."TYPE",
-  "UNIT"       = EXCLUDED."UNIT",
-  "POSITION"   = EXCLUDED."POSITION";
+ON CONFLICT ("KEY") DO NOTHING;
 
 -- 3. Capability → Permission (Layer-Verknüpfung)
 INSERT INTO "CAPABILITY_PERMISSION" ("CAPABILITY_KEY","PERMISSION_KEY") VALUES

@@ -119,19 +119,22 @@ function buildInbox(snapshot) {
       });
     }
 
-    // ── 4. Verwaiste Capability in der DB ────────────────────────────────────
+    // ── 4. Capability nur in der DB (in der Konsole angelegt) ────────────────
+    // Seit dem Capability-Management ist die DB die editierbare Quelle: eine hier
+    // angelegte Capability steht bewusst nicht im Manifest. Das ist kein Fehler,
+    // nur nicht „deploy-fest" — bei Neuaufbau der DB aus dem Manifest-Seed fehlt sie.
     for (const key of dbCaps) {
       if (manifestCapKeys.has(key)) continue;
       items.push({
-        kind: "capability_orphaned_in_db",
-        severity: "mittel",
+        kind: "capability_db_only",
+        severity: "niedrig",
         ref: key,
         title: key,
         detail:
-          `Die Capability „${key}“ existiert in der Datenbank, aber nicht mehr im Code-Manifest. ` +
-          `Sie kann Plänen zugeordnet sein, ohne dass im Code je etwas darauf prüft.`,
-        action: "Capability im Manifest wiederherstellen oder die DB-Zeile samt Plan-Zuordnungen entfernen.",
-        targetTab: "inbox",
+          `Die Capability „${key}“ wurde in der Konsole angelegt und steht nicht im Code-Manifest. ` +
+          `Das ist in Ordnung — bei einem Neuaufbau der DB aus dem Seed wäre sie aber nicht dabei.`,
+        action: "Optional ins Manifest (capabilities.manifest.js) übernehmen, damit sie deploy-fest ist.",
+        targetTab: "functions",
       });
     }
   }
@@ -277,7 +280,7 @@ const KIND_LABELS = {
   permission_unmapped: "Neue Funktionen ohne Lizenz-Zuordnung",
   capability_unpackaged: "Capabilities in keinem verkaufbaren Plan",
   capability_missing_in_db: "Capabilities fehlen in der Datenbank",
-  capability_orphaned_in_db: "Verwaiste Capabilities in der Datenbank",
+  capability_db_only: "Nur in der Konsole angelegt (nicht im Manifest)",
   link_only_in_db: "Zuordnung nur in der Datenbank (nicht im Manifest)",
   link_only_in_manifest: "Zuordnung nur im Manifest (nicht in der Datenbank)",
   link_dangling_permission: "Zuordnung zeigt auf ein unbekanntes Recht",

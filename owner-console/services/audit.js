@@ -55,6 +55,14 @@ const ENTITY_LABELS = {
       return `${plan} · ${cap}`;
     },
   },
+  LICENSE_MODULE: {
+    label: "Modul",
+    describe: (e) => e.AFTER?.LABEL_DE || e.ENTITY_REF || "—",
+  },
+  LICENSE_CAPABILITY: {
+    label: "Capability",
+    describe: (e) => e.AFTER?.LABEL_DE || e.ENTITY_REF || "—",
+  },
   CAPABILITY_PERMISSION: {
     label: "Funktions-Zuordnung",
     describe: (e) => {

@@ -64,7 +64,20 @@ export interface MatrixResponse { plans: MatrixPlan[]; modules: Module[]; capabi
 
 export interface Capability { key: string; module: string; labelDe: string; type: 'boolean' | 'metered'; unit: string | null }
 export interface Module { key: string; labelDe: string }
-export interface CapabilityFns extends Capability { permissionKeys: string[]; since?: string | null }
+export interface CapabilityFns extends Capability { permissionKeys: string[]; inManifest?: boolean }
+
+// ── Katalog-Verwaltung (Module + Capabilities in der DB) ─────────────────────
+export interface CatalogModule { key: string; labelDe: string; position: number; inManifest: boolean }
+export interface CatalogCapability {
+  key: string
+  module: string
+  labelDe: string
+  type: 'boolean' | 'metered'
+  unit: string | null
+  position: number
+  inManifest: boolean
+}
+export interface CatalogResponse { modules: CatalogModule[]; capabilities: CatalogCapability[]; fromDb: boolean }
 export interface PermissionInfo { key: string; label: string; module: string; capabilityKeys?: string[] }
 export interface FunctionsResponse { modules: Module[]; capabilities: CapabilityFns[]; permissions: PermissionInfo[] }
 
@@ -396,6 +409,26 @@ export const api = {
     }),
   matrix: () => req<MatrixResponse>('/matrix'),
   inbox: () => req<InboxResponse>('/inbox'),
+
+  // Katalog-Verwaltung
+  catalog: () => req<CatalogResponse>('/capabilities'),
+  createModule: (m: { key: string; label_de: string; position?: number }) =>
+    req<{ module: unknown }>('/modules', { method: 'POST', body: JSON.stringify(m) }),
+  updateModule: (key: string, patch: { label_de?: string; position?: number }) =>
+    req<{ module: unknown }>(`/modules/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteModule: (key: string) =>
+    req<{ ok: true }>(`/modules/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+  createCapability: (c: { key: string; module: string; label_de: string; type: 'boolean' | 'metered'; unit?: string | null }) =>
+    req<{ capability: unknown }>('/capabilities', { method: 'POST', body: JSON.stringify(c) }),
+  updateCapability: (
+    key: string,
+    patch: { label_de?: string; module?: string; position?: number; unit?: string | null; type?: 'boolean' | 'metered' },
+  ) => req<{ capability: unknown }>(`/capabilities/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteCapability: (key: string, force = false) =>
+    req<{ ok: true; was_in_manifest: boolean; note: string | null }>(
+      `/capabilities/${encodeURIComponent(key)}${force ? '?force=true' : ''}`,
+      { method: 'DELETE' },
+    ),
   setCell: (planId: number, capKey: string, enabled: boolean, numericLimit: number | null) =>
     req<{ ok: true }>(`/plans/${planId}/capabilities/${encodeURIComponent(capKey)}`, {
       method: 'PUT',

@@ -331,6 +331,11 @@ table.grid select, table.grid input:not([type='checkbox']):not([type='radio']) {
 button.small-btn { min-height: 36px; }
 button.small-btn.danger { color: var(--danger); border-color: #fca5a5; }
 
+/* Katalog-Verwaltung */
+.cat-module { margin-bottom: 16px; }
+.cat-module-head { font-weight: 700; padding: 8px 2px; border-bottom: 2px solid var(--border); margin-bottom: 6px; }
+.cat-module .grid input.num { width: 70px; }
+
 /* Dialog (Bestandsschutz beim Entfernen) */
 .dialog-backdrop {
   position: fixed; inset: 0; background: rgba(20, 27, 46, 0.45);

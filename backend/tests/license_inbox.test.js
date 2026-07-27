@@ -78,11 +78,13 @@ describe("Inbox-Regeln", () => {
     expect(it.severity).toBe("kritisch");
   });
 
-  it("verwaiste DB-Capability wird gemeldet", () => {
+  it("nur in der Konsole angelegte DB-Capability wird (informativ) gemeldet", () => {
     const snap = healthySnapshot();
-    snap.dbCapabilityKeys.push("legacy.capability");
+    snap.dbCapabilityKeys.push("custom.capability");
     const { items } = buildInbox(snap);
-    expect(items.some((i) => i.kind === "capability_orphaned_in_db" && i.ref === "legacy.capability")).toBe(true);
+    const it = items.find((i) => i.kind === "capability_db_only" && i.ref === "custom.capability");
+    expect(it).toBeTruthy();
+    expect(it.severity).toBe("niedrig");
   });
 
   it("Zuordnung auf ein unbekanntes Recht ist hoch", () => {
@@ -141,7 +143,7 @@ describe("Inbox-Regeln", () => {
   it("jede Aufgabenart hat ein Label", () => {
     const kinds = new Set([
       "permission_unmapped", "capability_unpackaged", "capability_missing_in_db",
-      "capability_orphaned_in_db", "link_only_in_db", "link_only_in_manifest",
+      "capability_db_only", "link_only_in_db", "link_only_in_manifest",
       "link_dangling_permission", "capability_ungated", "tenant_without_license", "plan_empty",
     ]);
     for (const k of kinds) expect(KIND_LABELS[k]).toBeTruthy();
