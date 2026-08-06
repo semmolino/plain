@@ -4,9 +4,19 @@
 # Buildpacks und kennt kein Dockerfile — der apt-Buildpack liest stattdessen
 # diese Datei.
 #
-# STACK-HINWEIS: gilt fuer scalingo-22 (Ubuntu 22.04). Auf einem neueren Stack
-# heisst libasound2 moeglicherweise libasound2t64. Schlaegt der Build mit
-# "unable to locate package" fehl, ist das die erste Stelle zum Nachsehen.
+# STACK: Ubuntu "resolute" (26.04) — im Build-Log an den t64-Paketnamen und der
+# Zeile "Get:… resolute/main" erkennbar.
+#
+# Zu den t64-Namen: mit der time64-Umstellung wurden viele Bibliotheken
+# umbenannt. apt loest das selbst auf, SOLANGE es genau einen Anbieter gibt --
+# libatk1.0-0, libatk-bridge2.0-0 und libcups2 landen so automatisch bei ihren
+# t64-Varianten und muessen hier nicht angepasst werden.
+#
+# libasound2 ist die Ausnahme: dort gibt es ZWEI Anbieter (libasound2t64 und
+# liboss4-salsa-asound2). Bei dieser Mehrdeutigkeit verweigert apt die Auswahl
+# und bricht ab mit:
+#     E: Package 'libasound2' has no installation candidate
+# Deshalb steht hier explizit libasound2t64.
 
 libnss3
 libnspr4
@@ -21,7 +31,7 @@ libxdamage1
 libxfixes3
 libxrandr2
 libgbm1
-libasound2
+libasound2t64
 libpango-1.0-0
 libcairo2
 libx11-6
