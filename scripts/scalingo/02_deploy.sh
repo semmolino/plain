@@ -72,6 +72,56 @@ else
   scalingo --app "$APP" git-setup
 fi
 
+# ── SSH-Zugang pruefen ──────────────────────────────────────────────────────
+# git push laeuft ueber SSH. Der API-Token authentifiziert nur den CLI, NICHT
+# Git — dafuer muss ein oeffentlicher Schluessel im Scalingo-Konto liegen.
+# Ohne diese Vorpruefung bricht der Push erst nach dem Hostkey-Dialog ab, mit
+# "Permission denied (publickey)", was leicht als Rechteproblem der App
+# missverstanden wird.
+echo "→ Pruefe SSH-Zugang ..."
+SSH_OUT="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -T git@ssh.osc-fr1.scalingo.com 2>&1 || true)"
+if grep -qi "successfully authenticated" <<<"$SSH_OUT"; then
+  echo "    ✓ SSH-Schluessel akzeptiert"
+else
+  cat >&2 <<HINWEIS
+
+FEHLER: SSH-Zugang zu Scalingo funktioniert nicht.
+        Antwort des Servers: $(head -1 <<<"$SSH_OUT")
+
+  git push nutzt SSH. Der API-Token gilt nur fuer den CLI, nicht fuer Git.
+  Im Scalingo-Konto muss ein oeffentlicher Schluessel hinterlegt sein.
+
+  1. Schluessel erzeugen (falls noch keiner da ist):
+         ls ~/.ssh/*.pub                    # vorhanden?
+         ssh-keygen -t ed25519 -C "scalingo"
+     (dreimal Enter uebernimmt die Vorgaben; Passphrase optional)
+
+  2. Oeffentlichen Teil anzeigen und vollstaendig kopieren:
+         cat ~/.ssh/id_ed25519.pub
+     Beginnt mit "ssh-ed25519".
+
+  3. Im Dashboard hinterlegen:
+         https://dashboard.scalingo.com/account/keys
+     "Add a new key", Namen vergeben, Inhalt einfuegen.
+
+  4. Pruefen:
+         ssh -T git@ssh.osc-fr1.scalingo.com
+     Erwartet: "You've successfully authenticated on Scalingo,
+                but there is no shell access"
+
+  5. Dieses Skript erneut starten.
+
+  ALTERNATIVE ohne SSH — Bereitstellung ueber GitHub:
+     Der Code liegt ohnehin auf GitHub. Dann entfaellt der Push nach
+     Scalingo ganz:
+         scalingo integrations-add github
+         scalingo --app $APP integration-link-create \\
+           --auto-deploy --branch main https://github.com/semmolino/plain
+HINWEIS
+  exit 1
+fi
+
 # ── Push = Build = Deploy ───────────────────────────────────────────────────
 echo ""
 echo "→ Pushe nach Scalingo. Der Build laeuft im Anschluss automatisch."
