@@ -116,9 +116,15 @@ fi
 
 # ── Umgebungsvariablen ──────────────────────────────────────────────────────
 # PORT wird von Scalingo selbst gesetzt und darf hier nicht auftauchen.
+#
+# MSYS_NO_PATHCONV=1 ist unter Git-Bash zwingend: MSYS2 wandelt jeden Wert, der
+# wie ein absoluter Unix-Pfad aussieht, in einen Windows-Pfad um, sobald er an
+# ein natives Programm (scalingo.exe) geht. Aus /app/.playwright wuerde sonst
+# C:/Program Files/Git/app/.playwright — auf dem Linux-Container wertlos, und
+# der Fehler faellt erst auf, wenn die PDF-Erzeugung Chromium nicht findet.
 echo ""
 echo "→ Setze Umgebungsvariablen ..."
-scalingo --app "$APP" env-set \
+MSYS_NO_PATHCONV=1 scalingo --app "$APP" env-set \
   JWT_SECRET="$JWT_SECRET" \
   SUPABASE_URL="$SUPABASE_URL" \
   SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
@@ -128,6 +134,19 @@ scalingo --app "$APP" env-set \
 
 echo "✓ Gesetzt: JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY,"
 echo "           NODE_ENV=production, PLAYWRIGHT_BROWSERS_PATH=/app/.playwright"
+
+# Zurueckgelesen pruefen — verlassen wir uns nicht darauf, dass es geklappt hat.
+echo ""
+echo "→ Pruefe zurueckgelesene Werte ..."
+PW_ACTUAL="$(scalingo --app "$APP" env 2>/dev/null | grep -E '^PLAYWRIGHT_BROWSERS_PATH=' | cut -d= -f2- | tr -d '\r')"
+if [[ "$PW_ACTUAL" == "/app/.playwright" ]]; then
+  echo "    ✓ PLAYWRIGHT_BROWSERS_PATH=/app/.playwright"
+else
+  echo "    ✗ PLAYWRIGHT_BROWSERS_PATH ist '$PW_ACTUAL' statt '/app/.playwright'" >&2
+  echo "      Vermutlich hat MSYS2 den Pfad umgeschrieben. Korrigieren mit:" >&2
+  echo "        MSYS_NO_PATHCONV=1 scalingo --app $APP env-set PLAYWRIGHT_BROWSERS_PATH=/app/.playwright" >&2
+  exit 1
+fi
 
 echo ""
 echo "  Gesetzte Variablen (Werte gekuerzt):"

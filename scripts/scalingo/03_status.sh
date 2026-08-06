@@ -43,6 +43,16 @@ for v in JWT_SECRET SUPABASE_URL SUPABASE_SERVICE_KEY NODE_ENV PLAYWRIGHT_BROWSE
   fi
 done
 
+# Der Wert selbst, nicht nur die Existenz: unter Git-Bash schreibt MSYS2 den
+# Pfad in einen Windows-Pfad um, wenn MSYS_NO_PATHCONV=1 fehlt. Die Variable
+# ist dann gesetzt, aber auf dem Linux-Container wertlos.
+PW_ACTUAL="$(grep -E '^PLAYWRIGHT_BROWSERS_PATH=' <<<"$ENV_DUMP" | cut -d= -f2- | tr -d '\r')"
+if [[ -n "$PW_ACTUAL" && "$PW_ACTUAL" != "/app/.playwright" ]]; then
+  echo "  ✗ PLAYWRIGHT_BROWSERS_PATH ist '$PW_ACTUAL' — erwartet '/app/.playwright'"
+  echo "    Korrigieren mit:"
+  echo "      MSYS_NO_PATHCONV=1 scalingo --app $APP env-set PLAYWRIGHT_BROWSERS_PATH=/app/.playwright"
+fi
+
 # ── Erreichbarkeit ──────────────────────────────────────────────────────────
 URL="$(scalingo --app "$APP" apps-info 2>/dev/null | grep -oE 'https://[^ ]+scalingo\.io' | head -1)"
 if [[ -n "$URL" ]]; then
