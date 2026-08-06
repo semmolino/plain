@@ -28,6 +28,30 @@ function pwdFingerprint(passwordHashOrNull) {
 }
 
 /**
+ * Neutralisiert LIKE-Platzhalter in einem Wert, der als ilike-Muster verwendet
+ * wird. Ohne das ist "%" (bzw. "*" in PostgREST) ein Wildcard: eine Eingabe wie
+ * "admin@%" wuerde einen fremden Account matchen.
+ *
+ * "_" ist in E-Mail-Adressen legitim (vorname_nachname@...) und muss deshalb
+ * escaped statt verworfen werden, damit es weiterhin literal matcht.
+ */
+function likeEscape(value) {
+  return String(value).replace(/([\\%_*])/g, "\\$1");
+}
+
+/**
+ * Exakter, case-insensitiver Vergleich zweier E-Mail-Adressen.
+ *
+ * Zweite Verteidigungslinie hinter likeEscape(): selbst wenn das Escaping in
+ * einer kuenftigen PostgREST-Version anders greift, kann ein Wildcard-Treffer
+ * hier nicht durchrutschen. MAIL wird ungeeinheitlich gespeichert (keine
+ * Normalisierung beim Schreiben), daher case-insensitiv statt ===.
+ */
+function mailMatches(storedMail, inputMail) {
+  return String(storedMail || "").trim().toLowerCase() === String(inputMail || "").trim().toLowerCase();
+}
+
+/**
  * Legt fuer einen NEUEN Tenant die Standard-Rollen an (spiegelt Migration 0062)
  * und weist dem Erst-User die Administrator-Rolle zu.
  *
@@ -154,24 +178,33 @@ module.exports = (supabase) => {
     const { data: employee, error: empErr } = await supabase
       .from("EMPLOYEE")
       .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, PASSWORD, TENANT_ID, MAIL, ACTIVE, DASHBOARD_ROLE")
-      .ilike("MAIL", email.trim())
+      .ilike("MAIL", likeEscape(email.trim()))
       .maybeSingle();
 
-    if (empErr) return res.status(500).json({ error: "Fehler beim Laden des Benutzers." });
-    if (!employee) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
+    // Lookup-Fehler NICHT als 500 durchreichen: maybeSingle() liefert bei
+    // mehreren Treffern einen Fehler, der Statuscode waere sonst ein Orakel
+    // ("mehrere Accounts passen" vs. "keiner passt").
+    if (empErr || !employee || !mailMatches(employee.MAIL, email)) {
+      return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
+    }
 
     if (employee.ACTIVE === 2) {
       return res.status(403).json({ error: "Dieser Benutzer ist inaktiv. Bitte Administrator kontaktieren." });
     }
 
+    // Ohne gesetztes Passwort ist KEINE Anmeldung moeglich. Frueher wurde die
+    // Pruefung hier uebersprungen -- damit war jeder ueber POST /mitarbeiter
+    // oder den CSV-Import angelegte Account mit beliebigem Passwort offen.
+    // Erstzugang laeuft ueber /auth/reset-request.
     const stored = employee.PASSWORD || null;
-    if (stored) {
-      const valid = stored.startsWith("$2")
-        ? await bcrypt.compare(password || "", stored)
-        : stored === (password || "");
-      if (!valid) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
+    if (!stored) {
+      return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
     }
-    // If stored is null (no password set), login is allowed — employee should set a password after first login.
+
+    const valid = stored.startsWith("$2")
+      ? await bcrypt.compare(password || "", stored)
+      : stored === (password || "");
+    if (!valid) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
 
     const tenantId = employee.TENANT_ID;
     if (!tenantId) {
@@ -294,10 +327,12 @@ module.exports = (supabase) => {
     const { data: employee } = await supabase
       .from("EMPLOYEE")
       .select("ID, MAIL, PASSWORD")
-      .ilike("MAIL", email.trim())
+      .ilike("MAIL", likeEscape(email.trim()))
       .maybeSingle();
 
-    if (!employee) {
+    // Wie beim Login: exakter Abgleich als zweite Schranke gegen Wildcard-
+    // Treffer. Antwort bleibt in jedem Fall 200 (keine Existenz-Preisgabe).
+    if (!employee || !mailMatches(employee.MAIL, email)) {
       return res.json({ success: true });
     }
 
