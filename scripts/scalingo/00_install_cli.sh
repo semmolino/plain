@@ -63,7 +63,16 @@ NAECHSTER SCHRITT — einmalig anmelden.
   Konto ueber GitHub angelegt (kein Passwort)?  -> API-Token verwenden:
       1. https://dashboard.scalingo.com/account/tokens
       2. "Create new token", Token kopieren (wird nur EINMAL angezeigt)
-      3. read -rsp "API-Token: " TOKEN && echo && scalingo login --api-token "$TOKEN" && unset TOKEN
+      3. Diese Zeile UNVERAENDERT ausfuehren (den Token NICHT hineinschreiben):
+
+             read -rsp 'API-Token: ' TOKEN
+
+         Danach einfuegen mit Rechtsklick -> Paste oder Shift+Einfg
+         (Strg+V geht in MINGW64 nicht). Es erscheint nichts — richtig so.
+         Dann Enter.
+
+      4. echo "${#TOKEN} Zeichen"        # muss ~50 sein, nicht 0
+         scalingo login --api-token "$TOKEN" && unset TOKEN
 
   Konto mit Passwort oder hinterlegtem SSH-Schluessel?
       scalingo login

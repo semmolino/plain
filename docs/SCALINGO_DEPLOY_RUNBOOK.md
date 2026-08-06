@@ -68,15 +68,32 @@ existiert. Stattdessen einen API-Token verwenden:
 1. https://dashboard.scalingo.com/account/tokens öffnen
 2. „Create new token", Namen vergeben, erzeugen
 3. Token kopieren — er wird **nur einmal** angezeigt
-4. Anmelden:
+4. Diese Zeile **unverändert** ausführen — den Token *nicht* hineinschreiben:
 
 ```bash
-read -rsp "API-Token: " TOKEN && echo && scalingo login --api-token "$TOKEN" && unset TOKEN
+read -rsp 'API-Token: ' TOKEN
+```
+
+5. Der Cursor wartet nun hinter `API-Token:`. Token einfügen mit **Rechtsklick →
+   Paste** oder **Shift+Einfg** (Strg+V funktioniert in MINGW64 nicht). Es
+   erscheint nichts — die Eingabe ist absichtlich unsichtbar. Dann Enter.
+
+6. Kontrollieren und anmelden:
+
+```bash
+echo "${#TOKEN} Zeichen"          # muss ~50 sein, nicht 0
+scalingo login --api-token "$TOKEN" && unset TOKEN
 scalingo whoami
 ```
 
+> **Häufiger Fehler:** Den Token in die `read`-Zeile schreiben
+> (`read -rsp "API-Token: tk-us-…" TOKEN`). Alles zwischen den Anführungszeichen
+> ist nur der *Anzeigetext* — der Token landet dadurch unverschlüsselt in
+> `~/.bash_history` und `$TOKEN` bleibt leer. Die Anmeldung scheitert dann mit
+> `user unauthenticated`, und der Token ist zu widerrufen.
+
 `read -rsp` hält den Token aus der Terminalausgabe und aus `~/.bash_history`
-heraus — ein direktes `scalingo login --api-token abc123…` täte beides.
+heraus — ein direktes `scalingo login --api-token tk-us-…` täte beides.
 
 Alternativen: ein Passwort im Profil nachtragen, oder einen SSH-Schlüssel
 hinterlegen; dann funktioniert `scalingo login` direkt.

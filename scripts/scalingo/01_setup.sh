@@ -50,12 +50,24 @@ FEHLER: Nicht bei Scalingo angemeldet.
     1. https://dashboard.scalingo.com/account/tokens oeffnen
     2. "Create new token", Namen vergeben, erzeugen
     3. Token kopieren (wird nur EINMAL angezeigt)
-    4. Hier einfuegen:
+    4. Diese Zeile ausfuehren — UNVERAENDERT, ohne den Token hineinzuschreiben:
 
-       read -rsp "API-Token: " TOKEN && echo && scalingo login --api-token "$TOKEN" && unset TOKEN
+           read -rsp 'API-Token: ' TOKEN
 
-  Der Umweg ueber read -rsp haelt den Token aus Terminalausgabe und
-  ~/.bash_history heraus.
+       Der Cursor wartet dann. JETZT den Token einfuegen:
+         - Rechtsklick ins Fenster -> Paste,  oder  Shift+Einfg
+         - Strg+V funktioniert in MINGW64 NICHT
+         - Es erscheint nichts — die Eingabe ist absichtlich unsichtbar
+       Dann Enter.
+
+    5. Kontrolle und Anmeldung:
+
+           echo "${#TOKEN} Zeichen"        # muss ~50 sein, nicht 0
+           scalingo login --api-token "$TOKEN" && unset TOKEN
+
+  WICHTIG: Den Token NICHT in die read-Zeile schreiben. Alles zwischen den
+  Anführungszeichen ist nur der Anzeigetext — der Token landete sonst in
+  ~/.bash_history und waere zu widerrufen.
 
   Alternativen: Passwort im Profil nachtragen, oder einen SSH-Schluessel
   hinterlegen — dann funktioniert auch "scalingo login" direkt.
