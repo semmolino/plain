@@ -56,12 +56,21 @@ export PATH="$BIN_DIR:$PATH"
 
 echo ""
 echo "✓ Installiert: $("$BIN_DIR/scalingo.exe" --version)"
-echo ""
-echo "NAECHSTER SCHRITT — einmalig anmelden:"
-echo "    scalingo login"
-echo ""
-echo "  Oeffnet den Browser. Danach weiter mit:"
-echo "    bash scripts/scalingo/01_setup.sh"
+cat <<'HINWEIS'
+
+NAECHSTER SCHRITT — einmalig anmelden.
+
+  Konto ueber GitHub angelegt (kein Passwort)?  -> API-Token verwenden:
+      1. https://dashboard.scalingo.com/account/tokens
+      2. "Create new token", Token kopieren (wird nur EINMAL angezeigt)
+      3. read -rsp "API-Token: " TOKEN && echo && scalingo login --api-token "$TOKEN" && unset TOKEN
+
+  Konto mit Passwort oder hinterlegtem SSH-Schluessel?
+      scalingo login
+
+  Pruefen:   scalingo whoami
+  Danach:    bash scripts/scalingo/01_setup.sh
+HINWEIS
 echo ""
 echo "  HINWEIS: In einem NEUEN Git-Bash-Fenster ist der PATH aktiv."
 echo "  Im aktuellen Fenster vorher einmal:  export PATH=\"\$HOME/bin:\$PATH\""

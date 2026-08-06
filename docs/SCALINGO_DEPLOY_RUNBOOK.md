@@ -58,8 +58,28 @@ Scalingo empfiehlt für Windows ausdrücklich Git-Bash — das hast du bereits.
 ```bash
 # https://cli.scalingo.com/ herunterladen, scalingo.exe in den PATH legen
 scalingo --version
-scalingo login
 ```
+
+**Anmeldung bei einem GitHub-Konto.** Wurde das Scalingo-Konto über GitHub
+angelegt, schlägt `scalingo login` fehl: es probiert zuerst SSH (scheitert ohne
+hinterlegten Schlüssel) und fragt dann nach einem Passwort, das bei OAuth nicht
+existiert. Stattdessen einen API-Token verwenden:
+
+1. https://dashboard.scalingo.com/account/tokens öffnen
+2. „Create new token", Namen vergeben, erzeugen
+3. Token kopieren — er wird **nur einmal** angezeigt
+4. Anmelden:
+
+```bash
+read -rsp "API-Token: " TOKEN && echo && scalingo login --api-token "$TOKEN" && unset TOKEN
+scalingo whoami
+```
+
+`read -rsp` hält den Token aus der Terminalausgabe und aus `~/.bash_history`
+heraus — ein direktes `scalingo login --api-token abc123…` täte beides.
+
+Alternativen: ein Passwort im Profil nachtragen, oder einen SSH-Schlüssel
+hinterlegen; dann funktioniert `scalingo login` direkt.
 
 Firewall muss erlauben: `auth.scalingo.com:443`, `api.<region>.scalingo.com:443`,
 `ssh.<region>.scalingo.com:22`, `one-off.<region>.scalingo.com:5000`.

@@ -39,8 +39,27 @@ if ! command -v scalingo >/dev/null 2>&1; then
 fi
 
 if ! scalingo whoami >/dev/null 2>&1; then
-  echo "FEHLER: Nicht angemeldet." >&2
-  echo "  Erst ausfuehren: scalingo login" >&2
+  cat >&2 <<'HINWEIS'
+FEHLER: Nicht bei Scalingo angemeldet.
+
+  Bei Konten, die ueber GitHub angelegt wurden, funktioniert ein einfaches
+  "scalingo login" NICHT: es versucht zuerst SSH (scheitert ohne hinterlegten
+  Schluessel) und fragt dann nach einem Passwort, das es bei OAuth nicht gibt.
+
+  Loesung — API-Token:
+    1. https://dashboard.scalingo.com/account/tokens oeffnen
+    2. "Create new token", Namen vergeben, erzeugen
+    3. Token kopieren (wird nur EINMAL angezeigt)
+    4. Hier einfuegen:
+
+       read -rsp "API-Token: " TOKEN && echo && scalingo login --api-token "$TOKEN" && unset TOKEN
+
+  Der Umweg ueber read -rsp haelt den Token aus Terminalausgabe und
+  ~/.bash_history heraus.
+
+  Alternativen: Passwort im Profil nachtragen, oder einen SSH-Schluessel
+  hinterlegen — dann funktioniert auch "scalingo login" direkt.
+HINWEIS
   exit 1
 fi
 echo "✓ Angemeldet als: $(scalingo whoami)"
