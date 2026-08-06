@@ -35,7 +35,8 @@ scalingo --app "$APP" env 2>/dev/null | sed -E 's/=(.{0,6}).*/=\1…/' | sed 's/
 echo ""
 echo "── Pflichtvariablen ────────────────────────────────────────"
 ENV_DUMP="$(scalingo --app "$APP" env 2>/dev/null || true)"
-for v in JWT_SECRET SUPABASE_URL SUPABASE_SERVICE_KEY NODE_ENV PLAYWRIGHT_BROWSERS_PATH; do
+for v in JWT_SECRET SUPABASE_URL SUPABASE_SERVICE_KEY NODE_ENV \
+         PLAYWRIGHT_BROWSERS_PATH PLAYWRIGHT_HOST_PLATFORM_OVERRIDE; do
   if grep -q "^$v=" <<<"$ENV_DUMP"; then
     echo "  ✓ $v"
   else
@@ -93,6 +94,11 @@ if grep -qiE "Executable doesn't exist|browserType.launch|chromium.*not found" <
   echo "    2) Fehlende Bibliothek suchen:"
   echo "       scalingo --app $APP run bash"
   echo "       ldd /app/.playwright/chromium-*/chrome-linux/chrome | grep 'not found'"
+fi
+if grep -qi "does not support chromium on ubuntu" <<<"$LOGS"; then
+  echo "  ✗ Playwright kennt den Stack nicht (Scalingo laeuft auf Ubuntu 26.04,"
+  echo "    Playwright 1.57 unterstuetzt nur bis 24.04). Beheben mit:"
+  echo "      scalingo --app $APP env-set PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64"
 fi
 if grep -qi "JWT_SECRET environment variable is required" <<<"$LOGS"; then
   echo "  ✗ JWT_SECRET fehlt — 01_setup.sh erneut ausfuehren."

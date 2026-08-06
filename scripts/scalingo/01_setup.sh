@@ -124,16 +124,24 @@ fi
 # der Fehler faellt erst auf, wenn die PDF-Erzeugung Chromium nicht findet.
 echo ""
 echo "→ Setze Umgebungsvariablen ..."
+# PLAYWRIGHT_HOST_PLATFORM_OVERRIDE: Scalingos Stack ist Ubuntu 26.04, Playwright
+# 1.57 kennt aber nur bis 24.04 und bricht sonst ab mit
+#     ERROR: Playwright does not support chromium on ubuntu26.04-x64
+# Der Override laesst es die 24.04-Variante laden. Die laeuft auf 26.04, weil
+# die benoetigten Bibliotheken ueber das Aptfile installiert sind und aeltere
+# glibc-Bindungen auf neueren Systemen weiterhin funktionieren.
 MSYS_NO_PATHCONV=1 scalingo --app "$APP" env-set \
   JWT_SECRET="$JWT_SECRET" \
   SUPABASE_URL="$SUPABASE_URL" \
   SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
   NODE_ENV="production" \
   PLAYWRIGHT_BROWSERS_PATH="/app/.playwright" \
+  PLAYWRIGHT_HOST_PLATFORM_OVERRIDE="ubuntu24.04-x64" \
   >/dev/null
 
 echo "✓ Gesetzt: JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY,"
-echo "           NODE_ENV=production, PLAYWRIGHT_BROWSERS_PATH=/app/.playwright"
+echo "           NODE_ENV=production, PLAYWRIGHT_BROWSERS_PATH=/app/.playwright,"
+echo "           PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64"
 
 # Zurueckgelesen pruefen — verlassen wir uns nicht darauf, dass es geklappt hat.
 echo ""
