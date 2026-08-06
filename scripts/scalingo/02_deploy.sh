@@ -130,9 +130,17 @@ echo ""
 git push scalingo "$BRANCH:main"
 
 # ── Container dimensionieren ────────────────────────────────────────────────
+# Steht die Groesse schon richtig, antwortet die API mit
+# "400 Bad Request -> no change in containers formation". Das ist kein Fehler,
+# darf den Ablauf also nicht abbrechen (das Skript laeuft unter set -e).
 echo ""
 echo "→ Setze Containergroesse auf $SIZE ..."
-scalingo --app "$APP" scale "web:1:$SIZE"
+SCALE_OUT="$(scalingo --app "$APP" scale "web:1:$SIZE" 2>&1 || true)"
+if grep -qi "no change in containers formation" <<<"$SCALE_OUT"; then
+  echo "    ✓ bereits auf $SIZE"
+else
+  echo "$SCALE_OUT" | sed 's/^/    /'
+fi
 
 # ── URL ermitteln und eintragen ─────────────────────────────────────────────
 URL="$(scalingo --app "$APP" apps-info 2>/dev/null | grep -oE 'https://[^ ]+scalingo\.io' | head -1)"
