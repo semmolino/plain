@@ -2,3 +2,10 @@
 # der Shebang (\r am Zeilenende -> "bad interpreter").
 .githooks/** text eol=lf
 *.sh text eol=lf
+
+# Buildpack-Dateien fuer Scalingo. Werden auf einem Linux-Container gelesen;
+# mit CRLF wird das Startkommando im Procfile nicht erkannt und Paketnamen im
+# Aptfile bekommen ein \r angehaengt ("unable to locate package libnss3\r").
+Procfile text eol=lf
+Aptfile text eol=lf
+.buildpacks text eol=lf
