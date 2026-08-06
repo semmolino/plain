@@ -1,0 +1,13 @@
+{
+  "name": "plain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "plan&simple — Einstiegspunkt fuer die Buildpack-Erkennung (Scalingo). Railway baut weiterhin ueber nixpacks.toml bzw. Dockerfile und nutzt diese Datei nicht.",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "scalingo-postbuild": "npm ci --prefix frontend-react && npm ci --prefix backend && cd backend && npx playwright install chromium && cd .. && npm --prefix frontend-react run build",
+    "start": "node backend/server.js"
+  }
+}

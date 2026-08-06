@@ -212,6 +212,17 @@ app.get(/^(?!\/api\/).*/, (req, res) => {
 
 app.listen(port, () => {
   console.log(`✅ Backend läuft auf Port ${port}`);
+
+  // Die periodischen Checker verschicken E-Mails (Mahnungen, Faelligkeits- und
+  // Leistungsstand-Erinnerungen) an echte Empfaenger. Zeigen ZWEI Instanzen auf
+  // dieselbe Datenbank -- etwa waehrend einer Migration oder beim Testen eines
+  // zweiten Hosters -- laeuft jeder Versand doppelt.
+  // Auf solchen Nebeninstanzen deshalb DISABLE_BACKGROUND_JOBS=true setzen.
+  if (process.env.DISABLE_BACKGROUND_JOBS === "true") {
+    console.log("⏸  Hintergrund-Checker deaktiviert (DISABLE_BACKGROUND_JOBS=true)");
+    return;
+  }
+
   // Daily/periodic checkers
   try { startDueDateChecker(supabase); }              catch (e) { console.error("startDueDateChecker:", e?.message || e); }
   try { startMonatsabschlussChecker(supabase); }      catch (e) { console.error("startMonatsabschlussChecker:", e?.message || e); }
