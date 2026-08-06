@@ -48,10 +48,13 @@ done
 # Pfad in einen Windows-Pfad um, wenn MSYS_NO_PATHCONV=1 fehlt. Die Variable
 # ist dann gesetzt, aber auf dem Linux-Container wertlos.
 PW_ACTUAL="$(grep -E '^PLAYWRIGHT_BROWSERS_PATH=' <<<"$ENV_DUMP" | cut -d= -f2- | tr -d '\r')"
-if [[ -n "$PW_ACTUAL" && "$PW_ACTUAL" != "/app/.playwright" ]]; then
-  echo "  ✗ PLAYWRIGHT_BROWSERS_PATH ist '$PW_ACTUAL' — erwartet '/app/.playwright'"
+if [[ -n "$PW_ACTUAL" && "$PW_ACTUAL" != "0" ]]; then
+  echo "  ✗ PLAYWRIGHT_BROWSERS_PATH ist '$PW_ACTUAL' — erwartet '0'"
+  echo "    ('0' legt Chromium in node_modules ab. Ein absoluter Pfad wie"
+  echo "     /app/.playwright liegt beim Build ausserhalb von /build/<uuid>/"
+  echo "     und ist nach dem Deployment verschwunden.)"
   echo "    Korrigieren mit:"
-  echo "      MSYS_NO_PATHCONV=1 scalingo --app $APP env-set PLAYWRIGHT_BROWSERS_PATH=/app/.playwright"
+  echo "      scalingo --app $APP env-set PLAYWRIGHT_BROWSERS_PATH=0"
 fi
 
 # ── Erreichbarkeit ──────────────────────────────────────────────────────────
@@ -93,7 +96,7 @@ if grep -qiE "Executable doesn't exist|browserType.launch|chromium.*not found" <
   echo "    1) PLAYWRIGHT_BROWSERS_PATH gesetzt? (siehe oben)"
   echo "    2) Fehlende Bibliothek suchen:"
   echo "       scalingo --app $APP run bash"
-  echo "       ldd /app/.playwright/chromium-*/chrome-linux/chrome | grep 'not found'"
+  echo "       find /app -name 'chrome' -type f 2>/dev/null | head -1 | xargs ldd | grep 'not found'"
 fi
 if grep -qi "does not support chromium on ubuntu" <<<"$LOGS"; then
   echo "  ✗ Playwright kennt den Stack nicht (Scalingo laeuft auf Ubuntu 26.04,"

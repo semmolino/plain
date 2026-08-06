@@ -124,35 +124,62 @@ fi
 # der Fehler faellt erst auf, wenn die PDF-Erzeugung Chromium nicht findet.
 echo ""
 echo "→ Setze Umgebungsvariablen ..."
-# PLAYWRIGHT_HOST_PLATFORM_OVERRIDE: Scalingos Stack ist Ubuntu 26.04, Playwright
-# 1.57 kennt aber nur bis 24.04 und bricht sonst ab mit
-#     ERROR: Playwright does not support chromium on ubuntu26.04-x64
-# Der Override laesst es die 24.04-Variante laden. Die laeuft auf 26.04, weil
-# die benoetigten Bibliotheken ueber das Aptfile installiert sind und aeltere
-# glibc-Bindungen auf neueren Systemen weiterhin funktionieren.
+# PLAYWRIGHT_BROWSERS_PATH=0 -> Chromium landet in node_modules statt in einem
+#   festen Pfad. Wichtig, weil Scalingo in /build/<uuid>/ baut und den Inhalt
+#   erst danach nach /app verschiebt: ein absoluter Pfad wie /app/.playwright
+#   laege ausserhalb des Build-Verzeichnisses und waere nach dem Deployment weg.
+#   Mit 0 wandert der Browser als Teil von node_modules mit und wird zur
+#   Laufzeit am selben Ort gefunden. playwright-chromium steht in
+#   "dependencies", ueberlebt das Pruning der devDependencies also.
+#
+# PLAYWRIGHT_HOST_PLATFORM_OVERRIDE -> Scalingos Stack ist Ubuntu 26.04,
+#   Playwright 1.57 kennt aber nur bis 24.04 und bricht sonst ab mit
+#       ERROR: Playwright does not support chromium on ubuntu26.04-x64
+#   Der Override laedt die 24.04-Variante; sie laeuft auf 26.04, weil die
+#   noetigen Bibliotheken ueber das Aptfile da sind und aeltere glibc-Bindungen
+#   auf neueren Systemen weiterhin funktionieren.
+#
+# Beide stehen zusaetzlich in scalingo-postbuild (package.json) -- dort greifen
+# sie waehrend des Builds unabhaengig davon, ob die Plattform App-Variablen in
+# die Build-Phase durchreicht. Hier gesetzt gelten sie zur LAUFZEIT.
 MSYS_NO_PATHCONV=1 scalingo --app "$APP" env-set \
   JWT_SECRET="$JWT_SECRET" \
   SUPABASE_URL="$SUPABASE_URL" \
   SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
   NODE_ENV="production" \
-  PLAYWRIGHT_BROWSERS_PATH="/app/.playwright" \
+  PLAYWRIGHT_BROWSERS_PATH="0" \
   PLAYWRIGHT_HOST_PLATFORM_OVERRIDE="ubuntu24.04-x64" \
   >/dev/null
 
 echo "✓ Gesetzt: JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY,"
-echo "           NODE_ENV=production, PLAYWRIGHT_BROWSERS_PATH=/app/.playwright,"
+echo "           NODE_ENV=production, PLAYWRIGHT_BROWSERS_PATH=0,"
 echo "           PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64"
 
 # Zurueckgelesen pruefen — verlassen wir uns nicht darauf, dass es geklappt hat.
 echo ""
 echo "→ Pruefe zurueckgelesene Werte ..."
-PW_ACTUAL="$(scalingo --app "$APP" env 2>/dev/null | grep -E '^PLAYWRIGHT_BROWSERS_PATH=' | cut -d= -f2- | tr -d '\r')"
-if [[ "$PW_ACTUAL" == "/app/.playwright" ]]; then
-  echo "    ✓ PLAYWRIGHT_BROWSERS_PATH=/app/.playwright"
-else
-  echo "    ✗ PLAYWRIGHT_BROWSERS_PATH ist '$PW_ACTUAL' statt '/app/.playwright'" >&2
-  echo "      Vermutlich hat MSYS2 den Pfad umgeschrieben. Korrigieren mit:" >&2
-  echo "        MSYS_NO_PATHCONV=1 scalingo --app $APP env-set PLAYWRIGHT_BROWSERS_PATH=/app/.playwright" >&2
+ENV_DUMP="$(scalingo --app "$APP" env 2>/dev/null)"
+CHECK_FAILED=0
+check_env() {
+  local key="$1" want="$2"
+  local got; got="$(grep -E "^$key=" <<<"$ENV_DUMP" | cut -d= -f2- | tr -d '\r')"
+  if [[ "$got" == "$want" ]]; then
+    echo "    ✓ $key=$want"
+  else
+    echo "    ✗ $key ist '$got' statt '$want'" >&2
+    CHECK_FAILED=1
+  fi
+}
+check_env PLAYWRIGHT_BROWSERS_PATH          "0"
+check_env PLAYWRIGHT_HOST_PLATFORM_OVERRIDE "ubuntu24.04-x64"
+check_env NODE_ENV                          "production"
+
+if [[ $CHECK_FAILED -eq 1 ]]; then
+  echo "" >&2
+  echo "      Manuell korrigieren mit:" >&2
+  echo "        MSYS_NO_PATHCONV=1 scalingo --app $APP env-set \\" >&2
+  echo "          PLAYWRIGHT_BROWSERS_PATH=0 \\" >&2
+  echo "          PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64" >&2
   exit 1
 fi
 
