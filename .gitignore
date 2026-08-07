@@ -32,3 +32,6 @@ frontend-react/test-results/
 # Temp files
 brand.md
 frontend-react/vite.config.ts.timestamp-*.mjs
+
+# Capacitor-Build-Artefakte (lokal erzeugt, nicht versioniert)
+frontend-react/android/
