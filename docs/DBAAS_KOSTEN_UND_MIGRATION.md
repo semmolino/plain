@@ -1,6 +1,13 @@
 # Datenbank-Umzug zu einem deutschen Anbieter — Kosten und Ablauf
 
-Stand: 2026-08-07 · Entscheidungsgrundlage, noch keine Festlegung
+Stand: 2026-08-07 · Anbieter in engerer Wahl: **plusserver** · noch keine Festlegung
+
+> **Kurzfassung zu plusserver:** Die Kombination trägt. Datenbank, PostgREST und
+> Anwendung können alle in Köln oder Hamburg laufen — damit löst sich der
+> Latenzpunkt, der bei getrennten Standorten (App in Paris, Datenbank in
+> Deutschland) das größte technische Problem gewesen wäre. Die Extensions-Frage
+> ist geklärt: euer Schema braucht keine. Offen bleiben die Preise oberhalb der
+> Einstiegsstufe und die Betriebsform für PostgREST. Details in **Abschnitt 8**.
 
 > **Zu den Preisen:** Die Zahlen unten stammen aus einem Anbietervergleich, nicht aus
 > den Preislisten der Anbieter selbst. Sie taugen zur Größenordnung und für die
@@ -317,15 +324,131 @@ dem Pentest strukturell.
 
 ## 7. Was vor der Entscheidung zu klären ist
 
-| # | Frage | Warum sie zählt |
+| # | Frage | Stand |
 |---|---|---|
-| 1 | **Souveränität oder DSGVO?** | Bestimmt, ob Ubicloud/Sliplane in Frage kommen und ob Scalingo als EU-Anbieter reicht |
-| 2 | **Wo läuft die Anwendung?** | Muss zur Datenbank passen, sonst Latenz bei jedem Klick |
-| 3 | **Kann der Anbieter PostgREST hosten?** | Sonst zweite Plattform nötig — oder 750 Aufrufstellen umschreiben |
-| 4 | **Hochverfügbarkeit ab wann?** | Verdoppelt bis verdreifacht den Posten |
-| 5 | **Welche Extensions nutzt die DB?** | Inventar Abschnitt 5 — kann den Restore scheitern lassen |
-| 6 | **demo1 mitnehmen?** | 8.888 Zeilen Seed-Daten in der Produktivdatenbank |
+| 1 | **Souveränität oder DSGVO?** | plusserver erfüllt beides — Frage entschärft |
+| 2 | **Wo läuft die Anwendung?** | **offen** — Kernentscheidung, siehe Abschnitt 8 |
+| 3 | **Kann der Anbieter PostgREST hosten?** | ja, über PSKE (Kubernetes) |
+| 4 | **Hochverfügbarkeit ab wann?** | offen, Preis erfragen |
+| 5 | **Welche Extensions nutzt die DB?** | **geklärt: keine** (Abschnitt 8), Restbestätigung über das Inventar |
+| 6 | **demo1 mitnehmen?** | offen — 8.888 Zeilen Seed-Daten |
 
-**Wenn du mir sagst, welchen Anbieter du dir ansiehst,** rechne ich die Szenarien
-mit dessen echter Preisliste durch statt mit Vergleichswerten — und prüfe die
-beiden Punkte, die dort scheitern könnten: Extensions und PostgREST-Hosting.
+---
+
+## 8. plusserver im Detail
+
+### Was bestätigt ist
+
+| | |
+|---|---|
+| Produkt | PostgreSQL as a Service, Managed |
+| Standorte | Köln, Hamburg (eigene deutsche Rechenzentren) |
+| Postgres-Versionen | **15 – 18** |
+| Kleinster Knoten | b2-4 — 2 vCPU, 4 GB RAM |
+| Abrechnung | Pay-as-you-go, keine Mindestlaufzeit |
+| Skalierung | CPU, RAM und Speicher jederzeit änderbar |
+| Redundanz | Cluster/HA, bis zu **drei Read-Replicas**, Multi-AZ konfigurierbar |
+| Backups | täglich automatisch, 7 Tage Standardaufbewahrung |
+| Inklusive | Setup, Patching, Backup, Monitoring, Betrieb |
+
+Preise aus dem Anbietervergleich (**nicht** aus plusservers Preisliste):
+0,11 €/h ≈ **80,52 €/Monat** für b2-4, **14,30 € je 50 GB** Speicher im Monat.
+
+### Der entscheidende Fund: plusserver hat auch Compute
+
+plusserver betreibt die **Kubernetes Engine (PSKE)** — CNCF-zertifiziert, auf
+Basis von SAP Gardener, mit Autoscaling und Hibernation. Workloads laufen in der
+BSI-C5-geprüften *pluscloud open* an vier deutschen Standorten; als Cluster-Regionen
+stehen Köln und zwei Hamburger Standorte zur Wahl.
+
+Das beantwortet die Frage aus Abschnitt 5, die wichtiger war als der Preis:
+
+```
+     bisher geplant                     mit plusserver möglich
+  ┌──────────────────────┐          ┌──────────────────────────┐
+  │ App (Scalingo/Paris) │          │ App        (Köln)        │
+  │        ↕ ~10 ms      │          │ PostgREST  (Köln)        │
+  │ DB  (Deutschland)    │          │ PostgreSQL (Köln)        │
+  └──────────────────────┘          └──────────────────────────┘
+   200 ms Aufschlag je Seite         alles im selben RZ, < 20 ms
+```
+
+Damit ist der gesamte Stack deutsch **und** ko-lokalisiert — die technisch
+sauberste Variante.
+
+### Der Preis dafür ist nicht in Euro
+
+Kubernetes ist betrieblich etwas völlig anderes als Scalingos Buildpack-Modell.
+Was ihr heute mit `git push` erledigt, bedeutet dort: Container-Images bauen,
+Manifeste pflegen, Ingress und TLS konfigurieren, Secrets verwalten, Deployments
+und Rollbacks selbst fahren.
+
+Für ein kleines Team ist das ein realer, dauerhafter Aufwand — er taucht in keiner
+Preisliste auf, kostet aber Zeit, die sonst ins Produkt fließt. Das gehört gegen
+den Vorteil „alles aus einer Hand in Deutschland" abgewogen.
+
+Zwischenlösung, falls das zu viel ist: **Datenbank bei plusserver, Anwendung
+bleibt bei Scalingo.** Dann bleibt der Latenzaufschlag — er ist bei sechs
+Mandanten und moderater Nutzung verkraftbar, wächst aber mit jedem Nutzer.
+
+### Extensions: geprüft, kein Risiko
+
+Der Punkt, der einen Restore am ehesten scheitern lässt, ist geklärt. Prüfung
+gegen alle 119 Migrationen:
+
+| Extension | verwendet? |
+|---|---|
+| `gen_random_uuid`, `uuid-ossp`, `pgcrypto` | nein |
+| `pg_trgm`, `citext`, `unaccent` | nein |
+| `postgis`, `vector`, `hstore`, `ltree` | nein |
+| `CREATE EXTENSION` überhaupt | **kein einziges Vorkommen** |
+
+Euer Schema ist reines Standard-Postgres. UUIDs werden node-seitig über
+`crypto.randomUUID()` erzeugt, nicht in der Datenbank.
+
+> **Ein Rest bleibt:** Das Basis-Schema stammt nicht aus den Migrationen, sondern
+> wurde von Hand in Supabase angelegt. Theoretisch könnte dort eine Spalte einen
+> Extension-Default tragen, den die Migrationen nicht zeigen. Abschnitt 5 des
+> Inventar-Skripts beantwortet das endgültig — das ist ohnehin der erste Schritt.
+
+### Was du im Angebotsgespräch klären solltest
+
+Nach Wichtigkeit sortiert:
+
+1. **Preisliste oberhalb b2-4.** Für die Szenarien B–D brauche ich die Stufen mit
+   8, 16, 32 und 64 GB RAM. Öffentlich ist nur der Einstieg dokumentiert.
+2. **Was kostet Hochverfügbarkeit?** Faktor 2 oder Faktor 3 gegenüber einem
+   einzelnen Knoten — das entscheidet Szenario B mit.
+3. **Verbindung von außen.** Erreichbar über einen öffentlichen Endpunkt mit TLS,
+   oder nur aus dem eigenen Netz? Bestimmt, ob Anwendung und Datenbank zwingend
+   bei plusserver zusammenliegen müssen.
+4. **Extensions-Liste.** Auch wenn ihr aktuell keine braucht — für später
+   relevant, etwa `pg_trgm` für bessere Volltextsuche.
+5. **Point-in-Time-Recovery.** Dokumentiert sind tägliche Backups mit 7 Tagen
+   Aufbewahrung. Für eine Anwendung, die Rechnungen führt, ist PITR die
+   interessantere Größe — gibt es das, und bis zu welcher Granularität?
+6. **Verbindungs-Pooler.** Ist PgBouncer o. ä. inklusive, oder müsst ihr das
+   selbst betreiben? Ab Szenario C nicht mehr optional.
+7. **Kubernetes-Kosten (PSKE).** Falls ihr den gesamten Stack dorthin verlagert:
+   Was kostet der Cluster zusätzlich zur Datenbank?
+8. **Migrationsunterstützung.** Manche Anbieter helfen beim Erstimport — bei
+   einem Dump dieser Größe ist das in einer Stunde erledigt, aber fragen kostet
+   nichts.
+
+### Empfehlung
+
+**Datenbank bei plusserver ist eine gute Wahl.** Deutsche Rechenzentren, aktuelle
+Postgres-Versionen, HA und Read-Replicas verfügbar, pay-as-you-go ohne
+Mindestlaufzeit — und für euren Bedarf reicht auf Jahre die kleinste Stufe.
+
+**Ob auch die Anwendung dorthin sollte, ist die eigentliche Frage** — und sie ist
+keine Kostenfrage, sondern eine Frage eurer Betriebskapazität. Der Scalingo-Test
+hat gerade gezeigt, wie viel Reibung schon ein Plattformwechsel erzeugt;
+Kubernetes ist noch einmal eine andere Größenordnung.
+
+Mein Vorschlag: **erst die Datenbank umziehen, Anwendung vorerst bei Scalingo
+lassen.** Damit ist der Supabase-Ausstieg erledigt (und der kompromittierte
+Service-Key endgültig entwertet), ihr sammelt Erfahrung mit plusserver, und die
+Latenz ist bei der aktuellen Größe unkritisch. Der Umzug der Anwendung bleibt
+danach jederzeit möglich — und ist dann eine Entscheidung mit Betriebserfahrung
+statt auf Verdacht.
