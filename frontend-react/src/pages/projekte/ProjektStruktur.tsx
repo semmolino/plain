@@ -950,7 +950,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               />
                             </td>
                             <td>
-                              <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                              <button className="row-action-btn row-action-btn--danger"
                                 disabled={deleteMut.isPending}
                                 title="Element löschen"
                                 onClick={() => setConfirmState({

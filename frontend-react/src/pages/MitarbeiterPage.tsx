@@ -3105,7 +3105,7 @@ export function MitarbeiterPage() {
                             </button>
                           </Can>
                           <Can permission="employees.delete">
-                            <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDelete(r)} title="Löschen">
+                            <button className="row-action-btn row-action-btn--danger" onClick={() => handleDelete(r)} title="Löschen">
                               <Trash2 size={14} strokeWidth={2} />
                             </button>
                           </Can>

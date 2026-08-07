@@ -135,6 +135,7 @@
   --danger:         #dc2626;
   --danger-strong:  #b91c1c;
   --danger-bg:      #fee2e2;
+  --danger-fg:      #ffffff;   /* Schrift AUF --danger-Flaechen */
   --warning:        #b45309;
   --warning-strong: #92400e;
   --warning-bg:     #fef3c7;
@@ -370,6 +371,7 @@
   --danger:         #f87171;
   --danger-strong:  #fca5a5;
   --danger-bg:      rgba(248,113,113,0.16);
+  --danger-fg:      #1a0d0d;   /* weiss auf dem hellen Rot waere 2.77:1 */
   --warning:        #fbbf24;
   --warning-strong: #fcd34d;
   --warning-bg:     rgba(251,191,36,0.16);
@@ -812,6 +814,60 @@ button:hover { background: var(--hover-bg); }
 
 .btn-elevated { box-shadow: var(--shadow-md); }
 .btn-elevated:hover { box-shadow: var(--shadow-lg); }
+
+/* ── Button-Varianten ────────────────────────────────────────────────────
+   .btn (8 Dateien), .btn-secondary (14), .btn-danger (7), .btn-sm (3) und
+   .link-btn (2) wurden im Code laengst benutzt, waren aber NIE im
+   Stylesheet definiert. Sie fielen auf die globale button-Regel zurueck —
+   mit zwei sichtbaren Folgen:
+     • ein „Sekundaer"-Button sah exakt aus wie jeder andere Button
+     • ConfirmModal nutzt btn-danger als DEFAULT: der Bestaetigen-Knopf im
+       Loeschdialog war optisch nicht von „Abbrechen" zu unterscheiden
+     • .link-btn (Projektspalte der Rechnungsliste) wurde als umrandete
+       Box mit Innenabstand gerendert statt als Textlink und hat die
+       Zeilenhoehe dort fast verdreifacht */
+.btn,
+.btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 38px; padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text);
+  font-size: 13px; font-weight: 600;
+  white-space: nowrap; cursor: pointer;
+}
+.btn:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) { background: var(--hover-bg); }
+.btn:disabled, .btn-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Reiner Farb-Modifier — kombinierbar mit .btn und .btn-small, funktioniert
+   aber auch allein (dann traegt die globale button-Regel die Geometrie). */
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-fg);
+  font-weight: 700;
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger-strong);
+  border-color: var(--danger-strong);
+}
+
+/* .btn-small existiert bereits; .btn-sm wird im Code als zweiter Name
+   benutzt. Gleiche Groesse, damit beide dasselbe bedeuten. */
+.btn-sm {
+  height: 30px; padding: 0 10px;
+  font-size: 12px; border-radius: var(--radius-sm);
+}
+
+/* Textlink in Tabellenzellen — kein Kasten, keine Innenabstaende. */
+.link-btn {
+  display: inline; padding: 0; height: auto;
+  border: none; background: none; box-shadow: none;
+  color: var(--accent); font-weight: 600; font-size: inherit;
+  text-align: left; cursor: pointer;
+}
+.link-btn:hover { background: none; text-decoration: underline; }
 
 /* ── Fokus-Sichtbarkeit (WCAG 2.4.7 / 2.4.11 / 2.4.13) ───────────────────
    Vorher gab es 3 :focus-visible-Regeln bei 633 Buttons, und mehrere
@@ -1326,19 +1382,52 @@ input::placeholder { color: var(--text-4); }
 }
 
 /* ── Tabs ────────────────────────────────────────────────────────────────── */
-.tabs { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; }
-.tab-btn {
-  padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 700;
-  border: 1.5px solid var(--border); background: var(--surface); color: var(--text-3);
-  cursor: pointer; box-shadow: none; transition: all 0.12s;
+/* Modul-Tabs. Vorher: `flex-wrap: wrap` mit Pillen — bei 9 Tabs (Projekte)
+   ergab das auf 390px DREI Zeilen, der Inhalt begann erst bei rund einem
+   Drittel der Bildschirmhoehe. Jetzt eine Zeile, die seitlich scrollt.
+   Ausserdem Unterstrich statt gefuellter Pille: eine gefuellte dunkle Pille
+   sieht aus wie ein Primaerbutton und konkurrierte optisch mit
+   „+ Neues Projekt" direkt daneben. */
+.tabs {
+  display: flex; gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border-2);
 }
-.tab-btn:hover { background: var(--bg); transform: none; box-shadow: none; color: var(--text); }
-.tab-btn.active { background: var(--btn); color: var(--btn-fg); border-color: var(--btn); }
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab-btn {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  font-size: 13px; font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer; box-shadow: none;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.tab-btn:hover { background: var(--hover-bg); transform: none; box-shadow: none; color: var(--text); }
+.tab-btn.active {
+  background: none;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-sm); }
 
 /* ── Master pages (shared layout) ───────────────────────────────────────── */
 .master-page { padding: 16px 16px 0; }
 .master-page-header { margin-bottom: 14px; }
-.master-page-title { font-size: var(--fs-page-title); font-weight: var(--fw-title); }
+/* Beide Namen sind im Einsatz. `.master-title` (Projekte, Rechnungen,
+   Angebote, Nachtraege, Reporting) hatte GAR KEINE Regel und fiel damit auf
+   den Browser-Default fuer <h1> zurueck: 32px/700 statt der Token-Vorgabe
+   20px/800. Dadurch war derselbe Seitentitel je nach Modul unterschiedlich
+   gross — und frass auf dem Handy ein Drittel der ersten Bildschirmhoehe. */
+.master-page-title,
+.master-title { font-size: var(--fs-page-title); font-weight: var(--fw-title); line-height: 1.2; margin: 0; }
 .master-section { padding-top: 4px; }
 
 /* form-control / form-label aliases (used in MahnungenListe detail panel) */
@@ -1390,6 +1479,10 @@ input::placeholder { color: var(--text-4); }
   white-space: nowrap;
 }
 .master-table td { padding: 8px; border-bottom: 1px solid var(--border-4); vertical-align: middle; }
+/* Kennungen und Datumsangaben duerfen nicht umbrechen: „RE-2025-0046" wurde
+   in der Rechnungsliste sonst dreizeilig und „2025-08-01" zweizeilig, was
+   die Zeilenhoehe verdreifacht hat. */
+.cell-nowrap { white-space: nowrap; }
 .master-table tbody tr:last-child td { border-bottom: none; }
 
 /* Zebrastreifen: bei 10+ Spalten verrutscht das Auge sonst leicht in die
@@ -2652,8 +2745,21 @@ input::placeholder { color: var(--text-4); }
 /* Row action buttons (MahnungenListe + RechnungenListe) */
 .row-actions     { white-space: nowrap; padding: 0 4px; }
 .row-action-btn  { background: none; border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: 14px; padding: 4px 6px; min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; transition: background 0.1s; color: var(--text-2); }
-.row-action-btn:hover:not(:disabled) { background: var(--hover-bg, rgba(0,0,0,0.06)); border-color: var(--border); color: var(--text); }
+.row-action-btn:hover:not(:disabled) { background: var(--hover-bg); border-color: var(--border); color: var(--text); }
 .row-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Destruktive Zeilenaktion: im Ruhezustand neutral, erst bei Hover/Fokus rot.
+   Vorher war der Loeschen-Knopf in JEDER Zeile dauerhaft rot umrandet und
+   rot gefuellt — die gefaehrlichste Aktion der Seite war damit das optisch
+   lauteste Element, waehrend die eigentliche Hauptaktion („Oeffnen") dezent
+   blieb. Die Farbe kommt jetzt erst, wenn der Nutzer den Knopf ansteuert. */
+.row-action-btn--danger { color: var(--text-3); border-color: transparent; }
+.row-action-btn--danger:hover:not(:disabled),
+.row-action-btn--danger:focus-visible {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
 /* Sticky table headers — desktop only (mobile uses static to avoid overflow issues) */
 @media (max-width: 1023px) { .master-table th { position: static !important; } }
 

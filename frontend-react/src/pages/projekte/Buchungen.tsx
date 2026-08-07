@@ -658,7 +658,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                               <button className="row-action-btn" onClick={() => isBreakRow(b) ? setPauseModal({ mode: 'edit', row: b }) : isSpecialKind(b.BOOKING_KIND) ? setEditSpecial(b) : openEdit(b)} title="Bearbeiten">
                                 <Pencil size={14} strokeWidth={2} />
                               </button>
-                              <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => confirmDelete(b)} title="Löschen">
+                              <button className="row-action-btn row-action-btn--danger" onClick={() => confirmDelete(b)} title="Löschen">
                                 <Trash2 size={14} strokeWidth={2} />
                               </button>
                             </>

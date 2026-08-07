@@ -539,7 +539,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                         </button>
                       </Can>
                       <Can permission="projects.delete">
-                        <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDelete(p)} title="Löschen">
+                        <button className="row-action-btn row-action-btn--danger" onClick={() => handleDelete(p)} title="Löschen">
                           <Trash2 size={14} strokeWidth={2} />
                         </button>
                       </Can>

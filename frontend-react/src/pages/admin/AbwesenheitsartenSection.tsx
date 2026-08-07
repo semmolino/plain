@@ -113,7 +113,7 @@ export function AbwesenheitsartenSection() {
                     <button className="row-action-btn" onClick={() => setEditId(t.ID)} title="Bearbeiten">
                       <Pencil size={13} strokeWidth={2} />
                     </button>
-                    <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                    <button className="row-action-btn row-action-btn--danger"
                       onClick={() => setConfirmState({ id: t.ID, label: t.NAME })} title="Löschen">
                       <Trash2 size={13} strokeWidth={2} />
                     </button>

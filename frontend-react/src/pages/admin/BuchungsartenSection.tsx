@@ -117,7 +117,7 @@ export function BuchungsartenSection() {
                     <button className="row-action-btn" onClick={() => setEditId(t.ID)} title="Bearbeiten">
                       <Pencil size={13} strokeWidth={2} />
                     </button>
-                    <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                    <button className="row-action-btn row-action-btn--danger"
                       onClick={() => setConfirmState({ id: t.ID, label: t.NAME_SHORT })} title="Löschen">
                       <Trash2 size={13} strokeWidth={2} />
                     </button>
@@ -284,7 +284,7 @@ function TypeTextTemplates({ typeId }: { typeId: number }) {
             <div key={r.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
               {r.LABEL && <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.LABEL}:</span>}
               <span style={{ color: 'var(--text-2)', flex: 1, whiteSpace: 'pre-line' }}>{r.TEXT}</span>
-              <button type="button" className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+              <button type="button" className="row-action-btn row-action-btn--danger"
                 onClick={() => delMut.mutate(r.ID)} title="Löschen">
                 <Trash2 size={12} strokeWidth={2.5} />
               </button>

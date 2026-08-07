@@ -281,8 +281,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                     )}
                     <Can permission="offers.delete">
                       <button
-                        className="row-action-btn"
-                        style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                        className="row-action-btn row-action-btn--danger"
                         onClick={() => requestDelete(r)}
                         title="Löschen"
                       >

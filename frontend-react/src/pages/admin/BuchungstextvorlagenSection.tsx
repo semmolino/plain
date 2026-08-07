@@ -80,7 +80,7 @@ export function BuchungstextvorlagenSection() {
                     <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
                       <Pencil size={13} strokeWidth={2} />
                     </button>
-                    <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                    <button className="row-action-btn row-action-btn--danger"
                       onClick={() => setDelConfirm({ id: r.ID, label: r.LABEL || r.TEXT.slice(0, 30) })} title="Löschen">
                       <Trash2 size={13} strokeWidth={2} />
                     </button>

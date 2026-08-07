@@ -256,7 +256,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                             <button className="row-action-btn" onClick={() => startEdit(row)} title="Bearbeiten">
                               <Pencil size={14} strokeWidth={2} />
                             </button>
-                            <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDelete(row)} title="Entfernen">
+                            <button className="row-action-btn row-action-btn--danger" onClick={() => handleDelete(row)} title="Entfernen">
                               <Trash2 size={14} strokeWidth={2} />
                             </button>
                           </Can>
@@ -458,7 +458,7 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
                               <Pencil size={14} strokeWidth={2} />
                             </button>
                             {r.SCOPE === 'project' && (
-                              <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                              <button className="row-action-btn row-action-btn--danger"
                                 onClick={() => setDelConfirm({ id: r.BOOKING_TYPE_ID, label: r.NAME_SHORT })} title="Projektbezogene Buchungsart löschen">
                                 <Trash2 size={14} strokeWidth={2} />
                               </button>

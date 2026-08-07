@@ -170,7 +170,7 @@ function RoleRow({ role, onEdit, onDelete, onDuplicate }: { role: UserRole; onEd
         <Copy size={14} strokeWidth={2} />
       </button>
       {!role.IS_SYSTEM && (
-        <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={onDelete} title="Löschen">
+        <button className="row-action-btn row-action-btn--danger" onClick={onDelete} title="Löschen">
           <Trash2 size={14} strokeWidth={2} />
         </button>
       )}

@@ -413,7 +413,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
                       </button>
                     </Can>
                     <Can permission="addresses.delete">
-                      <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDelete(a)} title="Löschen">
+                      <button className="row-action-btn row-action-btn--danger" onClick={() => handleDelete(a)} title="Löschen">
                         <Trash2 size={14} strokeWidth={2} />
                       </button>
                     </Can>
@@ -786,7 +786,7 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
                       </button>
                     </Can>
                     <Can permission="addresses.contacts.delete">
-                      <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDeleteContact(c)} title="Löschen">
+                      <button className="row-action-btn row-action-btn--danger" onClick={() => handleDeleteContact(c)} title="Löschen">
                         <Trash2 size={14} strokeWidth={2} />
                       </button>
                     </Can>
