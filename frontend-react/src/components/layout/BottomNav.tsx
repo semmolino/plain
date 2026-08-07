@@ -1,58 +1,94 @@
-import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard, BookUser, FolderOpen, BarChart3,
-  Receipt, FileSignature, FileDiff, Users, Settings, LifeBuoy,
-  type LucideIcon,
-} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
+import { MoreHorizontal } from 'lucide-react'
 import { usePermissionsStore } from '@/store/permissionsStore'
 import { useLicenseStore } from '@/store/licenseStore'
+import { NAV_ITEMS, MOBILE_PRIMARY_COUNT, type NavItem } from './navItems'
 
-interface NavItem {
-  to:    string
-  icon:  LucideIcon
-  label: string
-  /** Eine Permission reicht (anyOf) — Item ist sichtbar, sobald eine erfuellt ist. */
-  permissions: string[]
-  feature?: string
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { to: '/',           icon: LayoutDashboard, label: 'Übersicht',     permissions: ['dashboard.view'], feature: 'core.dashboard' },
-  { to: '/adressen',   icon: BookUser,        label: 'Adressen',      permissions: ['addresses.view'], feature: 'core.addresses' },
-  { to: '/projekte',   icon: FolderOpen,      label: 'Projekte',      permissions: ['projects.view'], feature: 'projects.management' },
-  { to: '/daten',      icon: BarChart3,       label: 'Reporting',     permissions: ['reports.view'], feature: 'reports.standard' },
-  { to: '/rechnungen', icon: Receipt,         label: 'Rechnungen',    permissions: ['invoices.view','dunning.view','security_retention.view'], feature: 'invoices.basic' },
-  { to: '/admin',      icon: Settings,        label: 'Einstellungen', permissions: ['settings.basedata.view','settings.basedata.edit','settings.defaults.edit','settings.notifications.edit','settings.monthly_close.edit','settings.company.view','settings.company.edit','settings.numbers.edit','settings.text_templates.edit','settings.dunning_config.edit','settings.work_time.edit','settings.cost_rate.edit','roles.view'], feature: 'settings.core' },
-  { to: '/mitarbeiter',icon: Users,           label: 'Mitarbeiter',   permissions: ['employees.view','absence.view','absence.request'], feature: 'employees.management' },
-  { to: '/angebote',   icon: FileSignature,   label: 'Angebote',      permissions: ['offers.view'], feature: 'offers.basic' },
-  { to: '/nachtraege', icon: FileDiff,        label: 'Nachträge',     permissions: ['nachtraege.view'], feature: 'nachtraege.management' },
-  { to: '/service',    icon: LifeBuoy,        label: 'Service',       permissions: ['service.suggestions.view','service.feedback.use','service.support.use'] },
-]
+/** Maximale Anzahl Spalten in der Leiste — darueber wird "Mehr" eingeblendet. */
+const MAX_BAR_ITEMS = MOBILE_PRIMARY_COUNT + 1
 
 export function BottomNav() {
-  const unrestricted = usePermissionsStore(s => s.unrestricted)
-  const keys         = usePermissionsStore(s => s.keys)
+  const unrestricted    = usePermissionsStore(s => s.unrestricted)
+  const keys            = usePermissionsStore(s => s.keys)
   const licUnrestricted = useLicenseStore(s => s.unrestricted)
   const caps            = useLicenseStore(s => s.capabilities)
-  const visibleItems = NAV_ITEMS.filter(it =>
+  const [moreOpen, setMoreOpen] = useState(false)
+  const location = useLocation()
+
+  // Beim Navigieren schliessen — sonst bleibt das Sheet nach der Auswahl offen.
+  useEffect(() => { setMoreOpen(false) }, [location.pathname])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoreOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [moreOpen])
+
+  const visible = NAV_ITEMS.filter(it =>
     (unrestricted || it.permissions.some(p => keys.has(p))) &&
     (licUnrestricted || !it.feature || caps.has(it.feature))
   )
+
+  // Passt alles in die Leiste, braucht es kein "Mehr".
+  const needsMore = visible.length > MAX_BAR_ITEMS
+
+  // mobileRank entscheidet nur, WELCHE Eintraege in die Leiste kommen —
+  // angezeigt werden sie in derselben Reihenfolge wie in der Seitennavigation.
+  // Sonst haette dasselbe Modul auf Desktop und Handy eine andere Position.
+  const inBar = new Set(
+    [...visible].sort((a, b) => a.mobileRank - b.mobileRank).slice(0, MOBILE_PRIMARY_COUNT)
+  )
+  const primary  = needsMore ? visible.filter(it => inBar.has(it))  : visible
+  const overflow = needsMore ? visible.filter(it => !inBar.has(it)) : []
+
+  const overflowActive = overflow.some(it => it.to !== '/' && location.pathname.startsWith(it.to))
+
+  const renderLink = (it: NavItem, cls: string) => (
+    <NavLink
+      key={it.to}
+      to={it.to}
+      end={it.to === '/'}
+      className={({ isActive }) => cls + (isActive ? ' active' : '')}
+    >
+      <span className="bn-icon"><it.icon size={20} strokeWidth={1.75} /></span>
+      <span className="bn-label">{it.label}</span>
+    </NavLink>
+  )
+
   return (
-    <nav className="bottom-nav">
-      {visibleItems.map(({ to, icon: Icon, label }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === '/'}
-          className={({ isActive }) =>
-            'bottom-nav-item' + (isActive ? ' active' : '')
-          }
-        >
-          <span className="bn-icon"><Icon size={20} strokeWidth={1.75} /></span>
-          <span className="bn-label">{label}</span>
-        </NavLink>
-      ))}
-    </nav>
+    <>
+      {moreOpen && (
+        <div
+          className="bn-more-backdrop"
+          onClick={() => setMoreOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <nav className="bottom-nav" aria-label="Hauptnavigation">
+        {primary.map(it => renderLink(it, 'bottom-nav-item'))}
+
+        {needsMore && (
+          <button
+            type="button"
+            className={'bottom-nav-item bn-more-btn' + (moreOpen || overflowActive ? ' active' : '')}
+            onClick={() => setMoreOpen(v => !v)}
+            aria-expanded={moreOpen}
+            aria-haspopup="menu"
+          >
+            <span className="bn-icon"><MoreHorizontal size={20} strokeWidth={1.75} /></span>
+            <span className="bn-label">Mehr</span>
+          </button>
+        )}
+      </nav>
+
+      {moreOpen && (
+        <div className="bn-more-sheet" role="menu" aria-label="Weitere Bereiche">
+          {overflow.map(it => renderLink(it, 'bn-more-item'))}
+        </div>
+      )}
+    </>
   )
 }

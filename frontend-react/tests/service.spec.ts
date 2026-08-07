@@ -97,7 +97,16 @@ test.describe('Service — Bereich', () => {
   test('Service-Nav-Eintrag verlinkt auf /service', async ({ page, viewport }) => {
     await page.goto('/')
     const isMobile = (viewport?.width ?? 0) < 1024
-    const selector = isMobile ? '.bottom-nav-item' : '.side-nav-item'
+    // Auf Mobil zeigt die Bottom-Nav nur noch die 5 haeufigsten Bereiche
+    // (sonst < 44px Touch-Target); Service liegt hinter "Mehr".
+    if (isMobile) {
+      // Der React-Query-Devtools-Button liegt im Dev-Server ueber der unteren
+      // rechten Ecke und faengt den Klick ab. In Produktion rendert das Paket
+      // nichts, daher hier nur fuer den Test ausblenden.
+      await page.addStyleTag({ content: '.tsqd-parent-container { display: none !important }' })
+      await page.locator('.bn-more-btn').click()
+    }
+    const selector = isMobile ? '.bn-more-item' : '.side-nav-item'
     const href = await page.locator(selector).filter({ hasText: 'Service' }).getAttribute('href')
     expect(href).toBe('/service')
   })

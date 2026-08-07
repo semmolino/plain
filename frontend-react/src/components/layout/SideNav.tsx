@@ -1,33 +1,8 @@
 import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard, BookUser, FolderOpen, BarChart3,
-  Receipt, FileSignature, FileDiff, Users, Settings, LifeBuoy,
-  type LucideIcon,
-} from 'lucide-react'
 import { usePermissionsStore } from '@/store/permissionsStore'
 import { useLicenseStore } from '@/store/licenseStore'
 import { BrandWordmark } from '@/components/brand/BrandLogo'
-
-interface NavItem {
-  to:    string
-  icon:  LucideIcon
-  label: string
-  permissions: string[]
-  feature?: string
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { to: '/',            icon: LayoutDashboard, label: 'Übersicht',     permissions: ['dashboard.view'], feature: 'core.dashboard' },
-  { to: '/adressen',    icon: BookUser,        label: 'Adressen',      permissions: ['addresses.view'], feature: 'core.addresses' },
-  { to: '/projekte',    icon: FolderOpen,      label: 'Projekte',      permissions: ['projects.view'], feature: 'projects.management' },
-  { to: '/daten',       icon: BarChart3,       label: 'Reporting',     permissions: ['reports.view'], feature: 'reports.standard' },
-  { to: '/rechnungen',  icon: Receipt,         label: 'Rechnungen',    permissions: ['invoices.view','dunning.view','security_retention.view'], feature: 'invoices.basic' },
-  { to: '/angebote',    icon: FileSignature,   label: 'Angebote',      permissions: ['offers.view'], feature: 'offers.basic' },
-  { to: '/nachtraege',  icon: FileDiff,        label: 'Nachträge',     permissions: ['nachtraege.view'], feature: 'nachtraege.management' },
-  { to: '/mitarbeiter', icon: Users,           label: 'Mitarbeiter',   permissions: ['employees.view','absence.view','absence.request'], feature: 'employees.management' },
-  { to: '/service',     icon: LifeBuoy,        label: 'Service',       permissions: ['service.suggestions.view','service.feedback.use','service.support.use'] },
-  { to: '/admin',       icon: Settings,        label: 'Einstellungen', permissions: ['settings.basedata.view','settings.basedata.edit','settings.defaults.edit','settings.notifications.edit','settings.monthly_close.edit','settings.company.view','settings.company.edit','settings.numbers.edit','settings.text_templates.edit','settings.dunning_config.edit','settings.work_time.edit','settings.cost_rate.edit','roles.view'], feature: 'settings.core' },
-]
+import { NAV_ITEMS } from './navItems'
 
 export function SideNav() {
   const unrestricted = usePermissionsStore(s => s.unrestricted)

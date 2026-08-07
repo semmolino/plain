@@ -228,6 +228,32 @@ import { Pencil, FileText, MoreHorizontal } from 'lucide-react'
 
 ---
 
+## Design-Tokens — verbindlich bei jedem neuen UI
+
+Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein Block pro Theme). **Nie feste Farb-/Abstands-/Radius-Werte schreiben** — es gibt 6 Themes, hartkodierte Werte ändern sich beim Theme-Wechsel nicht mit. Vollständige Analyse: `docs/UX_UI_AUDIT_2026-08.md`.
+
+| Zweck | Tokens |
+|---|---|
+| Text | `--text`, `--text-2`, `--text-3` (alle ≥ 4,5:1) · `--text-4` (nur Platzhalter/UI, 3:1) · `--text-5` (rein dekorativ, **nicht für lesbaren Text**) |
+| Flächen | `--bg`, `--surface`, `--surface-2`, `--surface-3`, `--dim`, `--dim-2` |
+| Akzent | `--accent`, `--accent-dark`, `--accent-bg`, `--accent-tint…3`, `--accent-ring`, `--accent-rgb` |
+| Schrift auf Farbflächen | `--btn-fg` (auf `--btn`/`--cta`), `--accent-fg` (auf `--accent`) — **nie `#fff` hartkodieren** |
+| Status | `--success`, `--danger`, `--warning`, `--info` + je `-strong` und `-bg` (statt `#dc2626`, `#16a34a`, …) |
+| Abstand | `--space-1` (4px) … `--space-8` (32px) |
+| Radius | `--radius-sm` (6) · `--radius-md` (10) · `--radius-lg` (14) · `--radius-pill` |
+| Schatten | `--shadow-sm/md/lg` (theme-abhängig über `--shadow-color`) |
+| Interaktion | `--hover-bg`, `--focus-ring` |
+
+**Regeln**
+- Kontrast: neue Farbkombinationen müssen WCAG AA (4,5:1 für Text) in **allen 6 Themes** erfüllen — nicht nur im Default.
+- Fokus: `:focus-visible` ist global gesetzt. Bei eigenen Komponenten **nie `outline: none` ohne Ersatz**.
+- Buttons sind standardmäßig flach; Erhebung nur bewusst über `.btn-elevated`.
+- Dialoge: `Modal`/`ConfirmModal` benutzen (bringen Escape, Fokus-Falle, Fokus-Rückgabe, `role="dialog"` mit). Kein eigenes Overlay bauen.
+- Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
+- Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
+
+---
+
 ## UI/UX — responsive & mobile rules
 
 These rules apply to every feature. Playwright smoke tests in `frontend-react/tests/` enforce them automatically in CI.

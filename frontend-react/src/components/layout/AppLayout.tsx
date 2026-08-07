@@ -136,6 +136,9 @@ export function AppLayout() {
 
   return (
     <div className="app-layout">
+      {/* Ohne Skip-Link muessen Tastaturnutzer auf jeder Seite Header und
+          Navigation komplett durchtabben, bevor sie den Inhalt erreichen. */}
+      <a href="#hauptinhalt" className="skip-link">Zum Hauptinhalt springen</a>
       <header className="app-header">
         <div className="app-header-left">
           <BrandMark size={26} className="app-header-brand" />
@@ -149,7 +152,7 @@ export function AppLayout() {
       </header>
       <div className="app-body">
         <SideNav />
-        <main className="app-main">
+        <main className="app-main" id="hauptinhalt" tabIndex={-1}>
           <ToastContainer />
           <LicenseReadOnlyBanner />
           <Outlet />

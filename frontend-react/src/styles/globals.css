@@ -24,10 +24,13 @@
   --surface-2:  #f8f9fb;
   --surface-3:  #f9fafb;
 
+  /* --text-2/-3 sind WCAG-AA-tauglich (>= 4.5:1 auf --bg UND --surface).
+     --text-4 erreicht 3:1 (Schwelle fuer UI-Elemente/Platzhalter),
+     --text-5 ist rein dekorativ — NICHT fuer lesbaren Text verwenden. */
   --text:       #111827;
   --text-2:     rgba(17,24,39,0.70);
-  --text-3:     rgba(17,24,39,0.55);
-  --text-4:     rgba(17,24,39,0.45);
+  --text-3:     rgba(17,24,39,0.60);
+  --text-4:     rgba(17,24,39,0.47);
   --text-5:     rgba(17,24,39,0.38);
 
   --border:     rgba(17,24,39,0.10);
@@ -68,6 +71,12 @@
   --cta:   #2563eb;
   --cta-h: #1d4ed8;
 
+  /* Schriftfarbe AUF --btn/--cta. Als Token, damit Themes mit hellem
+     Button-Hintergrund (dark) auf dunkle Schrift wechseln koennen —
+     vorher war #fff hartkodiert und im Dark-Theme unter AA. */
+  --btn-fg:    #ffffff;
+  --accent-fg: #ffffff;   /* Schriftfarbe AUF --accent-Flaechen */
+
   --notif-badge: #dc2626;
   --notif-dot:   #2563eb;
   --overlay:     rgba(17,24,39,0.45);
@@ -88,6 +97,57 @@
   --fs-eyebrow:       12px;    /* Overline / Abschnitts-Label (UPPERCASE) */
   --fs-label:         11px;    /* Feld-/Kennzahl-Label (UPPERCASE) */
   --ls-eyebrow:       0.05em;  /* einheitliches Tracking fuer ALLE Versal-Labels */
+
+  /* ── Abstands-Skala ────────────────────────────────────────────────────
+     4px-Raster. Bei neuen Komponenten IMMER diese Tokens statt fester
+     Pixelwerte verwenden — sonst driften Abstaende auseinander. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ── Radius-Skala ──────────────────────────────────────────────────────
+     Vier Stufen statt bisher 14 verschiedener Werte.
+     sm = Badges/Chips · md = Buttons/Inputs · lg = Cards/Modals · pill = rund */
+  --radius-sm:   6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-pill: 999px;
+
+  /* ── Schatten-Skala ────────────────────────────────────────────────────
+     Theme-abhaengig (--shadow-color), damit Schatten im Dark-Theme
+     nicht unsichtbar werden. */
+  --shadow-color: 17,24,39;
+  --shadow-sm: 0 1px 2px  rgba(var(--shadow-color),0.06);
+  --shadow-md: 0 2px 8px  rgba(var(--shadow-color),0.08);
+  --shadow-lg: 0 8px 24px rgba(var(--shadow-color),0.12);
+
+  /* ── Status-Farben ─────────────────────────────────────────────────────
+     Ersetzen die bisher hartkodierten Tailwind-Werte (#dc2626, #16a34a, …).
+     Jeweils: Textfarbe (AA auf --surface), kraeftige Variante, Flaeche. */
+  --success:        #15803d;
+  --success-strong: #166534;
+  --success-bg:     #dcfce7;
+  --danger:         #dc2626;
+  --danger-strong:  #b91c1c;
+  --danger-bg:      #fee2e2;
+  --warning:        #b45309;
+  --warning-strong: #92400e;
+  --warning-bg:     #fef3c7;
+  --info:           #1d4ed8;
+  --info-strong:    #1e40af;
+  --info-bg:        #dbeafe;
+
+  /* ── Interaktions-Tokens ───────────────────────────────────────────────
+     --accent-rgb und --hover-bg wurden im Code bereits per var(…) genutzt,
+     waren aber nirgends definiert: der Fokusring war dadurch in JEDEM Theme
+     blau (Fallback 59,130,246) und Hover im Dark-Theme dunkler statt heller. */
+  --accent-rgb: 37,99,235;
+  --hover-bg:   rgba(17,24,39,0.06);
+  --focus-ring: 0 0 0 3px var(--accent-ring);
 }
 
 [data-theme="modern"] {
@@ -95,22 +155,28 @@
   --surface-2: #f0ebe0;
   --surface-3: #f2ede1;
   --text:      #2d3f4f;
-  --text-2:    rgba(45,63,79,0.70);
-  --text-3:    rgba(45,63,79,0.55);
-  --text-4:    rgba(45,63,79,0.45);
-  --text-5:    rgba(45,63,79,0.38);
+  --text-2:    rgba(45,63,79,0.80);
+  --text-3:    rgba(45,63,79,0.74);
+  --text-4:    rgba(45,63,79,0.57);
+  --text-5:    rgba(45,63,79,0.42);
   --border:    #d8cbb5;
   --border-2:  #d8cbb5;
   --border-3:  rgba(45,63,79,0.06);
   --border-4:  rgba(45,63,79,0.04);
-  --accent:       #d4714e;
-  --accent-dark:  #b85a38;
+  /* Akzent abgedunkelt (vorher #d4714e): weisse Schrift darauf lag bei 3.35:1,
+     als Textfarbe auf dem beigen --bg sogar bei 2.87:1 — beides unter AA.
+     Farbton bleibt Terrakotta, nur dunkler/gesaettigter. */
+  --accent:       #b04824;
+  --accent-dark:  #8f3a18;
   --accent-bg:    #fdf0ea;
   --accent-bg2:   #f9ddd0;
-  --accent-tint:  rgba(212,113,78,0.04);
-  --accent-tint2: rgba(212,113,78,0.08);
-  --accent-tint3: rgba(212,113,78,0.10);
-  --accent-ring:  rgba(212,113,78,0.15);
+  --accent-tint:  rgba(176,72,36,0.04);
+  --accent-tint2: rgba(176,72,36,0.08);
+  --accent-tint3: rgba(176,72,36,0.10);
+  --accent-ring:  rgba(176,72,36,0.30);
+  --accent-rgb:   176,72,36;
+  --hover-bg:     rgba(45,63,79,0.07);
+  --shadow-color: 45,63,79;
   --chrome:          #2d3f4f;
   --chrome-border:   rgba(255,255,255,0.08);
   --chrome-shadow-h: 0 2px 12px rgba(45,63,79,0.30);
@@ -136,8 +202,8 @@
   --surface-3: #f2f2f2;
   --text:      #1a1a1a;
   --text-2:    rgba(26,26,26,0.70);
-  --text-3:    rgba(26,26,26,0.55);
-  --text-4:    #999999;
+  --text-3:    rgba(26,26,26,0.61);
+  --text-4:    rgba(26,26,26,0.47);
   --text-5:    rgba(26,26,26,0.38);
   --border:    #cbcbcb;
   --border-2:  #cbcbcb;
@@ -150,7 +216,10 @@
   --accent-tint:  rgba(23,77,56,0.04);
   --accent-tint2: rgba(23,77,56,0.08);
   --accent-tint3: rgba(23,77,56,0.10);
-  --accent-ring:  rgba(23,77,56,0.14);
+  --accent-ring:  rgba(23,77,56,0.30);
+  --accent-rgb:   23,77,56;
+  --hover-bg:     rgba(26,26,26,0.07);
+  --shadow-color: 26,26,26;
   --chrome:          #174d38;
   --chrome-border:   rgba(255,255,255,0.10);
   --chrome-shadow-h: 0 2px 12px rgba(23,77,56,0.30);
@@ -176,21 +245,26 @@
   --surface-3: #faf9f8;
   --text:      #000000;
   --text-2:    rgba(0,0,0,0.70);
-  --text-3:    rgba(0,0,0,0.55);
-  --text-4:    #9c9a9a;
+  --text-3:    rgba(0,0,0,0.56);
+  --text-4:    rgba(0,0,0,0.44);
   --text-5:    rgba(0,0,0,0.38);
   --border:    rgba(0,0,0,0.10);
   --border-2:  rgba(0,0,0,0.08);
   --border-3:  rgba(0,0,0,0.06);
   --border-4:  rgba(0,0,0,0.04);
-  --accent:       #a35e47;
-  --accent-dark:  #8b4e3b;
+  /* minimal abgedunkelt (vorher #a35e47): als Textfarbe auf dem
+     leicht getoenten --bg lag der Wert bei 4.43:1, knapp unter AA. */
+  --accent:       #9d5943;
+  --accent-dark:  #854a37;
   --accent-bg:    rgba(163,94,71,0.08);
   --accent-bg2:   rgba(163,94,71,0.06);
   --accent-tint:  rgba(163,94,71,0.04);
   --accent-tint2: rgba(163,94,71,0.08);
   --accent-tint3: rgba(163,94,71,0.10);
-  --accent-ring:  rgba(163,94,71,0.15);
+  --accent-ring:  rgba(163,94,71,0.30);
+  --accent-rgb:   163,94,71;
+  --hover-bg:     rgba(0,0,0,0.06);
+  --shadow-color: 0,0,0;
   --chrome:          #464646;
   --chrome-border:   rgba(255,255,255,0.08);
   --chrome-shadow-h: 0 2px 12px rgba(0,0,0,0.22);
@@ -215,22 +289,26 @@
   --surface-2: #e4f2f5;
   --surface-3: #eef7f9;
   --text:      #0b2e33;
-  --text-2:    rgba(11,46,51,0.70);
-  --text-3:    rgba(11,46,51,0.55);
-  --text-4:    #93b1b5;
+  --text-2:    rgba(11,46,51,0.72);
+  --text-3:    rgba(11,46,51,0.65);
+  --text-4:    rgba(11,46,51,0.52);
   --text-5:    rgba(11,46,51,0.38);
   --border:    #b8e3e9;
   --border-2:  rgba(184,227,233,0.50);
   --border-3:  rgba(184,227,233,0.30);
   --border-4:  rgba(184,227,233,0.20);
-  --accent:       #4f7c82;
-  --accent-dark:  #3d6268;
+  /* minimal abgedunkelt (vorher #4f7c82 = 4.25:1 als Text auf --bg). */
+  --accent:       #4a747a;
+  --accent-dark:  #3a5d63;
   --accent-bg:    rgba(79,124,130,0.10);
   --accent-bg2:   rgba(79,124,130,0.08);
   --accent-tint:  rgba(184,227,233,0.10);
   --accent-tint2: rgba(184,227,233,0.14);
   --accent-tint3: rgba(79,124,130,0.14);
-  --accent-ring:  rgba(79,124,130,0.16);
+  --accent-ring:  rgba(79,124,130,0.32);
+  --accent-rgb:   79,124,130;
+  --hover-bg:     rgba(11,46,51,0.07);
+  --shadow-color: 11,46,51;
   --chrome:          #0b2e33;
   --chrome-border:   rgba(184,227,233,0.18);
   --chrome-shadow-h: 0 2px 12px rgba(11,46,51,0.30);
@@ -257,21 +335,41 @@
   --surface-3: #252529;
   --text:      #e8e8e8;
   --text-2:    #cccccc;
-  --text-3:    #808080;
-  --text-4:    #666666;
-  --text-5:    #555555;
+  --text-3:    #909090;
+  --text-4:    #6e6e6e;
+  --text-5:    #5a5a5a;
   --border:    #2e2e35;
   --border-2:  #2e2e35;
   --border-3:  rgba(255,255,255,0.06);
   --border-4:  rgba(255,255,255,0.04);
-  --accent:       #7a7ac6;
-  --accent-dark:  #8888d0;
+  /* Als TEXTfarbe auf dunklem Grund aufgehellt (vorher #7a7ac6 = 4.39:1).
+     Der Button-Hintergrund (--btn/--cta) bleibt #7a7ac6, bekommt aber
+     ueber --btn-fg dunkle statt weisser Schrift (vorher 3.87:1). */
+  --accent:       #9a9ade;
+  --accent-dark:  #b0b0ea;
   --accent-bg:    rgba(122,122,198,0.14);
   --accent-bg2:   rgba(122,122,198,0.10);
   --accent-tint:  rgba(122,122,198,0.05);
   --accent-tint2: rgba(122,122,198,0.10);
   --accent-tint3: rgba(122,122,198,0.14);
-  --accent-ring:  rgba(122,122,198,0.20);
+  --accent-ring:  rgba(154,154,222,0.40);
+  --accent-rgb:   154,154,222;
+  --hover-bg:     rgba(255,255,255,0.08);
+  --shadow-color: 0,0,0;
+  /* Statusfarben fuer dunklen Grund aufgehellt — die Light-Werte
+     (#15803d, #dc2626, …) liegen auf #1c1c21 bei 2.4–3.5:1. */
+  --success:        #4ade80;
+  --success-strong: #86efac;
+  --success-bg:     rgba(74,222,128,0.16);
+  --danger:         #f87171;
+  --danger-strong:  #fca5a5;
+  --danger-bg:      rgba(248,113,113,0.16);
+  --warning:        #fbbf24;
+  --warning-strong: #fcd34d;
+  --warning-bg:     rgba(251,191,36,0.16);
+  --info:           #93c5fd;
+  --info-strong:    #bfdbfe;
+  --info-bg:        rgba(147,197,253,0.16);
   --chrome:          #0e0e12;
   --chrome-border:   #2e2e35;
   --chrome-shadow-h: 0 2px 12px rgba(0,0,0,0.35);
@@ -285,6 +383,8 @@
   --btn-h: #8888d0;
   --cta:   #7a7ac6;
   --cta-h: #8888d0;
+  --btn-fg:    #14141c;   /* dunkle Schrift auf hellem Lila-Button: 4.73:1 */
+  --accent-fg: #14141c;
   --notif-badge: #7a7ac6;
   --notif-dot:   #7a7ac6;
   --overlay:     rgba(0,0,0,0.65);
@@ -654,7 +754,7 @@ body {
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 .btn-primary {
   width: 100%; padding: 13px;
-  background: var(--btn); color: #fff;
+  background: var(--btn); color: var(--btn-fg);
   border: none; border-radius: 10px;
   font-size: 15px; font-weight: 700;
   cursor: pointer; margin-top: 4px;
@@ -663,22 +763,68 @@ body {
 .btn-primary:hover  { background: var(--btn-h); }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* Basis-Button bewusst FLACH. Der fruehere Default (Schlagschatten 22px +
+   translateY(-1px) bei Hover) traf JEDEN <button> — auch 30x30px-Icon-Buttons
+   in Tabellenzeilen, was dort Flimmern erzeugte und von .row-action-btn,
+   .btn-small und .bottom-nav-item einzeln zurueckgesetzt werden musste.
+   Erhebung gibt es jetzt nur noch explizit ueber .btn-elevated. */
 button {
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
-  box-shadow: 0 8px 22px rgba(17,24,39,0.06);
+  transition: box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 28px rgba(17,24,39,0.10);
-  background: var(--bg);
+button:hover { background: var(--hover-bg); }
+
+.btn-elevated { box-shadow: var(--shadow-md); }
+.btn-elevated:hover { box-shadow: var(--shadow-lg); }
+
+/* ── Fokus-Sichtbarkeit (WCAG 2.4.7 / 2.4.11 / 2.4.13) ───────────────────
+   Vorher gab es 3 :focus-visible-Regeln bei 633 Buttons, und mehrere
+   Eingabefelder setzten `outline: none` OHNE Ersatz — Tastaturnutzer sahen
+   nicht, wo der Fokus steht. Ein einziger, theme-treuer Ring fuer alles.
+   :focus-visible statt :focus, damit Mausklicks keinen Ring hinterlassen. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
+/* Felder mit eigenem Rahmen: Ring innen statt aussen, damit er nicht
+   an Nachbarzellen in dichten Tabellen anstoesst. */
+:where(input, select, textarea):focus-visible {
+  outline-offset: 0;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* ── Bewegung reduzieren (WCAG 2.3.3, prefers-reduced-motion) ─────────────
+   Betrifft 44 Transitions/Animationen, die vorher ungefiltert liefen. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Skip-Link ───────────────────────────────────────────────────────────
+   Ohne ihn muessen Tastaturnutzer auf JEDER Seite Header + 10 Nav-Punkte
+   durchtabben, bevor sie den Inhalt erreichen. */
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 1000;
+  background: var(--surface); color: var(--text);
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-md);
+  font-weight: 700; text-decoration: none;
+  box-shadow: var(--shadow-lg);
+}
+.skip-link:focus { left: var(--space-2); top: var(--space-2); }
 
 /* ── Global input baseline ───────────────────────────────────────────────── */
 input, select, textarea {
@@ -771,7 +917,51 @@ input::placeholder { color: var(--text-4); }
 .bottom-nav-item.active { color: var(--nav-active); }
 .bottom-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -3px; border-radius: 4px; }
 .bn-icon  { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; }
-.bn-label { font-size: 9px; font-weight: 700; letter-spacing: 0.02em; }
+/* 11px = Untergrenze aus CLAUDE.md (vorher 9px). Bei max. 5 Spalten passt
+   das Label jetzt auch auf 390px-Geraeten ohne Umbruch. */
+.bn-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Bottom-Nav: "Mehr"-Sheet ────────────────────────────────────────────
+   Statt 10 Eintraege nebeneinander (= 39px pro Ziel auf 390px, unter den
+   geforderten 44px) zeigt die Leiste 4 Ziele + "Mehr"; der Rest liegt in
+   einem Sheet darueber. */
+.bn-more-btn { font-family: inherit; box-shadow: none; }
+
+.bn-more-backdrop {
+  position: fixed; inset: 0;
+  background: var(--overlay);
+  z-index: 99;
+}
+
+.bn-more-sheet {
+  position: fixed; bottom: 58px; left: 0; right: 0;
+  z-index: 101;
+  background: var(--chrome);
+  border-top: 1px solid var(--chrome-border);
+  box-shadow: var(--chrome-shadow-n);
+  padding: var(--space-2) 0 var(--space-1);
+  display: grid; grid-template-columns: repeat(3, 1fr);
+}
+
+.bn-more-item {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: var(--space-1);
+  min-height: 64px;                 /* Touch-Target deutlich ueber 44px */
+  padding: var(--space-2) var(--space-1);
+  color: var(--nav-inactive);
+  text-decoration: none;
+  transition: color 0.13s, background 0.13s;
+}
+.bn-more-item:hover  { background: var(--chrome-hover-bg); color: var(--chrome-text); }
+.bn-more-item.active { color: var(--nav-active); }
+.bn-more-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -3px; }
+
+@media (min-width: 1024px) {
+  .bn-more-sheet, .bn-more-backdrop { display: none; }
+}
 
 /* ── Side navigation (desktop ≥ 1024 px) ─────────────────────────────────── */
 .side-nav { display: none; }
@@ -1099,7 +1289,7 @@ input::placeholder { color: var(--text-4); }
   cursor: pointer; box-shadow: none; transition: all 0.12s;
 }
 .tab-btn:hover { background: var(--bg); transform: none; box-shadow: none; color: var(--text); }
-.tab-btn.active { background: var(--btn); color: #fff; border-color: var(--btn); }
+.tab-btn.active { background: var(--btn); color: var(--btn-fg); border-color: var(--btn); }
 
 /* ── Master pages (shared layout) ───────────────────────────────────────── */
 .master-page { padding: 16px 16px 0; }
@@ -1138,17 +1328,22 @@ input::placeholder { color: var(--text-4); }
 .list-checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; user-select: none; }
 
 /* ── Master table ────────────────────────────────────────────────────────── */
-.master-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 400px; }
+/* 13px = Untergrenze fuer Fliesstext aus CLAUDE.md (vorher 12px — und das
+   in JEDER Tabelle der App, also auf der Hauptarbeitsflaeche). */
+.master-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 400px; }
 .master-table th {
-  text-align: left; padding: 7px 8px; font-weight: 700;
-  color: var(--text-3); border-bottom: 2px solid var(--border-2);
+  text-align: left; padding: 8px; font-weight: 700;
+  color: var(--text-2); border-bottom: 2px solid var(--border-2);
   white-space: nowrap;
   position: sticky; top: 0; z-index: 2; background: var(--surface);
 }
 .master-table th.num, .master-table td.num { text-align: right; }
-.master-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-4); }
+.master-table td { padding: 8px; border-bottom: 1px solid var(--border-4); }
 .master-table tr:last-child td { border-bottom: none; }
-.master-table tr:hover td { background: var(--accent-tint); }
+/* Zebrastreifen: bei 10+ Spalten verrutscht das Auge sonst leicht in die
+   Nachbarzeile. tbody-Kinder, damit der sticky Header unberuehrt bleibt. */
+.master-table tbody tr:nth-child(even) td { background: var(--dim-2); }
+.master-table tbody tr:hover td { background: var(--accent-tint); }
 .sortable-th { cursor: pointer; user-select: none; }
 .sortable-th:hover { color: var(--text); }
 .master-table th.sortable { cursor: pointer; user-select: none; }
@@ -1209,7 +1404,7 @@ input::placeholder { color: var(--text-4); }
   width: 18px; height: 18px; margin-left: 2px; border: none; border-radius: 50%;
   background: var(--accent-bg2); color: var(--accent-dark); cursor: pointer; font-size: 14px; line-height: 1; padding: 0;
 }
-.filter-chip-clear:hover { background: var(--accent); color: #fff; }
+.filter-chip-clear:hover { background: var(--accent); color: var(--accent-fg); }
 .filter-chip-dropdown {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 120;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
@@ -1256,7 +1451,7 @@ input::placeholder { color: var(--text-4); }
    unlesbar. Hier explizit als kleiner Primaer-Button wiederherstellen. */
 .btn-primary.btn-small {
   width: auto; padding: 7px 16px; font-size: 12px;
-  background: var(--btn); color: #fff; border: none; border-radius: 8px;
+  background: var(--btn); color: var(--btn-fg); border: none; border-radius: 8px;
 }
 .btn-primary.btn-small:hover { background: var(--btn-h); }
 .btn-primary.btn-small:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -1354,7 +1549,7 @@ input::placeholder { color: var(--text-4); }
 .admin-company-selector { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 .admin-company-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; cursor: pointer; color: var(--text-2); transition: background 0.15s, border-color 0.15s; }
 .admin-company-btn:hover { background: var(--dim); }
-.admin-company-btn.active { background: var(--btn); color: #fff; border-color: var(--btn); }
+.admin-company-btn.active { background: var(--btn); color: var(--btn-fg); border-color: var(--btn); }
 
 /* Nummernkreise */
 .nr-preview { font-size: 12px; color: var(--accent); font-weight: 600; margin-top: -6px; margin-bottom: 4px; }
@@ -1608,7 +1803,7 @@ input::placeholder { color: var(--text-4); }
   transition: background 0.15s;
 }
 .wizard-step:last-child { border-right: none; }
-.wizard-step.active { background: var(--cta); color: #fff; }
+.wizard-step.active { background: var(--cta); color: var(--btn-fg); }
 .wizard-step.done   { background: var(--accent-tint3); color: var(--accent); }
 .wizard-step-title  { font-size: var(--fs-section-title); font-weight: var(--fw-heading); margin-bottom: 14px; }
 .wizard-step-content { padding: 4px 0; }
@@ -1725,7 +1920,7 @@ input::placeholder { color: var(--text-4); }
 }
 .daten-filter-mode-btn input { display: none; }
 .daten-filter-mode-btn.active {
-  background: var(--accent); color: #fff; border-color: var(--accent);
+  background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
 }
 .daten-filter-dates {
   display: flex; gap: 12px; align-items: center;
@@ -2099,8 +2294,8 @@ input::placeholder { color: var(--text-4); }
 }
 .tbr-btn:hover { opacity: 0.85; }
 .tbr-start  { background: #16a34a; color: #fff; }
-.tbr-next   { background: var(--cta); color: #fff; }
-.tbr-finish { background: var(--btn); color: #fff; }
+.tbr-next   { background: var(--cta); color: var(--btn-fg); }
+.tbr-finish { background: var(--btn); color: var(--btn-fg); }
 .tbr-running {
   display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
 }
@@ -2353,7 +2548,7 @@ input::placeholder { color: var(--text-4); }
 .text-template-types { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .text-template-type-btn        { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 13px; background: transparent; color: var(--text); transition: background 0.15s; }
 .text-template-type-btn:hover  { background: var(--hover-bg, rgba(0,0,0,0.04)); }
-.text-template-type-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.text-template-type-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
 /* Muted row for closed Mahnungen */
 .row-muted td { color: var(--text-muted) !important; }
@@ -2411,7 +2606,7 @@ input::placeholder { color: var(--text-4); }
 .dash-subnav { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
 .dash-subnav-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer; font-size: 13px; color: var(--text); transition: background 0.15s, color 0.15s; }
 .dash-subnav-btn:hover { background: var(--hover-bg, rgba(0,0,0,0.04)); }
-.dash-subnav-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dash-subnav-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
 .dash-ampel-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .ampel-filter-btn { padding: 5px 12px; border: 1.5px solid var(--border); border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 500; background: transparent; color: var(--text); transition: background 0.15s; display: inline-flex; align-items: center; gap: 5px; }
@@ -2503,7 +2698,7 @@ input::placeholder { color: var(--text-4); }
 .days-warn { color: #92400e; }
 .days-crit { color: #b91c1c; font-weight: 600; }
 .text-template-type-btn { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 13px; background: transparent; }
-.text-template-type-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.text-template-type-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 [data-theme="dark"] .mahnstufe-badge.ms-4 { background: rgba(127,29,29,0.2);  color: #fca5a5; }
 
 /* ── Unternehmenskennzahlen ───────────────────────────────────────────────── */
@@ -2514,7 +2709,7 @@ input::placeholder { color: var(--text-4); }
 .unk-period-tabs { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-right: 2px; }
 .unk-period-tab { padding: 4px 11px; background: transparent; border: none; cursor: pointer; font-size: 12px; color: var(--text-2); line-height: 1.6; transition: background 0.12s, color 0.12s; }
 .unk-period-tab:hover { background: var(--surface-2); color: var(--text); }
-.unk-period-tab.active { background: var(--accent); color: #fff; }
+.unk-period-tab.active { background: var(--accent); color: var(--accent-fg); }
 
 .unk-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 @media (max-width: 680px) { .unk-grid { grid-template-columns: 1fr; } }
@@ -2723,7 +2918,7 @@ input::placeholder { color: var(--text-4); }
 .welcome-flow-num {
   width: 20px; height: 20px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 50%; background: var(--accent); color: #fff;
+  border-radius: 50%; background: var(--accent); color: var(--accent-fg);
   font-size: 11px; font-weight: 700;
 }
 .welcome-flow-icon { flex-shrink: 0; display: inline-flex; color: var(--accent); }
@@ -3192,7 +3387,7 @@ input::placeholder { color: var(--text-4); }
 .ks-panel-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
 .ks-step-num {
   flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--accent-fg);
   font-size: 13px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center;
   font-variant-numeric: tabular-nums;
@@ -3308,7 +3503,7 @@ input::placeholder { color: var(--text-4); }
   font-variant-numeric: tabular-nums; transition: background .12s, border-color .12s, color .12s; flex-shrink: 0;
 }
 .sg-vote:hover:not(:disabled) { border-color: var(--nav-active); color: var(--nav-active); }
-.sg-vote.voted { background: var(--nav-active); border-color: var(--nav-active); color: #fff; }
+.sg-vote.voted { background: var(--nav-active); border-color: var(--nav-active); color: var(--accent-fg); }
 .sg-vote:disabled { cursor: not-allowed; opacity: 0.75; }
 
 /* Badges */
