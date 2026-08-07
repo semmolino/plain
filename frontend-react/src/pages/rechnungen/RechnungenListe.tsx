@@ -829,11 +829,11 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       {/* Batch toolbar */}
       {selected.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13 }}>
-          <span style={{ color: 'var(--text-muted)' }}>{selected.size} ausgewählt</span>
+          <span style={{ color: 'var(--text-3)' }}>{selected.size} ausgewählt</span>
           <button className="btn btn-sm" onClick={openSelectedPdfs}>
             PDFs öffnen ({selected.size})
           </button>
-          <button className="btn btn-sm" style={{ color: 'var(--text-muted)' }} onClick={() => setSelected(new Set())}>
+          <button className="btn btn-sm" style={{ color: 'var(--text-3)' }} onClick={() => setSelected(new Set())}>
             Auswahl aufheben
           </button>
         </div>
@@ -1262,7 +1262,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                 placeholder="Sehr geehrte Damen und Herren,&#10;im Anhang finden Sie …"
               />
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
               📎 PDF wird automatisch angehängt.
             </div>
             {emailMsg && (

@@ -163,8 +163,8 @@ export function ImportSection() {
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px',
                       borderRadius: 999, fontSize: 12, cursor: 'pointer', fontWeight: active ? 600 : 500,
-                      border: '1px solid ' + (active ? 'var(--accent, #2563eb)' : 'var(--border)'),
-                      background: active ? 'var(--accent, #2563eb)' : (imported ? '#ecfdf5' : 'var(--surface-1, #fff)'),
+                      border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
+                      background: active ? 'var(--accent)' : (imported ? '#ecfdf5' : 'var(--surface)'),
                       color: active ? '#fff' : (imported ? '#047857' : 'var(--text-2)'),
                     }}
                   >
@@ -307,7 +307,7 @@ export function ImportSection() {
                   <col />
                 </colgroup>
                 <thead>
-                  <tr style={{ position: 'sticky', top: 0, background: 'var(--surface-1, #fff)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                  <tr style={{ position: 'sticky', top: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
                     <th style={{ textAlign: 'left', padding: '6px 8px' }}>Zeile</th>
                     <th style={{ textAlign: 'left', padding: '6px 8px' }}>Status</th>
                     <th style={{ textAlign: 'left', padding: '6px 8px' }}>Datensatz</th>
@@ -321,7 +321,7 @@ export function ImportSection() {
                     const hasWarn = r.messages.some(m => m.level === 'warn')
                     const noteColor = hasErr ? '#b91c1c' : hasWarn ? '#b45309' : 'var(--text-3)'
                     return (
-                      <tr key={r.row} style={{ borderBottom: '1px solid var(--border-subtle, #f3f4f6)', verticalAlign: 'top' }}>
+                      <tr key={r.row} style={{ borderBottom: '1px solid var(--border-3)', verticalAlign: 'top' }}>
                         <td style={{ padding: '6px 8px', color: 'var(--text-3)' }}>{r.row}</td>
                         <td style={{ padding: '6px 8px' }}><StatusBadge status={r.status} /></td>
                         <td style={{ padding: '6px 8px', wordBreak: 'break-word' }}>{data || '—'}</td>
@@ -401,7 +401,7 @@ export function ImportSection() {
             </thead>
             <tbody>
               {batches.map(b => (
-                <tr key={b.id} style={{ borderBottom: '1px solid var(--border-subtle, #f3f4f6)' }}>
+                <tr key={b.id} style={{ borderBottom: '1px solid var(--border-3)' }}>
                   <td style={{ padding: '5px 8px 5px 0', whiteSpace: 'nowrap' }}>{new Date(b.createdAt).toLocaleString('de-DE')}</td>
                   <td style={{ padding: '5px 8px 5px 0' }}>{b.domainLabel}</td>
                   <td style={{ padding: '5px 8px 5px 0', color: 'var(--text-3)' }}>{b.filename ?? '—'}</td>

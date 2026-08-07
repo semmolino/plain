@@ -136,7 +136,7 @@ export function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
       </div>
 
       {/* E-Rechnungs-Angaben — aufklappbar */}
-      <div style={{ background: 'var(--surface-2, #f9fafb)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 6, padding: 14, marginTop: 4 }}>
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 6, padding: 14, marginTop: 4 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: showEinvoice ? 12 : 0 }}>
           <input
             type="checkbox"
@@ -149,7 +149,7 @@ export function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
           </span>
         </label>
         {!showEinvoice && (
-          <p style={{ fontSize: 12, color: 'var(--text-muted, #6b7280)', margin: '6px 0 0 26px' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0 26px' }}>
             Käuferreferenz / Leitweg-ID und Peppol-Endpoint — nur bei öffentlichen Auftraggebern oder Kunden im Peppol-Netz nötig.
           </p>
         )}

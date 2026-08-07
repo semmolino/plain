@@ -2242,7 +2242,7 @@ function MahnungsEinstellungenSection() {
 
   return (
     <div style={{ maxWidth: 720 }}>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, display: 'inline-flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 16, display: 'inline-flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <span>Bezeichnungen, Gebühren und Texte für jede Mahnstufe. Diese Einstellungen gelten für alle Mahnungs-PDFs.</span>
         <HelpHint id="dunning.process" />
       </p>
@@ -2282,7 +2282,7 @@ function MahnungsEinstellungenSection() {
       <button className="btn btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} style={{ marginTop: 8 }}>
         {saveMut.isPending ? 'Speichern…' : 'Einstellungen speichern'}
       </button>
-      <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>oder Strg+S</span>
+      <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-3)' }}>oder Strg+S</span>
     </div>
   )
 }
@@ -2343,7 +2343,7 @@ function TextVorlagenSection() {
 
   return (
     <div style={{ maxWidth: 720 }}>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+      <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 16 }}>
         Hinterlegen Sie Standardtexte für Rechnungs- und Angebots-PDFs. Diese erscheinen als Kopf- und Fußtext
         auf dem Dokument, sofern beim Erstellen des Belegs kein eigener Text eingetragen wurde.
       </p>
@@ -2363,7 +2363,7 @@ function TextVorlagenSection() {
 
       {/* Platzhalter-Chips */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', margin: '12px 0' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Platzhalter einfügen:</span>
+        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Platzhalter einfügen:</span>
         {TEXT_PLACEHOLDERS.map(p => (
           <button key={p.token} type="button" className="btn-small" onClick={() => insertToken(p.token)} title={p.token}>
             {p.label}
@@ -2405,7 +2405,7 @@ function TextVorlagenSection() {
       <button className="btn btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
         {saveMut.isPending ? 'Speichern…' : 'Textvorlage speichern'}
       </button>
-      <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>oder Strg+S</span>
+      <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-3)' }}>oder Strg+S</span>
     </div>
   )
 }

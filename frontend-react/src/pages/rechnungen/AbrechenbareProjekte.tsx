@@ -63,7 +63,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
   return (
     <div className="abrechenbar-card" style={{
       border: '1px solid var(--border)', borderRadius: 8, marginBottom: 16,
-      background: 'var(--surface-1, #fff)',
+      background: 'var(--surface)',
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',

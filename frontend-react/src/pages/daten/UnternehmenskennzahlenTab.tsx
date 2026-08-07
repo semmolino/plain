@@ -201,7 +201,7 @@ export function UnternehmenskennzahlenTab() {
         Für Kennzahlen, die eine vollständige Kostenaufschlüsselung erfordern, sind Platzhalter ausgewiesen.
       </p>
 
-      {error && <p style={{ color: 'var(--red, #dc2626)', fontSize: 13 }}>Fehler beim Laden.</p>}
+      {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>Fehler beim Laden.</p>}
       {isLoading && <p className="empty-note">Lade Kennzahlen …</p>}
 
       {!isLoading && kpis && (

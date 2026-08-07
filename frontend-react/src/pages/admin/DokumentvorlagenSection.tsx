@@ -274,7 +274,7 @@ export function DokumentvorlagenSection() {
                     title={p.label}
                     style={{
                       padding: 5, borderRadius: 8, cursor: 'pointer', background: 'transparent',
-                      border: active ? '2px solid var(--text-1)' : '1px solid #e5e7eb',
+                      border: active ? '2px solid var(--text)' : '1px solid #e5e7eb',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
                     }}
                   >
@@ -306,7 +306,7 @@ export function DokumentvorlagenSection() {
                     aria-label={`Hausfarbe ${c}`}
                     style={{
                       width: 32, height: 32, borderRadius: 8, background: c, cursor: 'pointer',
-                      border: active ? '2px solid var(--text-1)' : '1px solid #d1d5db',
+                      border: active ? '2px solid var(--text)' : '1px solid #d1d5db',
                       boxShadow: active ? '0 0 0 2px #fff inset' : 'none',
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     }}
@@ -319,7 +319,7 @@ export function DokumentvorlagenSection() {
                 title="Eigene Farbe"
                 style={{
                   width: 32, height: 32, borderRadius: 8, cursor: 'pointer', overflow: 'hidden',
-                  border: !accentInPalette ? '2px solid var(--text-1)' : '1px dashed #9ca3af',
+                  border: !accentInPalette ? '2px solid var(--text)' : '1px dashed #9ca3af',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   background: !accentInPalette ? theme.brand.accentColor : '#fff',
                 }}

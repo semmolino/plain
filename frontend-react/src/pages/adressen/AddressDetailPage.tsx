@@ -25,7 +25,7 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   if (children == null || children === '') return null
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 8, padding: '4px 0', fontSize: 14 }}>
-      <span style={{ color: 'var(--text-muted, #6b7280)' }}>{label}</span>
+      <span style={{ color: 'var(--text-3)' }}>{label}</span>
       <span style={{ whiteSpace: 'pre-line' }}>{children}</span>
     </div>
   )
@@ -52,7 +52,7 @@ function LinkList<T>({ items, icon, label, render, onClick }: {
   if (!items.length) return null
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-muted, #6b7280)', marginBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
         {icon}{label} ({items.length})
       </div>
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -243,7 +243,7 @@ export function AddressDetailPage() {
       <div className="master-page-header" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h1 className="master-page-title" style={{ margin: 0 }}>{address.ADDRESS_NAME_1}</h1>
         {typeLabel && (
-          <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 10px', borderRadius: 999, background: 'var(--surface-2, #f3f4f6)', color: 'var(--text-muted, #4b5563)' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 10px', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-3)' }}>
             {typeLabel}
           </span>
         )}

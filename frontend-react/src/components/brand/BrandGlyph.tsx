@@ -26,7 +26,7 @@ export function BrandGlyph({
   size = 24, fill = 1, color, emptyColor, animate = true, title, className,
 }: Props) {
   const f = Math.max(0, Math.min(1, Number.isFinite(fill) ? fill : 0))
-  const full  = color ?? 'var(--brand-glyph, var(--accent, #2563eb))'
+  const full  = color ?? 'var(--brand-glyph, var(--accent))'
   const empty = emptyColor ?? 'var(--brand-glyph-empty, rgba(37,99,235,0.18))'
 
   const maskBase: CSSProperties = {

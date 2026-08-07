@@ -627,7 +627,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
   // ── Render ────────────────────────────────────────────────────────────────────
 
   if (rows$.isLoading) return <p className="empty-note">Lade Mahnungsdaten…</p>
-  if (rows$.error)     return <p className="empty-note" style={{ color: 'var(--red)' }}>Fehler beim Laden.</p>
+  if (rows$.error)     return <p className="empty-note" style={{ color: 'var(--danger)' }}>Fehler beim Laden.</p>
 
   return (
     <div>
@@ -707,11 +707,11 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
       {/* ── Batch toolbar ── */}
       {selected.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13 }}>
-          <span style={{ color: 'var(--text-muted)' }}>{selected.size} ausgewählt</span>
+          <span style={{ color: 'var(--text-3)' }}>{selected.size} ausgewählt</span>
           <button className="btn btn-sm" onClick={openSelectedPdfs} disabled={selectedWithMahnung === 0}>
             PDFs öffnen ({selectedWithMahnung})
           </button>
-          <button className="btn btn-sm" style={{ color: 'var(--text-muted)' }} onClick={() => setSelected(new Set())}>
+          <button className="btn btn-sm" style={{ color: 'var(--text-3)' }} onClick={() => setSelected(new Set())}>
             Auswahl aufheben
           </button>
         </div>
@@ -815,7 +815,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                       {!hiddenCols.has('contractName') && <td style={{ fontSize: 12 }}>{r.contractName ?? '–'}</td>}
                       {!hiddenCols.has('contact')      && <td style={{ fontSize: 12 }}>{r.contact ?? '–'}</td>}
                       {!hiddenCols.has('totalGross')   && <td className="num">{fmtMoney(r.totalGross)}</td>}
-                      {!hiddenCols.has('openAmount')   && <td className="num" style={{ fontWeight: r.openAmount > 0 ? 600 : undefined, color: r.openAmount > 0 ? 'var(--red, #dc2626)' : undefined }}>{fmtMoney(r.openAmount)}</td>}
+                      {!hiddenCols.has('openAmount')   && <td className="num" style={{ fontWeight: r.openAmount > 0 ? 600 : undefined, color: r.openAmount > 0 ? 'var(--danger)' : undefined }}>{fmtMoney(r.openAmount)}</td>}
 
                       {/* Abgeschlossen checkbox */}
                       <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
@@ -863,7 +863,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                             ><Folder size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />→ Projekt</button>
                           )}
                         </RowMenu>
-                        {emp && <span title={`Verantw.: ${emp.SHORT_NAME}`} style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 2px' }}>{emp.SHORT_NAME}</span>}
+                        {emp && <span title={`Verantw.: ${emp.SHORT_NAME}`} style={{ fontSize: 11, color: 'var(--text-3)', padding: '0 2px' }}>{emp.SHORT_NAME}</span>}
                       </td>
                     </tr>
                   )
@@ -874,7 +874,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
         )
       }
 
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Klick auf eine Zeile für Details und Notizen.</p>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>Klick auf eine Zeile für Details und Notizen.</p>
 
       {/* ── Detail Modal ── */}
       {detailRow && (
@@ -905,7 +905,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
               </div>
 
               <div className="form-group">
-                <label className="form-label">Datum nächste Mahnung <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(wird auto-berechnet)</span></label>
+                <label className="form-label">Datum nächste Mahnung <span style={{ fontSize: 11, color: 'var(--text-3)' }}>(wird auto-berechnet)</span></label>
                 <input
                   type="date" className="form-control"
                   value={draft.nextMahnungDate ?? ''}
@@ -977,7 +977,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
             {/* Right — level info + history */}
             <div>
               {(draft.mahnstufe ?? 0) > 0 && settingsByLevel[draft.mahnstufe!] && (
-                <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }}>
+                <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }}>
                   <div style={{ fontWeight: 600, marginBottom: 6 }}>
                     <span className={`mahnstufe-badge ms-${draft.mahnstufe}`}>{settingsByLevel[draft.mahnstufe!].label}</span>
                   </div>
@@ -990,7 +990,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
               <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Verlauf</div>
               {detailRow.history.length === 0
-                ? <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Noch keine Aktionen.</p>
+                ? <p style={{ fontSize: 12, color: 'var(--text-3)' }}>Noch keine Aktionen.</p>
                 : (
                   <ul className="mahnung-history-list">
                     {detailRow.history.map((h, i) => (
@@ -998,7 +998,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                         <span className={`mahnstufe-badge ms-${h.mahnstufe}`}>{STUFEN_LABELS[h.mahnstufe] ?? `Stufe ${h.mahnstufe}`}</span>
                         <div style={{ flex: 1 }}>
                           <div>{new Date(h.dateAction).toLocaleDateString('de-DE')}{h.emailSent ? ' · ✉ ' + (h.emailTo ?? '') : ''}</div>
-                          {h.feeAmount > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Gebühr: {fmtMoney(h.feeAmount)}</div>}
+                          {h.feeAmount > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Gebühr: {fmtMoney(h.feeAmount)}</div>}
                         </div>
                       </li>
                     ))}

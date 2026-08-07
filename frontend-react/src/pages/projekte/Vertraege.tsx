@@ -176,7 +176,7 @@ export function Vertraege({ initialProjectId }: Props) {
 
       {!pid && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
       {pid && isLoading && <p className="empty-note">Lade Vertragsdaten…</p>}
-      {pid && isError   && <p className="empty-note" style={{ color: 'var(--color-danger)' }}>Fehler beim Laden.</p>}
+      {pid && isError   && <p className="empty-note" style={{ color: 'var(--danger)' }}>Fehler beim Laden.</p>}
       {pid && !isLoading && !contract && !isError && (
         <p className="empty-note">Kein Vertrag für dieses Projekt gefunden.</p>
       )}

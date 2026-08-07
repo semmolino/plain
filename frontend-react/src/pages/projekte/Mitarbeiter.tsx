@@ -201,7 +201,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
 
       {!pid && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
       {pid && isLoading && <p className="empty-note">Lade Mitarbeiterdaten…</p>}
-      {pid && isError   && <p className="empty-note" style={{ color: 'var(--color-danger)' }}>Fehler beim Laden.</p>}
+      {pid && isError   && <p className="empty-note" style={{ color: 'var(--danger)' }}>Fehler beim Laden.</p>}
 
       {pid && !isLoading && !isError && (
         <>

@@ -168,7 +168,7 @@ export function Leistungsstand({ initialProjectId }: Props) {
 
       {!pid && <p className="ls-empty">Bitte oben ein Projekt auswählen.</p>}
       {pid && isLoading && <p className="ls-empty">Lade Daten…</p>}
-      {pid && isError   && <p className="ls-empty" style={{ color: 'var(--color-danger)' }}>Fehler beim Laden.</p>}
+      {pid && isError   && <p className="ls-empty" style={{ color: 'var(--danger)' }}>Fehler beim Laden.</p>}
 
       {pid && !isLoading && lsNodes.length > 0 && (
         <>

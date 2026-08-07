@@ -225,7 +225,7 @@ function ProfileAvatar({ shortName, email }: { shortName: string | null; email: 
         style={{
           width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
           background: dataUri ? '#fff' : 'var(--accent-bg, #eff6ff)',
-          color: 'var(--accent, #2563eb)',
+          color: 'var(--accent)',
           border: '1px solid var(--border, #e5e7eb)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 24, fontWeight: 700, flexShrink: 0,
