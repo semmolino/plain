@@ -74,7 +74,11 @@ const addresses = PROJECTS.map(([, , , , , addr], i) => ({
   CATEGORY_NAME: i % 2 ? 'Bauherr' : 'Fachplaner', IS_ACTIVE: true,
 }))
 
-const named = (n: string[]) => n.map((name, i) => ({ ID: i + 1, NAME: name, NAME_SHORT: name, NAME_LONG: name }))
+/** Deckt die verschiedenen Namensfelder der Stammdaten-Typen ab —
+ *  ProjectManager nutzt SHORT_NAME, Status/Typ/Abteilung NAME_SHORT. */
+const named = (n: string[]) => n.map((name, i) => ({
+  ID: i + 1, NAME: name, NAME_SHORT: name, NAME_LONG: name, SHORT_NAME: name,
+}))
 
 /** Registriert Auth + Beispieldaten. Reihenfolge wie in den anderen Specs:
  *  Catch-All zuerst, spezifische Routen danach. */

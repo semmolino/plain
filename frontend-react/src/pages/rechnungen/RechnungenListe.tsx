@@ -845,7 +845,10 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       {isLoading && <p className="empty-note">Laden …</p>}
       {!isLoading && (
         <div className="list-section table-scroll">
-          <table className="master-table">
+          {/* Diese Tabelle hat so viele Spalten, dass sie auf ueblichen
+              Breiten horizontal scrollt — daher die rechts fixierte
+              Aktionsspalte. Schmalere Listen bekommen den Modifier nicht. */}
+          <table className="master-table master-table--sticky-actions">
             <thead>
               <tr>
                 <th style={{ width: 32, padding: '6px 4px' }}>

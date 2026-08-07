@@ -20,6 +20,7 @@ import {
   type Project,
 } from '@/api/projekte'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
+import { rowClickHandler } from '@/utils/rowClick'
 
 const PAGE_SIZE = 25
 type SortKey = 'NAME_SHORT' | 'NAME_LONG' | 'STATUS_NAME' | 'MANAGER_NAME' | 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
@@ -380,7 +381,9 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   }
 
   const sortProps = { sortKey, dir: sortDir, onClick: toggleSort }
-  const actionColSpan = 1 + (onSelectProject ? 1 : 0)
+  // Frueher gab es zusaetzlich eine „Oeffnen"-Spalte; die Zeile selbst ist
+  // jetzt anklickbar, das Kuerzel dient als fokussierbarer Einstieg.
+  const actionColSpan = 1
 
   return (
     <>
@@ -411,7 +414,10 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
             </button>
           )}
         </div>
-        <div ref={colPanelRef} className="pl-col-wrap">
+        {/* Das Nach-rechts-Ruecken steckt in globals.css und gilt erst ab
+            641px. Als Inline-Style wirkte es auch auf dem Handy und riss
+            die Filter-Chips dort auseinander. */}
+        <div ref={colPanelRef} className="pl-col-wrap pl-toolbar-actions">
           <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
           {colPanelOpen && (
             <div className="pl-col-panel">
@@ -425,11 +431,14 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
             </div>
           )}
         </div>
-        <span className="list-info">
-          {processed.length}{processed.length !== projects.length ? ` / ${projects.length}` : ''} Projekte · Seite {safePage}/{totalPages}
-        </span>
+        {/* Die Trefferzahl stand vorher hier — zwischen „Spalten" (Ansicht)
+            und „+ Neues Projekt" (Aktion), also mitten zwischen zwei
+            Bedienelementen und ohne gemeinsame Grundlinie. Sie steht ohnehin
+            in der Fusszeile der Tabelle; „Seite x/y" zeigt jetzt das
+            Blaettern selbst. In der Leiste bleiben nur Bedienelemente:
+            links Suche und Filter, rechts Ansicht und Primaeraktion. */}
         <Can permission="projects.create">
-          <button className="btn-primary btn-small" style={{ marginLeft: 'auto' }} onClick={() => setShowCreate(true)}>
+          <button className="btn-primary btn-small" onClick={() => setShowCreate(true)}>
             + Neues Projekt
           </button>
         </Can>
@@ -465,15 +474,24 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                     <SortTh key={c.key} label={c.label} k={c.key} {...sortProps} />
                   ))}
                   <th style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Intern</th>
-                  <th></th>
-                  {onSelectProject && <th></th>}
+                  <th className="doc-actions"><span className="sr-only">Aktionen</span></th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map(p => (
-                  <tr key={p.ID} style={p.IS_INTERNAL ? { opacity: 0.7 } : undefined}>
+                  <tr
+                    key={p.ID}
+                    className={onSelectProject ? 'clickable-row' : undefined}
+                    onClick={onSelectProject ? rowClickHandler(() => onSelectProject(p.ID)) : undefined}
+                    style={p.IS_INTERNAL ? { opacity: 0.7 } : undefined}
+                  >
                     <td>
-                      {p.NAME_SHORT}
+                      {/* Das Kuerzel ist der fokussierbare Einstieg in die Zeile —
+                          es ersetzt die frueher in JEDER Zeile wiederholte
+                          Schaltflaeche „Oeffnen" und bleibt per Tab erreichbar. */}
+                      {onSelectProject
+                        ? <button className="link-btn" onClick={() => onSelectProject(p.ID)}>{p.NAME_SHORT}</button>
+                        : p.NAME_SHORT}
                       {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6, fontSize: 10 }}>intern</span>}
                     </td>
                     <td>{p.NAME_LONG}</td>
@@ -544,9 +562,6 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                         </button>
                       </Can>
                     </td>
-                    {onSelectProject && (
-                      <td><button className="btn-small btn-save" onClick={() => onSelectProject(p.ID)}>Öffnen</button></td>
-                    )}
                   </tr>
                 ))}
                 {!pageRows.length && (

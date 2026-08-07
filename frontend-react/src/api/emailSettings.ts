@@ -16,22 +16,6 @@ export interface EmailSettings {
   smtp_pass_set:             boolean   // ob ein verschluesseltes Passwort hinterlegt ist
   encryption_available:      boolean   // ob EMAIL_ENC_KEY gesetzt ist
   global_fallback_available: boolean   // ob globaler ENV-Absender existiert
-  transport:                 'resend' | 'smtp'  // aktiver Versand-Weg
-  provider_ready:            boolean   // im Resend-Modus: RESEND_API_KEY + EMAIL_FROM gesetzt
-  domain_name:               string    // eigene Absender-Domain (oder '')
-  domain_status:             string    // not_started | pending | verified | failed | ...
-  domain_records:            DomainRecord[]  // anzuzeigende DNS-Records
-}
-
-/** Ein von Resend geliefertes DNS-Record zur Domain-Verifizierung. */
-export interface DomainRecord {
-  record?:   string   // z.B. 'SPF' | 'DKIM'
-  name:      string   // Host/Name des Records
-  type:      string   // 'TXT' | 'MX' | 'CNAME'
-  value:     string   // Wert
-  ttl?:      string
-  priority?: number
-  status?:   string
 }
 
 /** Speicher-Payload. `smtp_pass` nur senden, wenn neu/geaendert. */
@@ -58,14 +42,3 @@ export const saveEmailSettings = (body: EmailSettingsPayload) =>
 
 export const sendEmailSettingsTest = (to: string) =>
   apiClient.post<{ sent: boolean }>('/email-settings/test', { to })
-
-// ── Absender-Domain ─────────────────────────────────────────────────────────
-
-export const addEmailDomain = (domain: string) =>
-  apiClient.post<EmailSettings>('/email-settings/domain', { domain })
-
-export const verifyEmailDomain = () =>
-  apiClient.post<EmailSettings>('/email-settings/domain/verify', {})
-
-export const removeEmailDomain = () =>
-  apiClient.delete<EmailSettings>('/email-settings/domain')

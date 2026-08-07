@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "335467894649",
+    "project_id": "plain-19683",
+    "storage_bucket": "plain-19683.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:335467894649:android:07d7a0b8ea4a7bf2b101a8",
+        "android_client_info": {
+          "package_name": "io.plain.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWtxdiFtNu8N7NNcN02_xOaC2DG-gbEzE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

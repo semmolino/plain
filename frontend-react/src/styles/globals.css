@@ -1472,6 +1472,34 @@ input::placeholder { color: var(--text-4); }
 }
 
 .list-info { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+
+/* Auf schmalen Geraeten bekommt die Suche eine eigene Zeile. Vorher belegte
+   sie als flex:1 rund 270 von 390px, sodass neben ihr nur ein bis zwei
+   Filter-Chips Platz fanden und der Rest auf zwei weitere Zeilen rutschte.
+   Mit voller Breite fuer die Chips passen drei nebeneinander.
+
+   Es gibt drei Leisten-Klassen (.list-toolbar 10x, .pl-toolbar 8x,
+   .ls-toolbar 1x) — dieselbe Sache unter drei Namen. Bis das
+   zusammengefuehrt ist, greift die Regel fuer alle drei. */
+@media (max-width: 640px) {
+  .list-toolbar, .pl-toolbar, .ls-toolbar { gap: var(--space-2); }
+  .list-toolbar .list-search,
+  .pl-toolbar   .list-search,
+  .ls-toolbar   .list-search { flex: 1 0 100%; min-width: 0; }
+  /* Der Chip-Block ist ein eigener Flex-Container; ohne volle Breite teilt
+     er sich die Zeile mit „Spalten"/„+ Neu" und bricht dann intern nochmal
+     um. Drei Zeilen fuer vier Chips waren die Folge. */
+  /* Zwei Selektoren tief, weil die Basisregel .pl-filter-chips { flex: 1 }
+     weiter unten in dieser Datei steht und sonst gewinnt. */
+  .pl-toolbar .pl-filter-chips { flex: 1 0 100%; }
+  /* Ansicht + Primaeraktion auf eine eigene Zeile am Ende, damit sie sich
+     nicht zwischen die Filter-Chips schieben. */
+  .pl-toolbar .pl-toolbar-actions { margin-left: 0; }
+}
+/* Ab Tablet: Ansicht und Primaeraktion gemeinsam nach rechts. */
+@media (min-width: 641px) {
+  .pl-toolbar-actions { margin-left: auto; }
+}
 .list-checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; user-select: none; }
 
 /* ── Master table ────────────────────────────────────────────────────────── */
@@ -1498,22 +1526,33 @@ input::placeholder { color: var(--text-4); }
    die Zeilenhoehe verdreifacht hat. */
 .cell-nowrap { white-space: nowrap; }
 
-/* Aktionsspalte am rechten Rand fixieren. In der Rechnungsliste lief sie
+/* Nur fuer Screenreader — z. B. Beschriftung einer Aktionsspalte, die
+   visuell leer bleibt. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Aktionsspalte am rechten Rand fixieren — nur fuer Tabellen, die breiter
+   sind als ihr Container (Modifier .master-table--sticky-actions).
+   Global angewandt erzeugte die undurchsichtige Spalte auch dort einen
+   sichtbaren weissen Streifen, wo die Tabelle ohnehin passt. In der Rechnungsliste lief sie
    sonst aus dem Viewport — ausgerechnet die Interaktionsspalte war das
    Erste, was verschwand. background-image statt background-color fuer die
    Zebra-/Hover-Lage, weil eine sticky Zelle undurchsichtig sein muss:
    --dim-2 ist transluzent und wuerde den durchlaufenden Inhalt zeigen. */
-.master-table th.doc-actions,
-.master-table td.doc-actions {
+.master-table--sticky-actions th.doc-actions,
+.master-table--sticky-actions td.doc-actions {
   position: sticky; right: 0; z-index: 1;
   background-color: var(--surface);
   box-shadow: -6px 0 8px -8px rgba(var(--shadow-color), 0.35);
 }
-.master-table th.doc-actions { z-index: 3; }
-.master-table tbody tr:nth-child(even) td.doc-actions {
+.master-table--sticky-actions th.doc-actions { z-index: 3; }
+.master-table--sticky-actions tbody tr:nth-child(even) td.doc-actions {
   background-image: linear-gradient(var(--dim-2), var(--dim-2));
 }
-.master-table tbody tr:hover td.doc-actions {
+.master-table--sticky-actions tbody tr:hover td.doc-actions {
   background-image: linear-gradient(var(--accent-tint), var(--accent-tint));
 }
 .master-table tbody tr:last-child td { border-bottom: none; }

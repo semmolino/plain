@@ -1,0 +1,1 @@
+import{n as e}from"./client-DnUAumsl.js";var t=t=>e.get(`/number-ranges?year=${t}`),n=t=>e.post(`/number-ranges/set`,t);export{n,t};
