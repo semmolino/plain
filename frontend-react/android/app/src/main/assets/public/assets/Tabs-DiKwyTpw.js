@@ -1,1 +1,0 @@
-import{c as e}from"./client-DnUAumsl.js";var t=e();function n({tabs:e,active:n,onChange:r}){return(0,t.jsx)(`div`,{className:`tabs`,children:e.map(e=>(0,t.jsx)(`button`,{className:`tab-btn`+(n===e.id?` active`:``),onClick:()=>r(e.id),type:`button`,children:e.label},e.id))})}export{n as t};
