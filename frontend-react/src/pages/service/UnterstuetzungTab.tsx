@@ -119,7 +119,7 @@ export function UnterstuetzungTab() {
           <div className="sg-form" style={{ marginTop: cat.faq.length ? 14 : 0 }}>
             <label className="sg-field">
               <span>Betreff</span>
-              <input className="list-search" maxLength={120} value={subject} onChange={e => setSubject(e.target.value)} placeholder={`Ihr Anliegen zu „${cat.label}"`} />
+              <input type="search" className="list-search" maxLength={120} value={subject} onChange={e => setSubject(e.target.value)} placeholder={`Ihr Anliegen zu „${cat.label}"`} />
             </label>
             <label className="sg-field">
               <span>Beschreibung</span>
@@ -141,7 +141,7 @@ export function UnterstuetzungTab() {
                   <span>Rückruf zur Datenübernahme vereinbaren</span>
                 </label>
                 {callback && (
-                  <input className="list-search" value={callbackTime} onChange={e => setCallbackTime(e.target.value)} placeholder="Wunsch-Zeitfenster (z. B. Mo–Mi vormittags)" />
+                  <input type="search" className="list-search" value={callbackTime} onChange={e => setCallbackTime(e.target.value)} placeholder="Wunsch-Zeitfenster (z. B. Mo–Mi vormittags)" />
                 )}
               </div>
             )}

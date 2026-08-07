@@ -328,7 +328,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
           }}
         />
         <div className="pl-toolbar">
-          <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+          <input type="search" className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
           <div className="pl-filter-chips">
             <FilterChip label="Kategorie" options={filterOptions.typ}   active={activeTyp}   onChange={setActiveTyp}   />
             <FilterChip label="Land"      options={filterOptions.land}  active={activeLand}  onChange={setActiveLand}  />
@@ -687,7 +687,7 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
     <>
       <div className="list-section">
         <div className="pl-toolbar">
-          <input className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+          <input type="search" className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
           <div className="pl-filter-chips">
             <FilterChip label="Adresse"   options={filterOptions.adresse}   active={activeAdresse}   onChange={setActiveAdresse}   />
             <FilterChip label="Funktion"  options={filterOptions.funktion}  active={activeFunktion}  onChange={setActiveFunktion}  />

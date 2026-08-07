@@ -148,7 +148,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
       />
 
       <div className="list-toolbar" style={{ marginTop: 10 }}>
-        <input
+        <input type="search"
           className="list-search"
           placeholder="Suchen …"
           value={search}

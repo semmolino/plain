@@ -10,7 +10,7 @@ import type { HelpId } from '@/help/helpContent'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
-import { Pencil, Trash2, Download, AlertTriangle } from 'lucide-react'
+import { Pencil, Trash2, Download, AlertTriangle , ChevronLeft, ChevronRight } from 'lucide-react'
 import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
@@ -2994,7 +2994,7 @@ export function MitarbeiterPage() {
           <>
             <LimitBanner capability="limits.employees" />
             <div className="list-toolbar">
-              <input
+              <input type="search"
                 className="list-search"
                 placeholder="Suchen …"
                 value={search}
@@ -3123,10 +3123,17 @@ export function MitarbeiterPage() {
                   </tfoot>
                 </table>
                 </div>
-                <div className="pagination">
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}>← Zurück</button>
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>Weiter →</button>
-                </div>
+                {totalPages > 1 && (
+                  <div className="pagination">
+                    <button className="btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}>
+                      <ChevronLeft size={14} strokeWidth={2} />Zurück
+                    </button>
+                    <span className="pagination-info">Seite {safePage} / {totalPages}</span>
+                    <button className="btn-sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>
+                      Weiter<ChevronRight size={14} strokeWidth={2} />
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </>

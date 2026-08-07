@@ -644,7 +644,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
       {/* ── Toolbar (search + filter chips) ── */}
       <div className="pl-toolbar" style={{ marginTop: 10 }}>
-        <input
+        <input type="search"
           className="list-search"
           placeholder="Suchen … (Nummer, Adresse, Projekt, Vertrag)"
           value={filters.search}

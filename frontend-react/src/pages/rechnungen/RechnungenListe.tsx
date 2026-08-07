@@ -5,7 +5,7 @@ import { trackRecent } from '@/api/recents'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MoreHorizontal, Mail } from 'lucide-react'
+import { MoreHorizontal, Mail , SlidersHorizontal } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import { HasFeature } from '@/components/ui/HasFeature'
 import { Modal }        from '@/components/ui/Modal'
@@ -242,9 +242,13 @@ function FilterChip({ label, options, active, onChange }: {
 type ColKey = 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'seHeld' | 'payable' | 'paid' | 'open' | 'statusLabel'
 
 interface ColDef { key: ColKey; label: string; className?: string; defaultVisible: boolean }
+// Status steht bewusst VOR den Betraegen: er ist die haeufigste Scan-Dimension
+// („was ist offen / ueberfaellig?"). Ganz rechts lag er hinter der fixierten
+// Aktionsspalte und war beim horizontalen Scrollen als Erstes verdeckt.
 const COLUMNS: ColDef[] = [
   { key: 'typ',         label: 'Typ',             defaultVisible: true  },
   { key: 'date',        label: 'Datum',           defaultVisible: true  },
+  { key: 'statusLabel', label: 'Status',          defaultVisible: true  },
   { key: 'project',     label: 'Projekt',         defaultVisible: true  },
   { key: 'address',     label: 'Adresse',         defaultVisible: false },
   { key: 'net',         label: 'Netto €',         className: 'num', defaultVisible: true  },
@@ -253,7 +257,6 @@ const COLUMNS: ColDef[] = [
   { key: 'payable',     label: 'Forderung €',     className: 'num', defaultVisible: true  },
   { key: 'paid',        label: 'Bezahlt €',       className: 'num', defaultVisible: false },
   { key: 'open',        label: 'Offene Posten €', className: 'num', defaultVisible: true  },
-  { key: 'statusLabel', label: 'Status',          defaultVisible: true  },
 ]
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
@@ -773,7 +776,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       />
 
       <div className="pl-toolbar" style={{ marginTop: backProject ? 0 : 10 }}>
-        <input
+        <input type="search"
           className="list-search"
           placeholder="Suchen …"
           value={search}
@@ -793,7 +796,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
           )}
         </div>
         <div ref={colPanelRef} className="pl-col-wrap">
-          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}>⚙ Spalten</button>
+          <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
           {colPanelOpen && (
             <div className="pl-col-panel">
               <div className="pl-col-panel-title">Sichtbare Spalten</div>
@@ -893,15 +896,22 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     <Can permission="invoices.download_pdf">
                       <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
                     </Can>
-                    {row.statusClass === 'booked' && (
-                      <Can permission="invoices.send_email">
-                        <button className="btn-small" title="Per E-Mail senden" onClick={() => openEmailFor(row)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={13} strokeWidth={1.75} />Mail</button>
-                      </Can>
-                    )}
-                    {canPay(row) && (
-                      <button className="btn-small btn-save" onClick={() => openPayment(row)}>Zahlung</button>
-                    )}
+                    {/* „Mail" und „Zahlung" sind ins ⋯-Menue gewandert. Beide
+                        erschienen nur unter Bedingungen, wodurch die Aktions-
+                        spalte von Zeile zu Zeile ihre Breite wechselte — bei
+                        einer rechts fixierten Spalte besonders unruhig. Inline
+                        bleibt jetzt immer dasselbe Paar: Details + PDF + ⋯. */}
                     <RowMenu>
+                      {row.statusClass === 'booked' && (
+                        <Can permission="invoices.send_email">
+                          <button className="row-menu-item" onClick={() => openEmailFor(row)}>
+                            <Mail size={13} strokeWidth={1.75} />Per E-Mail senden
+                          </button>
+                        </Can>
+                      )}
+                      {canPay(row) && (
+                        <button className="row-menu-item" onClick={() => openPayment(row)}>Zahlung erfassen</button>
+                      )}
                       <Can permission="invoices.download_xml">
                         <HasFeature feature="einvoice.xrechnung">
                           <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>

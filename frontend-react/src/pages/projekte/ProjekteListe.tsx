@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { SlidersHorizontal, Pencil, Copy, Trash2 } from 'lucide-react'
+import { SlidersHorizontal, Pencil, Copy, Trash2 , ChevronLeft, ChevronRight } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import { usePermission } from '@/store/permissionsStore'
 import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
@@ -385,7 +385,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   return (
     <>
       <div className="pl-toolbar">
-        <input
+        <input type="search"
           className="list-search"
           placeholder="Suchen …"
           value={search}
@@ -564,10 +564,17 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
               </tfoot>
             </table>
           </div>
-          <div className="pagination">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}>← Zurück</button>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>Weiter →</button>
-          </div>
+          {totalPages > 1 && (
+            <div className="pagination">
+              <button className="btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}>
+                <ChevronLeft size={14} strokeWidth={2} />Zurück
+              </button>
+              <span className="pagination-info">Seite {safePage} / {totalPages}</span>
+              <button className="btn-sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>
+                Weiter<ChevronRight size={14} strokeWidth={2} />
+              </button>
+            </div>
+          )}
         </>
       )}
 

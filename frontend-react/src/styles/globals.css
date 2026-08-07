@@ -1457,7 +1457,21 @@ input::placeholder { color: var(--text-4); }
   border: 1px solid var(--border); border-radius: 10px;
   background: var(--surface); font-size: 14px; outline: none; color: var(--text);
 }
-.list-info { font-size: 12px; color: var(--text-4); white-space: nowrap; }
+/* Lupe als Hintergrundbild statt als zusaetzliches Markup — .list-search
+   steht in 19 Dateien, ein Wrapper-Element pro Stelle waere unverhaeltnis-
+   maessig. type="search" liefert zusaetzlich den nativen Loeschen-Knopf. */
+.list-search {
+  padding-left: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 10px center;
+  background-size: 15px 15px;
+}
+[data-theme="dark"] .list-search {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23909090' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E");
+}
+
+.list-info { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 .list-checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; user-select: none; }
 
 /* ── Master table ────────────────────────────────────────────────────────── */
@@ -1483,6 +1497,25 @@ input::placeholder { color: var(--text-4); }
    in der Rechnungsliste sonst dreizeilig und „2025-08-01" zweizeilig, was
    die Zeilenhoehe verdreifacht hat. */
 .cell-nowrap { white-space: nowrap; }
+
+/* Aktionsspalte am rechten Rand fixieren. In der Rechnungsliste lief sie
+   sonst aus dem Viewport — ausgerechnet die Interaktionsspalte war das
+   Erste, was verschwand. background-image statt background-color fuer die
+   Zebra-/Hover-Lage, weil eine sticky Zelle undurchsichtig sein muss:
+   --dim-2 ist transluzent und wuerde den durchlaufenden Inhalt zeigen. */
+.master-table th.doc-actions,
+.master-table td.doc-actions {
+  position: sticky; right: 0; z-index: 1;
+  background-color: var(--surface);
+  box-shadow: -6px 0 8px -8px rgba(var(--shadow-color), 0.35);
+}
+.master-table th.doc-actions { z-index: 3; }
+.master-table tbody tr:nth-child(even) td.doc-actions {
+  background-image: linear-gradient(var(--dim-2), var(--dim-2));
+}
+.master-table tbody tr:hover td.doc-actions {
+  background-image: linear-gradient(var(--accent-tint), var(--accent-tint));
+}
 .master-table tbody tr:last-child td { border-bottom: none; }
 
 /* Zebrastreifen: bei 10+ Spalten verrutscht das Auge sonst leicht in die
@@ -1615,9 +1648,13 @@ input::placeholder { color: var(--text-4); }
 .doc-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
 
 /* ── Pagination ──────────────────────────────────────────────────────────── */
-.pagination { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
-.pagination button { font-size: 12px; padding: 6px 12px; box-shadow: none; }
+/* Blaettern wird nur noch gerendert, wenn es mehr als eine Seite gibt —
+   vorher standen bei 8 Eintraegen zwei funktionslose Knoepfe unter der
+   Tabelle. Pfeile kommen aus lucide statt als Unicode-Zeichen. */
+.pagination { display: flex; gap: var(--space-2); margin-top: var(--space-3); align-items: center; justify-content: flex-end; }
+.pagination button { box-shadow: none; gap: 4px; }
 .pagination button:hover { transform: none; }
+.pagination-info { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 
 /* ── Autocomplete ────────────────────────────────────────────────────────── */
 .autocomplete-wrap { position: relative; }

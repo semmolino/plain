@@ -25,14 +25,17 @@ interface PickRow {
 }
 
 export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abrechenbar-collapsed' }: Props) {
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    return localStorage.getItem(storageKey) === '1'
+  // `null` = der Nutzer hat noch nichts entschieden; dann entscheidet der
+  // Inhalt (siehe unten). Sobald er selbst klappt, gilt seine Wahl.
+  const [userCollapsed, setUserCollapsed] = useState<boolean | null>(() => {
+    const v = localStorage.getItem(storageKey)
+    return v === '1' ? true : v === '0' ? false : null
   })
   const [picker, setPicker] = useState<PickRow | null>(null)
 
   function toggleCollapsed() {
     const next = !collapsed
-    setCollapsed(next)
+    setUserCollapsed(next)
     localStorage.setItem(storageKey, next ? '1' : '0')
   }
 
@@ -50,6 +53,12 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
   const billing  = data?.data ?? null
   const projects = useMemo(() => (billing?.projects ?? []).slice().sort((a, b) => b.OPEN_NET_TOTAL - a.OPEN_NET_TOTAL), [billing])
   const total    = projects.reduce((s, p) => s + p.OPEN_NET_TOTAL, 0)
+
+  // Ohne eigene Entscheidung des Nutzers richtet sich der Zustand nach dem
+  // Inhalt: leer -> zu, Potenzial vorhanden -> auf. Vorher belegte das Panel
+  // den obersten Bereich der Rechnungsseite dauerhaft mit der Meldung, dass
+  // es nichts zu tun gibt.
+  const collapsed = userCollapsed ?? (!isLoading && projects.length === 0)
 
   function handlePick(wizardType: WizardType) {
     if (!picker) return

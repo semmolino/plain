@@ -248,7 +248,7 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
       <div className="sg-form">
         <label className="sg-field">
           <span>Titel</span>
-          <input className="list-search" maxLength={80} value={title} onChange={e => setTitle(e.target.value)} placeholder="Worum geht es in einem Satz?" />
+          <input type="search" className="list-search" maxLength={80} value={title} onChange={e => setTitle(e.target.value)} placeholder="Worum geht es in einem Satz?" />
         </label>
         <label className="sg-field">
           <span>Bereich</span>

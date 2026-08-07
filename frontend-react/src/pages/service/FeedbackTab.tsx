@@ -70,7 +70,7 @@ export function FeedbackTab() {
           </label>
           <label className="sg-field">
             <span>Betreff</span>
-            <input className="list-search" maxLength={120} value={subject} onChange={e => setSubject(e.target.value)} placeholder="Kurz: worum geht es?" />
+            <input type="search" className="list-search" maxLength={120} value={subject} onChange={e => setSubject(e.target.value)} placeholder="Kurz: worum geht es?" />
           </label>
           <label className="sg-field">
             <span>Nachricht</span>
