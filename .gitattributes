@@ -9,3 +9,10 @@
 Procfile text eol=lf
 Aptfile text eol=lf
 .buildpacks text eol=lf
+
+# Fremdcode nicht normalisieren. node_modules ist zwar in .gitignore, es sind
+# aber noch ~2000 Dateien aus der Zeit davor im Index. Ohne diese Ausnahme
+# wuerde die *.sh-Regel oben deren Zeilenenden umschreiben und sie dauerhaft
+# als geaendert anzeigen.
+node_modules/** -text
+**/node_modules/** -text
