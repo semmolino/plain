@@ -34,6 +34,7 @@ import {
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import { RecentList } from '@/components/recents/RecentList'
 import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
+import { useChartDefaults } from '@/theme/useChartDefaults'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -481,6 +482,9 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ProjektlisteTab() {
+  // Achsen-, Gitter- und Legendenfarben ans Theme koppeln.
+  useChartDefaults()
+
   const navigate = useNavigate()
 
   const [mode,     setMode]     = useState<FilterMode>('now')

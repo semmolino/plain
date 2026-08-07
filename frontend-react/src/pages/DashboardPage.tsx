@@ -60,6 +60,7 @@ import { StreakCard } from '@/components/engagement/StreakCard'
 import { RecapCard } from '@/components/engagement/RecapCard'
 import { DashboardHero } from '@/components/theme/DashboardHero'
 import { fetchSetupProgress } from '@/api/setupProgress'
+import { useChartDefaults } from '@/theme/useChartDefaults'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -1702,6 +1703,9 @@ function DashboardFilterBar({
 }
 
 export function DashboardPage() {
+  // Achsen-, Gitter- und Legendenfarben ans Theme koppeln.
+  useChartDefaults()
+
   const { dashboardRole, setDashboardRole, employeeId } = useSession()
   const canSwitchView = usePermission('dashboard.view_switch')
 

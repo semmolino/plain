@@ -17,6 +17,7 @@ import { Line } from 'react-chartjs-2'
 import { fetchProjectsShort } from '@/api/projekte'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { RecentList } from '@/components/recents/RecentList'
+import { useChartDefaults } from '@/theme/useChartDefaults'
 import {
   fetchProjectReportHeader,
   fetchProjectReportStructure,
@@ -242,6 +243,9 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
 // ── Main tab component ────────────────────────────────────────────────────────
 
 export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: number } = {}) {
+  // Achsen-, Gitter- und Legendenfarben ans Theme koppeln.
+  useChartDefaults()
+
   const navigate = useNavigate()
   const [pid,       setPid]      = useState<number | null>(initialProjectId ?? null)
   const [projectInput,         setProjectInput]         = useState('')

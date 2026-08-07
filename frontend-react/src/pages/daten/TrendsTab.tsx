@@ -16,6 +16,8 @@ import {
 } from 'chart.js'
 import { Chart } from 'react-chartjs-2'
 import { fetchTrends, type TrendPeriod, type TrendsGroupBy } from '@/api/reports'
+import { useSeriesColors } from '@/theme/chartTheme'
+import { useChartDefaults } from '@/theme/useChartDefaults'
 
 ChartJS.register(
   CategoryScale, LinearScale,
@@ -38,15 +40,9 @@ const fmtH    = (v: number | null | undefined) => v == null ? '–' : FMT_H.form
 const fmtPct  = (v: number | null | undefined) => v == null ? '–' : FMT_PCT.format(v) + ' %'
 
 // ── Colors ────────────────────────────────────────────────────────────────────
-
-const C = {
-  fakturiert: '#10b981',
-  kosten:     '#ef4444',
-  db:         '#3b82f6',
-  bezahlt:    '#06b6d4',
-  stunden:    '#8b5cf6',
-  backlog:    '#f59e0b',
-}
+// Serienfarben kommen aus dem Chart-Theme (useSeriesColors): im Dark-Theme
+// heller, damit die Reihen auf dunklem Grund noch stehen. Chart.js zeichnet
+// auf Canvas — dort waere `var(--token)` keine gueltige Farbe.
 
 // ── Date range helpers ────────────────────────────────────────────────────────
 
@@ -150,6 +146,9 @@ function baseOpts(yLabel: string): object {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function TrendsTab() {
+  useChartDefaults()
+  const C = useSeriesColors()
+
   const initRange = defaultRange('month')
   const [groupBy,  setGroupBy]  = useState<TrendsGroupBy>('month')
   const [dateFrom, setDateFrom] = useState(initRange.from)
