@@ -182,3 +182,37 @@ test.describe('Mobile Navigation', () => {
     expect(primary.length + overflow.length).toBe(ORDER.length)
   })
 })
+
+test.describe('Theming', () => {
+  test.beforeEach(async ({ page }) => { await mockLoggedIn(page) })
+
+  // Die weisse Wortmarke galt nur fuer data-theme="dark". In allen Branchen-
+  // Themes stand der dunkle Schriftzug auf dunkler Chrome-Flaeche — sichtbar
+  // blieb nur das blaue „&".
+  for (const theme of ['tga-foto', 'urban-foto', 'architecture-foto', 'dark']) {
+    test(`Wortmarke in der Seitennavigation ist sichtbar (${theme})`, async ({ page, viewport }) => {
+      if ((viewport?.width ?? 0) < 1024) return   // Seitennavigation ist mobil ausgeblendet
+      await page.addInitScript(t => { localStorage.setItem('plain-theme-1', t) }, theme)
+      await page.goto('/')
+      await page.locator('.side-nav-brand').waitFor()
+
+      const shown = await page.locator('.side-nav-brand .brand-wordmark-white').evaluate(
+        el => getComputedStyle(el).display
+      )
+      const hidden = await page.locator('.side-nav-brand .brand-wordmark-color').evaluate(
+        el => getComputedStyle(el).display
+      )
+      expect(shown).not.toBe('none')
+      expect(hidden).toBe('none')
+    })
+  }
+
+  test('Login zeigt weiterhin die farbige Wortmarke auf hellem Grund', async ({ page }) => {
+    await page.goto('/login')
+    await page.locator('.auth-logo').waitFor()
+    const color = await page.locator('.auth-logo .brand-wordmark-color').evaluate(
+      el => getComputedStyle(el).display
+    )
+    expect(color).not.toBe('none')
+  })
+})

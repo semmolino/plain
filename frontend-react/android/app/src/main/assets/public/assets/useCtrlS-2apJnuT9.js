@@ -1,0 +1,1 @@
+import{d as e,l as t}from"./client-DnUAumsl.js";var n=e(t(),1);function r(e,t=!0){let r=(0,n.useRef)(e);r.current=e,(0,n.useEffect)(()=>{if(!t)return;let e=e=>{(e.ctrlKey||e.metaKey)&&e.key===`s`&&(e.preventDefault(),r.current())};return window.addEventListener(`keydown`,e),()=>window.removeEventListener(`keydown`,e)},[t])}export{r as t};
