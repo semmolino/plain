@@ -7,7 +7,7 @@
     "node": "20.x"
   },
   "scripts": {
-    "scalingo-postbuild": "export PLAYWRIGHT_BROWSERS_PATH=0 PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 && npm ci --prefix frontend-react --include=dev && npm ci --prefix backend && (cd backend && npx playwright install chromium) && npm --prefix frontend-react run build",
+    "scalingo-postbuild": "export PLAYWRIGHT_BROWSERS_PATH=0 PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 && npm ci --prefix frontend-react --include=dev && npm ci --prefix backend && (cd backend && npx playwright install chromium) && bash bin/fetch-postgrest.sh ./bin && npm --prefix frontend-react run build",
     "start": "node backend/server.js"
   }
 }
