@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-APP="${APP:-plain-test}"
+APP="${APP:-planandsimple}"
 SIZE="${SIZE:-M}"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 

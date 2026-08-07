@@ -29,7 +29,7 @@
 
 set -euo pipefail
 
-APP="${APP:-plain-test}"
+APP="${APP:-planandsimple}"
 PGBIN="${PGBIN:-$HOME/AppData/Local/Temp/claude/c--Users-simon-Desktop-plain-2603-plain/e1c8ad08-7229-40b6-8eda-0d16275bf24f/scratchpad/pgtools/pgsql/bin}"
 OUT="./export"
 TUNNEL_PORT=10000

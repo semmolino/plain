@@ -6,7 +6,7 @@
 #   bash scripts/scalingo/01_setup.sh
 #
 # Optional andere App/Region:
-#   APP=plain-test REGION=osc-fr1 bash scripts/scalingo/01_setup.sh
+#   APP=planandsimple REGION=osc-fr1 bash scripts/scalingo/01_setup.sh
 #
 # Die Werte fuer JWT_SECRET, SUPABASE_URL und SUPABASE_SERVICE_KEY werden aus
 # backend/.env uebernommen. Sie werden NICHT auf dem Bildschirm ausgegeben.
@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-APP="${APP:-plain-test}"
+APP="${APP:-planandsimple}"
 REGION="${REGION:-osc-fr1}"
 ENV_FILE="backend/.env"
 
