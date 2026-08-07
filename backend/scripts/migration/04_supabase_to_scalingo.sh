@@ -132,6 +132,14 @@ if [[ "$SRC_VER" != PostgreSQL* ]]; then
 fi
 echo "  ✓ ${SRC_VER:0:60}…"
 
+# Alten Export verwerfen. Bleiben Dateien aus einem frueheren Lauf liegen,
+# stehen zwei Generationen nebeneinander — und die Kontrolle am Ende
+# vergleicht dann teils gegen veraltete Staende.
+if [[ -d "$OUT" ]]; then
+  say "Alten Export verwerfen"
+  rm -rf "$OUT"
+  echo "  ✓ $OUT geleert"
+fi
 mkdir -p "$OUT/data"
 
 # ── Schemas ermitteln ───────────────────────────────────────────────────────
@@ -155,7 +163,12 @@ mapfile -t SCHEMAS < <(src -Atc "
 SCHEMA_ARGS=()
 for s in "${SCHEMAS[@]}"; do
   [[ -z "$s" ]] && continue
-  SCHEMA_ARGS+=(--schema="$s")
+  # Die Anfuehrungszeichen sind ZWINGEND. pg_dump wertet --schema wie ein
+  # psql-\d-Muster aus und faltet unquotierte Namen auf Kleinschreibung.
+  # --schema=REPORTING sucht also nach "reporting" -- findet nichts, und der
+  # Dump enthaelt das Schema stillschweigend nicht. Erst beim Import faellt
+  # es auf, als "relation REPORTING.VW_... does not exist".
+  SCHEMA_ARGS+=(--schema="\"$s\"")
   echo "  • $s"
 done
 printf '%s\n' "${SCHEMAS[@]}" | grep -v '^$' > "$OUT/schemas.txt"
@@ -174,6 +187,26 @@ echo "  ✓ pre-data  ($(wc -l < "$OUT/01_schema_pre.sql") Zeilen)"
   --schema-only --section=post-data "${SCHEMA_ARGS[@]}" \
   --no-owner --no-privileges --no-comments -f "$OUT/03_schema_post.sql"
 echo "  ✓ post-data ($(wc -l < "$OUT/03_schema_post.sql") Zeilen)"
+
+# Selbstpruefung: taucht wirklich jedes erkannte Schema im Dump auf?
+# Ohne diese Kontrolle faellt ein stillschweigend uebergangenes Schema erst
+# beim Import auf — und dann als scheinbar unzusammenhaengender Folgefehler.
+FEHLEND=0
+for s in "${SCHEMAS[@]}"; do
+  [[ -z "$s" ]] && continue
+  if grep -qE "CREATE SCHEMA (IF NOT EXISTS )?\"?$s\"?;" "$OUT/01_schema_pre.sql"; then
+    echo "  ✓ Schema $s im Dump enthalten"
+  else
+    echo "  ✗ Schema $s FEHLT im Dump" >&2
+    FEHLEND=1
+  fi
+done
+[[ $FEHLEND -eq 0 ]] || {
+  echo "" >&2
+  echo "  Abbruch: mindestens ein Schema wurde nicht exportiert." >&2
+  echo "  Ein Import waere unvollstaendig und wuerde erst spaeter scheitern." >&2
+  exit 1
+}
 
 # ── Daten exportieren ───────────────────────────────────────────────────────
 say "Daten exportieren"
