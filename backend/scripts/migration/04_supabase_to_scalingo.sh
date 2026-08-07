@@ -155,18 +155,34 @@ say "Daten exportieren"
 if [[ $# -gt 0 ]]; then TENANTS="$(IFS=,; echo "$*")"; echo "  Nur Mandanten: $TENANTS"
 else TENANTS=""; echo "  Alle Daten (keine Mandanten-IDs angegeben)"; fi
 
+# tr -d '\r' ist hier zwingend: psql liefert unter Windows CRLF, und ein
+# Wagenruecklauf im Tabellennamen landet sonst im Dateipfad. Der Fehler zeigt
+# sich dann als "…csv: No such file or directory", weil \r den Namen ungueltig
+# macht und die Terminalausgabe zusaetzlich ueberschreibt.
 mapfile -t TABLES < <(src -Atc "
   SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-  WHERE n.nspname='public' AND c.relkind='r' ORDER BY c.relname")
+  WHERE n.nspname='public' AND c.relkind='r' ORDER BY c.relname" | tr -d '\r')
 echo "  $(printf '%s\n' "${TABLES[@]}" | grep -c .) Tabellen gefunden"
 
+# Welche Tabellen haben eine TENANT_ID? In EINER Abfrage statt 109 einzelnen —
+# ueber den Pooler kostet jede Verbindung spuerbar Zeit, und am mobilen
+# Hotspot zaehlt das.
+mapfile -t TENANT_TABLES < <(src -Atc "
+  SELECT table_name FROM information_schema.columns
+  WHERE table_schema='public' AND column_name='TENANT_ID'" | tr -d '\r')
+has_tenant() { printf '%s\n' "${TENANT_TABLES[@]}" | grep -qxF "$1"; }
+echo "  davon mit TENANT_ID: $(printf '%s\n' "${TENANT_TABLES[@]}" | grep -c .)"
+
 for tbl in "${TABLES[@]}"; do
+  tbl="${tbl%$'\r'}"
   [[ -z "$tbl" ]] && continue
-  HAS_T="$(src -Atc "SELECT count(*) FROM information_schema.columns
-           WHERE table_schema='public' AND table_name='$tbl' AND column_name='TENANT_ID'")"
-  if [[ -n "$TENANTS" && "$HAS_T" == "1" ]]; then WHERE="WHERE \"TENANT_ID\" IN ($TENANTS)"; else WHERE=""; fi
+  if [[ -n "$TENANTS" ]] && has_tenant "$tbl"; then
+    WHERE="WHERE \"TENANT_ID\" IN ($TENANTS)"
+  else
+    WHERE=""
+  fi
   src -q -c "\copy (SELECT * FROM \"$tbl\" $WHERE) TO '$OUT/data/$tbl.csv' WITH (FORMAT csv, HEADER)"
-  printf "  %-30s %8s Zeilen\n" "$tbl" "$(( $(wc -l < "$OUT/data/$tbl.csv") - 1 ))"
+  printf "  %-34s %8s Zeilen\n" "$tbl" "$(( $(wc -l < "$OUT/data/$tbl.csv") - 1 ))"
   echo "\\copy \"$tbl\" FROM 'data/$tbl.csv' WITH (FORMAT csv, HEADER)" >> "$OUT/02_load_data.sql"
 done
 
@@ -183,7 +199,7 @@ src -Atc "
   JOIN pg_class t ON t.oid=d.refobjid
   JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum=d.refobjsubid
   JOIN pg_namespace tn ON tn.oid=t.relnamespace
-  WHERE s.relkind='S' AND tn.nspname='public' ORDER BY t.relname" > "$OUT/04_sequences.sql"
+  WHERE s.relkind='S' AND tn.nspname='public' ORDER BY t.relname" | tr -d '\r' > "$OUT/04_sequences.sql"
 echo "  $(wc -l < "$OUT/04_sequences.sql") Sequenzen"
 unset PGPASSWORD
 
@@ -234,9 +250,10 @@ printf "  %-30s %10s %10s\n" "TABELLE" "QUELLE" "ZIEL"
 printf "  %-30s %10s %10s\n" "------------------------------" "----------" "----------"
 ABWEICHUNG=0
 for tbl in "${TABLES[@]}"; do
+  tbl="${tbl%$'\r'}"
   [[ -z "$tbl" ]] && continue
   SRC_N=$(( $(wc -l < "$OUT/data/$tbl.csv") - 1 ))
-  DST_N="$(dst -Atc "SELECT count(*) FROM \"$tbl\"" 2>/dev/null || echo "?")"
+  DST_N="$(dst -Atc "SELECT count(*) FROM \"$tbl\"" 2>/dev/null | tr -d '\r' || echo "?")"
   MARK=""; [[ "$SRC_N" != "$DST_N" ]] && { MARK="  ← ABWEICHUNG"; ABWEICHUNG=1; }
   printf "  %-30s %10s %10s%s\n" "$tbl" "$SRC_N" "$DST_N" "$MARK"
 done
