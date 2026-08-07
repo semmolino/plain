@@ -134,18 +134,44 @@ echo "  ✓ ${SRC_VER:0:60}…"
 
 mkdir -p "$OUT/data"
 
+# ── Schemas ermitteln ───────────────────────────────────────────────────────
+# NICHT auf "public" festlegen. Die Datenbank enthaelt z.B. ein Schema
+# REPORTING mit Views, auf die Views in public per JOIN zugreifen. Ein Dump
+# mit --schema=public erzeugt dann Views, die auf nichts verweisen — der
+# Import bricht ab mit:
+#     ERROR: relation "REPORTING.VW_PROJECT_PROGRESS_AGG" does not exist
+# Deshalb: alle Schemas nehmen, die nicht zu Postgres oder Supabase gehoeren.
+say "Schemas ermitteln"
+mapfile -t SCHEMAS < <(src -Atc "
+  SELECT nspname FROM pg_namespace
+  WHERE nspname NOT LIKE 'pg\_%'
+    AND nspname NOT IN ('information_schema','auth','storage','graphql',
+                        'graphql_public','realtime','realtime_dev','vault',
+                        'extensions','supabase_functions','supabase_migrations',
+                        'pgsodium','pgsodium_masks','net','cron','_analytics',
+                        '_realtime','pgbouncer')
+  ORDER BY nspname" | tr -d '\r')
+[[ ${#SCHEMAS[@]} -gt 0 ]] || { echo "FEHLER: keine Schemas gefunden." >&2; exit 1; }
+SCHEMA_ARGS=()
+for s in "${SCHEMAS[@]}"; do
+  [[ -z "$s" ]] && continue
+  SCHEMA_ARGS+=(--schema="$s")
+  echo "  • $s"
+done
+printf '%s\n' "${SCHEMAS[@]}" | grep -v '^$' > "$OUT/schemas.txt"
+
 # ── Schema exportieren ──────────────────────────────────────────────────────
 # In zwei Abschnitten: erst Tabellen ohne Constraints, ganz am Ende die
 # Constraints und Indizes. Dadurch spielt die Ladereihenfolge der Daten keine
 # Rolle und es braucht keine Superuser-Rechte auf der Zielseite.
 say "Schema exportieren"
 "$PG_DUMP" -h "$SRC_HOST" -p "$SRC_PORT" -U "$SRC_USER" -d "$SRC_DB" \
-  --schema-only --section=pre-data --schema=public \
+  --schema-only --section=pre-data "${SCHEMA_ARGS[@]}" \
   --no-owner --no-privileges --no-comments -f "$OUT/01_schema_pre.sql"
 echo "  ✓ pre-data  ($(wc -l < "$OUT/01_schema_pre.sql") Zeilen)"
 
 "$PG_DUMP" -h "$SRC_HOST" -p "$SRC_PORT" -U "$SRC_USER" -d "$SRC_DB" \
-  --schema-only --section=post-data --schema=public \
+  --schema-only --section=post-data "${SCHEMA_ARGS[@]}" \
   --no-owner --no-privileges --no-comments -f "$OUT/03_schema_post.sql"
 echo "  ✓ post-data ($(wc -l < "$OUT/03_schema_post.sql") Zeilen)"
 
@@ -159,31 +185,38 @@ else TENANTS=""; echo "  Alle Daten (keine Mandanten-IDs angegeben)"; fi
 # Wagenruecklauf im Tabellennamen landet sonst im Dateipfad. Der Fehler zeigt
 # sich dann als "…csv: No such file or directory", weil \r den Namen ungueltig
 # macht und die Terminalausgabe zusaetzlich ueberschreibt.
+#
+# Format je Zeile: schema|tabelle — alle Schemas, nicht nur public.
+SCHEMA_LIST="$(printf "'%s'," "${SCHEMAS[@]}" | sed "s/,$//")"
 mapfile -t TABLES < <(src -Atc "
-  SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-  WHERE n.nspname='public' AND c.relkind='r' ORDER BY c.relname" | tr -d '\r')
+  SELECT n.nspname||'|'||c.relname
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE n.nspname IN ($SCHEMA_LIST) AND c.relkind='r'
+  ORDER BY n.nspname, c.relname" | tr -d '\r')
 echo "  $(printf '%s\n' "${TABLES[@]}" | grep -c .) Tabellen gefunden"
 
-# Welche Tabellen haben eine TENANT_ID? In EINER Abfrage statt 109 einzelnen —
-# ueber den Pooler kostet jede Verbindung spuerbar Zeit, und am mobilen
-# Hotspot zaehlt das.
+# Welche Tabellen haben eine TENANT_ID? In EINER Abfrage statt einer je
+# Tabelle — ueber den Pooler kostet jede Verbindung spuerbar Zeit, und am
+# mobilen Hotspot zaehlt das.
 mapfile -t TENANT_TABLES < <(src -Atc "
-  SELECT table_name FROM information_schema.columns
-  WHERE table_schema='public' AND column_name='TENANT_ID'" | tr -d '\r')
+  SELECT table_schema||'|'||table_name FROM information_schema.columns
+  WHERE table_schema IN ($SCHEMA_LIST) AND column_name='TENANT_ID'" | tr -d '\r')
 has_tenant() { printf '%s\n' "${TENANT_TABLES[@]}" | grep -qxF "$1"; }
 echo "  davon mit TENANT_ID: $(printf '%s\n' "${TENANT_TABLES[@]}" | grep -c .)"
 
-for tbl in "${TABLES[@]}"; do
-  tbl="${tbl%$'\r'}"
-  [[ -z "$tbl" ]] && continue
-  if [[ -n "$TENANTS" ]] && has_tenant "$tbl"; then
+for qual in "${TABLES[@]}"; do
+  qual="${qual%$'\r'}"
+  [[ -z "$qual" ]] && continue
+  sch="${qual%%|*}"; tbl="${qual#*|}"
+  file="${sch}__${tbl}.csv"
+  if [[ -n "$TENANTS" ]] && has_tenant "$qual"; then
     WHERE="WHERE \"TENANT_ID\" IN ($TENANTS)"
   else
     WHERE=""
   fi
-  src -q -c "\copy (SELECT * FROM \"$tbl\" $WHERE) TO '$OUT/data/$tbl.csv' WITH (FORMAT csv, HEADER)"
-  printf "  %-34s %8s Zeilen\n" "$tbl" "$(( $(wc -l < "$OUT/data/$tbl.csv") - 1 ))"
-  echo "\\copy \"$tbl\" FROM 'data/$tbl.csv' WITH (FORMAT csv, HEADER)" >> "$OUT/02_load_data.sql"
+  src -q -c "\copy (SELECT * FROM \"$sch\".\"$tbl\" $WHERE) TO '$OUT/data/$file' WITH (FORMAT csv, HEADER)"
+  printf "  %-40s %8s Zeilen\n" "$sch.$tbl" "$(( $(wc -l < "$OUT/data/$file") - 1 ))"
+  echo "\\copy \"$sch\".\"$tbl\" FROM 'data/$file' WITH (FORMAT csv, HEADER)" >> "$OUT/02_load_data.sql"
 done
 
 # ── Sequenzen ───────────────────────────────────────────────────────────────
@@ -235,6 +268,20 @@ echo "  ✓ 127.0.0.1:$TUNNEL_PORT"
 export PGPASSWORD="$DST_PASS"
 dst() { "$PSQL" -h 127.0.0.1 -p "$TUNNEL_PORT" -U "$DST_USER" -d "$DST_NAME" "$@"; }
 
+# ── Zielschemas leeren ──────────────────────────────────────────────────────
+# Der Dump enthaelt "CREATE SCHEMA public". Das Schema existiert in jeder
+# frischen Postgres-Datenbank bereits, der Befehl scheitert also — und mit
+# ON_ERROR_STOP=1 bricht psql beim ERSTEN Fehler ab, hier schon in Zeile 26.
+# Ergebnis waere eine leere Zieldatenbank ohne erkennbare Ursache.
+# Deshalb: vorhandene Schemas verwerfen und den Dump sie neu anlegen lassen.
+# Das macht den Import ausserdem wiederholbar.
+say "Zielschemas leeren"
+while read -r s; do
+  [[ -z "$s" ]] && continue
+  dst -Atc "DROP SCHEMA IF EXISTS \"$s\" CASCADE;" >/dev/null
+  echo "  • $s verworfen"
+done < "$OUT/schemas.txt"
+
 # ── Import ──────────────────────────────────────────────────────────────────
 say "Import: Tabellen";                dst -v ON_ERROR_STOP=1 -q -f "$OUT/01_schema_pre.sql"  && echo "  ✓"
 say "Import: Daten"
@@ -246,16 +293,18 @@ say "Import: Sequenzen";               dst -v ON_ERROR_STOP=1 -q -f "$OUT/04_seq
 # Quelle = exportierte CSV-Zeilen, Ziel = echtes count(*). Beides exakt,
 # nicht die geschaetzten reltuples aus dem Planner.
 say "Kontrolle: Zeilenzahlen"
-printf "  %-30s %10s %10s\n" "TABELLE" "QUELLE" "ZIEL"
-printf "  %-30s %10s %10s\n" "------------------------------" "----------" "----------"
+printf "  %-40s %10s %10s\n" "TABELLE" "QUELLE" "ZIEL"
+printf "  %-40s %10s %10s\n" "----------------------------------------" "----------" "----------"
 ABWEICHUNG=0
-for tbl in "${TABLES[@]}"; do
-  tbl="${tbl%$'\r'}"
-  [[ -z "$tbl" ]] && continue
-  SRC_N=$(( $(wc -l < "$OUT/data/$tbl.csv") - 1 ))
-  DST_N="$(dst -Atc "SELECT count(*) FROM \"$tbl\"" 2>/dev/null | tr -d '\r' || echo "?")"
+for qual in "${TABLES[@]}"; do
+  qual="${qual%$'\r'}"
+  [[ -z "$qual" ]] && continue
+  sch="${qual%%|*}"; tbl="${qual#*|}"
+  SRC_N=$(( $(wc -l < "$OUT/data/${sch}__${tbl}.csv") - 1 ))
+  DST_N="$(dst -Atc "SELECT count(*) FROM \"$sch\".\"$tbl\"" 2>/dev/null | tr -d '\r' || echo "?")"
+  [[ -z "$DST_N" ]] && DST_N="?"
   MARK=""; [[ "$SRC_N" != "$DST_N" ]] && { MARK="  ← ABWEICHUNG"; ABWEICHUNG=1; }
-  printf "  %-30s %10s %10s%s\n" "$tbl" "$SRC_N" "$DST_N" "$MARK"
+  printf "  %-40s %10s %10s%s\n" "$sch.$tbl" "$SRC_N" "$DST_N" "$MARK"
 done
 
 say "Kontrolle: Struktur"
