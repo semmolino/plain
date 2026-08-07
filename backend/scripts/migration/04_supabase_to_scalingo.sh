@@ -248,7 +248,13 @@ for qual in "${TABLES[@]}"; do
     WHERE=""
   fi
   src -q -c "\copy (SELECT * FROM \"$sch\".\"$tbl\" $WHERE) TO '$OUT/data/$file' WITH (FORMAT csv, HEADER)"
-  printf "  %-40s %8s Zeilen\n" "$sch.$tbl" "$(( $(wc -l < "$OUT/data/$file") - 1 ))"
+  # Echte Datensatzzahl aus der QUELLE holen, nicht die Zeilen der CSV zaehlen.
+  # Freitextfelder (Rechnungstexte, Adressen, Buchungsbeschreibungen) enthalten
+  # Zeilenumbrueche; wc -l zaehlt die als zusaetzliche Datensaetze und meldet
+  # dann Abweichungen, die keine sind.
+  N="$(src -Atc "SELECT count(*) FROM \"$sch\".\"$tbl\" $WHERE" | tr -d '\r')"
+  echo "$sch|$tbl|$N" >> "$OUT/quelle_zeilen.txt"
+  printf "  %-40s %8s Datensaetze\n" "$sch.$tbl" "$N"
   echo "\\copy \"$sch\".\"$tbl\" FROM 'data/$file' WITH (FORMAT csv, HEADER)" >> "$OUT/02_load_data.sql"
 done
 
@@ -325,20 +331,18 @@ say "Import: Sequenzen";               dst -v ON_ERROR_STOP=1 -q -f "$OUT/04_seq
 # ── Kontrolle ───────────────────────────────────────────────────────────────
 # Quelle = exportierte CSV-Zeilen, Ziel = echtes count(*). Beides exakt,
 # nicht die geschaetzten reltuples aus dem Planner.
-say "Kontrolle: Zeilenzahlen"
+# Beide Seiten mit count(*) — die Quellzahlen wurden beim Export erfasst.
+say "Kontrolle: Datensatzzahlen"
 printf "  %-40s %10s %10s\n" "TABELLE" "QUELLE" "ZIEL"
 printf "  %-40s %10s %10s\n" "----------------------------------------" "----------" "----------"
 ABWEICHUNG=0
-for qual in "${TABLES[@]}"; do
-  qual="${qual%$'\r'}"
-  [[ -z "$qual" ]] && continue
-  sch="${qual%%|*}"; tbl="${qual#*|}"
-  SRC_N=$(( $(wc -l < "$OUT/data/${sch}__${tbl}.csv") - 1 ))
+while IFS='|' read -r sch tbl SRC_N; do
+  [[ -z "$sch" ]] && continue
   DST_N="$(dst -Atc "SELECT count(*) FROM \"$sch\".\"$tbl\"" 2>/dev/null | tr -d '\r' || echo "?")"
   [[ -z "$DST_N" ]] && DST_N="?"
   MARK=""; [[ "$SRC_N" != "$DST_N" ]] && { MARK="  ← ABWEICHUNG"; ABWEICHUNG=1; }
   printf "  %-40s %10s %10s%s\n" "$sch.$tbl" "$SRC_N" "$DST_N" "$MARK"
-done
+done < "$OUT/quelle_zeilen.txt"
 
 say "Kontrolle: Struktur"
 printf "  Tabellen   : %s\n" "$(dst -Atc "select count(*) from information_schema.tables where table_schema='public'")"
