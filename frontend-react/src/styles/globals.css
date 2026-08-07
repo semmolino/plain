@@ -1560,7 +1560,7 @@ input::placeholder { color: var(--text-4); }
 .pl-clear-btn:hover { background: #fee2e2; }
 .pl-col-wrap { position: relative; }
 .pl-col-btn {
-  padding: 5px 10px; font-size: 12px; border-radius: 6px;
+  padding: 0 10px; height: 30px; font-size: 12px; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--surface); cursor: pointer; white-space: nowrap;
 }
 .pl-col-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -1582,7 +1582,7 @@ input::placeholder { color: var(--text-4); }
 /* Filter chips */
 .filter-chip-wrap { position: relative; display: inline-flex; align-items: center; }
 .filter-chip-btn {
-  padding: 5px 10px; font-size: 12px; border-radius: 16px;
+  padding: 5px 10px; font-size: 12px; border-radius: var(--radius-pill);
   border: 1px solid var(--border); background: var(--surface);
   cursor: pointer; white-space: nowrap; color: var(--text);
   transition: border-color 0.12s, background 0.12s;
@@ -1628,8 +1628,8 @@ input::placeholder { color: var(--text-4); }
 .link-cell:hover { text-decoration: underline; }
 
 .btn-small {
-  padding: 4px 10px; font-size: 11px; font-weight: 700;
-  border-radius: 8px; border: 1px solid var(--border);
+  padding: 0 10px; height: 30px; font-size: 12px; font-weight: 600;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; box-shadow: none;
   transition: background 0.12s;
 }
@@ -1641,7 +1641,7 @@ input::placeholder { color: var(--text-4); }
    unlesbar. Hier explizit als kleiner Primaer-Button wiederherstellen. */
 .btn-primary.btn-small {
   width: auto; padding: 7px 16px; font-size: 12px;
-  background: var(--btn); color: var(--btn-fg); border: none; border-radius: 8px;
+  background: var(--btn); color: var(--btn-fg); border: none; border-radius: var(--radius-sm);
 }
 .btn-primary.btn-small:hover { background: var(--btn-h); }
 .btn-primary.btn-small:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -2781,7 +2781,7 @@ input::placeholder { color: var(--text-4); }
 
 /* Row action buttons (MahnungenListe + RechnungenListe) */
 .row-actions     { white-space: nowrap; padding: 0 4px; }
-.row-action-btn  { background: none; border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: 14px; padding: 4px 6px; min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; transition: background 0.1s; color: var(--text-2); }
+.row-action-btn  { background: none; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; padding: 4px 6px; min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; transition: background 0.1s; color: var(--text-2); }
 .row-action-btn:hover:not(:disabled) { background: var(--hover-bg); border-color: var(--border); color: var(--text); }
 .row-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
