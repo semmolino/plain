@@ -162,18 +162,30 @@ scalingo --app plain-test env-set \
 
 ### 4. Deployen
 
-Zwei Wege — für den ersten Versuch ist Git-Push der direktere:
+Scalingo ist per Auto-Deploy an das GitHub-Repository gekoppelt. **Ein Push nach
+`origin/main` genügt** — der Build startet von selbst, genau wie bei Railway:
 
 ```bash
-# Variante A: direkt pushen
-scalingo --app plain-test git-setup
-git push scalingo main
+git push origin main
+```
 
-# Variante B: an GitHub koppeln (spaeter, fuer Auto-Deploy)
+Oder mit Begleitung (wartet auf den Build, setzt Containergröße und URL):
+
+```bash
+bash scripts/scalingo/02_deploy.sh
+```
+
+Falls die Kopplung noch nicht steht:
+
+```bash
 scalingo integrations-add github
 scalingo --app plain-test integration-link-create \
   --auto-deploy --branch main https://github.com/semmolino/plain
 ```
+
+> **Nicht zusätzlich direkt pushen.** Ein `git push scalingo main` neben dem
+> Push nach GitHub löst einen **zweiten** Build desselben Commits aus — doppelte
+> Buildzeit ohne Nutzen. Der `scalingo`-Remote wurde deshalb entfernt.
 
 Der Build dauert deutlich länger als bei Railway: zweimal `npm ci`, Vite-Build und
 der Chromium-Download (~150 MB).
