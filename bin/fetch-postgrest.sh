@@ -16,6 +16,16 @@
 
 set -euo pipefail
 
+# Nur laden, wenn PostgREST auch benutzt wird. Solange die Anwendung direkt
+# mit Supabase spricht, waeren 4 MB Download und die Entpackzeit bei jedem
+# Build umsonst. Wiedereinstieg ist damit eine Variable, keine Codeaenderung:
+#     scalingo --app <app> env-set POSTGREST_ENABLED=true
+# und neu deployen.
+if [[ "${POSTGREST_ENABLED:-false}" != "true" ]]; then
+  echo "[postgrest] uebersprungen (POSTGREST_ENABLED != true)"
+  exit 0
+fi
+
 VERSION="${POSTGREST_VERSION:-v14.16}"
 DEST="${1:-./bin}"
 URL="https://github.com/PostgREST/postgrest/releases/download/${VERSION}/postgrest-${VERSION}-linux-static-x86-64.tar.xz"
