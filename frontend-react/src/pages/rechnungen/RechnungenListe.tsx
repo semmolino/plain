@@ -1133,7 +1133,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                             title="Zahlung löschen"
                             disabled={deletingPayId === p.ID}
                             onClick={() => handleDeletePayment(p.ID)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 16, lineHeight: 1, padding: '0 2px' }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontWeight: 700, fontSize: 16, lineHeight: 1, padding: '0 2px' }}
                           >
                             ×
                           </button>

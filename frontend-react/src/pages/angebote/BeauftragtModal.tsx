@@ -157,16 +157,16 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Position</th>
-                      <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Rolle</th>
-                      <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Mitarbeiter</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border)' }}>Position</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border)' }}>Rolle</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--border)' }}>Mitarbeiter</th>
                     </tr>
                   </thead>
                   <tbody>
                     {bt2Nodes.map(n => (
                       <tr key={n.ID}>
                         <td style={{ padding: '4px 8px' }}>{n.NAME_SHORT || '—'}</td>
-                        <td style={{ padding: '4px 8px', color: '#6b7280' }}>{n.ROLE_NAME_SHORT || '—'}</td>
+                        <td style={{ padding: '4px 8px', color: 'var(--text-3)' }}>{n.ROLE_NAME_SHORT || '—'}</td>
                         <td style={{ padding: '4px 8px' }}>
                           <select
                             value={employeeMap[n.ID] ?? ''}
@@ -202,7 +202,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
                 ))}
               </select>
             </div>
-            <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
               Das Angebot wird als beauftragt markiert. Es wird <strong>kein neues Projekt angelegt</strong>.
               Optional kann ein bereits existierendes Projekt verknüpft werden.
             </p>

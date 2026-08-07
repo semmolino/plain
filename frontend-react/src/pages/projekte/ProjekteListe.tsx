@@ -464,7 +464,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                   {visibleOptCols.map(c => (
                     <SortTh key={c.key} label={c.label} k={c.key} {...sortProps} />
                   ))}
-                  <th style={{ textAlign: 'center', fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>Intern</th>
+                  <th style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Intern</th>
                   <th></th>
                   {onSelectProject && <th></th>}
                 </tr>
@@ -539,7 +539,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                         </button>
                       </Can>
                       <Can permission="projects.delete">
-                        <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(p)} title="Löschen">
+                        <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDelete(p)} title="Löschen">
                           <Trash2 size={14} strokeWidth={2} />
                         </button>
                       </Can>
@@ -663,7 +663,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                   onChange={e => setEditForm(f => ({ ...f, is_internal: e.target.checked }))}
                 />
                 <span>Internes Projekt</span>
-                <span style={{ fontSize: 11, color: '#6b7280' }}>(nicht Teil von Verträgen / Rechnungen)</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>(nicht Teil von Verträgen / Rechnungen)</span>
               </label>
             </div>
             <Message text={editMsg?.text ?? null} type={editMsg?.type} />

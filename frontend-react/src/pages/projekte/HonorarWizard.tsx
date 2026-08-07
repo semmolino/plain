@@ -706,7 +706,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           {isOfferMode && (
             <div className="form-group">
               <label>Angebot</label>
-              <input readOnly value={`${offerLabel} (festgelegt)`} style={{ background: '#f9fafb', color: '#6b7280' }} />
+              <input readOnly value={`${offerLabel} (festgelegt)`} style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }} />
             </div>
           )}
           <div className="form-group">
@@ -743,7 +743,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           {isOfferMode ? (
             <div className="form-group">
               <label>Angebot</label>
-              <input readOnly value={`${offerLabel} (festgelegt)`} style={{ background: '#f9fafb', color: '#6b7280' }} />
+              <input readOnly value={`${offerLabel} (festgelegt)`} style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }} />
             </div>
           ) : (
             <div className="form-group">
@@ -827,13 +827,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                           {kxOptionsForBase.map(k => <option key={k} value={k}>{k}</option>)}
                         </select>
                       </td>
-                      <td style={{ textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
+                      <td style={{ textAlign: 'right', color: 'var(--text-3)', fontSize: 12 }}>
                         {p.REVENUE_BASE != null ? fmtEur(p.REVENUE_BASE) : '—'}
                       </td>
-                      <td style={{ textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
+                      <td style={{ textAlign: 'right', color: 'var(--text-3)', fontSize: 12 }}>
                         {fmtN(p.FEE_PERCENT_BASE) || '—'}
                       </td>
-                      <td style={{ textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
+                      <td style={{ textAlign: 'right', color: 'var(--text-3)', fontSize: 12 }}>
                         {basisHonorar != null ? fmtEur(basisHonorar) : '—'}
                       </td>
                       <td style={{ textAlign: 'right' }}>
@@ -863,7 +863,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       {step === 4 && (
         <div className="wizard-step-content">
           <h3 className="wizard-step-title">{isEdit ? 'Schritt 3' : 'Schritt 4'}: Besondere Leistungen</h3>
-          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
             Optionale Zusatzleistungen über die HOAI-Grundleistungen hinaus (§ 3 Abs. 3).
             Werden separat im Gesamthonorar ausgewiesen und als eigene Elemente in der Projektstruktur angelegt.
           </p>
@@ -946,7 +946,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                               value={b.AMOUNT !== 0 ? String(b.AMOUNT) : ''}
                               onChange={e => updateBl({ AMOUNT: toNum(e.target.value) ?? 0 })} />
                           ) : (
-                            <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>
                               {fmtEur(computed)}
                             </span>
                           )}
@@ -993,21 +993,21 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
 
           <div className="admin-block" style={{ marginBottom: 12, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <div>
-              <span style={{ fontSize: 12, color: '#6b7280' }}>Grundhonorar: </span>
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Grundhonorar: </span>
               <strong>{fmtEur(totalPhaseRev)}</strong>
             </div>
             {blTotal !== 0 && (
               <div>
-                <span style={{ fontSize: 12, color: '#6b7280' }}>+ BL: </span>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ BL: </span>
                 <strong>{fmtEur(blTotal)}</strong>
               </div>
             )}
             <div>
-              <span style={{ fontSize: 12, color: '#6b7280' }}>+ Zuschläge: </span>
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ Zuschläge: </span>
               <strong>{fmtEur(totalSurchargeAmt)}</strong>
             </div>
-            <div style={{ borderLeft: '2px solid #e5e7eb', paddingLeft: 16 }}>
-              <span style={{ fontSize: 12, color: '#6b7280' }}>Gesamt: </span>
+            <div style={{ borderLeft: '2px solid var(--border)', paddingLeft: 16 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Gesamt: </span>
               <strong style={{ fontSize: 15 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</strong>
             </div>
           </div>
@@ -1015,7 +1015,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           {/* Global suggestions */}
           {globalSurcharges.length > 0 && (
             <div style={{ marginBottom: 10 }}>
-              <span style={{ fontSize: 12, color: '#6b7280', marginRight: 8 }}>Vorschläge:</span>
+              <span style={{ fontSize: 12, color: 'var(--text-3)', marginRight: 8 }}>Vorschläge:</span>
               {globalSurcharges.filter(g => !alreadyAdded.has(g.ID)).map(g => (
                 <button key={g.ID} type="button" className="btn-small" style={{ marginRight: 6, marginBottom: 4 }}
                   onClick={() => addSurchargeFromGlobal(g)}>
@@ -1063,7 +1063,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                               value={r.PERCENT != null ? String(r.PERCENT) : ''}
                               onChange={e => updateSurcharge(idx, 'PERCENT', toNum(e.target.value))} />
                           </td>
-                          <td style={{ textAlign: 'right', fontSize: 12, color: '#6b7280' }}>
+                          <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--text-3)' }}>
                             {fmtEur(effect?.effectiveBase)}
                           </td>
                           <td style={{ textAlign: 'right', fontWeight: 600, color: (effect?.amount ?? 0) >= 0 ? '#166534' : '#991b1b' }}>
@@ -1083,9 +1083,9 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                         </tr>
                         {isExpanded && (
                           <tr key={`${idx}-detail`}>
-                            <td colSpan={7} style={{ background: '#f8faff', padding: '10px 12px', borderBottom: '1px solid #e5e7eb' }}>
+                            <td colSpan={7} style={{ background: 'var(--info-bg)', padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
                               <div style={{ marginBottom: 8 }}>
-                                <strong style={{ fontSize: 12, color: '#374151', marginRight: 8 }}>Berechnungsmodus:</strong>
+                                <strong style={{ fontSize: 12, color: 'var(--text-2)', marginRight: 8 }}>Berechnungsmodus:</strong>
                                 <button type="button" className="btn-small"
                                   style={{ marginRight: 4, background: (r.CALC_MODE ?? 'parallel') === 'parallel' ? 'var(--accent)' : undefined, color: (r.CALC_MODE ?? 'parallel') === 'parallel' ? '#fff' : undefined }}
                                   onClick={() => updateSurcharge(idx, 'CALC_MODE', 'parallel')}>
@@ -1096,7 +1096,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                                   onClick={() => updateSurcharge(idx, 'CALC_MODE', 'cumulative')}>
                                   Kumulativ
                                 </button>
-                                <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 8 }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 8 }}>
                                   {r.CALC_MODE === 'cumulative' && idx > 0
                                     ? 'Zuschlag auf Honorarbasis + Summe vorheriger Zuschläge'
                                     : 'Zuschlag auf Honorarbasis'}
@@ -1105,7 +1105,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                               {blItems.length > 0 && (
                                 <div style={{ marginBottom: 8 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                    <strong style={{ fontSize: 12, color: '#374151' }}>Betroffene Besondere Leistungen:</strong>
+                                    <strong style={{ fontSize: 12, color: 'var(--text-2)' }}>Betroffene Besondere Leistungen:</strong>
                                     <button type="button" className="btn-small" onClick={() => setSurchargeAllBl(idx, true)}>Alle</button>
                                     <button type="button" className="btn-small" onClick={() => setSurchargeAllBl(idx, false)}>Keine</button>
                                   </div>
@@ -1125,7 +1125,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                                 </div>
                               )}
                               <div>
-                                <strong style={{ fontSize: 12, color: '#374151' }}>Betroffene Leistungsphasen:</strong>
+                                <strong style={{ fontSize: 12, color: 'var(--text-2)' }}>Betroffene Leistungsphasen:</strong>
                                 <button type="button" className="btn-small" style={{ marginLeft: 8, marginRight: 4 }}
                                   onClick={() => setSurchargeAllLph(idx, true)}>Alle</button>
                                 <button type="button" className="btn-small"
@@ -1175,7 +1175,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             {isEdit ? 'Schritt 5' : 'Schritt 6'}: Zusammenfassung
             {!isEdit && ' & Zuordnen'}
           </h3>
-          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
             {calcMaster?.NAME_SHORT}{calcMaster?.NAME_LONG ? ' – ' + calcMaster.NAME_LONG : ''}
             {isEdit
               ? ' · Übersicht über die aktualisierten Werte:'
@@ -1188,7 +1188,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               <thead>
                 <tr>
                   <th>Bezeichnung</th>
-                  <th style={{ width: 120, color: '#6b7280', fontWeight: 400 }}>Typ</th>
+                  <th style={{ width: 120, color: 'var(--text-3)', fontWeight: 400 }}>Typ</th>
                   <th style={{ width: 140, textAlign: 'right' }}>Honorar (netto) €</th>
                 </tr>
               </thead>
@@ -1197,12 +1197,12 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 {phases.filter(p => (p.PHASE_REVENUE ?? 0) !== 0).map(p => (
                   <tr key={p.ID}>
                     <td style={{ fontSize: 13 }}>{p.PHASE_LABEL}</td>
-                    <td style={{ fontSize: 11, color: '#6b7280' }}>Grundleistung</td>
+                    <td style={{ fontSize: 11, color: 'var(--text-3)' }}>Grundleistung</td>
                     <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(p.PHASE_REVENUE)}</td>
                   </tr>
                 ))}
                 {/* Grundhonorar summary */}
-                <tr style={{ borderTop: '2px solid #d1d5db', background: '#f9fafb' }}>
+                <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface-3)' }}>
                   <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>Grundhonorar</td>
                   <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(totalPhaseRev)}</td>
                 </tr>
@@ -1210,13 +1210,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 {blTotal !== 0 && blItems.map((b, i) => blComputedAmounts[i] !== 0 && (
                   <tr key={`bl-${i}`}>
                     <td style={{ fontSize: 13 }}>{[b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || `BL ${i + 1}`}</td>
-                    <td style={{ fontSize: 11, color: '#6b7280' }}>Besondere Leistung</td>
+                    <td style={{ fontSize: 11, color: 'var(--text-3)' }}>Besondere Leistung</td>
                     <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(blComputedAmounts[i])}</td>
                   </tr>
                 ))}
                 {/* BL sum */}
                 {blTotal !== 0 && (
-                  <tr style={{ borderTop: '1px solid #d1d5db', background: '#f9fafb' }}>
+                  <tr style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-3)' }}>
                     <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>+ Besondere Leistungen</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(blTotal)}</td>
                   </tr>
@@ -1229,7 +1229,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                   return (
                     <tr key={`s-${idx}`}>
                       <td style={{ fontSize: 13 }}>{label}</td>
-                      <td style={{ fontSize: 11, color: '#6b7280' }}>
+                      <td style={{ fontSize: 11, color: 'var(--text-3)' }}>
                         {(r.PERCENT ?? 0) >= 0 ? 'Zuschlag' : 'Nachlass'} {r.PERCENT ?? 0}&nbsp;%
                       </td>
                       <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(eff.amount)}</td>
@@ -1238,13 +1238,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 })}
                 {/* Zuschläge sum */}
                 {totalSurchargeAmt !== 0 && (
-                  <tr style={{ borderTop: '1px solid #d1d5db', background: '#f9fafb' }}>
+                  <tr style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-3)' }}>
                     <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>+ Zuschläge / Nachlässe</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(totalSurchargeAmt)}</td>
                   </tr>
                 )}
                 {/* Gesamthonorar */}
-                <tr style={{ borderTop: '2px solid #374151' }}>
+                <tr style={{ borderTop: '2px solid var(--text-4)' }}>
                   <td colSpan={2} style={{ fontWeight: 700, fontSize: 15, padding: '8px 8px' }}>Gesamthonorar</td>
                   <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 15, padding: '8px 8px' }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</td>
                 </tr>
@@ -1253,7 +1253,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           </div>
           {/* Edit mode: sync choice */}
           {isEdit && (
-            <div className="admin-block" style={{ background: '#fef9c3', border: '1px solid #fbbf24', padding: 14 }}>
+            <div className="admin-block" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', padding: 14 }}>
               <p style={{ marginBottom: 10, fontWeight: 500, fontSize: 13 }}>
                 Sollen die verknüpften Projektelemente mit den aktualisierten Honorarwerten überschrieben werden?
               </p>
@@ -1395,11 +1395,11 @@ function FilterChip({ label, options, selected, onChange }: {
             </label>
           ))}
           {options.length === 0 && (
-            <span style={{ padding: '6px 10px', fontSize: 12, color: '#9ca3af', display: 'block' }}>Keine Optionen</span>
+            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-4)', display: 'block' }}>Keine Optionen</span>
           )}
           {hasFilter && (
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
-              <button type="button" className="filter-chip-option" style={{ color: '#dc2626', width: '100%', textAlign: 'left' }}
+              <button type="button" className="filter-chip-option" style={{ color: 'var(--danger)', width: '100%', textAlign: 'left' }}
                 onClick={() => { onChange(new Set()); setOpen(false) }}>
                 Zurücksetzen
               </button>
@@ -1562,7 +1562,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                     {r.projectLabel
                       ? r.projectLabel
                       : r.offerLabel
-                        ? <span style={{ color: '#7c3aed' }}>{r.offerLabel}</span>
+                        ? <span style={{ color: 'var(--accent2)' }}>{r.offerLabel}</span>
                         : '—'}
                   </td>
                   <td style={{ textAlign: 'right' }}>{fmtEurShort(r.grundhonorar)}</td>

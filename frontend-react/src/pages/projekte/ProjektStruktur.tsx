@@ -698,7 +698,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
               {selectedIds.size > 0 && (
                 <div className="struct-bulk-bar">
                   <span>{selectedIds.size} ausgewählt</span>
-                  <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c' }}
+                  <button className="btn-small" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                     onClick={bulkDelete}>
                     Löschen ({selectedIds.size})
                   </button>
@@ -950,7 +950,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               />
                             </td>
                             <td>
-                              <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                              <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                                 disabled={deleteMut.isPending}
                                 title="Element löschen"
                                 onClick={() => setConfirmState({

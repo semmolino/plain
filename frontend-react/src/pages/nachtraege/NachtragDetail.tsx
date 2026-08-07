@@ -85,8 +85,8 @@ export function NachtragDetail() {
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
-  if (isLoading) return <p style={{ padding: '2rem', color: '#888' }}>Laden …</p>
-  if (!nachtrag) return <p style={{ padding: '2rem', color: '#b91c1c' }}>Nachtrag nicht gefunden.</p>
+  if (isLoading) return <p style={{ padding: '2rem', color: 'var(--text-3)' }}>Laden …</p>
+  if (!nachtrag) return <p style={{ padding: '2rem', color: 'var(--danger-strong)' }}>Nachtrag nicht gefunden.</p>
 
   const releasable = !!curStatus?.ALLOWS_RELEASE
   const editable   = curStatus?.CODE !== 'COMMISSIONED'
@@ -102,7 +102,7 @@ export function NachtragDetail() {
       {/* ── Kopf ─────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 }}>
         <h1 className="master-title" style={{ margin: 0 }}>{nachtrag.NAME_SHORT} · {nachtrag.NAME_LONG}</h1>
-        <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, background: '#eef2ff', color: '#3730a3' }}>
+        <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, background: 'var(--info-bg)', color: 'var(--accent2)' }}>
           {curStatus?.NAME_SHORT ?? '—'}
         </span>
       </div>
@@ -119,7 +119,7 @@ export function NachtragDetail() {
       <div className="list-toolbar">
         <Can permission="nachtraege.edit">
           <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 13, color: '#6b7280' }}>Status:</span>
+            <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Status:</span>
             <select
               value={curStatus?.CODE ?? ''}
               disabled={!editable}
@@ -144,7 +144,7 @@ export function NachtragDetail() {
         </button>
         <Can permission="nachtraege.delete">
           {curStatus?.CODE === 'DRAFT' && (
-            <button style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b91c1c' }} onClick={() => setConfirmDel({ kind: 'nachtrag' })}>
+            <button style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--danger-strong)' }} onClick={() => setConfirmDel({ kind: 'nachtrag' })}>
               <Trash2 size={13} /> Löschen
             </button>
           )}
@@ -162,7 +162,7 @@ export function NachtragDetail() {
       </Can>
 
       {nodes.length === 0 ? (
-        <p style={{ color: '#6b7280', fontSize: 13 }}>Noch keine Positionen. Positionen beschreiben Leistung und Preis des Nachtrags.</p>
+        <p style={{ color: 'var(--text-3)', fontSize: 13 }}>Noch keine Positionen. Positionen beschreiben Leistung und Preis des Nachtrags.</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table className="master-table">
@@ -272,7 +272,7 @@ export function NachtragDetail() {
 function Field({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
       <div style={{ fontSize: 14 }}>{value}</div>
     </div>
   )
@@ -366,12 +366,12 @@ function ReleaseForm({ leaves, submitting, onSubmit }: {
     onSubmit({ release_kind: kind, release_basis: basis, note: note.trim() || undefined, positions })
   }
 
-  if (!leaves.length) return <p style={{ color: '#6b7280' }}>Keine offenen Positionen zur Freigabe vorhanden.</p>
+  if (!leaves.length) return <p style={{ color: 'var(--text-3)' }}>Keine offenen Positionen zur Freigabe vorhanden.</p>
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       {err && <Message text={err} type="error" />}
-      <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
+      <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
         Ausgewählte Positionen werden ins Projekt übernommen und damit buch- und abrechenbar. Betrag optional kürzen (Anerkennung „der Höhe nach").
       </p>
       <table className="master-table">
@@ -389,7 +389,7 @@ function ReleaseForm({ leaves, submitting, onSubmit }: {
                     <input type="number" inputMode="decimal" style={{ width: 100, textAlign: 'right' }}
                       placeholder={String(l.REVENUE)} value={amounts[l.ID] ?? ''}
                       onChange={e => setAmounts(a => ({ ...a, [l.ID]: e.target.value }))} disabled={!checked.has(l.ID)} />
-                  ) : <span style={{ fontSize: 11, color: '#9ca3af' }}>über Buchungen</span>}
+                  ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>über Buchungen</span>}
                 </td>
               </tr>
             )
@@ -482,7 +482,7 @@ function ReviewSection({ nachtrag, canReview, onSaved, onError }: {
               {mut.isPending ? 'Speichern …' : 'Prüfung speichern'}
             </button>
             {nachtrag.REVIEWED_AT && (
-              <span style={{ fontSize: 11, color: '#9ca3af' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-4)' }}>
                 zuletzt geprüft {new Date(nachtrag.REVIEWED_AT).toLocaleDateString('de-DE')}
               </span>
             )}

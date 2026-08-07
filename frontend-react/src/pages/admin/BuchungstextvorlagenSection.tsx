@@ -50,21 +50,21 @@ export function BuchungstextvorlagenSection() {
           </button>
         </Can>
       </div>
-      <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 8px' }}>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '4px 0 8px' }}>
         Globale Beschreibungstexte, die beim Buchen von <strong>Stundenleistungen</strong> als
         Baustein zur Auswahl stehen. Texte für Pauschalen oder Stückleistungen legst du direkt
         bei der jeweiligen Buchungsart an (oben unter „Buchungsarten").
       </p>
 
-      {isLoading && <p style={{ fontSize: 12, color: '#6b7280' }}>Laden …</p>}
+      {isLoading && <p style={{ fontSize: 12, color: 'var(--text-3)' }}>Laden …</p>}
       {!isLoading && rows.length === 0 && (
-        <p style={{ fontSize: 12, color: '#6b7280' }}>Noch keine Textvorlagen für Stundenleistungen. Mit „Neue Textvorlage" einen Baustein anlegen.</p>
+        <p style={{ fontSize: 12, color: 'var(--text-3)' }}>Noch keine Textvorlagen für Stundenleistungen. Mit „Neue Textvorlage" einen Baustein anlegen.</p>
       )}
 
       {rows.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, margin: '8px 0' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+            <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
               <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
               <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Text</th>
               <th></th>
@@ -72,15 +72,15 @@ export function BuchungstextvorlagenSection() {
           </thead>
           <tbody>
             {rows.map(r => (
-              <tr key={r.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+              <tr key={r.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
                 <td style={{ padding: '4px 6px 4px 0', fontWeight: 600, whiteSpace: 'nowrap' }}>{r.LABEL || '—'}</td>
-                <td style={{ padding: '4px 6px 4px 0', color: '#374151', whiteSpace: 'pre-line' }}>{r.TEXT}</td>
+                <td style={{ padding: '4px 6px 4px 0', color: 'var(--text-2)', whiteSpace: 'pre-line' }}>{r.TEXT}</td>
                 <td style={{ padding: '4px 0', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <Can permission="settings.booking_text_templates.edit">
                     <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
                       <Pencil size={13} strokeWidth={2} />
                     </button>
-                    <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                    <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                       onClick={() => setDelConfirm({ id: r.ID, label: r.LABEL || r.TEXT.slice(0, 30) })} title="Löschen">
                       <Trash2 size={13} strokeWidth={2} />
                     </button>

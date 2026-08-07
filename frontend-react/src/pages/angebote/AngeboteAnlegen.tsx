@@ -222,7 +222,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
       {step === 2 && createdOfferId && (
         <div className="wizard-step-content">
           <h3 className="wizard-step-title">Schritt 2: HOAI-Kalkulationen (optional)</h3>
-          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
             Das Angebot wurde angelegt. Positionen können im Tab „Struktur" ergänzt werden.
             Fügen Sie optional HOAI-Kalkulationen hinzu oder überspringen Sie diesen Schritt.
           </p>

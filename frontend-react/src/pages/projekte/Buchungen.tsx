@@ -578,7 +578,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                           style={{ background: 'rgba(17,24,39,0.04)', cursor: 'not-allowed' }}
                           title="Wird automatisch aus dem Kostensatz-Verlauf ermittelt" />
                         {cpRateFound === false && (
-                          <span style={{ fontSize: 11, color: '#dc2626', display: 'block', marginTop: 2 }}>
+                          <span style={{ fontSize: 11, color: 'var(--danger)', display: 'block', marginTop: 2 }}>
                             ⚠ Kein Kostensatz für dieses Datum hinterlegt — Buchung wird mit 0 gespeichert.
                           </span>
                         )}
@@ -633,12 +633,12 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                         </td>
                         <td>
                           {isSpecialKind(b.BOOKING_KIND) && (
-                            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: '#3730a3', background: '#e0e7ff', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>
+                            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--accent2)', background: 'var(--info-bg)', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>
                               {KIND_BADGE[b.BOOKING_KIND!]}
                             </span>
                           )}
                           {isBreakRow(b) && (
-                            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: '#92400e', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>
+                            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--warning-strong)', background: 'var(--warning-bg)', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>
                               Pause
                             </span>
                           )}
@@ -658,7 +658,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                               <button className="row-action-btn" onClick={() => isBreakRow(b) ? setPauseModal({ mode: 'edit', row: b }) : isSpecialKind(b.BOOKING_KIND) ? setEditSpecial(b) : openEdit(b)} title="Bearbeiten">
                                 <Pencil size={14} strokeWidth={2} />
                               </button>
-                              <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => confirmDelete(b)} title="Löschen">
+                              <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => confirmDelete(b)} title="Löschen">
                                 <Trash2 size={14} strokeWidth={2} />
                               </button>
                             </>
@@ -1141,11 +1141,11 @@ function FilterChip({ label, options, selected, onChange }: {
             </label>
           ))}
           {options.length === 0 && (
-            <span style={{ padding: '6px 10px', fontSize: 12, color: '#9ca3af', display: 'block' }}>Keine Optionen</span>
+            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-4)', display: 'block' }}>Keine Optionen</span>
           )}
           {hasFilter && (
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
-              <button type="button" className="filter-chip-option" style={{ color: '#dc2626', width: '100%', textAlign: 'left' }}
+              <button type="button" className="filter-chip-option" style={{ color: 'var(--danger)', width: '100%', textAlign: 'left' }}
                 onClick={() => { onChange(new Set()); setOpen(false) }}>
                 Zurücksetzen
               </button>

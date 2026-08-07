@@ -163,13 +163,13 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
         </button>
         {isBeauftragt ? (
           <>
-            <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>
+            <span style={{ fontSize: 13, color: 'var(--success)', fontWeight: 600 }}>
               ✅ Beauftragt
             </span>
             <button className="btn-small" onClick={() => openAuftragsbestaetigungPdf(oid)}>Auftragsbestätigung PDF</button>
           </>
         ) : (
-          <button className="btn" style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
+          <button className="btn" style={{ background: '#16a34a', color: '#fff', borderColor: 'var(--success)' }}
             onClick={() => { setConvertErr(null); setShowBeauftragt(true) }}>
             Beauftragt
           </button>

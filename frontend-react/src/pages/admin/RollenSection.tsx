@@ -72,7 +72,7 @@ export function RollenSection() {
           <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, display: 'inline-flex', alignItems: 'center' }}>
             Rollen & Berechtigungen <HelpHint id="roles.concept" />
           </h2>
-          <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 0 0' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '4px 0 0 0' }}>
             Lege Rollen an und steuere, welche Berechtigungen sie haben. Mitarbeiter werden den Rollen einzeln zugeordnet (Tab Mitarbeiter).
           </p>
         </div>
@@ -81,10 +81,10 @@ export function RollenSection() {
         </button>
       </div>
 
-      {(rolesLoading || catLoading) && <p style={{ fontSize: 13, color: '#6b7280' }}>Laden …</p>}
+      {(rolesLoading || catLoading) && <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Laden …</p>}
 
       {!rolesLoading && roles.length === 0 && (
-        <p style={{ fontSize: 13, color: '#6b7280' }}>
+        <p style={{ fontSize: 13, color: 'var(--text-3)' }}>
           Noch keine Rollen vorhanden. Wenn die Migration 0062 noch nicht eingespielt wurde, lege sie zuerst an.
         </p>
       )}
@@ -146,21 +146,21 @@ function RoleRow({ role, onEdit, onDelete, onDuplicate }: { role: UserRole; onEd
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <strong style={{ fontSize: 14 }}>{role.NAME_SHORT}</strong>
           {role.IS_SYSTEM && (
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#374151', background: '#e5e7eb', padding: '1px 6px', borderRadius: 4, letterSpacing: 0.4 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4, letterSpacing: 0.4 }}>
               SYSTEM
             </span>
           )}
           {role.IS_DEFAULT && (
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 6px', borderRadius: 4, letterSpacing: 0.4 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--warning-strong)', background: 'var(--warning-bg)', padding: '1px 6px', borderRadius: 4, letterSpacing: 0.4 }}>
               DEFAULT
             </span>
           )}
         </div>
         {role.NAME_LONG && (
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{role.NAME_LONG}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{role.NAME_LONG}</div>
         )}
       </div>
-      <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
         {role.EMPLOYEE_COUNT} {role.EMPLOYEE_COUNT === 1 ? 'Mitarbeiter' : 'Mitarbeiter'}
       </span>
       <button className="row-action-btn" onClick={onEdit} title="Bearbeiten">
@@ -170,7 +170,7 @@ function RoleRow({ role, onEdit, onDelete, onDuplicate }: { role: UserRole; onEd
         <Copy size={14} strokeWidth={2} />
       </button>
       {!role.IS_SYSTEM && (
-        <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={onDelete} title="Löschen">
+        <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={onDelete} title="Löschen">
           <Trash2 size={14} strokeWidth={2} />
         </button>
       )}
@@ -196,7 +196,7 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
   })
 
   const [form, setForm] = useState<{ name_short: string; name_long: string; color: string; is_default: boolean }>({
-    name_short: '', name_long: '', color: '#2563eb', is_default: false,
+    name_short: '', name_long: '', color: 'var(--accent)', is_default: false,
   })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -304,10 +304,10 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
             </label>
           )}
 
-          <div style={{ marginTop: 6, padding: 10, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+          <div style={{ marginTop: 6, padding: 10, background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
               <strong style={{ fontSize: 13 }}>Berechtigungen</strong>
-              <span style={{ fontSize: 12, color: '#6b7280' }}>{selected.size} von {permissions.length} aktiv</span>
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{selected.size} von {permissions.length} aktiv</span>
             </div>
 
             <div style={{ maxHeight: 480, overflowY: 'auto', paddingRight: 4 }}>
@@ -323,7 +323,7 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
                       <input type="checkbox" checked={allOn} ref={el => { if (el) el.indeterminate = anyOn && !allOn }}
                         onChange={e => toggleModule(moduleKey, e.target.checked)} />
                       <strong style={{ fontSize: 13 }}>{moduleLabel}</strong>
-                      <span style={{ fontSize: 11, color: '#9ca3af' }}>{onCount}/{perms.length}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{onCount}/{perms.length}</span>
                     </div>
                     <div style={{ marginLeft: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                       {perms.map(p => (

@@ -57,16 +57,16 @@ export function TextSnippetBar({ currentText, onChange, kind, bookingTypeId }: {
 
       {global.map(s => (
         <button key={`g${s.ID}`} type="button" title={s.TEXT} onClick={() => insert(s)}
-          style={{ ...insertBtn, background: 'rgba(17,24,39,0.06)', color: '#374151', borderRadius: 999, padding: '3px 10px' }}>
+          style={{ ...insertBtn, background: 'rgba(17,24,39,0.06)', color: 'var(--text-2)', borderRadius: 999, padding: '3px 10px' }}>
           {s.LABEL || s.TEXT}
         </button>
       ))}
 
       {personal.map(s => (
-        <span key={`p${s.ID}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(99,102,241,0.10)', color: '#3730a3', borderRadius: 999, padding: '2px 4px 2px 10px', fontSize: 12 }}>
+        <span key={`p${s.ID}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(99,102,241,0.10)', color: 'var(--accent2)', borderRadius: 999, padding: '2px 4px 2px 10px', fontSize: 12 }}>
           <button type="button" title={s.TEXT} onClick={() => insert(s)} style={insertBtn}>{s.LABEL || s.TEXT}</button>
           <button type="button" title="Baustein löschen" onClick={() => delMut.mutate(s.ID)}
-            style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', padding: '0 4px', fontSize: 13, lineHeight: 1 }}>×</button>
+            style={{ background: 'none', border: 'none', color: 'var(--accent2)', cursor: 'pointer', padding: '0 4px', fontSize: 13, lineHeight: 1 }}>×</button>
         </span>
       ))}
 

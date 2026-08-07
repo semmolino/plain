@@ -58,7 +58,7 @@ function FilterChip({ label, options, selected, onChange }: {
           ))}
           {selected.size > 0 && (
             <button type="button" onClick={() => onChange(new Set())}
-              style={{ width: '100%', marginTop: 4, padding: '4px 8px', fontSize: 12, background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', textAlign: 'left' }}>
+              style={{ width: '100%', marginTop: 4, padding: '4px 8px', fontSize: 12, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', textAlign: 'left' }}>
               Zurücksetzen
             </button>
           )}
@@ -70,10 +70,10 @@ function FilterChip({ label, options, selected, onChange }: {
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div style={{ flex: '1 1 130px', minWidth: 130, border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 12px', background: '#f9fafb' }}>
-      <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: '#111827' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#9ca3af' }}>{sub}</div>}
+    <div style={{ flex: '1 1 130px', minWidth: 130, border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', background: 'var(--surface-3)' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{sub}</div>}
     </div>
   )
 }
@@ -167,9 +167,9 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
       </div>
 
       {isLoading ? (
-        <p style={{ color: '#888', padding: '1rem' }}>Laden …</p>
+        <p style={{ color: 'var(--text-3)', padding: '1rem' }}>Laden …</p>
       ) : filtered.length === 0 ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)' }}>
           {hasFilter ? (
             <p>Kein Nachtrag passt zu Suche/Filter.</p>
           ) : (

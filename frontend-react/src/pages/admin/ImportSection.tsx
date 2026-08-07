@@ -14,10 +14,10 @@ import {
 
 // ── Status-Darstellung ─────────────────────────────────────────────────────────
 const STATUS_META: Record<ImportRowStatus, { label: string; color: string; bg: string }> = {
-  ok:        { label: 'OK',       color: '#047857', bg: '#ecfdf5' },
-  warning:   { label: 'Warnung',  color: '#b45309', bg: '#fffbeb' },
-  duplicate: { label: 'Dublette', color: '#475569', bg: '#f1f5f9' },
-  error:     { label: 'Fehler',   color: '#b91c1c', bg: '#fef2f2' },
+  ok:        { label: 'OK',       color: 'var(--success-strong)', bg: 'var(--success-bg)' },
+  warning:   { label: 'Warnung',  color: 'var(--warning)', bg: 'var(--warning-bg)' },
+  duplicate: { label: 'Dublette', color: 'var(--text-2)', bg: 'var(--surface-2)' },
+  error:     { label: 'Fehler',   color: 'var(--danger-strong)', bg: 'var(--danger-bg)' },
 }
 
 function StatusBadge({ status }: { status: ImportRowStatus }) {
@@ -262,7 +262,7 @@ export function ImportSection() {
               {preview.fields.map(f => (
                 <div key={f.key} className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontSize: 12 }}>
-                    {f.header}{f.required && <span style={{ color: '#b91c1c' }}> *</span>}
+                    {f.header}{f.required && <span style={{ color: 'var(--danger-strong)' }}> *</span>}
                   </label>
                   <select value={mapping[f.key] ?? ''} onChange={e => changeMapping(f.key, e.target.value)}>
                     <option value="">— nicht importieren —</option>
@@ -408,7 +408,7 @@ export function ImportSection() {
                   <td style={{ padding: '5px 8px 5px 0', textAlign: 'right' }}>{b.rowOk}</td>
                   <td style={{ padding: '5px 8px 5px 0' }}>
                     {b.status === 'committed'
-                      ? <span style={{ color: '#047857' }}>aktiv</span>
+                      ? <span style={{ color: 'var(--success-strong)' }}>aktiv</span>
                       : <span style={{ color: 'var(--text-3)' }}>zurückgesetzt</span>}
                   </td>
                   <td style={{ padding: '5px 0', textAlign: 'right' }}>

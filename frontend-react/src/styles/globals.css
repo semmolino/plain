@@ -140,6 +140,11 @@
   --info:           #1d4ed8;
   --info-strong:    #1e40af;
   --info-bg:        #dbeafe;
+  /* Zweitakzent (violett) — im Code fuer Abwesenheiten/Sonderfaelle genutzt,
+     damit sie nicht mit Erfolg/Warnung/Fehler verwechselt werden. */
+  --accent2:        #6d28d9;
+  --accent2-strong: #5b21b6;
+  --accent2-bg:     #ede9fe;
 
   /* ── Interaktions-Tokens ───────────────────────────────────────────────
      --accent-rgb und --hover-bg wurden im Code bereits per var(…) genutzt,
@@ -370,6 +375,9 @@
   --info:           #93c5fd;
   --info-strong:    #bfdbfe;
   --info-bg:        rgba(147,197,253,0.16);
+  --accent2:        #c4b5fd;
+  --accent2-strong: #ddd6fe;
+  --accent2-bg:     rgba(196,181,253,0.16);
   --chrome:          #0e0e12;
   --chrome-border:   #2e2e35;
   --chrome-shadow-h: 0 2px 12px rgba(0,0,0,0.35);

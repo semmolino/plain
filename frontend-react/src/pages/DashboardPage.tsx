@@ -419,7 +419,7 @@ function OverdueInvoicesTable({ invoices }: { invoices: OverdueInvoice[] }) {
   const { field, dir, toggle, sort } = useSort<OverdueSortField>('days', 'desc')
   if (!invoices.length) {
     return (
-      <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
+      <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid var(--success)' }}>
         Keine überfälligen Rechnungen. Alle offenen Forderungen sind im Zeitplan.
       </div>
     )
@@ -637,7 +637,7 @@ function SuggestionRow({ s, navigate }: { s: MahnungSuggestion; navigate: Return
           {isActionDue ? ' · Aktion fällig!' : ' · noch keine Mahnung'}
         </div>
       </div>
-      <span style={{ fontSize: 12, fontWeight: 600, color: '#dc2626', flexShrink: 0 }}>{FMT_EUR_DASH.format(s.openAmount)}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)', flexShrink: 0 }}>{FMT_EUR_DASH.format(s.openAmount)}</span>
     </div>
   )
 }
@@ -657,27 +657,27 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
 
       {/* Primary alert: urgent count */}
       {stats.overdueActionsCount > 0 ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca', cursor: 'pointer' }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: 'var(--danger-bg)', borderRadius: 8, border: '1px solid var(--danger-bg)', cursor: 'pointer' }}
           onClick={() => navigate('/rechnungen?tab=mahnungen')}>
           <span style={{ fontSize: 20, lineHeight: 1 }}>⚠️</span>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#991b1b' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger-strong)' }}>
               {stats.overdueActionsCount} Aktion{stats.overdueActionsCount !== 1 ? 'en' : ''} fällig
             </div>
-            <div style={{ fontSize: 12, color: '#b91c1c' }}>
+            <div style={{ fontSize: 12, color: 'var(--danger-strong)' }}>
               {stats.noDunningCount > 0 ? `${stats.noDunningCount} noch ungemahnt` : 'Nächste Mahnung überfällig'}
             </div>
           </div>
         </div>
       ) : stats.totalOverdue === 0 ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 12px', background: 'rgba(34,197,94,0.07)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.25)' }}>
-          <span style={{ color: '#16a34a', fontSize: 14 }}>✓</span>
-          <span style={{ fontSize: 13, color: '#15803d' }}>Keine überfälligen Rechnungen</span>
+          <span style={{ color: 'var(--success)', fontSize: 14 }}>✓</span>
+          <span style={{ fontSize: 13, color: 'var(--success)' }}>Keine überfälligen Rechnungen</span>
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 12px', background: 'rgba(234,179,8,0.07)', borderRadius: 8, border: '1px solid rgba(234,179,8,0.3)' }}>
-          <span style={{ color: '#b45309', fontSize: 14 }}>ℹ</span>
-          <span style={{ fontSize: 13, color: '#92400e' }}>{stats.totalOverdue} überfällig, alle in Bearbeitung</span>
+          <span style={{ color: 'var(--warning)', fontSize: 14 }}>ℹ</span>
+          <span style={{ fontSize: 13, color: 'var(--warning-strong)' }}>{stats.totalOverdue} überfällig, alle in Bearbeitung</span>
         </div>
       )}
 
@@ -865,8 +865,8 @@ function AbsenceOverviewCard() {
     <div key={a.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0' }}>
       <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af' }} />
       <strong style={{ minWidth: 44 }}>{nameOf(a)}</strong>
-      <span style={{ color: '#6b7280' }}>{a.TYPE_NAME}</span>
-      <span style={{ marginLeft: 'auto', color: '#6b7280', whiteSpace: 'nowrap' }}>{fmtRange(a)}</span>
+      <span style={{ color: 'var(--text-3)' }}>{a.TYPE_NAME}</span>
+      <span style={{ marginLeft: 'auto', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmtRange(a)}</span>
     </div>
   )
 
@@ -878,13 +878,13 @@ function AbsenceOverviewCard() {
       {rows.length === 0 && <p className="empty-note">Niemand ist in den nächsten 14 Tagen abwesend.</p>}
       {heute.length > 0 && (
         <div style={{ marginBottom: kommend.length ? 10 : 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 }}>Heute abwesend</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 }}>Heute abwesend</div>
           {heute.map(line)}
         </div>
       )}
       {kommend.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 }}>Demnächst (14 Tage)</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 }}>Demnächst (14 Tage)</div>
           {kommend.slice(0, 8).map(line)}
         </div>
       )}
@@ -1184,7 +1184,7 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
             Risikohinweise
           </div>
           {flags.length === 0 ? (
-            <div style={{ color: '#16a34a', fontSize: 13 }}>✓ Keine Risiken erkannt</div>
+            <div style={{ color: 'var(--success)', fontSize: 13 }}>✓ Keine Risiken erkannt</div>
           ) : (
             flags.map(f => {
               const info = FLAG_LABELS[f]
@@ -1338,7 +1338,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                           ? <span key={f} className={`flag-badge flag-${info.sev}`} style={{ marginRight: 3 }}>{info.label}</span>
                           : null
                       })}
-                      {p.flags.length === 0 && <span style={{ color: '#16a34a', fontSize: 12 }}>✓</span>}
+                      {p.flags.length === 0 && <span style={{ color: 'var(--success)', fontSize: 12 }}>✓</span>}
                     </td>
                   </tr>
                 ))}
@@ -1416,7 +1416,7 @@ function OpenPostenTable({ posten }: { posten: OpenPosten[] }) {
   const navigate = useNavigate()
   if (!posten.length) {
     return (
-      <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
+      <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid var(--success)' }}>
         Keine offenen Posten. Alle Rechnungen sind bezahlt.
       </div>
     )
@@ -1446,7 +1446,7 @@ function OpenPostenTable({ posten }: { posten: OpenPosten[] }) {
             <td className="col-hide-mobile">{p.addressName || '—'}</td>
             <td className="col-hide-mobile">
               {p.dueDate ? fmtDateDE(p.dueDate) : '—'}
-              {p.daysOverdue > 0 && <span style={{ color: '#b91c1c', fontSize: 11, marginLeft: 4 }}>+{p.daysOverdue}d</span>}
+              {p.daysOverdue > 0 && <span style={{ color: 'var(--danger-strong)', fontSize: 11, marginLeft: 4 }}>+{p.daysOverdue}d</span>}
             </td>
             <td className="num" style={{ fontWeight: 600 }}>{fmtEur(p.openAmount)}</td>
           </tr>
@@ -1461,7 +1461,7 @@ function BillingPotentialTable({ projects, maxRows = 10 }: { projects: BillingPr
   const navigate = useNavigate()
   if (!projects.length) {
     return (
-      <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid #22c55e' }}>
+      <div className="narrative-block" style={{ background: 'rgba(34,197,94,0.08)', borderLeft: '3px solid var(--success)' }}>
         Kein Abrechnungspotenzial erkannt. Alle Projekte sind vollständig fakturiert.
       </div>
     )
@@ -1484,7 +1484,7 @@ function BillingPotentialTable({ projects, maxRows = 10 }: { projects: BillingPr
                 <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
               )}
             </td>
-            <td className="num" style={{ fontWeight: 600, color: '#1d4ed8' }}>{fmtEur(p.OPEN_NET_TOTAL)}</td>
+            <td className="num" style={{ fontWeight: 600, color: 'var(--info)' }}>{fmtEur(p.OPEN_NET_TOTAL)}</td>
           </tr>
         ))}
       </tbody>

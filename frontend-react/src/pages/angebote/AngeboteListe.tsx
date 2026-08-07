@@ -251,7 +251,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                       <Can permission="offers.convert">
                         <button
                           className="row-action-btn"
-                          style={{ color: '#16a34a', borderColor: '#16a34a' }}
+                          style={{ color: 'var(--success)', borderColor: 'var(--success)' }}
                           onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
                           title="Beauftragt"
                         >
@@ -263,7 +263,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                       <Can permission="offers.edit">
                         <button
                           className="row-action-btn"
-                          style={{ color: '#ea580c', borderColor: '#ea580c' }}
+                          style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
                           onClick={() => requestReject(r)}
                           title="Als abgelehnt markieren"
                         >
@@ -274,7 +274,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                     {isRejected(r) && (
                       <span
                         title="Abgelehnt"
-                        style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px', color: '#9ca3af', fontSize: 11, fontWeight: 600 }}
+                        style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px', color: 'var(--text-4)', fontSize: 11, fontWeight: 600 }}
                       >
                         Abgelehnt
                       </span>
@@ -282,7 +282,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                     <Can permission="offers.delete">
                       <button
                         className="row-action-btn"
-                        style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                        style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                         onClick={() => requestDelete(r)}
                         title="Löschen"
                       >

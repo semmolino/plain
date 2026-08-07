@@ -461,7 +461,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
         grid: { color: 'rgba(0,0,0,0.06)' },
         ticks: {
           font: { size: 11 },
-          color: '#6b7280',
+          color: 'var(--text-3)',
           callback: (v) => FMT_EUR0_CHART.format(Number(v)),
         },
       },

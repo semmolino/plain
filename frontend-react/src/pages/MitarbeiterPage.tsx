@@ -105,8 +105,8 @@ function latestValidId<T extends { ID: number; VALID_FROM: string }>(items: T[],
 
 function HistBadge({ kind }: { kind: 'current' | 'planned' }) {
   const style = kind === 'current'
-    ? { background: '#dcfce7', color: '#166534' }
-    : { background: '#dbeafe', color: '#1e40af' }
+    ? { background: 'var(--success-bg)', color: 'var(--success-strong)' }
+    : { background: 'var(--info-bg)', color: 'var(--info)' }
   return (
     <span style={{ ...style, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 8, marginLeft: 6 }}>
       {kind === 'current' ? 'aktuell' : 'geplant'}
@@ -229,7 +229,7 @@ function RoleSection({ employeeId, roles, mapping }: {
 
   return (
     <div>
-      <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
         Mehrere Rollen sind möglich — der Mitarbeiter erhält die Vereinigungsmenge der Berechtigungen.
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
@@ -249,9 +249,9 @@ function RoleSection({ employeeId, roles, mapping }: {
               <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || '#6b7280' }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{r.NAME_SHORT}</div>
-                {r.NAME_LONG && <div style={{ fontSize: 11, color: '#6b7280' }}>{r.NAME_LONG}</div>}
+                {r.NAME_LONG && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.NAME_LONG}</div>}
               </div>
-              {r.IS_SYSTEM && <span style={{ fontSize: 10, color: '#6b7280' }}>SYSTEM</span>}
+              {r.IS_SYSTEM && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>SYSTEM</span>}
             </label>
           )
         })}
@@ -281,7 +281,7 @@ function EmployeeProjectsSection({ employeeId }: { employeeId: number }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
       <thead>
-        <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontSize: 12 }}>
+        <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
           <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Projekt</th>
           <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Status</th>
           <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Rolle</th>
@@ -290,10 +290,10 @@ function EmployeeProjectsSection({ employeeId }: { employeeId: number }) {
       </thead>
       <tbody>
         {rows.map(r => (
-          <tr key={r.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+          <tr key={r.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
             <td style={{ padding: '4px 8px 4px 0' }}>
               <strong>{r.PROJECT_NUMBER || '—'}</strong>
-              {r.PROJECT_NAME ? <span style={{ color: '#6b7280' }}> · {r.PROJECT_NAME}</span> : null}
+              {r.PROJECT_NAME ? <span style={{ color: 'var(--text-3)' }}> · {r.PROJECT_NAME}</span> : null}
             </td>
             <td style={{ padding: '4px 8px 4px 0' }}>{r.STATUS_NAME || '—'}</td>
             <td style={{ padding: '4px 8px 4px 0' }}>{r.ROLE_NAME_SHORT || '—'}</td>
@@ -315,10 +315,10 @@ function fmtDateShort(d: string) {
 
 function AbsenceStatusBadge({ status }: { status: AbsenceStatus }) {
   const map: Record<AbsenceStatus, { label: string; bg: string; color: string }> = {
-    REQUESTED: { label: 'Beantragt',  bg: '#fef3c7', color: '#92400e' },
-    APPROVED:  { label: 'Genehmigt',  bg: '#dcfce7', color: '#166534' },
-    REJECTED:  { label: 'Abgelehnt',  bg: '#fee2e2', color: '#b91c1c' },
-    CANCELLED: { label: 'Storniert',  bg: '#f3f4f6', color: '#6b7280' },
+    REQUESTED: { label: 'Beantragt',  bg: 'var(--warning-bg)', color: 'var(--warning-strong)' },
+    APPROVED:  { label: 'Genehmigt',  bg: 'var(--success-bg)', color: 'var(--success-strong)' },
+    REJECTED:  { label: 'Abgelehnt',  bg: 'var(--danger-bg)', color: 'var(--danger-strong)' },
+    CANCELLED: { label: 'Storniert',  bg: 'var(--surface-2)', color: 'var(--text-3)' },
   }
   const s = map[status]
   return <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10 }}>{s.label}</span>
@@ -336,7 +336,7 @@ function ClarifyModal({ absenceId, onClose, onDone }: { absenceId: number; onClo
   return (
     <Modal open onClose={onClose} title="Rückfrage zum Antrag">
       <div className="master-form">
-        <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 8px' }}>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 8px' }}>
           Der Antrag bleibt offen. Der Antragsteller wird benachrichtigt und kann seinen Antrag anpassen.
         </p>
         <div className="form-group">
@@ -426,7 +426,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
   const singleDay = !!fFrom && (!fTo || fTo === fFrom)
   const stat = (label: string, value: string, color?: string) => (
     <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>{label}</div>
       <div style={{ fontWeight: 700, fontSize: 16, color: color ?? 'inherit' }}>{value}</div>
     </div>
   )
@@ -434,16 +434,16 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
   return (
     <div>
       {/* Urlaubssaldo */}
-      <div style={{ display: 'flex', gap: 18, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 18, background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         {stat('Anspruch', bal ? `${bal.entitled} T` : '…')}
         {stat('Übertrag', bal ? `${bal.carryover} T` : '…')}
         {stat('Genommen', bal ? `${bal.taken} T` : '…')}
         {bal && !!bal.forfeited && bal.forfeited > 0 && stat('Verfallen', `${bal.forfeited} T`, '#dc2626')}
         {stat('Resturlaub', bal ? `${bal.remaining} T` : '…', bal && bal.remaining < 0 ? '#dc2626' : '#059669')}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af', textAlign: 'right' }}>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-4)', textAlign: 'right' }}>
           Urlaub {year} ({bal?.carryoverExpires ? `Übertrag verfällt ${bal.carryoverExpiryLabel ?? '31.03.'}` : 'Übertrag automatisch'})
           {bal && !!bal.atRisk && bal.atRisk > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', color: '#d97706', marginTop: 2 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', color: 'var(--warning)', marginTop: 2 }}>
               <AlertTriangle size={12} strokeWidth={2} /> {bal.atRisk} T Übertrag verfallen am {bal.carryoverExpiryLabel ?? '31.03.'}
             </span>
           )}
@@ -456,7 +456,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
         </button>
       )}
       {canManage && editEnt && (
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 12, marginBottom: 14 }}>
+        <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12, marginBottom: 14 }}>
           <div className="form-row">
             <div className="form-group">
               <label>Anspruch {year} (Tage)</label>
@@ -473,7 +473,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
             </button>
             <button type="button" className="btn-small" onClick={() => setEditEnt(false)}>Abbrechen</button>
           </div>
-          <p style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
             Übertrag leer lassen = automatisch aus dem Resturlaub des Vorjahres.
           </p>
         </div>
@@ -484,7 +484,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
           {!showForm
             ? <button type="button" className="btn-small btn-save" onClick={() => setShowForm(true)}>+ Abwesenheit erfassen</button>
             : (
-              <div style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 12 }}>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12 }}>
                 <div className="form-row">
                   <div className="form-group">
                     <label>Art</label>
@@ -526,7 +526,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
       {absences.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontSize: 12 }}>
+            <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
               <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Zeitraum</th>
               <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Art</th>
               <th style={{ textAlign: 'right', padding: '3px 8px 4px 0' }}>Tage</th>
@@ -536,10 +536,10 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
           </thead>
           <tbody>
             {absences.map((a: Absence) => (
-              <tr key={a.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+              <tr key={a.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
                 <td style={{ padding: '5px 8px 5px 0', whiteSpace: 'nowrap' }}>
                   {fmtDateShort(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDateShort(a.DATE_TO)}` : ''}
-                  {a.HALF_DAY && <span style={{ color: '#6b7280' }}> (½)</span>}
+                  {a.HALF_DAY && <span style={{ color: 'var(--text-3)' }}> (½)</span>}
                 </td>
                 <td style={{ padding: '5px 8px 5px 0' }}>
                   <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />
@@ -774,7 +774,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     <>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-        padding: '0 0 14px', marginBottom: 14, borderBottom: '1px solid #e5e7eb',
+        padding: '0 0 14px', marginBottom: 14, borderBottom: '1px solid var(--border)',
       }}>
         <div style={{
           width: 44, height: 44, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
@@ -788,14 +788,14 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: 14 }}>{employee.FIRST_NAME} {employee.LAST_NAME}</span>
-            <span style={{ fontSize: 11, color: '#6b7280' }}>{employee.SHORT_NAME}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{employee.SHORT_NAME}</span>
             <span style={{
               fontSize: 11, padding: '1px 7px', borderRadius: 10, fontWeight: 500,
               background: employee.ACTIVE === 2 ? '#fee2e2' : '#dcfce7',
               color:      employee.ACTIVE === 2 ? '#b91c1c' : '#166534',
             }}>{employee.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}</span>
           </div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
             {employee.DEPARTMENT_NAME || '—'} · {employee.CURRENT_MODEL_NAME || 'kein Modell'}
             {employee.ENTRY_DATE && ` · seit ${new Date(employee.ENTRY_DATE).toLocaleDateString('de-DE')}`}
             {employee.EXIT_DATE && ` · bis ${new Date(employee.EXIT_DATE).toLocaleDateString('de-DE')}`}
@@ -803,14 +803,14 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, textAlign: 'right' }}>
           <div>
-            <div style={{ fontSize: 11, color: '#6b7280' }}>Kostensatz</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Kostensatz</div>
             <div style={{ fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
               {currentCpRate != null ? `${currentCpRate.toFixed(2)} €/h` : '—'}
             </div>
           </div>
           {canViewBookings && (
             <div>
-              <div style={{ fontSize: 11, color: '#6b7280' }}>Saldo (laufend)</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Saldo (laufend)</div>
               <div style={{ fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums',
                             color: runningBalance != null ? balColor(runningBalance) : '#9ca3af' }}>
                 {runningBalance != null ? fmtBalance(runningBalance) : '…'}
@@ -886,12 +886,12 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 
       {section === 'kostensatz' && (
         <div>
-          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
             Gilt ab dem angegebenen Datum. Der aktuell gültige Satz ist der mit dem neuesten Datum.
           </p>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontSize: 12 }}>
+              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
                 <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Gültig ab</th>
                 <th style={{ textAlign: 'right', padding: '3px 0 4px 8px' }}>Kostensatz (€/h)</th>
                 <th></th>
@@ -899,7 +899,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             </thead>
             <tbody>
               {cpRates.map(r => (
-                <tr key={r.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <tr key={r.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
                   {editingCpId === r.ID ? (
                     <>
                       <td style={{ padding: '3px 8px 3px 0' }}>
@@ -931,7 +931,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                 </tr>
               ))}
               {!cpRates.length && (
-                <tr><td colSpan={3} style={{ color: '#9ca3af', fontSize: 12, padding: '4px 0' }}>Noch kein Verlauf erfasst.</td></tr>
+                <tr><td colSpan={3} style={{ color: 'var(--text-4)', fontSize: 12, padding: '4px 0' }}>Noch kein Verlauf erfasst.</td></tr>
               )}
             </tbody>
           </table>
@@ -954,12 +954,12 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 
       {section === 'arbeitszeit' && (
         <div>
-          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
             Das Modell mit dem neuesten Datum vor dem jeweiligen Tag bestimmt die Soll-Arbeitszeit.
           </p>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontSize: 12 }}>
+              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
                 <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Gültig ab</th>
                 <th style={{ textAlign: 'left', padding: '3px 0 4px 8px' }}>Modell</th>
                 <th></th>
@@ -967,7 +967,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             </thead>
             <tbody>
               {empWmList.map(wm => (
-                <tr key={wm.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <tr key={wm.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
                   {editingWmId === wm.ID ? (
                     <>
                       <td style={{ padding: '3px 8px 3px 0' }}>
@@ -1000,7 +1000,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                 </tr>
               ))}
               {!empWmList.length && (
-                <tr><td colSpan={3} style={{ color: '#9ca3af', fontSize: 12, padding: '4px 0' }}>Kein Modell zugewiesen.</td></tr>
+                <tr><td colSpan={3} style={{ color: 'var(--text-4)', fontSize: 12, padding: '4px 0' }}>Kein Modell zugewiesen.</td></tr>
               )}
             </tbody>
           </table>
@@ -1042,7 +1042,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 
       {section === 'passwort' && (
         <div>
-          <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
             Hier können Sie das Passwort des Mitarbeiters setzen oder löschen (Passwort = leer → Mitarbeiter kann sich ohne Passwort anmelden).
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
@@ -1663,17 +1663,17 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
           {loadingMonth && <p className="empty-note">Laden …</p>}
           {monthData && (
             <>
-              <div style={{ display: 'flex', gap: 16, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 16, background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Soll</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>Soll</div>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtH(monthData.required)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Ist</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>Ist</div>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtH(monthData.actual)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>Saldo</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>Saldo</div>
                   <div style={{ fontWeight: 700, fontSize: 16, color: balanceColor(monthData.balance) }}>{fmtBalance(monthData.balance)}</div>
                 </div>
                 <div style={{ marginLeft: 'auto' }}>
@@ -1720,7 +1720,7 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
                               {hasBookings && (
                                 <button
                                   type="button"
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#6b7280', padding: 0 }}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--text-3)', padding: 0 }}
                                   onClick={() => toggleDay(d.date)}
                                   title={isExpanded ? 'Buchungen ausblenden' : 'Buchungen anzeigen'}
                                 >
@@ -1732,14 +1732,14 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
                               {d.isHoliday && <span title="Feiertag" style={{ marginRight: 4 }}>🏖</span>}
                               {d.date}
                             </td>
-                            <td style={{ color: '#6b7280' }}>{WEEKDAY_SHORT[d.weekday]}</td>
+                            <td style={{ color: 'var(--text-3)' }}>{WEEKDAY_SHORT[d.weekday]}</td>
                             <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {d.required > 0 ? fmtH(d.required) : <span style={{ color: '#d1d5db' }}>—</span>}
+                              {d.required > 0 ? fmtH(d.required) : <span style={{ color: 'var(--text-5)' }}>—</span>}
                             </td>
                             <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {d.actual > 0 ? fmtH(d.actual) : <span style={{ color: '#d1d5db' }}>—</span>}
+                              {d.actual > 0 ? fmtH(d.actual) : <span style={{ color: 'var(--text-5)' }}>—</span>}
                               {d.absence && (
-                                <div style={{ fontSize: 10, fontWeight: 600, color: '#7c3aed' }} title={`${d.absence.name} — als Soll gutgeschrieben`}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent2)' }} title={`${d.absence.name} — als Soll gutgeschrieben`}>
                                   {d.absence.name}{d.absence.fraction === 0.5 ? ' ½' : ''}
                                 </div>
                               )}
@@ -1749,20 +1749,20 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
                             </td>
                           </tr>
                           {isExpanded && (d.bookings as DayBooking[]).map(b => (
-                            <tr key={`bk-${b.id}`} style={{ background: '#f0f9ff', cursor: 'pointer' }}
+                            <tr key={`bk-${b.id}`} style={{ background: 'var(--info-bg)', cursor: 'pointer' }}
                                 title="Klicken zum Bearbeiten"
                                 onClick={() => openEditBooking(b, d.bookings as DayBooking[])}>
                               <td></td>
-                              <td colSpan={2} style={{ color: '#0369a1', fontSize: 11, paddingLeft: 12 }}>
+                              <td colSpan={2} style={{ color: 'var(--info)', fontSize: 11, paddingLeft: 12 }}>
                                 {b.time_start && b.time_finish && (
-                                  <span style={{ color: '#6b7280', marginRight: 6 }}>
+                                  <span style={{ color: 'var(--text-3)', marginRight: 6 }}>
                                     {b.time_start.slice(0, 5)}–{b.time_finish.slice(0, 5)}
                                   </span>
                                 )}
                                 {b.project}{b.structure ? ` / ${b.structure}` : ''}
                               </td>
-                              <td colSpan={2} style={{ color: '#374151', fontSize: 11 }}>{b.description}</td>
-                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 11, color: '#374151' }}>
+                              <td colSpan={2} style={{ color: 'var(--text-2)', fontSize: 11 }}>{b.description}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 11, color: 'var(--text-2)' }}>
                                 {fmtH(b.hours)}
                               </td>
                             </tr>
@@ -1820,7 +1820,7 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
         title={`Buchung bearbeiten`}>
         {editBooking && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
               {editBooking.project}{editBooking.structure ? ` / ${editBooking.structure}` : ''}
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -1869,14 +1869,14 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
               const overlaps = detectOverlaps(editStart, editFinish)
               if (overlaps.length === 0) {
                 return (
-                  <p style={{ fontSize: 11, color: '#92400e', background: 'rgba(245,158,11,0.08)',
+                  <p style={{ fontSize: 11, color: 'var(--warning-strong)', background: 'rgba(245,158,11,0.08)',
                               padding: '6px 10px', borderRadius: 6, margin: 0 }}>
                     ⚠ Änderungen wirken sich auf das Zeitkonto, Projektkosten und ggf. das ArbZG-Audit aus.
                   </p>
                 )
               }
               return (
-                <p style={{ fontSize: 12, color: '#7f1d1d', background: 'rgba(220,38,38,0.08)',
+                <p style={{ fontSize: 12, color: 'var(--danger-strong)', background: 'rgba(220,38,38,0.08)',
                             padding: '8px 12px', borderRadius: 6, margin: 0,
                             border: '1px solid rgba(220,38,38,0.25)' }}>
                   <strong>Zeitliche Überschneidung</strong> mit {overlaps.length === 1 ? '1 Buchung' : `${overlaps.length} Buchungen`} desselben Tages:
@@ -2018,7 +2018,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                         {(() => {
                           const ov = overlapsFor(a)
                           return ov.length > 0 ? (
-                            <div style={{ fontSize: 11, color: '#b45309', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'normal' }}
+                            <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'normal' }}
                               title={`Gleichzeitig abwesend: ${ov.map(o => `${o.EMPLOYEE_SHORT_NAME} (${o.TYPE_NAME})`).join(', ')}`}>
                               <AlertTriangle size={11} strokeWidth={2} /> {ov.length} gleichzeitig: {ov.map(o => o.EMPLOYEE_SHORT_NAME).filter(Boolean).join(', ')}
                             </div>
@@ -2027,7 +2027,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                       </td>
                       <td><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />{a.TYPE_NAME}</td>
                       <td className="num">{a.DAYS}</td>
-                      <td style={{ fontSize: 12, color: '#6b7280' }}>
+                      <td style={{ fontSize: 12, color: 'var(--text-3)' }}>
                         {a.NOTE || '—'}
                         <ClarificationThread a={a} />
                       </td>
@@ -2038,7 +2038,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                             <button className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }} disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'REJECTED' })}>Ablehnen</button>
                             <button className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} onClick={() => setClarifyId(a.ID)}>Rückfrage</button>
                           </>
-                        ) : <span style={{ fontSize: 11, color: '#9ca3af' }}>—</span>}
+                        ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>—</span>}
                       </td>
                     </tr>
                   ))}
@@ -2097,7 +2097,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                           return (
                             <td key={day}
                               title={cell ? `${cell.name}${cell.status === 'REQUESTED' ? ' (beantragt)' : ''}${cell.half ? ' ½' : ''}` : ''}
-                              style={{ textAlign: 'center', padding: 0, height: 22, borderLeft: '1px solid #f3f4f6',
+                              style={{ textAlign: 'center', padding: 0, height: 22, borderLeft: '1px solid var(--border-3)',
                                 background: cell ? cell.color : (we ? '#f9fafb' : undefined),
                                 opacity: cell && cell.status === 'REQUESTED' ? 0.45 : 1 }}>
                               {cell && cell.status === 'REQUESTED' ? <span style={{ color: '#fff', fontSize: 9 }}>?</span> : ''}
@@ -2111,7 +2111,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                 </tbody>
               </table>
             </div>
-            <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
               Farbe = Abwesenheitsart · blass mit „?" = beantragt (offen) · voll = genehmigt
             </p>
           </>
@@ -2190,7 +2190,7 @@ function EntitlementsBulkEditor({ employees }: { employees: Employee[] }) {
           <button type="button" className="btn-small" onClick={applyBulk}>Allen zuweisen</button>
         </span>
       </div>
-      <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 10px' }}>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px' }}>
         Jahres-Urlaubsanspruch je Mitarbeiter für {year}. „Übertrag manuell" überschreibt den automatischen
         Übertrag aus dem Vorjahr (leer = automatisch).
       </p>
@@ -2464,7 +2464,7 @@ function MonthsOverviewTab() {
             {months.map(m => {
               const open = openInColumn(m.year, m.month)
               return (
-                <th key={`${m.year}-${m.month}`} style={{ textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 500, color: '#6b7280' }}>
+                <th key={`${m.year}-${m.month}`} style={{ textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 500, color: 'var(--text-3)' }}>
                   {MONTH_NAMES[m.month - 1].slice(0, 3)}<br />{m.year}
                   <div style={{ marginTop: 3, minHeight: 18 }}>
                     {open > 0 && (
@@ -2514,7 +2514,7 @@ function MonthsOverviewTab() {
         </tbody>
       </table>
       </div>
-      <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+      <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
         ✓ Abgeschlossen &nbsp;·&nbsp; ○ Offen &nbsp;·&nbsp; Einzelne Zelle klicken zum Umschalten &nbsp;·&nbsp; „alle ✓" schließt eine ganze Monatsspalte ab
       </p>
 
@@ -2557,9 +2557,9 @@ const EVENT_LABEL: Record<string, string> = Object.fromEntries(
 
 function sevBadge(s: ArbzgSeverity) {
   const style: Record<ArbzgSeverity, React.CSSProperties> = {
-    INFO:  { background: 'rgba(59,130,246,0.12)',  color: '#1e40af' },
-    WARN:  { background: 'rgba(245,158,11,0.15)',  color: '#92400e' },
-    BLOCK: { background: 'rgba(220,38,38,0.13)',   color: '#7f1d1d' },
+    INFO:  { background: 'rgba(59,130,246,0.12)',  color: 'var(--info)' },
+    WARN:  { background: 'rgba(245,158,11,0.15)',  color: 'var(--warning-strong)' },
+    BLOCK: { background: 'rgba(220,38,38,0.13)',   color: 'var(--danger-strong)' },
   }
   return (
     <span style={{ ...style[s], display: 'inline-block', padding: '2px 8px',
@@ -2676,11 +2676,11 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
             style={{ marginLeft: 4 }} />
         </label>
         <select value={evtType} onChange={e => setEvtType(e.target.value)}
-          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}>
+          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}>
           {EVENT_TYPES.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
         </select>
         <select value={sev} onChange={e => setSev(e.target.value as '' | ArbzgSeverity)}
-          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}>
+          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}>
           {SEVERITIES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
         <button type="button" className="btn-small btn-save"
@@ -2690,7 +2690,7 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
       </div>
 
       {warning && (
-        <p style={{ fontSize: 12, color: '#92400e', background: 'rgba(245,158,11,0.08)',
+        <p style={{ fontSize: 12, color: 'var(--warning-strong)', background: 'rgba(245,158,11,0.08)',
                     border: '1px solid rgba(245,158,11,0.25)', borderRadius: 6,
                     padding: '8px 12px', marginBottom: 12 }}>
           ⚠ {warning}
@@ -2723,15 +2723,15 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
                   <tr key={r.ID}>
                     <td>
                       <strong>{emp?.SHORT_NAME ?? `#${r.EMPLOYEE_ID}`}</strong>
-                      {emp && <span style={{ display: 'block', fontSize: 11, color: '#6b7280' }}>
+                      {emp && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)' }}>
                         {emp.FIRST_NAME} {emp.LAST_NAME}
                       </span>}
                     </td>
                     <td>{fmtDate(r.DATE_VOUCHER)}</td>
                     <td>{EVENT_LABEL[r.EVENT_TYPE] ?? r.EVENT_TYPE}</td>
                     <td>{sevBadge(r.SEVERITY)}</td>
-                    <td style={{ fontSize: 12, color: '#374151' }}>{fmtDetails(r.DETAILS || {})}</td>
-                    <td style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                    <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{fmtDetails(r.DETAILS || {})}</td>
+                    <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
                       {fmtDateTime(r.CREATED_AT)}
                     </td>
                   </tr>
@@ -2743,7 +2743,7 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
       )}
 
       {rows.length > 0 && (
-        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+        <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
           {rows.length} Einträge · limitiert auf 1.000 — bei mehr Treffern Filter verfeinern.
         </p>
       )}
@@ -2765,8 +2765,8 @@ function EmployeeRoleBadge({ employeeId, roles, mapping, onClick }: {
   if (assigned.length === 0) {
     return (
       <button onClick={onClick} style={{
-        background: 'transparent', border: '1px dashed #d1d5db', borderRadius: 12, padding: '2px 8px',
-        fontSize: 11, color: '#9ca3af', cursor: 'pointer',
+        background: 'transparent', border: '1px dashed var(--border)', borderRadius: 12, padding: '2px 8px',
+        fontSize: 11, color: 'var(--text-4)', cursor: 'pointer',
       }}>+ Rolle</button>
     )
   }
@@ -3067,7 +3067,7 @@ export function MitarbeiterPage() {
                             onChange={v => empInlineMut.mutate({ id: r.ID, body: employeeRowToPayload(r, { department_id: v ? Number(v) : null }) })}
                           />
                         </td>
-                        <td>{r.CURRENT_MODEL_NAME || <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                        <td>{r.CURRENT_MODEL_NAME || <span style={{ color: 'var(--text-5)' }}>—</span>}</td>
                         {canViewBookings && (() => {
                           const bal = balByEmp.get(r.ID)
                           const run = bal?.RUNNING_BALANCE ?? 0
@@ -3076,7 +3076,7 @@ export function MitarbeiterPage() {
                                 title={bal ? `Monatssaldo (akt. Monat): ${fmtBalance(bal.BALANCE)}` : undefined}>
                               {bal
                                 ? <span style={{ color: run > 0 ? '#059669' : run < 0 ? '#dc2626' : '#6b7280', fontWeight: 600 }}>{fmtBalance(run)}</span>
-                                : <span style={{ color: '#d1d5db' }}>—</span>}
+                                : <span style={{ color: 'var(--text-5)' }}>—</span>}
                             </td>
                           )
                         })()}
@@ -3084,7 +3084,7 @@ export function MitarbeiterPage() {
                           <InlineSelect
                             value={r.ACTIVE ?? 1} options={EMP_STATUS_OPTS} allowEmpty={false}
                             readOnly={!canEditEmp} ariaLabel="Status"
-                            tone={r.ACTIVE === 2 ? { bg: '#fee2e2', color: '#b91c1c' } : { bg: '#dcfce7', color: '#166534' }}
+                            tone={r.ACTIVE === 2 ? { bg: 'var(--danger-bg)', color: 'var(--danger-strong)' } : { bg: 'var(--success-bg)', color: 'var(--success-strong)' }}
                             onChange={v => empInlineMut.mutate({ id: r.ID, body: employeeRowToPayload(r, { active: Number(v) }) })}
                           />
                         </td>
@@ -3105,7 +3105,7 @@ export function MitarbeiterPage() {
                             </button>
                           </Can>
                           <Can permission="employees.delete">
-                            <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(r)} title="Löschen">
+                            <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDelete(r)} title="Löschen">
                               <Trash2 size={14} strokeWidth={2} />
                             </button>
                           </Can>
@@ -3194,8 +3194,8 @@ export function MitarbeiterPage() {
             </div>
           </div>
 
-          <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />
-          <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Arbeitszeitmodell*</p>
+          <hr style={{ margin: '12px 0', borderColor: 'var(--border)' }} />
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>Arbeitszeitmodell*</p>
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="mwm">Modell*</label>
@@ -3210,8 +3210,8 @@ export function MitarbeiterPage() {
             </div>
           </div>
 
-          <hr style={{ margin: '12px 0', borderColor: '#e5e7eb' }} />
-          <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Kostensatz*</p>
+          <hr style={{ margin: '12px 0', borderColor: 'var(--border)' }} />
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>Kostensatz*</p>
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="mcr">Kostensatz (€/h)*</label>

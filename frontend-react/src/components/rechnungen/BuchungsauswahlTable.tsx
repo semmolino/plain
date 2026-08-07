@@ -64,11 +64,11 @@ function FilterChip({ label, options, selected, onChange }: {
             </label>
           ))}
           {options.length === 0 && (
-            <span style={{ padding: '6px 10px', fontSize: 12, color: '#9ca3af', display: 'block' }}>Keine Optionen</span>
+            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-4)', display: 'block' }}>Keine Optionen</span>
           )}
           {hasFilter && (
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
-              <button type="button" className="filter-chip-option" style={{ color: '#dc2626', width: '100%', textAlign: 'left' }}
+              <button type="button" className="filter-chip-option" style={{ color: 'var(--danger)', width: '100%', textAlign: 'left' }}
                 onClick={() => { onChange(new Set()); setOpen(false) }}>
                 Zurücksetzen
               </button>

@@ -613,7 +613,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           {/* E-Rechnungs-Felder (BT-10/13/19/83) */}
           <div style={{ marginTop: 12, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
             <button type="button" onClick={() => setShowEinvoice(s => !s)}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#374151', padding: 0 }}>
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-2)', padding: 0 }}>
               {showEinvoice ? '▼' : '▶'} E-Rechnungs-Detailfelder
             </button>
             {showEinvoice && (
@@ -649,7 +649,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                   </>
                 )}
 
-                <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
                   Optional. Leitweg-ID nur bei öffentlichen Auftraggebern.
                 </p>
               </div>
@@ -797,7 +797,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
             </div>
           )}
           {dedWarn && (
-            <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 8, fontSize: 13, color: '#92400e' }}>
+            <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 8, fontSize: 13, color: 'var(--warning-strong)' }}>
               ⚠ {dedWarn}
             </div>
           )}
@@ -1013,7 +1013,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
               <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, display: 'inline-flex', alignItems: 'center' }}>
                 Sicherheitseinbehalt-Auflösung <HelpHint id="invoice.sicherheitseinbehalt" />
               </p>
-              <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
                 Diese Abschlagsrechnungen haben Sicherheitseinbehalte, die mit dieser Rechnung aufgelöst werden können.
                 Standardmäßig sind alle ausgewählt (komplette Auflösung).
               </p>
@@ -1033,9 +1033,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                     />
                     <span style={{ minWidth: 140 }}>
                       Nr. <strong>{e.PARTIAL_PAYMENT_NUMBER || `#${e.ID}`}</strong>
-                      {e.PARTIAL_PAYMENT_DATE ? <span style={{ color: '#6b7280' }}> · {fmtDate(e.PARTIAL_PAYMENT_DATE)}</span> : null}
+                      {e.PARTIAL_PAYMENT_DATE ? <span style={{ color: 'var(--text-3)' }}> · {fmtDate(e.PARTIAL_PAYMENT_DATE)}</span> : null}
                     </span>
-                    <span style={{ marginLeft: 'auto', fontSize: 12, color: '#15803d' }}>+ {fmtEur(e.SE_AMOUNT)}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--success)' }}>+ {fmtEur(e.SE_AMOUNT)}</span>
                   </label>
                 ))}
                 {(() => {
@@ -1043,7 +1043,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                   return (
                     <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(17,24,39,0.08)', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
                       <span>Σ Auflösung in dieser Rechnung</span>
-                      <strong style={{ color: '#15803d' }}>+ {fmtEur(selSum)}</strong>
+                      <strong style={{ color: 'var(--success)' }}>+ {fmtEur(selSum)}</strong>
                     </div>
                   )
                 })()}
@@ -1066,12 +1066,12 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                 <div className="bp-row"><span>Abzüge Netto</span><strong>– {fmtEur(dedTotals.deductionsTotal)}</strong></div>
                 <div className="bp-row"><span>Netto Zwischensumme</span><strong>{fmtEur(base)}</strong></div>
                 {totalDisc > 0 && (
-                  <div className="bp-row" style={{ color: '#b91c1c' }}>
+                  <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
                     <span>./. Nachlässe</span><strong>− {fmtEur(totalDisc)}</strong>
                   </div>
                 )}
                 {cdAmt > 0 && (
-                  <div className="bp-row" style={{ color: '#b91c1c' }}>
+                  <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
                     <span>./. Skonto</span><strong>− {fmtEur(cdAmt)}</strong>
                   </div>
                 )}
@@ -1081,7 +1081,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                 )}
                 <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(gross)}</strong></div>
                 {seReleaseSum > 0 && (
-                  <div className="bp-row" style={{ color: '#15803d' }}>
+                  <div className="bp-row" style={{ color: 'var(--success)' }}>
                     <span>+ Auflösung Sicherheitseinbehalt</span><strong>+ {fmtEur(seReleaseSum)}</strong>
                   </div>
                 )}

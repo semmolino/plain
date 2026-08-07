@@ -596,7 +596,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
           {offerDropdownOpen && (
             <div className="project-ac-dropdown">
               {filteredOffers.length === 0 && (
-                <div className="project-ac-option" style={{ color: '#6b7280', fontStyle: 'italic' }}>Keine Treffer</div>
+                <div className="project-ac-option" style={{ color: 'var(--text-3)', fontStyle: 'italic' }}>Keine Treffer</div>
               )}
               {filteredOffers.map(o => (
                 <div key={o.ID} className="project-ac-option"
@@ -622,7 +622,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
         <>
           {selectedIds.size > 0 && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-              <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c' }} onClick={bulkDelete}>
+              <button className="btn-small" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={bulkDelete}>
                 Löschen ({selectedIds.size})
               </button>
               <button className="btn-small" onClick={() => setSelectedIds(new Set())}>Auswahl aufheben</button>
@@ -679,7 +679,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         <button
                           className="row-action-btn"
                           title={offerLevelSurcharges > 0 ? `Angebotszuschläge (${fmtEur(offerLevelSurcharges)})` : 'Angebotszuschläge bearbeiten'}
-                          style={offerLevelSurcharges > 0 ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
+                          style={offerLevelSurcharges > 0 ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : { color: 'var(--text-3)' }}
                           onClick={() => {
                             if (offerSurchargePanel) closeOfferSurchargePanel()
                             else { setOfferSurchargeEdit(offerSurchargeDefault()); setOfferSurchargePanel(true) }
@@ -857,10 +857,10 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                             <button
                               className="row-action-btn"
                               title={hasSurcharges ? `Zuschläge (${fmtEur(n.SURCHARGES_TOTAL ?? 0)})` : 'Zuschläge bearbeiten'}
-                              style={hasSurcharges ? { color: '#2563eb', borderColor: '#2563eb' } : { color: '#6b7280' }}
+                              style={hasSurcharges ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : { color: 'var(--text-3)' }}
                               onClick={() => { if (surchargePanel === n.ID) closeSurchargePanel(n.ID); else setSurchargePanel(n.ID) }}
                             ><Percent size={13} strokeWidth={2} /></button>
-                            <button className="btn-small" style={{ color: '#e74c3c', borderColor: '#e74c3c', display: 'inline-flex', alignItems: 'center' }}
+                            <button className="btn-small" style={{ color: 'var(--danger)', borderColor: 'var(--danger)', display: 'inline-flex', alignItems: 'center' }}
                               disabled={deleteMut.isPending}
                               onClick={() => setConfirmState({
                                 title: 'Element löschen',

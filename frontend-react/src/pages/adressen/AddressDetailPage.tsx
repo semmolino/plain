@@ -254,7 +254,7 @@ export function AddressDetailPage() {
             </button>
           </Can>
           <Can permission="addresses.delete">
-            <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }}
+            <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
               title="Adresse löschen"
               onClick={() => setConfirmState({
                 title: 'Adresse löschen',
@@ -305,7 +305,7 @@ export function AddressDetailPage() {
               {sortedContacts.map(c => (
                 <tr key={c.ID}>
                   <td>
-                    {!!c.IS_PRIMARY && <Star size={12} strokeWidth={2} fill="currentColor" style={{ color: '#f59e0b', marginRight: 4, verticalAlign: 'middle' }} aria-label="Hauptansprechpartner" />}
+                    {!!c.IS_PRIMARY && <Star size={12} strokeWidth={2} fill="currentColor" style={{ color: 'var(--warning)', marginRight: 4, verticalAlign: 'middle' }} aria-label="Hauptansprechpartner" />}
                     {c.TITLE ? `${c.TITLE} ` : ''}{c.FIRST_NAME} {c.LAST_NAME}
                   </td>
                   <td>{c.POSITION ?? '—'}{c.DEPARTMENT ? ` · ${c.DEPARTMENT}` : ''}</td>
@@ -320,7 +320,7 @@ export function AddressDetailPage() {
                       <button className="row-action-btn" onClick={() => openConEdit(c)} title="Bearbeiten"><Pencil size={14} strokeWidth={2} /></button>
                     </Can>
                     <Can permission="addresses.contacts.delete">
-                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDeleteContact(c)} title="Löschen"><Trash2 size={14} strokeWidth={2} /></button>
+                      <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDeleteContact(c)} title="Löschen"><Trash2 size={14} strokeWidth={2} /></button>
                     </Can>
                   </td>
                 </tr>

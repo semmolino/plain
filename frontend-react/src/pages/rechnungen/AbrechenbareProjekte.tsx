@@ -83,7 +83,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
           <strong style={{ fontSize: 14 }}>Abrechenbare Projekte</strong>
           {!isLoading && projects.length > 0 && (
             <span style={{
-              background: 'rgba(29, 78, 216, 0.12)', color: '#1d4ed8',
+              background: 'rgba(29, 78, 216, 0.12)', color: 'var(--info)',
               fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
             }}>
               {projects.length}
@@ -116,9 +116,9 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
 
       {!collapsed && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
-          {isLoading && <p style={{ padding: 12, fontSize: 12, color: '#6b7280' }}>Lädt …</p>}
+          {isLoading && <p style={{ padding: 12, fontSize: 12, color: 'var(--text-3)' }}>Lädt …</p>}
           {!isLoading && projects.length === 0 && (
-            <p style={{ padding: 12, fontSize: 13, color: '#16a34a' }}>
+            <p style={{ padding: 12, fontSize: 13, color: 'var(--success)' }}>
               Kein Abrechnungspotenzial — alle Projekte sind vollständig fakturiert.
             </p>
           )}
@@ -149,15 +149,15 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
                       <td className="ls-td">
                         <strong>{p.NAME_SHORT}</strong>
                         {p.NAME_LONG && (
-                          <span style={{ display: 'block', fontSize: 11, color: '#6b7280', fontWeight: 400 }}>
+                          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)', fontWeight: 400 }}>
                             {p.NAME_LONG}
                           </span>
                         )}
                       </td>
-                      <td className="ls-td" style={{ fontSize: 12, color: '#6b7280' }}>
+                      <td className="ls-td" style={{ fontSize: 12, color: 'var(--text-3)' }}>
                         {p.PROJECT_MANAGER_DISPLAY ?? '—'}
                       </td>
-                      <td className="ls-td ls-col-num" style={{ color: '#1d4ed8', fontWeight: 600 }}>
+                      <td className="ls-td ls-col-num" style={{ color: 'var(--info)', fontWeight: 600 }}>
                         {fmtEur(p.OPEN_NET_TOTAL)}
                       </td>
                     </tr>
@@ -175,7 +175,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
         title="Welche Rechnung erstellen?"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 320 }}>
-          <p style={{ margin: 0, fontSize: 13, color: '#374151', display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap' }}>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)', display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span>
               Projekt <strong>{picker?.projectName}</strong>
               {picker && picker.openAmount > 0 && (
@@ -187,17 +187,17 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
           <button className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => handlePick('abschlag')}>
             <FileText size={16} strokeWidth={1.75} />
-            <span><strong>Abschlagsrechnung</strong><br/><span style={{ fontSize: 11, color: '#6b7280' }}>Teilbetrag eines laufenden Vertrags</span></span>
+            <span><strong>Abschlagsrechnung</strong><br/><span style={{ fontSize: 11, color: 'var(--text-3)' }}>Teilbetrag eines laufenden Vertrags</span></span>
           </button>
           <button className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => handlePick('rechnung')}>
             <Receipt size={16} strokeWidth={1.75} />
-            <span><strong>Rechnung</strong><br/><span style={{ fontSize: 11, color: '#6b7280' }}>Einzelrechnung / Nebenleistungen</span></span>
+            <span><strong>Rechnung</strong><br/><span style={{ fontSize: 11, color: 'var(--text-3)' }}>Einzelrechnung / Nebenleistungen</span></span>
           </button>
           <button className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => handlePick('schluss')}>
             <FileCheck2 size={16} strokeWidth={1.75} />
-            <span><strong>Teilschluss- / Schlussrechnung</strong><br/><span style={{ fontSize: 11, color: '#6b7280' }}>Vertrag abrechnen, vorherige Abschläge verrechnen</span></span>
+            <span><strong>Teilschluss- / Schlussrechnung</strong><br/><span style={{ fontSize: 11, color: 'var(--text-3)' }}>Vertrag abrechnen, vorherige Abschläge verrechnen</span></span>
           </button>
         </div>
       </Modal>

@@ -237,7 +237,7 @@ export function Vertraege({ initialProjectId }: Props) {
                 </option>
               ))}
             </select>
-            <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0' }}>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
               Bestimmt den MwSt-Satz für alle Rechnungen aus diesem Vertrag.
               Bei "Organisations-Standard" wird der Default aus den Vorbelegungen verwendet.
             </p>
@@ -285,7 +285,7 @@ export function Vertraege({ initialProjectId }: Props) {
                     style={{ flex: 1, minWidth: 200, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
                   />
                 </label>
-                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
                   Wird in jeder Abschlagsrechnung abgezogen und mit der Schluss-/Teilschlussrechnung aufgelöst.
                 </p>
               </div>
@@ -317,7 +317,7 @@ export function Vertraege({ initialProjectId }: Props) {
                   style={{ padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }} />
               </div>
             )}
-            <p style={{ fontSize: 12, color: '#6b7280', margin: '8px 0 0 0' }}>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '8px 0 0 0' }}>
               Default für alle Rechnungen aus diesem Vertrag. Pro Rechnung im Wizard überschreibbar.
             </p>
           </div>

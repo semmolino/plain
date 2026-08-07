@@ -413,7 +413,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
                       </button>
                     </Can>
                     <Can permission="addresses.delete">
-                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(a)} title="Löschen">
+                      <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDelete(a)} title="Löschen">
                         <Trash2 size={14} strokeWidth={2} />
                       </button>
                     </Can>
@@ -752,7 +752,7 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
               {filtered.map(c => (
                 <tr key={c.ID}>
                   <td>
-                    {!!c.IS_PRIMARY && <Star size={12} strokeWidth={2} fill="currentColor" style={{ color: '#f59e0b', marginRight: 4, verticalAlign: 'middle' }} aria-label="Hauptansprechpartner" />}
+                    {!!c.IS_PRIMARY && <Star size={12} strokeWidth={2} fill="currentColor" style={{ color: 'var(--warning)', marginRight: 4, verticalAlign: 'middle' }} aria-label="Hauptansprechpartner" />}
                     {c.FIRST_NAME} {c.LAST_NAME}
                   </td>
                   <td>
@@ -786,7 +786,7 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
                       </button>
                     </Can>
                     <Can permission="addresses.contacts.delete">
-                      <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDeleteContact(c)} title="Löschen">
+                      <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDeleteContact(c)} title="Löschen">
                         <Trash2 size={14} strokeWidth={2} />
                       </button>
                     </Can>

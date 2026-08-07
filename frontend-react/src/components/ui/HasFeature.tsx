@@ -31,9 +31,9 @@ export function UpgradeHint({ plan, text }: { plan?: string; text?: string }) {
       role="note"
       style={{
         fontSize: 13,
-        color: '#92400e',
-        background: '#fffbeb',
-        border: '1px solid #fde68a',
+        color: 'var(--warning-strong)',
+        background: 'var(--warning-bg)',
+        border: '1px solid var(--warning-bg)',
         borderRadius: 8,
         padding: '8px 12px',
       }}

@@ -67,15 +67,15 @@ export function ProfilePage() {
 
       {/* User info + Profilfoto */}
       <div style={{
-        background: '#f9fafb', border: '1px solid #e5e7eb',
+        background: 'var(--surface-3)', border: '1px solid var(--border)',
         borderRadius: 8, padding: '14px 18px', marginBottom: 24,
         display: 'flex', alignItems: 'center', gap: 18,
       }}>
         <ProfileAvatar shortName={shortName} email={email} />
         <div>
-          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>Angemeldet als</div>
+          <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 4 }}>Angemeldet als</div>
           <div style={{ fontWeight: 600, fontSize: 15 }}>{email}</div>
-          {shortName && <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>Kürzel: {shortName}</div>}
+          {shortName && <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>Kürzel: {shortName}</div>}
         </div>
       </div>
 
@@ -87,25 +87,25 @@ export function ProfilePage() {
 
       {/* Password change form */}
       <div style={{
-        background: '#fff', border: '1px solid #e5e7eb',
+        background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 8, padding: '18px 20px',
       }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Passwort ändern</div>
 
         {success && (
           <div style={{
-            background: '#f0fdf4', border: '1px solid #86efac',
+            background: 'var(--success-bg)', border: '1px solid var(--success)',
             borderRadius: 6, padding: '10px 14px', fontSize: 13,
-            color: '#166534', marginBottom: 14,
+            color: 'var(--success-strong)', marginBottom: 14,
           }}>
             Passwort erfolgreich geändert.
           </div>
         )}
         {error && (
           <div style={{
-            background: '#fef2f2', border: '1px solid #fca5a5',
+            background: 'var(--danger-bg)', border: '1px solid var(--danger)',
             borderRadius: 6, padding: '10px 14px', fontSize: 13,
-            color: '#991b1b', marginBottom: 14,
+            color: 'var(--danger-strong)', marginBottom: 14,
           }}>
             {error}
           </div>
@@ -113,7 +113,7 @@ export function ProfilePage() {
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
               Aktuelles Passwort
             </label>
             <input
@@ -125,7 +125,7 @@ export function ProfilePage() {
             />
           </div>
           <div>
-            <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
               Neues Passwort
             </label>
             <input
@@ -138,7 +138,7 @@ export function ProfilePage() {
             />
           </div>
           <div>
-            <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
               Neues Passwort bestätigen
             </label>
             <input
@@ -169,7 +169,7 @@ export function ProfilePage() {
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box',
   padding: '7px 10px', fontSize: 13,
-  border: '1px solid #d1d5db', borderRadius: 6,
+  border: '1px solid var(--border)', borderRadius: 6,
   outline: 'none',
 }
 
@@ -259,7 +259,7 @@ function ProfileAvatar({ shortName, email }: { shortName: string | null; email: 
           </button>
         )}
       </div>
-      {err && <div style={{ fontSize: 11, color: '#b91c1c', maxWidth: 140, textAlign: 'center' }}>{err}</div>}
+      {err && <div style={{ fontSize: 11, color: 'var(--danger-strong)', maxWidth: 140, textAlign: 'center' }}>{err}</div>}
     </div>
   )
 }

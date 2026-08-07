@@ -150,7 +150,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
               placeholder="Mitarbeiter wählen …"
             />
             {cpRateFound === false && (
-              <span style={{ fontSize: 11, color: '#dc2626', marginTop: 2, display: 'block' }}>
+              <span style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, display: 'block' }}>
                 ⚠ Kein Kostensatz für heute hinterlegt — Buchung wird mit 0 gespeichert.
               </span>
             )}
@@ -590,7 +590,7 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
                     <tr key={d.ID} className={isEditing ? 'tbm-row-editing' : ''}>
                       <td>
                         {isBreak ? (
-                          <span className="tbm-review-proj" style={{ color: '#92400e' }}>
+                          <span className="tbm-review-proj" style={{ color: 'var(--warning-strong)' }}>
                             ⏸ Pause
                           </span>
                         ) : (

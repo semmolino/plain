@@ -107,7 +107,7 @@ function TagList({ items, onDelete, onEdit }: {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
       {items.map(it => (
-        <span key={it.ID} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 4, padding: '2px 8px', fontSize: 12 }}>
+        <span key={it.ID} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 8px', fontSize: 12 }}>
           {editingId === it.ID ? (
             <>
               <input
@@ -115,16 +115,16 @@ function TagList({ items, onDelete, onEdit }: {
                 value={editVal}
                 onChange={e => setEditVal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit() }}
-                style={{ fontSize: 12, border: '1px solid #d1d5db', borderRadius: 3, padding: '1px 4px', width: 120 }}
+                style={{ fontSize: 12, border: '1px solid var(--border)', borderRadius: 3, padding: '1px 4px', width: 120 }}
               />
-              <button type="button" onClick={saveEdit}   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: 14, lineHeight: 1, padding: 0 }} title="Speichern">✓</button>
-              <button type="button" onClick={cancelEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 14, lineHeight: 1, padding: 0 }} title="Abbrechen">✗</button>
+              <button type="button" onClick={saveEdit}   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--success)', fontSize: 14, lineHeight: 1, padding: 0 }} title="Speichern">✓</button>
+              <button type="button" onClick={cancelEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 14, lineHeight: 1, padding: 0 }} title="Abbrechen">✗</button>
             </>
           ) : (
             <>
               {it.label}
-              {onEdit && <button type="button" onClick={() => startEdit(it)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 11, lineHeight: 1, padding: '0 0 0 2px' }} title="Bearbeiten">✎</button>}
-              <button type="button" onClick={() => onDelete(it.ID)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 14, lineHeight: 1, padding: 0 }} title="Löschen">×</button>
+              {onEdit && <button type="button" onClick={() => startEdit(it)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 11, lineHeight: 1, padding: '0 0 0 2px' }} title="Bearbeiten">✎</button>}
+              <button type="button" onClick={() => onDelete(it.ID)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 14, lineHeight: 1, padding: 0 }} title="Löschen">×</button>
             </>
           )}
         </span>
@@ -267,7 +267,7 @@ function StammdatenSection() {
         {rollen.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 10 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
                 <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
                 <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Bezeichnung</th>
                 <th style={{ textAlign: 'right', padding: '2px 0 4px 6px' }}>Stundensatz</th>
@@ -276,7 +276,7 @@ function StammdatenSection() {
             </thead>
             <tbody>
               {rollen.map((r: Rolle) => (
-                <tr key={r.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <tr key={r.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
                   {editingRolleId === r.ID ? (
                     <>
                       <td style={{ padding: '3px 6px 3px 0' }}>
@@ -298,8 +298,8 @@ function StammdatenSection() {
                   ) : (
                     <>
                       <td style={{ padding: '3px 6px 3px 0', fontWeight: 600 }}>{r.NAME_SHORT}</td>
-                      <td style={{ padding: '3px 6px 3px 0', color: '#374151' }}>{r.NAME_LONG ?? '—'}</td>
-                      <td style={{ padding: '3px 0 3px 6px', textAlign: 'right', color: '#374151' }}>
+                      <td style={{ padding: '3px 6px 3px 0', color: 'var(--text-2)' }}>{r.NAME_LONG ?? '—'}</td>
+                      <td style={{ padding: '3px 0 3px 6px', textAlign: 'right', color: 'var(--text-2)' }}>
                         {r.SP_RATE != null ? `${r.SP_RATE} €/h` : '—'}
                       </td>
                       <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
@@ -609,10 +609,10 @@ function NrTemplateBlock({
           maxLength={80}
           style={{ fontFamily: 'monospace', fontSize: 13 }}
         />
-        {!valid.ok && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>{valid.error}</div>}
+        {!valid.ok && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>{valid.error}</div>}
       </div>
 
-      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Bausteine einfügen:</div>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Bausteine einfügen:</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
         {TOKEN_PALETTE.map(t => (
           <button
@@ -720,7 +720,7 @@ function CompanyAssetsSection({ companyId }: { companyId: number }) {
   })
 
   return (
-    <div style={{ marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
+    <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
       <AssetUploadBlock
         label="Unterschrift (Angebot + Auftragsbestätigung)"
         hint="PNG, JPG · Empfehlung: weißer oder transparenter Hintergrund"
@@ -961,8 +961,8 @@ function TenantBrandingSection() {
           maxLength={60}
           style={{ fontFamily: 'monospace' }}
         />
-        {!slugFormatOk && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Ungültiges Format. Erlaubt: a-z, 0-9, Bindestrich. 3-60 Zeichen.</div>}
-        {slugFormatOk && slugIsReserved && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>„{slugLower}" ist reserviert und kann nicht verwendet werden.</div>}
+        {!slugFormatOk && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>Ungültiges Format. Erlaubt: a-z, 0-9, Bindestrich. 3-60 Zeichen.</div>}
+        {slugFormatOk && slugIsReserved && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>„{slugLower}" ist reserviert und kann nicht verwendet werden.</div>}
       </div>
 
       <div className="form-group" style={{ marginTop: 16 }}>
@@ -1314,7 +1314,7 @@ function MonatsabschlussSection() {
         Monatsabschluss <HelpHint id="monthclose.concept" />
       </h2>
 
-      <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 16, marginBottom: 20 }}>
+      <div style={{ background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6, padding: 16, marginBottom: 20 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
           <input
             type="checkbox"
@@ -1324,7 +1324,7 @@ function MonatsabschlussSection() {
           />
           <span style={{ fontWeight: 500 }}>Automatischer Monatsabschluss aktivieren</span>
         </label>
-        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 0 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 0 }}>
           Am letzten Tag jedes Monats wird automatisch ein Projekt-Snapshot für die gewählten Projektstatus erstellt
           und eine Benachrichtigung versandt.
         </p>
@@ -1332,7 +1332,7 @@ function MonatsabschlussSection() {
 
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontWeight: 500, marginBottom: 8 }}>Projektstatus einschließen</div>
-        {statuses.length === 0 && <p style={{ fontSize: 13, color: '#6b7280' }}>Keine Projektstatus vorhanden.</p>}
+        {statuses.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Keine Projektstatus vorhanden.</p>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {statuses.map((s: ProjectStatus) => (
             <label key={s.ID} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, background: selectedStatuses.includes(s.ID) ? '#eff6ff' : '#f3f4f6', border: `1px solid ${selectedStatuses.includes(s.ID) ? '#93c5fd' : '#e5e7eb'}`, borderRadius: 4, padding: '4px 10px' }}>
@@ -1346,7 +1346,7 @@ function MonatsabschlussSection() {
             </label>
           ))}
         </div>
-        <p style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
           Keine Auswahl = alle Projektstatus einschließen.
         </p>
       </div>
@@ -1360,16 +1360,16 @@ function MonatsabschlussSection() {
         {saveMut.isPending ? 'Speichert …' : 'Einstellungen speichern'}
       </button>
 
-      <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', marginBottom: 20 }} />
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', marginBottom: 20 }} />
 
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 500, marginBottom: 4 }}>Letzter Abschluss</div>
         {settings?.lastRunMonth ? (
-          <p style={{ fontSize: 13, color: '#374151' }}>
+          <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
             {settings.lastRunMonth} — {settings.lastRunCount} Projekt{settings.lastRunCount !== 1 ? 'e' : ''} &middot; {lastRunFormatted}
           </p>
         ) : (
-          <p style={{ fontSize: 13, color: '#6b7280' }}>Noch kein Abschluss durchgeführt.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Noch kein Abschluss durchgeführt.</p>
         )}
       </div>
 
@@ -1431,7 +1431,7 @@ function WtmHourRow({ form, onChange }: {
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {days.map(d => (
         <div key={d.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <label style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>{d.label}</label>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{d.label}</label>
           <input
             type="number" min={0} max={24} step={0.5}
             style={{ width: 54, textAlign: 'center', fontSize: 13 }}
@@ -1534,7 +1534,7 @@ function ArbeitszeitmodelleSection() {
         {models.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 14 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
                 <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Name</th>
                 <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Bundesland</th>
                 <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Mo</th>
@@ -1552,13 +1552,13 @@ function ArbeitszeitmodelleSection() {
               {models.map(m => {
                 const weekHours = m.MON + m.TUE + m.WED + m.THU + m.FRI + m.SAT + m.SUN
                 return (
-                  <tr key={m.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <tr key={m.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
                     <td style={{ padding: '3px 8px 3px 0', fontWeight: 600 }}>{m.NAME}</td>
-                    <td style={{ padding: '3px 8px 3px 0', color: '#374151' }}>{getStateLabel(m.COUNTRY_CODE, m.STATE_CODE)}</td>
+                    <td style={{ padding: '3px 8px 3px 0', color: 'var(--text-2)' }}>{getStateLabel(m.COUNTRY_CODE, m.STATE_CODE)}</td>
                     {[m.MON, m.TUE, m.WED, m.THU, m.FRI, m.SAT, m.SUN].map((h, i) => (
                       <td key={i} style={{ textAlign: 'center', padding: '3px 4px', color: h === 0 ? '#d1d5db' : '#374151' }}>{h}</td>
                     ))}
-                    <td style={{ textAlign: 'right', padding: '3px 0 3px 4px', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{weekHours}</td>
+                    <td style={{ textAlign: 'right', padding: '3px 0 3px 4px', fontVariantNumeric: 'tabular-nums', color: 'var(--text-2)' }}>{weekHours}</td>
                     <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
                       <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => startEdit(m)}>✎</button>
                       <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} disabled={deleteMut.isPending} onClick={() => { setMsg(null); deleteMut.mutate(m.ID) }}>×</button>
@@ -1578,7 +1578,7 @@ function ArbeitszeitmodelleSection() {
         )}
 
         {showForm && (
-          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 14, marginTop: 12 }}>
+          <div style={{ background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6, padding: 14, marginTop: 12 }}>
             <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 13 }}>
               {editingId ? 'Modell bearbeiten' : 'Neues Modell'}
             </div>
@@ -1616,12 +1616,12 @@ function ArbeitszeitmodelleSection() {
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Stunden pro Tag</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Stunden pro Tag</div>
               <WtmHourRow form={form} onChange={setField} />
             </div>
 
-            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 10, marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontWeight: 600 }}>
                 ArbZG-Rahmen
               </div>
               <div className="form-row" style={{ marginBottom: 8 }}>
@@ -2122,7 +2122,7 @@ function KostensatzSection() {
                           <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.direct_cost_per_h)}</td>
                           <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.overhead_per_h)}</td>
                           <td style={{ textAlign: 'right', fontWeight: 700 }}>{FMT_EUR_KS.format(bd.vollkostensatz)}</td>
-                          {imp && <td style={{ textAlign: 'right', fontWeight: 700, color: '#1d4ed8' }}>{FMT_EUR_KS.format(bd.import_rate)}</td>}
+                          {imp && <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--info)' }}>{FMT_EUR_KS.format(bd.import_rate)}</td>}
                           <td style={{ textAlign: 'right', color: 'var(--text-3)' }}>{r.current_cp_rate != null ? FMT_EUR_KS.format(r.current_cp_rate) : '—'}</td>
                           <td style={{ textAlign: 'right', fontWeight: 600, color: diffColor(r.current_cp_rate, rate) }}>
                             {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(1).replace('.', ',')} %` : '—'}
@@ -2465,7 +2465,7 @@ function PausenregelnSection() {
         {!isLoading && rules.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 14 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
                 <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Name</th>
                 <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>ab Std.</th>
                 <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Pause</th>
@@ -2477,7 +2477,7 @@ function PausenregelnSection() {
             </thead>
             <tbody>
               {rules.map(r => (
-                <tr key={r.ID} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <tr key={r.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
                   <td style={{ padding: '3px 8px 3px 0', fontWeight: 600 }}>{r.NAME}</td>
                   <td style={{ padding: '3px 8px 3px 0', textAlign: 'right' }}>{r.T1_HOURS}</td>
                   <td style={{ padding: '3px 8px 3px 0', textAlign: 'right' }}>{r.T1_BREAK_MIN} min</td>
@@ -2508,7 +2508,7 @@ function PausenregelnSection() {
         )}
 
         {showForm && (
-          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: 14, marginTop: 12 }}>
+          <div style={{ background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6, padding: 14, marginTop: 12 }}>
             <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 13 }}>
               {form.id ? 'Pausenregel bearbeiten' : 'Neue Pausenregel'}
             </div>
@@ -2609,8 +2609,8 @@ function ArbzgSettingsSection() {
         checked={!!merged[k]}
         onChange={e => set(k, e.target.checked as ArbzgSettings[typeof k])} />
       <span>
-        <span style={{ fontSize: 13, color: '#111827' }}>{label}</span>
-        {hint && <span style={{ display: 'block', fontSize: 11, color: '#6b7280', marginTop: 1 }}>{hint}</span>}
+        <span style={{ fontSize: 13, color: 'var(--text)' }}>{label}</span>
+        {hint && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{hint}</span>}
       </span>
     </label>
   )
@@ -2624,16 +2624,16 @@ function ArbzgSettingsSection() {
           Arbeitszeitgesetz (BAG-Urteil vom 13.09.2022 + ArbZG-Reform 2026).
         </p>
 
-        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
-          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Allgemein</legend>
+        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', padding: '0 6px' }}>Allgemein</legend>
           <Tog k="enabled"    label="ArbZG-Prüfung aktiv"
             hint="Master-Schalter. Deaktiviert alle nachstehenden Prüfungen, ohne dass die Konfiguration verloren geht." />
           <Tog k="strictMode" label="Strikter Modus"
             hint="Warnungen werden zu Blockaden — Buchungen, die ArbZG verletzen, werden abgewiesen." />
         </fieldset>
 
-        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
-          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Prüfungen</legend>
+        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', padding: '0 6px' }}>Prüfungen</legend>
           <Tog k="checkBreakRequired" label="Pflichtpause prüfen (§ 4 ArbZG)" />
           <Tog k="checkMaxDaily"      label="Tageshöchstarbeitszeit prüfen (§ 3 ArbZG)"
             hint="Wert pro Mitarbeiter über das Arbeitszeitmodell konfigurierbar (Default 10 h)." />
@@ -2645,16 +2645,16 @@ function ArbzgSettingsSection() {
             hint="Nur Reporting — verhindert keine Buchung." />
         </fieldset>
 
-        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
-          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Automatischer Pausenabzug</legend>
+        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', padding: '0 6px' }}>Automatischer Pausenabzug</legend>
           <Tog k="autoBreakDeduct" label="Fehlende Pause beim Tagesabschluss abziehen"
             hint="Vermeidet, dass die Tagessumme höher gemeldet wird als rechtskonform." />
           <Tog k="autoBreakRequireConfirm" label="Mitarbeiter muss Auto-Abzug bestätigen"
             hint="BAG 2025: ein blinder Abzug ohne Bestätigung wäre als Lohnraub angreifbar. Empfohlen AN." />
         </fieldset>
 
-        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
-          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Region</legend>
+        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', padding: '0 6px' }}>Region</legend>
           <div className="form-row" style={{ marginBottom: 8 }}>
             <div className="form-group">
               <label>Land</label>
@@ -2686,10 +2686,10 @@ function ArbzgSettingsSection() {
           </div>
         </fieldset>
 
-        <fieldset style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
-          <legend style={{ fontSize: 12, fontWeight: 600, color: '#374151', padding: '0 6px' }}>Hinweistext beim Tagesabschluss</legend>
+        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 14px 12px', margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', padding: '0 6px' }}>Hinweistext beim Tagesabschluss</legend>
           <textarea rows={4} style={{ width: '100%', fontSize: 12, padding: 8, fontFamily: 'inherit',
-                                       border: '1px solid #d1d5db', borderRadius: 4 }}
+                                       border: '1px solid var(--border)', borderRadius: 4 }}
             value={merged.legalTextBlock ?? ''}
             onChange={e => set('legalTextBlock', e.target.value)} />
         </fieldset>
@@ -2800,9 +2800,9 @@ function BenachrichtigungenSection() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title}</div>
                 {c.description && (
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{c.description}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{c.description}</div>
                 )}
-                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
                   Empfänger: {summarizeAudience(c)}
                 </div>
               </div>
@@ -2816,7 +2816,7 @@ function BenachrichtigungenSection() {
                   Bearbeiten
                 </button>
               ) : (
-                <span style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic', paddingTop: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-4)', fontStyle: 'italic', paddingTop: 4 }}>
                   nur ein/aus
                 </span>
               )}
@@ -2930,7 +2930,7 @@ function LeistungsstandReminderBlock() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
             <strong style={{ fontSize: 14 }}>Leistungsstand pflegen</strong>
-            <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#6b7280' }}>
+            <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--text-3)' }}>
               Monatliche Erinnerung an die Pflege der Leistungsstaende.
             </p>
           </div>
@@ -2955,7 +2955,7 @@ function LeistungsstandReminderBlock() {
                   placeholder="z.B. 25, 26, 27"
                   style={{ width: 180 }}
                 />
-                <span style={{ fontSize: 12, color: '#6b7280' }}>(Komma-Liste, Tag 1–31)</span>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>(Komma-Liste, Tag 1–31)</span>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 8 }}>
                 <input
@@ -3000,7 +3000,7 @@ function LeistungsstandReminderBlock() {
                 />
                 <span>
                   <strong>Projektleiter</strong> des jeweiligen Projekts
-                  <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block' }}>
                     Pro Projekt eine Notification an den eingetragenen Projektleiter (Link springt direkt zum Projekt).
                   </span>
                 </span>
@@ -3009,7 +3009,7 @@ function LeistungsstandReminderBlock() {
 
             {/* Zusaetzliche Audience */}
             <div style={{ paddingLeft: 8, borderLeft: '2px solid var(--border)' }}>
-              <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 8px 0' }}>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 8px 0' }}>
                 Zusätzliche Empfänger (OR-verknüpft, Link führt zur Leistungsstand-Liste):
               </p>
 
@@ -3057,7 +3057,7 @@ function LeistungsstandReminderBlock() {
             </div>
 
             {lastFiredDate && (
-              <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
                 Letzter Lauf: {new Date(lastFiredDate).toLocaleDateString('de-DE')}
               </p>
             )}
@@ -3140,7 +3140,7 @@ function HoursBookingReminderBlock() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <strong style={{ fontSize: 14 }}>Stunden für heute buchen</strong>
-          <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#6b7280' }}>
+          <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--text-3)' }}>
             Tägliche Erinnerung an alle aktiven Mitarbeiter, die heute noch keine Zeitbuchung haben.
           </p>
         </div>
@@ -3169,7 +3169,7 @@ function HoursBookingReminderBlock() {
             </p>
           </div>
           {lastFiredDate && (
-            <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
               Letzter Lauf: {new Date(lastFiredDate).toLocaleDateString('de-DE')}
             </p>
           )}
@@ -3245,7 +3245,7 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
     <Modal open={open} onClose={onClose} title={config.title}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 420 }}>
         {config.description && (
-          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{config.description}</p>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)' }}>{config.description}</p>
         )}
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
@@ -3265,7 +3265,7 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
             />
             <span>
               <strong>Organisations-Standard</strong>
-              <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block' }}>
                 Wirkt für alle Mitarbeiter (systemweit).
               </span>
             </span>
@@ -3280,7 +3280,7 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
             />
             <span>
               <strong>Manuell konfigurieren</strong>
-              <span style={{ fontSize: 11, color: '#6b7280', display: 'block' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block' }}>
                 Empfänger werden aus Rollen / Abteilungen / Mitarbeitern kombiniert (OR-Verknüpfung).
               </span>
             </span>
@@ -3401,7 +3401,7 @@ function EngagementSection() {
   return (
     <div>
       <h2 className="settings-section-title">Engagement-Funktionen</h2>
-      <p className="settings-section-hint" style={{ marginBottom: 18, fontSize: 12, color: '#6b7280' }}>
+      <p className="settings-section-hint" style={{ marginBottom: 18, fontSize: 12, color: 'var(--text-3)' }}>
         Steuert die optionalen Engagement-Hilfen für die Mitarbeiter deines Büros. Schaltet alles unsichtbar wenn der Master-Schalter aus ist.
       </p>
 
@@ -3416,14 +3416,14 @@ function EngagementSection() {
           />
           <strong>Engagement aktiv</strong>
         </label>
-        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, marginLeft: 24 }}>
+        <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4, marginLeft: 24 }}>
           Master-Schalter. Wenn aus, sind alle vier Features unten unsichtbar — unabhängig davon, wie sie einzeln stehen.
         </p>
       </div>
 
       <div className="settings-card" style={{ opacity: draft.enabled ? 1 : 0.5, pointerEvents: draft.enabled ? 'auto' : 'none' }}>
         {features.map(f => (
-          <div key={f.key} style={{ padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
+          <div key={f.key} style={{ padding: '10px 0', borderBottom: '1px solid var(--border-3)' }}>
             <label className="settings-toggle" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <input
                 type="checkbox"
@@ -3432,7 +3432,7 @@ function EngagementSection() {
               />
               <span style={{ fontSize: 13, fontWeight: 600 }}>{f.label}</span>
             </label>
-            <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, marginLeft: 24 }}>{f.hint}</p>
+            <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2, marginLeft: 24 }}>{f.hint}</p>
           </div>
         ))}
       </div>
@@ -3450,13 +3450,13 @@ function EngagementSection() {
 
 function DomainStatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; bg: string; color: string }> = {
-    verified:          { label: 'Verifiziert',            bg: '#dcfce7', color: '#166534' },
-    pending:           { label: 'Ausstehend',             bg: '#fef9c3', color: '#854d0e' },
-    not_started:       { label: 'Nicht gestartet',        bg: '#f3f4f6', color: '#374151' },
-    failed:            { label: 'Fehlgeschlagen',         bg: '#fee2e2', color: '#991b1b' },
-    temporary_failure: { label: 'Temporär fehlgeschlagen', bg: '#fee2e2', color: '#991b1b' },
+    verified:          { label: 'Verifiziert',            bg: 'var(--success-bg)', color: 'var(--success-strong)' },
+    pending:           { label: 'Ausstehend',             bg: 'var(--warning-bg)', color: 'var(--warning-strong)' },
+    not_started:       { label: 'Nicht gestartet',        bg: 'var(--surface-2)', color: 'var(--text-2)' },
+    failed:            { label: 'Fehlgeschlagen',         bg: 'var(--danger-bg)', color: 'var(--danger-strong)' },
+    temporary_failure: { label: 'Temporär fehlgeschlagen', bg: 'var(--danger-bg)', color: 'var(--danger-strong)' },
   }
-  const s = map[status] ?? { label: status || '—', bg: '#f3f4f6', color: '#374151' }
+  const s = map[status] ?? { label: status || '—', bg: 'var(--surface-2)', color: 'var(--text-2)' }
   return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.color }}>{s.label}</span>
 }
 
@@ -3756,7 +3756,7 @@ function EmailVersandSection() {
                 Gespeichertes Passwort entfernen
               </button>
             )}
-            {clearPw && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Das gespeicherte Passwort wird beim Speichern gelöscht.</div>}
+            {clearPw && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>Das gespeicherte Passwort wird beim Speichern gelöscht.</div>}
           </div>
         </div>
       )}

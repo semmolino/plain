@@ -215,14 +215,14 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
           maxRotation: 45,
           maxTicksLimit: 12,
           font: { size: 11 },
-          color: '#6b7280',
+          color: 'var(--text-3)',
         },
       },
       y: {
         grid: { color: 'rgba(0,0,0,0.06)' },
         ticks: {
           font: { size: 11 },
-          color: '#6b7280',
+          color: 'var(--text-3)',
           callback: (v) => FMT_EUR0.format(Number(v)),
         },
       },
@@ -406,7 +406,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
             {projectDropdownOpen && (
               <div className="project-ac-dropdown">
                 {filteredProjects.length === 0 && (
-                  <div className="project-ac-option" style={{ color: '#6b7280', fontStyle: 'italic' }}>Keine Treffer</div>
+                  <div className="project-ac-option" style={{ color: 'var(--text-3)', fontStyle: 'italic' }}>Keine Treffer</div>
                 )}
                 {filteredProjects.map(p => (
                   <div key={p.ID} className="project-ac-option"

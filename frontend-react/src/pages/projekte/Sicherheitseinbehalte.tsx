@@ -47,16 +47,16 @@ function SeUebersicht({ onSelectProject }: { onSelectProject: (id: number) => vo
       {/* KPI-Kacheln */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8 }}>
-          <div style={{ fontSize: 12, color: '#92400e', fontWeight: 600, marginBottom: 4 }}>OFFENE SICHERHEITSEINBEHALTE</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#78350f' }}>{fmtEur(totalOpen)}</div>
+          <div style={{ fontSize: 12, color: 'var(--warning-strong)', fontWeight: 600, marginBottom: 4 }}>OFFENE SICHERHEITSEINBEHALTE</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{fmtEur(totalOpen)}</div>
         </div>
         <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.25)', borderRadius: 8 }}>
-          <div style={{ fontSize: 12, color: '#166534', fontWeight: 600, marginBottom: 4 }}>BEREITS AUFGELÖST</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#14532d' }}>{fmtEur(totalReleased)}</div>
+          <div style={{ fontSize: 12, color: 'var(--success-strong)', fontWeight: 600, marginBottom: 4 }}>BEREITS AUFGELÖST</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success-strong)' }}>{fmtEur(totalReleased)}</div>
         </div>
         <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(17, 24, 39, 0.04)', border: '1px solid rgba(17, 24, 39, 0.10)', borderRadius: 8 }}>
-          <div style={{ fontSize: 12, color: '#374151', fontWeight: 600, marginBottom: 4 }}>PROJEKTE / VERTRÄGE</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#111827' }}>{rows.length}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>PROJEKTE / VERTRÄGE</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{rows.length}</div>
         </div>
       </div>
 
@@ -85,13 +85,13 @@ function SeUebersicht({ onSelectProject }: { onSelectProject: (id: number) => vo
                     onClick={() => r.project_id && onSelectProject(r.project_id)}>
                   <td className="ls-td">
                     <strong>{r.project_number || `#${r.project_id}`}</strong>
-                    {r.project_name && <span style={{ color: '#6b7280', fontSize: 12 }}> · {r.project_name}</span>}
+                    {r.project_name && <span style={{ color: 'var(--text-3)', fontSize: 12 }}> · {r.project_name}</span>}
                   </td>
                   <td className="ls-td">
                     {r.contract_number ? (
                       <>
                         {r.contract_number}
-                        {r.contract_name && <span style={{ color: '#6b7280', fontSize: 12 }}> · {r.contract_name}</span>}
+                        {r.contract_name && <span style={{ color: 'var(--text-3)', fontSize: 12 }}> · {r.contract_name}</span>}
                       </>
                     ) : '—'}
                   </td>
@@ -99,11 +99,11 @@ function SeUebersicht({ onSelectProject }: { onSelectProject: (id: number) => vo
                     <span style={{ color: r.open_sum > 0 ? '#92400e' : undefined, fontWeight: r.open_sum > 0 ? 600 : 400 }}>
                       {fmtEur(r.open_sum)}
                     </span>
-                    {r.open_count > 0 && <span style={{ color: '#6b7280', fontSize: 11 }}> · {r.open_count}</span>}
+                    {r.open_count > 0 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}> · {r.open_count}</span>}
                   </td>
                   <td className="ls-td ls-right">
                     {fmtEur(r.released_sum)}
-                    {r.released_count > 0 && <span style={{ color: '#6b7280', fontSize: 11 }}> · {r.released_count}</span>}
+                    {r.released_count > 0 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}> · {r.released_count}</span>}
                   </td>
                   <td className="ls-td ls-right" style={{ fontWeight: 600 }}>{fmtEur(r.total_active_sum)}</td>
                   <td className="ls-td">
@@ -152,21 +152,21 @@ function SeProjektDetails({ projectId, onBack }: { projectId: number; onBack: ()
         <>
           <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: '#92400e', fontWeight: 600, marginBottom: 4 }}>OFFENE SICHERHEITSEINBEHALTE</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#78350f' }}>{fmtEur(openSum)}</div>
-              <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>{open.length} {open.length === 1 ? 'Eintrag' : 'Einträge'}</div>
+              <div style={{ fontSize: 12, color: 'var(--warning-strong)', fontWeight: 600, marginBottom: 4 }}>OFFENE SICHERHEITSEINBEHALTE</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{fmtEur(openSum)}</div>
+              <div style={{ fontSize: 12, color: 'var(--warning-strong)', marginTop: 2 }}>{open.length} {open.length === 1 ? 'Eintrag' : 'Einträge'}</div>
             </div>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.25)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: '#166534', fontWeight: 600, marginBottom: 4 }}>BEREITS AUFGELÖST</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#14532d' }}>{fmtEur(releasedSum)}</div>
-              <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>{released.length} {released.length === 1 ? 'Eintrag' : 'Einträge'}</div>
+              <div style={{ fontSize: 12, color: 'var(--success-strong)', fontWeight: 600, marginBottom: 4 }}>BEREITS AUFGELÖST</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success-strong)' }}>{fmtEur(releasedSum)}</div>
+              <div style={{ fontSize: 12, color: 'var(--success-strong)', marginTop: 2 }}>{released.length} {released.length === 1 ? 'Eintrag' : 'Einträge'}</div>
             </div>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(17, 24, 39, 0.04)', border: '1px solid rgba(17, 24, 39, 0.10)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: '#374151', fontWeight: 600, marginBottom: 4 }}>GESAMT (AKTIV)</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#111827' }}>{fmtEur(openSum + releasedSum)}</div>
-              <div style={{ fontSize: 12, color: '#374151', marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>GESAMT (AKTIV)</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{fmtEur(openSum + releasedSum)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
                 {activeRows.length} {activeRows.length === 1 ? 'Eintrag' : 'Einträge'}
-                {cancelled.length > 0 && <span style={{ color: '#9ca3af' }}> · {cancelled.length} storniert</span>}
+                {cancelled.length > 0 && <span style={{ color: 'var(--text-4)' }}> · {cancelled.length} storniert</span>}
               </div>
             </div>
           </div>
@@ -203,20 +203,20 @@ function SeProjektDetails({ projectId, onBack }: { projectId: number; onBack: ()
                       <td className="ls-td ls-right" style={{ fontWeight: 600 }}>{fmtEur(r.se_amount)}</td>
                       <td className="ls-td" style={{ textDecoration: 'none' }}>
                         {r.status === 'OFFEN' && (
-                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(245, 158, 11, 0.15)', color: '#92400e', fontSize: 11, fontWeight: 600 }}>OFFEN</span>
+                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-strong)', fontSize: 11, fontWeight: 600 }}>OFFEN</span>
                         )}
                         {r.status === 'AUFGELOEST' && (
-                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(34, 197, 94, 0.15)', color: '#166534', fontSize: 11, fontWeight: 600 }}>AUFGELÖST</span>
+                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(34, 197, 94, 0.15)', color: 'var(--success-strong)', fontSize: 11, fontWeight: 600 }}>AUFGELÖST</span>
                         )}
                         {r.status === 'STORNIERT' && (
-                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(107, 114, 128, 0.15)', color: '#4b5563', fontSize: 11, fontWeight: 600 }}>STORNIERT</span>
+                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(107, 114, 128, 0.15)', color: 'var(--text-2)', fontSize: 11, fontWeight: 600 }}>STORNIERT</span>
                         )}
                       </td>
                       <td className="ls-td" style={{ textDecoration: 'none' }}>
                         {r.status === 'AUFGELOEST' ? (
                           <>
                             <strong>{r.released_by_invoice_number || `#${r.released_by_invoice_id}`}</strong>
-                            {r.released_by_invoice_date && <span style={{ color: '#6b7280', fontSize: 12 }}> · {fmtDate(r.released_by_invoice_date)}</span>}
+                            {r.released_by_invoice_date && <span style={{ color: 'var(--text-3)', fontSize: 12 }}> · {fmtDate(r.released_by_invoice_date)}</span>}
                           </>
                         ) : '—'}
                       </td>

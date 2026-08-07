@@ -39,7 +39,7 @@ const queryClient = new QueryClient({
 })
 
 function PageLoader() {
-  return <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Laden …</div>
+  return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)' }}>Laden …</div>
 }
 
 export default function App() {

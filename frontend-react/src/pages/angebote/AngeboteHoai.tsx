@@ -75,7 +75,7 @@ export function AngeboteHoai({ initialOfferId }: Props) {
                     <button className="row-action-btn" onClick={() => openHonorarPdf(c.ID)} title="PDF">
                       <FileText size={14} strokeWidth={1.75} />
                     </button>
-                    <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }} disabled={deleteMut.isPending} title="Löschen"
+                    <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} disabled={deleteMut.isPending} title="Löschen"
                       onClick={() => setConfirmState({
                         title: 'Kalkulation löschen',
                         message: `HOAI-Kalkulation „${c.NAME_SHORT || c.NAME_LONG || 'Kalkulation'}" löschen?`,

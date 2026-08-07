@@ -30,7 +30,7 @@ export function ProtectedRoute({ children, anyOf }: Props) {
   if (anyOf && anyOf.length > 0) {
     // Permissions noch nicht geladen -> kurzes Loading statt Redirect
     if (!loaded && !unrestricted) {
-      return <div style={{ padding: 40, textAlign: 'center', color: '#6b7280' }}>Laden …</div>
+      return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Laden …</div>
     }
     if (!unrestricted && !anyOf.some(k => keys.has(k))) {
       return <Navigate to="/403" state={{ from: location.pathname }} replace />

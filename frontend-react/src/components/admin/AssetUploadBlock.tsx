@@ -48,7 +48,7 @@ export function AssetUploadBlock({ label, hint, assetId, dataUri, onSave, onRemo
           <img
             src={dataUri ?? `/api/v1/assets/${assetId}`}
             alt={label}
-            style={{ maxHeight: 60, maxWidth: 220, objectFit: 'contain', display: 'block', marginBottom: 8, border: '1px solid #e5e7eb', borderRadius: 4, padding: 4, background: '#fafafa' }}
+            style={{ maxHeight: 60, maxWidth: 220, objectFit: 'contain', display: 'block', marginBottom: 8, border: '1px solid var(--border)', borderRadius: 4, padding: 4, background: 'var(--surface-3)' }}
           />
           <button type="button" className="btn-small btn-danger" onClick={onRemove} disabled={isPending}>
             Entfernen
@@ -62,7 +62,7 @@ export function AssetUploadBlock({ label, hint, assetId, dataUri, onSave, onRemo
         <button type="button" className="btn-small" onClick={() => inputRef.current?.click()} disabled={uploading || isPending}>
           {uploading ? 'Wird hochgeladen …' : assetId ? 'Ersetzen' : 'Hochladen'}
         </button>
-        <span style={{ fontSize: 11, color: '#6b7280' }}>{hint ?? 'PNG, JPG, SVG · max. 10 MB'}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{hint ?? 'PNG, JPG, SVG · max. 10 MB'}</span>
       </label>
       <Message text={msg?.text ?? null} type={msg?.type} />
     </div>

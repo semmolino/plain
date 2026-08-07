@@ -144,14 +144,14 @@ export function Budget({ initialProjectId }: Props) {
           {/* KPI Kacheln */}
           <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(17, 24, 39, 0.04)', border: '1px solid rgba(17, 24, 39, 0.10)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: '#374151', fontWeight: 600, marginBottom: 4 }}>HONORAR + ZUSCHLÄGE</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#111827' }}>{fmtEur(overview.projectAggregate.budget)}</div>
-              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>ohne Nebenkosten</div>
+              <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>HONORAR + ZUSCHLÄGE</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{fmtEur(overview.projectAggregate.budget)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>ohne Nebenkosten</div>
             </div>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: '#92400e', fontWeight: 600, marginBottom: 4 }}>VERBRAUCHT</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#78350f' }}>{fmtEur(overview.projectAggregate.verbrauch)}</div>
-              <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: 'var(--warning-strong)', fontWeight: 600, marginBottom: 4 }}>VERBRAUCHT</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{fmtEur(overview.projectAggregate.verbrauch)}</div>
+              <div style={{ fontSize: 12, color: 'var(--warning-strong)', marginTop: 2 }}>
                 {overview.projectAggregate.budget > 0
                   ? `${(overview.projectAggregate.verbrauch / overview.projectAggregate.budget * 100).toFixed(1).replace('.', ',')} %`
                   : '—'}
@@ -229,10 +229,10 @@ export function Budget({ initialProjectId }: Props) {
                         </td>
                         <td className="ls-td">
                           {r.MUTED
-                            ? <span style={{ color: '#9ca3af', fontSize: 12 }}>stumm</span>
+                            ? <span style={{ color: 'var(--text-4)', fontSize: 12 }}>stumm</span>
                             : reached
-                              ? <span style={{ color: '#b91c1c', fontSize: 12, fontWeight: 600 }}>überschritten</span>
-                              : <span style={{ color: '#16a34a', fontSize: 12 }}>aktiv</span>}
+                              ? <span style={{ color: 'var(--danger-strong)', fontSize: 12, fontWeight: 600 }}>überschritten</span>
+                              : <span style={{ color: 'var(--success)', fontSize: 12 }}>aktiv</span>}
                         </td>
                         <td className="ls-td">
                           <button className="row-action-btn" title="Bearbeiten" onClick={() => openEdit(r)}>
@@ -281,7 +281,7 @@ export function Budget({ initialProjectId }: Props) {
                           <td className="ls-td">{label}</td>
                           <td className="ls-td ls-col-num">{fmtEur(f.BUDGET_EUR)}</td>
                           <td className="ls-td ls-col-num">{fmtEur(f.ACTUAL_EUR)}</td>
-                          <td className="ls-td">{f.RESET_AT ? <span style={{ color: '#6b7280', fontSize: 12 }}>zurückgesetzt {fmtDate(f.RESET_AT)}</span> : <span style={{ color: '#b91c1c', fontSize: 12, fontWeight: 600 }}>offen</span>}</td>
+                          <td className="ls-td">{f.RESET_AT ? <span style={{ color: 'var(--text-3)', fontSize: 12 }}>zurückgesetzt {fmtDate(f.RESET_AT)}</span> : <span style={{ color: 'var(--danger-strong)', fontSize: 12, fontWeight: 600 }}>offen</span>}</td>
                         </tr>
                       )
                     })}

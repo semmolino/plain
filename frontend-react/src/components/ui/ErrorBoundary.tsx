@@ -15,7 +15,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{ padding: 32, fontFamily: 'monospace' }}>
           <h2 style={{ color: 'red' }}>Runtime Error</h2>
-          <pre style={{ marginTop: 16, whiteSpace: 'pre-wrap', color: '#333' }}>
+          <pre style={{ marginTop: 16, whiteSpace: 'pre-wrap', color: 'var(--text-2)' }}>
             {this.state.error.message}
             {'\n\n'}
             {this.state.error.stack}

@@ -30,7 +30,7 @@ export function ConsentGate({ children }: { children: ReactNode }) {
   })
 
   if (consentQuery.isLoading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#6b7280' }}>Laden …</div>
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Laden …</div>
   }
 
   if (consentQuery.data?.accepted) {

@@ -78,11 +78,11 @@ function RowMenu({ open, onOpen, onClose, children }: {
 // ── Mahnstufe badge-select ────────────────────────────────────────────────────
 
 const STUFE_COLORS: Record<number, { bg: string; color: string }> = {
-  0: { bg: '#e5e7eb', color: '#6b7280' },
-  1: { bg: '#dbeafe', color: '#1d4ed8' },
-  2: { bg: '#fef3c7', color: '#92400e' },
-  3: { bg: '#fed7aa', color: '#9a3412' },
-  4: { bg: '#fecaca', color: '#7f1d1d' },
+  0: { bg: 'var(--surface-2)', color: 'var(--text-3)' },
+  1: { bg: 'var(--info-bg)', color: 'var(--info)' },
+  2: { bg: 'var(--warning-bg)', color: 'var(--warning-strong)' },
+  3: { bg: 'var(--warning-bg)', color: 'var(--warning-strong)' },
+  4: { bg: 'var(--danger-bg)', color: 'var(--danger-strong)' },
 }
 
 function MahnstufeSelect({ value, levels, onChange, onClick }: {
@@ -1061,7 +1061,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                             title="Zahlung löschen"
                             disabled={deletingPayId === p.ID}
                             onClick={() => handleDeletePayment(p.ID)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 16, lineHeight: 1, padding: '0 2px' }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontWeight: 700, fontSize: 16, lineHeight: 1, padding: '0 2px' }}
                           >×</button>
                         </td>
                       </tr>

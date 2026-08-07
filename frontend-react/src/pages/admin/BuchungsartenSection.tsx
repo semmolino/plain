@@ -82,10 +82,10 @@ export function BuchungsartenSection() {
         </Can>
       </div>
 
-      {isLoading && <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Laden …</p>}
+      {isLoading && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>Laden …</p>}
 
       {!isLoading && rows.length === 0 && (
-        <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
           Noch keine Buchungsarten angelegt. Mit „Neue Buchungsart" eine Pauschale oder Stückleistung mit Standardpreis definieren.
         </p>
       )}
@@ -93,7 +93,7 @@ export function BuchungsartenSection() {
       {rows.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, margin: '10px 0' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+            <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
               <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Art</th>
               <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
               <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Bezeichnung</th>
@@ -105,10 +105,10 @@ export function BuchungsartenSection() {
           </thead>
           <tbody>
             {rows.map(t => (
-              <tr key={t.ID} style={{ borderBottom: '1px solid #f3f4f6', opacity: t.ACTIVE === 0 ? 0.5 : 1 }}>
+              <tr key={t.ID} style={{ borderBottom: '1px solid var(--border-3)', opacity: t.ACTIVE === 0 ? 0.5 : 1 }}>
                 <td style={{ padding: '4px 6px 4px 0' }}>{BOOKING_KIND_LABEL[t.KIND]}</td>
                 <td style={{ padding: '4px 6px 4px 0', fontWeight: 600 }}>{t.NAME_SHORT}</td>
-                <td style={{ padding: '4px 6px 4px 0', color: '#6b7280' }}>{t.NAME_LONG || '—'}</td>
+                <td style={{ padding: '4px 6px 4px 0', color: 'var(--text-3)' }}>{t.NAME_LONG || '—'}</td>
                 <td style={{ padding: '4px 6px 4px 0' }}>{t.KIND === 'UNIT' ? (t.UNIT_LABEL || '—') : '—'}</td>
                 <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtEur(t.DEFAULT_SP_RATE)}</td>
                 <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtEur(t.DEFAULT_CP_RATE)}</td>
@@ -117,7 +117,7 @@ export function BuchungsartenSection() {
                     <button className="row-action-btn" onClick={() => setEditId(t.ID)} title="Bearbeiten">
                       <Pencil size={13} strokeWidth={2} />
                     </button>
-                    <button className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                    <button className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                       onClick={() => setConfirmState({ id: t.ID, label: t.NAME_SHORT })} title="Löschen">
                       <Trash2 size={13} strokeWidth={2} />
                     </button>
@@ -235,7 +235,7 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
           </Can>
         )}
         {isCreate && (
-          <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0' }}>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
             Textvorlagen für diese Buchungsart kannst du nach dem Speichern (beim Bearbeiten) hinterlegen.
           </p>
         )}
@@ -272,9 +272,9 @@ function TypeTextTemplates({ typeId }: { typeId: number }) {
   const delMut = useMutation({ mutationFn: deleteGlobalSnippet, onSuccess: invalidate })
 
   return (
-    <div style={{ marginTop: 8, padding: 10, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+    <div style={{ marginTop: 8, padding: 10, background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6 }}>
       <strong style={{ fontSize: 13 }}>Textvorlagen für diese Buchungsart</strong>
-      <p style={{ fontSize: 11, color: '#6b7280', margin: '2px 0 8px' }}>
+      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 8px' }}>
         Erscheinen beim Buchen dieser Buchungsart als Baustein.
       </p>
 
@@ -283,8 +283,8 @@ function TypeTextTemplates({ typeId }: { typeId: number }) {
           {rows.map(r => (
             <div key={r.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
               {r.LABEL && <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.LABEL}:</span>}
-              <span style={{ color: '#374151', flex: 1, whiteSpace: 'pre-line' }}>{r.TEXT}</span>
-              <button type="button" className="row-action-btn" style={{ color: '#dc2626', borderColor: '#dc2626' }}
+              <span style={{ color: 'var(--text-2)', flex: 1, whiteSpace: 'pre-line' }}>{r.TEXT}</span>
+              <button type="button" className="row-action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => delMut.mutate(r.ID)} title="Löschen">
                 <Trash2 size={12} strokeWidth={2.5} />
               </button>
@@ -296,7 +296,7 @@ function TypeTextTemplates({ typeId }: { typeId: number }) {
       <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <input className="tbl-input" style={{ width: 110 }} value={label} onChange={e => setLabel(e.target.value)} placeholder="Kürzel (optional)" />
         <textarea rows={2} value={text} onChange={e => setText(e.target.value)} placeholder="Textbaustein …"
-          style={{ flex: 1, minWidth: 180, padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+          style={{ flex: 1, minWidth: 180, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, outline: 'none' }} />
         <button type="button" className="btn-small btn-save" disabled={!text.trim() || addMut.isPending}
           onClick={() => addMut.mutate()}>
           {addMut.isPending ? '…' : 'Hinzufügen'}

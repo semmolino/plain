@@ -495,7 +495,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
           {/* E-Rechnungs-Felder (BT-10/13/19/83) — optional, einklappbar */}
           <div style={{ marginTop: 12, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
             <button type="button" onClick={() => setShowEinvoice(s => !s)}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#374151', padding: 0 }}>
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-2)', padding: 0 }}>
               {showEinvoice ? '▼' : '▶'} E-Rechnungs-Detailfelder (Käuferreferenz, Bestellnummer …)
             </button>
             {showEinvoice && (
@@ -518,7 +518,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                       <option key={k} value={k}>{VAT_CATEGORY_LABELS[k]}</option>
                     ))}
                   </select>
-                  <p style={{ fontSize: 11, color: '#6b7280', margin: '4px 0 0 0' }}>
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0 0' }}>
                     Bei "Reverse Charge §13b UStG" (z.B. Bauleistung an Bauträger) wird kein Steuerbetrag ausgewiesen
                     und der Standardhinweis automatisch ergänzt.
                   </p>
@@ -536,7 +536,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                   </>
                 )}
 
-                <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
                   Optional. Bei öffentlichen Auftraggebern ist die Leitweg-ID erforderlich — wird vom Empfänger im Format geprüft.
                 </p>
               </div>
@@ -667,7 +667,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                       {d2Pct && <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>= {fmtEur(d2Amt)}</span>}
                     </div>
                   )}
-                  {totalDisc > 0 && <div style={{ fontSize: 12, color: '#374151' }}>Gesamt-Nachlass: <strong>{fmtEur(totalDisc)}</strong></div>}
+                  {totalDisc > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Gesamt-Nachlass: <strong>{fmtEur(totalDisc)}</strong></div>}
                 </div>
               )}
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
@@ -695,7 +695,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                       style={{ width: 70, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
                       placeholder="z. B. 14" />
                   </div>
-                  {cdAmt > 0 && <div style={{ fontSize: 12, color: '#374151' }}>Skonto-Abzug: <strong>{fmtEur(cdAmt)}</strong></div>}
+                  {cdAmt > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Skonto-Abzug: <strong>{fmtEur(cdAmt)}</strong></div>}
                 </div>
               )}
               {(totalDisc > 0 || cdAmt > 0) && (
@@ -719,12 +719,12 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                   <div className="bp-row"><span>Nebenkosten Netto</span><strong>{fmtEur(proposal.amount_extras_net)}</strong></div>
                   <div className="bp-row"><span>Netto Zwischensumme</span><strong>{fmtEur(base)}</strong></div>
                   {totalDisc > 0 && (
-                    <div className="bp-row" style={{ color: '#b91c1c' }}>
+                    <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
                       <span>./. Nachlässe</span><strong>− {fmtEur(totalDisc)}</strong>
                     </div>
                   )}
                   {cdAmt > 0 && (
-                    <div className="bp-row" style={{ color: '#b91c1c' }}>
+                    <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
                       <span>./. Skonto</span><strong>− {fmtEur(cdAmt)}</strong>
                     </div>
                   )}
@@ -734,7 +734,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                   )}
                   <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(grossAfter)}</strong></div>
                   {seEnabled && seAmt > 0 && (
-                    <div className="bp-row" style={{ color: '#b91c1c' }}>
+                    <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
                       <span>./. Sicherheitseinbehalt {sePctNum}&thinsp;% vom {seBasis === 'BRUTTO' ? 'Brutto' : 'Netto'}</span>
                       <strong>− {fmtEur(seAmt)}</strong>
                     </div>
