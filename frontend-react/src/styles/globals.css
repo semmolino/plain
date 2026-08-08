@@ -651,7 +651,7 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ── Auth loading overlay ───────────────────────────────────────────────── */
@@ -676,7 +676,7 @@ body {
 /* ── Auth pages ─────────────────────────────────────────────────────────── */
 .auth-container {
   display: flex; align-items: center; justify-content: center;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(135deg, var(--accent-bg) 0%, var(--bg) 100%);
   padding: 24px;
   position: relative;
@@ -975,19 +975,28 @@ input::placeholder { color: var(--text-4); }
 .app-layout {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 .app-main {
   flex: 1;
   overflow-y: auto;
-  padding-bottom: 64px;
+  /* Platz fuer die fixierte Bottom-Nav PLUS die Gestenleiste darunter. */
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ── Bottom navigation ───────────────────────────────────────────────────── */
+/* Sichere Zone unten: Auf Geraeten mit Gestenleiste (iPhone ab X, moderne
+   Android-Geraete) reicht der Bildschirm ueber die bedienbare Flaeche hinaus.
+   Ohne diesen Innenabstand liegen die untersten ~20-34px der Navigation
+   unter der Systemleiste — als PWA und in der Capacitor-App dauerhaft.
+   Voraussetzung ist viewport-fit=cover in der index.html. */
 .bottom-nav {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  height: 58px;
+  height: calc(58px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left:  env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   background: var(--chrome);
   border-top: 1px solid var(--chrome-border);
   display: flex;
@@ -1037,7 +1046,8 @@ input::placeholder { color: var(--text-4); }
 }
 
 .bn-more-sheet {
-  position: fixed; bottom: 58px; left: 0; right: 0;
+  /* sitzt direkt ueber der Bottom-Nav — deren Safe-Area mitrechnen */
+  position: fixed; bottom: calc(58px + env(safe-area-inset-bottom, 0px)); left: 0; right: 0;
   z-index: 101;
   background: var(--chrome);
   border-top: 1px solid var(--chrome-border);
@@ -1073,7 +1083,7 @@ input::placeholder { color: var(--text-4); }
   /* App-Shell auf Viewport-Hoehe fixieren: nur .app-main scrollt (hat bereits
      overflow-y:auto), Header und Sidebar bleiben statisch sichtbar. Mobile
      behaelt den Dokument-Scroll + fixe Bottom-Nav. */
-  .app-layout { height: 100vh; overflow: hidden; }
+  .app-layout { height: 100dvh; overflow: hidden; }
   .side-nav {
     display: flex; flex-direction: column;
     width: 200px; flex-shrink: 0;
@@ -1555,6 +1565,7 @@ input::placeholder { color: var(--text-4); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
 
 /* Nur fuer Screenreader — z. B. Beschriftung einer Aktionsspalte, die
    visuell leer bleibt. */
@@ -2359,7 +2370,9 @@ input::placeholder { color: var(--text-4); }
   position: sticky;
   top: 0;
   z-index: 90;
-  height: 48px;
+  /* Notch/Statusleiste oben freihalten (Standalone-PWA und Capacitor). */
+  height: calc(48px + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
   background: var(--chrome);
   border-bottom: 1px solid var(--chrome-border);
   display: flex;
@@ -3963,4 +3976,109 @@ input::placeholder { color: var(--text-4); }
 .limit-note.reached {
   background: var(--danger-bg); color: var(--danger-strong); border: 1px solid var(--danger);
   border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px;
+}
+
+/* ── Touch-Ziele auf Mobilgeraeten ───────────────────────────────────────
+   Gemessen auf 390x844: 75 Bedienelemente unter 44px allein auf der
+   Projektliste — Zeilen-Icons (30px), Inline-Auswahlen, Checkboxen (16px),
+   Tabs (33px). Am Schreibtisch mit Maus unkritisch, mit dem Daumen nicht.
+
+   Wo mehr Hoehe die Liste zu sehr strecken wuerde, vergroessert ein
+   ::after-Overlay nur die TREFFERFLAECHE, ohne das Layout zu veraendern. */
+@media (pointer: coarse), (max-width: 640px) {
+  .row-action-btn,
+  .btn-small,
+  .btn-sm,
+  .pl-col-btn,
+  .filter-chip-btn,
+  .tab-btn {
+    min-height: 44px;
+  }
+  .row-action-btn { min-width: 44px; }
+  /* Text-Knoepfe brauchen auch Breite — „PDF" war 38px breit. */
+  .btn-small, .btn-sm { min-width: 44px; }
+
+  /* Kopfzeilen-Knoepfe: auf JEDER Seite sichtbar und bisher 30-38px. */
+  .tbr-btn, .notif-bell-btn, .user-menu-btn, .welcome-panel-close {
+    min-height: 44px; min-width: 44px;
+  }
+
+  /* Inline-Auswahlen in Tabellenzeilen */
+  .inline-edit-select,
+  .inline-edit-date,
+  .inline-edit-number { min-height: 44px; }
+
+  /* Checkboxen: 16px sind mit dem Daumen kaum zu treffen. `<input>` ist ein
+     ersetztes Element — ::before/::after rendern dort nicht zuverlaessig,
+     ein Overlay-Trick waere also nicht belastbar. Stattdessen echte Groesse
+     (24px erfuellt WCAG 2.5.8 AA) plus Abstand ringsum, damit man nicht
+     versehentlich die Nachbarzeile trifft. */
+  .master-table input[type="checkbox"],
+  .list-section input[type="checkbox"] {
+    width: 24px; height: 24px;
+    margin: 10px;
+  }
+
+  /* Textlinks in Zellen (Kuerzel, Projektname) */
+  .link-btn, .link-cell {
+    display: inline-block;
+    min-height: 44px;
+    line-height: 44px;
+  }
+  /* … ausser wenn der Text ohnehin mehrzeilig geklammert ist */
+  .link-btn.cell-clamp { line-height: 1.4; padding: 12px 0; min-height: 0; }
+}
+
+/* ── Filter-Leiste (FilterBar) ───────────────────────────────────────────
+   Ab Tablet verhaelt sie sich wie vorher: alle Chips sichtbar, kein
+   Umschalter. Auf dem Handy klappen die Chips hinter „Filter" — die
+   Bedienleiste der Rechnungsliste brauchte dort sonst drei Zeilen und
+   142 von 360px bis zur ersten Datenzeile. */
+.filter-bar-toggle { display: none; }
+
+.filter-bar-chips {
+  display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+}
+
+@media (max-width: 640px) {
+  .filter-bar-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 44px; padding: 0 var(--space-3);
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: var(--surface); color: var(--text);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .filter-bar-toggle.active { border-color: var(--accent); color: var(--accent); }
+  .filter-bar-count {
+    min-width: 18px; height: 18px; padding: 0 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-pill);
+    background: var(--accent); color: var(--accent-fg);
+    font-size: 11px; font-weight: 700;
+  }
+
+  /* Eingeklappt = gar nicht im Layout, damit keine leere Zeile bleibt. */
+  .filter-bar-chips { display: none; flex: 1 0 100%; }
+  .filter-bar-chips.open { display: flex; }
+
+  .filter-bar-reset {
+    display: inline-flex; align-items: center; gap: 4px;
+    min-height: 44px; padding: 0 var(--space-2);
+    border: none; background: none; box-shadow: none;
+    color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+}
+
+/* ── Vertikaler Rhythmus auf dem Handy ───────────────────────────────────
+   Gemessen auf 390x844 begann die erste Datenzeile der Rechnungsliste bei
+   417px — knapp der halbe Bildschirm ging fuer Kopfzeile, Titel, Tabs und
+   Bedienleiste drauf. Die Abstaende sind hier enger; ab 641px gilt wieder
+   der normale Rhythmus. */
+@media (max-width: 640px) {
+  .master-page, .dash-page { padding: var(--space-2) var(--space-3) 0; }
+  .master-page-header { margin-bottom: var(--space-2); }
+  .master-page-title, .master-title { font-size: 18px; }
+  .tabs { margin-bottom: var(--space-2); }
+  .list-toolbar, .pl-toolbar { margin-bottom: var(--space-2); }
+  .abrechenbar-card { margin-bottom: var(--space-2); }
 }

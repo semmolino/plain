@@ -2,34 +2,22 @@ import { apiClient } from './client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-/** Vom Backend gelieferte SMTP-Einstellungen (OHNE Passwort). */
+/** Vom Backend gelieferte Absender-Einstellungen. SMTP-Zugangsdaten kommen
+ *  ausschliesslich aus den globalen ENV-Variablen und sind hier nicht Teil
+ *  der API. */
 export interface EmailSettings {
-  configured:                boolean
-  enabled:                   boolean
-  smtp_host:                 string
-  smtp_port:                 number
-  smtp_secure:               boolean
-  smtp_user:                 string
-  smtp_from:                 string
-  from_name:                 string
-  reply_to:                  string
-  smtp_pass_set:             boolean   // ob ein verschluesseltes Passwort hinterlegt ist
-  encryption_available:      boolean   // ob EMAIL_ENC_KEY gesetzt ist
-  global_fallback_available: boolean   // ob globaler ENV-Absender existiert
+  enabled:   boolean
+  smtp_from: string
+  from_name: string
+  reply_to:  string
 }
 
-/** Speicher-Payload. `smtp_pass` nur senden, wenn neu/geaendert. */
+/** Speicher-Payload. */
 export interface EmailSettingsPayload {
-  enabled:        boolean
-  smtp_host:      string
-  smtp_port:      number
-  smtp_secure:    boolean
-  smtp_user:      string
-  smtp_from:      string
-  from_name:      string
-  reply_to:       string
-  smtp_pass?:     string   // leer/weggelassen = unveraendert
-  clear_password?: boolean // true = gespeichertes Passwort loeschen
+  enabled:   boolean
+  smtp_from: string
+  from_name: string
+  reply_to:  string
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────

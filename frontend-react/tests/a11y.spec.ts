@@ -216,3 +216,47 @@ test.describe('Theming', () => {
     expect(color).not.toBe('none')
   })
 })
+
+test.describe('Mobile Bedienbarkeit', () => {
+  test.beforeEach(async ({ page }) => { await mockLoggedIn(page) })
+
+  // Gemessen auf 390x844 lagen vor dieser Runde 75 Bedienelemente allein auf
+  // der Projektliste unter 44px — Zeilen-Icons, Inline-Auswahlen, Checkboxen
+  // (16px) und die Kopfzeilen-Knoepfe. Mit Maus unkritisch, mit dem Daumen
+  // nicht. WCAG 2.5.8 (AA) fordert 24x24; CLAUDE.md fordert 44x44.
+  for (const [name, url] of [['Übersicht', '/'], ['Adressen', '/adressen']] as [string, string][]) {
+    test(`${name} — Bedienelemente erfuellen 24px (WCAG 2.5.8)`, async ({ page, viewport }) => {
+      if ((viewport?.width ?? 0) >= 1024) return
+      await page.goto(url)
+      await page.locator('.app-main').waitFor()
+      await page.waitForTimeout(600)
+
+      const tooSmall = await page.evaluate(() => {
+        const bad: string[] = []
+        for (const el of document.querySelectorAll('button, a[href], select')) {
+          const b = (el as HTMLElement).getBoundingClientRect()
+          if (b.width === 0 || b.height === 0) continue          // ausgeblendet
+          if (b.width < 24 || b.height < 24) {
+            bad.push(`${el.tagName.toLowerCase()}.${(el.className || '').toString().split(' ')[0]} `
+              + `${Math.round(b.width)}x${Math.round(b.height)}`)
+          }
+        }
+        return bad
+      })
+      expect(tooSmall, `Zu kleine Bedienelemente auf ${url}:\n  ${tooSmall.join('\n  ')}`).toEqual([])
+    })
+  }
+
+  test('Bottom-Nav respektiert die Safe-Area unten', async ({ page, viewport }) => {
+    if ((viewport?.width ?? 0) >= 1024) return
+    await page.goto('/')
+    await page.locator('.bottom-nav').waitFor()
+    // env(safe-area-inset-*) meldet im Test 0; geprueft wird, dass die Regel
+    // ueberhaupt greift und die Nav nicht wieder auf feste 58px zurueckfaellt.
+    const usesEnv = await page.evaluate(() => {
+      const nav = document.querySelector('.bottom-nav') as HTMLElement
+      return getComputedStyle(nav).paddingBottom !== '' && nav.getBoundingClientRect().height >= 58
+    })
+    expect(usesEnv).toBe(true)
+  })
+})

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Pencil, Copy, Trash2 , ChevronLeft, ChevronRight } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { usePermission } from '@/store/permissionsStore'
 import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
 import { Modal }         from '@/components/ui/Modal'
@@ -394,7 +395,11 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1) }}
         />
-        <div className="pl-filter-chips">
+        {/* Auf dem Handy hinter „Filter" eingeklappt (siehe FilterBar). */}
+        <FilterBar
+          activeCount={activeFilters.status.size + activeFilters.typ.size + activeFilters.manager.size + (internalFilter !== null ? 1 : 0)}
+          onReset={() => { setActiveFilters(emptyFilters()); setSearch(''); setInternalFilter(null); setPage(1) }}
+        >
           <FilterChip label="Status"   options={filterOptions.status}  active={activeFilters.status}  onChange={v => setDimFilter('status', v)}  />
           <FilterChip label="Typ"      options={filterOptions.typ}     active={activeFilters.typ}     onChange={v => setDimFilter('typ', v)}     />
           <FilterChip label="Leitung"  options={filterOptions.manager} active={activeFilters.manager} onChange={v => setDimFilter('manager', v)} />
@@ -408,12 +413,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
           >
             Intern{internalFilter === true ? ': Ja' : internalFilter === false ? ': Nein' : ''} ▾
           </button>
-          {hasActiveFilter && (
-            <button className="pl-clear-btn" onClick={() => { setActiveFilters(emptyFilters()); setSearch(''); setInternalFilter(null); setPage(1) }}>
-              Alle Filter löschen
-            </button>
-          )}
-        </div>
+        </FilterBar>
         {/* Das Nach-rechts-Ruecken steckt in globals.css und gilt erst ab
             641px. Als Inline-Style wirkte es auch auf dem Handy und riss
             die Filter-Chips dort auseinander. */}

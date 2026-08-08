@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, Mail , SlidersHorizontal } from 'lucide-react'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { Can } from '@/components/ui/Can'
 import { HasFeature } from '@/components/ui/HasFeature'
 import { Modal }        from '@/components/ui/Modal'
@@ -782,19 +783,19 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-        <div className="pl-filter-chips">
+        {/* Auf dem Handy liegen die Chips hinter „Filter" (siehe FilterBar) —
+            die Leiste brauchte dort sonst drei Zeilen. */}
+        <FilterBar
+          activeCount={activeFilters.status.size + activeFilters.typ.size + (onlyOpen ? 1 : 0)}
+          onReset={() => { setActiveFilters(emptyFilters()); setOnlyOpen(false) }}
+        >
           <FilterChip label="Status" options={filterOptions.status} active={activeFilters.status} onChange={v => setDimFilter('status', v)} />
           <FilterChip label="Typ"    options={filterOptions.typ}    active={activeFilters.typ}    onChange={v => setDimFilter('typ', v)}    />
           <label className="list-checkbox-label" style={{ fontSize: 12 }}>
             <input type="checkbox" checked={onlyOpen} onChange={e => setOnlyOpen(e.target.checked)} />
             nur offen
           </label>
-          {(activeFilters.status.size > 0 || activeFilters.typ.size > 0) && (
-            <button className="pl-clear-btn" onClick={() => setActiveFilters(emptyFilters())}>
-              Filter löschen
-            </button>
-          )}
-        </div>
+        </FilterBar>
         <div ref={colPanelRef} className="pl-col-wrap">
           <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
           {colPanelOpen && (

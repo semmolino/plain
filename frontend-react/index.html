@@ -7,7 +7,10 @@
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#2b54e0" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover ist Voraussetzung dafuer, dass env(safe-area-inset-*)
+         ueberhaupt Werte liefert. Ohne das sitzt die fixierte Bottom-Nav auf
+         Geraeten mit Gestenleiste bzw. Notch unter der Systemleiste. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>plan&amp;simple</title>
   </head>
   <body>

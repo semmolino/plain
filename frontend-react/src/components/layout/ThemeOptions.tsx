@@ -31,6 +31,28 @@ const storageKey = (employeeId: number | null) => employeeId ? `plain-theme-${em
 function applyTheme(id: ThemeId) {
   if (id === 'light') document.documentElement.removeAttribute('data-theme')
   else document.documentElement.setAttribute('data-theme', id)
+  syncThemeColor()
+}
+
+/**
+ * Haelt <meta name="theme-color"> am --chrome-Token.
+ *
+ * Der Wert faerbt die Systemleiste in der installierten PWA und in der
+ * Capacitor-App. Er stand fest auf #2b54e0 — einem Blau, das zu keinem
+ * Theme gehoert; im Dark-Theme und in allen Branchen-Themes passte die
+ * Systemleiste damit nicht zur App.
+ */
+function syncThemeColor() {
+  const chrome = getComputedStyle(document.documentElement)
+    .getPropertyValue('--chrome').trim()
+  if (!chrome) return
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+  if (!meta) {
+    meta = document.createElement('meta')
+    meta.name = 'theme-color'
+    document.head.appendChild(meta)
+  }
+  meta.content = chrome
 }
 
 /** User-Einstellung > Tenant-Vorgabe > 'light'. */
