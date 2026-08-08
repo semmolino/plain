@@ -11,6 +11,49 @@ function chunk(arr, size) {
 }
 
 // ---------------------------------------------------------------------------
+// Besitzpruefungen
+//
+// Pentest-Befund vom 2026-08-06: Viele Funktionen dieses Moduls filterten nur
+// nach ID, nicht nach Mandant — z.B. getProjectStructure und searchContracts.
+// Ein Nutzer konnte damit durch blosses Hochzaehlen der Projekt-ID
+// Honorarstrukturen und Vertragskonditionen fremder Mandanten lesen und, ueber
+// patchStructureCompletionPercents und deleteStructure, sogar veraendern.
+//
+// Statt jede einzelne Query umzubauen, wird die Zugehoerigkeit EINMAL an der
+// Grenze geprueft: jeder Einstiegspunkt aus dem Controller ruft zuerst die
+// passende Pruefung. Die internen Helfer bleiben unveraendert — sie sind erst
+// erreichbar, nachdem die Pruefung bestanden wurde.
+//
+// Alle drei werfen denselben 404, egal ob der Datensatz nicht existiert oder
+// einem anderen Mandanten gehoert. Sonst liesse sich ueber den Statuscode
+// ermitteln, welche IDs anderswo vergeben sind.
+// ---------------------------------------------------------------------------
+
+const NOT_FOUND = () => ({ status: 404, message: "Nicht gefunden." });
+
+async function assertInTenant(supabase, table, id, tenantId) {
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw new Error(`assertInTenant(${table}): tenantId ist erforderlich`);
+  }
+  const numericId = parseInt(String(id), 10);
+  if (!Number.isFinite(numericId)) throw NOT_FOUND();
+
+  const { data, error } = await supabase
+    .from(table)
+    .select("ID")
+    .eq("ID", numericId)
+    .eq("TENANT_ID", tenantId)
+    .maybeSingle();
+  if (error) throw { status: 500, message: error.message };
+  if (!data) throw NOT_FOUND();
+  return numericId;
+}
+
+const assertProjectInTenant   = (supabase, id, tenantId) => assertInTenant(supabase, "PROJECT", id, tenantId);
+const assertStructureInTenant = (supabase, id, tenantId) => assertInTenant(supabase, "PROJECT_STRUCTURE", id, tenantId);
+const assertContractInTenant  = (supabase, id, tenantId) => assertInTenant(supabase, "CONTRACT", id, tenantId);
+
+// ---------------------------------------------------------------------------
 // Lookup / reference data
 // ---------------------------------------------------------------------------
 
@@ -502,7 +545,8 @@ async function searchProjects(supabase, { q, tenantId }) {
   return data;
 }
 
-async function searchContracts(supabase, { projectId, q }) {
+async function searchContracts(supabase, { projectId, q, tenantId }) {
+  projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   const query = (table, cols) =>
     supabase
       .from(table)
@@ -528,7 +572,8 @@ async function searchContracts(supabase, { projectId, q }) {
 // Project Structure
 // ---------------------------------------------------------------------------
 
-async function getProjectStructure(supabase, { projectId }) {
+async function getProjectStructure(supabase, { projectId, tenantId }) {
+  projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   const { data: structures, error } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("*")
@@ -562,7 +607,8 @@ async function getProjectStructure(supabase, { projectId }) {
   }));
 }
 
-async function patchStructureCompletionPercents(supabase, { structureId, revPct, exPct }) {
+async function patchStructureCompletionPercents(supabase, { structureId, revPct, exPct, tenantId }) {
+  structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { error } = await supabase
     .from("PROJECT_STRUCTURE")
     .update({ REVENUE_COMPLETION_PERCENT: revPct, EXTRAS_COMPLETION_PERCENT: exPct })
@@ -691,6 +737,17 @@ async function propagateUpwards(supabase, { structureId }) {
 
 // Compute project-level surcharges (Option A — root surcharges live on PROJECT)
 // Basis = sum of root-level PROJECT_STRUCTURE REVENUE for this project.
+/**
+ * Interner Helfer — KEIN Einstiegspunkt.
+ *
+ * Wird nur aus patchProject und propagateUpwards heraus gerufen, also erst
+ * nachdem die Besitzpruefung am Einstiegspunkt bestanden wurde. Eine eigene
+ * Pruefung waere hier redundant und muesste tenantId durch die gesamte
+ * propagateUpwards-Rekursion (acht Aufrufstellen) faedeln.
+ *
+ * Sollte diese Funktion je vom Controller aus erreichbar werden, gehoert
+ * assertProjectInTenant an den Anfang.
+ */
 async function recalcProjectRootSurcharges(supabase, { projectId }) {
   const { data: roots } = await supabase
     .from("PROJECT_STRUCTURE")
@@ -717,7 +774,8 @@ async function recalcProjectRootSurcharges(supabase, { projectId }) {
   }).eq("ID", projectId);
 }
 
-async function progressSnapshot(supabase, { projectId }) {
+async function progressSnapshot(supabase, { projectId, tenantId }) {
+  projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   const { data: structures, error: sErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("ID, TENANT_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, PARTIAL_PAYMENTS, INVOICED, PAYED")
@@ -798,7 +856,8 @@ async function progressSnapshot(supabase, { projectId }) {
   return { updated: updates.length, inserted: progressRows.length };
 }
 
-async function getTecSum(supabase, { structureId }) {
+async function getTecSum(supabase, { structureId, tenantId }) {
+  structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { data: tecRows, error } = await supabase
     .from("TEC")
     .select("SP_TOT")
@@ -811,7 +870,8 @@ async function getTecSum(supabase, { structureId }) {
   return sum;
 }
 
-async function checkParentForChild(supabase, { parentId }) {
+async function checkParentForChild(supabase, { parentId, tenantId }) {
+  parentId = await assertStructureInTenant(supabase, parentId, tenantId);
   const { data: parent, error } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION_PERCENT, EXTRAS_COMPLETION, COSTS, PARTIAL_PAYMENTS, INVOICED, PAYED, CLOSED_BY_INVOICE_ID")
@@ -861,7 +921,8 @@ async function checkParentForChild(supabase, { parentId }) {
   return { status: "ok" };
 }
 
-async function createStructureNode(supabase, { projectId, node, transferParentValues = false }) {
+async function createStructureNode(supabase, { projectId, node, transferParentValues = false, tenantId }) {
+  projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   const nameShort = String(node.NAME_SHORT || "").trim();
   const nameLong = String(node.NAME_LONG || "").trim();
   if (!nameShort) throw { status: 400, message: "NAME_SHORT ist erforderlich" };
@@ -1026,7 +1087,8 @@ async function createStructureNode(supabase, { projectId, node, transferParentVa
   return { ...created, tec_moved };
 }
 
-async function patchStructure(supabase, { structureId, update }) {
+async function patchStructure(supabase, { structureId, update, tenantId }) {
+  structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { data: current, error: currentErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE, REVENUE_BASIS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, TENANT_ID, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL")
@@ -1168,7 +1230,8 @@ async function patchStructure(supabase, { structureId, update }) {
   return { billingTypeId, revenue, extras, revenueCompletion, extrasCompletion };
 }
 
-async function inheritStructure(supabase, { structureId, inheritBt, inheritExtras }) {
+async function inheritStructure(supabase, { structureId, inheritBt, inheritExtras, tenantId }) {
+  structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { data: root, error: rootErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("ID, PROJECT_ID")
@@ -1282,7 +1345,8 @@ async function inheritStructure(supabase, { structureId, inheritBt, inheritExtra
   return { updated: updatedIds.length, updated_ids: updatedIds };
 }
 
-async function moveStructure(supabase, { structureId, fatherRaw, sortAfterId }) {
+async function moveStructure(supabase, { structureId, fatherRaw, sortAfterId, tenantId }) {
+  structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const newFatherId =
     fatherRaw === undefined || fatherRaw === null || String(fatherRaw) === "" || String(fatherRaw) === "0"
       ? null
@@ -1413,7 +1477,8 @@ async function getContractByProject(supabase, { projectId, tenantId }) {
   return data;
 }
 
-async function patchContract(supabase, { contractId, body }) {
+async function patchContract(supabase, { contractId, body, tenantId }) {
+  contractId = await assertContractInTenant(supabase, contractId, tenantId);
   const allowed = {};
   if (body.NAME_SHORT !== undefined) allowed.NAME_SHORT = String(body.NAME_SHORT).trim();
   if (body.NAME_LONG  !== undefined) allowed.NAME_LONG  = String(body.NAME_LONG).trim();
@@ -1484,7 +1549,8 @@ async function patchContract(supabase, { contractId, body }) {
   if (error) throw error;
 }
 
-async function getLeistungsstand(supabase, { projectId }) {
+async function getLeistungsstand(supabase, { projectId, tenantId }) {
+  projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   const { data: nodes, error: nErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("ID, NAME_SHORT, NAME_LONG, FATHER_ID, SORT_ORDER, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION, TENANT_ID")
@@ -1522,7 +1588,8 @@ async function getLeistungsstand(supabase, { projectId }) {
   }));
 }
 
-async function saveLeistungsstand(supabase, { projectId, updates }) {
+async function saveLeistungsstand(supabase, { projectId, updates, tenantId }) {
+  projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   if (!Array.isArray(updates) || !updates.length) return { saved: 0, updated: 0, inserted: 0 };
 
   const ids = updates.map(u => String(u.structure_id));
@@ -1596,11 +1663,12 @@ async function saveLeistungsstand(supabase, { projectId, updates }) {
     await propagateUpwards(supabase, { structureId: parentId });
   }
 
-  const snapshotResult = await progressSnapshot(supabase, { projectId: String(projectId) });
+  const snapshotResult = await progressSnapshot(supabase, { projectId: String(projectId), tenantId });
   return { saved: updates.length, ...snapshotResult };
 }
 
-async function deleteStructure(supabase, { structureId, cascade }) {
+async function deleteStructure(supabase, { structureId, cascade, tenantId }) {
+  structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { data: current, error: curErr } = await supabase
     .from("PROJECT_STRUCTURE")
     .select("ID, PROJECT_ID")
