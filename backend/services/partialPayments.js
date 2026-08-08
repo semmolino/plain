@@ -874,6 +874,7 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
   if (!skipDocuments) try {
     const r = await renderDocumentPdf({
       supabase,
+      tenantId,
       docType: "PARTIAL_PAYMENT",
       docId: parseInt(id, 10),
       templateId: pp.DOCUMENT_TEMPLATE_ID ? parseInt(String(pp.DOCUMENT_TEMPLATE_ID), 10) : null,

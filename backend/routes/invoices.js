@@ -54,7 +54,7 @@ module.exports = (supabase) => {
         .maybeSingle();
       if (!inv) return res.status(404).json({ error: "Rechnung nicht gefunden" });
 
-      const { pdf } = await renderDocumentPdf({ supabase, docType: "INVOICE", docId: invoiceId });
+      const { pdf } = await renderDocumentPdf({ supabase, tenantId, docType: "INVOICE", docId: invoiceId });
       const safeName = (inv.INVOICE_NUMBER || `Rechnung_${invoiceId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
       const pdfBuffer = Buffer.from(pdf);
       await sendMail({

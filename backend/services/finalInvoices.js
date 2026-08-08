@@ -630,6 +630,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
   try {
     const r = await renderDocumentPdf({
       supabase,
+      tenantId,
       docType: "INVOICE",
       docId: parseInt(id, 10),
       templateId: inv.DOCUMENT_TEMPLATE_ID ? parseInt(String(inv.DOCUMENT_TEMPLATE_ID), 10) : null,

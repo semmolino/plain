@@ -584,18 +584,25 @@ async function getPdf(req, res, supabase) {
     const download = String(req.query.download || "") === "1";
     const templateId = req.query.template_id ? parseInt(String(req.query.template_id), 10) : null;
 
-    if (!preview) {
-      const { data: invRow, error: invRowErr } = await supabase
-        .from("INVOICE")
-        .select("ID, STATUS_ID, DOCUMENT_PDF_ASSET_ID, INVOICE_NUMBER")
-        .eq("ID", invoiceId)
-        .eq("TENANT_ID", req.tenantId)
-        .maybeSingle();
+    // Mandantenpruefung IMMER, nicht nur im Nicht-Preview-Zweig. Frueher stand
+    // dieser Lookup innerhalb von `if (!preview)`, wodurch ein ?preview=1 die
+    // Pruefung komplett uebersprang und jedes Rechnungs-PDF der Plattform
+    // abrufbar war (Pentest 2026-08-06).
+    const { data: invRow, error: invRowErr } = await supabase
+      .from("INVOICE")
+      .select("ID, STATUS_ID, DOCUMENT_PDF_ASSET_ID, INVOICE_NUMBER")
+      .eq("ID", invoiceId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
 
-      if (!invRowErr && invRow && String(invRow.STATUS_ID) === "2" && invRow.DOCUMENT_PDF_ASSET_ID) {
-        const fname = `Rechnung_${invRow.INVOICE_NUMBER || invRow.ID}.pdf`;
-        return svc.streamPdfAsset({ supabase, res, assetId: invRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
-      }
+    if (invRowErr) return res.status(500).json({ error: "Fehler beim Laden der Rechnung." });
+    // Nicht vorhanden und "gehoert einem anderen Mandanten" gleich behandeln,
+    // damit die Antwort die Existenz fremder Belege nicht verraet.
+    if (!invRow) return res.status(404).json({ error: "Rechnung nicht gefunden." });
+
+    if (!preview && String(invRow.STATUS_ID) === "2" && invRow.DOCUMENT_PDF_ASSET_ID) {
+      const fname = `Rechnung_${invRow.INVOICE_NUMBER || invRow.ID}.pdf`;
+      return svc.streamPdfAsset({ supabase, res, assetId: invRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
     }
 
     // Preview-Only: wenn der Wizard SE-Release-IDs mitschickt, in die
@@ -606,6 +613,7 @@ async function getPdf(req, res, supabase) {
 
     const { pdf } = await renderDocumentPdf({
       supabase,
+      tenantId: req.tenantId,
       docType: "INVOICE",
       docId: invoiceId,
       templateId: Number.isFinite(templateId) ? templateId : null,
@@ -693,6 +701,7 @@ async function getPdfHybrid(req, res, supabase) {
     const [{ pdf }, data] = await Promise.all([
       renderDocumentPdf({
         supabase,
+        tenantId: req.tenantId,
         docType: "INVOICE",
         docId: invoiceId,
         templateId: Number.isFinite(templateId) ? templateId : null,

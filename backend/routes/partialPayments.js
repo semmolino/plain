@@ -64,7 +64,7 @@ module.exports = (supabase) => {
         .maybeSingle();
       if (!pp) return res.status(404).json({ error: "Anzahlung nicht gefunden" });
 
-      const { pdf } = await renderDocumentPdf({ supabase, docType: "PARTIAL_PAYMENT", docId: ppId });
+      const { pdf } = await renderDocumentPdf({ supabase, tenantId, docType: "PARTIAL_PAYMENT", docId: ppId });
       const pdfBuffer = Buffer.from(pdf);
       const safeName  = (pp.PARTIAL_PAYMENT_NUMBER || `Anzahlung_${ppId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
       await sendMail({
