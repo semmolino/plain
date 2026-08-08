@@ -21,8 +21,9 @@ async function save(req, res, supabase) {
   }
 }
 
-// POST /email-settings/test — sendet eine Testnachricht ueber die GESPEICHERTE
-// Tenant-Konfiguration (ENABLED egal), damit vor dem Aktivieren geprueft werden kann.
+// POST /email-settings/test — sendet eine Testnachricht ueber die globale
+// SMTP-Verbindung (ENV), mit der GESPEICHERTEN Tenant-Absenderidentitaet
+// (ENABLED egal), damit vor dem Aktivieren geprueft werden kann.
 async function test(req, res, supabase) {
   try {
     const to = (req.body?.to || "").trim();
@@ -32,9 +33,9 @@ async function test(req, res, supabase) {
       tenantId:      req.tenantId,
       requireTenant: true,
       to,
-      subject: "PlaIn — SMTP-Testnachricht",
-      text:    "Diese Testnachricht bestaetigt, dass deine SMTP-Einstellungen in PlaIn funktionieren.",
-      html:    "<p>Diese Testnachricht bestätigt, dass deine SMTP-Einstellungen in PlaIn funktionieren.</p>",
+      subject: "PlaIn — Test-E-Mail",
+      text:    "Diese Testnachricht bestaetigt, dass deine Absender-Einstellungen in PlaIn funktionieren.",
+      html:    "<p>Diese Testnachricht bestätigt, dass deine Absender-Einstellungen in PlaIn funktionieren.</p>",
     });
     return res.json({ sent: true });
   } catch (e) {
@@ -42,33 +43,4 @@ async function test(req, res, supabase) {
   }
 }
 
-// ── Absender-Domain (Resend) ──────────────────────────────────────────────────
-
-async function addDomain(req, res, supabase) {
-  try {
-    const data = await svc.addTenantDomain(supabase, { tenantId: req.tenantId, domain: req.body?.domain });
-    return res.json(data);
-  } catch (e) {
-    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
-  }
-}
-
-async function verifyDomain(req, res, supabase) {
-  try {
-    const data = await svc.verifyTenantDomain(supabase, { tenantId: req.tenantId });
-    return res.json(data);
-  } catch (e) {
-    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
-  }
-}
-
-async function removeDomain(req, res, supabase) {
-  try {
-    const data = await svc.removeTenantDomain(supabase, { tenantId: req.tenantId });
-    return res.json(data);
-  } catch (e) {
-    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
-  }
-}
-
-module.exports = { get, save, test, addDomain, verifyDomain, removeDomain };
+module.exports = { get, save, test };
