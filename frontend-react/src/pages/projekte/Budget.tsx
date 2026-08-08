@@ -193,14 +193,14 @@ export function Budget({ initialProjectId }: Props) {
               <table className="ls-table">
                 <thead>
                   <tr>
-                    <th className="ls-th">Scope</th>
-                    <th className="ls-th ls-col-num">Schwelle %</th>
-                    <th className="ls-th ls-col-num">Schwelle €</th>
-                    <th className="ls-th ls-col-num">Verbraucht</th>
-                    <th className="ls-th ls-col-num">Verbraucht %</th>
-                    <th className="ls-th">Empfänger</th>
-                    <th className="ls-th">Status</th>
-                    <th className="ls-th" style={{ width: 100 }}>Aktion</th>
+                    <th scope="col" className="ls-th">Scope</th>
+                    <th scope="col" className="ls-th ls-col-num">Schwelle %</th>
+                    <th scope="col" className="ls-th ls-col-num">Schwelle €</th>
+                    <th scope="col" className="ls-th ls-col-num">Verbraucht</th>
+                    <th scope="col" className="ls-th ls-col-num">Verbraucht %</th>
+                    <th scope="col" className="ls-th">Empfänger</th>
+                    <th scope="col" className="ls-th">Status</th>
+                    <th scope="col" className="ls-th" style={{ width: 100 }}>Aktion</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -260,11 +260,11 @@ export function Budget({ initialProjectId }: Props) {
                 <table className="ls-table">
                   <thead>
                     <tr>
-                      <th className="ls-th">Zeit</th>
-                      <th className="ls-th">Regel</th>
-                      <th className="ls-th ls-col-num">Budget</th>
-                      <th className="ls-th ls-col-num">Verbraucht</th>
-                      <th className="ls-th">Status</th>
+                      <th scope="col" className="ls-th">Zeit</th>
+                      <th scope="col" className="ls-th">Regel</th>
+                      <th scope="col" className="ls-th ls-col-num">Budget</th>
+                      <th scope="col" className="ls-th ls-col-num">Verbraucht</th>
+                      <th scope="col" className="ls-th">Status</th>
                     </tr>
                   </thead>
                   <tbody>

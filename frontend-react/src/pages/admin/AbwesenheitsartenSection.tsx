@@ -89,12 +89,12 @@ export function AbwesenheitsartenSection() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, margin: '10px 0' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-              <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Art</th>
-              <th style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Schreibt das Tages-Soll im Zeitkonto gut">Zählt als gearbeitet</th>
-              <th style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Reduziert den Urlaubsanspruch">Zehrt vom Urlaub</th>
-              <th style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Antrag muss genehmigt werden">Freigabepflichtig</th>
-              <th style={{ textAlign: 'center', padding: '2px 6px 4px 0' }}>Bezahlt</th>
-              <th></th>
+              <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Art</th>
+              <th scope="col" style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Schreibt das Tages-Soll im Zeitkonto gut">Zählt als gearbeitet</th>
+              <th scope="col" style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Reduziert den Urlaubsanspruch">Zehrt vom Urlaub</th>
+              <th scope="col" style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Antrag muss genehmigt werden">Freigabepflichtig</th>
+              <th scope="col" style={{ textAlign: 'center', padding: '2px 6px 4px 0' }}>Bezahlt</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>

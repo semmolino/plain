@@ -170,16 +170,16 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
           <table className="master-table">
             <thead>
               <tr>
-                <th>Nr.</th>
-                <th>Titel</th>
-                <th>Status</th>
-                <th>Ansprechpartner</th>
-                <th>Adresse</th>
-                <th className="num">Angebotssumme</th>
-                <th className="num">Wahrsch.</th>
-                <th>Angebotsdatum</th>
-                <th>Gültig bis</th>
-                <th></th>
+                <th scope="col">Nr.</th>
+                <th scope="col">Titel</th>
+                <th scope="col">Status</th>
+                <th scope="col">Ansprechpartner</th>
+                <th scope="col">Adresse</th>
+                <th scope="col" className="num">Angebotssumme</th>
+                <th scope="col" className="num">Wahrsch.</th>
+                <th scope="col">Angebotsdatum</th>
+                <th scope="col">Gültig bis</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

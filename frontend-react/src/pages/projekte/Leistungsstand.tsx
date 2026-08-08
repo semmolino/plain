@@ -181,13 +181,13 @@ export function Leistungsstand({ initialProjectId }: Props) {
             <table className="ls-table">
               <thead>
                 <tr>
-                  <th className="ls-th ls-col-short">Kürzel</th>
-                  <th className="ls-th ls-col-name">Bezeichnung</th>
-                  <th className="ls-th ls-col-num">Honorar</th>
-                  <th className="ls-th ls-col-num">Letzter Stand</th>
-                  <th className="ls-th ls-col-input">Neuer Stand</th>
-                  <th className="ls-th ls-col-num">Neuer Wert</th>
-                  <th className="ls-th ls-col-delta">Δ €</th>
+                  <th scope="col" className="ls-th ls-col-short">Kürzel</th>
+                  <th scope="col" className="ls-th ls-col-name">Bezeichnung</th>
+                  <th scope="col" className="ls-th ls-col-num">Honorar</th>
+                  <th scope="col" className="ls-th ls-col-num">Letzter Stand</th>
+                  <th scope="col" className="ls-th ls-col-input">Neuer Stand</th>
+                  <th scope="col" className="ls-th ls-col-num">Neuer Wert</th>
+                  <th scope="col" className="ls-th ls-col-delta">Δ €</th>
                 </tr>
               </thead>
               <tbody>

@@ -143,7 +143,7 @@ function SortTh<T extends string>({ label, field, current, dir, onSort, classNam
 }) {
   const active = current === field
   return (
-    <th
+    <th scope="col" 
       className={`sortable${className ? ' ' + className : ''}${active ? ' sorted' : ''}`}
       onClick={() => onSort(field)}
       title={title}
@@ -955,10 +955,10 @@ function BookingsTable({ bookings }: { bookings: DayBooking[] }) {
       </colgroup>
       <thead>
         <tr>
-          <th>Projekt</th>
-          <th>Leistungsposition</th>
-          <th className="num">Stunden</th>
-          <th>Notiz</th>
+          <th scope="col">Projekt</th>
+          <th scope="col">Leistungsposition</th>
+          <th scope="col" className="num">Stunden</th>
+          <th scope="col">Notiz</th>
         </tr>
       </thead>
       <tbody>
@@ -1291,7 +1291,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
             <table className="dash-table dash-table-clickable" style={{ margin: 0 }}>
               <thead>
                 <tr>
-                  <th style={{ width: 4, padding: 0 }}></th>
+                  <th scope="col" style={{ width: 4, padding: 0 }}></th>
                   <SortTh label="Projekte" field="name"      current={field} dir={dir} onSort={toggle} />
                   <SortTh label="Honorar"  field="budget"    current={field} dir={dir} onSort={toggle} className="num col-hide-mobile" />
                   <SortTh label="Kosten"   field="cost"      current={field} dir={dir} onSort={toggle} className="num" />
@@ -1394,7 +1394,7 @@ function TopOpenOffersCard() {
           : (
             <table className="dash-table dash-table-clickable">
               <thead>
-                <tr><th>Angebot</th><th className="col-hide-mobile">Empfänger</th><th className="num">Summe</th></tr>
+                <tr><th scope="col">Angebot</th><th scope="col" className="col-hide-mobile">Empfänger</th><th scope="col" className="num">Summe</th></tr>
               </thead>
               <tbody>
                 {open.map(o => (
@@ -1426,10 +1426,10 @@ function OpenPostenTable({ posten }: { posten: OpenPosten[] }) {
     <table className="dash-table dash-table-clickable">
       <thead>
         <tr>
-          <th>Nr.</th>
-          <th className="col-hide-mobile">Empfänger</th>
-          <th className="col-hide-mobile">Fällig</th>
-          <th className="num">Offen (brutto)</th>
+          <th scope="col">Nr.</th>
+          <th scope="col" className="col-hide-mobile">Empfänger</th>
+          <th scope="col" className="col-hide-mobile">Fällig</th>
+          <th scope="col" className="num">Offen (brutto)</th>
         </tr>
       </thead>
       <tbody>
@@ -1470,7 +1470,7 @@ function BillingPotentialTable({ projects, maxRows = 10 }: { projects: BillingPr
   return (
     <table className="dash-table dash-table-clickable">
       <thead>
-        <tr><th>Projekt</th><th className="num">Zur Abrechnung</th></tr>
+        <tr><th scope="col">Projekt</th><th scope="col" className="num">Zur Abrechnung</th></tr>
       </thead>
       <tbody>
         {projects.slice(0, maxRows).map((p, i) => (
@@ -1603,12 +1603,12 @@ function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: Te
         <table className="dash-table">
           <thead>
             <tr>
-              <th>Mitarbeiter</th>
+              <th scope="col">Mitarbeiter</th>
               {months.map(m => {
                 const month = parseInt(m.split('-')[1], 10)
-                return <th key={m} className="num col-hide-mobile">{MONTHS_DE[month - 1]}</th>
+                return <th scope="col" key={m} className="num col-hide-mobile">{MONTHS_DE[month - 1]}</th>
               })}
-              <th className="num">Gesamt</th>
+              <th scope="col" className="num">Gesamt</th>
             </tr>
           </thead>
           <tbody>

@@ -267,10 +267,10 @@ function StammdatenSection() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 10 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-                <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
-                <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Bezeichnung</th>
-                <th style={{ textAlign: 'right', padding: '2px 0 4px 6px' }}>Stundensatz</th>
-                <th></th>
+                <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
+                <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Bezeichnung</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '2px 0 4px 6px' }}>Stundensatz</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>
@@ -1534,17 +1534,17 @@ function ArbeitszeitmodelleSection() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 14 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-                <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Name</th>
-                <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Bundesland</th>
-                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Mo</th>
-                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Di</th>
-                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Mi</th>
-                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Do</th>
-                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Fr</th>
-                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Sa</th>
-                <th style={{ textAlign: 'center', padding: '2px 4px 4px' }}>So</th>
-                <th style={{ textAlign: 'right', padding: '2px 0 4px 4px' }}>h/Woche</th>
-                <th></th>
+                <th scope="col" style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Name</th>
+                <th scope="col" style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Bundesland</th>
+                <th scope="col" style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Mo</th>
+                <th scope="col" style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Di</th>
+                <th scope="col" style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Mi</th>
+                <th scope="col" style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Do</th>
+                <th scope="col" style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Fr</th>
+                <th scope="col" style={{ textAlign: 'center', padding: '2px 4px 4px' }}>Sa</th>
+                <th scope="col" style={{ textAlign: 'center', padding: '2px 4px 4px' }}>So</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '2px 0 4px 4px' }}>h/Woche</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>
@@ -1919,10 +1919,10 @@ function KostensatzSection() {
         <table className="master-table" style={{ fontSize: 13, marginBottom: 10 }}>
           <thead>
             <tr>
-              <th>Kategorie</th>
-              <th>Bezeichnung</th>
-              <th style={{ textAlign: 'right' }}>Betrag/Jahr</th>
-              <th></th>
+              <th scope="col">Kategorie</th>
+              <th scope="col">Bezeichnung</th>
+              <th scope="col" style={{ textAlign: 'right' }}>Betrag/Jahr</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>
@@ -1992,20 +1992,20 @@ function KostensatzSection() {
           <table className="master-table" style={{ fontSize: 12 }}>
             <thead>
               <tr>
-                <th>Kürzel</th>
-                <th>Jahresgehalt (brutto)</th>
-                <th style={{ textAlign: 'right' }}>Wochenstd.</th>
-                <th style={{ textAlign: 'right' }}>Urlaub</th>
-                <th style={{ textAlign: 'right' }}>Krank</th>
-                <th style={{ textAlign: 'right' }}>Weiterbild.</th>
-                <th style={{ textAlign: 'right' }}>
+                <th scope="col">Kürzel</th>
+                <th scope="col">Jahresgehalt (brutto)</th>
+                <th scope="col" style={{ textAlign: 'right' }}>Wochenstd.</th>
+                <th scope="col" style={{ textAlign: 'right' }}>Urlaub</th>
+                <th scope="col" style={{ textAlign: 'right' }}>Krank</th>
+                <th scope="col" style={{ textAlign: 'right' }}>Weiterbild.</th>
+                <th scope="col" style={{ textAlign: 'right' }}>
                   AG-SV %
                   <InfoHint align="right" title="Arbeitgeber-Sozialabgaben">
                     Anteil, den du als Arbeitgeber zusätzlich zum Bruttogehalt zahlst (KV, RV, AV,
                     PV, UV). In Deutschland zusammen ca. <strong>21 %</strong>.
                   </InfoHint>
                 </th>
-                <th style={{ textAlign: 'right' }}>
+                <th scope="col" style={{ textAlign: 'right' }}>
                   Produktiv %
                   <InfoHint align="right" title="Produktivität">
                     Anteil der Arbeitszeit, der <strong>fakturierbar</strong> ist (ohne Leerlauf,
@@ -2085,16 +2085,16 @@ function KostensatzSection() {
               <table className="master-table" style={{ fontSize: 12 }}>
                 <thead>
                   <tr>
-                    <th style={{ width: 24 }}></th>
-                    <th>Mitarbeiter</th>
-                    <th style={{ textAlign: 'right' }}>Nettostunden</th>
-                    <th style={{ textAlign: 'right' }}>Direktkosten/h</th>
-                    <th style={{ textAlign: 'right' }}>Gemeinkosten/h</th>
-                    <th style={{ textAlign: 'right' }}>Vollkostensatz</th>
-                    {parseFloat(markup) > 0 && <th style={{ textAlign: 'right' }}>Importrate</th>}
-                    <th style={{ textAlign: 'right' }}>Aktueller Satz</th>
-                    <th style={{ textAlign: 'right' }}>Diff.</th>
-                    <th style={{ width: 32, textAlign: 'center' }}>
+                    <th scope="col" style={{ width: 24 }}></th>
+                    <th scope="col">Mitarbeiter</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Nettostunden</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Direktkosten/h</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Gemeinkosten/h</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Vollkostensatz</th>
+                    {parseFloat(markup) > 0 && <th scope="col" style={{ textAlign: 'right' }}>Importrate</th>}
+                    <th scope="col" style={{ textAlign: 'right' }}>Aktueller Satz</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Diff.</th>
+                    <th scope="col" style={{ width: 32, textAlign: 'center' }}>
                       <input type="checkbox"
                         checked={selected.size === calcResults.length}
                         onChange={e => setSelected(e.target.checked ? new Set(calcResults.map(r => r.employee_id)) : new Set())}
@@ -2465,13 +2465,13 @@ function PausenregelnSection() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 14 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-                <th style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Name</th>
-                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>ab Std.</th>
-                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Pause</th>
-                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>ab Std.</th>
-                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Pause</th>
-                <th style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Min-Block</th>
-                <th></th>
+                <th scope="col" style={{ textAlign: 'left', padding: '2px 8px 4px 0' }}>Name</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>ab Std.</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Pause</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>ab Std.</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Pause</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '2px 8px 4px 0' }}>Min-Block</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

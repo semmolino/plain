@@ -575,11 +575,11 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
             <table className="tbm-review-table">
               <thead>
                 <tr>
-                  <th>Projekt / Aufgabe</th>
-                  <th>Zeit</th>
-                  <th>Std.</th>
-                  <th>Beschreibung</th>
-                  <th></th>
+                  <th scope="col">Projekt / Aufgabe</th>
+                  <th scope="col">Zeit</th>
+                  <th scope="col">Std.</th>
+                  <th scope="col">Beschreibung</th>
+                  <th scope="col"></th>
                 </tr>
               </thead>
               <tbody>

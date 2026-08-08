@@ -268,7 +268,7 @@ function SortTh({ label, k, sortKey, dir, onClick, className }: {
   onClick: (k: SortKey) => void; className?: string
 }) {
   return (
-    <th className={`sortable-th${className ? ' ' + className : ''}`} onClick={() => onClick(k)}>
+    <th scope="col" className={`sortable-th${className ? ' ' + className : ''}`} onClick={() => onClick(k)}>
       {label} {sortKey === k ? (dir === 'asc' ? '▲' : '▼') : ''}
     </th>
   )
@@ -851,14 +851,14 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
           <table className="master-table master-table--sticky-actions">
             <thead>
               <tr>
-                <th style={{ width: 32, padding: '6px 4px' }}>
+                <th scope="col" style={{ width: 32, padding: '6px 4px' }}>
                   <input type="checkbox" checked={allSelected} onChange={toggleAll} />
                 </th>
                 <SortTh label="Nummer" k="number" {...sp} />
                 {visibleCols.map(c => (
                   <SortTh key={c.key} label={c.label} k={c.key} {...sp} className={c.className} />
                 ))}
-                <th></th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>
@@ -871,7 +871,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                   {visibleCols.map(c => {
                     if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
                     if (c.key === 'date')        return <td key={c.key} className="cell-nowrap">{fmtDate(row.date)}</td>
-                    if (c.key === 'project')     return <td key={c.key}>{row.projectId !== null ? <button className="link-btn" style={{ fontSize: 13 }} onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : (row.project ?? '—')}</td>
+                    if (c.key === 'project')     return <td key={c.key} title={row.project ?? undefined}>{row.projectId !== null ? <button className="link-btn cell-clamp" style={{ fontSize: 13 }} onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : <span className="cell-clamp">{row.project ?? '—'}</span>}</td>
                     if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
                     if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
                     if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>

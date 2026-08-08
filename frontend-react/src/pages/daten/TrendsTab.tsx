@@ -103,12 +103,12 @@ function PeriodTable({ periods, rows }: { periods: TrendPeriod[]; rows: TableRow
       <table className="trends-table">
         <thead>
           <tr>
-            <th className="trends-th-label">Kennzahl</th>
+            <th scope="col" className="trends-th-label">Kennzahl</th>
             {periods.map(p => (
-              <th key={p.period} className="trends-th-period">{p.period_label}</th>
+              <th scope="col" key={p.period} className="trends-th-period">{p.period_label}</th>
             ))}
-            <th className="trends-th-avg">Ø / Periode</th>
-            <th className="trends-th-total">Gesamt / Akt.</th>
+            <th scope="col" className="trends-th-avg">Ø / Periode</th>
+            <th scope="col" className="trends-th-total">Gesamt / Akt.</th>
           </tr>
         </thead>
         <tbody>

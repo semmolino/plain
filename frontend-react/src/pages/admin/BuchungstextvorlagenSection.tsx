@@ -65,9 +65,9 @@ export function BuchungstextvorlagenSection() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, margin: '8px 0' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-              <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
-              <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Text</th>
-              <th></th>
+              <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
+              <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Text</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>

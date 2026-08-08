@@ -805,13 +805,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             <table className="master-table">
               <thead>
                 <tr>
-                  <th>Phase</th>
-                  <th>Kx</th>
-                  <th style={{ textAlign: 'right' }}>Basis €</th>
-                  <th style={{ textAlign: 'right' }}>Basis %</th>
-                  <th style={{ textAlign: 'right' }}>Basis-Honorar €</th>
-                  <th style={{ textAlign: 'right' }}>Honorar %</th>
-                  <th style={{ textAlign: 'right' }}>Honorar €</th>
+                  <th scope="col">Phase</th>
+                  <th scope="col">Kx</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>Basis €</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>Basis %</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>Basis-Honorar €</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>Honorar %</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>Honorar €</th>
                 </tr>
               </thead>
               <tbody>
@@ -849,9 +849,9 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </tbody>
               <tfoot>
                 <tr>
-                  <th colSpan={5}>Grundhonorar</th>
-                  <th style={{ textAlign: 'right' }}>{fmtPct(totalPhasePct)}</th>
-                  <th style={{ textAlign: 'right' }}>{fmtMoney2(totalPhaseRev)}</th>
+                  <th scope="col" colSpan={5}>Grundhonorar</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>{fmtPct(totalPhasePct)}</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>{fmtMoney2(totalPhaseRev)}</th>
                 </tr>
               </tfoot>
             </table>
@@ -872,14 +872,14 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th style={{ width: 80 }}>Kürzel</th>
-                    <th style={{ width: '22%' }}>Bezeichnung</th>
-                    <th style={{ width: 120 }}>LPH-Bezug</th>
-                    <th style={{ width: 160 }}>Berechnungsart</th>
-                    <th style={{ width: 70, textAlign: 'right' }}>%</th>
-                    <th style={{ width: 80 }}>Kx</th>
-                    <th style={{ width: 110, textAlign: 'right' }}>Betrag €</th>
-                    <th style={{ width: 30 }}></th>
+                    <th scope="col" style={{ width: 80 }}>Kürzel</th>
+                    <th scope="col" style={{ width: '22%' }}>Bezeichnung</th>
+                    <th scope="col" style={{ width: 120 }}>LPH-Bezug</th>
+                    <th scope="col" style={{ width: 160 }}>Berechnungsart</th>
+                    <th scope="col" style={{ width: 70, textAlign: 'right' }}>%</th>
+                    <th scope="col" style={{ width: 80 }}>Kx</th>
+                    <th scope="col" style={{ width: 110, textAlign: 'right' }}>Betrag €</th>
+                    <th scope="col" style={{ width: 30 }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -961,9 +961,9 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 </tbody>
                 <tfoot>
                   <tr>
-                    <th colSpan={6}>Summe Besondere Leistungen</th>
-                    <th style={{ textAlign: 'right' }}>{fmtEur(blTotal)}</th>
-                    <th></th>
+                    <th scope="col" colSpan={6}>Summe Besondere Leistungen</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>{fmtEur(blTotal)}</th>
+                    <th scope="col"></th>
                   </tr>
                 </tfoot>
               </table>
@@ -1031,13 +1031,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '25%' }}>Kurzbezeichnung</th>
-                    <th style={{ width: '25%' }}>Langbezeichnung</th>
-                    <th style={{ width: 80 }}>% (neg. = Nachlass)</th>
-                    <th style={{ width: 100 }}>Berechnungsbasis €</th>
-                    <th style={{ width: 100 }}>Betrag €</th>
-                    <th style={{ width: 60 }}>LPH / Modus</th>
-                    <th style={{ width: 30 }}></th>
+                    <th scope="col" style={{ width: '25%' }}>Kurzbezeichnung</th>
+                    <th scope="col" style={{ width: '25%' }}>Langbezeichnung</th>
+                    <th scope="col" style={{ width: 80 }}>% (neg. = Nachlass)</th>
+                    <th scope="col" style={{ width: 100 }}>Berechnungsbasis €</th>
+                    <th scope="col" style={{ width: 100 }}>Betrag €</th>
+                    <th scope="col" style={{ width: 60 }}>LPH / Modus</th>
+                    <th scope="col" style={{ width: 30 }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1149,16 +1149,16 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 </tbody>
                 <tfoot>
                   <tr>
-                    <th colSpan={4}>Summe Zuschläge / Nachlässe</th>
-                    <th style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? '#166534' : '#991b1b' }}>
+                    <th scope="col" colSpan={4}>Summe Zuschläge / Nachlässe</th>
+                    <th scope="col" style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? '#166534' : '#991b1b' }}>
                       {fmtEur(totalSurchargeAmt)}
                     </th>
-                    <th colSpan={2}></th>
+                    <th scope="col" colSpan={2}></th>
                   </tr>
                   <tr>
-                    <th colSpan={4}>Gesamthonorar</th>
-                    <th style={{ textAlign: 'right', fontSize: 14 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</th>
-                    <th colSpan={2}></th>
+                    <th scope="col" colSpan={4}>Gesamthonorar</th>
+                    <th scope="col" style={{ textAlign: 'right', fontSize: 14 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</th>
+                    <th scope="col" colSpan={2}></th>
                   </tr>
                 </tfoot>
               </table>
@@ -1187,9 +1187,9 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             <table className="master-table">
               <thead>
                 <tr>
-                  <th>Bezeichnung</th>
-                  <th style={{ width: 120, color: 'var(--text-3)', fontWeight: 400 }}>Typ</th>
-                  <th style={{ width: 140, textAlign: 'right' }}>Honorar (netto) €</th>
+                  <th scope="col">Bezeichnung</th>
+                  <th scope="col" style={{ width: 120, color: 'var(--text-3)', fontWeight: 400 }}>Typ</th>
+                  <th scope="col" style={{ width: 140, textAlign: 'right' }}>Honorar (netto) €</th>
                 </tr>
               </thead>
               <tbody>
@@ -1482,7 +1482,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
   function SortTh({ col, children, right }: { col: SortCol; children: React.ReactNode; right?: boolean }) {
     const active = sort.col === col
     return (
-      <th style={{ cursor: 'pointer', textAlign: right ? 'right' : undefined, userSelect: 'none' }}
+      <th scope="col" style={{ cursor: 'pointer', textAlign: right ? 'right' : undefined, userSelect: 'none' }}
         onClick={() => toggleSort(col)}>
         {children} {active ? (sort.dir === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.3 }}>↕</span>}
       </th>
@@ -1548,9 +1548,9 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                 <SortTh col="nameLong">Bezeichnung</SortTh>
                 <SortTh col="project">Projekt</SortTh>
                 <SortTh col="grundhonorar" right>Grundhonorar</SortTh>
-                <th style={{ textAlign: 'right' }}>Zuschläge</th>
+                <th scope="col" style={{ textAlign: 'right' }}>Zuschläge</th>
                 <SortTh col="gesamthonorar" right>Gesamthonorar</SortTh>
-                <th></th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

@@ -94,13 +94,13 @@ export function BuchungsartenSection() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, margin: '10px 0' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-              <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Art</th>
-              <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
-              <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Bezeichnung</th>
-              <th style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Einheit</th>
-              <th style={{ textAlign: 'right', padding: '2px 6px 4px 0' }}>Std. Verkauf</th>
-              <th style={{ textAlign: 'right', padding: '2px 6px 4px 0' }}>Std. Kosten</th>
-              <th></th>
+              <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Art</th>
+              <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Kürzel</th>
+              <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Bezeichnung</th>
+              <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Einheit</th>
+              <th scope="col" style={{ textAlign: 'right', padding: '2px 6px 4px 0' }}>Std. Verkauf</th>
+              <th scope="col" style={{ textAlign: 'right', padding: '2px 6px 4px 0' }}>Std. Kosten</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>

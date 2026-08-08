@@ -78,7 +78,7 @@ function SortTh({ label, k, sortKey, dir, onClick }: {
   label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'; onClick: (k: SortKey) => void
 }) {
   return (
-    <th className="sortable-th" onClick={() => onClick(k)}>
+    <th scope="col" className="sortable-th" onClick={() => onClick(k)}>
       {label} {sortKey === k ? (dir === 'asc' ? '▲' : '▼') : ''}
     </th>
   )
@@ -473,8 +473,8 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                   {visibleOptCols.map(c => (
                     <SortTh key={c.key} label={c.label} k={c.key} {...sortProps} />
                   ))}
-                  <th style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Intern</th>
-                  <th className="doc-actions"><span className="sr-only">Aktionen</span></th>
+                  <th scope="col" style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Intern</th>
+                  <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -494,7 +494,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                         : p.NAME_SHORT}
                       {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6, fontSize: 10 }}>intern</span>}
                     </td>
-                    <td>{p.NAME_LONG}</td>
+                    <td><span className="cell-clamp" title={p.NAME_LONG}>{p.NAME_LONG}</span></td>
                     <td>
                       <InlineSelect
                         value={p.PROJECT_STATUS_ID} options={statusOpts} allowEmpty={false}

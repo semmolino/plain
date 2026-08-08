@@ -9,7 +9,7 @@ import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
 import { NotificationBell } from './NotificationBell'
 import { TimerBar } from './TimerBar'
-import { ThemeSwitcher } from './ThemeSwitcher'
+import { ThemeOptions, useAppliedTheme } from './ThemeOptions'
 import { ToastContainer } from '@/components/ui/Toast'
 import { BrandMark } from '@/components/brand/BrandLogo'
 import { fetchDefaults } from '@/api/stammdaten'
@@ -18,6 +18,8 @@ import { fetchMyAvatar } from '@/api/mitarbeiter'
 function UserMenu() {
   const [open,       setOpen]       = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [themesOpen, setThemesOpen] = useState(false)
+  const theme = useAppliedTheme()
   const wrapRef   = useRef<HTMLDivElement>(null)
   const shortName = useAuthStore(s => s.shortName)
   const clearAuth = useAuthStore(s => s.clearAuth)
@@ -73,6 +75,19 @@ function UserMenu() {
           <button className="user-menu-item" onClick={() => { navigate('/profil'); setOpen(false) }}>
             Profil
           </button>
+
+          {/* Farbthema hing vorher als eigenes Dropdown dauerhaft in der
+              Kopfzeile. Man stellt es einmal ein — der Platz dort gehoert
+              zu den wertvollsten der App. */}
+          <button
+            className="user-menu-item"
+            onClick={() => setThemesOpen(v => !v)}
+            aria-expanded={themesOpen}
+          >
+            Darstellung
+          </button>
+          {themesOpen && <ThemeOptions current={theme.current} onSelect={theme.select} />}
+
           {confirming ? (
             <div className="user-menu-confirm">
               <span className="user-menu-confirm-text">Wirklich abmelden?</span>
@@ -144,8 +159,7 @@ export function AppLayout() {
           <BrandMark size={26} className="app-header-brand" />
           {timerEnabled && <TimerBar />}
         </div>
-        <div className="app-header-right">
-          <ThemeSwitcher />
+        <div className="app-header-right">
           <NotificationBell />
           <UserMenu />
         </div>

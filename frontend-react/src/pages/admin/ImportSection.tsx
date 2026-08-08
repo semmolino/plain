@@ -308,10 +308,10 @@ export function ImportSection() {
                 </colgroup>
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Zeile</th>
-                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Status</th>
-                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Datensatz</th>
-                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Hinweise</th>
+                    <th scope="col" style={{ textAlign: 'left', padding: '6px 8px' }}>Zeile</th>
+                    <th scope="col" style={{ textAlign: 'left', padding: '6px 8px' }}>Status</th>
+                    <th scope="col" style={{ textAlign: 'left', padding: '6px 8px' }}>Datensatz</th>
+                    <th scope="col" style={{ textAlign: 'left', padding: '6px 8px' }}>Hinweise</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -391,12 +391,12 @@ export function ImportSection() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-                <th style={{ textAlign: 'left', padding: '4px 8px 6px 0' }}>Datum</th>
-                <th style={{ textAlign: 'left', padding: '4px 8px 6px 0' }}>Bereich</th>
-                <th style={{ textAlign: 'left', padding: '4px 8px 6px 0' }}>Datei</th>
-                <th style={{ textAlign: 'right', padding: '4px 8px 6px 0' }}>Angelegt</th>
-                <th style={{ textAlign: 'left', padding: '4px 8px 6px 0' }}>Status</th>
-                <th></th>
+                <th scope="col" style={{ textAlign: 'left', padding: '4px 8px 6px 0' }}>Datum</th>
+                <th scope="col" style={{ textAlign: 'left', padding: '4px 8px 6px 0' }}>Bereich</th>
+                <th scope="col" style={{ textAlign: 'left', padding: '4px 8px 6px 0' }}>Datei</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '4px 8px 6px 0' }}>Angelegt</th>
+                <th scope="col" style={{ textAlign: 'left', padding: '4px 8px 6px 0' }}>Status</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

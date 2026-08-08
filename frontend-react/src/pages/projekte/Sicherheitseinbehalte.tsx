@@ -70,12 +70,12 @@ function SeUebersicht({ onSelectProject }: { onSelectProject: (id: number) => vo
           <table className="ls-table">
             <thead>
               <tr>
-                <th className="ls-th">Projekt</th>
-                <th className="ls-th">Vertrag</th>
-                <th className="ls-th ls-col-num">Offen</th>
-                <th className="ls-th ls-col-num">Aufgelöst</th>
-                <th className="ls-th ls-col-num">Aktiv gesamt</th>
-                <th className="ls-th"></th>
+                <th scope="col" className="ls-th">Projekt</th>
+                <th scope="col" className="ls-th">Vertrag</th>
+                <th scope="col" className="ls-th ls-col-num">Offen</th>
+                <th scope="col" className="ls-th ls-col-num">Aufgelöst</th>
+                <th scope="col" className="ls-th ls-col-num">Aktiv gesamt</th>
+                <th scope="col" className="ls-th"></th>
               </tr>
             </thead>
             <tbody>
@@ -180,14 +180,14 @@ function SeProjektDetails({ projectId, onBack }: { projectId: number; onBack: ()
               <table className="ls-table">
                 <thead>
                   <tr>
-                    <th className="ls-th">Quelle</th>
-                    <th className="ls-th">Datum</th>
-                    <th className="ls-th ls-col-num">Brutto AR</th>
-                    <th className="ls-th ls-col-num">SE %</th>
-                    <th className="ls-th">Basis</th>
-                    <th className="ls-th ls-col-num">SE-Betrag</th>
-                    <th className="ls-th">Status</th>
-                    <th className="ls-th">Aufgelöst durch</th>
+                    <th scope="col" className="ls-th">Quelle</th>
+                    <th scope="col" className="ls-th">Datum</th>
+                    <th scope="col" className="ls-th ls-col-num">Brutto AR</th>
+                    <th scope="col" className="ls-th ls-col-num">SE %</th>
+                    <th scope="col" className="ls-th">Basis</th>
+                    <th scope="col" className="ls-th ls-col-num">SE-Betrag</th>
+                    <th scope="col" className="ls-th">Status</th>
+                    <th scope="col" className="ls-th">Aufgelöst durch</th>
                   </tr>
                 </thead>
                 <tbody>

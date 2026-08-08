@@ -677,7 +677,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
             <table className="master-table">
               <thead>
                 <tr>
-                  <th style={{ width: 36 }}>
+                  <th scope="col" style={{ width: 36 }}>
                     <input
                       type="checkbox"
                       checked={allPhasesChecked}
@@ -685,10 +685,10 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                       title="Alle auswählen / abwählen"
                     />
                   </th>
-                  <th>Position</th>
-                  <th className="num">Leistungsstand €</th>
-                  <th className="num">Bereits abgerechnet €</th>
-                  <th className="num">Dieser Rechnung €</th>
+                  <th scope="col">Position</th>
+                  <th scope="col" className="num">Leistungsstand €</th>
+                  <th scope="col" className="num">Bereits abgerechnet €</th>
+                  <th scope="col" className="num">Dieser Rechnung €</th>
                 </tr>
               </thead>
               <tbody>
@@ -758,7 +758,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th style={{ width: 36 }}>
+                    <th scope="col" style={{ width: 36 }}>
                       <input
                         type="checkbox"
                         checked={allDedChecked}
@@ -766,10 +766,10 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                         title="Alle auswählen / abwählen"
                       />
                     </th>
-                    <th>Nummer</th>
-                    <th>Datum</th>
-                    <th className="num">Betrag Netto €</th>
-                    <th className="num">Abzug Netto €</th>
+                    <th scope="col">Nummer</th>
+                    <th scope="col">Datum</th>
+                    <th scope="col" className="num">Betrag Netto €</th>
+                    <th scope="col" className="num">Abzug Netto €</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -956,10 +956,10 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                 <table className="master-table">
                   <thead>
                     <tr>
-                      <th>Position</th>
-                      <th className="num">Leistungsstand €</th>
-                      <th className="num">Bereits abgerechnet €</th>
-                      <th className="num">Dieser Rechnung €</th>
+                      <th scope="col">Position</th>
+                      <th scope="col" className="num">Leistungsstand €</th>
+                      <th scope="col" className="num">Bereits abgerechnet €</th>
+                      <th scope="col" className="num">Dieser Rechnung €</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -988,9 +988,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                 <table className="master-table">
                   <thead>
                     <tr>
-                      <th>Nummer</th>
-                      <th>Datum</th>
-                      <th className="num">Abzug Netto €</th>
+                      <th scope="col">Nummer</th>
+                      <th scope="col">Datum</th>
+                      <th scope="col" className="num">Abzug Netto €</th>
                     </tr>
                   </thead>
                   <tbody>

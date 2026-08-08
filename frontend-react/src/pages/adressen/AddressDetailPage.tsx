@@ -299,7 +299,7 @@ export function AddressDetailPage() {
         ) : (
           <table className="master-table">
             <thead>
-              <tr><th>Name</th><th>Funktion</th><th>E-Mail</th><th>Telefon</th><th></th></tr>
+              <tr><th scope="col">Name</th><th scope="col">Funktion</th><th scope="col">E-Mail</th><th scope="col">Telefon</th><th scope="col"></th></tr>
             </thead>
             <tbody>
               {sortedContacts.map(c => (

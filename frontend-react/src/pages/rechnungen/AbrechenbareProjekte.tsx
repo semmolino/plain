@@ -136,9 +136,9 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
               <table className="ls-table" style={{ width: '100%' }}>
                 <thead>
                   <tr>
-                    <th className="ls-th">Projekt</th>
-                    <th className="ls-th">Projektleiter</th>
-                    <th className="ls-th ls-col-num">Zur Abrechnung</th>
+                    <th scope="col" className="ls-th">Projekt</th>
+                    <th scope="col" className="ls-th">Projektleiter</th>
+                    <th scope="col" className="ls-th ls-col-num">Zur Abrechnung</th>
                   </tr>
                 </thead>
                 <tbody>

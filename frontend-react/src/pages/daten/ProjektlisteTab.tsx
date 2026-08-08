@@ -312,7 +312,7 @@ function SortTh({ label, field, current, dir, onSort, className, help }: {
 }) {
   const active = current === field
   return (
-    <th
+    <th scope="col" 
       className={`sortable${className ? ' ' + className : ''}${active ? ' sorted' : ''}`}
       onClick={() => onSort(field)}
     >

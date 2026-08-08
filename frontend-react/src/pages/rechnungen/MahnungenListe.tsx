@@ -167,7 +167,7 @@ function SortTh({ label, k, sortKey, dir, onClick, className }: {
   onClick: (k: SortKey) => void; className?: string
 }) {
   return (
-    <th className={`sortable-th${className ? ' '+className : ''}`} onClick={() => onClick(k)}>
+    <th scope="col" className={`sortable-th${className ? ' '+className : ''}`} onClick={() => onClick(k)}>
       {label}{sortKey === k ? (dir === 'asc' ? ' ▲' : ' ▼') : ''}
     </th>
   )
@@ -725,8 +725,8 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
             <table className="master-table">
               <thead>
                 <tr>
-                  <th style={{ width: 32, padding: '6px 4px' }}><input type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
-                  <th style={{ width: 80 }}>Typ</th>
+                  <th scope="col" style={{ width: 32, padding: '6px 4px' }}><input type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
+                  <th scope="col" style={{ width: 80 }}>Typ</th>
                   <SortTh label="Nummer"         k="number"          sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                   {!hiddenCols.has('invoiceDate') && <SortTh label="Rech.-Datum" k="invoiceDate" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />}
                   <SortTh label="Fällig"          k="dueDate"         sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
@@ -736,12 +736,12 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                   <SortTh label="Nächste Mahnung" k="nextMahnungDate" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                   <SortTh label="Projekt"         k="projectName"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                   <SortTh label="Adresse"         k="addressName1"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                  {!hiddenCols.has('contractName') && <th>Vertrag</th>}
-                  {!hiddenCols.has('contact')      && <th>Ansprechpart.</th>}
+                  {!hiddenCols.has('contractName') && <th scope="col">Vertrag</th>}
+                  {!hiddenCols.has('contact')      && <th scope="col">Ansprechpart.</th>}
                   {!hiddenCols.has('totalGross')   && <SortTh label="Betrag"          k="totalGross" sortKey={sortKey} dir={sortDir} onClick={toggleSort} className="num" />}
                   {!hiddenCols.has('openAmount')   && <SortTh label="Offene Posten €" k="openAmount" sortKey={sortKey} dir={sortDir} onClick={toggleSort} className="num" />}
-                  <th style={{ width: 40, textAlign: 'center' }}>Abg.</th>
-                  <th style={{ width: 120 }}>Aktionen</th>
+                  <th scope="col" style={{ width: 40, textAlign: 'center' }}>Abg.</th>
+                  <th scope="col" style={{ width: 120 }}>Aktionen</th>
                 </tr>
               </thead>
               <tbody>

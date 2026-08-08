@@ -645,19 +645,19 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
               <table className="master-table structure-table">
                 <thead>
                   <tr>
-                    <th style={{ width: 28 }}>
+                    <th scope="col" style={{ width: 28 }}>
                       <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Alle auswählen" />
                     </th>
-                    <th style={{ width: 24 }}></th>
-                    <th>Kürzel</th>
-                    <th>Bezeichnung</th>
-                    <th>Abrechnung</th>
-                    <th className="num">Honorar €</th>
-                    <th className="num">Zuschläge €</th>
-                    <th className="num">Honorar + Zuschl. €</th>
-                    <th className="num">NK %</th>
-                    <th className="num">Nebenkosten €</th>
-                    <th></th>
+                    <th scope="col" style={{ width: 24 }}></th>
+                    <th scope="col">Kürzel</th>
+                    <th scope="col">Bezeichnung</th>
+                    <th scope="col">Abrechnung</th>
+                    <th scope="col" className="num">Honorar €</th>
+                    <th scope="col" className="num">Zuschläge €</th>
+                    <th scope="col" className="num">Honorar + Zuschl. €</th>
+                    <th scope="col" className="num">NK %</th>
+                    <th scope="col" className="num">Nebenkosten €</th>
+                    <th scope="col"></th>
                   </tr>
                 </thead>
                 <tbody ref={tbodyRef}>

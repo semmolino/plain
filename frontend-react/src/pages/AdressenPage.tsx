@@ -108,7 +108,7 @@ function SortTh<K extends string>({ label, k, sortKey, dir, onClick }: {
   label: string; k: K; sortKey: K; dir: 'asc'|'desc'; onClick: (k: K) => void
 }) {
   return (
-    <th className="sortable-th" onClick={() => onClick(k)}>
+    <th scope="col" className="sortable-th" onClick={() => onClick(k)}>
       {label} {sortKey === k ? (dir === 'asc' ? '▲' : '▼') : ''}
     </th>
   )
@@ -375,8 +375,8 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
                 <SortTh label="Ort"       k="CITY"            sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                 <SortTh label="Land"      k="COUNTRY"         sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                 <SortTh label="Kundennr." k="CUSTOMER_NUMBER" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                {visibleOptCols.map(c => <th key={c.key}>{c.label}</th>)}
-                <th></th>
+                {visibleOptCols.map(c => <th scope="col" key={c.key}>{c.label}</th>)}
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>
@@ -744,8 +744,8 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
                 <SortTh label="Anrede"     k="SALUTATION" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                 <SortTh label="Geschlecht" k="GENDER"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                 <SortTh label="Adresse"    k="ADDRESS"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                {visibleOptCols.map(c => <th key={c.key}>{c.label}</th>)}
-                <th></th>
+                {visibleOptCols.map(c => <th scope="col" key={c.key}>{c.label}</th>)}
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

@@ -288,7 +288,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
           <table className="master-table">
             <thead>
               <tr>
-                <th style={{ width: 32 }}>
+                <th scope="col" style={{ width: 32 }}>
                   <input
                     type="checkbox"
                     ref={el => { if (el) el.indeterminate = selectedEmpIds.size > 0 && selectedEmpIds.size < employees.length }}
@@ -297,7 +297,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                     title="Alle an-/abwählen"
                   />
                 </th>
-                <th>Mitarbeiter{selectedEmpIds.size > 0 ? ` (${selectedEmpIds.size} ausgewählt)` : ''}</th>
+                <th scope="col">Mitarbeiter{selectedEmpIds.size > 0 ? ` (${selectedEmpIds.size} ausgewählt)` : ''}</th>
               </tr>
             </thead>
             <tbody>
@@ -325,11 +325,11 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th>Mitarbeiter</th>
-                    <th>Rolle (Vorlage)</th>
-                    <th>Rollenkürzel</th>
-                    <th>Rollenbezeichnung</th>
-                    <th>Stundensatz</th>
+                    <th scope="col">Mitarbeiter</th>
+                    <th scope="col">Rolle (Vorlage)</th>
+                    <th scope="col">Rollenkürzel</th>
+                    <th scope="col">Rollenbezeichnung</th>
+                    <th scope="col">Stundensatz</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -367,11 +367,11 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                 <table className="master-table">
                   <thead>
                     <tr>
-                      <th>Art</th>
-                      <th>Buchungsart</th>
-                      <th>Standard VK</th>
-                      <th>Projekt VK</th>
-                      <th>Projekt Kosten</th>
+                      <th scope="col">Art</th>
+                      <th scope="col">Buchungsart</th>
+                      <th scope="col">Standard VK</th>
+                      <th scope="col">Projekt VK</th>
+                      <th scope="col">Projekt Kosten</th>
                     </tr>
                   </thead>
                   <tbody>

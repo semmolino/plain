@@ -188,9 +188,9 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
           <table className="master-table">
             <thead>
               <tr>
-                <th>Nr.</th><th>Betreff</th>{!projectId && <th>Projekt</th>}<th>Kategorie</th>
-                <th>Status</th><th style={{ textAlign: 'right' }}>Gefordert</th>
-                <th style={{ textAlign: 'right' }}>Freigegeben</th><th>Prüffrist</th>
+                <th scope="col">Nr.</th><th scope="col">Betreff</th>{!projectId && <th scope="col">Projekt</th>}<th scope="col">Kategorie</th>
+                <th scope="col">Status</th><th scope="col" style={{ textAlign: 'right' }}>Gefordert</th>
+                <th scope="col" style={{ textAlign: 'right' }}>Freigegeben</th><th scope="col">Prüffrist</th>
               </tr>
             </thead>
             <tbody>

@@ -199,7 +199,7 @@ function SortTh({ label, sortKey, current, dir, onClick }: {
 }) {
   const active = current === sortKey
   return (
-    <th className="sortable-th" onClick={() => onClick(sortKey)}>
+    <th scope="col" className="sortable-th" onClick={() => onClick(sortKey)}>
       {label} {active ? (dir === 'asc' ? '▲' : '▼') : ''}
     </th>
   )
@@ -282,10 +282,10 @@ function EmployeeProjectsSection({ employeeId }: { employeeId: number }) {
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
       <thead>
         <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
-          <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Projekt</th>
-          <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Status</th>
-          <th style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Rolle</th>
-          <th style={{ textAlign: 'right', padding: '3px 0 4px 8px' }}>Stundensatz</th>
+          <th scope="col" style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Projekt</th>
+          <th scope="col" style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Status</th>
+          <th scope="col" style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Rolle</th>
+          <th scope="col" style={{ textAlign: 'right', padding: '3px 0 4px 8px' }}>Stundensatz</th>
         </tr>
       </thead>
       <tbody>
@@ -527,11 +527,11 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
-              <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Zeitraum</th>
-              <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Art</th>
-              <th style={{ textAlign: 'right', padding: '3px 8px 4px 0' }}>Tage</th>
-              <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Status</th>
-              <th></th>
+              <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Zeitraum</th>
+              <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Art</th>
+              <th scope="col" style={{ textAlign: 'right', padding: '3px 8px 4px 0' }}>Tage</th>
+              <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Status</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>
@@ -892,9 +892,9 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
-                <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Gültig ab</th>
-                <th style={{ textAlign: 'right', padding: '3px 0 4px 8px' }}>Kostensatz (€/h)</th>
-                <th></th>
+                <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Gültig ab</th>
+                <th scope="col" style={{ textAlign: 'right', padding: '3px 0 4px 8px' }}>Kostensatz (€/h)</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>
@@ -960,9 +960,9 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
-                <th style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Gültig ab</th>
-                <th style={{ textAlign: 'left', padding: '3px 0 4px 8px' }}>Modell</th>
-                <th></th>
+                <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Gültig ab</th>
+                <th scope="col" style={{ textAlign: 'left', padding: '3px 0 4px 8px' }}>Modell</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>
@@ -1257,7 +1257,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
 
   function NumTh({ label, field, help }: { label: string; field: string; help?: HelpId }) {
     return (
-      <th className="num sortable-th" onClick={() => toggleSort(field)} style={{ cursor: 'pointer' }}>
+      <th scope="col" className="num sortable-th" onClick={() => toggleSort(field)} style={{ cursor: 'pointer' }}>
         {label}{si(field)}
         {help && (
           <span onClick={e => e.stopPropagation()} style={{ cursor: 'default' }}>
@@ -1375,15 +1375,15 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>Kürzel{si('name')}</th>
-                    <th>Name</th>
-                    <th className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('dept')}>Abteilung{si('dept')}</th>
+                    <th scope="col" className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>Kürzel{si('name')}</th>
+                    <th scope="col">Name</th>
+                    <th scope="col" className="sortable-th" style={{ cursor: 'pointer' }} onClick={() => toggleSort('dept')}>Abteilung{si('dept')}</th>
                     <NumTh label="Soll"            field="required"     />
                     <NumTh label="Ist"             field="actual"       />
                     <NumTh label="Monatssaldo"     field="balance"      help="mitarbeiter.saldo" />
-                    <th className="num">Laufender Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
+                    <th scope="col" className="num">Laufender Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
                     <NumTh label="Kosten"          field="cost"         />
-                    <th className="num" title="Projektstunden (ohne interne) / Alle gebuchten Stunden">Produktivität</th>
+                    <th scope="col" className="num" title="Projektstunden (ohne interne) / Alle gebuchten Stunden">Produktivität</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1427,15 +1427,15 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                 <table className="master-table">
                   <thead>
                     <tr>
-                      <th>Mitarbeiter</th>
-                      <th>Abteilung</th>
-                      <th>Monat</th>
+                      <th scope="col">Mitarbeiter</th>
+                      <th scope="col">Abteilung</th>
+                      <th scope="col">Monat</th>
                       <NumTh label="Soll"          field="required"     />
                       <NumTh label="Ist"           field="actual"       />
                       <NumTh label="Monatssaldo"   field="balance"      />
-                      <th className="num">Laufender Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
+                      <th scope="col" className="num">Laufender Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
                       <NumTh label="Kosten"        field="cost"         />
-                      <th className="num" title="Projektstunden (ohne interne) / Alle gebuchten Stunden">Produktivität</th>
+                      <th scope="col" className="num" title="Projektstunden (ohne interne) / Alle gebuchten Stunden">Produktivität</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1696,12 +1696,12 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
                 <table className="master-table" style={{ fontSize: 12 }}>
                   <thead>
                     <tr>
-                      <th style={{ width: 18 }}></th>
-                      <th style={{ width: 90 }}>Datum</th>
-                      <th style={{ width: 28 }}>Tag</th>
-                      <th style={{ textAlign: 'right', width: 64 }}>Soll</th>
-                      <th style={{ textAlign: 'right', width: 64 }}>Ist</th>
-                      <th style={{ textAlign: 'right', width: 80 }}>Saldo</th>
+                      <th scope="col" style={{ width: 18 }}></th>
+                      <th scope="col" style={{ width: 90 }}>Datum</th>
+                      <th scope="col" style={{ width: 28 }}>Tag</th>
+                      <th scope="col" style={{ textAlign: 'right', width: 64 }}>Soll</th>
+                      <th scope="col" style={{ textAlign: 'right', width: 64 }}>Ist</th>
+                      <th scope="col" style={{ textAlign: 'right', width: 80 }}>Saldo</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1792,11 +1792,11 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
               <table className="master-table" style={{ fontSize: 12 }}>
                 <thead>
                   <tr>
-                    <th>Monat</th>
-                    <th style={{ textAlign: 'right' }}>Soll</th>
-                    <th style={{ textAlign: 'right' }}>Ist</th>
-                    <th style={{ textAlign: 'right' }}>Saldo</th>
-                    <th style={{ textAlign: 'right' }}>Laufender Saldo</th>
+                    <th scope="col">Monat</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Soll</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Ist</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Saldo</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Laufender Saldo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2007,7 +2007,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
             <div className="table-scroll">
               <table className="master-table">
                 <thead><tr>
-                  <th>Mitarbeiter</th><th>Zeitraum</th><th>Art</th><th className="num">Tage</th><th>Notiz</th><th></th>
+                  <th scope="col">Mitarbeiter</th><th scope="col">Zeitraum</th><th scope="col">Art</th><th scope="col" className="num">Tage</th><th scope="col">Notiz</th><th scope="col"></th>
                 </tr></thead>
                 <tbody>
                   {inbox.map((a: Absence) => (
@@ -2078,10 +2078,10 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
               <table className="master-table" style={{ fontSize: 11 }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>Mitarbeiter</th>
+                    <th scope="col" style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>Mitarbeiter</th>
                     {dayList.map(day => {
                       const we = [0, 6].includes(new Date(year, month - 1, day).getDay())
-                      return <th key={day} style={{ textAlign: 'center', padding: '2px 3px', color: we ? '#d1d5db' : '#6b7280', fontWeight: 500 }}>{day}</th>
+                      return <th scope="col" key={day} style={{ textAlign: 'center', padding: '2px 3px', color: we ? '#d1d5db' : '#6b7280', fontWeight: 500 }}>{day}</th>
                     })}
                   </tr>
                 </thead>
@@ -2205,9 +2205,9 @@ function EntitlementsBulkEditor({ employees }: { employees: Employee[] }) {
           <div className="table-scroll">
             <table className="master-table">
               <thead><tr>
-                <th style={{ textAlign: 'left' }}>Mitarbeiter</th>
-                <th className="num">Anspruch (Tage)</th>
-                <th className="num">Übertrag manuell</th>
+                <th scope="col" style={{ textAlign: 'left' }}>Mitarbeiter</th>
+                <th scope="col" className="num">Anspruch (Tage)</th>
+                <th scope="col" className="num">Übertrag manuell</th>
               </tr></thead>
               <tbody>
                 {active.map(e => (
@@ -2460,11 +2460,11 @@ function MonthsOverviewTab() {
       <table className="master-table" style={{ fontSize: 12 }}>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', paddingRight: 16, whiteSpace: 'nowrap' }}>Mitarbeiter</th>
+            <th scope="col" style={{ textAlign: 'left', paddingRight: 16, whiteSpace: 'nowrap' }}>Mitarbeiter</th>
             {months.map(m => {
               const open = openInColumn(m.year, m.month)
               return (
-                <th key={`${m.year}-${m.month}`} style={{ textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 500, color: 'var(--text-3)' }}>
+                <th scope="col" key={`${m.year}-${m.month}`} style={{ textAlign: 'center', whiteSpace: 'nowrap', fontWeight: 500, color: 'var(--text-3)' }}>
                   {MONTH_NAMES[m.month - 1].slice(0, 3)}<br />{m.year}
                   <div style={{ marginTop: 3, minHeight: 18 }}>
                     {open > 0 && (
@@ -2708,12 +2708,12 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
           <table className="master-table">
             <thead>
               <tr>
-                <th>Mitarbeiter</th>
-                <th>Datum</th>
-                <th>Ereignis</th>
-                <th>Schwere</th>
-                <th>Details</th>
-                <th>Erfasst</th>
+                <th scope="col">Mitarbeiter</th>
+                <th scope="col">Datum</th>
+                <th scope="col">Ereignis</th>
+                <th scope="col">Schwere</th>
+                <th scope="col">Details</th>
+                <th scope="col">Erfasst</th>
               </tr>
             </thead>
             <tbody>
@@ -3042,15 +3042,15 @@ export function MitarbeiterPage() {
                       <SortTh label="Vorname"   sortKey="FIRST_NAME" {...sortProps} />
                       <SortTh label="Nachname"  sortKey="LAST_NAME"  {...sortProps} />
                       <SortTh label="E-Mail"    sortKey="MAIL"       {...sortProps} />
-                      <th>Abteilung</th>
-                      <th>Modell</th>
+                      <th scope="col">Abteilung</th>
+                      <th scope="col">Modell</th>
                       {canViewBookings && (
-                        <th className="num">Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
+                        <th scope="col" className="num">Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
                       )}
-                      <th>Status</th>
-                      <th>Rolle</th>
-                      <th>Dashboard-Rolle</th>
-                      <th></th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Rolle</th>
+                      <th scope="col">Dashboard-Rolle</th>
+                      <th scope="col"></th>
                     </tr>
                   </thead>
                   <tbody>

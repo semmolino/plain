@@ -210,12 +210,12 @@ export function Mitarbeiter({ initialProjectId }: Props) {
           <table className="master-table">
             <thead>
               <tr>
-                <th>Mitarbeiter</th>
-                <th>Rolle (Vorlage)</th>
-                <th>Rollenkürzel</th>
-                <th>Rollenbezeichnung</th>
-                <th className="num">Stundensatz</th>
-                <th></th>
+                <th scope="col">Mitarbeiter</th>
+                <th scope="col">Rolle (Vorlage)</th>
+                <th scope="col">Rollenkürzel</th>
+                <th scope="col">Rollenbezeichnung</th>
+                <th scope="col" className="num">Stundensatz</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>
@@ -417,14 +417,14 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
           <table className="master-table">
             <thead>
               <tr>
-                <th>Art</th>
-                <th>Buchungsart</th>
-                <th>Einheit</th>
-                <th className="num">Standard VK</th>
-                <th className="num">Standard Kosten</th>
-                <th className="num">Projekt VK</th>
-                <th className="num">Projekt Kosten</th>
-                <th></th>
+                <th scope="col">Art</th>
+                <th scope="col">Buchungsart</th>
+                <th scope="col">Einheit</th>
+                <th scope="col" className="num">Standard VK</th>
+                <th scope="col" className="num">Standard Kosten</th>
+                <th scope="col" className="num">Projekt VK</th>
+                <th scope="col" className="num">Projekt Kosten</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

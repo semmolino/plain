@@ -57,7 +57,7 @@ function SortTh({
 }) {
   const active = current === field
   return (
-    <th
+    <th scope="col" 
       className={`sortable${className ? ' ' + className : ''}${active ? ' sorted' : ''}`}
       onClick={() => onSort(field)}
     >
@@ -564,8 +564,8 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                       <SortTh label="Stunden"          field="hours"   current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
                       <SortTh label="Kosten €"         field="cost"    current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
                       <SortTh label="Kostenquote"      field="kq"      current={sortField} dir={sortDir} onSort={toggleSort} className="num" />
-                      <th className="num" title="CPI (Cost-Performance-Index): Kosten-Leistung-Index">CPI</th>
-                      <th className="num" title="Estimate at Completion: Prognose Gesamtkosten">EAC (Prognose)</th>
+                      <th scope="col" className="num" title="CPI (Cost-Performance-Index): Kosten-Leistung-Index">CPI</th>
+                      <th scope="col" className="num" title="Estimate at Completion: Prognose Gesamtkosten">EAC (Prognose)</th>
                     </tr>
                   </thead>
                   <tbody>

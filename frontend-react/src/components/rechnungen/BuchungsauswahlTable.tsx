@@ -234,9 +234,9 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
               <table className="master-table">
                 <thead>
                   <tr>
-                    <th><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible}
+                    <th scope="col"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible}
                       aria-label="Alle sichtbaren auswählen" /></th>
-                    <th>Datum</th><th>Mitarbeiter</th><th>Beschreibung</th><th className="num">Betrag €</th>
+                    <th scope="col">Datum</th><th scope="col">Mitarbeiter</th><th scope="col">Beschreibung</th><th scope="col" className="num">Betrag €</th>
                   </tr>
                 </thead>
                 <tbody>

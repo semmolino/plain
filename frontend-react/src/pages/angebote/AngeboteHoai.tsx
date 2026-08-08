@@ -50,11 +50,11 @@ export function AngeboteHoai({ initialOfferId }: Props) {
           <table className="ls-table">
             <thead>
               <tr>
-                <th className="ls-th">§</th>
-                <th className="ls-th">Bezeichnung</th>
-                <th className="ls-th ls-col-num">Grundhonorar</th>
-                <th className="ls-th ls-col-num">Gesamthonorar</th>
-                <th className="ls-th"></th>
+                <th scope="col" className="ls-th">§</th>
+                <th scope="col" className="ls-th">Bezeichnung</th>
+                <th scope="col" className="ls-th ls-col-num">Grundhonorar</th>
+                <th scope="col" className="ls-th ls-col-num">Gesamthonorar</th>
+                <th scope="col" className="ls-th"></th>
               </tr>
             </thead>
             <tbody>

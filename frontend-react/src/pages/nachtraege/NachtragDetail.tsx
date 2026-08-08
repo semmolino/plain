@@ -167,7 +167,7 @@ export function NachtragDetail() {
         <div style={{ overflowX: 'auto' }}>
           <table className="master-table">
             <thead>
-              <tr><th>Bezeichnung</th><th>Art</th><th style={{ textAlign: 'right' }}>Betrag (netto)</th><th>Freigabe</th><th /></tr>
+              <tr><th scope="col">Bezeichnung</th><th scope="col">Art</th><th scope="col" style={{ textAlign: 'right' }}>Betrag (netto)</th><th scope="col">Freigabe</th><th scope="col" /></tr>
             </thead>
             <tbody>
               {nodes.map(n => {
@@ -215,7 +215,7 @@ export function NachtragDetail() {
           <h2 style={{ fontSize: 16, marginTop: 24 }}>Freigabe-Historie</h2>
           <div style={{ overflowX: 'auto' }}>
             <table className="master-table">
-              <thead><tr><th>Nr.</th><th>Art</th><th>Grundlage</th><th style={{ textAlign: 'right' }}>Betrag (netto)</th><th>Am</th><th>Notiz</th></tr></thead>
+              <thead><tr><th scope="col">Nr.</th><th scope="col">Art</th><th scope="col">Grundlage</th><th scope="col" style={{ textAlign: 'right' }}>Betrag (netto)</th><th scope="col">Am</th><th scope="col">Notiz</th></tr></thead>
               <tbody>
                 {releases.map(r => (
                   <tr key={r.ID}>
@@ -375,7 +375,7 @@ function ReleaseForm({ leaves, submitting, onSubmit }: {
         Ausgewählte Positionen werden ins Projekt übernommen und damit buch- und abrechenbar. Betrag optional kürzen (Anerkennung „der Höhe nach").
       </p>
       <table className="master-table">
-        <thead><tr><th /><th>Position</th><th style={{ textAlign: 'right' }}>Gefordert</th><th style={{ textAlign: 'right' }}>Anerkannt</th></tr></thead>
+        <thead><tr><th scope="col" /><th scope="col">Position</th><th scope="col" style={{ textAlign: 'right' }}>Gefordert</th><th scope="col" style={{ textAlign: 'right' }}>Anerkannt</th></tr></thead>
         <tbody>
           {leaves.map(l => {
             const isBt1 = Number(l.BILLING_TYPE_ID) === 1

@@ -315,7 +315,7 @@ Every list/table view must use the same toolbar and search/filter pattern. Devia
 - `.filter-chip-wrap` / `.filter-chip-btn` / `.filter-chip-dropdown` / `.filter-chip-option` — multi-select dropdown filter chip
 
 **FilterChip component**
-- Local component defined per-page (copy pattern from `HonorarWizard.tsx` → `FilterChip`)
+- **Gemeinsame Komponente, nicht kopieren.** Die frühere Regel („copy pattern from `HonorarWizard.tsx`") hat zu 10 Kopien geführt — zehnmal eigenes Tastaturverhalten, zehnmal eigene ARIA-Semantik, zehn Stellen für jede Korrektur. Dieselbe Ursache steckte hinter drei Namen für dieselbe Bedienleiste (`.list-toolbar` / `.pl-toolbar` / `.ls-toolbar`). Neue Verwendungen bitte aus `components/ui/` beziehen; bestehende Kopien werden nach und nach dorthin gezogen.
 - Uses `Set<string>` for selected values; null/empty set means "all"
 - Click-outside closes via `useRef` + `mousedown` listener
 - Shows count badge when active: `§ (2) ▾`
