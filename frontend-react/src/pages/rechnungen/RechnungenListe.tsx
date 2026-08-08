@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
 import { RecentList } from '@/components/recents/RecentList'
@@ -971,17 +972,17 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               <p>Stornorechnung für <strong>{stornoState.label}</strong> erstellen?</p>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button className="btn" onClick={() => setStornoState(null)}>Abbrechen</button>
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setStornoState(null)}>Abbrechen</button>
             {stornoState.hasPayments && (
-              <button className="btn btn-danger" onClick={() => { void stornoState.onStorno(true); setStornoState(null) }}>
+              <button type="button" className="btn btn-danger" onClick={() => { void stornoState.onStorno(true); setStornoState(null) }}>
                 Stornieren + Zahlungen löschen
               </button>
             )}
-            <button className="btn btn-danger" onClick={() => { void stornoState.onStorno(false); setStornoState(null) }}>
+            <button type="button" className="btn btn-danger" onClick={() => { void stornoState.onStorno(false); setStornoState(null) }}>
               {stornoState.hasPayments ? 'Nur stornieren' : 'Stornieren'}
             </button>
-          </div>
+          </DialogFooter>
         </Modal>
       )}
 
@@ -1197,12 +1198,12 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               />
             </div>
             <Message text={payMsg?.text ?? null} type={payMsg?.type} />
-            <div className="modal-actions">
+            <DialogFooter>
+              <button type="button" className="btn-secondary" onClick={() => setPayTarget(null)}>Abbrechen</button>
               <button className="btn-primary" type="submit" disabled={payMut.isPending}>
                 {payMut.isPending ? 'Speichert …' : 'Zahlung speichern'}
               </button>
-              <button type="button" onClick={() => setPayTarget(null)}>Abbrechen</button>
-            </div>
+            </DialogFooter>
           </form>
         )}
       </Modal>
@@ -1250,18 +1251,19 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
             {emailMsg && (
               <Message text={emailMsg.text} type={emailMsg.type} />
             )}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => { setEmailRow(null); setEmailMsg(null) }}>
+            <DialogFooter>
+              <button type="button" className="btn-secondary" onClick={() => { setEmailRow(null); setEmailMsg(null) }}>
                 Abbrechen
               </button>
               <button
+                type="button"
                 className="btn btn-primary"
                 disabled={sendEmailMut.isPending || !emailTo}
                 onClick={() => sendEmailMut.mutate({ row: emailRow, to: emailTo, subject: emailSubject, body: emailBody })}
               >
                 {sendEmailMut.isPending ? 'Senden…' : 'Senden'}
               </button>
-            </div>
+            </DialogFooter>
           </div>
         )}
       </Modal>

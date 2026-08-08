@@ -1,4 +1,5 @@
 import { Modal } from './Modal'
+import { DialogFooter } from './DialogFooter'
 import { AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react'
 import type { ValidationResult } from '@/api/rechnungen'
 
@@ -66,19 +67,19 @@ export function ValidationModal({
       )}
 
       {!loading && (
-        <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose}>Schliessen</button>
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Schließen</button>
           {!hasErrors && hasWarnings && onAcknowledge && (
-            <button className="btn-primary" onClick={onAcknowledge}>
+            <button type="button" className="btn-primary" onClick={onAcknowledge}>
               Trotzdem buchen
             </button>
           )}
           {hasErrors && onForce && (
-            <button className="btn-danger" onClick={onForce} title="Buchung trotz Fehlern erzwingen — nur in Ausnahmen!">
+            <button type="button" className="btn-danger" onClick={onForce} title="Buchung trotz Fehlern erzwingen — nur in Ausnahmen!">
               Notbuchung (force)
             </button>
           )}
-        </div>
+        </DialogFooter>
       )}
     </Modal>
   )

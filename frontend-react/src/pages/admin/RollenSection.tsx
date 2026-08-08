@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Trash2, Plus, Copy } from 'lucide-react'
 import { Modal }        from '@/components/ui/Modal'
@@ -342,12 +343,12 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
 
           <Message text={msg?.text ?? null} type={msg?.type} />
 
-          <div className="modal-actions">
+          <DialogFooter>
             <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
             <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
               {saveMut.isPending ? 'Speichert …' : 'Speichern'}
             </button>
-          </div>
+          </DialogFooter>
         </div>
       )}
     </Modal>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useNavigate } from 'react-router-dom'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -346,22 +347,24 @@ export function Vertraege({ initialProjectId }: Props) {
             </select>
           </div>
 
-          <div className="modal-actions" style={{ marginTop: 20 }}>
+          <DialogFooter>
             <button
-              className="btn-primary"
-              disabled={!dirty || saveMut.isPending}
-              onClick={() => saveMut.mutate()}
-            >
-              {saveMut.isPending ? 'Speichern…' : 'Vertrag speichern'}
-            </button>
-            <button
+              type="button"
               className="btn-secondary"
               disabled={!dirty || saveMut.isPending}
               onClick={handleReset}
             >
               Zurücksetzen
             </button>
-          </div>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!dirty || saveMut.isPending}
+              onClick={() => saveMut.mutate()}
+            >
+              {saveMut.isPending ? 'Speichern…' : 'Vertrag speichern'}
+            </button>
+          </DialogFooter>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Trash2, Plus } from 'lucide-react'
 import { Modal }        from '@/components/ui/Modal'
@@ -144,12 +145,12 @@ function SnippetModal({ existing, onClose, onSaved }: { existing?: TextSnippet; 
             style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
         </div>
         <Message text={msg?.text ?? null} type={msg?.type} />
-        <div className="modal-actions">
+        <DialogFooter>
           <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
           <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
             {saveMut.isPending ? 'Speichert …' : 'Speichern'}
           </button>
-        </div>
+        </DialogFooter>
       </div>
     </Modal>
   )

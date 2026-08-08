@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -224,11 +225,11 @@ function RoleSection({ employeeId, roles, mapping }: {
         })}
         {!roles.length && <p className="empty-note">Noch keine Rollen definiert.</p>}
       </div>
-      <div className="modal-actions">
+      <DialogFooter>
         <button className="btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
           {saveMut.isPending ? 'Speichert …' : 'Rollen speichern'}
         </button>
-      </div>
+      </DialogFooter>
     </div>
   )
 }
@@ -311,12 +312,12 @@ function ClarifyModal({ absenceId, onClose, onDone }: { absenceId: number; onClo
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
             placeholder="Was soll geklärt werden?" style={{ width: '100%', resize: 'vertical' }} />
         </div>
-        <div className="modal-actions">
+        <DialogFooter>
           <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
           <button className="btn-primary" disabled={!note.trim() || mut.isPending} onClick={() => mut.mutate()}>
             {mut.isPending ? 'Sendet …' : 'Rückfrage senden'}
           </button>
-        </div>
+        </DialogFooter>
       </div>
     </Modal>
   )
@@ -842,12 +843,12 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             </select>
           </div>
           <Message text={editMsg?.text ?? null} type={editMsg?.type} />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
             <button className="btn-primary" type="submit" disabled={saving}>
               {saving ? 'Speichert …' : 'Speichern'}
             </button>
-            <button type="button" onClick={onClose}>Abbrechen</button>
-          </div>
+          </DialogFooter>
         </form>
       )}
 
@@ -3200,12 +3201,12 @@ export function MitarbeiterPage() {
           </div>
 
           <Message text={createMsg?.text ?? null} type={createMsg?.type} />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Abbrechen</button>
             <button className="btn-primary" type="submit" disabled={creating}>
               {creating ? 'Speichert …' : 'Speichern'}
             </button>
-            <button type="button" onClick={() => setShowCreate(false)}>Abbrechen</button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 

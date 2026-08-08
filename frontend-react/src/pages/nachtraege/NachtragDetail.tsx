@@ -1,4 +1,5 @@
 import { useState, useMemo, type ReactNode } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2, CheckCircle2, FileText } from 'lucide-react'
@@ -331,9 +332,9 @@ function AddPositionForm({ nodes, submitting, onSubmit }: {
           </select>
         </label>
       )}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="btn-primary" disabled={submitting} onClick={submit}>Hinzufügen</button>
-      </div>
+      <DialogFooter>
+        <button type="button" className="btn-primary" disabled={submitting} onClick={submit}>Hinzufügen</button>
+      </DialogFooter>
     </div>
   )
 }
@@ -411,9 +412,9 @@ function ReleaseForm({ leaves, submitting, onSubmit }: {
       <label>Notiz (optional)
         <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} style={{ resize: 'vertical' }} />
       </label>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? 'Freigeben …' : 'Freigeben & ins Projekt übernehmen'}</button>
-      </div>
+      <DialogFooter>
+        <button type="button" className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? 'Freigeben …' : 'Freigeben & ins Projekt übernehmen'}</button>
+      </DialogFooter>
     </div>
   )
 }

@@ -35,3 +35,4 @@ frontend-react/vite.config.ts.timestamp-*.mjs
 
 # Capacitor-Build-Artefakte (lokal erzeugt, nicht versioniert)
 frontend-react/android/
+test-results/

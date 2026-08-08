@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
@@ -577,12 +578,12 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
               Soll die Adresse / der Kontakt auch im Vertrag übernommen werden?
             </p>
             <Message text={editMsg?.text ?? null} type={editMsg?.type} />
-            <div className="modal-actions">
+            <DialogFooter>
+              <button type="button" className="btn-secondary" onClick={closeEdit}>Nein</button>
               <button className="btn-primary" onClick={() => applyToContract(contractConfirm)}>
                 Ja, übernehmen
               </button>
-              <button type="button" onClick={closeEdit}>Nein</button>
-            </div>
+            </DialogFooter>
           </div>
         ) : (
           <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
@@ -658,12 +659,12 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
               </label>
             </div>
             <Message text={editMsg?.text ?? null} type={editMsg?.type} />
-            <div className="modal-actions">
+            <DialogFooter>
+              <button type="button" className="btn-secondary" onClick={closeEdit}>Abbrechen</button>
               <button className="btn-primary" type="submit" disabled={updateMut.isPending}>
                 {updateMut.isPending ? 'Speichert …' : 'Speichern'}
               </button>
-              <button type="button" onClick={closeEdit}>Abbrechen</button>
-            </div>
+            </DialogFooter>
           </form>
         )}
       </Modal>

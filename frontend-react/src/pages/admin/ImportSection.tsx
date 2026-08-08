@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Download, Upload, RotateCcw, CheckCircle2, AlertTriangle, Copy, XCircle } from 'lucide-react'
 import { Message } from '@/components/ui/Message'
@@ -433,13 +434,13 @@ export function ImportSection() {
           Einträge werden gelöscht. Das ist nicht möglich, wenn inzwischen andere Daten daran hängen (z. B. ein
           Projekt an einer importierten Adresse) — dann erhältst du einen Hinweis.
         </p>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+        <DialogFooter>
           <button type="button" className="btn-secondary" onClick={() => setConfirmRollback(null)} disabled={rollbackMut.isPending}>Abbrechen</button>
           <button type="button" className="btn-danger" disabled={rollbackMut.isPending}
             onClick={() => confirmRollback && rollbackMut.mutate(confirmRollback.id)}>
             {rollbackMut.isPending ? 'Setzt zurück …' : 'Ja, zurücksetzen'}
           </button>
-        </div>
+        </DialogFooter>
       </Modal>
     </div>
   )

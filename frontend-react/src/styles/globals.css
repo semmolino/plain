@@ -1892,8 +1892,11 @@ input::placeholder { color: var(--text-4); }
    gesetzt werden musste. */
 .modal-actions-secondary { display: flex; gap: var(--space-2); margin-right: auto; }
 .modal-actions-primary   { display: flex; gap: var(--space-2); margin-left: auto; }
+/* Gleiche Hoehe fuer alles in der Fusszeile: gemessen standen „Schliessen"
+   (38px, aus .btn-secondary) und „Speichern" (43px, aus .btn-primary)
+   nebeneinander und lagen sichtbar versetzt. */
 .modal-actions-primary button,
-.modal-actions-secondary button { flex: 0 1 auto; }
+.modal-actions-secondary button { flex: 0 1 auto; height: 40px; padding: 0 16px; margin-top: 0; }
 
 .modal-card.modal-wide { max-width: 860px; }
 .modal-card.modal-xl   { max-width: 1100px; }
@@ -4090,6 +4093,18 @@ input::placeholder { color: var(--text-4); }
   .tbr-btn, .notif-bell-btn, .user-menu-btn, .welcome-panel-close {
     min-height: 44px; min-width: 44px;
   }
+
+  /* Dialog-Fusszeile: rechtsbuendig gedraengt lagen die beiden Knoepfe auf
+     390px Breite in den rechten 190px, jeder unter 44px hoch — 200px daneben
+     blieben leer. Auf dem Handy teilen sie sich stattdessen die volle Breite.
+     Die Sekundaerzone bleibt links, damit ein Loeschen-Knopf nicht
+     gleichrangig neben „Speichern" landet. */
+  .modal-actions-primary { flex: 1; flex-wrap: wrap; }
+  /* Basis 140px statt 0: zwei kurze Knoepfe teilen sich damit die Zeile,
+     drei lange (Storno-Dialog: „Stornieren + Zahlungen loeschen") brechen
+     um, statt auf je 110px zusammengequetscht zu werden. */
+  .modal-actions-primary button,
+  .modal-actions-secondary button { flex: 1 1 140px; min-height: 44px; height: auto; }
 
   /* Aufklappmenue der Filter-Chips: die Zeilen massen 32px. Sie liegen
      direkt uebereinander, ein Fehlgriff waehlt also den falschen Filter.

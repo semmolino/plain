@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate }    from 'react-router-dom'
@@ -975,12 +976,12 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
               <textarea className="form-control" rows={6} value={emailBody} onChange={e => setEmailBody(e.target.value)} />
             </div>
             {emailMsg && <Message type={emailMsg.type === 'ok' ? 'success' : 'error'} text={emailMsg.text} />}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-              <button className="btn" onClick={() => setEmailRow(null)}>Abbrechen</button>
-              <button className="btn btn-primary" onClick={sendEmail} disabled={sendMut.isPending || !emailTo}>
+            <DialogFooter>
+              <button type="button" className="btn-secondary" onClick={() => setEmailRow(null)}>Abbrechen</button>
+              <button type="button" className="btn btn-primary" onClick={sendEmail} disabled={sendMut.isPending || !emailTo}>
                 {sendMut.isPending ? 'Senden…' : 'Senden'}
               </button>
-            </div>
+            </DialogFooter>
           </div>
         </Modal>
       )}
@@ -1073,12 +1074,12 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
             <Message text={payMsg?.type === 'ok' ? payMsg.text : null} type="success" />
             <Message text={payMsg?.type === 'err' ? payMsg.text : null} type="error" />
-            <div className="modal-actions">
+            <DialogFooter>
+              <button type="button" className="btn-secondary" onClick={() => setPayTarget(null)}>Abbrechen</button>
               <button className="btn-primary" type="submit" disabled={payMut.isPending}>
                 {payMut.isPending ? 'Speichert …' : 'Zahlung speichern'}
               </button>
-              <button type="button" onClick={() => setPayTarget(null)}>Abbrechen</button>
-            </div>
+            </DialogFooter>
           </form>
         )}
       </Modal>

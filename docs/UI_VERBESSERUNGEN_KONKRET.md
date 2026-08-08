@@ -259,9 +259,7 @@ Signaturen). Der sinnvolle nächste Schritt ist daher: `RowMenu` nach
 auch die Aktionsspalte fixieren.
 
 Weitere offene Punkte in derselben Kerbe:
-- Dialog-Fußzeilen: `DialogFooter` existiert, migriert ist bisher nur
-  „Vorschlag einreichen". 13 Dateien nutzen weiter `.modal-actions`
-  direkt, dazu rund 14 handgebaute `flex-end`-Zeilen.
+- Dialog-Fußzeilen: erledigt, siehe unten.
 - Wizards (Abschlags-/Schlussrechnung) sind auf dem Handy nie geprüft
   worden; `StepIndicator` liegt 5× kopiert vor.
 
@@ -287,3 +285,34 @@ direkt übereinander, ein Fehlgriff wählte den Nachbarfilter.
 
 `tests/filters.spec.ts` deckt das Verhalten seitdem ab (Eingrenzen,
 Zähler, Escape mit Fokusrückgabe, Zurücksetzen) — auf beiden Viewports.
+
+### Nachgezogen: Dialog-Fußzeilen vereinheitlicht
+
+Der eigentliche Befund war nicht die Duplizierung, sondern die **Reihenfolge**.
+`ConfirmModal` — mit 24 Verwendungen die Fußzeile, die man im Produkt am
+häufigsten sieht — setzt Abbrechen links, die Aktion rechts. **13 Dialoge
+machten es genau umgekehrt**: Speichern links, Abbrechen rechts. Wer im
+Adressbuch speichert und danach in den Einstellungen speichert, trifft
+dieselbe Position mit gegenteiliger Wirkung.
+
+Alle 22 Fußzeilen laufen jetzt über `components/ui/DialogFooter.tsx`.
+Verbindlich: **Abbrechen links, Hauptaktion rechts.**
+
+Nebenbefunde, die dabei sichtbar wurden:
+
+| Befund | Korrektur |
+|---|---|
+| Abbrechen war mal `.btn-secondary`, mal `.btn`, mal ein Knopf **ohne Klasse** | überall `.btn-secondary` (`.btn` ist damit identisch definiert) |
+| Knöpfe unterschiedlich hoch: 38 px (`.btn-secondary`) neben 43 px (`.btn-primary`) | beide 40 px, auf Touch 44 px |
+| Auf 390 px drängten sich beide in den rechten 190 px, keiner erreichte 44 px | teilen sich auf dem Handy die volle Breite |
+| Drei lange Knöpfe (Storno-Dialog) wären auf je 110 px gequetscht worden | Basis 140 px — der lange Knopf bricht auf eine eigene Zeile um |
+| „Schliessen" statt „Schließen" in `ValidationModal` | korrigiert |
+| Mehrere Knöpfe ohne `type="button"` | ergänzt (in einem `<form>` wäre das ein Absenden) |
+
+Nicht migriert, weil es keine Dialog-Fußzeilen sind: die Speicherzeile in
+den Einstellungen (`AdminPage`), der Aktionsblock der Budget-Regeln und
+der PDF-Knopf über dem Honorar-Wizard. Dort wäre der am unteren
+Dialogrand klebende Balken falsch.
+
+`tests/dialogs.spec.ts` prüft Reihenfolge, gleiche Höhe und 44 px auf dem
+Handy.

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -347,10 +348,10 @@ export function AddressDetailPage() {
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Adresse bearbeiten">
         <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
           <AddrForm vals={editForm} setK={setEK} msg={editMsg} countries={countries} />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setEditOpen(false)}>Abbrechen</button>
             <button className="btn-primary" type="submit" disabled={updateAddrMut.isPending}>{updateAddrMut.isPending ? 'Speichert …' : 'Speichern'}</button>
-            <button type="button" onClick={() => setEditOpen(false)}>Abbrechen</button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 
@@ -359,10 +360,10 @@ export function AddressDetailPage() {
         <form ref={conCreateRef} onSubmit={submitConCreate} className="master-form">
           <ContactForm vals={conForm} setK={setCK} onPrimaryChange={setCPrimary} addrTxt={conAddrText} setAddrTxt={setConAddrText}
             msg={conMsg} salutations={salutations} genders={genders} searchAddresses={searchAddresses} />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setConCreateOpen(false)}>Schließen</button>
             <button className="btn-primary" type="submit" disabled={createConMut.isPending}>{createConMut.isPending ? 'Speichert …' : 'Speichern'}</button>
-            <button type="button" onClick={() => setConCreateOpen(false)}>Schließen</button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 
@@ -371,10 +372,10 @@ export function AddressDetailPage() {
         <form ref={conEditRef} onSubmit={submitConEdit} className="master-form">
           <ContactForm vals={conEditForm} setK={setCEK} onPrimaryChange={setCEPrimary} addrTxt={conEditAddrText} setAddrTxt={setConEditAddrText}
             msg={conEditMsg} isEdit salutations={salutations} genders={genders} searchAddresses={searchAddresses} />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setEditContact(null)}>Abbrechen</button>
             <button className="btn-primary" type="submit" disabled={updateConMut.isPending}>{updateConMut.isPending ? 'Speichert …' : 'Speichern'}</button>
-            <button type="button" onClick={() => setEditContact(null)}>Abbrechen</button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 

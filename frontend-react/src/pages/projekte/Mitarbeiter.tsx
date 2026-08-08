@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
@@ -567,12 +568,12 @@ function ProjectBookingTypeModal({ projectId, onClose, onSaved }: { projectId: n
           </div>
         )}
         <Message text={msg?.text ?? null} type={msg?.type} />
-        <div className="modal-actions">
+        <DialogFooter>
           <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
           <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
             {saveMut.isPending ? 'Speichert …' : 'Anlegen'}
           </button>
-        </div>
+        </DialogFooter>
       </div>
     </Modal>
   )

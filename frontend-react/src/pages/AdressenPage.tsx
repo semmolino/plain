@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState, useStickySet } from '@/hooks/useStickyState'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -414,24 +415,24 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Neue Adresse">
         <form ref={createAddrFormRef} onSubmit={submitCreate} className="master-form">
           <AddrForm vals={form} setK={set} msg={msg} countries={countries} />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setCreateOpen(false)}>Schließen</button>
             <button className="btn-primary" type="submit" disabled={createMut.isPending}>
               {createMut.isPending ? 'Speichert …' : 'Speichern'}
             </button>
-            <button type="button" onClick={() => setCreateOpen(false)}>Schließen</button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 
       <Modal open={editAddr !== null} onClose={() => setEditAddr(null)} title="Adresse bearbeiten">
         <form ref={editAddrFormRef} onSubmit={submitEdit} className="master-form">
           <AddrForm vals={editForm} setK={setE} msg={editMsg} countries={countries} />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setEditAddr(null)}>Abbrechen</button>
             <button className="btn-primary" type="submit" disabled={updateMut.isPending}>
               {updateMut.isPending ? 'Speichert …' : 'Speichern'}
             </button>
-            <button type="button" onClick={() => setEditAddr(null)}>Abbrechen</button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 
@@ -789,12 +790,12 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
             vals={form} setK={set} onPrimaryChange={setPrimary} addrTxt={addrText} setAddrTxt={setAddrText}
             msg={msg} salutations={salutations} genders={genders} searchAddresses={searchAddresses}
           />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setCreateOpen(false)}>Schließen</button>
             <button className="btn-primary" type="submit" disabled={createMut.isPending}>
               {createMut.isPending ? 'Speichert …' : 'Speichern'}
             </button>
-            <button type="button" onClick={() => setCreateOpen(false)}>Schließen</button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 
@@ -804,12 +805,12 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
             vals={editForm} setK={setE} onPrimaryChange={setEditPrimary} addrTxt={editAddrText} setAddrTxt={setEditAddrText}
             msg={editMsg} isEdit salutations={salutations} genders={genders} searchAddresses={searchAddresses}
           />
-          <div className="modal-actions">
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setEditContact(null)}>Abbrechen</button>
             <button className="btn-primary" type="submit" disabled={updateMut.isPending}>
               {updateMut.isPending ? 'Speichert …' : 'Speichern'}
             </button>
-            <button type="button" onClick={() => setEditContact(null)}>Abbrechen</button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 

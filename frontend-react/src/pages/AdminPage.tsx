@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { RollenSection } from '@/pages/admin/RollenSection'
 import { BuchungsartenSection } from '@/pages/admin/BuchungsartenSection'
 import { BuchungstextvorlagenSection } from '@/pages/admin/BuchungstextvorlagenSection'
@@ -3350,12 +3351,12 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn-primary" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
             {saveMut.isPending ? 'Speichert …' : 'Speichern'}
           </button>
-        </div>
+        </DialogFooter>
       </div>
     </Modal>
   )

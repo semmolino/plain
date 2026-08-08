@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -240,9 +241,9 @@ function NachtragCreateForm({ projectId, submitting, onSubmit }: {
       <label>Anspruchsgrundlage <HelpHint id="nachtrag.anspruchsgrundlage" />
         <input type="text" value={claim} onChange={e => setClaim(e.target.value)} placeholder="z. B. § 650b BGB / § 10 HOAI" />
       </label>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? 'Anlegen …' : 'Anlegen'}</button>
-      </div>
+      <DialogFooter>
+        <button type="button" className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? 'Anlegen …' : 'Anlegen'}</button>
+      </DialogFooter>
     </div>
   )
 }

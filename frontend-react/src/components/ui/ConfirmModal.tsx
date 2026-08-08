@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useBackdropClose } from '@/hooks/useBackdropClose'
 import { useDialog } from '@/hooks/useDialog'
+import { DialogFooter } from './DialogFooter'
 
 interface Props {
   open:          boolean
@@ -40,15 +41,15 @@ export function ConfirmModal({
           >
             {message}
           </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <DialogFooter>
             {/* Abbrechen zuerst im DOM: der Dialog fokussiert beim Oeffnen das
                 erste Element — bei einer Loeschabfrage soll das die sichere
                 Option sein, nicht der destruktive Button. */}
-            <button type="button" onClick={onCancel}>Abbrechen</button>
+            <button type="button" className="btn-secondary" onClick={onCancel}>Abbrechen</button>
             <button type="button" className={confirmClass} onClick={() => { onConfirm(); onCancel() }}>
               {confirmLabel}
             </button>
-          </div>
+          </DialogFooter>
         </div>
       </div>
     </div>,

@@ -249,6 +249,7 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 - Fokus: `:focus-visible` ist global gesetzt. Bei eigenen Komponenten **nie `outline: none` ohne Ersatz**.
 - Buttons sind standardmäßig flach; Erhebung nur bewusst über `.btn-elevated`.
 - Dialoge: `Modal`/`ConfirmModal` benutzen (bringen Escape, Fokus-Falle, Fokus-Rückgabe, `role="dialog"` mit). Kein eigenes Overlay bauen.
+- Dialog-Fußzeile: **immer `<DialogFooter>`** aus `components/ui/`, nie ein eigenes `flex-end`-`<div>` und nie `.modal-actions` direkt. Reihenfolge ist verbindlich: **Abbrechen links, Hauptaktion rechts** (13 Dialoge hatten es umgekehrt — dieselbe Position, gegenteilige Wirkung). Abbrechen trägt `.btn-secondary`, jeder Knopf ein `type="button"`. Ein Löschen-Knopf gehört in die `secondary`-Zone, nicht gleichrangig neben „Speichern". Geprüft von `tests/dialogs.spec.ts`.
 - Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
 - Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
 

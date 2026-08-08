@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useQuery } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/Modal'
 import { Message } from '@/components/ui/Message'
@@ -215,10 +216,11 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
-          <button className="btn" onClick={onClose} disabled={isPending}>Abbrechen</button>
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={isPending}>Abbrechen</button>
           {mode === 'create' ? (
             <button
+              type="button"
               className="btn btn-primary"
               disabled={isPending || !orderDate || !projectStatusId || !projectManagerId}
               onClick={handleCreateSubmit}>
@@ -226,13 +228,14 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
             </button>
           ) : (
             <button
+              type="button"
               className="btn btn-primary"
               disabled={isPending || !orderDate}
               onClick={handleMarkSubmit}>
               {isPending ? 'Speichert …' : 'Als beauftragt markieren'}
             </button>
           )}
-        </div>
+        </DialogFooter>
       </div>
     </Modal>
   )
