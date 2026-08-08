@@ -1,0 +1,47 @@
+{
+  "$comment": [
+    "Single source of truth for the table/column rename project.",
+    "Every artefact - SQL migration, codemod, leftover guard, post-migration",
+    "verification - is generated from THIS file. Never hand-edit a generated",
+    "migration and never rename something in code that is not listed here.",
+    "",
+    "status:  'example' -> ignored by every command",
+    "         'planned' -> processed",
+    "         'done'    -> ignored, kept as documentation",
+    "",
+    "columns[].scope:",
+    "  'global' -> the column name is unique enough to replace repo-wide.",
+    "              Only allowed if `check` confirms no other table carries a",
+    "              column of the same name (or you are renaming it on all of",
+    "              them). This is the only scope the codemod applies.",
+    "  'table'  -> the same column name exists on other tables that are NOT",
+    "              being renamed. Cannot be automated - a repo-wide replace",
+    "              would corrupt the other tables' call sites. `apply` skips",
+    "              these and lists every occurrence for manual review."
+  ],
+  "blocks": [
+    {
+      "id": "00-example",
+      "status": "example",
+      "note": "Delete or ignore - shows the shape only.",
+      "tables": [
+        {
+          "from": "TEXT_SNIPPET",
+          "to": "TEXTBAUSTEIN",
+          "columns": [
+            { "from": "SCOPE", "to": "GUELTIGKEITSBEREICH", "scope": "table" },
+            { "from": "SNIPPET_BODY", "to": "INHALT", "scope": "global" }
+          ]
+        },
+        {
+          "from": "PROJECT_PROGRESS",
+          "to": null,
+          "note": "to: null renames columns only, the table keeps its name.",
+          "columns": [
+            { "from": "PROGRESS_PCT", "to": "FORTSCHRITT_PROZENT", "scope": "global" }
+          ]
+        }
+      ]
+    }
+  ]
+}

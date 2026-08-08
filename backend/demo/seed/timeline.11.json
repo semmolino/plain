@@ -1,0 +1,70 @@
+{
+  "tenantId": 11,
+  "note": "Start/Ende/closed pro Projekt anpassen. 'closed:true' ⇒ Schlussrechnung. intensity skaliert das Buchungsvolumen.",
+  "generatedAt": "2026-07-18T09:51:06.469Z",
+  "projects": [
+    {
+      "projectId": 62,
+      "name": "P-26-002",
+      "revenue": 10083,
+      "start": "2022-06-25",
+      "end": "2026-07-18",
+      "closed": false,
+      "intensity": 1
+    },
+    {
+      "projectId": 68,
+      "name": "P-26-006",
+      "revenue": 0,
+      "start": "2022-12-12",
+      "end": "2027-12-12",
+      "closed": false,
+      "intensity": 1
+    },
+    {
+      "projectId": 61,
+      "name": "P-26-001",
+      "revenue": 25544,
+      "start": "2023-06-24",
+      "end": "2026-07-18",
+      "closed": false,
+      "intensity": 1
+    },
+    {
+      "projectId": 65,
+      "name": "P-26-003",
+      "revenue": 106669,
+      "start": "2021-09-30",
+      "end": "2026-01-30",
+      "closed": true,
+      "intensity": 1
+    },
+    {
+      "projectId": 66,
+      "name": "P-26-004",
+      "revenue": 329050,
+      "start": "2024-02-23",
+      "end": "2026-07-18",
+      "closed": false,
+      "intensity": 1
+    },
+    {
+      "projectId": 67,
+      "name": "P-26-005",
+      "revenue": 121354,
+      "start": "2022-07-18",
+      "end": "2026-07-18",
+      "closed": false,
+      "intensity": 1
+    },
+    {
+      "projectId": 69,
+      "name": "P-26-007",
+      "revenue": 49970,
+      "start": "2023-12-11",
+      "end": "2026-07-10",
+      "closed": false,
+      "intensity": 1
+    }
+  ]
+}

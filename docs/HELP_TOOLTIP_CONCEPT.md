@@ -83,7 +83,7 @@ Stand-Legende: ✅ erledigt · 🟡 teils · ⬜ offen
 - ⬜ Benachrichtigungen (Empfänger-Logik, Zeitpläne)
 - ⬜ Mahnungen (Mahnstufen, Gebühren, Texte)
 - ⬜ Rollen & Berechtigungen (Permissions, System- vs. eigene Rollen)
-- ⬜ E-Mail-Versand (Resend/SMTP, Absender-Domain)
+- ⬜ E-Mail-Versand (Eusend/SMTP, Absender-Domain)
 - ⬜ Monatsabschluss
 
 ### Phase 2 — Wizards

@@ -92,6 +92,10 @@ const ENTITY_LABELS = {
     label: "Konsolen-Anmeldung",
     describe: (e) => e.ENTITY_REF || e.ACTOR || "—",
   },
+  PLATFORM_EMAIL_SETTINGS: {
+    label: "Plattform-E-Mail",
+    describe: (e) => e.AFTER?.smtp_host || "SMTP-Konfiguration",
+  },
   SUGGESTION: {
     label: "Vorschlag",
     describe: (e) => e.CONTEXT?.title || `Vorschlag #${e.ENTITY_REF}`,

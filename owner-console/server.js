@@ -47,6 +47,7 @@ app.use("/api/console", consoleAuth, writeLimiter, require("./routes/audit"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/suggestions"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/serviceRequests"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/analytics"));
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/platformEmail"));
 
 // Gebaute Web-UI ausliefern (ein Server für UI + API). Falls noch nicht gebaut:
 // `npm --prefix web run build`.

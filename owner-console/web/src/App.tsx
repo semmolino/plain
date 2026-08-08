@@ -13,10 +13,11 @@ import { SuggestionsView } from './pages/Suggestions'
 import { RequestsView } from './pages/Requests'
 import { AnalyticsView } from './pages/Analytics'
 import { SecurityView } from './pages/Security'
+import { EmailSettingsView } from './pages/EmailSettings'
 
 type Tab =
   | 'inbox' | 'matrix' | 'plans' | 'tenants' | 'functions' | 'catalog' | 'overrides'
-  | 'audit' | 'suggestions' | 'requests' | 'analytics'
+  | 'audit' | 'suggestions' | 'requests' | 'analytics' | 'email'
 
 interface TabDef { id: Tab; label: string; group: 'license' | 'service' }
 
@@ -34,6 +35,7 @@ const TABS: TabDef[] = [
   { id: 'suggestions', label: 'Vorschläge', group: 'service' },
   { id: 'requests', label: 'Anfragen', group: 'service' },
   { id: 'analytics', label: 'Auswertung', group: 'service' },
+  { id: 'email', label: 'E-Mail', group: 'service' },
 ]
 const TAB_IDS = new Set(TABS.map((t) => t.id))
 
@@ -165,6 +167,7 @@ export function App() {
         {tab === 'suggestions' && <SuggestionsView />}
         {tab === 'requests' && <RequestsView />}
         {tab === 'analytics' && <AnalyticsView />}
+        {tab === 'email' && <EmailSettingsView adminEmail={email} />}
           </>
         )}
       </main>

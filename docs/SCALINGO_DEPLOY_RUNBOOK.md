@@ -154,7 +154,7 @@ scalingo --app plain-test env-set \
 | Variable | Wofür |
 |---|---|
 | `EMAIL_ENC_KEY` | Entschlüsselt gespeicherte SMTP-Zugangsdaten. Ohne sie schlägt der Mailversand fehl — für einen Startbarkeits-Test verzichtbar. |
-| `RESEND_API_KEY`, `EMAIL_FROM` | Mailversand über Resend |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Mailversand über Eusend (SMTP) |
 | `SMTP_*` | Mailversand über SMTP |
 | `LICENSE_STATE_ENFORCEMENT` | Lizenzdurchsetzung |
 

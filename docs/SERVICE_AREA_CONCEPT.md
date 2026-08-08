@@ -4,8 +4,8 @@
 > Unterstützung · Jira + E-Mail · Anhänge/Screenshots · Auswertungen) (2026-06-29/30).
 > Entscheidungen: Kommentare **moderiert & pseudonym** · Reject-Label **„Aktuell nicht geplant"** ·
 > Jira **Phase 3** · Consent für **alle** Anwender · Rückruf-Option **ja**.
-> **Migrationen 0096 + 0097 sind in Supabase eingespielt (2026-06-30).** E-Mail-Versand ist no-op, bis Resend
-> (`RESEND_API_KEY` + `EMAIL_FROM`) konfiguriert ist; Jira aktiv, sobald `JIRA_*` gesetzt sind.
+> **Migrationen 0096 + 0097 sind in Supabase eingespielt (2026-06-30).** E-Mail-Versand ist no-op, bis Eusend
+> (`SMTP_HOST` + `SMTP_FROM`) konfiguriert ist; Jira aktiv, sobald `JIRA_*` gesetzt sind.
 > **Ziel:** Ein neuer Top-Level-Bereich **„Service"** (auf Ebene von Projekte/Rechnungen/Einstellungen),
 > über den Anwender direkt aus der Software Funktionswünsche, Feedback und Unterstützungsanfragen an
 > plan&simple richten können — **ohne Drittanbieter, ohne zweiten Login, datenschutzkonform**.
@@ -263,7 +263,7 @@ damit der Anwender sieht, was übermittelt wird): Organisation, Name, E-Mail. Ei
 
 Nach dem Absenden: Bestätigung + Vorgangsnummer. Antworten von plan&simple laufen über die Owner-Konsole
 (Status `new → in_progress → resolved`) und werden dem Anwender unter „Meine Anfragen" angezeigt; optionale
-E-Mail-Benachrichtigung über den bestehenden Resend/SMTP-Versand.
+E-Mail-Benachrichtigung über den bestehenden Eusend/SMTP-Versand.
 
 ---
 
@@ -494,12 +494,12 @@ Drei neue Permissions (Format exakt wie `0088_rbac_import.sql`):
 - **Jira** (Owner-Konsole, einseitig): `services/jira.js` (REST API v2, Basic-Auth, env-konfiguriert),
   Endpoint `POST /suggestions/:id/jira` (nutzt `PUBLIC_*` → kein Kunden-PII), speichert `JIRA_ISSUE_KEY`,
   Button/Link „Als Jira-Ticket anlegen" im Vorschlags-Editor. Inaktiv mit klarer Meldung ohne Konfiguration.
-- **E-Mail** (`services/notify.js`, Resend, **best-effort/no-op** ohne Konfiguration — wirft nie):
+- **E-Mail** (`services/notify.js`, Eusend/SMTP via nodemailer, **best-effort/no-op** ohne Konfiguration — wirft nie):
   Anwender wird benachrichtigt bei Antwort auf seine **Anfrage** (`/requests/:id/reply`) und auf seinen
   **Vorschlag** (`/suggestions/:id/respond`). Zusätzlich optionale interne Benachrichtigung an plan&simple
   bei neuem Eintrag (Main-Backend, `SERVICE_NOTIFY_EMAIL`).
 - ENV (Owner-Konsole): `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY`,
-  `JIRA_ISSUE_TYPE` (Default `Task`), `RESEND_API_KEY`, `EMAIL_FROM`. Main-Backend optional `SERVICE_NOTIFY_EMAIL`.
+  `JIRA_ISSUE_TYPE` (Default `Task`), `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`. Main-Backend optional `SERVICE_NOTIFY_EMAIL`.
 - Verifiziert: Owner-Konsole `tsc -b` (0), Backend-Jest (102 grün)
 
 **Phase 4 (Anhänge / Screenshots) — fertig (2026-06-30):**

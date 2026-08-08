@@ -345,7 +345,7 @@ module.exports = (supabase) => {
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
 
     try {
-      // System-Mail -> Plattform-Absender (Resend EMAIL_FROM bzw. SMTP-ENV),
+      // System-Mail -> Plattform-Absender (globale SMTP_*-ENV, z.B. Eusend),
       // bewusst OHNE tenantId. _sendMail wirft {status:503}, wenn gar kein
       // Versand konfiguriert ist.
       await _sendMail({

@@ -374,6 +374,27 @@ export interface PlanPatch {
   force?: boolean
 }
 
+// ── Plattform-E-Mail (zentrale SMTP-Konfiguration) ───────────────────────────
+export interface PlatformEmailSettings {
+  smtp_host: string
+  smtp_port: number
+  smtp_secure: boolean
+  smtp_user: string
+  smtp_from: string
+  from_name: string
+  pass_set: boolean
+  encryption_available: boolean
+}
+export interface PlatformEmailPayload {
+  smtp_host: string
+  smtp_port: number
+  smtp_secure: boolean
+  smtp_user: string
+  smtp_from: string
+  from_name: string
+  smtp_pass?: string // leer/weggelassen = unverändert
+}
+
 // ── API ──────────────────────────────────────────────────────────────────────
 export const api = {
   login: (email: string, password: string, totp?: string) =>
@@ -537,4 +558,11 @@ export const api = {
     req<{ ok: true }>(`/requests/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
 
   analytics: () => req<Analytics>('/analytics'),
+
+  // Plattform-E-Mail (zentrale SMTP-Konfiguration)
+  platformEmail: () => req<PlatformEmailSettings>('/platform-email'),
+  savePlatformEmail: (body: PlatformEmailPayload) =>
+    req<PlatformEmailSettings>('/platform-email', { method: 'PUT', body: JSON.stringify(body) }),
+  testPlatformEmail: (to: string) =>
+    req<{ sent: true }>('/platform-email/test', { method: 'POST', body: JSON.stringify({ to }) }),
 }
