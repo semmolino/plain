@@ -243,7 +243,7 @@ sich:
 | „Öffnen" in jeder Zeile wiederholt | behoben — Zeile anklickbar, Nr. als Link |
 | Trefferzahl in der Bedienleiste statt an der Tabelle | behoben |
 | Tabelle überläuft **schon auf dem Desktop** (1204 px in 1048 px Container) | offen |
-| Keine Filter-Chips (nur Suche + eine Checkbox) — anders als alle anderen Listen | offen |
+| Keine Filter-Chips (nur Suche + eine Checkbox) — anders als alle anderen Listen | behoben — Status und Ansprechpartner in einer `FilterBar` |
 
 **Warum die fixierte Aktionsspalte hier (noch) nicht geht:** Die Zeilen
 zeigen je nach Status unterschiedlich viele Knöpfe (Beauftragen, Ablehnen,
@@ -264,3 +264,26 @@ Weitere offene Punkte in derselben Kerbe:
   direkt, dazu rund 14 handgebaute `flex-end`-Zeilen.
 - Wizards (Abschlags-/Schlussrechnung) sind auf dem Handy nie geprüft
   worden; `StepIndicator` liegt 5× kopiert vor.
+
+### Nachgezogen: FilterChip zusammengeführt
+
+`FilterChip` lag **zehnmal lokal** in den Seiten — die frühere CLAUDE.md
+schrieb das sogar so vor („copy pattern from `HonorarWizard.tsx`"). Die
+Kopien waren nicht identisch: eine ohne `type="button"` (löst in einem
+Formular ein Absenden aus), eine mit `{value,label}`-Optionen, eine mit
+„Zurücksetzen" im Menü statt als ×, unterschiedliche Prop-Namen
+(`active` vs. `selected`). Keine reagierte auf Escape.
+
+Alle elf Verwendungen hängen jetzt an `components/ui/FilterChip.tsx`.
+Zwei Trefferflächen, die dadurch an einer Stelle korrigierbar wurden:
+
+| Element | vorher | jetzt |
+|---|---|---|
+| ×-Feld am aktiven Chip | 18 × 18 px | 24 × 24 (Touch: 28 × 28) |
+| Zeilen im Aufklappmenü | 32 px | 44 px auf Touch-Geräten |
+
+18 × 18 lag unter der Untergrenze aus WCAG 2.5.8; die Menüzeilen liegen
+direkt übereinander, ein Fehlgriff wählte den Nachbarfilter.
+
+`tests/filters.spec.ts` deckt das Verhalten seitdem ab (Eingrenzen,
+Zähler, Escape mit Fokusrückgabe, Zurücksetzen) — auf beiden Viewports.

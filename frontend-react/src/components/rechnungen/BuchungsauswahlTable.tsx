@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { FilterChip } from '@/components/ui/FilterChip'
 import { RotateCcw } from 'lucide-react'
 import { InfoHint } from '@/components/ui/InfoHint'
 import type { TecEntry } from '@/api/rechnungen'
@@ -19,66 +20,6 @@ function lsPut(key: string, val: unknown) {
 // beziehen sich auf dieselbe Art von Daten (offene Buchungen) und bleiben so
 // über Rechnung und Abschlag hinweg konsistent gespeichert.
 const DEFAULT_KEY = 'plain:filt:tec-selection'
-
-// FilterChip — lokal, nach dem projektweiten Muster (siehe HonorarWizard.tsx)
-function FilterChip({ label, options, selected, onChange }: {
-  label: string
-  options: string[]
-  selected: Set<string>
-  onChange: (next: Set<string>) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
-
-  function toggle(v: string) {
-    const next = new Set(selected)
-    if (next.has(v)) next.delete(v); else next.add(v)
-    onChange(next)
-  }
-
-  const hasFilter = selected.size > 0
-  return (
-    <div className="filter-chip-wrap" ref={ref}>
-      <button
-        type="button"
-        className={`filter-chip-btn${hasFilter ? ' active' : ''}`}
-        onClick={() => setOpen(o => !o)}
-      >
-        {label}{hasFilter ? ` (${selected.size})` : ''} ▾
-      </button>
-      {open && (
-        <div className="filter-chip-dropdown">
-          {options.map(v => (
-            <label key={v} className="filter-chip-option">
-              <input type="checkbox" checked={selected.has(v)} onChange={() => toggle(v)} />
-              {v}
-            </label>
-          ))}
-          {options.length === 0 && (
-            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-3)', display: 'block' }}>Keine Optionen</span>
-          )}
-          {hasFilter && (
-            <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
-              <button type="button" className="filter-chip-option" style={{ color: 'var(--danger)', width: '100%', textAlign: 'left' }}
-                onClick={() => { onChange(new Set()); setOpen(false) }}>
-                Zurücksetzen
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 /**
  * BuchungsauswahlTable — Auswahl der abzurechnenden Buchungen (BILLING_TYPE_ID = 2)
@@ -197,7 +138,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
             <span style={{ fontSize: 13, color: 'var(--text-3)' }}>–</span>
             <input type="date" className="inline-date-input" aria-label="Datum bis"
               value={dateTo} onChange={e => setDateTo(e.target.value)} />
-            <FilterChip label="Mitarbeiter" options={allEmployees} selected={empFilter} onChange={setEmpFilter} />
+            <FilterChip label="Mitarbeiter" options={allEmployees} active={empFilter} onChange={setEmpFilter} />
             <label className="list-checkbox-label">
               <input type="checkbox" checked={hideZero} onChange={e => setHideZero(e.target.checked)} />
               0-Beträge ausblenden

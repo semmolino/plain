@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
+import { FilterChip } from '@/components/ui/FilterChip'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs }        from '@/components/ui/Tabs'
@@ -157,41 +158,6 @@ function SegmentNav<T extends string>({ items, active, onChange, style }: {
 
 // ── FilterChip ────────────────────────────────────────────────────────────────
 
-function FilterChip({ label, options, active, onChange }: {
-  label: string; options: string[]; active: Set<string>; onChange: (v: Set<string>) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  function toggle(val: string) { const s = new Set(active); s.has(val) ? s.delete(val) : s.add(val); onChange(s) }
-  const count = active.size
-  return (
-    <div ref={ref} className="filter-chip-wrap">
-      <button className={`filter-chip-btn${count > 0 ? ' active' : ''}`} onClick={() => setOpen(o => !o)}>
-        {label}{count > 0 ? ` (${count})` : ''} ▾
-      </button>
-      {count > 0 && <button className="filter-chip-clear" onClick={() => { onChange(new Set()); setOpen(false) }} title="Zurücksetzen">×</button>}
-      {open && (
-        <div className="filter-chip-dropdown">
-          {options.length === 0 ? <div className="filter-chip-empty">Keine Optionen</div> : options.map(opt => (
-            <label key={opt} className="filter-chip-option">
-              <input type="checkbox" checked={active.has(opt)} onChange={() => toggle(opt)} />
-              {opt || '(ohne)'}
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── SortTh ────────────────────────────────────────────────────────────────────
 

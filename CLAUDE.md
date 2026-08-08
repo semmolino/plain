@@ -303,7 +303,7 @@ Every list/table view must use the same toolbar and search/filter pattern. Devia
 <div className="list-toolbar">
   <input type="search" className="list-search" placeholder="Suchen …" value={search} onChange={…} />
   {/* FilterChips go here, one per filterable dimension */}
-  <FilterChip label="Dimension" options={allValues} selected={filterSet} onChange={setFilterSet} />
+  <FilterChip label="Dimension" options={allValues} active={filterSet} onChange={setFilterSet} />
   {/* Primary action button last, pushed right */}
   <button className="btn-primary" style={{ marginLeft: 'auto' }}>+ Neu</button>
 </div>
@@ -318,7 +318,7 @@ Every list/table view must use the same toolbar and search/filter pattern. Devia
 - **Gemeinsame Komponente, nicht kopieren.** Die frühere Regel („copy pattern from `HonorarWizard.tsx`") hat zu 10 Kopien geführt — zehnmal eigenes Tastaturverhalten, zehnmal eigene ARIA-Semantik, zehn Stellen für jede Korrektur. Dieselbe Ursache steckte hinter drei Namen für dieselbe Bedienleiste (`.list-toolbar` / `.pl-toolbar` / `.ls-toolbar`). Neue Verwendungen bitte aus `components/ui/` beziehen; bestehende Kopien werden nach und nach dorthin gezogen.
 - Uses `Set<string>` for selected values; null/empty set means "all"
 - Click-outside closes via `useRef` + `mousedown` listener
-- Shows count badge when active: `§ (2) ▾`
+- Shows count badge when active: `§ (2)` plus ein `ChevronDown`-Icon (kein Unicode-Dreieck)
 - "Zurücksetzen" button shown when filter is active
 - Filter values are derived from the loaded data (no hardcoded lists)
 - **Filtering is always client-side** (never add server-side query params for chip filters)

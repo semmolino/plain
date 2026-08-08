@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState, useStickySet } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -480,9 +481,9 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                   ))}
                 </select>
 
-                <FilterChip label="Mitarbeiter" options={empOptions}    selected={filterEmp}    onChange={setFilterEmp} />
-                <FilterChip label="Buchungstyp" options={kindOptions}   selected={filterKind}   onChange={setFilterKind} />
-                <FilterChip label="Status"      options={statusOptions} selected={filterStatus} onChange={setFilterStatus} />
+                <FilterChip label="Mitarbeiter" options={empOptions}    active={filterEmp}    onChange={setFilterEmp} />
+                <FilterChip label="Buchungstyp" options={kindOptions}   active={filterKind}   onChange={setFilterKind} />
+                <FilterChip label="Status"      options={statusOptions} active={filterStatus} onChange={setFilterStatus} />
 
                 <label className="filter-daterange" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-2)' }}>
                   Zeitraum
@@ -1098,61 +1099,3 @@ function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }:
 
 // ── Mehrfach-Auswahl-Filter (Chip) ─────────────────────────────────────────────
 
-function FilterChip({ label, options, selected, onChange }: {
-  label:    string
-  options:  string[]
-  selected: Set<string>
-  onChange: (next: Set<string>) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
-
-  function toggle(v: string) {
-    const next = new Set(selected)
-    if (next.has(v)) next.delete(v); else next.add(v)
-    onChange(next)
-  }
-
-  const hasFilter = selected.size > 0
-  return (
-    <div className="filter-chip-wrap" ref={ref}>
-      <button
-        type="button"
-        className={`filter-chip-btn${hasFilter ? ' active' : ''}`}
-        onClick={() => setOpen(o => !o)}
-      >
-        {label}{hasFilter ? ` (${selected.size})` : ''} ▾
-      </button>
-      {open && (
-        <div className="filter-chip-dropdown">
-          {options.map(v => (
-            <label key={v} className="filter-chip-option">
-              <input type="checkbox" checked={selected.has(v)} onChange={() => toggle(v)} />
-              {v}
-            </label>
-          ))}
-          {options.length === 0 && (
-            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-3)', display: 'block' }}>Keine Optionen</span>
-          )}
-          {hasFilter && (
-            <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
-              <button type="button" className="filter-chip-option" style={{ color: 'var(--danger)', width: '100%', textAlign: 'left' }}
-                onClick={() => { onChange(new Set()); setOpen(false) }}>
-                Zurücksetzen
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}

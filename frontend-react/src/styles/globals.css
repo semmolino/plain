@@ -1759,9 +1759,12 @@ input::placeholder { color: var(--text-4); }
 }
 .filter-chip-btn:hover { border-color: var(--accent); color: var(--accent); }
 .filter-chip-btn.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-dark); font-weight: 600; }
+/* 24x24 statt vormals 18x18 — das ist die Untergrenze aus WCAG 2.5.8
+   (Target Size, Minimum). Gemessen an einem Chip von 90x44 kostet das
+   keine Zeile Umbruch. */
 .filter-chip-clear {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; margin-left: 2px; border: none; border-radius: 50%;
+  width: 24px; height: 24px; margin-left: 2px; border: none; border-radius: 50%;
   background: var(--accent-bg2); color: var(--accent-dark); cursor: pointer; font-size: 14px; line-height: 1; padding: 0;
 }
 .filter-chip-clear:hover { background: var(--accent); color: var(--accent-fg); }
@@ -4087,6 +4090,12 @@ input::placeholder { color: var(--text-4); }
   .tbr-btn, .notif-bell-btn, .user-menu-btn, .welcome-panel-close {
     min-height: 44px; min-width: 44px;
   }
+
+  /* Aufklappmenue der Filter-Chips: die Zeilen massen 32px. Sie liegen
+     direkt uebereinander, ein Fehlgriff waehlt also den falschen Filter.
+     Eine Zeile mehr Hoehe faellt hier nicht auf, das Menue scrollt ohnehin. */
+  .filter-chip-option { min-height: 44px; padding-top: 0; padding-bottom: 0; }
+  .filter-chip-clear { width: 28px; height: 28px; }
 
   /* Inline-Auswahlen in Tabellenzeilen */
   .inline-edit-select,

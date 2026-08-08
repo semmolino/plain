@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react'
-import { useStickyState } from '@/hooks/useStickyState'
+import { useStickyState, useStickySet } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignature } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import { rowClickHandler } from '@/utils/rowClick'
 import { RowMenu } from '@/components/ui/RowMenu'
+import { FilterBar } from '@/components/ui/FilterBar'
+import { FilterChip } from '@/components/ui/FilterChip'
 import { usePermission } from '@/store/permissionsStore'
 import { InlineSelect, InlineDate, InlineNumber, type InlineOption } from '@/components/ui/InlineEdit'
 import { Message } from '@/components/ui/Message'
@@ -32,6 +34,8 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
   const [search,        setSearch]        = useState('')
   const [page,          setPage]          = useState(1)
   const [onlyOpen,      setOnlyOpen]      = useStickyState<boolean>('angebote.onlyOpen', false)
+  const [activeStatus,   setActiveStatus]   = useStickySet('angebote.status')
+  const [activeEmployee, setActiveEmployee] = useStickySet('angebote.employee')
   const [msg,           setMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [beauftragtRow, setBeauftragtRow] = useState<OfferListItem | null>(null)
   const [convertErr,    setConvertErr]    = useState<string | null>(null)
@@ -101,15 +105,25 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
+  // Filterwerte kommen aus den geladenen Daten, nicht aus festen Listen —
+  // so wie in den uebrigen Listen auch.
+  const filterOptions = useMemo(() => {
+    const uniq = (pick: (r: OfferListItem) => string | null | undefined) =>
+      [...new Set(rows.map(pick).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'de'))
+    return { status: uniq(r => r.STATUS_NAME), employee: uniq(r => r.EMPLOYEE_NAME) }
+  }, [rows])
+
   const filtered = useMemo(() => {
     let result = rows
     if (onlyOpen) result = result.filter(r => r.PROJECT_ID === null && (rejectedId === null || r.OFFER_STATUS_ID !== rejectedId))
+    if (activeStatus.size > 0)   result = result.filter(r => r.STATUS_NAME   && activeStatus.has(r.STATUS_NAME))
+    if (activeEmployee.size > 0) result = result.filter(r => r.EMPLOYEE_NAME && activeEmployee.has(r.EMPLOYEE_NAME))
     const q = search.trim().toLowerCase()
     if (q) result = result.filter(r =>
       `${r.NAME_SHORT} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q)
     )
     return result
-  }, [rows, search, onlyOpen, rejectedId])
+  }, [rows, search, onlyOpen, rejectedId, activeStatus, activeEmployee])
 
   const totalSum = useMemo(() => filtered.reduce((s, r) => s + (r.TOTAL_AMOUNT ?? 0), 0), [filtered])
 
@@ -156,11 +170,20 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1) }}
         />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
-          <input type="checkbox" checked={onlyOpen} onChange={e => { setOnlyOpen(e.target.checked); setPage(1) }} />
-          Offene Angebote
-        </label>
-        
+        {/* Bis hierher war das die einzige Liste ohne Filter-Chips — nur
+            Suche plus eine Checkbox. Status und Ansprechpartner sind die
+            Dimensionen, nach denen man Angebote tatsaechlich einschraenkt. */}
+        <FilterBar
+          activeCount={activeStatus.size + activeEmployee.size + (onlyOpen ? 1 : 0)}
+          onReset={() => { setActiveStatus(new Set()); setActiveEmployee(new Set()); setOnlyOpen(false); setPage(1) }}
+        >
+          <FilterChip label="Status"     options={filterOptions.status}   active={activeStatus}   onChange={v => { setActiveStatus(v); setPage(1) }} />
+          <FilterChip label="Ansprechp." options={filterOptions.employee} active={activeEmployee} onChange={v => { setActiveEmployee(v); setPage(1) }} />
+          <label className="list-checkbox-label">
+            <input type="checkbox" checked={onlyOpen} onChange={e => { setOnlyOpen(e.target.checked); setPage(1) }} />
+            Offene Angebote
+          </label>
+        </FilterBar>
       </div>
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}

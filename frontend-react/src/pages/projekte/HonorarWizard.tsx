@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { FilterChip } from '@/components/ui/FilterChip'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -1344,64 +1345,6 @@ function fmtEurShort(v: number | null | undefined) {
   return v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 }
 
-function FilterChip({ label, options, selected, onChange }: {
-  label: string
-  options: string[]
-  selected: Set<string>
-  onChange: (next: Set<string>) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
-
-  function toggle(v: string) {
-    const next = new Set(selected)
-    if (next.has(v)) next.delete(v); else next.add(v)
-    onChange(next)
-  }
-
-  const hasFilter = selected.size > 0
-  return (
-    <div className="filter-chip-wrap" ref={ref}>
-      <button
-        type="button"
-        className={`filter-chip-btn${hasFilter ? ' active' : ''}`}
-        onClick={() => setOpen(o => !o)}
-      >
-        {label}{hasFilter ? ` (${selected.size})` : ''} ▾
-      </button>
-      {open && (
-        <div className="filter-chip-dropdown">
-          {options.map(v => (
-            <label key={v} className="filter-chip-option">
-              <input type="checkbox" checked={selected.has(v)} onChange={() => toggle(v)} />
-              {v}
-            </label>
-          ))}
-          {options.length === 0 && (
-            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-3)', display: 'block' }}>Keine Optionen</span>
-          )}
-          {hasFilter && (
-            <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
-              <button type="button" className="filter-chip-option" style={{ color: 'var(--danger)', width: '100%', textAlign: 'left' }}
-                onClick={() => { onChange(new Set()); setOpen(false) }}>
-                Zurücksetzen
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 interface HonorarTabProps {
   initialProjectId?: number
@@ -1513,8 +1456,8 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
           onChange={e => setSearch(e.target.value)}
           style={{ flex: '0 1 220px', minWidth: 120 }}
         />
-        <FilterChip label="§" options={allParas} selected={paraFilter} onChange={setParaFilter} />
-        <FilterChip label="Projekt" options={allProjekte} selected={projektFilter} onChange={setProjektFilter} />
+        <FilterChip label="§" options={allParas} active={paraFilter} onChange={setParaFilter} />
+        <FilterChip label="Projekt" options={allProjekte} active={projektFilter} onChange={setProjektFilter} />
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           <input type="checkbox" checked={showOfferCalcs} onChange={e => setShowOfferCalcs(e.target.checked)} />
           Angebots-Kalkulationen

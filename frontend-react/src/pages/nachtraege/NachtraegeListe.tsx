@@ -1,7 +1,8 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo } from 'react'
+import { FilterChip } from '@/components/ui/FilterChip'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileDiff, ChevronDown } from 'lucide-react'
+import { FileDiff } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import { Modal } from '@/components/ui/Modal'
 import { Message } from '@/components/ui/Message'
@@ -24,49 +25,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 const CATEGORY_ENTRIES = Object.entries(CATEGORY_LABELS) as [NachtragCategory, string][]
 
-// Kompakter Multi-Select-Filter (Listen-Standard, siehe CLAUDE.md → FilterChip).
-function FilterChip({ label, options, selected, onChange }: {
-  label: string
-  options: { value: string; label: string }[]
-  selected: Set<string>
-  onChange: (s: Set<string>) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [open])
-  const toggle = (v: string) => {
-    const next = new Set(selected)
-    next.has(v) ? next.delete(v) : next.add(v)
-    onChange(next)
-  }
-  return (
-    <div className="filter-chip-wrap" ref={ref}>
-      <button type="button" className="filter-chip-btn" onClick={() => setOpen(o => !o)}>
-        {label}{selected.size > 0 ? ` (${selected.size})` : ''} <ChevronDown size={13} strokeWidth={2} />
-      </button>
-      {open && (
-        <div className="filter-chip-dropdown">
-          {options.map(o => (
-            <label key={o.value} className="filter-chip-option">
-              <input type="checkbox" checked={selected.has(o.value)} onChange={() => toggle(o.value)} /> {o.label}
-            </label>
-          ))}
-          {selected.size > 0 && (
-            <button type="button" onClick={() => onChange(new Set())}
-              style={{ width: '100%', marginTop: 4, padding: '4px 8px', fontSize: 12, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', textAlign: 'left' }}>
-              Zurücksetzen
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -157,10 +115,10 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
       <div className="list-toolbar">
         <input type="search" className="list-search" placeholder="Nachträge suchen …" value={search} onChange={e => setSearch(e.target.value)} />
         {!projectId && projectOptions.length > 0 && (
-          <FilterChip label="Projekt" options={projectOptions} selected={projFilter} onChange={setProj} />
+          <FilterChip label="Projekt" options={projectOptions} active={projFilter} onChange={setProj} />
         )}
-        <FilterChip label="Status"    options={statusOptions}   selected={statusFilter} onChange={setStatus} />
-        <FilterChip label="Kategorie" options={CATEGORY_ENTRIES.map(([value, label]) => ({ value, label }))} selected={catFilter} onChange={setCat} />
+        <FilterChip label="Status"    options={statusOptions}   active={statusFilter} onChange={setStatus} />
+        <FilterChip label="Kategorie" options={CATEGORY_ENTRIES.map(([value, label]) => ({ value, label }))} active={catFilter} onChange={setCat} />
         <Can permission="nachtraege.create">
           <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setCreateOpen(true)}>+ Nachtrag</button>
         </Can>
