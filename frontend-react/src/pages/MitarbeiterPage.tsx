@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
+import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useSearchParams } from 'react-router-dom'
@@ -488,7 +489,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
         </div>
       )}
 
-      {isLoading && <p className="empty-note">Laden …</p>}
+      {isLoading && <ListLoading columns={6} />}
       {!isLoading && absences.length === 0 && <p className="empty-note">Noch keine Abwesenheiten erfasst.</p>}
 
       {absences.length > 0 && (
@@ -1296,7 +1297,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
         </select>
       </div>
 
-      {isLoading && <p className="empty-note">Laden …</p>}
+      {isLoading && <ListLoading columns={6} />}
       {!isLoading && !filterReady && <p className="empty-note">Bitte Datumfilter ausfüllen.</p>}
       {!isLoading && filterReady && allRows.length === 0 && <p className="empty-note">Keine Daten vorhanden.</p>}
 
@@ -2166,7 +2167,7 @@ function EntitlementsBulkEditor({ employees }: { employees: Employee[] }) {
         Übertrag aus dem Vorjahr (leer = automatisch).
       </p>
 
-      {isLoading && <p className="empty-note">Laden …</p>}
+      {isLoading && <ListLoading columns={6} />}
       {!isLoading && active.length === 0 && (
         <p className="empty-note">Keine aktiven Mitarbeiter. (Der Editor benötigt das Recht „Mitarbeiter ansehen".)</p>
       )}
@@ -3001,7 +3002,7 @@ export function MitarbeiterPage() {
               <FilterChip label="Modell"    options={filterOptions.model}   active={activeModel}   onChange={v => { setActiveModel(v);  setPage(1) }} />
             </FilterBar>
 
-            {isLoading && <p className="empty-note">Laden …</p>}
+            {isLoading && <ListLoading columns={6} />}
             {!isLoading && (
               <>
                 <div className="table-scroll">

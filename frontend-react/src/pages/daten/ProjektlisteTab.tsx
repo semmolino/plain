@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+import { ListLoading } from '@/components/ui/Skeleton'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
 import { SlidersHorizontal } from 'lucide-react'
@@ -623,7 +624,7 @@ export function ProjektlisteTab() {
         )}
       </div>
 
-      {isLoading && <p className="empty-note">Laden …</p>}
+      {isLoading && <ListLoading columns={7} />}
 
       {!isLoading && filterReady && allRows.length > 0 && (
         <>

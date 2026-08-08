@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState, useStickySet } from '@/hooks/useStickyState'
@@ -329,8 +330,13 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }} disabled={filtered.length === 0}>
             <Download size={13} strokeWidth={2} />CSV
           </button>
+          {/* Waehrend des Ladens stand hier „0 Einträge" — eine falsche
+              Aussage, die sich auf langsamer Verbindung wie „keine Daten"
+              liest. */}
           <span className="list-info">
-            {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length}` : `${addresses.length}`} Einträge
+            {isLoading
+              ? '… Einträge'
+              : `${filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length}` : `${addresses.length}`} Einträge`}
           </span>
           <Can permission="addresses.create">
             <button className="btn-primary btn-small" onClick={openCreate} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -338,7 +344,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
             </button>
           </Can>
         </div>
-        {isLoading && <p className="empty-note">Laden …</p>}
+        {isLoading && <ListLoading columns={6} />}
         {!isLoading && (
           <table className="master-table">
             <thead>
@@ -699,7 +705,9 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
             <Download size={13} strokeWidth={2} />CSV
           </button>
           <span className="list-info">
-            {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length}` : `${contacts.length}`} Einträge
+            {isLoading
+              ? '… Einträge'
+              : `${filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length}` : `${contacts.length}`} Einträge`}
           </span>
           <Can permission="addresses.contacts.create">
             <button className="btn-primary btn-small" onClick={openCreate} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -707,7 +715,7 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
             </button>
           </Can>
         </div>
-        {isLoading && <p className="empty-note">Laden …</p>}
+        {isLoading && <ListLoading columns={6} />}
         {!isLoading && (
           <table className="master-table">
             <thead>

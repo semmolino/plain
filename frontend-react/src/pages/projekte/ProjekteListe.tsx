@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
@@ -429,7 +430,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
         )
       })()}
 
-      {isLoading && <p className="empty-note">Laden …</p>}
+      {isLoading && <ListLoading columns={6} />}
       {!isLoading && (
         <>
           <div className="list-section">

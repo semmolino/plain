@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { ListLoading } from '@/components/ui/Skeleton'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState, useStickySet } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
@@ -459,7 +460,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
 
       {pid !== null && (
         <>
-          {isLoading && <p className="empty-note">Laden …</p>}
+          {isLoading && <ListLoading columns={6} />}
           {!isLoading && (
             <>
               <div className="list-toolbar">

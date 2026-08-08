@@ -8,6 +8,7 @@ import { rowClickHandler } from '@/utils/rowClick'
 import { RowMenu } from '@/components/ui/RowMenu'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { FilterChip } from '@/components/ui/FilterChip'
+import { ListLoading } from '@/components/ui/Skeleton'
 import { usePermission } from '@/store/permissionsStore'
 import { InlineSelect, InlineDate, InlineNumber, type InlineOption } from '@/components/ui/InlineEdit'
 import { Message } from '@/components/ui/Message'
@@ -188,7 +189,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
 
-      {isLoading && <p className="empty-note">Laden …</p>}
+      {isLoading && <ListLoading columns={6} />}
 
       {!isLoading && (
         <div className="list-section table-scroll">

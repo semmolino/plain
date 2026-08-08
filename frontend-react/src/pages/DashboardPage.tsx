@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { DashboardLoading } from '@/components/ui/Skeleton'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import {
   Chart as ChartJS,
@@ -191,7 +192,11 @@ function DonutChart({ billed, open, remaining }: { billed: number; open: number;
   return (
     <div className="donut-wrap">
       <div className="donut-canvas-wrap">
+        {/* Chart.js rendert ein <canvas role="img"> — ohne Beschriftung ist
+            das fuer Screenreader ein namenloses Bild. Die Zahlen selbst
+            stehen ohnehin daneben in der Legende. */}
         <Doughnut
+          aria-label="Ringdiagramm: Verteilung von abgerechnet, offener Leistung und noch zu erbringender Leistung. Die Werte stehen als Text in der Legende daneben."
           data={{ labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] }}
           options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '65%' }}
         />
@@ -284,7 +289,10 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
   return (
     <div className="timeline-wrap">
       <h3 className="timeline-title">Projektverlauf {dateFrom.substring(0, 4)}{dateFrom.substring(0, 4) !== dateTo.substring(0, 4) ? `–${dateTo.substring(0, 4)}` : ''}</h3>
-      <div className="timeline-chart"><Line data={chartData} options={options} /></div>
+      <div className="timeline-chart">
+        <Line aria-label={`Liniendiagramm: Projektverlauf von ${dateFrom} bis ${dateTo}.`}
+          data={chartData} options={options} />
+      </div>
     </div>
   )
 }
@@ -567,9 +575,9 @@ function GeschaeftsleitungView({
           <KpiCard label="Aktive Projekte"  value={String(activeCount)} />
           <KpiCard
             label="Auftragsreichweite"
-            value={fmtMonths(snapshot?.kpis.auftragsreichweite ?? null)}
+            value={fmtMonths(snapshot?.kpis?.auftragsreichweite ?? null)}
             meta="Auftragsbestand ÷ Ø Monatsumsatz"
-            accent={snapshot?.kpis.auftragsreichweite != null && snapshot.kpis.auftragsreichweite < 3}
+            accent={snapshot?.kpis?.auftragsreichweite != null && (snapshot.kpis?.auftragsreichweite ?? 0) < 3}
             hint={<>Wie viele Monate der aktuelle Auftragsbestand (Budget − Abgerechnet aller Projekte) bei durchschnittlichem Monatsumsatz der letzten 12 Monate noch reicht. Unter 3 Mon. = knappe Auslastung, ab 6 Mon. = komfortabel.</>}
           />
           {(() => {
@@ -1563,13 +1571,13 @@ function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: Te
       <div className="kpi-grid">
         <KpiCard
           label="Anteil Projektmitarbeiter"
-          value={snapshot?.kpis.anteilProjektmitarbeiter != null ? fmtPct(snapshot.kpis.anteilProjektmitarbeiter) : '—'}
+          value={snapshot?.kpis?.anteilProjektmitarbeiter != null ? fmtPct(snapshot.kpis.anteilProjektmitarbeiter) : '—'}
           meta="der aktiven Mitarbeiter mit Buchungen"
           hint={<>Anteil der aktiven Mitarbeiter mit Projekt-Zeitbuchungen in den letzten 12 Monaten (Mitarbeiter mit Buchungen ÷ aktive Mitarbeiter). Ersetzt den „Projektstundenanteil“, der ohne Erfassung der Bürostunden nicht berechenbar ist.</>}
         />
         <KpiCard
           label="Umsatz pro Mitarbeiter"
-          value={fmtEur(snapshot?.kpis.umsatzProMitarbeiter ?? null)}
+          value={fmtEur(snapshot?.kpis?.umsatzProMitarbeiter ?? null)}
           meta="letzte 12 Monate"
           hint={<>Umsatz (Rechnungen + Abschlagszahlungen) der letzten 12 Monate ÷ Anzahl aktiver Mitarbeiter.</>}
         />
@@ -1585,6 +1593,7 @@ function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: Te
         <div className="dash-card-title">Stunden nach Mitarbeiter ({periodLabel})</div>
         <div className="chart-wrap">
           <Bar
+            aria-label={`Balkendiagramm: gebuchte Stunden je Mitarbeiter (${periodLabel}).`}
             data={{ labels, datasets }}
             options={{
               responsive: true, maintainAspectRatio: false,
@@ -1654,7 +1663,10 @@ function DashboardFilterBar({
             Begrenzt Kosten, Stunden, Leistungsstand und die Verlaufsgrafik auf den gewählten Zeitraum. Honorar bzw. Budget bleiben das volle Projektvolumen. Die Projekt-Ampel rechnet immer kumuliert (Stand heute) und ist vom Zeitraum unabhängig.
           </InfoHint>
         </span>
-        <select className="inline-select" value={filters.zeitraum}
+        {/* Die Beschriftung „Zeitraum" ist ein <span> (sie traegt den
+            InfoHint mit) und damit kein Label — das Auswahlfeld hatte fuer
+            Screenreader gar keinen Namen. */}
+        <select className="inline-select" aria-label="Zeitraum" value={filters.zeitraum}
           onChange={e => onChange({ zeitraum: e.target.value as ZeitraumKey })}>
           {ZEITRAUM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -1838,7 +1850,7 @@ export function DashboardPage() {
 
       {!dashboardRole && canSwitchView && <RoleSelector onSelect={setDashboardRole} />}
 
-      {isLoading && dashboardRole && <div className="dash-loading">Laden …</div>}
+      {isLoading && dashboardRole && <DashboardLoading />}
 
       {!isLoading && dashboardRole === 'geschaeftsleitung' && (
         <GeschaeftsleitungView

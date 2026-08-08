@@ -316,3 +316,50 @@ Dialogrand klebende Balken falsch.
 
 `tests/dialogs.spec.ts` prüft Reihenfolge, gleiche Höhe und 44 px auf dem
 Handy.
+
+### Nachgezogen: Ladezustände
+
+Das Produkt hatte **keinen einzigen Ladeplatzhalter**. An 52 Stellen stand
+nur „Laden …" — als 13-px-Zeile links oben in einer rund 500 px hohen
+leeren Fläche (gemessen auf `/projekte` und `/rechnungen`).
+
+Der schwerere Befund kam beim Nachsehen ans Licht: die Trefferzahl in der
+Bedienleiste rendert unabhängig vom Ladezustand und behauptete währenddessen
+**„0 Einträge"**. Auf einer langsamen Verbindung liest sich das nicht als
+„lädt", sondern als „du hast keine Rechnungen". Jetzt steht dort
+„… Einträge", bis die Daten da sind.
+
+Umgesetzt:
+
+| Ort | vorher | jetzt |
+|---|---|---|
+| 10 Listen | „Laden …" | Platzhaltertabelle in Form der kommenden Liste |
+| Übersicht | zentriertes „Laden …" | Kennzahlkacheln + Platzhaltertabelle |
+| Trefferzahl (3 Listen) | „0 Einträge" | „… Einträge" |
+| Screenreader | keine Ansage | `role="status"` + „Liste wird geladen …" |
+
+Der Platzhalter selbst trägt `aria-hidden` — eine Reihe leerer Kästen ist
+für Screenreader wertlos, die Ansage übernimmt die Statuszeile. Unter
+`prefers-reduced-motion` läuft kein Schimmern; die globale Regel setzt die
+Dauer nur auf 0,01 ms, wodurch der Verlauf an beliebiger Stelle stehen
+bliebe — deshalb dort ausdrücklich eine ruhige Fläche.
+
+Nicht umgestellt: `AdminPage` (dort folgt ein Formular, keine Tabelle).
+
+**Zwei Funde als Nebenwirkung.** Damit der Ladezustand der Übersicht
+überhaupt sichtbar wird, musste die Test-Fixture eine Dashboard-Rolle
+setzen — vorher zeigte die Seite im Test nur die Rollenauswahl, das
+eigentliche Dashboard war **nie geprüft**. Dabei fielen auf:
+
+1. `snapshot?.kpis.auftragsreichweite` — die Optional-Kette schützte nur
+   `snapshot`, nicht `kpis`. Eine unvollständige Antwort riss die ganze
+   Übersicht mit einem Laufzeitfehler ab (weiße Seite). An 4 Stellen
+   nachgezogen.
+2. Zwei Barrierefreiheits-Verstöße, die der bestehende axe-Test nicht sehen
+   konnte: das Auswahlfeld „Zeitraum" hatte keinen zugänglichen Namen
+   (`select-name`, kritisch — die Beschriftung ist ein `<span>`, kein
+   `<label>`), und die drei Chart.js-Diagramme rendern ein
+   `<canvas role="img">` ohne Alternativtext (`role-img-alt`).
+
+`tests/loading.spec.ts` deckt Platzhalter, Trefferzahl und die
+Screenreader-Ansage ab.

@@ -13,6 +13,9 @@ const AUTH = {
   state: {
     token: 'test-token', employeeId: 1, tenantId: 1,
     shortName: 'SM', email: 'simon@buero.de', companyName: 'Messina Architekten GmbH',
+    // Ohne gewaehlte Rolle zeigt die Uebersicht nur die Rollenauswahl — das
+    // eigentliche Dashboard (und damit sein Ladezustand) war so nie im Test.
+    dashboardRole: 'geschaeftsleitung',
   },
   version: 0,
 }
@@ -131,6 +134,17 @@ export async function mockDemo(page: Page) {
     ['adressen',             { data: addresses }],
     ['angebote/statuses',    { data: named(['Entwurf', 'Angebot', 'Beauftragt', 'Abgelehnt']) }],
     ['angebote',             { data: offers }],
+
+    // Uebersicht (Geschaeftsleitung). Der Auffang-Mock lieferte hier
+    // `{ data: [] }`, worauf `snapshot.kpis` undefined war und die ganze
+    // Seite mit einem Laufzeitfehler ausstieg — die Uebersicht war damit
+    // nie im Test.
+    ['reports/dashboard/company-snapshot', { data: {
+      periodMonths: 12,
+      raw: { revenue: 812_400, directCosts: 496_100, totalHours: 14_820,
+             employeeCount: 9, projectEmployeeCount: 7, backlog: 268_500 },
+      kpis: { umsatzProMitarbeiter: 90_267, anteilProjektmitarbeiter: 77.8, auftragsreichweite: 4.1 },
+    } }],
   ]
   for (const [path, body] of routes) {
     await page.route(new RegExp(`/api/v1/${path}(\\?|$)`), r => r.fulfill(j(body)))

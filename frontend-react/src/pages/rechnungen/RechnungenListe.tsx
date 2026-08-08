@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
@@ -746,8 +747,12 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
             </div>
           )}
         </div>
+        {/* Waehrend des Ladens stand hier „0 Einträge" — eine falsche
+            Aussage, die sich auf langsamer Verbindung wie „keine Daten" liest. */}
         <span className="list-info">
-          {rows.length}{rows.length !== allRows.length ? ` / ${allRows.length}` : ''} Einträge
+          {isLoading
+            ? '… Einträge'
+            : `${rows.length}${rows.length !== allRows.length ? ` / ${allRows.length}` : ''} Einträge`}
         </span>
       </div>
 
@@ -779,7 +784,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         </div>
       )}
 
-      {isLoading && <p className="empty-note">Laden …</p>}
+      {isLoading && <ListLoading columns={6} />}
       {!isLoading && (
         <div className="list-section table-scroll">
           {/* Diese Tabelle hat so viele Spalten, dass sie auf ueblichen
