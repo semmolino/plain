@@ -237,7 +237,7 @@ Daraus folgt eine Kopplung, die in der Anbieterwahl mitentschieden werden muss:
 > erreichbar. Die Zahlen oben sind typische RTT-Werte, keine Messung an eurem
 > Aufbau. Nachholen mit:
 > ```bash
-> scalingo --app plain-test run 'curl -s -o /dev/null \
+> scalingo --app planandsimple run 'curl -s -o /dev/null \
 >   -w "%{time_connect} %{time_appconnect} %{time_total}\n" \
 >   -H "apikey: $SUPABASE_SERVICE_KEY" "$SUPABASE_URL/rest/v1/"'
 > ```

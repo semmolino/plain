@@ -1,138 +1,106 @@
 #!/usr/bin/env bash
 # =============================================================================
-# 02_deploy.sh — Code nach Scalingo pushen, Container dimensionieren, URL setzen
+# 02_deploy.sh — Deployment ueber GitHub anstossen und begleiten
 #
 # AUSFUEHREN IN: Git-Bash, im WURZELVERZEICHNIS des Repositories
 #   bash scripts/scalingo/02_deploy.sh
 #
-# Der erste Build dauert lange (zweimal npm ci, Vite-Build, Chromium-Download
-# ~150 MB). 10-15 Minuten sind normal.
+# -----------------------------------------------------------------------------
+# WARUM UEBER GITHUB UND NICHT PER DIREKT-PUSH
 #
-# Idempotent: erneut ausfuehrbar, um eine neue Version zu deployen.
-# =============================================================================
+# Scalingo ist per Auto-Deploy an semmolino/plain gekoppelt: jeder Push nach
+# origin/main loest dort automatisch einen Build aus. Ein zusaetzlicher
+# 'git push scalingo main' baute deshalb JEDES MAL ein zweites Mal dasselbe --
+# doppelte Buildzeit ohne Nutzen.
+#
+# Deshalb pusht dieses Skript nur nach origin und begleitet danach den Build,
+# den Scalingo von selbst startet. Der Ablauf ist damit derselbe wie bei
+# Railway: ein Push, ein Deploy.
+# -----------------------------------------------------------------------------
 
 set -euo pipefail
 
-APP="${APP:-plain-test}"
-SIZE="${SIZE:-M}"          # S=512MB reicht fuer Chromium nicht
+APP="${APP:-planandsimple}"
+SIZE="${SIZE:-M}"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 echo "============================================================"
 echo " Deployment:  $APP     Branch: $BRANCH     Groesse: $SIZE"
 echo "============================================================"
 
-if [[ ! -f "package.json" || ! -d "backend" ]]; then
-  echo "FEHLER: Bitte im Wurzelverzeichnis des Repositories ausfuehren." >&2
-  exit 1
-fi
+[[ -f package.json && -d backend ]] || { echo "FEHLER: Bitte im Wurzelverzeichnis des Repositories ausfuehren." >&2; exit 1; }
+scalingo --app "$APP" apps-info >/dev/null 2>&1 || {
+  echo "FEHLER: App '$APP' existiert nicht. Erst 01_setup.sh ausfuehren." >&2; exit 1; }
 
-if ! scalingo --app "$APP" apps-info >/dev/null 2>&1; then
-  echo "FEHLER: App '$APP' existiert nicht." >&2
-  echo "  Erst ausfuehren: bash scripts/scalingo/01_setup.sh" >&2
-  exit 1
-fi
-
-# ── Buildpack-Dateien pruefen ───────────────────────────────────────────────
-# Fehlt eine davon, scheitert der Build mit einer schwer deutbaren Meldung.
+# ── Buildpack-Dateien ───────────────────────────────────────────────────────
 echo "→ Pruefe Buildpack-Dateien ..."
 for f in package.json Procfile Aptfile .buildpacks; do
-  if [[ -f "$f" ]]; then
-    echo "    ✓ $f"
-  else
-    echo "    ✗ $f FEHLT" >&2
-    exit 1
-  fi
+  [[ -f "$f" ]] && echo "    ✓ $f" || { echo "    ✗ $f FEHLT" >&2; exit 1; }
 done
-
 # CRLF wuerde den Build zum Scheitern bringen ("unable to locate package …\r")
 for f in Procfile Aptfile .buildpacks; do
-  if grep -qU $'\r' "$f" 2>/dev/null; then
+  grep -qU $'\r' "$f" 2>/dev/null && {
     echo "FEHLER: $f enthaelt CRLF-Zeilenenden." >&2
     echo "  Beheben mit:  git rm --cached $f && git checkout $f" >&2
-    exit 1
-  fi
+    exit 1; }
 done
 echo "    ✓ Zeilenenden korrekt (LF)"
 
-# ── Nicht committete Aenderungen? ───────────────────────────────────────────
-# Gepusht wird der COMMIT, nicht das Arbeitsverzeichnis.
-if ! git diff-index --quiet HEAD -- 2>/dev/null; then
-  echo ""
-  echo "HINWEIS: Es gibt nicht committete Aenderungen."
-  echo "         Scalingo baut den letzten Commit ($(git rev-parse --short HEAD))."
-  read -rp "         Trotzdem fortfahren? [j/N] " a
-  [[ "$a" =~ ^[jJyY]$ ]] || { echo "Abgebrochen."; exit 1; }
-fi
-
-# ── Git-Remote ──────────────────────────────────────────────────────────────
-if git remote | grep -qx "scalingo"; then
-  echo "→ Remote 'scalingo' vorhanden"
-else
-  echo "→ Richte Remote 'scalingo' ein ..."
-  scalingo --app "$APP" git-setup
-fi
-
-# ── SSH-Zugang pruefen ──────────────────────────────────────────────────────
-# git push laeuft ueber SSH. Der API-Token authentifiziert nur den CLI, NICHT
-# Git — dafuer muss ein oeffentlicher Schluessel im Scalingo-Konto liegen.
-# Ohne diese Vorpruefung bricht der Push erst nach dem Hostkey-Dialog ab, mit
-# "Permission denied (publickey)", was leicht als Rechteproblem der App
-# missverstanden wird.
-echo "→ Pruefe SSH-Zugang ..."
-SSH_OUT="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-            -T git@ssh.osc-fr1.scalingo.com 2>&1 || true)"
-if grep -qi "successfully authenticated" <<<"$SSH_OUT"; then
-  echo "    ✓ SSH-Schluessel akzeptiert"
+# ── Auto-Deploy pruefen ─────────────────────────────────────────────────────
+echo "→ Pruefe GitHub-Kopplung ..."
+LINK="$(scalingo --app "$APP" integration-link 2>&1 || true)"
+if grep -q "Automatic deployment: ✔" <<<"$LINK"; then
+  echo "    ✓ Auto-Deploy aktiv auf $(grep -oE 'Automatic deployment: ✔, .*' <<<"$LINK" | sed 's/.*, //')"
 else
   cat >&2 <<HINWEIS
-
-FEHLER: SSH-Zugang zu Scalingo funktioniert nicht.
-        Antwort des Servers: $(head -1 <<<"$SSH_OUT")
-
-  git push nutzt SSH. Der API-Token gilt nur fuer den CLI, nicht fuer Git.
-  Im Scalingo-Konto muss ein oeffentlicher Schluessel hinterlegt sein.
-
-  1. Schluessel erzeugen (falls noch keiner da ist):
-         ls ~/.ssh/*.pub                    # vorhanden?
-         ssh-keygen -t ed25519 -C "scalingo"
-     (dreimal Enter uebernimmt die Vorgaben; Passphrase optional)
-
-  2. Oeffentlichen Teil anzeigen und vollstaendig kopieren:
-         cat ~/.ssh/id_ed25519.pub
-     Beginnt mit "ssh-ed25519".
-
-  3. Im Dashboard hinterlegen:
-         https://dashboard.scalingo.com/account/keys
-     "Add a new key", Namen vergeben, Inhalt einfuegen.
-
-  4. Pruefen:
-         ssh -T git@ssh.osc-fr1.scalingo.com
-     Erwartet: "You've successfully authenticated on Scalingo,
-                but there is no shell access"
-
-  5. Dieses Skript erneut starten.
-
-  ALTERNATIVE ohne SSH — Bereitstellung ueber GitHub:
-     Der Code liegt ohnehin auf GitHub. Dann entfaellt der Push nach
-     Scalingo ganz:
-         scalingo integrations-add github
-         scalingo --app $APP integration-link-create \\
-           --auto-deploy --branch main https://github.com/semmolino/plain
+    ✗ Auto-Deploy ist nicht aktiv.
+      Einrichten mit:
+        scalingo integrations-add github
+        scalingo --app $APP integration-link-create \\
+          --auto-deploy --branch main https://github.com/semmolino/plain
 HINWEIS
   exit 1
 fi
 
-# ── Push = Build = Deploy ───────────────────────────────────────────────────
-echo ""
-echo "→ Pushe nach Scalingo. Der Build laeuft im Anschluss automatisch."
-echo "  Das dauert beim ersten Mal 10-15 Minuten."
-echo ""
-git push scalingo "$BRANCH:main"
+# ── Push ────────────────────────────────────────────────────────────────────
+if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+  echo ""
+  echo "HINWEIS: Es gibt nicht committete Aenderungen — gebaut wird der letzte Commit."
+  read -rp "         Trotzdem fortfahren? [j/N] " a
+  [[ "$a" =~ ^[jJyY]$ ]] || { echo "Abgebrochen."; exit 1; }
+fi
 
-# ── Container dimensionieren ────────────────────────────────────────────────
+SHA="$(git rev-parse HEAD)"
+echo ""
+echo "→ Pushe nach origin/$BRANCH (loest den Scalingo-Build aus) ..."
+git push origin "$BRANCH"
+
+# ── Build begleiten ─────────────────────────────────────────────────────────
+echo ""
+echo "→ Warte auf den Build von ${SHA:0:8} ..."
+STATUS=""
+for _ in $(seq 1 60); do
+  LINE="$(scalingo --app "$APP" deployments 2>/dev/null | grep -F "${SHA:0:8}" | head -1 || true)"
+  if [[ -n "$LINE" ]]; then
+    STATUS="$(grep -oE 'building|success|build-error|aborted|starting' <<<"$LINE" | head -1)"
+    printf "\r    Status: %-14s" "$STATUS"
+    [[ "$STATUS" == "success" || "$STATUS" == "build-error" || "$STATUS" == "aborted" ]] && break
+  fi
+  sleep 10
+done
+echo ""
+case "$STATUS" in
+  success) echo "    ✓ Build erfolgreich" ;;
+  build-error|aborted)
+    echo "    ✗ Build fehlgeschlagen. Log:" >&2
+    scalingo --app "$APP" deployment-logs 2>/dev/null | tail -30 >&2
+    exit 1 ;;
+  *) echo "    ! Status unklar ($STATUS) — mit 'scalingo --app $APP deployments' nachsehen." ;;
+esac
+
+# ── Containergroesse ────────────────────────────────────────────────────────
 # Steht die Groesse schon richtig, antwortet die API mit
-# "400 Bad Request -> no change in containers formation". Das ist kein Fehler,
-# darf den Ablauf also nicht abbrechen (das Skript laeuft unter set -e).
+# "400 Bad Request -> no change in containers formation". Kein Fehler.
 echo ""
 echo "→ Setze Containergroesse auf $SIZE ..."
 SCALE_OUT="$(scalingo --app "$APP" scale "web:1:$SIZE" 2>&1 || true)"
@@ -142,24 +110,21 @@ else
   echo "$SCALE_OUT" | sed 's/^/    /'
 fi
 
-# ── URL ermitteln und eintragen ─────────────────────────────────────────────
+# ── URL eintragen ───────────────────────────────────────────────────────────
 URL="$(scalingo --app "$APP" apps-info 2>/dev/null | grep -oE 'https://[^ ]+scalingo\.io' | head -1)"
 if [[ -n "$URL" ]]; then
-  echo ""
-  echo "→ Trage FRONTEND_URL und CORS_ORIGINS ein: $URL"
-  scalingo --app "$APP" env-set FRONTEND_URL="$URL" CORS_ORIGINS="$URL" >/dev/null
-  scalingo --app "$APP" restart >/dev/null
-  echo "  ✓ Gesetzt, App neu gestartet"
-else
-  echo ""
-  echo "HINWEIS: URL konnte nicht automatisch ermittelt werden."
-  echo "  Manuell nachtragen:"
-  echo "    scalingo --app $APP env-set FRONTEND_URL=\"https://…\" CORS_ORIGINS=\"https://…\""
+  CUR="$(scalingo --app "$APP" env 2>/dev/null | grep '^FRONTEND_URL=' | cut -d= -f2- | tr -d '\r')"
+  if [[ "$CUR" != "$URL" ]]; then
+    echo ""
+    echo "→ Trage FRONTEND_URL und CORS_ORIGINS ein: $URL"
+    scalingo --app "$APP" env-set FRONTEND_URL="$URL" CORS_ORIGINS="$URL" >/dev/null
+    scalingo --app "$APP" restart >/dev/null
+    echo "    ✓ gesetzt, App neu gestartet"
+  fi
 fi
 
 echo ""
 echo "============================================================"
-echo " Deployment abgeschlossen."
-echo "   URL:    ${URL:-<siehe scalingo --app $APP apps-info>}"
-echo "   Pruefen: bash scripts/scalingo/03_status.sh"
+echo " Fertig.   URL: ${URL:-<siehe apps-info>}"
+echo " Pruefen:  bash scripts/scalingo/03_status.sh"
 echo "============================================================"

@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-APP="${APP:-plain-test}"
+APP="${APP:-planandsimple}"
 
 if [[ "${1:-}" == "--follow" ]]; then
   echo "→ Log-Ausgabe von '$APP' (Abbruch mit Strg+C)"
