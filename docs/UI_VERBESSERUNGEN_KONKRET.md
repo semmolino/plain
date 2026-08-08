@@ -228,3 +228,39 @@ hatte zuvor neun undefinierte Tokens gefunden.
 
 **Empfehlung:** beide Prüfungen als Lint-Schritt in CI aufnehmen. Sie sind billig und
 hätten jeden dieser Fehler beim Entstehen gemeldet.
+
+---
+
+## Nachtrag August 2026 — Angebote-Liste und offene Punkte
+
+Die Angebote-Liste war bis dahin **nie sichtbar geprüft**, weil die
+Test-Fixture keine Angebote lieferte. Nach Ergänzung der Fixture zeigte
+sich:
+
+| Befund | Status |
+|---|---|
+| Zeilenhöhen schwankten zwischen 56 und 96 px (Titel brach bis vierzeilig um) | behoben — einzeilig mit Auslassung, Volltext im `title` |
+| „Öffnen" in jeder Zeile wiederholt | behoben — Zeile anklickbar, Nr. als Link |
+| Trefferzahl in der Bedienleiste statt an der Tabelle | behoben |
+| Tabelle überläuft **schon auf dem Desktop** (1204 px in 1048 px Container) | offen |
+| Keine Filter-Chips (nur Suche + eine Checkbox) — anders als alle anderen Listen | offen |
+
+**Warum die fixierte Aktionsspalte hier (noch) nicht geht:** Die Zeilen
+zeigen je nach Status unterschiedlich viele Knöpfe (Beauftragen, Ablehnen,
+Projekt öffnen). Die Spalte bekommt dadurch pro Zeile eine andere Breite
+und überlappt fixiert die Daten — im Versuch reproduziert und wieder
+zurückgenommen. Voraussetzung wäre ein **konstanter Satz Inline-Aktionen
+plus ⋯-Menü**, wie in der Rechnungsliste.
+
+Dem steht entgegen, dass `RowMenu` **zweimal lokal implementiert** ist
+(`RechnungenListe.tsx` und `MahnungenListe.tsx`, mit unterschiedlichen
+Signaturen). Der sinnvolle nächste Schritt ist daher: `RowMenu` nach
+`components/ui/` heben, dann Angebote darauf umstellen. Damit ließe sich
+auch die Aktionsspalte fixieren.
+
+Weitere offene Punkte in derselben Kerbe:
+- Dialog-Fußzeilen: `DialogFooter` existiert, migriert ist bisher nur
+  „Vorschlag einreichen". 13 Dateien nutzen weiter `.modal-actions`
+  direkt, dazu rund 14 handgebaute `flex-end`-Zeilen.
+- Wizards (Abschlags-/Schlussrechnung) sind auf dem Handy nie geprüft
+  worden; `StepIndicator` liegt 5× kopiert vor.

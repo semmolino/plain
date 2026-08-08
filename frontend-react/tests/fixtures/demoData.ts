@@ -71,6 +71,30 @@ const invoices = INVOICES.map(([nr, date, due, net, status, typ], i) => ({
   CASH_DISCOUNT_PERCENT: 0, CASH_DISCOUNT_DAYS: 0,
 }))
 
+const OFFERS = [
+  ['A-2025-014', 'Neubau Kindertagesstätte Sonnenblume — Leistungsphasen 1–5', 'Angebot',     78,  112_400],
+  ['A-2025-015', 'Sanierung Altbau Bahnhofstraße 14',                          'Beauftragt',  100,  38_900.5],
+  ['A-2025-016', 'Machbarkeitsstudie Quartier Westufer, Variantenuntersuchung','Angebot',     40,   9_800],
+  ['A-2025-017', 'Brandschutzertüchtigung Schulzentrum, Bauabschnitt Nord',    'Abgelehnt',    0,  54_200],
+  ['A-2025-018', 'Innenausbau Praxisräume Dr. Hoffmann',                       'Entwurf',     25,  21_450.75],
+]
+
+const offers = OFFERS.map(([short, long, status, prob, total], i) => ({
+  ID: i + 1,
+  NAME_SHORT: short as string, NAME_LONG: long as string,
+  PROBABILITY: prob as number,
+  CREATED_AT: '2025-06-0' + ((i % 8) + 1),
+  OFFER_DATE: '2025-07-0' + ((i % 8) + 1),
+  VALID_UNTIL: '2025-09-0' + ((i % 8) + 1),
+  TOTAL_AMOUNT: total as number,
+  STATUS_NAME: status as string, OFFER_STATUS_ID: (i % 4) + 1,
+  EMPLOYEE_NAME: ['M. Messina', 'T. Kern', 'S. Braun'][i % 3],
+  ADDRESS_NAME: PROJECTS[i % PROJECTS.length][5],
+  CONTACT_NAME: 'A. Ansprechpartner',
+  PROJECT_ID: i === 1 ? 2 : null,
+  PROJECT_NAME: i === 1 ? PROJECTS[1][0] : null,
+}))
+
 const addresses = PROJECTS.map(([, , , , , addr], i) => ({
   ID: i + 1, NAME_1: addr, NAME_2: '', STREET: 'Musterweg ' + (i + 3),
   ZIP: String(88000 + i), CITY: ['Ravensburg', 'Friedrichshafen', 'Weingarten'][i % 3],
@@ -105,6 +129,8 @@ export async function mockDemo(page: Page) {
     ['projekte/departments', { data: named(['Hochbau', 'Tiefbau']) }],
     ['invoices',             { data: invoices }],
     ['adressen',             { data: addresses }],
+    ['angebote/statuses',    { data: named(['Entwurf', 'Angebot', 'Beauftragt', 'Abgelehnt']) }],
+    ['angebote',             { data: offers }],
   ]
   for (const [path, body] of routes) {
     await page.route(new RegExp(`/api/v1/${path}(\\?|$)`), r => r.fulfill(j(body)))

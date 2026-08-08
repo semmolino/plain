@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignature } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
+import { rowClickHandler } from '@/utils/rowClick'
 import { usePermission } from '@/store/permissionsStore'
 import { InlineSelect, InlineDate, InlineNumber, type InlineOption } from '@/components/ui/InlineEdit'
 import { Message } from '@/components/ui/Message'
@@ -158,7 +159,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
           <input type="checkbox" checked={onlyOpen} onChange={e => { setOnlyOpen(e.target.checked); setPage(1) }} />
           Offene Angebote
         </label>
-        <span className="list-info">{filtered.length} Einträge</span>
+        
       </div>
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
@@ -167,6 +168,12 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
 
       {!isLoading && (
         <div className="list-section table-scroll">
+          {/* Bewusst OHNE die fixierte Aktionsspalte: die Zeilen zeigen je
+              nach Status unterschiedlich viele Knoepfe (Beauftragen,
+              Ablehnen, Projekt oeffnen). Die Spalte bekommt dadurch pro
+              Zeile eine andere Breite und ueberlappt fixiert die Daten.
+              Voraussetzung waere ein konstanter Satz Inline-Aktionen mit
+              ⋯-Menue wie in der Rechnungsliste — siehe Notiz unten. */}
           <table className="master-table">
             <thead>
               <tr>
@@ -184,9 +191,29 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
             </thead>
             <tbody>
               {pageRows.map(r => (
-                <tr key={r.ID}>
-                  <td style={{ whiteSpace: 'nowrap' }}>{r.NAME_SHORT ?? '—'}</td>
-                  <td>{r.NAME_LONG}</td>
+                <tr
+                  key={r.ID}
+                  className={onSelectOffer ? 'clickable-row' : undefined}
+                  onClick={onSelectOffer ? rowClickHandler(() => {
+                    void trackRecent('offer', r.ID, [r.NAME_SHORT, r.NAME_LONG].filter(Boolean).join(' · ') || `#${r.ID}`).catch(() => {})
+                    onSelectOffer(r.ID, r.NAME_SHORT ?? '')
+                  }) : undefined}
+                >
+                  {/* Die Nummer ist der fokussierbare Einstieg in die Zeile —
+                      sie ersetzt die frueher in jeder Zeile wiederholte
+                      Schaltflaeche „Oeffnen" und bleibt per Tab erreichbar. */}
+                  <td className="cell-nowrap">
+                    {onSelectOffer
+                      ? <button className="link-btn" onClick={() => {
+                          void trackRecent('offer', r.ID, [r.NAME_SHORT, r.NAME_LONG].filter(Boolean).join(' · ') || `#${r.ID}`).catch(() => {})
+                          onSelectOffer(r.ID, r.NAME_SHORT ?? '')
+                        }}>{r.NAME_SHORT ?? '—'}</button>
+                      : (r.NAME_SHORT ?? '—')}
+                  </td>
+                  {/* Einzeilig mit Auslassung: die Titel brachen sonst auf bis
+                      zu vier Zeilen um, wodurch die Zeilenhoehen zwischen 56
+                      und 96px schwankten. Volltext im title-Attribut. */}
+                  <td className="cell-ellipsis" title={r.NAME_LONG}>{r.NAME_LONG}</td>
                   <td>
                     <InlineSelect
                       value={r.OFFER_STATUS_ID} options={statusOpts} allowEmpty={false}
@@ -194,8 +221,8 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                       onChange={v => v && inlineMut.mutate({ id: r.ID, body: { offer_status_id: Number(v) } })}
                     />
                   </td>
-                  <td>{r.EMPLOYEE_NAME ?? '—'}</td>
-                  <td>{r.ADDRESS_NAME ?? '—'}</td>
+                  <td className="cell-nowrap">{r.EMPLOYEE_NAME ?? '—'}</td>
+                  <td className="cell-ellipsis" title={r.ADDRESS_NAME ?? undefined}>{r.ADDRESS_NAME ?? '—'}</td>
                   <td className="num">{fmtEur(r.TOTAL_AMOUNT)}</td>
                   <td className="num">
                     <InlineNumber
@@ -222,10 +249,8 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                         <Pencil size={14} strokeWidth={2} />
                       </button>
                     </Can>
-                    <button className="btn-small" onClick={() => {
-                      void trackRecent('offer', r.ID, [r.NAME_SHORT, r.NAME_LONG].filter(Boolean).join(' · ') || `#${r.ID}`).catch(() => {})
-                      onSelectOffer?.(r.ID, r.NAME_SHORT ?? '')
-                    }} title="Angebotsstruktur öffnen">Öffnen</button>
+                    {/* „Oeffnen" entfaellt — die Zeile ist anklickbar und die
+                        Nummer ist ein Link. */}
                     <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">
                       <FileText size={14} strokeWidth={1.75} />
                     </button>

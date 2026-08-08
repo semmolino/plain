@@ -4234,3 +4234,14 @@ input::placeholder { color: var(--text-4); }
   }
   .modal-header { position: relative; padding-top: 20px; }
 }
+
+/* Einzeilige Zelle mit Auslassung. Fuer Spalten, deren Inhalt sonst
+   umbricht und die Zeilenhoehen auseinanderlaufen laesst (Angebotstitel
+   schwankten zwischen einer und vier Zeilen). Volltext gehoert ins
+   title-Attribut und in die Detailansicht. */
+.cell-ellipsis {
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
