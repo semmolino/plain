@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignature } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import { rowClickHandler } from '@/utils/rowClick'
+import { RowMenu } from '@/components/ui/RowMenu'
 import { usePermission } from '@/store/permissionsStore'
 import { InlineSelect, InlineDate, InlineNumber, type InlineOption } from '@/components/ui/InlineEdit'
 import { Message } from '@/components/ui/Message'
@@ -136,8 +137,8 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
 
   const isOpen = (r: OfferListItem) =>
     r.PROJECT_ID === null && (rejectedId === null || r.OFFER_STATUS_ID !== rejectedId)
-  const isRejected = (r: OfferListItem) =>
-    rejectedId !== null && r.OFFER_STATUS_ID === rejectedId
+  // isRejected entfaellt: der Status steht in der Status-Spalte, ein
+  // zusaetzlicher Hinweis in der Aktionsspalte war doppelt.
 
   return (
     <>
@@ -174,7 +175,11 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
               Zeile eine andere Breite und ueberlappt fixiert die Daten.
               Voraussetzung waere ein konstanter Satz Inline-Aktionen mit
               ⋯-Menue wie in der Rechnungsliste — siehe Notiz unten. */}
-          <table className="master-table">
+          {/* Die Aktionsspalte ist jetzt konstant breit (Bearbeiten, PDF, ⋯) —
+              damit laesst sie sich rechts fixieren, ohne die Daten zu
+              ueberlappen. Die Tabelle ist auch auf ueblichen Desktop-Breiten
+              breiter als ihr Container. */}
+          <table className="master-table master-table--sticky-actions">
             <thead>
               <tr>
                 <th scope="col">Nr.</th>
@@ -254,65 +259,46 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                     <button className="row-action-btn" onClick={() => openOfferPdf(r.ID)} title="PDF">
                       <FileText size={14} strokeWidth={1.75} />
                     </button>
-                    {r.PROJECT_ID && (
-                      <>
-                        <button
-                          className="row-action-btn"
-                          onClick={() => openAuftragsbestaetigungPdf(r.ID)}
-                          title="Auftragsbestätigung PDF"
-                        >
-                          <FileSignature size={14} strokeWidth={1.75} />
-                        </button>
-                        <button
-                          className="row-action-btn"
-                          title={`Zum Projekt ${r.PROJECT_NAME ?? r.PROJECT_ID}`}
-                          onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}
-                        >
-                          <FolderOpen size={14} strokeWidth={1.75} />
-                        </button>
-                      </>
-                    )}
-                    {isOpen(r) && (
-                      <Can permission="offers.convert">
-                        <button
-                          className="row-action-btn"
-                          style={{ color: 'var(--success)', borderColor: 'var(--success)' }}
-                          onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}
-                          title="Beauftragt"
-                        >
-                          <CheckCircle2 size={14} strokeWidth={2} />
-                        </button>
-                      </Can>
-                    )}
-                    {isOpen(r) && (
-                      <Can permission="offers.edit">
-                        <button
-                          className="row-action-btn"
-                          style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
-                          onClick={() => requestReject(r)}
-                          title="Als abgelehnt markieren"
-                        >
-                          <XCircle size={14} strokeWidth={2} />
+                    {/* Alles Bedingte steckt im ⋯-Menue. Inline standen vorher
+                        je nach Status drei bis sieben Knoepfe — die Spalte
+                        bekam dadurch pro Zeile eine andere Breite und liess
+                        sich nicht fixieren. Jetzt konstant: Bearbeiten, PDF, ⋯
+                        Der Hinweis „Abgelehnt" entfaellt hier; der Status
+                        steht bereits in der eigenen Spalte. */}
+                    <RowMenu triggerClassName="row-action-btn">
+                      {r.PROJECT_ID && (
+                        <>
+                          <button className="row-menu-item" onClick={() => openAuftragsbestaetigungPdf(r.ID)}>
+                            <FileSignature size={13} strokeWidth={1.75} /> Auftragsbestätigung (PDF)
+                          </button>
+                          <button
+                            className="row-menu-item"
+                            onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}
+                          >
+                            <FolderOpen size={13} strokeWidth={1.75} /> Zum Projekt {r.PROJECT_NAME ?? ''}
+                          </button>
+                        </>
+                      )}
+                      {isOpen(r) && (
+                        <Can permission="offers.convert">
+                          <button className="row-menu-item" onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}>
+                            <CheckCircle2 size={13} strokeWidth={2} /> Als beauftragt markieren
+                          </button>
+                        </Can>
+                      )}
+                      {isOpen(r) && (
+                        <Can permission="offers.edit">
+                          <button className="row-menu-item" onClick={() => requestReject(r)}>
+                            <XCircle size={13} strokeWidth={2} /> Als abgelehnt markieren
+                          </button>
+                        </Can>
+                      )}
+                      <Can permission="offers.delete">
+                        <button className="row-menu-item danger" onClick={() => requestDelete(r)}>
+                          <Trash2 size={13} strokeWidth={2} /> Löschen
                         </button>
                       </Can>
-                    )}
-                    {isRejected(r) && (
-                      <span
-                        title="Abgelehnt"
-                        style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px', color: 'var(--text-3)', fontSize: 11, fontWeight: 600 }}
-                      >
-                        Abgelehnt
-                      </span>
-                    )}
-                    <Can permission="offers.delete">
-                      <button
-                        className="row-action-btn row-action-btn--danger"
-                        onClick={() => requestDelete(r)}
-                        title="Löschen"
-                      >
-                        <Trash2 size={14} strokeWidth={2} />
-                      </button>
-                    </Can>
+                    </RowMenu>
                   </td>
                 </tr>
               ))}

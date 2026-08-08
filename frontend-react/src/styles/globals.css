@@ -1673,10 +1673,18 @@ input::placeholder { color: var(--text-4); }
    „Ueberfaellig") haben die Zeile sonst zusaetzlich in die Hoehe getrieben. */
 .master-table--sticky-actions .status-badge { vertical-align: middle; }
 .master-table--sticky-actions th.doc-actions { z-index: 3; }
-.master-table--sticky-actions tbody tr:nth-child(even) td.doc-actions {
+/* Die Zebra-Regel (.master-table tbody tr:nth-child(even) td) nutzt die
+   background-KURZFORM und hat hoehere Spezifitaet — sie hat die
+   undurchsichtige Grundfarbe der fixierten Zelle ueberschrieben, wodurch
+   die darunter durchlaufenden Daten sichtbar wurden. Deshalb hier mit
+   gleicher Tiefe erneut setzen: Grundfarbe deckend, Zebra als Bildebene. */
+.master-table.master-table--sticky-actions tbody tr td.doc-actions {
+  background-color: var(--surface);
+}
+.master-table.master-table--sticky-actions tbody tr:nth-child(even) td.doc-actions {
   background-image: linear-gradient(var(--dim-2), var(--dim-2));
 }
-.master-table--sticky-actions tbody tr:hover td.doc-actions {
+.master-table.master-table--sticky-actions tbody tr:hover td.doc-actions {
   background-image: linear-gradient(var(--accent-tint), var(--accent-tint));
 }
 .master-table tbody tr:last-child td { border-bottom: none; }

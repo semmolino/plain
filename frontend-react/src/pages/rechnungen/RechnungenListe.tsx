@@ -2,11 +2,11 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStickyState } from '@/hooks/useStickyState'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
-import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MoreHorizontal, Mail , SlidersHorizontal } from 'lucide-react'
+import { Mail, SlidersHorizontal } from 'lucide-react'
 import { FilterBar } from '@/components/ui/FilterBar'
+import { RowMenu } from '@/components/ui/RowMenu'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { Can } from '@/components/ui/Can'
 import { HasFeature } from '@/components/ui/HasFeature'
@@ -294,55 +294,7 @@ function emptyPaymentForm() {
 
 // ── Row overflow menu ─────────────────────────────────────────────────────────
 
-function RowMenu({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const t = triggerRef.current
-    if (t) {
-      const r = t.getBoundingClientRect()
-      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right })
-    }
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (triggerRef.current?.contains(target)) return
-      if (dropdownRef.current?.contains(target)) return
-      setOpen(false)
-    }
-    const handleScroll = () => setOpen(false)
-    document.addEventListener('mousedown', handleClickOutside)
-    window.addEventListener('scroll', handleScroll, true)
-    window.addEventListener('resize', handleScroll)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      window.removeEventListener('scroll', handleScroll, true)
-      window.removeEventListener('resize', handleScroll)
-    }
-  }, [open])
-
-  return (
-    <>
-      <button ref={triggerRef} className="btn-small" onClick={() => setOpen(o => !o)} aria-label="Weitere Aktionen" style={{ display: 'inline-flex', alignItems: 'center' }}>
-        <MoreHorizontal size={15} strokeWidth={1.75} />
-      </button>
-      {open && pos && createPortal(
-        <div
-          ref={dropdownRef}
-          className="row-menu-dropdown row-menu-dropdown-portal"
-          style={{ top: pos.top, right: pos.right }}
-          onClick={() => setOpen(false)}
-        >
-          {children}
-        </div>,
-        document.body
-      )}
-    </>
-  )
-}
+// RowMenu liegt jetzt in components/ui/RowMenu.tsx (war hier lokal).
 
 // ── Component ─────────────────────────────────────────────────────────────────
 

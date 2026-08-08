@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate }    from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileText, Banknote, Mail, Receipt, Folder, MoreHorizontal, SlidersHorizontal } from 'lucide-react'
+import { FileText, Banknote, Mail, Receipt, Folder, SlidersHorizontal } from 'lucide-react'
 import { FilterBar } from '@/components/ui/FilterBar'
+import { RowMenu } from '@/components/ui/RowMenu'
 import { Modal }          from '@/components/ui/Modal'
 import { Message }        from '@/components/ui/Message'
 import { ConfirmModal }   from '@/components/ui/ConfirmModal'
@@ -56,25 +57,7 @@ function addDays(dateStr: string, days: number): string {
 
 // ── Row overflow menu ─────────────────────────────────────────────────────────
 
-function RowMenu({ open, onOpen, onClose, children }: {
-  open: boolean; onOpen: () => void; onClose: () => void; children: React.ReactNode
-}) {
-  const wrapRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    function onDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose()
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open, onClose])
-  return (
-    <div ref={wrapRef} className="row-menu-wrap" style={{ display: 'inline-block', position: 'relative' }}>
-      <button className="row-action-btn" onClick={open ? onClose : onOpen} title="Weitere Aktionen"><MoreHorizontal size={15} strokeWidth={1.75} /></button>
-      {open && <div className="row-menu-dropdown">{children}</div>}
-    </div>
-  )
-}
+// RowMenu liegt jetzt in components/ui/RowMenu.tsx (war hier lokal).
 
 // ── Mahnstufe badge-select ────────────────────────────────────────────────────
 
@@ -299,7 +282,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
   )
   const [colPanelOpen, setColPanelOpen] = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
-  const [menuOpenId,   setMenuOpenId]   = useState<string | null>(null)
+  // menuOpenId entfaellt: die gemeinsame RowMenu verwaltet ihren Zustand selbst.
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
 
   useEffect(() => { saveFilters(filters) }, [filters])
@@ -840,26 +823,22 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                           title="Zahlung erfassen"
                           onClick={() => openPaymentFor(r)}
                         ><Banknote size={14} strokeWidth={1.75} /></button>
-                        <RowMenu
-                          open={menuOpenId === rowKey(r)}
-                          onOpen={() => setMenuOpenId(rowKey(r))}
-                          onClose={() => setMenuOpenId(null)}
-                        >
+                        <RowMenu triggerClassName="row-action-btn">
                           <HasFeature feature="dunning.email">
                             <button
                               className="row-menu-item"
                               disabled={!r.mahnungId}
-                              onClick={() => { setMenuOpenId(null); r.mahnungId && openEmailFor(r) }}
+                              onClick={() => { r.mahnungId && openEmailFor(r) }}
                             ><Mail size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />E-Mail senden</button>
                           </HasFeature>
                           <button
                             className="row-menu-item"
-                            onClick={() => { setMenuOpenId(null); navigate('/rechnungen', { state: { projectSearch: r.number } }) }}
+                            onClick={() => { navigate('/rechnungen', { state: { projectSearch: r.number } }) }}
                           ><Receipt size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />→ Rechnung</button>
                           {r.projectId && (
                             <button
                               className="row-menu-item"
-                              onClick={() => { setMenuOpenId(null); navigate('/projekte', { state: { search: r.projectNumber ?? r.projectName } }) }}
+                              onClick={() => { navigate('/projekte', { state: { search: r.projectNumber ?? r.projectName } }) }}
                             ><Folder size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />→ Projekt</button>
                           )}
                         </RowMenu>
