@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, Mail , SlidersHorizontal } from 'lucide-react'
 import { FilterBar } from '@/components/ui/FilterBar'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { Can } from '@/components/ui/Can'
 import { HasFeature } from '@/components/ui/HasFeature'
 import { Modal }        from '@/components/ui/Modal'
@@ -375,6 +376,9 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   )
   const [colPanelOpen,  setColPanelOpen]  = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
+  // Steuert die REIHENFOLGE der Spalten (Aktionen vorne auf dem Handy) —
+  // reine Darstellungsunterschiede stehen weiterhin in CSS-Media-Queries.
+  const narrow = useIsNarrow()
 
   useEffect(() => {
     if (initialSearch !== undefined) setSearch(initialSearch)
@@ -686,6 +690,16 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     })
   }
 
+  /** Detailansicht oeffnen. Liegt als Funktion vor, weil der Einstieg an
+   *  zwei Stellen haengt: als Knopf in der Zeile (ab Tablet) und als
+   *  Eintrag im ⋯-Menue (Handy). */
+  function openDetail(row: UnifiedRow) {
+    setDetailRow(row)
+    const id   = row.source === 'invoice' ? (row.raw as Invoice).ID : (row.raw as PartialPayment).ID
+    const type = row.source === 'invoice' ? 'invoice' : 'partial_payment'
+    void trackRecent(type, id, [row.number, row.address].filter(Boolean).join(' · ') || `#${id}`).catch(() => {})
+  }
+
   function openPdf(row: UnifiedRow) {
     if (row.source === 'invoice') openInvoicePdf((row.raw as Invoice).ID)
     else openPpPdf((row.raw as PartialPayment).ID)
@@ -852,103 +866,136 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
           <table className="master-table master-table--sticky-actions">
             <thead>
               <tr>
-                <th scope="col" style={{ width: 32, padding: '6px 4px' }}>
-                  <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-                </th>
+                {/* Auf dem Handy steht die Aktionsspalte VORNE: als letzte
+                    Zelle laege sie am Ende einer rund 1200px breiten Tabelle
+                    und waere ohne Seitwaerts-Scrollen unerreichbar. Die
+                    Mehrfachauswahl entfaellt dort — Sammelaktionen sind eine
+                    Schreibtisch-Taetigkeit und kosten sonst 44px Breite. */}
+                {narrow
+                  ? <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>
+                  : (
+                    <th scope="col" style={{ width: 32, padding: '6px 4px' }}>
+                      <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Alle auswählen" />
+                    </th>
+                  )}
                 <SortTh label="Nummer" k="number" {...sp} />
                 {visibleCols.map(c => (
                   <SortTh key={c.key} label={c.label} k={c.key} {...sp} className={c.className} />
                 ))}
-                <th scope="col"></th>
+                {!narrow && <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>}
               </tr>
             </thead>
             <tbody>
-              {rows.map(row => (
-                <tr key={row.key} className={`row-status-${row.statusClass}`}>
-                  <td style={{ padding: '4px', textAlign: 'center' }}>
-                    <input type="checkbox" checked={selected.has(row.key)} onChange={() => toggleRowSel(row.key)} />
-                  </td>
-                  <td className="cell-nowrap">{row.number ?? '—'}</td>
-                  {visibleCols.map(c => {
-                    if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
-                    if (c.key === 'date')        return <td key={c.key} className="cell-nowrap">{fmtDate(row.date)}</td>
-                    if (c.key === 'project')     return <td key={c.key} title={row.project ?? undefined}>{row.projectId !== null ? <button className="link-btn" style={{ fontSize: 13 }} onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : (row.project ?? '—')}</td>
-                    if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
-                    if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
-                    if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
-                    if (c.key === 'seHeld') {
-                      if (row.seHeld == null) return <td key={c.key} className="num">—</td>
-                      const v = row.seHeld
-                      // Original-AR: positiv → als Abzug "− X" zeigen.
-                      // Storno-AR:    negativ → als Rückbuchung "+ X" zeigen.
-                      const label = v >= 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`
-                      return <td key={c.key} className="num">{label}</td>
-                    }
-                    if (c.key === 'payable')     return <td key={c.key} className="num">{row.payable != null && (row.seHeld != null || row.seRelease != null) ? <strong>{fmtEur(row.payable)}</strong> : fmtEur(row.payable)}</td>
-                    if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>
-                    if (c.key === 'open')        return <td key={c.key} className="num">{fmtEur(row.open)}</td>
-                    if (c.key === 'statusLabel') return <td key={c.key}><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span>{row.isOverdue && <span className="status-badge overdue" title={`Fällig: ${row.dueDate}`}>Überfällig</span>}</td>
-                    return null
-                  })}
-                  <td className="doc-actions" style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn-small" onClick={() => {
-                      setDetailRow(row)
-                      const id = row.source === 'invoice' ? (row.raw as Invoice).ID : (row.raw as PartialPayment).ID
-                      const type = row.source === 'invoice' ? 'invoice' : 'partial_payment'
-                      void trackRecent(type, id, [row.number, row.address].filter(Boolean).join(' · ') || `#${id}`).catch(() => {})
-                    }}>Details</button>
-                    <Can permission="invoices.download_pdf">
-                      <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
-                    </Can>
-                    {/* „Mail" und „Zahlung" sind ins ⋯-Menue gewandert. Beide
-                        erschienen nur unter Bedingungen, wodurch die Aktions-
-                        spalte von Zeile zu Zeile ihre Breite wechselte — bei
-                        einer rechts fixierten Spalte besonders unruhig. Inline
-                        bleibt jetzt immer dasselbe Paar: Details + PDF + ⋯. */}
-                    <RowMenu>
-                      {row.statusClass === 'booked' && (
-                        <Can permission="invoices.send_email">
-                          <button className="row-menu-item" onClick={() => openEmailFor(row)}>
-                            <Mail size={13} strokeWidth={1.75} />Per E-Mail senden
+              {rows.map(row => {
+                // Aktionszelle als Variable, weil sie je nach Breite an
+                // unterschiedlicher Stelle steht — auf dem Handy vorne,
+                // sonst am Zeilenende.
+                const actionsCell = (
+                    <td className="doc-actions" style={{ whiteSpace: 'nowrap' }}>
+                      {/* Ab Tablet stehen „Details" und „PDF" direkt in der Zeile.
+                          Auf dem Handy bleibt nur das ⋯-Menue stehen (siehe die
+                          gleichnamigen Eintraege darin) — drei Knoepfe belegten
+                          dort rund 180px und zwangen zum Seitwaerts-Scrollen.
+                          Die jeweils andere Variante ist per CSS ausgeblendet und
+                          damit auch aus Tab-Reihenfolge und Screenreader raus. */}
+                      <span className="doc-actions-inline">
+                        <button className="btn-small" onClick={() => openDetail(row)}>Details</button>
+                        <Can permission="invoices.download_pdf">
+                          <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
+                        </Can>
+                      </span>
+                      {/* „Mail" und „Zahlung" sind ins ⋯-Menue gewandert. Beide
+                          erschienen nur unter Bedingungen, wodurch die Aktions-
+                          spalte von Zeile zu Zeile ihre Breite wechselte — bei
+                          einer rechts fixierten Spalte besonders unruhig. Inline
+                          bleibt jetzt immer dasselbe Paar: Details + PDF + ⋯. */}
+                      <RowMenu>
+                        {/* Nur auf dem Handy sichtbar — dort ersetzen diese
+                            beiden die Knoepfe aus der Zeile. */}
+                        <button className="row-menu-item row-menu-item--mobile" onClick={() => openDetail(row)}>
+                          Details
+                        </button>
+                        <Can permission="invoices.download_pdf">
+                          <button className="row-menu-item row-menu-item--mobile" onClick={() => openPdf(row)}>
+                            PDF öffnen
                           </button>
                         </Can>
-                      )}
-                      {canPay(row) && (
-                        <button className="row-menu-item" onClick={() => openPayment(row)}>Zahlung erfassen</button>
-                      )}
-                      <Can permission="invoices.download_xml">
-                        <HasFeature feature="einvoice.xrechnung">
-                          <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
-                        </HasFeature>
-                        <HasFeature feature="einvoice.zugferd">
-                          <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
-                        </HasFeature>
-                        <HasFeature feature="einvoice.peppol">
-                          <button className="row-menu-item" onClick={() => openPeppol(row)}>Peppol BIS 3.0</button>
-                        </HasFeature>
-                        <HasFeature feature="einvoice.zugferd">
-                          <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
-                        </HasFeature>
-                      </Can>
-                      {row.statusClass === 'booked' && (
-                        <Can permission="dunning.view">
-                          <button className="row-menu-item" onClick={() => navigate('/rechnungen?tab=mahnungen')}>→ Mahnung</button>
+                        {row.statusClass === 'booked' && (
+                          <Can permission="invoices.send_email">
+                            <button className="row-menu-item" onClick={() => openEmailFor(row)}>
+                              <Mail size={13} strokeWidth={1.75} />Per E-Mail senden
+                            </button>
+                          </Can>
+                        )}
+                        {canPay(row) && (
+                          <button className="row-menu-item" onClick={() => openPayment(row)}>Zahlung erfassen</button>
+                        )}
+                        <Can permission="invoices.download_xml">
+                          <HasFeature feature="einvoice.xrechnung">
+                            <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
+                          </HasFeature>
+                          <HasFeature feature="einvoice.zugferd">
+                            <button className="row-menu-item" onClick={() => openZUGFeRD(row)}>ZUGFeRD</button>
+                          </HasFeature>
+                          <HasFeature feature="einvoice.peppol">
+                            <button className="row-menu-item" onClick={() => openPeppol(row)}>Peppol BIS 3.0</button>
+                          </HasFeature>
+                          <HasFeature feature="einvoice.zugferd">
+                            <button className="row-menu-item" onClick={() => openHybridPdf(row)}>PDF + ZUGFeRD (hybrid)</button>
+                          </HasFeature>
                         </Can>
-                      )}
-                      {canCancel(row) && (
-                        <Can permission="invoices.cancel">
-                          <button className="row-menu-item danger" onClick={() => handleCancel(row)}>Storno</button>
-                        </Can>
-                      )}
-                      {canDelete(row) && (
-                        <Can permission="invoices.delete">
-                          <button className="row-menu-item danger" onClick={() => handleDelete(row)}>Löschen</button>
-                        </Can>
-                      )}
-                    </RowMenu>
-                  </td>
-                </tr>
-              ))}
+                        {row.statusClass === 'booked' && (
+                          <Can permission="dunning.view">
+                            <button className="row-menu-item" onClick={() => navigate('/rechnungen?tab=mahnungen')}>→ Mahnung</button>
+                          </Can>
+                        )}
+                        {canCancel(row) && (
+                          <Can permission="invoices.cancel">
+                            <button className="row-menu-item danger" onClick={() => handleCancel(row)}>Storno</button>
+                          </Can>
+                        )}
+                        {canDelete(row) && (
+                          <Can permission="invoices.delete">
+                            <button className="row-menu-item danger" onClick={() => handleDelete(row)}>Löschen</button>
+                          </Can>
+                        )}
+                      </RowMenu>
+                    </td>
+                )
+                return (
+                  <tr key={row.key} className={`row-status-${row.statusClass}`}>
+                    {narrow && actionsCell}
+                    {!narrow && (
+                      <td style={{ padding: '4px', textAlign: 'center' }}>
+                        <input type="checkbox" checked={selected.has(row.key)} onChange={() => toggleRowSel(row.key)} />
+                      </td>
+                    )}
+                    <td className="cell-nowrap">{row.number ?? '—'}</td>
+                    {visibleCols.map(c => {
+                      if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
+                      if (c.key === 'date')        return <td key={c.key} className="cell-nowrap">{fmtDate(row.date)}</td>
+                      if (c.key === 'project')     return <td key={c.key} title={row.project ?? undefined}>{row.projectId !== null ? <button className="link-btn" style={{ fontSize: 13 }} onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : (row.project ?? '—')}</td>
+                      if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
+                      if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
+                      if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
+                      if (c.key === 'seHeld') {
+                        if (row.seHeld == null) return <td key={c.key} className="num">—</td>
+                        const v = row.seHeld
+                        // Original-AR: positiv → als Abzug "− X" zeigen.
+                        // Storno-AR:    negativ → als Rückbuchung "+ X" zeigen.
+                        const label = v >= 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`
+                        return <td key={c.key} className="num">{label}</td>
+                      }
+                      if (c.key === 'payable')     return <td key={c.key} className="num">{row.payable != null && (row.seHeld != null || row.seRelease != null) ? <strong>{fmtEur(row.payable)}</strong> : fmtEur(row.payable)}</td>
+                      if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>
+                      if (c.key === 'open')        return <td key={c.key} className="num">{fmtEur(row.open)}</td>
+                      if (c.key === 'statusLabel') return <td key={c.key}><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span>{row.isOverdue && <span className="status-badge overdue" title={`Fällig: ${row.dueDate}`}>Überfällig</span>}</td>
+                      return null
+                    })}
+                    {!narrow && actionsCell}
+                  </tr>
+                )
+              })}
               {!rows.length && (
                 <tr><td colSpan={3 + visibleCols.length} className="empty-note">
                   {(search.trim() || onlyOpen || activeFilters.status.size > 0 || activeFilters.typ.size > 0)

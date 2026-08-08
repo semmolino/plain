@@ -260,3 +260,30 @@ test.describe('Mobile Bedienbarkeit', () => {
     expect(usesEnv).toBe(true)
   })
 })
+
+test.describe('Mobile Listen-Aktionen', () => {
+  test('Rechnungsliste: auf dem Handy nur das ⋯-Menue, und zwar vorne', async ({ page, viewport }) => {
+    await mockLoggedIn(page)
+    await page.goto('/rechnungen')
+    await page.locator('.master-table').waitFor()
+    await page.waitForTimeout(600)
+
+    const narrow = (viewport?.width ?? 0) < 641
+    const layout = await page.evaluate(() => {
+      const head = document.querySelector('.master-table thead tr')!
+      const cells = [...head.children]
+      return {
+        aktionSpalte: cells.findIndex(c => c.classList.contains('doc-actions')),
+        spalten: cells.length,
+      }
+    })
+
+    if (narrow) {
+      // Vorne: sonst liegt die Aktion am Ende einer ~1200px breiten Tabelle
+      // und ist ohne Seitwaerts-Scrollen nicht erreichbar.
+      expect(layout.aktionSpalte).toBe(0)
+    } else {
+      expect(layout.aktionSpalte).toBeGreaterThan(0)
+    }
+  })
+})

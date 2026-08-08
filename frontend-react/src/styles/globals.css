@@ -3878,6 +3878,14 @@ input::placeholder { color: var(--text-4); }
    sein eigener Text und darueber hinauslaeuft. */
 .consent-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .consent-actions button { flex: 0 0 auto; white-space: nowrap; }
+
+/* `.btn-primary` ist fuer die Anmeldemaske als Block gedacht (width:100%).
+   In einer Dialog-Fusszeile nimmt es damit die ganze Breite und schiebt
+   „Abbrechen" aus dem Sichtfeld — im Vollbild-Sheet auf dem Handy faellt
+   das sofort auf. In Fusszeilen daher auf Inhaltsbreite zuruecknehmen. */
+.consent-actions .btn-primary,
+.modal-actions   .btn-primary,
+.tbm-modal-footer .btn-primary { width: auto; }
 .consent-error { color: var(--danger); font-size: 12px; margin: 0 0 10px; }
 
 /* ── Vorschläge (Board · Meine/Unsere · Detail · Einreichen) ───────────────── */
@@ -4155,15 +4163,64 @@ input::placeholder { color: var(--text-4); }
   .tbr-running { gap: var(--space-1); }
 }
 
-/* Fixierte Aktionsspalte nur ab Tablet. Auf 390px belegt sie mit drei
-   Knoepfen rund 180px und legt sich damit ueber Status und Betraege —
-   sie loest dort also mehr Probleme aus, als sie behebt. Auf dem Handy
-   scrollt die Spalte normal mit. */
+/* Aktionsspalte auf dem Handy LINKS anheften statt rechts.
+   Rechts lag sie am Ende einer rund 1200px breiten Tabelle und war ohne
+   Seitwaerts-Scrollen nicht erreichbar. Da dort nur noch das ⋯-Menue steht
+   (60px statt 180px), passt sie links bequem hin und ueberdeckt lediglich
+   die Auswahl-Checkbox — die am wenigsten benoetigte Spalte.
+   Die Zeilen sind in dieser Tabelle alle gleich hoch, deshalb greift das
+   Problem mit nicht mitwachsenden sticky-Zellen hier nicht. */
 @media (max-width: 640px) {
   .master-table--sticky-actions th.doc-actions,
   .master-table--sticky-actions td.doc-actions {
-    position: static;
-    box-shadow: none;
-    background-color: transparent;
+    right: auto;
+    left: 0;
+    box-shadow: 6px 0 8px -8px rgba(var(--shadow-color), 0.35);
   }
+}
+
+/* ── Zeilen-Aktionen: Zeile vs. Menue ────────────────────────────────────
+   Ab Tablet stehen die haeufigen Aktionen direkt in der Zeile, auf dem
+   Handy nur das ⋯-Menue. Beide Varianten stehen im Markup; die jeweils
+   nicht passende wird per display:none ausgeblendet und ist damit auch
+   aus Tab-Reihenfolge und Screenreader-Ausgabe heraus. */
+.row-menu-item--mobile { display: none; }
+
+@media (max-width: 640px) {
+  .doc-actions-inline { display: none; }
+  .row-menu-item--mobile { display: block; }
+}
+
+/* ── Dialoge auf dem Handy als Bottom-Sheet ──────────────────────────────
+   Bisher schwebte der Dialog mittig mit 16px Rand ringsum — ein Desktop-
+   Muster. Buendig unten ist mobil nicht nur idiomatisch, sondern auch
+   daumenfreundlicher: die Aktionen liegen dann in Reichweite statt am
+   oberen Bildschirmrand.
+
+   dvh statt vh, weil ein- und ausfahrende Browserleisten die Hoehe
+   aendern; die Safe-Area unten wird zusaetzlich freigehalten. */
+@media (max-width: 640px) {
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal-card,
+  .modal-card.modal-wide,
+  .modal-card.modal-xl {
+    max-width: none;
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Griff-Andeutung wie bei nativen Sheets — signalisiert „von unten". */
+  .modal-header::before {
+    content: '';
+    position: absolute; top: 6px; left: 50%;
+    width: 36px; height: 4px;
+    transform: translateX(-50%);
+    border-radius: var(--radius-pill);
+    background: var(--border);
+  }
+  .modal-header { position: relative; padding-top: 20px; }
 }
