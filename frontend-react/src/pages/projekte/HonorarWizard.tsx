@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Message } from '@/components/ui/Message'
@@ -160,15 +162,7 @@ function newSurchargeRow(calcMasterId: number, sortOrder: number): FeeCalcSurcha
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
-function StepIndicator({ step, totalSteps }: { step: number; totalSteps: number }) {
-  return (
-    <div className="wizard-steps">
-      {Array.from({ length: totalSteps }, (_, i) => i + 1).map(s => (
-        <span key={s} className={`wizard-step${s === step ? ' active' : s < step ? ' done' : ''}`}>{s}</span>
-      ))}
-    </div>
-  )
-}
+// StepIndicator liegt jetzt in components/ui/StepIndicator.tsx (war hier lokal).
 
 // ── Wizard component ──────────────────────────────────────────────────────────
 
@@ -688,7 +682,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           </button>
         </div>
       )}
-      <StepIndicator step={dotFor(step)} totalSteps={totalSteps} />
+      <StepIndicator steps={Array.from({ length: totalSteps }, (_, i) => String(i + 1))} current={dotFor(step)} />
 
       {/* ── Step 1: Honorarordnung (create only) ─────────────────────────────── */}
       {step === 1 && (
@@ -1306,9 +1300,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
 
       <div className="wizard-nav">
         {step > firstStep && (
-          <button type="button" className="btn-small" onClick={goBack} disabled={loading}>
-            ← Zurück
-          </button>
+          <button type="button" className="btn-small" onClick={goBack} disabled={loading}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
         )}
         {step >= firstStep && (
           <button type="button" onClick={cancelAndDelete} disabled={loading}>
@@ -1316,7 +1308,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           </button>
         )}
         {step === 1 && (
-          <button className="btn-primary" type="button" onClick={goNext1} disabled={loading || !feeMasterId}>Weiter →</button>
+          <button className="btn-primary" type="button" onClick={goNext1} disabled={loading || !feeMasterId}>Weiter<ChevronRight size={14} strokeWidth={2} /></button>
         )}
         {step === 2 && (
           <button className="btn-primary" type="button" onClick={saveBasisAndGo} disabled={loading}>Speichern &amp; Weiter →</button>

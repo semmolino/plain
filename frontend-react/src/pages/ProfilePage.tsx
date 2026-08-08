@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Camera, Trash2 } from 'lucide-react'
+import { Camera, Trash2 , ChevronLeft } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { changePassword } from '@/api/auth'
 import { uploadAsset } from '@/api/stammdaten'
@@ -59,9 +59,7 @@ export function ProfilePage() {
             borderRadius: 6, padding: '4px 12px', fontSize: 12,
             cursor: 'pointer', color: 'var(--text-3)',
           }}
-        >
-          ← Zurück
-        </button>
+        ><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Profil</h1>
       </div>
 

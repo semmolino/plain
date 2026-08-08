@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { ChevronLeft } from 'lucide-react'
+import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -31,20 +33,7 @@ function todayIso() { return new Date().toISOString().slice(0, 10) }
 
 const STEPS = ['Init', 'Details', 'Positionen', 'Abzüge', 'Buchen']
 
-function StepIndicator({ step, onStepClick }: { step: number; onStepClick: (i: number) => void }) {
-  return (
-    <div className="wizard-steps">
-      {STEPS.map((s, i) => (
-        <div
-          key={s}
-          className={`wizard-step${i === step ? ' active' : i < step ? ' done' : ''}`}
-          onClick={i < step ? () => onStepClick(i) : undefined}
-          style={i < step ? { cursor: 'pointer' } : undefined}
-        >{s}</div>
-      ))}
-    </div>
-  )
-}
+// StepIndicator liegt jetzt in components/ui/StepIndicator.tsx (war hier lokal).
 
 interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; d1Pct: number; d2Pct: number; d1Reason: string | null; d2Reason: string | null; cashDiscPct: number; cashDiscDays: number }
 
@@ -523,7 +512,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
 
   return (
     <div className="wizard-wrap">
-      <StepIndicator step={step} onStepClick={i => void goToStep(i)} />
+      <StepIndicator steps={STEPS} current={step} onStepClick={i => void goToStep(i)} />
 
       {/* Step 0 */}
       {step === 0 && (
@@ -586,7 +575,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">
             <button className="btn-primary" onClick={submitStep0} disabled={initMut.isPending}>
-              {initMut.isPending ? 'Erstelle …' : 'Weiter →'}
+              {initMut.isPending ? 'Erstelle …' : 'Weiter'}
             </button>
           </div>
         </div>
@@ -661,9 +650,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">
             <button onClick={handleCancel}>Abbrechen</button>
-            <button onClick={() => void goToStep(0)}>← Zurück</button>
+            <button onClick={() => void goToStep(0)}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
             <button className="btn-primary" onClick={submitStep1} disabled={patchMut.isPending}>
-              {patchMut.isPending ? 'Speichert …' : 'Weiter →'}
+              {patchMut.isPending ? 'Speichert …' : 'Weiter'}
             </button>
           </div>
         </div>
@@ -733,9 +722,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">
             <button onClick={handleCancel}>Abbrechen</button>
-            <button onClick={() => void goToStep(1)}>← Zurück</button>
+            <button onClick={() => void goToStep(1)}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
             <button className="btn-primary" onClick={submitPhases} disabled={phasesMut.isPending}>
-              {phasesMut.isPending ? 'Speichert …' : 'Weiter →'}
+              {phasesMut.isPending ? 'Speichert …' : 'Weiter'}
             </button>
           </div>
         </div>
@@ -804,9 +793,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">
             <button onClick={handleCancel}>Abbrechen</button>
-            <button onClick={() => void goToStep(2)}>← Zurück</button>
+            <button onClick={() => void goToStep(2)}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
             <button className="btn-primary" onClick={submitDeductions} disabled={dedMut.isPending}>
-              {dedMut.isPending ? 'Speichert …' : 'Weiter →'}
+              {dedMut.isPending ? 'Speichert …' : 'Weiter'}
             </button>
           </div>
         </div>
@@ -1105,7 +1094,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <Message text={msg?.text ?? null} type={msg?.type} />
           <div className="wizard-nav">
             <button onClick={handleCancel}>Abbrechen</button>
-            <button onClick={() => void goToStep(3)}>← Zurück</button>
+            <button onClick={() => void goToStep(3)}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
             <button
               onClick={async () => {
                 if (!draftId) return

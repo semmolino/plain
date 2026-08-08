@@ -2179,17 +2179,31 @@ input::placeholder { color: var(--text-4); }
 /* Wizard layout */
 .wizard-wrap { max-width: 100%; }
 .wizard-steps {
-  display: flex; gap: 0; margin-bottom: 24px;
-  border-radius: 12px; overflow: hidden;
+  display: flex; gap: 0; margin: 0 0 var(--space-6);
+  padding: 0; list-style: none;
+  border-radius: var(--radius-lg); overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
 .wizard-step {
-  flex: 1; padding: 10px 6px; text-align: center;
+  flex: 1; text-align: center;
   font-size: 12px; font-weight: 600;
-  background: var(--dim); color: var(--text-5);
+  background: var(--dim);
+  /* vorher --text-5 — das ist das dekorative Token und lag hier bei 2.37:1 */
+  color: var(--text-3);
   border-right: 1px solid var(--border-2);
   transition: background 0.15s;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 38px; padding: 10px 6px;
 }
+/* Erledigte Schritte sind anwaehlbar — als echter Knopf statt als div,
+   damit sie per Tastatur erreichbar sind. */
+.wizard-step:has(.wizard-step-btn) { padding: 0; }
+.wizard-step-btn {
+  width: 100%; min-height: 38px; padding: 10px 6px;
+  border: none; background: none; box-shadow: none;
+  color: inherit; font: inherit; cursor: pointer;
+}
+.wizard-step-btn:hover { background: var(--hover-bg); }
 .wizard-step:last-child { border-right: none; }
 .wizard-step.active { background: var(--cta); color: var(--cta-fg); }
 .wizard-step.done   { background: var(--accent-tint3); color: var(--accent); }

@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
 import { Autocomplete } from '@/components/ui/Autocomplete'
@@ -34,15 +36,7 @@ function emptyBasic(): BasicForm {
 
 // ── Sub-wizard components ─────────────────────────────────────────────────────
 
-function StepIndicator({ step, total }: { step: number; total: number }) {
-  return (
-    <div className="wizard-steps">
-      {Array.from({ length: total }, (_, i) => i + 1).map(s => (
-        <span key={s} className={`wizard-step${s === step ? ' active' : s < step ? ' done' : ''}`}>{s}</span>
-      ))}
-    </div>
-  )
-}
+// StepIndicator liegt jetzt in components/ui/StepIndicator.tsx (war hier lokal).
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -206,7 +200,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
 
   return (
     <div className="wizard-wrap">
-      <StepIndicator step={step} total={3} />
+      <StepIndicator steps={['1', '2', '3']} current={step} />
 
       {/* ── Step 1: Basisdaten ── */}
       {step === 1 && (
@@ -399,10 +393,10 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
       {/* Navigation */}
       <div className="wizard-nav">
         {step > 1 && (
-          <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}>← Zurück</button>
+          <button type="button" onClick={() => { setMsg(null); setStep(s => s - 1) }}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
         )}
         {step < 3 && (
-          <button className="btn-primary" type="button" onClick={goNext}>Weiter →</button>
+          <button className="btn-primary" type="button" onClick={goNext}>Weiter<ChevronRight size={14} strokeWidth={2} /></button>
         )}
         {step === 3 && (
           <button className="btn-primary" type="button" disabled={createMut.isPending} onClick={goNext}>
