@@ -15,6 +15,7 @@ import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
 import { AddrForm, ContactForm, emptyAddr, emptyContact, addressToPayload, contactToPayload } from '@/pages/adressen/addressForms'
 import { downloadCsv, downloadText, contactVCard } from '@/utils/exportData'
+import { FilterBar } from '@/components/ui/FilterBar'
 import {
   fetchCountries, fetchSalutations, fetchGenders,
   fetchAddressList, searchAddressesApi, createAddress, updateAddress, deleteAddress,
@@ -313,7 +314,9 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   useCtrlS(() => createAddrFormRef.current?.requestSubmit(), createOpen)
   useCtrlS(() => editAddrFormRef.current?.requestSubmit(),   editAddr !== null)
 
-  const hasActiveFilter = activeTyp.size > 0 || activeLand.size > 0 || activeStadt.size > 0 || search.trim() !== ''
+  // Zaehlt nur die Chip-Filter — die Suche hat ihr eigenes Feld und muss
+  // nicht zusaetzlich im Filter-Badge auftauchen.
+  const activeFilterCount = activeTyp.size + activeLand.size + activeStadt.size
 
   return (
     <>
@@ -329,17 +332,16 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
         />
         <div className="pl-toolbar">
           <input type="search" className="list-search" placeholder="Suchen …" value={search} onChange={e => setSearch(e.target.value)} />
-          <div className="pl-filter-chips">
+          {/* Auf dem Handy hinter „Filter" eingeklappt (siehe FilterBar). */}
+          <FilterBar
+            activeCount={activeFilterCount}
+            onReset={() => { setActiveTyp(new Set()); setActiveLand(new Set()); setActiveStadt(new Set()); setSearch('') }}
+          >
             <FilterChip label="Kategorie" options={filterOptions.typ}   active={activeTyp}   onChange={setActiveTyp}   />
             <FilterChip label="Land"      options={filterOptions.land}  active={activeLand}  onChange={setActiveLand}  />
             <FilterChip label="Stadt"     options={filterOptions.stadt} active={activeStadt} onChange={setActiveStadt} />
-            {hasActiveFilter && (
-              <button className="pl-clear-btn" onClick={() => { setActiveTyp(new Set()); setActiveLand(new Set()); setActiveStadt(new Set()); setSearch('') }}>
-                Filter löschen
-              </button>
-            )}
-          </div>
-          <div ref={colPanelRef} className="pl-col-wrap">
+          </FilterBar>
+          <div ref={colPanelRef} className="pl-col-wrap pl-toolbar-actions">
             <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
             {colPanelOpen && (
               <div className="pl-col-panel">

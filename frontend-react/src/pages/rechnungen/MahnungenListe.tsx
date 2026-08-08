@@ -3,6 +3,7 @@ import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate }    from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { FileText, Banknote, Mail, Receipt, Folder, MoreHorizontal, SlidersHorizontal } from 'lucide-react'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { Modal }          from '@/components/ui/Modal'
 import { Message }        from '@/components/ui/Message'
 import { ConfirmModal }   from '@/components/ui/ConfirmModal'
@@ -650,7 +651,11 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
           value={filters.search}
           onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
         />
-        <div className="pl-filter-chips">
+        {/* Auf dem Handy hinter „Filter" eingeklappt (siehe FilterBar). */}
+        <FilterBar
+          activeCount={filters.mahnstufen.length + (filters.onlyOpen ? 1 : 0) + (filters.stichtag ? 1 : 0)}
+          onReset={() => setFilters(f => ({ ...defaultFilters(), showClosed: f.showClosed }))}
+        >
           <FilterChip
             label="Stufe"
             options={stufeOptions.map(s => stufeLabels[s] ?? `Stufe ${s}`)}
@@ -680,12 +685,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
             />
             {filters.stichtag && <button className="filter-chip-clear" onClick={() => setFilters(f => ({ ...f, stichtag: '' }))} title="Zurücksetzen">×</button>}
           </label>
-          {(filters.mahnstufen.length > 0 || filters.onlyOpen || filters.stichtag || filters.search) && (
-            <button className="pl-clear-btn" onClick={() => setFilters(f => ({ ...defaultFilters(), showClosed: f.showClosed }))}>
-              Filter löschen
-            </button>
-          )}
-        </div>
+        </FilterBar>
         {/* Column chooser */}
         <div ref={colPanelRef} className="pl-col-wrap">
           <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>

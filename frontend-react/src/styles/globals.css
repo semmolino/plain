@@ -1874,6 +1874,16 @@ input::placeholder { color: var(--text-4); }
 /* min-width:0 verhindert, dass lange Beschriftungen ueber den Knopfrand
    hinauslaufen — „Abbrechen" ragte sonst in den Nachbarknopf. */
 .modal-actions button { flex: 1 1 0; min-width: 0; }
+
+/* Zwei Zonen: links Sekundaeres (z. B. Loeschen), rechts die Hauptaktionen.
+   Siehe components/ui/DialogFooter.tsx — der eine Ort fuer Dialog-Fusszeilen.
+   Vorher gab es drei Auspraegungen, weshalb dieselbe Korrektur mehrfach
+   gesetzt werden musste. */
+.modal-actions-secondary { display: flex; gap: var(--space-2); margin-right: auto; }
+.modal-actions-primary   { display: flex; gap: var(--space-2); margin-left: auto; }
+.modal-actions-primary button,
+.modal-actions-secondary button { flex: 0 1 auto; }
+
 .modal-card.modal-wide { max-width: 860px; }
 .modal-card.modal-xl   { max-width: 1100px; }
 

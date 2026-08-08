@@ -15,6 +15,7 @@ import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
 import { Can } from '@/components/ui/Can'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { MyAbsencesPanel, ClarificationThread } from '@/components/mitarbeiter/MyAbsencesPanel'
 import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
 import { LimitBanner } from '@/components/ui/LimitBanner'
@@ -1343,12 +1344,15 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
               onChange={e => setSearch(e.target.value)}
               className="list-search"
             />
-            <div className="pl-filter-chips">
+            {/* Auf dem Handy hinter „Filter" eingeklappt (siehe FilterBar). */}
+            <FilterBar
+              activeCount={deptFilter.size + statusFilter.size + modelFilter.size}
+              onReset={clearFilters}
+            >
               <FilterChip label="Abteilung" options={deptOptions}    active={deptFilter}   onChange={setDeptFilter}   />
               <FilterChip label="Status"    options={statusOptions}  active={statusFilter} onChange={setStatusFilter} />
               <FilterChip label="Modell"    options={modelOptions}   active={modelFilter}  onChange={setModelFilter}  />
-              {hasFilter && <button className="pl-clear-btn" onClick={clearFilters}>Alle Filter löschen</button>}
-            </div>
+            </FilterBar>
             <button
               type="button"
               className="btn-small"
@@ -2964,7 +2968,8 @@ export function MitarbeiterPage() {
 
   const sortProps = { current: sortKey, dir: sortDir, onClick: toggleSort }
 
-  const hasActiveFilter = activeAbt.size > 0 || activeStatus.size > 0 || activeModel.size > 0
+  // Die FilterBar zeigt die Anzahl selbst an; ein separates Flag braucht es
+  // seit der Umstellung nicht mehr.
 
   const visibleTabs = useLicenseFilterTabs(useFilterTabs(TABS))
   // Aktuellen Tab an verfügbare Tabs + ?tab=-Deeplink angleichen.
@@ -3020,16 +3025,14 @@ export function MitarbeiterPage() {
               </Can>
             </div>
 
-            <div className="pl-filter-chips" style={{ marginBottom: 12 }}>
+            <FilterBar
+              activeCount={activeAbt.size + activeStatus.size + activeModel.size}
+              onReset={() => { setActiveAbt(new Set()); setActiveStatus(new Set()); setActiveModel(new Set()); setSearch('') }}
+            >
               <FilterChip label="Abteilung" options={filterOptions.abt}    active={activeAbt}    onChange={v => { setActiveAbt(v);    setPage(1) }} />
               <FilterChip label="Status"    options={filterOptions.status}  active={activeStatus}  onChange={v => { setActiveStatus(v); setPage(1) }} />
               <FilterChip label="Modell"    options={filterOptions.model}   active={activeModel}   onChange={v => { setActiveModel(v);  setPage(1) }} />
-              {hasActiveFilter && (
-                <button className="pl-clear-btn" onClick={() => { setActiveAbt(new Set()); setActiveStatus(new Set()); setActiveModel(new Set()); setSearch('') }}>
-                  Filter löschen
-                </button>
-              )}
-            </div>
+            </FilterBar>
 
             {isLoading && <p className="empty-note">Laden …</p>}
             {!isLoading && (

@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from 'react'
 import { useStickyState } from '@/hooks/useStickyState'
 import { SlidersHorizontal } from 'lucide-react'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { FilterBar } from '@/components/ui/FilterBar'
 import type { HelpId } from '@/help/helpContent'
 
 function lsGet<T>(key: string, fallback: T): T {
@@ -690,18 +691,18 @@ export function ProjektlisteTab() {
               onChange={e => setSearch(e.target.value)}
               className="list-search"
             />
-            <div className="pl-filter-chips">
+            {/* Fuenf Chips — auf dem Handy besonders wichtig, dass sie
+                eingeklappt sind (siehe FilterBar). */}
+            <FilterBar
+              activeCount={Object.values(activeFilters).reduce((n, s) => n + s.size, 0)}
+              onReset={() => { setActiveFilters(emptyFilters()); setSearch('') }}
+            >
               <FilterChip label="Status"        options={filterOptions.status}    active={activeFilters.status}    onChange={v => setDimFilter('status', v)}    />
               <FilterChip label="Projektleiter" options={filterOptions.manager}   active={activeFilters.manager}   onChange={v => setDimFilter('manager', v)}   />
               <FilterChip label="Typ"           options={filterOptions.typ}       active={activeFilters.typ}       onChange={v => setDimFilter('typ', v)}       />
               <FilterChip label="Abteilung"     options={filterOptions.abteilung} active={activeFilters.abteilung} onChange={v => setDimFilter('abteilung', v)} />
               <FilterChip label="Adresse"       options={filterOptions.adresse}   active={activeFilters.adresse}   onChange={v => setDimFilter('adresse', v)}   />
-              {hasActiveFilter && (
-                <button className="pl-clear-btn" onClick={() => { setActiveFilters(emptyFilters()); setSearch('') }}>
-                  Alle Filter löschen
-                </button>
-              )}
-            </div>
+            </FilterBar>
 
             {/* Column visibility */}
             <div ref={colPanelRef} className="pl-col-wrap">

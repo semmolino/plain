@@ -3,6 +3,7 @@ import { useStickyState } from '@/hooks/useStickyState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Lightbulb, Megaphone, ChevronUp, MessageSquare, Plus, X } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { InfoHint } from '@/components/ui/InfoHint'
 import { usePermission } from '@/store/permissionsStore'
@@ -277,12 +278,12 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
           Bitte keine personenbezogenen Daten Dritter oder vertrauliche Geschäftsdaten eingeben.
         </p>
         {submit.isError && <p className="consent-error">Einreichen fehlgeschlagen. Bitte erneut versuchen.</p>}
-        <div className="consent-actions" style={{ gap: 8 }}>
-          <button type="button" className="btn-small" onClick={onClose}>Abbrechen</button>
+        <DialogFooter>
+          <button type="button" className="btn" onClick={onClose}>Abbrechen</button>
           <button type="button" className="btn-primary" disabled={!valid || submit.isPending} onClick={() => submit.mutate()}>
             {submit.isPending ? 'Wird gesendet …' : 'Einreichen'}
           </button>
-        </div>
+        </DialogFooter>
       </div>
     </Modal>
   )
