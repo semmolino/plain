@@ -1486,17 +1486,23 @@ input::placeholder { color: var(--text-4); }
   border: 1px solid var(--border); border-radius: 10px;
   background: var(--surface); font-size: 14px; outline: none; color: var(--text);
 }
-/* Lupe als Hintergrundbild statt als zusaetzliches Markup — .list-search
-   steht in 19 Dateien, ein Wrapper-Element pro Stelle waere unverhaeltnis-
-   maessig. type="search" liefert zusaetzlich den nativen Loeschen-Knopf. */
-.list-search {
+/* Lupe als Hintergrundbild statt als zusaetzliches Markup. WICHTIG: nur in
+   Bedienleisten. `.list-search` ist an 28 Stellen schlicht der Standard-
+   Feldstil — auch fuer Betreff-, E-Mail- und Textfelder in Dialogen. Global
+   angewandt erschien die Lupe dort faelschlicherweise mit (z. B. im Feld
+   „Worum geht es in einem Satz?"). */
+.list-toolbar .list-search,
+.pl-toolbar   .list-search,
+.ls-toolbar   .list-search {
   padding-left: 32px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: 10px center;
   background-size: 15px 15px;
 }
-[data-theme="dark"] .list-search {
+[data-theme="dark"] .list-toolbar .list-search,
+[data-theme="dark"] .pl-toolbar .list-search,
+[data-theme="dark"] .ls-toolbar .list-search {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23909090' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E");
 }
 
@@ -1836,7 +1842,7 @@ input::placeholder { color: var(--text-4); }
 .modal-backdrop--confirm { z-index: 600; }
 .modal-card {
   background: var(--surface); border-radius: 18px;
-  width: 100%; max-width: 480px; max-height: 90vh;
+  width: 100%; max-width: 480px; max-height: 90dvh;
   display: flex; flex-direction: column;
   box-shadow: var(--shadow-lg);
 }
@@ -1852,8 +1858,22 @@ input::placeholder { color: var(--text-4); }
 }
 .modal-close:hover { background: var(--dim); transform: none; box-shadow: none; color: var(--text); }
 .modal-body { padding: 16px 20px 20px; overflow-y: auto; }
-.modal-actions { display: flex; gap: 8px; margin-top: 12px; }
-.modal-actions button { flex: 1; }
+
+/* Aktionen bleiben am unteren Rand des Dialogs stehen, statt mit dem
+   Formular wegzuscrollen. Bei langen Masken (z. B. „Vorschlag einreichen")
+   musste man sonst erst ganz nach unten scrollen, um ueberhaupt an
+   „Speichern" zu kommen — auf dem Handy der Regelfall. */
+.modal-actions {
+  display: flex; gap: var(--space-2);
+  position: sticky; bottom: 0;
+  margin: var(--space-3) calc(-1 * var(--space-5)) calc(-1 * var(--space-5));
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface);
+  border-top: 1px solid var(--border-3);
+}
+/* min-width:0 verhindert, dass lange Beschriftungen ueber den Knopfrand
+   hinauslaufen — „Abbrechen" ragte sonst in den Nachbarknopf. */
+.modal-actions button { flex: 1 1 0; min-width: 0; }
 .modal-card.modal-wide { max-width: 860px; }
 .modal-card.modal-xl   { max-width: 1100px; }
 
@@ -3853,7 +3873,11 @@ input::placeholder { color: var(--text-4); }
   background: var(--bg); margin-bottom: 14px; cursor: pointer;
 }
 .consent-check input { margin-top: 2px; width: 18px; height: 18px; flex-shrink: 0; cursor: pointer; }
-.consent-actions { display: flex; justify-content: flex-end; }
+/* Zweite Auspraegung einer Dialog-Fusszeile (neben .modal-actions).
+   flex-shrink: 0 an den Knoepfen, weil „Abbrechen" sonst schmaler wird als
+   sein eigener Text und darueber hinauslaeuft. */
+.consent-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.consent-actions button { flex: 0 0 auto; white-space: nowrap; }
 .consent-error { color: var(--danger); font-size: 12px; margin: 0 0 10px; }
 
 /* ── Vorschläge (Board · Meine/Unsere · Detail · Einreichen) ───────────────── */
