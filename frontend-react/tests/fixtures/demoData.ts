@@ -38,13 +38,16 @@ const projects = PROJECTS.map(([short, long, status, typ, mgr, addr], i) => ({
   ADDRESS_NAME: addr, CONTACT_NAME: 'A. Ansprechpartner', DEPARTMENT_NAME: 'Hochbau',
 }))
 
+// STATUS_ID 2 = gebucht, sonst Entwurf. Negative Betraege + CANCELS_INVOICE_ID
+// erzeugen Storno-Zeilen (.row-status-cancelled) — die brauchte es, um die
+// Darstellung der fixierten Aktionsspalte auf farbigen Zeilen zu pruefen.
 const INVOICES = [
-  ['RE-2025-0041', '2025-07-02', '2025-08-01', 112_400,  1, 'Abschlag'],
+  ['RE-2025-0041', '2025-07-02', '2025-08-01', 112_400,   1, 'Abschlag'],
   ['RE-2025-0042', '2025-07-08', '2025-08-07',  38_900.5, 2, 'Abschlag'],
-  ['RE-2025-0043', '2025-07-15', '2025-07-29',   4_250,   3, 'Schluss'],
-  ['RE-2025-0044', '2025-07-21', '2025-08-20', 268_000,   1, 'Abschlag'],
+  ['RE-2025-0043', '2025-07-15', '2025-07-29',   4_250,   2, 'Schluss'],
+  ['RE-2025-0044', '2025-07-21', '2025-08-20', -38_900.5, 2, 'Storno'],
   ['RE-2025-0045', '2025-07-28', '2025-08-27',   1_980.4, 2, 'Schluss'],
-  ['RE-2025-0046', '2025-08-01', '2025-08-31',  57_300,   4, 'Abschlag'],
+  ['RE-2025-0046', '2025-08-01', '2025-08-31',  -4_250,   2, 'Storno'],
 ]
 
 const invoices = INVOICES.map(([nr, date, due, net, status, typ], i) => ({
@@ -60,7 +63,8 @@ const invoices = INVOICES.map(([nr, date, due, net, status, typ], i) => ({
   CONTACT: 'A. Ansprechpartner', CONTACT_MAIL: 'kontakt@kunde.de',
   ADDRESS_NAME_1: projects[i % projects.length].ADDRESS_NAME,
   AMOUNT_PAYED_GROSS: i % 3 === 0 ? Math.round((net as number) * 1.19 * 100) / 100 : 0,
-  COMMENT: null, INVOICE_TYPE: typ as string, CANCELS_INVOICE_ID: null,
+  COMMENT: null, INVOICE_TYPE: typ as string,
+  CANCELS_INVOICE_ID: (net as number) < 0 ? i : null,
   TOTAL_DISCOUNTS: 0, CASH_DISCOUNT: 0,
   DISCOUNT_1_PERCENT: 0, DISCOUNT_2_PERCENT: 0,
   DISCOUNT_1_REASON: null, DISCOUNT_2_REASON: null,

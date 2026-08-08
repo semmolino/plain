@@ -1639,12 +1639,33 @@ input::placeholder { color: var(--text-4); }
    Erste, was verschwand. background-image statt background-color fuer die
    Zebra-/Hover-Lage, weil eine sticky Zelle undurchsichtig sein muss:
    --dim-2 ist transluzent und wuerde den durchlaufenden Inhalt zeigen. */
+/* Eine sticky Tabellenzelle nimmt nicht an der Hoehenangleichung der Zeile
+   teil: bei 58px hohen Zeilen blieb die Aktionszelle 47px hoch, sichtbar
+   als versetzte Farbbaender neben den Knoepfen. Statt das zu erzwingen
+   (height:inherit funktioniert nur fuer ein Kind-Element, nicht fuer die
+   Zelle selbst) sind in dieser Tabelle ALLE Zeilen gleich hoch — siehe
+   .master-table--sticky-actions td weiter unten. Dann gibt es nichts,
+   was auseinanderlaufen koennte. */
 .master-table--sticky-actions th.doc-actions,
 .master-table--sticky-actions td.doc-actions {
   position: sticky; right: 0; z-index: 1;
   background-color: var(--surface);
   box-shadow: -6px 0 8px -8px rgba(var(--shadow-color), 0.35);
 }
+.doc-actions { align-items: center; }
+
+/* Einheitliche Zeilenhoehe: Inhalt einzeilig mit Auslassung statt Umbruch.
+   Der vollstaendige Text steht im title-Attribut und in der Detailansicht. */
+.master-table--sticky-actions tbody td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+.master-table--sticky-actions tbody td.doc-actions { overflow: visible; max-width: none; }
+/* Status-Badges nebeneinander statt gestapelt — zwei Badges („Gebucht" +
+   „Ueberfaellig") haben die Zeile sonst zusaetzlich in die Hoehe getrieben. */
+.master-table--sticky-actions .status-badge { vertical-align: middle; }
 .master-table--sticky-actions th.doc-actions { z-index: 3; }
 .master-table--sticky-actions tbody tr:nth-child(even) td.doc-actions {
   background-image: linear-gradient(var(--dim-2), var(--dim-2));
@@ -4081,4 +4102,44 @@ input::placeholder { color: var(--text-4); }
   .tabs { margin-bottom: var(--space-2); }
   .list-toolbar, .pl-toolbar { margin-bottom: var(--space-2); }
   .abrechenbar-card { margin-bottom: var(--space-2); }
+}
+
+/* ── Stempeluhr in der Kopfzeile ─────────────────────────────────────────
+   Auf dem Handy standen dort drei beschriftete Knoepfe („Pause", „Nächste
+   Aufgabe", „Buchungen abschließen"). Zusammen brauchen sie mehr Platz als
+   die Kopfzeile hat — die Beschriftungen wurden mitten im Wort umbrochen
+   und abgeschnitten, und Glocke sowie Benutzermenue wurden an den Rand
+   gedrueckt.
+
+   Unter 640px bleiben nur die Symbole. Der Text bleibt im DOM und wird nur
+   visuell ausgeblendet (gleiche Technik wie .sr-only), damit Screenreader
+   und die Sprachsteuerung die Knoepfe weiterhin benennen koennen. */
+@media (max-width: 640px) {
+  .tbr-label {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .tbr-btn {
+    padding: 0;
+    min-width: 44px; min-height: 44px;
+    justify-content: center;
+  }
+  /* Projekt/Leistung der laufenden Buchung: auf dem Handy ohnehin auf
+     wenige Zeichen zusammengedrueckt — dort weglassen. */
+  .tbr-task { display: none; }
+  .tbr-running { gap: var(--space-1); }
+}
+
+/* Fixierte Aktionsspalte nur ab Tablet. Auf 390px belegt sie mit drei
+   Knoepfen rund 180px und legt sich damit ueber Status und Betraege —
+   sie loest dort also mehr Probleme aus, als sie behebt. Auf dem Handy
+   scrollt die Spalte normal mit. */
+@media (max-width: 640px) {
+  .master-table--sticky-actions th.doc-actions,
+  .master-table--sticky-actions td.doc-actions {
+    position: static;
+    box-shadow: none;
+    background-color: transparent;
+  }
 }

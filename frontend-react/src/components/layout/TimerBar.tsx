@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Pause, Play, ArrowRight, Square, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTimerStore, elapsedSeconds, formatDuration, formatDurationHuman, quantityFromSeconds } from '@/store/timerStore'
 import type { TimerSession } from '@/store/timerStore'
@@ -812,8 +813,8 @@ export function TimerBar() {
     return (
       <>
         <button className="tbr-btn tbr-start" onClick={() => setModal('start')} title="Arbeitstag starten">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-          Start
+          <Play size={14} strokeWidth={2.5} />
+          <span className="tbr-label">Start</span>
         </button>
         {modal === 'start' && <StartModal onClose={() => setModal('none')} />}
       </>
@@ -823,12 +824,18 @@ export function TimerBar() {
   if (breakState) {
     return (
       <div className="tbr-running tbr-running-break">
-        <span className="tbr-clock tbr-clock-break">⏸ {formatDuration(brElapsed)}</span>
+        <span className="tbr-clock tbr-clock-break">
+          <Pause size={13} strokeWidth={2.5} /> {formatDuration(brElapsed)}
+        </span>
         <span className="tbr-task tbr-task-break">Pause läuft</span>
         <button className="tbr-btn tbr-resume" disabled={savingBreak} onClick={handleEndBreak}>
-          {savingBreak ? 'Speichere…' : '▶ Pause beenden'}
+          <Play size={14} strokeWidth={2.5} />
+          <span className="tbr-label">{savingBreak ? 'Speichere…' : 'Pause beenden'}</span>
         </button>
-        <button className="tbr-btn" title="Pause verwerfen (nicht buchen)" onClick={cancelBreak}>✕</button>
+        <button className="tbr-btn" title="Pause verwerfen (nicht buchen)" onClick={cancelBreak}>
+          <X size={14} strokeWidth={2.5} />
+          <span className="sr-only">Pause verwerfen</span>
+        </button>
         {breakErr && <span className="tbr-error">{breakErr}</span>}
       </div>
     )
@@ -843,17 +850,22 @@ export function TimerBar() {
         <span className="tbr-task" title={`${session.projectName} / ${session.structureName}`}>
           {session.projectName} / {session.structureName}
         </span>
+        {/* Auf schmalen Geraeten bleiben nur die Symbole stehen: die drei
+            Beschriftungen brauchten sonst mehr Platz als die Kopfzeile hat
+            und wurden mitten im Wort abgeschnitten („Nächs Aufgab").
+            Der Text bleibt im DOM und wird per .sr-only nur visuell
+            ausgeblendet — der Screenreader liest ihn weiterhin vor. */}
         <button className="tbr-btn tbr-pause" onClick={startBreak} title="Pause starten">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-          Pause
+          <Pause size={14} strokeWidth={2.5} />
+          <span className="tbr-label">Pause</span>
         </button>
         <button className="tbr-btn tbr-next" onClick={() => setModal('next')} title="Nächste Aufgabe">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12,5 19,12 12,19"/></svg>
-          Nächste Aufgabe
+          <ArrowRight size={14} strokeWidth={2.5} />
+          <span className="tbr-label">Nächste Aufgabe</span>
         </button>
         <button className="tbr-btn tbr-finish" onClick={() => setModal('finish')} title="Buchungen abschließen">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-          Buchungen abschließen
+          <Square size={14} strokeWidth={2.5} fill="currentColor" />
+          <span className="tbr-label">Buchungen abschließen</span>
         </button>
       </div>
 

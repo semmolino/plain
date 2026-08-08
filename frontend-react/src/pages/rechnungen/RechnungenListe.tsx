@@ -872,7 +872,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                   {visibleCols.map(c => {
                     if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
                     if (c.key === 'date')        return <td key={c.key} className="cell-nowrap">{fmtDate(row.date)}</td>
-                    if (c.key === 'project')     return <td key={c.key} title={row.project ?? undefined}>{row.projectId !== null ? <button className="link-btn cell-clamp" style={{ fontSize: 13 }} onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : <span className="cell-clamp">{row.project ?? '—'}</span>}</td>
+                    if (c.key === 'project')     return <td key={c.key} title={row.project ?? undefined}>{row.projectId !== null ? <button className="link-btn" style={{ fontSize: 13 }} onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : (row.project ?? '—')}</td>
                     if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
                     if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
                     if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
