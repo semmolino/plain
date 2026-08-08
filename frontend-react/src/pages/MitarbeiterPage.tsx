@@ -440,7 +440,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
         {stat('Genommen', bal ? `${bal.taken} T` : '…')}
         {bal && !!bal.forfeited && bal.forfeited > 0 && stat('Verfallen', `${bal.forfeited} T`, '#dc2626')}
         {stat('Resturlaub', bal ? `${bal.remaining} T` : '…', bal && bal.remaining < 0 ? '#dc2626' : '#059669')}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-4)', textAlign: 'right' }}>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', textAlign: 'right' }}>
           Urlaub {year} ({bal?.carryoverExpires ? `Übertrag verfällt ${bal.carryoverExpiryLabel ?? '31.03.'}` : 'Übertrag automatisch'})
           {bal && !!bal.atRisk && bal.atRisk > 0 && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', color: 'var(--warning)', marginTop: 2 }}>
@@ -931,7 +931,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                 </tr>
               ))}
               {!cpRates.length && (
-                <tr><td colSpan={3} style={{ color: 'var(--text-4)', fontSize: 12, padding: '4px 0' }}>Noch kein Verlauf erfasst.</td></tr>
+                <tr><td colSpan={3} style={{ color: 'var(--text-3)', fontSize: 12, padding: '4px 0' }}>Noch kein Verlauf erfasst.</td></tr>
               )}
             </tbody>
           </table>
@@ -1000,7 +1000,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                 </tr>
               ))}
               {!empWmList.length && (
-                <tr><td colSpan={3} style={{ color: 'var(--text-4)', fontSize: 12, padding: '4px 0' }}>Kein Modell zugewiesen.</td></tr>
+                <tr><td colSpan={3} style={{ color: 'var(--text-3)', fontSize: 12, padding: '4px 0' }}>Kein Modell zugewiesen.</td></tr>
               )}
             </tbody>
           </table>
@@ -1455,7 +1455,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                               {i === 0 && (
                                 <td rowSpan={sorted.length} style={{ verticalAlign: 'top', paddingTop: 8 }}>
                                   <strong>{r.SHORT_NAME}</strong>
-                                  <br /><span style={{ fontSize: 11, color: 'var(--text-4)', fontWeight: 400 }}>{r.FIRST_NAME} {r.LAST_NAME}</span>
+                                  <br /><span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 400 }}>{r.FIRST_NAME} {r.LAST_NAME}</span>
                                 </td>
                               )}
                               {i === 0 && (
@@ -1734,10 +1734,10 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
                             </td>
                             <td style={{ color: 'var(--text-3)' }}>{WEEKDAY_SHORT[d.weekday]}</td>
                             <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {d.required > 0 ? fmtH(d.required) : <span style={{ color: 'var(--text-5)' }}>—</span>}
+                              {d.required > 0 ? fmtH(d.required) : <span style={{ color: 'var(--text-3)' }}>—</span>}
                             </td>
                             <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {d.actual > 0 ? fmtH(d.actual) : <span style={{ color: 'var(--text-5)' }}>—</span>}
+                              {d.actual > 0 ? fmtH(d.actual) : <span style={{ color: 'var(--text-3)' }}>—</span>}
                               {d.absence && (
                                 <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent2)' }} title={`${d.absence.name} — als Soll gutgeschrieben`}>
                                   {d.absence.name}{d.absence.fraction === 0.5 ? ' ½' : ''}
@@ -2038,7 +2038,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                             <button className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }} disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'REJECTED' })}>Ablehnen</button>
                             <button className="btn-small" style={{ padding: '1px 8px', fontSize: 11 }} onClick={() => setClarifyId(a.ID)}>Rückfrage</button>
                           </>
-                        ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>—</span>}
+                        ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>—</span>}
                       </td>
                     </tr>
                   ))}
@@ -2111,7 +2111,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                 </tbody>
               </table>
             </div>
-            <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
               Farbe = Abwesenheitsart · blass mit „?" = beantragt (offen) · voll = genehmigt
             </p>
           </>
@@ -2514,7 +2514,7 @@ function MonthsOverviewTab() {
         </tbody>
       </table>
       </div>
-      <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
         ✓ Abgeschlossen &nbsp;·&nbsp; ○ Offen &nbsp;·&nbsp; Einzelne Zelle klicken zum Umschalten &nbsp;·&nbsp; „alle ✓" schließt eine ganze Monatsspalte ab
       </p>
 
@@ -2743,7 +2743,7 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
       )}
 
       {rows.length > 0 && (
-        <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
           {rows.length} Einträge · limitiert auf 1.000 — bei mehr Treffern Filter verfeinern.
         </p>
       )}
@@ -2766,7 +2766,7 @@ function EmployeeRoleBadge({ employeeId, roles, mapping, onClick }: {
     return (
       <button onClick={onClick} style={{
         background: 'transparent', border: '1px dashed var(--border)', borderRadius: 12, padding: '2px 8px',
-        fontSize: 11, color: 'var(--text-4)', cursor: 'pointer',
+        fontSize: 11, color: 'var(--text-3)', cursor: 'pointer',
       }}>+ Rolle</button>
     )
   }
@@ -3067,7 +3067,7 @@ export function MitarbeiterPage() {
                             onChange={v => empInlineMut.mutate({ id: r.ID, body: employeeRowToPayload(r, { department_id: v ? Number(v) : null }) })}
                           />
                         </td>
-                        <td>{r.CURRENT_MODEL_NAME || <span style={{ color: 'var(--text-5)' }}>—</span>}</td>
+                        <td>{r.CURRENT_MODEL_NAME || <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
                         {canViewBookings && (() => {
                           const bal = balByEmp.get(r.ID)
                           const run = bal?.RUNNING_BALANCE ?? 0
@@ -3076,7 +3076,7 @@ export function MitarbeiterPage() {
                                 title={bal ? `Monatssaldo (akt. Monat): ${fmtBalance(bal.BALANCE)}` : undefined}>
                               {bal
                                 ? <span style={{ color: run > 0 ? '#059669' : run < 0 ? '#dc2626' : '#6b7280', fontWeight: 600 }}>{fmtBalance(run)}</span>
-                                : <span style={{ color: 'var(--text-5)' }}>—</span>}
+                                : <span style={{ color: 'var(--text-3)' }}>—</span>}
                             </td>
                           )
                         })()}
@@ -3115,8 +3115,8 @@ export function MitarbeiterPage() {
                     {!pageRows.length && <tr><td colSpan={canViewBookings ? 10 : 9} className="empty-note">Keine Einträge</td></tr>}
                   </tbody>
                   <tfoot>
-                    <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                      <td colSpan={canViewBookings ? 10 : 9} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                    <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
+                      <td colSpan={canViewBookings ? 10 : 9} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                         {processed.length !== employees.length ? `${processed.length} / ${employees.length} Einträge` : `${employees.length} Einträge`}
                       </td>
                     </tr>

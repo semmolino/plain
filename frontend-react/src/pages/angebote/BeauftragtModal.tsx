@@ -84,7 +84,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
       <div>
 
         {/* Mode selector */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, padding: 4, background: 'rgba(17,24,39,0.04)', borderRadius: 6 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, padding: 4, background: 'var(--dim)', borderRadius: 6 }}>
           <button
             type="button"
             onClick={() => setMode('create')}

@@ -323,7 +323,7 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
                       <input type="checkbox" checked={allOn} ref={el => { if (el) el.indeterminate = anyOn && !allOn }}
                         onChange={e => toggleModule(moduleKey, e.target.checked)} />
                       <strong style={{ fontSize: 13 }}>{moduleLabel}</strong>
-                      <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{onCount}/{perms.length}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{onCount}/{perms.length}</span>
                     </div>
                     <div style={{ marginLeft: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                       {perms.map(p => (

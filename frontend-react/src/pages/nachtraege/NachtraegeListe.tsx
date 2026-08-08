@@ -73,7 +73,7 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub?: s
     <div style={{ flex: '1 1 130px', minWidth: 130, border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', background: 'var(--surface-3)' }}>
       <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{sub}</div>}
     </div>
   )
 }

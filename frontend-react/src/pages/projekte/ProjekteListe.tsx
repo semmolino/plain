@@ -571,8 +571,8 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                 )}
               </tbody>
               <tfoot>
-                <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                  <td colSpan={5 + visibleOptCols.length + actionColSpan} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
+                  <td colSpan={5 + visibleOptCols.length + actionColSpan} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                     {processed.length !== projects.length ? `${processed.length} / ${projects.length} Einträge` : `${projects.length} Einträge`}
                   </td>
                 </tr>

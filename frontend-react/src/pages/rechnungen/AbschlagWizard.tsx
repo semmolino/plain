@@ -431,7 +431,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
           {singleContract ? (
             <div className="form-group">
               <label>Vertrag</label>
-              <input readOnly value={contractLabel} style={{ background: 'rgba(17,24,39,0.04)' }} />
+              <input readOnly value={contractLabel} style={{ background: 'var(--dim)' }} />
             </div>
           ) : (
             <Autocomplete
@@ -500,7 +500,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
           <div className="form-group">
             <label>Kommentar</label>
             <textarea rows={2} value={comment} onChange={e => setComment(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15 }} />
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15 }} />
           </div>
 
           {/* E-Rechnungs-Felder (BT-10/13/19/83) */}
@@ -643,7 +643,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
             <p className="wizard-step-title">Abschlagsrechnung buchen</p>
 
             {/* Discount section */}
-            <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+            <div style={{ background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
               <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Nachlässe und Skonto</p>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
                 <input type="checkbox" checked={showDiscounts} onChange={e => setShowDiscounts(e.target.checked)} />
@@ -655,24 +655,24 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                     <label style={{ fontSize: 13, minWidth: 80 }}>Nachlass I (%)</label>
                     <input type="number" step="0.01" min="0" max="100" value={d1Pct}
                       onChange={e => { setD1Pct(e.target.value); if (!e.target.value) { setD2Pct(''); setD2Reason('') } }}
-                      style={{ width: 90, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      style={{ width: 90, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                       placeholder="z. B. 3" />
                     <input type="text" value={d1Reason} onChange={e => setD1Reason(e.target.value)}
-                      style={{ flex: 1, minWidth: 120, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      style={{ flex: 1, minWidth: 120, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                       placeholder="Bezeichnung (optional)" />
-                    {d1Pct && <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>= {fmtEur(d1Amt)}</span>}
+                    {d1Pct && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>= {fmtEur(d1Amt)}</span>}
                   </div>
                   {d1Pct && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <label style={{ fontSize: 13, minWidth: 80 }}>Nachlass II (%)</label>
                       <input type="number" step="0.01" min="0" max="100" value={d2Pct}
                         onChange={e => setD2Pct(e.target.value)}
-                        style={{ width: 90, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                        style={{ width: 90, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                         placeholder="optional" />
                       <input type="text" value={d2Reason} onChange={e => setD2Reason(e.target.value)}
-                        style={{ flex: 1, minWidth: 120, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                        style={{ flex: 1, minWidth: 120, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                         placeholder="Bezeichnung (optional)" />
-                      {d2Pct && <span style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>= {fmtEur(d2Amt)}</span>}
+                      {d2Pct && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>= {fmtEur(d2Amt)}</span>}
                     </div>
                   )}
                   {totalDisc > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Gesamt-Nachlass: <strong>{fmtEur(totalDisc)}</strong></div>}
@@ -695,25 +695,25 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                     <label style={{ fontSize: 13, minWidth: 80 }}>Skonto (%)</label>
                     <input type="number" step="0.01" min="0" max="100" value={cashDiscPct}
                       onChange={e => setCashDiscPct(e.target.value)}
-                      style={{ width: 90, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      style={{ width: 90, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                       placeholder="z. B. 2" />
                     <label style={{ fontSize: 13, minWidth: 80 }}>Zahlungsziel (Tage)</label>
                     <input type="number" step="1" min="0" value={cashDiscDays}
                       onChange={e => setCashDiscDays(e.target.value)}
-                      style={{ width: 70, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      style={{ width: 70, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                       placeholder="z. B. 14" />
                   </div>
                   {cdAmt > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Skonto-Abzug: <strong>{fmtEur(cdAmt)}</strong></div>}
                 </div>
               )}
               {(totalDisc > 0 || cdAmt > 0) && (
-                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(17,24,39,0.08)', fontSize: 13 }}>
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 13 }}>
                   Rechnungssumme netto nach Abzügen: <strong>{fmtEur(netAfter)}</strong>
                 </div>
               )}
 
               {/* Sicherheitseinbehalt */}
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(17,24,39,0.08)' }}>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 6 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
                     <input type="checkbox" checked={seEnabled} onChange={e => setSeEnabled(e.target.checked)} />
@@ -727,7 +727,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                       Prozent (%):
                       <input type="number" step="0.01" min="0" max="100" value={sePct}
                         onChange={e => setSePct(e.target.value)}
-                        style={{ width: 80, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                        style={{ width: 80, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                         placeholder="z. B. 5" />
                     </label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
@@ -789,7 +789,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                 <button className="btn-small" onClick={() => void downloadPpEinvoice(draftId, null, 'cii')}>ZUGFeRD herunterladen</button>
               </div>
             )}
-            <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', marginTop: 8 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 8 }}>
               Nach dem Buchen ist die Abschlagsrechnung unveränderlich. Vorher kann sie als Entwurf zwischengespeichert werden.
             </p>
             <Message text={msg?.text ?? null} type={msg?.type} />

@@ -827,7 +827,7 @@ function UnternehmenSection() {
         <div className="form-group">
           <label htmlFor="upep" style={{ display: 'inline-flex', alignItems: 'center' }}>
             Peppol Endpoint-ID (Versender)
-            <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 6 }}>(optional)</span>
+            <span style={{ color: 'var(--text-3)', fontWeight: 400, marginLeft: 6 }}>(optional)</span>
             <HelpHint id="einvoice.peppol" />
           </label>
           <input id="upep" type="text" value={form.peppol_endpoint_id} onChange={set('peppol_endpoint_id')} />
@@ -835,7 +835,7 @@ function UnternehmenSection() {
         <div className="form-group">
           <label htmlFor="upep-sc">
             Peppol Scheme-ID (EAS)
-            <span style={{ color: 'var(--text-4)', fontWeight: 400, marginLeft: 6 }}>(optional)</span>
+            <span style={{ color: 'var(--text-3)', fontWeight: 400, marginLeft: 6 }}>(optional)</span>
           </label>
           <select id="upep-sc" value={form.peppol_scheme_id} onChange={e => setForm({ ...form, peppol_scheme_id: e.target.value })}>
             <option value="">— keiner —</option>
@@ -1985,7 +1985,7 @@ function KostensatzSection() {
           <button type="button" className="btn-small btn-save" onClick={saveAllParams}>Alle speichern</button>
         </KsStepHead>
         {paramsMsg && <Message text={paramsMsg.text} type={paramsMsg.type} />}
-        <p style={{ fontSize: 11, color: 'var(--text-4)', marginBottom: 10, marginTop: 0 }}>
+        <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: 0 }}>
           Richtwert AG-Sozialabgaben (D): KV ~7,3 % · RV 9,3 % · AV 1,5 % · PV ~1,8 % · UV ~1 % ≈ 21 % gesamt
         </p>
         <div className="table-scroll">
@@ -2018,7 +2018,7 @@ function KostensatzSection() {
             <tbody>
               {employees.map(emp => {
                 const p = empParams[emp.ID]
-                if (!p) return <tr key={emp.ID}><td colSpan={8} style={{ color: 'var(--text-4)', fontSize: 11 }}>Laden…</td></tr>
+                if (!p) return <tr key={emp.ID}><td colSpan={8} style={{ color: 'var(--text-3)', fontSize: 11 }}>Laden…</td></tr>
                 const inp = (field: keyof EmployeeCalcParams, w = 70) => (
                   <input
                     type="number"
@@ -2113,10 +2113,10 @@ function KostensatzSection() {
                     return (
                       <Fragment key={r.employee_id}>
                         <tr style={{ cursor: 'pointer' }} onClick={() => toggleExpand(r.employee_id)}>
-                          <td style={{ textAlign: 'center', color: 'var(--text-4)' }}>
+                          <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>
                             {isExp ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                           </td>
-                          <td><strong>{r.short_name}</strong> <span style={{ color: 'var(--text-4)', fontWeight: 400 }}>{r.first_name} {r.last_name}</span></td>
+                          <td><strong>{r.short_name}</strong> <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>{r.first_name} {r.last_name}</span></td>
                           <td style={{ textAlign: 'right' }}>{FMT_H_KS(bd.productive_hours)}</td>
                           <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.direct_cost_per_h)}</td>
                           <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.overhead_per_h)}</td>
@@ -2801,7 +2801,7 @@ function BenachrichtigungenSection() {
                 {c.description && (
                   <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{c.description}</div>
                 )}
-                <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
                   Empfänger: {summarizeAudience(c)}
                 </div>
               </div>
@@ -2815,7 +2815,7 @@ function BenachrichtigungenSection() {
                   Bearbeiten
                 </button>
               ) : (
-                <span style={{ fontSize: 11, color: 'var(--text-4)', fontStyle: 'italic', paddingTop: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic', paddingTop: 4 }}>
                   nur ein/aus
                 </span>
               )}
@@ -3415,7 +3415,7 @@ function EngagementSection() {
           />
           <strong>Engagement aktiv</strong>
         </label>
-        <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4, marginLeft: 24 }}>
+        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, marginLeft: 24 }}>
           Master-Schalter. Wenn aus, sind alle vier Features unten unsichtbar — unabhängig davon, wie sie einzeln stehen.
         </p>
       </div>
@@ -3431,7 +3431,7 @@ function EngagementSection() {
               />
               <span style={{ fontSize: 13, fontWeight: 600 }}>{f.label}</span>
             </label>
-            <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2, marginLeft: 24 }}>{f.hint}</p>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, marginLeft: 24 }}>{f.hint}</p>
           </div>
         ))}
       </div>

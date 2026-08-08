@@ -551,7 +551,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           {singleContract ? (
             <div className="form-group">
               <label>Vertrag</label>
-              <input readOnly value={contractLabel} style={{ background: 'rgba(17,24,39,0.04)' }} />
+              <input readOnly value={contractLabel} style={{ background: 'var(--dim)' }} />
             </div>
           ) : (
             <Autocomplete
@@ -607,7 +607,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <div className="form-group">
             <label>Kommentar</label>
             <textarea rows={2} value={comment} onChange={e => setComment(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15 }} />
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15 }} />
           </div>
 
           {/* E-Rechnungs-Felder (BT-10/13/19/83) */}
@@ -726,7 +726,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
             </table>
           </div>
           {hiddenCount > 0 && (
-            <p style={{ fontSize: 12, color: 'rgba(17,24,39,0.45)', marginTop: 6 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
               {hiddenCount} vollständig abgerechnete oder geschlossene {hiddenCount === 1 ? 'Position' : 'Positionen'} werden nicht angezeigt.
             </p>
           )}
@@ -787,7 +787,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                           value={dedSelected.has(d.ID) ? (deductAmounts[d.ID] ?? '') : ''}
                           disabled={!dedSelected.has(d.ID)}
                           onChange={e => setDeductAmounts(prev => ({ ...prev, [d.ID]: e.target.value }))}
-                          style={{ width: 110, padding: '4px 6px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 6, fontSize: 13 }}
+                          style={{ width: 110, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                         />
                       </td>
                     </tr>
@@ -843,7 +843,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <p className="wizard-step-title">Schlussrechnung buchen</p>
 
           {/* Nachlässe und Skonto */}
-          <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+          <div style={{ background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
             <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Nachlässe und Skonto</p>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 6, cursor: 'pointer' }}>
               <input type="checkbox" checked={showDiscounts} onChange={e => setShowDiscounts(e.target.checked)} />
@@ -855,24 +855,24 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                   <label style={{ fontSize: 12 }}>Nachlass I (%)</label>
                   <input type="number" step="0.01" min="0" max="100" value={d1Pct}
                     onChange={e => setD1Pct(e.target.value)}
-                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
                 </div>
                 <div className="form-group" style={{ flex: '2 1 200px', minWidth: 160, marginBottom: 0 }}>
                   <label style={{ fontSize: 12 }}>Bezeichnung Nachlass I (optional)</label>
                   <input type="text" value={d1Reason} onChange={e => setD1Reason(e.target.value)}
-                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }}
                     placeholder="z. B. Planungsrabatt" />
                 </div>
                 <div className="form-group" style={{ flex: '1 1 120px', minWidth: 120, marginBottom: 0 }}>
                   <label style={{ fontSize: 12 }}>Nachlass II (% auf N I)</label>
                   <input type="number" step="0.01" min="0" max="100" value={d2Pct}
                     onChange={e => setD2Pct(e.target.value)}
-                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
                 </div>
                 <div className="form-group" style={{ flex: '2 1 200px', minWidth: 160, marginBottom: 0 }}>
                   <label style={{ fontSize: 12 }}>Bezeichnung Nachlass II (optional)</label>
                   <input type="text" value={d2Reason} onChange={e => setD2Reason(e.target.value)}
-                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }}
                     placeholder="z. B. Treuerabatt" />
                 </div>
               </div>
@@ -899,34 +899,34 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                   </label>
                   <input type="number" step="0.01" min="0" max="100" value={cashDiscPct}
                     onChange={e => setCashDiscPct(e.target.value)}
-                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
                 </div>
                 <div className="form-group" style={{ flex: '1 1 120px', minWidth: 120, marginBottom: 0 }}>
                   <label style={{ fontSize: 12 }}>Skonto-Tage</label>
                   <input type="number" step="1" min="0" value={cashDiscDays}
                     onChange={e => setCashDiscDays(e.target.value)}
-                    style={{ width: '100%', padding: '6px 10px', border: '1px solid rgba(17,24,39,0.12)', borderRadius: 8, fontSize: 14 }} />
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
                 </div>
               </div>
             )}
             {(showDiscounts || showSkonto) && (
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(17,24,39,0.08)', fontSize: 13 }}>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 13 }}>
                 {showDiscounts && d1 > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(17,24,39,0.6)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-3)' }}>
                     <span>Nachlass I ({d1} %)</span><span>– {fmtEur(d1Amt)}</span>
                   </div>
                 )}
                 {showDiscounts && d2 > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(17,24,39,0.6)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-3)' }}>
                     <span>Nachlass II ({d2} %)</span><span>– {fmtEur(d2Amt)}</span>
                   </div>
                 )}
                 {showSkonto && cdPct > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(17,24,39,0.6)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-3)' }}>
                     <span>Skonto ({cdPct} %)</span><span>– {fmtEur(cdAmt)}</span>
                   </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, marginTop: 4, paddingTop: 4, borderTop: '1px solid rgba(17,24,39,0.08)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
                   <span>Netto nach Abzügen</span><span>{fmtEur(netAfter)}</span>
                 </div>
               </div>
@@ -934,15 +934,15 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           </div>
 
           {/* Invoice summary */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 14, marginBottom: 18, padding: '12px 16px', background: 'rgba(17,24,39,0.03)', borderRadius: 10 }}>
-            <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Typ: </span><strong>Teilschluss-/Schlussrechnung</strong></div>
-            <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Projekt: </span><strong>{projectLabel || '—'}</strong></div>
-            <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Vertrag: </span><strong>{contractLabel || '—'}</strong></div>
-            <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Rechnungsdatum: </span><strong>{fmtDate(detDate)}</strong></div>
-            {dueDate && <div><span style={{ color: 'rgba(17,24,39,0.5)' }}>Fällig: </span><strong>{fmtDate(dueDate)}</strong></div>}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 14, marginBottom: 18, padding: '12px 16px', background: 'var(--dim)', borderRadius: 10 }}>
+            <div><span style={{ color: 'var(--text-3)' }}>Typ: </span><strong>Teilschluss-/Schlussrechnung</strong></div>
+            <div><span style={{ color: 'var(--text-3)' }}>Projekt: </span><strong>{projectLabel || '—'}</strong></div>
+            <div><span style={{ color: 'var(--text-3)' }}>Vertrag: </span><strong>{contractLabel || '—'}</strong></div>
+            <div><span style={{ color: 'var(--text-3)' }}>Rechnungsdatum: </span><strong>{fmtDate(detDate)}</strong></div>
+            {dueDate && <div><span style={{ color: 'var(--text-3)' }}>Fällig: </span><strong>{fmtDate(dueDate)}</strong></div>}
             {(bpStart || bpFinish) && (
               <div style={{ gridColumn: '1/-1' }}>
-                <span style={{ color: 'rgba(17,24,39,0.5)' }}>Leistungszeitraum: </span>
+                <span style={{ color: 'var(--text-3)' }}>Leistungszeitraum: </span>
                 <strong>{fmtDate(bpStart)} – {fmtDate(bpFinish)}</strong>
               </div>
             )}
@@ -1009,7 +1009,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
 
           {/* ── Sicherheitseinbehalt-Auflösung (Phase 2) ───────────────── */}
           {openSeList.length > 0 && (
-            <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
+            <div style={{ background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
               <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, display: 'inline-flex', alignItems: 'center' }}>
                 Sicherheitseinbehalt-Auflösung <HelpHint id="invoice.sicherheitseinbehalt" />
               </p>
@@ -1041,7 +1041,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                 {(() => {
                   const selSum = openSeList.filter(e => seReleaseSel.has(e.ID)).reduce((s, e) => s + (e.SE_AMOUNT || 0), 0)
                   return (
-                    <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(17,24,39,0.08)', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
                       <span>Σ Auflösung in dieser Rechnung</span>
                       <strong style={{ color: 'var(--success)' }}>+ {fmtEur(selSum)}</strong>
                     </div>
@@ -1099,7 +1099,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
               <button className="btn-small" onClick={() => void downloadInvoiceEinvoice(draftId, invType, null, 'cii')}>ZUGFeRD herunterladen</button>
             </div>
           )}
-          <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', marginTop: 8 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 8 }}>
             Nach dem Buchen sind alle gewählten Strukturpositionen als abgeschlossen markiert. Vorher kann die Rechnung als Entwurf zwischengespeichert werden.
           </p>
           <Message text={msg?.text ?? null} type={msg?.type} />

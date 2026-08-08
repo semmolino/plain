@@ -55,9 +55,9 @@ export function ProfilePage() {
         <button
           onClick={() => navigate('/')}
           style={{
-            background: 'transparent', border: '1px solid rgba(0,0,0,0.15)',
+            background: 'transparent', border: '1px solid var(--border)',
             borderRadius: 6, padding: '4px 12px', fontSize: 12,
-            cursor: 'pointer', color: 'rgba(17,24,39,0.6)',
+            cursor: 'pointer', color: 'var(--text-3)',
           }}
         >
           ← Zurück

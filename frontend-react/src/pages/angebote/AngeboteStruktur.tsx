@@ -664,17 +664,17 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                   {/* Root totals row */}
                   {structure.length > 0 && (
                     <>
-                    <tr style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)', cursor: 'context-menu' }}
+                    <tr style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid var(--border)', cursor: 'context-menu' }}
                       onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null }) }}>
                       <td></td><td></td>
-                      <td style={{ fontSize: 12, color: 'rgba(17,24,39,0.5)' }}>Gesamt</td>
+                      <td style={{ fontSize: 12, color: 'var(--text-3)' }}>Gesamt</td>
                       <td></td>
-                      <td><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
-                      <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootRevenueBasis)}</span></td>
+                      <td><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
+                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootRevenueBasis)}</span></td>
                       <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges > 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
                       <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges > 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
-                      <td className="num"><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
-                      <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
+                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
+                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
                       <td>
                         <button
                           className="row-action-btn"
@@ -826,9 +826,9 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         </td>
                         <td className="num">
                           {isParent ? (
-                            <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(displayRevenueBasis)}</span>
+                            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(displayRevenueBasis)}</span>
                           ) : isHourly ? (
-                            <span style={{ color: 'rgba(17,24,39,0.55)', fontSize: 12 }} title="Honorar = Stunden × Satz (oben editierbar)">{fmtEur(hourlyEur)}</span>
+                            <span style={{ color: 'var(--text-3)', fontSize: 12 }} title="Honorar = Stunden × Satz (oben editierbar)">{fmtEur(hourlyEur)}</span>
                           ) : (
                             <input className="tbl-input" type="number" min={0} step={100}
                               style={{ width: 90, textAlign: 'right' }}
@@ -839,7 +839,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                           {displaySurcharges !== 0 ? (
                             <span style={{ color: displaySurcharges > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{fmtEur(displaySurcharges)}</span>
                           ) : (
-                            <span style={{ color: 'rgba(17,24,39,0.25)', fontSize: 12 }}>—</span>
+                            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span>
                           )}
                         </td>
                         <td className="num">

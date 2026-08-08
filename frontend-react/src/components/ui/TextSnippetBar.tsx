@@ -51,13 +51,13 @@ export function TextSnippetBar({ currentText, onChange, kind, bookingTypeId }: {
 
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
-      <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.5)', display: 'inline-flex', alignItems: 'center' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'inline-flex', alignItems: 'center' }}>
         Textbausteine <HelpHint id="bookings.text_snippets" />
       </span>
 
       {global.map(s => (
         <button key={`g${s.ID}`} type="button" title={s.TEXT} onClick={() => insert(s)}
-          style={{ ...insertBtn, background: 'rgba(17,24,39,0.06)', color: 'var(--text-2)', borderRadius: 999, padding: '3px 10px' }}>
+          style={{ ...insertBtn, background: 'var(--surface-2)', color: 'var(--text-2)', borderRadius: 999, padding: '3px 10px' }}>
           {s.LABEL || s.TEXT}
         </button>
       ))}

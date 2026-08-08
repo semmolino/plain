@@ -146,7 +146,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
               step={0.01}
               value={cpRate}
               readOnly
-              style={{ background: 'rgba(17,24,39,0.04)', cursor: 'not-allowed' }}
+              style={{ background: 'var(--dim)', cursor: 'not-allowed' }}
               placeholder="Mitarbeiter wählen …"
             />
             {cpRateFound === false && (

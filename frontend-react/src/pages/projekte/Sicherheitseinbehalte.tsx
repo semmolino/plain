@@ -54,7 +54,7 @@ function SeUebersicht({ onSelectProject }: { onSelectProject: (id: number) => vo
           <div style={{ fontSize: 12, color: 'var(--success-strong)', fontWeight: 600, marginBottom: 4 }}>BEREITS AUFGELÖST</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success-strong)' }}>{fmtEur(totalReleased)}</div>
         </div>
-        <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(17, 24, 39, 0.04)', border: '1px solid rgba(17, 24, 39, 0.10)', borderRadius: 8 }}>
+        <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 8 }}>
           <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>PROJEKTE / VERTRÄGE</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{rows.length}</div>
         </div>
@@ -161,12 +161,12 @@ function SeProjektDetails({ projectId, onBack }: { projectId: number; onBack: ()
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success-strong)' }}>{fmtEur(releasedSum)}</div>
               <div style={{ fontSize: 12, color: 'var(--success-strong)', marginTop: 2 }}>{released.length} {released.length === 1 ? 'Eintrag' : 'Einträge'}</div>
             </div>
-            <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(17, 24, 39, 0.04)', border: '1px solid rgba(17, 24, 39, 0.10)', borderRadius: 8 }}>
+            <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>GESAMT (AKTIV)</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{fmtEur(openSum + releasedSum)}</div>
               <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
                 {activeRows.length} {activeRows.length === 1 ? 'Eintrag' : 'Einträge'}
-                {cancelled.length > 0 && <span style={{ color: 'var(--text-4)' }}> · {cancelled.length} storniert</span>}
+                {cancelled.length > 0 && <span style={{ color: 'var(--text-3)' }}> · {cancelled.length} storniert</span>}
               </div>
             </div>
           </div>

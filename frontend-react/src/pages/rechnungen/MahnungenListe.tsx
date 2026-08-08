@@ -1045,16 +1045,16 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
             {/* Existing payments */}
             {existingPayments.length > 0 && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(17,24,39,0.5)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Bisherige Zahlungen
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <tbody>
                     {existingPayments.map(p => (
-                      <tr key={p.ID} style={{ borderBottom: '1px solid rgba(17,24,39,0.08)' }}>
-                        <td style={{ padding: '4px 0', color: 'rgba(17,24,39,0.55)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
+                      <tr key={p.ID} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '4px 0', color: 'var(--text-3)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
                         <td style={{ padding: '4px 6px', fontWeight: 500 }}>{fmtMoney(p.AMOUNT_PAYED_GROSS)}</td>
-                        <td style={{ padding: '4px 0', color: 'rgba(17,24,39,0.45)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
+                        <td style={{ padding: '4px 0', color: 'var(--text-3)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
                         <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>
                           <button
                             type="button"
@@ -1073,7 +1073,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
             {/* Amount summary */}
             {payTarget.totalGross != null && (
-              <div style={{ marginBottom: 12, fontSize: 14, color: 'rgba(17,24,39,0.6)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span>
                   Rechnungsbetrag: <strong>{fmtMoney(payTarget.totalGross)}</strong>
                   {(payTarget.paidGross ?? 0) > 0 && (

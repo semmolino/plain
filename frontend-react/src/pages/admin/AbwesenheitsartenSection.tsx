@@ -37,7 +37,7 @@ function toForm(t: AbsenceType): FormState {
 }
 
 const Flag = ({ on }: { on: boolean }) =>
-  on ? <Check size={14} strokeWidth={2.5} color="#059669" /> : <span style={{ color: 'var(--text-5)' }}>—</span>
+  on ? <Check size={14} strokeWidth={2.5} color="#059669" /> : <span style={{ color: 'var(--text-3)' }}>—</span>
 
 export function AbwesenheitsartenSection() {
   const qc = useQueryClient()
@@ -102,7 +102,7 @@ export function AbwesenheitsartenSection() {
               <tr key={t.ID} style={{ borderBottom: '1px solid var(--border-3)', opacity: t.ACTIVE === 0 ? 0.5 : 1 }}>
                 <td style={{ padding: '4px 6px 4px 0', fontWeight: 600 }}>
                   <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: t.COLOR || '#9ca3af', marginRight: 6 }} />
-                  {t.NAME}{t.ACTIVE === 0 && <span style={{ fontWeight: 400, color: 'var(--text-4)' }}> (inaktiv)</span>}
+                  {t.NAME}{t.ACTIVE === 0 && <span style={{ fontWeight: 400, color: 'var(--text-3)' }}> (inaktiv)</span>}
                 </td>
                 <td style={{ padding: '4px 6px', textAlign: 'center' }}><Flag on={t.COUNTS_AS_WORKED} /></td>
                 <td style={{ padding: '4px 6px', textAlign: 'center' }}><Flag on={t.REDUCES_VACATION} /></td>
@@ -209,7 +209,7 @@ function VerfallSettingsCard() {
           <select value={mm} disabled={!canManage} onChange={e => setMm(e.target.value)} style={selStyle}>
             {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <span style={{ color: 'var(--text-4)' }}>(Vorgabe 31.03.)</span>
+          <span style={{ color: 'var(--text-3)' }}>(Vorgabe 31.03.)</span>
         </div>
       )}
 

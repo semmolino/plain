@@ -484,7 +484,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                 <FilterChip label="Buchungstyp" options={kindOptions}   selected={filterKind}   onChange={setFilterKind} />
                 <FilterChip label="Status"      options={statusOptions} selected={filterStatus} onChange={setFilterStatus} />
 
-                <label className="filter-daterange" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'rgba(17,24,39,0.7)' }}>
+                <label className="filter-daterange" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-2)' }}>
                   Zeitraum
                   <input type="date" className="inline-date-input" value={dateFrom} max={dateTo || undefined}
                     onChange={e => setDateFrom(e.target.value)} title="Von" />
@@ -493,7 +493,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                     onChange={e => setDateTo(e.target.value)} title="Bis" />
                 </label>
 
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'rgba(17,24,39,0.7)' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-2)' }}>
                   <input type="checkbox" checked={hideZeroExt} onChange={e => setHideZeroExt(e.target.checked)} />
                   0 zur Abrechnung ausblenden
                 </label>
@@ -575,7 +575,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                       <div className="form-group">
                         <label htmlFor="bcr">Kostensatz</label>
                         <input id="bcr" type="number" step="0.01" value={form.CP_RATE} readOnly
-                          style={{ background: 'rgba(17,24,39,0.04)', cursor: 'not-allowed' }}
+                          style={{ background: 'var(--dim)', cursor: 'not-allowed' }}
                           title="Wird automatisch aus dem Kostensatz-Verlauf ermittelt" />
                         {cpRateFound === false && (
                           <span style={{ fontSize: 11, color: 'var(--danger)', display: 'block', marginTop: 2 }}>
@@ -594,7 +594,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                   <div className="form-group">
                     <label>Beschreibung*</label>
                     <textarea rows={2} value={form.POSTING_DESCRIPTION} onChange={setF('POSTING_DESCRIPTION')} required
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
                     <TextSnippetBar currentText={form.POSTING_DESCRIPTION} onChange={t => setForm(f => ({ ...f, POSTING_DESCRIPTION: t }))} kind="WORK" />
                   </div>
                   <Message text={msg?.text ?? null} type={msg?.type} />
@@ -628,7 +628,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                       <tr key={b.ID}>
                         <td>{fmtDate(b.DATE_VOUCHER)}</td>
                         <td>{b.EMPLOYEE?.SHORT_NAME}</td>
-                        <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.6)' }}>
+                        <td style={{ fontSize: 13, color: 'var(--text-3)' }}>
                           {b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'}
                         </td>
                         <td>
@@ -663,7 +663,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                               </button>
                             </>
                           ) : (
-                            <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.4)', whiteSpace: 'nowrap' }}>abgerechnet</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>abgerechnet</span>
                           )}
                         </td>
                       </tr>
@@ -671,8 +671,8 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                     {!visibleBuchungen.length && <tr><td colSpan={6 + (showRevenue ? 2 : 0) + (showCosts ? 1 : 0)} className="empty-note">Keine Buchungen</td></tr>}
                   </tbody>
                   <tfoot>
-                    <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                      <td colSpan={3} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                    <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
+                      <td colSpan={3} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                         {visibleBuchungen.length !== buchungen.length
                           ? `${visibleBuchungen.length} / ${buchungen.length} Einträge`
                           : `${buchungen.length} Einträge`}
@@ -731,7 +731,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
           <div className="form-group">
             <label>Beschreibung*</label>
             <textarea rows={2} value={editForm.POSTING_DESCRIPTION} onChange={setEF('POSTING_DESCRIPTION')} required
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
           </div>
           <Message text={editMsg?.text ?? null} type={editMsg?.type} />
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -928,7 +928,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
             ))}
           </select>
           {billable && (
-            <span style={{ fontSize: 11, color: 'rgba(17,24,39,0.55)', display: 'block', marginTop: 2 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginTop: 2 }}>
               Erforderlich für die Abrechnung — abgerechnet wird auf <strong>Stunden-Elementen (BT=2)</strong> wie eine Stundenbuchung.
             </span>
           )}
@@ -941,7 +941,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
         <div className="form-group">
           <label>Bezeichnung*</label>
           <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} required
-            style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
           <TextSnippetBar currentText={description} onChange={setDescription} kind={kind} bookingTypeId={bookingTypeId ? Number(bookingTypeId) : undefined} />
         </div>
 
@@ -965,7 +965,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
           </div>
         )}
 
-        <div style={{ fontSize: 13, color: 'rgba(17,24,39,0.7)', margin: '4px 0 8px' }}>
+        <div style={{ fontSize: 13, color: 'var(--text-2)', margin: '4px 0 8px' }}>
           {kind === 'LUMP_COST'
             ? <>Belastet das Projekt mit <strong>{FMT_NUM.format(previewCost)} €</strong> Kosten.</>
             : kind === 'LUMP_REVENUE'
@@ -1079,9 +1079,9 @@ function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }:
         <div className="form-group">
           <label>Beschreibung</label>
           <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Pause"
-            style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
         </div>
-        <div style={{ fontSize: 13, color: 'rgba(17,24,39,0.7)', margin: '4px 0 8px' }}>
+        <div style={{ fontSize: 13, color: 'var(--text-2)', margin: '4px 0 8px' }}>
           Kostenneutral · zählt zur Pausenpflicht (§ 4 ArbZG), <strong>nicht</strong> als Arbeitszeit im Zeitkonto.
         </div>
         <Message text={msg?.text ?? null} type={msg?.type} />
@@ -1141,7 +1141,7 @@ function FilterChip({ label, options, selected, onChange }: {
             </label>
           ))}
           {options.length === 0 && (
-            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-4)', display: 'block' }}>Keine Optionen</span>
+            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-3)', display: 'block' }}>Keine Optionen</span>
           )}
           {hasFilter && (
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>

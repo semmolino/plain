@@ -211,7 +211,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
     },
     scales: {
       x: {
-        grid: { color: 'rgba(0,0,0,0.04)' },
+        grid: { color: 'var(--text-3)' },
         ticks: {
           maxRotation: 45,
           maxTicksLimit: 12,
@@ -220,7 +220,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         },
       },
       y: {
-        grid: { color: 'rgba(0,0,0,0.06)' },
+        grid: { color: 'var(--text-3)' },
         ticks: {
           font: { size: 11 },
           color: 'var(--text-3)',

@@ -274,7 +274,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
                     {isRejected(r) && (
                       <span
                         title="Abgelehnt"
-                        style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px', color: 'var(--text-4)', fontSize: 11, fontWeight: 600 }}
+                        style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px', color: 'var(--text-3)', fontSize: 11, fontWeight: 600 }}
                       >
                         Abgelehnt
                       </span>
@@ -300,8 +300,8 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
               )}
             </tbody>
             <tfoot>
-              <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                <td colSpan={5} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+              <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
+                <td colSpan={5} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                   {filtered.length} Einträge
                 </td>
                 <td className="num">{fmtEur(totalSum)}</td>

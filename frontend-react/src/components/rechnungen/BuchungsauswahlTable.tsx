@@ -64,7 +64,7 @@ function FilterChip({ label, options, selected, onChange }: {
             </label>
           ))}
           {options.length === 0 && (
-            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-4)', display: 'block' }}>Keine Optionen</span>
+            <span style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-3)', display: 'block' }}>Keine Optionen</span>
           )}
           {hasFilter && (
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
@@ -179,7 +179,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
       </div>
 
       {tecList.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.45)', margin: '4px 0 8px' }}>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 8px' }}>
           Keine offenen Buchungen für dieses Projekt vorhanden.
         </p>
       ) : (
@@ -194,7 +194,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
             />
             <input type="date" className="inline-date-input" aria-label="Datum von"
               value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-            <span style={{ fontSize: 13, color: 'var(--text-4)' }}>–</span>
+            <span style={{ fontSize: 13, color: 'var(--text-3)' }}>–</span>
             <input type="date" className="inline-date-input" aria-label="Datum bis"
               value={dateTo} onChange={e => setDateTo(e.target.value)} />
             <FilterChip label="Mitarbeiter" options={allEmployees} selected={empFilter} onChange={setEmpFilter} />
@@ -222,7 +222,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
           </div>
 
           {filtered.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'rgba(17,24,39,0.45)', margin: '4px 0 8px' }}>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 8px' }}>
               Kein Treffer für die aktuellen Filter.{' '}
               <button type="button" onClick={resetFilters}
                 style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, font: 'inherit' }}>

@@ -749,19 +749,19 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                       {currentProject && (
                         <>
                         <tr
-                          style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid rgba(17,24,39,0.10)', cursor: 'context-menu' }}
+                          style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid var(--border)', cursor: 'context-menu' }}
                           onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null }) }}
                         >
                           <td></td>
                           <td></td>
                           <td style={{ paddingLeft: 4, fontSize: 13 }}>{currentProject.NAME_SHORT}</td>
-                          <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.7)' }}>{currentProject.NAME_LONG}</td>
-                          <td><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
-                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
+                          <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{currentProject.NAME_LONG}</td>
+                          <td><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
+                          <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
                           <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : rootSurcharges < 0 ? '#dc2626' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
                           <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges !== 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
-                          <td style={{ textAlign: 'left' }}><span style={{ color: 'rgba(17,24,39,0.3)', fontSize: 12 }}>—</span></td>
-                          <td className="num"><span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
+                          <td style={{ textAlign: 'left' }}><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
+                          <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
                           <td className="num"><span style={{ fontSize: 12, fontWeight: 700 }}>{fmtEur(rootGesamt)}</span></td>
                           <td></td>
                           <td></td>
@@ -890,7 +890,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                             <td className="num">
                               {/* Honorar € = pure leaf sum (REVENUE_BASIS) so it never includes surcharges */}
                               {isParent || isTec ? (
-                                <span style={{ color: 'rgba(17,24,39,0.45)', fontSize: 12 }}>
+                                <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
                                   {fmtEur(isTec ? node.TEC_SP_TOT_SUM : (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0))}
                                 </span>
                               ) : (
@@ -905,7 +905,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                 const sv = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
                                 return sv !== 0
                                   ? <span style={{ color: sv > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{fmtEur(sv)}</span>
-                                  : <span style={{ color: 'rgba(17,24,39,0.25)', fontSize: 12 }}>—</span>
+                                  : <span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span>
                               })()}
                             </td>
                             <td className="num">

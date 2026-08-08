@@ -62,6 +62,13 @@ jobs:
       - name: Type check
         run: cd frontend-react && npx tsc -b
 
+      # Findet im Code benutzte CSS-Variablen und Klassen, die es nirgends
+      # gibt, sowie Kontraste unter WCAG AA. Solche Fehler verschwinden im
+      # Browser lautlos — der Design-Audit vom August 2026 hat rund 20 davon
+      # gefunden (u. a. Fehlermeldungen, die nicht rot waren).
+      - name: Design-System pruefen
+        run: cd frontend-react && npm run check:design
+
   frontend-unit:
     name: Frontend Unit (Vitest)
     runs-on: ubuntu-latest

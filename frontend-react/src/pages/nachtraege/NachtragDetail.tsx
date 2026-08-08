@@ -272,7 +272,7 @@ export function NachtragDetail() {
 function Field({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
       <div style={{ fontSize: 14 }}>{value}</div>
     </div>
   )
@@ -389,7 +389,7 @@ function ReleaseForm({ leaves, submitting, onSubmit }: {
                     <input type="number" inputMode="decimal" style={{ width: 100, textAlign: 'right' }}
                       placeholder={String(l.REVENUE)} value={amounts[l.ID] ?? ''}
                       onChange={e => setAmounts(a => ({ ...a, [l.ID]: e.target.value }))} disabled={!checked.has(l.ID)} />
-                  ) : <span style={{ fontSize: 11, color: 'var(--text-4)' }}>über Buchungen</span>}
+                  ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>über Buchungen</span>}
                 </td>
               </tr>
             )
@@ -482,7 +482,7 @@ function ReviewSection({ nachtrag, canReview, onSaved, onError }: {
               {mut.isPending ? 'Speichern …' : 'Prüfung speichern'}
             </button>
             {nachtrag.REVIEWED_AT && (
-              <span style={{ fontSize: 11, color: 'var(--text-4)' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
                 zuletzt geprüft {new Date(nachtrag.REVIEWED_AT).toLocaleDateString('de-DE')}
               </span>
             )}

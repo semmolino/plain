@@ -276,8 +276,8 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
       },
     },
     scales: {
-      x: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: '#6b7280' } },
-      y: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { size: 11 }, color: '#6b7280', callback: (v) => FMT_EUR0.format(Number(v)) } },
+      x: { grid: { color: 'var(--text-3)' }, ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: '#6b7280' } },
+      y: { grid: { color: 'var(--text-3)' }, ticks: { font: { size: 11 }, color: '#6b7280', callback: (v) => FMT_EUR0.format(Number(v)) } },
     },
   }
 
@@ -633,7 +633,7 @@ function SuggestionRow({ s, navigate }: { s: MahnungSuggestion; navigate: Return
         <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {s.number}{s.addressName1 ? ` · ${s.addressName1}` : ''}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-4)' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
           {s.daysOverdue}d überfällig
           {isActionDue ? ' · Aktion fällig!' : ' · noch keine Mahnung'}
         </div>
@@ -685,7 +685,7 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
       {/* Suggestions */}
       {(stats.suggestions ?? []).length > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-4)', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 6 }}>
             Vorschläge für nächste Aktionen
           </div>
           {stats.suggestions.map((s, i) => (
@@ -697,7 +697,7 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
       {/* Breakdown by stufe */}
       {(stats.byStufe[0] ?? 0) + stufen.reduce((a, s) => a + (stats.byStufe[s] ?? 0), 0) > 0 && (
         <div>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-4)', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 6 }}>
             {stats.totalOpen} offene Vorgänge nach Stufe
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -715,7 +715,7 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
             ))}
           </div>
           {stats.totalClosed > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--text-4)', marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
               {stats.totalClosed} abgeschlossen
             </div>
           )}
@@ -723,7 +723,7 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
       )}
 
       {stats.totalOverdue === 0 && (stats.suggestions ?? []).length === 0 && (
-        <p style={{ fontSize: 13, color: 'var(--text-4)', margin: 0 }}>Keine überfälligen Rechnungen.</p>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>Keine überfälligen Rechnungen.</p>
       )}
     </div>
   )
@@ -899,7 +899,7 @@ function AbsenceOverviewCard() {
 function ProjektleiterView({ riskProjects, dateFrom, dateTo }: { riskProjects: RiskProject[]; dateFrom: string; dateTo: string }) {
   return (
     <>
-      <div style={{ fontSize: 12, color: 'var(--text-4)', margin: '2px 0 12px' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 12px' }}>
         Projekte, in denen du als Projektleiter eingetragen bist — bewertet nach aktuellem Gesamtstand.
       </div>
       <RisikoView projects={riskProjects} />
@@ -932,7 +932,7 @@ function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 10 } } },
           scales: {
-            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: 'var(--text-3)' } },
             yS: { type: 'linear', position: 'right', ticks: { font: { size: 10 }, callback: v => `${Number(v) >= 0 ? '+' : ''}${v} h` }, grid: { display: false } },
             x:  { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
           },
@@ -1174,14 +1174,14 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
 
         <div>
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 6 }}>Ampel</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 6 }}>Ampel</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {ampelDot(project.ampel, 14)}
               <strong style={{ color: AMPEL_COLORS[project.ampel] }}>{AMPEL_LABELS[project.ampel] ?? '—'}</strong>
             </div>
           </div>
 
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8 }}>
             Risikohinweise
           </div>
           {flags.length === 0 ? (
@@ -1313,7 +1313,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                     <td>
                       <div style={{ fontWeight: 500 }}>{p.NAME_SHORT}</div>
                       {p.PROJECT_MANAGER_DISPLAY && (
-                        <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
                       )}
                     </td>
                     <td className="num col-hide-mobile">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
@@ -1324,7 +1324,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                     <td className="num col-hide-mobile">
                       {(() => {
                         const evm = computeEvm(p)
-                        if (evm.cpi == null) return <span style={{ color: 'var(--text-4)' }}>–</span>
+                        if (evm.cpi == null) return <span style={{ color: 'var(--text-3)' }}>–</span>
                         const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
                         return <span style={{ color, fontWeight: 600 }}>{fmtCpi(evm.cpi)}</span>
                       })()}
@@ -1442,7 +1442,7 @@ function OpenPostenTable({ posten }: { posten: OpenPosten[] }) {
           >
             <td>
               <div style={{ fontWeight: 500 }}>{p.number}</div>
-              {p.sourceType === 'pp' && <div style={{ fontSize: 11, color: 'var(--text-4)' }}>Abschlag</div>}
+              {p.sourceType === 'pp' && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Abschlag</div>}
             </td>
             <td className="col-hide-mobile">{p.addressName || '—'}</td>
             <td className="col-hide-mobile">
@@ -1482,7 +1482,7 @@ function BillingPotentialTable({ projects, maxRows = 10 }: { projects: BillingPr
             <td>
               <div style={{ fontWeight: 500 }}>{p.NAME_SHORT}</div>
               {p.PROJECT_MANAGER_DISPLAY && (
-                <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
               )}
             </td>
             <td className="num" style={{ fontWeight: 600, color: 'var(--info)' }}>{fmtEur(p.OPEN_NET_TOTAL)}</td>
@@ -1617,7 +1617,7 @@ function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: Te
                 <td>{emp.short_name}</td>
                 {emp.months.map(m => (
                   <td key={m.month} className="num col-hide-mobile">
-                    {m.hours > 0 ? fmtH(m.hours) : <span style={{ color: 'var(--text-4)' }}>—</span>}
+                    {m.hours > 0 ? fmtH(m.hours) : <span style={{ color: 'var(--text-3)' }}>—</span>}
                   </td>
                 ))}
                 <td className="num"><strong>{fmtH(emp.total)}</strong></td>
@@ -1803,7 +1803,7 @@ export function DashboardPage() {
       <div className="dash-header">
         <div>
           <div className="dash-title">Übersicht</div>
-          {roleLabel && <div style={{ fontSize: 12, color: 'var(--text-4)', marginTop: 2 }}>{roleLabel}</div>}
+          {roleLabel && <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{roleLabel}</div>}
         </div>
         {dashboardRole && (
           <Can permission="dashboard.view_switch">

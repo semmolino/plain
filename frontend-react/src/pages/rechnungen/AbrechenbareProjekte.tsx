@@ -99,7 +99,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
             </span>
           )}
         </button>
-        <span style={{ fontSize: 12, color: 'var(--text-4, #6b7280)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
           {isLoading
             ? 'lädt …'
             : projects.length === 0
@@ -113,7 +113,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
             style={{
               background: 'transparent', border: 'none', cursor: isFetching ? 'wait' : 'pointer',
               padding: 4, borderRadius: 4, display: 'inline-flex', alignItems: 'center',
-              color: 'var(--text-4, #6b7280)',
+              color: 'var(--text-3)',
             }}
           >
             <RefreshCcw size={14} strokeWidth={1.75} style={{

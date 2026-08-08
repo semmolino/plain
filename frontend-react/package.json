@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run check:design && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
-    "test": "vitest run && playwright test"
+    "test": "vitest run && playwright test",
+    "check:design": "node scripts/check-design-system.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",
@@ -26,6 +27,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.60.0",
     "@types/node": "^24.12.0",

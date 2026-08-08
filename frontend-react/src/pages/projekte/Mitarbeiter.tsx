@@ -245,7 +245,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                       </>
                     ) : (
                       <>
-                        <td style={{ color: 'rgba(17,24,39,0.5)', fontSize: 12 }}>
+                        <td style={{ color: 'var(--text-3)', fontSize: 12 }}>
                           {row.ROLE_ID ? roles.find(r => r.ID === row.ROLE_ID)?.NAME_SHORT ?? '—' : '—'}
                         </td>
                         <td>{row.ROLE_NAME_SHORT || '—'}</td>
@@ -268,7 +268,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
               })}
 
               {/* Add row */}
-              <tr style={{ borderTop: '2px solid rgba(17,24,39,0.1)', background: 'rgba(16,185,129,0.03)' }}>
+              <tr style={{ borderTop: '2px solid var(--border)', background: 'rgba(16,185,129,0.03)' }}>
                 <td>
                   <select className="tbl-select" value={addForm.employee_id} onChange={e => setAF('employee_id')(e.target.value)}>
                     <option value="">— Mitarbeiter wählen —</option>
@@ -308,8 +308,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
               )}
             </tbody>
             <tfoot>
-              <tr style={{ borderTop: '2px solid rgba(17,24,39,0.12)', fontWeight: 600 }}>
-                <td colSpan={7} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+              <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 600 }}>
+                <td colSpan={7} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                   {rows.length} Mitarbeiter zugeordnet
                 </td>
               </tr>
@@ -401,7 +401,7 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
           </button>
         </Can>
       </div>
-      <p style={{ fontSize: 12, color: 'rgba(17,24,39,0.55)', margin: '0 0 8px' }}>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 8px' }}>
         Standardpreise aus den Stammdaten; hier optional projektbezogen überschreiben. Leer = Standardpreis gilt.
         Projektbezogene Buchungsarten gelten nur in diesem Projekt.
       </p>
@@ -432,8 +432,8 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
                 const isEditing = editId === r.BOOKING_TYPE_ID
                 return (
                   <tr key={r.BOOKING_TYPE_ID}>
-                    <td style={{ fontSize: 12, color: 'rgba(17,24,39,0.6)' }}>{BOOKING_KIND_LABEL[r.KIND]}{r.SCOPE === 'project' ? ' · Projekt' : ''}</td>
-                    <td>{r.NAME_SHORT}{r.NAME_LONG ? <span style={{ color: 'rgba(17,24,39,0.5)' }}> – {r.NAME_LONG}</span> : null}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{BOOKING_KIND_LABEL[r.KIND]}{r.SCOPE === 'project' ? ' · Projekt' : ''}</td>
+                    <td>{r.NAME_SHORT}{r.NAME_LONG ? <span style={{ color: 'var(--text-3)' }}> – {r.NAME_LONG}</span> : null}</td>
                     <td>{r.KIND === 'UNIT' ? (r.UNIT_LABEL || '—') : '—'}</td>
                     <td className="num">{fmtRateOpt(r.DEFAULT_SP_RATE)}</td>
                     <td className="num">{fmtRateOpt(r.DEFAULT_CP_RATE)}</td>

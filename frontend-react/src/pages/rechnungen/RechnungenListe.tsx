@@ -957,9 +957,9 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               )}
             </tbody>
             <tfoot>
-              <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
+              <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
                 <td></td>
-                <td style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+                <td style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                   {rows.length !== allRows.length ? `${rows.length} / ${allRows.length}` : `${allRows.length}`}
                 </td>
                 {visibleCols.map(c => {
@@ -1044,8 +1044,8 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
           const comment     = (inv ?? pp)?.COMMENT ?? null
 
           const row2 = (label: string, value: React.ReactNode, dimmed = false) => (
-            <tr style={{ borderBottom: '1px solid rgba(17,24,39,0.06)' }}>
-              <td style={{ padding: '5px 12px 5px 0', fontSize: 13, color: 'rgba(17,24,39,0.5)', whiteSpace: 'nowrap' }}>{label}</td>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <td style={{ padding: '5px 12px 5px 0', fontSize: 13, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{label}</td>
               <td style={{ padding: '5px 0', fontSize: 13, color: dimmed ? 'rgba(17,24,39,0.45)' : undefined }}>{value}</td>
             </tr>
           )
@@ -1078,7 +1078,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
 
               {/* Amount breakdown */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(17,24,39,0.4)', marginBottom: 4 }}>Beträge</div>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Beträge</div>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <tbody>
                     {pp && pp.AMOUNT_NET != null && amtRow('Honorar', Number(pp.AMOUNT_NET))}
@@ -1096,7 +1096,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     {amtRow('Offene Posten', detailRow.open ?? detailRow.payable ?? adjGross, true)}
                     {cdPct > 0 && (
                       <tr>
-                        <td colSpan={2} style={{ paddingTop: 8, fontSize: 12, color: 'rgba(17,24,39,0.55)', fontStyle: 'italic' }}>
+                        <td colSpan={2} style={{ paddingTop: 8, fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>
                           Bei Zahlung innerhalb von {cdDays} Tagen: {cdPct} % Skonto → zu zahlen {fmtEur(skontoPayAmt)}
                         </td>
                       </tr>
@@ -1130,16 +1130,16 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
             {/* Existing payments list */}
             {existingPayments.length > 0 && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(17,24,39,0.5)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Bisherige Zahlungen
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <tbody>
                     {existingPayments.map(p => (
-                      <tr key={p.ID} style={{ borderBottom: '1px solid rgba(17,24,39,0.08)' }}>
-                        <td style={{ padding: '4px 0', color: 'rgba(17,24,39,0.55)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
+                      <tr key={p.ID} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '4px 0', color: 'var(--text-3)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
                         <td style={{ padding: '4px 6px', fontWeight: 500 }}>{fmtEur(p.AMOUNT_PAYED_GROSS)}</td>
-                        <td style={{ padding: '4px 0', color: 'rgba(17,24,39,0.45)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
+                        <td style={{ padding: '4px 0', color: 'var(--text-3)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
                         <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>
                           <button
                             type="button"
@@ -1159,7 +1159,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
             )}
 
             {payTarget.totalGross != null && (
-              <div style={{ marginBottom: 12, fontSize: 14, color: 'rgba(17,24,39,0.6)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span>
                   Rechnungsbetrag: <strong>{fmtEur(payTarget.totalGross)}</strong>
                   {payTarget.paidGross != null && payTarget.paidGross > 0 && (
@@ -1180,7 +1180,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               const skontoAmt = Math.round(payTarget.totalGross * (1 - payTarget.cashDiscountPct / 100) * 100) / 100
               return (
                 <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(16,185,129,0.07)', borderRadius: 8, border: '1px solid rgba(16,185,129,0.25)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ flex: 1, fontSize: 13, color: 'rgba(17,24,39,0.75)' }}>
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-2)' }}>
                     <strong>{payTarget.cashDiscountPct} % Skonto</strong> verfügbar
                     {payTarget.cashDiscountDays > 0 && ` (innerhalb von ${payTarget.cashDiscountDays} Tagen)`}
                     {' – '}Betrag abzgl. Skonto: <strong>{fmtEur(skontoAmt)}</strong>

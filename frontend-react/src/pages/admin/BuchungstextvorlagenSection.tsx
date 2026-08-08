@@ -141,7 +141,7 @@ function SnippetModal({ existing, onClose, onSaved }: { existing?: TextSnippet; 
         <div className="form-group">
           <label>Text*</label>
           <textarea rows={3} value={text} onChange={e => setText(e.target.value)} required
-            style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(17,24,39,0.10)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
         </div>
         <Message text={msg?.text ?? null} type={msg?.type} />
         <div className="modal-actions">

@@ -430,8 +430,8 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
               )}
             </tbody>
             <tfoot>
-              <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                <td colSpan={5 + visibleOptCols.length} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+              <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
+                <td colSpan={5 + visibleOptCols.length} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                   {filtered.length !== addresses.length ? `${filtered.length} / ${addresses.length} Einträge` : `${addresses.length} Einträge`}
                 </td>
               </tr>
@@ -802,8 +802,8 @@ function KontakteSection({ initialSearch, initialAddressId, initialAddressName }
               )}
             </tbody>
             <tfoot>
-              <tr style={{ fontWeight: 600, borderTop: '2px solid rgba(17,24,39,0.12)' }}>
-                <td colSpan={5 + visibleOptCols.length} style={{ fontSize: 13, color: 'rgba(17,24,39,0.5)', paddingTop: 6 }}>
+              <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
+                <td colSpan={5 + visibleOptCols.length} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                   {filtered.length !== contacts.length ? `${filtered.length} / ${contacts.length} Einträge` : `${contacts.length} Einträge`}
                 </td>
               </tr>

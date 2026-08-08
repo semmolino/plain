@@ -244,7 +244,7 @@ export function Vertraege({ initialProjectId }: Props) {
           </div>
 
           {/* ── Sicherheitseinbehalt ───────────────────────────────────────── */}
-          <div style={{ background: 'rgba(17,24,39,0.03)', border: '1px solid rgba(17,24,39,0.08)', borderRadius: 10, padding: '14px 16px', marginTop: 12, marginBottom: 8 }}>
+          <div style={{ background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginTop: 12, marginBottom: 8 }}>
             <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Sicherheitseinbehalt</p>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>
               <input type="checkbox" checked={seEnabled} onChange={e => { setSeEnabled(e.target.checked); touch() }} />
@@ -259,7 +259,7 @@ export function Vertraege({ initialProjectId }: Props) {
                       type="number" min={0} max={100} step={0.01}
                       value={sePct}
                       onChange={e => { setSePct(e.target.value); touch() }}
-                      style={{ width: 80, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                      style={{ width: 80, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                       placeholder="z.B. 5"
                     />
                   </label>
@@ -282,7 +282,7 @@ export function Vertraege({ initialProjectId }: Props) {
                     value={seLegalRef}
                     onChange={e => { setSeLegalRef(e.target.value); touch() }}
                     placeholder="z.B. § 17 VOB/B oder freier Text"
-                    style={{ flex: 1, minWidth: 200, padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }}
+                    style={{ flex: 1, minWidth: 200, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                   />
                 </label>
                 <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
@@ -310,11 +310,11 @@ export function Vertraege({ initialProjectId }: Props) {
                 <input type="text" value={vatExemptCode}
                   onChange={e => { setVatExemptCode(e.target.value); touch() }}
                   placeholder="Begründung Code (optional)"
-                  style={{ padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }} />
+                  style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }} />
                 <textarea rows={2} value={vatExemptText}
                   onChange={e => { setVatExemptText(e.target.value); touch() }}
                   placeholder="Begründungstext (leer = Standardtext)"
-                  style={{ padding: '4px 8px', border: '1px solid rgba(17,24,39,0.15)', borderRadius: 6, fontSize: 13 }} />
+                  style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }} />
               </div>
             )}
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '8px 0 0 0' }}>

@@ -143,7 +143,7 @@ export function Budget({ initialProjectId }: Props) {
         <>
           {/* KPI Kacheln */}
           <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(17, 24, 39, 0.04)', border: '1px solid rgba(17, 24, 39, 0.10)', borderRadius: 8 }}>
+            <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>HONORAR + ZUSCHLÄGE</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{fmtEur(overview.projectAggregate.budget)}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>ohne Nebenkosten</div>
@@ -229,7 +229,7 @@ export function Budget({ initialProjectId }: Props) {
                         </td>
                         <td className="ls-td">
                           {r.MUTED
-                            ? <span style={{ color: 'var(--text-4)', fontSize: 12 }}>stumm</span>
+                            ? <span style={{ color: 'var(--text-3)', fontSize: 12 }}>stumm</span>
                             : reached
                               ? <span style={{ color: 'var(--danger-strong)', fontSize: 12, fontWeight: 600 }}>überschritten</span>
                               : <span style={{ color: 'var(--success)', fontSize: 12 }}>aktiv</span>}
