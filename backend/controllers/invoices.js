@@ -406,7 +406,7 @@ async function getEinvoiceUbl(req, res, supabase) {
 
   if (isBooked && !preview && invRow.DOCUMENT_XML_ASSET_ID) {
     try {
-      return await svc.streamXmlAsset({ supabase, res, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+      return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
     } catch (snapErr) {
       console.warn("[EINVOICE_XRECHNUNG] snapshot missing on disk, regenerating live", { invoice_id: invRow.ID, asset_id: invRow.DOCUMENT_XML_ASSET_ID });
     }
@@ -602,7 +602,7 @@ async function getPdf(req, res, supabase) {
 
     if (!preview && String(invRow.STATUS_ID) === "2" && invRow.DOCUMENT_PDF_ASSET_ID) {
       const fname = `Rechnung_${invRow.INVOICE_NUMBER || invRow.ID}.pdf`;
-      return svc.streamPdfAsset({ supabase, res, assetId: invRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
+      return svc.streamPdfAsset({ supabase, res, tenantId: req.tenantId, assetId: invRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
     }
 
     // Preview-Only: wenn der Wizard SE-Release-IDs mitschickt, in die
@@ -774,7 +774,7 @@ async function getEinvoiceCii(req, res, supabase) {
   // Serve snapshot only if format matches
   if (!preview && String(invRow.STATUS_ID) === "2" && invRow.DOCUMENT_XML_ASSET_ID && invRow.DOCUMENT_XML_PROFILE === profileKey) {
     try {
-      return await svc.streamXmlAsset({ supabase, res, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+      return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
     } catch (snapErr) {
       console.warn("[EINVOICE_CII_INV] snapshot missing on disk, regenerating live", { invoice_id: invRow.ID, asset_id: invRow.DOCUMENT_XML_ASSET_ID });
     }

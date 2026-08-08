@@ -798,7 +798,7 @@ async function getEinvoiceUbl(req, res, supabase) {
 
   if (isBooked && !preview && ppRow.DOCUMENT_XML_ASSET_ID) {
     try {
-      return await svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+      return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
     } catch (snapErr) {
       console.warn("[EINVOICE_XRECHNUNG_PP] snapshot missing on disk, regenerating live", { partial_payment_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
     }
@@ -952,7 +952,7 @@ async function getPdf(req, res, supabase) {
 
     if (!preview && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_PDF_ASSET_ID) {
       const fname = `Abschlagsrechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.pdf`;
-      return svc.streamPdfAsset({ supabase, res, assetId: ppRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
+      return svc.streamPdfAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
     }
 
     const { pdf } = await renderDocumentPdf({
@@ -1092,7 +1092,7 @@ async function getEinvoiceCii(req, res, supabase) {
 
   if (!preview && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_XML_ASSET_ID && ppRow.DOCUMENT_XML_PROFILE === profileKey) {
     try {
-      return await svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+      return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
     } catch (snapErr) {
       console.warn("[EINVOICE_CII_PP] snapshot missing on disk, regenerating live", { partial_payment_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
     }

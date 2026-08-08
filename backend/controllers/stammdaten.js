@@ -1,4 +1,5 @@
 "use strict";
+const { findAssetForTenant } = require("../services/assetAccess");
 
 const fs   = require("fs");
 const path = require("path");
@@ -1292,7 +1293,7 @@ async function putLogo(req, res, supabase) {
   let dataUri = null;
   if (assetId) {
     try {
-      const { data: asset } = await supabase.from("ASSET").select("STORAGE_KEY, MIME_TYPE").eq("ID", assetId).maybeSingle();
+      const asset = await findAssetForTenant(supabase, assetId, req.tenantId, "STORAGE_KEY, MIME_TYPE");
       if (asset) {
         const uploadRoot = path.join(__dirname, "..", "uploads");
         const filePath   = path.join(uploadRoot, asset.STORAGE_KEY);
@@ -1332,7 +1333,7 @@ async function _upsertCompanyAsset(supabase, tenantId, companyId, type, assetId)
   let dataUri = null;
   if (assetId) {
     try {
-      const { data: asset } = await supabase.from("ASSET").select("STORAGE_KEY, MIME_TYPE").eq("ID", assetId).maybeSingle();
+      const asset = await findAssetForTenant(supabase, assetId, tenantId, "STORAGE_KEY, MIME_TYPE");
       if (asset) {
         const filePath = path.join(__dirname, "..", "uploads", asset.STORAGE_KEY);
         if (fs.existsSync(filePath)) {

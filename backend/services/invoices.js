@@ -8,6 +8,7 @@ const { validateEInvoiceData } = require("../services_einvoice_validator");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { findAssetForTenant } = require("./assetAccess");
 
 // ---------------------------------------------------------------------------
 // File-system helpers
@@ -22,14 +23,17 @@ function safeFileName(name, fallback) {
   return base.length ? base : "document";
 }
 
-async function loadAssetRow({ supabase, assetId }) {
-  const { data, error } = await supabase.from("ASSET").select("*").eq("ID", assetId).maybeSingle();
-  if (error) throw new Error(error.message);
-  return data || null;
+// Mandantengebunden aufloesen statt allein ueber die ID. Die Aufrufer holen
+// die Asset-ID zwar aus einer bereits tenant-gefilterten Rechnung — damit
+// haengt die Sicherheit aber an der Disziplin der Aufrufer, nicht an der
+// Struktur. Diese Schranke macht sie unabhaengig davon (Pentest 2026-08-06,
+// nachrangige Beobachtung zu streamPdfAsset/streamXmlAsset).
+async function loadAssetRow({ supabase, assetId, tenantId }) {
+  return findAssetForTenant(supabase, assetId, tenantId, "*");
 }
 
-async function streamPdfAsset({ supabase, res, assetId, dispositionName, download }) {
-  const asset = await loadAssetRow({ supabase, assetId });
+async function streamPdfAsset({ supabase, res, assetId, tenantId, dispositionName, download }) {
+  const asset = await loadAssetRow({ supabase, assetId, tenantId });
   if (!asset) return res.status(404).json({ error: "PDF asset not found" });
 
   const root = uploadRoot();
@@ -46,8 +50,8 @@ async function streamPdfAsset({ supabase, res, assetId, dispositionName, downloa
   return true;
 }
 
-async function streamXmlAsset({ supabase, res, assetId, dispositionName, download }) {
-  const asset = await loadAssetRow({ supabase, assetId });
+async function streamXmlAsset({ supabase, res, assetId, tenantId, dispositionName, download }) {
+  const asset = await loadAssetRow({ supabase, assetId, tenantId });
   if (!asset) throw new Error("XML asset not found");
 
   const root = uploadRoot();

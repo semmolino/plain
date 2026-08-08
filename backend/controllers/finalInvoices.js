@@ -125,7 +125,7 @@ async function getEinvoiceUbl(req, res, supabase) {
   const fname = `XRechnung_${row.INVOICE_NUMBER || row.ID}.xml`;
 
   if (!preview && String(row.STATUS_ID) === "2" && row.DOCUMENT_XML_ASSET_ID && row.DOCUMENT_XML_PROFILE === "xrechnung-ubl") {
-    return invSvc.streamXmlAsset({ supabase, res, assetId: row.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    return invSvc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: row.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
   }
 
   try {
@@ -197,7 +197,7 @@ async function getEinvoiceCii(req, res, supabase) {
   const profileKey = `zugferd-${profile.toLowerCase()}`;
 
   if (!preview && String(row.STATUS_ID) === "2" && row.DOCUMENT_XML_ASSET_ID && row.DOCUMENT_XML_PROFILE === profileKey) {
-    return invSvc.streamXmlAsset({ supabase, res, assetId: row.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+    return invSvc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: row.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
   }
 
   try {
