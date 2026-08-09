@@ -6,6 +6,7 @@ import { BuchungstextvorlagenSection } from '@/pages/admin/BuchungstextvorlagenS
 import { AbwesenheitsartenSection } from '@/pages/admin/AbwesenheitsartenSection'
 import { DokumentvorlagenSection } from '@/pages/admin/DokumentvorlagenSection'
 import { ImportSection } from '@/pages/admin/ImportSection'
+import { LeistungsphasenBloeckeSection } from '@/pages/admin/LeistungsphasenBloeckeSection'
 import { Can } from '@/components/ui/Can'
 import { useFilterTabs } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
@@ -3593,6 +3594,8 @@ export function AdminPage() {
         {tab === 'stammdaten'            && (
           <>
             <StammdatenSection />
+            <hr style={{ margin: '32px 0', border: 0, borderTop: '1px solid var(--border)' }} />
+            <LeistungsphasenBloeckeSection />
             <hr style={{ margin: '32px 0', border: 0, borderTop: '1px solid var(--border)' }} />
             <ArbeitszeitmodelleSection />
           </>

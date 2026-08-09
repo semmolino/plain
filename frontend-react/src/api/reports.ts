@@ -207,6 +207,9 @@ export interface PhaseReportRow {
   DB:                     number
   ampel:                  'rot' | 'orange' | 'gruen'
   flags:                  string[]
+  BLOCK_ID:               number | null
+  BLOCK_NAME:             string | null
+  BLOCK_SORT:             number | null
 }
 
 export interface PhaseReportTotals {
@@ -221,6 +224,7 @@ export interface PhaseReportTotals {
 
 export interface PhaseReport {
   hasPhases: boolean
+  hasBlocks: boolean
   phases:    PhaseReportRow[]
   totals:    PhaseReportTotals | null
 }

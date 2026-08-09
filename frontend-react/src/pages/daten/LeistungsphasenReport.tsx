@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,55 +25,116 @@ const fmtPct   = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.f
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
-const AMPEL_COLOR: Record<PhaseReportRow['ampel'], string> = {
+type Ampel = PhaseReportRow['ampel']
+
+const AMPEL_COLOR: Record<Ampel, string> = {
   rot:    'var(--danger)',
   orange: 'var(--warning)',
   gruen:  'var(--success)',
 }
-const AMPEL_LABEL: Record<PhaseReportRow['ampel'], string> = {
+const AMPEL_LABEL: Record<Ampel, string> = {
   rot:    'Kritisch — Kostenquote hoch oder Deckungsbeitrag negativ',
   orange: 'Beobachten — Kostenquote erhöht',
   gruen:  'Im Plan',
 }
 
-function AmpelDot({ ampel }: { ampel: PhaseReportRow['ampel'] }) {
+function AmpelDot({ ampel }: { ampel: Ampel }) {
   return (
     <span
       title={AMPEL_LABEL[ampel]}
       aria-label={AMPEL_LABEL[ampel]}
-      style={{
-        display: 'inline-block', width: 12, height: 12, borderRadius: '50%',
-        background: AMPEL_COLOR[ampel],
-      }}
+      style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: AMPEL_COLOR[ampel] }}
     />
   )
 }
 
-// Soll-Honorar vs. erbrachte Leistung vs. Kosten je Leistungsphase.
-function PhaseBarChart({ phases }: { phases: PhaseReportRow[] }) {
-  const t = useChartTheme()
+// ── Aggregation zu Blöcken (clientseitig aus den Phasen-Zeilen) ────────────────
 
+interface BlockGroup {
+  key:        string
+  name:       string
+  sort:       number
+  isCatchAll: boolean   // "Weitere Phasen" (Phasen ohne Block)
+  phases:     PhaseReportRow[]
+  HONORAR_NET: number
+  EARNED_VALUE_NET: number
+  HOURS_TOTAL: number
+  COST_TOTAL:  number
+  LEISTUNGSSTAND_PERCENT: number | null
+  KOSTENQUOTE: number | null
+  DB:          number
+  ampel:       Ampel
+}
+
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+
+function ampelFor(earned: number, cost: number): Ampel {
+  const kq = earned > 0 ? cost / earned : null
+  const db = earned - cost
+  if ((kq != null && kq >= 0.9) || (db < 0 && (cost > 500 || earned > 500))) return 'rot'
+  if (kq != null && kq >= 0.75) return 'orange'
+  return 'gruen'
+}
+
+function buildBlocks(phases: PhaseReportRow[]): BlockGroup[] {
+  const map = new Map<string, BlockGroup>()
+  for (const p of phases) {
+    const key  = p.BLOCK_ID != null ? `b${p.BLOCK_ID}` : 'none'
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        name: p.BLOCK_ID != null ? (p.BLOCK_NAME ?? 'Block') : 'Weitere Phasen',
+        sort: p.BLOCK_ID != null ? (p.BLOCK_SORT ?? 0) : Number.MAX_SAFE_INTEGER,
+        isCatchAll: p.BLOCK_ID == null,
+        phases: [],
+        HONORAR_NET: 0, EARNED_VALUE_NET: 0, HOURS_TOTAL: 0, COST_TOTAL: 0,
+        LEISTUNGSSTAND_PERCENT: null, KOSTENQUOTE: null, DB: 0, ampel: 'gruen',
+      })
+    }
+    const g = map.get(key)!
+    g.phases.push(p)
+    g.HONORAR_NET      += p.HONORAR_NET
+    g.EARNED_VALUE_NET += p.EARNED_VALUE_NET
+    g.HOURS_TOTAL      += p.HOURS_TOTAL
+    g.COST_TOTAL       += p.COST_TOTAL
+  }
+  const groups = [...map.values()]
+  for (const g of groups) {
+    g.HONORAR_NET = round2(g.HONORAR_NET)
+    g.EARNED_VALUE_NET = round2(g.EARNED_VALUE_NET)
+    g.HOURS_TOTAL = round2(g.HOURS_TOTAL)
+    g.COST_TOTAL = round2(g.COST_TOTAL)
+    g.LEISTUNGSSTAND_PERCENT = g.HONORAR_NET > 0 ? round2((g.EARNED_VALUE_NET / g.HONORAR_NET) * 100) : null
+    g.KOSTENQUOTE = g.EARNED_VALUE_NET > 0 ? g.COST_TOTAL / g.EARNED_VALUE_NET : null
+    g.DB = round2(g.EARNED_VALUE_NET - g.COST_TOTAL)
+    g.ampel = ampelFor(g.EARNED_VALUE_NET, g.COST_TOTAL)
+  }
+  return groups.sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
+}
+
+// ── Balkendiagramm: Honorar/Leistung/Kosten je Phase (oder Block) ─────────────
+
+function PhaseBarChart({ labels, honorar, leistung, kosten, title }: {
+  labels: string[]; honorar: number[]; leistung: number[]; kosten: number[]; title: string
+}) {
+  const t = useChartTheme()
   const data = useMemo(() => ({
-    labels: phases.map(p => p.NAME_SHORT),
+    labels,
     datasets: [
-      { label: 'Honorar',   data: phases.map(p => p.HONORAR_NET),      backgroundColor: t.series[0], borderRadius: 3, maxBarThickness: 34 },
-      { label: 'Leistung',  data: phases.map(p => p.EARNED_VALUE_NET), backgroundColor: t.series[1], borderRadius: 3, maxBarThickness: 34 },
-      { label: 'Kosten',    data: phases.map(p => p.COST_TOTAL),       backgroundColor: t.series[5], borderRadius: 3, maxBarThickness: 34 },
+      { label: 'Honorar',  data: honorar,  backgroundColor: t.series[0], borderRadius: 3, maxBarThickness: 34 },
+      { label: 'Leistung', data: leistung, backgroundColor: t.series[1], borderRadius: 3, maxBarThickness: 34 },
+      { label: 'Kosten',   data: kosten,   backgroundColor: t.series[5], borderRadius: 3, maxBarThickness: 34 },
     ],
-  }), [phases, t])
+  }), [labels, honorar, leistung, kosten, t])
 
   const options: ChartOptions<'bar'> = {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: {
-        position: 'top',
-        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, color: t.text, font: { size: 12 } },
-      },
+      legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, color: t.text, font: { size: 12 } } },
       tooltip: {
-        backgroundColor: t.tooltipBg, titleColor: t.tooltipFg, bodyColor: t.tooltipFg,
-        padding: 12, cornerRadius: 8,
+        backgroundColor: t.tooltipBg, titleColor: t.tooltipFg, bodyColor: t.tooltipFg, padding: 12, cornerRadius: 8,
         callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}` },
       },
     },
@@ -84,11 +146,30 @@ function PhaseBarChart({ phases }: { phases: PhaseReportRow[] }) {
 
   return (
     <div className="timeline-wrap">
-      <h3 className="timeline-title">Honorar · Leistung · Kosten je Leistungsphase</h3>
-      <div className="timeline-chart">
-        <Bar data={data} options={options} />
-      </div>
+      <h3 className="timeline-title">{title}</h3>
+      <div className="timeline-chart"><Bar data={data} options={options} /></div>
     </div>
+  )
+}
+
+// ── Zeilen ────────────────────────────────────────────────────────────────────
+
+function PhaseCells({ p, indent }: { p: PhaseReportRow; indent?: boolean }) {
+  return (
+    <>
+      <td style={indent ? { paddingLeft: 28 } : undefined}>
+        {p.NAME_SHORT}
+        {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
+      </td>
+      <td className="num">{fmtEur(p.HONORAR_NET)}</td>
+      <td className="num">{fmtPct(p.LEISTUNGSSTAND_PERCENT)}</td>
+      <td className="num">{fmtEur(p.EARNED_VALUE_NET)}</td>
+      <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
+      <td className="num">{fmtEur(p.COST_TOTAL)}</td>
+      <td className="num">{p.KOSTENQUOTE != null ? fmtPct(p.KOSTENQUOTE * 100) : '—'}</td>
+      <td className="num" style={{ color: p.DB < 0 ? 'var(--danger)' : undefined }}>{fmtEur(p.DB)}</td>
+      <td style={{ textAlign: 'center' }}>{!p.IS_UNASSIGNED && <AmpelDot ampel={p.ampel} />}</td>
+    </>
   )
 }
 
@@ -100,8 +181,13 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
   })
 
   const report = data?.data
-  const phases = report?.phases ?? []
+  const phases = useMemo(() => report?.phases ?? [], [report])
   const totals = report?.totals ?? null
+  const hasBlocks = report?.hasBlocks ?? false
+
+  const blocks = useMemo(() => hasBlocks ? buildBlocks(phases) : [], [hasBlocks, phases])
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const toggle = (key: string) => setCollapsed(c => ({ ...c, [key]: !c[key] }))
 
   if (isLoading) return <p className="empty-note">Laden …</p>
   if (isError)   return <p className="empty-note" style={{ color: 'var(--danger)' }}>Fehler beim Laden der Leistungsphasen.</p>
@@ -115,18 +201,28 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
     )
   }
 
+  // Diagramm: bei Blöcken je Block, sonst je Phase.
+  const chart = hasBlocks
+    ? { labels: blocks.map(b => b.name), honorar: blocks.map(b => b.HONORAR_NET), leistung: blocks.map(b => b.EARNED_VALUE_NET), kosten: blocks.map(b => b.COST_TOTAL), title: 'Honorar · Leistung · Kosten je Block' }
+    : { labels: phases.map(p => p.NAME_SHORT), honorar: phases.map(p => p.HONORAR_NET), leistung: phases.map(p => p.EARNED_VALUE_NET), kosten: phases.map(p => p.COST_TOTAL), title: 'Honorar · Leistung · Kosten je Leistungsphase' }
+
   return (
     <div style={{ marginTop: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
         <h3 className="timeline-title" style={{ margin: 0 }}>Auswertung nach Leistungsphase</h3>
         <HelpHint id="report.leistungsphasen" />
+        {hasBlocks && (
+          <span className="empty-note" style={{ margin: 0, marginLeft: 'auto' }}>
+            Nach Blöcken gruppiert — Zeile aufklappen für die einzelnen Phasen
+          </span>
+        )}
       </div>
 
       <div className="list-section table-scroll">
         <table className="master-table">
           <thead>
             <tr>
-              <th scope="col">Leistungsphase</th>
+              <th scope="col">{hasBlocks ? 'Block / Leistungsphase' : 'Leistungsphase'}</th>
               <th scope="col" className="num">Honorar</th>
               <th scope="col" className="num">Lst.stand&nbsp;%</th>
               <th scope="col" className="num">Lst.stand&nbsp;€</th>
@@ -138,22 +234,46 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
             </tr>
           </thead>
           <tbody>
-            {phases.map(p => (
-              <tr key={p.PHASE_STRUCTURE_ID ?? 'none'} className={p.IS_UNASSIGNED ? 'is-muted-row' : undefined}>
-                <td>
-                  <strong>{p.NAME_SHORT}</strong>
-                  {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
-                </td>
-                <td className="num">{fmtEur(p.HONORAR_NET)}</td>
-                <td className="num">{fmtPct(p.LEISTUNGSSTAND_PERCENT)}</td>
-                <td className="num">{fmtEur(p.EARNED_VALUE_NET)}</td>
-                <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
-                <td className="num">{fmtEur(p.COST_TOTAL)}</td>
-                <td className="num">{p.KOSTENQUOTE != null ? fmtPct(p.KOSTENQUOTE * 100) : '—'}</td>
-                <td className="num" style={{ color: p.DB < 0 ? 'var(--danger)' : undefined }}>{fmtEur(p.DB)}</td>
-                <td style={{ textAlign: 'center' }}>{!p.IS_UNASSIGNED && <AmpelDot ampel={p.ampel} />}</td>
-              </tr>
-            ))}
+            {hasBlocks
+              ? blocks.map(b => {
+                  const isCollapsed = collapsed[b.key]
+                  return (
+                    <FragmentRows key={b.key}>
+                      <tr
+                        className="sum-row"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => toggle(b.key)}
+                      >
+                        <td>
+                          <button type="button" className="row-action-btn" aria-label={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+                            style={{ marginRight: 4, verticalAlign: 'middle' }}
+                            onClick={(e) => { e.stopPropagation(); toggle(b.key) }}>
+                            {isCollapsed ? <ChevronRight size={14} strokeWidth={2} /> : <ChevronDown size={14} strokeWidth={2} />}
+                          </button>
+                          <strong>{b.name}</strong>
+                        </td>
+                        <td className="num"><strong>{fmtEur(b.HONORAR_NET)}</strong></td>
+                        <td className="num"><strong>{fmtPct(b.LEISTUNGSSTAND_PERCENT)}</strong></td>
+                        <td className="num"><strong>{fmtEur(b.EARNED_VALUE_NET)}</strong></td>
+                        <td className="num"><strong>{fmtH(b.HOURS_TOTAL)}</strong></td>
+                        <td className="num"><strong>{fmtEur(b.COST_TOTAL)}</strong></td>
+                        <td className="num"><strong>{b.KOSTENQUOTE != null ? fmtPct(b.KOSTENQUOTE * 100) : '—'}</strong></td>
+                        <td className="num" style={{ color: b.DB < 0 ? 'var(--danger)' : undefined }}><strong>{fmtEur(b.DB)}</strong></td>
+                        <td style={{ textAlign: 'center' }}>{!b.isCatchAll && <AmpelDot ampel={b.ampel} />}</td>
+                      </tr>
+                      {!isCollapsed && b.phases.map(p => (
+                        <tr key={p.PHASE_STRUCTURE_ID ?? `none-${p.NAME_SHORT}`}>
+                          <PhaseCells p={p} indent />
+                        </tr>
+                      ))}
+                    </FragmentRows>
+                  )
+                })
+              : phases.map(p => (
+                  <tr key={p.PHASE_STRUCTURE_ID ?? 'none'} className={p.IS_UNASSIGNED ? 'is-muted-row' : undefined}>
+                    <PhaseCells p={p} />
+                  </tr>
+                ))}
           </tbody>
           {totals && (
             <tfoot>
@@ -173,7 +293,12 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
         </table>
       </div>
 
-      {phases.length > 0 && <PhaseBarChart phases={phases} />}
+      {phases.length > 0 && <PhaseBarChart {...chart} />}
     </div>
   )
+}
+
+// Kleiner Helfer: mehrere <tr> ohne zusätzliches DOM-Element gruppieren.
+function FragmentRows({ children }: { children: React.ReactNode }) {
+  return <>{children}</>
 }

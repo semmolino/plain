@@ -4,6 +4,7 @@ const express = require("express");
 const ctrl = require("../controllers/stammdaten");
 const bookingTypesCtrl = require("../controllers/bookingTypes");
 const textSnippetsCtrl = require("../controllers/textSnippets");
+const lphBlocksCtrl = require("../controllers/lphBlocks");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
@@ -40,6 +41,11 @@ module.exports = (supabase) => {
   router.post("/fee-calculation-masters/:id/add-to-project-structure", requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcAddToStructure(req, res, supabase));
   router.post("/fee-calculation-masters/:id/add-to-offer-structure",   requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcAddToOfferStructure(req, res, supabase));
   router.post("/fee-calculation-masters/:id/sync-to-structure",        requirePermission("projects.calculations.edit"), (req, res) => ctrl.syncFeeCalcToStructure(req, res, supabase));
+  // Leistungsphasen-Blöcke (konfigurierbar je Leistungsbild)
+  router.get("/lph-blocks",                                          (req, res) => lphBlocksCtrl.getBlocks(req, res, supabase));
+  router.post("/lph-blocks/save",                                    requirePermission("settings.basedata.edit"), (req, res) => lphBlocksCtrl.saveBlocks(req, res, supabase));
+  router.post("/lph-blocks/seed-default",                            requirePermission("settings.basedata.edit"), (req, res) => lphBlocksCtrl.seedDefault(req, res, supabase));
+
   router.get("/companies",                                           (req, res) => ctrl.getCompanies(req, res, supabase));
   router.post("/company",                                            requirePermission("settings.company.edit"), (req, res) => ctrl.postCompany(req, res, supabase));
   router.put("/company/:id",                                         requirePermission("settings.company.edit"), (req, res) => ctrl.putCompany(req, res, supabase));

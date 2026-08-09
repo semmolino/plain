@@ -470,6 +470,19 @@ export const HELP = {
       </>
     ),
   },
+  'stammdaten.lph_bloecke': {
+    title: 'Leistungsphasen-Blöcke',
+    body: (
+      <>
+        Ein Block bündelt mehrere HOAI-Leistungsphasen zu einer Auswertungseinheit — z. B.
+        „Planung" für LPH 1–4, „Ausführung" für LPH 5–7, „Überwachung" für LPH 8–9. In der
+        Projekt-Auswertung „Leistungsphasen" siehst du dann zuerst diese Blöcke und kannst jeden
+        auf die einzelnen Phasen aufklappen. Das Schema wird je Leistungsbild gepflegt, weil
+        verschiedene Leistungsbilder unterschiedliche Phasenschnitte haben. „HOAI-Standard" legt die
+        gängige Aufteilung 1–4 / 5–7 / 8–9 in einem Klick an; danach frei anpassbar.
+      </>
+    ),
+  },
   'report.leistungsphasen': {
     title: 'Auswertung nach Leistungsphase',
     body: (

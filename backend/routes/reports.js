@@ -443,6 +443,7 @@ module.exports = (supabase) => {
         if (anc) {
           bucket = ensure(anc.ID, {
             PHASE_STRUCTURE_ID: anc.ID,
+            CALC_PHASE_ID: anc.FEE_CALC_PHASE_ID,
             NAME_SHORT: anc.NAME_SHORT,
             NAME_LONG:  anc.NAME_LONG,
             SORT_KEY:   phaseSortKey(anc.NAME_SHORT),
@@ -482,6 +483,7 @@ module.exports = (supabase) => {
         else if (flags.includes("kostenquote_warn"))                                ampel = "orange";
         return {
           PHASE_STRUCTURE_ID: b.PHASE_STRUCTURE_ID,
+          CALC_PHASE_ID: b.CALC_PHASE_ID ?? null,
           NAME_SHORT: b.NAME_SHORT,
           NAME_LONG:  b.NAME_LONG,
           IS_UNASSIGNED: b.IS_UNASSIGNED,
@@ -503,6 +505,55 @@ module.exports = (supabase) => {
         .sort((a, b) => a.SORT_KEY - b.SORT_KEY
           || String(a.NAME_SHORT).localeCompare(String(b.NAME_SHORT)));
 
+      // 4b) Block-Zuordnung auflösen: Phasenknoten → FEE_CALCULATION_PHASE →
+      //     FEE_PHASE.BLOCK_ID → LPH_BLOCK. Soft-fail, wenn Migration 0097 fehlt.
+      let hasBlocks = false;
+      try {
+        const calcPhaseIds = [...new Set(phases.map((p) => p.CALC_PHASE_ID).filter(Boolean))];
+        if (calcPhaseIds.length) {
+          const { data: calcPhases, error: cpErr } = await supabase
+            .from("FEE_CALCULATION_PHASE").select("ID, FEE_PHASE_ID").in("ID", calcPhaseIds);
+          if (cpErr) throw cpErr;
+          const calcToFeePhase = new Map((calcPhases || []).map((r) => [r.ID, r.FEE_PHASE_ID]));
+          const feePhaseIds = [...new Set((calcPhases || []).map((r) => r.FEE_PHASE_ID).filter(Boolean))];
+
+          let feePhaseToBlock = new Map();
+          if (feePhaseIds.length) {
+            const { data: feePhases, error: fpErr } = await supabase
+              .from("FEE_PHASE").select("ID, BLOCK_ID").in("ID", feePhaseIds);
+            if (fpErr) throw fpErr; // fehlende Spalte BLOCK_ID → catch unten
+            feePhaseToBlock = new Map((feePhases || []).map((r) => [r.ID, r.BLOCK_ID]));
+          }
+
+          const blockIds = [...new Set([...feePhaseToBlock.values()].filter(Boolean))];
+          let blockMeta = new Map();
+          if (blockIds.length) {
+            const { data: blocks, error: blErr } = await supabase
+              .from("LPH_BLOCK").select("ID, NAME_SHORT, SORT_ORDER")
+              .eq("TENANT_ID", tenantId).in("ID", blockIds);
+            if (blErr) throw blErr;
+            blockMeta = new Map((blocks || []).map((r) => [r.ID, r]));
+          }
+
+          for (const p of phases) {
+            const feePhaseId = p.CALC_PHASE_ID != null ? calcToFeePhase.get(p.CALC_PHASE_ID) : null;
+            const blockId    = feePhaseId != null ? feePhaseToBlock.get(feePhaseId) : null;
+            const meta       = blockId != null ? blockMeta.get(blockId) : null;
+            p.BLOCK_ID   = blockId ?? null;
+            p.BLOCK_NAME = meta ? meta.NAME_SHORT : null;
+            p.BLOCK_SORT = meta ? Number(meta.SORT_ORDER) : null;
+            if (meta) hasBlocks = true;
+          }
+        }
+      } catch (blockErr) {
+        // Migration 0097 noch nicht gelaufen o. Ä. → Report bleibt ohne Blöcke.
+        for (const p of phases) { p.BLOCK_ID = null; p.BLOCK_NAME = null; p.BLOCK_SORT = null; }
+        hasBlocks = false;
+      }
+
+      // Internes Feld nicht ausliefern.
+      for (const p of phases) delete p.CALC_PHASE_ID;
+
       // 5) Summenzeile.
       const sum = (k) => phases.reduce((s, p) => s + Number(p[k] || 0), 0);
       const tHonorar = round2(sum("HONORAR_NET"));
@@ -518,7 +569,7 @@ module.exports = (supabase) => {
         DB: round2(tEarned - tCost),
       };
 
-      res.json({ data: { hasPhases: true, phases, totals } });
+      res.json({ data: { hasPhases: true, hasBlocks, phases, totals } });
     } catch (e) {
       res.status(500).json({ error: e.message || String(e) });
     }
