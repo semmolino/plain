@@ -25,6 +25,8 @@ export interface FeeCalcMaster {
   REVENUE_K2:                  number | null
   REVENUE_K3:                  number | null
   REVENUE_K4:                  number | null
+  DIN276_ESTIMATE_ID?:         number | null
+  DIN276_LEISTUNGSBILD?:       string | null
   // angereichert vom Backend aus FEE_MASTERS.BASE_TYPE
   BASE_TYPE?:                  FeeBaseType
   // enriched fields from listFeeCalcMasters

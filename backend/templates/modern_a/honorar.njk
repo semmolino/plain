@@ -228,6 +228,39 @@ table.data-table tfoot tr.grand-total td {
 </table>
 {% endif %}
 
+{# Anrechenbare Kosten (DIN 276) — Herleitung #}
+{% if din276 %}
+<div class="section-title">Anrechenbare Kosten (DIN 276 · {{ din276.leistungsbildLabel }})</div>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th style="width:12%">KG</th>
+      <th>Ansatz</th>
+      <th class="num">Basis €</th>
+      <th class="num">%</th>
+      <th class="num">anrechenbar €</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in din276.herleitung %}
+    <tr>
+      <td>{{ h.kg }}</td>
+      <td>{{ h.label }}</td>
+      <td class="num">{{ h.basis | money }}</td>
+      <td class="num">{{ h.ansatz }}</td>
+      <td class="num">{{ h.betrag | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="4">Anrechenbare Kosten ({{ din276.stageLabel }})</td>
+      <td class="num">{{ din276.anrechenbareKosten | money }}</td>
+    </tr>
+  </tfoot>
+</table>
+{% endif %}
+
 {# Leistungsphasen #}
 {% if phases and phases.length %}
 <div class="section-title">Leistungsphasen</div>

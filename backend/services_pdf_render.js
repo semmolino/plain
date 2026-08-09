@@ -1361,6 +1361,39 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     } catch (_) { /* Migration noch nicht gelaufen -> Default */ }
   }
 
+  // DIN-276-Herleitung der anrechenbaren Kosten (falls verknüpft). Soft-fail,
+  // wenn Migration 0098/0099 oder die Ermittlung fehlt.
+  let din276Ctx = null;
+  if (calc.DIN276_ESTIMATE_ID) {
+    try {
+      const din276 = require('./services/din276');
+      const { data: est } = await supabase.from('DIN276_COST_ESTIMATE')
+        .select('ID, MITVERARBEITETE_BAUSUBSTANZ, STAGE')
+        .eq('ID', calc.DIN276_ESTIMATE_ID).eq('TENANT_ID', tenantId).maybeSingle();
+      if (est) {
+        const { data: groups } = await supabase.from('DIN276_COST_GROUP')
+          .select('KG_CODE, AMOUNT, IS_PLANNED_SELF')
+          .eq('ESTIMATE_ID', est.ID).eq('TENANT_ID', tenantId);
+        const lb = calc.DIN276_LEISTUNGSBILD || 'gebaeude';
+        const r = din276.anrechenbareKosten(lb, {
+          mitverarbeiteteBausubstanz: est.MITVERARBEITETE_BAUSUBSTANZ,
+          groups: (groups || []).map(g => ({ kg: g.KG_CODE, amount: g.AMOUNT, isPlannedSelf: g.IS_PLANNED_SELF })),
+        });
+        const lbLabel = lb === 'tragwerk' ? 'Tragwerksplanung (§ 50)'
+          : lb === 'freianlagen' ? 'Freianlagen (§ 38/40)' : 'Gebäude (§ 33)';
+        din276Ctx = {
+          leistungsbild: lb,
+          leistungsbildLabel: lbLabel,
+          stage: est.STAGE,
+          stageLabel: est.STAGE === 'schaetzung' ? 'Kostenschätzung' : 'Kostenberechnung',
+          anrechenbareKosten: r.anrechenbareKosten,
+          sonstigeAnrechenbareKosten: r.sonstigeAnrechenbareKosten,
+          herleitung: r.herleitung,
+        };
+      }
+    } catch (_) { /* Migration/Ermittlung fehlt -> ohne Herleitung */ }
+  }
+
   const buildSurchargeCtx = ({ r, effectiveBase, amount, lphItems, surchargeBls }) => {
     let lphDetail = null;
     if (r.LPH_FILTER) {
@@ -1435,6 +1468,7 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     grundhonorar: d.grundhonorar,
     zuschlaegeSum: d.zuschlaegeSum,
     gesamthonorar: d.gesamthonorar,
+    din276:       din276Ctx,
   };
 }
 

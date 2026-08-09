@@ -29,7 +29,7 @@ interface Props {
   offerId?:      number
   leistungsbild?: string
   /** Übernahme des berechneten Betrags (anrechenbare Kosten) in die Kalkulation. */
-  onApply:       (anrechenbareKosten: number, estimateId: number) => void
+  onApply:       (anrechenbareKosten: number, estimateId: number, leistungsbild: string) => void
 }
 
 export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild = 'gebaeude', onApply }: Props) {
@@ -272,7 +272,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
           type="button"
           className="btn-primary"
           disabled={anrechenbar == null || !estimate}
-          onClick={() => { if (anrechenbar != null && estimate) { onApply(anrechenbar, estimate.ID); onClose() } }}
+          onClick={() => { if (anrechenbar != null && estimate) { onApply(anrechenbar, estimate.ID, lb); onClose() } }}
           title={anrechenbar == null ? 'Erst „Speichern & berechnen"' : undefined}
         >
           In Kalkulation übernehmen{anrechenbar != null ? ` (${fmtEur(anrechenbar)})` : ''}

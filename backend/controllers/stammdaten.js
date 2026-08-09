@@ -239,7 +239,20 @@ async function patchFeeCalcMasterBasis(req, res, supabase) {
       .select("*")
       .single();
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ data });
+
+    // DIN-276-Verknüpfung separat und soft speichern — bricht nicht, falls
+    // Migration 0099 (Spalten DIN276_*) noch nicht gelaufen ist.
+    let out = data;
+    const din = {};
+    if ("DIN276_ESTIMATE_ID"   in body) din.DIN276_ESTIMATE_ID   = body.DIN276_ESTIMATE_ID   ?? null;
+    if ("DIN276_LEISTUNGSBILD" in body) din.DIN276_LEISTUNGSBILD = body.DIN276_LEISTUNGSBILD ?? null;
+    if (Object.keys(din).length) {
+      const { data: d2, error: e2 } = await supabase
+        .from("FEE_CALCULATION_MASTER")
+        .update(din).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single();
+      if (!e2 && d2) out = d2;
+    }
+    res.json({ data: out });
   } catch (err) {
     return res.status(500).json({ error: err?.message || String(err) });
   }

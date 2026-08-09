@@ -205,6 +205,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     K0: '', K1: '', K2: '', K3: '', K4: '',
   })
   const [din276Open, setDin276Open] = useState(false)
+  const [din276EstimateId,    setDin276EstimateId]    = useState<number | null>(null)
+  const [din276Leistungsbild, setDin276Leistungsbild] = useState<string | null>(null)
   const [projectId, setProjectId]             = useState(initialProjectId ? String(initialProjectId) : '')
   const [structureNodes, setStructureNodes]   = useState<Awaited<ReturnType<typeof fetchProjectStructure>>['data']>([])
   const [offerStructureNodes, setOfferStructureNodes] = useState<OfferStructureNode[]>([])
@@ -334,6 +336,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       K4: fmtN(row.CONSTRUCTION_COSTS_K4),
     })
     setProjectId(row.PROJECT_ID != null ? String(row.PROJECT_ID) : '')
+    setDin276EstimateId(row.DIN276_ESTIMATE_ID ?? null)
+    setDin276Leistungsbild(row.DIN276_LEISTUNGSBILD ?? null)
     if (row.FEE_MASTER_ID) {
       const zonesRes = await fetchFeeZones(row.FEE_MASTER_ID)
       setZones(zonesRes.data ?? [])
@@ -372,6 +376,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     })
     const pid = row.PROJECT_ID != null ? String(row.PROJECT_ID) : (initialProjectId ? String(initialProjectId) : '')
     setProjectId(pid)
+    setDin276EstimateId(row.DIN276_ESTIMATE_ID ?? null)
+    setDin276Leistungsbild(row.DIN276_LEISTUNGSBILD ?? null)
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -412,6 +418,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
         CONSTRUCTION_COSTS_K2: isAreaHa ? null : toNum(basis.K2),
         CONSTRUCTION_COSTS_K3: isAreaHa ? null : toNum(basis.K3),
         CONSTRUCTION_COSTS_K4: isAreaHa ? null : toNum(basis.K4),
+        DIN276_ESTIMATE_ID:    din276EstimateId,
+        DIN276_LEISTUNGSBILD:  din276Leistungsbild,
       })
       populateBasis(updated.data)
       setMsg({ text: 'Lade Leistungsphasen …', type: 'info' })
@@ -804,7 +812,11 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 projectId={!isOfferMode && projectId ? Number(projectId) : undefined}
                 offerId={isOfferMode && offerId ? offerId : undefined}
                 leistungsbild="gebaeude"
-                onApply={(anrechenbar) => setBasis(b => ({ ...b, K0: String(anrechenbar) }))}
+                onApply={(anrechenbar, estimateId, lb) => {
+                  setBasis(b => ({ ...b, K0: String(anrechenbar) }))
+                  setDin276EstimateId(estimateId)
+                  setDin276Leistungsbild(lb)
+                }}
               />
             </>
           )}
