@@ -285,19 +285,25 @@ anrechenbare Kosten Gebäude             1.557.500
 
 ---
 
-## 6. Offene Entscheidungen (vor Umsetzung zu klären)
+## 6. Entscheidungen (getroffen)
 
-1. **KG-Tiefe:** Reicht die 1. Ebene (100–700) für den Start, oder gleich die
-   2. Ebene (Anlagengruppen 410–480 etc.)? (Empfehlung: 2. Ebene zulassen,
-   Regeln auf aggregierter Ebene.)
-2. **Regelwerk code- vs. datenbasiert:** feste Regeln je Leistungsbild
-   (Empfehlung) oder konfigurierbare Regeltabelle?
-3. **HOAI-/DIN-Fassung:** Nur DIN 276-1:2008-12 + HOAI 2021 zum Start, oder
-   Mehrfassungs-Fähigkeit von Anfang an (Datenfeld ist vorgesehen, Regeln aber Aufwand)?
-4. **Umfang Leistungsbilder Phase 1:** Nur Gebäude (§33) zuerst — Reihenfolge
-   der weiteren (Tragwerk/TGA/Freianlagen)?
-5. **Mengenbasierte Eingabe** (BGF × €/m²) — Teil des MVP oder spätere Ausbaustufe?
-6. **Permission:** bestehende `projects.calculations.edit` ausreichend oder eigene?
+1. **KG-Tiefe:** **2. Ebene zulassen** — 1. Ebene (100–700) pflichtig, 2. Ebene
+   (410–480 etc.) optional; Regeln rechnen auf aggregierter Ebene. ✅
+2. **Regelwerk:** **fest im Code, versioniert je HOAI-Fassung**, echte Parameter
+   (25 %-Schwelle, 55 %/10 % Tragwerk …) als benannte Konstanten. ✅
+3. **HOAI-/DIN-Fassung:** Start mit **DIN 276-1:2008-12 + HOAI 2021**; das
+   `DIN_VERSION`-Feld ist vorgesehen, aber zunächst ein Regelsatz. ✅ (Default)
+4. **Umfang Phase 1:** **nur Gebäude (§ 33)** end-to-end; Tragwerk/TGA/Freianlagen
+   danach iterativ. ✅
+5. **Mengenbasierte Eingabe:** **später** — MVP mit direkten €-Beträgen je KG. ✅
+6. **Permission:** bestehende **`projects.calculations.edit`** (keine neue
+   Permission — passt laut RBAC-Regel, Kostenermittlung gehört zur Kalkulation). ✅ (Default)
+
+**Daraus abgeleitet Baustein 1 (nächster Schritt):** Migration
+(`DIN276_COST_ESTIMATE` + `DIN276_COST_GROUP`, RLS), Backend-Rule-Engine
+`anrechenbareKostenGebaeude(estimate)` (§ 33) mit Herleitung, plus Jest-Unit-Tests
+gegen manuell gerechnete Referenzbeispiele. Erst danach UI + Wizard-Integration
+(Baustein 2).
 
 ---
 
