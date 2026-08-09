@@ -232,6 +232,44 @@ export interface PhaseReport {
 export const fetchProjectPhases = (projectId: number) =>
   apiClient.get<{ data: PhaseReport }>(`/reports/project/${projectId}/phases`)
 
+// ── Portfolio: Leistungsphasen-Matrix (alle Projekte) ──────────────────────────
+
+export interface PhaseCell {
+  HONORAR_NET:            number
+  EARNED_VALUE_NET:       number
+  HOURS_TOTAL:            number
+  COST_TOTAL:             number
+  LEISTUNGSSTAND_PERCENT: number | null
+  KOSTENQUOTE:            number | null
+  DB:                     number
+  ampel:                  'rot' | 'orange' | 'gruen'
+}
+
+export interface PhaseMatrixProject {
+  PROJECT_ID: number
+  NAME_SHORT: string
+  NAME_LONG:  string | null
+  cells:      Record<number, PhaseCell>
+  total:      PhaseCell
+}
+
+export interface PhaseMatrixByPhase extends PhaseCell {
+  num:           number
+  label:         string
+  HOURS_SHARE:   number | null
+  HONORAR_SHARE: number | null
+}
+
+export interface PhaseMatrix {
+  phases:   { num: number; label: string }[]
+  projects: PhaseMatrixProject[]
+  byPhase:  PhaseMatrixByPhase[]
+  totals:   PhaseCell | null
+}
+
+export const fetchPhaseMatrix = () =>
+  apiClient.get<{ data: PhaseMatrix }>('/reports/phases/matrix')
+
 // ── Project timeline (chart data) ─────────────────────────────────────────────
 
 export interface TimelinePoint {

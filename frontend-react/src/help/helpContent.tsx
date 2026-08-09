@@ -483,6 +483,30 @@ export const HELP = {
       </>
     ),
   },
+  'report.lph_matrix': {
+    title: 'Leistungsphasen-Matrix',
+    body: (
+      <>
+        Alle Projekte mit Leistungsphasen-Struktur auf einen Blick: Zeilen sind Projekte, Spalten die
+        Leistungsphasen (LPH 1–9). Die Zellenfarbe zeigt die Ampel (grün = im Plan, gelb = Kostenquote
+        erhöht, rot = kritisch oder Deckungsbeitrag negativ). Über die Umschalter oben wählst du, welche
+        Kennzahl in den Zellen steht. So erkennst du sofort, in welcher Phase welches Projekt brennt.
+        Klick auf einen Projektnamen öffnet den Einzelprojekt-Report.
+      </>
+    ),
+  },
+  'report.lph_stundenanteil': {
+    title: 'Stundenanteil vs. Honoraranteil',
+    body: (
+      <>
+        Aggregiert über alle Projekte: Wie verteilen sich die tatsächlich gebuchten Stunden auf die
+        Leistungsphasen (Stundenanteil) — verglichen mit der Verteilung des Honorars (Honoraranteil, was
+        grob der HOAI-Gewichtung entspricht). Liegt der Stundenanteil einer Phase deutlich über ihrem
+        Honoraranteil, verbraucht diese Phase systematisch mehr Aufwand als sie einbringt — ein Hinweis
+        auf Unterkalkulation oder nötige Besondere Leistungen. Solche Phasen sind rot hervorgehoben.
+      </>
+    ),
+  },
   'report.leistungsphasen': {
     title: 'Auswertung nach Leistungsphase',
     body: (

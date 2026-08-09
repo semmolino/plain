@@ -575,6 +575,179 @@ module.exports = (supabase) => {
     }
   });
 
+  // ── Portfolio: Leistungsphasen-Matrix über alle (in-scope) Projekte ───────
+  // Universelle Dimension über Projekte hinweg ist die LPH-Nummer (aus dem
+  // Kürzel "LPH n"), da Blocknamen je Leistungsbild variieren. Liefert:
+  //   - phases:   vorhandene LPH-Nummern (Spalten) mit Beispiel-Label
+  //   - projects: je Projekt eine Zeile mit Zellen je LPH + Projektsumme
+  //   - byPhase:  Portfolio-Aggregat je LPH inkl. Stunden-/Honoraranteil
+  //   - totals:   Gesamtsumme
+  router.get("/phases/matrix", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const phaseNum = (nameShort) => {
+      const m = String(nameShort || "").match(/\d+/);
+      return m ? parseInt(m[0], 10) : null;
+    };
+    const ampelFor = (earned, cost) => {
+      const kq = earned > 0 ? cost / earned : null;
+      const db = earned - cost;
+      if ((kq != null && kq >= 0.9) || (db < 0 && (cost > 500 || earned > 500))) return "rot";
+      if (kq != null && kq >= 0.75) return "orange";
+      return "gruen";
+    };
+
+    try {
+      // Projekte des Mandanten (ggf. auf Reporting-Scope eingeschränkt).
+      let projQ = supabase
+        .from("PROJECT")
+        .select("ID, NAME_SHORT, NAME_LONG")
+        .eq("TENANT_ID", tenantId);
+      const { data: allProjects, error: pErr } = await projQ;
+      if (pErr) return res.status(500).json({ error: pErr.message });
+
+      let projects = allProjects || [];
+      if (req.reportScopeProjectIds !== null) {
+        projects = projects.filter((p) => req.reportScopeProjectIds.has(p.ID));
+      }
+      if (projects.length === 0) {
+        return res.json({ data: { phases: [], projects: [], byPhase: [], totals: null } });
+      }
+      const projectIds = projects.map((p) => p.ID);
+
+      // Strukturknoten + Blatt-Kennzahlen in einem Rutsch für alle Projekte.
+      const [{ data: nodes, error: nErr }, { data: viewRows, error: vErr }] = await Promise.all([
+        supabase.from("PROJECT_STRUCTURE")
+          .select("ID, PROJECT_ID, FATHER_ID, NAME_SHORT, FEE_CALC_PHASE_ID")
+          .eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds),
+        supabase.from("VW_REPORT_PROJECT_DETAIL_STRUCTURE")
+          .select("STRUCTURE_ID, PROJECT_ID, IS_LEAF, HOURS_TOTAL, COST_TOTAL, EARNED_VALUE_NET, HONORAR_NET")
+          .eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds),
+      ]);
+      if (nErr) return res.status(500).json({ error: nErr.message });
+      if (vErr) return res.status(500).json({ error: vErr.message });
+
+      // Knoten je Projekt indexieren.
+      const byIdPerProject = new Map(); // projectId → Map(nodeId → node)
+      for (const n of (nodes || [])) {
+        if (!byIdPerProject.has(n.PROJECT_ID)) byIdPerProject.set(n.PROJECT_ID, new Map());
+        byIdPerProject.get(n.PROJECT_ID).set(n.ID, n);
+      }
+      const phaseAncestor = (projectId, startId) => {
+        const byId = byIdPerProject.get(projectId);
+        if (!byId) return null;
+        let cur = byId.get(startId);
+        const seen = new Set();
+        while (cur && !seen.has(cur.ID)) {
+          if (cur.FEE_CALC_PHASE_ID != null) return cur;
+          seen.add(cur.ID);
+          cur = cur.FATHER_ID != null ? byId.get(cur.FATHER_ID) : null;
+        }
+        return null;
+      };
+
+      // Aggregation: matrix[projectId][phaseNum] und portfolioByPhase[phaseNum].
+      const emptyAgg = () => ({ HONORAR_NET: 0, EARNED_VALUE_NET: 0, HOURS_TOTAL: 0, COST_TOTAL: 0 });
+      const matrix       = new Map(); // projectId → Map(num → agg)
+      const phaseLabels  = new Map(); // num → label (erstes gesehenes)
+      const byPhase      = new Map(); // num → agg
+      const projectsWithPhases = new Set();
+
+      for (const r of (viewRows || [])) {
+        if (!r.IS_LEAF) continue;
+        const anc = phaseAncestor(r.PROJECT_ID, r.STRUCTURE_ID);
+        if (!anc) continue; // nur phasenzugeordnete Blätter zählen
+        const num = phaseNum(anc.NAME_SHORT);
+        if (num == null) continue;
+        projectsWithPhases.add(r.PROJECT_ID);
+        if (!phaseLabels.has(num)) phaseLabels.set(num, anc.NAME_SHORT);
+
+        if (!matrix.has(r.PROJECT_ID)) matrix.set(r.PROJECT_ID, new Map());
+        const pm = matrix.get(r.PROJECT_ID);
+        if (!pm.has(num)) pm.set(num, emptyAgg());
+        if (!byPhase.has(num)) byPhase.set(num, emptyAgg());
+        for (const agg of [pm.get(num), byPhase.get(num)]) {
+          agg.HONORAR_NET      += Number(r.HONORAR_NET      || 0);
+          agg.EARNED_VALUE_NET += Number(r.EARNED_VALUE_NET || 0);
+          agg.HOURS_TOTAL      += Number(r.HOURS_TOTAL      || 0);
+          agg.COST_TOTAL       += Number(r.COST_TOTAL       || 0);
+        }
+      }
+
+      const phaseNumsSorted = [...phaseLabels.keys()].sort((a, b) => a - b);
+      const phasesOut = phaseNumsSorted.map((num) => ({ num, label: phaseLabels.get(num) }));
+
+      const decorateCell = (agg) => {
+        const honorar = round2(agg.HONORAR_NET);
+        const earned  = round2(agg.EARNED_VALUE_NET);
+        const cost    = round2(agg.COST_TOTAL);
+        return {
+          HONORAR_NET: honorar,
+          EARNED_VALUE_NET: earned,
+          HOURS_TOTAL: round2(agg.HOURS_TOTAL),
+          COST_TOTAL: cost,
+          LEISTUNGSSTAND_PERCENT: honorar > 0 ? round2((earned / honorar) * 100) : null,
+          KOSTENQUOTE: earned > 0 ? cost / earned : null,
+          DB: round2(earned - cost),
+          ampel: ampelFor(earned, cost),
+        };
+      };
+
+      // Projektzeilen (nur Projekte mit Phasenstruktur).
+      const projectRows = projects
+        .filter((p) => projectsWithPhases.has(p.ID))
+        .map((p) => {
+          const pm = matrix.get(p.ID) || new Map();
+          const cells = {};
+          const tot = emptyAgg();
+          for (const num of phaseNumsSorted) {
+            const agg = pm.get(num);
+            if (!agg) continue;
+            cells[num] = decorateCell(agg);
+            tot.HONORAR_NET += agg.HONORAR_NET; tot.EARNED_VALUE_NET += agg.EARNED_VALUE_NET;
+            tot.HOURS_TOTAL += agg.HOURS_TOTAL; tot.COST_TOTAL += agg.COST_TOTAL;
+          }
+          return {
+            PROJECT_ID: p.ID, NAME_SHORT: p.NAME_SHORT, NAME_LONG: p.NAME_LONG,
+            cells, total: decorateCell(tot),
+          };
+        })
+        .sort((a, b) => String(a.NAME_SHORT).localeCompare(String(b.NAME_SHORT)));
+
+      // Portfolio-Gesamtsummen für Anteile.
+      let totHonorar = 0, totHours = 0;
+      for (const agg of byPhase.values()) { totHonorar += agg.HONORAR_NET; totHours += agg.HOURS_TOTAL; }
+
+      const byPhaseOut = phaseNumsSorted.map((num) => {
+        const agg = byPhase.get(num) || emptyAgg();
+        const cell = decorateCell(agg);
+        return {
+          num, label: phaseLabels.get(num), ...cell,
+          // Anteil an Stunden vs. Anteil am Honorar — Ist-Stundenlast vs.
+          // HOAI-Gewichtung. Weichen sie stark ab, wird die Phase über-/unterkalkuliert.
+          HOURS_SHARE:   totHours   > 0 ? round2((agg.HOURS_TOTAL / totHours)   * 100) : null,
+          HONORAR_SHARE: totHonorar > 0 ? round2((agg.HONORAR_NET / totHonorar) * 100) : null,
+        };
+      });
+
+      const grandTot = emptyAgg();
+      for (const agg of byPhase.values()) {
+        grandTot.HONORAR_NET += agg.HONORAR_NET; grandTot.EARNED_VALUE_NET += agg.EARNED_VALUE_NET;
+        grandTot.HOURS_TOTAL += agg.HOURS_TOTAL; grandTot.COST_TOTAL += agg.COST_TOTAL;
+      }
+
+      res.json({ data: {
+        phases: phasesOut,
+        projects: projectRows,
+        byPhase: byPhaseOut,
+        totals: projectRows.length ? decorateCell(grandTot) : null,
+      }});
+    } catch (e) {
+      res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
   // All projects with KPIs (multi-project list)
   router.get("/projects/list", async (req, res) => {
     const tenantId = requireTenantId(req, res);
