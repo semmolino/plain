@@ -470,6 +470,42 @@ export const HELP = {
       </>
     ),
   },
+  'din276.anrechenbare_kosten': {
+    title: 'Anrechenbare Kosten (DIN 276 → HOAI)',
+    body: (
+      <>
+        Die anrechenbaren Kosten sind die Grundlage der Honorarberechnung. Sie werden aus den Baukosten
+        je Kostengruppe nach DIN 276 abgeleitet. Für Gebäude (§ 33 HOAI) gilt: KG 300 (Baukonstruktionen)
+        voll; KG 400 (Technische Anlagen) voll, wenn selbst geplant/überwacht, sonst voll bis 25 % der
+        sonstigen anrechenbaren Kosten und darüber zur Hälfte; mitverarbeitete Bausubstanz kommt hinzu.
+        KG 100/500/700 und nicht selbst geplante KG 200/600 sind nicht anrechenbar. Das Ergebnis wird als
+        Baukosten-Basis (K0) in die Honorarberechnung übernommen. Maßgeblich ist die Kostenberechnung
+        (LPH 3) nach DIN 276-1:2008-12.
+      </>
+    ),
+  },
+  'din276.stufe': {
+    title: 'Kostenstufe',
+    body: (
+      <>
+        Genauigkeit/Zeitpunkt der Kostenermittlung: die <strong>Kostenschätzung</strong> entsteht meist zur
+        Vorplanung (LPH 2), die <strong>Kostenberechnung</strong> zur Entwurfsplanung (LPH 3). Für die
+        anrechenbaren Kosten ist grundsätzlich die Kostenberechnung maßgeblich; in frühen Phasen dient die
+        Schätzung als Ersatz.
+      </>
+    ),
+  },
+  'din276.bausubstanz': {
+    title: 'Mitverarbeitete Bausubstanz (§ 4 Abs. 3)',
+    body: (
+      <>
+        Vorhandene Bausubstanz, die bei Umbau/Modernisierung technisch oder gestalterisch mitverarbeitet
+        wird, ist angemessen in die anrechenbaren Kosten einzubeziehen (schriftlich zu vereinbaren). Sie
+        zählt zu den „sonstigen anrechenbaren Kosten" und beeinflusst damit auch die 25-%-Schwelle der
+        KG-400-Regel. Ohne Umbau/Bestand: 0 lassen.
+      </>
+    ),
+  },
   'stammdaten.lph_bloecke': {
     title: 'Leistungsphasen-Blöcke',
     body: (

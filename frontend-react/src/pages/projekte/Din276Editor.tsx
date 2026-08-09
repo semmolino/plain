@@ -1,0 +1,271 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
+import { Modal } from '@/components/ui/Modal'
+import { DialogFooter } from '@/components/ui/DialogFooter'
+import { Message } from '@/components/ui/Message'
+import { HelpHint } from '@/components/ui/HelpHint'
+import { Can } from '@/components/ui/Can'
+import {
+  fetchDin276Estimates, fetchDin276Estimate, createDin276Estimate,
+  updateDin276Estimate, saveDin276Groups, computeDin276Anrechenbar,
+  type Din276Group, type Din276Estimate, type Din276AnrechenbarResult, type Din276Stage,
+} from '@/api/din276'
+
+const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
+
+// Erste Hunderter-KG aus einem Code ("410" → 400).
+const kgHundred = (code: string): number | null => {
+  const n = parseInt(String(code).replace(/\D/g, ''), 10)
+  return Number.isFinite(n) ? Math.floor(n / 100) * 100 : null
+}
+// KG 200/400/600 sind nur bei "selbst geplant" (voll bzw. anteilig) anrechenbar.
+const SELF_RELEVANT = new Set([200, 400, 600])
+
+interface Props {
+  open:          boolean
+  onClose:       () => void
+  projectId?:    number
+  offerId?:      number
+  leistungsbild?: string
+  /** Übernahme des berechneten Betrags (anrechenbare Kosten) in die Kalkulation. */
+  onApply:       (anrechenbareKosten: number, estimateId: number) => void
+}
+
+export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild = 'gebaeude', onApply }: Props) {
+  const [loading,   setLoading]   = useState(false)
+  const [available, setAvailable] = useState(true)
+  const [estimate,  setEstimate]  = useState<Din276Estimate | null>(null)
+  const [groups,    setGroups]    = useState<Din276Group[]>([])
+  const [stage,     setStage]     = useState<Din276Stage>('berechnung')
+  const [bausubstanz, setBausubstanz] = useState('0')
+  const [result,    setResult]    = useState<Din276AnrechenbarResult | null>(null)
+  const [msg,       setMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  function applyEstimate(est: Din276Estimate) {
+    setEstimate(est)
+    setGroups((est.groups ?? []).slice().sort((a, b) => a.SORT_ORDER - b.SORT_ORDER))
+    setStage(est.STAGE)
+    setBausubstanz(String(est.MITVERARBEITETE_BAUSUBSTANZ ?? 0))
+    setResult(null)
+  }
+
+  // Beim Öffnen: bestehende Kostenermittlung laden oder anlegen.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setLoading(true); setMsg(null); setResult(null)
+    ;(async () => {
+      try {
+        const list = await fetchDin276Estimates({ project_id: projectId, offer_id: offerId })
+        if (cancelled) return
+        if (list.data.available === false) { setAvailable(false); setLoading(false); return }
+        setAvailable(true)
+        if (list.data.data.length > 0) {
+          const full = await fetchDin276Estimate(list.data.data[0].ID)
+          if (!cancelled) applyEstimate(full.data)
+        } else {
+          const created = await createDin276Estimate({ project_id: projectId, offer_id: offerId, stage: 'berechnung' })
+          if (!cancelled) applyEstimate(created.data)
+        }
+      } catch (e) {
+        if (!cancelled) setMsg({ text: (e as Error).message, type: 'error' })
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [open, projectId, offerId])
+
+  function setGroup(idx: number, patch: Partial<Din276Group>) {
+    setGroups(gs => gs.map((g, i) => i === idx ? { ...g, ...patch } : g))
+    setResult(null)
+  }
+  function addGroup() {
+    setGroups(gs => [...gs, { KG_CODE: '', LABEL: '', AMOUNT: 0, IS_PLANNED_SELF: false, SORT_ORDER: gs.length }])
+  }
+  function removeGroup(idx: number) {
+    setGroups(gs => gs.filter((_, i) => i !== idx))
+    setResult(null)
+  }
+
+  async function saveAndCompute() {
+    if (!estimate) return
+    setLoading(true); setMsg(null)
+    try {
+      await updateDin276Estimate(estimate.ID, { stage, mitverarbeitete_bausubstanz: Number(bausubstanz) || 0 })
+      const saved = await saveDin276Groups(estimate.ID, groups.map((g, i) => ({ ...g, SORT_ORDER: i })))
+      applyEstimate(saved.data)
+      const r = await computeDin276Anrechenbar(estimate.ID, leistungsbild)
+      setResult(r.data)
+      setMsg({ text: 'Gespeichert und berechnet ✅', type: 'success' })
+    } catch (e) {
+      setMsg({ text: (e as Error).message, type: 'error' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const anrechenbar = result?.anrechenbareKosten ?? null
+  const totalBaukosten = useMemo(() => groups.reduce((s, g) => s + (Number(g.AMOUNT) || 0), 0), [groups])
+
+  return (
+    <Modal open={open} onClose={onClose} title="Anrechenbare Kosten aus DIN-276-Kostenermittlung">
+      {!available ? (
+        <p className="empty-note" style={{ color: 'var(--warning-strong)' }}>
+          Das DIN-276-Modul ist noch nicht verfügbar — die Datenbank-Migration 0098 wurde noch nicht ausgeführt.
+        </p>
+      ) : loading && !estimate ? (
+        <p className="empty-note">Laden …</p>
+      ) : (
+        <>
+          <p className="admin-section-hint" style={{ marginTop: 0, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <span>
+              Trage die Baukosten je Kostengruppe (DIN 276) ein. Daraus werden die anrechenbaren Kosten nach
+              HOAI § 33 (Gebäude) berechnet — inkl. der KG-400-Regel und mitverarbeiteter Bausubstanz.
+            </span>
+            <HelpHint id="din276.anrechenbare_kosten" />
+          </p>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+                Kostenstufe <HelpHint id="din276.stufe" />
+              </label>
+              <select value={stage} onChange={e => { setStage(e.target.value as Din276Stage); setResult(null) }}>
+                <option value="schaetzung">Kostenschätzung (LPH 2)</option>
+                <option value="berechnung">Kostenberechnung (LPH 3, maßgeblich)</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+                Mitverarbeitete Bausubstanz (€) <HelpHint id="din276.bausubstanz" />
+              </label>
+              <input type="text" inputMode="numeric" value={bausubstanz}
+                onChange={e => { setBausubstanz(e.target.value); setResult(null) }} />
+            </div>
+          </div>
+
+          <div className="table-scroll">
+            <table className="master-table">
+              <thead>
+                <tr>
+                  <th scope="col" style={{ width: 70 }}>KG</th>
+                  <th scope="col">Bezeichnung</th>
+                  <th scope="col" className="num">Betrag €</th>
+                  <th scope="col" style={{ textAlign: 'center' }} title="Vom Auftragnehmer selbst fachlich geplant/überwacht (relevant für KG 200/400/600)">selbst geplant?</th>
+                  <th scope="col" />
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g, idx) => {
+                  const h = kgHundred(g.KG_CODE)
+                  const showSelf = h != null && SELF_RELEVANT.has(h)
+                  return (
+                    <tr key={g.ID ?? `new-${idx}`}>
+                      <td>
+                        <input className="tbl-input" style={{ width: 56 }} value={g.KG_CODE}
+                          onChange={e => setGroup(idx, { KG_CODE: e.target.value })} placeholder="300" />
+                      </td>
+                      <td>
+                        <input className="tbl-input" style={{ width: '100%' }} value={g.LABEL ?? ''}
+                          onChange={e => setGroup(idx, { LABEL: e.target.value })} />
+                      </td>
+                      <td className="num">
+                        <input className="tbl-input num" type="text" inputMode="numeric" style={{ width: 120, textAlign: 'right' }}
+                          value={String(g.AMOUNT ?? 0)}
+                          onChange={e => setGroup(idx, { AMOUNT: Number(e.target.value.replace(',', '.')) || 0 })} />
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {showSelf ? (
+                          <input type="checkbox" checked={g.IS_PLANNED_SELF}
+                            onChange={e => setGroup(idx, { IS_PLANNED_SELF: e.target.checked })} />
+                        ) : <span className="ls-muted">—</span>}
+                      </td>
+                      <td>
+                        <Can permission="projects.calculations.edit">
+                          <button type="button" className="row-action-btn" title="Zeile entfernen" onClick={() => removeGroup(idx)}>
+                            <Trash2 size={12} strokeWidth={2.5} />
+                          </button>
+                        </Can>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="sum-row">
+                  <td colSpan={2}><strong>Baukosten gesamt</strong></td>
+                  <td className="num"><strong>{fmtEur(totalBaukosten)}</strong></td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <Can permission="projects.calculations.edit">
+            <button type="button" className="btn-small" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6 }} onClick={addGroup}>
+              <Plus size={13} strokeWidth={2} /> Kostengruppe hinzufügen
+            </button>
+          </Can>
+
+          {result && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Herleitung (§ 33 HOAI)</div>
+              <div className="table-scroll">
+                <table className="master-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">KG</th>
+                      <th scope="col">Ansatz</th>
+                      <th scope="col" className="num">Basis €</th>
+                      <th scope="col" className="num">%</th>
+                      <th scope="col" className="num">anrechenbar €</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.herleitung.map((h, i) => (
+                      <tr key={i}>
+                        <td>{h.kg}</td>
+                        <td>{h.label}</td>
+                        <td className="num">{fmtEur(h.basis)}</td>
+                        <td className="num">{h.ansatz}</td>
+                        <td className="num">{fmtEur(h.betrag)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="sum-row">
+                      <td colSpan={4}><strong>Anrechenbare Kosten</strong></td>
+                      <td className="num"><strong>{fmtEur(result.anrechenbareKosten)}</strong></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {msg && <div style={{ marginTop: 10 }}><Message text={msg.text} type={msg.type} /></div>}
+        </>
+      )}
+
+      <DialogFooter>
+        <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+        <Can permission="projects.calculations.edit">
+          <button type="button" className="btn-secondary" disabled={loading || !estimate} onClick={saveAndCompute}>
+            {loading ? '…' : 'Speichern & berechnen'}
+          </button>
+        </Can>
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={anrechenbar == null || !estimate}
+          onClick={() => { if (anrechenbar != null && estimate) { onApply(anrechenbar, estimate.ID); onClose() } }}
+          title={anrechenbar == null ? 'Erst „Speichern & berechnen"' : undefined}
+        >
+          In Kalkulation übernehmen{anrechenbar != null ? ` (${fmtEur(anrechenbar)})` : ''}
+        </button>
+      </DialogFooter>
+    </Modal>
+  )
+}

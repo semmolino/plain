@@ -5,6 +5,7 @@ const ctrl = require("../controllers/stammdaten");
 const bookingTypesCtrl = require("../controllers/bookingTypes");
 const textSnippetsCtrl = require("../controllers/textSnippets");
 const lphBlocksCtrl = require("../controllers/lphBlocks");
+const din276Ctrl = require("../controllers/din276");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
@@ -45,6 +46,15 @@ module.exports = (supabase) => {
   router.get("/lph-blocks",                                          (req, res) => lphBlocksCtrl.getBlocks(req, res, supabase));
   router.post("/lph-blocks/save",                                    requirePermission("settings.basedata.edit"), (req, res) => lphBlocksCtrl.saveBlocks(req, res, supabase));
   router.post("/lph-blocks/seed-default",                            requirePermission("settings.basedata.edit"), (req, res) => lphBlocksCtrl.seedDefault(req, res, supabase));
+
+  // DIN-276-Kostenermittlung (Grundlage anrechenbare Baukosten)
+  router.get("/din276/estimates",                                   (req, res) => din276Ctrl.listEstimates(req, res, supabase));
+  router.post("/din276/estimates",                                  requirePermission("projects.calculations.edit"), (req, res) => din276Ctrl.createEstimate(req, res, supabase));
+  router.get("/din276/estimates/:id",                               (req, res) => din276Ctrl.getEstimate(req, res, supabase));
+  router.patch("/din276/estimates/:id",                             requirePermission("projects.calculations.edit"), (req, res) => din276Ctrl.updateEstimate(req, res, supabase));
+  router.post("/din276/estimates/:id/groups/save",                  requirePermission("projects.calculations.edit"), (req, res) => din276Ctrl.saveGroups(req, res, supabase));
+  router.get("/din276/estimates/:id/anrechenbar",                   (req, res) => din276Ctrl.computeAnrechenbar(req, res, supabase));
+  router.delete("/din276/estimates/:id",                            requirePermission("projects.calculations.delete"), (req, res) => din276Ctrl.deleteEstimate(req, res, supabase));
 
   router.get("/companies",                                           (req, res) => ctrl.getCompanies(req, res, supabase));
   router.post("/company",                                            requirePermission("settings.company.edit"), (req, res) => ctrl.postCompany(req, res, supabase));

@@ -19,6 +19,8 @@ import {
 import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from '@/api/projekte'
 import { fetchOffer, fetchOfferStructure, type OfferStructureNode } from '@/api/angebote'
 
+import { Din276Editor } from '@/pages/projekte/Din276Editor'
+
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
 
@@ -202,6 +204,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '',
     K0: '', K1: '', K2: '', K3: '', K4: '',
   })
+  const [din276Open, setDin276Open] = useState(false)
   const [projectId, setProjectId]             = useState(initialProjectId ? String(initialProjectId) : '')
   const [structureNodes, setStructureNodes]   = useState<Awaited<ReturnType<typeof fetchProjectStructure>>['data']>([])
   const [offerStructureNodes, setOfferStructureNodes] = useState<OfferStructureNode[]>([])
@@ -778,14 +781,32 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </p>
             </div>
           ) : (
-            <div className="fee-k-grid">
-              {(['K0','K1','K2','K3','K4'] as const).map(k => (
-                <div key={k} className="form-group">
-                  <label>{k}</label>
-                  <input type="number" step="0.01" value={(basis as Record<string, string>)[k]} onChange={e => setBasis(b => ({ ...b, [k]: e.target.value }))} />
-                </div>
-              ))}
-            </div>
+            <>
+              <div className="fee-k-grid">
+                {(['K0','K1','K2','K3','K4'] as const).map(k => (
+                  <div key={k} className="form-group">
+                    <label>{k}</label>
+                    <input type="number" step="0.01" value={(basis as Record<string, string>)[k]} onChange={e => setBasis(b => ({ ...b, [k]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" className="btn-small" onClick={() => setDin276Open(true)}>
+                  Baukosten aus DIN 276 ermitteln …
+                </button>
+                <span className="admin-section-hint" style={{ margin: 0 }}>
+                  Berechnet die anrechenbaren Kosten nach § 33 (Gebäude) und übernimmt sie nach K0.
+                </span>
+              </div>
+              <Din276Editor
+                open={din276Open}
+                onClose={() => setDin276Open(false)}
+                projectId={!isOfferMode && projectId ? Number(projectId) : undefined}
+                offerId={isOfferMode && offerId ? offerId : undefined}
+                leistungsbild="gebaeude"
+                onApply={(anrechenbar) => setBasis(b => ({ ...b, K0: String(anrechenbar) }))}
+              />
+            </>
           )}
         </div>
       )}
