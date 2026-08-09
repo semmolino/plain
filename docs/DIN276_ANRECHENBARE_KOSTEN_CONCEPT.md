@@ -129,9 +129,14 @@ zu verifizieren):
   (z. B. konstruktive Anteile). Exakte KG-Zuordnung und Prozentsätze aus dem
   Gesetzestext übernehmen.
 
-**Technische Ausrüstung / TGA (§ 53 HOAI 2021):** ⚠️
-- Anrechenbar sind die **Kosten der jeweils geplanten Anlagengruppen der KG 400**
-  (je Anlagengruppe getrennt), i. d. R. vollständig; ggf. anteilige KG 300/500.
+**Technische Ausrüstung / TGA (§ 53/54 HOAI 2021):** ✅ umgesetzt (Einzel-Anlagengruppe)
+- Das Honorar wird **je Anlagengruppe (KG 410–480) getrennt** ermittelt (§ 54 Abs. 1);
+  anrechenbare Kosten einer Anlagengruppe = deren KG-4x0-Kosten, **voll** (kein
+  25/50-Cap — der gilt nur für den Gebäudeplaner). Die Rule-Engine rechnet **eine**
+  Anlagengruppe (Schlüssel `tga:<410–480>`), der Editor bietet die Anlagengruppen-Auswahl.
+- ⚠️ Offen (bewusst später, „Mischhonorare"): **Zusammenfassen mehrerer Anlagengruppen**
+  zu einem Honorar bzw. funktionale Einheiten (§ 54 Abs. 2); mitverarbeitete
+  Bausubstanz je Anlagengruppe (KG 400, 3. Ebene).
 
 **Freianlagen (§ 39/§ 40 HOAI 2021):** ⚠️
 - Im Kern **KG 500** sowie anteilige KG 200/300, soweit den Freianlagen zugehörig.

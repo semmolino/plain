@@ -22,6 +22,18 @@ const kgHundred = (code: string): number | null => {
 // KG 200/400/600 sind nur bei "selbst geplant" (voll bzw. anteilig) anrechenbar.
 const SELF_RELEVANT = new Set([200, 400, 600])
 
+// Anlagengruppen der Technischen Ausrüstung (KG 410–480, § 53).
+const ANLAGENGRUPPEN: [string, string][] = [
+  ['410', 'Abwasser-, Wasser-, Gasanlagen'],
+  ['420', 'Wärmeversorgungsanlagen'],
+  ['430', 'Lufttechnische Anlagen'],
+  ['440', 'Starkstromanlagen'],
+  ['450', 'Fernmelde- und informationstechnische Anlagen'],
+  ['460', 'Förderanlagen'],
+  ['470', 'Nutzungsspezifische und verfahrenstechnische Anlagen'],
+  ['480', 'Gebäudeautomation'],
+]
+
 interface Props {
   open:          boolean
   onClose:       () => void
@@ -40,6 +52,9 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
   const [stage,     setStage]     = useState<Din276Stage>('berechnung')
   const [bausubstanz, setBausubstanz] = useState('0')
   const [lb,        setLb]        = useState(leistungsbild)
+  const [anlagengruppe, setAnlagengruppe] = useState('410')
+  // Zusammengesetzter Schlüssel für TGA (je Anlagengruppe): "tga:420".
+  const effectiveLb = lb === 'tga' ? `tga:${anlagengruppe}` : lb
   const [result,    setResult]    = useState<Din276AnrechenbarResult | null>(null)
   const [msg,       setMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
@@ -97,7 +112,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
       await updateDin276Estimate(estimate.ID, { stage, mitverarbeitete_bausubstanz: Number(bausubstanz) || 0 })
       const saved = await saveDin276Groups(estimate.ID, groups.map((g, i) => ({ ...g, SORT_ORDER: i })))
       applyEstimate(saved.data)
-      const r = await computeDin276Anrechenbar(estimate.ID, lb)
+      const r = await computeDin276Anrechenbar(estimate.ID, effectiveLb)
       setResult(r.data)
       setMsg({ text: 'Gespeichert und berechnet ✅', type: 'success' })
     } catch (e) {
@@ -136,8 +151,19 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                 <option value="gebaeude">Gebäude (§ 33)</option>
                 <option value="tragwerk">Tragwerksplanung (§ 50)</option>
                 <option value="freianlagen">Freianlagen (§ 38/40)</option>
+                <option value="tga">Technische Ausrüstung (§ 53/54)</option>
               </select>
             </div>
+            {lb === 'tga' && (
+              <div className="form-group">
+                <label>Anlagengruppe</label>
+                <select value={anlagengruppe} onChange={e => { setAnlagengruppe(e.target.value); setResult(null) }}>
+                  {ANLAGENGRUPPEN.map(([code, name]) => (
+                    <option key={code} value={code}>{code} · {name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="form-group">
               <label style={{ display: 'inline-flex', alignItems: 'center' }}>
                 Kostenstufe <HelpHint id="din276.stufe" />
@@ -155,6 +181,14 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                 onChange={e => { setBausubstanz(e.target.value); setResult(null) }} />
             </div>
           </div>
+
+          {lb === 'tga' && (
+            <p className="empty-note" style={{ marginTop: 0, marginBottom: 8 }}>
+              Für die Technische Ausrüstung wird je Anlagengruppe getrennt gerechnet. Erfasse die Kosten
+              der gewählten Anlagengruppe als eigene Kostengruppen-Zeile (z. B. <strong>{anlagengruppe}</strong>) —
+              das Zusammenfassen mehrerer Anlagengruppen (Mischhonorar) ist noch nicht abgebildet.
+            </p>
+          )}
 
           <div className="table-scroll">
             <table className="master-table">
@@ -222,7 +256,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
           {result && (
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>
-                Herleitung ({lb === 'tragwerk' ? '§ 50' : lb === 'freianlagen' ? '§ 38/40' : '§ 33'} HOAI)
+                Herleitung ({lb === 'tragwerk' ? '§ 50' : lb === 'freianlagen' ? '§ 38/40' : lb === 'tga' ? '§ 53/54' : '§ 33'} HOAI)
               </div>
               <div className="table-scroll">
                 <table className="master-table">
@@ -272,7 +306,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
           type="button"
           className="btn-primary"
           disabled={anrechenbar == null || !estimate}
-          onClick={() => { if (anrechenbar != null && estimate) { onApply(anrechenbar, estimate.ID, lb); onClose() } }}
+          onClick={() => { if (anrechenbar != null && estimate) { onApply(anrechenbar, estimate.ID, effectiveLb); onClose() } }}
           title={anrechenbar == null ? 'Erst „Speichern & berechnen"' : undefined}
         >
           In Kalkulation übernehmen{anrechenbar != null ? ` (${fmtEur(anrechenbar)})` : ''}

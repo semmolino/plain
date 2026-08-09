@@ -155,7 +155,7 @@ async function saveGroups(req, res, supabase) {
 async function computeAnrechenbar(req, res, supabase) {
   const tenantId = req.tenantId;
   const id = parseInt(req.params.id, 10);
-  const leistungsbild = String(req.query.leistungsbild || "gebaeude");
+  const { key, opts } = svc.parseLeistungsbild(req.query.leistungsbild || "gebaeude");
   try {
     const { data: est } = await supabase.from("DIN276_COST_ESTIMATE")
       .select("ID, MITVERARBEITETE_BAUSUBSTANZ").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
@@ -166,7 +166,7 @@ async function computeAnrechenbar(req, res, supabase) {
       mitverarbeiteteBausubstanz: est.MITVERARBEITETE_BAUSUBSTANZ,
       groups: (groups || []).map((g) => ({ kg: g.KG_CODE, amount: g.AMOUNT, isPlannedSelf: g.IS_PLANNED_SELF })),
     };
-    const result = svc.anrechenbareKosten(leistungsbild, estimate);
+    const result = svc.anrechenbareKosten(key, estimate, opts);
     res.json({ data: result });
   } catch (e) {
     res.status(400).json({ error: e?.message || String(e) });

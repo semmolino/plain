@@ -4,7 +4,9 @@ const {
   anrechenbareKostenGebaeude,
   anrechenbareKostenTragwerk,
   anrechenbareKostenFreianlagen,
+  anrechenbareKostenTGA,
   anrechenbareKosten,
+  parseLeistungsbild,
   kgHundred,
 } = require("../services/din276");
 
@@ -136,6 +138,36 @@ describe("anrechenbareKostenFreianlagen (§ 38/40)", () => {
   });
 });
 
+// ── § 53/54 Technische Ausrüstung ─────────────────────────────────────────────
+
+describe("anrechenbareKostenTGA (§ 53/54)", () => {
+  it("summiert nur die gewählte Anlagengruppe (KG 420er), voll", () => {
+    const r = anrechenbareKostenTGA(
+      { groups: [g("420", 150000), g("421", 30000), g("410", 99000), g("300", 1000000)] },
+      { anlagengruppe: "420" },
+    );
+    expect(r.anrechenbareKosten).toBe(180000);
+  });
+  it("wirft ohne Anlagengruppe", () => {
+    expect(() => anrechenbareKostenTGA({ groups: [g("420", 1)] }, {})).toThrow();
+  });
+  it("liefert 0, wenn die Anlagengruppe nicht erfasst ist", () => {
+    const r = anrechenbareKostenTGA({ groups: [g("410", 50000)] }, { anlagengruppe: "480" });
+    expect(r.anrechenbareKosten).toBe(0);
+  });
+});
+
+// ── parseLeistungsbild ────────────────────────────────────────────────────────
+
+describe("parseLeistungsbild", () => {
+  it("einfacher Schlüssel", () => {
+    expect(parseLeistungsbild("gebaeude")).toEqual({ key: "gebaeude", opts: {} });
+  });
+  it("TGA mit Anlagengruppe", () => {
+    expect(parseLeistungsbild("tga:420")).toEqual({ key: "tga", opts: { anlagengruppe: "420" } });
+  });
+});
+
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 
 describe("anrechenbareKosten (Dispatcher)", () => {
@@ -150,6 +182,10 @@ describe("anrechenbareKosten (Dispatcher)", () => {
   it("ruft die Freianlagen-Regel", () => {
     const r = anrechenbareKosten("freianlagen", { groups: [g("500", 100000)] });
     expect(r.anrechenbareKosten).toBe(100000);
+  });
+  it("ruft die TGA-Regel mit Anlagengruppe", () => {
+    const r = anrechenbareKosten("tga", { groups: [g("430", 80000)] }, { anlagengruppe: "430" });
+    expect(r.anrechenbareKosten).toBe(80000);
   });
   it("wirft bei unbekanntem Leistungsbild", () => {
     expect(() => anrechenbareKosten("unbekannt", { groups: [] })).toThrow();

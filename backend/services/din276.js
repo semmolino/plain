@@ -148,14 +148,66 @@ function anrechenbareKostenFreianlagen(estimate) {
   return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(kg500), herleitung };
 }
 
-// Registry: Leistungsbild-Typ → Regelfunktion.
-// TGA (§ 53) fehlt bewusst: dort wird je Anlagengruppe (KG 410–480) getrennt
-// abgerechnet — das passt nicht in das Einzel-Basis-Modell (K0) und braucht ein
-// eigenes Konzept.
+// ── § 53/54 HOAI (Technische Ausrüstung) ──────────────────────────────────────
+// Das Honorar wird JE ANLAGENGRUPPE getrennt ermittelt (§ 54 Abs. 1). Die
+// anrechenbaren Kosten einer Anlagengruppe sind die Kosten der zugehörigen
+// KG-400-Untergruppe (410–480), voll (kein 25/50-Cap — der gilt nur für den
+// Gebäudeplaner, § 33).
+// Dieses Modul rechnet EINE Anlagengruppe (opts.anlagengruppe, z. B. 420);
+// das Zusammenfassen mehrerer Anlagengruppen (Mischhonorar, § 54 Abs. 2) ist
+// bewusst NICHT abgebildet und als eigene Erweiterung vorgesehen.
+// ⚠️ Mitverarbeitete Bausubstanz (KG 400) ist hier NICHT gesondert je
+// Anlagengruppe berücksichtigt und vor produktivem Einsatz zu ergänzen.
+
+const ANLAGENGRUPPEN = {
+  410: "Abwasser-, Wasser-, Gasanlagen",
+  420: "Wärmeversorgungsanlagen",
+  430: "Lufttechnische Anlagen",
+  440: "Starkstromanlagen",
+  450: "Fernmelde- und informationstechnische Anlagen",
+  460: "Förderanlagen",
+  470: "Nutzungsspezifische und verfahrenstechnische Anlagen",
+  480: "Gebäudeautomation",
+};
+
+// Zehner-Kostengruppe aus einem KG-Code ("421" → 420, "420" → 420).
+function kgTens(kgCode) {
+  const n = parseInt(String(kgCode == null ? "" : kgCode).replace(/\D/g, ""), 10);
+  if (!Number.isFinite(n)) return null;
+  return Math.floor(n / 10) * 10;
+}
+
+function anrechenbareKostenTGA(estimate, opts = {}) {
+  const agNum = parseInt(String(opts.anlagengruppe == null ? "" : opts.anlagengruppe).replace(/\D/g, ""), 10);
+  if (!Number.isFinite(agNum)) {
+    throw new Error("Technische Ausrüstung: Anlagengruppe (z. B. 420) erforderlich");
+  }
+  const agTens = Math.floor(agNum / 10) * 10;
+  const groups = estimate?.groups || [];
+
+  const herleitung = [];
+  let total = 0;
+  for (const g of groups) {
+    const code = g.kg ?? g.KG_CODE;
+    const n = parseInt(String(code == null ? "" : code).replace(/\D/g, ""), 10);
+    if (!Number.isFinite(n) || n < 400 || n >= 500) continue;
+    if (kgTens(code) !== agTens) continue;
+    const amt = num(g.amount ?? g.AMOUNT);
+    if (!amt) continue;
+    const b = round2(amt);
+    herleitung.push({ kg: String(n), label: g.label ?? g.LABEL ?? "Technische Anlagen", basis: b, ansatz: 100, betrag: b });
+    total += b;
+  }
+
+  return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(total), herleitung };
+}
+
+// Registry: Leistungsbild-Typ → Regelfunktion (estimate, opts) → Ergebnis.
 const RULES = {
   gebaeude:    anrechenbareKostenGebaeude,
   tragwerk:    anrechenbareKostenTragwerk,
   freianlagen: anrechenbareKostenFreianlagen,
+  tga:         anrechenbareKostenTGA,
 };
 
 /**
@@ -163,18 +215,32 @@ const RULES = {
  * @param {string} leistungsbild  Schluessel in RULES (z. B. 'gebaeude')
  * @param {object} estimate
  */
-function anrechenbareKosten(leistungsbild, estimate) {
+function anrechenbareKosten(leistungsbild, estimate, opts = {}) {
   const fn = RULES[String(leistungsbild || "").toLowerCase()];
   if (!fn) throw new Error(`Kein Anrechenbarkeits-Regelsatz fuer Leistungsbild "${leistungsbild}"`);
-  return fn(estimate);
+  return fn(estimate, opts);
+}
+
+// Zerlegt einen ggf. zusammengesetzten Leistungsbild-Schlüssel:
+//   "gebaeude"  → { key: "gebaeude", opts: {} }
+//   "tga:420"   → { key: "tga", opts: { anlagengruppe: "420" } }
+function parseLeistungsbild(str) {
+  const raw = String(str || "").trim();
+  const [key, param] = raw.split(":");
+  const k = (key || "gebaeude").toLowerCase();
+  return { key: k, opts: k === "tga" && param ? { anlagengruppe: param } : {} };
 }
 
 module.exports = {
   anrechenbareKostenGebaeude,
   anrechenbareKostenTragwerk,
   anrechenbareKostenFreianlagen,
+  anrechenbareKostenTGA,
   anrechenbareKosten,
+  parseLeistungsbild,
   kgHundred,
+  kgTens,
+  ANLAGENGRUPPEN,
   GEBAEUDE_KG400_THRESHOLD_PCT,
   GEBAEUDE_KG400_ABOVE_FACTOR,
   TRAGWERK_KG300_PCT,

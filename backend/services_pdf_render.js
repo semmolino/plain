@@ -1374,15 +1374,18 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
         const { data: groups } = await supabase.from('DIN276_COST_GROUP')
           .select('KG_CODE, AMOUNT, IS_PLANNED_SELF')
           .eq('ESTIMATE_ID', est.ID).eq('TENANT_ID', tenantId);
-        const lb = calc.DIN276_LEISTUNGSBILD || 'gebaeude';
-        const r = din276.anrechenbareKosten(lb, {
+        const { key, opts } = din276.parseLeistungsbild(calc.DIN276_LEISTUNGSBILD || 'gebaeude');
+        const r = din276.anrechenbareKosten(key, {
           mitverarbeiteteBausubstanz: est.MITVERARBEITETE_BAUSUBSTANZ,
           groups: (groups || []).map(g => ({ kg: g.KG_CODE, amount: g.AMOUNT, isPlannedSelf: g.IS_PLANNED_SELF })),
-        });
-        const lbLabel = lb === 'tragwerk' ? 'Tragwerksplanung (§ 50)'
-          : lb === 'freianlagen' ? 'Freianlagen (§ 38/40)' : 'Gebäude (§ 33)';
+        }, opts);
+        const agName = opts.anlagengruppe ? (din276.ANLAGENGRUPPEN[parseInt(opts.anlagengruppe, 10)] || `AG ${opts.anlagengruppe}`) : null;
+        const lbLabel = key === 'tragwerk' ? 'Tragwerksplanung (§ 50)'
+          : key === 'freianlagen' ? 'Freianlagen (§ 38/40)'
+          : key === 'tga' ? `Technische Ausrüstung (§ 53/54)${agName ? ' · ' + agName : ''}`
+          : 'Gebäude (§ 33)';
         din276Ctx = {
-          leistungsbild: lb,
+          leistungsbild: calc.DIN276_LEISTUNGSBILD || 'gebaeude',
           leistungsbildLabel: lbLabel,
           stage: est.STAGE,
           stageLabel: est.STAGE === 'schaetzung' ? 'Kostenschätzung' : 'Kostenberechnung',
