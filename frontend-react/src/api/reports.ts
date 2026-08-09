@@ -190,6 +190,44 @@ export const fetchProjectReportStructure = (projectId: number, filter: DateFilte
   return apiClient.get<{ data: ProjectReportStructure[] }>(`/reports/project/${projectId}/structure${qs ? `?${qs}` : ''}`)
 }
 
+// ── Leistungsphasen-Report (einzelnes Projekt) ─────────────────────────────────
+
+export interface PhaseReportRow {
+  PHASE_STRUCTURE_ID:     number | null
+  NAME_SHORT:             string
+  NAME_LONG:              string | null
+  IS_UNASSIGNED:          boolean
+  SORT_KEY:               number
+  HONORAR_NET:            number
+  EARNED_VALUE_NET:       number
+  LEISTUNGSSTAND_PERCENT: number | null
+  HOURS_TOTAL:            number
+  COST_TOTAL:             number
+  KOSTENQUOTE:            number | null
+  DB:                     number
+  ampel:                  'rot' | 'orange' | 'gruen'
+  flags:                  string[]
+}
+
+export interface PhaseReportTotals {
+  HONORAR_NET:            number
+  EARNED_VALUE_NET:       number
+  LEISTUNGSSTAND_PERCENT: number | null
+  HOURS_TOTAL:            number
+  COST_TOTAL:             number
+  KOSTENQUOTE:            number | null
+  DB:                     number
+}
+
+export interface PhaseReport {
+  hasPhases: boolean
+  phases:    PhaseReportRow[]
+  totals:    PhaseReportTotals | null
+}
+
+export const fetchProjectPhases = (projectId: number) =>
+  apiClient.get<{ data: PhaseReport }>(`/reports/project/${projectId}/phases`)
+
 // ── Project timeline (chart data) ─────────────────────────────────────────────
 
 export interface TimelinePoint {

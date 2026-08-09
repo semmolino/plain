@@ -470,6 +470,21 @@ export const HELP = {
       </>
     ),
   },
+  'report.leistungsphasen': {
+    title: 'Auswertung nach Leistungsphase',
+    body: (
+      <>
+        Die Kennzahlen des Projekts — Honorar, Leistungsstand, Stunden, Kosten,
+        Kostenquote und Deckungsbeitrag — verdichtet je HOAI-Leistungsphase
+        (LPH). So siehst du, welche Phase wirtschaftlich läuft und welche über
+        Budget ist, nicht erst am Projektende. Grundlage sind die Buchungen und
+        der Leistungsstand, den Phasen-Knoten zugeordnet, die aus der
+        Honorarberechnung stammen. Buchungen ohne Phasenbezug erscheinen unter
+        „Ohne Phasenzuordnung". Der Report wird nur angezeigt, wenn das Projekt
+        eine Leistungsphasen-Struktur besitzt.
+      </>
+    ),
+  },
 
   // ── Mitarbeiter / Arbeitszeit ────────────────────────────────────────────
   'mitarbeiter.saldo': {
