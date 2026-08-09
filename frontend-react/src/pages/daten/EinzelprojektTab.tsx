@@ -296,8 +296,11 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
     enabled:  pid !== null,
   })
   const hasPhases = phasesData?.data?.hasPhases ?? false
-  // Ohne Phasenstruktur immer auf die Elemente-Ansicht zurückfallen.
-  const effSubView: 'elemente' | 'phasen' = hasPhases ? subView : 'elemente'
+  // Der Phasen-Report zeigt den aktuellen Stand (Datumsfilter noch nicht
+  // unterstützt) — daher nur im Modus „Aktuell" anbieten, sonst würde er den
+  // datumsgefilterten KPIs widersprechen.
+  const phasesAvailable = hasPhases && mode === 'now'
+  const effSubView: 'elemente' | 'phasen' = phasesAvailable ? subView : 'elemente'
 
   const projects  = projectsData?.data ?? []
   const header    = headerData?.data   ?? null
@@ -547,7 +550,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
             )
           })()}
 
-          {hasPhases && (
+          {phasesAvailable && (
             <div className="daten-filter-modes" style={{ marginTop: 20 }}>
               {(['elemente', 'phasen'] as const).map(v => (
                 <label key={v} className={`daten-filter-mode-btn${effSubView === v ? ' active' : ''}`}>
@@ -557,6 +560,12 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                 </label>
               ))}
             </div>
+          )}
+          {hasPhases && mode !== 'now' && (
+            <p className="empty-note" style={{ marginTop: 16, marginBottom: 0 }}>
+              Die Auswertung nach Leistungsphase ist im Modus „Aktuell" verfügbar (Stichtag/Zeitraum
+              werden dort noch nicht berücksichtigt).
+            </p>
           )}
 
           {effSubView === 'phasen' && pid !== null ? (

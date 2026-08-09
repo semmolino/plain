@@ -517,12 +517,14 @@ module.exports = (supabase) => {
           const calcToFeePhase = new Map((calcPhases || []).map((r) => [r.ID, r.FEE_PHASE_ID]));
           const feePhaseIds = [...new Set((calcPhases || []).map((r) => r.FEE_PHASE_ID).filter(Boolean))];
 
+          // Mandantengetrennte Zuordnung aus der Join-Tabelle (FEE_PHASE ist global).
           let feePhaseToBlock = new Map();
           if (feePhaseIds.length) {
-            const { data: feePhases, error: fpErr } = await supabase
-              .from("FEE_PHASE").select("ID, BLOCK_ID").in("ID", feePhaseIds);
-            if (fpErr) throw fpErr; // fehlende Spalte BLOCK_ID → catch unten
-            feePhaseToBlock = new Map((feePhases || []).map((r) => [r.ID, r.BLOCK_ID]));
+            const { data: links, error: fpErr } = await supabase
+              .from("LPH_BLOCK_PHASE").select("FEE_PHASE_ID, BLOCK_ID")
+              .eq("TENANT_ID", tenantId).in("FEE_PHASE_ID", feePhaseIds);
+            if (fpErr) throw fpErr; // fehlende Tabelle → catch unten
+            feePhaseToBlock = new Map((links || []).map((r) => [r.FEE_PHASE_ID, r.BLOCK_ID]));
           }
 
           const blockIds = [...new Set([...feePhaseToBlock.values()].filter(Boolean))];

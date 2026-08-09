@@ -6,9 +6,11 @@
 -- unterschiedliche Phasenschnitte haben und künftige Kalkulationstypen davon
 -- abweichen können.
 --
--- Da FEE_PHASE (Phasen-Katalog) bereits pro Leistungsbild geführt wird
--- (FEE_PHASE.FEE_MASTER_ID), genügt eine BLOCK_ID-Spalte auf FEE_PHASE für die
--- Zuordnung Phase → Block. Eine Phase gehört zu höchstens einem Block.
+-- WICHTIG (Mandantentrennung): FEE_PHASE ist eine GLOBALE HOAI-Referenztabelle
+-- (keine TENANT_ID, für alle Mandanten dieselben Zeilen). Die Phase→Block-
+-- Zuordnung darf deshalb NICHT als Spalte auf FEE_PHASE liegen — sonst würde
+-- Mandant B die Zuordnung von Mandant A überschreiben. Sie liegt daher in einer
+-- eigenen, mandantengetrennten Zuordnungstabelle LPH_BLOCK_PHASE.
 --
 -- Manuell im Supabase SQL-Editor ausführen (wie alle Migrations).
 
@@ -24,14 +26,34 @@ CREATE TABLE IF NOT EXISTS "LPH_BLOCK" (
 CREATE INDEX IF NOT EXISTS "idx_lph_block_master"
   ON "LPH_BLOCK" ("TENANT_ID", "FEE_MASTER_ID");
 
--- Zuordnung Phase → Block. NULL = keinem Block zugeordnet ("Weitere Phasen").
-ALTER TABLE "FEE_PHASE"
-  ADD COLUMN IF NOT EXISTS "BLOCK_ID" INTEGER REFERENCES "LPH_BLOCK"("ID") ON DELETE SET NULL;
+-- Mandantengetrennte Zuordnung Phase → Block. Eine Phase gehört je Mandant zu
+-- höchstens einem Block.
+CREATE TABLE IF NOT EXISTS "LPH_BLOCK_PHASE" (
+  "ID"           SERIAL PRIMARY KEY,
+  "TENANT_ID"    INTEGER NOT NULL,
+  "BLOCK_ID"     INTEGER NOT NULL REFERENCES "LPH_BLOCK"("ID") ON DELETE CASCADE,
+  "FEE_PHASE_ID" INTEGER NOT NULL,
+  "created_at"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE ("TENANT_ID", "FEE_PHASE_ID")
+);
 
--- RLS (Defense-in-Depth wie bei allen Mandanten-Tabellen; App filtert
--- ohnehin per TENANT_ID, der Service-Role-Key umgeht RLS).
+CREATE INDEX IF NOT EXISTS "idx_lph_block_phase_tenant"
+  ON "LPH_BLOCK_PHASE" ("TENANT_ID", "FEE_PHASE_ID");
+
+-- Falls eine frühere Fassung dieser Migration die Spalte auf FEE_PHASE angelegt
+-- hat: entfernen (die globale Spalte war mandantenübergreifend fehlerhaft).
+ALTER TABLE "FEE_PHASE" DROP COLUMN IF EXISTS "BLOCK_ID";
+
+-- RLS (Defense-in-Depth wie bei allen Mandanten-Tabellen; App filtert ohnehin
+-- per TENANT_ID, der Service-Role-Key umgeht RLS).
 ALTER TABLE "LPH_BLOCK" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "tenant_isolation" ON "LPH_BLOCK";
 CREATE POLICY "tenant_isolation" ON "LPH_BLOCK"
+  USING  ("TENANT_ID" = public.current_tenant_id())
+  WITH CHECK ("TENANT_ID" = public.current_tenant_id());
+
+ALTER TABLE "LPH_BLOCK_PHASE" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tenant_isolation" ON "LPH_BLOCK_PHASE";
+CREATE POLICY "tenant_isolation" ON "LPH_BLOCK_PHASE"
   USING  ("TENANT_ID" = public.current_tenant_id())
   WITH CHECK ("TENANT_ID" = public.current_tenant_id());
