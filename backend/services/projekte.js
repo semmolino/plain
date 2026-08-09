@@ -10,48 +10,13 @@ function chunk(arr, size) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// Besitzpruefungen
-//
-// Pentest-Befund vom 2026-08-06: Viele Funktionen dieses Moduls filterten nur
-// nach ID, nicht nach Mandant — z.B. getProjectStructure und searchContracts.
-// Ein Nutzer konnte damit durch blosses Hochzaehlen der Projekt-ID
-// Honorarstrukturen und Vertragskonditionen fremder Mandanten lesen und, ueber
-// patchStructureCompletionPercents und deleteStructure, sogar veraendern.
-//
-// Statt jede einzelne Query umzubauen, wird die Zugehoerigkeit EINMAL an der
-// Grenze geprueft: jeder Einstiegspunkt aus dem Controller ruft zuerst die
-// passende Pruefung. Die internen Helfer bleiben unveraendert — sie sind erst
-// erreichbar, nachdem die Pruefung bestanden wurde.
-//
-// Alle drei werfen denselben 404, egal ob der Datensatz nicht existiert oder
-// einem anderen Mandanten gehoert. Sonst liesse sich ueber den Statuscode
-// ermitteln, welche IDs anderswo vergeben sind.
-// ---------------------------------------------------------------------------
-
-const NOT_FOUND = () => ({ status: 404, message: "Nicht gefunden." });
-
-async function assertInTenant(supabase, table, id, tenantId) {
-  if (tenantId === undefined || tenantId === null || tenantId === "") {
-    throw new Error(`assertInTenant(${table}): tenantId ist erforderlich`);
-  }
-  const numericId = parseInt(String(id), 10);
-  if (!Number.isFinite(numericId)) throw NOT_FOUND();
-
-  const { data, error } = await supabase
-    .from(table)
-    .select("ID")
-    .eq("ID", numericId)
-    .eq("TENANT_ID", tenantId)
-    .maybeSingle();
-  if (error) throw { status: 500, message: error.message };
-  if (!data) throw NOT_FOUND();
-  return numericId;
-}
-
-const assertProjectInTenant   = (supabase, id, tenantId) => assertInTenant(supabase, "PROJECT", id, tenantId);
-const assertStructureInTenant = (supabase, id, tenantId) => assertInTenant(supabase, "PROJECT_STRUCTURE", id, tenantId);
-const assertContractInTenant  = (supabase, id, tenantId) => assertInTenant(supabase, "CONTRACT", id, tenantId);
+// Besitzpruefungen liegen zentral in services/tenantGuard.js — dasselbe Muster
+// wird auch in services/buchungen.js und beim Rechnungs-Init gebraucht.
+const {
+  assertProjectInTenant,
+  assertStructureInTenant,
+  assertContractInTenant,
+} = require("./tenantGuard");
 
 // ---------------------------------------------------------------------------
 // Lookup / reference data

@@ -2,6 +2,7 @@
 
 const arbzg = require("./arbzg");
 const budgetWarnings = require("./budgetWarnings");
+const { assertProjectInTenant, assertStructureInTenant, assertTecInTenant } = require("./tenantGuard");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -116,16 +117,14 @@ async function createTimerDraft(supabase, { body, tenantId }) {
 
   await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
 
-  let resolvedTenantId = tenantId ?? null;
+  // Das Projekt muss dem Mandanten des Aufrufers gehoeren. Frueher wurde die
+  // TENANT_ID aus dem MITGESCHICKTEN Projekt abgeleitet — damit liess sich
+  // durch Angabe einer fremden PROJECT_ID in den fremden Mandanten
+  // hineinschreiben (Pentest 2026-08-06).
+  const resolvedTenantId = tenantId ?? null;
   let preset = null;
   if (b.PROJECT_ID) {
-    const { data: projRow, error: projErr } = await supabase
-      .from("PROJECT")
-      .select("TENANT_ID")
-      .eq("ID", b.PROJECT_ID)
-      .maybeSingle();
-    if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
-    resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
+    await assertProjectInTenant(supabase, b.PROJECT_ID, tenantId);
     preset = await loadEmployee2Project(supabase, Number(b.EMPLOYEE_ID), Number(b.PROJECT_ID));
   }
 
@@ -235,17 +234,25 @@ async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
 async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId }) {
   if (!Array.isArray(ids) || !ids.length) throw { status: 400, message: "ids fehlen" };
 
+  // Nur Entwuerfe des eigenen Mandanten. Frueher wurde allein nach der
+  // ID-Liste geladen und der Mandant anschliessend aus dem ERSTEN Treffer
+  // abgeleitet — fremde Entwurfs-IDs liessen sich damit bestaetigen und
+  // wurden zu abrechnungsrelevanten Buchungen (Pentest 2026-08-06).
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw new Error("confirmDrafts: tenantId ist erforderlich");
+  }
   const { data: rows, error: fetchErr } = await supabase
     .from("TEC")
     .select("ID, TENANT_ID, EMPLOYEE_ID, DATE_VOUCHER, STRUCTURE_ID, STATUS, QUANTITY_INT, ENTRY_KIND")
-    .in("ID", ids);
+    .in("ID", ids)
+    .eq("TENANT_ID", tenantId);
   if (fetchErr) throw fetchErr;
 
   const drafts = (rows || []).filter(r => r.STATUS === "DRAFT");
   if (!drafts.length) return { confirmed: 0, arbzgEvents: [] };
 
   const draftIds = drafts.map(r => r.ID);
-  const resolvedTenant = drafts[0].TENANT_ID ?? tenantId ?? null;
+  const resolvedTenant = tenantId;
 
   // ── ArbZG-Tagesabschluss pro (Mitarbeiter, Datum) ───────────────────────
   const settings = await arbzg.getArbzgSettings(supabase, resolvedTenant);
@@ -408,26 +415,38 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
   return { confirmed: draftIds.length, arbzgEvents: auditEvents };
 }
 
-async function deleteDraft(supabase, { id }) {
+// Mandant UND Besitzer pruefen. Frueher filterte diese Funktion allein nach
+// der TEC-ID: jede gueltige Sitzung konnte damit Entwuerfe fremder Mandanten
+// und fremder Kollegen loeschen (Pentest 2026-08-06).
+async function deleteDraft(supabase, { id, tenantId, employeeId }) {
   const { data: row, error: fetchErr } = await supabase
     .from("TEC")
-    .select("ID, STATUS")
+    .select("ID, STATUS, EMPLOYEE_ID")
     .eq("ID", id)
+    .eq("TENANT_ID", tenantId)
     .maybeSingle();
   if (fetchErr) throw fetchErr;
   if (!row) throw { status: 404, message: "Eintrag nicht gefunden" };
   if (row.STATUS !== "DRAFT") throw { status: 400, message: "Nur Entwürfe können gelöscht werden" };
+  if (employeeId != null && String(row.EMPLOYEE_ID) !== String(employeeId)) {
+    throw { status: 403, message: "Nur eigene Entwürfe können gelöscht werden" };
+  }
 
-  const { error } = await supabase.from("TEC").delete().eq("ID", id);
+  const { error } = await supabase
+    .from("TEC").delete().eq("ID", id).eq("TENANT_ID", tenantId);
   if (error) throw error;
 }
 
-async function patchDraftDescription(supabase, { id, description, time_start, time_finish, quantity_int }) {
+// Mandant UND Besitzer pruefen — siehe deleteDraft.
+async function patchDraftDescription(supabase, { id, description, time_start, time_finish, quantity_int, tenantId, employeeId }) {
   const { data: row, error: fetchErr } = await supabase
-    .from("TEC").select("ID, STATUS").eq("ID", id).maybeSingle();
+    .from("TEC").select("ID, STATUS, EMPLOYEE_ID").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (fetchErr) throw fetchErr;
   if (!row) throw { status: 404, message: "Eintrag nicht gefunden" };
   if (row.STATUS !== "DRAFT") throw { status: 400, message: "Nur Entwürfe können bearbeitet werden" };
+  if (employeeId != null && String(row.EMPLOYEE_ID) !== String(employeeId)) {
+    throw { status: 403, message: "Nur eigene Entwürfe können bearbeitet werden" };
+  }
 
   const updates = {};
   if (description  !== undefined) updates.POSTING_DESCRIPTION = description;
@@ -437,7 +456,8 @@ async function patchDraftDescription(supabase, { id, description, time_start, ti
 
   if (!Object.keys(updates).length) return;
 
-  const { error } = await supabase.from("TEC").update(updates).eq("ID", id);
+  const { error } = await supabase
+    .from("TEC").update(updates).eq("ID", id).eq("TENANT_ID", tenantId);
   if (error) throw error;
 }
 
@@ -456,13 +476,13 @@ async function createBreakBuchung(supabase, { body, tenantId }) {
 
   await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
 
-  // Tenant über das (optionale) Projekt auflösen, sonst aus dem JWT.
-  let resolvedTenantId = tenantId ?? null;
+  // Das Projekt muss dem Mandanten des Aufrufers gehoeren. Frueher wurde die
+  // TENANT_ID aus dem MITGESCHICKTEN Projekt abgeleitet — damit liess sich
+  // durch Angabe einer fremden PROJECT_ID in den fremden Mandanten
+  // hineinschreiben (Pentest 2026-08-06).
+  const resolvedTenantId = tenantId ?? null;
   if (b.PROJECT_ID) {
-    const { data: projRow, error: projErr } = await supabase
-      .from("PROJECT").select("TENANT_ID").eq("ID", b.PROJECT_ID).maybeSingle();
-    if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
-    resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
+    await assertProjectInTenant(supabase, b.PROJECT_ID, tenantId);
   }
 
   const insertRow = {
@@ -515,13 +535,12 @@ async function createBuchung(supabase, { body, tenantId }) {
     }
   }
 
-  const { data: projRow, error: projErr } = await supabase
-    .from("PROJECT")
-    .select("TENANT_ID")
-    .eq("ID", b.PROJECT_ID)
-    .maybeSingle();
-  if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
-  const resolvedTenantId = projRow?.TENANT_ID ?? null;
+  // Das Projekt muss dem Mandanten des Aufrufers gehoeren. Frueher wurde die
+  // TENANT_ID aus dem MITGESCHICKTEN Projekt abgeleitet — damit liess sich
+  // durch Angabe einer fremden PROJECT_ID in den fremden Mandanten
+  // hineinschreiben (Pentest 2026-08-06).
+  await assertProjectInTenant(supabase, b.PROJECT_ID, tenantId);
+  const resolvedTenantId = tenantId;
 
   let preset = null;
   try {
@@ -662,12 +681,10 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
     return s === "" ? null : s;
   };
 
-  let resolvedTenantId = existing.TENANT_ID ?? null;
-  if (!resolvedTenantId) {
-    const effectivePid = newProjectId !== undefined ? newProjectId : existing.PROJECT_ID;
-    const { data: projRow } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", effectivePid).maybeSingle();
-    resolvedTenantId = projRow?.TENANT_ID ?? null;
-  }
+  // existing wurde bereits mandantengefiltert geladen. Der fruehere
+  // Fallback holte die TENANT_ID notfalls aus dem Projekt — und damit
+  // moeglicherweise aus einem fremden Mandanten.
+  const resolvedTenantId = existing.TENANT_ID ?? tenantId ?? null;
 
   // Echtes PATCH: nur Felder schreiben, die im Body explizit gesetzt sind.
   // Effektivwerte für Berechnung (Total-Spalten) aus den existierenden Werten
@@ -757,20 +774,27 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   return updatedTec;
 }
 
-async function deleteBuchung(supabase, { id }) {
+// Mandantengebunden loeschen. Frueher filterte diese Funktion allein nach der
+// TEC-ID. Der vorgeschaltete dependencyCheck im Controller IST tenant-gescopt
+// und fand fremde Zeilen deshalb gar nicht — er meldete "nicht blockiert",
+// und anschliessend loeschte diese Funktion die fremde Buchung und schrieb
+// COSTS/REVENUE des fremden Strukturknotens neu (Pentest 2026-08-06).
+async function deleteBuchung(supabase, { id, tenantId }) {
   const { data: existing, error: exErr } = await supabase
     .from("TEC")
     .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID")
     .eq("ID", id)
-    .single();
+    .eq("TENANT_ID", tenantId)
+    .maybeSingle();
 
   if (exErr || !existing) {
-    throw { status: 404, message: "Buchung nicht gefunden: " + ((exErr && exErr.message) || "") };
+    throw { status: 404, message: "Buchung nicht gefunden" };
   }
 
   const structureId = existing.STRUCTURE_ID;
 
-  const { error: delErr } = await supabase.from("TEC").delete().eq("ID", id);
+  const { error: delErr } = await supabase
+    .from("TEC").delete().eq("ID", id).eq("TENANT_ID", tenantId);
   if (delErr) throw { status: 500, message: "Fehler beim Löschen: " + delErr.message };
 
   if (!structureId) return;
@@ -895,10 +919,12 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
 
   await assertLeafStructure(supabase, b.STRUCTURE_ID);
 
-  const { data: projRow, error: projErr } = await supabase
-    .from("PROJECT").select("TENANT_ID").eq("ID", b.PROJECT_ID).maybeSingle();
-  if (projErr) throw { status: 500, message: "Fehler beim Laden des Projekts: " + projErr.message };
-  const resolvedTenantId = projRow?.TENANT_ID ?? tenantId ?? null;
+  // Das Projekt muss dem Mandanten des Aufrufers gehoeren. Frueher wurde die
+  // TENANT_ID aus dem MITGESCHICKTEN Projekt abgeleitet — damit liess sich
+  // durch Angabe einer fremden PROJECT_ID in den fremden Mandanten
+  // hineinschreiben (Pentest 2026-08-06).
+  await assertProjectInTenant(supabase, b.PROJECT_ID, tenantId);
+  const resolvedTenantId = tenantId ?? null;
 
   const { qtyInt, qtyExt, cpRate, cpTot, spRate, spTot, unitLabel } = computeSpecialEncoding(kind, b);
 

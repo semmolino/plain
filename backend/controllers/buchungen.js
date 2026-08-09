@@ -57,7 +57,7 @@ async function deleteBuchung(req, res, supabase) {
     const depCheck = require("../services/dependencyCheck");
     const check = await depCheck.checkTec(supabase, { tenantId: req.tenantId, id });
     if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
-    await svc.deleteBuchung(supabase, { id });
+    await svc.deleteBuchung(supabase, { id, tenantId: req.tenantId });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;
@@ -95,7 +95,13 @@ async function listBuchungenByProject(req, res, supabase) {
 
 async function createTimerDraft(req, res, supabase) {
   try {
-    const data = await svc.createTimerDraft(supabase, { body: req.body, tenantId: req.tenantId });
+    // EMPLOYEE_ID aus der SITZUNG, nicht aus dem Body. Frueher liess sich
+    // hier eine fremde Mitarbeiter-ID mitschicken und damit eine Zeitbuchung
+    // fuer einen Kollegen anlegen (Pentest 2026-08-06).
+    const data = await svc.createTimerDraft(supabase, {
+      body: { ...(req.body || {}), EMPLOYEE_ID: req.employeeId },
+      tenantId: req.tenantId,
+    });
     res.json({ success: true, data });
   } catch (err) {
     const status = err.status || 500;
@@ -132,7 +138,7 @@ async function deleteDraft(req, res, supabase) {
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "ID fehlt" });
   try {
-    await svc.deleteDraft(supabase, { id });
+    await svc.deleteDraft(supabase, { id, tenantId: req.tenantId, employeeId: req.employeeId });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;
@@ -145,7 +151,7 @@ async function patchDraftDescription(req, res, supabase) {
   if (!id) return res.status(400).json({ error: "ID fehlt" });
   const { description, time_start, time_finish, quantity_int } = req.body || {};
   try {
-    await svc.patchDraftDescription(supabase, { id, description, time_start, time_finish, quantity_int });
+    await svc.patchDraftDescription(supabase, { id, description, time_start, time_finish, quantity_int, tenantId: req.tenantId, employeeId: req.employeeId });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;
