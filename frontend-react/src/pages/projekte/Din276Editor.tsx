@@ -59,10 +59,10 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
       try {
         const list = await fetchDin276Estimates({ project_id: projectId, offer_id: offerId })
         if (cancelled) return
-        if (list.data.available === false) { setAvailable(false); setLoading(false); return }
+        if (list.available === false) { setAvailable(false); setLoading(false); return }
         setAvailable(true)
-        if (list.data.data.length > 0) {
-          const full = await fetchDin276Estimate(list.data.data[0].ID)
+        if (list.data.length > 0) {
+          const full = await fetchDin276Estimate(list.data[0].ID)
           if (!cancelled) applyEstimate(full.data)
         } else {
           const created = await createDin276Estimate({ project_id: projectId, offer_id: offerId, stage: 'berechnung' })
