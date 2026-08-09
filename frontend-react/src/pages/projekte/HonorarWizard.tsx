@@ -795,7 +795,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                   Baukosten aus DIN 276 ermitteln …
                 </button>
                 <span className="admin-section-hint" style={{ margin: 0 }}>
-                  Berechnet die anrechenbaren Kosten nach § 33 (Gebäude) und übernimmt sie nach K0.
+                  Berechnet die anrechenbaren Kosten nach HOAI (Leistungsbild wählbar) und übernimmt sie nach K0.
                 </span>
               </div>
               <Din276Editor

@@ -39,6 +39,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
   const [groups,    setGroups]    = useState<Din276Group[]>([])
   const [stage,     setStage]     = useState<Din276Stage>('berechnung')
   const [bausubstanz, setBausubstanz] = useState('0')
+  const [lb,        setLb]        = useState(leistungsbild)
   const [result,    setResult]    = useState<Din276AnrechenbarResult | null>(null)
   const [msg,       setMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
@@ -96,7 +97,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
       await updateDin276Estimate(estimate.ID, { stage, mitverarbeitete_bausubstanz: Number(bausubstanz) || 0 })
       const saved = await saveDin276Groups(estimate.ID, groups.map((g, i) => ({ ...g, SORT_ORDER: i })))
       applyEstimate(saved.data)
-      const r = await computeDin276Anrechenbar(estimate.ID, leistungsbild)
+      const r = await computeDin276Anrechenbar(estimate.ID, lb)
       setResult(r.data)
       setMsg({ text: 'Gespeichert und berechnet ✅', type: 'success' })
     } catch (e) {
@@ -121,13 +122,22 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
         <>
           <p className="admin-section-hint" style={{ marginTop: 0, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
             <span>
-              Trage die Baukosten je Kostengruppe (DIN 276) ein. Daraus werden die anrechenbaren Kosten nach
-              HOAI § 33 (Gebäude) berechnet — inkl. der KG-400-Regel und mitverarbeiteter Bausubstanz.
+              Trage die Baukosten je Kostengruppe (DIN 276) ein. Daraus werden die anrechenbaren Kosten
+              nach HOAI je gewähltem Leistungsbild berechnet — für Gebäude inkl. der KG-400-Regel und
+              mitverarbeiteter Bausubstanz.
             </span>
             <HelpHint id="din276.anrechenbare_kosten" />
           </p>
 
           <div className="form-row">
+            <div className="form-group">
+              <label>Leistungsbild</label>
+              <select value={lb} onChange={e => { setLb(e.target.value); setResult(null) }}>
+                <option value="gebaeude">Gebäude (§ 33)</option>
+                <option value="tragwerk">Tragwerksplanung (§ 50)</option>
+                <option value="freianlagen">Freianlagen (§ 38/40)</option>
+              </select>
+            </div>
             <div className="form-group">
               <label style={{ display: 'inline-flex', alignItems: 'center' }}>
                 Kostenstufe <HelpHint id="din276.stufe" />
@@ -211,7 +221,9 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
 
           {result && (
             <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Herleitung (§ 33 HOAI)</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>
+                Herleitung ({lb === 'tragwerk' ? '§ 50' : lb === 'freianlagen' ? '§ 38/40' : '§ 33'} HOAI)
+              </div>
               <div className="table-scroll">
                 <table className="master-table">
                   <thead>

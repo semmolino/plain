@@ -107,10 +107,55 @@ function anrechenbareKostenGebaeude(estimate) {
   };
 }
 
-// Registry: Leistungsbild-Typ → Regelfunktion. Weitere (Tragwerk §50/51,
-// TGA §53, Freianlagen §39/40) folgen in spaeteren Bausteinen.
+// ── § 50 HOAI (Tragwerksplanung) ──────────────────────────────────────────────
+// Anrechenbar sind 55 % der Kosten der Baukonstruktion (KG 300) und 10 % der
+// Kosten der Technischen Anlagen (KG 400).
+// ⚠️ Sonderfaelle (bestimmte tragwerksrelevante KG-400-Anteile voll,
+// mitverarbeitete Bausubstanz im Bestand) sind hier NICHT abgebildet und vor
+// produktivem Einsatz zu ergaenzen/verifizieren.
+const TRAGWERK_KG300_PCT = 0.55;
+const TRAGWERK_KG400_PCT = 0.10;
+
+function anrechenbareKostenTragwerk(estimate) {
+  const groups = estimate?.groups || [];
+  const kg300 = sumHundred(groups, 300);
+  const kg400 = sumHundred(groups, 400);
+
+  const herleitung = [];
+  let total = 0;
+  const add = (kg, label, basis, ansatz, betrag) => {
+    const b = round2(betrag);
+    herleitung.push({ kg, label, basis: round2(basis), ansatz, betrag: b });
+    total += b;
+  };
+  if (kg300) add("300", "Baukonstruktionen (55 %)", kg300, 55, kg300 * TRAGWERK_KG300_PCT);
+  if (kg400) add("400", "Technische Anlagen (10 %)", kg400, 10, kg400 * TRAGWERK_KG400_PCT);
+
+  return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(kg300), herleitung };
+}
+
+// ── § 38/§ 40 HOAI (Freianlagen) ──────────────────────────────────────────────
+// Kern: Kosten der Außenanlagen (KG 500) sind voll anrechenbar.
+// ⚠️ Anteilige Kosten aus KG 200/300, die den Freianlagen zuzurechnen sind,
+// sowie technische Anlagen in Außenanlagen (KG 540) sind hier NICHT gesondert
+// behandelt und vor produktivem Einsatz zu ergaenzen/verifizieren.
+function anrechenbareKostenFreianlagen(estimate) {
+  const groups = estimate?.groups || [];
+  const kg500 = sumHundred(groups, 500);
+  const herleitung = [];
+  let total = 0;
+  if (kg500) { herleitung.push({ kg: "500", label: "Außenanlagen", basis: round2(kg500), ansatz: 100, betrag: round2(kg500) }); total += round2(kg500); }
+  return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(kg500), herleitung };
+}
+
+// Registry: Leistungsbild-Typ → Regelfunktion.
+// TGA (§ 53) fehlt bewusst: dort wird je Anlagengruppe (KG 410–480) getrennt
+// abgerechnet — das passt nicht in das Einzel-Basis-Modell (K0) und braucht ein
+// eigenes Konzept.
 const RULES = {
-  gebaeude: anrechenbareKostenGebaeude,
+  gebaeude:    anrechenbareKostenGebaeude,
+  tragwerk:    anrechenbareKostenTragwerk,
+  freianlagen: anrechenbareKostenFreianlagen,
 };
 
 /**
@@ -126,8 +171,12 @@ function anrechenbareKosten(leistungsbild, estimate) {
 
 module.exports = {
   anrechenbareKostenGebaeude,
+  anrechenbareKostenTragwerk,
+  anrechenbareKostenFreianlagen,
   anrechenbareKosten,
   kgHundred,
   GEBAEUDE_KG400_THRESHOLD_PCT,
   GEBAEUDE_KG400_ABOVE_FACTOR,
+  TRAGWERK_KG300_PCT,
+  TRAGWERK_KG400_PCT,
 };

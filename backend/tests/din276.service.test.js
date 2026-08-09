@@ -2,6 +2,8 @@
 
 const {
   anrechenbareKostenGebaeude,
+  anrechenbareKostenTragwerk,
+  anrechenbareKostenFreianlagen,
   anrechenbareKosten,
   kgHundred,
 } = require("../services/din276");
@@ -108,11 +110,45 @@ describe("anrechenbareKostenGebaeude (§ 33)", () => {
   });
 });
 
+// ── § 50 Tragwerksplanung ─────────────────────────────────────────────────────
+
+describe("anrechenbareKostenTragwerk (§ 50)", () => {
+  it("55 % KG 300 + 10 % KG 400", () => {
+    const r = anrechenbareKostenTragwerk({ groups: [g("300", 1000000), g("400", 200000)] });
+    expect(r.anrechenbareKosten).toBe(570000); // 550.000 + 20.000
+  });
+  it("nur KG 300", () => {
+    const r = anrechenbareKostenTragwerk({ groups: [g("300", 1000000)] });
+    expect(r.anrechenbareKosten).toBe(550000);
+  });
+  it("2. Ebene wird aggregiert", () => {
+    const r = anrechenbareKostenTragwerk({ groups: [g("310", 400000), g("330", 600000), g("420", 200000)] });
+    expect(r.anrechenbareKosten).toBe(570000);
+  });
+});
+
+// ── § 38/40 Freianlagen ───────────────────────────────────────────────────────
+
+describe("anrechenbareKostenFreianlagen (§ 38/40)", () => {
+  it("KG 500 voll, andere ignoriert", () => {
+    const r = anrechenbareKostenFreianlagen({ groups: [g("500", 300000), g("300", 1000000)] });
+    expect(r.anrechenbareKosten).toBe(300000);
+  });
+});
+
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 
 describe("anrechenbareKosten (Dispatcher)", () => {
   it("ruft die Gebaeude-Regel", () => {
     const r = anrechenbareKosten("gebaeude", { groups: [g("300", 100000)] });
+    expect(r.anrechenbareKosten).toBe(100000);
+  });
+  it("ruft die Tragwerk-Regel", () => {
+    const r = anrechenbareKosten("tragwerk", { groups: [g("300", 100000)] });
+    expect(r.anrechenbareKosten).toBe(55000);
+  });
+  it("ruft die Freianlagen-Regel", () => {
+    const r = anrechenbareKosten("freianlagen", { groups: [g("500", 100000)] });
     expect(r.anrechenbareKosten).toBe(100000);
   });
   it("wirft bei unbekanntem Leistungsbild", () => {
