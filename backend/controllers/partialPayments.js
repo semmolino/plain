@@ -273,7 +273,7 @@ async function initPartialPayment(req, res, supabase) {
   }
 
   try {
-    const result = await svc.initPartialPayment(supabase, { companyId, employeeId, projectId, contractId });
+    const result = await svc.initPartialPayment(supabase, { companyId, employeeId, projectId, contractId, tenantId: req.tenantId });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;

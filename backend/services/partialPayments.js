@@ -648,13 +648,22 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
   }));
 }
 
-async function initPartialPayment(supabase, { companyId, employeeId, projectId, contractId }) {
-  const { data: project, error: projectErr } = await supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, TENANT_ID, COMPANY_ID").eq("ID", projectId).maybeSingle();
+/**
+ * Wie initInvoice: companyId und employeeId stammen aus dem Request-Body und
+ * muessen gegen den Mandanten der Sitzung geprueft werden. Ohne diese Pruefung
+ * landeten IBAN, BIC, Steuernummer und Glaeubiger-ID einer fremden Firma in
+ * der eigenen Abschlagsrechnung (Pentest 2026-08-06).
+ */
+async function initPartialPayment(supabase, { companyId, employeeId, projectId, contractId, tenantId }) {
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw new Error("initPartialPayment: tenantId ist erforderlich");
+  }
+  const { data: project, error: projectErr } = await supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, TENANT_ID, COMPANY_ID").eq("ID", projectId).eq("TENANT_ID", tenantId).maybeSingle();
   if (projectErr || !project) throw { status: 500, message: "Projekt konnte nicht geladen werden" };
 
   let resolvedCompanyId = companyId || project.COMPANY_ID;
   if (!resolvedCompanyId) {
-    const { data: cos } = await supabase.from("COMPANY").select("ID").eq("TENANT_ID", project.TENANT_ID).limit(1);
+    const { data: cos } = await supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).limit(1);
     resolvedCompanyId = cos?.[0]?.ID ?? null;
   }
   if (!resolvedCompanyId) throw { status: 500, message: "Firma konnte nicht ermittelt werden" };
@@ -663,6 +672,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     .from("COMPANY")
     .select(`ID, COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, COUNTRY_ID, POST_OFFICE_BOX, BIC, TAX_NUMBER, IBAN, "TAX-ID", "CREDITOR-ID"`)
     .eq("ID", resolvedCompanyId)
+    .eq("TENANT_ID", tenantId)
     .maybeSingle();
   if (companyErr || !company) throw { status: 500, message: "Firma konnte nicht geladen werden" };
 
@@ -672,9 +682,9 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   let employee = null;
   let employeeSalutation = null;
 
-  const { data: emp1, error: empErr1 } = await supabase.from("EMPLOYEE").select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE, SALUTATION_ID").eq("ID", empId).maybeSingle();
+  const { data: emp1, error: empErr1 } = await supabase.from("EMPLOYEE").select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE, SALUTATION_ID").eq("ID", empId).eq("TENANT_ID", tenantId).maybeSingle();
   if (empErr1) {
-    const { data: emp2, error: empErr2 } = await supabase.from("EMPLOYEE").select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE").eq("ID", empId).maybeSingle();
+    const { data: emp2, error: empErr2 } = await supabase.from("EMPLOYEE").select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE").eq("ID", empId).eq("TENANT_ID", tenantId).maybeSingle();
     if (empErr2 || !emp2) throw { status: 500, message: `Mitarbeiter konnte nicht geladen werden: ${empErr2?.message || empErr1.message || "unbekannter Fehler"}` };
     employee = emp2;
   } else {
@@ -684,7 +694,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   if (!employee) throw { status: 500, message: "Mitarbeiter konnte nicht geladen werden" };
 
   let contractRow = null;
-  const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).maybeSingle();
+  const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).eq("TENANT_ID", tenantId).maybeSingle();
   if (!c1Err && c1) contractRow = c1;
   if (!contractRow) {
     const { data: c2, error: c2Err } = await supabase.from("CONTRACTS").select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).maybeSingle();
@@ -700,8 +710,8 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   let effectiveVatId = contractRow.VAT_ID ?? null;
   if (!effectiveVatId) {
     try {
-      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
-      const tenantId = projT?.TENANT_ID ?? null;
+      // tenantId kommt aus der Sitzung (Parameter). Frueher wurde er hier
+      // erneut aus dem Projekt geholt und ueberschattete dabei den Parameter.
       if (tenantId) {
         const { data: settingsRows } = await supabase
           .from("TENANT_SETTINGS").select("KEY, VALUE")
@@ -790,7 +800,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     CONTACT_SALUTATION: contactSalutation,
     CONTACT_MAIL: invoiceContact.EMAIL ?? null,
     CONTACT_PHONE: invoiceContact.MOBILE ?? null,
-    TENANT_ID: project.TENANT_ID ?? null,
+    TENANT_ID: tenantId,
   };
 
   const { data: created, error: insertErr } = await supabase.from("PARTIAL_PAYMENT").insert([insertRow]).select("ID").single();

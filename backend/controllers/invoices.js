@@ -46,7 +46,7 @@ async function initInvoice(req, res, supabase) {
   }
 
   try {
-    const result = await svc.initInvoice(supabase, { companyId, employeeId, projectId, contractId, invoiceType });
+    const result = await svc.initInvoice(supabase, { companyId, employeeId, projectId, contractId, invoiceType, tenantId: req.tenantId });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;
