@@ -141,7 +141,7 @@ export function LeistungsphasenMatrixTab() {
             {projects.map(p => (
               <tr key={p.PROJECT_ID}>
                 <td>
-                  <button type="button" className="linklike" onClick={() => goToProject(p)} title="Zum Projekt-Report"
+                  <button type="button" onClick={() => goToProject(p)} title="Zum Projekt-Report"
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', font: 'inherit', textAlign: 'left' }}>
                     <strong>{p.NAME_SHORT}</strong>
                   </button>
