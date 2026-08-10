@@ -58,7 +58,9 @@ function computeMischhonorar(splits, tafelFn) {
 // Gibt das Ergebnis zurück oder null, wenn keine Zonenanteile existieren
 // (dann bleibt der Einzelzonen-Pfad maßgeblich). Soft gegenüber fehlender
 // Migration 0100 (wirft — Aufrufer fangen ab).
-async function recomputeMischhonorarK0(supabase, { calcMasterId, tenantId }) {
+// Read-only: lädt Zonenanteile + Honorartafel und berechnet das Mischhonorar
+// (ohne DB-Schreibzugriff). null, wenn keine Zonenanteile existieren.
+async function computeMischhonorarForMaster(supabase, { calcMasterId, tenantId }) {
   const { data: master } = await supabase
     .from("FEE_CALCULATION_MASTER")
     .select("ID, FEE_MASTER_ID")
@@ -90,13 +92,17 @@ async function recomputeMischhonorarK0(supabase, { calcMasterId, tenantId }) {
     }
   }
   const tafelFn = (_cost, zoneId, zonePercent) => cache.get(`${zoneId}:${num(zonePercent)}`) ?? 0;
-  const result = computeMischhonorar(rows, tafelFn);
+  return computeMischhonorar(rows, tafelFn);
+}
 
+// Berechnet das Mischhonorar UND schreibt K0 (= Σ Anteile) + REVENUE_K0 zurück.
+async function recomputeMischhonorarK0(supabase, { calcMasterId, tenantId }) {
+  const result = await computeMischhonorarForMaster(supabase, { calcMasterId, tenantId });
+  if (!result) return null;
   await supabase.from("FEE_CALCULATION_MASTER")
     .update({ CONSTRUCTION_COSTS_K0: result.akGesamt, REVENUE_K0: result.honorar })
     .eq("ID", calcMasterId).eq("TENANT_ID", tenantId);
-
   return result;
 }
 
-module.exports = { computeMischhonorar, recomputeMischhonorarK0 };
+module.exports = { computeMischhonorar, computeMischhonorarForMaster, recomputeMischhonorarK0 };

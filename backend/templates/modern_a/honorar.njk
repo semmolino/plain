@@ -261,6 +261,39 @@ table.data-table tfoot tr.grand-total td {
 </table>
 {% endif %}
 
+{# Mischhonorar (§ 54) — Aufteilung auf Honorarzonen #}
+{% if mischhonorar %}
+<div class="section-title">Mischhonorar (§ 54 · Aufteilung auf Honorarzonen)</div>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Honorarzone</th>
+      <th class="num">Anrechenbare Kosten €</th>
+      <th class="num">Honorar (voll) €</th>
+      <th class="num">Anteil %</th>
+      <th class="num">Einzelhonorar €</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in mischhonorar.herleitung %}
+    <tr>
+      <td>{{ h.zone }}</td>
+      <td class="num">{{ h.amount | money }}</td>
+      <td class="num">{{ h.hVoll | money }}</td>
+      <td class="num">{{ h.anteilPct }}</td>
+      <td class="num">{{ h.einzelhonorar | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="4">Mischhonorar (Grundhonorar-Basis)</td>
+      <td class="num">{{ mischhonorar.honorar | money }}</td>
+    </tr>
+  </tfoot>
+</table>
+{% endif %}
+
 {# Leistungsphasen #}
 {% if phases and phases.length %}
 <div class="section-title">Leistungsphasen</div>

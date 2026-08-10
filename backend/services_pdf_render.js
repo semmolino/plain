@@ -1397,6 +1397,26 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     } catch (_) { /* Migration/Ermittlung fehlt -> ohne Herleitung */ }
   }
 
+  // TGA-Mischhonorar (§ 54): Zonenanteile → Herleitung, falls vorhanden. Soft-fail.
+  let mischhonorarCtx = null;
+  try {
+    const misch = require('./services/mischhonorar');
+    const mr = await misch.computeMischhonorarForMaster(supabase, { calcMasterId, tenantId });
+    if (mr && mr.herleitung.length) {
+      const zoneIds = [...new Set(mr.herleitung.map(h => h.zoneId))];
+      const { data: zs } = await supabase.from('FEE_ZONES').select('ID, NAME_SHORT').in('ID', zoneIds);
+      const zoneNames = new Map((zs || []).map(z => [z.ID, z.NAME_SHORT]));
+      mischhonorarCtx = {
+        akGesamt: mr.akGesamt,
+        honorar: mr.honorar,
+        herleitung: mr.herleitung.map(h => ({
+          zone: zoneNames.get(h.zoneId) || `Zone ${h.zoneId}`,
+          amount: h.amount, hVoll: h.hVoll, anteilPct: h.anteilPct, einzelhonorar: h.einzelhonorar,
+        })),
+      };
+    }
+  } catch (_) { /* Migration 0100/Anteile fehlen -> ohne Mischhonorar-Herleitung */ }
+
   const buildSurchargeCtx = ({ r, effectiveBase, amount, lphItems, surchargeBls }) => {
     let lphDetail = null;
     if (r.LPH_FILTER) {
@@ -1472,6 +1492,7 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     zuschlaegeSum: d.zuschlaegeSum,
     gesamthonorar: d.gesamthonorar,
     din276:       din276Ctx,
+    mischhonorar: mischhonorarCtx,
   };
 }
 
