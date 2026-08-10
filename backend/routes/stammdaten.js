@@ -38,6 +38,8 @@ module.exports = (supabase) => {
   router.post("/fee-calculation-masters/:id/phases/init",             requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcPhasesInit(req, res, supabase));
   router.patch("/fee-calculation-phases/:id",                         requirePermission("projects.calculations.edit"), (req, res) => ctrl.patchFeeCalcPhase(req, res, supabase));
   router.post("/fee-calculation-masters/:id/phases/save",             requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcPhasesSave(req, res, supabase));
+  router.get("/fee-calculation-masters/:id/zone-splits",              (req, res) => ctrl.getFeeCalcZoneSplits(req, res, supabase));
+  router.post("/fee-calculation-masters/:id/zone-splits/save",        requirePermission("projects.calculations.edit"), (req, res) => ctrl.saveFeeCalcZoneSplits(req, res, supabase));
   router.delete("/fee-calculation-masters/:id",                       requirePermission("projects.calculations.delete"), (req, res) => ctrl.deleteFeeCalcMaster(req, res, supabase));
   router.post("/fee-calculation-masters/:id/add-to-project-structure", requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcAddToStructure(req, res, supabase));
   router.post("/fee-calculation-masters/:id/add-to-offer-structure",   requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcAddToOfferStructure(req, res, supabase));

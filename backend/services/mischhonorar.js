@@ -53,4 +53,50 @@ function computeMischhonorar(splits, tafelFn) {
   return { akGesamt, honorar: round2(honorar), herleitung };
 }
 
-module.exports = { computeMischhonorar };
+// Lädt die Zonenanteile einer Berechnung und schreibt K0 (= Σ Anteile) sowie
+// REVENUE_K0 (= Mischhonorar) auf den FEE_CALCULATION_MASTER zurück.
+// Gibt das Ergebnis zurück oder null, wenn keine Zonenanteile existieren
+// (dann bleibt der Einzelzonen-Pfad maßgeblich). Soft gegenüber fehlender
+// Migration 0100 (wirft — Aufrufer fangen ab).
+async function recomputeMischhonorarK0(supabase, { calcMasterId, tenantId }) {
+  const { data: master } = await supabase
+    .from("FEE_CALCULATION_MASTER")
+    .select("ID, FEE_MASTER_ID")
+    .eq("ID", calcMasterId).eq("TENANT_ID", tenantId).maybeSingle();
+  if (!master) return null;
+
+  const { data: splits, error } = await supabase
+    .from("FEE_CALC_ZONE_SPLIT")
+    .select("ZONE_ID, ZONE_PERCENT, AMOUNT")
+    .eq("FEE_CALC_MASTER_ID", calcMasterId).eq("TENANT_ID", tenantId)
+    .order("SORT_ORDER", { ascending: true });
+  if (error) throw error;
+  if (!splits || splits.length === 0) return null;
+
+  const rows = splits.map((s) => ({ zoneId: s.ZONE_ID, zonePercent: s.ZONE_PERCENT, amount: s.AMOUNT }));
+  const akGesamt = round2(rows.reduce((a, r) => a + num(r.amount), 0));
+
+  // Grundhonorar je (Zone, Position) EINMAL bei AK_gesamt vorberechnen (async),
+  // dann synchron in computeMischhonorar einspeisen.
+  const stamm = require("./stammdaten");
+  const cache = new Map();
+  for (const r of rows) {
+    const key = `${r.zoneId}:${num(r.zonePercent)}`;
+    if (!cache.has(key)) {
+      const h = await stamm.interpolateHonorarForZone(supabase, {
+        feeMasterId: master.FEE_MASTER_ID, zoneId: r.zoneId, zonePercent: num(r.zonePercent), cost: akGesamt,
+      });
+      cache.set(key, num(h));
+    }
+  }
+  const tafelFn = (_cost, zoneId, zonePercent) => cache.get(`${zoneId}:${num(zonePercent)}`) ?? 0;
+  const result = computeMischhonorar(rows, tafelFn);
+
+  await supabase.from("FEE_CALCULATION_MASTER")
+    .update({ CONSTRUCTION_COSTS_K0: result.akGesamt, REVENUE_K0: result.honorar })
+    .eq("ID", calcMasterId).eq("TENANT_ID", tenantId);
+
+  return result;
+}
+
+module.exports = { computeMischhonorar, recomputeMischhonorarK0 };

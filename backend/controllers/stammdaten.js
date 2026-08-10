@@ -3,6 +3,7 @@
 const fs   = require("fs");
 const path = require("path");
 const svc  = require("../services/stammdaten");
+const misch = require("../services/mischhonorar");
 
 // Reichert FEE_CALCULATION_MASTER-Rows um BASE_TYPE aus FEE_MASTERS an.
 // Fällt auf 'cost_eur' (= bisheriges Verhalten) zurück, wenn Migration
@@ -252,6 +253,18 @@ async function patchFeeCalcMasterBasis(req, res, supabase) {
         .update(din).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single();
       if (!e2 && d2) out = d2;
     }
+
+    // Mischhonorar (§ 54): existieren Zonenanteile, ist K0 = Σ Anteile und
+    // REVENUE_K0 = Mischhonorar — überschreibt den Einzelzonen-Wert. Soft.
+    try {
+      const mischResult = await misch.recomputeMischhonorarK0(supabase, { calcMasterId: id, tenantId: req.tenantId });
+      if (mischResult) {
+        const { data: d3 } = await supabase.from("FEE_CALCULATION_MASTER")
+          .select("*").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
+        if (d3) out = d3;
+      }
+    } catch (_) { /* Migration 0100 fehlt o. Ä. → Einzelzonen-Wert bleibt */ }
+
     res.json({ data: out });
   } catch (err) {
     return res.status(500).json({ error: err?.message || String(err) });
@@ -1958,8 +1971,70 @@ async function deleteWorkingTimeModel(req, res, supabase) {
   }
 }
 
+// ── TGA-Mischhonorar: Zonenanteile (§ 54) ────────────────────────────────────
+// GET /fee-calculation-masters/:id/zone-splits
+async function getFeeCalcZoneSplits(req, res, supabase) {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+  try {
+    const { data, error } = await supabase.from("FEE_CALC_ZONE_SPLIT")
+      .select("ID, ZONE_ID, ZONE_PERCENT, AMOUNT, SORT_ORDER")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+      .order("SORT_ORDER", { ascending: true });
+    if (error) {
+      if (/FEE_CALC_ZONE_SPLIT/i.test(error.message)) return res.json({ data: [], available: false });
+      return res.status(500).json({ error: error.message });
+    }
+    res.json({ data: data || [], available: true });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
+// POST /fee-calculation-masters/:id/zone-splits/save  Body: { splits: [{ zone_id, zone_percent, amount }] }
+// Ersetzt alle Zonenanteile und rechnet K0 (= Σ Anteile) + REVENUE_K0 (Mischhonorar) neu.
+async function saveFeeCalcZoneSplits(req, res, supabase) {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "id is required" });
+  const incoming = Array.isArray(req.body?.splits) ? req.body.splits : [];
+  try {
+    const { data: master } = await supabase.from("FEE_CALCULATION_MASTER")
+      .select("ID").eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+    if (!master) return res.status(404).json({ error: "Honorarberechnung nicht gefunden" });
+
+    await supabase.from("FEE_CALC_ZONE_SPLIT")
+      .delete().eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
+
+    const rows = incoming
+      .filter((s) => s.zone_id && Number(s.amount) > 0)
+      .map((s, i) => ({
+        TENANT_ID: req.tenantId, FEE_CALC_MASTER_ID: id,
+        ZONE_ID: Number(s.zone_id),
+        ZONE_PERCENT: s.zone_percent != null ? Number(s.zone_percent) : 0,
+        AMOUNT: Number(s.amount) || 0, SORT_ORDER: i,
+      }));
+    if (rows.length) {
+      const { error } = await supabase.from("FEE_CALC_ZONE_SPLIT").insert(rows);
+      if (error) throw error;
+    }
+
+    const result = await misch.recomputeMischhonorarK0(supabase, { calcMasterId: id, tenantId: req.tenantId });
+    const { data: saved } = await supabase.from("FEE_CALC_ZONE_SPLIT")
+      .select("ID, ZONE_ID, ZONE_PERCENT, AMOUNT, SORT_ORDER")
+      .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
+      .order("SORT_ORDER", { ascending: true });
+    res.json({ data: { splits: saved || [], result } });
+  } catch (e) {
+    if (/FEE_CALC_ZONE_SPLIT/i.test(String(e?.message))) {
+      return res.status(400).json({ error: "Mischhonorar noch nicht verfügbar — Migration 0100 ausstehend." });
+    }
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+}
+
 module.exports = {
   postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
+  getFeeCalcZoneSplits, saveFeeCalcZoneSplits,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure, postFeeCalcAddToOfferStructure, syncFeeCalcToStructure,
   getCompanies, postCompany, putCompany, postAddress, postRollen,
