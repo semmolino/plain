@@ -20,6 +20,7 @@ import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from
 import { fetchOffer, fetchOfferStructure, type OfferStructureNode } from '@/api/angebote'
 
 import { Din276Editor } from '@/pages/projekte/Din276Editor'
+import { MischhonorarEditor } from '@/pages/projekte/MischhonorarEditor'
 
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
@@ -205,6 +206,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     K0: '', K1: '', K2: '', K3: '', K4: '',
   })
   const [din276Open, setDin276Open] = useState(false)
+  const [mischOpen,  setMischOpen]  = useState(false)
   const [din276EstimateId,    setDin276EstimateId]    = useState<number | null>(null)
   const [din276Leistungsbild, setDin276Leistungsbild] = useState<string | null>(null)
   const [projectId, setProjectId]             = useState(initialProjectId ? String(initialProjectId) : '')
@@ -806,6 +808,27 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                   Berechnet die anrechenbaren Kosten nach HOAI (Leistungsbild wählbar) und übernimmt sie nach K0.
                 </span>
               </div>
+              {calcMaster && (
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="btn-small" onClick={() => setMischOpen(true)} disabled={zones.length === 0}>
+                    Mischhonorar (§ 54) …
+                  </button>
+                  <span className="admin-section-hint" style={{ margin: 0 }}>
+                    Technische Ausrüstung: anrechenbare Kosten auf mehrere Honorarzonen aufteilen. K0 wird dann daraus berechnet.
+                  </span>
+                </div>
+              )}
+              {calcMaster && (
+                <MischhonorarEditor
+                  open={mischOpen}
+                  onClose={() => setMischOpen(false)}
+                  calcMasterId={calcMaster.ID}
+                  zones={zones}
+                  onApplied={() => { void (async () => {
+                    try { const r = await fetchFeeCalcMaster(calcMaster.ID); populateBasis(r.data) } catch { /* ignore */ }
+                  })() }}
+                />
+              )}
               <Din276Editor
                 open={din276Open}
                 onClose={() => setDin276Open(false)}

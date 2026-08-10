@@ -154,3 +154,39 @@ export const syncFeeCalcToStructure = (id: number) =>
   apiClient.post<{ synced: number; projectId: number | null; message: string }>(
     `/stammdaten/fee-calculation-masters/${id}/sync-to-structure`, {}
   )
+
+// ── TGA-Mischhonorar: Zonenanteile (§ 54) ──────────────────────────────────────
+
+export interface FeeZoneSplit {
+  ID?:           number
+  ZONE_ID:       number
+  ZONE_PERCENT:  number
+  AMOUNT:        number
+  SORT_ORDER?:   number
+}
+
+export interface MischhonorarHerleitungRow {
+  zoneId:        number
+  zonePercent:   number
+  amount:        number
+  hVoll:         number
+  anteilPct:     number
+  einzelhonorar: number
+}
+
+export interface MischhonorarResult {
+  akGesamt:   number
+  honorar:    number
+  herleitung: MischhonorarHerleitungRow[]
+}
+
+export const fetchFeeZoneSplits = (calcMasterId: number) =>
+  apiClient.get<{ data: FeeZoneSplit[]; available: boolean }>(
+    `/stammdaten/fee-calculation-masters/${calcMasterId}/zone-splits`)
+
+export const saveFeeZoneSplits = (
+  calcMasterId: number,
+  splits: Array<{ zone_id: number; zone_percent: number; amount: number }>,
+) =>
+  apiClient.post<{ data: { splits: FeeZoneSplit[]; result: MischhonorarResult | null } }>(
+    `/stammdaten/fee-calculation-masters/${calcMasterId}/zone-splits/save`, { splits })

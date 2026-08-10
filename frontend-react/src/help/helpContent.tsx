@@ -470,6 +470,20 @@ export const HELP = {
       </>
     ),
   },
+  'hoai.mischhonorar': {
+    title: 'Mischhonorar (§ 54 Abs. 3 HOAI)',
+    body: (
+      <>
+        Für die Technische Ausrüstung: Gehören die Anlagen einer Anlagengruppe verschiedenen
+        Honorarzonen an, wird das Honorar aus gewichteten Einzelhonoraren gebildet. Je Zone wird das
+        Honorar so berechnet, als läge die <strong>gesamte</strong> anrechenbare Kostensumme in dieser Zone;
+        dieses Vollhonorar wird dann mit dem Kostenanteil der Zone gewichtet. So wirkt die Degression der
+        Honorartafel auf die Gesamtsumme. Die anrechenbaren Gesamtkosten (K0) ergeben sich als Summe der
+        Zonenbeträge; ein separates K0-Feld entfällt in diesem Modus. „Position %" ist die Lage innerhalb
+        des Zonenbands (0 = untere, 100 = obere Tafelgrenze).
+      </>
+    ),
+  },
   'din276.anrechenbare_kosten': {
     title: 'Anrechenbare Kosten (DIN 276 → HOAI)',
     body: (
