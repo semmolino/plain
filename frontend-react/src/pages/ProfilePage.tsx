@@ -1,13 +1,15 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Camera, Trash2 , ChevronLeft } from 'lucide-react'
+import { Camera, Trash2 , ChevronLeft, BellRing, BellOff, Smartphone } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { changePassword } from '@/api/auth'
 import { uploadAsset } from '@/api/stammdaten'
 import { fetchMyAvatar, putMyAvatar, deleteMyAvatar } from '@/api/mitarbeiter'
 import { AchievementsSection } from '@/components/engagement/AchievementsSection'
 import { MasterySection }      from '@/components/engagement/MasterySection'
+import { HelpHint }            from '@/components/ui/HelpHint'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 
 export function ProfilePage() {
   const navigate   = useNavigate()
@@ -76,6 +78,9 @@ export function ProfilePage() {
           {shortName && <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>Kürzel: {shortName}</div>}
         </div>
       </div>
+
+      {/* Push-Benachrichtigungen (pro Gerät) */}
+      <PushNotificationsCard />
 
       {/* Modul-Reife */}
       <MasterySection />
@@ -169,6 +174,85 @@ const inputStyle: React.CSSProperties = {
   padding: '7px 10px', fontSize: 13,
   border: '1px solid var(--border)', borderRadius: 6,
   outline: 'none',
+}
+
+function PushNotificationsCard() {
+  const push = usePushNotifications()
+
+  const active = push.subscribed && push.permission === 'granted'
+
+  // Info-Zeile je nach Zustand (unter dem Schalter).
+  let hint: React.ReactNode = null
+  if (push.needsInstall) {
+    hint = (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <Smartphone size={13} strokeWidth={2} />
+        Auf dem iPhone/iPad zuerst über „Teilen → Zum Home-Bildschirm" installieren,
+        dann aus dem Symbol öffnen — erst dann sind Push-Benachrichtigungen möglich.
+      </span>
+    )
+  } else if (!push.supported) {
+    hint = 'Dieser Browser unterstützt keine Push-Benachrichtigungen.'
+  } else if (push.serverEnabled === false) {
+    hint = 'Push ist für diese Umgebung derzeit nicht aktiviert.'
+  } else if (push.permission === 'denied') {
+    hint = 'Benachrichtigungen sind im Browser blockiert. Bitte in den Website-Einstellungen erlauben.'
+  } else if (active) {
+    hint = 'Aktiv auf diesem Gerät — du erhältst Benachrichtigungen auch bei geschlossener App.'
+  } else {
+    hint = 'Erhalte Benachrichtigungen auch, wenn plan&simple gerade geschlossen ist.'
+  }
+
+  const canToggle = push.supported && push.serverEnabled !== false && !push.needsInstall && push.permission !== 'denied'
+
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 8, padding: '18px 20px', marginBottom: 24,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+        <span style={{ fontWeight: 600, fontSize: 14 }}>Push-Benachrichtigungen</span>
+        <HelpHint id="notifications.push" />
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => (active ? void push.unsubscribe() : void push.subscribe())}
+          disabled={push.busy || !canToggle}
+          className={active ? 'btn-secondary' : 'btn-primary'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            minHeight: 44, padding: '0 16px', fontSize: 13, fontWeight: 600,
+            cursor: push.busy || !canToggle ? 'not-allowed' : 'pointer',
+            opacity: canToggle ? 1 : 0.6,
+          }}
+        >
+          {active
+            ? <><BellOff size={16} strokeWidth={2} />Auf diesem Gerät deaktivieren</>
+            : <><BellRing size={16} strokeWidth={2} />{push.busy ? 'Bitte warten …' : 'Auf diesem Gerät aktivieren'}</>}
+        </button>
+
+        <span style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: active ? 'var(--success-strong)' : 'var(--text-3)',
+        }}>
+          {active ? 'Aktiv' : 'Inaktiv'}
+        </span>
+      </div>
+
+      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '12px 0 0', lineHeight: 1.5 }}>
+        {hint}
+      </p>
+
+      {push.error && (
+        <p style={{ fontSize: 12, color: 'var(--danger-strong)', margin: '8px 0 0' }}>
+          {push.error}
+        </p>
+      )}
+    </div>
+  )
 }
 
 export function initialsFrom(shortName: string | null, email: string | null): string {

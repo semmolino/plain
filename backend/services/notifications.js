@@ -1,6 +1,7 @@
 "use strict";
 
 const notificationConfig = require('./notificationConfig');
+const push = require('./push');
 
 // ---------------------------------------------------------------------------
 // createNotification – Gate-Layer.
@@ -64,6 +65,13 @@ async function insertOne(supabase, { tenantId, userId, type, title, body, link, 
     METADATA:  metadata,
   }]);
   if (error) throw { status: 500, message: error.message };
+
+  // Zusätzlicher Zustellkanal: dieselbe Benachrichtigung als mobiler Push an
+  // alle Geräte, die der/die Empfänger freigegeben haben. Fire-and-forget —
+  // der In-App-Insert oben ist die Quelle der Wahrheit und darf nie auf den
+  // Push warten oder daran scheitern.
+  push.sendPushForNotification(supabase, { tenantId, userId, title, body, link })
+    .catch(e => console.warn("[NOTIFICATION] Push-Versand fehlgeschlagen:", e?.message || e));
 }
 
 // ---------------------------------------------------------------------------

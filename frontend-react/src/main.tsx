@@ -11,3 +11,13 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 )
+
+// Service Worker registrieren (Voraussetzung für Web-Push). Nur wenn der
+// Browser ihn unterstützt; Fehler dürfen den App-Start nie blockieren.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch(err => console.warn('[SW] Registrierung fehlgeschlagen:', err))
+  })
+}
