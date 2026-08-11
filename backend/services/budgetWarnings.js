@@ -1,6 +1,7 @@
 'use strict';
 
 const { createNotification } = require('./notifications');
+const { assertProjectInTenant } = require('./tenantGuard');
 
 // Cooldown zwischen zwei Fires derselben Regel (auch nach Reset).
 // Schützt gegen Schwingungen, wenn ein Verbrauchswert mehrfach am Tag knapp
@@ -379,6 +380,11 @@ async function listRecentFiredForProject(supabase, { tenantId, projectId, limit 
 }
 
 async function getProjectOverview(supabase, { tenantId, projectId }) {
+  // loadProjectMeta, projectAggregate und loadProjectTree filtern selbst nur
+  // nach PROJECT_ID. Ohne diese Pruefung lieferte der Endpunkt Budget und
+  // Verbrauch fremder Projekte aus (Pentest 2026-08-06).
+  await assertProjectInTenant(supabase, projectId, tenantId);
+
   const project = await loadProjectMeta(supabase, projectId);
   if (!project) throw { status: 404, message: 'Projekt nicht gefunden' };
 
@@ -414,6 +420,7 @@ async function getProjectOverview(supabase, { tenantId, projectId }) {
 }
 
 async function createRule(supabase, { tenantId, projectId, body, employeeId }) {
+  await assertProjectInTenant(supabase, projectId, tenantId);
   const b = body || {};
   const pct = Number(b.threshold_pct);
   if (!Number.isFinite(pct) || pct <= 0 || pct > 500) {
@@ -534,6 +541,7 @@ async function deleteRule(supabase, { tenantId, ruleId }) {
 }
 
 async function setProjectMute(supabase, { tenantId, projectId, muted }) {
+  await assertProjectInTenant(supabase, projectId, tenantId);
   const { data, error } = await supabase
     .from('PROJECT').update({ BUDGET_WARNINGS_MUTED: !!muted })
     .eq('ID', projectId).eq('TENANT_ID', tenantId)

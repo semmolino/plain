@@ -557,7 +557,10 @@ const DOC_TITLES = {
   stornorechnung:     'Stornorechnung',
 };
 
-async function buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds = [] }) {
+async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewReleasePpIds = [] }) {
+  if (tenantId === undefined || tenantId === null || tenantId === '') {
+    throw new Error('buildPdfViewModel: tenantId ist erforderlich');
+  }
   const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
 
   // Load raw doc for fields not exposed by loadInvoiceData
@@ -565,11 +568,10 @@ async function buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds
     .from(table)
     .select('*')
     .eq('ID', docId)
+    .eq('TENANT_ID', tenantId)
     .maybeSingle();
   if (rawErr) throw new Error(rawErr.message);
-  if (!rawDoc) throw new Error(`${table} ${docId} not found`);
-
-  const tenantId = rawDoc.TENANT_ID ?? null;
+  if (!rawDoc) throw Object.assign(new Error('Beleg nicht gefunden'), { status: 404 });
 
   // Core invoice data (seller, buyer, lines, totals, deductions, etc.)
   const inv = await loadInvoiceData(supabase, docId, docType, tenantId);
@@ -881,11 +883,33 @@ async function buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-async function renderDocumentPdf({ supabase, docType, docId, templateId, previewReleasePpIds = [] }) {
+/**
+ * tenantId ist PFLICHT.
+ *
+ * Frueher wurde der Mandant aus dem geladenen Datensatz abgeleitet
+ * (`docMeta?.TENANT_ID`) statt aus der Sitzung des Aufrufers. Damit bestaetigte
+ * die Pruefung nur, dass ein fremder Beleg zu seinem eigenen Mandanten gehoert
+ * — sie war also wirkungslos. Zusammen mit dem `?preview=1`-Zweig im Controller
+ * liess sich so jedes Rechnungs-PDF der Plattform abrufen (Pentest 2026-08-06).
+ *
+ * Der Parameter wird bewusst hart geprueft: ein vergessener Aufrufer soll einen
+ * Fehler ausloesen, kein stilles Leck.
+ */
+async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateId, previewReleasePpIds = [] }) {
+  if (tenantId === undefined || tenantId === null || tenantId === '') {
+    throw new Error('renderDocumentPdf: tenantId ist erforderlich');
+  }
   const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
-  const { data: docMeta } = await supabase.from(table).select('COMPANY_ID, TENANT_ID').eq('ID', docId).maybeSingle();
-  const companyId = docMeta?.COMPANY_ID;
-  const tenantId  = docMeta?.TENANT_ID ?? null;
+  const { data: docMeta } = await supabase
+    .from(table)
+    .select('COMPANY_ID, TENANT_ID')
+    .eq('ID', docId)
+    .eq('TENANT_ID', tenantId)
+    .maybeSingle();
+  // Kein Treffer heisst: gibt es nicht ODER gehoert einem anderen Mandanten.
+  // Beides gleich behandeln, damit die Antwort keine Existenz verraet.
+  if (!docMeta) throw Object.assign(new Error('Beleg nicht gefunden'), { status: 404 });
+  const companyId = docMeta.COMPANY_ID;
   if (!companyId) throw new Error('Company for document not found');
 
   const tpl = await loadTemplate({ supabase, companyId, docType, templateId });
@@ -895,7 +919,7 @@ async function renderDocumentPdf({ supabase, docType, docId, templateId, preview
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
   ]);
 
-  const vm = await buildPdfViewModel({ supabase, docType, docId, previewReleasePpIds });
+  const vm = await buildPdfViewModel({ supabase, docType, docId, tenantId, previewReleasePpIds });
   applyCategoryBlocks(theme, invoiceTypeToCategory(vm.inv && vm.inv.invoiceType, docType));
   vm.theme             = theme;
   vm.themeHead         = buildThemeHead(theme);

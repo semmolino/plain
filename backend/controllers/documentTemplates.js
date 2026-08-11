@@ -40,7 +40,7 @@ async function patchDocumentTemplate(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
   try {
-    const data = await svc.patchDocumentTemplate(supabase, { id, body: req.body });
+    const data = await svc.patchDocumentTemplate(supabase, { id, body: req.body, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     const status = err.status || 500;
@@ -52,7 +52,7 @@ async function duplicateDocumentTemplate(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
   try {
-    const data = await svc.duplicateDocumentTemplate(supabase, { id });
+    const data = await svc.duplicateDocumentTemplate(supabase, { id, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     const status = err.status || 500;
@@ -64,7 +64,7 @@ async function publishDocumentTemplate(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
   try {
-    const data = await svc.publishDocumentTemplate(supabase, { id });
+    const data = await svc.publishDocumentTemplate(supabase, { id, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     const status = err.status || 500;
@@ -76,7 +76,7 @@ async function archiveDocumentTemplate(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
   try {
-    const data = await svc.archiveDocumentTemplate(supabase, { id });
+    const data = await svc.archiveDocumentTemplate(supabase, { id, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     const status = err.status || 500;
@@ -88,7 +88,7 @@ async function setDefaultDocumentTemplate(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
   try {
-    const data = await svc.setDefaultDocumentTemplate(supabase, { id });
+    const data = await svc.setDefaultDocumentTemplate(supabase, { id, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     const status = err.status || 500;

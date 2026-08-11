@@ -8,6 +8,7 @@ const { validateEInvoiceData } = require("../services_einvoice_validator");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { findAssetForTenant } = require("./assetAccess");
 
 // ---------------------------------------------------------------------------
 // File-system helpers
@@ -22,14 +23,17 @@ function safeFileName(name, fallback) {
   return base.length ? base : "document";
 }
 
-async function loadAssetRow({ supabase, assetId }) {
-  const { data, error } = await supabase.from("ASSET").select("*").eq("ID", assetId).maybeSingle();
-  if (error) throw new Error(error.message);
-  return data || null;
+// Mandantengebunden aufloesen statt allein ueber die ID. Die Aufrufer holen
+// die Asset-ID zwar aus einer bereits tenant-gefilterten Rechnung — damit
+// haengt die Sicherheit aber an der Disziplin der Aufrufer, nicht an der
+// Struktur. Diese Schranke macht sie unabhaengig davon (Pentest 2026-08-06,
+// nachrangige Beobachtung zu streamPdfAsset/streamXmlAsset).
+async function loadAssetRow({ supabase, assetId, tenantId }) {
+  return findAssetForTenant(supabase, assetId, tenantId, "*");
 }
 
-async function streamPdfAsset({ supabase, res, assetId, dispositionName, download }) {
-  const asset = await loadAssetRow({ supabase, assetId });
+async function streamPdfAsset({ supabase, res, assetId, tenantId, dispositionName, download }) {
+  const asset = await loadAssetRow({ supabase, assetId, tenantId });
   if (!asset) return res.status(404).json({ error: "PDF asset not found" });
 
   const root = uploadRoot();
@@ -46,8 +50,8 @@ async function streamPdfAsset({ supabase, res, assetId, dispositionName, downloa
   return true;
 }
 
-async function streamXmlAsset({ supabase, res, assetId, dispositionName, download }) {
-  const asset = await loadAssetRow({ supabase, assetId });
+async function streamXmlAsset({ supabase, res, assetId, tenantId, dispositionName, download }) {
+  const asset = await loadAssetRow({ supabase, assetId, tenantId });
   if (!asset) throw new Error("XML asset not found");
 
   const root = uploadRoot();
@@ -646,17 +650,33 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
   }));
 }
 
-async function initInvoice(supabase, { companyId, employeeId, projectId, contractId, invoiceType }) {
+/**
+ * companyId und employeeId kommen aus dem Request-Body und muessen deshalb
+ * gegen den Mandanten der Sitzung geprueft werden.
+ *
+ * Pentest-Befund vom 2026-08-06: Diese Funktion lud Projekt, Firma und
+ * Mitarbeiter allein ueber die ID. Ein Nutzer konnte in seinem EIGENEN Projekt
+ * eine Rechnung anlegen und dabei eine fremde company_id mitschicken — IBAN,
+ * BIC, Steuernummer und Glaeubiger-ID der fremden Firma landeten dann in
+ * seiner eigenen Rechnung und waren ueber GET /invoices/:id auslesbar.
+ * Ueber employee_id dasselbe mit Name, E-Mail und Mobilnummer.
+ */
+async function initInvoice(supabase, { companyId, employeeId, projectId, contractId, invoiceType, tenantId }) {
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw new Error("initInvoice: tenantId ist erforderlich");
+  }
   const { data: project, error: projectErr } = await supabase
     .from("PROJECT")
     .select("ID, NAME_SHORT, NAME_LONG, TENANT_ID, COMPANY_ID")
     .eq("ID", projectId)
+    .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  if (projectErr || !project) throw { status: 500, message: "Projekt konnte nicht geladen werden" };
+  if (projectErr) throw { status: 500, message: "Projekt konnte nicht geladen werden" };
+  if (!project) throw { status: 404, message: "Projekt nicht gefunden" };
 
   let resolvedCompanyId = companyId || project.COMPANY_ID;
   if (!resolvedCompanyId) {
-    const { data: cos } = await supabase.from("COMPANY").select("ID").eq("TENANT_ID", project.TENANT_ID).limit(1);
+    const { data: cos } = await supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).limit(1);
     resolvedCompanyId = cos?.[0]?.ID ?? null;
   }
   if (!resolvedCompanyId) throw { status: 500, message: "Firma konnte nicht ermittelt werden" };
@@ -665,8 +685,10 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     .from("COMPANY")
     .select(`ID, COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, COUNTRY_ID, POST_OFFICE_BOX, BIC, TAX_NUMBER, IBAN, "TAX-ID", "CREDITOR-ID"`)
     .eq("ID", resolvedCompanyId)
+    .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  if (company_q.error || !company_q.data) throw { status: 500, message: "Firma konnte nicht geladen werden" };
+  if (company_q.error) throw { status: 500, message: "Firma konnte nicht geladen werden" };
+  if (!company_q.data) throw { status: 404, message: "Firma nicht gefunden" };
   const company = company_q.data;
   const companyCountryLong = await getCountryNameLong(supabase, company.COUNTRY_ID);
 
@@ -678,6 +700,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     .from("EMPLOYEE")
     .select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE, SALUTATION_ID")
     .eq("ID", empId)
+    .eq("TENANT_ID", tenantId)
     .maybeSingle();
 
   if (empErr1) {
@@ -685,6 +708,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
       .from("EMPLOYEE")
       .select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE")
       .eq("ID", empId)
+      .eq("TENANT_ID", tenantId)
       .maybeSingle();
     if (empErr2 || !emp2) throw { status: 500, message: `Mitarbeiter konnte nicht geladen werden: ${empErr2?.message || empErr1.message || "unbekannter Fehler"}` };
     employee = emp2;
@@ -700,6 +724,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
       .from("CONTRACT")
       .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT")
       .eq("ID", contractId)
+      .eq("TENANT_ID", tenantId)
       .maybeSingle();
     if (!c1Err && c1) contractRow = c1;
   }
@@ -717,8 +742,8 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   let effectiveVatId = contractRow.VAT_ID ?? null;
   if (!effectiveVatId) {
     try {
-      const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
-      const tenantId = projT?.TENANT_ID ?? null;
+      // tenantId kommt aus der Sitzung (Parameter). Frueher wurde er hier
+      // erneut aus dem Projekt geholt und ueberschattete dabei den Parameter.
       if (tenantId) {
         const { data: settingsRows } = await supabase
           .from("TENANT_SETTINGS").select("KEY, VALUE")
@@ -797,7 +822,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     CONTACT_SALUTATION: contactSalutation,
     CONTACT_MAIL: invoiceContact.EMAIL ?? null,
     CONTACT_PHONE: invoiceContact.MOBILE ?? null,
-    TENANT_ID: project.TENANT_ID ?? null,
+    TENANT_ID: tenantId,
     INVOICE_TYPE: invoiceType,
     // E-Rechnung Branch 2 — VAT-Category vom Vertrag uebernehmen
     VAT_CATEGORY:              contractRow.VAT_CATEGORY              ?? 'S',
@@ -1074,6 +1099,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
   if (!skipDocuments) try {
     const r = await renderDocumentPdf({
       supabase,
+      tenantId,
       docType: "INVOICE",
       docId: parseInt(id, 10),
       templateId: inv.DOCUMENT_TEMPLATE_ID ? parseInt(String(inv.DOCUMENT_TEMPLATE_ID), 10) : null,

@@ -273,7 +273,7 @@ async function initPartialPayment(req, res, supabase) {
   }
 
   try {
-    const result = await svc.initPartialPayment(supabase, { companyId, employeeId, projectId, contractId });
+    const result = await svc.initPartialPayment(supabase, { companyId, employeeId, projectId, contractId, tenantId: req.tenantId });
     return res.json(result);
   } catch (e) {
     const status = e?.status || 500;
@@ -798,7 +798,7 @@ async function getEinvoiceUbl(req, res, supabase) {
 
   if (isBooked && !preview && ppRow.DOCUMENT_XML_ASSET_ID) {
     try {
-      return await svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+      return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
     } catch (snapErr) {
       console.warn("[EINVOICE_XRECHNUNG_PP] snapshot missing on disk, regenerating live", { partial_payment_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
     }
@@ -937,22 +937,27 @@ async function getPdf(req, res, supabase) {
     const download = String(req.query.download || "") === "1";
     const templateId = req.query.template_id ? parseInt(String(req.query.template_id), 10) : null;
 
-    if (!preview) {
-      const { data: ppRow, error: ppRowErr } = await supabase
-        .from("PARTIAL_PAYMENT")
-        .select("ID, STATUS_ID, DOCUMENT_PDF_ASSET_ID, PARTIAL_PAYMENT_NUMBER")
-        .eq("ID", ppId)
-        .eq("TENANT_ID", req.tenantId)
-        .maybeSingle();
+    // Mandantenpruefung IMMER, nicht nur im Nicht-Preview-Zweig — analog zu
+    // getPdf in controllers/invoices.js. Mit ?preview=1 wurde sie sonst
+    // uebersprungen (Pentest 2026-08-06).
+    const { data: ppRow, error: ppRowErr } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select("ID, STATUS_ID, DOCUMENT_PDF_ASSET_ID, PARTIAL_PAYMENT_NUMBER")
+      .eq("ID", ppId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
 
-      if (!ppRowErr && ppRow && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_PDF_ASSET_ID) {
-        const fname = `Abschlagsrechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.pdf`;
-        return svc.streamPdfAsset({ supabase, res, assetId: ppRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
-      }
+    if (ppRowErr) return res.status(500).json({ error: "Fehler beim Laden der Abschlagsrechnung." });
+    if (!ppRow) return res.status(404).json({ error: "Abschlagsrechnung nicht gefunden." });
+
+    if (!preview && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_PDF_ASSET_ID) {
+      const fname = `Abschlagsrechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.pdf`;
+      return svc.streamPdfAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
     }
 
     const { pdf } = await renderDocumentPdf({
       supabase,
+      tenantId: req.tenantId,
       docType: "PARTIAL_PAYMENT",
       docId: ppId,
       templateId: Number.isFinite(templateId) ? templateId : null,
@@ -1016,6 +1021,7 @@ async function getPdfHybrid(req, res, supabase) {
     const [{ pdf }, data] = await Promise.all([
       renderDocumentPdf({
         supabase,
+        tenantId: req.tenantId,
         docType: "PARTIAL_PAYMENT",
         docId: ppId,
         templateId: Number.isFinite(templateId) ? templateId : null,
@@ -1086,7 +1092,7 @@ async function getEinvoiceCii(req, res, supabase) {
 
   if (!preview && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_XML_ASSET_ID && ppRow.DOCUMENT_XML_PROFILE === profileKey) {
     try {
-      return await svc.streamXmlAsset({ supabase, res, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
+      return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
     } catch (snapErr) {
       console.warn("[EINVOICE_CII_PP] snapshot missing on disk, regenerating live", { partial_payment_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
     }

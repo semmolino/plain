@@ -11,6 +11,7 @@
 
 const path = require("path");
 const fs = require("fs");
+const { loadAssetForTenant, findAssetForTenant } = require("../services/assetAccess");
 
 const ALLOWED_MIME = new Set([
   "application/pdf",
@@ -53,14 +54,16 @@ async function listAttachments(supabase, { docType, docId, tenantId }) {
 async function addAttachment(supabase, { docType, docId, tenantId, assetId, description, attachmentTypeCode, documentReference }) {
   const key = ensureDocKey(docType);
 
-  // Validate asset belongs to tenant + check MIME and size
-  const { data: asset, error: aErr } = await supabase
-    .from("ASSET")
-    .select("ID, COMPANY_ID, MIME_TYPE, FILE_SIZE, FILE_NAME")
-    .eq("ID", assetId)
-    .maybeSingle();
-  if (aErr) throw new Error(aErr.message);
-  if (!asset) throw { status: 404, message: "Asset nicht gefunden" };
+  // Zugehoerigkeit zum Mandanten pruefen, dann MIME und Groesse.
+  //
+  // Der Kommentar an dieser Stelle versprach die Pruefung schon vorher — der
+  // Code darunter filterte aber nur nach ID. Ein Nutzer konnte damit eine
+  // FREMDE Asset-ID an seine eigene Rechnung haengen; beim Abruf der
+  // XRechnung wurde die Datei von Platte gelesen und base64 ins XML
+  // eingebettet (Pentest 2026-08-06).
+  const asset = await loadAssetForTenant(
+    supabase, assetId, tenantId, "ID, COMPANY_ID, MIME_TYPE, FILE_SIZE, FILE_NAME"
+  );
   if (!ALLOWED_MIME.has(String(asset.MIME_TYPE || "").toLowerCase())) {
     throw { status: 400, message: `MIME-Typ nicht erlaubt fuer E-Rechnungs-Anlage: ${asset.MIME_TYPE}` };
   }
@@ -141,12 +144,14 @@ async function loadAttachmentsForXml(supabase, { docType, docId, tenantId }) {
   const out = [];
   for (const a of items) {
     if (!a.ASSET) continue;
-    const { data: full, error } = await supabase
-      .from("ASSET")
-      .select("STORAGE_KEY, MIME_TYPE, FILE_NAME, FILE_SIZE")
-      .eq("ID", a.ASSET_ID)
-      .maybeSingle();
-    if (error || !full?.STORAGE_KEY) continue;
+    // Zweite Schranke: auch beim Nachladen mandantengebunden aufloesen.
+    // Bestandsdaten koennen noch Verweise auf fremde Assets enthalten, die
+    // vor dem Fix in addAttachment angelegt wurden — die sollen nicht
+    // nachtraeglich doch noch im XML landen.
+    const full = await findAssetForTenant(
+      supabase, a.ASSET_ID, tenantId, "STORAGE_KEY, MIME_TYPE, FILE_NAME, FILE_SIZE"
+    );
+    if (!full?.STORAGE_KEY) continue;
 
     const filePath = path.join(uploadRoot, full.STORAGE_KEY);
     if (!fs.existsSync(filePath)) continue;

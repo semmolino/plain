@@ -3,6 +3,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const { findAssetForTenant } = require("../services/assetAccess");
 
 const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
 
@@ -92,18 +93,29 @@ module.exports = (supabase) => {
       const { heroAssetId } = await readBrandingSettings(tenant.ID);
       if (!heroAssetId) return res.status(404).send("kein custom-bild");
 
-      const { data: asset, error } = await supabase
-        .from("ASSET")
-        .select("MIME_TYPE, STORAGE_KEY, FILE_NAME")
-        .eq("ID", heroAssetId)
-        .maybeSingle();
-      if (error || !asset) return res.status(404).send("asset nicht gefunden");
+      // Das Asset muss dem Mandanten gehoeren, dessen Slug angefragt wurde.
+      // heroAssetId stammt aus TENANT_SETTINGS und ist damit vom Mandanten
+      // selbst gesetzt: ohne diese Pruefung konnte ein Admin dort eine FREMDE
+      // Asset-ID eintragen und die Datei anschliessend ueber diesen
+      // Endpunkt oeffentlich — ohne jede Anmeldung — abrufen lassen
+      // (Pentest 2026-08-06).
+      const asset = await findAssetForTenant(
+        supabase, heroAssetId, tenant.ID, "MIME_TYPE, STORAGE_KEY, FILE_NAME"
+      );
+      if (!asset) return res.status(404).send("asset nicht gefunden");
 
       const uploadRoot = path.join(__dirname, "..", "uploads");
       const filePath = path.join(uploadRoot, asset.STORAGE_KEY);
       if (!fs.existsSync(filePath)) return res.status(404).send("file fehlt auf disk");
 
-      res.setHeader("Content-Type", asset.MIME_TYPE || "image/jpeg");
+      // Content-Type NICHT ungeprueft aus der Datenbank uebernehmen. Ein als
+      // image/svg+xml abgelegtes Asset wuerde sonst hier als Dokument im
+      // eigenen Origin ausgefuehrt — mit deaktivierter CSP und dem JWT im
+      // localStorage waere das ein Weg zum Token-Diebstahl.
+      const ERLAUBT = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+      const mime = String(asset.MIME_TYPE || "").toLowerCase();
+      res.setHeader("Content-Type", ERLAUBT.has(mime) ? mime : "application/octet-stream");
+      res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "public, max-age=300"); // 5 min Cache OK
       fs.createReadStream(filePath).pipe(res);
     } catch (e) {

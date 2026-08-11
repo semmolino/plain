@@ -20,11 +20,19 @@ module.exports = (supabase) => {
   router.patch("/:id",                requirePermission("projects.bookings.edit"),   (req, res) => ctrl.patchBuchung(req, res, supabase));
   router.delete("/:id",               requirePermission("projects.bookings.delete"), (req, res) => ctrl.deleteBuchung(req, res, supabase));
   router.get("/project/:id",          requirePermission("projects.bookings.view"),   (req, res) => ctrl.listBuchungenByProject(req, res, supabase));
-  router.post("/timer/draft",        (req, res) => ctrl.createTimerDraft(req, res, supabase));
-  router.get("/timer/drafts",        (req, res) => ctrl.listDraftsByEmployee(req, res, supabase));
-  router.post("/timer/confirm",      (req, res) => ctrl.confirmDrafts(req, res, supabase));
-  router.delete("/timer/draft/:id",  (req, res) => ctrl.deleteDraft(req, res, supabase));
-  router.patch("/timer/draft/:id",   (req, res) => ctrl.patchDraftDescription(req, res, supabase));
+  // Die Timer-Endpunkte trugen bisher KEIN Gate, obwohl ihre Zwillinge direkt
+  // darueber (POST /, PATCH /:id, DELETE /:id) eines haben. Ein Nutzer mit der
+  // Default-Rolle "Mitarbeiter" — die laut Migration 0062 nur dashboard.view
+  // und addresses.view besitzt — konnte darueber Zeitbuchungen anlegen,
+  // bestaetigen, aendern und loeschen (Pentest 2026-08-06).
+  //
+  // Dieselben Permissions wie bei den regulaeren Buchungen: ein Entwurf wird
+  // durch /timer/confirm zu einer abrechnungsrelevanten Buchung.
+  router.post("/timer/draft",        requirePermission("projects.bookings.create"), (req, res) => ctrl.createTimerDraft(req, res, supabase));
+  router.get("/timer/drafts",        requirePermission("projects.bookings.view"),   (req, res) => ctrl.listDraftsByEmployee(req, res, supabase));
+  router.post("/timer/confirm",      requirePermission("projects.bookings.create"), (req, res) => ctrl.confirmDrafts(req, res, supabase));
+  router.delete("/timer/draft/:id",  requirePermission("projects.bookings.delete"), (req, res) => ctrl.deleteDraft(req, res, supabase));
+  router.patch("/timer/draft/:id",   requirePermission("projects.bookings.edit"),   (req, res) => ctrl.patchDraftDescription(req, res, supabase));
   router.get("/workstart-status",    (req, res) => ctrl.getWorkstartStatus(req, res, supabase));
 
   // Persönliche Buchungstexte (Textbausteine) — jeweils nur die eigenen.

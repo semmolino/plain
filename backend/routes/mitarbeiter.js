@@ -3,6 +3,7 @@ const bcrypt       = require("bcryptjs");
 const fs           = require("fs");
 const path         = require("path");
 const balanceSvc   = require("../services/employeeBalance");
+const { findAssetForTenant } = require("../services/assetAccess");
 const { requirePermission } = require("../middleware/permissions");
 const { enforceLimit } = require("../middleware/limits");
 
@@ -126,8 +127,12 @@ module.exports = (supabase) => {
       const assetId = req.body?.asset_id != null ? parseInt(String(req.body.asset_id), 10) : null;
       if (!assetId || Number.isNaN(assetId)) return res.status(400).json({ error: "asset_id erforderlich" });
 
-      const { data: asset } = await supabase
-        .from("ASSET").select("STORAGE_KEY, MIME_TYPE").eq("ID", assetId).maybeSingle();
+      // Das Asset muss zu einer Firma des eigenen Mandanten gehoeren. Frueher
+      // wurde es allein ueber die ID geladen — ein Hochzaehlen von asset_id
+      // lieferte damit jede hochgeladene Datei der Plattform base64-kodiert in
+      // der Antwort dieses Endpunkts zurueck (Pentest 2026-08-06).
+      const asset = await findAssetForTenant(supabase, assetId, req.tenantId, "STORAGE_KEY, MIME_TYPE");
+      if (!asset) return res.status(404).json({ error: "Asset nicht gefunden." });
 
       let dataUri = null;
       if (asset?.STORAGE_KEY && asset?.MIME_TYPE) {

@@ -143,7 +143,7 @@ async function searchContracts(req, res, supabase) {
   if (!projectIdRaw) return res.json({ data: [] });
   if (q.length > 0 && q.length < 2) return res.json({ data: [] });
   try {
-    const data = await svc.searchContracts(supabase, { projectId: projectIdRaw, q });
+    const data = await svc.searchContracts(supabase, { projectId: projectIdRaw, q, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
@@ -153,7 +153,7 @@ async function searchContracts(req, res, supabase) {
 async function getProjectStructure(req, res, supabase) {
   const { id } = req.params;
   try {
-    const data = await svc.getProjectStructure(supabase, { projectId: id });
+    const data = await svc.getProjectStructure(supabase, { projectId: id, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
@@ -177,7 +177,7 @@ async function patchStructureCompletionPercents(req, res, supabase) {
   }
 
   try {
-    await svc.patchStructureCompletionPercents(supabase, { structureId, revPct, exPct });
+    await svc.patchStructureCompletionPercents(supabase, { structureId, revPct, exPct, tenantId: req.tenantId });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
@@ -189,7 +189,7 @@ async function progressSnapshot(req, res, supabase) {
   const projectId = String(id || "").trim();
   if (!projectId) return res.status(400).json({ error: "Projekt-ID fehlt" });
   try {
-    const result = await svc.progressSnapshot(supabase, { projectId });
+    const result = await svc.progressSnapshot(supabase, { projectId, tenantId: req.tenantId });
     res.json({ success: true, ...result });
   } catch (err) {
     const status = err.status || 500;
@@ -200,7 +200,7 @@ async function progressSnapshot(req, res, supabase) {
 async function getTecSum(req, res, supabase) {
   const { id } = req.params;
   try {
-    const sum = await svc.getTecSum(supabase, { structureId: id });
+    const sum = await svc.getTecSum(supabase, { structureId: id, tenantId: req.tenantId });
     res.json({ sum });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
@@ -210,7 +210,7 @@ async function getTecSum(req, res, supabase) {
 async function checkParentForChild(req, res, supabase) {
   const { id } = req.params;
   try {
-    const result = await svc.checkParentForChild(supabase, { parentId: Number(id) });
+    const result = await svc.checkParentForChild(supabase, { parentId: Number(id), tenantId: req.tenantId });
     res.json(result);
   } catch (err) {
     const status = err.status || 500;
@@ -222,7 +222,7 @@ async function createStructureNode(req, res, supabase) {
   const { id: projectId } = req.params;
   try {
     const { transfer_parent_values, ...nodeBody } = req.body || {};
-    const data = await svc.createStructureNode(supabase, { projectId, node: nodeBody, transferParentValues: !!transfer_parent_values });
+    const data = await svc.createStructureNode(supabase, { projectId, node: nodeBody, transferParentValues: !!transfer_parent_values, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     const status = err.status || 500;
@@ -234,7 +234,7 @@ async function patchStructure(req, res, supabase) {
   const { id } = req.params;
   const structureId = id;
   try {
-    const computed = await svc.patchStructure(supabase, { structureId, update: req.body || {} });
+    const computed = await svc.patchStructure(supabase, { structureId, update: req.body || {}, tenantId: req.tenantId });
     res.json({
       success: true,
       computed: {
@@ -271,7 +271,7 @@ async function inheritStructure(req, res, supabase) {
   }
 
   try {
-    const result = await svc.inheritStructure(supabase, { structureId, inheritBt, inheritExtras });
+    const result = await svc.inheritStructure(supabase, { structureId, inheritBt, inheritExtras, tenantId: req.tenantId });
     res.json({ success: true, ...result });
   } catch (err) {
     const status = err.status || 500;
@@ -286,7 +286,7 @@ async function moveStructure(req, res, supabase) {
   const fatherRaw = (req.body || {}).father_id;
   const sortAfterId = (req.body || {}).sort_after_id; // null=prepend, '__end__'=append, id=insert after
   try {
-    await svc.moveStructure(supabase, { structureId, fatherRaw, sortAfterId });
+    await svc.moveStructure(supabase, { structureId, fatherRaw, sortAfterId, tenantId: req.tenantId });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;
@@ -309,7 +309,7 @@ async function patchContract(req, res, supabase) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ error: "Vertrags-ID fehlt" });
   try {
-    await svc.patchContract(supabase, { contractId: id, body: req.body || {} });
+    await svc.patchContract(supabase, { contractId: id, body: req.body || {}, tenantId: req.tenantId });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;
@@ -321,7 +321,7 @@ async function getLeistungsstand(req, res, supabase) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
   try {
-    const data = await svc.getLeistungsstand(supabase, { projectId: id });
+    const data = await svc.getLeistungsstand(supabase, { projectId: id, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
@@ -334,7 +334,7 @@ async function saveLeistungsstand(req, res, supabase) {
   const updates = (req.body || {}).updates;
   if (!Array.isArray(updates)) return res.status(400).json({ error: "updates muss ein Array sein" });
   try {
-    const result = await svc.saveLeistungsstand(supabase, { projectId: id, updates });
+    const result = await svc.saveLeistungsstand(supabase, { projectId: id, updates, tenantId: req.tenantId });
     res.json({ success: true, ...result });
   } catch (err) {
     const status = err.status || 500;
@@ -354,7 +354,7 @@ async function deleteStructure(req, res, supabase) {
       const check = await depCheck.checkProjectStructure(supabase, { tenantId: req.tenantId, id: parseInt(structureId, 10) });
       if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
     }
-    const deleted_ids = await svc.deleteStructure(supabase, { structureId, cascade });
+    const deleted_ids = await svc.deleteStructure(supabase, { structureId, cascade, tenantId: req.tenantId });
     res.json({ success: true, deleted_ids });
   } catch (err) {
     const status = err.status || 500;

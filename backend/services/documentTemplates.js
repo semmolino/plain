@@ -38,6 +38,36 @@ async function resolveCompanyIds(supabase, tenantId) {
   return (data || []).map(r => r.ID).filter(id => id != null);
 }
 
+/**
+ * Gehoert die Vorlage einer Firma des Mandanten?
+ *
+ * DOCUMENT_TEMPLATE haengt ueber COMPANY_ID am Mandanten, nicht ueber eine
+ * eigene TENANT_ID. Die ID-basierten Operationen (patch, duplicate, publish,
+ * archive, set-default) filterten frueher gar nicht: ein Nutzer konnte die
+ * Vorlage eines fremden Mandanten duplizieren und damit deren THEME_JSON samt
+ * Farben, Kopf-/Fusstexten und Logo-Verweis auslesen — oder die fremde
+ * Standardvorlage umstellen, sodass alle kuenftigen Belege des Opfers mit
+ * einem manipulierten Layout gerendert werden (Pentest 2026-08-06).
+ */
+async function assertTemplateInTenant(supabase, id, tenantId) {
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw new Error("assertTemplateInTenant: tenantId ist erforderlich");
+  }
+  const companyIds = await resolveCompanyIds(supabase, tenantId);
+  if (!companyIds.length) throw { status: 404, message: "not found" };
+
+  const { data, error } = await supabase
+    .from("DOCUMENT_TEMPLATE")
+    .select("ID")
+    .eq("ID", id)
+    .in("COMPANY_ID", companyIds)
+    .maybeSingle();
+  if (error) throw { status: 500, message: error.message };
+  if (!data) throw { status: 404, message: "not found" };
+  return data.ID;
+}
+
+
 // ---------------------------------------------------------------------------
 // Service functions
 // ---------------------------------------------------------------------------
@@ -110,7 +140,8 @@ async function createDocumentTemplate(supabase, { tenantId, name, doc_type, layo
   return result;
 }
 
-async function patchDocumentTemplate(supabase, { id, body }) {
+async function patchDocumentTemplate(supabase, { id, body, tenantId }) {
+  await assertTemplateInTenant(supabase, id, tenantId);
   const { data: existing, error: exErr } = await supabase
     .from("DOCUMENT_TEMPLATE")
     .select("ID, STATUS")
@@ -147,7 +178,8 @@ async function patchDocumentTemplate(supabase, { id, body }) {
   return data;
 }
 
-async function duplicateDocumentTemplate(supabase, { id }) {
+async function duplicateDocumentTemplate(supabase, { id, tenantId }) {
+  await assertTemplateInTenant(supabase, id, tenantId);
   const { data: src, error: srcErr } = await supabase.from("DOCUMENT_TEMPLATE").select("*").eq("ID", id).maybeSingle();
   if (srcErr) throw srcErr;
   if (!src) throw { status: 404, message: "not found" };
@@ -188,7 +220,8 @@ async function duplicateDocumentTemplate(supabase, { id }) {
   return data;
 }
 
-async function publishDocumentTemplate(supabase, { id }) {
+async function publishDocumentTemplate(supabase, { id, tenantId }) {
+  await assertTemplateInTenant(supabase, id, tenantId);
   const { data: tpl, error: tplErr } = await supabase.from("DOCUMENT_TEMPLATE").select("ID, STATUS").eq("ID", id).maybeSingle();
   if (tplErr) throw tplErr;
   if (!tpl) throw { status: 404, message: "not found" };
@@ -207,7 +240,8 @@ async function publishDocumentTemplate(supabase, { id }) {
   return data;
 }
 
-async function archiveDocumentTemplate(supabase, { id }) {
+async function archiveDocumentTemplate(supabase, { id, tenantId }) {
+  await assertTemplateInTenant(supabase, id, tenantId);
   const { data: tpl, error: tplErr } = await supabase.from("DOCUMENT_TEMPLATE").select("ID, STATUS").eq("ID", id).maybeSingle();
   if (tplErr) throw tplErr;
   if (!tpl) throw { status: 404, message: "not found" };
@@ -226,7 +260,8 @@ async function archiveDocumentTemplate(supabase, { id }) {
   return data;
 }
 
-async function setDefaultDocumentTemplate(supabase, { id }) {
+async function setDefaultDocumentTemplate(supabase, { id, tenantId }) {
+  await assertTemplateInTenant(supabase, id, tenantId);
   const { data: tpl, error: tplErr } = await supabase
     .from("DOCUMENT_TEMPLATE")
     .select("ID, COMPANY_ID, DOC_TYPE, STATUS, IS_ACTIVE")
