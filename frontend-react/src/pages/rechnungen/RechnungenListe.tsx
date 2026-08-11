@@ -16,6 +16,7 @@ import { HasFeature } from '@/components/ui/HasFeature'
 import { Modal }        from '@/components/ui/Modal'
 import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { BatchEmailModal, type BatchEmailItem } from '@/components/ui/BatchEmailModal'
 import { useToast }     from '@/store/toastStore'
 import { AbrechenbareProjekte } from '@/pages/rechnungen/AbrechenbareProjekte'
 import {
@@ -28,8 +29,10 @@ import {
   deleteInvoice, deletePartialPayment,
   fetchPayments, createPayment, deletePayment,
   sendInvoiceEmail, sendPpEmail,
+  fetchInvoiceEmailPreview, fetchPpEmailPreview,
   type Invoice, type PartialPayment, type Payment,
 } from '@/api/rechnungen'
+import { fetchEmailTemplates } from '@/api/emailTemplates'
 
 interface EditDraftPayload {
   id:            number
@@ -339,28 +342,60 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody,    setEmailBody]    = useState('')
   const [emailMsg,     setEmailMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [emailLoading, setEmailLoading] = useState(false)
+
+  // E-Mail-Textvorlage des Mandanten (Platzhalter noch unaufgeloest) — sie
+  // fuellt den Sammelversand vor. Der Einzelversand nimmt stattdessen die vom
+  // Server bereits belegbezogen aufgeloeste Fassung (email-preview).
+  const { data: mailTemplates } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn:  () => fetchEmailTemplates().then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const invoiceTemplate = mailTemplates?.find(t => t.key === 'invoice')
+
+  function sendMailFor(row: UnifiedRow, payload: { emailTo?: string; emailSubject?: string; emailBody?: string }) {
+    const id = (row.raw as Invoice & PartialPayment).ID
+    return row.source === 'invoice' ? sendInvoiceEmail(id, payload) : sendPpEmail(id, payload)
+  }
 
   function openEmailFor(row: UnifiedRow) {
-    const raw         = row.raw as Invoice & PartialPayment
-    const contactMail = raw.CONTACT_MAIL ?? ''
+    const raw = row.raw as Invoice & PartialPayment
+    // Dialog sofort oeffnen und mit den bekannten Werten fuellen; Betreff/Text
+    // kommen gleich darauf vom Server nach (dort werden die Platzhalter der
+    // Vorlage gegen die Werte dieses Belegs ersetzt).
     setEmailRow(row)
-    setEmailTo(contactMail)
-    setEmailSubject(row.source === 'invoice'
-      ? `Rechnung ${row.number ?? ''}`
-      : `Abschlagsrechnung ${row.number ?? ''}`)
+    setEmailTo(raw.CONTACT_MAIL ?? '')
+    setEmailSubject('')
     setEmailBody('')
     setEmailMsg(null)
+    setEmailLoading(true)
+    const load = row.source === 'invoice' ? fetchInvoiceEmailPreview(raw.ID) : fetchPpEmailPreview(raw.ID)
+    load
+      .then(p => {
+        setEmailTo(t => t || p.to)
+        setEmailSubject(p.subject)
+        setEmailBody(p.body)
+      })
+      .catch(() => {
+        // Vorschau fehlgeschlagen: der Versand greift serverseitig ohnehin auf
+        // die Vorlage zurueck — hier nur ein brauchbarer Betreff als Notnagel.
+        setEmailSubject(row.source === 'invoice'
+          ? `Rechnung ${row.number ?? ''}`
+          : `Abschlagsrechnung ${row.number ?? ''}`)
+      })
+      .finally(() => setEmailLoading(false))
   }
 
   const sendEmailMut = useMutation({
-    mutationFn: ({ row, to, subject, body }: { row: UnifiedRow; to: string; subject: string; body: string }) => {
-      const id = (row.raw as Invoice & PartialPayment).ID
-      if (row.source === 'invoice') return sendInvoiceEmail(id, { emailTo: to, emailSubject: subject, emailBody: body })
-      return sendPpEmail(id, { emailTo: to, emailSubject: subject, emailBody: body })
-    },
+    mutationFn: ({ row, to, subject, body }: { row: UnifiedRow; to: string; subject: string; body: string }) =>
+      sendMailFor(row, { emailTo: to, emailSubject: subject, emailBody: body }),
     onSuccess: () => setEmailMsg({ text: 'E-Mail erfolgreich gesendet.', type: 'success' }),
     onError:   (e: Error) => setEmailMsg({ text: e.message, type: 'error' }),
   })
+
+  // ── Sammelversand ─────────────────────────────────────────────────────────────
+  const [batchOpen, setBatchOpen] = useState(false)
 
   const { data: invData, isLoading: invLoading } = useQuery({
     queryKey: ['invoices'],
@@ -432,6 +467,22 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     rows.filter(r => selected.has(r.key))
       .forEach((row, i) => setTimeout(() => openPdf(row), i * 300))
   }
+
+  // Versendbar ist, was gebucht ist — gleiche Bedingung wie beim Einzelversand
+  // im Zeilenmenue. Entwuerfe und Stornos bleiben aussen vor.
+  const selectedSendable = useMemo(
+    () => rows.filter(r => selected.has(r.key) && r.statusClass === 'booked'),
+    [rows, selected],
+  )
+  const batchItems = useMemo<BatchEmailItem[]>(
+    () => selectedSendable.map(r => ({
+      key:   r.key,
+      label: r.number ?? `#${(r.raw as Invoice & PartialPayment).ID}`,
+      sub:   [r.typ, r.address].filter(Boolean).join(' · '),
+      to:    (r.raw as Invoice & PartialPayment).CONTACT_MAIL ?? '',
+    })),
+    [selectedSendable],
+  )
 
   const payMut = useMutation({
     mutationFn: createPayment,
@@ -778,6 +829,17 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
           <button className="btn btn-sm" onClick={openSelectedPdfs}>
             PDFs öffnen ({selected.size})
           </button>
+          <Can permission="invoices.send_email">
+            <button
+              className="btn btn-sm"
+              onClick={() => setBatchOpen(true)}
+              disabled={selectedSendable.length === 0}
+              title={selectedSendable.length === 0 ? 'Nur gebuchte Rechnungen können versendet werden' : undefined}
+            >
+              <Mail size={13} strokeWidth={1.75} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+              Rechnungen versenden ({selectedSendable.length})
+            </button>
+          </Can>
           <button className="btn btn-sm" style={{ color: 'var(--text-3)' }} onClick={() => setSelected(new Set())}>
             Auswahl aufheben
           </button>
@@ -1241,17 +1303,18 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Nachricht (optional)</label>
+              <label className="form-label">Nachricht</label>
               <textarea
                 className="form-control"
-                rows={5}
+                rows={8}
                 value={emailBody}
                 onChange={e => setEmailBody(e.target.value)}
-                placeholder="Sehr geehrte Damen und Herren,&#10;im Anhang finden Sie …"
+                placeholder={emailLoading ? 'Lade Textvorlage …' : 'Sehr geehrte Damen und Herren,\nim Anhang finden Sie …'}
               />
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
-              📎 PDF wird automatisch angehängt.
+              📎 PDF wird automatisch angehängt. Betreff und Text stammen aus der Textvorlage
+              (Einstellungen → E-Mail-Versand) und können hier angepasst werden.
             </div>
             {emailMsg && (
               <Message text={emailMsg.text} type={emailMsg.type} />
@@ -1263,7 +1326,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={sendEmailMut.isPending || !emailTo}
+                disabled={sendEmailMut.isPending || emailLoading || !emailTo}
                 onClick={() => sendEmailMut.mutate({ row: emailRow, to: emailTo, subject: emailSubject, body: emailBody })}
               >
                 {sendEmailMut.isPending ? 'Senden…' : 'Senden'}
@@ -1272,6 +1335,26 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
           </div>
         )}
       </Modal>
+
+      {/* Sammelversand — nur gemountet, solange offen: so startet jeder Aufruf
+          mit frischem Zustand (Empfaenger, Status, Fehler). */}
+      {batchOpen && <BatchEmailModal
+        title={`Rechnungen versenden (${batchItems.length})`}
+        docLabel="Rechnung"
+        items={batchItems}
+        subject={invoiceTemplate?.subject ?? '{{belegart}} {{belegnummer}}'}
+        body={invoiceTemplate?.body ?? ''}
+        onSend={(item, to, subject, body) => {
+          const row = selectedSendable.find(r => r.key === item.key)
+          if (!row) return Promise.reject(new Error('Rechnung nicht mehr in der Auswahl'))
+          return sendMailFor(row, { emailTo: to, emailSubject: subject, emailBody: body })
+        }}
+        onSent={() => {
+          void qc.invalidateQueries({ queryKey: ['invoices'] })
+          void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+        }}
+        onClose={() => setBatchOpen(false)}
+      />}
     </div>
   )
 }

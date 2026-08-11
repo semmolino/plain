@@ -5,6 +5,7 @@ const ctrl    = require("../controllers/partialPayments");
 const att     = require("../controllers/attachments");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { sendMail }    = require("../services/emailService");
+const emailTemplates  = require("../services/emailTemplates");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
@@ -48,13 +49,29 @@ module.exports = (supabase) => {
   router.patch ("/:id/attachments/:attId",     requirePermission("invoices.edit"), (req, res) => att.patch (req, res, supabase));
   router.delete("/:id/attachments/:attId",     requirePermission("invoices.edit"), (req, res) => att.remove(req, res, supabase));
 
+  // GET /partial-payments/:id/email-preview — Empfaenger + Betreff/Text aus der
+  // E-Mail-Textvorlage, Platzhalter gegen diese Abschlagsrechnung aufgeloest.
+  router.get("/:id/email-preview", requirePermission("invoices.send_email"), async (req, res) => {
+    try {
+      const composed = await emailTemplates.composeInvoiceEmail(supabase, {
+        tenantId: req.tenantId,
+        docType:  "PARTIAL_PAYMENT",
+        docId:    Number(req.params.id),
+      });
+      return res.json(composed);
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   // POST /partial-payments/:id/email  — send partial payment PDF via SMTP
+  // emailSubject/emailBody optional -> Textvorlage; Platzhalter werden immer
+  // aufgeloest (siehe routes/invoices.js).
   router.post("/:id/email", requirePermission("invoices.send_email"), async (req, res) => {
     try {
       const ppId     = Number(req.params.id);
       const tenantId = req.tenantId;
       const { emailTo, emailSubject, emailBody } = req.body || {};
-      if (!emailTo) return res.status(400).json({ error: "emailTo erforderlich" });
 
       const { data: pp } = await supabase
         .from("PARTIAL_PAYMENT")
@@ -64,16 +81,23 @@ module.exports = (supabase) => {
         .maybeSingle();
       if (!pp) return res.status(404).json({ error: "Anzahlung nicht gefunden" });
 
+      const composed = await emailTemplates.composeInvoiceEmail(supabase, {
+        tenantId, docType: "PARTIAL_PAYMENT", docId: ppId,
+        subject: emailSubject, body: emailBody,
+      });
+      const to = emailTo || composed.to;
+      if (!to) return res.status(400).json({ error: "Keine E-Mail-Adresse hinterlegt" });
+
       const { pdf } = await renderDocumentPdf({ supabase, tenantId, docType: "PARTIAL_PAYMENT", docId: ppId });
       const pdfBuffer = Buffer.from(pdf);
       const safeName  = (pp.PARTIAL_PAYMENT_NUMBER || `Anzahlung_${ppId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
       await sendMail({
         supabase,
         tenantId,
-        to:          emailTo,
-        subject:     emailSubject || `Abschlagsrechnung ${pp.PARTIAL_PAYMENT_NUMBER}`,
-        html:        emailBody ? `<pre style="font-family:inherit;white-space:pre-wrap">${emailBody}</pre>` : undefined,
-        text:        emailBody,
+        to,
+        subject:     composed.subject,
+        html:        composed.body ? `<pre style="font-family:inherit;white-space:pre-wrap">${composed.body}</pre>` : undefined,
+        text:        composed.body,
         attachments: [{ filename: `${safeName}.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
       });
       return res.json({ sent: true });

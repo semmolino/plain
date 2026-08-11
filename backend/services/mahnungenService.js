@@ -3,6 +3,7 @@
  */
 const { sendMail }         = require("./emailService");
 const { renderMahnungPdf } = require("../services_pdf_render");
+const emailTemplates       = require("./emailTemplates");
 
 const DEFAULT_SETTINGS = [
   { mahnstufe: 1, label: "Zahlungserinnerung", days_after_due: 7,  days_after_prev: 0,  fee: 0  },
@@ -441,15 +442,29 @@ async function upsertMahnung(supabase, { body, tenantId, employeeId }) {
 
 // ── Send Email ────────────────────────────────────────────────────────────────
 
-async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, emailBody, tenantId, employeeId }) {
-  // Load MAHNUNG record
-  const { data: mahnung, error: mErr } = await supabase
+/** Laedt die MAHNUNG-Zeile eines Mandanten oder wirft 404. */
+async function loadMahnung(supabase, { mahnungId, tenantId }) {
+  const { data, error } = await supabase
     .from("MAHNUNG")
     .select("*")
     .eq("ID", mahnungId)
     .eq("TENANT_ID", tenantId)
     .single();
-  if (mErr || !mahnung) throw { status: 404, message: "Mahnung nicht gefunden" };
+  if (error || !data) throw { status: 404, message: "Mahnung nicht gefunden" };
+  return data;
+}
+
+/**
+ * Empfaenger + Betreff/Text aus der Mahnungs-Textvorlage, Platzhalter bereits
+ * gegen diese Mahnung aufgeloest — fuellt den Versanddialog vor.
+ */
+async function getMahnungEmailPreview(supabase, { mahnungId, tenantId }) {
+  const mahnung = await loadMahnung(supabase, { mahnungId, tenantId });
+  return emailTemplates.composeMahnungEmail(supabase, { tenantId, mahnung });
+}
+
+async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, emailBody, tenantId, employeeId }) {
+  const mahnung = await loadMahnung(supabase, { mahnungId, tenantId });
 
   // Load settings for fee
   const { data: settings } = await supabase
@@ -459,6 +474,15 @@ async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, em
     .eq("MAHNSTUFE", mahnung.MAHNSTUFE)
     .maybeSingle();
   const fee = settings ? Number(settings.FEE) : 0;
+
+  // Betreff/Text: uebergebene Werte gewinnen, sonst greift die Textvorlage.
+  // Platzhalter werden in beiden Faellen aufgeloest -> Sammelversand mit einem
+  // Text fuer viele Mahnungen.
+  const composed = await emailTemplates.composeMahnungEmail(supabase, {
+    tenantId, mahnung, subject: emailSubject, body: emailBody,
+  });
+  const to = emailTo || composed.to;
+  if (!to) throw { status: 400, message: "Keine E-Mail-Adresse hinterlegt" };
 
   // Generate PDF
   const pdfBuffer = await renderMahnungPdf(supabase, {
@@ -477,10 +501,10 @@ async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, em
   await sendMail({
     supabase,
     tenantId,
-    to:      emailTo,
-    subject: emailSubject,
-    html:    emailBody ? `<pre style="font-family:inherit;white-space:pre-wrap">${emailBody}</pre>` : undefined,
-    text:    emailBody,
+    to,
+    subject: composed.subject,
+    html:    composed.body ? `<pre style="font-family:inherit;white-space:pre-wrap">${composed.body}</pre>` : undefined,
+    text:    composed.body,
     attachments: [{ filename, content: pdfBuffer, contentType: "application/pdf" }],
   });
 
@@ -490,8 +514,8 @@ async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, em
     MAHNUNG_ID:    mahnungId,
     MAHNSTUFE:     mahnung.MAHNSTUFE,
     EMPLOYEE_ID:   employeeId || null,
-    EMAIL_TO:      emailTo,
-    EMAIL_SUBJECT: emailSubject,
+    EMAIL_TO:      to,
+    EMAIL_SUBJECT: composed.subject,
     EMAIL_SENT:    true,
     FEE_AMOUNT:    fee,
   });
@@ -607,6 +631,7 @@ module.exports = {
   listMahnungen,
   upsertMahnung,
   sendMahnungEmail,
+  getMahnungEmailPreview,
   getSettings,
   saveSettings,
   getTextTemplates,

@@ -106,6 +106,7 @@ const recentsRoutes              = require("./routes/recents")(supabase);
 const gamificationRoutes         = require("./routes/gamification")(supabase);
 const tenantsRoutes              = require("./routes/tenants")(supabase);
 const emailSettingsRoutes        = require("./routes/emailSettings")(supabase);
+const emailTemplatesRoutes       = require("./routes/emailTemplates")(supabase);
 const importRoutes               = require("./routes/import")(supabase);
 const serviceRoutes              = require("./routes/service")(supabase);
 const licenseRoutes              = require("./routes/license")(supabase);
@@ -172,6 +173,10 @@ app.use("/api/v1/tenants", ...authChain, tenantsRoutes);
 
 // Per-Tenant SMTP-/E-Mail-Versand-Einstellungen
 app.use("/api/v1/email-settings", ...authChain, emailSettingsRoutes);
+
+// E-Mail-Textvorlagen (Rechnungen / Mahnungen) — lesen fuer alle, aendern via
+// settings.text_templates.edit (Guard im Router).
+app.use("/api/v1/email-templates", ...authChain, emailTemplatesRoutes);
 
 // Geführter Datenimport (Onboarding) — alle Endpunkte via requirePermission('import.manage')
 app.use("/api/v1/import", ...authChain, importRoutes);
