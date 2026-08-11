@@ -92,6 +92,7 @@ const numberRangesRoutes     = require("./routes/numberRanges")(supabase);
 const reportsRoutes          = require("./routes/reports")(supabase);
 const finalInvoicesRoutes    = require("./routes/finalInvoices")(supabase);
 const notificationsRoutes    = require("./routes/notifications")(supabase);
+const pushRoutes             = require("./routes/push")(supabase);
 const angeboteRoutes         = require("./routes/angebote")(supabase);
 const nachtraegeRoutes       = require("./routes/nachtraege")(supabase);
 const kostensatzRoutes       = require("./routes/kostensatz")(supabase);
@@ -147,6 +148,7 @@ app.use("/api/v1/number-ranges",     ...authChain, numberRangesRoutes);
 app.use("/api/v1/reports",           ...authChain, reportsRoutes);
 app.use("/api/v1/final-invoices",    ...authChain, finalInvoicesRoutes);
 app.use("/api/v1/notifications",     ...authChain, notificationsRoutes);
+app.use("/api/v1/push",              ...authChain, pushRoutes);
 app.use("/api/v1/angebote",          ...authChain, angeboteRoutes);
 app.use("/api/v1/nachtraege",        ...authChain, nachtraegeRoutes);
 app.use("/api/v1/kostensatz",        ...authChain, kostensatzRoutes);
@@ -187,10 +189,12 @@ app.use("/api/v1/license", ...authChain, licenseRoutes);
 const FRONTEND_DIST = path.join(__dirname, "../frontend-react/dist");
 app.use(express.static(FRONTEND_DIST, {
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith("index.html")) {
+    if (filePath.endsWith("index.html") || filePath.endsWith("sw.js")) {
       // Kein Caching von index.html -- darin stehen die Hashes der
       // aktuellen JS/CSS-Bundles. Sonst zeigt Railway/CDN/Browser
       // nach Deploys weiterhin alte Versionen.
+      // sw.js (Service Worker) ebenso ungecacht ausliefern, damit
+      // Aktualisierungen der Push-Logik zeitnah greifen.
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");

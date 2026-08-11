@@ -546,6 +546,24 @@ export const HELP = {
       </>
     ),
   },
+  'notifications.push': {
+    title: 'Push-Benachrichtigungen',
+    body: (
+      <>
+        Erhalte dieselben Benachrichtigungen wie in der App zusätzlich als
+        <strong> Push direkt aufs Gerät</strong> — auch wenn plan&amp;simple gerade
+        geschlossen ist. Die Freigabe gilt <strong>nur für dieses Gerät</strong>;
+        auf jedem Handy/Tablet/Rechner separat aktivierbar. <strong>Welche</strong>{' '}
+        Benachrichtigungen du bekommst, steuert unverändert die normale
+        Benachrichtigungs-Konfiguration — Push ist nur ein zusätzlicher
+        Zustellweg.
+        <br />
+        <strong>iPhone/iPad:</strong> funktioniert erst, wenn du plan&amp;simple
+        über „Teilen → Zum Home-Bildschirm" installiert und aus diesem Symbol
+        geöffnet hast.
+      </>
+    ),
+  },
 
   // ── Unternehmen / Monatsabschluss ────────────────────────────────────────
   'company.creditor_id': {
