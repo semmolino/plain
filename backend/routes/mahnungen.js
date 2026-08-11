@@ -108,6 +108,20 @@ module.exports = (supabase) => {
     }
   });
 
+  // GET /mahnungen/:id/email-preview — Empfaenger + Betreff/Text aus der
+  // Mahnungs-Textvorlage, Platzhalter gegen diese Mahnung aufgeloest.
+  router.get("/:id/email-preview", async (req, res) => {
+    try {
+      const data = await svc.getMahnungEmailPreview(supabase, {
+        mahnungId: Number(req.params.id),
+        tenantId:  tid(req),
+      });
+      res.json(data);
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   // POST /mahnungen/:id/send — Mahnung versenden
   router.post("/:id/send", requirePermission("dunning.send"), async (req, res) => {
     try {

@@ -66,6 +66,11 @@ import {
   fetchEmailSettings, saveEmailSettings, sendEmailSettingsTest,
   type EmailSettingsPayload,
 } from '@/api/emailSettings'
+import {
+  fetchEmailTemplates, saveEmailTemplate, resetEmailTemplate,
+  EMAIL_TEMPLATE_LABELS, EMAIL_TEMPLATE_HINTS, placeholdersFor,
+  type EmailTemplateKey,
+} from '@/api/emailTemplates'
 import { useAuthStore } from '@/store/authStore'
 
 const PAGE_TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
@@ -3577,6 +3582,152 @@ function EmailVersandSection() {
   )
 }
 
+// ── E-Mail-Textvorlagen (Rechnungs- / Mahnungsversand) ────────────────────────
+
+/**
+ * Je eine Vorlage fuer Rechnungen und Mahnungen. Sie fuellt die Versanddialoge
+ * vor (Einzel- wie Sammelversand); Platzhalter loest der Server beim Versand
+ * gegen die Werte des jeweiligen Belegs auf.
+ *
+ * Kein Strg+S: im selben Tab steht bereits EmailVersandSection mit eigenem
+ * Ctrl+S-Handler — beide wuerden gleichzeitig feuern.
+ */
+function EmailTextvorlagenSection() {
+  const qc = useQueryClient()
+  const { data: raw, isLoading } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn:  () => fetchEmailTemplates().then(r => r.data),
+  })
+
+  const [activeKey, setActiveKey] = useState<EmailTemplateKey>('invoice')
+  // Nur die tatsaechlich bearbeiteten Vorlagen liegen hier; alles andere kommt
+  // direkt aus der Query. So braucht es keinen Sync-Effect, und ein Reset
+  // (Draft loeschen) faellt automatisch auf den Serverwert zurueck.
+  const [drafts,    setDrafts]    = useState<Record<string, { subject: string; body: string }>>({})
+  const [msg,       setMsg]       = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [activeField, setActiveField] = useState<'subject' | 'body'>('body')
+  const subjectRef = useRef<HTMLInputElement>(null)
+  const bodyRef    = useRef<HTMLTextAreaElement>(null)
+
+  const template = (raw ?? []).find(t => t.key === activeKey)
+  const current  = drafts[activeKey] ?? { subject: template?.subject ?? '', body: template?.body ?? '' }
+
+  const saveMut = useMutation({
+    mutationFn: () => saveEmailTemplate(activeKey, current),
+    onSuccess:  () => { void qc.invalidateQueries({ queryKey: ['email-templates'] }); setMsg({ type: 'ok', text: 'Textvorlage gespeichert.' }) },
+    onError:    (e: Error) => setMsg({ type: 'err', text: e.message }),
+  })
+
+  const resetMut = useMutation({
+    mutationFn: () => resetEmailTemplate(activeKey),
+    onSuccess:  () => {
+      setDrafts(d => { const n = { ...d }; delete n[activeKey]; return n })
+      void qc.invalidateQueries({ queryKey: ['email-templates'] })
+      setMsg({ type: 'ok', text: 'Auf Standardtext zurückgesetzt.' })
+    },
+    onError: (e: Error) => setMsg({ type: 'err', text: e.message }),
+  })
+
+  function update(field: 'subject' | 'body', value: string) {
+    setDrafts(d => ({ ...d, [activeKey]: { ...current, [field]: value } }))
+    setMsg(null)
+  }
+
+  function insertToken(token: string) {
+    const el  = activeField === 'subject' ? subjectRef.current : bodyRef.current
+    const cur = current[activeField] ?? ''
+    if (el) {
+      const start = el.selectionStart ?? cur.length
+      const end   = el.selectionEnd   ?? cur.length
+      update(activeField, cur.slice(0, start) + token + cur.slice(end))
+      requestAnimationFrame(() => { el.focus(); const pos = start + token.length; el.setSelectionRange(pos, pos) })
+    } else {
+      update(activeField, cur + token)
+    }
+  }
+
+  if (isLoading) return <p className="empty-note">Lade…</p>
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 12 }}>
+        Betreff und Text für den E-Mail-Versand. Die Vorlage füllt den Versanddialog vor — beim Einzelversand
+        wie beim Sammelversand aus der Rechnungs- bzw. Mahnungsliste. Angepasst werden kann der Text dort
+        weiterhin je Versand.
+      </p>
+
+      <div className="text-template-types">
+        {(Object.keys(EMAIL_TEMPLATE_LABELS) as EmailTemplateKey[]).map(k => (
+          <button
+            key={k}
+            className={`text-template-type-btn${activeKey === k ? ' active' : ''}`}
+            onClick={() => { setActiveKey(k); setMsg(null) }}
+          >
+            {EMAIL_TEMPLATE_LABELS[k]}
+          </button>
+        ))}
+      </div>
+
+      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
+        {EMAIL_TEMPLATE_HINTS[activeKey]}
+        {template && !template.isCustom && ' — aktuell greift der Standardtext.'}
+      </p>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', margin: '12px 0' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Platzhalter einfügen:</span>
+        {placeholdersFor(activeKey).map(p => (
+          <button key={p.token} type="button" className="btn-small" onClick={() => insertToken(p.token)} title={p.token}>
+            {p.label}
+          </button>
+        ))}
+        <InfoHint title="Platzhalter">
+          Diese Felder werden beim Versand automatisch durch die echten Werte des Belegs ersetzt
+          (z. B. <code>{'{{belegnummer}}'}</code> → die Rechnungsnummer). Klicke zuerst in Betreff oder
+          Nachricht und dann auf einen Platzhalter — er wird an der Cursorposition eingefügt.
+        </InfoHint>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Betreff</label>
+        <input
+          ref={subjectRef}
+          type="text"
+          className="form-control"
+          value={current.subject}
+          onFocus={() => setActiveField('subject')}
+          onChange={e => update('subject', e.target.value)}
+        />
+      </div>
+      <div className="form-group">
+        <label className="form-label">Nachricht</label>
+        <textarea
+          ref={bodyRef}
+          className="form-control"
+          rows={10}
+          value={current.body}
+          onFocus={() => setActiveField('body')}
+          onChange={e => update('body', e.target.value)}
+        />
+      </div>
+
+      {msg && <Message type={msg.type === 'ok' ? 'success' : 'error'} text={msg.text} />}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+          {saveMut.isPending ? 'Speichern…' : 'Textvorlage speichern'}
+        </button>
+        <button
+          className="btn-secondary" type="button"
+          disabled={resetMut.isPending || !template?.isCustom}
+          onClick={() => resetMut.mutate()}
+          title={template?.isCustom ? undefined : 'Es greift bereits der Standardtext'}
+        >
+          {resetMut.isPending ? 'Setzt zurück…' : 'Auf Standardtext zurücksetzen'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function AdminPage() {
@@ -3603,7 +3754,16 @@ export function AdminPage() {
         {tab === 'datenimport'           && <ImportSection />}
         {tab === 'nummernkreise'         && <NummernkreiseSection />}
         {tab === 'unternehmen'           && <UnternehmenSection />}
-        {tab === 'email'                 && <EmailVersandSection />}
+        {tab === 'email'                 && (
+          <>
+            <EmailVersandSection />
+            <Can permission="settings.text_templates.edit">
+              <hr style={{ margin: '32px 0', border: 0, borderTop: '1px solid var(--border)' }} />
+              <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 12px' }}>Textvorlagen für den Versand</h2>
+              <EmailTextvorlagenSection />
+            </Can>
+          </>
+        )}
         {tab === 'vorbelegungen'         && <VorbelegungenSection />}
         {tab === 'arbzg'                 && (
           <>

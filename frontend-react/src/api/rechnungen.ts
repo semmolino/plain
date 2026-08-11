@@ -1,4 +1,5 @@
 import { apiClient, downloadWithAuth, openPdfWithAuth } from './client'
+import type { EmailPreview } from './emailTemplates'
 
 // ── Lookup types ──────────────────────────────────────────────────────────────
 
@@ -525,12 +526,21 @@ export const deletePayment = (id: number) =>
 
 // ── Email ─────────────────────────────────────────────────────────────────────
 
+// Betreff/Text sind optional: fehlen sie, nimmt der Server die E-Mail-Text-
+// vorlage des Mandanten. Platzhalter ({{belegnummer}} …) loest er in jedem
+// Fall auf — deshalb darf beim Sammelversand ein Text fuer alle Belege gelten.
 export const sendInvoiceEmail = (
   id: number,
-  payload: { emailTo: string; emailSubject: string; emailBody: string }
+  payload: { emailTo?: string; emailSubject?: string; emailBody?: string }
 ) => apiClient.post<{ sent: boolean }>(`/invoices/${id}/email`, payload)
 
 export const sendPpEmail = (
   id: number,
-  payload: { emailTo: string; emailSubject: string; emailBody: string }
+  payload: { emailTo?: string; emailSubject?: string; emailBody?: string }
 ) => apiClient.post<{ sent: boolean }>(`/partial-payments/${id}/email`, payload)
+
+export const fetchInvoiceEmailPreview = (id: number) =>
+  apiClient.get<EmailPreview>(`/invoices/${id}/email-preview`)
+
+export const fetchPpEmailPreview = (id: number) =>
+  apiClient.get<EmailPreview>(`/partial-payments/${id}/email-preview`)

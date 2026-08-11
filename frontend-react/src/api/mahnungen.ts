@@ -1,4 +1,5 @@
 import { apiClient, openPdfWithAuth } from './client'
+import type { EmailPreview } from './emailTemplates'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -124,10 +125,15 @@ export const upsertMahnung = (payload: {
   notes?:                  string | null
 }) => apiClient.put<{ id: number }>('/mahnungen/upsert', payload)
 
+// Betreff/Text optional -> Server nimmt die Mahnungs-Textvorlage. Platzhalter
+// werden immer aufgeloest, auch in selbst geschriebenen Texten.
 export const sendMahnungEmail = (
   mahnungId: number,
-  payload: { emailTo: string; emailSubject: string; emailBody: string }
+  payload: { emailTo?: string; emailSubject?: string; emailBody?: string }
 ) => apiClient.post<{ sent: boolean }>(`/mahnungen/${mahnungId}/send`, payload)
+
+export const fetchMahnungEmailPreview = (mahnungId: number) =>
+  apiClient.get<EmailPreview>(`/mahnungen/${mahnungId}/email-preview`)
 
 export const openMahnungPdf = (mahnungId: number) =>
   openPdfWithAuth(`/mahnungen/${mahnungId}/pdf`)

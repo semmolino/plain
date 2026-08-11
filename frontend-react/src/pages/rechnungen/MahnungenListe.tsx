@@ -13,11 +13,13 @@ import { ConfirmModal }   from '@/components/ui/ConfirmModal'
 import { HasFeature }     from '@/components/ui/HasFeature'
 import { RecentList }     from '@/components/recents/RecentList'
 import { trackRecent }    from '@/api/recents'
+import { BatchEmailModal, type BatchEmailItem } from '@/components/ui/BatchEmailModal'
 import {
   fetchMahnungen, upsertMahnung, sendMahnungEmail, openMahnungPdf,
-  fetchMahnungSettings,
+  fetchMahnungSettings, fetchMahnungEmailPreview,
   type MahnungRow, type MahnungSettingsLevel,
 } from '@/api/mahnungen'
+import { fetchEmailTemplates } from '@/api/emailTemplates'
 import { fetchEmployeeList, type Employee } from '@/api/mitarbeiter'
 import {
   fetchPayments, createPayment, deletePayment,
@@ -356,12 +358,28 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
     setSelected(s)
   }
 
-  const selectedWithMahnung = rows.filter(r => selected.has(rowKey(r)) && r.mahnungId !== null).length
+  // Versendbar ist nur, wofuer bereits eine Mahnung angelegt wurde (Mahnstufe
+  // gesetzt/gespeichert) — sonst gibt es kein PDF und keine MAHNUNG-ID.
+  const selectedMahnungen = useMemo(
+    () => rows.filter(r => selected.has(rowKey(r)) && r.mahnungId !== null),
+    [rows, selected],
+  )
+  const selectedWithMahnung = selectedMahnungen.length
 
   function openSelectedPdfs() {
-    const selRows = rows.filter(r => selected.has(rowKey(r)) && r.mahnungId !== null)
-    selRows.forEach((r, i) => setTimeout(() => openMahnungPdf(r.mahnungId!), i * 300))
+    selectedMahnungen.forEach((r, i) => setTimeout(() => openMahnungPdf(r.mahnungId!), i * 300))
   }
+
+  const batchItems = useMemo<BatchEmailItem[]>(
+    () => selectedMahnungen.map(r => ({
+      key:   rowKey(r),
+      label: r.number,
+      sub:   [STUFEN_LABELS[r.mahnstufe] ?? `Stufe ${r.mahnstufe}`, r.addressName1].filter(Boolean).join(' · '),
+      to:    r.contactMail ?? '',
+    })),
+    [selectedMahnungen],
+  )
+  const [batchOpen, setBatchOpen] = useState(false)
 
   // ── Inline save mutation ──────────────────────────────────────────────────────
   const inlineMut = useMutation({
@@ -460,15 +478,40 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody,    setEmailBody]    = useState('')
   const [emailMsg,     setEmailMsg]     = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [emailLoading, setEmailLoading] = useState(false)
+
+  // Mahnungs-Textvorlage (Platzhalter unaufgeloest) — fuellt den Sammelversand
+  // vor. Der Einzelversand nimmt die vom Server belegbezogen aufgeloeste
+  // Fassung (email-preview).
+  const { data: mailTemplates } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn:  () => fetchEmailTemplates().then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+  const dunningTemplate = mailTemplates?.find(t => t.key === 'dunning')
 
   function openEmailFor(r: MahnungRow) {
     const stufe = r.mahnstufe || 0
     const lv    = settingsByLevel[stufe]
     setEmailRow(r)
     setEmailTo(r.contactMail ?? '')
-    setEmailSubject(`${lv?.label ?? STUFEN_LABELS[stufe] ?? 'Mahnung'} zu ${r.number}`)
-    setEmailBody(lv?.headerText ?? '')
+    setEmailSubject('')
+    setEmailBody('')
     setEmailMsg(null)
+    if (!r.mahnungId) return
+    setEmailLoading(true)
+    fetchMahnungEmailPreview(r.mahnungId)
+      .then(p => {
+        setEmailTo(t => t || p.to)
+        setEmailSubject(p.subject)
+        setEmailBody(p.body)
+      })
+      .catch(() => {
+        // Vorschau fehlgeschlagen: Versand greift serverseitig ohnehin auf die
+        // Vorlage zurueck — hier nur ein brauchbarer Betreff als Notnagel.
+        setEmailSubject(`${lv?.label ?? STUFEN_LABELS[stufe] ?? 'Mahnung'} zu ${r.number}`)
+      })
+      .finally(() => setEmailLoading(false))
   }
 
   const sendMut = useMutation({
@@ -664,6 +707,17 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
           <button className="btn btn-sm" onClick={openSelectedPdfs} disabled={selectedWithMahnung === 0}>
             PDFs öffnen ({selectedWithMahnung})
           </button>
+          <HasFeature feature="dunning.email">
+            <button
+              className="btn btn-sm"
+              onClick={() => setBatchOpen(true)}
+              disabled={selectedWithMahnung === 0}
+              title={selectedWithMahnung === 0 ? 'Erst Mahnstufe setzen und speichern' : undefined}
+            >
+              <Mail size={13} strokeWidth={1.75} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+              Mahnungen versenden ({selectedWithMahnung})
+            </button>
+          </HasFeature>
           <button className="btn btn-sm" style={{ color: 'var(--text-3)' }} onClick={() => setSelected(new Set())}>
             Auswahl aufheben
           </button>
@@ -973,12 +1027,20 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
             </div>
             <div className="form-group">
               <label className="form-label">Nachricht</label>
-              <textarea className="form-control" rows={6} value={emailBody} onChange={e => setEmailBody(e.target.value)} />
+              <textarea
+                className="form-control" rows={8} value={emailBody}
+                placeholder={emailLoading ? 'Lade Textvorlage …' : undefined}
+                onChange={e => setEmailBody(e.target.value)}
+              />
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+              📎 Mahnungs-PDF wird automatisch angehängt. Betreff und Text stammen aus der Textvorlage
+              (Einstellungen → E-Mail-Versand) und können hier angepasst werden.
             </div>
             {emailMsg && <Message type={emailMsg.type === 'ok' ? 'success' : 'error'} text={emailMsg.text} />}
             <DialogFooter>
               <button type="button" className="btn-secondary" onClick={() => setEmailRow(null)}>Abbrechen</button>
-              <button type="button" className="btn btn-primary" onClick={sendEmail} disabled={sendMut.isPending || !emailTo}>
+              <button type="button" className="btn btn-primary" onClick={sendEmail} disabled={sendMut.isPending || emailLoading || !emailTo}>
                 {sendMut.isPending ? 'Senden…' : 'Senden'}
               </button>
             </DialogFooter>
@@ -1093,6 +1155,23 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />
+
+      {/* ── Sammelversand ── nur gemountet, solange offen: frischer Zustand
+          (Empfaenger, Status, Fehler) bei jedem Aufruf. */}
+      {batchOpen && <BatchEmailModal
+        title={`Mahnungen versenden (${batchItems.length})`}
+        docLabel="Mahnung"
+        items={batchItems}
+        subject={dunningTemplate?.subject ?? '{{mahnstufe}} zu {{belegart}} {{belegnummer}}'}
+        body={dunningTemplate?.body ?? ''}
+        onSend={(item, to, subject, body) => {
+          const row = selectedMahnungen.find(r => rowKey(r) === item.key)
+          if (!row?.mahnungId) return Promise.reject(new Error('Mahnung nicht mehr in der Auswahl'))
+          return sendMahnungEmail(row.mahnungId, { emailTo: to, emailSubject: subject, emailBody: body })
+        }}
+        onSent={() => { void qc.invalidateQueries({ queryKey: ['mahnungen'] }) }}
+        onClose={() => setBatchOpen(false)}
+      />}
     </div>
   )
 }

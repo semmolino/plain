@@ -5,6 +5,7 @@ const ctrl    = require("../controllers/invoices");
 const att     = require("../controllers/attachments");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { sendMail }          = require("../services/emailService");
+const emailTemplates        = require("../services/emailTemplates");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
@@ -38,13 +39,31 @@ module.exports = (supabase) => {
   router.patch ("/:id/attachments/:attId",     requirePermission("invoices.edit"), (req, res) => att.patch (req, res, supabase));
   router.delete("/:id/attachments/:attId",     requirePermission("invoices.edit"), (req, res) => att.remove(req, res, supabase));
 
+  // GET /invoices/:id/email-preview — Empfaenger + Betreff/Text aus der
+  // E-Mail-Textvorlage, Platzhalter bereits gegen diese Rechnung aufgeloest.
+  router.get("/:id/email-preview", requirePermission("invoices.send_email"), async (req, res) => {
+    try {
+      const composed = await emailTemplates.composeInvoiceEmail(supabase, {
+        tenantId: req.tenantId,
+        docType:  "INVOICE",
+        docId:    Number(req.params.id),
+      });
+      return res.json(composed);
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   // POST /invoices/:id/email  — send invoice PDF via SMTP
+  // emailSubject/emailBody sind optional: fehlen sie, greift die Textvorlage
+  // des Mandanten. Platzhalter ({{belegnummer}} …) werden immer aufgeloest,
+  // auch in selbst eingetippten Texten — dadurch funktioniert der Sammelversand
+  // mit einem Text fuer viele Rechnungen.
   router.post("/:id/email", requirePermission("invoices.send_email"), async (req, res) => {
     try {
       const invoiceId = Number(req.params.id);
       const tenantId  = req.tenantId;
       const { emailTo, emailSubject, emailBody } = req.body || {};
-      if (!emailTo) return res.status(400).json({ error: "emailTo erforderlich" });
 
       const { data: inv } = await supabase
         .from("INVOICE")
@@ -54,16 +73,23 @@ module.exports = (supabase) => {
         .maybeSingle();
       if (!inv) return res.status(404).json({ error: "Rechnung nicht gefunden" });
 
+      const composed = await emailTemplates.composeInvoiceEmail(supabase, {
+        tenantId, docType: "INVOICE", docId: invoiceId,
+        subject: emailSubject, body: emailBody,
+      });
+      const to = emailTo || composed.to;
+      if (!to) return res.status(400).json({ error: "Keine E-Mail-Adresse hinterlegt" });
+
       const { pdf } = await renderDocumentPdf({ supabase, tenantId, docType: "INVOICE", docId: invoiceId });
       const safeName = (inv.INVOICE_NUMBER || `Rechnung_${invoiceId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
       const pdfBuffer = Buffer.from(pdf);
       await sendMail({
         supabase,
         tenantId,
-        to:          emailTo,
-        subject:     emailSubject || `Rechnung ${inv.INVOICE_NUMBER}`,
-        html:        emailBody ? `<pre style="font-family:inherit;white-space:pre-wrap">${emailBody}</pre>` : undefined,
-        text:        emailBody,
+        to,
+        subject:     composed.subject,
+        html:        composed.body ? `<pre style="font-family:inherit;white-space:pre-wrap">${composed.body}</pre>` : undefined,
+        text:        composed.body,
         attachments: [{ filename: `${safeName}.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
       });
       return res.json({ sent: true });
