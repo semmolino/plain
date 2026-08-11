@@ -364,3 +364,46 @@ export const runMonatsabschlussNow = () =>
 
 export const openMonatsabschlussPdf = () =>
   openPdfWithAuth('/stammdaten/monatsabschluss/pdf')
+
+// ── Leistungsphasen-Blöcke (konfigurierbar je Leistungsbild) ──────────────────
+
+export interface LphBlock {
+  ID:         number
+  NAME_SHORT: string
+  SORT_ORDER: number
+}
+
+export interface LphBlockPhase {
+  ID:         number
+  NAME_SHORT: string
+  NAME_LONG:  string | null
+  BLOCK_ID:   number | null
+}
+
+export interface LphBlocksData {
+  available:   boolean
+  feeMasterId: number
+  blocks:      LphBlock[]
+  phases:      LphBlockPhase[]
+}
+
+// key: Client-seitiger Schlüssel für neue Blöcke (id === null); bestehende tragen id.
+export interface LphBlockInput {
+  key:        string
+  id:         number | null
+  name_short: string
+  sort_order: number
+}
+
+export const fetchLphBlocks = (feeMasterId: number) =>
+  apiClient.get<{ data: LphBlocksData }>(`/stammdaten/lph-blocks?fee_master_id=${feeMasterId}`)
+
+export const saveLphBlocks = (body: {
+  fee_master_id: number
+  blocks:        LphBlockInput[]
+  assignments:   Record<number, string | null>
+}) =>
+  apiClient.post<{ data: LphBlocksData }>('/stammdaten/lph-blocks/save', body)
+
+export const seedDefaultLphBlocks = (feeMasterId: number) =>
+  apiClient.post<{ data: LphBlocksData }>('/stammdaten/lph-blocks/seed-default', { fee_master_id: feeMasterId })

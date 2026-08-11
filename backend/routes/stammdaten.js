@@ -4,6 +4,8 @@ const express = require("express");
 const ctrl = require("../controllers/stammdaten");
 const bookingTypesCtrl = require("../controllers/bookingTypes");
 const textSnippetsCtrl = require("../controllers/textSnippets");
+const lphBlocksCtrl = require("../controllers/lphBlocks");
+const din276Ctrl = require("../controllers/din276");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
@@ -36,10 +38,26 @@ module.exports = (supabase) => {
   router.post("/fee-calculation-masters/:id/phases/init",             requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcPhasesInit(req, res, supabase));
   router.patch("/fee-calculation-phases/:id",                         requirePermission("projects.calculations.edit"), (req, res) => ctrl.patchFeeCalcPhase(req, res, supabase));
   router.post("/fee-calculation-masters/:id/phases/save",             requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcPhasesSave(req, res, supabase));
+  router.get("/fee-calculation-masters/:id/zone-splits",              (req, res) => ctrl.getFeeCalcZoneSplits(req, res, supabase));
+  router.post("/fee-calculation-masters/:id/zone-splits/save",        requirePermission("projects.calculations.edit"), (req, res) => ctrl.saveFeeCalcZoneSplits(req, res, supabase));
   router.delete("/fee-calculation-masters/:id",                       requirePermission("projects.calculations.delete"), (req, res) => ctrl.deleteFeeCalcMaster(req, res, supabase));
   router.post("/fee-calculation-masters/:id/add-to-project-structure", requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcAddToStructure(req, res, supabase));
   router.post("/fee-calculation-masters/:id/add-to-offer-structure",   requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcAddToOfferStructure(req, res, supabase));
   router.post("/fee-calculation-masters/:id/sync-to-structure",        requirePermission("projects.calculations.edit"), (req, res) => ctrl.syncFeeCalcToStructure(req, res, supabase));
+  // Leistungsphasen-Blöcke (konfigurierbar je Leistungsbild)
+  router.get("/lph-blocks",                                          (req, res) => lphBlocksCtrl.getBlocks(req, res, supabase));
+  router.post("/lph-blocks/save",                                    requirePermission("settings.basedata.edit"), (req, res) => lphBlocksCtrl.saveBlocks(req, res, supabase));
+  router.post("/lph-blocks/seed-default",                            requirePermission("settings.basedata.edit"), (req, res) => lphBlocksCtrl.seedDefault(req, res, supabase));
+
+  // DIN-276-Kostenermittlung (Grundlage anrechenbare Baukosten)
+  router.get("/din276/estimates",                                   (req, res) => din276Ctrl.listEstimates(req, res, supabase));
+  router.post("/din276/estimates",                                  requirePermission("projects.calculations.edit"), (req, res) => din276Ctrl.createEstimate(req, res, supabase));
+  router.get("/din276/estimates/:id",                               (req, res) => din276Ctrl.getEstimate(req, res, supabase));
+  router.patch("/din276/estimates/:id",                             requirePermission("projects.calculations.edit"), (req, res) => din276Ctrl.updateEstimate(req, res, supabase));
+  router.post("/din276/estimates/:id/groups/save",                  requirePermission("projects.calculations.edit"), (req, res) => din276Ctrl.saveGroups(req, res, supabase));
+  router.get("/din276/estimates/:id/anrechenbar",                   (req, res) => din276Ctrl.computeAnrechenbar(req, res, supabase));
+  router.delete("/din276/estimates/:id",                            requirePermission("projects.calculations.delete"), (req, res) => din276Ctrl.deleteEstimate(req, res, supabase));
+
   router.get("/companies",                                           (req, res) => ctrl.getCompanies(req, res, supabase));
   router.post("/company",                                            requirePermission("settings.company.edit"), (req, res) => ctrl.postCompany(req, res, supabase));
   router.put("/company/:id",                                         requirePermission("settings.company.edit"), (req, res) => ctrl.putCompany(req, res, supabase));

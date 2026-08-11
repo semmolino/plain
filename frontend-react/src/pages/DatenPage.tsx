@@ -5,15 +5,17 @@ import { ProjektlisteTab }             from '@/pages/daten/ProjektlisteTab'
 import { EinzelprojektTab }            from '@/pages/daten/EinzelprojektTab'
 import { UnternehmenskennzahlenTab }   from '@/pages/daten/UnternehmenskennzahlenTab'
 import { TrendsTab }                   from '@/pages/daten/TrendsTab'
+import { LeistungsphasenMatrixTab }    from '@/pages/daten/LeistungsphasenMatrixTab'
 import { useLicenseFilterTabs }        from '@/store/licenseStore'
 
-type Tab = 'projektliste' | 'einzelprojekt' | 'kennzahlen' | 'trends'
+type Tab = 'projektliste' | 'einzelprojekt' | 'leistungsphasen' | 'kennzahlen' | 'trends'
 
 const TABS: { id: Tab; label: string; feature?: string }[] = [
-  { id: 'projektliste',  label: 'Alle Projekte'          },
-  { id: 'einzelprojekt', label: 'Projekt'                },
-  { id: 'kennzahlen',    label: 'Unternehmenskennzahlen', feature: 'reports.advanced' },
-  { id: 'trends',        label: 'Trends',                 feature: 'reports.advanced' },
+  { id: 'projektliste',    label: 'Alle Projekte'          },
+  { id: 'einzelprojekt',   label: 'Projekt'                },
+  { id: 'leistungsphasen', label: 'Leistungsphasen',        feature: 'reports.advanced' },
+  { id: 'kennzahlen',      label: 'Unternehmenskennzahlen', feature: 'reports.advanced' },
+  { id: 'trends',          label: 'Trends',                 feature: 'reports.advanced' },
 ]
 
 export function DatenPage() {
@@ -40,10 +42,11 @@ export function DatenPage() {
       <h1 className="master-title">Projektdaten</h1>
       <Tabs tabs={useLicenseFilterTabs(TABS)} active={tab} onChange={handleTabChange} />
       <div className="master-tab-content">
-        {tab === 'projektliste'  && <ProjektlisteTab />}
-        {tab === 'einzelprojekt' && <EinzelprojektTab initialProjectId={initProjId} />}
-        {tab === 'kennzahlen'    && <UnternehmenskennzahlenTab />}
-        {tab === 'trends'        && <TrendsTab />}
+        {tab === 'projektliste'    && <ProjektlisteTab />}
+        {tab === 'einzelprojekt'   && <EinzelprojektTab initialProjectId={initProjId} />}
+        {tab === 'leistungsphasen' && <LeistungsphasenMatrixTab />}
+        {tab === 'kennzahlen'      && <UnternehmenskennzahlenTab />}
+        {tab === 'trends'          && <TrendsTab />}
       </div>
     </div>
   )

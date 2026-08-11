@@ -203,9 +203,47 @@ async function recomputeStructureAggregates(supabase, structureId) {
   if (updateErr) throw new Error(updateErr.message);
 }
 
+// Grundhonorar (100 %) fuer EINE Honorarzone bei gegebenen anrechenbaren Kosten.
+// Wiederverwendet die lineare Interpolation der Honorartafel (FEE_TABLES) — dieselbe
+// Logik wie calculateRevenueFields, nur fuer eine Zone und einen Kostenwert.
+// Wird u. a. fuer das TGA-Mischhonorar (§ 54) mehrfach je Zone aufgerufen.
+async function interpolateHonorarForZone(supabase, { feeMasterId, zoneId, zonePercent, cost }) {
+  const kx = toNumberOrNull(cost);
+  if (!feeMasterId || !zoneId || kx === null) return null;
+
+  const { data: zone, error: zoneErr } = await supabase
+    .from("FEE_ZONES").select("ID, NAME_SHORT").eq("ID", zoneId).single();
+  if (zoneErr) throw new Error(zoneErr.message);
+  if (!zone) throw new Error("FEE_ZONE not found");
+  const zoneKey = String(zone.NAME_SHORT || "").trim().toUpperCase();
+  const zoneColumns = FEE_ZONE_COLUMN_BY_ROMAN[zoneKey];
+  if (!zoneColumns) throw new Error(`Unsupported FEE_ZONE.NAME_SHORT "${zone.NAME_SHORT}"`);
+
+  const { data: feeTables, error: tblErr } = await supabase
+    .from("FEE_TABLES")
+    .select(`BASE, ${zoneColumns.min}, ${zoneColumns.max}`)
+    .eq("FEE_MASTER_ID", feeMasterId)
+    .order("BASE", { ascending: true, nullsFirst: false });
+  if (tblErr) throw new Error(tblErr.message);
+  const rows = Array.isArray(feeTables) ? feeTables : [];
+  if (!rows.length) throw new Error("No FEE_TABLES rows found for selected FEE_MASTER_ID");
+
+  const strategy = resolveRevenueStrategy();
+  const zonePct = toNumberOrNull(zonePercent) ?? 0;
+  const { lower, upper } = findBounds(rows, kx);
+  if (!lower || !upper) return null;
+  const k1 = toNumberOrNull(lower.BASE);
+  const k2 = toNumberOrNull(upper.BASE);
+  const hm = strategy(kx, k1, k2, toNumberOrNull(lower[zoneColumns.min]), toNumberOrNull(upper[zoneColumns.min]));
+  const hh = strategy(kx, k1, k2, toNumberOrNull(lower[zoneColumns.max]), toNumberOrNull(upper[zoneColumns.max]));
+  if (hm === null || hh === null) return null;
+  return hm + ((hh - hm) * (zonePct / 100));
+}
+
 module.exports = {
   toNumberOrNull,
   calculateRevenueFields,
+  interpolateHonorarForZone,
   getRevenueByKx,
   calculatePhaseRevenue,
   feePhaseSortKey,

@@ -19,6 +19,9 @@ import {
 import { fetchProjectsShort, fetchProjectStructure, fetchParentChildCheck } from '@/api/projekte'
 import { fetchOffer, fetchOfferStructure, type OfferStructureNode } from '@/api/angebote'
 
+import { Din276Editor } from '@/pages/projekte/Din276Editor'
+import { MischhonorarEditor } from '@/pages/projekte/MischhonorarEditor'
+
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
 
@@ -202,6 +205,10 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '',
     K0: '', K1: '', K2: '', K3: '', K4: '',
   })
+  const [din276Open, setDin276Open] = useState(false)
+  const [mischOpen,  setMischOpen]  = useState(false)
+  const [din276EstimateId,    setDin276EstimateId]    = useState<number | null>(null)
+  const [din276Leistungsbild, setDin276Leistungsbild] = useState<string | null>(null)
   const [projectId, setProjectId]             = useState(initialProjectId ? String(initialProjectId) : '')
   const [structureNodes, setStructureNodes]   = useState<Awaited<ReturnType<typeof fetchProjectStructure>>['data']>([])
   const [offerStructureNodes, setOfferStructureNodes] = useState<OfferStructureNode[]>([])
@@ -331,6 +338,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       K4: fmtN(row.CONSTRUCTION_COSTS_K4),
     })
     setProjectId(row.PROJECT_ID != null ? String(row.PROJECT_ID) : '')
+    setDin276EstimateId(row.DIN276_ESTIMATE_ID ?? null)
+    setDin276Leistungsbild(row.DIN276_LEISTUNGSBILD ?? null)
     if (row.FEE_MASTER_ID) {
       const zonesRes = await fetchFeeZones(row.FEE_MASTER_ID)
       setZones(zonesRes.data ?? [])
@@ -369,6 +378,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     })
     const pid = row.PROJECT_ID != null ? String(row.PROJECT_ID) : (initialProjectId ? String(initialProjectId) : '')
     setProjectId(pid)
+    setDin276EstimateId(row.DIN276_ESTIMATE_ID ?? null)
+    setDin276Leistungsbild(row.DIN276_LEISTUNGSBILD ?? null)
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -409,6 +420,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
         CONSTRUCTION_COSTS_K2: isAreaHa ? null : toNum(basis.K2),
         CONSTRUCTION_COSTS_K3: isAreaHa ? null : toNum(basis.K3),
         CONSTRUCTION_COSTS_K4: isAreaHa ? null : toNum(basis.K4),
+        DIN276_ESTIMATE_ID:    din276EstimateId,
+        DIN276_LEISTUNGSBILD:  din276Leistungsbild,
       })
       populateBasis(updated.data)
       setMsg({ text: 'Lade Leistungsphasen …', type: 'info' })
@@ -778,14 +791,57 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </p>
             </div>
           ) : (
-            <div className="fee-k-grid">
-              {(['K0','K1','K2','K3','K4'] as const).map(k => (
-                <div key={k} className="form-group">
-                  <label>{k}</label>
-                  <input type="number" step="0.01" value={(basis as Record<string, string>)[k]} onChange={e => setBasis(b => ({ ...b, [k]: e.target.value }))} />
+            <>
+              <div className="fee-k-grid">
+                {(['K0','K1','K2','K3','K4'] as const).map(k => (
+                  <div key={k} className="form-group">
+                    <label>{k}</label>
+                    <input type="number" step="0.01" value={(basis as Record<string, string>)[k]} onChange={e => setBasis(b => ({ ...b, [k]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" className="btn-small" onClick={() => setDin276Open(true)}>
+                  Baukosten aus DIN 276 ermitteln …
+                </button>
+                <span className="admin-section-hint" style={{ margin: 0 }}>
+                  Berechnet die anrechenbaren Kosten nach HOAI (Leistungsbild wählbar) und übernimmt sie nach K0.
+                </span>
+              </div>
+              {calcMaster && (
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="btn-small" onClick={() => setMischOpen(true)} disabled={zones.length === 0}>
+                    Mischhonorar (§ 54) …
+                  </button>
+                  <span className="admin-section-hint" style={{ margin: 0 }}>
+                    Technische Ausrüstung: anrechenbare Kosten auf mehrere Honorarzonen aufteilen. K0 wird dann daraus berechnet.
+                  </span>
                 </div>
-              ))}
-            </div>
+              )}
+              {calcMaster && (
+                <MischhonorarEditor
+                  open={mischOpen}
+                  onClose={() => setMischOpen(false)}
+                  calcMasterId={calcMaster.ID}
+                  zones={zones}
+                  onApplied={() => { void (async () => {
+                    try { const r = await fetchFeeCalcMaster(calcMaster.ID); populateBasis(r.data) } catch { /* ignore */ }
+                  })() }}
+                />
+              )}
+              <Din276Editor
+                open={din276Open}
+                onClose={() => setDin276Open(false)}
+                projectId={!isOfferMode && projectId ? Number(projectId) : undefined}
+                offerId={isOfferMode && offerId ? offerId : undefined}
+                leistungsbild="gebaeude"
+                onApply={(anrechenbar, estimateId, lb) => {
+                  setBasis(b => ({ ...b, K0: String(anrechenbar) }))
+                  setDin276EstimateId(estimateId)
+                  setDin276Leistungsbild(lb)
+                }}
+              />
+            </>
           )}
         </div>
       )}

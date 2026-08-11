@@ -470,6 +470,108 @@ export const HELP = {
       </>
     ),
   },
+  'hoai.mischhonorar': {
+    title: 'Mischhonorar (§ 54 Abs. 3 HOAI)',
+    body: (
+      <>
+        Für die Technische Ausrüstung: Gehören die Anlagen einer Anlagengruppe verschiedenen
+        Honorarzonen an, wird das Honorar aus gewichteten Einzelhonoraren gebildet. Je Zone wird das
+        Honorar so berechnet, als läge die <strong>gesamte</strong> anrechenbare Kostensumme in dieser Zone;
+        dieses Vollhonorar wird dann mit dem Kostenanteil der Zone gewichtet. So wirkt die Degression der
+        Honorartafel auf die Gesamtsumme. Die anrechenbaren Gesamtkosten (K0) ergeben sich als Summe der
+        Zonenbeträge; ein separates K0-Feld entfällt in diesem Modus. „Position %" ist die Lage innerhalb
+        des Zonenbands (0 = untere, 100 = obere Tafelgrenze).
+      </>
+    ),
+  },
+  'din276.anrechenbare_kosten': {
+    title: 'Anrechenbare Kosten (DIN 276 → HOAI)',
+    body: (
+      <>
+        Die anrechenbaren Kosten sind die Grundlage der Honorarberechnung. Sie werden aus den Baukosten
+        je Kostengruppe nach DIN 276 abgeleitet. Für Gebäude (§ 33 HOAI) gilt: KG 300 (Baukonstruktionen)
+        voll; KG 400 (Technische Anlagen) voll, wenn selbst geplant/überwacht, sonst voll bis 25 % der
+        sonstigen anrechenbaren Kosten und darüber zur Hälfte; mitverarbeitete Bausubstanz kommt hinzu.
+        KG 100/500/700 und nicht selbst geplante KG 200/600 sind nicht anrechenbar. Das Ergebnis wird als
+        Baukosten-Basis (K0) in die Honorarberechnung übernommen. Maßgeblich ist die Kostenberechnung
+        (LPH 3) nach DIN 276-1:2008-12.
+      </>
+    ),
+  },
+  'din276.stufe': {
+    title: 'Kostenstufe',
+    body: (
+      <>
+        Genauigkeit/Zeitpunkt der Kostenermittlung: die <strong>Kostenschätzung</strong> entsteht meist zur
+        Vorplanung (LPH 2), die <strong>Kostenberechnung</strong> zur Entwurfsplanung (LPH 3). Für die
+        anrechenbaren Kosten ist grundsätzlich die Kostenberechnung maßgeblich; in frühen Phasen dient die
+        Schätzung als Ersatz.
+      </>
+    ),
+  },
+  'din276.bausubstanz': {
+    title: 'Mitverarbeitete Bausubstanz (§ 4 Abs. 3)',
+    body: (
+      <>
+        Vorhandene Bausubstanz, die bei Umbau/Modernisierung technisch oder gestalterisch mitverarbeitet
+        wird, ist angemessen in die anrechenbaren Kosten einzubeziehen (schriftlich zu vereinbaren). Sie
+        zählt zu den „sonstigen anrechenbaren Kosten" und beeinflusst damit auch die 25-%-Schwelle der
+        KG-400-Regel. Ohne Umbau/Bestand: 0 lassen.
+      </>
+    ),
+  },
+  'stammdaten.lph_bloecke': {
+    title: 'Leistungsphasen-Blöcke',
+    body: (
+      <>
+        Ein Block bündelt mehrere HOAI-Leistungsphasen zu einer Auswertungseinheit — z. B.
+        „Planung" für LPH 1–4, „Ausführung" für LPH 5–7, „Überwachung" für LPH 8–9. In der
+        Projekt-Auswertung „Leistungsphasen" siehst du dann zuerst diese Blöcke und kannst jeden
+        auf die einzelnen Phasen aufklappen. Das Schema wird je Leistungsbild gepflegt, weil
+        verschiedene Leistungsbilder unterschiedliche Phasenschnitte haben. „HOAI-Standard" legt die
+        gängige Aufteilung 1–4 / 5–7 / 8–9 in einem Klick an; danach frei anpassbar.
+      </>
+    ),
+  },
+  'report.lph_matrix': {
+    title: 'Leistungsphasen-Matrix',
+    body: (
+      <>
+        Alle Projekte mit Leistungsphasen-Struktur auf einen Blick: Zeilen sind Projekte, Spalten die
+        Leistungsphasen (LPH 1–9). Die Zellenfarbe zeigt die Ampel (grün = im Plan, gelb = Kostenquote
+        erhöht, rot = kritisch oder Deckungsbeitrag negativ). Über die Umschalter oben wählst du, welche
+        Kennzahl in den Zellen steht. So erkennst du sofort, in welcher Phase welches Projekt brennt.
+        Klick auf einen Projektnamen öffnet den Einzelprojekt-Report.
+      </>
+    ),
+  },
+  'report.lph_stundenanteil': {
+    title: 'Stundenanteil vs. Honoraranteil',
+    body: (
+      <>
+        Aggregiert über alle Projekte: Wie verteilen sich die tatsächlich gebuchten Stunden auf die
+        Leistungsphasen (Stundenanteil) — verglichen mit der Verteilung des Honorars (Honoraranteil, was
+        grob der HOAI-Gewichtung entspricht). Liegt der Stundenanteil einer Phase deutlich über ihrem
+        Honoraranteil, verbraucht diese Phase systematisch mehr Aufwand als sie einbringt — ein Hinweis
+        auf Unterkalkulation oder nötige Besondere Leistungen. Solche Phasen sind rot hervorgehoben.
+      </>
+    ),
+  },
+  'report.leistungsphasen': {
+    title: 'Auswertung nach Leistungsphase',
+    body: (
+      <>
+        Die Kennzahlen des Projekts — Honorar, Leistungsstand, Stunden, Kosten,
+        Kostenquote und Deckungsbeitrag — verdichtet je HOAI-Leistungsphase
+        (LPH). So siehst du, welche Phase wirtschaftlich läuft und welche über
+        Budget ist, nicht erst am Projektende. Grundlage sind die Buchungen und
+        der Leistungsstand, den Phasen-Knoten zugeordnet, die aus der
+        Honorarberechnung stammen. Buchungen ohne Phasenbezug erscheinen unter
+        „Ohne Phasenzuordnung". Der Report wird nur angezeigt, wenn das Projekt
+        eine Leistungsphasen-Struktur besitzt.
+      </>
+    ),
+  },
 
   // ── Mitarbeiter / Arbeitszeit ────────────────────────────────────────────
   'mitarbeiter.saldo': {

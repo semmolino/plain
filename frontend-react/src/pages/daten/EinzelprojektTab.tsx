@@ -22,11 +22,13 @@ import {
   fetchProjectReportHeader,
   fetchProjectReportStructure,
   fetchProjectTimeline,
+  fetchProjectPhases,
   type DateFilter,
   type FilterMode,
   type ProjectReportStructure,
   type TimelinePoint,
 } from '@/api/reports'
+import { LeistungsphasenReport } from '@/pages/daten/LeistungsphasenReport'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -258,6 +260,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
   const [search,    setSearch]   = useState('')
   const [sortField, setSortField] = useState<SortField>('path')
   const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>('asc')
+  const [subView,   setSubView]  = useState<'elemente' | 'phasen'>('elemente')
 
   const filter: DateFilter = { mode, asOfDate, dateFrom, dateTo }
 
@@ -286,6 +289,18 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
     enabled:  pid !== null && filterReady,
     staleTime: 300000,
   })
+  // Leistungsphasen-Report: nur relevant, wenn das Projekt eine LPH-Struktur hat.
+  const { data: phasesData } = useQuery({
+    queryKey: ['project-phases', pid],
+    queryFn:  () => fetchProjectPhases(pid!),
+    enabled:  pid !== null,
+  })
+  const hasPhases = phasesData?.data?.hasPhases ?? false
+  // Der Phasen-Report zeigt den aktuellen Stand (Datumsfilter noch nicht
+  // unterstützt) — daher nur im Modus „Aktuell" anbieten, sonst würde er den
+  // datumsgefilterten KPIs widersprechen.
+  const phasesAvailable = hasPhases && mode === 'now'
+  const effSubView: 'elemente' | 'phasen' = phasesAvailable ? subView : 'elemente'
 
   const projects  = projectsData?.data ?? []
   const header    = headerData?.data   ?? null
@@ -535,6 +550,28 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
             )
           })()}
 
+          {phasesAvailable && (
+            <div className="daten-filter-modes" style={{ marginTop: 20 }}>
+              {(['elemente', 'phasen'] as const).map(v => (
+                <label key={v} className={`daten-filter-mode-btn${effSubView === v ? ' active' : ''}`}>
+                  <input type="radio" name="epSubView" value={v} checked={effSubView === v}
+                    onChange={() => setSubView(v)} />
+                  {v === 'elemente' ? 'Projektelemente' : 'Leistungsphasen'}
+                </label>
+              ))}
+            </div>
+          )}
+          {hasPhases && mode !== 'now' && (
+            <p className="empty-note" style={{ marginTop: 16, marginBottom: 0 }}>
+              Die Auswertung nach Leistungsphase ist im Modus „Aktuell" verfügbar (Stichtag/Zeitraum
+              werden dort noch nicht berücksichtigt).
+            </p>
+          )}
+
+          {effSubView === 'phasen' && pid !== null ? (
+            <LeistungsphasenReport projectId={pid} />
+          ) : (
+          <>
           <div style={{ marginTop: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
               <input
@@ -655,6 +692,8 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
           {/* Timeline chart — shown when a project is selected and filter is ready */}
           {pid !== null && filterReady && (
             <ProjectTimeline projectId={pid} filter={filter} />
+          )}
+          </>
           )}
         </>
       )}
