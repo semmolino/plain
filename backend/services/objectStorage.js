@@ -217,13 +217,29 @@ function getDriver() {
 // Vom server.js beim Start aufgerufen. Ohne diese Pruefung faellt eine
 // vergessene Variable erst beim ersten Datei-Upload auf — im Zweifel Tage
 // spaeter und beim Kunden statt beim Deploy.
+const PFLICHT = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
+
 function assertConfigured() {
   if (DRIVER !== "s3") return;
-  const fehlend = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]
-    .filter((v) => !process.env[v]);
+
+  const fehlend = PFLICHT.filter((v) => !process.env[v]);
   if (fehlend.length) {
     throw new Error(
       `STORAGE_DRIVER=s3, aber folgende Variablen fehlen: ${fehlend.join(", ")}`
+    );
+  }
+
+  // Auf Platzhalter pruefen. Klingt uebertrieben, ist es nicht: beim Einrichten
+  // wurden die spitzen Klammern aus der Beispielzeile mituebernommen
+  // (S3_REGION="<region>"). Die Variablen waren damit "gesetzt", die App startete
+  // — und erst der erste Datei-Upload scheiterte, mit einer Meldung ueber
+  // ungueltige Hostnamen, die den Zusammenhang nicht erkennen laesst.
+  // In keinem dieser Werte kommt je eine spitze Klammer oder ein "…" vor.
+  const platzhalter = [...PFLICHT, "S3_REGION"]
+    .filter((v) => /[<>…]/.test(process.env[v] || ""));
+  if (platzhalter.length) {
+    throw new Error(
+      `Diese Variablen enthalten noch Platzhalter statt echter Werte: ${platzhalter.join(", ")}`
     );
   }
 }

@@ -117,4 +117,25 @@ describe("assertConfigured", () => {
     process.env = alt;
     jest.resetModules();
   });
+
+  // Beim Einrichten wurden die spitzen Klammern aus der Beispielzeile
+  // mituebernommen. Die Variablen galten damit als gesetzt, die App startete,
+  // und erst der erste Upload scheiterte — mit einer Meldung ueber ungueltige
+  // Hostnamen, die den Zusammenhang nicht erkennen liess.
+  it("erkennt uebernommene Platzhalter statt echter Werte", () => {
+    jest.resetModules();
+    const alt = { ...process.env };
+    process.env.STORAGE_DRIVER = "s3";
+    process.env.S3_ENDPOINT = "https://<region>.storage.impossibleapi.net";
+    process.env.S3_REGION = "<region>";
+    process.env.S3_BUCKET = "<dein-bucket>";
+    process.env.S3_ACCESS_KEY_ID = "…";
+    process.env.S3_SECRET_ACCESS_KEY = "…";
+
+    const frisch = require("../services/objectStorage");
+    expect(() => frisch.assertConfigured()).toThrow(/Platzhalter/);
+
+    process.env = alt;
+    jest.resetModules();
+  });
 });
