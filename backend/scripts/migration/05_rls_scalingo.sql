@@ -36,9 +36,20 @@
 -- Fehlers, wenn die Variable fehlt (psql, Wartung, Migrationen).
 -- NULL bedeutet "kein Mandant" -> die Policies liefern keine Zeilen.
 
+-- Das aeussere NULLIF ist nicht kosmetisch: current_setting liefert NULL nur,
+-- wenn die Variable NIE gesetzt wurde. Wurde sie auf einen leeren Wert gesetzt
+-- — set_config(..., NULL, ...) tut genau das, und PostgREST kann es bei einem
+-- Request ohne Claims ebenfalls — kommt '' zurueck, und ''::json wirft
+--     ERROR: invalid input syntax for type json
+-- Ohne diese Absicherung waere der Zustand "kein Claim" also ein FEHLER statt
+-- "keine Zeilen" — fail-error statt fail-closed, und damit das Gegenteil der
+-- Absicht dieses Skripts.
 CREATE OR REPLACE FUNCTION public.current_tenant_id()
 RETURNS integer LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true)::json ->> 'tenant_id', '')::integer
+  SELECT NULLIF(
+           NULLIF(current_setting('request.jwt.claims', true), '')::json ->> 'tenant_id',
+           ''
+         )::integer
 $$;
 
 COMMENT ON FUNCTION public.current_tenant_id() IS
@@ -53,9 +64,13 @@ COMMENT ON FUNCTION public.current_tenant_id() IS
 -- Sie bekommen ein JWT mit "sys":"true". Diese Liste kurz zu halten IST die
 -- Sicherheitsarbeit — jede Erweiterung schwaecht die Trennung wieder auf.
 
+-- Gleiche Absicherung gegen den leeren Wert wie oben.
 CREATE OR REPLACE FUNCTION public.is_system_request()
 RETURNS boolean LANGUAGE sql STABLE AS $$
-  SELECT coalesce(current_setting('request.jwt.claims', true)::json ->> 'sys', '') = 'true'
+  SELECT coalesce(
+           NULLIF(current_setting('request.jwt.claims', true), '')::json ->> 'sys',
+           ''
+         ) = 'true'
 $$;
 
 COMMENT ON FUNCTION public.is_system_request() IS
@@ -123,21 +138,59 @@ END $$;
 
 
 -- ── 5. Nachweis ─────────────────────────────────────────────────────────────
--- Nach dem Umbau ausfuehren. <TENANT_ID> durch eine echte ID ersetzen.
+-- Laeuft automatisch mit und BRICHT AB, wenn die Trennung nicht greift. Ein
+-- Skript, das die Policies anlegt und danach nur behauptet, sie wirkten, ist
+-- die Muehe nicht wert — der Mandant wird hier aus den echten Daten gewaehlt
+-- statt fest eingetragen, damit der Nachweis in jeder Umgebung laeuft.
 
--- (a) Ohne Claim -> keine Zeilen. Der fail-closed-Nachweis.
-SELECT set_config('request.jwt.claims', NULL, false);
-SELECT 'ohne Claim, muss 0 sein: '||count(*) FROM "PROJECT";
+DO $$
+DECLARE
+  t integer; n_alle integer; n_einer integer; n_ohne integer; verboten integer;
+BEGIN
+  -- (a) Systemzugriff sieht alles.
+  PERFORM set_config('request.jwt.claims', '{"sys":"true"}', false);
+  SELECT count(*) INTO n_alle FROM "PROJECT";
+  SELECT "TENANT_ID" INTO t FROM "PROJECT"
+    WHERE "TENANT_ID" IS NOT NULL GROUP BY "TENANT_ID" ORDER BY count(*) DESC LIMIT 1;
 
--- (b) Mit Claim -> genau ein Mandant.
+  -- (b) Mit Mandanten-Claim -> nur dessen Zeilen.
+  PERFORM set_config('request.jwt.claims', json_build_object('tenant_id', t)::text, false);
+  SELECT count(*) INTO n_einer FROM "PROJECT";
+  SELECT count(*) INTO verboten FROM "PROJECT" WHERE "TENANT_ID" <> t;
+
+  -- (c) Ohne Claim -> keine Zeile. Der eigentliche fail-closed-Nachweis.
+  --     Bewusst der leere String, nicht NULL: genau diese Form hat den Fehler
+  --     "invalid input syntax for type json" ausgeloest, bevor current_tenant_id()
+  --     dagegen abgesichert wurde.
+  PERFORM set_config('request.jwt.claims', '', false);
+  SELECT count(*) INTO n_ohne FROM "PROJECT";
+
+  RAISE NOTICE 'sys=true       -> % Zeilen (alle Mandanten)', n_alle;
+  RAISE NOTICE 'tenant_id=%   -> % Zeilen, davon fremd: %', t, n_einer, verboten;
+  RAISE NOTICE 'ohne Claim     -> % Zeilen', n_ohne;
+
+  IF n_ohne <> 0 THEN
+    RAISE EXCEPTION 'FAIL-CLOSED VERLETZT: ohne Claim sind % Zeilen sichtbar', n_ohne;
+  END IF;
+  IF verboten <> 0 THEN
+    RAISE EXCEPTION 'MANDANTENTRENNUNG VERLETZT: % fremde Zeilen sichtbar', verboten;
+  END IF;
+  IF n_einer >= n_alle THEN
+    RAISE EXCEPTION 'Filter greift nicht: mit Claim % Zeilen, ohne Filter %', n_einer, n_alle;
+  END IF;
+
+  RAISE NOTICE '✓ Mandantentrennung wirkt.';
+END $$;
+
+-- Sitzung wieder in den Ausgangszustand, damit nachfolgende Befehle in
+-- derselben Verbindung nicht unbemerkt als Mandant % laufen.
+SELECT set_config('request.jwt.claims', '', false);
+
+-- (d) Schreiben in einen fremden Mandanten muss scheitern. Bewusst NICHT
+--     automatisiert: der Versuch legt bei einem Fehler in den Policies eine
+--     echte Zeile an. Von Hand ausfuehren, wenn du es sehen willst:
 -- SELECT set_config('request.jwt.claims', '{"tenant_id":4}', false);
--- SELECT "TENANT_ID", count(*) FROM "PROJECT" GROUP BY "TENANT_ID";
-
--- (c) Schreiben in fremden Mandanten muss scheitern.
 -- INSERT INTO "PROJECT" ("TENANT_ID","NAME_SHORT") VALUES (6,'verboten');
-
--- (d) Systemzugriff sieht alles.
--- SELECT set_config('request.jwt.claims', '{"sys":"true"}', false);
 -- SELECT count(DISTINCT "TENANT_ID") FROM "PROJECT";
 
 -- Uebersicht:
