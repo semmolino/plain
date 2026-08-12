@@ -103,8 +103,23 @@ Im Log steht dann eine Zeile `📦 Dateiablage: s3` bzw. `local`.
 Die Reihenfolge ist nicht beliebig. Schritt 2 **vor** Schritt 4, sonst zeigen
 alle Bestandsverweise ins Leere.
 
-1. **Bucket anlegen**, Zugangsschlüssel erzeugen, AVV im Konto prüfen.
-   Bucket auf **privat** stellen — er wird nie direkt aus dem Browser gelesen.
+0. **Konto betriebsfähig machen** — beides *vor* Schritt 3, nicht danach:
+   - **Zahlungsart hinterlegen.** Impossible Cloud startet mit einem
+     30-Tage-Testzeitraum und weist ausdrücklich darauf hin, dass die Daten
+     danach ohne Zahlungsart nicht erhalten bleiben. Ein Testkonto als Ziel für
+     Rechnungs-PDFs wäre genau der Fehler, den dieses Dokument verhindern soll.
+   - **MFA einschalten** (Profile Settings). Das Konto enthält nach der
+     Umstellung sämtliche Kundendateien — Belege, Anhänge, Profilfotos.
+1. **Bucket anlegen** und auf **privat** lassen — er wird nie direkt aus dem
+   Browser gelesen, die Rechteprüfung hängt am Backend (`findAssetForTenant`).
+   **Zugangsschlüssel auf diesen einen Bucket beschränken** (IAM → Policies →
+   Keys): `GetObject`, `PutObject`, `DeleteObject`, `ListBucket` genügen. Der
+   Schlüssel liegt später in Railway- und Scalingo-Variablen; geht er verloren,
+   soll er nicht das ganze Konto öffnen.
+   **AVV anfordern** — nicht in der Storage-Konsole, sondern über den Help
+   Center: DPA nach Art. 28, Unterauftragsverarbeiter, TOM, Speicherorte. Die
+   Subprozessoren-Liste ist der Grund für die Anbieterwahl und gehört zur DSFA.
+   Blockiert die technischen Schritte nicht, nur das produktive Umschalten.
 2. **Bestandsdateien übertragen**, auf einem Rechner, auf dem `backend/uploads/`
    vollständig vorliegt (von Railway herunterladen):
    ```bash
