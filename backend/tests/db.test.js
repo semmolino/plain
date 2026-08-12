@@ -67,7 +67,11 @@ describe("mit POSTGREST_URL", () => {
   it("gibt dem Request den Mandanten als Claim mit", (done) => {
     const { db, tenantScope } = ladeMit(MIT);
     tenantScope({ tenantId: 4 }, null, () => {
-      expect(claimsVon(db)).toMatchObject({ role: "plain_app", tenant_id: 4 });
+      expect(claimsVon(db)).toMatchObject({ tenant_id: 4 });
+      // Bewusst KEIN role-Claim: PostgREST wuerde daraufhin SET LOCAL ROLE
+      // versuchen, und die Rolle gibt es auf Scalingo nicht — der
+      // Datenbankbenutzer hat kein CREATEROLE.
+      expect(claimsVon(db).role).toBeUndefined();
       done();
     });
   });
@@ -103,6 +107,7 @@ describe("mit POSTGREST_URL", () => {
     const c = claimsVon(db);
     expect(c.tenant_id).toBeUndefined();
     expect(c.sys).toBeUndefined();
+    expect(c.role).toBeUndefined();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("ausserhalb eines Request"));
     warn.mockRestore();
   });

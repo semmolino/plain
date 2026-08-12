@@ -82,16 +82,30 @@ function scopedClient(schluessel, claims) {
   return client;
 }
 
+// KEIN role-Claim. Traegt das JWT einen, versucht PostgREST bei jedem Request
+// ein SET LOCAL ROLE — und bricht ab, wenn es die Rolle nicht gibt:
+//     ERROR: role "plain_app" does not exist
+// Auf Scalingo gibt es sie nicht und kann es sie nicht geben: der
+// Datenbankbenutzer hat kein CREATEROLE. Die Abfragen laufen deshalb unter dem
+// Verbindungsbenutzer, und die Trennung kommt allein aus den Claims. Das ist
+// gleichwertig, weil 05_rls_scalingo.sql FORCE ROW LEVEL SECURITY setzt — ohne
+// das wuerde der Tabelleneigentuemer die Policies stillschweigend umgehen.
 const tenantClient = (tenantId) =>
-  scopedClient(`t:${tenantId}`, { role: "plain_app", tenant_id: Number(tenantId) });
+  scopedClient(`t:${tenantId}`, { tenant_id: Number(tenantId) });
 
 const systemClient = () =>
-  scopedClient("system", { role: "plain_app", sys: "true" });
+  scopedClient("system", { sys: "true" });
 
-// Ohne Claims. Die Policies finden keinen Mandanten und liefern keine Zeile —
-// das ist der Zustand, in dem ein Programmfehler landen SOLL. Frueher waere
-// derselbe Fehler mit Service-Key-Rechten weitergelaufen.
-const anonymerClient = () => scopedClient("anon", { role: "plain_app" });
+// Ohne Mandanten und ohne Systemanspruch. Die Policies finden keinen Mandanten
+// und liefern keine Zeile — das ist der Zustand, in dem ein Programmfehler
+// landen SOLL. Frueher waere derselbe Fehler mit Service-Key-Rechten
+// weitergelaufen und haette alle Mandanten gesehen.
+//
+// Ein leeres Claim-Objekt waere hier falsch: jwt.sign({}) erzeugt ein Token
+// ohne Nutzlast, und PostgREST setzt request.jwt.claims dann auf einen leeren
+// Wert. Genau dagegen ist current_tenant_id() inzwischen abgesichert, aber der
+// Marker macht ausserdem im Log erkennbar, woher die Abfrage kam.
+const anonymerClient = () => scopedClient("anon", { scope: "none" });
 
 let warnungGezeigt = false;
 function ohneKontext() {
