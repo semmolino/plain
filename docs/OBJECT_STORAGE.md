@@ -98,6 +98,36 @@ Im Log steht dann eine Zeile `📦 Dateiablage: s3` bzw. `local`.
 
 ---
 
+## Befund vom 12.08.: auch Railway hatte nie ein Volume
+
+Nachgesehen im laufenden Container:
+
+```
+du -sh backend/uploads   →  4.0K   (leeres Verzeichnis)
+Dateien: 0
+Container laeuft seit    →  Tue Aug 11 18:16:52 2026
+```
+
+**Das flüchtige Dateisystem ist kein Scalingo-Thema, sondern der Ist-Zustand.**
+`backend/uploads/` wird auf Railway bei jedem Deploy geleert; es hängt dort kein
+Volume. Die Umstellung behebt also einen laufenden Fehler, statt einen künftigen
+zu verhindern.
+
+Aufgefallen ist es nie, weil Logos, Signaturen und Profilfotos **zusätzlich** als
+base64 in der Datenbank liegen — `TENANT_SETTINGS.logo_data_uri`,
+`co_<id>_sig_data_uri`, `EMPLOYEE.AVATAR_DATA_URI`. Der Kommentar in
+`controllers/stammdaten.js` sagt den Grund: *„so it survives server redeploys"*.
+Diese Umgehung deckt genau die sichtbaren Dinge ab. Was sie nicht abdeckt —
+Rechnungs-PDFs, XRechnungs-XML, Beleganhänge, Login-Hero-Bilder — verschwand
+still.
+
+Zum Zeitpunkt des Befunds standen 180 `ASSET`-Zeilen (~31 MB) auf Dateien, die es
+nicht mehr gab. **Alles davon Testdaten — das Produkt ist noch nicht live.** Es
+gab deshalb nichts zu retten und Schritt 2 unten war ein Leerlauf. Nach dem
+Umschalten stellt sich die Frage nicht mehr.
+
+---
+
 ## Umschalten — Reihenfolge
 
 Die Reihenfolge ist nicht beliebig. Schritt 2 **vor** Schritt 4, sonst zeigen
@@ -120,15 +150,18 @@ alle Bestandsverweise ins Leere.
    Center: DPA nach Art. 28, Unterauftragsverarbeiter, TOM, Speicherorte. Die
    Subprozessoren-Liste ist der Grund für die Anbieterwahl und gehört zur DSFA.
    Blockiert die technischen Schritte nicht, nur das produktive Umschalten.
-2. **Bestandsdateien übertragen**, auf einem Rechner, auf dem `backend/uploads/`
-   vollständig vorliegt (von Railway herunterladen):
+2. **Bestandsdateien übertragen** — beim Erstumzug entfallen (siehe Befund oben:
+   es lag nichts vor). Das Skript bleibt für den **Anbieterwechsel**, wo es dann
+   echte Arbeit hat. Es läuft dort, wo die Dateien liegen — im Container per
+   `railway ssh` bzw. `scalingo run`, nicht auf dem eigenen Rechner; dann müssen
+   Kundendateien nicht über den Laptop wandern.
    ```bash
    node backend/scripts/migration/06_uploads_to_objectstorage.js --dry-run
    node backend/scripts/migration/06_uploads_to_objectstorage.js
    ```
-   Das Skript ist wiederholbar: vorhandene Objekte werden übersprungen, ein
-   abgebrochener Lauf einfach neu gestartet. Bei Fehlern bricht es mit Code 1 ab
-   — dann **nicht** umschalten.
+   Wiederholbar: vorhandene Objekte werden übersprungen, ein abgebrochener Lauf
+   einfach neu gestartet. Bei Fehlern endet es mit Code 1 — dann **nicht**
+   umschalten.
 3. **Variablen setzen:**
    ```bash
    scalingo --app planandsimple env-set \
