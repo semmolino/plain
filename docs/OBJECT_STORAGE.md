@@ -175,6 +175,28 @@ alle Bestandsverweise ins Leere.
 
 ## Abnahme
 
+### Zuerst: der Selbsttest
+
+```bash
+scalingo --app planandsimple run "node backend/scripts/storage-selftest.js"
+# oder im Railway-Container:  node backend/scripts/storage-selftest.js
+```
+
+Schreibt ein Testobjekt, liest es als Puffer **und** als Strom zurück, vergleicht
+byteweise, löscht es wieder.
+
+**Warum das nicht der Startprüfung überlassen bleibt:** die sieht nur nach, ob die
+Variablen gesetzt und frei von Platzhaltern sind. Ob Endpunkt, Bucket und
+Zugangsdaten *zusammen* funktionieren, zeigt erst ein echter Schreibzugriff.
+Beim Einrichten auf Scalingo hat genau dieser Test zwei Fehler nacheinander
+gefunden, die der Start jeweils nicht bemerkt hatte — eine Region, die wörtlich
+`<region>` hieß, und danach Zugangsdaten, die aus einem Auslassungszeichen
+bestanden. Beide Male lief die App scheinbar sauber.
+
+Nach jeder Änderung an den Speichervariablen einmal ausführen.
+
+### Dann: durch die Anwendung
+
 Der eine Test, der zählt, ist der **nach einem Neustart** — vorher beweist
 nichts, dass die Datei den Container überlebt.
 
