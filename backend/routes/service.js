@@ -1,12 +1,11 @@
 "use strict";
 const express = require("express");
-const path = require("path");
-const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 const { sendMail } = require("../services/emailService");
 const { stripImageMetadata } = require("../services/imageStrip");
+const objectStorage = require("../services/objectStorage");
 
 // ── Routen: Service-Bereich (Phase 0 — Fundament) ─────────────────────────────
 // Liefert das Zugangs-Gate (Haftungs-/Nutzungsbestätigung) und die Verwaltung
@@ -482,7 +481,6 @@ module.exports = (supabase) => {
   const ATT_ALLOWED = new Set(["image/png", "image/jpeg"]);
   const ATT_MAX_BYTES = 5 * 1024 * 1024;
   const ATT_MAX_COUNT = 3;
-  const uploadRoot = path.join(__dirname, "..", "uploads");
 
   const attUpload = multer({
     storage: multer.memoryStorage(),
@@ -528,20 +526,22 @@ module.exports = (supabase) => {
       if ((existing || []).length >= ATT_MAX_COUNT)
         return res.status(400).json({ error: `Maximal ${ATT_MAX_COUNT} Anhänge je Eintrag.` });
 
-      // Metadaten entfernen, dann unter uploads/<tenant>/service/<uuid>.<ext> ablegen.
+      // Metadaten entfernen, dann unter <tenant>/service/<uuid>.<ext> ablegen.
       const cleaned = stripImageMetadata(req.file.buffer, req.file.mimetype);
       const ext = req.file.mimetype === "image/png" ? ".png" : ".jpg";
-      const relDir = path.join(String(req.tenantId), "service");
-      fs.mkdirSync(path.join(uploadRoot, relDir), { recursive: true });
-      const storageKey = path.join(relDir, `${crypto.randomUUID()}${ext}`).replace(/\\/g, "/");
-      fs.writeFileSync(path.join(uploadRoot, storageKey), cleaned);
+      const storageKey = `${req.tenantId}/service/${crypto.randomUUID()}${ext}`;
+      await objectStorage.put(storageKey, cleaned, { contentType: req.file.mimetype });
 
       const { data, error } = await supabase.from(cfg.child).insert([{
         [cfg.fk]: id, TENANT_ID: req.tenantId, STORAGE_KEY: storageKey,
         FILENAME: (req.file.originalname || "screenshot").slice(0, 200),
         MIME_TYPE: req.file.mimetype, SIZE_BYTES: cleaned.length, CREATED_BY: req.employeeId,
       }]).select("ID, FILENAME, MIME_TYPE, SIZE_BYTES").single();
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        // Sonst bliebe ein Bild ohne zugehörige Zeile liegen (siehe assets.js).
+        await objectStorage.remove(storageKey).catch(() => {});
+        return res.status(500).json({ error: error.message });
+      }
       res.json({ data: { id: data.ID, filename: data.FILENAME, mime_type: data.MIME_TYPE, size_bytes: data.SIZE_BYTES } });
     }));
 
@@ -564,11 +564,11 @@ module.exports = (supabase) => {
       const { data: att } = await supabase.from(cfg.child)
         .select("STORAGE_KEY, MIME_TYPE, FILENAME, TENANT_ID").eq("ID", attId).eq(cfg.fk, id).maybeSingle();
       if (!att || att.TENANT_ID !== req.tenantId) return res.status(404).json({ error: "Nicht gefunden" });
-      const filePath = path.join(uploadRoot, att.STORAGE_KEY);
-      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Datei fehlt" });
+      const obj = await objectStorage.getStream(att.STORAGE_KEY);
+      if (!obj) return res.status(404).json({ error: "Datei fehlt" });
       res.setHeader("Content-Type", att.MIME_TYPE || "application/octet-stream");
       res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(att.FILENAME || "anhang")}"`);
-      fs.createReadStream(filePath).pipe(res);
+      obj.stream.pipe(res);
     });
 
     // DELETE (nur Eigentümer)
@@ -579,7 +579,7 @@ module.exports = (supabase) => {
       if (!parent) return res.status(404).json({ error: "Nicht gefunden" });
       const { data: att } = await supabase.from(cfg.child).select("STORAGE_KEY").eq("ID", attId).eq(cfg.fk, id).maybeSingle();
       if (att?.STORAGE_KEY) {
-        try { fs.unlinkSync(path.join(uploadRoot, att.STORAGE_KEY)); } catch { /* Datei evtl. schon weg */ }
+        try { await objectStorage.remove(att.STORAGE_KEY); } catch { /* Datei evtl. schon weg */ }
       }
       await supabase.from(cfg.child).delete().eq("ID", attId).eq(cfg.fk, id).eq("TENANT_ID", req.tenantId);
       res.json({ ok: true });

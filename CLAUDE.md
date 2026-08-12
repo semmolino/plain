@@ -70,6 +70,14 @@ throw { status: 400, message: 'Pflichtfeld fehlt' }
 }
 ```
 
+**Dateiablage — nie `fs.*`**: Dateien laufen ausschließlich über
+`services/objectStorage.js` (`put` / `getBuffer` / `getStream` / `exists` /
+`remove`), geschlüsselt über `STORAGE_KEY`. Auf Scalingo gibt es kein
+dauerhaftes Dateisystem — ein `fs.writeFileSync` nach `backend/uploads/` ist
+nach dem nächsten Deploy verschwunden. Erzeugte Belege (PDF/XML) laufen über
+`services/generatedAssets.js`, nicht über eigene Kopien. Details:
+`docs/OBJECT_STORAGE.md`.
+
 ---
 
 ## Frontend architecture

@@ -1,8 +1,7 @@
 "use strict";
 
 const express = require("express");
-const path = require("path");
-const fs = require("fs");
+const objectStorage = require("../services/objectStorage");
 const { findAssetForTenant } = require("../services/assetAccess");
 
 const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
@@ -104,9 +103,8 @@ module.exports = (supabase) => {
       );
       if (!asset) return res.status(404).send("asset nicht gefunden");
 
-      const uploadRoot = path.join(__dirname, "..", "uploads");
-      const filePath = path.join(uploadRoot, asset.STORAGE_KEY);
-      if (!fs.existsSync(filePath)) return res.status(404).send("file fehlt auf disk");
+      const obj = await objectStorage.getStream(asset.STORAGE_KEY);
+      if (!obj) return res.status(404).send("file fehlt auf disk");
 
       // Content-Type NICHT ungeprueft aus der Datenbank uebernehmen. Ein als
       // image/svg+xml abgelegtes Asset wuerde sonst hier als Dokument im
@@ -117,7 +115,7 @@ module.exports = (supabase) => {
       res.setHeader("Content-Type", ERLAUBT.has(mime) ? mime : "application/octet-stream");
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "public, max-age=300"); // 5 min Cache OK
-      fs.createReadStream(filePath).pipe(res);
+      obj.stream.pipe(res);
     } catch (e) {
       res.status(500).send(e?.message || String(e));
     }

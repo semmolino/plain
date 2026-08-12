@@ -1,8 +1,7 @@
 "use strict";
 const { findAssetForTenant } = require("../services/assetAccess");
 
-const fs   = require("fs");
-const path = require("path");
+const objectStorage = require("../services/objectStorage");
 const svc  = require("../services/stammdaten");
 const misch = require("../services/mischhonorar");
 
@@ -1321,12 +1320,8 @@ async function putLogo(req, res, supabase) {
     try {
       const asset = await findAssetForTenant(supabase, assetId, req.tenantId, "STORAGE_KEY, MIME_TYPE");
       if (asset) {
-        const uploadRoot = path.join(__dirname, "..", "uploads");
-        const filePath   = path.join(uploadRoot, asset.STORAGE_KEY);
-        if (fs.existsSync(filePath)) {
-          const b64 = fs.readFileSync(filePath).toString("base64");
-          dataUri = `data:${asset.MIME_TYPE};base64,${b64}`;
-        }
+        const buf = await objectStorage.getBuffer(asset.STORAGE_KEY);
+        if (buf) dataUri = `data:${asset.MIME_TYPE};base64,${buf.toString("base64")}`;
       }
     } catch (e) {
       console.error("[PUT_LOGO] base64 cache error:", e.message);
@@ -1361,11 +1356,8 @@ async function _upsertCompanyAsset(supabase, tenantId, companyId, type, assetId)
     try {
       const asset = await findAssetForTenant(supabase, assetId, tenantId, "STORAGE_KEY, MIME_TYPE");
       if (asset) {
-        const filePath = path.join(__dirname, "..", "uploads", asset.STORAGE_KEY);
-        if (fs.existsSync(filePath)) {
-          const b64 = fs.readFileSync(filePath).toString("base64");
-          dataUri = `data:${asset.MIME_TYPE};base64,${b64}`;
-        }
+        const buf = await objectStorage.getBuffer(asset.STORAGE_KEY);
+        if (buf) dataUri = `data:${asset.MIME_TYPE};base64,${buf.toString("base64")}`;
       }
     } catch (e) {
       console.error(`[COMPANY_ASSET] base64 cache error:`, e.message);

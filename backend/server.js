@@ -13,6 +13,18 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "plain-dev-secret-chan
   process.exit(1);
 }
 
+// Dateiablage: bei STORAGE_DRIVER=s3 muessen Endpunkt, Bucket und Zugangsdaten
+// vollstaendig sein. Fehlt eines davon, faellt das sonst erst beim ersten
+// Datei-Upload auf — dann aber beim Kunden statt beim Deploy.
+const objectStorage = require("./services/objectStorage");
+try {
+  objectStorage.assertConfigured();
+  console.log(`📦 Dateiablage: ${objectStorage.driverName()}`);
+} catch (e) {
+  console.error(`FATAL: ${e.message}`);
+  process.exit(1);
+}
+
 const app = express();
 const port = process.env.PORT || 3000;
 

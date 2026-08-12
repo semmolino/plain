@@ -202,7 +202,7 @@ Der Anwendungscode ändert sich an überraschend wenigen Stellen:
 | `SUPABASE_URL` → PostgREST-URL | Railway-/Scalingo-Variablen | trivial |
 | Service-Key → JWT pro Request | `server.js:51-54` | **der Kern** |
 | `supabase.auth.admin.createUser` entfernen | `routes/auth.js:428-453`, `demo/createDemoTenant.js` | klein |
-| Uploads auf S3 umstellen | `routes/assets.js`, `services/attachments.js`, `controllers/stammdaten.js` | mittel |
+| ~~Uploads auf S3 umstellen~~ | **erledigt 12.08.** — Adapter `services/objectStorage.js`, alle 9 Stellen umgestellt, Anbieter Impossible Cloud. Siehe [OBJECT_STORAGE.md](OBJECT_STORAGE.md) | ~~mittel~~ |
 | `package.json` im Root + `Procfile` | neu | klein |
 | `Aptfile` für Chromium-Bibliotheken | neu | mittel, fehleranfällig |
 
@@ -269,7 +269,10 @@ Das `Dockerfile` bleibt bestehen, solange Railway parallel läuft.
 1. **PostgREST auf einem Buildpack** — als Erstes praktisch verifizieren. Davon
    hängt die Tragfähigkeit der gesamten Architektur ab.
 2. **Welche Mandanten kommen mit?** IDs aus `01_inventory.sql`, Abschnitt 8.
-3. **Objektspeicher-Anbieter wählen.** Scalingo hat keinen eigenen; empfohlen
+3. ~~**Objektspeicher-Anbieter wählen.**~~ **Entschieden 12.08.: Impossible
+   Cloud** (Hamburg, S3-kompatibel, kein US-Subprozessor). Adapter gebaut,
+   Bestandsumzug offen — siehe [OBJECT_STORAGE.md](OBJECT_STORAGE.md).
+   Ursprüngliche Notiz: Scalingo hat keinen eigenen; empfohlen
    werden Outscale OOS, S3, GCS, Azure Blob oder OVH. Für eine deutsche
    Kundschaft ist der Serverstandort ein Auswahlkriterium.
 4. **Extensions gegenprüfen** (Inventar Abschnitt 5).

@@ -3,22 +3,15 @@
 const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { insertProgressSnapshot } = require("./projectProgress");
-const path = require("path");
-const fs = require("fs");
-const crypto = require("crypto");
+const {
+  storeGeneratedPdfAsAsset,
+  storeGeneratedXmlAsAsset,
+  bestEffortDeleteAsset,
+} = require("./generatedAssets");
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function uploadRoot() {
-  return path.join(__dirname, "..", "uploads");
-}
-
-function safeFileName(name, fallback) {
-  const base = String(name || fallback || "document").replace(/[\/:*?"<>|]+/g, "_").trim();
-  return base.length ? base : "document";
-}
 
 function toNum(v) {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
@@ -27,69 +20,6 @@ function toNum(v) {
 
 function round2(v) {
   return Math.round(toNum(v) * 100) / 100;
-}
-
-async function storeGeneratedPdfAsAsset({ supabase, companyId, fileName, pdfBuffer, assetType }) {
-  const root = uploadRoot();
-  if (!fs.existsSync(root)) fs.mkdirSync(root, { recursive: true });
-  const uuid = crypto.randomUUID();
-  const dir = path.join(root, String(companyId), "generated");
-  fs.mkdirSync(dir, { recursive: true });
-  const outName = `${uuid}.pdf`;
-  const absPath = path.join(dir, outName);
-  fs.writeFileSync(absPath, Buffer.from(pdfBuffer));
-  const storageKey = path.relative(root, absPath).replace(/\\/g, "/");
-  const sha256 = crypto.createHash("sha256").update(Buffer.from(pdfBuffer)).digest("hex");
-  const row = {
-    COMPANY_ID: companyId,
-    ASSET_TYPE: assetType || "PDF",
-    FILE_NAME: safeFileName(fileName, "document.pdf"),
-    MIME_TYPE: "application/pdf",
-    FILE_SIZE: Buffer.byteLength(Buffer.from(pdfBuffer)),
-    STORAGE_KEY: storageKey,
-    SHA256: sha256,
-  };
-  const { data, error } = await supabase.from("ASSET").insert([row]).select("*").maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-async function storeGeneratedXmlAsAsset({ supabase, companyId, fileName, xmlString, assetType }) {
-  const root = uploadRoot();
-  if (!fs.existsSync(root)) fs.mkdirSync(root, { recursive: true });
-  const uuid = crypto.randomUUID();
-  const dir = path.join(root, String(companyId), "generated");
-  fs.mkdirSync(dir, { recursive: true });
-  const outName = `${uuid}.xml`;
-  const absPath = path.join(dir, outName);
-  const buf = Buffer.from(String(xmlString || ""), "utf8");
-  fs.writeFileSync(absPath, buf);
-  const storageKey = path.relative(root, absPath).replace(/\\/g, "/");
-  const sha256 = crypto.createHash("sha256").update(buf).digest("hex");
-  const row = {
-    COMPANY_ID: companyId,
-    ASSET_TYPE: assetType || "XML",
-    FILE_NAME: safeFileName(fileName, "document.xml"),
-    MIME_TYPE: "application/xml",
-    FILE_SIZE: Buffer.byteLength(buf),
-    STORAGE_KEY: storageKey,
-    SHA256: sha256,
-  };
-  const { data, error } = await supabase.from("ASSET").insert([row]).select("*").maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
-}
-
-async function bestEffortDeleteAsset({ supabase, asset }) {
-  try {
-    if (asset?.STORAGE_KEY) {
-      const fp = path.join(uploadRoot(), asset.STORAGE_KEY);
-      if (fs.existsSync(fp)) fs.unlinkSync(fp);
-    }
-  } catch (_) {}
-  try {
-    if (asset?.ID) await supabase.from("ASSET").delete().eq("ID", asset.ID);
-  } catch (_) {}
 }
 
 async function recomputeTotal(supabase, invoiceId) {

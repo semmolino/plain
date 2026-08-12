@@ -9,8 +9,7 @@
  * bestehenden Asset-Infrastruktur (backend/uploads/...).
  */
 
-const path = require("path");
-const fs = require("fs");
+const objectStorage = require("./objectStorage");
 const { loadAssetForTenant, findAssetForTenant } = require("../services/assetAccess");
 
 const ALLOWED_MIME = new Set([
@@ -139,7 +138,6 @@ async function deleteAttachment(supabase, { id, tenantId }) {
  */
 async function loadAttachmentsForXml(supabase, { docType, docId, tenantId }) {
   const items = await listAttachments(supabase, { docType, docId, tenantId });
-  const uploadRoot = path.join(__dirname, "..", "uploads");
 
   const out = [];
   for (const a of items) {
@@ -153,10 +151,9 @@ async function loadAttachmentsForXml(supabase, { docType, docId, tenantId }) {
     );
     if (!full?.STORAGE_KEY) continue;
 
-    const filePath = path.join(uploadRoot, full.STORAGE_KEY);
-    if (!fs.existsSync(filePath)) continue;
+    const buf = await objectStorage.getBuffer(full.STORAGE_KEY);
+    if (!buf) continue;
 
-    const buf = fs.readFileSync(filePath);
     out.push({
       id: a.ID,
       description: a.DESCRIPTION || full.FILE_NAME,

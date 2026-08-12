@@ -1,9 +1,9 @@
 const express = require("express");
 const path = require("path");
-const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 const { checkStorageLimit } = require("../middleware/limits");
+const objectStorage = require("../services/objectStorage");
 
 function isTableMissingErr(err, tableName) {
   const msg = String(err?.message || "").toLowerCase();
@@ -24,23 +24,18 @@ module.exports = (supabase) => {
     return data?.ID ?? null;
   }
 
-  const uploadRoot = path.join(__dirname, "..", "uploads");
-  if (!fs.existsSync(uploadRoot)) fs.mkdirSync(uploadRoot, { recursive: true });
+  // Speicherablage statt Plattenablage: die Datei geht direkt vom Request in
+  // den Objektspeicher, ohne Zwischenstation im Dateisystem. Das ist nicht nur
+  // noetig (auf Scalingo gibt es keine dauerhafte Platte), es entfernt auch die
+  // Aufraeumpflicht — eine abgewiesene Datei muss nicht mehr geloescht werden,
+  // weil sie nie irgendwo lag. Die Obergrenze von 10 MB unten begrenzt zugleich,
+  // was maximal im Arbeitsspeicher liegen kann.
+  const storage = multer.memoryStorage();
 
-  const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      // Use tenantId as the folder key (company_id resolved later in the handler)
-      const folder = String(req.tenantId || "0");
-      const dir = path.join(uploadRoot, folder);
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || "") || "";
-      const name = `${crypto.randomUUID()}${ext}`;
-      cb(null, name);
-    },
-  });
+  // Schluessel wie bisher: "<tenantId>/<uuid><endung>". Bewusst unveraendert,
+  // damit bestehende ASSET-Zeilen nach dem Umzug weiter aufloesen.
+  const buildStorageKey = (req, originalName) =>
+    `${String(req.tenantId || "0")}/${crypto.randomUUID()}${path.extname(originalName || "") || ""}`;
 
   const ALLOWED_MIME = new Set([
     "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
@@ -74,12 +69,11 @@ module.exports = (supabase) => {
       }
       if (!companyId) return res.status(404).json({ error: "Kein Unternehmen für diesen Mandanten gefunden." });
 
-      // Speicherlimit (metered): inkrementell prüfen, bevor die Datei registriert
-      // wird. Bei Überschreitung die bereits auf Platte liegende Temp-Datei wieder
-      // entfernen, damit sie nicht ungezählt liegen bleibt.
+      // Speicherlimit (metered): inkrementell prüfen, bevor die Datei abgelegt
+      // wird. Die Datei liegt zu diesem Zeitpunkt nur im Arbeitsspeicher — bei
+      // Überschreitung ist deshalb nichts aufzuräumen.
       const storageCheck = await checkStorageLimit(supabase, req, req.file.size);
       if (!storageCheck.allowed) {
-        fs.unlink(req.file.path, () => {});
         return res.status(402).json({
           error:
             `Speicherlimit erreicht: ${storageCheck.limitMb} MB (belegt: ${storageCheck.usedMb} MB, ` +
@@ -93,9 +87,9 @@ module.exports = (supabase) => {
 
       const assetType = String(req.body.asset_type || "OTHER").toUpperCase().trim();
 
-      const storageKey = path.relative(uploadRoot, req.file.path).replace(/\\/g, "/");
-      const fileBuf = fs.readFileSync(req.file.path);
-      const sha256 = crypto.createHash("sha256").update(fileBuf).digest("hex");
+      const storageKey = buildStorageKey(req, req.file.originalname);
+      const sha256 = crypto.createHash("sha256").update(req.file.buffer).digest("hex");
+      await objectStorage.put(storageKey, req.file.buffer, { contentType: req.file.mimetype });
 
       const insertRow = {
         COMPANY_ID: companyId,
@@ -109,6 +103,10 @@ module.exports = (supabase) => {
 
       const { data, error } = await supabase.from("ASSET").insert([insertRow]).select("*").maybeSingle();
       if (error) {
+        // Das Objekt liegt schon im Speicher, die Zeile fehlt. Ohne Aufräumen
+        // bliebe eine Datei zurück, auf die nichts verweist — unauffindbar,
+        // aber sie zählt weiter gegen das Speicherlimit des Mandanten.
+        await objectStorage.remove(storageKey).catch(() => {});
         if (isTableMissingErr(error, "asset")) {
           return res.status(501).json({ error: "Missing table ASSET. Please run backend/sql/stageA_document_templates.sql" });
         }
@@ -142,12 +140,12 @@ module.exports = (supabase) => {
       }
       if (!data) return res.status(404).json({ error: "not found" });
 
-      const filePath = path.join(uploadRoot, data.STORAGE_KEY);
-      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "file missing on disk" });
+      const obj = await objectStorage.getStream(data.STORAGE_KEY);
+      if (!obj) return res.status(404).json({ error: "file missing on disk" });
 
       res.setHeader("Content-Type", data.MIME_TYPE || "application/octet-stream");
       res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(data.FILE_NAME || "asset")}"`);
-      fs.createReadStream(filePath).pipe(res);
+      obj.stream.pipe(res);
     } catch (e) {
       res.status(500).json({ error: String(e?.message || e) });
     }

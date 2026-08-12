@@ -1,13 +1,10 @@
 const express      = require("express");
 const bcrypt       = require("bcryptjs");
-const fs           = require("fs");
-const path         = require("path");
 const balanceSvc   = require("../services/employeeBalance");
 const { findAssetForTenant } = require("../services/assetAccess");
 const { requirePermission } = require("../middleware/permissions");
 const { enforceLimit } = require("../middleware/limits");
-
-const uploadRoot = path.join(__dirname, "..", "uploads");
+const objectStorage = require("../services/objectStorage");
 
 // Returns an error message string if a duplicate is found, otherwise null.
 // excludeId: skip this employee ID (used on update to ignore self).
@@ -137,11 +134,8 @@ module.exports = (supabase) => {
       let dataUri = null;
       if (asset?.STORAGE_KEY && asset?.MIME_TYPE) {
         try {
-          const filePath = path.join(uploadRoot, asset.STORAGE_KEY);
-          if (fs.existsSync(filePath)) {
-            const b64 = fs.readFileSync(filePath).toString("base64");
-            dataUri = `data:${asset.MIME_TYPE};base64,${b64}`;
-          }
+          const buf = await objectStorage.getBuffer(asset.STORAGE_KEY);
+          if (buf) dataUri = `data:${asset.MIME_TYPE};base64,${buf.toString("base64")}`;
         } catch (e) { console.error("[ME_AVATAR] base64 cache error:", e.message); }
       }
 
