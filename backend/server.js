@@ -4,7 +4,7 @@ const cors      = require("cors");
 const helmet    = require("helmet");
 const bodyParser = require("body-parser");
 const path      = require("path");
-const { createClient } = require("@supabase/supabase-js");
+const dbLayer = require("./db");
 
 // ── Startup safety checks ────────────────────────────────────────────────────
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "plain-dev-secret-change-me") {
@@ -20,6 +20,17 @@ const objectStorage = require("./services/objectStorage");
 try {
   objectStorage.assertConfigured();
   console.log(`📦 Dateiablage: ${objectStorage.driverName()}`);
+} catch (e) {
+  console.error(`FATAL: ${e.message}`);
+  process.exit(1);
+}
+
+// Datenbankweg: direkt gegen Supabase (Service-Key) oder ueber PostgREST mit
+// einem Mandanten-Claim je Request. Gleiche Begruendung wie oben — eine
+// fehlende Variable soll den Deploy anhalten, nicht den ersten Nutzer.
+try {
+  dbLayer.assertConfigured();
+  console.log(`🗄  Datenbankweg: ${dbLayer.mode()}`);
 } catch (e) {
   console.error(`FATAL: ${e.message}`);
   process.exit(1);
@@ -60,10 +71,11 @@ const corsMw = cors({
 app.use("/api", corsMw);
 app.use(bodyParser.json());
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+// Kein Client, sondern ein Stellvertreter: er loest bei jedem Zugriff auf, in
+// wessen Auftrag gerade gearbeitet wird (siehe db.js). Ohne POSTGREST_URL ist
+// das unveraendert der bisherige Client mit dem Service-Key — die 36 Router
+// darunter und die 1.571 Aufrufstellen merken von der Umstellung nichts.
+const { db: supabase, tenantScope, runAsSystem } = dbLayer;
 
 // Auth
 const authRoutes    = require("./routes/auth")(supabase);
@@ -143,7 +155,11 @@ const { startNachtragFristenChecker }        = require("./services/nachtragFrist
 // licenseMiddleware MUSS vor permissionsMiddleware laufen: die Permissions-
 // Suppression (L3) braucht req.license. licenseMiddleware haengt nicht von
 // Permissions ab, daher unproblematisch.
-const authChain = [authMiddleware, licenseMiddleware, permissionsMiddleware];
+// tenantScope MUSS direkt hinter authMiddleware stehen: davor gibt es noch
+// keinen req.tenantId, und dahinter greifen bereits licenseMiddleware und
+// permissionsMiddleware auf die Datenbank zu — die brauchen den Mandanten
+// schon.
+const authChain = [authMiddleware, tenantScope, licenseMiddleware, permissionsMiddleware];
 
 app.use("/api/v1/stammdaten",        ...authChain, stammdatenRoutes);
 app.use("/api/v1/mitarbeiter",       ...authChain, mitarbeiterRoutes);
@@ -245,10 +261,17 @@ app.listen(port, () => {
   }
 
   // Daily/periodic checkers
-  try { startDueDateChecker(supabase); }              catch (e) { console.error("startDueDateChecker:", e?.message || e); }
-  try { startMonatsabschlussChecker(supabase); }      catch (e) { console.error("startMonatsabschlussChecker:", e?.message || e); }
-  try { startMahnungChecker(supabase); }              catch (e) { console.error("startMahnungChecker:", e?.message || e); }
-  try { startLeistungsstandReminderChecker(supabase); } catch (e) { console.error("startLeistungsstandReminderChecker:", e?.message || e); }
-  try { startHoursBookingReminderChecker(supabase); }    catch (e) { console.error("startHoursBookingReminderChecker:", e?.message || e); }
-  try { startNachtragFristenChecker(supabase); }         catch (e) { console.error("startNachtragFristenChecker:", e?.message || e); }
+  //
+  // Sie laufen ueber ALLE Mandanten und damit ausserhalb jedes Requests. Ohne
+  // runAsSystem faenden sie keinen Mandanten-Claim vor und wuerden — richtig,
+  // aber nutzlos — null Zeilen sehen. Der Kontext traegt bis in die Timer
+  // hinein, die start… synchron plant; deshalb genuegt das Umhuellen hier.
+  runAsSystem(() => {
+    try { startDueDateChecker(supabase); }              catch (e) { console.error("startDueDateChecker:", e?.message || e); }
+    try { startMonatsabschlussChecker(supabase); }      catch (e) { console.error("startMonatsabschlussChecker:", e?.message || e); }
+    try { startMahnungChecker(supabase); }              catch (e) { console.error("startMahnungChecker:", e?.message || e); }
+    try { startLeistungsstandReminderChecker(supabase); } catch (e) { console.error("startLeistungsstandReminderChecker:", e?.message || e); }
+    try { startHoursBookingReminderChecker(supabase); }    catch (e) { console.error("startHoursBookingReminderChecker:", e?.message || e); }
+    try { startNachtragFristenChecker(supabase); }         catch (e) { console.error("startNachtragFristenChecker:", e?.message || e); }
+  });
 });
