@@ -38,3 +38,13 @@ libx11-6
 libxcb1
 libxext6
 fonts-liberation
+
+# Postgres-Client 17 fuer die Datenmigration (Skript 08).
+#
+# Das Image bringt bereits postgresql-client-16 mit. Das genuegt NICHT:
+# Supabase laeuft auf 17.6, und pg_dump weigert sich, von einem neueren Server
+# zu lesen ("server version mismatch"). Mit Version 17 laeuft die Migration
+# vollstaendig im Container — beide Datenbanken sind von dort direkt
+# erreichbar, es braucht weder SSH-Tunnel noch Postgres-Werkzeuge auf einem
+# Arbeitsrechner, und Kundendaten wandern nicht ueber einen Laptop.
+postgresql-client-17
