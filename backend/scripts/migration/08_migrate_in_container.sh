@@ -45,19 +45,27 @@ say() { echo ""; echo "── $* ───────────────�
 [[ -n "$DST" ]] || { echo "FEHLER: SCALINGO_POSTGRESQL_URL fehlt — Addon angelegt?" >&2; exit 1; }
 
 # ── Werkzeuge ───────────────────────────────────────────────────────────────
-# Den Pfad explizit waehlen: /usr/bin/pg_dump zeigt auf Version 16, und die
-# liest nicht von einem 17er-Server. Die Fehlermeldung ("server version
-# mismatch") nennt zwar die Ursache, aber nicht, dass daneben ein passendes
-# Binary liegt.
-PGBIN17="/usr/lib/postgresql/17/bin"
-if [[ -x "$PGBIN17/pg_dump" ]]; then
-  PG_DUMP="$PGBIN17/pg_dump"; PSQL="$PGBIN17/psql"
-else
-  PG_DUMP="$(command -v pg_dump)"; PSQL="$(command -v psql)"
-  echo "WARNUNG: $PGBIN17 fehlt — nutze $($PG_DUMP --version)." >&2
-  echo "         Steht postgresql-client-17 im Aptfile und wurde neu gebaut?" >&2
+# Den Pfad explizit waehlen. `which pg_dump` liefert /usr/bin/pg_dump — das ist
+# Version 16 aus dem Basisimage, und die liest nicht von einem 17er-Server.
+# Die Fehlermeldung ("server version mismatch") nennt zwar die Ursache, aber
+# nicht, dass ein passendes Binary danebenliegt.
+#
+# Der apt-Buildpack installiert NICHT nach /usr, sondern in /app/.apt — und
+# stellt seinen Pfad in PATH hinter die Systemverzeichnisse. Deshalb steht der
+# Buildpack-Pfad hier an erster Stelle.
+PG_DUMP=""; PSQL=""
+for b in /app/.apt/usr/lib/postgresql/17/bin \
+         "${HOME:-/app}/.apt/usr/lib/postgresql/17/bin" \
+         /usr/lib/postgresql/17/bin; do
+  if [[ -x "$b/pg_dump" ]]; then PG_DUMP="$b/pg_dump"; PSQL="$b/psql"; break; fi
+done
+if [[ -z "$PG_DUMP" ]]; then
+  PG_DUMP="$(command -v pg_dump || true)"; PSQL="$(command -v psql || true)"
+  [[ -n "$PG_DUMP" ]] || { echo "FEHLER: kein pg_dump gefunden." >&2; exit 1; }
+  echo "WARNUNG: kein pg_dump 17 gefunden — nutze $("$PG_DUMP" --version)." >&2
+  echo "         Steht postgresql-client-17 im Aptfile und wurde danach neu gebaut?" >&2
 fi
-echo "Werkzeug : $("$PG_DUMP" --version)"
+echo "Werkzeug : $("$PG_DUMP" --version)  ($PG_DUMP)"
 
 # ── Verbindungen pruefen ────────────────────────────────────────────────────
 say "Verbindungen"
