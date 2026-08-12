@@ -133,7 +133,41 @@ uebertrage() {
 
 uebertrage "Tabellen"               --schema-only --section=pre-data
 uebertrage "Daten und Sequenzen"    --data-only                       # enthaelt setval()
-uebertrage "Constraints, Indizes"   --schema-only --section=post-data
+
+# Der letzte Abschnitt braucht einen Filter.
+#
+# --no-privileges entfernt GRANTs, aber RLS-POLICIES sind keine Privilegien —
+# sie bleiben im Dump und verweisen auf die Supabase-Rollen anon,
+# authenticated und service_role. Die gibt es auf Scalingo nicht, und anlegen
+# duerfen wir sie auch nicht (der Datenbankbenutzer hat kein CREATEROLE).
+# Der Import bricht sonst ab mit:
+#     ERROR: role "authenticated" does not exist
+#
+# Weglassen ist richtig und kein Verlust: 05_rls_scalingo.sql legt die
+# Policies neu an — gegen JWT-Claims statt gegen Datenbankrollen. Dasselbe gilt
+# fuer die Realtime-Publikation, die es hier nicht gibt.
+say "Uebertrage: Constraints, Indizes"
+ROH=$(mktemp); SAUBER=$(mktemp)
+trap 'rm -f "$ROH" "$SAUBER"' EXIT
+"$PG_DUMP" "$SRC" --no-owner --no-privileges --no-comments "${ARGS[@]}" \
+  --schema-only --section=post-data > "$ROH"
+
+ANZ_POL=$(grep -c '^CREATE POLICY' "$ROH" || true)
+ANZ_PUB=$(grep -cE '^(CREATE|ALTER) PUBLICATION' "$ROH" || true)
+
+# Anweisungen koennen mehrzeilig sein: ab der Kopfzeile ueberspringen, bis eine
+# Zeile auf ein Semikolon endet.
+awk '
+  /^CREATE POLICY/                  { ueberspringen = 1 }
+  /^(CREATE|ALTER) PUBLICATION/     { ueberspringen = 1 }
+  ueberspringen                     { if (/;[ \t]*$/) ueberspringen = 0; next }
+                                    { print }
+' "$ROH" > "$SAUBER"
+
+echo "  uebersprungen: $ANZ_POL Supabase-Policies, $ANZ_PUB Publikationen"
+echo "                 (Policies kommen mit 05_rls_scalingo.sql zurueck)"
+"$PSQL" "$DST" -v ON_ERROR_STOP=1 -q -f "$SAUBER"
+echo "  ✓"
 
 # ── Kontrolle ───────────────────────────────────────────────────────────────
 # Zeilenzahlen beider Seiten mit count(*), nicht mit den geschaetzten reltuples
