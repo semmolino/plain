@@ -82,19 +82,39 @@ function scopedClient(schluessel, claims) {
   return client;
 }
 
-// KEIN role-Claim. Traegt das JWT einen, versucht PostgREST bei jedem Request
-// ein SET LOCAL ROLE — und bricht ab, wenn es die Rolle nicht gibt:
-//     ERROR: role "plain_app" does not exist
-// Auf Scalingo gibt es sie nicht und kann es sie nicht geben: der
-// Datenbankbenutzer hat kein CREATEROLE. Die Abfragen laufen deshalb unter dem
-// Verbindungsbenutzer, und die Trennung kommt allein aus den Claims. Das ist
-// gleichwertig, weil 05_rls_scalingo.sql FORCE ROW LEVEL SECURITY setzt — ohne
-// das wuerde der Tabelleneigentuemer die Policies stillschweigend umgehen.
+// ── Die Rolle im Token ──────────────────────────────────────────────────────
+// PostgREST BRAUCHT einen role-Claim. Fehlt er und ist kein db-anon-role
+// konfiguriert, wird jeder Request abgewiesen:
+//     {"code":"PGRST302","message":"Anonymous access is disabled"}   401
+// Fuer den Login sah das aus wie "Benutzer unbekannt", weil der Handler
+// Lookup-Fehler bewusst verschluckt — der Fehler tauchte nirgends auf.
+//
+// Die Rolle muss in der Datenbank EXISTIEREN, sonst scheitert PostgREST beim
+// SET LOCAL ROLE. Ein ausgedachter Name wie "plain_app" geht hier nicht: auf
+// Scalingo fehlt CREATEROLE, um ihn anzulegen. Genommen wird deshalb der
+// Verbindungsbenutzer selbst.
+//
+// Das schwaecht die Trennung nicht: die Rolle hat rolbypassrls = false, und
+// 05_rls_scalingo.sql setzt FORCE ROW LEVEL SECURITY — die Policies gelten
+// also auch fuer den Tabelleneigentuemer.
+//
+// Ohne PGRST_ROLE wird der Name aus der Datenbank-URL abgeleitet. Damit bleibt
+// die Anwendung richtig, wenn das Addon einmal neu angelegt wird und der
+// Benutzername sich aendert.
+function ermittleRolle() {
+  if (process.env.PGRST_ROLE) return process.env.PGRST_ROLE;
+  const url = process.env.SCALINGO_POSTGRESQL_URL || process.env.DATABASE_URL || "";
+  const treffer = url.match(/^postgres(?:ql)?:\/\/([^:@/]+)/);
+  return treffer ? treffer[1] : null;
+}
+const ROLLE = ermittleRolle();
+const mitRolle = (claims) => (ROLLE ? { role: ROLLE, ...claims } : claims);
+
 const tenantClient = (tenantId) =>
-  scopedClient(`t:${tenantId}`, { tenant_id: Number(tenantId) });
+  scopedClient(`t:${tenantId}`, mitRolle({ tenant_id: Number(tenantId) }));
 
 const systemClient = () =>
-  scopedClient("system", { sys: "true" });
+  scopedClient("system", mitRolle({ sys: "true" }));
 
 // Ohne Mandanten und ohne Systemanspruch. Die Policies finden keinen Mandanten
 // und liefern keine Zeile — das ist der Zustand, in dem ein Programmfehler
@@ -105,7 +125,7 @@ const systemClient = () =>
 // ohne Nutzlast, und PostgREST setzt request.jwt.claims dann auf einen leeren
 // Wert. Genau dagegen ist current_tenant_id() inzwischen abgesichert, aber der
 // Marker macht ausserdem im Log erkennbar, woher die Abfrage kam.
-const anonymerClient = () => scopedClient("anon", { scope: "none" });
+const anonymerClient = () => scopedClient("anon", mitRolle({ scope: "none" }));
 
 let warnungGezeigt = false;
 function ohneKontext() {
@@ -187,6 +207,15 @@ function assertConfigured() {
   const fehlend = ["PGRST_JWT_SECRET"].filter((v) => !process.env[v]);
   if (fehlend.length) {
     throw new Error(`POSTGREST_URL ist gesetzt, aber es fehlt: ${fehlend.join(", ")}`);
+  }
+  // Ohne Rolle weist PostgREST jeden Request mit PGRST302 ab. Das aeussert
+  // sich als leere Ergebnisse statt als Fehler — der Login meldete deshalb
+  // "Benutzer unbekannt", und im Log stand nichts. Lieber beim Start abbrechen.
+  if (!ROLLE) {
+    throw new Error(
+      "POSTGREST_URL ist gesetzt, aber es liess sich keine Datenbankrolle ermitteln. " +
+      "PGRST_ROLE setzen (Name des Verbindungsbenutzers) oder SCALINGO_POSTGRESQL_URL bereitstellen."
+    );
   }
 }
 

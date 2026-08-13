@@ -53,7 +53,39 @@ describe("ohne POSTGREST_URL — unveraendertes Verhalten", () => {
 });
 
 describe("mit POSTGREST_URL", () => {
-  const MIT = { POSTGREST_URL: "http://127.0.0.1:3001" };
+  const MIT = { POSTGREST_URL: "http://127.0.0.1:3001", PGRST_ROLE: "planandsimp_3252" };
+
+  // PostgREST weist jeden Request ohne role-Claim ab:
+  //   {"code":"PGRST302","message":"Anonymous access is disabled"}
+  // Fuer den Login sah das aus wie "Benutzer unbekannt", weil der Handler
+  // Lookup-Fehler verschluckt. Der Claim muss in JEDEM Geltungsbereich stehen.
+  it("legt in jeden Geltungsbereich die Datenbankrolle", () => {
+    const { db, tenantScope, systemScope, runAsSystem } = ladeMit(MIT);
+    const gesehen = [];
+    tenantScope({ tenantId: 4 }, null, () => gesehen.push(claimsVon(db).role));
+    systemScope({}, null, () => gesehen.push(claimsVon(db).role));
+    runAsSystem(() => gesehen.push(claimsVon(db).role));
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    gesehen.push(claimsVon(db).role);   // ohne Kontext
+    warn.mockRestore();
+    expect(gesehen).toEqual(Array(4).fill("planandsimp_3252"));
+  });
+
+  it("leitet die Rolle aus der Datenbank-URL ab, wenn PGRST_ROLE fehlt", () => {
+    const { db, runAsSystem } = ladeMit({
+      POSTGREST_URL: "http://127.0.0.1:3001", PGRST_ROLE: "",
+      SCALINGO_POSTGRESQL_URL: "postgres://planandsimp_9999:geheim@host:32540/db",
+    });
+    runAsSystem(() => expect(claimsVon(db).role).toBe("planandsimp_9999"));
+  });
+
+  it("verweigert den Start, wenn sich keine Rolle ermitteln laesst", () => {
+    const m = ladeMit({
+      POSTGREST_URL: "http://127.0.0.1:3001", PGRST_ROLE: "",
+      SCALINGO_POSTGRESQL_URL: "", DATABASE_URL: "",
+    });
+    expect(() => m.assertConfigured()).toThrow(/Datenbankrolle/);
+  });
 
   it("meldet den PostgREST-Weg", () => {
     expect(ladeMit(MIT).mode()).toBe("postgrest");
@@ -67,11 +99,10 @@ describe("mit POSTGREST_URL", () => {
   it("gibt dem Request den Mandanten als Claim mit", (done) => {
     const { db, tenantScope } = ladeMit(MIT);
     tenantScope({ tenantId: 4 }, null, () => {
-      expect(claimsVon(db)).toMatchObject({ tenant_id: 4 });
-      // Bewusst KEIN role-Claim: PostgREST wuerde daraufhin SET LOCAL ROLE
-      // versuchen, und die Rolle gibt es auf Scalingo nicht — der
-      // Datenbankbenutzer hat kein CREATEROLE.
-      expect(claimsVon(db).role).toBeUndefined();
+      // Die Rolle MUSS mit: ohne sie antwortet PostgREST mit PGRST302.
+      // Sie muss zugleich eine existierende Datenbankrolle sein — ein
+      // ausgedachter Name scheitert am SET LOCAL ROLE.
+      expect(claimsVon(db)).toMatchObject({ tenant_id: 4, role: "planandsimp_3252" });
       done();
     });
   });
@@ -107,7 +138,9 @@ describe("mit POSTGREST_URL", () => {
     const c = claimsVon(db);
     expect(c.tenant_id).toBeUndefined();
     expect(c.sys).toBeUndefined();
-    expect(c.role).toBeUndefined();
+    // Die Rolle bleibt drin — sonst wuerde PostgREST den Request abweisen und
+    // aus dem beabsichtigten "keine Zeilen" wuerde ein Fehler.
+    expect(c.role).toBe("planandsimp_3252");
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("ausserhalb eines Request"));
     warn.mockRestore();
   });
