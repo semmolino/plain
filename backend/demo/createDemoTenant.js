@@ -86,23 +86,23 @@ async function main() {
 
   const supabase = createClient(url, key);
 
-  // 1) Supabase-Auth-User
-  const { data: authData, error: authErr } = await supabase.auth.admin.createUser({ email, password, email_confirm: true });
-  if (authErr) { console.error("✗ Auth-User:", authErr.message || authErr); process.exit(1); }
-  const userId = authData.user.id;
+  // 1) E-Mail schon vergeben?
+  //    Ersetzt supabase.auth.admin.createUser, das hier frueher stand: der
+  //    Auth-Benutzer wurde nie wieder gebraucht (die Anmeldung laeuft ueber
+  //    EMPLOYEE.PASSWORD), aber der Aufruf war nebenbei die Dublettenpruefung.
+  const { data: vorhanden } = await supabase
+    .from("EMPLOYEE").select("ID").ilike("MAIL", email).maybeSingle();
+  if (vorhanden) { console.error("✗ E-Mail bereits vergeben:", email); process.exit(1); }
 
   // 2) TENANTS
   const { data: tenant, error: tErr } = await supabase.from("TENANTS").insert([{ TENANT: company }]).select("ID").single();
-  if (tErr) { await supabase.auth.admin.deleteUser(userId).catch(() => {}); console.error("✗ TENANTS:", tErr.message); process.exit(1); }
+  if (tErr) { console.error("✗ TENANTS:", tErr.message); process.exit(1); }
   const tenantId = tenant.ID;
 
   // 3) COMPANY
   await supabase.from("COMPANY").insert([{ COMPANY_NAME_1: company, TENANT_ID: tenantId }]);
 
-  // 4) app_metadata (best effort)
-  await supabase.auth.admin.updateUserById(userId, { app_metadata: { tenant_id: tenantId } }).catch(() => {});
-
-  // 5) EMPLOYEE
+  // 4) EMPLOYEE
   const hashedPw = await bcrypt.hash(password, 10);
   const { data: emp, error: eErr } = await supabase.from("EMPLOYEE").insert([{
     MAIL: email, PASSWORD: hashedPw, SHORT_NAME: String(shortNm).trim().toUpperCase(),

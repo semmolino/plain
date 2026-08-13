@@ -424,14 +424,24 @@ module.exports = (supabase) => {
         return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen haben." });
       }
 
-      // 1. Create Supabase Auth user (email auto-confirmed)
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
-      if (authError) return res.status(400).json({ error: authError.message || String(authError) || "Auth-Benutzer konnte nicht erstellt werden." });
-      const userId = authData.user.id;
+      // 1. E-Mail schon vergeben?
+      //
+      // Diese Pruefung ersetzt supabase.auth.admin.createUser, das hier frueher
+      // stand. Der dort angelegte Auth-Benutzer wurde nie wieder gebraucht --
+      // die Anmeldung laeuft ueber EMPLOYEE.PASSWORD und ein eigenes JWT --,
+      // aber der Aufruf scheiterte bei bereits vergebener Adresse und war
+      // damit nebenbei die Dublettenpruefung. Ohne Ersatz haette dieselbe
+      // E-Mail in mehreren Mandanten angelegt werden koennen, und der Login
+      // sucht mandantenuebergreifend: maybeSingle() haette dann bei jedem
+      // Versuch einen Fehler geliefert und beide Konten unbrauchbar gemacht.
+      const { data: vorhanden } = await supabase
+        .from("EMPLOYEE")
+        .select("ID")
+        .ilike("MAIL", likeEscape(String(email).trim()))
+        .maybeSingle();
+      if (vorhanden) {
+        return res.status(400).json({ error: "Diese E-Mail-Adresse ist bereits vergeben." });
+      }
 
       // 2. Create TENANTS record
       const { data: tenant, error: tenantError } = await supabase
@@ -441,7 +451,6 @@ module.exports = (supabase) => {
         .single();
 
       if (tenantError) {
-        await supabase.auth.admin.deleteUser(userId).catch(() => {});
         return res.status(500).json({ error: "Mandant konnte nicht angelegt werden: " + tenantError.message });
       }
       const tenantId = tenant.ID;
@@ -449,12 +458,7 @@ module.exports = (supabase) => {
       // 3. Create COMPANY record
       await supabase.from("COMPANY").insert([{ COMPANY_NAME_1: companyName, TENANT_ID: tenantId }]);
 
-      // 4. Store tenant_id in Supabase app_metadata (best-effort, non-fatal)
-      await supabase.auth.admin.updateUserById(userId, { app_metadata: { tenant_id: tenantId } }).catch((e) => {
-        console.error("[SIGNUP][APP_METADATA]", e?.message || e);
-      });
-
-      // 5. Create the first EMPLOYEE so they can log in
+      // 4. Create the first EMPLOYEE so they can log in
       const hashedPw = await bcrypt.hash(password, 10);
       const { data: emp, error: empErr } = await supabase.from("EMPLOYEE").insert([{
         MAIL:       email,
@@ -466,14 +470,21 @@ module.exports = (supabase) => {
       }]).select("ID").single();
       if (empErr) {
         console.error("[SIGNUP][EMPLOYEE]", empErr.message);
+        // Mandant und Firma wieder wegraeumen. Frueher scheiterte der Signup
+        // fast immer schon am Auth-Benutzer, also VOR diesen Zeilen; jetzt ist
+        // dies der erste Schritt, der kippen kann. Ohne Aufraeumen bliebe ein
+        // Mandant ohne einen einzigen Benutzer zurueck — unerreichbar, aber in
+        // der Owner-Konsole und in jeder Mandantenliste sichtbar.
+        await supabase.from("COMPANY").delete().eq("TENANT_ID", tenantId).catch(() => {});
+        await supabase.from("TENANTS").delete().eq("ID", tenantId).catch(() => {});
         return res.status(500).json({ error: "Mitarbeiter konnte nicht angelegt werden: " + empErr.message });
       }
 
-      // 6. RBAC: Standard-Rollen fuer den neuen Tenant anlegen + Erst-User als
+      // 5. RBAC: Standard-Rollen fuer den neuen Tenant anlegen + Erst-User als
       // Administrator. Ohne das waere der User komplett ohne Berechtigungen.
       await seedTenantRbacAndAssignAdmin(supabase, tenantId, emp.ID);
 
-      // 7. Lizenz: Standard-Plan zuweisen. Ohne diese Zeile faellt die
+      // 6. Lizenz: Standard-Plan zuweisen. Ohne diese Zeile faellt die
       // Lizenzpruefung auf "unbeschraenkt" zurueck (Soft-Fail in
       // middleware/license.js) UND der Mandant fehlt in der Owner-Konsole.
       // Best-effort: eine fehlende Lizenz darf die Registrierung nicht kippen.
