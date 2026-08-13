@@ -75,29 +75,36 @@ app.use(bodyParser.json());
 // wessen Auftrag gerade gearbeitet wird (siehe db.js). Ohne POSTGREST_URL ist
 // das unveraendert der bisherige Client mit dem Service-Key — die 36 Router
 // darunter und die 1.571 Aufrufstellen merken von der Umstellung nichts.
-const { db: supabase, tenantScope, runAsSystem } = dbLayer;
+const { db: supabase, tenantScope, systemScope, runAsSystem } = dbLayer;
 
 // Auth
 const authRoutes    = require("./routes/auth")(supabase);
 const authMiddleware = require("./middleware/auth")(supabase);
 
 
+// Oeffentliche Router laufen an der authChain und damit an tenantScope vorbei —
+// per Definition, denn dort gibt es noch keine Anmeldung. Ueber PostgREST
+// braeuchten sie deshalb systemScope: ohne ihn landen sie im claimlosen
+// Rueckfall, der keine Zeile liefert, und der Login faende den Benutzer nicht.
+// Er MUSS mandantenuebergreifend suchen — die E-Mail ist der einzige
+// Anhaltspunkt, der Mandant ergibt sich erst aus dem Fund.
+
 // Public auth routes (no token required)
-app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/auth", systemScope, authRoutes);
 
 // Public webhook routes (signature-verified, no JWT)
 const webhookRoutes = require("./routes/webhooks");
-app.use("/api/v1/webhooks", webhookRoutes);
+app.use("/api/v1/webhooks", systemScope, webhookRoutes);
 
 // Öffentliche, cookieless Landing-Page-Analytics (KEINE Auth, vor authChain).
 // First-Party-Erfassung anonymer Besucher-Ereignisse der Marketing-Seite.
 // Siehe routes/tracking.js, Migration 0084, docs/marketing/Analytics_Setup.md.
 const trackingRoutes = require("./routes/tracking")(supabase);
-app.use("/api/v1/track", trackingRoutes);
+app.use("/api/v1/track", systemScope, trackingRoutes);
 
 // Public branding routes (no JWT -- liefert Login-Hero-Info via Slug)
 const brandingRoutes = require("./routes/branding")(supabase);
-app.use("/api/v1/branding", brandingRoutes);
+app.use("/api/v1/branding", systemScope, brandingRoutes);
 
 // All other API routes require a valid session
 const stammdatenRoutes       = require("./routes/stammdaten")(supabase);

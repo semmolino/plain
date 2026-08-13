@@ -135,4 +135,16 @@ describe("mit POSTGREST_URL", () => {
     const { tenantScope } = ladeMit(MIT);
     tenantScope({}, null, done);   // kein tenantId -> next() ohne Kontext
   });
+
+  // Ohne systemScope landet der Login im claimlosen Rueckfall und findet den
+  // Benutzer nicht — ohne dass irgendwo ein Fehler auftaucht. Er muss
+  // mandantenuebergreifend suchen duerfen: die E-Mail ist der einzige
+  // Anhaltspunkt, der Mandant ergibt sich erst aus dem Fund.
+  it("gibt oeffentlichen Routern per systemScope Systemzugriff", (done) => {
+    const { db, systemScope } = ladeMit(MIT);
+    systemScope({}, null, () => {
+      expect(claimsVon(db).sys).toBe("true");
+      done();
+    });
+  });
 });

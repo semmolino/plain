@@ -165,6 +165,23 @@ function runAsSystem(fn) {
   return als.run({ client: systemClient() }, fn);
 }
 
+// Dasselbe als Express-Middleware, fuer die oeffentlichen Router.
+//
+// WARUM SIE NOETIG IST: tenantScope haengt in der authChain und setzt den
+// Mandanten aus req.tenantId. Die oeffentlichen Router laufen daran vorbei —
+// per Definition, denn dort gibt es noch keine Anmeldung. Ohne systemScope
+// landen sie im claimlosen Rueckfall, und der liefert null Zeilen. Der Login
+// wuerde den Benutzer dann nicht finden und "unbekannt" melden, ohne dass
+// irgendwo ein Fehler auftaucht — der stillste aller Ausfaelle.
+//
+// Der Login MUSS mandantenuebergreifend suchen: die E-Mail-Adresse ist der
+// einzige Anhaltspunkt, der Mandant ergibt sich erst aus dem Fund. Das ist
+// nicht zu vermeiden und der Grund, warum diese Router eine Ausnahme bilden.
+function systemScope(_req, _res, next) {
+  if (!AKTIV) return next();
+  als.run({ client: systemClient() }, next);
+}
+
 function assertConfigured() {
   if (!AKTIV) return;
   const fehlend = ["PGRST_JWT_SECRET"].filter((v) => !process.env[v]);
@@ -176,6 +193,7 @@ function assertConfigured() {
 module.exports = {
   db,
   tenantScope,
+  systemScope,
   runAsSystem,
   assertConfigured,
   mode: () => (AKTIV ? "postgrest" : "supabase"),
