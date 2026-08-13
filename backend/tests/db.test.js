@@ -155,6 +155,23 @@ describe("mit POSTGREST_URL", () => {
     });
   });
 
+  // supabase-js haengt "/rest/v1" an jede URL. Bei Supabase bildet ein Gateway
+  // das auf PostgREST ab; ein nacktes PostgREST antwortet darauf mit
+  // {"code":"PGRST125","message":"Invalid path specified in request URL"} —
+  // und zwar auf JEDE Abfrage, weshalb nach dem Umschalten gar nichts ging.
+  it("entfernt den /rest/v1-Praefix, den supabase-js anhaengt", () => {
+    const { _pfadKorrigieren } = ladeMit(MIT);
+    const basis = "http://127.0.0.1:3001";
+    expect(_pfadKorrigieren(`${basis}/rest/v1/EMPLOYEE?select=ID`))
+      .toBe(`${basis}/EMPLOYEE?select=ID`);
+    expect(_pfadKorrigieren(`${basis}/rest/v1/rpc/fn_dashboard_kpis`))
+      .toBe(`${basis}/rpc/fn_dashboard_kpis`);
+    // Ein Tabellenname, der zufaellig so heisst, darf nicht mitverstuemmelt
+    // werden — deshalb wird gegen die Basis-URL ersetzt, nicht global.
+    expect(_pfadKorrigieren(`${basis}/rest/v1/T?x=/rest/v1/y`))
+      .toBe(`${basis}/T?x=/rest/v1/y`);
+  });
+
   it("erzeugt aus dem Stellvertreter eine echte Abfragekette", (done) => {
     const { db, tenantScope } = ladeMit(MIT);
     tenantScope({ tenantId: 4 }, null, () => {

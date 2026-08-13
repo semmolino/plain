@@ -65,6 +65,28 @@ function legacyClient() {
 // der Bereiche ist klein: ein Mandant je aktivem Nutzer, plus "system".
 const clients = new Map();
 
+// ── Der Pfad ────────────────────────────────────────────────────────────────
+// supabase-js haengt an die Basis-URL immer "/rest/v1" an. Bei Supabase liegt
+// davor ein Gateway, das diesen Pfad auf PostgREST abbildet; ein nacktes
+// PostgREST kennt ihn nicht und antwortet auf jede Abfrage mit
+//     {"code":"PGRST125","message":"Invalid path specified in request URL"}
+//
+// Das war die Annahme, die im Migrationskonzept fehlte: supabase-js spricht
+// zwar PostgREST, aber nicht dessen Pfade. Statt einen Reverse-Proxy davor zu
+// stellen, wird der Praefix hier beim Absenden entfernt — eine Stelle, kein
+// zusaetzlicher Prozess, und es gilt auch fuer /rest/v1/rpc/<funktion>.
+function pfadKorrigieren(url) {
+  return String(url).replace(POSTGREST_URL + "/rest/v1", POSTGREST_URL);
+}
+
+function fetchOhnePraefix(eingabe, init) {
+  if (typeof eingabe === "string" || eingabe instanceof URL) {
+    return fetch(pfadKorrigieren(eingabe), init);
+  }
+  // Request-Objekt: URL laesst sich nicht aendern, also neu aufbauen.
+  return fetch(new Request(pfadKorrigieren(eingabe.url), eingabe), init);
+}
+
 function scopedClient(schluessel, claims) {
   const jetzt = Date.now();
   const treffer = clients.get(schluessel);
@@ -75,7 +97,10 @@ function scopedClient(schluessel, claims) {
   const token = jwt.sign(claims, process.env.PGRST_JWT_SECRET, { expiresIn: `${TOKEN_MINUTEN}m` });
   const client = createClient(POSTGREST_URL, token, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
+    global: {
+      headers: { Authorization: `Bearer ${token}` },
+      fetch: fetchOhnePraefix,
+    },
   });
 
   clients.set(schluessel, { client, gueltigBis: jetzt + TOKEN_MINUTEN * 60_000 });
@@ -227,6 +252,7 @@ module.exports = {
   assertConfigured,
   mode: () => (AKTIV ? "postgrest" : "supabase"),
   // nur fuer Tests
+  _pfadKorrigieren: pfadKorrigieren,
   _als: als,
   _resetForTests: () => { clients.clear(); legacy = null; warnungGezeigt = false; },
 };
