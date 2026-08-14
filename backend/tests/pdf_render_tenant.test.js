@@ -16,7 +16,7 @@
  *   3. die Antwort verraet nicht, ob der Beleg ueberhaupt existiert
  */
 
-const { renderDocumentPdf } = require("../services_pdf_render");
+const { renderDocumentPdf, renderMahnungPdf } = require("../services_pdf_render");
 
 /** Minimaler Supabase-Nachbau: kennt genau eine Rechnung (ID 1, Mandant 4). */
 function fakeSupabase() {
@@ -78,5 +78,40 @@ describe("renderDocumentPdf — Mandantentrennung", () => {
     const msg = await render({ docId: 1, tenantId: 4 }).catch((e) => e.message);
     expect(msg).not.toMatch(/tenantId ist erforderlich/);
     expect(msg).not.toMatch(/nicht gefunden/);
+  });
+});
+
+/**
+ * Die Wache oben kam mit der Pentest-Haertung dazu, und jeder Aufrufer von
+ * buildPdfViewModel wurde nachgezogen — einer nicht: renderMahnungPdf reichte
+ * tenantId zwar an die Logo-Aufloesung weiter, aber nicht an das Belegmodell.
+ * Damit war die PDF-Ausgabe fuer Mahnungen vollstaendig ausgefallen, waehrend
+ * Liste, Statistik und Versand weiter funktionierten — der Ausfall sah deshalb
+ * nach einem Anzeigefehler aus.
+ *
+ * Diese Tests halten fest, dass renderMahnungPdf denselben Vertrag erfuellt.
+ */
+describe("renderMahnungPdf — Mandantentrennung", () => {
+  const mahnung = (args) =>
+    renderMahnungPdf(fakeSupabase(), { invoiceId: 1, mahnstufe: 1, ...args });
+
+  it("reicht tenantId bis zum Belegmodell durch", async () => {
+    // Ohne die Weitergabe scheiterte JEDER Aufruf hier — auch der mit gueltigem
+    // Mandanten. Genau das war der Fehler.
+    const msg = await mahnung({ tenantId: 4 }).catch((e) => e.message);
+    expect(msg).not.toMatch(/tenantId ist erforderlich/);
+  });
+
+  it("verlangt tenantId", async () => {
+    await expect(mahnung({ tenantId: undefined })).rejects.toThrow(/tenantId ist erforderlich/);
+  });
+
+  it("verweigert eine Mahnung zu einem fremden Beleg", async () => {
+    await expect(mahnung({ tenantId: 6 })).rejects.toThrow(/nicht gefunden/);
+  });
+
+  it("verlangt einen Beleg", async () => {
+    await expect(mahnung({ invoiceId: null, ppId: null, tenantId: 4 }))
+      .rejects.toMatchObject({ status: 400 });
   });
 });

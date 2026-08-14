@@ -1157,7 +1157,13 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
   if (!docId) throw { status: 400, message: 'invoiceId oder ppId erforderlich' };
 
   // Load base document data (reuses all existing seller/buyer resolvers)
-  const vm = await buildPdfViewModel({ supabase, docType, docId });
+  //
+  // tenantId MUSS mit. buildPdfViewModel filtert damit den Beleg mandanten-
+  // gebunden und weist den Aufruf sonst ab. Genau das ist hier passiert: die
+  // Wache kam mit der Pentest-Haertung dazu, jeder Aufrufer wurde nachgezogen
+  // — dieser eine nicht. Damit war die PDF-Ausgabe fuer Mahnungen komplett
+  // ausgefallen, waehrend Liste und Versand weiter funktionierten.
+  const vm = await buildPdfViewModel({ supabase, docType, docId, tenantId });
 
   // Load company template for theme + logo
   const { data: docMeta } = await supabase
