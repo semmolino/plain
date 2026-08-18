@@ -68,7 +68,8 @@ export function ObjektlisteZonePicker({ open, onClose, feeMasterId, zones, onApp
       <p className="admin-section-hint" style={{ marginTop: 0 }}>
         Die gesetzliche Objektliste beschreibt typische Sachverhalte je Honorarzone. Beschreibung
         auswählen, die am ehesten passt — die Zone wird daraus übernommen, bleibt aber im
-        Basisdaten-Feld weiter änderbar.
+        Basisdaten-Feld weiter änderbar. Manche Objekte führt die HOAI in zwei Zonen; sie
+        erscheinen dann zweimal, und die zutreffende Zone ist zu wählen.
       </p>
 
       {!feeMasterId ? (

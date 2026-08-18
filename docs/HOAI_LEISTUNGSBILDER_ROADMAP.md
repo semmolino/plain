@@ -1,6 +1,6 @@
 # Leistungsbilder im Kalkulationsmodul — Bestand, Lücken, Reihenfolge
 
-Stand: 18.08.2026 (HOAI 2021 Anlage 1 vollständig, Honorarzonen-Objektliste begonnen, AHO Heft 9+17, HOAI 2013 ergänzt)
+Stand: 18.08.2026 (HOAI 2021 Anlage 1, Honorarzonen-Objektlisten, AHO Heft 9+17, HOAI 2013 — alle vollständig)
 
 Was das Kalkulationsmodul heute kann, was fehlt, und in welcher Reihenfolge
 die Lücken geschlossen werden. Betrifft `FEE_*`-Stammdaten,
@@ -106,7 +106,7 @@ unten).
 Instandsetzung, Nebenkosten (§ 14) und Mehrfachbeauftragung (§ 11) tippt
 heute jede Nutzerin frei ein — je Berechnung neu, ohne Prozentvorschlag.
 
-### 3.5 Honorarzonen-Einstufung — Arbeit begonnen (0120)
+### 3.5 Honorarzonen-Einstufung — Objektlisten gelöst (0120/0124), Punktesystem offen
 
 Die Zone wurde bisher immer direkt geschätzt. Wichtige Erkenntnis beim
 Startversuch (Tragwerksplanung, siehe § 7 unten): Es gibt **kein
@@ -119,7 +119,7 @@ unterschiedliche Mechanismen:
   Technische Ausrüstung (15.2 zu § 56), Tragwerksplanung (14.2 zu § 52 — trotz
   der Paragraphenformulierung „Bewertungsmerkmale" tatsächlich eine
   Zeilen-Auswahl-Tabelle wie die anderen fünf, keine Punkte-Summierung).
-  **Neue Tabelle `FEE_ZONE_LOOKUP`, bislang nur Tragwerksplanung befüllt.**
+  **Tabelle `FEE_ZONE_LOOKUP` — vollständig befüllt (0120 + 0124).**
 - **Numerisches Punktesystem** (mehrere Kriterien einzeln bepunkten, Summe
   bandet in eine Zone): UVS (Anlage 1.1.2), Ingenieurvermessung
   (Anlage 1.4.3/1.4.6), vermutlich auch Bauleitplanung (§ 21) und
@@ -129,7 +129,7 @@ unterschiedliche Mechanismen:
   (Kriterien + Punktwerte je Kriterium + Zonen-Schwellen) — noch nicht
   gebaut.
 
-Wer weitermacht: § 7 unten für Stand und offene Objektlisten.
+Wer weitermacht: § 7 unten für den Stand; offen ist nur noch das Punktesystem.
 
 ---
 
@@ -242,13 +242,12 @@ Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
 3. ~~Anlage 1.1 Umweltverträglichkeitsstudie~~ — erledigt (0118)
 4. ~~Anlage 1.4 Ingenieurvermessung~~ — erledigt (0119), inkl. `BASE_TYPE`
    `verrechnungseinheiten` (3.1). **Anlage 1 ist damit vollständig.**
-5. **Honorarzonen-Einstufung** (3.5) — begonnen (0120): Objektliste-Muster
-   an Tragwerksplanung validiert. Offen: dieselbe Objektliste für Gebäude
-   (Anlage 10.2/10.3 — vermutlich die längste Tabelle), Freianlagen (11.2),
-   Ingenieurbauwerke (12.2), Verkehrsanlagen (13.2), Technische Ausrüstung
-   (15.2); danach das numerische Punktesystem (UVS/Ingenieurvermessung/
-   vermutlich Bauleitplanung/Landschaftsplanung) als zweite, andere Tabelle.
-   **In Arbeit, nicht abgeschlossen.**
+5. **Honorarzonen-Einstufung** (3.5) — **Objektlisten-Variante vollständig**
+   (0120 Tragwerksplanung, 0124 die übrigen sechs Listen für beide
+   HOAI-Fassungen). Offen bleibt nur das **numerische Punktesystem**
+   (UVS/Ingenieurvermessung/vermutlich Bauleitplanung+Landschaftsplanung) —
+   andere Struktur, braucht eine eigene Tabelle (Kriterien + Punktwerte +
+   Zonen-Schwellen), siehe § 7.
 6. ~~§ 42 (Ingenieurbauwerke) / § 46 (Verkehrsanlagen) in `din276.js`~~ —
    erledigt, siehe § 8 unten. Damit ist eine spätere Bauvermessungs-Regel
    (Anlage 1.4.5 Abs. 2, siehe Anlage-1.4-Abschnitt oben) **nicht mehr
@@ -270,7 +269,7 @@ Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
 
 ---
 
-## 7. Honorarzonen-Objektliste (Migration 0120, laufend)
+## 7. Honorarzonen-Objektliste (Migrationen 0120 + 0124, vollständig)
 
 Neue globale Referenztabelle `FEE_ZONE_LOOKUP` (`FEE_MASTER_ID`, `CATEGORY`,
 `DESCRIPTION`, `ZONE_ID`, `SORT_ORDER`) — pro Zeile ein Sachverhalt, der
@@ -292,14 +291,54 @@ die Tragwerksplanung-Zonen aus 0115 (I=50 … V=54) — bei weiteren
 Leistungsbildern jeweils die passenden `FEE_ZONES`-IDs für dieses
 Leistungsbild nachschlagen, nicht die von Tragwerksplanung wiederverwenden.
 
-**Noch offen** (siehe 6.5): dieselbe Objektliste für Gebäude/Innenräume,
-Freianlagen, Ingenieurbauwerke, Verkehrsanlagen, Technische Ausrüstung —
-jeweils eigene Anlage, eigener Umfang (Anlage 10.2 für Gebäude ist nach
-allgemeiner Kenntnis deutlich länger als Tragwerksplanungs 54 Zeilen, vor
-Beginn zu sichten). Das numerische Punktesystem (UVS, Ingenieurvermessung,
-vermutlich Bauleitplanung/Landschaftsplanung — noch nicht mit Primärquelle
-verifiziert) ist strukturell etwas anderes und braucht eine eigene Tabelle
-(Kriterien + Punktwerte + Zonen-Schwellen), nicht `FEE_ZONE_LOOKUP`.
+### Die übrigen sechs Objektlisten (Migration 0124)
+
+Mit 0124 ist die Objektlisten-Variante **vollständig** — 956 Zeilen, je einmal
+für HOAI 2021 und HOAI 2013:
+
+| Anlage | Leistungsbild | Zeilen | Kategorien | Zonen |
+|---|---|---|---|---|
+| 10.2 | Gebäude | 88 | 9 | 5 |
+| 10.3 | Innenräume | 65 | 9 | 5 |
+| 11.2 | Freianlagen | 59 | 7 | 5 |
+| 12.2 | Ingenieurbauwerke | 170 | 7 Gruppen | 5 |
+| 13.2 | Verkehrsanlagen | 35 | 9 | 5 |
+| 15.2 | Technische Ausrüstung | 61 | 9 Anlagengr. | **3** |
+
+Drei Eigenheiten, die der erste Parser (nur Anlage 14) noch nicht kannte und
+die `parse_objektliste2.js` jetzt abdeckt:
+
+- **Variable Zonenzahl**: TGA hat nur drei Honorarzonen (4 Tabellenspalten
+  statt 6), alle übrigen fünf.
+- **Eine Liste über mehrere `<table>`-Elemente**: Anlage 12
+  (Ingenieurbauwerke) ist im HTML in sieben Tabellen zerlegt — vermutlich
+  Seitenumbrüche im Original. Alle sieben gehören zu 12.2.
+- **Zwei Kategoriezeilen-Varianten**: fett mit `colspan` (Anlagen
+  10/11/13/14/15) *oder* fett mit nur zwei Zellen ohne `colspan`
+  (Anlage 12: „Gruppe 1 – …"). Ohne die zweite Variante fielen alle 170
+  Ingenieurbauwerk-Zeilen in eine einzige Kategorie.
+
+**Mehrfachzonen sind echter Verordnungsinhalt.** Die HOAI markiert etliche
+Objekte in zwei Zonen (z. B. „Einfamilienhäuser … in verdichteter Bauweise" =
+III *oder* IV) — gegen das Quell-HTML gegengeprüft, kein Parser-Artefakt.
+Abgebildet als je eine Zeile pro Zone; der Picker zeigt die Beschreibung dann
+zweimal mit unterschiedlicher Zonenangabe und weist im Hinweistext darauf hin.
+Betrifft 29 der 88 Gebäude-Einträge, 12 von 65 bei Innenräumen, 19 von 59 bei
+Freianlagen.
+
+**Vorgehen**: Der Parser wurde vorab gegen die bereits eingespielte
+Tragwerksplanung-Liste validiert (54/54 Zeilen identisch reproduziert), bevor
+er auf die neuen Anlagen losgelassen wurde — so ist ausgeschlossen, dass eine
+Parser-Änderung den Bestand still verändert. Nachgelagert geprüft: keine
+ID-Duplikate, keine Kollision mit 0120, jede `ZONE_ID` gehört zum jeweiligen
+`FEE_MASTER_ID`, keine leeren Beschreibungen.
+
+**Noch offen**: das **numerische Punktesystem** (UVS, Ingenieurvermessung,
+vermutlich Bauleitplanung/Landschaftsplanung — Letztere noch nicht mit
+Primärquelle verifiziert). Strukturell etwas anderes: mehrere Kriterien
+einzeln bepunkten, Summe bandet in eine Zone. Braucht eine eigene Tabelle
+(Kriterien + Punktwerte je Kriterium + Zonen-Schwellen), nicht
+`FEE_ZONE_LOOKUP`.
 
 ---
 
