@@ -2,7 +2,7 @@ import { apiClient, openPdfWithAuth } from './client'
 
 export interface FeeGroup  { ID: number; NAME_SHORT: string; NAME_LONG: string }
 export type FeeBaseType = 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' | 'percent_of_baukosten' | 'flaechenaequivalent_brandschutz'
-export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string; BASE_TYPE?: FeeBaseType }
+export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string; BASE_TYPE?: FeeBaseType; SUPPORTS_ZONE_SPLIT?: boolean }
 export interface FeeZone   { ID: number; NAME_SHORT: string; NAME_LONG: string }
 
 // Bewertungsmerkmal des Honorarzonen-Punktesystems (§ 5 Abs. 2 HOAI):
@@ -61,6 +61,8 @@ export interface FeeCalcMaster {
   DIN276_LEISTUNGSBILD?:       string | null
   // angereichert vom Backend aus FEE_MASTERS.BASE_TYPE
   BASE_TYPE?:                  FeeBaseType
+  /** Zonenaufteilung/Mischhonorar anwendbar (§ 54, nur Technische Ausrüstung). */
+  SUPPORTS_ZONE_SPLIT?:        boolean
   // enriched fields from listFeeCalcMasters
   projectLabel?: string | null
   offerLabel?:   string | null

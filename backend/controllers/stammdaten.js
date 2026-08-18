@@ -5,21 +5,35 @@ const objectStorage = require("../services/objectStorage");
 const svc  = require("../services/stammdaten");
 const misch = require("../services/mischhonorar");
 
-// Reichert FEE_CALCULATION_MASTER-Rows um BASE_TYPE aus FEE_MASTERS an.
-// Fällt auf 'cost_eur' (= bisheriges Verhalten) zurück, wenn Migration
-// 0054 noch nicht gelaufen ist und die Spalte noch nicht existiert.
+// Reichert FEE_CALCULATION_MASTER-Rows um Merkmale des Leistungsbilds an:
+//   BASE_TYPE            Bemessungsgrundlage (Migration 0054)
+//   SUPPORTS_ZONE_SPLIT  Mischhonorar/Zonenaufteilung anwendbar (Migration 0128)
+// Beide fallen auf das bisherige Verhalten zurück ('cost_eur' bzw. false),
+// solange die jeweilige Migration noch nicht gelaufen ist — deshalb der
+// zweistufige Select statt eines harten Fehlers.
 async function enrichBaseType(supabase, rows) {
   const arr = Array.isArray(rows) ? rows : [rows];
   const ids = [...new Set(arr.map(r => r?.FEE_MASTER_ID).filter(Boolean))];
   let map = new Map();
   if (ids.length) {
-    const { data: masters, error } = await supabase
-      .from("FEE_MASTERS").select("ID, BASE_TYPE").in("ID", ids);
+    let { data: masters, error } = await supabase
+      .from("FEE_MASTERS").select("ID, BASE_TYPE, SUPPORTS_ZONE_SPLIT").in("ID", ids);
+    if (error) {
+      // Spalte SUPPORTS_ZONE_SPLIT fehlt noch → ohne sie laden.
+      ({ data: masters, error } = await supabase
+        .from("FEE_MASTERS").select("ID, BASE_TYPE").in("ID", ids));
+    }
     if (!error) {
-      map = new Map((masters || []).map(m => [m.ID, m.BASE_TYPE || 'cost_eur']));
+      map = new Map((masters || []).map(m => [m.ID, {
+        BASE_TYPE: m.BASE_TYPE || 'cost_eur',
+        SUPPORTS_ZONE_SPLIT: m.SUPPORTS_ZONE_SPLIT === true,
+      }]));
     }
   }
-  const enrich = (r) => ({ ...r, BASE_TYPE: (r?.FEE_MASTER_ID && map.get(r.FEE_MASTER_ID)) || 'cost_eur' });
+  const enrich = (r) => {
+    const m = (r?.FEE_MASTER_ID && map.get(r.FEE_MASTER_ID)) || null;
+    return { ...r, BASE_TYPE: m?.BASE_TYPE || 'cost_eur', SUPPORTS_ZONE_SPLIT: m?.SUPPORTS_ZONE_SPLIT === true };
+  };
   return Array.isArray(rows) ? arr.map(enrich) : enrich(rows);
 }
 
@@ -110,22 +124,31 @@ async function getFeeMasters(req, res, supabase) {
   const feeGroupId = feeGroupIdRaw ? Number.parseInt(feeGroupIdRaw, 10) : null;
   if (feeGroupIdRaw && Number.isNaN(feeGroupId)) return res.status(400).json({ error: "fee_group_id must be a number" });
 
-  let query = supabase.from("FEE_MASTERS").select("ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID, BASE_TYPE").order("NAME_SHORT", { ascending: true, nullsFirst: false });
-  if (feeGroupId !== null) query = query.eq("FEE_GROUP_ID", feeGroupId);
-
-  let { data, error } = await query;
-  if (error) {
-    // Fallback wenn Migration 0054 noch nicht gelaufen ist — BASE_TYPE
-    // existiert dann nicht und Select wirft. Wir liefern dann ohne den
-    // Flag aus und Default ist 'cost_eur' (bisheriges Verhalten).
-    let fb = supabase.from("FEE_MASTERS")
-      .select("ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID")
-      .order("NAME_SHORT", { ascending: true, nullsFirst: false });
-    if (feeGroupId !== null) fb = fb.eq("FEE_GROUP_ID", feeGroupId);
-    const fallback = await fb;
-    if (fallback.error) return res.status(500).json({ error: fallback.error.message });
-    data = (fallback.data || []).map(r => ({ ...r, BASE_TYPE: 'cost_eur' }));
+  // Gestufter Fallback über die additiven Spalten: BASE_TYPE kam mit
+  // Migration 0054, SUPPORTS_ZONE_SPLIT mit 0128. Ein einstufiger Fallback auf
+  // den Minimalsatz würde bei „0054 gelaufen, 0128 noch nicht" auch BASE_TYPE
+  // verlieren — Flächenplanung erschiene dann als Baukosten-Leistungsbild.
+  const COLUMN_SETS = [
+    "ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID, BASE_TYPE, SUPPORTS_ZONE_SPLIT",
+    "ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID, BASE_TYPE",
+    "ID, NAME_SHORT, NAME_LONG, FEE_GROUP_ID",
+  ];
+  let data = null, lastError = null;
+  for (const cols of COLUMN_SETS) {
+    let q = supabase.from("FEE_MASTERS").select(cols).order("NAME_SHORT", { ascending: true, nullsFirst: false });
+    if (feeGroupId !== null) q = q.eq("FEE_GROUP_ID", feeGroupId);
+    const res2 = await q;
+    if (!res2.error) { data = res2.data; break; }
+    lastError = res2.error;
   }
+  if (data === null) return res.status(500).json({ error: lastError?.message || "FEE_MASTERS query failed" });
+
+  // Fehlende Spalten mit dem bisherigen Verhalten auffüllen.
+  data = (data || []).map(r => ({
+    ...r,
+    BASE_TYPE: r.BASE_TYPE || 'cost_eur',
+    SUPPORTS_ZONE_SPLIT: r.SUPPORTS_ZONE_SPLIT === true,
+  }));
   res.json({ data });
 }
 

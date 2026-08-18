@@ -761,3 +761,34 @@ ermitteln"** neben dem bisherigen **„Zone anhand Objektliste bestimmen"**. Der
 Rechner verlangt eine Bewertung **aller** Merkmale, bevor er eine Zone
 vorschlägt — eine Teilbewertung ergäbe eine zu niedrige Zone, ohne dass es
 auffällt. Die übernommene Zone bleibt im Dropdown änderbar.
+
+---
+
+## 15. Mischhonorar-Button nur bei TGA (Migration 0128)
+
+Der Button „Mischhonorar …" stand bei **jedem** Leistungsbild mit anrechenbaren
+Kosten im Wizard — bei Gebäude, Tragwerksplanung usw. führte er in die Irre.
+Die gewichtete Zonenaufteilung ist nur für die Technische Ausrüstung gedacht
+(§ 54: Honorar je Anlagengruppe, deren Anlagen unterschiedlichen Honorarzonen
+angehören können).
+
+**Warum eine Spalte und keine ID-Abfrage**: Das Frontend darf nicht auf
+`FEE_MASTER_ID` oder `NAME_SHORT` verzweigen — dieselbe Leistung hat je Fassung
+eine andere ID (TGA: 14 in HOAI 2021, 1014 in HOAI 2013). Eine fest verdrahtete
+Prüfung hätte für die 2013er Berechnungen still nicht gegriffen. Vorbild ist
+`BASE_TYPE` (0054): Verhalten am Leistungsbild hinterlegen, im Code nur das
+Merkmal abfragen. Neue Spalte `FEE_MASTERS.SUPPORTS_ZONE_SPLIT`, gesetzt über
+`NAME_SHORT IN ('2021_55','2013_55')` statt über IDs.
+
+Durchgereicht wird sie über `enrichBaseType()` — dieselbe Stelle, die schon
+`BASE_TYPE` an `FEE_CALCULATION_MASTER`-Rows hängt.
+
+**Gestufter Spalten-Fallback**: `getFeeMasters()` probiert jetzt drei
+Spaltensätze der Reihe nach (mit `SUPPORTS_ZONE_SPLIT` → nur `BASE_TYPE` → ohne
+beides). Ein einstufiger Fallback auf den Minimalsatz hätte bei „0054 gelaufen,
+0128 noch nicht" auch `BASE_TYPE` verloren — Flächenplanung wäre dann als
+Baukosten-Leistungsbild erschienen, also ein stiller Rechenfehler durch eine
+reine UI-Änderung.
+
+Nebenbei: Die Beschriftung nennt nicht mehr „§ 54" — der Absatz, der das
+Verfahren angeblich trägt, regelt etwas anderes (siehe § 12.3).

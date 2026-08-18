@@ -264,6 +264,14 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     ?? (feeMasterId
           ? (masters.find(m => String(m.ID) === String(feeMasterId))?.BASE_TYPE ?? 'cost_eur')
           : 'cost_eur')
+  // Zonenaufteilung/Mischhonorar gilt nur für die Technische Ausrüstung
+  // (§ 54). Kommt als Merkmal vom Leistungsbild, nicht über eine ID-Abfrage —
+  // dieselbe Leistung hat je HOAI-Fassung eine andere ID.
+  const supportsZoneSplit =
+    calcMaster?.SUPPORTS_ZONE_SPLIT
+    ?? (feeMasterId
+          ? (masters.find(m => String(m.ID) === String(feeMasterId))?.SUPPORTS_ZONE_SPLIT ?? false)
+          : false)
   const isAreaHa  = baseType === 'area_ha'
   const isVerrechnungseinheiten = baseType === 'verrechnungseinheiten'
   // Kalkulationstypen ohne Honorarzone/-tafel (z. B. AHO-Leistungsbilder):
@@ -859,17 +867,18 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                   Berechnet die anrechenbaren Kosten nach HOAI (Leistungsbild wählbar) und übernimmt sie nach K0.
                 </span>
               </div>
-              {calcMaster && (
+              {calcMaster && supportsZoneSplit && (
                 <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <button type="button" className="btn-small" onClick={() => setMischOpen(true)} disabled={zones.length === 0}>
-                    Mischhonorar (§ 54) …
+                    Mischhonorar …
                   </button>
                   <span className="admin-section-hint" style={{ margin: 0 }}>
-                    Technische Ausrüstung: anrechenbare Kosten auf mehrere Honorarzonen aufteilen. K0 wird dann daraus berechnet.
+                    Gehören die Anlagen einer Anlagengruppe verschiedenen Honorarzonen an, lassen sich die
+                    anrechenbaren Kosten hier aufteilen. K0 wird dann daraus berechnet.
                   </span>
                 </div>
               )}
-              {calcMaster && (
+              {calcMaster && supportsZoneSplit && (
                 <MischhonorarEditor
                   open={mischOpen}
                   onClose={() => setMischOpen(false)}
