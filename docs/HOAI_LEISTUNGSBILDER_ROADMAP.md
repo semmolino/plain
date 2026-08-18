@@ -1,6 +1,6 @@
 # Leistungsbilder im Kalkulationsmodul — Bestand, Lücken, Reihenfolge
 
-Stand: 18.08.2026 (Anlage 1 vollständig: Geotechnik, UVS, Ingenieurvermessung ergänzt)
+Stand: 18.08.2026 (HOAI 2021 Anlage 1 vollständig, Honorarzonen-Objektliste begonnen, AHO Heft 9+17, HOAI 2013 ergänzt)
 
 Was das Kalkulationsmodul heute kann, was fehlt, und in welcher Reihenfolge
 die Lücken geschlossen werden. Betrifft `FEE_*`-Stammdaten,
@@ -258,12 +258,15 @@ Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
 7. **AHO-Hefte und weitere Kalkulationstypen** — Heft 9 (0121) und Heft 17
    (0122) angelegt, siehe § 9 oben. Heft 9 ohne Leistungsphasen (fehlende
    geprüfte Quelle), Heft 17 vollständig inkl. eigener Honorarformel und
-   Leistungsphasen (Quelle vorhanden und verifiziert). Als Nächstes: Heft 15
-   (SiGeKo, noch keine Quelle).
-8. **HOAI 2013** als zweite `FEE_GROUPS`-Zeile — Altverträge rechnen weiter
-   nach der Fassung, die bei Vertragsschluss galt. Das Modell trägt mehrere
-   Fassungen bereits; zu klären ist die Vorbelegung nach Vertragsdatum.
-   Relevanz sinkt mit jedem Jahr seit der 2021-Reform.
+   Leistungsphasen (Quelle vorhanden und verifiziert). Heft 15 (SiGeKo)
+   zurückgestellt: gezielt gesucht, aber **keine belastbare Quelle** —
+   AKBW-PDF ist von 2002 und rät selbst von Tafeln ab, VSGK-Seite enthält
+   keine Werte, zwei Online-Rechner (bauformeln.de, sicherheitsingenieur.nrw)
+   verbergen die Formel hinter Login/JS. Ohne Quelle nicht bauen.
+8. ~~**HOAI 2013** als zweite `FEE_GROUPS`-Zeile~~ — erledigt (0123), siehe
+   § 10 unten. **Offen bleibt** die Vorbelegung der Honorarordnung nach
+   Vertragsdatum (Verträge vor 2021 → HOAI 2013); aktuell wählt die Nutzerin
+   sie im Wizard weiterhin selbst.
 
 ---
 
@@ -415,7 +418,44 @@ weiterhin keine Quelle), danach Heft 15 (SiGeKo).
 
 ---
 
-## 10. Werte pflegen
+## 10. HOAI 2013 als zweite Honorarordnung (Migration 0123)
+
+Verträge bis 31.12.2020 rechnen weiter nach der Fassung 2013. Rechtlicher
+Unterschied: 2013 waren die Tafelwerte **verbindliche Mindest- und
+Höchstsätze** („sind in der folgenden Honorartafel festgesetzt"), seit 2021
+nur noch **Orientierungswerte**.
+
+**Die Zahlenwerte selbst sind identisch geblieben** — geprüft, nicht
+angenommen. Stichprobenvergleich gegen den 2013er Volltext
+(hoai.de/hoai/volltext/hoai-2013/) über vier Leistungsbild-Familien mit
+unterschiedlicher Bemessungsgrundlage: § 35 Gebäude (€, 60 Werte), § 52
+Tragwerksplanung (€, 30 Werte), § 20 Flächennutzungsplan (ha, 48 Werte),
+Anlage 1.2.3 Bauphysik Wärmeschutz (€, 36 Werte) und Anlage 1.1.2 UVS (ha,
+inkl. Phasensätze 3/37/50/10) — durchgehend deckungsgleich. Auch die
+Anlage-1-Struktur ist unverändert (1.1–1.4 mit denselben Unterabschnitten);
+abweichend ist nur der Anlagentitel („Beratungsleistungen" 2013 vs „Weitere
+Fachplanungs- und Beratungsleistungen" 2021) — rein redaktionell.
+
+Migration 0123 ist deshalb **maschinell aus 0115–0119 generiert** (Skript
+`gen_hoai2013_full.js` im Session-Scratchpad): reine ID-Umschreibung, kein
+Wert neu erfasst. Anschließend verifiziert: alle 439 FEE_TABLES-Zeilen
+wertidentisch zur Quelle, IDs exakt um den Offset verschoben, keine
+FK-Verletzungen, keine ID-Kollisionen mit HOAI 2021/AHO, keine Duplikate,
+alle 21 Leistungsbilder mit Phasensumme exakt 100.
+
+**ID-Schema** (kollisionsfrei): `FEE_GROUPS` 3 (1 = HOAI 2021, 2 = AHO,
+3 = HOAI 2013), `FEE_MASTERS` +1000, `FEE_ZONES`/`FEE_PHASE`/`FEE_TABLES`
++2000. AHO-Leistungsbilder (0121/0122) sind bewusst **nicht** dupliziert —
+eigene Schriftenreihe, keine HOAI-Fassung.
+
+**Offen**: Vorbelegung der Honorarordnung nach Vertragsdatum. Das Modell
+trägt jetzt mehrere Fassungen, aber der Wizard lässt weiterhin frei wählen —
+sinnvoll wäre, bei Projekten/Verträgen mit Datum vor 2021 automatisch HOAI
+2013 vorzuschlagen.
+
+---
+
+## 11. Werte pflegen
 
 Die Tafelwerte wurden maschinell aus dem amtlichen Volltext übernommen, nicht
 abgetippt: Parser + Round-Trip-Prüfung gegen die Quelle (Bandgrenzen
