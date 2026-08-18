@@ -153,6 +153,37 @@ async function getFeeZones(req, res, supabase) {
 // auseinander, in der Lücke soll der Wizard nicht mit 500 abbrechen, sondern
 // die Objektliste-Schaltfläche einfach nicht anzeigen (leeres Array).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GET /api/stammdaten/fee-zone-criteria
+//
+// Bewertungsmerkmale + Punkteschwellen eines Leistungsbilds (§ 5 Abs. 2 HOAI).
+// Nicht jedes Leistungsbild hat ein Punktesystem — Tragwerksplanung, TGA,
+// Geotechnik und Bau-/Raumakustik ordnen die Zone rein beschreibend zu. Für
+// die ist ein leeres Ergebnis der Normalfall, kein Fehler.
+// Soft-fail wie bei fee-zone-lookup: solange Migration 0127 nicht gelaufen
+// ist, liefert der Endpunkt leere Listen statt 500.
+// ---------------------------------------------------------------------------
+async function getFeeZoneCriteria(req, res, supabase) {
+  const feeMasterIdRaw = (req.query.fee_master_id || "").toString().trim();
+  const feeMasterId = feeMasterIdRaw ? Number.parseInt(feeMasterIdRaw, 10) : null;
+  if (!feeMasterId) return res.status(400).json({ error: "fee_master_id is required" });
+
+  try {
+    const [critRes, thrRes] = await Promise.all([
+      supabase.from("FEE_ZONE_CRITERION")
+        .select("ID, FEE_MASTER_ID, SORT_ORDER, TEXT, MAX_POINTS, LEVEL_HINT, LEGAL_REF")
+        .eq("FEE_MASTER_ID", feeMasterId).order("SORT_ORDER", { ascending: true }),
+      supabase.from("FEE_ZONE_THRESHOLD")
+        .select("ID, FEE_MASTER_ID, ZONE_ID, POINTS_FROM, POINTS_TO")
+        .eq("FEE_MASTER_ID", feeMasterId).order("POINTS_FROM", { ascending: true }),
+    ]);
+    if (critRes.error || thrRes.error) return res.json({ criteria: [], thresholds: [] });
+    return res.json({ criteria: critRes.data || [], thresholds: thrRes.data || [] });
+  } catch (e) {
+    return res.json({ criteria: [], thresholds: [] });
+  }
+}
+
 async function getFeeZoneLookup(req, res, supabase) {
   const feeMasterIdRaw = (req.query.fee_master_id || "").toString().trim();
   const feeMasterId = feeMasterIdRaw ? Number.parseInt(feeMasterIdRaw, 10) : null;
@@ -2051,7 +2082,7 @@ async function saveFeeCalcZoneSplits(req, res, supabase) {
 }
 
 module.exports = {
-  postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones, getFeeZoneLookup,
+  postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones, getFeeZoneLookup, getFeeZoneCriteria,
   getFeeCalcZoneSplits, saveFeeCalcZoneSplits,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure, postFeeCalcAddToOfferStructure, syncFeeCalcToStructure,

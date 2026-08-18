@@ -5,6 +5,28 @@ export type FeeBaseType = 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' | 'pe
 export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string; BASE_TYPE?: FeeBaseType }
 export interface FeeZone   { ID: number; NAME_SHORT: string; NAME_LONG: string }
 
+// Bewertungsmerkmal des Honorarzonen-Punktesystems (§ 5 Abs. 2 HOAI):
+// je Merkmal werden 0..MAX_POINTS vergeben, die Summe bestimmt die Zone.
+export interface FeeZoneCriterion {
+  ID:            number
+  FEE_MASTER_ID: number
+  SORT_ORDER:    number
+  TEXT:          string
+  MAX_POINTS:    number
+  /** Stufenbenennungen, wo die HOAI welche nennt (z. B. „sehr gering 1–3 · …"). */
+  LEVEL_HINT:    string | null
+  LEGAL_REF:     string | null
+}
+
+/** Punkteband einer Honorarzone, z. B. 19–26 Punkte → Zone III. */
+export interface FeeZoneThreshold {
+  ID:            number
+  FEE_MASTER_ID: number
+  ZONE_ID:       number
+  POINTS_FROM:   number
+  POINTS_TO:     number
+}
+
 // Objektliste zur Honorarzonen-Bestimmung (z. B. Anlage 14.2 Tragwerksplanung):
 // jede Zeile ordnet eine Sachverhaltsbeschreibung genau einer Zone zu.
 export interface FeeZoneLookupRow {
@@ -113,6 +135,10 @@ export const fetchFeeZones = (feeMasterId: number | string) =>
 
 export const fetchFeeZoneLookup = (feeMasterId: number | string) =>
   apiClient.get<{ data: FeeZoneLookupRow[] }>(`/stammdaten/fee-zone-lookup?fee_master_id=${feeMasterId}`)
+
+export const fetchFeeZoneCriteria = (feeMasterId: number | string) =>
+  apiClient.get<{ criteria: FeeZoneCriterion[]; thresholds: FeeZoneThreshold[] }>(
+    `/stammdaten/fee-zone-criteria?fee_master_id=${feeMasterId}`)
 
 export const fetchFeeCalcMasters = (params?: { project_id?: number; offer_id?: number }) => {
   const sp = new URLSearchParams()

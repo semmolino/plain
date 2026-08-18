@@ -374,6 +374,16 @@ export const HELP = {
         bestimmt zusammen mit den anrechenbaren Kosten das Honorar aus der
         HOAI-Tabelle. Der <strong>Zonenanteil %</strong> erlaubt die Feinjustierung
         zwischen zwei Tabellenwerten.
+        <br /><br />
+        Zwei Hilfen stehen bereit, statt die Zone zu schätzen:
+        <br />
+        <strong>Bewertungsmerkmale</strong> — der eigentliche Weg nach § 5 Abs. 2 HOAI: je
+        Merkmal Punkte vergeben, die Summe ergibt die Zone. Nicht jedes Leistungsbild hat ein
+        solches Punktesystem; Tragwerksplanung, Technische Ausrüstung, Geotechnik sowie Bau- und
+        Raumakustik ordnen die Zone rein beschreibend zu.
+        <br />
+        <strong>Objektliste</strong> — die Regelbeispiele der Anlagen: Sachverhalt auswählen, Zone
+        ablesen. Manche Objekte führt die HOAI in zwei Zonen; dann ist die zutreffende zu wählen.
       </>
     ),
   },

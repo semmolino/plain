@@ -154,6 +154,38 @@ function calculatePhaseRevenue(feePercent, revenueBase) {
   return Math.round(((pct * base) / 100) * 100) / 100;
 }
 
+/**
+ * Honorarzone aus Bewertungspunkten bestimmen (§ 5 Abs. 2 HOAI).
+ *
+ * Reine Rechenlogik ohne DB-Zugriff, damit sie per Unit-Test gegen die
+ * Beispiele der Verordnung absicherbar ist.
+ *
+ * @param {number} punkte      Summe der vergebenen Bewertungspunkte
+ * @param {Array}  thresholds  [{ ZONE_ID, POINTS_FROM, POINTS_TO }, …]
+ * @returns {{ zoneId:number, from:number, to:number } | null}
+ *
+ * Die Bänder der HOAI sind lückenlos und beginnen bei 0 ("bis zu 10 Punkte"),
+ * ein Treffer ist also für jede Punktzahl innerhalb der Skala garantiert.
+ * Liegt die Summe ÜBER dem letzten Band (kann nur passieren, wenn mehr Punkte
+ * vergeben wurden als die Merkmale hergeben), greift die höchste Zone —
+ * sinnvoller als kein Ergebnis.
+ */
+function zoneFromPoints(punkte, thresholds) {
+  const p = toNumberOrNull(punkte);
+  if (p === null || !Array.isArray(thresholds) || !thresholds.length) return null;
+  const sorted = [...thresholds].sort((a, b) => Number(a.POINTS_FROM) - Number(b.POINTS_FROM));
+  for (const t of sorted) {
+    if (p >= Number(t.POINTS_FROM) && p <= Number(t.POINTS_TO)) {
+      return { zoneId: t.ZONE_ID, from: Number(t.POINTS_FROM), to: Number(t.POINTS_TO) };
+    }
+  }
+  const last = sorted[sorted.length - 1];
+  if (p > Number(last.POINTS_TO)) {
+    return { zoneId: last.ZONE_ID, from: Number(last.POINTS_FROM), to: Number(last.POINTS_TO) };
+  }
+  return null;
+}
+
 // Sortierschlüssel für Leistungsphasen. Bevorzugt SORT_ORDER (explizit
 // gepflegt); ohne SORT_ORDER Fallback auf die führende Zahl aus NAME_SHORT
 // ("LPH 1" → 1). Der Fallback greift bei Leistungsbildern, deren
@@ -296,6 +328,7 @@ module.exports = {
   getRevenueByKx,
   calculatePhaseRevenue,
   feePhaseSortKey,
+  zoneFromPoints,
   loadPhaseRowsWithLabels,
   buildProjectProgressRow,
   recomputeStructureAggregates,

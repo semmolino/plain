@@ -22,6 +22,7 @@ import { fetchOffer, fetchOfferStructure, type OfferStructureNode } from '@/api/
 import { Din276Editor } from '@/pages/projekte/Din276Editor'
 import { MischhonorarEditor } from '@/pages/projekte/MischhonorarEditor'
 import { ObjektlisteZonePicker } from '@/pages/projekte/ObjektlisteZonePicker'
+import { ZonenPunkteRechner } from '@/pages/projekte/ZonenPunkteRechner'
 
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
@@ -209,6 +210,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   const [din276Open, setDin276Open] = useState(false)
   const [mischOpen,  setMischOpen]  = useState(false)
   const [objektlisteOpen, setObjektlisteOpen] = useState(false)
+  const [punkteOpen, setPunkteOpen] = useState(false)
   const [din276EstimateId,    setDin276EstimateId]    = useState<number | null>(null)
   const [din276Leistungsbild, setDin276Leistungsbild] = useState<string | null>(null)
   const [projectId, setProjectId]             = useState(initialProjectId ? String(initialProjectId) : '')
@@ -795,9 +797,14 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 <option value="">—</option>
                 {zones.map(z => <option key={z.ID} value={z.ID}>{z.NAME_SHORT}{z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}</option>)}
               </select>
-              <button type="button" className="btn-small" style={{ marginTop: 6 }} onClick={() => setObjektlisteOpen(true)}>
-                Zone anhand Objektliste bestimmen …
-              </button>
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                <button type="button" className="btn-small" onClick={() => setPunkteOpen(true)}>
+                  Zone über Bewertungsmerkmale ermitteln …
+                </button>
+                <button type="button" className="btn-small" onClick={() => setObjektlisteOpen(true)}>
+                  Zone anhand Objektliste bestimmen …
+                </button>
+              </div>
             </div>
           )}
           <div className="form-group">
@@ -890,6 +897,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           <ObjektlisteZonePicker
             open={objektlisteOpen}
             onClose={() => setObjektlisteOpen(false)}
+            feeMasterId={feeMasterId ? Number(feeMasterId) : null}
+            zones={zones}
+            onApply={(zoneId) => setBasis(b => ({ ...b, ZONE_ID: String(zoneId) }))}
+          />
+          <ZonenPunkteRechner
+            open={punkteOpen}
+            onClose={() => setPunkteOpen(false)}
             feeMasterId={feeMasterId ? Number(feeMasterId) : null}
             zones={zones}
             onApply={(zoneId) => setBasis(b => ({ ...b, ZONE_ID: String(zoneId) }))}

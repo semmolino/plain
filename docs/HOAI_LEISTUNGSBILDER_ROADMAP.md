@@ -1,6 +1,6 @@
 # Leistungsbilder im Kalkulationsmodul — Bestand, Lücken, Reihenfolge
 
-Stand: 18.08.2026 (HOAI 2021 + 2013 vollständig, Objektlisten, AHO Heft 9+17, Zuschlagskatalog; offen: Zonen-Punktesystem, AHO Heft 15)
+Stand: 18.08.2026 (HOAI 2021 + 2013, Zonenbestimmung komplett, AHO Heft 9+17, Zuschlagskatalog; offen: AHO Heft 15, Vorbelegung n. Vertragsdatum)
 
 Was das Kalkulationsmodul heute kann, was fehlt, und in welcher Reihenfolge
 die Lücken geschlossen werden. Betrifft `FEE_*`-Stammdaten,
@@ -107,12 +107,14 @@ Instandsetzung (§ 12), Wiederholungsminderung (§ 11) und Nebenkosten (§ 14)
 tippte jede Nutzerin frei ein. Migration 0126 befüllt den Katalog samt
 Vorschlagswert, gesetzlicher Obergrenze und Fundstelle — Details in § 13.
 
-### 3.5 Honorarzonen-Einstufung — Objektlisten gelöst (0120/0124), Punktesystem offen
+### 3.5 Honorarzonen-Einstufung — gelöst (Objektlisten 0120/0124, Punktesystem 0127)
 
-Die Zone wurde bisher immer direkt geschätzt. Wichtige Erkenntnis beim
-Startversuch (Tragwerksplanung, siehe § 7 unten): Es gibt **kein
-einheitliches Punktesystem über alle Leistungsbilder** — zwei
-unterschiedliche Mechanismen:
+Die Zone wurde bisher immer direkt geschätzt. Die HOAI kennt dafür **zwei
+Mechanismen**, und die meisten Leistungsbilder haben **beide**: Nach § 5
+Abs. 2 wird die Zone anhand der Bewertungsmerkmale ermittelt „sowie unter
+Berücksichtigung der Regelbeispiele in den Objektlisten". Das Punktesystem ist
+also der eigentliche Weg, die Objektliste die Ergänzung — nicht zwei
+Alternativen für verschiedene Leistungsbilder, wie hier zunächst angenommen:
 
 - **Objektliste** (Zeile auswählen, Zone direkt ablesbar, keine Arithmetik):
   Gebäude/Innenräume (Anlage 10.2/10.3 zu § 35), Freianlagen (11.2 zu § 40),
@@ -121,16 +123,20 @@ unterschiedliche Mechanismen:
   der Paragraphenformulierung „Bewertungsmerkmale" tatsächlich eine
   Zeilen-Auswahl-Tabelle wie die anderen fünf, keine Punkte-Summierung).
   **Tabelle `FEE_ZONE_LOOKUP` — vollständig befüllt (0120 + 0124).**
-- **Numerisches Punktesystem** (mehrere Kriterien einzeln bepunkten, Summe
-  bandet in eine Zone): UVS (Anlage 1.1.2), Ingenieurvermessung
-  (Anlage 1.4.3/1.4.6), vermutlich auch Bauleitplanung (§ 21) und
-  Landschaftsplanung (§ 32) — deren Bewertungsmerkmale sind noch nicht mit
-  Primärquelle verifiziert (bisherige Recherche kam aus einer unzuverlässigen
-  Zusammenfassung, nicht aus dem Volltext). Braucht eine andere Tabelle
-  (Kriterien + Punktwerte je Kriterium + Zonen-Schwellen) — noch nicht
-  gebaut.
+- **Numerisches Punktesystem** (je Merkmal Punkte vergeben, Summe bandet in
+  eine Zone): Bauleitplanung (§§ 20/21), Landschaftsplanung (§§ 28–32),
+  Gebäude UND Innenräume (§ 35), Freianlagen (§ 40), Ingenieurbauwerke (§ 44),
+  Verkehrsanlagen (§ 48), UVS (Anlage 1.1.2), Ingenieurvermessung
+  (Anlage 1.4.3/1.4.6) — 15 Systeme, alle gegen den Volltext verifiziert.
+  **Tabellen `FEE_ZONE_CRITERION` + `FEE_ZONE_THRESHOLD` (0127).**
 
-Wer weitermacht: § 7 unten für den Stand; offen ist nur noch das Punktesystem.
+**Nur Objektliste, kein Punktesystem**: Tragwerksplanung (§ 52), Technische
+Ausrüstung (§ 56), Geotechnik (Anlage 1.3), Bauakustik und Raumakustik
+(Anlage 1.2.4/1.2.5) — dort ordnet die HOAI die Zonen über beschreibende
+Merkmalstexte zu, ohne Punkte. Wärmeschutz (Anlage 1.2.3) erbt die Zone des
+Gebäudes nach § 35.
+
+Beide Wege stehen im Wizard nebeneinander. Details: § 7 (Objektliste) und § 14 (Punktesystem).
 
 ---
 
@@ -668,3 +674,90 @@ erzeugt (`gen_surcharges.js`), nicht handgetippt.
 Honorarzone → Honorar nach der Summe der anrechenbaren Kosten). Das ist keine
 Zuschlagszeile, sondern eine andere Berechnungsgrundlage — bräuchte eine
 Zusammenfassung mehrerer Objekte in einer Berechnung.
+
+---
+
+## 14. Honorarzonen-Punktesystem (Migration 0127)
+
+Damit ist die Zonenbestimmung vollständig. Wichtig zur Einordnung: Nach § 5
+Abs. 2 ist das **Punktesystem der eigentliche Mechanismus** — die Objektliste
+(§ 7) ist die ergänzende Hilfe („unter Berücksichtigung der Regelbeispiele in
+den Objektlisten"). Bis 0127 hatte die Software nur die Hilfe, nicht den
+Mechanismus.
+
+**15 Punktesysteme**, alle maschinell aus dem amtlichen Volltext geparst:
+
+| Leistungsbild | Merkmale | Σ Punkte | Zonen | Fundstelle |
+|---|---|---|---|---|
+| Flächennutzungsplan | 6 | 18 | 3 | § 20 Abs. 3–5 |
+| Bebauungsplan | 6 | 18 | 3 | § 21 Abs. 3, § 20 Abs. 4–5 |
+| Landschaftsplan | 6 | 42 | 3 | § 28 Abs. 3–5 |
+| Grünordnungsplan | 6 | 42 | 3 | § 29 Abs. 3–5 |
+| Landschaftsrahmenplan | 6 | 42 | 3 | § 30 Abs. 3–5 |
+| Landschaftspfleg. Begleitplan | 6 | 42 | 3 | § 31 Abs. 3–5 |
+| Pflege- und Entwicklungsplan | 5 | 34 | 3 | § 32 Abs. 3–5 |
+| Gebäude | 6 | 42 | 5 | § 35 Abs. 2, 4, 6 |
+| Innenräume | 6 | 42 | 5 | § 35 Abs. 3, 5, 6 |
+| Freianlagen | 5 | 36 | 5 | § 40 Abs. 2–4 |
+| Ingenieurbauwerke | 5 | 40 | 5 | § 44 Abs. 2–4 |
+| Verkehrsanlagen | 5 | 40 | 5 | § 48 Abs. 2–4 |
+| Umweltverträglichkeitsstudie | 6 | 42 | 3 | Anlage 1.1.2 Abs. 4–6 |
+| Planungsbegl. Vermessung | 6 | 55 | 5 | Anlage 1.4.3 |
+| Bauvermessung | 6 | 60 | 5 | Anlage 1.4.6 |
+
+### Drei Textvarianten, ein Datenmodell
+
+- **A — je Merkmal eigene Höchstpunktzahl**: „die Bewertungsmerkmale gemäß
+  Absatz 2 Nummer 1, 4 bis 6 mit je bis zu 6 Punkten". Die Mehrzahl.
+- **B — gemeinsame Stufenskala für alle Merkmale**: „geringe Anforderungen:
+  1 Punkt / durchschnittliche: 2 / hohe: 3" (§ 20, § 21). Jedes Merkmal hat
+  damit max. 3 Punkte.
+- **C — je Merkmal benannte Stufen mit Punktspannen**: „sehr gering 1 bis 3 …
+  sehr hoch 13 bis 15" (Ingenieurvermessung).
+
+Alle drei laufen auf *Merkmal → Höchstpunktzahl, Summe → Zone* hinaus, also
+zwei Tabellen: `FEE_ZONE_CRITERION` (Merkmal, Höchstpunktzahl, `LEVEL_HINT`,
+`LEGAL_REF`) und `FEE_ZONE_THRESHOLD` (Punkteband → `ZONE_ID`). Die
+Stufenbenennungen aus B und C stehen als `LEVEL_HINT` am Merkmal — ohne sie
+müsste die Nutzerin raten, was 13 von 15 Punkten bedeutet.
+
+### Zwei Systeme in einem Paragraphen
+
+§ 35 enthält **Gebäude** (Abs. 2/4) und **Innenräume** (Abs. 3/5) als getrennte
+Merkmalssätze. Der generische Parser findet nur das erste; Innenräume ist
+deshalb explizit erfasst und mit derselben Summenprobe geprüft (42 = 42).
+Ebenso aufgelöst: § 21 hat eigene Merkmale, verweist für Gewichtung und
+Schwellen aber auf § 20 Abs. 4/5 — in der Migration steht beides ausgeschrieben,
+damit die Berechnung ohne Verweisketten auskommt.
+
+### Prüfungen
+
+Vor dem Erzeugen der Migration bestanden alle 15 Systeme:
+
+1. **Summenprobe**: Σ Höchstpunktzahlen = Obergrenze der höchsten Zone
+   (§ 35: 6+9+9+6+6+6 = 42 = Obergrenze Zone V). Das ist die schärfste Probe —
+   eine falsch zugeordnete Gewichtung fällt sofort auf.
+2. **Zonenanzahl** = Anzahl der Honorarzonen des Leistungsbilds.
+3. **Lückenlosigkeit**: Band n+1 beginnt bei Band n + 1 Punkt.
+
+Beim Parsen der Ingenieurvermessung zeigte die Summenprobe zweimal an, was
+sonst durchgerutscht wäre: einmal zog das letzte Merkmal die Zonenzeilen als
+Stufen ein (57 statt 60), einmal fehlte eine Stufe, weil die Zeile im Original
+mit einem Punkt endet („13 bis 15 Punkte.").
+
+### Kein Punktesystem
+
+Tragwerksplanung (§ 52), Technische Ausrüstung (§ 56), Geotechnik
+(Anlage 1.3), Bauakustik und Raumakustik (Anlage 1.2.4/1.2.5) ordnen die Zone
+über **beschreibende Merkmalstexte** zu, ohne Punkte — dort bleibt die
+Objektliste das Mittel der Wahl. Wärmeschutz (Anlage 1.2.3) erbt die Zone des
+Gebäudes nach § 35. Der Rechner zeigt für diese Leistungsbilder einen
+entsprechenden Hinweis statt einer leeren Tabelle.
+
+### Bedienung
+
+Im Wizard steht neben dem Zonen-Dropdown jetzt **„Zone über Bewertungsmerkmale
+ermitteln"** neben dem bisherigen **„Zone anhand Objektliste bestimmen"**. Der
+Rechner verlangt eine Bewertung **aller** Merkmale, bevor er eine Zone
+vorschlägt — eine Teilbewertung ergäbe eine zu niedrige Zone, ohne dass es
+auffällt. Die übernommene Zone bleibt im Dropdown änderbar.

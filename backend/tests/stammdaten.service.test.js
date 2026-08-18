@@ -6,6 +6,7 @@ const {
   calculatePhaseRevenue,
   calculateRevenueFields,
   feePhaseSortKey,
+  zoneFromPoints,
 } = require("../services/stammdaten");
 
 // ── toNumberOrNull ────────────────────────────────────────────────────────────
@@ -251,5 +252,59 @@ describe("feePhaseSortKey", () => {
   });
   it("behandelt fehlende Phase (undefined) wie MAX_SAFE_INTEGER", () => {
     expect(feePhaseSortKey(undefined)).toBe(Number.MAX_SAFE_INTEGER);
+  });
+});
+
+// ── zoneFromPoints (§ 5 Abs. 2 HOAI) ──────────────────────────────────────────
+
+describe("zoneFromPoints", () => {
+  // § 35 Abs. 6 (Gebäude/Innenräume): I bis 10, II 11–18, III 19–26,
+  // IV 27–34, V 35–42 — Zone-IDs wie in Migration 0115 für Gebäude.
+  const gebaeude = [
+    { ZONE_ID: 1, POINTS_FROM: 0,  POINTS_TO: 10 },
+    { ZONE_ID: 2, POINTS_FROM: 11, POINTS_TO: 18 },
+    { ZONE_ID: 3, POINTS_FROM: 19, POINTS_TO: 26 },
+    { ZONE_ID: 4, POINTS_FROM: 27, POINTS_TO: 34 },
+    { ZONE_ID: 5, POINTS_FROM: 35, POINTS_TO: 42 },
+  ];
+
+  it("trifft die unterste Zone", () => {
+    expect(zoneFromPoints(0, gebaeude).zoneId).toBe(1);
+    expect(zoneFromPoints(10, gebaeude).zoneId).toBe(1);
+  });
+  it("trifft an den Bandgrenzen die richtige Zone", () => {
+    expect(zoneFromPoints(11, gebaeude).zoneId).toBe(2);
+    expect(zoneFromPoints(18, gebaeude).zoneId).toBe(2);
+    expect(zoneFromPoints(19, gebaeude).zoneId).toBe(3);
+  });
+  it("trifft die oberste Zone", () => {
+    expect(zoneFromPoints(35, gebaeude).zoneId).toBe(5);
+    expect(zoneFromPoints(42, gebaeude).zoneId).toBe(5);
+  });
+  it("gibt das getroffene Band mit zurück (für die Anzeige)", () => {
+    expect(zoneFromPoints(20, gebaeude)).toEqual({ zoneId: 3, from: 19, to: 26 });
+  });
+  it("oberhalb der Skala greift die höchste Zone statt kein Ergebnis", () => {
+    expect(zoneFromPoints(99, gebaeude).zoneId).toBe(5);
+  });
+  it("ohne Punktzahl oder ohne Schwellen: null", () => {
+    expect(zoneFromPoints(null, gebaeude)).toBeNull();
+    expect(zoneFromPoints("", gebaeude)).toBeNull();
+    expect(zoneFromPoints(10, [])).toBeNull();
+    expect(zoneFromPoints(10, null)).toBeNull();
+  });
+  it("funktioniert auch bei dreizonigen Leistungsbildern (§ 20: 0-9/10-14/15-18)", () => {
+    const fnp = [
+      { ZONE_ID: 9,  POINTS_FROM: 0,  POINTS_TO: 9 },
+      { ZONE_ID: 10, POINTS_FROM: 10, POINTS_TO: 14 },
+      { ZONE_ID: 11, POINTS_FROM: 15, POINTS_TO: 18 },
+    ];
+    expect(zoneFromPoints(9, fnp).zoneId).toBe(9);
+    expect(zoneFromPoints(10, fnp).zoneId).toBe(10);
+    expect(zoneFromPoints(18, fnp).zoneId).toBe(11);
+  });
+  it("sortiert unsortierte Schwellen selbst", () => {
+    const shuffled = [gebaeude[3], gebaeude[0], gebaeude[4], gebaeude[1], gebaeude[2]];
+    expect(zoneFromPoints(20, shuffled).zoneId).toBe(3);
   });
 });
