@@ -1,6 +1,6 @@
 # Leistungsbilder im Kalkulationsmodul — Bestand, Lücken, Reihenfolge
 
-Stand: 18.08.2026 (Geotechnik ergänzt)
+Stand: 18.08.2026 (Geotechnik + UVS ergänzt)
 
 Was das Kalkulationsmodul heute kann, was fehlt, und in welcher Reihenfolge
 die Lücken geschlossen werden. Betrifft `FEE_*`-Stammdaten,
@@ -49,7 +49,7 @@ Beratungsleistungen** (§ 3 Abs. 1). Sieben Honorartafeln:
 
 | HOAI | Leistungsbild | Zonen | Bemessungsgrundlage | Tafelbereich | Status |
 |---|---|---|---|---|---|
-| 1.1.2 | Umweltverträglichkeitsstudie | 3 | Fläche (ha) | 50–10.000 ha | offen |
+| 1.1.2 | Umweltverträglichkeitsstudie | 3 | Fläche (ha) | 50–10.000 ha | **erledigt** (0118) |
 | 1.2.3 | Wärmeschutz und Energiebilanzierung | 5 | anrechenbare Kosten (€) | 250 T–25 Mio | **erledigt** (0116) |
 | 1.2.4 | Bauakustik | 3 | anrechenbare Kosten (€) | 250 T–25 Mio | **erledigt** (0116) |
 | 1.2.5 | Raumakustik | 5 | anrechenbare Kosten (€), je Innenraum | 50 T–7,5 Mio | **erledigt** (0116) |
@@ -109,7 +109,23 @@ Teil dieser Reihe.
 
 ---
 
-## 4. Erledigt: Anlage 1.2 Bauphysik, Anlage 1.3 Geotechnik
+## 4. Erledigt: Anlage 1.1 UVS, Anlage 1.2 Bauphysik, Anlage 1.3 Geotechnik
+
+### Anlage 1.1 Umweltverträglichkeitsstudie (Migration 0118)
+
+Reines Datenupdate, keine Codeänderung — strukturell identisch zur
+bestehenden Landschaftsplanung: `BASE_TYPE = 'area_ha'` (existiert bereits),
+vier LPH-nummerierte Phasen (3/37/50/10 %, wortgleich mit Landschaftsplan),
+drei Honorarzonen, keine anrechenbaren Kosten in € → kein Eintrag in
+`services/din276.js` nötig. `BASE_TYPE` wird in Frontend (`HonorarWizard.tsx`),
+Backend-Controller und PDF-Template durchgehend aus der DB gelesen, nie nach
+`FEE_MASTER_ID` verzweigt — ein neues `area_ha`-Leistungsbild erscheint damit
+automatisch überall, ohne Codeänderung.
+
+Die Zonen-Einstufung folgt einem Punktesystem (Anlage 1.1.2 Abs. 4–6,
+Bewertungsmerkmale × Gewichtung), das die Software nicht abbildet — die
+Nutzerin wählt die Zone direkt. Das ist keine UVS-spezifische Lücke, sondern
+die allgemeine unter 3.5 dokumentierte.
 
 Migrationen `0115` (Schema + Bestand) und `0116` (Bauphysik).
 
@@ -174,8 +190,9 @@ Besonderheiten, keine davon ein neuer Regelsatz:
 
 1. ~~Anlage 1.2 Bauphysik~~ — erledigt (0115/0116)
 2. ~~Anlage 1.3 Geotechnik~~ — erledigt (0117), inkl. `SORT_ORDER` (3.2)
-3. **Anlage 1.1 Umweltverträglichkeitsstudie** — `area_ha`, Modell trägt das schon
-4. **Anlage 1.4 Ingenieurvermessung** — braucht 3.1 (`BASE_TYPE`), zwei Tafeln
+3. ~~Anlage 1.1 Umweltverträglichkeitsstudie~~ — erledigt (0118)
+4. **Anlage 1.4 Ingenieurvermessung** — braucht 3.1 (`BASE_TYPE`), zwei Tafeln.
+   Letztes offenes Anlage-1-Leistungsbild.
 5. **Zuschlagskatalog** (3.4) — kleiner Aufwand, wirkt auf jede Berechnung
 6. **HOAI 2013** als zweite `FEE_GROUPS`-Zeile — Altverträge rechnen weiter
    nach der Fassung, die bei Vertragsschluss galt. Das Modell trägt mehrere
