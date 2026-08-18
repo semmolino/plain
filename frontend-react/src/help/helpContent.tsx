@@ -520,6 +520,31 @@ export const HELP = {
       </>
     ),
   },
+  'din276.raumakustik_volumen': {
+    title: 'Rauminhalt und Bruttorauminhalt (Anlage 1.2.5)',
+    body: (
+      <>
+        Die Raumakustik wird <strong>je Innenraum</strong> honoriert, nicht für das ganze Gebäude. Als
+        anrechenbare Kosten gilt deshalb nur der Anteil, der auf den Raum entfällt: KG 300 + KG 400 werden
+        durch den Bruttorauminhalt des Gebäudes geteilt und mit dem Rauminhalt des Innenraums multipliziert.
+        Die Ausstattung des Innenraums (KG 610) kommt voll hinzu — sie verteilt sich nicht nach Volumen.
+        Beide Werte in m³ eintragen. Für mehrere Räume je Raum eine eigene Berechnung anlegen.
+      </>
+    ),
+  },
+  'din276.bauphysik': {
+    title: 'Anrechenbare Kosten der Bauphysik (Anlage 1.2)',
+    body: (
+      <>
+        Die drei Teilgebiete rechnen <strong>unterschiedlich</strong>: Der <strong>Wärmeschutz</strong>
+        {' '}(1.2.3) übernimmt die Gebäuderegel des § 33 samt der 25-/50-%-Kappung für fremdgeplante KG 400.
+        Die <strong>Bauakustik</strong> (1.2.4) rechnet KG 300 und KG 400 voll an — die Kappung gilt dort
+        nicht, sie betrifft nur den Gebäudeplaner. Die <strong>Raumakustik</strong> (1.2.5) rechnet je
+        Innenraum anteilig. Das Leistungsbild ist für alle drei gleich: sieben Leistungsphasen bis zur
+        Mitwirkung bei der Vergabe, LPH 8/9 gibt es nicht.
+      </>
+    ),
+  },
   'stammdaten.lph_bloecke': {
     title: 'Leistungsphasen-Blöcke',
     body: (

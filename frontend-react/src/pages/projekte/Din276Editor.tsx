@@ -53,6 +53,10 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
   const [bausubstanz, setBausubstanz] = useState('0')
   const [lb,        setLb]        = useState(leistungsbild)
   const [anlagengruppe, setAnlagengruppe] = useState('410')
+  // Raumakustik (Anlage 1.2.5) wird je Innenraum gerechnet: KG 300 + KG 400
+  // werden über den Bruttorauminhalt auf den Raum umgelegt.
+  const [rauminhalt, setRauminhalt] = useState('')
+  const [bri,        setBri]        = useState('')
   // Zusammengesetzter Schlüssel für TGA (je Anlagengruppe): "tga:420".
   const effectiveLb = lb === 'tga' ? `tga:${anlagengruppe}` : lb
   const [result,    setResult]    = useState<Din276AnrechenbarResult | null>(null)
@@ -112,7 +116,8 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
       await updateDin276Estimate(estimate.ID, { stage, mitverarbeitete_bausubstanz: Number(bausubstanz) || 0 })
       const saved = await saveDin276Groups(estimate.ID, groups.map((g, i) => ({ ...g, SORT_ORDER: i })))
       applyEstimate(saved.data)
-      const r = await computeDin276Anrechenbar(estimate.ID, effectiveLb)
+      const r = await computeDin276Anrechenbar(estimate.ID, effectiveLb,
+        lb === 'bauphysik_raumakustik' ? { rauminhalt, bri } : undefined)
       setResult(r.data)
       setMsg({ text: 'Gespeichert und berechnet ✅', type: 'success' })
     } catch (e) {
@@ -152,6 +157,9 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                 <option value="tragwerk">Tragwerksplanung (§ 50)</option>
                 <option value="freianlagen">Freianlagen (§ 38/40)</option>
                 <option value="tga">Technische Ausrüstung (§ 53/54)</option>
+                <option value="bauphysik_waerme">Wärmeschutz und Energiebilanzierung (Anlage 1.2.3)</option>
+                <option value="bauphysik_bauakustik">Bauakustik (Anlage 1.2.4)</option>
+                <option value="bauphysik_raumakustik">Raumakustik (Anlage 1.2.5)</option>
               </select>
             </div>
             {lb === 'tga' && (
@@ -163,6 +171,22 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                   ))}
                 </select>
               </div>
+            )}
+            {lb === 'bauphysik_raumakustik' && (
+              <>
+                <div className="form-group">
+                  <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Rauminhalt Innenraum (m³) <HelpHint id="din276.raumakustik_volumen" />
+                  </label>
+                  <input type="text" inputMode="numeric" value={rauminhalt}
+                    onChange={e => { setRauminhalt(e.target.value); setResult(null) }} />
+                </div>
+                <div className="form-group">
+                  <label>Bruttorauminhalt Gebäude (m³)</label>
+                  <input type="text" inputMode="numeric" value={bri}
+                    onChange={e => { setBri(e.target.value); setResult(null) }} />
+                </div>
+              </>
             )}
             <div className="form-group">
               <label style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -182,6 +206,16 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
             </div>
           </div>
 
+          {lb.startsWith('bauphysik_') && (
+            <p className="empty-note" style={{ marginTop: 0, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+              <span>
+                {lb === 'bauphysik_waerme'     && 'Wärmeschutz rechnet mit den anrechenbaren Kosten des Gebäudes nach § 33 — einschließlich der 25-/50-%-Regel für fremdgeplante KG 400.'}
+                {lb === 'bauphysik_bauakustik' && 'Bauakustik rechnet KG 300 und KG 400 voll an. Die 25-/50-%-Kappung des § 33 gilt hier nicht.'}
+                {lb === 'bauphysik_raumakustik' && 'Raumakustik gilt je Innenraum: KG 300 + KG 400 anteilig über den Bruttorauminhalt, KG 610 des Innenraums voll.'}
+              </span>
+              <HelpHint id="din276.bauphysik" />
+            </p>
+          )}
           {lb === 'tga' && (
             <p className="empty-note" style={{ marginTop: 0, marginBottom: 8 }}>
               Für die Technische Ausrüstung wird je Anlagengruppe getrennt gerechnet. Erfasse die Kosten

@@ -191,3 +191,95 @@ describe("anrechenbareKosten (Dispatcher)", () => {
     expect(() => anrechenbareKosten("unbekannt", { groups: [] })).toThrow();
   });
 });
+
+// ── Anlage 1.2 Bauphysik ──────────────────────────────────────────────────────
+
+const {
+  anrechenbareKostenBauphysikWaerme,
+  anrechenbareKostenBauphysikBauakustik,
+  anrechenbareKostenBauphysikRaumakustik,
+} = require("../services/din276");
+
+describe("anrechenbareKostenBauphysikWaerme (Anlage 1.2.3)", () => {
+  it("erbt die Gebaeuderegel nach § 33 unveraendert", () => {
+    const estimate = {
+      mitverarbeiteteBausubstanz: 100000,
+      groups: [g("300", 1000000), g("400", 120000, true), g("400", 400000, false)],
+    };
+    expect(anrechenbareKostenBauphysikWaerme(estimate).anrechenbareKosten)
+      .toBe(anrechenbareKostenGebaeude(estimate).anrechenbareKosten);
+  });
+
+  it("kappt fremdgeplante KG 400 wie § 33 (25 % voll, Rest zur Haelfte)", () => {
+    // sonstige = KG300 1.000.000; KG400 fremd 400.000
+    // → 250.000 voll + 150.000/2 = 75.000  ⇒ 1.325.000
+    const r = anrechenbareKostenBauphysikWaerme({ groups: [g("300", 1000000), g("400", 400000)] });
+    expect(r.anrechenbareKosten).toBe(1325000);
+  });
+});
+
+describe("anrechenbareKostenBauphysikBauakustik (Anlage 1.2.4)", () => {
+  it("rechnet KG 300 + KG 400 voll an — ohne die 25/50-Kappung des § 33", () => {
+    const r = anrechenbareKostenBauphysikBauakustik({ groups: [g("300", 1000000), g("400", 400000)] });
+    expect(r.anrechenbareKosten).toBe(1400000);
+  });
+
+  it("ignoriert selbst/fremd geplant — die Kappung gilt nur dem Gebaeudeplaner", () => {
+    const selbst = anrechenbareKostenBauphysikBauakustik({ groups: [g("400", 400000, true)] });
+    const fremd  = anrechenbareKostenBauphysikBauakustik({ groups: [g("400", 400000, false)] });
+    expect(selbst.anrechenbareKosten).toBe(fremd.anrechenbareKosten);
+  });
+
+  it("laesst KG 100/500/600/700 aussen vor", () => {
+    const r = anrechenbareKostenBauphysikBauakustik({
+      groups: [g("300", 100000), g("100", 50000), g("500", 50000), g("610", 50000), g("700", 50000)],
+    });
+    expect(r.anrechenbareKosten).toBe(100000);
+  });
+
+  it("beruecksichtigt mitverarbeitete Bausubstanz", () => {
+    const r = anrechenbareKostenBauphysikBauakustik({
+      mitverarbeiteteBausubstanz: 80000,
+      groups: [g("300", 100000)],
+    });
+    expect(r.anrechenbareKosten).toBe(180000);
+  });
+});
+
+describe("anrechenbareKostenBauphysikRaumakustik (Anlage 1.2.5)", () => {
+  it("teilt KG 300 + KG 400 ueber den Bruttorauminhalt auf den Innenraum", () => {
+    // (1.000.000 + 200.000) x 600/6000 = 120.000, zzgl. KG 610 des Innenraums
+    const r = anrechenbareKostenBauphysikRaumakustik(
+      { groups: [g("300", 1000000), g("400", 200000), g("610", 30000)] },
+      { rauminhalt: 600, bri: 6000 },
+    );
+    expect(r.anrechenbareKosten).toBe(150000);
+  });
+
+  it("rechnet KG 610 voll an, nicht anteilig", () => {
+    const r = anrechenbareKostenBauphysikRaumakustik(
+      { groups: [g("610", 30000)] },
+      { rauminhalt: 600, bri: 6000 },
+    );
+    expect(r.anrechenbareKosten).toBe(30000);
+  });
+
+  it("verlangt Rauminhalt und Bruttorauminhalt", () => {
+    const est = { groups: [g("300", 100000)] };
+    expect(() => anrechenbareKostenBauphysikRaumakustik(est, {})).toThrow(/Rauminhalt/);
+    expect(() => anrechenbareKostenBauphysikRaumakustik(est, { rauminhalt: 600 })).toThrow(/Rauminhalt/);
+    expect(() => anrechenbareKostenBauphysikRaumakustik(est, { bri: 6000 })).toThrow(/Rauminhalt/);
+  });
+
+  it("weist einen Innenraum groesser als das Gebaeude zurueck", () => {
+    expect(() => anrechenbareKostenBauphysikRaumakustik(
+      { groups: [g("300", 100000)] }, { rauminhalt: 7000, bri: 6000 },
+    )).toThrow(/groesser/);
+  });
+
+  it("ist ueber die Registry erreichbar", () => {
+    const r = anrechenbareKosten("bauphysik_raumakustik",
+      { groups: [g("300", 1200000)] }, { rauminhalt: 500, bri: 5000 });
+    expect(r.anrechenbareKosten).toBe(120000);
+  });
+});

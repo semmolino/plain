@@ -156,6 +156,11 @@ async function computeAnrechenbar(req, res, supabase) {
   const tenantId = req.tenantId;
   const id = parseInt(req.params.id, 10);
   const { key, opts } = svc.parseLeistungsbild(req.query.leistungsbild || "gebaeude");
+  // Raumakustik (Anlage 1.2.5) rechnet je Innenraum und braucht dafuer zwei
+  // Groessen, die nicht aus der Kostenermittlung stammen: den Rauminhalt des
+  // Innenraums und den Bruttorauminhalt des Gebaeudes.
+  if (req.query.rauminhalt != null) opts.rauminhalt = req.query.rauminhalt;
+  if (req.query.bri != null)        opts.bri        = req.query.bri;
   try {
     const { data: est } = await supabase.from("DIN276_COST_ESTIMATE")
       .select("ID, MITVERARBEITETE_BAUSUBSTANZ").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();

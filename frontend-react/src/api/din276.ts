@@ -61,8 +61,19 @@ export const saveDin276Groups = (id: number, groups: Din276Group[]) =>
     id: g.ID, kg_code: g.KG_CODE, label: g.LABEL, amount: g.AMOUNT, is_planned_self: g.IS_PLANNED_SELF, sort_order: g.SORT_ORDER,
   })) })
 
-export const computeDin276Anrechenbar = (id: number, leistungsbild = 'gebaeude') =>
-  apiClient.get<{ data: Din276AnrechenbarResult }>(`/stammdaten/din276/estimates/${id}/anrechenbar?leistungsbild=${leistungsbild}`)
+/** Raumakustik (Anlage 1.2.5) rechnet je Innenraum — dafuer Rauminhalt des
+ *  Innenraums und Bruttorauminhalt des Gebaeudes (m³). */
+export const computeDin276Anrechenbar = (
+  id: number,
+  leistungsbild = 'gebaeude',
+  volumes?: { rauminhalt?: string | number; bri?: string | number },
+) => {
+  const sp = new URLSearchParams({ leistungsbild })
+  if (volumes?.rauminhalt) sp.set('rauminhalt', String(volumes.rauminhalt))
+  if (volumes?.bri)        sp.set('bri',        String(volumes.bri))
+  return apiClient.get<{ data: Din276AnrechenbarResult }>(
+    `/stammdaten/din276/estimates/${id}/anrechenbar?${sp.toString()}`)
+}
 
 export const deleteDin276Estimate = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/stammdaten/din276/estimates/${id}`)

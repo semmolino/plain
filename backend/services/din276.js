@@ -202,12 +202,107 @@ function anrechenbareKostenTGA(estimate, opts = {}) {
   return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(total), herleitung };
 }
 
+// ── Anlage 1.2 HOAI (Bauphysik) ───────────────────────────────────────────────
+// Die drei Teilgebiete haben UNTERSCHIEDLICHE anrechenbare Kosten — ein
+// gemeinsamer Regelsatz waere fachlich falsch:
+//   1.2.3 Waermeschutz  → anrechenbare Kosten des Gebaeudes gemaess § 33
+//   1.2.4 Bauakustik    → KG 300 + KG 400, voll
+//   1.2.5 Raumakustik   → je Innenraum, (KG 300 + KG 400) anteilig ueber
+//                         Rauminhalt/Bruttorauminhalt, zzgl. KG 610
+//
+// Anlage 1.2.3 Abs. 1: "richtet sich nach den anrechenbaren Kosten des
+// Gebaeudes gemaess § 33 nach der Honorarzone nach § 35". Der Waermeschutz
+// erbt damit die Gebaeuderegel einschliesslich der KG-400-25/50-Kappung.
+function anrechenbareKostenBauphysikWaerme(estimate) {
+  return anrechenbareKostenGebaeude(estimate);
+}
+
+// Anlage 1.2.4 Abs. 1: "Fuer Grundleistungen der Bauakustik sind die Kosten
+// fuer Baukonstruktionen und Anlagen der Technischen Ausruestung anrechenbar."
+// Voll, ohne die 25/50-Kappung des § 33 und ohne Unterscheidung nach
+// selbst/fremd geplant — die Kappung gilt nur dem Gebaeudeplaner.
+// Satz 2: "Der Umfang der mitzuverarbeitenden Bausubstanz kann angemessen
+// beruecksichtigt werden."
+function anrechenbareKostenBauphysikBauakustik(estimate) {
+  const groups = estimate?.groups || [];
+  const bausubstanz = num(estimate?.mitverarbeiteteBausubstanz ?? estimate?.MITVERARBEITETE_BAUSUBSTANZ);
+  const kg300 = sumHundred(groups, 300);
+  const kg400 = sumHundred(groups, 400);
+
+  const herleitung = [];
+  let total = 0;
+  const add = (kg, label, basis, ansatz, betrag) => {
+    const b = round2(betrag);
+    herleitung.push({ kg, label, basis: round2(basis), ansatz, betrag: b });
+    total += b;
+  };
+  if (kg300)       add("300", "Baukonstruktionen", kg300, 100, kg300);
+  if (kg400)       add("400", "Technische Ausruestung", kg400, 100, kg400);
+  if (bausubstanz) add("—", "Mitverarbeitete Bausubstanz (angemessen)", bausubstanz, 100, bausubstanz);
+
+  return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(kg300 + kg400), herleitung };
+}
+
+// Anlage 1.2.5 Abs. 1/2: Das Honorar gilt JE INNENRAUM. Anrechenbar sind
+// KG 300 + KG 400, geteilt durch den Bruttorauminhalt des Gebaeudes und
+// multipliziert mit dem Rauminhalt des Innenraums, zuzueglich der Kosten der
+// Ausstattung (KG 610) DES INNENRAUMS.
+//
+// opts.rauminhalt  Rauminhalt des Innenraums in m³
+// opts.bri         Bruttorauminhalt des Gebaeudes in m³
+//
+// ⚠️ KG 610 wird aus der Kostenermittlung uebernommen. Ist dort das ganze
+// Gebaeude erfasst, ist der Wert vor dem Ansatz auf den Innenraum zu
+// reduzieren — anteilig herunterrechnen laesst er sich nicht, weil sich
+// Ausstattung nicht proportional zum Volumen verteilt.
+function anrechenbareKostenBauphysikRaumakustik(estimate, opts = {}) {
+  const rauminhalt = num(opts.rauminhalt);
+  const bri        = num(opts.bri);
+  if (!(rauminhalt > 0) || !(bri > 0)) {
+    throw new Error("Raumakustik: Rauminhalt des Innenraums und Bruttorauminhalt des Gebaeudes (m³) erforderlich");
+  }
+  if (rauminhalt > bri) {
+    throw new Error("Raumakustik: Rauminhalt des Innenraums ist groesser als der Bruttorauminhalt des Gebaeudes");
+  }
+
+  const groups = estimate?.groups || [];
+  const bausubstanz = num(estimate?.mitverarbeiteteBausubstanz ?? estimate?.MITVERARBEITETE_BAUSUBSTANZ);
+  const kg300 = sumHundred(groups, 300);
+  const kg400 = sumHundred(groups, 400);
+  const kg610 = (groups || []).reduce((s, g) => (kgTens(g.kg ?? g.KG_CODE) === 610 ? s + num(g.amount ?? g.AMOUNT) : s), 0);
+
+  const anteil = rauminhalt / bri;
+  const ansatzPct = round2(anteil * 100);
+
+  const herleitung = [];
+  let total = 0;
+  const add = (kg, label, basis, ansatz, betrag) => {
+    const b = round2(betrag);
+    herleitung.push({ kg, label, basis: round2(basis), ansatz, betrag: b });
+    total += b;
+  };
+  const label = `Anteil Innenraum ${round2(rauminhalt)} m³ / ${round2(bri)} m³`;
+  if (kg300)       add("300", `Baukonstruktionen — ${label}`, kg300, ansatzPct, kg300 * anteil);
+  if (kg400)       add("400", `Technische Ausruestung — ${label}`, kg400, ansatzPct, kg400 * anteil);
+  if (kg610)       add("610", "Ausstattung des Innenraums", kg610, 100, kg610);
+  if (bausubstanz) add("—", "Mitverarbeitete Bausubstanz (angemessen)", bausubstanz, 100, bausubstanz);
+
+  return {
+    anrechenbareKosten: round2(total),
+    sonstigeAnrechenbareKosten: round2((kg300 + kg400) * anteil),
+    herleitung,
+  };
+}
+
 // Registry: Leistungsbild-Typ → Regelfunktion (estimate, opts) → Ergebnis.
 const RULES = {
   gebaeude:    anrechenbareKostenGebaeude,
   tragwerk:    anrechenbareKostenTragwerk,
   freianlagen: anrechenbareKostenFreianlagen,
   tga:         anrechenbareKostenTGA,
+  bauphysik_waerme:      anrechenbareKostenBauphysikWaerme,
+  bauphysik_bauakustik:  anrechenbareKostenBauphysikBauakustik,
+  bauphysik_raumakustik: anrechenbareKostenBauphysikRaumakustik,
 };
 
 /**
@@ -236,6 +331,9 @@ module.exports = {
   anrechenbareKostenTragwerk,
   anrechenbareKostenFreianlagen,
   anrechenbareKostenTGA,
+  anrechenbareKostenBauphysikWaerme,
+  anrechenbareKostenBauphysikBauakustik,
+  anrechenbareKostenBauphysikRaumakustik,
   anrechenbareKosten,
   parseLeistungsbild,
   kgHundred,
