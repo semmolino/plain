@@ -4,6 +4,8 @@ const {
   anrechenbareKostenGebaeude,
   anrechenbareKostenTragwerk,
   anrechenbareKostenFreianlagen,
+  anrechenbareKostenIngenieurbauwerke,
+  anrechenbareKostenVerkehrsanlagen,
   anrechenbareKostenTGA,
   anrechenbareKostenGeotechnik,
   anrechenbareKosten,
@@ -139,6 +141,47 @@ describe("anrechenbareKostenFreianlagen (§ 38/40)", () => {
   });
 });
 
+// ── § 42 Ingenieurbauwerke ─────────────────────────────────────────────────────
+
+describe("anrechenbareKostenIngenieurbauwerke (§ 42)", () => {
+  it("KG 300 voll, ohne weitere Kostengruppen", () => {
+    const r = anrechenbareKostenIngenieurbauwerke({ groups: [g("300", 1000000)] });
+    expect(r.anrechenbareKosten).toBe(1000000);
+  });
+  it("KG 400 selbst geplant: voll", () => {
+    const r = anrechenbareKostenIngenieurbauwerke({ groups: [g("300", 1000000), g("400", 200000, true)] });
+    expect(r.anrechenbareKosten).toBe(1200000);
+  });
+  it("KG 400 fremd geplant: 25-/50-%-Schwelle wie bei Gebäude", () => {
+    const r = anrechenbareKostenIngenieurbauwerke({ groups: [g("300", 1000000), g("400", 300000, false)] });
+    // sonstige = 1.000.000; Schwelle 25 % = 250.000 voll + 50.000 zur Hälfte (25.000)
+    expect(r.anrechenbareKosten).toBe(1275000);
+  });
+  it("KG 500 selbst geplant ist anrechenbar (anders als bei Gebäude)", () => {
+    const r = anrechenbareKostenIngenieurbauwerke({ groups: [g("300", 1000000), g("500", 100000, true)] });
+    expect(r.anrechenbareKosten).toBe(1100000);
+  });
+  it("KG 500 fremd geplant ist NICHT anrechenbar", () => {
+    const r = anrechenbareKostenIngenieurbauwerke({ groups: [g("300", 1000000), g("500", 100000, false)] });
+    expect(r.anrechenbareKosten).toBe(1000000);
+  });
+});
+
+// ── § 46 Verkehrsanlagen ───────────────────────────────────────────────────────
+
+describe("anrechenbareKostenVerkehrsanlagen (§ 46)", () => {
+  it("Abs. 1–3 rechnen identisch zu § 42 (unabhängige, aber gleich aufgebaute Vorschrift)", () => {
+    const groups = [g("300", 1000000), g("400", 300000, false), g("500", 100000, true)];
+    const verkehr = anrechenbareKostenVerkehrsanlagen({ groups });
+    const ingbau  = anrechenbareKostenIngenieurbauwerke({ groups });
+    expect(verkehr.anrechenbareKosten).toBe(ingbau.anrechenbareKosten);
+  });
+  it("KG 300 voll", () => {
+    const r = anrechenbareKostenVerkehrsanlagen({ groups: [g("300", 500000)] });
+    expect(r.anrechenbareKosten).toBe(500000);
+  });
+});
+
 // ── § 53/54 Technische Ausrüstung ─────────────────────────────────────────────
 
 describe("anrechenbareKostenTGA (§ 53/54)", () => {
@@ -207,6 +250,14 @@ describe("anrechenbareKosten (Dispatcher)", () => {
   it("ruft die Geotechnik-Regel", () => {
     const r = anrechenbareKosten("geotechnik", { groups: [g("300", 100000)] });
     expect(r.anrechenbareKosten).toBe(55000);
+  });
+  it("ruft die Ingenieurbauwerke-Regel", () => {
+    const r = anrechenbareKosten("ingenieurbauwerke", { groups: [g("300", 100000)] });
+    expect(r.anrechenbareKosten).toBe(100000);
+  });
+  it("ruft die Verkehrsanlagen-Regel", () => {
+    const r = anrechenbareKosten("verkehrsanlagen", { groups: [g("300", 100000)] });
+    expect(r.anrechenbareKosten).toBe(100000);
   });
   it("wirft bei unbekanntem Leistungsbild", () => {
     expect(() => anrechenbareKosten("unbekannt", { groups: [] })).toThrow();

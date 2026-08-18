@@ -156,6 +156,8 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                 <option value="gebaeude">Gebäude (§ 33)</option>
                 <option value="tragwerk">Tragwerksplanung (§ 50)</option>
                 <option value="freianlagen">Freianlagen (§ 38/40)</option>
+                <option value="ingenieurbauwerke">Ingenieurbauwerke (§ 42)</option>
+                <option value="verkehrsanlagen">Verkehrsanlagen (§ 46)</option>
                 <option value="tga">Technische Ausrüstung (§ 53/54)</option>
                 <option value="bauphysik_waerme">Wärmeschutz und Energiebilanzierung (Anlage 1.2.3)</option>
                 <option value="bauphysik_bauakustik">Bauakustik (Anlage 1.2.4)</option>
@@ -298,7 +300,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
           {result && (
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>
-                Herleitung ({(lb === 'tragwerk' || lb === 'geotechnik') ? '§ 50' : lb === 'freianlagen' ? '§ 38/40' : lb === 'tga' ? '§ 53/54' : '§ 33'} HOAI)
+                Herleitung ({(lb === 'tragwerk' || lb === 'geotechnik') ? '§ 50' : lb === 'freianlagen' ? '§ 38/40' : lb === 'ingenieurbauwerke' ? '§ 42' : lb === 'verkehrsanlagen' ? '§ 46' : lb === 'tga' ? '§ 53/54' : '§ 33'} HOAI)
               </div>
               <div className="table-scroll">
                 <table className="master-table">

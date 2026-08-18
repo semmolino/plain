@@ -148,6 +148,119 @@ function anrechenbareKostenFreianlagen(estimate) {
   return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(kg500), herleitung };
 }
 
+// ── § 42 HOAI (Ingenieurbauwerke) ─────────────────────────────────────────────
+// Kern (Abs. 1–3, strukturell parallel zu § 33 Gebäude):
+//  - KG 300 (Baukonstruktion) vollstaendig.
+//  - KG 400 (Maschinentechnik/Technische Anlagen) selbst geplant: voll.
+//    Fremd geplant: bis 25 % der sonstigen anrechenbaren Kosten voll,
+//    darueber zur Haelfte (Abs. 2).
+//  - KG 200 (Herrichten/Erschliessen), KG 500 (Aussenanlagen/Leitungen),
+//    KG 600 (Ausstattung/Nebenanlagen) NUR soweit selbst geplant/ueberwacht,
+//    dann voll (Abs. 3) — anders als bei Gebaeude ist KG 500 hier NICHT
+//    grundsaetzlich ausgeschlossen, sondern wie KG 200/600 behandelt.
+//  - KG 100, 700: nicht anrechenbar (im Gesetzestext nicht erwaehnt).
+// ⚠️ Abs. 3 nennt zusaetzlich "verkehrsregelnde Massnahmen waehrend der
+// Bauzeit" — hier der KG-200-Gruppe zugeschlagen (baustellenbezogen), da
+// DIN 276 dafuer keine eigene Kostengruppe kennt.
+const INGENIEURBAUWERK_KG400_THRESHOLD_PCT = 0.25;
+const INGENIEURBAUWERK_KG400_ABOVE_FACTOR  = 0.5;
+
+function anrechenbareKostenIngenieurbauwerke(estimate) {
+  const groups = estimate?.groups || [];
+  const kg300      = sumHundred(groups, 300);
+  const kg200self   = sumHundred(groups, 200, isSelf);
+  const kg500self   = sumHundred(groups, 500, isSelf);
+  const kg600self   = sumHundred(groups, 600, isSelf);
+  const kg400self   = sumHundred(groups, 400, isSelf);
+  const kg400fremd  = sumHundred(groups, 400, (g) => !isSelf(g));
+
+  const herleitung = [];
+  let total = 0;
+  const add = (kg, label, basis, ansatz, betrag) => {
+    const b = round2(betrag);
+    herleitung.push({ kg, label, basis: round2(basis), ansatz, betrag: b });
+    total += b;
+  };
+
+  if (kg300)    add("300", "Baukonstruktion", kg300, 100, kg300);
+  if (kg200self) add("200", "Herrichten/Erschließen (selbst geplant)", kg200self, 100, kg200self);
+  if (kg500self) add("500", "Außenanlagen/Leitungen (selbst geplant)", kg500self, 100, kg500self);
+  if (kg600self) add("600", "Ausstattung/Nebenanlagen (selbst geplant)", kg600self, 100, kg600self);
+
+  const sonstige = round2(kg300 + kg200self + kg500self + kg600self);
+
+  if (kg400self) add("400", "Maschinentechnik/Technische Anlagen (selbst geplant)", kg400self, 100, kg400self);
+  if (kg400fremd > 0) {
+    const threshold = round2(sonstige * INGENIEURBAUWERK_KG400_THRESHOLD_PCT);
+    const fullPart  = Math.min(kg400fremd, threshold);
+    const abovePart = Math.max(0, kg400fremd - threshold);
+    add("400", `Technische Anlagen (fremd geplant), bis 25 % v. ${round2(sonstige)}`, fullPart, 100, fullPart);
+    if (abovePart > 0) {
+      add("400", "Technische Anlagen (fremd geplant), übersteigender Betrag", abovePart, 50, abovePart * INGENIEURBAUWERK_KG400_ABOVE_FACTOR);
+    }
+  }
+
+  return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: sonstige, herleitung };
+}
+
+// ── § 46 HOAI (Verkehrsanlagen) ───────────────────────────────────────────────
+// Abs. 1–3 sind im Kostenzuschnitt identisch zu § 42 Ingenieurbauwerke: KG 300
+// voll, KG 400 selbst/fremd mit derselben 25-/50-%-Schwelle, KG 200/500/600
+// nur soweit selbst geplant/ueberwacht. Eigene Regelfunktion (nicht Alias auf
+// § 42), weil es sich um zwei unabhaengige Vorschriften handelt, die nur
+// zufaellig gleich formuliert sind — anders als bei Geotechnik/Tragwerksplanung
+// gibt es hier KEINEN Verweis im Gesetzestext von § 46 auf § 42.
+//
+// ⚠️ BEWUSST NICHT ABGEBILDET (leistungsphasen-/objektabhaengig, passt nicht
+// in dieses Modul, das einen einzelnen K0-Wert liefert statt Werte je LPH):
+//  - Abs. 4: Erdarbeiten bis 40 % der sonstigen anrechenbaren Kosten
+//    zusaetzlich anrechenbar (nur LPH 1–7 und 9); 10 % der Kosten eines
+//    NICHT vom selben AN betreuten Ingenieurbauwerks zusaetzlich anrechenbar.
+//  - Abs. 5: Degression bei mehrstreifigen Straßen (85/70/60 %) bzw.
+//    mehrgleisigen Bahnanlagen (90 %), ebenfalls nur bestimmte LPH.
+// Vor produktivem Einsatz mit einer Fachperson gegenpruefen, ob diese
+// Vereinfachung fuer den jeweiligen Anwendungsfall tragbar ist.
+const VERKEHRSANLAGEN_KG400_THRESHOLD_PCT = 0.25;
+const VERKEHRSANLAGEN_KG400_ABOVE_FACTOR  = 0.5;
+
+function anrechenbareKostenVerkehrsanlagen(estimate) {
+  const groups = estimate?.groups || [];
+  const kg300      = sumHundred(groups, 300);
+  const kg200self   = sumHundred(groups, 200, isSelf);
+  const kg500self   = sumHundred(groups, 500, isSelf);
+  const kg600self   = sumHundred(groups, 600, isSelf);
+  const kg400self   = sumHundred(groups, 400, isSelf);
+  const kg400fremd  = sumHundred(groups, 400, (g) => !isSelf(g));
+
+  const herleitung = [];
+  let total = 0;
+  const add = (kg, label, basis, ansatz, betrag) => {
+    const b = round2(betrag);
+    herleitung.push({ kg, label, basis: round2(basis), ansatz, betrag: b });
+    total += b;
+  };
+
+  if (kg300)    add("300", "Baukonstruktion", kg300, 100, kg300);
+  if (kg200self) add("200", "Herrichten/Erschließen (selbst geplant)", kg200self, 100, kg200self);
+  if (kg500self) add("500", "Außenanlagen/Leitungen (selbst geplant)", kg500self, 100, kg500self);
+  if (kg600self) add("600", "Ausstattung/Nebenanlagen (selbst geplant)", kg600self, 100, kg600self);
+
+  const sonstige = round2(kg300 + kg200self + kg500self + kg600self);
+
+  if (kg400self) add("400", "Technische Anlagen (selbst geplant)", kg400self, 100, kg400self);
+  if (kg400fremd > 0) {
+    const threshold = round2(sonstige * VERKEHRSANLAGEN_KG400_THRESHOLD_PCT);
+    const fullPart  = Math.min(kg400fremd, threshold);
+    const abovePart = Math.max(0, kg400fremd - threshold);
+    add("400", `Technische Anlagen (fremd geplant), bis 25 % v. ${round2(sonstige)}`, fullPart, 100, fullPart);
+    if (abovePart > 0) {
+      add("400", "Technische Anlagen (fremd geplant), übersteigender Betrag", abovePart, 50, abovePart * VERKEHRSANLAGEN_KG400_ABOVE_FACTOR);
+    }
+  }
+
+  return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: sonstige, herleitung };
+}
+
 // ── § 53/54 HOAI (Technische Ausrüstung) ──────────────────────────────────────
 // Das Honorar wird JE ANLAGENGRUPPE getrennt ermittelt (§ 54 Abs. 1). Die
 // anrechenbaren Kosten einer Anlagengruppe sind die Kosten der zugehörigen
@@ -308,6 +421,8 @@ const RULES = {
   gebaeude:    anrechenbareKostenGebaeude,
   tragwerk:    anrechenbareKostenTragwerk,
   freianlagen: anrechenbareKostenFreianlagen,
+  ingenieurbauwerke: anrechenbareKostenIngenieurbauwerke,
+  verkehrsanlagen:   anrechenbareKostenVerkehrsanlagen,
   tga:         anrechenbareKostenTGA,
   bauphysik_waerme:      anrechenbareKostenBauphysikWaerme,
   bauphysik_bauakustik:  anrechenbareKostenBauphysikBauakustik,
@@ -340,6 +455,8 @@ module.exports = {
   anrechenbareKostenGebaeude,
   anrechenbareKostenTragwerk,
   anrechenbareKostenFreianlagen,
+  anrechenbareKostenIngenieurbauwerke,
+  anrechenbareKostenVerkehrsanlagen,
   anrechenbareKostenTGA,
   anrechenbareKostenBauphysikWaerme,
   anrechenbareKostenBauphysikBauakustik,

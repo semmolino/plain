@@ -249,10 +249,12 @@ Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
    (15.2); danach das numerische Punktesystem (UVS/Ingenieurvermessung/
    vermutlich Bauleitplanung/Landschaftsplanung) als zweite, andere Tabelle.
    **In Arbeit, nicht abgeschlossen.**
-6. **§ 42 (Ingenieurbauwerke) / § 46 (Verkehrsanlagen) in `din276.js`** —
-   beide Leistungsbilder existieren seit 0115, haben aber nie eine
-   Anrechenbarkeits-Regel bekommen. Voraussetzung für eine spätere
-   Bauvermessungs-Regel (siehe Anlage-1.4-Abschnitt oben). Als Nächstes dran.
+6. ~~§ 42 (Ingenieurbauwerke) / § 46 (Verkehrsanlagen) in `din276.js`~~ —
+   erledigt, siehe § 9 unten. Damit ist eine spätere Bauvermessungs-Regel
+   (Anlage 1.4.5 Abs. 2, siehe Anlage-1.4-Abschnitt oben) **nicht mehr
+   blockiert** — aber noch nicht gebaut (nicht Teil dieser Anfrage; braucht
+   zusätzlich einen Objektart-Selector Gebäude/Ingenieurbauwerk/
+   Verkehrsanlage + die 80-/100-%-Regel).
 7. **AHO-Hefte und weitere Kalkulationstypen** — Projektsteuerung (Heft 9),
    SiGeKo (Heft 15), Brandschutz (Heft 17) u. a. Diese rechnen nicht nach
    Honorartafel, sondern meist als Prozentsatz der Baukosten oder nach
@@ -299,7 +301,41 @@ verifiziert) ist strukturell etwas anderes und braucht eine eigene Tabelle
 
 ---
 
-## 7. Werte pflegen
+## 9. § 42 Ingenieurbauwerke / § 46 Verkehrsanlagen in `din276.js`
+
+Beide Leistungsbilder existieren seit Migration 0115 (Masters 11/12), hatten
+aber nie eine Anrechenbarkeits-Regel — Nutzerinnen mussten die anrechenbaren
+Kosten frei eintippen, ohne DIN276-Editor-Unterstützung.
+
+**Beide Vorschriften (Abs. 1–3) sind im Kostenzuschnitt identisch** und
+parallel zu § 33 Gebäude aufgebaut: KG 300 voll, KG 400 selbst geplant voll/
+fremd geplant 25-/50-%-Schwelle (dieselben Prozentsätze wie bei Gebäude).
+**Ein Unterschied zu Gebäude**: KG 500 (Außenanlagen/Erschließung/Leitungen)
+ist hier NICHT grundsätzlich ausgeschlossen wie bei Gebäude, sondern wird —
+wie KG 200/600 — anrechenbar, sobald der Auftragnehmer sie selbst plant oder
+überwacht.
+
+Trotz identischen Zuschnitts **zwei getrennte Funktionen**, kein Alias: Anders
+als bei Geotechnik/Tragwerksplanung verweist der Gesetzestext von § 46 nicht
+auf § 42 — die Übereinstimmung ist Zufall der Formulierung, kein rechtlicher
+Verweis. Eine Änderung an einer der beiden Vorschriften soll die andere nicht
+mitziehen.
+
+**Bewusst nicht abgebildet** (§ 46 Abs. 4/5): Erdarbeiten-Sonderregel (bis
+40 % zusätzlich anrechenbar, nur LPH 1–7+9), Zuschlag für nicht selbst
+betreute Ingenieurbauwerke (10 %), Degression bei mehrstreifigen
+Straßen/mehrgleisigen Bahnanlagen. Alle drei sind leistungsphasen- bzw.
+objektabhängig und passen nicht in dieses Modul, das einen einzelnen
+K0-Wert liefert statt Werte je LPH — bräuchten eine strukturelle Erweiterung
+des DIN276-Moduls, nicht nur eine neue Regel.
+
+**Folge**: Die in Anlage 1.4 zurückgestellte Bauvermessungs-Regel
+(80 %/100 % von § 33/§ 42/§ 46 je nach Objektart) ist jetzt nicht mehr
+blockiert, aber noch nicht gebaut — kein Teil dieser Anfrage.
+
+---
+
+## 10. Werte pflegen
 
 Die Tafelwerte wurden maschinell aus dem amtlichen Volltext übernommen, nicht
 abgetippt: Parser + Round-Trip-Prüfung gegen die Quelle (Bandgrenzen
