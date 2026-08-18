@@ -1,6 +1,6 @@
 # Leistungsbilder im Kalkulationsmodul — Bestand, Lücken, Reihenfolge
 
-Stand: 18.08.2026 (Geotechnik + UVS ergänzt)
+Stand: 18.08.2026 (Anlage 1 vollständig: Geotechnik, UVS, Ingenieurvermessung ergänzt)
 
 Was das Kalkulationsmodul heute kann, was fehlt, und in welcher Reihenfolge
 die Lücken geschlossen werden. Betrifft `FEE_*`-Stammdaten,
@@ -42,10 +42,10 @@ Voraussetzung dafür, dass die Spaltenkompression verlustfrei ist.
 
 ---
 
-## 2. Was fehlt: HOAI Anlage 1
+## 2. HOAI Anlage 1 — Weitere Fachplanungs- und Beratungsleistungen
 
-Nicht abgebildet ist **Anlage 1 — Weitere Fachplanungs- und
-Beratungsleistungen** (§ 3 Abs. 1). Sieben Honorartafeln:
+**Anlage 1** (§ 3 Abs. 1) ist mit Migration 0119 vollständig abgebildet.
+Sieben Honorartafeln:
 
 | HOAI | Leistungsbild | Zonen | Bemessungsgrundlage | Tafelbereich | Status |
 |---|---|---|---|---|---|
@@ -54,8 +54,8 @@ Beratungsleistungen** (§ 3 Abs. 1). Sieben Honorartafeln:
 | 1.2.4 | Bauakustik | 3 | anrechenbare Kosten (€) | 250 T–25 Mio | **erledigt** (0116) |
 | 1.2.5 | Raumakustik | 5 | anrechenbare Kosten (€), je Innenraum | 50 T–7,5 Mio | **erledigt** (0116) |
 | 1.3.4 | Geotechnik | 5 | anrechenbare Kosten (€) | 50 T–25 Mio | **erledigt** (0117) |
-| 1.4.8 (1) | Ingenieurvermessung — Planungsbegleitende Vermessung | 5 | **Verrechnungseinheiten** | 6–11.726 VE | offen |
-| 1.4.8 (2) | Ingenieurvermessung — Bauvermessung | 5 | anrechenbare Kosten (€) | 50 T–10 Mio | offen |
+| 1.4.8 (1) | Ingenieurvermessung — Planungsbegleitende Vermessung | 5 | **Verrechnungseinheiten** | 6–11.726 VE | **erledigt** (0119) |
+| 1.4.8 (2) | Ingenieurvermessung — Bauvermessung | 5 | anrechenbare Kosten (€) | 50 T–10 Mio | **erledigt** (0119) |
 
 Quelle: HOAI vom 10.07.2013 (BGBl. I S. 2276; Anlage 1: BGBl. I 2013,
 2306–2323), zuletzt geändert durch Art. 3 G v. 22.03.2023 — die als
@@ -69,12 +69,17 @@ Quelle: HOAI vom 10.07.2013 (BGBl. I S. 2276; Anlage 1: BGBl. I 2013,
 Diese Punkte sind der eigentliche Aufwand — der reine Stammdaten-Import ist
 der kleinere Teil.
 
-### 3.1 `BASE_TYPE` kennt nur `cost_eur` und `area_ha`
+### 3.1 `BASE_TYPE` kennt nur `cost_eur` und `area_ha` — gelöst (0119)
 
 Die Ingenieurvermessung (1.4.8 Abs. 1) rechnet in **Verrechnungseinheiten**.
-Betroffen: `chk_fee_masters_base_type` (Migration 0054/0115), der
-`FeeBaseType`-Union in `api/fee.ts`, die Einheitenbeschriftung im
-`HonorarWizard` und die PDF-Vorlage `honorar.njk`.
+Dritter `BASE_TYPE`-Wert `verrechnungseinheiten` ergänzt:
+`chk_fee_masters_base_type` (0119), `FeeBaseType`-Union in `api/fee.ts`,
+`HonorarWizard.tsx` (`isSingleValue` ersetzt das bisherige `isAreaHa` an den
+Stellen, die nur „ein Basisfeld statt K0..K4" bedeuten; `isAreaHa` bleibt für
+die Label-/Filter-Wahl), `services_pdf_render.js` + `honorar.njk` (neuer
+Nunjucks-Filter `verrechnungseinheiten`, Suffix „ VE"). Die
+Tafel-Interpolation selbst (`calculateRevenueFields` in `stammdaten.js`) war
+bereits einheitenagnostisch — keine Änderung nötig.
 
 ### 3.2 Leistungsbilder ohne LPH-Nummerierung — gelöst (0117)
 
@@ -109,7 +114,7 @@ Teil dieser Reihe.
 
 ---
 
-## 4. Erledigt: Anlage 1.1 UVS, Anlage 1.2 Bauphysik, Anlage 1.3 Geotechnik
+## 4. Erledigt: Anlage 1 vollständig (UVS, Bauphysik, Geotechnik, Ingenieurvermessung)
 
 ### Anlage 1.1 Umweltverträglichkeitsstudie (Migration 0118)
 
@@ -126,6 +131,28 @@ Die Zonen-Einstufung folgt einem Punktesystem (Anlage 1.1.2 Abs. 4–6,
 Bewertungsmerkmale × Gewichtung), das die Software nicht abbildet — die
 Nutzerin wählt die Zone direkt. Das ist keine UVS-spezifische Lücke, sondern
 die allgemeine unter 3.5 dokumentierte.
+
+### Anlage 1.4 Ingenieurvermessung (Migration 0119)
+
+Zwei Leistungsbilder, zwei Honorartafeln — Planungsbegleitende Vermessung
+(1.4.8 Abs. 1, 6–11.726 VE) und Bauvermessung (1.4.8 Abs. 2, 50T–10 Mio €).
+
+- **Dritter `BASE_TYPE`**: `verrechnungseinheiten`. Löst 3.1. Die
+  VE-Summe wird direkt eingetragen (VE = Fläche × Punktdichte-Faktor,
+  Anlage 1.4.2 Abs. 3 — keine Flächenklassen-Rechenhilfe gebaut, dieselbe
+  Vereinfachung wie bei `area_ha`).
+- **Bauvermessungs anrechenbare Kosten bewusst NICHT in `din276.js`**:
+  Anlage 1.4.5 Abs. 2 verlangt 80 % (Gebäude/Verkehrsanlagen) bzw. 100 %
+  (Ingenieurbauwerke) der Herstellungskosten nach § 33/§ 42/§ 46 — wir haben
+  aber nur § 33 (`anrechenbareKostenGebaeude`). § 42 (Ingenieurbauwerke) und
+  § 46 (Verkehrsanlagen) fehlen **auch für ihre eigenen Leistungsbilder**
+  (Masters 11/12 existieren seit 0115, haben aber nie eine DIN276-Regel
+  bekommen — Nutzerinnen tragen die anrechenbaren Kosten dort schon heute
+  direkt ein). Eine Bauvermessungs-Regel jetzt zu bauen hieße, auf zwei
+  fehlenden Regeln aufzusetzen. Zurückgestellt, bis § 42/§ 46 anstehen.
+- **Nicht abgebildet**: Anlage 1.4.7 Abs. 4 (LPH 4 bei Gebäuden abweichend
+  45–62 % statt pauschal 62 %) — Objektart-Abhängigkeit wie bei den meisten
+  Sonderfällen nicht modelliert, manuell in der Berechnung anzupassen.
 
 Migrationen `0115` (Schema + Bestand) und `0116` (Bauphysik).
 
@@ -191,9 +218,10 @@ Besonderheiten, keine davon ein neuer Regelsatz:
 1. ~~Anlage 1.2 Bauphysik~~ — erledigt (0115/0116)
 2. ~~Anlage 1.3 Geotechnik~~ — erledigt (0117), inkl. `SORT_ORDER` (3.2)
 3. ~~Anlage 1.1 Umweltverträglichkeitsstudie~~ — erledigt (0118)
-4. **Anlage 1.4 Ingenieurvermessung** — braucht 3.1 (`BASE_TYPE`), zwei Tafeln.
-   Letztes offenes Anlage-1-Leistungsbild.
-5. **Zuschlagskatalog** (3.4) — kleiner Aufwand, wirkt auf jede Berechnung
+4. ~~Anlage 1.4 Ingenieurvermessung~~ — erledigt (0119), inkl. `BASE_TYPE`
+   `verrechnungseinheiten` (3.1). **Anlage 1 ist damit vollständig.**
+5. **Zuschlagskatalog** (3.4) — kleiner Aufwand, wirkt auf jede Berechnung.
+   Nächster Schritt.
 6. **HOAI 2013** als zweite `FEE_GROUPS`-Zeile — Altverträge rechnen weiter
    nach der Fassung, die bei Vertragsschluss galt. Das Modell trägt mehrere
    Fassungen bereits; zu klären ist die Vorbelegung nach Vertragsdatum.
@@ -202,6 +230,10 @@ Besonderheiten, keine davon ein neuer Regelsatz:
    Honorartafel, sondern meist als Prozentsatz der Baukosten oder nach
    Zeithonorar. Ob das noch in `FEE_TABLES` passt oder einen eigenen
    Kalkulationstyp braucht, ist vor Beginn zu entscheiden — offene Frage.
+8. **§ 42 (Ingenieurbauwerke) / § 46 (Verkehrsanlagen) in `din276.js`** —
+   beide Leistungsbilder existieren seit 0115, haben aber nie eine
+   Anrechenbarkeits-Regel bekommen. Voraussetzung für eine spätere
+   Bauvermessungs-Regel (siehe Anlage-1.4-Abschnitt oben).
 
 ---
 

@@ -230,6 +230,14 @@ function env() {
     return n.toLocaleString('de-DE', { maximumFractionDigits: 4 }) + ' ha';
   });
 
+  // Verrechnungseinheiten (Anlage 1.4.8 HOAI) — deutsche Zahlformatierung mit "VE" Suffix
+  e.addFilter('verrechnungseinheiten', v => {
+    if (v === null || v === undefined || v === '') return '';
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '';
+    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' VE';
+  });
+
   _nunjucksEnv = e;
   return _nunjucksEnv;
 }
@@ -1381,7 +1389,7 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     zoneName = zone?.NAME_SHORT ?? null;
   }
 
-  // Bemessungsgrundlage des Leistungsbilds (cost_eur | area_ha)
+  // Bemessungsgrundlage des Leistungsbilds (cost_eur | area_ha | verrechnungseinheiten)
   let baseType = 'cost_eur';
   if (calc.FEE_MASTER_ID) {
     try {
@@ -1479,7 +1487,9 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
       nameLong:            calc.NAME_LONG  || '',
       baseType,
       isAreaHa:            baseType === 'area_ha',
-      baseLabel:           baseType === 'area_ha' ? 'Plangebiet (ha)' : 'Baukosten (€)',
+      isVerrechnungseinheiten: baseType === 'verrechnungseinheiten',
+      isSingleValue:       baseType === 'area_ha' || baseType === 'verrechnungseinheiten',
+      baseLabel:           baseType === 'area_ha' ? 'Plangebiet (ha)' : baseType === 'verrechnungseinheiten' ? 'Verrechnungseinheiten (VE)' : 'Baukosten (€)',
       zoneName,
       zonePercent:         calc.ZONE_PERCENT ?? '',
       constructionCostsK0: calc.CONSTRUCTION_COSTS_K0 ?? null,

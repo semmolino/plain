@@ -252,17 +252,21 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
 
   const totalPhaseRev = phases.reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
 
-  // Bemessungsgrundlage des Leistungsbilds — bestimmt UI/PDF-Labels und
-  // ob K0..K4 oder nur ein Fläche-Feld (ha) angezeigt wird. Fallback
-  // 'cost_eur' = bisheriges Verhalten.
-  const baseType: 'cost_eur' | 'area_ha' =
+  // Bemessungsgrundlage des Leistungsbilds — bestimmt UI/PDF-Labels und ob
+  // K0..K4 oder nur ein einzelnes Basis-Feld (ha / VE) angezeigt wird.
+  // Fallback 'cost_eur' = bisheriges Verhalten.
+  const baseType: 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' =
     calcMaster?.BASE_TYPE
     ?? (feeMasterId
           ? (masters.find(m => String(m.ID) === String(feeMasterId))?.BASE_TYPE ?? 'cost_eur')
           : 'cost_eur')
   const isAreaHa  = baseType === 'area_ha'
-  const baseLabel = isAreaHa ? 'Plangebiet (ha)'        : 'Baukosten (€)'
-  const kxOptionsForBase = isAreaHa ? (['K0'] as const) : KX_OPTIONS
+  const isVerrechnungseinheiten = baseType === 'verrechnungseinheiten'
+  // area_ha und verrechnungseinheiten haben beide nur EINEN Basiswert (kein
+  // K0..K4-Band, keine Baukosten-Zuschläge) — unterscheiden sich nur im Label.
+  const isSingleValue = isAreaHa || isVerrechnungseinheiten
+  const baseLabel = isAreaHa ? 'Plangebiet (ha)' : isVerrechnungseinheiten ? 'Verrechnungseinheiten (VE)' : 'Baukosten (€)'
+  const kxOptionsForBase = isSingleValue ? (['K0'] as const) : KX_OPTIONS
 
   // Compute surcharges without BL first (for pct_gesamthonorar BL base)
   const surchargeEffectsNoBl = computeSurchargeEffects(phases, surcharges, [], [])
@@ -416,10 +420,10 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
         ZONE_ID:               basis.ZONE_ID    ? Number(basis.ZONE_ID) : null,
         ZONE_PERCENT:          toNum(basis.ZONE_PERCENT),
         CONSTRUCTION_COSTS_K0: toNum(basis.K0),
-        CONSTRUCTION_COSTS_K1: isAreaHa ? null : toNum(basis.K1),
-        CONSTRUCTION_COSTS_K2: isAreaHa ? null : toNum(basis.K2),
-        CONSTRUCTION_COSTS_K3: isAreaHa ? null : toNum(basis.K3),
-        CONSTRUCTION_COSTS_K4: isAreaHa ? null : toNum(basis.K4),
+        CONSTRUCTION_COSTS_K1: isSingleValue ? null : toNum(basis.K1),
+        CONSTRUCTION_COSTS_K2: isSingleValue ? null : toNum(basis.K2),
+        CONSTRUCTION_COSTS_K3: isSingleValue ? null : toNum(basis.K3),
+        CONSTRUCTION_COSTS_K4: isSingleValue ? null : toNum(basis.K4),
         DIN276_ESTIMATE_ID:    din276EstimateId,
         DIN276_LEISTUNGSBILD:  din276Leistungsbild,
       })
@@ -776,18 +780,19 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             <input type="number" step="0.01" value={basis.ZONE_PERCENT} onChange={e => setBasis(b => ({ ...b, ZONE_PERCENT: e.target.value }))} />
           </div>
           <p className="admin-block-title" style={{ marginTop: 12 }}>{baseLabel}</p>
-          {isAreaHa ? (
+          {isSingleValue ? (
             <div className="form-group">
-              <label>Plangebiet</label>
+              <label>{isVerrechnungseinheiten ? 'Verrechnungseinheiten' : 'Plangebiet'}</label>
               <input
                 type="number" step="0.01" min={0}
                 value={basis.K0}
                 onChange={e => setBasis(b => ({ ...b, K0: e.target.value, K1: '', K2: '', K3: '', K4: '' }))}
-                placeholder="Größe des Plangebiets in ha"
+                placeholder={isVerrechnungseinheiten ? 'Anzahl der Verrechnungseinheiten (VE)' : 'Größe des Plangebiets in ha'}
               />
               <p className="admin-section-hint">
-                Bei Flächenplanung wird das Honorar aus der Plangebietsgröße in
-                Hektar interpoliert (HOAI 2021 §17 ff.).
+                {isVerrechnungseinheiten
+                  ? 'Die Verrechnungseinheiten ergeben sich aus der Fläche (ha) multipliziert mit dem Faktor der Punktdichte-Flächenklasse (Anlage 1.4.2 Abs. 3 HOAI, 40–800 VE/ha) und werden hier als Summe eingetragen.'
+                  : 'Bei Flächenplanung wird das Honorar aus der Plangebietsgröße in Hektar interpoliert (HOAI 2021 §17 ff.).'}
               </p>
             </div>
           ) : (
@@ -874,7 +879,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                     <tr key={p.ID}>
                       <td>{p.PHASE_LABEL}</td>
                       <td>
-                        <select className="tbl-select" value={p.KX || 'K0'} onChange={e => updatePhaseKx(p.ID, e.target.value)} disabled={isAreaHa}>
+                        <select className="tbl-select" value={p.KX || 'K0'} onChange={e => updatePhaseKx(p.ID, e.target.value)} disabled={isSingleValue}>
                           {kxOptionsForBase.map(k => <option key={k} value={k}>{k}</option>)}
                         </select>
                       </td>
@@ -968,7 +973,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                             onChange={e => updateBl({ AMOUNT_TYPE: e.target.value as BlAmountType, PERCENT: null, KX_REF: null })}>
                             {(Object.entries(BL_AMOUNT_TYPE_LABELS) as [BlAmountType, string][])
                               .filter(([k]) => k !== 'pct_gesamthonorar')
-                              .filter(([k]) => !(isAreaHa && k === 'pct_baukosten'))
+                              .filter(([k]) => !(isSingleValue && k === 'pct_baukosten'))
                               .map(([k, v]) => (
                                 <option key={k} value={k}>{v}</option>
                               ))}

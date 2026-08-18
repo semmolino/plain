@@ -202,15 +202,15 @@ table.data-table tfoot tr.grand-total td {
 <table class="data-table" style="margin-top:3mm">
   <thead>
     <tr>
-      {% if not calc.isAreaHa %}<th style="width:12%">Kx</th>{% endif %}
-      <th class="num">{% if calc.isAreaHa %}Plangebiet (ha){% else %}Baukosten €{% endif %}</th>
+      {% if not calc.isSingleValue %}<th style="width:12%">Kx</th>{% endif %}
+      <th class="num">{{ calc.baseLabel }}</th>
       <th class="num">Grundhonorar €</th>
     </tr>
   </thead>
   <tbody>
-    {% if calc.isAreaHa %}
+    {% if calc.isSingleValue %}
     <tr>
-      <td class="num">{{ calc.constructionCostsK0 | area_ha }}</td>
+      <td class="num">{% if calc.isVerrechnungseinheiten %}{{ calc.constructionCostsK0 | verrechnungseinheiten }}{% else %}{{ calc.constructionCostsK0 | area_ha }}{% endif %}</td>
       <td class="num">{{ calc.revenueK0 | money }}</td>
     </tr>
     {% else %}
