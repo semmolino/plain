@@ -143,6 +143,31 @@ async function getFeeZones(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/stammdaten/fee-zone-lookup
+//
+// Objektliste zur Honorarzonen-Bestimmung (z. B. Anlage 14.2 Tragwerksplanung):
+// jede Zeile beschreibt einen Sachverhalt und ordnet ihn genau einer Zone zu.
+// Nicht jedes Leistungsbild hat eine — leeres Array ist der Normalfall.
+// Fängt außerdem den Fall ab, dass Migration 0120 (legt FEE_ZONE_LOOKUP an)
+// noch nicht gelaufen ist: Deploy und manuelle Migration fallen zeitlich
+// auseinander, in der Lücke soll der Wizard nicht mit 500 abbrechen, sondern
+// die Objektliste-Schaltfläche einfach nicht anzeigen (leeres Array).
+// ---------------------------------------------------------------------------
+async function getFeeZoneLookup(req, res, supabase) {
+  const feeMasterIdRaw = (req.query.fee_master_id || "").toString().trim();
+  const feeMasterId = feeMasterIdRaw ? Number.parseInt(feeMasterIdRaw, 10) : null;
+  if (!feeMasterId) return res.status(400).json({ error: "fee_master_id is required" });
+
+  const { data, error } = await supabase
+    .from("FEE_ZONE_LOOKUP")
+    .select("ID, FEE_MASTER_ID, CATEGORY, DESCRIPTION, ZONE_ID, SORT_ORDER")
+    .eq("FEE_MASTER_ID", feeMasterId)
+    .order("SORT_ORDER", { ascending: true });
+  if (error) return res.json({ data: [] });
+  res.json({ data: data || [] });
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/stammdaten/fee-calculation-masters/init
 // ---------------------------------------------------------------------------
 async function postFeeCalcMasterInit(req, res, supabase) {
@@ -2026,7 +2051,7 @@ async function saveFeeCalcZoneSplits(req, res, supabase) {
 }
 
 module.exports = {
-  postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones,
+  postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones, getFeeZoneLookup,
   getFeeCalcZoneSplits, saveFeeCalcZoneSplits,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure, postFeeCalcAddToOfferStructure, syncFeeCalcToStructure,

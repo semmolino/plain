@@ -5,6 +5,16 @@ export type FeeBaseType = 'cost_eur' | 'area_ha' | 'verrechnungseinheiten'
 export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string; BASE_TYPE?: FeeBaseType }
 export interface FeeZone   { ID: number; NAME_SHORT: string; NAME_LONG: string }
 
+// Objektliste zur Honorarzonen-Bestimmung (z. B. Anlage 14.2 Tragwerksplanung):
+// jede Zeile ordnet eine Sachverhaltsbeschreibung genau einer Zone zu.
+export interface FeeZoneLookupRow {
+  ID:             number
+  FEE_MASTER_ID:  number
+  CATEGORY:       string | null
+  DESCRIPTION:    string
+  ZONE_ID:        number
+}
+
 export interface FeeCalcMaster {
   ID:                          number
   NAME_SHORT:                  string | null
@@ -94,6 +104,9 @@ export const fetchFeeMasters = (feeGroupId: number | string) =>
 
 export const fetchFeeZones = (feeMasterId: number | string) =>
   apiClient.get<{ data: FeeZone[] }>(`/stammdaten/fee-zones?fee_master_id=${feeMasterId}`)
+
+export const fetchFeeZoneLookup = (feeMasterId: number | string) =>
+  apiClient.get<{ data: FeeZoneLookupRow[] }>(`/stammdaten/fee-zone-lookup?fee_master_id=${feeMasterId}`)
 
 export const fetchFeeCalcMasters = (params?: { project_id?: number; offer_id?: number }) => {
   const sp = new URLSearchParams()

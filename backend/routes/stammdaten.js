@@ -25,6 +25,7 @@ module.exports = (supabase) => {
   router.get("/fee-groups",                                          (req, res) => ctrl.getFeeGroups(req, res, supabase));
   router.get("/fee-masters",                                         (req, res) => ctrl.getFeeMasters(req, res, supabase));
   router.get("/fee-zones",                                           (req, res) => ctrl.getFeeZones(req, res, supabase));
+  router.get("/fee-zone-lookup",                                     (req, res) => ctrl.getFeeZoneLookup(req, res, supabase));
   router.get("/fee-calculation-masters",                               (req, res) => ctrl.listFeeCalcMasters(req, res, supabase));
   router.post("/fee-calculation-masters/init",                        requirePermission("projects.calculations.edit"), (req, res) => ctrl.postFeeCalcMasterInit(req, res, supabase));
   router.get("/fee-surcharges-global",                                (req, res) => ctrl.listFeeSurchargesGlobal(req, res, supabase));

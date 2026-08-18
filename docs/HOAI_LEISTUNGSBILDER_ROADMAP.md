@@ -106,11 +106,30 @@ unten).
 Instandsetzung, Nebenkosten (§ 14) und Mehrfachbeauftragung (§ 11) tippt
 heute jede Nutzerin frei ein — je Berechnung neu, ohne Prozentvorschlag.
 
-### 3.5 Honorarzonen-Einstufung
+### 3.5 Honorarzonen-Einstufung — Arbeit begonnen (0120)
 
-Die Zone wird direkt gewählt. Die Punktbewertung nach den
-Bewertungsmerkmalen der Anlagen (§ 5) gibt es nicht — eigenes Feature, nicht
-Teil dieser Reihe.
+Die Zone wurde bisher immer direkt geschätzt. Wichtige Erkenntnis beim
+Startversuch (Tragwerksplanung, siehe § 8 unten): Es gibt **kein
+einheitliches Punktesystem über alle Leistungsbilder** — zwei
+unterschiedliche Mechanismen:
+
+- **Objektliste** (Zeile auswählen, Zone direkt ablesbar, keine Arithmetik):
+  Gebäude/Innenräume (Anlage 10.2/10.3 zu § 35), Freianlagen (11.2 zu § 40),
+  Ingenieurbauwerke (12.2 zu § 44), Verkehrsanlagen (13.2 zu § 48),
+  Technische Ausrüstung (15.2 zu § 56), Tragwerksplanung (14.2 zu § 52 — trotz
+  der Paragraphenformulierung „Bewertungsmerkmale" tatsächlich eine
+  Zeilen-Auswahl-Tabelle wie die anderen fünf, keine Punkte-Summierung).
+  **Neue Tabelle `FEE_ZONE_LOOKUP`, bislang nur Tragwerksplanung befüllt.**
+- **Numerisches Punktesystem** (mehrere Kriterien einzeln bepunkten, Summe
+  bandet in eine Zone): UVS (Anlage 1.1.2), Ingenieurvermessung
+  (Anlage 1.4.3/1.4.6), vermutlich auch Bauleitplanung (§ 21) und
+  Landschaftsplanung (§ 32) — deren Bewertungsmerkmale sind noch nicht mit
+  Primärquelle verifiziert (bisherige Recherche kam aus einer unzuverlässigen
+  Zusammenfassung, nicht aus dem Volltext). Braucht eine andere Tabelle
+  (Kriterien + Punktwerte je Kriterium + Zonen-Schwellen) — noch nicht
+  gebaut.
+
+Wer weitermacht: § 8 unten für Stand und offene Objektlisten.
 
 ---
 
@@ -132,29 +151,7 @@ Bewertungsmerkmale × Gewichtung), das die Software nicht abbildet — die
 Nutzerin wählt die Zone direkt. Das ist keine UVS-spezifische Lücke, sondern
 die allgemeine unter 3.5 dokumentierte.
 
-### Anlage 1.4 Ingenieurvermessung (Migration 0119)
-
-Zwei Leistungsbilder, zwei Honorartafeln — Planungsbegleitende Vermessung
-(1.4.8 Abs. 1, 6–11.726 VE) und Bauvermessung (1.4.8 Abs. 2, 50T–10 Mio €).
-
-- **Dritter `BASE_TYPE`**: `verrechnungseinheiten`. Löst 3.1. Die
-  VE-Summe wird direkt eingetragen (VE = Fläche × Punktdichte-Faktor,
-  Anlage 1.4.2 Abs. 3 — keine Flächenklassen-Rechenhilfe gebaut, dieselbe
-  Vereinfachung wie bei `area_ha`).
-- **Bauvermessungs anrechenbare Kosten bewusst NICHT in `din276.js`**:
-  Anlage 1.4.5 Abs. 2 verlangt 80 % (Gebäude/Verkehrsanlagen) bzw. 100 %
-  (Ingenieurbauwerke) der Herstellungskosten nach § 33/§ 42/§ 46 — wir haben
-  aber nur § 33 (`anrechenbareKostenGebaeude`). § 42 (Ingenieurbauwerke) und
-  § 46 (Verkehrsanlagen) fehlen **auch für ihre eigenen Leistungsbilder**
-  (Masters 11/12 existieren seit 0115, haben aber nie eine DIN276-Regel
-  bekommen — Nutzerinnen tragen die anrechenbaren Kosten dort schon heute
-  direkt ein). Eine Bauvermessungs-Regel jetzt zu bauen hieße, auf zwei
-  fehlenden Regeln aufzusetzen. Zurückgestellt, bis § 42/§ 46 anstehen.
-- **Nicht abgebildet**: Anlage 1.4.7 Abs. 4 (LPH 4 bei Gebäuden abweichend
-  45–62 % statt pauschal 62 %) — Objektart-Abhängigkeit wie bei den meisten
-  Sonderfällen nicht modelliert, manuell in der Berechnung anzupassen.
-
-Migrationen `0115` (Schema + Bestand) und `0116` (Bauphysik).
+### Anlage 1.2 Bauphysik (Migrationen 0115/0116)
 
 **Drei getrennte `FEE_MASTERS`**, weil jedes Teilgebiet eine eigene
 Honorartafel und eine eigene Zonenanzahl hat. Das Leistungsbild
@@ -195,6 +192,28 @@ Besonderheiten, keine davon ein neuer Regelsatz:
   ein Alias auf `anrechenbareKostenTragwerk()`, Registry-Schlüssel
   `geotechnik`.
 
+### Anlage 1.4 Ingenieurvermessung (Migration 0119)
+
+Zwei Leistungsbilder, zwei Honorartafeln — Planungsbegleitende Vermessung
+(1.4.8 Abs. 1, 6–11.726 VE) und Bauvermessung (1.4.8 Abs. 2, 50T–10 Mio €).
+
+- **Dritter `BASE_TYPE`**: `verrechnungseinheiten`. Löst 3.1. Die
+  VE-Summe wird direkt eingetragen (VE = Fläche × Punktdichte-Faktor,
+  Anlage 1.4.2 Abs. 3 — keine Flächenklassen-Rechenhilfe gebaut, dieselbe
+  Vereinfachung wie bei `area_ha`).
+- **Bauvermessungs anrechenbare Kosten bewusst NICHT in `din276.js`**:
+  Anlage 1.4.5 Abs. 2 verlangt 80 % (Gebäude/Verkehrsanlagen) bzw. 100 %
+  (Ingenieurbauwerke) der Herstellungskosten nach § 33/§ 42/§ 46 — wir haben
+  aber nur § 33 (`anrechenbareKostenGebaeude`). § 42 (Ingenieurbauwerke) und
+  § 46 (Verkehrsanlagen) fehlen **auch für ihre eigenen Leistungsbilder**
+  (Masters 11/12 existieren seit 0115, haben aber nie eine DIN276-Regel
+  bekommen — Nutzerinnen tragen die anrechenbaren Kosten dort schon heute
+  direkt ein). Eine Bauvermessungs-Regel jetzt zu bauen hieße, auf zwei
+  fehlenden Regeln aufzusetzen. Zurückgestellt, bis § 42/§ 46 anstehen.
+- **Nicht abgebildet**: Anlage 1.4.7 Abs. 4 (LPH 4 bei Gebäuden abweichend
+  45–62 % statt pauschal 62 %) — Objektart-Abhängigkeit wie bei den meisten
+  Sonderfällen nicht modelliert, manuell in der Berechnung anzupassen.
+
 ---
 
 ## 5. Bestandskorrekturen in 0115
@@ -215,25 +234,68 @@ Besonderheiten, keine davon ein neuer Regelsatz:
 
 ## 6. Reihenfolge
 
+Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
+„alle vier, von oben nach unten":
+
 1. ~~Anlage 1.2 Bauphysik~~ — erledigt (0115/0116)
 2. ~~Anlage 1.3 Geotechnik~~ — erledigt (0117), inkl. `SORT_ORDER` (3.2)
 3. ~~Anlage 1.1 Umweltverträglichkeitsstudie~~ — erledigt (0118)
 4. ~~Anlage 1.4 Ingenieurvermessung~~ — erledigt (0119), inkl. `BASE_TYPE`
    `verrechnungseinheiten` (3.1). **Anlage 1 ist damit vollständig.**
-5. **Zuschlagskatalog** (3.4) — kleiner Aufwand, wirkt auf jede Berechnung.
-   Nächster Schritt.
-6. **HOAI 2013** als zweite `FEE_GROUPS`-Zeile — Altverträge rechnen weiter
-   nach der Fassung, die bei Vertragsschluss galt. Das Modell trägt mehrere
-   Fassungen bereits; zu klären ist die Vorbelegung nach Vertragsdatum.
+5. **Honorarzonen-Einstufung** (3.5) — begonnen (0120): Objektliste-Muster
+   an Tragwerksplanung validiert. Offen: dieselbe Objektliste für Gebäude
+   (Anlage 10.2/10.3 — vermutlich die längste Tabelle), Freianlagen (11.2),
+   Ingenieurbauwerke (12.2), Verkehrsanlagen (13.2), Technische Ausrüstung
+   (15.2); danach das numerische Punktesystem (UVS/Ingenieurvermessung/
+   vermutlich Bauleitplanung/Landschaftsplanung) als zweite, andere Tabelle.
+   **In Arbeit, nicht abgeschlossen.**
+6. **§ 42 (Ingenieurbauwerke) / § 46 (Verkehrsanlagen) in `din276.js`** —
+   beide Leistungsbilder existieren seit 0115, haben aber nie eine
+   Anrechenbarkeits-Regel bekommen. Voraussetzung für eine spätere
+   Bauvermessungs-Regel (siehe Anlage-1.4-Abschnitt oben). Als Nächstes dran.
 7. **AHO-Hefte und weitere Kalkulationstypen** — Projektsteuerung (Heft 9),
    SiGeKo (Heft 15), Brandschutz (Heft 17) u. a. Diese rechnen nicht nach
    Honorartafel, sondern meist als Prozentsatz der Baukosten oder nach
    Zeithonorar. Ob das noch in `FEE_TABLES` passt oder einen eigenen
-   Kalkulationstyp braucht, ist vor Beginn zu entscheiden — offene Frage.
-8. **§ 42 (Ingenieurbauwerke) / § 46 (Verkehrsanlagen) in `din276.js`** —
-   beide Leistungsbilder existieren seit 0115, haben aber nie eine
-   Anrechenbarkeits-Regel bekommen. Voraussetzung für eine spätere
-   Bauvermessungs-Regel (siehe Anlage-1.4-Abschnitt oben).
+   Kalkulationstyp braucht, ist vor Beginn zu entscheiden — offene Frage,
+   braucht eine eigene Scoping-Runde vor dem ersten Code.
+8. **HOAI 2013** als zweite `FEE_GROUPS`-Zeile — Altverträge rechnen weiter
+   nach der Fassung, die bei Vertragsschluss galt. Das Modell trägt mehrere
+   Fassungen bereits; zu klären ist die Vorbelegung nach Vertragsdatum.
+   Relevanz sinkt mit jedem Jahr seit der 2021-Reform.
+
+---
+
+## 8. Honorarzonen-Objektliste (Migration 0120, laufend)
+
+Neue globale Referenztabelle `FEE_ZONE_LOOKUP` (`FEE_MASTER_ID`, `CATEGORY`,
+`DESCRIPTION`, `ZONE_ID`, `SORT_ORDER`) — pro Zeile ein Sachverhalt, der
+genau einer Honorarzone zugeordnet ist. Neue Komponente
+`ObjektlisteZonePicker.tsx`: Button „Zone anhand Objektliste bestimmen …"
+neben dem Zonen-Dropdown im `HonorarWizard` (Schritt Basisdaten), öffnet ein
+Modal mit Suche + nach `CATEGORY` gruppierter Liste; ausgewählte Zeile setzt
+`ZONE_ID`, bleibt danach im Dropdown frei überschreibbar. Endpoint
+`GET /stammdaten/fee-zone-lookup?fee_master_id=…`, fängt eine noch nicht
+gelaufene Migration ab (leeres Array statt 500, da Deploy und manuelle
+Migration zeitlich auseinanderfallen).
+
+**Befüllt: Tragwerksplanung** (Anlage 14.2 zu § 52), 54 Zeilen in 14
+fachlichen Kategorien (Stützwände/Verbau, Gründung, Mauerwerk, Gewölbe,
+Deckenkonstruktionen, Verbund-Konstruktionen, Rahmen-/Skelettbauten u. a.),
+maschinell aus dem amtlichen Volltext geparst (54/54 Zeilen mit genau einer
+Zonen-Markierung, keine Warnungen). `ZONE_ID`-Zuordnung fest verdrahtet auf
+die Tragwerksplanung-Zonen aus 0115 (I=50 … V=54) — bei weiteren
+Leistungsbildern jeweils die passenden `FEE_ZONES`-IDs für dieses
+Leistungsbild nachschlagen, nicht die von Tragwerksplanung wiederverwenden.
+
+**Noch offen** (siehe 6.5): dieselbe Objektliste für Gebäude/Innenräume,
+Freianlagen, Ingenieurbauwerke, Verkehrsanlagen, Technische Ausrüstung —
+jeweils eigene Anlage, eigener Umfang (Anlage 10.2 für Gebäude ist nach
+allgemeiner Kenntnis deutlich länger als Tragwerksplanungs 54 Zeilen, vor
+Beginn zu sichten). Das numerische Punktesystem (UVS, Ingenieurvermessung,
+vermutlich Bauleitplanung/Landschaftsplanung — noch nicht mit Primärquelle
+verifiziert) ist strukturell etwas anderes und braucht eine eigene Tabelle
+(Kriterien + Punktwerte + Zonen-Schwellen), nicht `FEE_ZONE_LOOKUP`.
 
 ---
 
