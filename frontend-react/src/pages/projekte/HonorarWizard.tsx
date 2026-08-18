@@ -257,7 +257,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   // Bemessungsgrundlage des Leistungsbilds — bestimmt UI/PDF-Labels und ob
   // K0..K4 oder nur ein einzelnes Basis-Feld (ha / VE) angezeigt wird.
   // Fallback 'cost_eur' = bisheriges Verhalten.
-  const baseType: 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' | 'percent_of_baukosten' =
+  const baseType: 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' | 'percent_of_baukosten' | 'flaechenaequivalent_brandschutz' =
     calcMaster?.BASE_TYPE
     ?? (feeMasterId
           ? (masters.find(m => String(m.ID) === String(feeMasterId))?.BASE_TYPE ?? 'cost_eur')
@@ -268,10 +268,20 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   // K0..K4 bleiben nutzbar wie bei cost_eur, nur ohne Zonen-Interpolation —
   // "Zonenanteil %" wird zum frei vereinbarten Honorarsatz % zweckentfremdet.
   const isPercentOfBaukosten = baseType === 'percent_of_baukosten'
-  // area_ha und verrechnungseinheiten haben beide nur EINEN Basiswert (kein
-  // K0..K4-Band, keine Baukosten-Zuschläge) — unterscheiden sich nur im Label.
-  const isSingleValue = isAreaHa || isVerrechnungseinheiten
-  const baseLabel = isAreaHa ? 'Plangebiet (ha)' : isVerrechnungseinheiten ? 'Verrechnungseinheiten (VE)' : 'Baukosten (€)'
+  // AHO Heft 17 (Brandschutz): H = 2.600 € + f × Aq^0,61. K0 = Flächenäquivalent
+  // Aq (m², extern aus Kalkulationseinheiten ermittelt), "Zonenanteil %" wird
+  // zum Faktor f zweckentfremdet — kein Zonen-, kein K1..K4-Konzept.
+  const isFlaechenaequivalent = baseType === 'flaechenaequivalent_brandschutz'
+  // Diese drei haben nur EINEN Basiswert (kein K0..K4-Band, keine
+  // Baukosten-Zuschläge) — unterscheiden sich nur im Label.
+  const isSingleValue = isAreaHa || isVerrechnungseinheiten || isFlaechenaequivalent
+  // percent_of_baukosten und flaechenaequivalent_brandschutz haben beide kein
+  // Zonen-Konzept (frei vereinbarter Satz statt gesetzlicher Zonentafel).
+  const isZoneless = isPercentOfBaukosten || isFlaechenaequivalent
+  const baseLabel = isAreaHa ? 'Plangebiet (ha)'
+    : isVerrechnungseinheiten ? 'Verrechnungseinheiten (VE)'
+    : isFlaechenaequivalent ? 'Flächenäquivalent Aq (m²)'
+    : 'Baukosten (€)'
   const kxOptionsForBase = isSingleValue ? (['K0'] as const) : KX_OPTIONS
 
   // Compute surcharges without BL first (for pct_gesamthonorar BL base)
@@ -772,7 +782,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </select>
             </div>
           )}
-          {!isPercentOfBaukosten && (
+          {!isZoneless && (
             <div className="form-group">
               <label style={{ display: 'inline-flex', alignItems: 'center' }}>
                 Honorarzone <HelpHint id="hoai.zone" />
@@ -787,7 +797,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             </div>
           )}
           <div className="form-group">
-            <label>{isPercentOfBaukosten ? 'Honorarsatz %' : 'Zonenanteil %'}</label>
+            <label>{isPercentOfBaukosten ? 'Honorarsatz %' : isFlaechenaequivalent ? 'Faktor f (Jahr der Beauftragung)' : 'Zonenanteil %'}</label>
             <input type="number" step="0.01" value={basis.ZONE_PERCENT} onChange={e => setBasis(b => ({ ...b, ZONE_PERCENT: e.target.value }))} />
             {isPercentOfBaukosten && (
               <p className="admin-section-hint">
@@ -795,20 +805,28 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 Grundhonorar = Kx × Honorarsatz.
               </p>
             )}
+            {isFlaechenaequivalent && (
+              <p className="admin-section-hint">
+                Honorar H = 2.600 € + f × Aq<sup>0,61</sup> (AHO Heft 17, Nr. 1.5). Faktor f nach Jahr der
+                Beauftragung: 2022=170 · 2023=173 · 2024=177 · 2025=180 · 2026=184 · 2027=188 · 2028=191.
+              </p>
+            )}
           </div>
           <p className="admin-block-title" style={{ marginTop: 12 }}>{baseLabel}</p>
           {isSingleValue ? (
             <div className="form-group">
-              <label>{isVerrechnungseinheiten ? 'Verrechnungseinheiten' : 'Plangebiet'}</label>
+              <label>{isVerrechnungseinheiten ? 'Verrechnungseinheiten' : isFlaechenaequivalent ? 'Flächenäquivalent Aq' : 'Plangebiet'}</label>
               <input
                 type="number" step="0.01" min={0}
                 value={basis.K0}
                 onChange={e => setBasis(b => ({ ...b, K0: e.target.value, K1: '', K2: '', K3: '', K4: '' }))}
-                placeholder={isVerrechnungseinheiten ? 'Anzahl der Verrechnungseinheiten (VE)' : 'Größe des Plangebiets in ha'}
+                placeholder={isVerrechnungseinheiten ? 'Anzahl der Verrechnungseinheiten (VE)' : isFlaechenaequivalent ? 'Flächenäquivalent Aq in m²' : 'Größe des Plangebiets in ha'}
               />
               <p className="admin-section-hint">
                 {isVerrechnungseinheiten
                   ? 'Die Verrechnungseinheiten ergeben sich aus der Fläche (ha) multipliziert mit dem Faktor der Punktdichte-Flächenklasse (Anlage 1.4.2 Abs. 3 HOAI, 40–800 VE/ha) und werden hier als Summe eingetragen.'
+                  : isFlaechenaequivalent
+                  ? 'Aq = Σ (Ai × ni × si) — je Kalkulationseinheit die Bruttogrundfläche Ai multipliziert mit Nutzungsbeiwert ni und Schwierigkeitsbeiwert si (AHO Heft 17, Nr. 1.2), summiert und hier eingetragen.'
                   : 'Bei Flächenplanung wird das Honorar aus der Plangebietsgröße in Hektar interpoliert (HOAI 2021 §17 ff.).'}
               </p>
             </div>

@@ -73,6 +73,22 @@ async function calculateRevenueFields(supabase, { feeMasterId, zoneId, zonePerce
         REVENUE_K4: revenueForKx("CONSTRUCTION_COSTS_K4"),
       };
     }
+
+    // AHO Heft 17 (Brandschutz), Nr. 1.5: H = 2.600 € + f × Aq^0,61 — eine
+    // geschlossene Potenzformel statt Zonentafel oder Prozentsatz. K0 trägt
+    // das Flächenäquivalent Aq (m², Σ Ai×ni×si aus Nutzungs-/Schwierigkeits-
+    // beiwerten — Kalkulationseinheiten werden extern ermittelt und als
+    // Summe eingetragen). ZONE_PERCENT wird hier zum Faktor f zweckentfremdet
+    // (170–191, je nach Jahr der Beauftragung, siehe Hinweistext im Wizard) —
+    // kein Prozentsatz, nur dieselbe freie Zahlenspalte wiederverwendet.
+    if (fm?.BASE_TYPE === "flaechenaequivalent_brandschutz") {
+      const aq = toNumberOrNull(costsByKey?.CONSTRUCTION_COSTS_K0);
+      const f  = toNumberOrNull(zonePercent);
+      const revenueK0 = (aq === null || f === null || aq < 0)
+        ? null
+        : Math.round((2600 + f * Math.pow(aq, 0.61)) * 100) / 100;
+      return { ...empty, REVENUE_K0: revenueK0 };
+    }
   } catch (_) { /* BASE_TYPE-Spalte/Migration fehlt -> bisheriges Verhalten */ }
 
   if (!zoneId) return empty;

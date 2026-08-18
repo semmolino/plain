@@ -172,6 +172,41 @@ describe("calculateRevenueFields", () => {
     expect(result.REVENUE_K0).toBeNull();
   });
 
+  it("flaechenaequivalent_brandschutz: H = 2.600 + f x Aq^0,61 (AHO Heft 17, gegen die Quelle verifiziert)", async () => {
+    const supabase = makeSupabaseMock({ zone: null, feeTables: [], baseType: "flaechenaequivalent_brandschutz" });
+    const result = await calculateRevenueFields(supabase, {
+      feeMasterId: 109,
+      zoneId: null,
+      zonePercent: 173, // Faktor f (zweckentfremdetes Feld), nicht Prozent
+      costsByKey: { CONSTRUCTION_COSTS_K0: 5000 }, // Aq in m²
+    });
+    expect(result.REVENUE_K0).toBe(33818.92);
+    expect(result.REVENUE_K1).toBeNull();
+  });
+
+  it("flaechenaequivalent_brandschutz: zweiter Referenzpunkt (f=184, Aq=10000)", async () => {
+    const supabase = makeSupabaseMock({ zone: null, feeTables: [], baseType: "flaechenaequivalent_brandschutz" });
+    const result = await calculateRevenueFields(supabase, {
+      feeMasterId: 109,
+      zoneId: null,
+      zonePercent: 184,
+      costsByKey: { CONSTRUCTION_COSTS_K0: 10000 },
+    });
+    expect(result.REVENUE_K0).toBe(53277.81);
+  });
+
+  it("flaechenaequivalent_brandschutz: null ohne Aq oder ohne Faktor f", async () => {
+    const supabase = makeSupabaseMock({ zone: null, feeTables: [], baseType: "flaechenaequivalent_brandschutz" });
+    const withoutAq = await calculateRevenueFields(supabase, {
+      feeMasterId: 109, zoneId: null, zonePercent: 173, costsByKey: {},
+    });
+    expect(withoutAq.REVENUE_K0).toBeNull();
+    const withoutF = await calculateRevenueFields(supabase, {
+      feeMasterId: 109, zoneId: null, zonePercent: null, costsByKey: { CONSTRUCTION_COSTS_K0: 5000 },
+    });
+    expect(withoutF.REVENUE_K0).toBeNull();
+  });
+
   it("throws when Supabase returns an error for FEE_ZONES", async () => {
     const supabase = {
       from: jest.fn().mockImplementation(() => ({

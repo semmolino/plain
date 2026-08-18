@@ -255,12 +255,11 @@ Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
    blockiert** — aber noch nicht gebaut (nicht Teil dieser Anfrage; braucht
    zusätzlich einen Objektart-Selector Gebäude/Ingenieurbauwerk/
    Verkehrsanlage + die 80-/100-%-Regel).
-7. **AHO-Hefte und weitere Kalkulationstypen** — begonnen (0121), siehe § 9
-   oben. Architektur steht (`BASE_TYPE='percent_of_baukosten'`), Heft 9
-   Projektsteuerung als Leistungsbild angelegt, aber noch ohne
-   Leistungsphasen (fehlende geprüfte Quelle für Handlungsbereiche/
-   Projektstufen-Gewichtung). Als Nächstes: Heft 15 (SiGeKo) oder Heft 17
-   (Brandschutz, Quelle bereits vorhanden).
+7. **AHO-Hefte und weitere Kalkulationstypen** — Heft 9 (0121) und Heft 17
+   (0122) angelegt, siehe § 9 oben. Heft 9 ohne Leistungsphasen (fehlende
+   geprüfte Quelle), Heft 17 vollständig inkl. eigener Honorarformel und
+   Leistungsphasen (Quelle vorhanden und verifiziert). Als Nächstes: Heft 15
+   (SiGeKo, noch keine Quelle).
 8. **HOAI 2013** als zweite `FEE_GROUPS`-Zeile — Altverträge rechnen weiter
    nach der Fassung, die bei Vertragsschluss galt. Das Modell trägt mehrere
    Fassungen bereits; zu klären ist die Vorbelegung nach Vertragsdatum.
@@ -335,7 +334,7 @@ blockiert, aber noch nicht gebaut — kein Teil dieser Anfrage.
 
 ---
 
-## 9. AHO-Hefte — Kalkulationstyp `percent_of_baukosten` (Migration 0121, begonnen)
+## 9. AHO-Hefte (begonnen: Heft 9 Migration 0121, Heft 17 Migration 0122)
 
 Erster Schritt Richtung AHO. Wichtiger Unterschied zur HOAI: AHO-Honorare
 sind **keine gesetzlich bindende Honorarzonentafel**, sondern eine
@@ -365,16 +364,54 @@ dieses Risiko zugestimmt („aus allgemeinem Wissen arbeiten"). Nutzerinnen
 tragen den Honorarsatz frei ein — keine erfundene Tafel, die wie ein
 geprüfter Wert aussieht, aber keiner ist.
 
-**Für Heft 17 (Brandschutz) liegt bereits eine Quelle vor** (User-Hinweis,
-siehe `reference_aho_heft17_source`-Memory):
-https://www.buero-romig.de/Home/Downloadbereich/downloadbereich.html —
-„Leistungsbild und Honorierung gemäß AHO Heft 17 2022" +
-„Überwachungsstufen LP 8 Heft 17 AHO 2022" als PDF. Vor Heft 17 diese PDFs
-lesen und wie bei der HOAI verifizieren statt zu spekulieren — kein Grund,
-dort denselben Vorbehalt wie bei Heft 9 zu wiederholen.
+### Heft 17 Brandschutz (Migration 0122) — eigene Honorarformel, keine Tafel
 
-**Offen**: Leistungsphasen für Heft 9 (Handlungsbereiche/Projektstufen),
-danach Heft 15 (SiGeKo) und Heft 17 (Brandschutz, Quelle vorhanden).
+Für Heft 17 lag eine echte Quelle vor (User-Hinweis):
+https://www.buero-romig.de/Home/Downloadbereich/downloadbereich.html —
+„Leistungsbild und Honorierung gemäß AHO Heft 17 2022" (Stand Dez. 2022), PDF
+mit `pdftotext`/`pdftoppm` gelesen statt spekuliert — genau wie bei der HOAI.
+
+**Wichtige Lektion beim Lesen**: `pdftotext -layout` hat die zweispaltigen
+Beiwerte-Tabellen (Nutzungsbeiwerte, Schwierigkeitsbeiwerte) beim Extrahieren
+falsch ausgerichtet — Werte um 1-2 Zeilen verschoben, ohne dass es wie ein
+Fehler aussah. `pdftotext -table` lieferte die korrekte Zuordnung (Summenprobe
+LPH-Prozentsätze = 100 bestätigte es zuerst); zur Sicherheit zusätzlich
+`pdftoppm` (Poppler, per winget nachinstalliert) zum Rendern einzelner Seiten
+als PNG genutzt und visuell mit der `-table`-Ausgabe abgeglichen — exakte
+Übereinstimmung. Bei zukünftigen PDF-Quellen: **`-table` bevorzugen, `-layout`
+bei mehrspaltigen Tabellen nicht blind vertrauen**, im Zweifel als Bild
+gegenprüfen.
+
+**Honorarformel** (Nr. 1.5, visuell verifiziert — keine Interpolation wie bei
+der HOAI, eine geschlossene Potenzformel):
+- `Aq = Σ(Ai · ni · si)` — Flächenäquivalent aus Bruttogrundfläche ×
+  Nutzungsbeiwert × Schwierigkeitsbeiwert je Kalkulationseinheit
+- `si = (1,0 + Σsp) · (1,0 + ΣsT)` — Projekt- und Teilflächen-Schwierigkeit
+  multiplikativ verknüpft
+- `H = 2.600 € + f · Aq^0,61` — f nach Jahr der Beauftragung (2022=170 …
+  2028=191)
+
+**Architektur**: neuer, bewusst Heft-17-spezifischer `BASE_TYPE`
+`flaechenaequivalent_brandschutz` (keine generische Wiederverwendung wie bei
+`percent_of_baukosten` — diese Formel gilt nur hier). K0 = Aq (m², extern
+ermittelt und als Summe eingetragen — kein Kalkulationseinheiten-Rechner in
+der UI, dieselbe Vereinfachung wie bei Verrechnungseinheiten).
+`ZONE_PERCENT` wird zum Faktor f zweckentfremdet, kein Zonen-Konzept. Formel
++ f-Tabelle stehen als Hinweistext im Wizard (echte, geprüfte Werte — anders
+als bei Heft 9 bewusst gezeigt).
+
+**Leistungsphasen vollständig** (LPH 1/2/3/4/5/8 = 1/15/19/15/18/32 %,
+Summenprobe = 100 ✓; LPH 6+7 nicht Teil der Regelleistungen, keine Zeilen —
+wie bei Leistungsbildern ohne vollständige LPH-Reihe).
+
+**Nicht in der DB abgelegt** (zu granular ohne Kalkulationseinheiten-Rechner):
+die 20-zeilige Nutzungsbeiwerte-Tabelle und die 8+6 Schwierigkeitsbeiwerte —
+vollständig in Migration 0122 als Kommentar dokumentiert, falls später ein
+Rechner (mehrere Kalkulationseinheiten mit Fläche + Nutzung-Dropdown +
+Kriterien-Checkboxen, automatische Aq-Summierung) gebaut wird.
+
+**Offen**: Leistungsphasen für Heft 9 (Handlungsbereiche/Projektstufen —
+weiterhin keine Quelle), danach Heft 15 (SiGeKo).
 
 ---
 

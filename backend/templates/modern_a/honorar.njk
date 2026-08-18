@@ -187,15 +187,15 @@ table.data-table tfoot tr.grand-total td {
     <div class="bc-label">Honorarordnung</div>
     <div class="bc-val">{{ calc.nameShort }}</div>
   </div>
-  {% if not calc.isPercentOfBaukosten %}
+  {% if not calc.isZoneless %}
   <div class="basis-cell">
     <div class="bc-label">Honorarzone</div>
     <div class="bc-val">{{ calc.zoneName or "—" }}</div>
   </div>
   {% endif %}
   <div class="basis-cell">
-    <div class="bc-label">{% if calc.isPercentOfBaukosten %}Honorarsatz{% else %}Zonenanteil{% endif %}</div>
-    <div class="bc-val">{{ calc.zonePercent or "—" }} %</div>
+    <div class="bc-label">{% if calc.isPercentOfBaukosten %}Honorarsatz{% elif calc.isFlaechenaequivalent %}Faktor f{% else %}Zonenanteil{% endif %}</div>
+    <div class="bc-val">{{ calc.zonePercent or "—" }}{% if not calc.isFlaechenaequivalent %} %{% endif %}</div>
   </div>
 </div>
 
@@ -212,7 +212,7 @@ table.data-table tfoot tr.grand-total td {
   <tbody>
     {% if calc.isSingleValue %}
     <tr>
-      <td class="num">{% if calc.isVerrechnungseinheiten %}{{ calc.constructionCostsK0 | verrechnungseinheiten }}{% else %}{{ calc.constructionCostsK0 | area_ha }}{% endif %}</td>
+      <td class="num">{% if calc.isVerrechnungseinheiten %}{{ calc.constructionCostsK0 | verrechnungseinheiten }}{% elif calc.isFlaechenaequivalent %}{{ calc.constructionCostsK0 | flaechenaequivalent }}{% else %}{{ calc.constructionCostsK0 | area_ha }}{% endif %}</td>
       <td class="num">{{ calc.revenueK0 | money }}</td>
     </tr>
     {% else %}

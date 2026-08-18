@@ -1,7 +1,7 @@
 import { apiClient, openPdfWithAuth } from './client'
 
 export interface FeeGroup  { ID: number; NAME_SHORT: string; NAME_LONG: string }
-export type FeeBaseType = 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' | 'percent_of_baukosten'
+export type FeeBaseType = 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' | 'percent_of_baukosten' | 'flaechenaequivalent_brandschutz'
 export interface FeeMaster { ID: number; NAME_SHORT: string; NAME_LONG: string; BASE_TYPE?: FeeBaseType }
 export interface FeeZone   { ID: number; NAME_SHORT: string; NAME_LONG: string }
 

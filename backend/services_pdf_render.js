@@ -230,6 +230,14 @@ function env() {
     return n.toLocaleString('de-DE', { maximumFractionDigits: 4 }) + ' ha';
   });
 
+  // Flächenäquivalent Aq (AHO Heft 17) — deutsche Zahlformatierung mit "m²" Suffix
+  e.addFilter('flaechenaequivalent', v => {
+    if (v === null || v === undefined || v === '') return '';
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '';
+    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' m²';
+  });
+
   // Verrechnungseinheiten (Anlage 1.4.8 HOAI) — deutsche Zahlformatierung mit "VE" Suffix
   e.addFilter('verrechnungseinheiten', v => {
     if (v === null || v === undefined || v === '') return '';
@@ -1489,8 +1497,10 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
       isAreaHa:            baseType === 'area_ha',
       isVerrechnungseinheiten: baseType === 'verrechnungseinheiten',
       isPercentOfBaukosten: baseType === 'percent_of_baukosten',
-      isSingleValue:       baseType === 'area_ha' || baseType === 'verrechnungseinheiten',
-      baseLabel:           baseType === 'area_ha' ? 'Plangebiet (ha)' : baseType === 'verrechnungseinheiten' ? 'Verrechnungseinheiten (VE)' : 'Baukosten (€)',
+      isFlaechenaequivalent: baseType === 'flaechenaequivalent_brandschutz',
+      isZoneless:          baseType === 'percent_of_baukosten' || baseType === 'flaechenaequivalent_brandschutz',
+      isSingleValue:       baseType === 'area_ha' || baseType === 'verrechnungseinheiten' || baseType === 'flaechenaequivalent_brandschutz',
+      baseLabel:           baseType === 'area_ha' ? 'Plangebiet (ha)' : baseType === 'verrechnungseinheiten' ? 'Verrechnungseinheiten (VE)' : baseType === 'flaechenaequivalent_brandschutz' ? 'Flächenäquivalent Aq (m²)' : 'Baukosten (€)',
       zoneName,
       zonePercent:         calc.ZONE_PERCENT ?? '',
       constructionCostsK0: calc.CONSTRUCTION_COSTS_K0 ?? null,
