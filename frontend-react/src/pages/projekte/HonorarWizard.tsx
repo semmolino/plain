@@ -264,6 +264,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     ?? (feeMasterId
           ? (masters.find(m => String(m.ID) === String(feeMasterId))?.BASE_TYPE ?? 'cost_eur')
           : 'cost_eur')
+  // Das gewählte Leistungsbild. `feeMasterId` (Dropdown in Schritt 1) ist nur
+  // im ANLEGE-Modus gefüllt — beim Öffnen einer bestehenden Berechnung bleibt
+  // es leer. Maßgeblich ist deshalb zuerst die Berechnung selbst; sonst
+  // bekämen die Zonen-Dialoge im Bearbeiten-Modus null und meldeten
+  // „Bitte zuerst ein Leistungsbild wählen".
+  const activeFeeMasterId = calcMaster?.FEE_MASTER_ID ?? (feeMasterId ? Number(feeMasterId) : null)
+
   // Zonenaufteilung/Mischhonorar gilt nur für die Technische Ausrüstung
   // (§ 54). Kommt als Merkmal vom Leistungsbild, nicht über eine ID-Abfrage —
   // dieselbe Leistung hat je HOAI-Fassung eine andere ID.
@@ -906,14 +913,14 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           <ObjektlisteZonePicker
             open={objektlisteOpen}
             onClose={() => setObjektlisteOpen(false)}
-            feeMasterId={feeMasterId ? Number(feeMasterId) : null}
+            feeMasterId={activeFeeMasterId}
             zones={zones}
             onApply={(zoneId) => setBasis(b => ({ ...b, ZONE_ID: String(zoneId) }))}
           />
           <ZonenPunkteRechner
             open={punkteOpen}
             onClose={() => setPunkteOpen(false)}
-            feeMasterId={feeMasterId ? Number(feeMasterId) : null}
+            feeMasterId={activeFeeMasterId}
             zones={zones}
             onApply={(zoneId) => setBasis(b => ({ ...b, ZONE_ID: String(zoneId) }))}
           />

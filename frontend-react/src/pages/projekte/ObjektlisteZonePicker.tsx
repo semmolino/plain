@@ -23,6 +23,8 @@ export function ObjektlisteZonePicker({ open, onClose, feeMasterId, zones, onApp
   const [loading,  setLoading]  = useState(false)
   const [search,   setSearch]   = useState('')
   const [selected, setSelected] = useState<number | null>(null)
+  // false = Migration 0120/0124 fehlt noch (vgl. ZonenPunkteRechner)
+  const [available, setAvailable] = useState(true)
   const [msg,      setMsg]      = useState<{ text: string; type: 'error' } | null>(null)
 
   useEffect(() => {
@@ -32,7 +34,9 @@ export function ObjektlisteZonePicker({ open, onClose, feeMasterId, zones, onApp
     ;(async () => {
       try {
         const r = await fetchFeeZoneLookup(feeMasterId)
-        if (!cancelled) setRows(r.data ?? [])
+        if (cancelled) return
+        setRows(r.data ?? [])
+        setAvailable(r.available !== false)
       } catch (e) {
         if (!cancelled) setMsg({ text: (e as Error).message, type: 'error' })
       } finally {
@@ -76,6 +80,11 @@ export function ObjektlisteZonePicker({ open, onClose, feeMasterId, zones, onApp
         <p className="empty-note">Bitte zuerst ein Leistungsbild wählen.</p>
       ) : loading ? (
         <p className="empty-note">Laden …</p>
+      ) : !available ? (
+        <p className="empty-note" style={{ color: 'var(--warning-strong)' }}>
+          Die Objektlisten sind noch nicht verfügbar — die Datenbank-Migration 0120/0124 wurde noch
+          nicht ausgeführt.
+        </p>
       ) : rows.length === 0 ? (
         <p className="empty-note">Für dieses Leistungsbild liegt keine Objektliste vor.</p>
       ) : (

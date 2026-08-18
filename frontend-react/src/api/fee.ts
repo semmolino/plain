@@ -136,10 +136,10 @@ export const fetchFeeZones = (feeMasterId: number | string) =>
   apiClient.get<{ data: FeeZone[] }>(`/stammdaten/fee-zones?fee_master_id=${feeMasterId}`)
 
 export const fetchFeeZoneLookup = (feeMasterId: number | string) =>
-  apiClient.get<{ data: FeeZoneLookupRow[] }>(`/stammdaten/fee-zone-lookup?fee_master_id=${feeMasterId}`)
+  apiClient.get<{ data: FeeZoneLookupRow[]; available?: boolean }>(`/stammdaten/fee-zone-lookup?fee_master_id=${feeMasterId}`)
 
 export const fetchFeeZoneCriteria = (feeMasterId: number | string) =>
-  apiClient.get<{ criteria: FeeZoneCriterion[]; thresholds: FeeZoneThreshold[] }>(
+  apiClient.get<{ criteria: FeeZoneCriterion[]; thresholds: FeeZoneThreshold[]; available?: boolean }>(
     `/stammdaten/fee-zone-criteria?fee_master_id=${feeMasterId}`)
 
 export const fetchFeeCalcMasters = (params?: { project_id?: number; offer_id?: number }) => {

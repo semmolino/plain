@@ -180,11 +180,14 @@ async function getFeeZones(req, res, supabase) {
 // GET /api/stammdaten/fee-zone-criteria
 //
 // Bewertungsmerkmale + Punkteschwellen eines Leistungsbilds (§ 5 Abs. 2 HOAI).
-// Nicht jedes Leistungsbild hat ein Punktesystem — Tragwerksplanung, TGA,
-// Geotechnik und Bau-/Raumakustik ordnen die Zone rein beschreibend zu. Für
-// die ist ein leeres Ergebnis der Normalfall, kein Fehler.
-// Soft-fail wie bei fee-zone-lookup: solange Migration 0127 nicht gelaufen
-// ist, liefert der Endpunkt leere Listen statt 500.
+//
+// `available` unterscheidet zwei Fälle, die beide leere Listen liefern und in
+// der Oberfläche sonst gleich aussähen:
+//   available: false  → Tabellen fehlen, Migration 0127 ist noch nicht gelaufen
+//   available: true   → Migration ist da, dieses Leistungsbild hat aber kein
+//                       Punktesystem (Tragwerksplanung, TGA, Geotechnik,
+//                       Bau-/Raumakustik ordnen die Zone rein beschreibend zu)
+// Gleiches Muster wie bei den Zonenanteilen (getFeeCalcZoneSplits).
 // ---------------------------------------------------------------------------
 async function getFeeZoneCriteria(req, res, supabase) {
   const feeMasterIdRaw = (req.query.fee_master_id || "").toString().trim();
@@ -200,10 +203,12 @@ async function getFeeZoneCriteria(req, res, supabase) {
         .select("ID, FEE_MASTER_ID, ZONE_ID, POINTS_FROM, POINTS_TO")
         .eq("FEE_MASTER_ID", feeMasterId).order("POINTS_FROM", { ascending: true }),
     ]);
-    if (critRes.error || thrRes.error) return res.json({ criteria: [], thresholds: [] });
-    return res.json({ criteria: critRes.data || [], thresholds: thrRes.data || [] });
+    if (critRes.error || thrRes.error) {
+      return res.json({ criteria: [], thresholds: [], available: false });
+    }
+    return res.json({ criteria: critRes.data || [], thresholds: thrRes.data || [], available: true });
   } catch (e) {
-    return res.json({ criteria: [], thresholds: [] });
+    return res.json({ criteria: [], thresholds: [], available: false });
   }
 }
 
@@ -217,8 +222,10 @@ async function getFeeZoneLookup(req, res, supabase) {
     .select("ID, FEE_MASTER_ID, CATEGORY, DESCRIPTION, ZONE_ID, SORT_ORDER")
     .eq("FEE_MASTER_ID", feeMasterId)
     .order("SORT_ORDER", { ascending: true });
-  if (error) return res.json({ data: [] });
-  res.json({ data: data || [] });
+  // `available` trennt "Migration 0120/0124 fehlt noch" von "dieses
+  // Leistungsbild hat keine Objektliste" — sonst sieht beides gleich aus.
+  if (error) return res.json({ data: [], available: false });
+  res.json({ data: data || [], available: true });
 }
 
 // ---------------------------------------------------------------------------

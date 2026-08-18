@@ -28,6 +28,10 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
   const [thresholds, setThresholds] = useState<FeeZoneThreshold[]>([])
   const [points,     setPoints]     = useState<Record<number, string>>({})
   const [loading,    setLoading]    = useState(false)
+  // false = Migration 0127 fehlt noch; true = da, aber ggf. ohne Punktesystem
+  // für dieses Leistungsbild. Beides liefert leere Listen und sähe sonst
+  // gleich aus.
+  const [available,  setAvailable]  = useState(true)
   const [msg,        setMsg]        = useState<{ text: string; type: 'error' } | null>(null)
 
   useEffect(() => {
@@ -40,6 +44,7 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
         if (cancelled) return
         setCriteria(r.criteria ?? [])
         setThresholds(r.thresholds ?? [])
+        setAvailable(r.available !== false)
       } catch (e) {
         if (!cancelled) setMsg({ text: (e as Error).message, type: 'error' })
       } finally {
@@ -93,6 +98,11 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
         <p className="empty-note">Bitte zuerst ein Leistungsbild wählen.</p>
       ) : loading ? (
         <p className="empty-note">Laden …</p>
+      ) : !available ? (
+        <p className="empty-note" style={{ color: 'var(--warning-strong)' }}>
+          Die Bewertungsmerkmale sind noch nicht verfügbar — die Datenbank-Migration 0127 wurde noch
+          nicht ausgeführt.
+        </p>
       ) : criteria.length === 0 ? (
         <p className="empty-note">
           Für dieses Leistungsbild sieht die HOAI kein Punktesystem vor — die Honorarzone wird dort
