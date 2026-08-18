@@ -1,6 +1,7 @@
 "use strict";
 
-// TGA-Mischhonorar (§ 54 Abs. 3 HOAI).
+// TGA-Mischhonorar: anrechenbare Kosten einer Anlagengruppe auf mehrere
+// Honorarzonen aufteilen.
 //
 // Gehören die Anlagen einer Anlagengruppe verschiedenen Honorarzonen an, ist das
 // Honorar die Summe gewichteter Einzelhonorare:
@@ -10,12 +11,27 @@
 //   3. Mischhonorar = Σ Einzelhonorare.
 // Die Tafel-Degression wirkt so auf die Gesamtsumme (Sinn der Regel).
 //
+// ⚠️ RECHTSGRUNDLAGE — frühere Angabe war falsch (18.08.2026 gegen den
+// Volltext geprüft): Dieses Verfahren stand hier als "§ 54 Abs. 3 HOAI".
+// § 54 Abs. 3 regelt aber etwas völlig anderes, nämlich die MINDERUNG bei
+// Wiederholungen (Verweis auf § 11 Abs. 3/4: im Wesentlichen gleiche Anlagen
+// → Prozentsätze der LPH 1–6 um 50/60/90 % mindern). Von gemischten
+// Honorarzonen steht dort nichts.
+//
+// Im Verordnungstext gibt es für die gewichtete Zonenmischung KEINE
+// ausdrückliche Grundlage: § 54 Abs. 1 stellt auf "die Summe der
+// anrechenbaren Kosten der Anlagen jeder Anlagengruppe" ab, § 5 Abs. 2 auf
+// eine Zuordnung anhand der Bewertungsmerkmale — beides legt EINE Zone je
+// Anlagengruppe nahe. Die gewichtete Mischung ist eine in der Praxis/
+// Kommentarliteratur verbreitete Auslegung, aber nicht aus der HOAI
+// ableitbar. Feature bewusst nicht entfernt (wird genutzt); vor
+// Rechnungsstellung fachlich absichern.
+//
 // Reine Rechenlogik: die Tafel-Interpolation wird als Funktion injiziert
 // (tafelFn(cost, zoneId, zonePercent) → Grundhonorar), damit die Logik ohne DB
 // per Unit-Test gegen Referenzbeispiele abgesichert werden kann.
 //
 // Konzept: docs/HOAI_MISCHHONORAR_TGA_CONCEPT.md
-// ⚠️ § 54 Abs. 3 ist gegen den Gesetzestext zu bestätigen.
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num    = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);

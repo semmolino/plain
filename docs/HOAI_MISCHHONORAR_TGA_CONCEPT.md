@@ -17,9 +17,28 @@ Technische Ausrüstung, § 53/54, je Anlagengruppe).
 Bei der Technischen Ausrüstung wird das Honorar **je Anlagengruppe** aus deren
 anrechenbaren Kosten und der Honorarzone ermittelt. **Mischhonorar** ist der
 Sonderfall, dass die Anlagen **einer** Anlagengruppe **unterschiedlichen
-Honorarzonen** angehören (§ 54 Abs. 3 HOAI). Dann darf nicht einfach eine Zone
-gewählt werden — das Honorar setzt sich aus gewichteten **Einzelhonoraren je
-Honorarzone** zusammen.
+Honorarzonen** angehören. Statt einer einzigen Zone setzt sich das Honorar dann
+aus gewichteten **Einzelhonoraren je Honorarzone** zusammen.
+
+> **⚠️ Korrektur der Rechtsgrundlage (18.08.2026).** Dieses Dokument (und der
+> Code) führte das Verfahren auf **§ 54 Abs. 3 HOAI** zurück. Das ist falsch:
+> § 54 Abs. 3 regelt die **Minderung bei Wiederholungen** und verweist dafür
+> auf § 11 Abs. 3/4 (im Wesentlichen gleiche Anlagen → Prozentsätze der
+> LPH 1–6 um 50/60/90 % mindern). Von gemischten Honorarzonen steht dort
+> nichts. Gegen den amtlichen Volltext geprüft.
+>
+> Für die gewichtete Zonenmischung gibt es im Verordnungstext **keine
+> ausdrückliche Grundlage**: § 54 Abs. 1 stellt auf „die Summe der
+> anrechenbaren Kosten der Anlagen jeder Anlagengruppe" ab, § 5 Abs. 2 auf die
+> Zuordnung anhand der Bewertungsmerkmale — beides legt *eine* Zone je
+> Anlagengruppe nahe. Die Mischung ist eine in Praxis und Kommentarliteratur
+> verbreitete Auslegung, aber nicht aus der HOAI ableitbar.
+>
+> Das Feature wurde **bewusst nicht entfernt** (es ist in Benutzung); Code und
+> Oberfläche nennen jetzt keine falsche Fundstelle mehr und weisen auf den
+> Auslegungscharakter hin. Migration `0100_fee_calc_zone_split.sql` trägt die
+> alte Angabe im Kopfkommentar noch — bereits eingespielt, deshalb nicht
+> nachträglich umgeschrieben.
 
 **Ziel:** Die Honorarberechnung einer TGA-Anlagengruppe kann die anrechenbaren
 Kosten auf **mehrere Honorarzonen aufteilen** und das Mischhonorar korrekt (mit
@@ -54,9 +73,9 @@ und wird für das Mischhonorar **mehrfach** benötigt — pro beteiligter Zone e
 
 ---
 
-## 3. Fachliche Grundlagen — § 54 Abs. 3 HOAI
+## 3. Fachliche Grundlagen (Auslegung, keine ausdrückliche Norm — siehe § 1)
 
-**Regel (sinngemäß, ⚠️ Wortlaut zu bestätigen):** Gehören die Anlagen einer
+**Regel (verbreitete Auslegung, nicht im Verordnungstext):** Gehören die Anlagen einer
 Anlagengruppe verschiedenen Honorarzonen an, ist das Honorar die **Summe der
 Einzelhonorare**. Jedes Einzelhonorar gilt für alle einer Honorarzone
 zugeordneten Anlagen und wird so bestimmt:

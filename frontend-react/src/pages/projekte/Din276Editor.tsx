@@ -20,7 +20,9 @@ const kgHundred = (code: string): number | null => {
   return Number.isFinite(n) ? Math.floor(n / 100) * 100 : null
 }
 // KG 200/400/600 sind nur bei "selbst geplant" (voll bzw. anteilig) anrechenbar.
-const SELF_RELEVANT = new Set([200, 400, 600])
+// KG 500 ebenso — bei Freianlagen (§ 38 Abs. 1) sowie bei Ingenieurbauwerken
+// und Verkehrsanlagen (§ 42/§ 46 Abs. 3).
+const SELF_RELEVANT = new Set([200, 400, 500, 600])
 
 // Anlagengruppen der Technischen Ausrüstung (KG 410–480, § 53).
 const ANLAGENGRUPPEN: [string, string][] = [
@@ -53,12 +55,18 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
   const [bausubstanz, setBausubstanz] = useState('0')
   const [lb,        setLb]        = useState(leistungsbild)
   const [anlagengruppe, setAnlagengruppe] = useState('410')
+  // Tragwerksplanung/Geotechnik: § 50 rechnet je nach Objektart mit anderen
+  // Prozentsätzen (Abs. 1 Gebäude 55/10, Abs. 3 Ingenieurbauwerk 90/15).
+  const [objektart, setObjektart] = useState('gebaeude')
   // Raumakustik (Anlage 1.2.5) wird je Innenraum gerechnet: KG 300 + KG 400
   // werden über den Bruttorauminhalt auf den Raum umgelegt.
   const [rauminhalt, setRauminhalt] = useState('')
   const [bri,        setBri]        = useState('')
   // Zusammengesetzter Schlüssel für TGA (je Anlagengruppe): "tga:420".
-  const effectiveLb = lb === 'tga' ? `tga:${anlagengruppe}` : lb
+  const usesObjektart = lb === 'tragwerk' || lb === 'geotechnik'
+  const effectiveLb = lb === 'tga' ? `tga:${anlagengruppe}`
+    : usesObjektart ? `${lb}:${objektart}`
+    : lb
   const [result,    setResult]    = useState<Din276AnrechenbarResult | null>(null)
   const [msg,       setMsg]       = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
@@ -175,6 +183,15 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                 </select>
               </div>
             )}
+            {usesObjektart && (
+              <div className="form-group">
+                <label>Objektart</label>
+                <select value={objektart} onChange={e => { setObjektart(e.target.value); setResult(null) }}>
+                  <option value="gebaeude">Gebäude (§ 50 Abs. 1 — 55 % / 10 %)</option>
+                  <option value="ingenieurbauwerk">Ingenieurbauwerk (§ 50 Abs. 3 — 90 % / 15 %)</option>
+                </select>
+              </div>
+            )}
             {lb === 'bauphysik_raumakustik' && (
               <>
                 <div className="form-group">
@@ -226,11 +243,22 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
               das Zusammenfassen mehrerer Anlagengruppen (Mischhonorar) ist noch nicht abgebildet.
             </p>
           )}
-          {lb === 'geotechnik' && (
+          {usesObjektart && (
             <p className="empty-note" style={{ marginTop: 0, marginBottom: 8 }}>
-              Geotechnik hat keine eigene Anrechenbarkeitsregel — Anlage 1.3.2 Abs. 1 verweist auf § 50
-              Abs. 1–3 (Tragwerksplanung): 55 % der Kosten für Baukonstruktionen (KG 300) und 10 % der
-              Kosten der Technischen Ausrüstung (KG 400), für das gesamte Objekt aus Bauwerk und Baugrube.
+              {lb === 'geotechnik'
+                ? 'Geotechnik hat keine eigene Anrechenbarkeitsregel — Anlage 1.3.2 Abs. 1 verweist auf § 50 Abs. 1–3 (Tragwerksplanung), für das gesamte Objekt aus Bauwerk und Baugrube. '
+                : ''}
+              Die Prozentsätze hängen von der Objektart ab: bei Gebäuden 55 % KG 300 + 10 % KG 400
+              (§ 50 Abs. 1), bei Ingenieurbauwerken 90 % + 15 % (Abs. 3). Bei Gebäuden mit hohem Anteil
+              an Gründung und Tragkonstruktion darf nach Abs. 2 ebenfalls die Ingenieurbauwerk-Variante
+              vereinbart werden — dann hier „Ingenieurbauwerk" wählen.
+            </p>
+          )}
+          {lb === 'freianlagen' && (
+            <p className="empty-note" style={{ marginTop: 0, marginBottom: 8 }}>
+              Anrechenbar sind die Außenanlagen (KG 500), aber nur soweit der Auftragnehmer sie selbst
+              plant oder überwacht (§ 38 Abs. 1) — dafür je Kostengruppen-Zeile „selbst geplant" setzen.
+              Fremd geplante Anteile erscheinen in der Herleitung mit 0 %.
             </p>
           )}
 
@@ -241,7 +269,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                   <th scope="col" style={{ width: 70 }}>KG</th>
                   <th scope="col">Bezeichnung</th>
                   <th scope="col" className="num">Betrag €</th>
-                  <th scope="col" style={{ textAlign: 'center' }} title="Vom Auftragnehmer selbst fachlich geplant/überwacht (relevant für KG 200/400/600)">selbst geplant?</th>
+                  <th scope="col" style={{ textAlign: 'center' }} title="Vom Auftragnehmer selbst fachlich geplant/überwacht (relevant für KG 200/400/500/600)">selbst geplant?</th>
                   <th scope="col" />
                 </tr>
               </thead>

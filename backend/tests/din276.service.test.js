@@ -118,7 +118,7 @@ describe("anrechenbareKostenGebaeude (§ 33)", () => {
 // ── § 50 Tragwerksplanung ─────────────────────────────────────────────────────
 
 describe("anrechenbareKostenTragwerk (§ 50)", () => {
-  it("55 % KG 300 + 10 % KG 400", () => {
+  it("Gebäude (Abs. 1, Default): 55 % KG 300 + 10 % KG 400", () => {
     const r = anrechenbareKostenTragwerk({ groups: [g("300", 1000000), g("400", 200000)] });
     expect(r.anrechenbareKosten).toBe(570000); // 550.000 + 20.000
   });
@@ -130,14 +130,42 @@ describe("anrechenbareKostenTragwerk (§ 50)", () => {
     const r = anrechenbareKostenTragwerk({ groups: [g("310", 400000), g("330", 600000), g("420", 200000)] });
     expect(r.anrechenbareKosten).toBe(570000);
   });
+  it("Ingenieurbauwerk (Abs. 3): 90 % KG 300 + 15 % KG 400", () => {
+    const r = anrechenbareKostenTragwerk(
+      { groups: [g("300", 1000000), g("400", 200000)] },
+      { objektart: "ingenieurbauwerk" },
+    );
+    expect(r.anrechenbareKosten).toBe(930000); // 900.000 + 30.000
+  });
+  it("unbekannte Objektart fällt auf die Gebäude-Sätze zurück", () => {
+    const r = anrechenbareKostenTragwerk({ groups: [g("300", 1000000)] }, { objektart: "unsinn" });
+    expect(r.anrechenbareKosten).toBe(550000);
+  });
+  it("Herleitung nennt den angewandten Absatz", () => {
+    const geb = anrechenbareKostenTragwerk({ groups: [g("300", 100000)] });
+    const ing = anrechenbareKostenTragwerk({ groups: [g("300", 100000)] }, { objektart: "ingenieurbauwerk" });
+    expect(geb.herleitung[0].label).toContain("Abs. 1");
+    expect(ing.herleitung[0].label).toContain("Abs. 3");
+  });
 });
 
 // ── § 38/40 Freianlagen ───────────────────────────────────────────────────────
 
 describe("anrechenbareKostenFreianlagen (§ 38/40)", () => {
-  it("KG 500 voll, andere ignoriert", () => {
-    const r = anrechenbareKostenFreianlagen({ groups: [g("500", 300000), g("300", 1000000)] });
+  it("KG 500 selbst geplant: voll; andere Kostengruppen ignoriert", () => {
+    const r = anrechenbareKostenFreianlagen({ groups: [g("500", 300000, true), g("300", 1000000, true)] });
     expect(r.anrechenbareKosten).toBe(300000);
+  });
+  it("KG 500 fremd geplant: NICHT anrechenbar (§ 38 Abs. 1)", () => {
+    const r = anrechenbareKostenFreianlagen({ groups: [g("500", 300000, false)] });
+    expect(r.anrechenbareKosten).toBe(0);
+  });
+  it("fremd geplanter Anteil wird in der Herleitung mit 0 % ausgewiesen", () => {
+    const r = anrechenbareKostenFreianlagen({ groups: [g("500", 200000, true), g("510", 100000, false)] });
+    expect(r.anrechenbareKosten).toBe(200000);
+    const fremd = r.herleitung.find(h => h.ansatz === 0);
+    expect(fremd).toBeDefined();
+    expect(fremd.basis).toBe(100000);
   });
 });
 
@@ -215,6 +243,11 @@ describe("anrechenbareKostenGeotechnik (Anlage 1.3.2)", () => {
     const r = anrechenbareKostenGeotechnik({ groups: [g("310", 400000), g("330", 600000)] });
     expect(r.anrechenbareKosten).toBe(550000);
   });
+  it("reicht die Objektart durch (Anlage 1.3.2 verweist auf § 50 Abs. 1 BIS 3)", () => {
+    const groups = [g("300", 1000000), g("400", 200000)];
+    const r = anrechenbareKostenGeotechnik({ groups }, { objektart: "ingenieurbauwerk" });
+    expect(r.anrechenbareKosten).toBe(930000);
+  });
 });
 
 // ── parseLeistungsbild ────────────────────────────────────────────────────────
@@ -225,6 +258,17 @@ describe("parseLeistungsbild", () => {
   });
   it("TGA mit Anlagengruppe", () => {
     expect(parseLeistungsbild("tga:420")).toEqual({ key: "tga", opts: { anlagengruppe: "420" } });
+  });
+  it("Tragwerk mit Objektart", () => {
+    expect(parseLeistungsbild("tragwerk:ingenieurbauwerk"))
+      .toEqual({ key: "tragwerk", opts: { objektart: "ingenieurbauwerk" } });
+  });
+  it("Geotechnik mit Objektart", () => {
+    expect(parseLeistungsbild("geotechnik:ingenieurbauwerk"))
+      .toEqual({ key: "geotechnik", opts: { objektart: "ingenieurbauwerk" } });
+  });
+  it("Parameter an einem Leistungsbild ohne Parameter wird ignoriert", () => {
+    expect(parseLeistungsbild("gebaeude:irgendwas")).toEqual({ key: "gebaeude", opts: {} });
   });
 });
 
@@ -239,8 +283,8 @@ describe("anrechenbareKosten (Dispatcher)", () => {
     const r = anrechenbareKosten("tragwerk", { groups: [g("300", 100000)] });
     expect(r.anrechenbareKosten).toBe(55000);
   });
-  it("ruft die Freianlagen-Regel", () => {
-    const r = anrechenbareKosten("freianlagen", { groups: [g("500", 100000)] });
+  it("ruft die Freianlagen-Regel (KG 500 nur selbst geplant, § 38 Abs. 1)", () => {
+    const r = anrechenbareKosten("freianlagen", { groups: [g("500", 100000, true)] });
     expect(r.anrechenbareKosten).toBe(100000);
   });
   it("ruft die TGA-Regel mit Anlagengruppe", () => {

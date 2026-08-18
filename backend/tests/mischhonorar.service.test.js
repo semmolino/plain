@@ -7,7 +7,7 @@ const { computeMischhonorar } = require("../services/mischhonorar");
 const FAKE_TAFEL = { 2: 60000, 3: 80000 };
 const tafelFn = (_cost, zoneId) => FAKE_TAFEL[zoneId] ?? 0;
 
-describe("computeMischhonorar (§ 54 Abs. 3)", () => {
+describe("computeMischhonorar (gewichtete Zonenmischung TGA)", () => {
   it("Referenzbeispiel: zwei Zonen, gewichtet nach Kostenanteil", () => {
     const r = computeMischhonorar(
       [

@@ -98,7 +98,7 @@ Leistungsbilder ohne LPH-Nummerierung setzen `SORT_ORDER` explizit.
 `RULES` in `services/din276.js` wirft für jeden nicht registrierten Schlüssel.
 Jedes neue Leistungsbild braucht seinen eigenen Regelsatz — die Regeln weichen
 stärker voneinander ab, als es auf den ersten Blick wirkt (siehe Bauphysik
-unten).
+unten). Stand der Regeln und der bewusst offen gelassenen Sonderfälle: § 12.
 
 ### 3.4 Zuschlagskatalog ist leer
 
@@ -501,3 +501,88 @@ abgetippt: Parser + Round-Trip-Prüfung gegen die Quelle (Bandgrenzen
 lückenlos, jede Zelle verglichen, Phasensummen = 100). Bei weiteren
 Leistungsbildern denselben Weg gehen — Zahlen dieser Größenordnung von Hand
 zu übertragen hält keiner Prüfung stand.
+
+---
+
+## 12. Korrigierte Anrechenbarkeits-Regeln (Migration 0125 + Code, 18.08.2026)
+
+Beim Durchgehen der mit `⚠️` markierten Vereinfachungen in `din276.js` kamen
+zwei echte Rechenfehler und eine falsche Rechtsgrundlage heraus. Alle drei
+wurden gegen den amtlichen Volltext geprüft, nicht aus dem Gedächtnis
+korrigiert.
+
+### 12.1 § 50 Abs. 3 — Tragwerksplanung bei Ingenieurbauwerken (Rechenfehler)
+
+Bisher rechnete `anrechenbareKostenTragwerk()` **immer** mit 55 % KG 300 +
+10 % KG 400. Das ist § 50 **Abs. 1** und gilt nur für Gebäude. **Abs. 3**
+setzt für Ingenieurbauwerke **90 % + 15 %** an — bei einem Tragwerk für ein
+Ingenieurbauwerk lagen die anrechenbaren Kosten damit um rund 40 % zu
+niedrig.
+
+Gelöst über einen Objektart-Parameter (`tragwerk:ingenieurbauwerk`), der auch
+**Geotechnik** erreicht: Anlage 1.3.2 Abs. 1 verweist ausdrücklich auf „§ 50
+Absatz 1 **bis 3**". Im DIN-276-Editor erscheint für beide Leistungsbilder ein
+Auswahlfeld „Objektart".
+
+Abs. 2 (bei Gebäuden mit hohem Gründungs-/Tragkonstruktionsanteil darf nach
+Abs. 3 gerechnet werden) ist damit ebenfalls bedienbar — dort einfach
+„Ingenieurbauwerk" wählen. **Nicht abgebildet** bleiben Abs. 4 (Traggerüste =
+Herstellkosten) und Abs. 5 (weitere Kosten bei Mehrleistungen nach § 51):
+beides beruht auf einer Vereinbarung im Einzelfall und lässt sich nicht aus
+der Kostenermittlung ableiten.
+
+### 12.2 § 38 Abs. 1 — Freianlagen nur soweit selbst geplant
+
+`anrechenbareKostenFreianlagen()` zählte KG 500 immer voll. § 38 Abs. 1
+rechnet die Außenanlagen aber nur an, „soweit diese durch den Auftragnehmer
+geplant oder überwacht werden". Fremd geplante Anteile zählen hier **gar
+nicht** (anders als bei § 33/§ 42/§ 46, wo fremd geplante KG 400 anteilig
+eingehen); sie erscheinen in der Herleitung jetzt mit 0 %, damit die Summe
+nicht wie ein Rechenfehler wirkt.
+
+**Migration 0125 ist der Bestandsschutz dazu.** Die Checkbox „selbst geplant?"
+gab es im Editor nur für KG 200/400/600 — alle vorhandenen KG-5xx-Zeilen
+stehen deshalb zwangsläufig auf `FALSE`, nicht aus Absicht, sondern weil das
+Feld nicht bedienbar war. Ohne die Migration hätte die korrigierte Regel jede
+bestehende Freianlagen-Berechnung still auf 0 € gesetzt. Die Migration setzt
+alle **bestehenden** KG-5xx-Zeilen auf `TRUE` (= bisheriges Ergebnis bleibt
+erhalten, und fachlich der Regelfall: wer Freianlagenplanung beauftragt, lässt
+die Außenanlagen gerade vom Auftragnehmer planen). Neue Zeilen bleiben beim
+Default `FALSE`.
+
+§ 38 Abs. 2 (Unter-/Oberbau von Fußgängerbereichen nicht anrechenbar, deren
+Oberflächenbefestigung schon) bleibt **nicht abgebildet** — dafür müsste die
+Kostenermittlung unterhalb der KG-500-Ebene aufgeteilt werden. Solche Anteile
+sind als eigene Kostengruppen-Zeile zu erfassen und „selbst geplant"
+abzuwählen.
+
+### 12.3 TGA-Mischhonorar — Rechtsgrundlage war falsch zitiert
+
+Code, Oberfläche, Hilfetext, Konzeptdokument und Migration 0100 führten die
+gewichtete Zonenmischung auf **§ 54 Abs. 3** zurück. Der Absatz regelt aber
+die **Minderung bei Wiederholungen** (Verweis auf § 11 Abs. 3/4: im
+Wesentlichen gleiche Anlagen → Prozentsätze der LPH 1–6 um 50/60/90 %
+mindern). Mit gemischten Honorarzonen hat er nichts zu tun. Der Code trug
+dazu schon länger den Hinweis „⚠️ § 54 Abs. 3 ist gegen den Gesetzestext zu
+bestätigen" — die Prüfung hat ihn widerlegt.
+
+Für die Zonenmischung gibt es im Verordnungstext **keine ausdrückliche
+Grundlage**: § 54 Abs. 1 stellt auf die Summe der anrechenbaren Kosten je
+Anlagengruppe ab, § 5 Abs. 2 auf die Zuordnung anhand der Bewertungsmerkmale —
+beides legt *eine* Zone je Anlagengruppe nahe. Die Mischung ist eine
+verbreitete Auslegung, aber nicht aus der HOAI ableitbar.
+
+Das Feature wurde **bewusst nicht entfernt** (es ist in Benutzung, und ob es
+fachlich vertretbar ist, entscheidet nicht die Software). Entfernt wurde nur
+die falsche Fundstelle; Oberfläche und Hilfetext weisen jetzt auf den
+Auslegungscharakter hin. Migration 0100 behält ihren alten Kopfkommentar —
+bereits eingespielt, historischer Stand.
+
+### 12.4 Nebenbefund: § 11 Abs. 3/4 fehlt komplett
+
+Beim Prüfen von § 54 Abs. 3 fiel auf, dass die **Wiederholungsminderung**
+(§ 11 Abs. 3: Prozentsätze der LPH 1–6 um 50 % ab der ersten, 60 % ab der
+fünften, 90 % ab der achten Wiederholung; Abs. 4 auch bei Folgeaufträgen
+zwischen denselben Parteien) nirgends abgebildet ist. Das sind konkrete,
+verbindliche Zahlen der Verordnung — inhaltlich der nächste Nachbar des noch
+offenen Zuschlagskatalogs (3.4) und dort mitzudenken.

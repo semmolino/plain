@@ -24,9 +24,12 @@ interface Props {
 }
 
 /**
- * TGA-Mischhonorar (§ 54 Abs. 3): anrechenbare Kosten einer Anlagengruppe auf
- * mehrere Honorarzonen aufteilen. K0 = Σ Beträge; REVENUE_K0 = gewichtetes
+ * TGA-Mischhonorar: anrechenbare Kosten einer Anlagengruppe auf mehrere
+ * Honorarzonen aufteilen. K0 = Σ Beträge; REVENUE_K0 = gewichtetes
  * Mischhonorar (serverseitig aus der Honorartafel).
+ *
+ * Trug früher die Angabe "§ 54 Abs. 3" — die ist falsch, der Absatz regelt
+ * die Minderung bei Wiederholungen. Herleitung siehe services/mischhonorar.js.
  */
 export function MischhonorarEditor({ open, onClose, calcMasterId, zones, onApplied }: Props) {
   const [rows,    setRows]    = useState<Row[]>([])
@@ -94,9 +97,11 @@ export function MischhonorarEditor({ open, onClose, calcMasterId, zones, onAppli
         <>
           <p className="admin-section-hint" style={{ marginTop: 0, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
             <span>
-              Für die Technische Ausrüstung (§ 54 Abs. 3): Gehören die Anlagen einer Anlagengruppe
+              Für die Technische Ausrüstung: Gehören die Anlagen einer Anlagengruppe
               verschiedenen Honorarzonen an, teile die anrechenbaren Kosten je Zone auf. Die Gesamtkosten (K0)
               ergeben sich als Summe; das Grundhonorar wird als gewichtetes Mischhonorar berechnet.
+              Die HOAI regelt diese Aufteilung nicht ausdrücklich — sie ist eine verbreitete
+              Auslegung und vor Rechnungsstellung fachlich abzusichern.
             </span>
             <HelpHint id="hoai.mischhonorar" />
           </p>
@@ -152,7 +157,7 @@ export function MischhonorarEditor({ open, onClose, calcMasterId, zones, onAppli
 
           {result && result.herleitung.length > 0 && (
             <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Herleitung (§ 54 Abs. 3)</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Herleitung (gewichtetes Mischhonorar)</div>
               <div className="table-scroll">
                 <table className="master-table">
                   <thead>

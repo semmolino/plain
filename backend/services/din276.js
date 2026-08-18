@@ -108,18 +108,41 @@ function anrechenbareKostenGebaeude(estimate) {
 }
 
 // ── § 50 HOAI (Tragwerksplanung) ──────────────────────────────────────────────
-// Anrechenbar sind 55 % der Kosten der Baukonstruktion (KG 300) und 10 % der
-// Kosten der Technischen Anlagen (KG 400).
-// ⚠️ Sonderfaelle (bestimmte tragwerksrelevante KG-400-Anteile voll,
-// mitverarbeitete Bausubstanz im Bestand) sind hier NICHT abgebildet und vor
-// produktivem Einsatz zu ergaenzen/verifizieren.
+// Die Prozentsaetze haengen von der OBJEKTART ab — das ist kein Detail,
+// sondern fast eine Verdoppelung der anrechenbaren Kosten:
+//   Abs. 1  Gebaeude und zugehoerige bauliche Anlagen  55 % KG 300 + 10 % KG 400
+//   Abs. 3  Ingenieurbauwerke                          90 % KG 300 + 15 % KG 400
+// Abs. 2 erlaubt es zusaetzlich, bei GEBAEUDEN mit hohem Anteil an Gruendung
+// und Tragkonstruktionen in Textform zu vereinbaren, dass nach Abs. 3
+// gerechnet wird — dafuer waehlt man hier ebenfalls 'ingenieurbauwerk'.
+//
+// ⚠️ NICHT abgebildet: Abs. 4 (Traggeruste bei Ingenieurbauwerken =
+// Herstellkosten inkl. Baustelleneinrichtung, bei Mehrfachverwendung der
+// Neuwert) und Abs. 5 (weitere Kosten anrechenbar, wenn dafuer Mehrleistungen
+// nach § 51 erbracht werden) — beides beruht auf einer Vereinbarung im
+// Einzelfall und laesst sich nicht aus der Kostenermittlung ableiten.
+// Mitverarbeitete Bausubstanz (§ 4 Abs. 3) wird hier ebenfalls nicht
+// angesetzt; sie ist "angemessen zu beruecksichtigen" und in Textform zu
+// vereinbaren, also kein aus DIN 276 ableitbarer Wert.
 const TRAGWERK_KG300_PCT = 0.55;
 const TRAGWERK_KG400_PCT = 0.10;
+const TRAGWERK_IB_KG300_PCT = 0.90;
+const TRAGWERK_IB_KG400_PCT = 0.15;
 
-function anrechenbareKostenTragwerk(estimate) {
+/**
+ * @param {object} estimate
+ * @param {object} opts
+ *   opts.objektart  'gebaeude' (Default, § 50 Abs. 1) | 'ingenieurbauwerk' (Abs. 3)
+ */
+function anrechenbareKostenTragwerk(estimate, opts = {}) {
   const groups = estimate?.groups || [];
   const kg300 = sumHundred(groups, 300);
   const kg400 = sumHundred(groups, 400);
+
+  const istIngenieurbauwerk = String(opts.objektart || "").toLowerCase() === "ingenieurbauwerk";
+  const pct300 = istIngenieurbauwerk ? TRAGWERK_IB_KG300_PCT : TRAGWERK_KG300_PCT;
+  const pct400 = istIngenieurbauwerk ? TRAGWERK_IB_KG400_PCT : TRAGWERK_KG400_PCT;
+  const absatz = istIngenieurbauwerk ? "Abs. 3" : "Abs. 1";
 
   const herleitung = [];
   let total = 0;
@@ -128,24 +151,49 @@ function anrechenbareKostenTragwerk(estimate) {
     herleitung.push({ kg, label, basis: round2(basis), ansatz, betrag: b });
     total += b;
   };
-  if (kg300) add("300", "Baukonstruktionen (55 %)", kg300, 55, kg300 * TRAGWERK_KG300_PCT);
-  if (kg400) add("400", "Technische Anlagen (10 %)", kg400, 10, kg400 * TRAGWERK_KG400_PCT);
+  const p = (x) => Math.round(x * 100);
+  if (kg300) add("300", `Baukonstruktionen (${p(pct300)} %, § 50 ${absatz})`, kg300, p(pct300), kg300 * pct300);
+  if (kg400) add("400", `Technische Anlagen (${p(pct400)} %, § 50 ${absatz})`, kg400, p(pct400), kg400 * pct400);
 
   return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(kg300), herleitung };
 }
 
 // ── § 38/§ 40 HOAI (Freianlagen) ──────────────────────────────────────────────
-// Kern: Kosten der Außenanlagen (KG 500) sind voll anrechenbar.
-// ⚠️ Anteilige Kosten aus KG 200/300, die den Freianlagen zuzurechnen sind,
-// sowie technische Anlagen in Außenanlagen (KG 540) sind hier NICHT gesondert
-// behandelt und vor produktivem Einsatz zu ergaenzen/verifizieren.
+// § 38 Abs. 1: anrechenbar sind die Kosten fuer Aussenanlagen (KG 500),
+// ausdruecklich aber nur, "soweit diese durch den Auftragnehmer geplant oder
+// ueberwacht werden". Die selbst/fremd-Unterscheidung ist hier also Teil der
+// Norm — fremd geplante Aussenanlagen zaehlen gar nicht mit (anders als bei
+// § 33/§ 42/§ 46, wo fremd geplante KG 400 anteilig eingehen).
+//
+// § 38 Abs. 2 schliesst zusaetzlich aus: die Kosten des Gebaeudes selbst, die
+// in § 33 Abs. 3 genannten Kosten (Herrichten, nichtoeffentliche
+// Erschliessung, Ausstattung/Kunstwerke) sowie Unter- und Oberbau von
+// Fussgaengerbereichen — ausgenommen deren Oberflaechenbefestigung. Da wir
+// ausschliesslich KG 500 ansetzen, sind Gebaeude (KG 300), Herrichten
+// (KG 200) und Ausstattung (KG 600) bereits ausgeschlossen.
+//
+// ⚠️ NICHT abgebildet: die Feinunterscheidung innerhalb von Fussgaenger-
+// bereichen (Unter-/Oberbau nicht anrechenbar, Oberflaechenbefestigung schon)
+// — dafuer muesste die Kostenermittlung unterhalb der KG-500-Ebene aufgeteilt
+// werden, was DIN 276 hier nicht hergibt. Solche Anteile sind ggf. als eigene
+// Kostengruppen-Zeile zu erfassen und "selbst geplant" abzuwaehlen.
 function anrechenbareKostenFreianlagen(estimate) {
   const groups = estimate?.groups || [];
-  const kg500 = sumHundred(groups, 500);
+  const kg500self  = sumHundred(groups, 500, isSelf);
+  const kg500fremd = sumHundred(groups, 500, (g) => !isSelf(g));
+
   const herleitung = [];
   let total = 0;
-  if (kg500) { herleitung.push({ kg: "500", label: "Außenanlagen", basis: round2(kg500), ansatz: 100, betrag: round2(kg500) }); total += round2(kg500); }
-  return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(kg500), herleitung };
+  if (kg500self) {
+    herleitung.push({ kg: "500", label: "Außenanlagen (selbst geplant/überwacht)", basis: round2(kg500self), ansatz: 100, betrag: round2(kg500self) });
+    total += round2(kg500self);
+  }
+  if (kg500fremd) {
+    // Sichtbar machen, warum der Betrag nicht in der Summe steht — sonst
+    // wirkt die Herleitung wie ein Rechenfehler.
+    herleitung.push({ kg: "500", label: "Außenanlagen (fremd geplant, § 38 Abs. 1 nicht anrechenbar)", basis: round2(kg500fremd), ansatz: 0, betrag: 0 });
+  }
+  return { anrechenbareKosten: round2(total), sonstigeAnrechenbareKosten: round2(kg500self), herleitung };
 }
 
 // ── § 42 HOAI (Ingenieurbauwerke) ─────────────────────────────────────────────
@@ -412,8 +460,11 @@ function anrechenbareKostenBauphysikRaumakustik(estimate, opts = {}) {
 // gesamte Objekt aus Bauwerk und Baugrube." Keine eigene Regel — identisch zur
 // Tragwerksplanung. Die Baugrube ist in DIN 276-1:2008-12 KG 310, also bereits
 // Teil von KG 300; die Tragwerk-Regel deckt "Bauwerk und Baugrube" damit ab.
-function anrechenbareKostenGeotechnik(estimate) {
-  return anrechenbareKostenTragwerk(estimate);
+function anrechenbareKostenGeotechnik(estimate, opts = {}) {
+  // Anlage 1.3.2 Abs. 1 verweist ausdruecklich auf "§ 50 Absatz 1 bis 3" —
+  // die Objektart-Unterscheidung (Gebaeude 55/10 vs Ingenieurbauwerk 90/15)
+  // gilt hier also genauso und wird durchgereicht.
+  return anrechenbareKostenTragwerk(estimate, opts);
 }
 
 // Registry: Leistungsbild-Typ → Regelfunktion (estimate, opts) → Ergebnis.
@@ -442,13 +493,24 @@ function anrechenbareKosten(leistungsbild, estimate, opts = {}) {
 }
 
 // Zerlegt einen ggf. zusammengesetzten Leistungsbild-Schlüssel:
-//   "gebaeude"  → { key: "gebaeude", opts: {} }
-//   "tga:420"   → { key: "tga", opts: { anlagengruppe: "420" } }
+//   "gebaeude"                    → { key: "gebaeude", opts: {} }
+//   "tga:420"                     → { key: "tga",       opts: { anlagengruppe: "420" } }
+//   "tragwerk:ingenieurbauwerk"   → { key: "tragwerk",  opts: { objektart: "ingenieurbauwerk" } }
+//   "geotechnik:ingenieurbauwerk" → { key: "geotechnik",opts: { objektart: "ingenieurbauwerk" } }
+// Der Parameter bedeutet je Leistungsbild etwas anderes; welche Schluessel
+// welchen Parameter verstehen, steht in PARAM_BY_KEY.
+const PARAM_BY_KEY = {
+  tga:        "anlagengruppe",
+  tragwerk:   "objektart",
+  geotechnik: "objektart",
+};
+
 function parseLeistungsbild(str) {
   const raw = String(str || "").trim();
   const [key, param] = raw.split(":");
   const k = (key || "gebaeude").toLowerCase();
-  return { key: k, opts: k === "tga" && param ? { anlagengruppe: param } : {} };
+  const paramName = PARAM_BY_KEY[k];
+  return { key: k, opts: paramName && param ? { [paramName]: param } : {} };
 }
 
 module.exports = {
@@ -471,4 +533,6 @@ module.exports = {
   GEBAEUDE_KG400_ABOVE_FACTOR,
   TRAGWERK_KG300_PCT,
   TRAGWERK_KG400_PCT,
+  TRAGWERK_IB_KG300_PCT,
+  TRAGWERK_IB_KG400_PCT,
 };
