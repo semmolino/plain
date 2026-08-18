@@ -60,7 +60,7 @@ describe("getRevenueByKx", () => {
 
 // ── calculateRevenueFields (with mocked Supabase) ────────────────────────────
 
-function makeSupabaseMock({ zone, feeTables }) {
+function makeSupabaseMock({ zone, feeTables, baseType }) {
   return {
     from: jest.fn().mockImplementation((table) => ({
       select: jest.fn().mockReturnThis(),
@@ -68,6 +68,11 @@ function makeSupabaseMock({ zone, feeTables }) {
       single: jest.fn().mockResolvedValue(
         table === "FEE_ZONES"
           ? { data: zone, error: null }
+          : { data: null, error: null }
+      ),
+      maybeSingle: jest.fn().mockResolvedValue(
+        table === "FEE_MASTERS"
+          ? { data: baseType ? { BASE_TYPE: baseType } : null, error: null }
           : { data: null, error: null }
       ),
       order: jest.fn().mockResolvedValue(
@@ -141,6 +146,30 @@ describe("calculateRevenueFields", () => {
     // zonePercent=0 → result = 14000 + (17000-14000)*0/100 = 14000
     expect(result.REVENUE_K0).toBeCloseTo(14000);
     expect(result.REVENUE_K1).toBeNull();
+  });
+
+  it("percent_of_baukosten: Grundhonorar je Kx = Kx × Honorarsatz, ohne Zone", async () => {
+    const supabase = makeSupabaseMock({ zone: null, feeTables: [], baseType: "percent_of_baukosten" });
+    const result = await calculateRevenueFields(supabase, {
+      feeMasterId: 108,
+      zoneId: null,
+      zonePercent: 10,
+      costsByKey: { CONSTRUCTION_COSTS_K0: 1000000, CONSTRUCTION_COSTS_K1: 500000 },
+    });
+    expect(result.REVENUE_K0).toBe(100000);
+    expect(result.REVENUE_K1).toBe(50000);
+    expect(result.REVENUE_K2).toBeNull();
+  });
+
+  it("percent_of_baukosten: null ohne Honorarsatz", async () => {
+    const supabase = makeSupabaseMock({ zone: null, feeTables: [], baseType: "percent_of_baukosten" });
+    const result = await calculateRevenueFields(supabase, {
+      feeMasterId: 108,
+      zoneId: null,
+      zonePercent: null,
+      costsByKey: { CONSTRUCTION_COSTS_K0: 1000000 },
+    });
+    expect(result.REVENUE_K0).toBeNull();
   });
 
   it("throws when Supabase returns an error for FEE_ZONES", async () => {

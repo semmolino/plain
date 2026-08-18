@@ -187,12 +187,14 @@ table.data-table tfoot tr.grand-total td {
     <div class="bc-label">Honorarordnung</div>
     <div class="bc-val">{{ calc.nameShort }}</div>
   </div>
+  {% if not calc.isPercentOfBaukosten %}
   <div class="basis-cell">
     <div class="bc-label">Honorarzone</div>
     <div class="bc-val">{{ calc.zoneName or "—" }}</div>
   </div>
+  {% endif %}
   <div class="basis-cell">
-    <div class="bc-label">Zonenanteil</div>
+    <div class="bc-label">{% if calc.isPercentOfBaukosten %}Honorarsatz{% else %}Zonenanteil{% endif %}</div>
     <div class="bc-val">{{ calc.zonePercent or "—" }} %</div>
   </div>
 </div>

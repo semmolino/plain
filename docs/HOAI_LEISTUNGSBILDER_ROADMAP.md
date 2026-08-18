@@ -109,7 +109,7 @@ heute jede Nutzerin frei ein — je Berechnung neu, ohne Prozentvorschlag.
 ### 3.5 Honorarzonen-Einstufung — Arbeit begonnen (0120)
 
 Die Zone wurde bisher immer direkt geschätzt. Wichtige Erkenntnis beim
-Startversuch (Tragwerksplanung, siehe § 8 unten): Es gibt **kein
+Startversuch (Tragwerksplanung, siehe § 7 unten): Es gibt **kein
 einheitliches Punktesystem über alle Leistungsbilder** — zwei
 unterschiedliche Mechanismen:
 
@@ -129,7 +129,7 @@ unterschiedliche Mechanismen:
   (Kriterien + Punktwerte je Kriterium + Zonen-Schwellen) — noch nicht
   gebaut.
 
-Wer weitermacht: § 8 unten für Stand und offene Objektlisten.
+Wer weitermacht: § 7 unten für Stand und offene Objektlisten.
 
 ---
 
@@ -250,17 +250,17 @@ Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
    vermutlich Bauleitplanung/Landschaftsplanung) als zweite, andere Tabelle.
    **In Arbeit, nicht abgeschlossen.**
 6. ~~§ 42 (Ingenieurbauwerke) / § 46 (Verkehrsanlagen) in `din276.js`~~ —
-   erledigt, siehe § 9 unten. Damit ist eine spätere Bauvermessungs-Regel
+   erledigt, siehe § 8 unten. Damit ist eine spätere Bauvermessungs-Regel
    (Anlage 1.4.5 Abs. 2, siehe Anlage-1.4-Abschnitt oben) **nicht mehr
    blockiert** — aber noch nicht gebaut (nicht Teil dieser Anfrage; braucht
    zusätzlich einen Objektart-Selector Gebäude/Ingenieurbauwerk/
    Verkehrsanlage + die 80-/100-%-Regel).
-7. **AHO-Hefte und weitere Kalkulationstypen** — Projektsteuerung (Heft 9),
-   SiGeKo (Heft 15), Brandschutz (Heft 17) u. a. Diese rechnen nicht nach
-   Honorartafel, sondern meist als Prozentsatz der Baukosten oder nach
-   Zeithonorar. Ob das noch in `FEE_TABLES` passt oder einen eigenen
-   Kalkulationstyp braucht, ist vor Beginn zu entscheiden — offene Frage,
-   braucht eine eigene Scoping-Runde vor dem ersten Code.
+7. **AHO-Hefte und weitere Kalkulationstypen** — begonnen (0121), siehe § 9
+   oben. Architektur steht (`BASE_TYPE='percent_of_baukosten'`), Heft 9
+   Projektsteuerung als Leistungsbild angelegt, aber noch ohne
+   Leistungsphasen (fehlende geprüfte Quelle für Handlungsbereiche/
+   Projektstufen-Gewichtung). Als Nächstes: Heft 15 (SiGeKo) oder Heft 17
+   (Brandschutz, Quelle bereits vorhanden).
 8. **HOAI 2013** als zweite `FEE_GROUPS`-Zeile — Altverträge rechnen weiter
    nach der Fassung, die bei Vertragsschluss galt. Das Modell trägt mehrere
    Fassungen bereits; zu klären ist die Vorbelegung nach Vertragsdatum.
@@ -268,7 +268,7 @@ Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
 
 ---
 
-## 8. Honorarzonen-Objektliste (Migration 0120, laufend)
+## 7. Honorarzonen-Objektliste (Migration 0120, laufend)
 
 Neue globale Referenztabelle `FEE_ZONE_LOOKUP` (`FEE_MASTER_ID`, `CATEGORY`,
 `DESCRIPTION`, `ZONE_ID`, `SORT_ORDER`) — pro Zeile ein Sachverhalt, der
@@ -301,7 +301,7 @@ verifiziert) ist strukturell etwas anderes und braucht eine eigene Tabelle
 
 ---
 
-## 9. § 42 Ingenieurbauwerke / § 46 Verkehrsanlagen in `din276.js`
+## 8. § 42 Ingenieurbauwerke / § 46 Verkehrsanlagen in `din276.js`
 
 Beide Leistungsbilder existieren seit Migration 0115 (Masters 11/12), hatten
 aber nie eine Anrechenbarkeits-Regel — Nutzerinnen mussten die anrechenbaren
@@ -332,6 +332,49 @@ des DIN276-Moduls, nicht nur eine neue Regel.
 **Folge**: Die in Anlage 1.4 zurückgestellte Bauvermessungs-Regel
 (80 %/100 % von § 33/§ 42/§ 46 je nach Objektart) ist jetzt nicht mehr
 blockiert, aber noch nicht gebaut — kein Teil dieser Anfrage.
+
+---
+
+## 9. AHO-Hefte — Kalkulationstyp `percent_of_baukosten` (Migration 0121, begonnen)
+
+Erster Schritt Richtung AHO. Wichtiger Unterschied zur HOAI: AHO-Honorare
+sind **keine gesetzlich bindende Honorarzonentafel**, sondern eine
+Verbandsempfehlung — das Honorar wird meist als frei vereinbarter
+Prozentsatz der anrechenbaren Kosten verhandelt (oder als Zeithonorar, das
+bereits über `BILLING_TYPE_ID=2`/TEC abgebildet ist). Das bestehende Zonen-/
+Tafel-Modell passt hier nicht.
+
+**Architektur** (mit User abgestimmt): vierter `BASE_TYPE`
+`percent_of_baukosten` — kein Zonen-Dropdown, `ZONE_PERCENT` wird zum frei
+eingetragenen Honorarsatz % zweckentfremdet, Grundhonorar je Kx = Kx ×
+Honorarsatz / 100. K0..K4 bleiben nutzbar wie bei `cost_eur` (Kostenschätzung/
+-berechnung/-anschlag-Fortschreibung), DIN276-Editor-Button bleibt sichtbar
+(anders als bei `area_ha`/`verrechnungseinheiten`, wo er keinen Sinn ergibt).
+`calculateRevenueFields()` fragt `FEE_MASTERS.BASE_TYPE` selbst ab
+(Soft-Fail, falls Migration noch nicht gelaufen ist) statt dass der Aufrufer
+es durchreichen muss.
+
+**⚠️ Quellenlage anders als bei allem bisherigen in dieser Reihe**: AHO-Hefte
+sind kostenpflichtige Verbandspublikationen, kein frei zugänglicher
+Gesetzestext. Migration 0121 legt bewusst NUR den Kalkulationstyp + das
+Leistungsbild „AHO_9 – Projektsteuerung" an — OHNE Leistungsphasen
+(Handlungsbereiche A–E, Projektstufen) und OHNE Honorarsatz-Richtwerte, weil
+deren genaue Gewichtung/Höhe nicht aus einer geprüften Quelle stammt, sondern
+aus allgemeinem Fachwissen. User hat dem nach ausdrücklichem Hinweis auf
+dieses Risiko zugestimmt („aus allgemeinem Wissen arbeiten"). Nutzerinnen
+tragen den Honorarsatz frei ein — keine erfundene Tafel, die wie ein
+geprüfter Wert aussieht, aber keiner ist.
+
+**Für Heft 17 (Brandschutz) liegt bereits eine Quelle vor** (User-Hinweis,
+siehe `reference_aho_heft17_source`-Memory):
+https://www.buero-romig.de/Home/Downloadbereich/downloadbereich.html —
+„Leistungsbild und Honorierung gemäß AHO Heft 17 2022" +
+„Überwachungsstufen LP 8 Heft 17 AHO 2022" als PDF. Vor Heft 17 diese PDFs
+lesen und wie bei der HOAI verifizieren statt zu spekulieren — kein Grund,
+dort denselben Vorbehalt wie bei Heft 9 zu wiederholen.
+
+**Offen**: Leistungsphasen für Heft 9 (Handlungsbereiche/Projektstufen),
+danach Heft 15 (SiGeKo) und Heft 17 (Brandschutz, Quelle vorhanden).
 
 ---
 

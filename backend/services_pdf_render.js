@@ -1488,6 +1488,7 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
       baseType,
       isAreaHa:            baseType === 'area_ha',
       isVerrechnungseinheiten: baseType === 'verrechnungseinheiten',
+      isPercentOfBaukosten: baseType === 'percent_of_baukosten',
       isSingleValue:       baseType === 'area_ha' || baseType === 'verrechnungseinheiten',
       baseLabel:           baseType === 'area_ha' ? 'Plangebiet (ha)' : baseType === 'verrechnungseinheiten' ? 'Verrechnungseinheiten (VE)' : 'Baukosten (€)',
       zoneName,

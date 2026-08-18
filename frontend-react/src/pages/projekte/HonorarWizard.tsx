@@ -257,13 +257,17 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   // Bemessungsgrundlage des Leistungsbilds — bestimmt UI/PDF-Labels und ob
   // K0..K4 oder nur ein einzelnes Basis-Feld (ha / VE) angezeigt wird.
   // Fallback 'cost_eur' = bisheriges Verhalten.
-  const baseType: 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' =
+  const baseType: 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' | 'percent_of_baukosten' =
     calcMaster?.BASE_TYPE
     ?? (feeMasterId
           ? (masters.find(m => String(m.ID) === String(feeMasterId))?.BASE_TYPE ?? 'cost_eur')
           : 'cost_eur')
   const isAreaHa  = baseType === 'area_ha'
   const isVerrechnungseinheiten = baseType === 'verrechnungseinheiten'
+  // Kalkulationstypen ohne Honorarzone/-tafel (z. B. AHO-Leistungsbilder):
+  // K0..K4 bleiben nutzbar wie bei cost_eur, nur ohne Zonen-Interpolation —
+  // "Zonenanteil %" wird zum frei vereinbarten Honorarsatz % zweckentfremdet.
+  const isPercentOfBaukosten = baseType === 'percent_of_baukosten'
   // area_ha und verrechnungseinheiten haben beide nur EINEN Basiswert (kein
   // K0..K4-Band, keine Baukosten-Zuschläge) — unterscheiden sich nur im Label.
   const isSingleValue = isAreaHa || isVerrechnungseinheiten
@@ -768,21 +772,29 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </select>
             </div>
           )}
+          {!isPercentOfBaukosten && (
+            <div className="form-group">
+              <label style={{ display: 'inline-flex', alignItems: 'center' }}>
+                Honorarzone <HelpHint id="hoai.zone" />
+              </label>
+              <select value={basis.ZONE_ID} onChange={e => setBasis(b => ({ ...b, ZONE_ID: e.target.value }))}>
+                <option value="">—</option>
+                {zones.map(z => <option key={z.ID} value={z.ID}>{z.NAME_SHORT}{z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}</option>)}
+              </select>
+              <button type="button" className="btn-small" style={{ marginTop: 6 }} onClick={() => setObjektlisteOpen(true)}>
+                Zone anhand Objektliste bestimmen …
+              </button>
+            </div>
+          )}
           <div className="form-group">
-            <label style={{ display: 'inline-flex', alignItems: 'center' }}>
-              Honorarzone <HelpHint id="hoai.zone" />
-            </label>
-            <select value={basis.ZONE_ID} onChange={e => setBasis(b => ({ ...b, ZONE_ID: e.target.value }))}>
-              <option value="">—</option>
-              {zones.map(z => <option key={z.ID} value={z.ID}>{z.NAME_SHORT}{z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}</option>)}
-            </select>
-            <button type="button" className="btn-small" style={{ marginTop: 6 }} onClick={() => setObjektlisteOpen(true)}>
-              Zone anhand Objektliste bestimmen …
-            </button>
-          </div>
-          <div className="form-group">
-            <label>Zonenanteil %</label>
+            <label>{isPercentOfBaukosten ? 'Honorarsatz %' : 'Zonenanteil %'}</label>
             <input type="number" step="0.01" value={basis.ZONE_PERCENT} onChange={e => setBasis(b => ({ ...b, ZONE_PERCENT: e.target.value }))} />
+            {isPercentOfBaukosten && (
+              <p className="admin-section-hint">
+                Frei vereinbarter Prozentsatz der Bemessungsgrundlage (kein gesetzliches Zonenband) —
+                Grundhonorar = Kx × Honorarsatz.
+              </p>
+            )}
           </div>
           <p className="admin-block-title" style={{ marginTop: 12 }}>{baseLabel}</p>
           {isSingleValue ? (

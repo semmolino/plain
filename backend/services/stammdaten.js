@@ -46,7 +46,36 @@ function resolveRevenueStrategy() {
 
 async function calculateRevenueFields(supabase, { feeMasterId, zoneId, zonePercent, costsByKey }) {
   const empty = { REVENUE_K0: null, REVENUE_K1: null, REVENUE_K2: null, REVENUE_K3: null, REVENUE_K4: null };
-  if (!feeMasterId || !zoneId) return empty;
+  if (!feeMasterId) return empty;
+
+  // Kalkulationstypen ohne Honorarzone/-tafel (z. B. AHO-Leistungsbilder wie
+  // Projektsteuerung): kein Zonen-Interpolations-Mechanismus, stattdessen
+  // Grundhonorar je Kx = Kx × frei vereinbarter Prozentsatz — wie bei
+  // cost_eur bleiben K0..K4 nutzbar (z. B. für Kostenschätzung/-berechnung/
+  // -anschlag), nur ohne Zonen-Interpolation. ZONE_PERCENT wird hier als
+  // Honorarsatz % zweckentfremdet — es gibt kein Zonenband, das es sonst
+  // beschreiben würde. Soft-fail (try/catch): falls BASE_TYPE noch nicht
+  // existiert (Migration nicht gelaufen), fällt der Code durch auf den
+  // bisherigen Zonen-Pfad.
+  try {
+    const { data: fm } = await supabase.from("FEE_MASTERS").select("BASE_TYPE").eq("ID", feeMasterId).maybeSingle();
+    if (fm?.BASE_TYPE === "percent_of_baukosten") {
+      const pct = toNumberOrNull(zonePercent);
+      const revenueForKx = (costKey) => {
+        const kx = toNumberOrNull(costsByKey?.[costKey]);
+        return (kx === null || pct === null) ? null : Math.round(((kx * pct) / 100) * 100) / 100;
+      };
+      return {
+        REVENUE_K0: revenueForKx("CONSTRUCTION_COSTS_K0"),
+        REVENUE_K1: revenueForKx("CONSTRUCTION_COSTS_K1"),
+        REVENUE_K2: revenueForKx("CONSTRUCTION_COSTS_K2"),
+        REVENUE_K3: revenueForKx("CONSTRUCTION_COSTS_K3"),
+        REVENUE_K4: revenueForKx("CONSTRUCTION_COSTS_K4"),
+      };
+    }
+  } catch (_) { /* BASE_TYPE-Spalte/Migration fehlt -> bisheriges Verhalten */ }
+
+  if (!zoneId) return empty;
 
   const { data: zone, error: zoneErr } = await supabase.from("FEE_ZONES").select("ID, NAME_SHORT").eq("ID", zoneId).single();
   if (zoneErr) throw new Error(zoneErr.message);
