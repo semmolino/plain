@@ -294,6 +294,15 @@ function anrechenbareKostenBauphysikRaumakustik(estimate, opts = {}) {
   };
 }
 
+// Anlage 1.3.2 Abs. 1: "Das Honorar der Grundleistungen richtet sich nach den
+// anrechenbaren Kosten der Tragwerksplanung nach § 50 Absatz 1 bis 3 fuer das
+// gesamte Objekt aus Bauwerk und Baugrube." Keine eigene Regel — identisch zur
+// Tragwerksplanung. Die Baugrube ist in DIN 276-1:2008-12 KG 310, also bereits
+// Teil von KG 300; die Tragwerk-Regel deckt "Bauwerk und Baugrube" damit ab.
+function anrechenbareKostenGeotechnik(estimate) {
+  return anrechenbareKostenTragwerk(estimate);
+}
+
 // Registry: Leistungsbild-Typ → Regelfunktion (estimate, opts) → Ergebnis.
 const RULES = {
   gebaeude:    anrechenbareKostenGebaeude,
@@ -303,6 +312,7 @@ const RULES = {
   bauphysik_waerme:      anrechenbareKostenBauphysikWaerme,
   bauphysik_bauakustik:  anrechenbareKostenBauphysikBauakustik,
   bauphysik_raumakustik: anrechenbareKostenBauphysikRaumakustik,
+  geotechnik:            anrechenbareKostenGeotechnik,
 };
 
 /**
@@ -334,6 +344,7 @@ module.exports = {
   anrechenbareKostenBauphysikWaerme,
   anrechenbareKostenBauphysikBauakustik,
   anrechenbareKostenBauphysikRaumakustik,
+  anrechenbareKostenGeotechnik,
   anrechenbareKosten,
   parseLeistungsbild,
   kgHundred,

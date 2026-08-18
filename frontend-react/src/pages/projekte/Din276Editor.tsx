@@ -160,6 +160,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                 <option value="bauphysik_waerme">Wärmeschutz und Energiebilanzierung (Anlage 1.2.3)</option>
                 <option value="bauphysik_bauakustik">Bauakustik (Anlage 1.2.4)</option>
                 <option value="bauphysik_raumakustik">Raumakustik (Anlage 1.2.5)</option>
+                <option value="geotechnik">Geotechnik (Anlage 1.3)</option>
               </select>
             </div>
             {lb === 'tga' && (
@@ -221,6 +222,13 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
               Für die Technische Ausrüstung wird je Anlagengruppe getrennt gerechnet. Erfasse die Kosten
               der gewählten Anlagengruppe als eigene Kostengruppen-Zeile (z. B. <strong>{anlagengruppe}</strong>) —
               das Zusammenfassen mehrerer Anlagengruppen (Mischhonorar) ist noch nicht abgebildet.
+            </p>
+          )}
+          {lb === 'geotechnik' && (
+            <p className="empty-note" style={{ marginTop: 0, marginBottom: 8 }}>
+              Geotechnik hat keine eigene Anrechenbarkeitsregel — Anlage 1.3.2 Abs. 1 verweist auf § 50
+              Abs. 1–3 (Tragwerksplanung): 55 % der Kosten für Baukonstruktionen (KG 300) und 10 % der
+              Kosten der Technischen Ausrüstung (KG 400), für das gesamte Objekt aus Bauwerk und Baugrube.
             </p>
           )}
 
@@ -290,7 +298,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
           {result && (
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>
-                Herleitung ({lb === 'tragwerk' ? '§ 50' : lb === 'freianlagen' ? '§ 38/40' : lb === 'tga' ? '§ 53/54' : '§ 33'} HOAI)
+                Herleitung ({(lb === 'tragwerk' || lb === 'geotechnik') ? '§ 50' : lb === 'freianlagen' ? '§ 38/40' : lb === 'tga' ? '§ 53/54' : '§ 33'} HOAI)
               </div>
               <div className="table-scroll">
                 <table className="master-table">

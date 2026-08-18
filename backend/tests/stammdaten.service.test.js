@@ -5,6 +5,7 @@ const {
   getRevenueByKx,
   calculatePhaseRevenue,
   calculateRevenueFields,
+  feePhaseSortKey,
 } = require("../services/stammdaten");
 
 // ── toNumberOrNull ────────────────────────────────────────────────────────────
@@ -159,5 +160,32 @@ describe("calculateRevenueFields", () => {
         costsByKey: {},
       })
     ).rejects.toThrow("DB error");
+  });
+});
+
+// ── feePhaseSortKey ───────────────────────────────────────────────────────────
+
+describe("feePhaseSortKey", () => {
+  it("parst die führende Zahl aus NAME_SHORT, wenn kein SORT_ORDER gesetzt ist", () => {
+    expect(feePhaseSortKey({ NAME_SHORT: "LPH 1" })).toBe(1);
+    expect(feePhaseSortKey({ NAME_SHORT: "LPH 9" })).toBe(9);
+  });
+  it("bevorzugt SORT_ORDER vor dem Namens-Parsing", () => {
+    expect(feePhaseSortKey({ NAME_SHORT: "LPH 9", SORT_ORDER: 1 })).toBe(1);
+  });
+  it("liefert MAX_SAFE_INTEGER für Namen ohne Ziffer und ohne SORT_ORDER (z. B. Geotechnik vor 0117)", () => {
+    expect(feePhaseSortKey({ NAME_SHORT: "TL a" })).toBe(Number.MAX_SAFE_INTEGER);
+  });
+  it("sortiert Teilleistungen a/b/c korrekt, wenn SORT_ORDER gesetzt ist", () => {
+    const phases = [
+      { NAME_SHORT: "TL c", SORT_ORDER: 3 },
+      { NAME_SHORT: "TL a", SORT_ORDER: 1 },
+      { NAME_SHORT: "TL b", SORT_ORDER: 2 },
+    ];
+    const sorted = [...phases].sort((a, b) => feePhaseSortKey(a) - feePhaseSortKey(b));
+    expect(sorted.map((p) => p.NAME_SHORT)).toEqual(["TL a", "TL b", "TL c"]);
+  });
+  it("behandelt fehlende Phase (undefined) wie MAX_SAFE_INTEGER", () => {
+    expect(feePhaseSortKey(undefined)).toBe(Number.MAX_SAFE_INTEGER);
   });
 });

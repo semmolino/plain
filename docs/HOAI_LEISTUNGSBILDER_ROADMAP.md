@@ -1,6 +1,6 @@
 # Leistungsbilder im Kalkulationsmodul — Bestand, Lücken, Reihenfolge
 
-Stand: 18.08.2026
+Stand: 18.08.2026 (Geotechnik ergänzt)
 
 Was das Kalkulationsmodul heute kann, was fehlt, und in welcher Reihenfolge
 die Lücken geschlossen werden. Betrifft `FEE_*`-Stammdaten,
@@ -53,7 +53,7 @@ Beratungsleistungen** (§ 3 Abs. 1). Sieben Honorartafeln:
 | 1.2.3 | Wärmeschutz und Energiebilanzierung | 5 | anrechenbare Kosten (€) | 250 T–25 Mio | **erledigt** (0116) |
 | 1.2.4 | Bauakustik | 3 | anrechenbare Kosten (€) | 250 T–25 Mio | **erledigt** (0116) |
 | 1.2.5 | Raumakustik | 5 | anrechenbare Kosten (€), je Innenraum | 50 T–7,5 Mio | **erledigt** (0116) |
-| 1.3.4 | Geotechnik | 5 | anrechenbare Kosten (€) | 50 T–25 Mio | offen |
+| 1.3.4 | Geotechnik | 5 | anrechenbare Kosten (€) | 50 T–25 Mio | **erledigt** (0117) |
 | 1.4.8 (1) | Ingenieurvermessung — Planungsbegleitende Vermessung | 5 | **Verrechnungseinheiten** | 6–11.726 VE | offen |
 | 1.4.8 (2) | Ingenieurvermessung — Bauvermessung | 5 | anrechenbare Kosten (€) | 50 T–10 Mio | offen |
 
@@ -76,13 +76,17 @@ Betroffen: `chk_fee_masters_base_type` (Migration 0054/0115), der
 `FeeBaseType`-Union in `api/fee.ts`, die Einheitenbeschriftung im
 `HonorarWizard` und die PDF-Vorlage `honorar.njk`.
 
-### 3.2 Leistungsbilder ohne LPH-Nummerierung
+### 3.2 Leistungsbilder ohne LPH-Nummerierung — gelöst (0117)
 
-`feePhaseSortKey()` in `services/stammdaten.js` zieht die erste Zahl aus
-`NAME_SHORT` („LPH 1" → 1) und liefert sonst `MAX_SAFE_INTEGER` — dann
-sortieren alle Phasen gleich und die Reihenfolge wird instabil. Bauphysik ist
-davon nicht betroffen (LPH 1–7), Geotechnik voraussichtlich schon. Vor 1.3.4
-zu härten: expliziter `SORT_ORDER` auf `FEE_PHASE` statt Namensparsing.
+`feePhaseSortKey()` in `services/stammdaten.js` zog die erste Zahl aus
+`NAME_SHORT` („LPH 1" → 1) und lieferte sonst `MAX_SAFE_INTEGER` — dann
+sortierten alle Phasen gleich und die Reihenfolge wurde instabil. Bauphysik
+war davon nicht betroffen (LPH 1–7), Geotechnik (Teilleistungen „TL a"/„TL
+b"/„TL c", keine Ziffer im Namen) schon. Gelöst durch `FEE_PHASE.SORT_ORDER`
+(nullable, Migration 0117): `feePhaseSortKey()` bevorzugt jetzt `SORT_ORDER`,
+wenn gesetzt, sonst Namens-Parsing wie bisher — die 17 bestehenden
+Leistungsbilder bleiben unverändert (ihr `SORT_ORDER` ist `NULL`). Künftige
+Leistungsbilder ohne LPH-Nummerierung setzen `SORT_ORDER` explizit.
 
 ### 3.3 Anrechenbare Kosten je Leistungsbild
 
@@ -105,7 +109,7 @@ Teil dieser Reihe.
 
 ---
 
-## 4. Erledigt: Anlage 1.2 Bauphysik
+## 4. Erledigt: Anlage 1.2 Bauphysik, Anlage 1.3 Geotechnik
 
 Migrationen `0115` (Schema + Bestand) und `0116` (Bauphysik).
 
@@ -131,6 +135,23 @@ Rauminhalt des Innenraums und Bruttorauminhalt des Gebäudes. Beide kommen als
 Query-Parameter an `GET /din276/estimates/:id/anrechenbar`. Für mehrere Räume
 ist je Raum eine eigene Berechnung anzulegen.
 
+### Anlage 1.3 Geotechnik (Migration 0117)
+
+Fünf Honorarzonen, 50.000–25.000.000 € anrechenbare Kosten. Zwei
+Besonderheiten, keine davon ein neuer Regelsatz:
+
+- **Kein LPH-Schema.** Drei Teilleistungen a/b/c (15/35/50 %) statt LPH 1–9 —
+  siehe 3.2. `FEE_PHASE.SORT_ORDER` löst das jetzt allgemein, nicht nur für
+  Geotechnik.
+- **Keine eigene Anrechenbarkeits-Regel.** Anlage 1.3.2 Abs. 1 verweist
+  direkt auf „die anrechenbaren Kosten der Tragwerksplanung nach § 50 Absatz
+  1 bis 3 für das gesamte Objekt aus Bauwerk und Baugrube". Baugrube ist in
+  DIN 276-1:2008-12 KG 310, also bereits Teil von KG 300 — die bestehende
+  Tragwerk-Regel (55 % KG 300 + 10 % KG 400) deckt das ab.
+  `anrechenbareKostenGeotechnik()` in `services/din276.js` ist deshalb nur
+  ein Alias auf `anrechenbareKostenTragwerk()`, Registry-Schlüssel
+  `geotechnik`.
+
 ---
 
 ## 5. Bestandskorrekturen in 0115
@@ -152,7 +173,7 @@ ist je Raum eine eigene Berechnung anzulegen.
 ## 6. Reihenfolge
 
 1. ~~Anlage 1.2 Bauphysik~~ — erledigt (0115/0116)
-2. **Anlage 1.3 Geotechnik** — vorher 3.2 (`SORT_ORDER`) klären
+2. ~~Anlage 1.3 Geotechnik~~ — erledigt (0117), inkl. `SORT_ORDER` (3.2)
 3. **Anlage 1.1 Umweltverträglichkeitsstudie** — `area_ha`, Modell trägt das schon
 4. **Anlage 1.4 Ingenieurvermessung** — braucht 3.1 (`BASE_TYPE`), zwei Tafeln
 5. **Zuschlagskatalog** (3.4) — kleiner Aufwand, wirkt auf jede Berechnung

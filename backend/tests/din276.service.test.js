@@ -5,6 +5,7 @@ const {
   anrechenbareKostenTragwerk,
   anrechenbareKostenFreianlagen,
   anrechenbareKostenTGA,
+  anrechenbareKostenGeotechnik,
   anrechenbareKosten,
   parseLeistungsbild,
   kgHundred,
@@ -157,6 +158,22 @@ describe("anrechenbareKostenTGA (§ 53/54)", () => {
   });
 });
 
+// ── Anlage 1.3 Geotechnik ──────────────────────────────────────────────────────
+
+describe("anrechenbareKostenGeotechnik (Anlage 1.3.2)", () => {
+  it("rechnet identisch zur Tragwerk-Regel (55 % KG 300 + 10 % KG 400)", () => {
+    const groups = [g("300", 1000000), g("400", 200000)];
+    const geotechnik = anrechenbareKostenGeotechnik({ groups });
+    const tragwerk = anrechenbareKostenTragwerk({ groups });
+    expect(geotechnik.anrechenbareKosten).toBe(tragwerk.anrechenbareKosten);
+    expect(geotechnik.anrechenbareKosten).toBe(570000);
+  });
+  it("Baugrube (KG 310) ist Teil von KG 300, also mit 55 % erfasst", () => {
+    const r = anrechenbareKostenGeotechnik({ groups: [g("310", 400000), g("330", 600000)] });
+    expect(r.anrechenbareKosten).toBe(550000);
+  });
+});
+
 // ── parseLeistungsbild ────────────────────────────────────────────────────────
 
 describe("parseLeistungsbild", () => {
@@ -186,6 +203,10 @@ describe("anrechenbareKosten (Dispatcher)", () => {
   it("ruft die TGA-Regel mit Anlagengruppe", () => {
     const r = anrechenbareKosten("tga", { groups: [g("430", 80000)] }, { anlagengruppe: "430" });
     expect(r.anrechenbareKosten).toBe(80000);
+  });
+  it("ruft die Geotechnik-Regel", () => {
+    const r = anrechenbareKosten("geotechnik", { groups: [g("300", 100000)] });
+    expect(r.anrechenbareKosten).toBe(55000);
   });
   it("wirft bei unbekanntem Leistungsbild", () => {
     expect(() => anrechenbareKosten("unbekannt", { groups: [] })).toThrow();

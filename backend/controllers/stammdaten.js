@@ -479,14 +479,14 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     if (activePhases.length === 0) return res.status(400).json({ error: "Alle Leistungsphasen haben 0 % und 0 € — bitte Honorarwerte eintragen." });
 
     const phaseIds = Array.from(new Set(activePhases.map((row) => row.FEE_PHASE_ID).filter(Boolean)));
-    const { data: phaseDefs, error: phaseDefsErr } = await supabase.from("FEE_PHASE").select("ID, NAME_SHORT, NAME_LONG").in("ID", phaseIds);
+    const { data: phaseDefs, error: phaseDefsErr } = await supabase.from("FEE_PHASE").select("ID, NAME_SHORT, NAME_LONG, SORT_ORDER").in("ID", phaseIds);
     if (phaseDefsErr) return res.status(500).json({ error: phaseDefsErr.message });
     const phaseMap = new Map((phaseDefs || []).map((row) => [row.ID, row]));
 
     // In LPH-Reihenfolge sortieren (statt FEE_PHASE_ID), damit die angelegten
     // Projektelemente die gleiche Reihenfolge wie der Wizard haben.
     activePhases.sort((a, b) =>
-      svc.feePhaseSortKey(phaseMap.get(a.FEE_PHASE_ID)?.NAME_SHORT) - svc.feePhaseSortKey(phaseMap.get(b.FEE_PHASE_ID)?.NAME_SHORT)
+      svc.feePhaseSortKey(phaseMap.get(a.FEE_PHASE_ID)) - svc.feePhaseSortKey(phaseMap.get(b.FEE_PHASE_ID))
       || (Number(a.FEE_PHASE_ID) - Number(b.FEE_PHASE_ID)));
 
     const extrasPercent = Number(father.EXTRAS_PERCENT ?? 0) || 0;

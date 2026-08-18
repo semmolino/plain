@@ -109,12 +109,16 @@ function calculatePhaseRevenue(feePercent, revenueBase) {
   return Math.round(((pct * base) / 100) * 100) / 100;
 }
 
-// Sortierschlüssel für Leistungsphasen: führende Zahl aus NAME_SHORT
-// ("LPH 1" → 1). Ohne diesen Schlüssel werden Phasen nach FEE_PHASE_ID
-// sortiert — bei Leistungsbildern, deren Phasen nicht in LPH-Reihenfolge
-// angelegt wurden (z. B. Bauleitplanung), erscheint dann "LPH 2, LPH 3, LPH 1".
-function feePhaseSortKey(nameShort) {
-  const m = String(nameShort || "").match(/\d+/);
+// Sortierschlüssel für Leistungsphasen. Bevorzugt SORT_ORDER (explizit
+// gepflegt); ohne SORT_ORDER Fallback auf die führende Zahl aus NAME_SHORT
+// ("LPH 1" → 1). Der Fallback greift bei Leistungsbildern, deren
+// Teilleistungen keine Nummer im Namen tragen (z. B. Geotechnik: "TL a"/"TL
+// b"/"TL c") NICHT — dort ist SORT_ORDER Pflicht, sonst sortieren alle Zeilen
+// gleich (MAX_SAFE_INTEGER) und die Reihenfolge wird instabil.
+function feePhaseSortKey(phase) {
+  const sortOrder = toNumberOrNull(phase?.SORT_ORDER);
+  if (sortOrder !== null) return sortOrder;
+  const m = String(phase?.NAME_SHORT || "").match(/\d+/);
   return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
 }
 
@@ -129,7 +133,7 @@ async function loadPhaseRowsWithLabels(supabase, calcMasterId) {
   const phaseIds = Array.from(new Set((phaseRows || []).map((r) => r.FEE_PHASE_ID).filter(Boolean)));
   let phaseMap = new Map();
   if (phaseIds.length) {
-    const { data: phases, error: phaseErr } = await supabase.from("FEE_PHASE").select("ID, NAME_SHORT, NAME_LONG, FEE_PERCENT").in("ID", phaseIds);
+    const { data: phases, error: phaseErr } = await supabase.from("FEE_PHASE").select("ID, NAME_SHORT, NAME_LONG, FEE_PERCENT, SORT_ORDER").in("ID", phaseIds);
     if (phaseErr) throw new Error(phaseErr.message);
     phaseMap = new Map((phases || []).map((p) => [p.ID, p]));
   }
@@ -144,8 +148,8 @@ async function loadPhaseRowsWithLabels(supabase, calcMasterId) {
       };
     })
     .sort((a, b) => {
-      const ka = feePhaseSortKey(phaseMap.get(a.FEE_PHASE_ID)?.NAME_SHORT);
-      const kb = feePhaseSortKey(phaseMap.get(b.FEE_PHASE_ID)?.NAME_SHORT);
+      const ka = feePhaseSortKey(phaseMap.get(a.FEE_PHASE_ID));
+      const kb = feePhaseSortKey(phaseMap.get(b.FEE_PHASE_ID));
       return ka - kb || (Number(a.FEE_PHASE_ID) - Number(b.FEE_PHASE_ID));
     });
 }
