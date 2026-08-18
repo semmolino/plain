@@ -62,6 +62,12 @@ export interface FeeSurchargeGlobal {
   NAME_SHORT:      string
   NAME_LONG:       string | null
   SURCHARGE_TYPE:  string | null
+  /** Vorschlagswert beim Hinzufügen; negativ bei Minderungen (§ 11 Abs. 3). */
+  DEFAULT_PERCENT?: number | null
+  /** Gesetzliche Obergrenze, je Leistungsbild unterschiedlich (33 % / 50 %). */
+  MAX_PERCENT?:     number | null
+  /** Fundstelle, z. B. "§ 6 Abs. 2, § 36 Abs. 1". */
+  LEGAL_REF?:       string | null
 }
 
 export interface FeeCalcSurcharge {

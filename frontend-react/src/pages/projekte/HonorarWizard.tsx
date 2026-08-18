@@ -627,7 +627,11 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       {
         FEE_CALC_MASTER_ID: calcMaster.ID, FEE_SURCHARGE_ID: g.ID,
         NAME_SHORT: g.NAME_SHORT, NAME_LONG: g.NAME_LONG ?? '',
-        PERCENT: null, BASE_AMOUNT: totalPhaseRev + blTotal, AMOUNT: null,
+        // Vorschlagswert aus dem Katalog übernehmen (z. B. 20 % Umbauzuschlag
+        // nach § 6 Abs. 2 Satz 4, −50 % Wiederholungsminderung). Bleibt
+        // änderbar; ohne Vorschlagswert wie bisher leer.
+        PERCENT: g.DEFAULT_PERCENT ?? null,
+        BASE_AMOUNT: totalPhaseRev + blTotal, AMOUNT: null,
         SORT_ORDER: prev.length, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false, BL_FILTER: null,
       },
     ])
@@ -1114,12 +1118,20 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           {globalSurcharges.length > 0 && (
             <div style={{ marginBottom: 10 }}>
               <span style={{ fontSize: 12, color: 'var(--text-3)', marginRight: 8 }}>Vorschläge:</span>
-              {globalSurcharges.filter(g => !alreadyAdded.has(g.ID)).map(g => (
-                <button key={g.ID} type="button" className="btn-small" style={{ marginRight: 6, marginBottom: 4 }}
-                  onClick={() => addSurchargeFromGlobal(g)}>
-                  + {g.NAME_SHORT}
-                </button>
-              ))}
+              {globalSurcharges.filter(g => !alreadyAdded.has(g.ID)).map(g => {
+                const grenze = g.MAX_PERCENT != null ? `, max. ${g.MAX_PERCENT} %` : ''
+                const titel = [g.NAME_LONG, g.LEGAL_REF ? `${g.LEGAL_REF}${grenze}` : null]
+                  .filter(Boolean).join('\n\n')
+                return (
+                  <button key={g.ID} type="button" className="btn-small" style={{ marginRight: 6, marginBottom: 4 }}
+                    onClick={() => addSurchargeFromGlobal(g)} title={titel || undefined}>
+                    + {g.NAME_SHORT}
+                    {g.DEFAULT_PERCENT != null && (
+                      <span style={{ color: 'var(--text-3)' }}> ({g.DEFAULT_PERCENT} %)</span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           )}
 

@@ -1,6 +1,6 @@
 # Leistungsbilder im Kalkulationsmodul — Bestand, Lücken, Reihenfolge
 
-Stand: 18.08.2026 (HOAI 2021 Anlage 1, Honorarzonen-Objektlisten, AHO Heft 9+17, HOAI 2013 — alle vollständig)
+Stand: 18.08.2026 (HOAI 2021 + 2013 vollständig, Objektlisten, AHO Heft 9+17, Zuschlagskatalog; offen: Zonen-Punktesystem, AHO Heft 15)
 
 Was das Kalkulationsmodul heute kann, was fehlt, und in welcher Reihenfolge
 die Lücken geschlossen werden. Betrifft `FEE_*`-Stammdaten,
@@ -100,11 +100,12 @@ Jedes neue Leistungsbild braucht seinen eigenen Regelsatz — die Regeln weichen
 stärker voneinander ab, als es auf den ersten Blick wirkt (siehe Bauphysik
 unten). Stand der Regeln und der bewusst offen gelassenen Sonderfälle: § 12.
 
-### 3.4 Zuschlagskatalog ist leer
+### 3.4 Zuschlagskatalog — gelöst (0126)
 
-`FEE_SURCHARGES` enthält keine Zeile. Umbau-/Modernisierungszuschlag (§ 6),
-Instandsetzung, Nebenkosten (§ 14) und Mehrfachbeauftragung (§ 11) tippt
-heute jede Nutzerin frei ein — je Berechnung neu, ohne Prozentvorschlag.
+`FEE_SURCHARGES` war leer; Umbau-/Modernisierungszuschlag (§ 6/§ 36),
+Instandsetzung (§ 12), Wiederholungsminderung (§ 11) und Nebenkosten (§ 14)
+tippte jede Nutzerin frei ein. Migration 0126 befüllt den Katalog samt
+Vorschlagswert, gesetzlicher Obergrenze und Fundstelle — Details in § 13.
 
 ### 3.5 Honorarzonen-Einstufung — Objektlisten gelöst (0120/0124), Punktesystem offen
 
@@ -266,6 +267,18 @@ Anlage 1 (1–4) abgeschlossen. Ab hier vom User am 18.08.2026 priorisiert,
    § 10 unten. **Offen bleibt** die Vorbelegung der Honorarordnung nach
    Vertragsdatum (Verträge vor 2021 → HOAI 2013); aktuell wählt die Nutzerin
    sie im Wizard weiterhin selbst.
+9. ~~**Zuschlagskatalog** (3.4)~~ — erledigt (0126), siehe § 13 unten.
+
+### Was danach noch offen ist
+
+| Thema | Warum offen |
+|---|---|
+| Zonen-**Punktesystem** (UVS, Vermessung, evtl. Bauleitplanung/Landschaftsplanung) | andere Struktur als die Objektliste, braucht eigene Tabelle — § 7 |
+| **Vorbelegung Honorarordnung** nach Vertragsdatum | klein, aber erst seit 0123 überhaupt relevant |
+| **AHO Heft 15** (SiGeKo), **Heft 9 Leistungsphasen** | keine belastbare Quelle gefunden — nicht ohne bauen |
+| **Bauvermessungs-Anrechenbarkeit** (Anlage 1.4.5 Abs. 2) | nicht mehr blockiert (§ 42/§ 46 da), braucht Objektart-Selektor + 80/100-%-Regel |
+| **§ 11 Abs. 2** (mehrere Objekte → Summe der anrechenbaren Kosten) | keine Zuschlagszeile, sondern andere Berechnungsgrundlage — § 13 |
+| Restliche `⚠️`-Vereinfachungen in `din276.js` | bewusst offen, jeweils im Code begründet — § 12 |
 
 ---
 
@@ -586,3 +599,72 @@ fünften, 90 % ab der achten Wiederholung; Abs. 4 auch bei Folgeaufträgen
 zwischen denselben Parteien) nirgends abgebildet ist. Das sind konkrete,
 verbindliche Zahlen der Verordnung — inhaltlich der nächste Nachbar des noch
 offenen Zuschlagskatalogs (3.4) und dort mitzudenken.
+
+---
+
+## 13. Zuschlagskatalog (Migration 0126)
+
+Der Anwendungs-Mechanismus war seit 0039 fertig (`FEE_CALCULATION_SURCHARGES`:
+Prozent oder Festbetrag, wahlweise auf einzelne Leistungsphasen oder BL-Posten
+begrenzt, parallel/kumulativ). Leer war nur der **Katalog**.
+
+Damit die Vorschläge mehr sind als Namen, hat `FEE_SURCHARGES` drei neue
+Spalten: `DEFAULT_PERCENT` (Vorschlagswert), `MAX_PERCENT` (gesetzliche
+Obergrenze) und `LEGAL_REF` (Fundstelle). Der Wizard übernimmt den
+Vorschlagswert beim Hinzufügen und zeigt Fundstelle + Grenze im Tooltip.
+
+| # | Eintrag | Vorschlag | Max | Fundstelle |
+|---|---|---|---|---|
+| 1 | Umbauzuschlag | 20 % | 33 % | § 6 Abs. 2, § 36 Abs. 1 |
+| 2 | Umbauzuschlag | 20 % | 50 % | § 6 Abs. 2, § 36 Abs. 2 |
+| 3 | Instandsetzung | — | 50 % | § 12 Abs. 2 |
+| 4 | Wiederholung 1.–4. | **−50 %** | — | § 11 Abs. 3 |
+| 5 | Wiederholung 5.–7. | **−60 %** | — | § 11 Abs. 3 |
+| 6 | Wiederholung ab 8. | **−90 %** | — | § 11 Abs. 3 |
+| 7 | Nebenkosten | — | — | § 14 |
+
+**Die Obergrenze hängt vom Leistungsbild ab** — deshalb zwei Einträge für
+denselben Zuschlag:
+
+- **bis 33 %**: Gebäude (§ 36 Abs. 1), Freianlagen (§ 40 Abs. 6 verweist auf
+  § 36 Abs. 1), Ingenieurbauwerke (§ 44 Abs. 6), Verkehrsanlagen (§ 48
+  Abs. 6), Bauphysik (Anlage 1.2.3/1.2.4/1.2.5 Abs. 3)
+- **bis 50 %**: Innenräume (§ 36 Abs. 2), Tragwerksplanung (§ 52 Abs. 4),
+  TGA (§ 56 Abs. 5)
+- **gar nicht**: Geotechnik, UVS, Ingenieurvermessung — die HOAI sieht dort
+  keinen Umbauzuschlag vor, also bewusst nicht verknüpft.
+
+`DEFAULT_PERCENT` ist überall 20 %, weil § 6 Abs. 2 Satz 4 genau das als
+vereinbart fingiert, wenn nichts in Textform vereinbart wurde. Die 33/50 %
+gelten laut Wortlaut „bei einem durchschnittlichen Schwierigkeitsgrad" und
+setzen eine Vereinbarung in Textform voraus.
+
+**Zwei Einträge wirken nur auf bestimmte Leistungsphasen** — die Software kann
+das nicht automatisch setzen, der Hinweistext sagt es deshalb an:
+
+- **§ 12 Abs. 2 (Instandsetzung)** erhöht den Prozentsatz der
+  Objektüberwachung/Bauoberleitung um bis zu 50 %, nicht das Gesamthonorar →
+  LPH-Filter auf die Objektüberwachung setzen. Rechnerisch gleichwertig zu
+  einer Erhöhung des Phasen-Prozentsatzes. Nur mit Leistungsbildern verknüpft,
+  die überhaupt eine LPH 8 haben (Tragwerksplanung endet bei LPH 6, Bauphysik
+  bei 7, Geotechnik/UVS/Vermessung haben keine).
+- **§ 11 Abs. 3 (Wiederholung)** ist eine **Minderung** der Leistungsphasen 1
+  bis 6 → negativer Prozentsatz, LPH-Filter auf LPH 1–6. § 11 Abs. 3 nennt
+  ausdrücklich Gebäude, Ingenieurbauwerke, Verkehrsanlagen und Tragwerke;
+  § 54 Abs. 3 erstreckt die Rechtsfolge auf die TGA — genau diese fünf sind
+  verknüpft. (Das ist übrigens der tatsächliche Regelungsgehalt von § 54
+  Abs. 3, der zuvor fälschlich für das Mischhonorar zitiert wurde, siehe
+  § 12.3.)
+
+**Nebenkosten haben bewusst keinen Vorschlagswert.** Die HOAI nennt keinen
+Prozentsatz, sondern lässt pauschal oder Einzelnachweis zu (§ 14 Abs. 3). Ein
+erfundener Default sähe im Katalog aus wie ein Gesetzeswert.
+
+Der Katalog gilt für beide Fassungen (2021 und die 2013er Leistungsbilder aus
+0123) — die Paragraphen sind wortgleich. Die 90 Verknüpfungen sind maschinell
+erzeugt (`gen_surcharges.js`), nicht handgetippt.
+
+**Nicht abgebildet**: § 11 Abs. 2 (mehrere vergleichbare Objekte derselben
+Honorarzone → Honorar nach der Summe der anrechenbaren Kosten). Das ist keine
+Zuschlagszeile, sondern eine andere Berechnungsgrundlage — bräuchte eine
+Zusammenfassung mehrerer Objekte in einer Berechnung.

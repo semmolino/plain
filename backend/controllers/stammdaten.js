@@ -1562,11 +1562,11 @@ async function listFeeSurchargesGlobal(req, res, supabase) {
       if (linkErr) return res.json({ data: [] }); // table may not exist
       const ids = (links || []).map(r => r.FEE_SURCHARGE_ID).filter(Boolean);
       if (!ids.length) return res.json({ data: [] });
-      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, NAME_SHORT, NAME_LONG, SURCHARGE_TYPE").in("ID", ids);
+      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, NAME_SHORT, NAME_LONG, SURCHARGE_TYPE, DEFAULT_PERCENT, MAX_PERCENT, LEGAL_REF").in("ID", ids);
       if (error) return res.json({ data: [] });
       return res.json({ data: data || [] });
     } else {
-      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, NAME_SHORT, NAME_LONG, SURCHARGE_TYPE").order("ID");
+      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, NAME_SHORT, NAME_LONG, SURCHARGE_TYPE, DEFAULT_PERCENT, MAX_PERCENT, LEGAL_REF").order("ID");
       if (error) return res.json({ data: [] });
       return res.json({ data: data || [] });
     }
