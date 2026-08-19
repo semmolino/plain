@@ -2,7 +2,7 @@
 
 **Produktname: „plan&simple"** (kleingeschrieben, mit Ampersand) — so heißt es in der Oberfläche, im Logo und gegenüber Nutzern. Der alte Name „PlaIn" stammt aus der Frühphase; **in jedem user-facing Text „plan&simple" verwenden**. Code-Bezeichner/Ordner (`plain/`, `tenantId`, …) bleiben unverändert.
 
-plan&simple is a **multi-tenant business management tool** for architects and planners: offers, projects, invoices (Abschlags- & Schlussrechnungen), contracts, employees, and address management. It is a German-language product deployed as a public SaaS on Railway.
+plan&simple is a **multi-tenant business management tool** for architects and planners: offers, projects, invoices (Abschlags- & Schlussrechnungen), contracts, employees, and address management. It is a German-language product deployed as a public SaaS on **Scalingo**.
 
 ---
 
@@ -11,11 +11,11 @@ plan&simple is a **multi-tenant business management tool** for architects and pl
 | Layer | Technology |
 |---|---|
 | Backend | Node.js 20 + Express, `@supabase/supabase-js` (service-role client) |
-| Database | Supabase (PostgreSQL), accessed via the JS client — no raw SQL in app code |
+| Database | **Scalingo PostgreSQL** über lokales PostgREST (`127.0.0.1:3001`), angesprochen mit dem supabase-js-Client — kein rohes SQL im App-Code. RLS ist aktiv und erzwungen (`is_system_request()` / `current_tenant_id()`). Das alte Supabase-Projekt hängt nur noch als Altbestand in den Variablen und enthält einen **veralteten Datenstand** — nicht dorthin schreiben. |
 | Auth | Custom JWT (`jsonwebtoken` + `bcryptjs`), 8h expiry, secret from `JWT_SECRET` env var |
 | Frontend | React 18, TypeScript, Vite, Tanstack Query v5, Zustand, React Router v6 |
 | PDF generation | Playwright-chromium + Nunjucks templates (`backend/templates/modern_a/`) |
-| Deployment | Railway — pushes to `main` auto-deploy; frontend built inside the container |
+| Deployment | **Scalingo** (`planandsimple`) — Pushes auf `main` deployen automatisch; Frontend wird im Container gebaut. `Procfile` → `bin/start-web.sh` startet PostgREST **und** Node im selben Container. |
 | E-invoicing | XRechnung (CII + UBL) generated server-side |
 
 ---
@@ -33,7 +33,7 @@ plain/
 │   ├── services_pdf_render.js # Playwright PDF renderer, Nunjucks env
 │   ├── services_einvoice_*.js # XRechnung/CII/UBL builders
 │   ├── templates/modern_a/   # Nunjucks PDF templates (invoice.njk, offer.njk, …)
-│   └── migrations/            # SQL files — run MANUALLY in Supabase SQL editor
+│   └── migrations/            # SQL files — MANUELL gegen die Scalingo-DB einspielen
 ├── frontend-react/
 │   └── src/
 │       ├── api/               # One file per domain — apiClient wrappers + TypeScript types
@@ -57,7 +57,7 @@ plain/
 **Tenant isolation** is enforced at the application layer:
 - `authMiddleware` decodes JWT → sets `req.tenantId`
 - Every service function receives `tenantId` and must include `.eq('TENANT_ID', tenantId)` on every query
-- There is NO database-level RLS enforcing this — a missing `.eq('TENANT_ID', ...)` leaks cross-tenant data
+- Zusätzlich greift seit dem Scalingo-Umzug **RLS in der Datenbank** (`ENABLE`+`FORCE ROW LEVEL SECURITY`, Policy `"TENANT_ID" = current_tenant_id() OR is_system_request()`). Der Mandant kommt als JWT-Claim über PostgREST. Ein vergessenes `.eq('TENANT_ID', ...)` ist damit nicht mehr automatisch ein Leck — aber die Filter bleiben Pflicht, denn Hintergrunddienste laufen mit `sys`-Claim an der Policy vorbei.
 
 **Error pattern** (services throw, controllers catch):
 ```js
@@ -171,7 +171,9 @@ beziehen sich auf diesen früheren Stand.
 
 1. Push to `main` → Scalingo baut über das Node-Buildpack (`scalingo-postbuild` in der
    Root-`package.json`), Start über `Procfile` → `bin/start-web.sh`
-2. **SQL migrations run manually** in the Supabase SQL editor — files are in `backend/migrations/` numbered `0001_…`
+2. **SQL-Migrationen manuell einspielen**, gegen die Scalingo-Datenbank (NICHT mehr im Supabase-Editor):
+   `scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -f backend/migrations/0129_….sql'`
+   Dateien liegen in `backend/migrations/`, nummeriert `0001_…`
 3. Umgebungsvariablen über `scalingo --app planandsimple env-set …` bzw. das Dashboard:
    `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `SMTP_*`, `FRONTEND_URL`
 4. Runbook: `docs/SCALINGO_DEPLOY_RUNBOOK.md`
@@ -191,12 +193,12 @@ Einstellungen → Benachrichtigungen → „Zustellung prüfen".
 - bcrypt password hashing (new accounts; legacy plaintext accounts still exist — see auth.js login fallback)
 - JWT authentication on all non-`/auth` routes
 - Tenant isolation at application layer (services filter by tenantId from JWT)
-- HTTPS via Railway
+- HTTPS via Scalingo
 
 **Known gaps (must fix before public launch):**
 - `JWT_SECRET` falls back to hardcoded `"plain-dev-secret-change-me"` if env var is missing — tokens are forgeable in that state
 - `app.use(cors())` allows all origins — no allowlist
-- Supabase **service-role key** used for all queries (bypasses RLS entirely) — a missing `.eq('TENANT_ID', ...)` in any service leaks data
+- Der frühere Weg (Supabase service-role key, RLS komplett umgangen) gilt nur noch, wenn `POSTGREST_URL` NICHT gesetzt ist. Auf Scalingo läuft alles über PostgREST mit Mandanten-Claim.
 - No rate limiting on auth endpoints (login, signup, password reset) — brute-force vulnerable
 - File uploads stored in `backend/uploads/` with no apparent size/type validation visible
 - No input sanitization middleware (XSS protection relies on Supabase parameterization + React's default escaping)
