@@ -160,8 +160,20 @@ function parseTimeHhmm(v) {
   return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
 }
 
+// Nicht jeder Zeitplan ist monatlich. Die Buchungs-Erinnerung laeuft TAEGLICH:
+// sie hat keine Tagesliste, nur eine Uhrzeit — checkHoursBookingReminders
+// prueft dementsprechend auch gar keinen Tag. Wer diese Unterscheidung
+// uebersieht, haelt einen voellig gesunden taeglichen Zeitplan fuer kaputt
+// ("kein Tag ausgewaehlt"), weil er ihn an monatlichen Regeln misst.
+const TAEGLICHE_TYPEN = new Set(['hours_booking_reminder']);
+
+function istTaeglich(typeKey) {
+  return TAEGLICHE_TYPEN.has(String(typeKey || ''));
+}
+
 // Ist heute ein Tag, an dem dieses Schedule feuert? (nur Datum, ohne Uhrzeit)
 function isFireDay(schedule, today = new Date()) {
+  if (istTaeglich(schedule.TYPE_KEY)) return true;   // taeglich: jeder Tag zaehlt
   const { dateStr, dayOfMonth } = localParts(today);
   const days = Array.isArray(schedule.SCHEDULE_DAYS) ? schedule.SCHEDULE_DAYS : [];
   if (days.includes(dayOfMonth)) return true;
@@ -198,6 +210,7 @@ module.exports = {
   upsertSchedule,
   shouldFireToday,
   isFireDay,
+  istTaeglich,
   hasReachedTimeOfDay,
   localDateStr,
   localParts,

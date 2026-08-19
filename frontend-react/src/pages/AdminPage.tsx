@@ -63,6 +63,7 @@ import {
   type PmNotifyMode,
 } from '@/api/notificationSchedule'
 import { fetchActiveEmployees } from '@/api/projekte'
+import { bueroZuGeraet, geraetZuBuero, bueroHinweis, geraeteZeitzone } from '@/utils/zeitzone'
 import { Modal } from '@/components/ui/Modal'
 import {
   fetchEmailSettings, saveEmailSettings, sendEmailSettingsTest,
@@ -2860,6 +2861,15 @@ function BenachrichtigungenSection() {
 // Grün/rot markierter Befund. Auf Modulebene, nicht in der Render-Funktion:
 // eine dort erzeugte Komponente ist bei jedem Durchlauf eine neue und wird
 // samt Zustand neu eingehängt.
+// Aktuelle Uhrzeit auf dem Gerät, im selben Format wie die Serverangabe —
+// nebeneinander gestellt beantworten die beiden Zeilen die Frage „geht die
+// Uhr des Servers anders als meine?" ohne Kopfrechnen.
+function jetztAufGeraet(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 function Befund({ gut, text }: { gut: boolean; text: string }) {
   return (
     <span style={{ color: gut ? 'var(--success-strong)' : 'var(--danger-strong)', fontWeight: 600 }}>
@@ -2908,13 +2918,40 @@ function ZustellungDiagnoseBlock() {
 
       {offen && data && (
         <div style={{ marginTop: 12 }}>
+          {/* Der eine Befund, der alles andere erklärt: laufen keine
+              Hintergrunddienste, kann keine geplante Erinnerung entstehen —
+              völlig unabhängig davon, wie gut alles darunter aussieht. */}
+          {data.hintergrundJobs.abgeschaltet && (
+            <div style={{
+              border: '1px solid var(--danger)', background: 'var(--danger-bg)',
+              borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+              fontSize: 12, marginBottom: 12, lineHeight: 1.5,
+            }}>
+              <strong>Auf dieser Instanz sind die Hintergrunddienste abgeschaltet.</strong>
+              <br />
+              Damit läuft kein Zeitplan — geplante Erinnerungen können gar nicht entstehen,
+              auch wenn alles Übrige richtig eingestellt ist. Nur „Jetzt ausführen“
+              funktioniert, weil es unmittelbar aus der Anwendung heraus läuft.
+              <br />
+              Ursache ist die Umgebungsvariable <code>DISABLE_BACKGROUND_JOBS=true</code>.
+              Sie gehört auf Nebeninstanzen, damit E-Mails nicht doppelt rausgehen — auf
+              der produktiven Instanz muss sie entfernt werden.
+            </div>
+          )}
+
           <div style={zeile}>
-            <span style={label}>Zeitzone</span>
+            <span style={label}>Zeit auf diesem Gerät</span>
             <span>
-              {data.zeit.zeitzone} · jetzt {data.zeit.jetztLokal}
+              {jetztAufGeraet()} ({geraeteZeitzone()})
+            </span>
+          </div>
+          <div style={zeile}>
+            <span style={label}>Zeit auf dem Server</span>
+            <span>
+              {data.zeit.jetztLokal} ({data.zeit.zeitzone})
               {data.zeit.versatzStunden !== 0 && (
                 <span style={{ color: 'var(--text-3)' }}>
-                  {' '}(UTC {data.zeit.jetztUtc}, {data.zeit.versatzStunden > 0 ? '+' : ''}
+                  {' '}· UTC {data.zeit.jetztUtc} ({data.zeit.versatzStunden > 0 ? '+' : ''}
                   {data.zeit.versatzStunden} h)
                 </span>
               )}
@@ -2926,6 +2963,11 @@ function ZustellungDiagnoseBlock() {
             {data.hintergrundJobs.abgeschaltet
               ? <Befund gut={false} text="abgeschaltet (DISABLE_BACKGROUND_JOBS)" />
               : <span>laufen · Prozess gestartet {data.hintergrundJobs.prozessStartUm.slice(0, 16).replace('T', ' ')} UTC</span>}
+          </div>
+
+          <div style={zeile}>
+            <span style={label}>Datenbankweg</span>
+            <span>{data.datenbank.weg}</span>
           </div>
 
           <div style={zeile}>
@@ -2977,30 +3019,66 @@ function ZustellungDiagnoseBlock() {
               von selbst.
             </p>
           ) : (
-            data.zeitplaene.map(z => (
-              <div key={z.typeKey} style={zeile}>
-                <span style={label}>{z.typeKey}</span>
-                <span>
-                  {z.aktiv ? 'aktiv' : <Befund gut={false} text="inaktiv" />}
-                  {z.tage.length > 0 && <> · Tage {z.tage.join(', ')}</>}
-                  {z.letzterTag && <> · letzter Monatstag</>}
-                  {z.uhrzeit ? <> · {z.uhrzeit} Uhr</> : <> · ohne Uhrzeit</>}
-                  {' · '}
-                  {z.naechsterLauf
-                    ? (z.naechsterLauf.faellig
-                        ? <strong>steht unmittelbar an</strong>
-                        : <>nächster Lauf {z.naechsterLauf.datum}{z.naechsterLauf.uhrzeit ? ` ${z.naechsterLauf.uhrzeit}` : ''}</>)
-                    : <Befund gut={false} text="kein nächster Lauf — kein Tag ausgewählt?" />}
-                  {z.zuletztGefeuert && (
-                    <span style={{ color: 'var(--text-3)' }}> · zuletzt {z.zuletztGefeuert}</span>
-                  )}
-                </span>
-              </div>
-            ))
+            data.zeitplaene.map(z => {
+              // Alle Uhrzeiten in der Zeit des Geräts, damit die Angaben hier
+              // dieselben sind wie in den Einstellungen darüber.
+              const zone    = data.zeit.zeitzone
+              const uhrzeit = z.uhrzeit ? bueroZuGeraet(z.uhrzeit, zone) : null
+              const naechste = z.naechsterLauf?.uhrzeit
+                ? bueroZuGeraet(z.naechsterLauf.uhrzeit, zone)
+                : null
+              return (
+                <div key={z.typeKey} style={zeile}>
+                  <span style={label}>{z.typeKey}</span>
+                  <span>
+                    {z.aktiv ? 'aktiv' : <Befund gut={false} text="inaktiv" />}
+                    {z.taeglich
+                      ? <> · täglich</>
+                      : <>
+                          {z.tage.length > 0 && <> · Tage {z.tage.join(', ')}</>}
+                          {z.letzterTag && <> · letzter Monatstag</>}
+                        </>}
+                    {uhrzeit ? <> · {uhrzeit} Uhr</> : <> · ohne Uhrzeit</>}
+                    {' · '}
+                    {z.naechsterLauf
+                      ? (z.naechsterLauf.faellig
+                          ? <strong>steht unmittelbar an</strong>
+                          : <>nächster Lauf {z.naechsterLauf.datum}{naechste ? ` ${naechste}` : ''}</>)
+                      : <Befund
+                          gut={false}
+                          text={z.taeglich
+                            ? 'kein nächster Lauf — keine Uhrzeit gesetzt'
+                            : 'kein nächster Lauf — kein Tag ausgewählt?'}
+                        />}
+                    {z.zuletztGefeuert && (
+                      <span style={{ color: 'var(--text-3)' }}> · zuletzt {z.zuletztGefeuert}</span>
+                    )}
+                  </span>
+                </div>
+              )
+            })
           )}
         </div>
       )}
     </div>
+  )
+}
+
+// Beschriftung neben einem Uhrzeit-Feld.
+//
+// Im Regelfall — Gerät und Büro in derselben Zone — steht hier schlicht, dass
+// die eigene Uhrzeit gemeint ist. Erst wenn beide auseinanderliegen (Reise,
+// Team über Zeitzonen), kommt die entsprechende Bürozeit dazu. Vorher stand
+// dort pauschal „deutsche Zeit", was jeden zum Nachrechnen zwang, der nicht
+// in Deutschland sitzt — und alle anderen ratlos ließ, ob ihre eigene Uhrzeit
+// gemeint ist oder nicht.
+function ZeitzonenHinweis({ zeit, bueroZone }: { zeit: string; bueroZone: string | null }) {
+  const hinweis = bueroHinweis(zeit, bueroZone)
+  return (
+    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+      deine Uhrzeit ({geraeteZeitzone()}) — die Erinnerung geht ab dann raus
+      {hinweis && <><br />{hinweis}</>}
+    </span>
   )
 }
 
@@ -3035,6 +3113,7 @@ function LeistungsstandReminderBlock() {
   const statuses    = statusData?.data ?? []
   const departments = deptData?.data ?? []
   const employees   = empData?.data ?? []
+  const bueroZone   = scheduleData?.bueroZeitzone ?? null
 
   useEffect(() => {
     const s = scheduleData?.data
@@ -3042,7 +3121,11 @@ function LeistungsstandReminderBlock() {
     setEnabled(s.ENABLED)
     setScheduleDays(s.SCHEDULE_DAYS ?? [25])
     setScheduleLastDay(s.SCHEDULE_LAST_DAY)
-    setScheduleTimeOfDay((s.SCHEDULE_TIME_OF_DAY ?? '09:00').slice(0, 5))
+    // Gespeichert ist Bürozeit — im Feld steht die Uhrzeit des Geräts.
+    setScheduleTimeOfDay(bueroZuGeraet(
+      (s.SCHEDULE_TIME_OF_DAY ?? '09:00').slice(0, 5),
+      scheduleData?.bueroZeitzone ?? null,
+    ))
     setNotifyProjectPm(s.NOTIFY_PROJECT_PM)
     setPmNotifyMode(s.PM_NOTIFY_MODE ?? 'per_project')
     setProjectStatusIds(s.PROJECT_STATUS_IDS ?? [])
@@ -3050,11 +3133,13 @@ function LeistungsstandReminderBlock() {
     setAudienceDepartments(s.AUDIENCE_DEPARTMENTS ?? [])
     setAudienceEmployees(s.AUDIENCE_EMPLOYEES ?? [])
     setLastFiredDate(s.LAST_FIRED_DATE)
-  }, [scheduleData?.data])
+  }, [scheduleData?.data, scheduleData?.bueroZeitzone])
 
   const saveMut = useMutation({
     mutationFn: () => upsertNotificationSchedule(TYPE_KEY, {
-      enabled, scheduleDays, scheduleLastDay, scheduleTimeOfDay,
+      enabled, scheduleDays, scheduleLastDay,
+      // Eingegeben wird Gerätezeit, gespeichert Bürozeit.
+      scheduleTimeOfDay: geraetZuBuero(scheduleTimeOfDay, bueroZone),
       notifyProjectPm, pmNotifyMode, projectStatusIds,
       audienceRoles, audienceDepartments, audienceEmployees,
     }),
@@ -3150,9 +3235,7 @@ function LeistungsstandReminderBlock() {
                   onChange={e => setScheduleTimeOfDay(e.target.value)}
                   style={{ width: 120 }}
                 />
-                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                  deutsche Zeit — die Erinnerung geht ab dieser Uhrzeit raus
-                </span>
+                <ZeitzonenHinweis zeit={scheduleTimeOfDay} bueroZone={bueroZone} />
               </div>
             </div>
 
@@ -3327,19 +3410,25 @@ function HoursBookingReminderBlock() {
     queryFn:  () => fetchNotificationSchedule(TYPE_KEY),
   })
 
+  const bueroZone = scheduleData?.bueroZeitzone ?? null
+
   useEffect(() => {
     const s = scheduleData?.data
     if (!s) return
     setEnabled(s.ENABLED)
-    // DB liefert "HH:MM:SS" oder NULL — Picker erwartet "HH:MM"
-    setScheduleTimeOfDay(s.SCHEDULE_TIME_OF_DAY ? String(s.SCHEDULE_TIME_OF_DAY).slice(0,5) : '17:00')
+    // DB liefert "HH:MM:SS" (Bürozeit) oder NULL — der Picker zeigt die
+    // Uhrzeit des Geräts.
+    setScheduleTimeOfDay(bueroZuGeraet(
+      s.SCHEDULE_TIME_OF_DAY ? String(s.SCHEDULE_TIME_OF_DAY).slice(0, 5) : '17:00',
+      scheduleData?.bueroZeitzone ?? null,
+    ))
     setLastFiredDate(s.LAST_FIRED_DATE)
-  }, [scheduleData?.data])
+  }, [scheduleData?.data, scheduleData?.bueroZeitzone])
 
   const saveMut = useMutation({
     mutationFn: () => upsertNotificationSchedule(TYPE_KEY, {
       enabled,
-      scheduleTimeOfDay,
+      scheduleTimeOfDay: geraetZuBuero(scheduleTimeOfDay, bueroZone),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
@@ -3390,9 +3479,10 @@ function HoursBookingReminderBlock() {
               style={{ width: 140 }}
             />
             <p className="admin-section-hint">
-              Deutsche Zeit. Sobald die Uhrzeit erreicht ist, geht eine Benachrichtigung an
-              alle aktiven Mitarbeiter, die heute noch keine Stunden gebucht haben
-              (Mitarbeiter mit Buchung werden übersprungen).
+              <ZeitzonenHinweis zeit={scheduleTimeOfDay} bueroZone={bueroZone} />
+              <br />
+              Es wird an alle aktiven Mitarbeiter erinnert, die heute noch keine Stunden
+              gebucht haben — wer schon gebucht hat, wird übersprungen.
             </p>
           </div>
           {lastFiredDate && (

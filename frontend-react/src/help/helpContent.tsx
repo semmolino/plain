@@ -722,10 +722,14 @@ export const HELP = {
     title: 'Uhrzeit des Zeitplans',
     body: (
       <>
-        Die Uhrzeit gilt in <strong>deutscher Zeit</strong> (inkl. Sommerzeit),
-        nicht in der Zeitzone des Servers. Die Erinnerung geht beim ersten
-        Durchlauf <strong>ab</strong> dieser Uhrzeit raus — geprüft wird
-        stündlich, es kann also einige Minuten später werden.
+        Die Uhrzeit steht hier in <strong>deiner Gerätezeit</strong> — du musst
+        nichts umrechnen. Gespeichert wird sie als feste Bürozeit, damit der
+        Versandzeitpunkt für alle derselbe bleibt und sich nicht danach richtet,
+        wer zuletzt gespeichert hat. Sitzt du in einer anderen Zeitzone als das
+        Büro, steht die entsprechende Bürozeit als Hinweis unter dem Feld.
+        <br />
+        Die Erinnerung geht <strong>ab</strong> dieser Uhrzeit raus — geprüft
+        wird stündlich, es kann also einige Minuten später werden.
         <br />
         Pro Tag wird höchstens einmal erinnert. Wer bereits erledigt hat, worum
         es geht (z. B. Stunden gebucht), wird übersprungen.

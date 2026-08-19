@@ -12,7 +12,10 @@ const RUNNERS_BY_TYPE = {
 async function list(req, res, supabase) {
   try {
     const data = await svc.listAllSchedules(supabase, req.tenantId);
-    res.json({ data });
+    // Die gespeicherte Uhrzeit gilt in dieser Zone. Das Frontend rechnet sie in
+    // die Geraetezeit des Betrachters um — ohne diese Angabe koennte es das
+    // nicht und muesste den Nutzer selbst rechnen lassen.
+    res.json({ data, bueroZeitzone: svc.APP_TIMEZONE });
   } catch (e) { res.status(e.status || 500).json({ error: e.message || String(e) }); }
 }
 
@@ -21,7 +24,7 @@ async function get(req, res, supabase) {
     const typeKey = String(req.params.typeKey || '').trim();
     if (!typeKey) return res.status(400).json({ error: 'typeKey fehlt' });
     const data = await svc.getSchedule(supabase, { tenantId: req.tenantId, typeKey });
-    res.json({ data });
+    res.json({ data, bueroZeitzone: svc.APP_TIMEZONE });
   } catch (e) { res.status(e.status || 500).json({ error: e.message || String(e) }); }
 }
 

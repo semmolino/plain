@@ -81,6 +81,8 @@ export interface NotificationDiagnostics {
   zeitplaene: {
     typeKey:         string
     aktiv:           boolean
+    /** Läuft jeden Tag (nur Uhrzeit) statt an festen Monatstagen. */
+    taeglich:        boolean
     tage:            number[]
     letzterTag:      boolean
     uhrzeit:         string | null

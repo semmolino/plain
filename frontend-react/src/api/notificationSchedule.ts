@@ -36,8 +36,13 @@ export interface UpsertNotificationScheduleBody {
   audienceEmployees?:   number[]
 }
 
+/** In dieser Zone gilt SCHEDULE_TIME_OF_DAY. Das UI rechnet daraus die
+ *  Gerätezeit des Betrachters — gespeichert wird weiter die Bürozeit, sonst
+ *  verschöbe sich der Versand je nachdem, wer zuletzt gespeichert hat. */
 export const fetchNotificationSchedule = (typeKey: string) =>
-  apiClient.get<{ data: NotificationSchedule | null }>(`/notification-schedule/${encodeURIComponent(typeKey)}`)
+  apiClient.get<{ data: NotificationSchedule | null; bueroZeitzone: string }>(
+    `/notification-schedule/${encodeURIComponent(typeKey)}`,
+  )
 
 export const upsertNotificationSchedule = (typeKey: string, body: UpsertNotificationScheduleBody) =>
   apiClient.put<{ data: NotificationSchedule }>(`/notification-schedule/${encodeURIComponent(typeKey)}`, body)

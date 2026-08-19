@@ -119,3 +119,66 @@ describe("shouldFireToday — Tag UND Uhrzeit", () => {
     expect(schedule.shouldFireToday(c, utc("2026-02-28T10:00:00Z"))).toBe(true);
   });
 });
+
+describe("naechsterLauf — taegliche vs. monatliche Zeitplaene", () => {
+  const { naechsterLauf } = require("../services/notificationDiagnostics");
+
+  // Die Buchungs-Erinnerung hat KEINE Tagesliste — sie laeuft jeden Tag zur
+  // hinterlegten Uhrzeit. An monatlichen Regeln gemessen sah dieser voellig
+  // gesunde Zeitplan aus wie "kein Tag ausgewaehlt".
+  const taeglich = (extra = {}) => ({
+    TYPE_KEY: "hours_booking_reminder",
+    ENABLED: true,
+    SCHEDULE_DAYS: null,
+    SCHEDULE_LAST_DAY: false,
+    SCHEDULE_TIME_OF_DAY: "16:00:00",
+    LAST_FIRED_DATE: null,
+    ...extra,
+  });
+
+  test("taeglicher Zeitplan vor der Uhrzeit: heute", () => {
+    // 2026-08-19 13:49 CEST = 11:49 UTC, Ziel 16:00
+    const r = naechsterLauf(taeglich(), utc("2026-08-19T11:49:00Z"));
+    expect(r).toEqual({ datum: "2026-08-19", uhrzeit: "16:00", faellig: false });
+  });
+
+  test("taeglicher Zeitplan nach der Uhrzeit, noch nicht gefeuert: steht an", () => {
+    // 2026-08-19 17:00 CEST = 15:00 UTC
+    const r = naechsterLauf(taeglich(), utc("2026-08-19T15:00:00Z"));
+    expect(r).toEqual({ datum: "2026-08-19", uhrzeit: "16:00", faellig: true });
+  });
+
+  test("taeglicher Zeitplan heute schon gefeuert: morgen", () => {
+    const r = naechsterLauf(
+      taeglich({ LAST_FIRED_DATE: "2026-08-19" }),
+      utc("2026-08-19T15:00:00Z"),
+    );
+    expect(r).toEqual({ datum: "2026-08-20", uhrzeit: "16:00", faellig: false });
+  });
+
+  test("taeglicher Zeitplan ohne Uhrzeit laeuft nie — sein Checker ueberspringt ihn", () => {
+    expect(naechsterLauf(taeglich({ SCHEDULE_TIME_OF_DAY: null }), utc("2026-08-19T11:00:00Z")))
+      .toBeNull();
+  });
+
+  test("inaktiver Zeitplan hat keinen naechsten Lauf", () => {
+    expect(naechsterLauf(taeglich({ ENABLED: false }), utc("2026-08-19T11:00:00Z"))).toBeNull();
+  });
+
+  test("monatlicher Zeitplan findet seinen naechsten Tag", () => {
+    const monatlich = {
+      TYPE_KEY: "leistungsstand_reminder",
+      ENABLED: true,
+      SCHEDULE_DAYS: [19],
+      SCHEDULE_LAST_DAY: false,
+      SCHEDULE_TIME_OF_DAY: "14:00:00",
+      LAST_FIRED_DATE: null,
+    };
+    // Vormittags am 19.: heute um 14:00
+    expect(naechsterLauf(monatlich, utc("2026-08-19T08:00:00Z")))
+      .toEqual({ datum: "2026-08-19", uhrzeit: "14:00", faellig: false });
+    // Am 20.: erst naechsten Monat
+    expect(naechsterLauf(monatlich, utc("2026-08-20T08:00:00Z")))
+      .toEqual({ datum: "2026-09-19", uhrzeit: "14:00", faellig: false });
+  });
+});
