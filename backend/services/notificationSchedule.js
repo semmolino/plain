@@ -112,6 +112,7 @@ async function upsertSchedule(supabase, { tenantId, typeKey, body, employeeId })
     SCHEDULE_LAST_DAY:     !!b.scheduleLastDay,
     SCHEDULE_TIME_OF_DAY:  parseTimeHhmm(b.scheduleTimeOfDay),
     NOTIFY_PROJECT_PM:     b.notifyProjectPm !== false,
+    PM_NOTIFY_MODE:        b.pmNotifyMode === 'summary' ? 'summary' : 'per_project',
     PROJECT_STATUS_IDS:    Array.isArray(b.projectStatusIds)
                             ? b.projectStatusIds.map(Number).filter(Number.isFinite)
                             : null,
@@ -125,6 +126,23 @@ async function upsertSchedule(supabase, { tenantId, typeKey, body, employeeId })
     .from('NOTIFICATION_SCHEDULE_CONFIG')
     .upsert([row], { onConflict: 'TENANT_ID,TYPE_KEY' })
     .select('*').single();
+
+  // Migration 0129 noch nicht eingespielt: die Spalte gibt es dann nicht, und
+  // PostgREST lehnt den ganzen Datensatz ab. Ohne diesen Rueckfall liesse sich
+  // der Reminder zwischen Deploy und Migration gar nicht mehr speichern —
+  // eine kaputte Einstellungsseite waere ein hoher Preis fuer ein Feld.
+  if (error && /PM_NOTIFY_MODE/i.test(error.message || '')) {
+    const { PM_NOTIFY_MODE, ...ohneModus } = row;
+    void PM_NOTIFY_MODE;
+    console.warn('[NOTIFICATION_SCHEDULE] PM_NOTIFY_MODE fehlt — Migration 0129 einspielen. Speichere ohne dieses Feld.');
+    const retry = await supabase
+      .from('NOTIFICATION_SCHEDULE_CONFIG')
+      .upsert([ohneModus], { onConflict: 'TENANT_ID,TYPE_KEY' })
+      .select('*').single();
+    if (retry.error) throw { status: 500, message: retry.error.message };
+    return retry.data;
+  }
+
   if (error) throw { status: 500, message: error.message };
   return data;
 }

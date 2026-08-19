@@ -59,6 +59,7 @@ import {
 } from '@/api/notificationConfig'
 import {
   fetchNotificationSchedule, upsertNotificationSchedule, runNotificationScheduleNow,
+  type PmNotifyMode,
 } from '@/api/notificationSchedule'
 import { fetchActiveEmployees } from '@/api/projekte'
 import { Modal } from '@/components/ui/Modal'
@@ -2861,6 +2862,7 @@ function LeistungsstandReminderBlock() {
   const [scheduleLastDay,     setScheduleLastDay]     = useState(false)
   const [scheduleTimeOfDay,   setScheduleTimeOfDay]   = useState('09:00')
   const [notifyProjectPm,     setNotifyProjectPm]     = useState(true)
+  const [pmNotifyMode,        setPmNotifyMode]        = useState<PmNotifyMode>('per_project')
   const [projectStatusIds,    setProjectStatusIds]    = useState<number[]>([])
   const [audienceRoles,       setAudienceRoles]       = useState<string[]>([])
   const [audienceDepartments, setAudienceDepartments] = useState<number[]>([])
@@ -2887,6 +2889,7 @@ function LeistungsstandReminderBlock() {
     setScheduleLastDay(s.SCHEDULE_LAST_DAY)
     setScheduleTimeOfDay((s.SCHEDULE_TIME_OF_DAY ?? '09:00').slice(0, 5))
     setNotifyProjectPm(s.NOTIFY_PROJECT_PM)
+    setPmNotifyMode(s.PM_NOTIFY_MODE ?? 'per_project')
     setProjectStatusIds(s.PROJECT_STATUS_IDS ?? [])
     setAudienceRoles(s.AUDIENCE_ROLES ?? [])
     setAudienceDepartments(s.AUDIENCE_DEPARTMENTS ?? [])
@@ -2897,7 +2900,7 @@ function LeistungsstandReminderBlock() {
   const saveMut = useMutation({
     mutationFn: () => upsertNotificationSchedule(TYPE_KEY, {
       enabled, scheduleDays, scheduleLastDay, scheduleTimeOfDay,
-      notifyProjectPm, projectStatusIds,
+      notifyProjectPm, pmNotifyMode, projectStatusIds,
       audienceRoles, audienceDepartments, audienceEmployees,
     }),
     onSuccess: () => {
@@ -3032,10 +3035,47 @@ function LeistungsstandReminderBlock() {
                 <span>
                   <strong>Projektleiter</strong> des jeweiligen Projekts
                   <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block' }}>
-                    Pro Projekt eine Notification an den eingetragenen Projektleiter (Link springt direkt zum Projekt).
+                    Benachrichtigt die am Projekt eingetragene Projektleitung.
                   </span>
                 </span>
               </label>
+
+              {notifyProjectPm && (
+                <div style={{ paddingLeft: 26, marginTop: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                    Wie viele Benachrichtigungen?
+                    <HelpHint id="notifications.reminder.pm_mode" />
+                  </div>
+                  {([
+                    {
+                      key:  'per_project' as const,
+                      titel: 'Eine je Projekt',
+                      hilfe: 'Für jedes betroffene Projekt eine eigene Nachricht — der Link springt direkt ins Projekt.',
+                    },
+                    {
+                      key:  'summary' as const,
+                      titel: 'Eine insgesamt',
+                      hilfe: 'Eine Sammelnachricht je Person, unabhängig von der Projektanzahl — der Link führt auf die eigenen Projekte.',
+                    },
+                  ]).map(opt => (
+                    <label
+                      key={opt.key}
+                      style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 4 }}
+                    >
+                      <input
+                        type="radio"
+                        name="pmNotifyMode"
+                        checked={pmNotifyMode === opt.key}
+                        onChange={() => setPmNotifyMode(opt.key)}
+                      />
+                      <span>
+                        {opt.titel}
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block' }}>{opt.hilfe}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Zusaetzliche Audience */}

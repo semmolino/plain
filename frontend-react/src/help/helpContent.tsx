@@ -697,6 +697,27 @@ export const HELP = {
       </>
     ),
   },
+  'notifications.reminder.pm_mode': {
+    title: 'Eine Benachrichtigung je Projekt oder eine insgesamt?',
+    body: (
+      <>
+        <strong>Eine je Projekt</strong> — für jedes betroffene Projekt eine
+        eigene Nachricht. Jede führt direkt in das jeweilige Projekt. Sinnvoll
+        bei wenigen Projekten je Person oder wenn jedes einzeln abgehakt werden
+        soll.
+        <br />
+        <strong>Eine insgesamt</strong> — eine Sammelnachricht je Person,
+        unabhängig davon, wie viele Projekte sie führt. Sie nennt die ersten
+        Projekte beim Namen und verlinkt auf die eigenen Leistungsstände.
+        Sinnvoll, sobald jemand viele Projekte betreut — zwanzig Meldungen am
+        selben Morgen werden überlesen.
+        <br />
+        Die Einstellung betrifft nur die Projektleitung. Empfänger aus
+        Rollen, Abteilungen oder der Personenliste bekommen ohnehin genau eine
+        Sammelnachricht.
+      </>
+    ),
+  },
   'notifications.schedule.time': {
     title: 'Uhrzeit des Zeitplans',
     body: (

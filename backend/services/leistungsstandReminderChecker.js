@@ -64,40 +64,23 @@ async function fireForTenant(supabase, cfg) {
   const { data: projects, error: projErr } = await projectsQuery;
   if (projErr) throw projErr;
 
-  // Pro-Projekt-PM-Notifications
+  // PM-Notifications: entweder je Projekt eine oder eine Sammelnachricht je
+  // Person. Bei zwanzig laufenden Projekten sind zwanzig Meldungen am selben
+  // Morgen keine Erinnerung mehr, sondern Rauschen — deshalb die Wahl.
   if (cfg.NOTIFY_PROJECT_PM) {
+    const projekteJePm = new Map();          // pmId(String) -> Projekte
     for (const p of projects || []) {
       if (!p.PROJECT_MANAGER_ID) continue;
-      // Schon heute fuer dieses Projekt geschrieben? -> skip (idempotent)
-      const { data: existing } = await supabase
-        .from("NOTIFICATION")
-        .select("ID")
-        .eq("TENANT_ID", tenantId)
-        .eq("TYPE", TYPE_KEY)
-        .eq("METADATA->>project_id", String(p.ID))
-        .eq("METADATA->>ref_date", todayLocal())
-        .limit(1);
-      if (existing && existing.length > 0) continue;
+      const key = String(p.PROJECT_MANAGER_ID);
+      if (!projekteJePm.has(key)) projekteJePm.set(key, []);
+      projekteJePm.get(key).push(p);
+    }
 
-      const label = `${p.NAME_SHORT || ""}${p.NAME_LONG ? " – " + p.NAME_LONG : ""}`.trim() || `#${p.ID}`;
-      try {
-        await createNotification(supabase, {
-          tenantId,
-          userId:   String(p.PROJECT_MANAGER_ID),  // managed_by_rule -> wird durchgereicht
-          type:     TYPE_KEY,
-          title:    `Leistungsstand pflegen: ${p.NAME_SHORT || `#${p.ID}`}`,
-          body:     `Bitte den Leistungsstand für „${label}" aktualisieren.`,
-          link:     `/projekte?tab=leistungsstand&projectId=${p.ID}`,
-          metadata: {
-            project_id: String(p.ID),
-            ref_date:   todayLocal(),
-            scope:      "pm",
-          },
-        });
-        created++;
-      } catch (e) {
-        console.warn(`[LEISTUNGSSTAND_REMINDER] PM-Notif fuer Projekt ${p.ID} fehlgeschlagen: ${e?.message || e}`);
-      }
+    const summary = String(cfg.PM_NOTIFY_MODE || "per_project") === "summary";
+    for (const [pmId, liste] of projekteJePm) {
+      created += summary
+        ? await notifyPmSummary(supabase, { tenantId, pmId, projekte: liste })
+        : await notifyPmPerProject(supabase, { tenantId, pmId, projekte: liste });
     }
   }
 
@@ -133,6 +116,98 @@ async function fireForTenant(supabase, cfg) {
   }
 
   return created;
+}
+
+// Beschriftung eines Projekts fuer Titel und Fliesstext.
+function projektLabel(p) {
+  return `${p.NAME_SHORT || ""}${p.NAME_LONG ? " – " + p.NAME_LONG : ""}`.trim() || `#${p.ID}`;
+}
+
+// Je Projekt eine eigene Nachricht (Vorgabe, bisheriges Verhalten).
+async function notifyPmPerProject(supabase, { tenantId, pmId, projekte }) {
+  let created = 0;
+  for (const p of projekte) {
+    // Schon heute fuer dieses Projekt geschrieben? -> skip (idempotent)
+    const { data: existing } = await supabase
+      .from("NOTIFICATION")
+      .select("ID")
+      .eq("TENANT_ID", tenantId)
+      .eq("TYPE", TYPE_KEY)
+      .eq("METADATA->>project_id", String(p.ID))
+      .eq("METADATA->>ref_date", todayLocal())
+      .limit(1);
+    if (existing && existing.length > 0) continue;
+
+    try {
+      await createNotification(supabase, {
+        tenantId,
+        userId:   pmId,                       // managed_by_rule -> wird durchgereicht
+        type:     TYPE_KEY,
+        title:    `Leistungsstand pflegen: ${p.NAME_SHORT || `#${p.ID}`}`,
+        body:     `Bitte den Leistungsstand für „${projektLabel(p)}" aktualisieren.`,
+        link:     `/projekte?tab=leistungsstand&projectId=${p.ID}`,
+        metadata: {
+          project_id: String(p.ID),
+          ref_date:   todayLocal(),
+          scope:      "pm",
+        },
+      });
+      created++;
+    } catch (e) {
+      console.warn(`[LEISTUNGSSTAND_REMINDER] PM-Notif fuer Projekt ${p.ID} fehlgeschlagen: ${e?.message || e}`);
+    }
+  }
+  return created;
+}
+
+// Eine Nachricht je Person — unabhaengig davon, wie viele Projekte sie fuehrt.
+//
+// Eigener scope ("pm_summary") in der Idempotenz-Pruefung: sonst wuerde eine
+// bereits vorhandene Einzelnachricht (etwa aus einem Lauf vor dem Umschalten)
+// die Sammelnachricht unterdruecken oder umgekehrt.
+async function notifyPmSummary(supabase, { tenantId, pmId, projekte }) {
+  const { data: existing } = await supabase
+    .from("NOTIFICATION")
+    .select("ID")
+    .eq("TENANT_ID", tenantId)
+    .eq("TYPE", TYPE_KEY)
+    .eq("USER_ID", pmId)
+    .eq("METADATA->>scope", "pm_summary")
+    .eq("METADATA->>ref_date", todayLocal())
+    .limit(1);
+  if (existing && existing.length > 0) return 0;
+
+  const anzahl = projekte.length;
+  // Vollstaendige Liste waere bei vielen Projekten unlesbar; die ersten fuenf
+  // benennen den Umfang, der Rest steht in der Leistungsstand-Liste hinter dem
+  // Link.
+  const namen = projekte.slice(0, 5).map(projektLabel);
+  const rest  = anzahl - namen.length;
+  const aufzaehlung = namen.join(", ") + (rest > 0 ? ` und ${rest} weitere` : "");
+
+  try {
+    await createNotification(supabase, {
+      tenantId,
+      userId:   pmId,
+      type:     TYPE_KEY,
+      title:    anzahl === 1
+        ? `Leistungsstand pflegen: ${projekte[0].NAME_SHORT || `#${projekte[0].ID}`}`
+        : `Leistungsstände pflegen (${anzahl} Projekte)`,
+      body:     anzahl === 1
+        ? `Bitte den Leistungsstand für „${projektLabel(projekte[0])}" aktualisieren.`
+        : `Bitte die Leistungsstände aktualisieren: ${aufzaehlung}.`,
+      link:     `/projekte?tab=leistungsstand&filter=mine`,
+      metadata: {
+        ref_date:    todayLocal(),
+        scope:       "pm_summary",
+        project_ids: projekte.map(p => String(p.ID)),
+      },
+    });
+    return 1;
+  } catch (e) {
+    console.warn(`[LEISTUNGSSTAND_REMINDER] PM-Sammelnotif fuer EMP ${pmId} fehlgeschlagen: ${e?.message || e}`);
+    return 0;
+  }
 }
 
 async function resolveScheduleAudience(supabase, tenantId, cfg) {
