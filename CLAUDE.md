@@ -165,9 +165,23 @@ Bausteine, Architektur, priorisierte Coverage-Map und Wording-Regeln: `docs/HELP
 
 ## Deployment
 
-1. Push to `main` → Railway rebuilds the Docker image (`npm --prefix frontend-react run build` then `node backend/server.js`)
+**Gehostet wird auf Scalingo** (`planandsimple`), nicht mehr auf Railway. Railway war
+bis zum Umzug die produktive Instanz; Erwähnungen davon in älteren Dokumenten
+beziehen sich auf diesen früheren Stand.
+
+1. Push to `main` → Scalingo baut über das Node-Buildpack (`scalingo-postbuild` in der
+   Root-`package.json`), Start über `Procfile` → `bin/start-web.sh`
 2. **SQL migrations run manually** in the Supabase SQL editor — files are in `backend/migrations/` numbered `0001_…`
-3. Environment variables set in Railway: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `SMTP_*`, `FRONTEND_URL`
+3. Umgebungsvariablen über `scalingo --app planandsimple env-set …` bzw. das Dashboard:
+   `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `SMTP_*`, `FRONTEND_URL`
+4. Runbook: `docs/SCALINGO_DEPLOY_RUNBOOK.md`
+
+**`DISABLE_BACKGROUND_JOBS` gehört NICHT auf die produktive Instanz.** Das Flag
+verhindert, dass die Hintergrund-Checker starten — ohne sie entsteht keine einzige
+geplante Benachrichtigung (weder Push noch in-app). Es war ausschließlich für den
+Parallelbetrieb gedacht, als Scalingo und Railway gleichzeitig auf dieselbe Supabase
+zeigten. Läuft nur noch eine Instanz, muss es weg. Prüfbar in der Oberfläche unter
+Einstellungen → Benachrichtigungen → „Zustellung prüfen".
 
 ---
 

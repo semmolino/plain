@@ -13,13 +13,21 @@ Der eigentliche Umzug steht in [SCALINGO_MIGRATION.md](SCALINGO_MIGRATION.md).
 
 ## ⚠ Vorab: zwei Instanzen, eine Datenbank
 
+> **Gilt nur, solange Railway und Scalingo GLEICHZEITIG laufen.**
+> Ist Railway abgeschaltet, ist dieser Abschnitt gegenstandslos — dann muss
+> `DISABLE_BACKGROUND_JOBS` **entfernt** werden. Siehe „Nach dem Abschalten von
+> Railway" weiter unten. Das Flag stehen zu lassen ist der teuerste Fehler in
+> diesem Runbook: es fällt nicht auf, weil nichts kaputtgeht — es passiert
+> nur nie etwas.
+
 Die Scalingo-App zeigt auf dieselbe Supabase-Instanz wie Railway. Daraus folgt:
 
 **Die sechs Hintergrund-Checker laufen doppelt.** Sie verschicken Mahnungen,
 Fälligkeits- und Leistungsstand-Erinnerungen an echte Empfänger. Ohne
 Gegenmaßnahme bekommen deine Kunden jede Mail zweimal.
 
-Deshalb ist in `server.js` ein Schalter ergänzt. Auf der Scalingo-App **zwingend**:
+Deshalb ist in `server.js` ein Schalter ergänzt. Auf der Scalingo-App **für die
+Dauer des Parallelbetriebs**:
 
 ```
 DISABLE_BACKGROUND_JOBS=true
@@ -267,6 +275,34 @@ Variable fehlt. `scalingo --app planandsimple env` zeigt, was gesetzt ist.
 
 **Login schlägt fehl, Netzwerk-Tab zeigt CORS-Fehler**
 `CORS_ORIGINS` auf die Scalingo-URL setzen (Schritt 3, zweiter Block).
+
+---
+
+## Nach dem Abschalten von Railway
+
+Sobald Scalingo die **einzige** Instanz ist, muss der Schalter aus dem
+Parallelbetrieb wieder weg:
+
+```bash
+scalingo --app planandsimple env-unset DISABLE_BACKGROUND_JOBS
+scalingo --app planandsimple restart
+```
+
+Vorher sicherstellen, dass die Railway-App wirklich **gestoppt** ist und nicht nur
+unbenutzt. Läuft sie noch gegen dieselbe Supabase, verschicken danach beide
+Instanzen — und die Kunden bekommen jede Mahnung zweimal.
+
+Solange das Flag steht, entsteht **keine einzige geplante Benachrichtigung** — auch
+keine in-app. Nur „Jetzt ausführen" funktioniert, weil es als normaler Request läuft.
+Das sieht nicht nach einem Fehler aus, sondern nach Stille; genau deshalb bleibt es
+lange unbemerkt.
+
+Prüfen lässt es sich an zwei Stellen:
+
+- Log: die Zeile `⏸ Hintergrund-Checker deaktiviert` darf **nicht** mehr erscheinen
+- Oberfläche: Einstellungen → Benachrichtigungen → „Zustellung prüfen" — dort dürfen
+  keine abgeschalteten Hintergrunddienste gemeldet werden, und unter „Letzte Läufe"
+  müssen die Checker wenige Minuten nach dem Start mit Zeitstempel auftauchen
 
 ---
 
