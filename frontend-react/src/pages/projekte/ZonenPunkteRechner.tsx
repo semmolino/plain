@@ -87,12 +87,38 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
 
   const legalRef = criteria.find(c => c.LEGAL_REF)?.LEGAL_REF
 
+  // Anforderungsgrade der HOAI — durchgängig gleich benannt in den
+  // Honorartafel-Köpfen aller Leistungsbilder. Sie sind der Maßstab, nach dem
+  // die Punkte je Merkmal zu vergeben sind: 0 = unterster Grad, Höchstwert =
+  // oberster Grad.
+  const gradeLabels = thresholds.length <= 3
+    ? ['geringe', 'durchschnittliche', 'hohe']
+    : ['sehr geringe', 'geringe', 'durchschnittliche', 'hohe', 'sehr hohe']
+  const gradeLow  = gradeLabels[0]
+  const gradeHigh = gradeLabels[gradeLabels.length - 1]
+
+  const zoneBands = [...thresholds]
+    .sort((a, b) => a.POINTS_FROM - b.POINTS_FROM)
+    .map(t => {
+      const z = zones.find(zz => zz.ID === t.ZONE_ID)
+      const name = z?.NAME_SHORT ?? '?'
+      return t.POINTS_FROM === 0 ? `${name} bis ${t.POINTS_TO}` : `${name} ${t.POINTS_FROM}–${t.POINTS_TO}`
+    })
+
   return (
     <Modal open={open} onClose={onClose} title="Honorarzone über Bewertungsmerkmale ermitteln">
       <p className="admin-section-hint" style={{ marginTop: 0 }}>
         Je Bewertungsmerkmal Punkte vergeben — die Summe ergibt die Honorarzone
         {legalRef ? ` (${legalRef})` : ''}. Die übernommene Zone bleibt im Basisdaten-Feld änderbar.
       </p>
+      {criteria.length > 0 && (
+        <p className="admin-section-hint" style={{ marginTop: 0 }}>
+          Maßstab je Merkmal: <strong>0 = {gradeLow} Anforderungen</strong> bis{' '}
+          <strong>Höchstwert = {gradeHigh} Anforderungen</strong>. Wo die HOAI ausdrückliche
+          Stufen nennt, stehen sie unter dem Merkmal; sonst gibt sie nur die Höchstpunktzahl vor
+          und überlässt die Abstufung der fachlichen Einschätzung.
+        </p>
+      )}
 
       {!feeMasterId ? (
         <p className="empty-note">Bitte zuerst ein Leistungsbild wählen.</p>
@@ -124,9 +150,13 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
                   <tr key={c.ID}>
                     <td>
                       {c.TEXT}
-                      {c.LEVEL_HINT && (
-                        <div className="ls-muted" style={{ fontSize: 11, marginTop: 2 }}>{c.LEVEL_HINT}</div>
-                      )}
+                      <div className="ls-muted" style={{ fontSize: 11, marginTop: 2 }}>
+                        {c.LEVEL_HINT
+                          // Stufen aus dem Verordnungstext (§ 20/21, Vermessung)
+                          ? c.LEVEL_HINT
+                          // Sonst nur der Maßstab — die HOAI nennt hier keine Stufen.
+                          : `0 = ${gradeLow} … ${c.MAX_POINTS} = ${gradeHigh} Anforderungen`}
+                      </div>
                     </td>
                     <td className="num">
                       <input
@@ -149,6 +179,12 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
               </tfoot>
             </table>
           </div>
+
+          {zoneBands.length > 0 && (
+            <p className="admin-section-hint" style={{ marginTop: 8, marginBottom: 0 }}>
+              Punktebänder: {zoneBands.join(' · ')}
+            </p>
+          )}
 
           <div style={{ marginTop: 12 }}>
             {treffer ? (

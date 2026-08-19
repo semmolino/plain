@@ -745,6 +745,42 @@ sonst durchgerutscht wäre: einmal zog das letzte Merkmal die Zonenzeilen als
 Stufen ein (57 statt 60), einmal fehlte eine Stufe, weil die Zeile im Original
 mit einem Punkt endet („13 bis 15 Punkte.").
 
+### Punkte-Kataloge je Merkmal: die HOAI liefert sie nur teilweise
+
+Beim Testen kam die naheliegende Frage auf: woher weiß die Nutzerin, ob ein
+Merkmal 3 oder 5 von 6 Punkten bekommt? Antwort nach Prüfung des Volltextes:
+**Die HOAI sagt es für die meisten Leistungsbilder nicht.**
+
+- **Stufen ausdrücklich genannt** — § 20/§ 21 (geringe 1 · durchschnittliche 2 ·
+  hohe 3) und die Ingenieurvermessung (Anlage 1.4.3/1.4.6: je Merkmal fünf
+  benannte Stufen mit Punktspannen). Diese stehen als `LEVEL_HINT` am Merkmal.
+- **Nur Merkmalsname und Höchstpunktzahl** — §§ 28–32, 35, 40, 44, 48 und
+  Anlage 1.1.2. Die Merkmalsbezeichnungen kommen im gesamten Verordnungstext
+  ausschließlich an der Stelle vor, wo sie aufgezählt werden; weder die
+  Anlagen noch die Objektlisten beschreiben sie je Honorarzone. Die Abstufung
+  ist fachliche Einschätzung.
+
+**Kein abgeleitetes Raster.** Es lag nahe, das 5-Stufen-Raster der Vermessung
+zu übertragen (dort: Höchstpunktzahl ÷ 5 = Punkte je Stufe). Das scheitert
+schon an der Arithmetik: § 44 wäre mit 5/5/5/10/15 glatt teilbar, § 35 mit
+6/9/9/6/6/6 nicht. Die Verordnung nennt die Stufen also gezielt dort, wo sie
+sie nennt — ein Raster für § 35 wäre erfunden und sähe im Dialog aus wie ein
+Gesetzeswert.
+
+**Was der Dialog stattdessen zeigt** (alles aus der Verordnung):
+
+- den Maßstab je Merkmal, verankert an der Zonenbenennung der Honorartafeln
+  (0 = sehr geringe … 6 = sehr hohe Anforderungen; bei dreizonigen
+  Leistungsbildern geringe … hohe),
+- die ausdrücklichen Stufen, wo es sie gibt,
+- die **Punktebänder aller Zonen** (z. B. I bis 10 · II 11–18 · III 19–26 ·
+  IV 27–34 · V 35–42), damit sichtbar ist, worauf die Bewertung zuläuft,
+- die laufende Summe und die getroffene Zone.
+
+Wer die Kataloge der Kommentarliteratur (Korbion/Mantscheff/Vygen u. a.)
+einpflegen will, kann sie als `LEVEL_HINT` je Merkmal nachtragen — das Feld
+ist genau dafür da und wird bereits angezeigt.
+
 ### Kein Punktesystem
 
 Tragwerksplanung (§ 52), Technische Ausrüstung (§ 56), Geotechnik
