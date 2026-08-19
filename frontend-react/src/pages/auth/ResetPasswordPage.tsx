@@ -9,6 +9,10 @@ export function ResetPasswordPage() {
   const navigate       = useNavigate()
   const [params]       = useSearchParams()
   const token          = params.get('token') ?? ''
+  // Derselbe Bildschirm, zwei Anlaesse: „Passwort vergessen" und der
+  // Erstzugang eines neu angelegten Mitarbeiters. Nur die Ansprache
+  // unterscheidet sich — wer eingeladen wurde, hat nichts zurueckzusetzen.
+  const welcome        = params.get('welcome') === '1'
 
   const [pw1, setPw1]         = useState('')
   const [pw2, setPw2]         = useState('')
@@ -38,7 +42,12 @@ export function ResetPasswordPage() {
 
     try {
       await confirmPasswordReset(token, pw1)
-      setMsg({ text: 'Passwort gespeichert. Bitte anmelden.', type: 'success' })
+      setMsg({
+        text: welcome
+          ? 'Passwort gespeichert. Sie können sich jetzt anmelden.'
+          : 'Passwort gespeichert. Bitte anmelden.',
+        type: 'success',
+      })
       setTimeout(() => navigate('/login'), 1500)
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : 'Fehler beim Speichern', type: 'error' })
@@ -55,14 +64,21 @@ export function ResetPasswordPage() {
       <div className="auth-card">
         <div className="auth-logo"><BrandWordmark size={34} /></div>
         <div className="auth-subtitle" />
-        <h2 className="auth-title">Neues Passwort setzen</h2>
+        <h2 className="auth-title">{welcome ? 'Zugang einrichten' : 'Neues Passwort setzen'}</h2>
+
+        {welcome && token && (
+          <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Willkommen bei plan&amp;simple. Legen Sie hier Ihr eigenes Passwort fest —
+            danach melden Sie sich mit Ihrer E-Mail-Adresse und diesem Passwort an.
+          </p>
+        )}
 
         {!token && (
           <Message text="Ungültiger oder abgelaufener Link." type="error" />
         )}
 
         <FormField
-          label="Neues Passwort"
+          label={welcome ? 'Passwort' : 'Neues Passwort'}
           id="reset-password"
           type="password"
           autoComplete="new-password"

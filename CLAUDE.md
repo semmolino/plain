@@ -146,6 +146,17 @@ Bausteine, Architektur, priorisierte Coverage-Map und Wording-Regeln: `docs/HELP
 | Hierarchy | `FATHER_ID` column; insert all rows with `FATHER_ID=null` first, then update — the **2-pass pattern** |
 | Soft delete | Not used — hard deletes only |
 | Tenant isolation | Every table has `TENANT_ID`; every query must filter by it |
+| `.upsert()` | **`TENANT_ID` gehört immer in die Nutzlast** — auch wenn nur aktualisiert wird |
+
+**Warum `.upsert()` ohne `TENANT_ID` bricht**: PostgREST übersetzt `.upsert()` in
+`INSERT … ON CONFLICT DO UPDATE`. Die RLS-Policy prüft `WITH CHECK` gegen die
+**vorgeschlagene** Zeile, nicht gegen die gespeicherte. Fehlt der Mandant, ist er
+dort `NULL`, der Vergleich ergibt `NULL` statt `true`, und die Datenbank antwortet
+mit `new row violates row-level security policy for table "…"`. Unter dem alten
+Supabase-Service-Key fiel das nicht auf — der umging RLS. Migration `0131` setzt
+zusätzlich `DEFAULT public.current_tenant_id()` auf jede `TENANT_ID`-Spalte als
+Netz darunter. Reine `.update()`-Aufrufe sind nicht betroffen (die Zeile behält
+ihren Mandanten).
 
 **Key tables**: `TENANT`, `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRUCTURE`, `PROJECT_PROGRESS`, `EMPLOYEE2PROJECT`, `CONTRACT`, `INVOICE`, `PARTIAL_PAYMENT`, `OFFER`, `OFFER_STRUCTURE`, `BILLING_TYPE`, `ROLE`, `VAT`, `TENANT_SETTINGS`.
 

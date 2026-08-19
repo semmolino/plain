@@ -316,10 +316,15 @@ async function importCostRates(supabase, tenantId, rates, validFrom, recalcBooki
     if (fetchErr) throw { status: 500, message: fetchErr.message };
     if (!tecRows || !tecRows.length) continue;
 
+    // TENANT_ID muss mit in die Nutzlast: .upsert() wird zu
+    // INSERT ... ON CONFLICT, und RLS prueft WITH CHECK gegen die
+    // vorgeschlagene Zeile. Ohne Mandant bricht das Speichern mit
+    // "new row violates row-level security policy" ab.
     const updates = tecRows.map(row => ({
-      ID:       row.ID,
-      CP_RATE:  r.rate,
-      CP_TOT:   Math.round(Number(row.QUANTITY_INT) * r.rate * 100) / 100,
+      ID:        row.ID,
+      TENANT_ID: tenantId,
+      CP_RATE:   r.rate,
+      CP_TOT:    Math.round(Number(row.QUANTITY_INT) * r.rate * 100) / 100,
     }));
     const { error: updErr } = await supabase
       .from('TEC')

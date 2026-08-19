@@ -782,7 +782,7 @@ async function progressSnapshot(supabase, { projectId, tenantId }) {
     const revenueCompletion = (revPct * revenue) / 100;
     const extrasCompletion = (exPct * extras) / 100;
 
-    updates.push({ sid, btId, revenue, extras, revenueCompletion, extrasCompletion });
+    updates.push({ sid, btId, revenue, extras, revenueCompletion, extrasCompletion, tenantId: r.TENANT_ID });
     progressRows.push({
       TENANT_ID: r.TENANT_ID,
       STRUCTURE_ID: sid,
@@ -801,8 +801,17 @@ async function progressSnapshot(supabase, { projectId, tenantId }) {
 
   // Batch all PROJECT_STRUCTURE updates in one upsert instead of N individual calls.
   // REVENUE/EXTRAS are always included: for non-BT2 rows they equal the stored values (no-op).
+  //
+  // TENANT_ID MUSS mit in die Nutzlast. PostgREST setzt .upsert() in ein
+  // INSERT ... ON CONFLICT DO UPDATE um, und die RLS-Policy prueft WITH CHECK
+  // gegen die VORGESCHLAGENE Zeile — nicht gegen die bereits gespeicherte.
+  // Fehlt der Mandant, ist er dort NULL, der Vergleich ergibt NULL statt true
+  // und die Datenbank antwortet mit
+  //     new row violates row-level security policy for table "PROJECT_STRUCTURE"
+  // Unter dem alten Service-Key fiel das nicht auf, weil der RLS umging.
   const structureUpserts = updates.map(u => ({
     ID: parseInt(u.sid, 10),
+    TENANT_ID: u.tenantId,
     REVENUE: u.revenue,
     EXTRAS: u.extras,
     REVENUE_COMPLETION: u.revenueCompletion,
@@ -1599,8 +1608,10 @@ async function saveLeistungsstand(supabase, { projectId, updates, tenantId }) {
     const revenueCompletion = (revPct * revenue) / 100;
     const extrasCompletion = (extrasPct * extras) / 100;
 
+    // TENANT_ID muss mit — siehe Begruendung in progressSnapshot().
     structureUpserts.push({
       ID: parseInt(sid, 10),
+      TENANT_ID: node.TENANT_ID,
       REVENUE_COMPLETION_PERCENT: revPct,
       EXTRAS_COMPLETION_PERCENT: extrasPct,
       REVENUE: revenue,

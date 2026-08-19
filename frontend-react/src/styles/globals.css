@@ -1412,14 +1412,48 @@ input::placeholder { color: var(--text-4); }
    Ausserdem Unterstrich statt gefuellter Pille: eine gefuellte dunkle Pille
    sieht aus wie ein Primaerbutton und konkurrierte optisch mit
    „+ Neues Projekt" direkt daneben. */
+/* Dass diese Leiste seitlich scrollt, war nicht zu sehen: die Bildlaufleiste
+   ist ausgeblendet, und der letzte sichtbare Reiter endete sauber am Rand —
+   es sah nach dem Ende der Liste aus. In der Administration mit ihren vielen
+   Reitern blieben so ganze Bereiche unauffindbar.
+
+   Der Hinweis kommt jetzt aus dem Hintergrund selbst, ohne JavaScript und ohne
+   Platz zu kosten: zwei Verlaufspaare, die per background-attachment
+   unterschiedlich mitscrollen. Die deckenden Verlaeufe (local) wandern mit dem
+   Inhalt und verdecken die Schatten, solange an dieser Seite nichts mehr
+   kommt; die Schatten (scroll) stehen fest am Rand und werden dadurch genau
+   dann sichtbar, wenn dort abgeschnittener Inhalt liegt. Nichts zu scrollen
+   heisst: kein Schatten. */
 .tabs {
   display: flex; gap: var(--space-1);
   margin-bottom: var(--space-3);
   overflow-x: auto;
   scrollbar-width: none;
   border-bottom: 1px solid var(--border-2);
+
+  background-image:
+    linear-gradient(to right, var(--bg), rgba(0, 0, 0, 0)),
+    linear-gradient(to left,  var(--bg), rgba(0, 0, 0, 0)),
+    linear-gradient(to right, rgba(var(--shadow-color), 0.18), rgba(0, 0, 0, 0)),
+    linear-gradient(to left,  rgba(var(--shadow-color), 0.18), rgba(0, 0, 0, 0));
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 28px 100%, 28px 100%, 12px 100%, 12px 100%;
+  /* Reihenfolge muss zu background-image passen: Abdeckung mitscrollend,
+     Schatten ortsfest. */
+  background-attachment: local, local, scroll, scroll;
 }
 .tabs::-webkit-scrollbar { display: none; }
+
+/* Mit Maus ist eine schmale Bildlaufleiste die eindeutigste Ansage. Auf
+   Touchgeraeten bleibt sie weg — dort kostet sie nur Hoehe, und gewischt wird
+   ohnehin. */
+@media (hover: hover) and (pointer: fine) {
+  .tabs { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; padding-bottom: 2px; }
+  .tabs::-webkit-scrollbar { display: block; height: 4px; }
+  .tabs::-webkit-scrollbar-track { background: transparent; }
+  .tabs::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: var(--radius-pill); }
+}
 
 .tab-btn {
   flex: 0 0 auto;
@@ -1818,7 +1852,68 @@ input::placeholder { color: var(--text-4); }
 }
 .btn-primary.btn-small:hover { background: var(--btn-h); }
 .btn-primary.btn-small:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Dieselbe Ursache wie eine Zeile darueber, zweimal weiter unbemerkt:
+   .btn-primary steht im Stylesheet VOR .btn / .btn-small. Bei gleicher
+   Spezifitaet (je eine Klasse) gewinnt die spaetere Regel — die Kombination
+   trug also die Geometrie-Klasse als Farbe davon:
+
+     .btn.btn-primary        -> Hintergrund var(--surface) statt var(--btn):
+                                der Hauptknopf sah aus wie ein Sekundaerknopf
+                                (u. a. Administration, Angebote, TimerBar).
+     .btn-small.btn-danger   -> .btn-small setzt background: var(--surface),
+                                .btn-danger aber nur color: var(--danger-fg) —
+                                weisse Schrift auf weisser Flaeche, der Knopf
+                                war schlicht unsichtbar (Administration, Profil,
+                                Import, Mitarbeiter: alle "x"-Loeschknoepfe).
+
+   Beide hier mit zwei Klassen (hoehere Spezifitaet) wiederhergestellt, statt
+   die Reihenfolge des ganzen Stylesheets umzustellen. */
+.btn.btn-primary {
+  width: auto;
+  background: var(--btn); color: var(--btn-fg);
+  border: none;
+}
+.btn.btn-primary:hover:not(:disabled) { background: var(--btn-h); }
+.btn.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-small.btn-danger,
+.btn-sm.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-fg);
+}
+.btn-small.btn-danger:hover:not(:disabled),
+.btn-sm.btn-danger:hover:not(:disabled) {
+  background: var(--danger-strong);
+  border-color: var(--danger-strong);
+}
 .doc-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+
+/* Hinweis auf das Rechtsklick-Menue in Projekt- und Angebotsstruktur. Bewusst
+   ruhig gehalten (Meta-Textgroesse, --text-3): er soll die Funktion auffindbar
+   machen, nicht mit den Bedienelementen daneben konkurrieren. Er bleibt auch
+   auf dem Handy stehen — dort oeffnet langes Antippen dasselbe Menue, und
+   genau deshalb nennt der Text beide Gesten. */
+.struct-context-tip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-3); line-height: 1.4;
+}
+.struct-context-tip svg { flex: 0 0 auto; }
+
+/* Hinweiskasten im Anlage-Dialog: erklaert, warum dort kein Passwortfeld mehr
+   steht. Steht an der Stelle, an der das Feld frueher war — sonst wirkt das
+   Fehlen wie ein Versehen. */
+.mitarbeiter-zugang-hinweis {
+  display: flex; gap: var(--space-2); align-items: flex-start;
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius-md);
+  font-size: 12px; line-height: 1.5; color: var(--text-2);
+}
+.mitarbeiter-zugang-hinweis svg { flex: 0 0 auto; margin-top: 1px; color: var(--accent); }
 
 /* ── Pagination ──────────────────────────────────────────────────────────── */
 /* Blaettern wird nur noch gerendert, wenn es mehr als eine Seite gibt —

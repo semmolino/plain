@@ -964,6 +964,44 @@ export const HELP = {
       </>
     ),
   },
+  // ── Projekt- und Angebotsstruktur: Rechtsklick-Menü ──────────────────────
+  // Die Funktionen lagen ausschliesslich hinter der rechten Maustaste und waren
+  // dadurch praktisch unauffindbar. Der Hinweis in der Leiste macht sie
+  // sichtbar, dieser Text erklaert, was dahinter steckt.
+  'structure.contextmenu': {
+    title: 'Rechtsklick auf eine Zeile',
+    body: (
+      <>
+        Ein <strong>Rechtsklick</strong> auf eine Zeile (auf dem Handy: langes Antippen) öffnet die
+        Funktionen zu genau diesem Element:
+        <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+          <li>
+            <strong>Element anlegen</strong> — legt ein <em>untergeordnetes</em> Element darunter an.
+            Abrechnungsart und Nebenkosten-Prozentsatz werden von der angeklickten Zeile übernommen,
+            lassen sich im Dialog aber ändern.
+          </li>
+          <li>
+            <strong>Zuschlag hinzufügen</strong> — bis zu drei prozentuale Zu- oder Abschläge auf das
+            Honorar dieses Elements (z.&nbsp;B. Umbauzuschlag, Nachlass). „Kumulativ" bedeutet: der
+            Zuschlag rechnet auf die bereits erhöhte Zwischensumme statt auf den Ausgangswert.
+          </li>
+          <li>
+            <strong>Kalkulation anlegen</strong> — hängt eine HOAI-/AHO-Honorarermittlung unter dieses
+            Element; die ermittelten Beträge fließen als Unterelemente zurück in die Struktur.
+          </li>
+          <li>
+            <strong>Element löschen</strong> — löscht das Element samt Kind-Elementen. Nicht möglich,
+            solange Buchungen oder Rechnungen darauf verweisen.
+          </li>
+        </ul>
+        <p style={{ margin: '8px 0 0' }}>
+          Rechtsklick auf die <strong>oberste Zeile</strong> (Projekt bzw. Angebot) legt Elemente auf
+          oberster Ebene an und setzt Zuschläge auf die Gesamtsumme. Sind mehrere Zeilen über die
+          Kästchen ausgewählt, bezieht sich das Löschen auf die ganze Auswahl.
+        </p>
+      </>
+    ),
+  },
 } satisfies Record<string, HelpEntry>
 
 export type HelpId = keyof typeof HELP

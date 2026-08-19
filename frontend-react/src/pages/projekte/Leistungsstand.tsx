@@ -3,11 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchProjectsShort, fetchLeistungsstand, saveLeistungsstand,
-  createProgressSnapshot,
   type LeistungsstandNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
-import { Can } from '@/components/ui/Can'
 import type { StructureNode } from '@/api/projekte'
 import { Message } from '@/components/ui/Message'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
@@ -26,10 +24,9 @@ export function Leistungsstand({ initialProjectId }: Props) {
   const navigate = useNavigate()
   const [pid,  setPid]  = useState<number | null>(initialProjectId ?? null)
   // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
-  useEffect(() => { setPid(initialProjectId ?? null); setMsg(null); setSnapMsg(null) }, [initialProjectId])
+  useEffect(() => { setPid(initialProjectId ?? null); setMsg(null) }, [initialProjectId])
   const [vals, setVals] = useState<Record<number, string>>({})
   const [msg,           setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [snapMsg,       setSnapMsg]     = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [elementSearch, setElementSearch] = useState('')
   const inputRefs                       = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -74,11 +71,11 @@ export function Leistungsstand({ initialProjectId }: Props) {
       setMsg({ text: (err as { message?: string }).message || 'Fehler beim Speichern', type: 'error' }),
   })
 
-  const snapMut = useMutation({
-    mutationFn: () => createProgressSnapshot(pid!),
-    onSuccess: () => setSnapMsg({ text: 'Snapshot gespeichert ✅', type: 'success' }),
-    onError:   (err: unknown) => setSnapMsg({ text: (err as { message?: string }).message || 'Fehler', type: 'error' }),
-  })
+  // Der Knopf "Projekt-Snapshot" ist hier entfallen. Snapshots entstehen
+  // ohnehin automatisch beim Monatsabschluss (Einstellungen → Monatsabschluss);
+  // ein zweiter, manueller Ausloeser direkt neben "Leistungsstände speichern"
+  // sah aus wie ein zweiter Speichern-Knopf und lud zum Verwechseln ein.
+  // Endpunkt und Permission bleiben unveraendert bestehen.
 
   const handleSave = useCallback(() => {
     if (pid && !saveMut.isPending) saveMut.mutate()
@@ -281,15 +278,6 @@ export function Leistungsstand({ initialProjectId }: Props) {
           </div>
 
           <div className="ls-footer">
-            <Can permission="projects.performance.snapshot">
-              <button
-                type="button"
-                disabled={snapMut.isPending}
-                onClick={() => { setSnapMsg(null); snapMut.mutate() }}
-              >
-                {snapMut.isPending ? 'Snapshot …' : 'Projekt-Snapshot'}
-              </button>
-            </Can>
             <button
               className="btn btn-primary"
               disabled={saveMut.isPending}
@@ -298,7 +286,6 @@ export function Leistungsstand({ initialProjectId }: Props) {
               {saveMut.isPending ? 'Speichern…' : 'Leistungsstände speichern'}
             </button>
           </div>
-          {snapMsg && <div style={{ marginTop: 8 }}><Message type={snapMsg.type} text={snapMsg.text} /></div>}
         </>
       )}
 

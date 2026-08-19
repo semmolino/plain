@@ -13,7 +13,7 @@ import type { HelpId } from '@/help/helpContent'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useCtrlS }    from '@/hooks/useCtrlS'
 import { useToast }    from '@/store/toastStore'
-import { Pencil, Trash2, Download, AlertTriangle , ChevronLeft, ChevronRight } from 'lucide-react'
+import { Pencil, Trash2, Download, AlertTriangle , ChevronLeft, ChevronRight, KeyRound } from 'lucide-react'
 import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
@@ -27,7 +27,7 @@ import {
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
   fetchEmployeeCpRates, createEmployeeCpRate, updateEmployeeCpRate, deleteEmployeeCpRate,
   fetchMonthBalance, fetchRunningBalance,
-  fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword,
+  fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword, sendEmployeeInvite,
   fetchEmployeeReportList, fetchEmployeeProjects, fetchEmployeeAvatar,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
   type EmployeeWorkModel, type EmployeeCpRate, type MonthBalance, type RunningMonth,
@@ -58,7 +58,7 @@ const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 
 type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'MAIL'
-type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'abwesenheit' | 'projekte' | 'rolle' | 'passwort'
+type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'abwesenheit' | 'projekte' | 'rolle' | 'zugang'
 
 function fmtH(n: number) {
   return n.toFixed(2).replace('.', ',') + ' h'
@@ -69,7 +69,7 @@ function fmtBalance(n: number) {
 }
 
 function emptyCreateForm(): CreateEmployeePayload {
-  return { short_name: '', title: '', first_name: '', last_name: '', password: '', email: '', mobile: '', personnel_number: '', gender_id: '', department_id: null, entry_date: '' }
+  return { short_name: '', title: '', first_name: '', last_name: '', email: '', mobile: '', personnel_number: '', gender_id: '', department_id: null, entry_date: '' }
 }
 
 // Inline-Status-Optionen (Liste). Aktiv=1, Inaktiv=2.
@@ -602,8 +602,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const [editWmForm,      setEditWmForm]      = useState({ model_id: '', valid_from: '' })
   const [wmMsg,           setWmMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
-  // Password management state
-  const [newPw,      setNewPw]      = useState('')
+  // Zugangsverwaltung: Einladung senden bzw. Passwort loeschen.
   const [pwMsg,      setPwMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [pwSaving,   setPwSaving]   = useState(false)
 
@@ -730,7 +729,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     ...(canViewAbsence  ? [{ id: 'abwesenheit' as EmpSection, label: 'Abwesenheit' }] : []),
     { id: 'projekte',    label: 'Projekte' },
     ...(canAssignRoles  ? [{ id: 'rolle' as EmpSection, label: 'Rolle & Rechte' }] : []),
-    { id: 'passwort',    label: 'Passwort' },
+    { id: 'zugang',      label: 'Zugang' },
   ]
 
   const seed = employee.SHORT_NAME || employee.LAST_NAME || 'x'
@@ -1009,41 +1008,69 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         <RoleSection employeeId={employee.ID} roles={roles} mapping={mapping} />
       )}
 
-      {section === 'passwort' && (
+      {section === 'zugang' && (
         <div>
           <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
-            Hier können Sie das Passwort des Mitarbeiters setzen oder löschen (Passwort = leer → Mitarbeiter kann sich ohne Passwort anmelden).
+            Das Passwort wählt der Mitarbeiter selbst. Sie schicken ihm dafür eine Einladung mit einem
+            einmaligen Link — ein von Ihnen vergebenes Passwort gibt es bewusst nicht.
+            Solange kein Passwort gesetzt ist, ist keine Anmeldung möglich.
           </p>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 10 }}>
-            <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
-              <label style={{ fontSize: 12 }}>Neues Passwort (mind. 8 Zeichen)</label>
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={newPw}
-                onChange={e => setNewPw(e.target.value)}
-                placeholder="Leer lassen, um Passwort zu löschen"
-              />
-            </div>
+
+          {!employee.MAIL && (
+            <Message
+              type="error"
+              text={'Für diesen Mitarbeiter ist keine E-Mail-Adresse hinterlegt. Bitte zuerst unter „Stammdaten" nachtragen.'}
+            />
+          )}
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
             <button
               type="button"
               className="btn-small btn-save"
-              disabled={pwSaving || (newPw.length > 0 && newPw.length < 8)}
+              disabled={pwSaving || !employee.MAIL}
               onClick={async () => {
                 setPwMsg(null)
                 setPwSaving(true)
                 try {
-                  await setEmployeePassword(employee.ID, newPw || null)
-                  setPwMsg({ text: newPw ? 'Passwort gesetzt ✅' : 'Passwort gelöscht ✅', type: 'success' })
-                  setNewPw('')
+                  const r = await sendEmployeeInvite(employee.ID)
+                  setPwMsg({ text: `Einladung an ${r.mail} gesendet.`, type: 'success' })
                 } catch (e: unknown) {
                   setPwMsg({ text: (e as Error).message, type: 'error' })
                 } finally { setPwSaving(false) }
               }}
             >
-              {pwSaving ? '…' : newPw ? 'Passwort setzen' : 'Passwort löschen'}
+              {pwSaving ? 'Sendet …' : 'Einladung senden'}
             </button>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              Der Link ist 7 Tage gültig und entwertet vorherige Einladungen.
+            </span>
           </div>
+
+          {/* Zugang sperren: setzt das Passwort zurueck. Danach kommt der
+              Mitarbeiter nur ueber eine neue Einladung wieder herein. */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <button
+              type="button"
+              className="btn-small btn-danger"
+              disabled={pwSaving}
+              onClick={async () => {
+                setPwMsg(null)
+                setPwSaving(true)
+                try {
+                  await setEmployeePassword(employee.ID, null)
+                  setPwMsg({ text: 'Passwort gelöscht — Anmeldung erst nach neuer Einladung möglich.', type: 'success' })
+                } catch (e: unknown) {
+                  setPwMsg({ text: (e as Error).message, type: 'error' })
+                } finally { setPwSaving(false) }
+              }}
+            >
+              Passwort löschen
+            </button>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              Sperrt den Zugang sofort, ohne den Mitarbeiter zu löschen.
+            </span>
+          </div>
+
           <Message text={pwMsg?.text ?? null} type={pwMsg?.type} />
         </div>
       )}
@@ -2917,7 +2944,20 @@ export function MitarbeiterPage() {
       await createEmployeeCpRate(empId, { cp_rate: parseFloat(createCpRate), valid_from: createCpValidFrom })
       void qc.invalidateQueries({ queryKey: ['employees'] })
       void qc.invalidateQueries({ queryKey: ['license-usage'] })
-      toast.success('Mitarbeiter angelegt')
+      // Der Versand der Einladung darf das Anlegen nicht als Fehler erscheinen
+      // lassen — das Konto existiert. Nur der Hinweistext unterscheidet sich.
+      if (res.invite?.sent) {
+        toast.success(`Mitarbeiter angelegt – Einladung an ${form.email} gesendet`)
+      } else {
+        toast.success('Mitarbeiter angelegt')
+        // Der Dialog schliesst gleich — der Hinweis muss ihn ueberleben,
+        // deshalb als Toast und nicht als Meldung im Formular.
+        toast.error(
+          `Einladung nicht versendet: ${res.invite?.reason ?? 'unbekannter Grund'} `
+          + 'Anmeldung erst nach dem Festlegen eines Passworts möglich — '
+          + 'Einladung in der Mitarbeiterakte erneut senden.'
+        )
+      }
       setForm(emptyCreateForm())
       setCreateWmModelId(''); setCreateWmValidFrom('')
       setCreateCpRate(''); setCreateCpValidFrom('')
@@ -3153,7 +3193,14 @@ export function MitarbeiterPage() {
             <label htmlFor="mentry">Eintrittsdatum</label>
             <input id="mentry" type="date" value={form.entry_date ?? ''} onChange={setF('entry_date')} />
           </div>
-          <FormField label="Passwort"    id="mpw" value={form.password ?? ''}       onChange={setF('password')} type="password" autoComplete="new-password" />
+          <div className="mitarbeiter-zugang-hinweis">
+            <KeyRound size={14} strokeWidth={2} />
+            <span>
+              Kein Passwort nötig: Nach dem Anlegen erhält der Mitarbeiter eine E-Mail mit einem
+              einmaligen Link und legt sein Passwort selbst fest. Ohne E-Mail-Adresse ist noch keine
+              Anmeldung möglich — die Einladung lässt sich später über den Mitarbeiter nachholen.
+            </span>
+          </div>
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="mge">Geschlecht*</label>

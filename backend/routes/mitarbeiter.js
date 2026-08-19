@@ -5,6 +5,7 @@ const { findAssetForTenant } = require("../services/assetAccess");
 const { requirePermission } = require("../middleware/permissions");
 const { enforceLimit } = require("../middleware/limits");
 const objectStorage = require("../services/objectStorage");
+const { sendInvite } = require("../services/accountInvite");
 
 // Returns an error message string if a duplicate is found, otherwise null.
 // excludeId: skip this employee ID (used on update to ignore self).
@@ -290,8 +291,11 @@ module.exports = (supabase) => {
     });
     if (dupConflict) return res.status(409).json({ error: dupConflict });
 
-    const hashedPassword = body.password ? await bcrypt.hash(body.password, 10) : null;
-
+    // Kein Passwort bei der Anlage. Der Admin legt nur das Konto an; das
+    // Passwort waehlt der Mitarbeiter selbst ueber den Einladungslink (siehe
+    // services/accountInvite.js). Ein mitgeschicktes `password` wird bewusst
+    // ignoriert statt abgelehnt — alte Clients sollen nicht brechen, aber auch
+    // kein fremdvergebenes Passwort mehr setzen koennen.
     const { data, error } = await supabase
       .from("EMPLOYEE")
       .insert([{
@@ -299,7 +303,7 @@ module.exports = (supabase) => {
         "TITLE": body.title,
         "FIRST_NAME": body.first_name,
         "LAST_NAME": body.last_name,
-        "PASSWORD": hashedPassword,
+        "PASSWORD": null,
         "MAIL": body.email,
         "MOBILE": body.mobile,
         "PERSONNEL_NUMBER": body.personnel_number,
@@ -335,7 +339,76 @@ module.exports = (supabase) => {
       }
     } catch (_) { /* ignore: Migration 0062 evtl. fehlt */ }
 
-    res.json({ data });
+    // Einladung verschicken. Scheitert der Versand, bleibt der Mitarbeiter
+    // trotzdem angelegt — die Oberflaeche zeigt den Grund und bietet
+    // "Einladung erneut senden" an. Ohne E-Mail-Adresse gibt es nichts zu
+    // senden; das Konto ist dann bis zur Nachpflege nicht anmeldbar.
+    let invite = { sent: false, reason: "Keine E-Mail-Adresse hinterlegt." };
+    if (data?.ID && body.email) {
+      const { data: company } = await supabase
+        .from("COMPANY")
+        .select("COMPANY_NAME_1")
+        .eq("TENANT_ID", req.tenantId)
+        .limit(1)
+        .maybeSingle();
+      invite = await sendInvite(req, {
+        employeeId:  data.ID,
+        mail:        body.email,
+        firstName:   body.first_name,
+        passwordHash: null,
+        companyName: company?.COMPANY_NAME_1 ?? null,
+      });
+    }
+
+    res.json({ data, invite });
+  });
+
+  // ── Einladung erneut senden ───────────────────────────────────────────────
+  // POST /mitarbeiter/:id/invite
+  //
+  // Bewusst dieselbe Permission wie "Passwort setzen": eine Einladung ist der
+  // Zugang zum Konto: wer sie ausloesen darf, darf ohnehin das Passwort
+  // bestimmen. Eine eigene Permission haette dieselbe Befugnis nur unter einem
+  // zweiten Namen gefuehrt.
+  router.post("/:id/invite", requirePermission("employees.password.set"), async (req, res) => {
+    const empId = Number(req.params.id);
+    if (!Number.isFinite(empId)) return res.status(400).json({ error: "Ungültige ID" });
+
+    const { data: emp, error } = await supabase
+      .from("EMPLOYEE")
+      .select("ID, MAIL, FIRST_NAME, PASSWORD, ACTIVE")
+      .eq("ID", empId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!emp)  return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+    if (!emp.MAIL) {
+      return res.status(400).json({ error: "Für diesen Mitarbeiter ist keine E-Mail-Adresse hinterlegt." });
+    }
+    if (emp.ACTIVE === 2) {
+      return res.status(400).json({ error: "Der Mitarbeiter ist inaktiv und kann sich nicht anmelden." });
+    }
+
+    const { data: company } = await supabase
+      .from("COMPANY")
+      .select("COMPANY_NAME_1")
+      .eq("TENANT_ID", req.tenantId)
+      .limit(1)
+      .maybeSingle();
+
+    // passwordHash geht MIT in den Token: hat der Mitarbeiter laengst ein
+    // Passwort, entwertet ein spaeterer Wechsel den Link wie beim
+    // Zuruecksetzen auch.
+    const invite = await sendInvite(req, {
+      employeeId:   emp.ID,
+      mail:         emp.MAIL,
+      firstName:    emp.FIRST_NAME,
+      passwordHash: emp.PASSWORD ?? null,
+      companyName:  company?.COMPANY_NAME_1 ?? null,
+    });
+
+    if (!invite.sent) return res.status(500).json({ error: invite.reason, ...(invite.url ? { url: invite.url } : {}) });
+    res.json({ sent: true, mail: emp.MAIL });
   });
 
 router.get("/", async (req, res) => {

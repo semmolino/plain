@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, Percent } from 'lucide-react'
+import { X, Percent, MousePointerClick } from 'lucide-react'
+import { HelpHint } from '@/components/ui/HelpHint'
 import { Message }      from '@/components/ui/Message'
 import { Modal }        from '@/components/ui/Modal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -635,13 +636,28 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
             </div>
           )}
 
+          {/* Gleiche Leiste wie in der Projektstruktur: Anlegen gehoert nach
+              oben, und die Rechtsklick-Funktionen brauchen einen sichtbaren
+              Hinweis. */}
+          <div className="list-toolbar">
+            {flatTree.length > 0 && (
+              <input type="search" className="list-search" placeholder="Elemente filtern …"
+                style={{ maxWidth: 260, fontSize: 13 }}
+                value={elementSearch} onChange={e => setElementSearch(e.target.value)} />
+            )}
+            <span className="struct-context-tip">
+              <MousePointerClick size={13} strokeWidth={1.75} />
+              Rechtsklick / langes Tippen auf eine Zeile öffnet weitere Funktionen
+              <HelpHint id="structure.contextmenu" />
+            </span>
+            <button className="btn-primary btn-small" type="button" style={{ marginLeft: 'auto' }}
+              onClick={() => { setSaveMsg(null); setAddForm(emptyAdd()) }}>
+              + Neue Position
+            </button>
+          </div>
+
           {flatTree.length > 0 && (
             <div className="list-section">
-              <div style={{ marginBottom: 8 }}>
-                <input type="search" className="list-search" placeholder="Elemente filtern …"
-                  style={{ maxWidth: 260, fontSize: 13 }}
-                  value={elementSearch} onChange={e => setElementSearch(e.target.value)} />
-              </div>
               <table className="master-table structure-table">
                 <thead>
                   <tr>
@@ -934,9 +950,6 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
           <div className="structure-actions">
             <button className="btn-primary" type="button" onClick={saveAll} disabled={saveMut.isPending}>
               {saveMut.isPending ? 'Speichert …' : 'Speichern (Strg+S)'}
-            </button>
-            <button type="button" onClick={() => { setSaveMsg(null); setAddForm(emptyAdd()) }}>
-              + Neue Position
             </button>
           </div>
           <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />

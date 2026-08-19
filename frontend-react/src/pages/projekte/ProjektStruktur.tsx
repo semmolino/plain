@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Trash2 } from 'lucide-react'
+import { Trash2, MousePointerClick } from 'lucide-react'
+import { HelpHint } from '@/components/ui/HelpHint'
 import { Message }       from '@/components/ui/Message'
 import { Modal }         from '@/components/ui/Modal'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
@@ -716,14 +717,32 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                 </div>
               )}
 
+              {/* Bedienleiste ueber der Tabelle. "+ Neues Element" stand
+                  frueher nur ganz unten hinter dem Speichern-Knopf — bei
+                  laengeren Strukturen ausserhalb des Sichtfelds und in der
+                  Wirkung wie ein Nebeneffekt des Speicherns. Sie wird auch bei
+                  leerer Struktur gerendert, sonst gaebe es dort keinen Weg zum
+                  ersten Element. */}
+              <div className="list-toolbar">
+                {flatTree.length > 0 && (
+                  <input type="search" className="list-search" placeholder="Elemente filtern …"
+                    style={{ maxWidth: 260, fontSize: 13 }}
+                    value={elementSearch} onChange={e => setElementSearch(e.target.value)}
+                  />
+                )}
+                <span className="struct-context-tip">
+                  <MousePointerClick size={13} strokeWidth={1.75} />
+                  Rechtsklick / langes Tippen auf eine Zeile öffnet weitere Funktionen
+                  <HelpHint id="structure.contextmenu" />
+                </span>
+                <button className="btn-primary btn-small" type="button" style={{ marginLeft: 'auto' }}
+                  onClick={() => { setSaveMsg(null); setAddForm(emptyAdd()) }}>
+                  + Neues Element
+                </button>
+              </div>
+
               {flatTree.length > 0 && (
                 <div className="list-section">
-                  <div style={{ marginBottom: 8 }}>
-                    <input type="search" className="list-search" placeholder="Elemente filtern …"
-                      style={{ maxWidth: 260, fontSize: 13 }}
-                      value={elementSearch} onChange={e => setElementSearch(e.target.value)}
-                    />
-                  </div>
                   <table className="master-table structure-table">
                     <thead>
                       <tr>
@@ -1039,9 +1058,6 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                   onClick={saveAll}
                   disabled={saveMut.isPending}>
                   {saveMut.isPending ? 'Speichert …' : 'Speichern (Strg+S)'}
-                </button>
-                <button type="button" onClick={() => { setSaveMsg(null); setAddForm(emptyAdd()) }}>
-                  + Neues Element
                 </button>
               </div>
               <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />

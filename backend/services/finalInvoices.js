@@ -661,8 +661,13 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
           const { data: psRows } = await supabase
             .from("PROJECT_STRUCTURE").select("ID, INVOICED").in("ID", sIds);
           const currentById = new Map((psRows || []).map(s => [String(s.ID), toNum(s.INVOICED)]));
+          // TENANT_ID muss mit in die Nutzlast: .upsert() wird zu
+          // INSERT ... ON CONFLICT, und RLS prueft WITH CHECK gegen die
+          // vorgeschlagene Zeile. Ohne Mandant bricht das Speichern mit
+          // "new row violates row-level security policy" ab.
           const updates = sIds.map(sid => ({
             ID: sid,
+            TENANT_ID: tenantId,
             INVOICED: round2((currentById.get(String(sid)) || 0) + (addByStructure.get(String(sid)) || 0)),
           }));
           const { error: psUpErr } = await supabase

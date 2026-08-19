@@ -29,7 +29,6 @@ export interface CreateEmployeePayload {
   title?:            string
   first_name:        string
   last_name:         string
-  password?:         string
   email?:            string
   mobile?:           string
   personnel_number?: string
@@ -37,6 +36,15 @@ export interface CreateEmployeePayload {
   department_id?:    number | null
   entry_date?:       string | null
   exit_date?:        string | null
+}
+
+/**
+ * Ergebnis des Einladungsversands beim Anlegen. Das Konto entsteht auch dann,
+ * wenn die Mail nicht rausgeht — deshalb ein eigenes Feld statt eines Fehlers.
+ */
+export interface InviteResult {
+  sent:    boolean
+  reason?: string
 }
 
 export interface UpdateEmployeePayload {
@@ -124,7 +132,11 @@ export const fetchEmployeeList = () =>
   apiClient.get<{ data: Employee[] }>('/mitarbeiter/list?limit=2000')
 
 export const createEmployee = (body: CreateEmployeePayload) =>
-  apiClient.post<{ data: Employee }>('/mitarbeiter', body)
+  apiClient.post<{ data: Employee; invite?: InviteResult }>('/mitarbeiter', body)
+
+/** Schickt die Einladung „Zugang einrichten" (erneut) an den Mitarbeiter. */
+export const sendEmployeeInvite = (id: number) =>
+  apiClient.post<{ sent: boolean; mail: string }>(`/mitarbeiter/${id}/invite`, {})
 
 export const updateEmployee = (id: number, body: UpdateEmployeePayload) =>
   apiClient.patch<{ data: Employee }>(`/mitarbeiter/${id}`, body)

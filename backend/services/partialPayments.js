@@ -852,7 +852,11 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
 
         const updates = structureIds.map((sid) => {
           const key = String(sid);
-          return { ID: sid, PARTIAL_PAYMENTS: round2((currentById.get(key) || 0) + (addByStructure.get(key) || 0)) };
+          // TENANT_ID muss mit in die Nutzlast: .upsert() wird zu
+          // INSERT ... ON CONFLICT, und RLS prueft WITH CHECK gegen die
+          // vorgeschlagene Zeile. Ohne Mandant bricht das Speichern mit
+          // "new row violates row-level security policy" ab.
+          return { ID: sid, TENANT_ID: tenantId, PARTIAL_PAYMENTS: round2((currentById.get(key) || 0) + (addByStructure.get(key) || 0)) };
         });
 
         const { error: psUpErr } = await supabase.from("PROJECT_STRUCTURE").upsert(updates, { onConflict: "ID" });
@@ -951,7 +955,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
     }
     if (payedByStructure.size > 0) {
       const upserts = [...payedByStructure.entries()].map(([sid, payed]) => ({
-        ID: parseInt(sid, 10), PAYED: payed,
+        ID: parseInt(sid, 10), TENANT_ID: tenantId, PAYED: payed,
       }));
       await supabase.from("PROJECT_STRUCTURE").upsert(upserts);
     }
