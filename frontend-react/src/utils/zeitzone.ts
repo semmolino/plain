@@ -21,6 +21,19 @@
  *   selbst bleibt aber an der Bürozeit verankert und verschiebt sich nicht.
  */
 
+/**
+ * Räumt negative Null weg.
+ *
+ * `-new Date().getTimezoneOffset()` ergibt in UTC nicht `0`, sondern `-0` —
+ * und `Object.is(-0, 0)` ist `false`. Das fiel nur in der CI auf, die in UTC
+ * läuft; auf einem Rechner in Berlin kommt der Fall nie vor. Ein Versatz von
+ * „minus null Minuten" ist ohnehin keine sinnvolle Aussage, also entsteht er
+ * hier gar nicht erst.
+ */
+function ohneNegativNull(n: number): number {
+  return n === 0 ? 0 : n
+}
+
 /** Versatz einer Zone gegenüber UTC in Minuten (östlich = positiv). */
 function zonenVersatzMinuten(zone: string, referenz: Date): number {
   try {
@@ -32,10 +45,10 @@ function zonenVersatzMinuten(zone: string, referenz: Date): number {
     const alsUtc = Date.parse(teile.replace(' ', 'T') + ':00Z')
     // Sekunden der Referenz wegschneiden, sonst verfälschen sie die Differenz.
     const referenzMinute = Math.floor(referenz.getTime() / 60000) * 60000
-    return Math.round((alsUtc - referenzMinute) / 60000)
+    return ohneNegativNull(Math.round((alsUtc - referenzMinute) / 60000))
   } catch {
     // Unbekannte Zone: lieber nicht umrechnen als falsch umrechnen.
-    return -referenz.getTimezoneOffset()
+    return ohneNegativNull(-referenz.getTimezoneOffset())
   }
 }
 
@@ -54,8 +67,8 @@ export function geraeteZeitzone(): string {
  */
 export function versatzZuBuero(bueroZone: string | null | undefined, referenz = new Date()): number {
   if (!bueroZone) return 0
-  const geraet = -referenz.getTimezoneOffset()
-  return geraet - zonenVersatzMinuten(bueroZone, referenz)
+  const geraet = ohneNegativNull(-referenz.getTimezoneOffset())
+  return ohneNegativNull(geraet - zonenVersatzMinuten(bueroZone, referenz))
 }
 
 function verschiebe(zeit: string, minuten: number): string {
