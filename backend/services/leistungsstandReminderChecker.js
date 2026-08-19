@@ -2,6 +2,7 @@
 
 const { createNotification } = require("./notifications");
 const schedule = require("./notificationSchedule");
+const health   = require("./checkerHealth");
 
 const TYPE_KEY = "leistungsstand_reminder";
 
@@ -23,9 +24,15 @@ async function checkLeistungsstandReminders(supabase) {
     if (error) throw error;
     configs = data || [];
   } catch (e) {
-    console.warn("[LEISTUNGSSTAND_REMINDER] kein Schedule-Tisch, skip:", e?.message || e);
+    // Diese Stelle verschluckte bisher JEDEN Datenbankfehler als "Tabelle
+    // fehlt eben". Ein abgelaufenes Token sah damit aus wie ein sauberer Lauf
+    // ohne Arbeit — der Grund, warum das Ausbleiben so lange raetselhaft war.
+    console.warn("[LEISTUNGSSTAND_REMINDER] Zeitplaene nicht lesbar, skip:", e?.message || e);
+    health.melde(TYPE_KEY, { fehler: e?.message || String(e) });
     return;
   }
+
+  health.melde(TYPE_KEY, { gesehen: configs.length });
 
   let totalCreated = 0;
 
@@ -43,6 +50,8 @@ async function checkLeistungsstandReminders(supabase) {
       console.error(`[LEISTUNGSSTAND_REMINDER] Tenant ${cfg.TENANT_ID} Fehler:`, e?.message || e);
     }
   }
+
+  health.melde(TYPE_KEY, { erstellt: totalCreated });
 
   if (totalCreated > 0) {
     console.log(`[LEISTUNGSSTAND_REMINDER] Insgesamt ${totalCreated} Notification(s) erstellt`);
@@ -248,11 +257,11 @@ function startLeistungsstandReminderChecker(supabase) {
 
   setTimeout(async () => {
     console.log("[LEISTUNGSSTAND_REMINDER] Initial-Lauf …");
-    await checkLeistungsstandReminders(supabase).catch(e =>
+    await health.laufe(TYPE_KEY, () => checkLeistungsstandReminders(supabase)).catch(e =>
       console.error("[LEISTUNGSSTAND_REMINDER] Error:", e?.message || e),
     );
     setInterval(() => {
-      checkLeistungsstandReminders(supabase).catch(e =>
+      health.laufe(TYPE_KEY, () => checkLeistungsstandReminders(supabase)).catch(e =>
         console.error("[LEISTUNGSSTAND_REMINDER] Error:", e?.message || e),
       );
     }, INTERVAL_MS);

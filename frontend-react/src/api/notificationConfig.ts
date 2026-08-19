@@ -47,3 +47,48 @@ export const upsertNotificationConfig = (typeKey: string, body: UpsertNotificati
 
 export const previewNotificationAudience = (typeKey: string, body: UpsertNotificationConfigBody) =>
   apiClient.post<AudiencePreview>(`/notification-config/${encodeURIComponent(typeKey)}/preview`, body)
+
+/** Laufprotokoll eines Hintergrund-Checkers (nur im Arbeitsspeicher). */
+export interface CheckerHealth {
+  zuletztUm: string | null
+  dauerMs:   number | null
+  /** Wie viele Datensätze der Lauf geprüft hat. */
+  gesehen:   number | null
+  /** Wie viele Benachrichtigungen er geschrieben hat. */
+  erstellt:  number | null
+  fehler:    string | null
+  laeufe:    number
+}
+
+export interface NotificationDiagnostics {
+  zeit: {
+    zeitzone:       string
+    jetztLokal:     string
+    jetztUtc:       string
+    versatzStunden: number
+  }
+  datenbank: { weg: string }
+  hintergrundJobs: {
+    abgeschaltet:   boolean
+    prozessStartUm: string
+    checker:        Record<string, CheckerHealth>
+  }
+  push: {
+    serverKonfiguriert: boolean
+    eigeneGeraete:      number
+    fehler:             string | null
+  }
+  zeitplaene: {
+    typeKey:         string
+    aktiv:           boolean
+    tage:            number[]
+    letzterTag:      boolean
+    uhrzeit:         string | null
+    zuletztGefeuert: string | null
+    naechsterLauf:   { datum: string; uhrzeit: string | null; faellig: boolean } | null
+  }[]
+  zeitplaeneFehler: string | null
+}
+
+export const fetchNotificationDiagnostics = () =>
+  apiClient.get<NotificationDiagnostics>('/notification-config/diagnose')

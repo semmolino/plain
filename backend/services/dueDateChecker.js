@@ -1,6 +1,7 @@
 "use strict";
 
 const { createNotification } = require("./notifications");
+const health = require("./checkerHealth");
 
 // Days before/after due date that trigger a notification
 const APPROACHING_DAYS = [7, 3, 1];
@@ -105,8 +106,13 @@ async function checkDueDates(supabase) {
 
   if (error) {
     console.error("[DUE_DATE_CHECKER] Failed to load invoices:", error.message);
+    // Fehler sichtbar machen: ohne diese Meldung sah ein abgelaufenes Token
+    // von aussen genauso aus wie "es gab nichts zu tun".
+    health.melde("invoice_due", { fehler: error.message });
     return;
   }
+
+  health.melde("invoice_due", { gesehen: (invoices || []).length });
 
   // Bezahlte Rechnungen sind weder faellig noch ueberfaellig. INVOICE traegt
   // kein Bezahlt-Kennzeichen — der offene Betrag ergibt sich erst aus den
@@ -161,6 +167,8 @@ async function checkDueDates(supabase) {
     }
   }
 
+  health.melde("invoice_due", { erstellt: created });
+
   if (created > 0 || skippedPaid > 0) {
     console.log(`[DUE_DATE_CHECKER] Created ${created} notification(s), ${skippedPaid} bezahlte Rechnung(en) uebersprungen`);
   }
@@ -173,12 +181,12 @@ function startDueDateChecker(supabase) {
 
   setTimeout(async () => {
     console.log("[DUE_DATE_CHECKER] Running initial check …");
-    await checkDueDates(supabase).catch(e =>
+    await health.laufe("invoice_due", () => checkDueDates(supabase)).catch(e =>
       console.error("[DUE_DATE_CHECKER] Error:", e?.message || e)
     );
     setInterval(() => {
       console.log("[DUE_DATE_CHECKER] Running daily check …");
-      checkDueDates(supabase).catch(e =>
+      health.laufe("invoice_due", () => checkDueDates(supabase)).catch(e =>
         console.error("[DUE_DATE_CHECKER] Error:", e?.message || e)
       );
     }, INTERVAL_MS);

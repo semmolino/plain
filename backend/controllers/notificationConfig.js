@@ -1,6 +1,7 @@
 'use strict';
 
-const svc = require('../services/notificationConfig');
+const svc     = require('../services/notificationConfig');
+const diagSvc = require('../services/notificationDiagnostics');
 
 async function listAll(req, res, supabase) {
   try {
@@ -41,4 +42,18 @@ async function preview(req, res, supabase) {
   }
 }
 
-module.exports = { listAll, upsert, preview };
+// GET /notification-config/diagnose
+// Selbstauskunft: Zeitzone, Hintergrunddienste, Zeitplaene, Push-Kanal.
+async function diagnose(req, res, supabase) {
+  try {
+    const data = await diagSvc.diagnose(supabase, {
+      tenantId: req.tenantId,
+      userId:   req.userId,
+    });
+    res.json(data);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || String(e) });
+  }
+}
+
+module.exports = { listAll, upsert, preview, diagnose };

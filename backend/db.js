@@ -135,11 +135,30 @@ function ermittleRolle() {
 const ROLLE = ermittleRolle();
 const mitRolle = (claims) => (ROLLE ? { role: ROLLE, ...claims } : claims);
 
-const tenantClient = (tenantId) =>
-  scopedClient(`t:${tenantId}`, mitRolle({ tenant_id: Number(tenantId) }));
+// ── Geltungsbereiche als BESCHREIBUNG, nicht als fertiger Client ────────────
+//
+// Hier lag ein Fehler, der nur Hintergrunddienste traf und deshalb lange
+// unsichtbar blieb: frueher wanderte ein fertiger CLIENT in den
+// AsyncLocalStorage. Fuer einen Request ist das harmlos — er wird je Anfrage
+// neu erzeugt und laeuft in Millisekunden ab. Ein Hintergrunddienst bekommt
+// seinen Kontext dagegen EINMAL beim Start und behaelt ihn, solange der
+// Prozess lebt. Sein Token war nach TOKEN_MINUTEN (5) abgelaufen, wurde aber
+// nie erneuert: ab da beantwortete PostgREST jede Abfrage der Checker mit 401.
+//
+// Sichtbar war davon nichts. Die Checker protokollieren Fehler bestenfalls als
+// Warnung und kehren zurueck — die Erinnerung blieb einfach aus. Der
+// "Jetzt ausfuehren"-Knopf lief dagegen im Request-Kontext mit frischem Token
+// und funktionierte tadellos. Genau diese Asymmetrie war das Krankheitsbild:
+// Test kommt an, Zeitplan nicht.
+//
+// Deshalb steht im Speicher jetzt nur noch, WELCHER Bereich gilt. Den Client
+// dazu holt aktuellerClient() bei jedem Zugriff ueber scopedClient — und der
+// erneuert das Token, sobald es abzulaufen droht.
+const tenantScopeOf = (tenantId) =>
+  ({ schluessel: `t:${tenantId}`, claims: mitRolle({ tenant_id: Number(tenantId) }) });
 
-const systemClient = () =>
-  scopedClient("system", mitRolle({ sys: "true" }));
+const systemScopeOf = () =>
+  ({ schluessel: "system", claims: mitRolle({ sys: "true" }) });
 
 // Ohne Mandanten und ohne Systemanspruch. Die Policies finden keinen Mandanten
 // und liefern keine Zeile — das ist der Zustand, in dem ein Programmfehler
@@ -172,7 +191,9 @@ function aktuellerClient() {
   if (!AKTIV) return legacyClient();
   const kontext = als.getStore();
   if (!kontext) return ohneKontext();
-  return kontext.client;
+  // Bei JEDEM Zugriff neu aufloesen statt einen Client festzuhalten: nur so
+  // bekommt ein Timer, der seit Stunden laeuft, ein gueltiges Token.
+  return scopedClient(kontext.schluessel, kontext.claims);
 }
 
 const db = new Proxy(Object.create(null), {
@@ -195,7 +216,7 @@ const db = new Proxy(Object.create(null), {
 function tenantScope(req, _res, next) {
   if (!AKTIV) return next();
   if (!req.tenantId) return next();          // oeffentliche Route: kein Mandant
-  als.run({ client: tenantClient(req.tenantId) }, next);
+  als.run(tenantScopeOf(req.tenantId), next);
 }
 
 // Fuer die wenigen mandantenuebergreifenden Vorgaenge: die sechs
@@ -207,7 +228,7 @@ function tenantScope(req, _res, next) {
 // fn geplant werden. Deshalb genuegt es, den start…Checker-Aufruf zu umhuellen.
 function runAsSystem(fn) {
   if (!AKTIV) return fn();
-  return als.run({ client: systemClient() }, fn);
+  return als.run(systemScopeOf(), fn);
 }
 
 // Dasselbe als Express-Middleware, fuer die oeffentlichen Router.
@@ -224,7 +245,7 @@ function runAsSystem(fn) {
 // nicht zu vermeiden und der Grund, warum diese Router eine Ausnahme bilden.
 function systemScope(_req, _res, next) {
   if (!AKTIV) return next();
-  als.run({ client: systemClient() }, next);
+  als.run(systemScopeOf(), next);
 }
 
 function assertConfigured() {

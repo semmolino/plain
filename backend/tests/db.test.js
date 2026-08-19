@@ -155,6 +155,51 @@ describe("mit POSTGREST_URL", () => {
     });
   });
 
+  // Der Fehler, der nur Hintergrunddienste traf: frueher landete ein fertiger
+  // CLIENT im AsyncLocalStorage. Ein Request ist nach Millisekunden fertig und
+  // merkt davon nichts — ein Checker behaelt seinen Kontext aber, solange der
+  // Prozess laeuft. Nach fuenf Minuten war sein Token abgelaufen und wurde nie
+  // erneuert: PostgREST beantwortete ab da jede Abfrage mit 401, und die
+  // Erinnerungen blieben stillschweigend aus. Der "Jetzt ausfuehren"-Knopf lief
+  // derweil im frischen Request-Kontext und funktionierte — genau die
+  // Asymmetrie, die das Krankheitsbild ausmachte.
+  it("erneuert das Token eines langlebigen Systemkontexts", () => {
+    const { db, runAsSystem } = ladeMit(MIT);
+    const echtesJetzt = Date.now;
+    try {
+      runAsSystem(() => {
+        const ersteAusgabe = claimsVon(db).exp;
+
+        // Sechs Minuten spaeter — laenger als TOKEN_MINUTEN (5).
+        const spaeter = echtesJetzt() + 6 * 60 * 1000;
+        Date.now = () => spaeter;
+
+        const zweiteAusgabe = claimsVon(db).exp;
+        expect(zweiteAusgabe).toBeGreaterThan(ersteAusgabe);
+        // Und der Anspruch bleibt derselbe — erneuert, nicht vertauscht.
+        expect(claimsVon(db).sys).toBe("true");
+        expect(claimsVon(db).exp * 1000).toBeGreaterThan(spaeter);
+      });
+    } finally {
+      Date.now = echtesJetzt;
+    }
+  });
+
+  it("erneuert auch den Mandanten-Client, ohne den Mandanten zu wechseln", () => {
+    const { db, tenantScope } = ladeMit(MIT);
+    const echtesJetzt = Date.now;
+    try {
+      tenantScope({ tenantId: 4 }, null, () => {
+        const ersteAusgabe = claimsVon(db).exp;
+        Date.now = () => echtesJetzt() + 6 * 60 * 1000;
+        expect(claimsVon(db).exp).toBeGreaterThan(ersteAusgabe);
+        expect(claimsVon(db).tenant_id).toBe(4);
+      });
+    } finally {
+      Date.now = echtesJetzt;
+    }
+  });
+
   // supabase-js haengt "/rest/v1" an jede URL. Bei Supabase bildet ein Gateway
   // das auf PostgREST ab; ein nacktes PostgREST antwortet darauf mit
   // {"code":"PGRST125","message":"Invalid path specified in request URL"} —

@@ -55,6 +55,7 @@ import {
 } from '@/api/arbzg'
 import {
   fetchNotificationConfigs, upsertNotificationConfig, previewNotificationAudience,
+  fetchNotificationDiagnostics,
   type NotificationTypeConfig, type UpsertNotificationConfigBody,
 } from '@/api/notificationConfig'
 import {
@@ -2845,6 +2846,160 @@ function BenachrichtigungenSection() {
 
       <LeistungsstandReminderBlock />
       <HoursBookingReminderBlock />
+      <ZustellungDiagnoseBlock />
+    </div>
+  )
+}
+
+// ── Diagnose: warum kam die Erinnerung nicht an? ─────────────────────────────
+//
+// Bleibt eine geplante Benachrichtigung aus, gibt es vier Verdächtige —
+// Zeitplan, Hintergrunddienst, Datenbank und Push-Kanal. Von außen sahen alle
+// vier gleich aus: nichts passiert. Dieser Block trennt sie auf, damit die
+// Frage einmal beantwortbar ist statt wiederholt geraten werden muss.
+// Grün/rot markierter Befund. Auf Modulebene, nicht in der Render-Funktion:
+// eine dort erzeugte Komponente ist bei jedem Durchlauf eine neue und wird
+// samt Zustand neu eingehängt.
+function Befund({ gut, text }: { gut: boolean; text: string }) {
+  return (
+    <span style={{ color: gut ? 'var(--success-strong)' : 'var(--danger-strong)', fontWeight: 600 }}>
+      {text}
+    </span>
+  )
+}
+
+function ZustellungDiagnoseBlock() {
+  const [offen, setOffen] = useState(false)
+  const { data, isFetching, refetch, error } = useQuery({
+    queryKey: ['notification-diagnose'],
+    queryFn:  fetchNotificationDiagnostics,
+    enabled:  offen,
+  })
+
+  const zeile: React.CSSProperties = {
+    display: 'flex', gap: 8, padding: '4px 0',
+    borderBottom: '1px solid var(--border)', fontSize: 12,
+  }
+  const label: React.CSSProperties = { minWidth: 190, color: 'var(--text-3)' }
+
+  return (
+    <div className="admin-block" style={{ marginTop: 24 }}>
+      <h3 className="admin-block-title">Zustellung prüfen</h3>
+      <p className="admin-section-hint">
+        Zeigt Serverzeit, Hintergrunddienste, Zeitpläne und den Push-Kanal — für den Fall,
+        dass eine geplante Erinnerung ausbleibt.
+      </p>
+
+      <button
+        type="button"
+        className="btn-secondary"
+        style={{ fontSize: 12, padding: '6px 12px', marginTop: 8 }}
+        onClick={() => { setOffen(true); if (offen) void refetch() }}
+        disabled={isFetching}
+      >
+        {isFetching ? 'Wird geprüft …' : offen ? 'Erneut prüfen' : 'Prüfen'}
+      </button>
+
+      {error && (
+        <p style={{ fontSize: 12, color: 'var(--danger-strong)', marginTop: 8 }}>
+          {error instanceof Error ? error.message : String(error)}
+        </p>
+      )}
+
+      {offen && data && (
+        <div style={{ marginTop: 12 }}>
+          <div style={zeile}>
+            <span style={label}>Zeitzone</span>
+            <span>
+              {data.zeit.zeitzone} · jetzt {data.zeit.jetztLokal}
+              {data.zeit.versatzStunden !== 0 && (
+                <span style={{ color: 'var(--text-3)' }}>
+                  {' '}(UTC {data.zeit.jetztUtc}, {data.zeit.versatzStunden > 0 ? '+' : ''}
+                  {data.zeit.versatzStunden} h)
+                </span>
+              )}
+            </span>
+          </div>
+
+          <div style={zeile}>
+            <span style={label}>Hintergrunddienste</span>
+            {data.hintergrundJobs.abgeschaltet
+              ? <Befund gut={false} text="abgeschaltet (DISABLE_BACKGROUND_JOBS)" />
+              : <span>laufen · Prozess gestartet {data.hintergrundJobs.prozessStartUm.slice(0, 16).replace('T', ' ')} UTC</span>}
+          </div>
+
+          <div style={zeile}>
+            <span style={label}>Push-Kanal</span>
+            <span>
+              {data.push.serverKonfiguriert
+                ? <Befund gut text="Server konfiguriert" />
+                : <Befund gut={false} text="keine VAPID-Schlüssel gesetzt" />}
+              {' · '}
+              {data.push.eigeneGeraete > 0
+                ? `${data.push.eigeneGeraete} eigene(s) Gerät(e)`
+                : 'kein eigenes Gerät registriert'}
+            </span>
+          </div>
+
+          <div style={{ ...zeile, borderBottom: 'none', marginTop: 8 }}>
+            <span style={{ ...label, fontWeight: 600, color: 'var(--text)' }}>Letzte Läufe</span>
+          </div>
+          {Object.keys(data.hintergrundJobs.checker).length === 0 ? (
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 8px 0' }}>
+              Seit dem Start des Servers ist noch kein Lauf erfolgt. Die Checker melden sich
+              erstmals wenige Minuten nach dem Start.
+            </p>
+          ) : (
+            Object.entries(data.hintergrundJobs.checker).map(([name, c]) => (
+              <div key={name} style={zeile}>
+                <span style={label}>{name}</span>
+                <span>
+                  {c.zuletztUm
+                    ? <>zuletzt {c.zuletztUm.slice(0, 16).replace('T', ' ')} UTC · {c.laeufe} Lauf/Läufe</>
+                    : 'noch nicht gelaufen'}
+                  {c.gesehen  != null && <> · {c.gesehen} geprüft</>}
+                  {c.erstellt != null && <> · {c.erstellt} erstellt</>}
+                  {c.fehler && <> · <Befund gut={false} text={c.fehler} /></>}
+                </span>
+              </div>
+            ))
+          )}
+
+          <div style={{ ...zeile, borderBottom: 'none', marginTop: 8 }}>
+            <span style={{ ...label, fontWeight: 600, color: 'var(--text)' }}>Zeitpläne</span>
+          </div>
+          {data.zeitplaeneFehler && (
+            <p style={{ fontSize: 12, color: 'var(--danger-strong)' }}>{data.zeitplaeneFehler}</p>
+          )}
+          {data.zeitplaene.length === 0 ? (
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
+              Für diesen Mandanten ist kein Zeitplan gespeichert — solange erinnert nichts
+              von selbst.
+            </p>
+          ) : (
+            data.zeitplaene.map(z => (
+              <div key={z.typeKey} style={zeile}>
+                <span style={label}>{z.typeKey}</span>
+                <span>
+                  {z.aktiv ? 'aktiv' : <Befund gut={false} text="inaktiv" />}
+                  {z.tage.length > 0 && <> · Tage {z.tage.join(', ')}</>}
+                  {z.letzterTag && <> · letzter Monatstag</>}
+                  {z.uhrzeit ? <> · {z.uhrzeit} Uhr</> : <> · ohne Uhrzeit</>}
+                  {' · '}
+                  {z.naechsterLauf
+                    ? (z.naechsterLauf.faellig
+                        ? <strong>steht unmittelbar an</strong>
+                        : <>nächster Lauf {z.naechsterLauf.datum}{z.naechsterLauf.uhrzeit ? ` ${z.naechsterLauf.uhrzeit}` : ''}</>)
+                    : <Befund gut={false} text="kein nächster Lauf — kein Tag ausgewählt?" />}
+                  {z.zuletztGefeuert && (
+                    <span style={{ color: 'var(--text-3)' }}> · zuletzt {z.zuletztGefeuert}</span>
+                  )}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

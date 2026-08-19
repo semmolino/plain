@@ -3,6 +3,7 @@
 const { createNotification } = require("./notifications");
 const streakSvc              = require("./streaks");
 const schedule               = require("./notificationSchedule");
+const health                 = require("./checkerHealth");
 
 /**
  * Liest die Tenant-Engagement-Konfig. Bei Fehler / fehlender Tabelle:
@@ -44,9 +45,14 @@ async function checkHoursBookingReminders(supabase) {
     if (error) throw error;
     configs = data || [];
   } catch (e) {
-    console.warn("[HOURS_BOOKING_REMINDER] kein Schedule-Tisch, skip:", e?.message || e);
+    // Wie beim Leistungsstand-Reminder: hier verschwand bisher jeder
+    // Datenbankfehler lautlos als "Tabelle fehlt eben".
+    console.warn("[HOURS_BOOKING_REMINDER] Zeitplaene nicht lesbar, skip:", e?.message || e);
+    health.melde(TYPE_KEY, { fehler: e?.message || String(e) });
     return;
   }
+
+  health.melde(TYPE_KEY, { gesehen: configs.length });
 
   let totalCreated = 0;
   for (const cfg of configs) {
@@ -67,6 +73,8 @@ async function checkHoursBookingReminders(supabase) {
       console.error(`[HOURS_BOOKING_REMINDER] Tenant ${cfg.TENANT_ID} Fehler:`, e?.message || e);
     }
   }
+
+  health.melde(TYPE_KEY, { erstellt: totalCreated });
 
   if (totalCreated > 0) {
     console.log(`[HOURS_BOOKING_REMINDER] Insgesamt ${totalCreated} Notification(s)`);
@@ -173,11 +181,11 @@ function startHoursBookingReminderChecker(supabase) {
   const INTERVAL_MS  = 60 * 60 * 1000;
   setTimeout(async () => {
     console.log("[HOURS_BOOKING_REMINDER] Initial-Lauf …");
-    await checkHoursBookingReminders(supabase).catch(e =>
+    await health.laufe(TYPE_KEY, () => checkHoursBookingReminders(supabase)).catch(e =>
       console.error("[HOURS_BOOKING_REMINDER] Error:", e?.message || e),
     );
     setInterval(() => {
-      checkHoursBookingReminders(supabase).catch(e =>
+      health.laufe(TYPE_KEY, () => checkHoursBookingReminders(supabase)).catch(e =>
         console.error("[HOURS_BOOKING_REMINDER] Error:", e?.message || e),
       );
     }, INTERVAL_MS);
