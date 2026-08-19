@@ -363,6 +363,36 @@ module.exports = (supabase) => {
     res.json({ data, invite });
   });
 
+  // ── Zugangsstatus ─────────────────────────────────────────────────────────
+  // GET /mitarbeiter/:id/access
+  //
+  // Beantwortet die Frage, die sonst nur durch Ausprobieren zu klaeren war:
+  // kann sich dieser Mitarbeiter ueberhaupt anmelden? Der Passwort-Hash selbst
+  // verlaesst den Server nicht — nur ob einer da ist.
+  //
+  // Bewusst OHNE Angabe, ob dieselbe Adresse in anderen Mandanten existiert:
+  // das waere ein Weg, fremde Konten abzufragen.
+  router.get("/:id/access", requirePermission("employees.password.set"), async (req, res) => {
+    const empId = Number(req.params.id);
+    if (!Number.isFinite(empId)) return res.status(400).json({ error: "Ungültige ID" });
+
+    const { data: emp, error } = await supabase
+      .from("EMPLOYEE")
+      .select("ID, MAIL, PASSWORD, ACTIVE")
+      .eq("ID", empId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!emp)  return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+
+    res.json({
+      has_password: !!emp.PASSWORD,
+      has_mail:     !!emp.MAIL,
+      active:       emp.ACTIVE !== 2,
+      can_login:    !!emp.PASSWORD && emp.ACTIVE !== 2,
+    });
+  });
+
   // ── Einladung erneut senden ───────────────────────────────────────────────
   // POST /mitarbeiter/:id/invite
   //
@@ -772,13 +802,20 @@ router.patch("/:id/set-password", requirePermission("employees.password.set"), a
     hashed = await bcrypt.hash(new_password, 10);
   }
 
-  const { error } = await supabase
+  // .select() erzwingt eine Rueckmeldung ueber die geschriebenen Zeilen: ohne
+  // es antwortet PostgREST mit 204, und ein Schreiben, das an einer Policy
+  // oder einem Filter vorbeilaeuft, saehe aus wie ein erfolgreiches.
+  const { data: geaendert, error } = await supabase
     .from("EMPLOYEE")
     .update({ PASSWORD: hashed })
     .eq("ID", id)
-    .eq("TENANT_ID", req.tenantId);
+    .eq("TENANT_ID", req.tenantId)
+    .select("ID");
 
   if (error) return res.status(500).json({ error: error.message });
+  if (!geaendert || geaendert.length !== 1) {
+    return res.status(404).json({ error: "Mitarbeiter nicht gefunden oder nicht änderbar." });
+  }
   res.json({ success: true });
 });
 

@@ -175,36 +175,73 @@ module.exports = (supabase) => {
       return res.status(400).json({ error: "E-Mail ist erforderlich." });
     }
 
-    const { data: employee, error: empErr } = await supabase
+    // ALLE Treffer holen, nicht maybeSingle().
+    //
+    // WARUM: EMPLOYEE.MAIL hat keinen Unique-Index, und die Dublettenpruefung
+    // beim Anlegen wirkt nur INNERHALB eines Mandanten — dieselbe Adresse in
+    // zwei Bueros ist erlaubt und im Alltag normal (Freiberufler, Testkonto
+    // des Administrators mit der eigenen Adresse). maybeSingle() liefert dann
+    // aber keinen zweiten Treffer, sondern einen FEHLER, und der landete hier
+    // in derselben Zeile wie "Benutzer unbekannt".
+    //
+    // Sichtbar war davon nichts: der Betroffene setzte sein Passwort ueber den
+    // Einladungslink, bekam "Passwort gespeichert" — und wurde beim Anmelden
+    // trotzdem mit "E-Mail oder Passwort falsch" abgewiesen, egal was er
+    // eintippte. Von aussen sah das aus, als sei das Passwort nicht angekommen.
+    const { data: kandidaten, error: empErr } = await supabase
       .from("EMPLOYEE")
       .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, PASSWORD, TENANT_ID, MAIL, ACTIVE, DASHBOARD_ROLE")
       .ilike("MAIL", likeEscape(email.trim()))
-      .maybeSingle();
+      .limit(20);
 
-    // Lookup-Fehler NICHT als 500 durchreichen: maybeSingle() liefert bei
-    // mehreren Treffern einen Fehler, der Statuscode waere sonst ein Orakel
-    // ("mehrere Accounts passen" vs. "keiner passt").
-    if (empErr || !employee || !mailMatches(employee.MAIL, email)) {
+    if (empErr) {
+      console.error("[LOGIN] Lookup-Fehler:", empErr.message);
       return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
     }
+
+    // likeEscape ist die erste Schranke, der exakte Vergleich die zweite.
+    const treffer = (kandidaten || []).filter((e) => mailMatches(e.MAIL, email));
+    if (treffer.length === 0) {
+      return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
+    }
+
+    // Das Passwort entscheidet, welches Konto gemeint ist. Das ist kein Orakel:
+    // wer hier ankommt, kennt das Passwort bereits.
+    const passt = async (e) => {
+      const stored = e.PASSWORD || null;
+      // Ohne gesetztes Passwort ist KEINE Anmeldung moeglich. Erstzugang laeuft
+      // ueber die Einladung bzw. /auth/reset-request.
+      if (!stored) return false;
+      return stored.startsWith("$2")
+        ? await bcrypt.compare(password || "", stored)
+        : stored === (password || "");
+    };
+
+    const passende = [];
+    for (const kandidat of treffer) {
+      if (await passt(kandidat)) passende.push(kandidat);
+    }
+
+    if (passende.length === 0) {
+      return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
+    }
+
+    // Gleiche Adresse UND gleiches Passwort in mehreren Mandanten: hier laesst
+    // sich nicht entscheiden, wer gemeint ist. Lieber ehrlich melden als
+    // willkuerlich einen der Mandanten waehlen.
+    if (passende.length > 1) {
+      console.warn(`[LOGIN] ${email}: ${passende.length} Konten mit gleicher Adresse und gleichem Passwort`);
+      return res.status(409).json({
+        error: "Diese E-Mail-Adresse gehört zu mehreren Konten mit demselben Passwort. "
+             + "Bitte den Administrator bitten, eines der Passwörter zu ändern.",
+      });
+    }
+
+    const employee = passende[0];
 
     if (employee.ACTIVE === 2) {
       return res.status(403).json({ error: "Dieser Benutzer ist inaktiv. Bitte Administrator kontaktieren." });
     }
-
-    // Ohne gesetztes Passwort ist KEINE Anmeldung moeglich. Frueher wurde die
-    // Pruefung hier uebersprungen -- damit war jeder ueber POST /mitarbeiter
-    // oder den CSV-Import angelegte Account mit beliebigem Passwort offen.
-    // Erstzugang laeuft ueber /auth/reset-request.
-    const stored = employee.PASSWORD || null;
-    if (!stored) {
-      return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
-    }
-
-    const valid = stored.startsWith("$2")
-      ? await bcrypt.compare(password || "", stored)
-      : stored === (password || "");
-    if (!valid) return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
 
     const tenantId = employee.TENANT_ID;
     if (!tenantId) {
@@ -310,12 +347,19 @@ module.exports = (supabase) => {
     if (!valid) return res.status(401).json({ error: "Aktuelles Passwort ist falsch." });
 
     const hashed = await bcrypt.hash(new_password, 10);
-    const { error: updErr } = await supabase
+    // .select() erzwingt eine Rueckmeldung ueber die geschriebenen Zeilen —
+    // siehe Begruendung bei /reset-confirm.
+    const { data: geaendert, error: updErr } = await supabase
       .from("EMPLOYEE")
       .update({ PASSWORD: hashed })
-      .eq("ID", decoded.employee_id);
+      .eq("ID", decoded.employee_id)
+      .select("ID");
 
     if (updErr) return res.status(500).json({ error: updErr.message });
+    if (!geaendert || geaendert.length !== 1) {
+      console.error(`[CHANGE-PASSWORD] Kein Schreibvorgang fuer EMPLOYEE ${decoded.employee_id} (${geaendert?.length ?? 0} Zeilen)`);
+      return res.status(500).json({ error: "Das Passwort konnte nicht gespeichert werden. Bitte Administrator kontaktieren." });
+    }
     return res.json({ success: true });
   });
 
@@ -324,44 +368,54 @@ module.exports = (supabase) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: "E-Mail ist erforderlich." });
 
-    const { data: employee } = await supabase
+    // Alle Treffer, nicht maybeSingle() — dieselbe Adresse darf in mehreren
+    // Mandanten vorkommen, und maybeSingle() lieferte dafuer einen Fehler
+    // statt Zeilen. Die Antwort war dann "success", ohne dass je eine Mail
+    // rausging: Passwort-vergessen blieb fuer genau diese Nutzer wirkungslos.
+    const { data: kandidaten } = await supabase
       .from("EMPLOYEE")
       .select("ID, MAIL, PASSWORD")
       .ilike("MAIL", likeEscape(email.trim()))
-      .maybeSingle();
+      .limit(20);
 
     // Wie beim Login: exakter Abgleich als zweite Schranke gegen Wildcard-
     // Treffer. Antwort bleibt in jedem Fall 200 (keine Existenz-Preisgabe).
-    if (!employee || !mailMatches(employee.MAIL, email)) {
+    const treffer = (kandidaten || []).filter((e) => mailMatches(e.MAIL, email));
+    if (treffer.length === 0) {
       return res.json({ success: true });
     }
 
-    const resetToken = jwt.sign(
-      { employee_id: employee.ID, email: employee.MAIL, purpose: "reset", pv: pwdFingerprint(employee.PASSWORD) },
-      jwtSecret(),
-      { expiresIn: "1h" }
-    );
-    const baseUrl  = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
-    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+    const baseUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
 
-    try {
-      // System-Mail -> Plattform-Absender (globale SMTP_*-ENV, z.B. Eusend),
-      // bewusst OHNE tenantId. _sendMail wirft {status:503}, wenn gar kein
-      // Versand konfiguriert ist.
-      await _sendMail({
-        to:      employee.MAIL,
-        subject: "PlaIn – Passwort zurücksetzen",
-        text:    `Klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen (gültig 1 Stunde):\n\n${resetUrl}`,
-        html:    `<p>Klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen (gültig 1 Stunde):</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
-      });
-    } catch (mailErr) {
-      if (mailErr?.status === 503) {
-        // Kein Versand konfiguriert — Link ins Log fuer Admin-Abruf.
-        console.log(`[PASSWORD RESET] ${employee.MAIL}: ${resetUrl}`);
-        return res.status(500).json({ error: "E-Mail-Versand nicht konfiguriert. Bitte Administrator kontaktieren." });
+    // Je Konto ein eigener Link. Wem die Adresse gehoert, dem gehoeren auch
+    // alle Konten dahinter — eine Auswahl waere hier weder moeglich noch noetig.
+    for (const employee of treffer) {
+      const resetToken = jwt.sign(
+        { employee_id: employee.ID, email: employee.MAIL, purpose: "reset", pv: pwdFingerprint(employee.PASSWORD) },
+        jwtSecret(),
+        { expiresIn: "1h" }
+      );
+      const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+
+      try {
+        // System-Mail -> Plattform-Absender (globale SMTP_*-ENV, z.B. Eusend),
+        // bewusst OHNE tenantId. _sendMail wirft {status:503}, wenn gar kein
+        // Versand konfiguriert ist.
+        await _sendMail({
+          to:      employee.MAIL,
+          subject: "plan&simple – Passwort zurücksetzen",
+          text:    `Klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen (gültig 1 Stunde):\n\n${resetUrl}`,
+          html:    `<p>Klicken Sie auf folgenden Link, um Ihr Passwort zurückzusetzen (gültig 1 Stunde):</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+        });
+      } catch (mailErr) {
+        if (mailErr?.status === 503) {
+          // Kein Versand konfiguriert — Link ins Log fuer Admin-Abruf.
+          console.log(`[PASSWORD RESET] ${employee.MAIL}: ${resetUrl}`);
+          return res.status(500).json({ error: "E-Mail-Versand nicht konfiguriert. Bitte Administrator kontaktieren." });
+        }
+        console.error("[PASSWORD RESET] Mail error:", mailErr?.message || mailErr);
+        return res.status(500).json({ error: "E-Mail konnte nicht gesendet werden. Bitte Administrator kontaktieren." });
       }
-      console.error("[PASSWORD RESET] Mail error:", mailErr?.message || mailErr);
-      return res.status(500).json({ error: "E-Mail konnte nicht gesendet werden. Bitte Administrator kontaktieren." });
     }
 
     return res.json({ success: true });
@@ -402,12 +456,22 @@ module.exports = (supabase) => {
     }
 
     const hashed = await bcrypt.hash(new_password, 10);
-    const { error: updErr } = await supabase
+    // .select() ist hier NICHT kosmetisch: ohne es antwortet PostgREST mit
+    // 204 und supabase-js meldet weder Fehler noch Zeilenzahl. Ein Schreiben,
+    // das an einer Policy oder einem Filter vorbeilaeuft, saehe damit exakt
+    // aus wie ein erfolgreiches — der Nutzer bekaeme "Passwort gespeichert"
+    // und stuende danach vor einem Konto, das er nicht betreten kann.
+    const { data: geaendert, error: updErr } = await supabase
       .from("EMPLOYEE")
       .update({ PASSWORD: hashed })
-      .eq("ID", decoded.employee_id);
+      .eq("ID", decoded.employee_id)
+      .select("ID");
 
     if (updErr) return res.status(500).json({ error: updErr.message });
+    if (!geaendert || geaendert.length !== 1) {
+      console.error(`[RESET-CONFIRM] Kein Schreibvorgang fuer EMPLOYEE ${decoded.employee_id} (${geaendert?.length ?? 0} Zeilen)`);
+      return res.status(500).json({ error: "Das Passwort konnte nicht gespeichert werden. Bitte Administrator kontaktieren." });
+    }
     return res.json({ success: true });
   });
 

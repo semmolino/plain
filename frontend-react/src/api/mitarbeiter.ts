@@ -138,6 +138,17 @@ export const createEmployee = (body: CreateEmployeePayload) =>
 export const sendEmployeeInvite = (id: number) =>
   apiClient.post<{ sent: boolean; mail: string }>(`/mitarbeiter/${id}/invite`, {})
 
+export interface EmployeeAccessState {
+  has_password: boolean
+  has_mail:     boolean
+  active:       boolean
+  can_login:    boolean
+}
+
+/** Kann sich dieser Mitarbeiter anmelden — und wenn nein, woran liegt es? */
+export const fetchEmployeeAccess = (id: number) =>
+  apiClient.get<EmployeeAccessState>(`/mitarbeiter/${id}/access`)
+
 export const updateEmployee = (id: number, body: UpdateEmployeePayload) =>
   apiClient.patch<{ data: Employee }>(`/mitarbeiter/${id}`, body)
 

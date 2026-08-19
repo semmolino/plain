@@ -27,7 +27,7 @@ import {
   fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
   fetchEmployeeCpRates, createEmployeeCpRate, updateEmployeeCpRate, deleteEmployeeCpRate,
   fetchMonthBalance, fetchRunningBalance,
-  fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword, sendEmployeeInvite,
+  fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword, sendEmployeeInvite, fetchEmployeeAccess,
   fetchEmployeeReportList, fetchEmployeeProjects, fetchEmployeeAvatar,
   type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
   type EmployeeWorkModel, type EmployeeCpRate, type MonthBalance, type RunningMonth,
@@ -605,6 +605,11 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   // Zugangsverwaltung: Einladung senden bzw. Passwort loeschen.
   const [pwMsg,      setPwMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [pwSaving,   setPwSaving]   = useState(false)
+  const { data: access, refetch: refetchAccess } = useQuery({
+    queryKey: ['employee-access', employee.ID],
+    queryFn:  () => fetchEmployeeAccess(employee.ID),
+    enabled:  section === 'zugang',
+  })
 
   const { data: cpRatesRes }    = useQuery({ queryKey: ['emp-cp-rates',    employee.ID], queryFn: () => fetchEmployeeCpRates(employee.ID)   })
   const { data: workModelsRes } = useQuery({ queryKey: ['emp-work-models', employee.ID], queryFn: () => fetchEmployeeWorkModels(employee.ID) })
@@ -1016,6 +1021,22 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             Solange kein Passwort gesetzt ist, ist keine Anmeldung möglich.
           </p>
 
+          {/* Der Zustand gehoert sichtbar hierher: ob ein Passwort gesetzt ist,
+              liess sich sonst nur durch einen Anmeldeversuch herausfinden. */}
+          <div className="zugang-status">
+            <span className={access?.can_login ? 'zugang-status-ok' : 'zugang-status-offen'}>
+              {access == null
+                ? 'Status wird geladen …'
+                : access.can_login
+                  ? 'Anmeldung möglich — Passwort ist gesetzt.'
+                  : !access.has_mail
+                    ? 'Keine Anmeldung möglich: keine E-Mail-Adresse hinterlegt.'
+                    : !access.active
+                      ? 'Keine Anmeldung möglich: Mitarbeiter ist inaktiv.'
+                      : 'Keine Anmeldung möglich: es wurde noch kein Passwort gesetzt.'}
+            </span>
+          </div>
+
           {!employee.MAIL && (
             <Message
               type="error"
@@ -1059,6 +1080,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                 try {
                   await setEmployeePassword(employee.ID, null)
                   setPwMsg({ text: 'Passwort gelöscht — Anmeldung erst nach neuer Einladung möglich.', type: 'success' })
+                  void refetchAccess()
                 } catch (e: unknown) {
                   setPwMsg({ text: (e as Error).message, type: 'error' })
                 } finally { setPwSaving(false) }

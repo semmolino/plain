@@ -7,6 +7,21 @@
 // `or()` wird bewusst ignoriert (keine Filterung) — nur Soft-Fail-Pfade
 // (Feiertage/Notifications) nutzen es, die in Tests leer/geschluckt sind.
 
+// Uebersetzt ein ILIKE-Muster in einen case-insensitiven regulaeren Ausdruck.
+// Backslash escaped das FOLGENDE Zeichen (dann literal), "%" und "*" sind
+// Platzhalter, alles andere wird literal genommen.
+function ilikeRegex(muster) {
+  let re = "";
+  const s = String(muster);
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "\\" && i + 1 < s.length) { re += s[++i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); continue; }
+    if (c === "%" || c === "*") { re += ".*"; continue; }
+    re += c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${re}$`, "i");
+}
+
 function makeFakeSupabase(initial = {}) {
   const tables = {};
   for (const [k, v] of Object.entries(initial)) tables[k] = v.map(r => ({ ...r }));
@@ -33,6 +48,7 @@ function makeFakeSupabase(initial = {}) {
         case "is":  return f.val === null ? (v === null || v === undefined) : v === f.val;
         // .not(col, "is", null) — die einzige not-Form, die im Code vorkommt.
         case "notIs": return f.val === null ? (v !== null && v !== undefined) : v !== f.val;
+        case "ilike": return f.val.test(String(v ?? ""));
         default:    return true;
       }
     }));
@@ -83,11 +99,27 @@ function makeFakeSupabase(initial = {}) {
       lte(col, val) { filters.push({ op: "lte", col, val }); return builder; },
       lt(col, val)  { filters.push({ op: "lt",  col, val }); return builder; },
       is(col, val)  { filters.push({ op: "is",  col, val }); return builder; },
+      // PostgREST-Semantik nachgebildet: "*" und "%" sind Platzhalter, ein
+      // vorangestellter Backslash macht das naechste Zeichen literal. Genau
+      // darauf verlaesst sich likeEscape() im Login.
+      ilike(col, muster) { filters.push({ op: "ilike", col, val: ilikeRegex(muster) }); return builder; },
       not(col, op, val) { filters.push({ op: op === "is" ? "notIs" : "neq", col, val }); return builder; },
       or() { return builder; },
       order(col, opts) { order = { col, asc: !opts || opts.ascending !== false }; return builder; },
       limit(n) { limitN = n; return builder; },
-      maybeSingle() { const { data, error } = run(); return Promise.resolve({ data: data && data.length ? data[0] : null, error }); },
+      // PostgREST liefert bei MEHREREN Treffern einen Fehler, nicht die erste
+      // Zeile. Genau daran haing der Login-Fehler bei doppelten E-Mail-
+      // Adressen — ein nachsichtiger Fake haette ihn nie gezeigt.
+      maybeSingle() {
+        const { data, error } = run();
+        if (data && data.length > 1) {
+          return Promise.resolve({
+            data: null,
+            error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" },
+          });
+        }
+        return Promise.resolve({ data: data && data.length ? data[0] : null, error });
+      },
       single() { const { data, error } = run(); return Promise.resolve({ data: data && data.length ? data[0] : null, error: (data && data.length) ? error : (error || { message: "No rows" }) }); },
       then(resolve, reject) { try { resolve(run()); } catch (e) { reject ? reject(e) : null; } },
     };

@@ -1417,42 +1417,53 @@ input::placeholder { color: var(--text-4); }
    es sah nach dem Ende der Liste aus. In der Administration mit ihren vielen
    Reitern blieben so ganze Bereiche unauffindbar.
 
-   Der Hinweis kommt jetzt aus dem Hintergrund selbst, ohne JavaScript und ohne
-   Platz zu kosten: zwei Verlaufspaare, die per background-attachment
-   unterschiedlich mitscrollen. Die deckenden Verlaeufe (local) wandern mit dem
-   Inhalt und verdecken die Schatten, solange an dieser Seite nichts mehr
-   kommt; die Schatten (scroll) stehen fest am Rand und werden dadurch genau
-   dann sichtbar, wenn dort abgeschnittener Inhalt liegt. Nichts zu scrollen
-   heisst: kein Schatten. */
+   Den Hinweis geben jetzt Pfeile an den Raendern (components/ui/Tabs.tsx). Sie
+   erscheinen nur, wenn in ihre Richtung wirklich etwas liegt, und sind zugleich
+   bedienbar. Eine eingeblendete Bildlaufleiste war die naheliegendere Loesung,
+   wird aber schlicht ueberlesen. */
+.tabs-wrap {
+  position: relative;
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-2);
+}
 .tabs {
   display: flex; gap: var(--space-1);
-  margin-bottom: var(--space-3);
   overflow-x: auto;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--border-2);
-
-  background-image:
-    linear-gradient(to right, var(--bg), rgba(0, 0, 0, 0)),
-    linear-gradient(to left,  var(--bg), rgba(0, 0, 0, 0)),
-    linear-gradient(to right, rgba(var(--shadow-color), 0.18), rgba(0, 0, 0, 0)),
-    linear-gradient(to left,  rgba(var(--shadow-color), 0.18), rgba(0, 0, 0, 0));
-  background-position: left center, right center, left center, right center;
-  background-repeat: no-repeat;
-  background-size: 28px 100%, 28px 100%, 12px 100%, 12px 100%;
-  /* Reihenfolge muss zu background-image passen: Abdeckung mitscrollend,
-     Schatten ortsfest. */
-  background-attachment: local, local, scroll, scroll;
+  scroll-behavior: smooth;
 }
 .tabs::-webkit-scrollbar { display: none; }
 
-/* Mit Maus ist eine schmale Bildlaufleiste die eindeutigste Ansage. Auf
-   Touchgeraeten bleibt sie weg — dort kostet sie nur Hoehe, und gewischt wird
-   ohnehin. */
-@media (hover: hover) and (pointer: fine) {
-  .tabs { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; padding-bottom: 2px; }
-  .tabs::-webkit-scrollbar { display: block; height: 4px; }
-  .tabs::-webkit-scrollbar-track { background: transparent; }
-  .tabs::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: var(--radius-pill); }
+/* Der Pfeil liegt UEBER der Leiste statt daneben: daneben wuerde er die
+   Reiter bei jedem Erscheinen und Verschwinden seitlich verschieben. Der
+   Farbverlauf dahinter laesst den darunterliegenden Reiter auslaufen, statt
+   ihn hart abzuschneiden — so ist erkennbar, dass dort weitergeht. */
+.tabs-arrow {
+  position: absolute; top: 0; bottom: 0;
+  z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; padding: 0;
+  border: none; border-radius: 0;
+  color: var(--text-2);
+  cursor: pointer;
+  box-shadow: none;
+}
+.tabs-arrow:hover { color: var(--text); }
+.tabs-arrow-left {
+  left: 0;
+  justify-content: flex-start;
+  background: linear-gradient(to right, var(--bg) 55%, rgba(0, 0, 0, 0));
+}
+.tabs-arrow-right {
+  right: 0;
+  justify-content: flex-end;
+  background: linear-gradient(to left, var(--bg) 55%, rgba(0, 0, 0, 0));
+}
+/* Beruehrflaeche auf die geforderten 44px bringen, ohne die Leiste hoeher zu
+   machen: der Knopf fuellt die volle Hoehe der Leiste (Reiter sind 37px) und
+   waechst auf dem Handy in der Breite. */
+@media (max-width: 767px) {
+  .tabs-arrow { width: 44px; }
 }
 
 .tab-btn {
@@ -1900,6 +1911,14 @@ input::placeholder { color: var(--text-4); }
   font-size: 11px; color: var(--text-3); line-height: 1.4;
 }
 .struct-context-tip svg { flex: 0 0 auto; }
+
+/* Zugangsstatus in der Mitarbeiterakte. */
+.zugang-status {
+  margin-bottom: var(--space-3);
+  font-size: 12px; font-weight: 600;
+}
+.zugang-status-ok     { color: var(--success-strong); }
+.zugang-status-offen  { color: var(--warning-strong); }
 
 /* Hinweiskasten im Anlage-Dialog: erklaert, warum dort kein Passwortfeld mehr
    steht. Steht an der Stelle, an der das Feld frueher war — sonst wirkt das
