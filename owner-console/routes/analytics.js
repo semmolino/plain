@@ -37,13 +37,16 @@ function perMonth(rows, n = 6) {
 
 router.get("/analytics", async (_req, res) => {
   const [{ data: sugg, error: e1 }, { data: reqs, error: e2 }] = await Promise.all([
-    supabase.from("SUGGESTION").select("ID, PUBLIC_TITLE, TITLE, CATEGORY, MODERATION_STATE, LIFECYCLE_STATUS, MERGED_INTO_ID, VOTE_COUNT, TENANT_ID, CREATED_AT"),
+    supabase.from("SUGGESTION").select("ID, PUBLIC_TITLE, TITLE, CATEGORY, MODERATION_STATE, LIFECYCLE_STATUS, MERGED_INTO_ID, VOTE_COUNT, TENANT_ID, CREATED_AT, ORG_STATE"),
     supabase.from("SERVICE_REQUEST").select("KIND, CATEGORY, STATUS, CREATED_AT"),
   ]);
   if (e1) return res.status(500).json({ error: e1.message });
   if (e2) return res.status(500).json({ error: e2.message });
 
-  const s = sugg || [];
+  // Nicht freigegebene Entwuerfe zaehlen hier nicht mit — sie sind fuer
+  // plan&simple nicht existent (Migration 0132). Ein Eingangszaehler, der sie
+  // mitzaehlt, waere schon die halbe Auskunft ueber ihren Inhalt.
+  const s = (sugg || []).filter((x) => x.ORG_STATE == null || x.ORG_STATE === "released");
   const r = reqs || [];
 
   const published = s.filter((x) => x.MODERATION_STATE === "published" && !x.MERGED_INTO_ID);

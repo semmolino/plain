@@ -60,6 +60,15 @@ Feedback & Unterstützung sind dagegen rein privat (1:1 Org ↔ plan&simple) und
    ausgespielt. → PII, die ein Anwender versehentlich eintippt, gelangt **nie ungeprüft** auf das Board.
 2. **Freigabe-Gate (Moderation).** Nichts erscheint öffentlich ohne Freigabe durch plan&simple. Gilt für
    Vorschläge *und* Kommentare.
+2b. **Org-Freigabe VOR der Moderation** (`ORG_STATE`, Migration 0132). Einreichen darf jeder mit
+   `service.suggestions.view`; das Haus verlässt ein Vorschlag aber erst, wenn der **Produkt-Sprecher**
+   ihn freigegeben hat. Bis dahin (`draft`) ist er für plan&simple nicht existent — auch nicht in der
+   Auswertung. Damit greift Schicht 1 nicht erst *nach* der Übermittlung des Originaltexts: der
+   kuratierte Doppeltext schützt das Board, die Org-Freigabe schützt den Weg dorthin. Lehnt der Sprecher
+   ab (`rejected`), sieht der Einreicher die Begründung.
+   *Warum eine eigene Spalte statt einer weiteren `MODERATION_STATE`-Ausprägung:* die Owner-Konsole fragt
+   dort nach `pending` und hätte nicht freigegebene Entwürfe mitgelesen. Zwei Prozesse mit zwei
+   Beteiligten gehören in zwei Felder.
 3. **Anhänge sind nie öffentlich.** Screenshots sind ausschließlich für plan&simple und die eigene Org
    sichtbar — niemals für fremde Anwender. Serverseitig: MIME-/Größen-Limit + **EXIF-/Metadaten-Strip**.
 4. **Pseudonymisierte Ausspielung.** Die Anwender-Seite erhält vom Backend **niemals** `EMPLOYEE_ID`/Namen/
@@ -209,8 +218,12 @@ Cross-Tenant-Leck, das wir vermeiden wollen. Die Owner-Konsole ist dafür der et
 
 ## 5  Statusmodell (inkl. „Abgelehnt"-Alternative)
 
-Zwei getrennte Felder — nicht vermischen:
+Drei getrennte Felder — nicht vermischen:
 
+- **`ORG_STATE`** (organisationsintern, steuert die Übermittlung an plan&simple):
+  `draft` · `released` · `rejected`. Nur `released` ist für plan&simple sichtbar. Entscheidet der
+  **Produkt-Sprecher** (ersatzweise `service.suggestions.admin`, damit nichts liegenbleibt); ein
+  Vorschlag des Sprechers selbst startet direkt als `released`.
 - **`MODERATION_STATE`** (intern, steuert Sichtbarkeit): `pending` · `published` · `declined` · `merged`
 - **`LIFECYCLE_STATUS`** (öffentlich, Roadmap-Signal an Kunden):
 
@@ -373,6 +386,9 @@ SUGGESTION
   PUBLIC_TITLE, PUBLIC_BODY              -- von plan&simple kuratiert (öffentlich)
   CATEGORY                               -- Modul-Enum
   PRIORITY_HINT                          -- nice/important/blocker (vom Einreicher)
+  ORG_STATE                              -- draft|released|rejected (Org-Freigabe, 0132)
+  ORG_RELEASED_AT, ORG_RELEASED_BY       -- wann/von wem entschieden
+  ORG_DECIDE_REASON                      -- Begründung bei Ablehnung (sieht der Einreicher)
   MODERATION_STATE                       -- pending|published|declined|merged
   LIFECYCLE_STATUS                       -- new|reviewing|planned|in_progress|shipped|not_planned
   MERGED_INTO_ID                         -- FK→SUGGESTION (Duplikat-Zusammenführung)

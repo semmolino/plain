@@ -11,6 +11,7 @@ import { fetchEmployeeList } from '@/api/mitarbeiter'
 import {
   fetchBoard, fetchMineSuggestions, fetchSuggestion, submitSuggestion,
   voteSuggestion, unvoteSuggestion, commentSuggestion, saveDelegate, fetchDelegate,
+  releaseSuggestion, rejectSuggestion,
   SUGGESTION_CATEGORIES,
   type BoardItem, type MineItem, type LifecycleStatus, type PriorityHint,
 } from '@/api/service'
@@ -28,6 +29,11 @@ const LIFECYCLE: Record<LifecycleStatus, { label: string; cls: string }> = {
 const CAT_LABEL = Object.fromEntries(SUGGESTION_CATEGORIES.map(c => [c.value, c.label]))
 
 function mineStatus(m: MineItem): { label: string; cls: string } {
+  // Die org-interne Freigabe kommt VOR der Moderation durch plan&simple und
+  // hat deshalb Vorrang in der Anzeige: solange nicht freigegeben ist, sagt
+  // "Wird geprüft" das Falsche — dort prüft noch niemand.
+  if (m.org_state === 'draft')    return { label: 'Wartet auf Freigabe',   cls: 'sg-st-new' }
+  if (m.org_state === 'rejected') return { label: 'Nicht freigegeben',     cls: 'sg-st-notplanned' }
   if (m.moderation_state === 'pending')  return { label: 'Wird geprüft',        cls: 'sg-st-reviewing' }
   if (m.moderation_state === 'declined') return { label: 'Nicht veröffentlicht', cls: 'sg-st-notplanned' }
   if (m.moderation_state === 'merged')   return { label: 'Zusammengeführt',      cls: 'sg-st-new' }
@@ -55,9 +61,10 @@ export function VorschlaegeTab() {
         <HelpHint id="service.vorschlaege" />
       </div>
       <p className="service-tab-lead">
-        Wünschen Sie sich eine Funktion? Reichen Sie sie ein. Nach Prüfung durch plan&amp;simple erscheint
-        sie im Portal, wo der Produkt-Sprecher Ihrer Organisation abstimmen kann. Andere Anwender sehen
-        dabei niemals Ihren Namen oder Ihre Organisation.
+        Wünschen Sie sich eine Funktion? Reichen Sie sie ein — das kann jeder im Haus. Ihr
+        Produkt-Sprecher gibt den Vorschlag frei, bevor er plan&amp;simple erreicht; nach dessen Prüfung
+        erscheint er im Portal, wo der Sprecher auch abstimmen kann. Andere Anwender sehen dabei
+        niemals Ihren Namen oder Ihre Organisation.
       </p>
 
       {isAdmin && <DelegateCard />}
@@ -168,6 +175,60 @@ function BoardCard({ item, canVote, onVote, voting, onOpen }: {
   )
 }
 
+// ── Freigabe durch den Produkt-Sprecher ──────────────────────────────────────
+// Sitzt direkt an der Karte statt in einem eigenen Reiter: der Sprecher
+// entscheidet anhand des Textes, den er gerade liest.
+function ReleaseActions({ item }: { item: MineItem }) {
+  const qc = useQueryClient()
+  const [ablehnen, setAblehnen] = useState(false)
+  const [grund, setGrund] = useState('')
+  const [fehler, setFehler] = useState<string | null>(null)
+
+  const fertig = () => {
+    setAblehnen(false); setGrund(''); setFehler(null)
+    void qc.invalidateQueries({ queryKey: ['service', 'mine'] })
+  }
+  const scheitern = (e: unknown) => setFehler(e instanceof Error ? e.message : 'Fehler')
+
+  const freigeben = useMutation({ mutationFn: () => releaseSuggestion(item.id), onSuccess: fertig, onError: scheitern })
+  const verwerfen = useMutation({ mutationFn: () => rejectSuggestion(item.id, grund.trim()), onSuccess: fertig, onError: scheitern })
+  const laeuft = freigeben.isPending || verwerfen.isPending
+
+  return (
+    <div className="sg-release">
+      {!ablehnen ? (
+        <div className="sg-release-row">
+          <span className="sg-release-frage">Für plan&amp;simple freigeben?</span>
+          <button type="button" className="btn-primary btn-small" disabled={laeuft}
+            onClick={() => { setFehler(null); freigeben.mutate() }}>
+            {freigeben.isPending ? 'Gibt frei …' : 'Freigeben'}
+          </button>
+          <button type="button" className="btn-small" disabled={laeuft} onClick={() => setAblehnen(true)}>
+            Nicht freigeben
+          </button>
+        </div>
+      ) : (
+        <div className="sg-release-row sg-release-row-grund">
+          <label htmlFor={`grund-${item.id}`} className="sg-release-frage">
+            Begründung für {item.submitter || 'den Einreicher'}
+          </label>
+          <input id={`grund-${item.id}`} className="tbl-input" value={grund} autoFocus
+            placeholder="z. B. wird schon von Funktion X abgedeckt"
+            onChange={e => setGrund(e.target.value)} />
+          <button type="button" className="btn-small btn-danger" disabled={laeuft || !grund.trim()}
+            onClick={() => { setFehler(null); verwerfen.mutate() }}>
+            {verwerfen.isPending ? 'Speichert …' : 'Ablehnen'}
+          </button>
+          <button type="button" className="btn-small" disabled={laeuft} onClick={() => { setAblehnen(false); setGrund('') }}>
+            Abbrechen
+          </button>
+        </div>
+      )}
+      {fehler && <div className="sg-release-fehler">{fehler}</div>}
+    </div>
+  )
+}
+
 // ── Meine / Unsere Vorschläge ────────────────────────────────────────────────
 function MineView() {
   const mineQuery = useQuery({ queryKey: ['service', 'mine'], queryFn: () => fetchMineSuggestions() })
@@ -175,7 +236,9 @@ function MineView() {
 
   const rows = mineQuery.data?.data ?? []
   const orgView = mineQuery.data?.org_view ?? false
+  const canRelease = mineQuery.data?.can_release ?? false
   const filtered = rows.filter(r => !search || (r.title + ' ' + r.body).toLowerCase().includes(search.toLowerCase()))
+  const offen = rows.filter(r => r.org_state === 'draft').length
 
   if (mineQuery.isLoading) return <p className="service-hint-muted">Laden …</p>
 
@@ -183,13 +246,23 @@ function MineView() {
     <>
       <div className="list-toolbar" style={{ marginTop: 4 }}>
         <input className="list-search" type="search" placeholder="Durchsuchen …" value={search} onChange={e => setSearch(e.target.value)} />
+        {canRelease && (
+          <span className="sg-offen-hinweis">
+            {offen === 0
+              ? 'Keine offenen Freigaben'
+              : offen === 1 ? '1 Vorschlag wartet auf Ihre Freigabe'
+              : `${offen} Vorschläge warten auf Ihre Freigabe`}
+            <HelpHint id="service.freigabe" />
+          </span>
+        )}
       </div>
       {filtered.length === 0 ? (
         <div className="service-empty">
           <div className="service-empty-icon"><Lightbulb size={26} strokeWidth={1.5} /></div>
           <h3>{rows.length === 0 ? 'Noch keine eigenen Vorschläge' : 'Kein Treffer'}</h3>
           <p>{rows.length === 0
-            ? 'Reichen Sie über „Vorschlag einreichen" Ihre erste Funktionsidee ein. Sie sehen hier jederzeit den Status.'
+            ? 'Reichen Sie über „Vorschlag einreichen" Ihre erste Funktionsidee ein. Sie sehen hier jederzeit den Status — '
+              + 'zuerst die Freigabe durch Ihren Produkt-Sprecher, danach die Prüfung durch plan&simple.'
             : 'Für die Suche gibt es keinen passenden Vorschlag.'}</p>
         </div>
       ) : (
@@ -205,6 +278,18 @@ function MineView() {
                   <span className="sg-comments"><ChevronUp size={13} strokeWidth={2} /> {m.vote_count}</span>
                   {orgView && m.submitter && <span className="sg-submitter">von {m.submitter}</span>}
                 </div>
+
+                {/* Abgelehnt: der Einreicher soll erfahren, warum und von wem —
+                    sonst wirkt es, als sei sein Vorschlag verschwunden. */}
+                {m.org_state === 'rejected' && m.org_decide_reason && (
+                  <div className="sg-abgelehnt">
+                    <strong>{m.org_decided_by || 'Produkt-Sprecher'}:</strong> {m.org_decide_reason}
+                  </div>
+                )}
+
+                {/* Nur der Sprecher sieht die Knöpfe, und nur bei Offenem. */}
+                {canRelease && m.org_state === 'draft' && <ReleaseActions item={m} />}
+
                 {m.vendor_responses.length > 0 && (
                   <div className="sg-vendor">
                     {m.vendor_responses.map((r, i) => (

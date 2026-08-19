@@ -853,10 +853,47 @@ export const HELP = {
     title: 'Vorschläge für Funktionen',
     body: (
       <>
-        Reichen Sie Funktionswünsche ein. Nach einer Prüfung durch plan&simple erscheinen sie im Portal,
-        wo der <strong>Produkt-Sprecher</strong> Ihrer Organisation abstimmen kann. Aus Datenschutzgründen
-        sehen andere Anwender dabei <strong>nie</strong> Ihren Namen, Ihre E-Mail oder Ihre Organisation —
-        nur den (von plan&simple geprüften) Inhalt, den Status und die Stimmenzahl.
+        Funktionswünsche darf <strong>jeder im Haus</strong> einreichen. Ein Vorschlag durchläuft danach
+        zwei Stationen:
+        <ol style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+          <li>
+            <strong>Freigabe durch den Produkt-Sprecher</strong> Ihrer Organisation. Bis dahin steht der
+            Vorschlag auf „Wartet auf Freigabe" und ist ausschließlich intern sichtbar — plan&simple
+            erfährt nichts davon.
+          </li>
+          <li>
+            <strong>Prüfung durch plan&simple.</strong> Erst danach erscheint der Vorschlag im Portal, wo
+            der Sprecher für Ihre Organisation abstimmen kann.
+          </li>
+        </ol>
+        <p style={{ margin: '8px 0 0' }}>
+          Die Freigabe ist bewusst eine Person und keine Formalie: ein Vorschlag spricht nach außen für
+          das ganze Büro, und der eingegebene Originaltext kann Projekt-, Bauherren- oder Kollegennamen
+          enthalten. Gibt der Sprecher einen Vorschlag nicht frei, sieht der Einreicher die Begründung.
+        </p>
+        <p style={{ margin: '8px 0 0' }}>
+          Aus Datenschutzgründen sehen andere Anwender <strong>nie</strong> Ihren Namen, Ihre E-Mail oder
+          Ihre Organisation — nur den von plan&simple geprüften Inhalt, den Status und die Stimmenzahl.
+        </p>
+      </>
+    ),
+  },
+  'service.freigabe': {
+    title: 'Freigabe durch den Produkt-Sprecher',
+    body: (
+      <>
+        Als Produkt-Sprecher entscheiden Sie, welche Vorschläge Ihres Hauses an plan&simple gehen.
+        <strong> Freigeben</strong> übergibt den Vorschlag zur Prüfung; <strong>Nicht freigeben</strong>
+        stoppt ihn und verlangt eine kurze Begründung, die der Einreicher zu sehen bekommt.
+        <p style={{ margin: '8px 0 0' }}>
+          Prüfen Sie vor der Freigabe vor allem den Text: er wird bei plan&simple im Original gelesen.
+          Projektnamen, Bauherren oder Namen von Kolleginnen und Kollegen gehören nicht hinein — lieber
+          nicht freigeben, kurz umformulieren lassen und neu einreichen.
+        </p>
+        <p style={{ margin: '8px 0 0' }}>
+          Eigene Vorschläge sind sofort freigegeben; Sie müssten sich sonst selbst bestätigen. Ist kein
+          Sprecher benannt, kann ein Administrator freigeben, damit nichts liegenbleibt.
+        </p>
       </>
     ),
   },

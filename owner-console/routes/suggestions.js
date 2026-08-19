@@ -80,6 +80,19 @@ function shape(r, orgMap, empMap) {
   };
 }
 
+// ── Nur freigegebene Vorschläge verlassen die Organisation ───────────────────
+//
+// Seit Migration 0132 muss der Produkt-Sprecher einen Vorschlag erst
+// freigeben, bevor plan&simple ihn sieht (ORG_STATE). Der Originaltext
+// (TITLE/BODY) ist ein interner Text und kann Projekt-, Bauherren- oder
+// Kollegennamen enthalten — ein Entwurf gehört hier nicht her.
+//
+// Die Sperre steht bewusst in JEDER lesenden Abfrage statt nur in der Liste:
+// eine Detailansicht, die eine ungefilterte ID akzeptiert, wäre sonst der Weg
+// daran vorbei. Bestandszeilen ohne ORG_STATE gelten als freigegeben — sie
+// wurden vor der Umstellung bereits übermittelt.
+const NICHT_FREIGEGEBEN = (r) => r && r.ORG_STATE != null && r.ORG_STATE !== "released";
+
 // GET /suggestions?state=pending|published|declined|merged|all
 router.get("/suggestions", async (req, res) => {
   const state = req.query.state || "all";
@@ -87,9 +100,23 @@ router.get("/suggestions", async (req, res) => {
   if (state !== "all") q = q.eq("MODERATION_STATE", state);
   const { data, error } = await q.order("CREATED_AT", { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
-  const rows = data || [];
+  const rows = (data || []).filter((r) => !NICHT_FREIGEGEBEN(r));
   const { orgMap, empMap } = await enrich(rows);
   res.json({ suggestions: rows.map((r) => shape(r, orgMap, empMap)) });
+});
+
+// Ein einziger Durchgang fuer ALLES unter /suggestions/:id — Detailansicht,
+// Anhaenge, Freigabe, Ablehnung, Zusammenfuehren, Antworten, Jira.
+//
+// Bewusst als Middleware und nicht als Pruefung in jedem Handler: acht
+// Endpunkte einzeln abzusichern haelt genau so lange, bis jemand den neunten
+// ergaenzt und die Zeile vergisst. Hier kommt er gar nicht erst vorbei.
+router.use("/suggestions/:id", async (req, res, next) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return next();
+  const { data: r } = await supabase.from("SUGGESTION").select("ID, ORG_STATE").eq("ID", id).maybeSingle();
+  if (NICHT_FREIGEGEBEN(r)) return res.status(404).json({ error: "Nicht gefunden" });
+  next();
 });
 
 // GET /suggestions/:id — Detail inkl. aller Kommentare
@@ -197,8 +224,10 @@ router.post("/suggestions/:id/merge", async (req, res) => {
   const id = Number(req.params.id);
   const intoId = Number(req.body?.into_id);
   if (!intoId || intoId === id) return res.status(400).json({ error: "Gültige into_id erforderlich" });
-  const { data: target } = await supabase.from("SUGGESTION").select("ID").eq("ID", intoId).maybeSingle();
-  if (!target) return res.status(400).json({ error: "Ziel-Vorschlag nicht gefunden" });
+  // Auch das ZIEL muss freigegeben sein — into_id kommt aus dem Request-Body
+  // und laeuft damit an der Middleware fuer :id vorbei.
+  const { data: target } = await supabase.from("SUGGESTION").select("ID, ORG_STATE").eq("ID", intoId).maybeSingle();
+  if (!target || NICHT_FREIGEGEBEN(target)) return res.status(400).json({ error: "Ziel-Vorschlag nicht gefunden" });
 
   // Stimmen des Duplikats auf den Ziel-Vorschlag übertragen (Unique-Konflikte ignorieren)
   const { data: votes } = await supabase.from("SUGGESTION_VOTE").select("TENANT_ID, EMPLOYEE_ID").eq("SUGGESTION_ID", id);

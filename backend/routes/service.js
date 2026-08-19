@@ -154,6 +154,25 @@ module.exports = (supabase) => {
   // Felder + Status + Stimmen aus — nie Name/E-Mail/Organisation. Einreicher-Namen
   // gibt es nur in der org-internen „Unsere Vorschläge"-Ansicht.
 
+  // ── Organisationsinterne Freigabe ───────────────────────────────────────────
+  //
+  // Einreichen darf jeder mit service.suggestions.view. Nach aussen geht ein
+  // Vorschlag aber erst, wenn der Produkt-Sprecher ihn freigegeben hat: er
+  // spricht damit fuer das ganze Buero, und der Originaltext kann Projekt-,
+  // Bauherren- oder Kollegennamen enthalten.
+  //
+  // RBAC: bewusst KEINE neue Permission. Wer freigeben darf, haengt — wie beim
+  // Abstimmen und Kommentieren — an der Rolle "Produkt-Sprecher" aus
+  // TENANT_SETTINGS, nicht am Rechtekatalog. service.suggestions.admin (der
+  // Administrator, der den Sprecher bestimmt) darf zusaetzlich freigeben,
+  // sonst steht das Verfahren still, solange kein Sprecher benannt oder dieser
+  // im Urlaub ist.
+  async function darfFreigeben(req) {
+    if (req.hasPermission("service.suggestions.admin")) return true;
+    const delegateId = await getDelegateId(req.tenantId);
+    return delegateId != null && req.employeeId === delegateId;
+  }
+
   // POST /suggestions — neuen Vorschlag einreichen
   router.post("/suggestions", requirePermission("service.suggestions.view"), async (req, res) => {
     const b = req.body || {};
@@ -162,6 +181,15 @@ module.exports = (supabase) => {
     if (!title || !body) return res.status(400).json({ error: "Titel und Beschreibung sind erforderlich" });
     const category = CATEGORIES.includes(b.category) ? b.category : "sonstiges";
     const priority = PRIORITIES.includes(b.priority_hint) ? b.priority_hint : null;
+
+    // Reicht der Sprecher selbst ein, ist die Freigabe bereits erteilt — er
+    // muesste sonst seinen eigenen Vorschlag ein zweites Mal bestaetigen.
+    // Ein Administrator ist nicht automatisch der Sprecher: seine Einreichung
+    // wartet wie jede andere.
+    const delegateId = await getDelegateId(req.tenantId);
+    const selbstFreigegeben = delegateId != null && req.employeeId === delegateId;
+    const jetzt = new Date().toISOString();
+
     const { data, error } = await supabase.from("SUGGESTION").insert([{
       TENANT_ID:        req.tenantId,
       EMPLOYEE_ID:      req.employeeId,
@@ -171,11 +199,64 @@ module.exports = (supabase) => {
       PRIORITY_HINT:    priority,
       MODERATION_STATE: "pending",
       LIFECYCLE_STATUS: "new",
+      ORG_STATE:        selbstFreigegeben ? "released" : "draft",
+      ORG_RELEASED_AT:  selbstFreigegeben ? jetzt : null,
+      ORG_RELEASED_BY:  selbstFreigegeben ? req.employeeId : null,
     }]).select("*").single();
     if (error) return res.status(500).json({ error: error.message });
-    notifyVendorNewItem({ kind: "Vorschlag", subject: title, category });
-    res.json({ data });
+
+    // plan&simple erfaehrt erst bei der Freigabe davon.
+    if (selbstFreigegeben) notifyVendorNewItem({ kind: "Vorschlag", subject: title, category });
+
+    res.json({ data, org_state: selbstFreigegeben ? "released" : "draft" });
   });
+
+  // POST /suggestions/:id/release — Freigabe durch den Produkt-Sprecher
+  // POST /suggestions/:id/reject  — Ablehnung, mit Begruendung fuer den Einreicher
+  for (const aktion of ["release", "reject"]) {
+    router.post(`/suggestions/:id/${aktion}`, requirePermission("service.suggestions.view"), async (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "Ungültige ID" });
+
+      if (!(await darfFreigeben(req))) {
+        return res.status(403).json({ error: "Nur der Produkt-Sprecher Ihrer Organisation kann Vorschläge freigeben." });
+      }
+
+      const grund = String(req.body?.reason || "").trim();
+      if (aktion === "reject" && !grund) {
+        return res.status(400).json({ error: "Bitte begründen Sie kurz, warum der Vorschlag nicht rausgeht — der Einreicher sieht diesen Text." });
+      }
+
+      // .eq TENANT_ID: eine Freigabe wirkt nur im eigenen Haus.
+      const { data: s } = await supabase
+        .from("SUGGESTION").select("ID, TITLE, CATEGORY, ORG_STATE")
+        .eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+      if (!s) return res.status(404).json({ error: "Vorschlag nicht gefunden" });
+      if (s.ORG_STATE !== "draft") {
+        return res.status(409).json({ error: "Über diesen Vorschlag wurde bereits entschieden." });
+      }
+
+      const jetzt = new Date().toISOString();
+      const { data: geaendert, error } = await supabase.from("SUGGESTION").update({
+        ORG_STATE:         aktion === "release" ? "released" : "rejected",
+        ORG_RELEASED_AT:   jetzt,
+        ORG_RELEASED_BY:   req.employeeId,
+        ORG_DECIDE_REASON: grund || null,
+        UPDATED_AT:        jetzt,
+      }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID");
+      if (error) return res.status(500).json({ error: error.message });
+      if (!geaendert || geaendert.length !== 1) {
+        return res.status(500).json({ error: "Die Entscheidung konnte nicht gespeichert werden." });
+      }
+
+      // Erst jetzt verlaesst der Vorschlag das Haus.
+      if (aktion === "release") {
+        notifyVendorNewItem({ kind: "Vorschlag", subject: s.TITLE, category: s.CATEGORY });
+      }
+
+      res.json({ ok: true, org_state: aktion === "release" ? "released" : "rejected" });
+    });
+  }
 
   // GET /suggestions/mine — eigene (bzw. org-weite für Sprecher/Admin) Einreichungen
   router.get("/suggestions/mine", requirePermission("service.suggestions.view"), async (req, res) => {
@@ -188,10 +269,15 @@ module.exports = (supabase) => {
     if (error) return res.status(500).json({ error: error.message });
     const rows = data || [];
 
-    // Einreicher-Namen nur innerhalb der eigenen Org (datenschutz-unkritisch)
+    // Einreicher-Namen nur innerhalb der eigenen Org (datenschutz-unkritisch).
+    // Der Name dessen, der ueber die Freigabe entschieden hat, gehoert dazu:
+    // ein Einreicher soll sehen, WER seinen Vorschlag nicht rausgehen liess.
     let nameMap = {};
-    if (orgView && rows.length) {
-      const empIds = [...new Set(rows.map(r => r.EMPLOYEE_ID))];
+    const empIds = [...new Set(rows.flatMap(r => [
+      ...(orgView ? [r.EMPLOYEE_ID] : []),
+      ...(r.ORG_RELEASED_BY != null ? [r.ORG_RELEASED_BY] : []),
+    ]))];
+    if (empIds.length) {
       const { data: emps } = await supabase.from("EMPLOYEE")
         .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME").in("ID", empIds).eq("TENANT_ID", req.tenantId);
       nameMap = Object.fromEntries((emps || []).map(e => [e.ID, employeeName(e)]));
@@ -208,7 +294,9 @@ module.exports = (supabase) => {
     }
 
     res.json({
-      org_view: orgView,
+      org_view:     orgView,
+      // Steuert, ob die Oberflaeche die Freigabe-Knoepfe zeigt.
+      can_release:  await darfFreigeben(req),
       data: rows.map(r => ({
         id:               r.ID,
         title:            r.TITLE,
@@ -217,6 +305,11 @@ module.exports = (supabase) => {
         priority_hint:    r.PRIORITY_HINT,
         moderation_state: r.MODERATION_STATE,
         lifecycle_status: r.LIFECYCLE_STATUS,
+        // Bestandszeilen vor Migration 0132 gelten als freigegeben — sie waren
+        // bereits uebermittelt.
+        org_state:        r.ORG_STATE || "released",
+        org_decided_by:   r.ORG_RELEASED_BY != null ? (nameMap[r.ORG_RELEASED_BY] || null) : null,
+        org_decide_reason: r.ORG_DECIDE_REASON || null,
         vote_count:       r.VOTE_COUNT,
         created_at:       r.CREATED_AT,
         submitter:        orgView ? (nameMap[r.EMPLOYEE_ID] || null) : null,

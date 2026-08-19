@@ -32,6 +32,13 @@ export const saveDelegate = (employeeId: number | null) =>
 
 export type LifecycleStatus = 'new' | 'reviewing' | 'planned' | 'in_progress' | 'shipped' | 'not_planned'
 export type ModerationState = 'pending' | 'published' | 'declined' | 'merged'
+
+/**
+ * Organisationsinterne Freigabe durch den Produkt-Sprecher — unabhängig von
+ * der Moderation durch plan&simple (ModerationState). Ein Vorschlag verlässt
+ * das Haus erst als 'released'.
+ */
+export type OrgState = 'draft' | 'released' | 'rejected'
 export type PriorityHint    = 'nice' | 'important' | 'blocker'
 
 export const SUGGESTION_CATEGORIES: { value: string; label: string }[] = [
@@ -66,6 +73,11 @@ export interface MineItem {
   priority_hint:    PriorityHint | null
   moderation_state: ModerationState
   lifecycle_status: LifecycleStatus
+  org_state:         OrgState
+  /** Wer über die Freigabe entschieden hat (erst nach einer Entscheidung). */
+  org_decided_by:    string | null
+  /** Begründung des Sprechers bei Ablehnung — der Einreicher sieht sie. */
+  org_decide_reason: string | null
   vote_count:       number
   created_at:       string
   submitter:        string | null
@@ -106,7 +118,15 @@ export const fetchBoard = (sort: 'popular' | 'new' = 'popular') =>
   apiClient.get<{ can_vote: boolean; data: BoardItem[] }>(`/service/suggestions/board?sort=${sort}`)
 
 export const fetchMineSuggestions = () =>
-  apiClient.get<{ org_view: boolean; data: MineItem[] }>('/service/suggestions/mine')
+  apiClient.get<{ org_view: boolean; can_release: boolean; data: MineItem[] }>('/service/suggestions/mine')
+
+/** Freigabe durch den Produkt-Sprecher — erst danach sieht plan&simple den Vorschlag. */
+export const releaseSuggestion = (id: number) =>
+  apiClient.post<{ ok: boolean; org_state: OrgState }>(`/service/suggestions/${id}/release`, {})
+
+/** Ablehnung durch den Produkt-Sprecher. Die Begründung sieht der Einreicher. */
+export const rejectSuggestion = (id: number, reason: string) =>
+  apiClient.post<{ ok: boolean; org_state: OrgState }>(`/service/suggestions/${id}/reject`, { reason })
 
 export const fetchSuggestion = (id: number) =>
   apiClient.get<{ data: SuggestionDetail }>(`/service/suggestions/${id}`)

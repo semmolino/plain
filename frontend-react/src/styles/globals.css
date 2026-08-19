@@ -4090,6 +4090,27 @@ input::placeholder { color: var(--text-4); }
   background: var(--info-bg); border-left: 3px solid var(--info); border-radius: 4px; padding: 7px 10px;
 }
 
+/* Ablehnung durch den Produkt-Sprecher — gleiche Form wie die
+   plan&simple-Antwort darueber, nur in Warnfarbe: beides sind Rueckmeldungen
+   an den Einreicher, nur von verschiedenen Stellen. */
+.sg-abgelehnt {
+  margin-top: 10px;
+  font-size: 13px; color: var(--text-2); line-height: 1.45; white-space: pre-line;
+  background: var(--warning-bg); border-left: 3px solid var(--warning);
+  border-radius: 4px; padding: 7px 10px;
+}
+
+/* Freigabe-Zeile an der Karte */
+.sg-release { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.sg-release-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sg-release-row-grund .tbl-input { flex: 1; min-width: 200px; }
+.sg-release-frage { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.sg-release-fehler { margin-top: 6px; font-size: 12px; color: var(--danger); }
+.sg-offen-hinweis {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--warning-strong);
+}
+
 /* Einreich-/Kommentar-Formular */
 .sg-form { display: flex; flex-direction: column; gap: 14px; }
 .sg-field { display: flex; flex-direction: column; gap: 5px; }
