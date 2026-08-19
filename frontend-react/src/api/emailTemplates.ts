@@ -2,8 +2,8 @@ import { apiClient } from './client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-/** Eine Vorlage je Versandart: Rechnungen bzw. Mahnungen. */
-export type EmailTemplateKey = 'invoice' | 'dunning'
+/** Eine Vorlage je Versandart: Rechnungen, Stornos bzw. Mahnungen. */
+export type EmailTemplateKey = 'invoice' | 'invoice_storno' | 'dunning'
 
 export interface EmailTemplate {
   key:            EmailTemplateKey
@@ -16,13 +16,15 @@ export interface EmailTemplate {
 }
 
 export const EMAIL_TEMPLATE_LABELS: Record<EmailTemplateKey, string> = {
-  invoice: 'Rechnungen',
-  dunning: 'Mahnungen',
+  invoice:        'Rechnungen',
+  invoice_storno: 'Stornos',
+  dunning:        'Mahnungen',
 }
 
 export const EMAIL_TEMPLATE_HINTS: Record<EmailTemplateKey, string> = {
-  invoice: 'Gilt für Rechnungen, Abschlags-, Schluss- und Stornorechnungen sowie Gutschriften.',
-  dunning: 'Gilt für Zahlungserinnerungen und alle Mahnstufen.',
+  invoice:        'Gilt für Rechnungen, Abschlags- und Schlussrechnungen sowie Gutschriften.',
+  invoice_storno: 'Gilt für Stornorechnungen und Storno-Abschlagsrechnungen — eigener Text, weil hier nichts mehr zu zahlen ist.',
+  dunning:        'Gilt für Zahlungserinnerungen und alle Mahnstufen.',
 }
 
 /** Platzhalter, die der Server beim Versand gegen Belegwerte ersetzt
@@ -30,18 +32,20 @@ export const EMAIL_TEMPLATE_HINTS: Record<EmailTemplateKey, string> = {
 export interface EmailPlaceholder {
   token: string
   label: string
-  /** Fehlt der Eintrag, gilt der Platzhalter für beide Vorlagen. */
+  /** Fehlt der Eintrag, gilt der Platzhalter für alle Vorlagen. */
   only?: EmailTemplateKey
+  /** Für diese Vorlagen ausblenden (fachlich sinnlos, z.B. Fälligkeit im Storno). */
+  hideFor?: EmailTemplateKey[]
 }
 
 export const EMAIL_PLACEHOLDERS: EmailPlaceholder[] = [
   { token: '{{belegart}}',        label: 'Belegart' },
   { token: '{{belegnummer}}',     label: 'Belegnummer' },
   { token: '{{belegdatum}}',      label: 'Belegdatum' },
-  { token: '{{faelligkeit}}',     label: 'Fällig am' },
+  { token: '{{faelligkeit}}',     label: 'Fällig am',       hideFor: ['invoice_storno'] },
   { token: '{{betrag}}',          label: 'Betrag brutto' },
-  { token: '{{bezahlt}}',         label: 'Bereits bezahlt' },
-  { token: '{{offener_betrag}}',  label: 'Offener Betrag' },
+  { token: '{{bezahlt}}',         label: 'Bereits bezahlt', hideFor: ['invoice_storno'] },
+  { token: '{{offener_betrag}}',  label: 'Offener Betrag',  hideFor: ['invoice_storno'] },
   { token: '{{projekt}}',         label: 'Projekt' },
   { token: '{{kunde}}',           label: 'Kunde' },
   { token: '{{ansprechpartner}}', label: 'Ansprechpartner' },
@@ -52,7 +56,7 @@ export const EMAIL_PLACEHOLDERS: EmailPlaceholder[] = [
 ]
 
 export const placeholdersFor = (key: EmailTemplateKey) =>
-  EMAIL_PLACEHOLDERS.filter(p => !p.only || p.only === key)
+  EMAIL_PLACEHOLDERS.filter(p => (!p.only || p.only === key) && !p.hideFor?.includes(key))
 
 /** Vom Server aufgelöster Betreff/Text für genau einen Beleg. */
 export interface EmailPreview {

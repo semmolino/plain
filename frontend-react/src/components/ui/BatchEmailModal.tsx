@@ -26,6 +26,8 @@ interface Props {
   /** Betreff-/Textvorlage MIT Platzhaltern (der Server loest sie je Beleg auf). */
   subject:  string
   body:     string
+  /** Optionaler Hinweis ueber der Belegliste (z.B. gemischte Auswahl). */
+  notice?:  string
   /** Versendet genau einen Beleg. Fehler werden pro Zeile angezeigt. */
   onSend:   (item: BatchEmailItem, to: string, subject: string, body: string) => Promise<unknown>
   /** Nach Abschluss, wenn mindestens ein Versand geklappt hat — z.B. Queries invalidieren. */
@@ -45,7 +47,7 @@ interface Props {
  * frischem Zustand, ohne Status/Fehler des vorherigen Laufs.
  */
 export function BatchEmailModal({
-  title, docLabel, items, subject, body, onSend, onSent, onClose,
+  title, docLabel, items, subject, body, notice, onSend, onSent, onClose,
 }: Props) {
   const [recipients, setRecipients] = useState<Record<string, string>>(
     () => Object.fromEntries(items.map(it => [it.key, it.to ?? ''])),
@@ -107,6 +109,7 @@ export function BatchEmailModal({
           Jeder Empfänger erhält eine eigene E-Mail mit ausschließlich seinem Beleg als PDF.
         </p>
 
+        {notice && <div style={{ marginBottom: 12 }}><Message type="info" text={notice} /></div>}
         <div className="table-scroll" style={{ maxHeight: 220, marginBottom: 14 }}>
           <table className="master-table" style={{ fontSize: 13 }}>
             <thead>

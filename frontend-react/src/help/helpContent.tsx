@@ -773,14 +773,20 @@ export const HELP = {
 
   // ── E-Mail-Versand ───────────────────────────────────────────────────────
   'email.smtp': {
-    title: 'Eigener E-Mail-Versand (SMTP)',
+    title: 'Absenderadresse',
     body: (
       <>
-        Damit Rechnungen/Mahnungen aus <strong>deinem</strong> Postfach versendet
-        werden, hinterlegst du hier deinen Postausgangsserver (SMTP). Für
-        Gmail/Microsoft 365 brauchst du meist ein <strong>App-Passwort</strong>,
-        nicht dein normales Login. Ohne eigene Konfiguration nutzt plan&simple
-        den System-Absender.
+        Rechnungen und Mahnungen verlassen plan&amp;simple immer über den
+        System-Mailserver — nicht über dein eigenes Postfach. Hier legst du nur
+        fest, <strong>wie der Absender aussieht</strong>: Adresse, Anzeigename
+        und optional eine Antwort-an-Adresse, an die Kundenantworten gehen.
+        Ohne eigene Angaben gilt der System-Absender.
+        <br />
+        <br />
+        Weil der Versand nicht über dein Postfach läuft, taucht dort auch keine
+        Kopie im <strong>Postausgang / Gesendet</strong> auf. Was verschickt
+        wurde, steht in plan&amp;simple: bei Mahnungen im Mahnverlauf, bei
+        Rechnungen im Ergebnis des Versanddialogs.
       </>
     ),
   },

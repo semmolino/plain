@@ -89,6 +89,8 @@ interface UnifiedRow {
   payable:    number | null   // tatsächliche Forderungssumme nach SEB
   statusLabel: string
   statusClass: string
+  /** true = der Storno-Beleg selbst (nicht der stornierte Originalbeleg). */
+  isStorno:   boolean
   raw:        Invoice | PartialPayment
 }
 
@@ -97,6 +99,17 @@ function effectiveDiscounts(rawNet: number, totalDiscounts: number | null, d1Pct
   const d1Amt = Math.round(rawNet * d1Pct / 100 * 100) / 100
   const d2Amt = Math.round((rawNet - d1Amt) * d2Pct / 100 * 100) / 100
   return Math.round((d1Amt + d2Amt) * 100) / 100
+}
+
+/**
+ * Versendbar ist jeder gebuchte Beleg — und zusaetzlich der Storno-Beleg
+ * selbst. Der traegt den Status "Storno-Rechnung" (nicht "gebucht"), ist aber
+ * ein eigener, gebuchter Beleg mit eigenem Storno-Formular und muss beim
+ * Kunden ankommen. Der stornierte ORIGINALbeleg bleibt aussen vor: er ist
+ * fachlich zurueckgenommen und darf nicht erneut verschickt werden.
+ */
+function canSendEmail(row: UnifiedRow) {
+  return row.statusClass === 'booked' || row.isStorno
 }
 
 function fromInvoice(inv: Invoice): UnifiedRow {
@@ -149,6 +162,7 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     payable,
     statusLabel,
     statusClass,
+    isStorno:    isStornoRow && !isOrigCancelled,
     raw:         inv,
   }
 }
@@ -202,6 +216,7 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     payable,
     statusLabel,
     statusClass,
+    isStorno:    isStornoRow && !isOrigCancelled,
     raw:         pp,
   }
 }
@@ -353,6 +368,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     staleTime: 5 * 60_000,
   })
   const invoiceTemplate = mailTemplates?.find(t => t.key === 'invoice')
+  const stornoTemplate  = mailTemplates?.find(t => t.key === 'invoice_storno')
 
   function sendMailFor(row: UnifiedRow, payload: { emailTo?: string; emailSubject?: string; emailBody?: string }) {
     const id = (row.raw as Invoice & PartialPayment).ID
@@ -468,12 +484,14 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       .forEach((row, i) => setTimeout(() => openPdf(row), i * 300))
   }
 
-  // Versendbar ist, was gebucht ist — gleiche Bedingung wie beim Einzelversand
-  // im Zeilenmenue. Entwuerfe und Stornos bleiben aussen vor.
   const selectedSendable = useMemo(
-    () => rows.filter(r => selected.has(r.key) && r.statusClass === 'booked'),
+    () => rows.filter(r => selected.has(r.key) && canSendEmail(r)),
     [rows, selected],
   )
+  // Der Storno-Text passt nur, wenn wirklich alle ausgewaehlten Belege Stornos
+  // sind — sonst gilt die Rechnungsvorlage und der Hinweis unten weist darauf hin.
+  const batchAllStorno = selectedSendable.length > 0 && selectedSendable.every(r => r.isStorno)
+  const batchMixed     = selectedSendable.some(r => r.isStorno) && selectedSendable.some(r => !r.isStorno)
   const batchItems = useMemo<BatchEmailItem[]>(
     () => selectedSendable.map(r => ({
       key:   r.key,
@@ -834,7 +852,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               className="btn btn-sm"
               onClick={() => setBatchOpen(true)}
               disabled={selectedSendable.length === 0}
-              title={selectedSendable.length === 0 ? 'Nur gebuchte Rechnungen können versendet werden' : undefined}
+              title={selectedSendable.length === 0 ? 'Nur gebuchte Rechnungen und Storno-Belege können versendet werden' : undefined}
             >
               <Mail size={13} strokeWidth={1.75} style={{ marginRight: 5, verticalAlign: 'middle' }} />
               Rechnungen versenden ({selectedSendable.length})
@@ -909,7 +927,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                             PDF öffnen
                           </button>
                         </Can>
-                        {row.statusClass === 'booked' && (
+                        {canSendEmail(row) && (
                           <Can permission="invoices.send_email">
                             <button className="row-menu-item" onClick={() => openEmailFor(row)}>
                               <Mail size={13} strokeWidth={1.75} />Per E-Mail senden
@@ -1145,7 +1163,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               {/* Actions */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 4 }}>
                 <button className="btn-small" onClick={() => openPdf(detailRow)}>PDF anzeigen</button>
-                {detailRow.statusClass === 'booked' && (
+                {canSendEmail(detailRow) && (
                   <button className="btn-small" onClick={() => { setDetailRow(null); openEmailFor(detailRow) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={13} strokeWidth={1.75} />Per E-Mail senden</button>
                 )}
                 {canEdit(detailRow) && onEditDraft && (
@@ -1342,8 +1360,11 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         title={`Rechnungen versenden (${batchItems.length})`}
         docLabel="Rechnung"
         items={batchItems}
-        subject={invoiceTemplate?.subject ?? '{{belegart}} {{belegnummer}}'}
-        body={invoiceTemplate?.body ?? ''}
+        subject={(batchAllStorno ? stornoTemplate : invoiceTemplate)?.subject ?? '{{belegart}} {{belegnummer}}'}
+        body={(batchAllStorno ? stornoTemplate : invoiceTemplate)?.body ?? ''}
+        notice={batchMixed
+          ? 'Die Auswahl enthält Storno- und normale Belege. Der Text unten gilt für alle — für Stornos besser getrennt versenden, dann greift die Storno-Textvorlage.'
+          : undefined}
         onSend={(item, to, subject, body) => {
           const row = selectedSendable.find(r => r.key === item.key)
           if (!row) return Promise.reject(new Error('Rechnung nicht mehr in der Auswahl'))

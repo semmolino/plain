@@ -183,7 +183,7 @@ body { padding-bottom: 4mm; }
           <td class="mv">{{ inv.date | date_de }}</td>
         </tr>
         <tr>
-          <td class="ml">Stornorechnung</td>
+          <td class="ml">{{ stornoTitle | default("Stornorechnung") }}</td>
           <td class="mv bold">{{ inv.number }}</td>
         </tr>
         {% if origInvoice %}
@@ -210,13 +210,13 @@ body { padding-bottom: 4mm; }
   </div>
 
   {# Document title #}
-  <div class="doc-title">Stornorechnung</div>
+  <div class="doc-title">{{ stornoTitle | default("Stornorechnung") }}</div>
 
   {# Reference to original invoice #}
   {% if origInvoice %}
   <div class="storno-ref">
     Hiermit stornieren wir
-    {% if origInvoice.INVOICE_TYPE == 'schlussrechnung' %}unsere Schlussrechnung{% elif origInvoice.INVOICE_TYPE == 'teilschlussrechnung' %}unsere Teilschlussrechnung{% else %}unsere Rechnung{% endif %}
+    {% if origInvoice.INVOICE_TYPE == 'schlussrechnung' %}unsere Schlussrechnung{% elif origInvoice.INVOICE_TYPE == 'teilschlussrechnung' %}unsere Teilschlussrechnung{% elif origInvoice.INVOICE_TYPE == 'abschlagsrechnung' %}unsere Abschlagsrechnung{% else %}unsere Rechnung{% endif %}
     Nr. <strong>{{ origInvoice.INVOICE_NUMBER }}</strong>
     {% if origInvoice.INVOICE_DATE %}vom <strong>{{ origInvoice.INVOICE_DATE | date_de }}</strong>{% endif %}
     vollständig.

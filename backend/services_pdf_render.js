@@ -967,22 +967,46 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
     reference: vm.inv.number,
   });
 
-  // For Stornorechnung: load the original invoice for the reference line
+  // For Stornorechnung: load the original document for the reference line.
+  // Storno gibt es in beiden Belegarten — als Stornorechnung zu einer Rechnung
+  // und als Storno-AR zu einer Abschlagsrechnung. Frueher wurde in beiden
+  // Faellen in INVOICE gesucht: bei einer Storno-AR traf die Abfrage damit auf
+  // eine fremde Rechnung mit derselben ID (oder auf nichts), und die Zeile
+  // "Storno von" fehlte bzw. zeigte einen falschen Beleg.
   if (vm.inv.invoiceType === 'stornorechnung') {
-    // rawDoc is not in scope here — re-read CANCELS_INVOICE_ID from the booked invoice
+    // rawDoc is not in scope here — re-read the reference from the booked document
+    const isInvoiceDoc = docType === 'INVOICE';
+    const refCol       = isInvoiceDoc ? 'CANCELS_INVOICE_ID' : 'CANCELS_PARTIAL_PAYMENT_ID';
+    vm.stornoTitle     = isInvoiceDoc ? 'Stornorechnung' : 'Storno-Abschlagsrechnung';
     const { data: cancelsDoc } = await supabase
-      .from('INVOICE')
-      .select('CANCELS_INVOICE_ID')
+      .from(isInvoiceDoc ? 'INVOICE' : 'PARTIAL_PAYMENT')
+      .select(refCol)
       .eq('ID', docId)
+      .eq('TENANT_ID', tenantId)
       .maybeSingle();
-    const cancelsId = cancelsDoc?.CANCELS_INVOICE_ID;
+    const cancelsId = cancelsDoc?.[refCol];
     if (cancelsId) {
-      const { data: origInv } = await supabase
-        .from('INVOICE')
-        .select('INVOICE_NUMBER, INVOICE_DATE, INVOICE_TYPE')
-        .eq('ID', cancelsId)
-        .maybeSingle();
-      vm.origInvoice = origInv ?? null;
+      const { data: orig } = isInvoiceDoc
+        ? await supabase
+            .from('INVOICE')
+            .select('INVOICE_NUMBER, INVOICE_DATE, INVOICE_TYPE')
+            .eq('ID', cancelsId)
+            .eq('TENANT_ID', tenantId)
+            .maybeSingle()
+        : await supabase
+            .from('PARTIAL_PAYMENT')
+            .select('PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE')
+            .eq('ID', cancelsId)
+            .eq('TENANT_ID', tenantId)
+            .maybeSingle();
+      // Das Template kennt nur die Rechnungsfelder — Storno-ARs darauf mappen.
+      vm.origInvoice = orig
+        ? (isInvoiceDoc ? orig : {
+            INVOICE_NUMBER: orig.PARTIAL_PAYMENT_NUMBER,
+            INVOICE_DATE:   orig.PARTIAL_PAYMENT_DATE,
+            INVOICE_TYPE:   'abschlagsrechnung',
+          })
+        : null;
     }
   }
 

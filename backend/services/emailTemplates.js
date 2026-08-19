@@ -17,7 +17,7 @@
 const TABLE = "EMAIL_TEMPLATE";
 
 /** Gueltige Vorlagenschluessel. */
-const TEMPLATE_KEYS = ["invoice", "dunning"];
+const TEMPLATE_KEYS = ["invoice", "invoice_storno", "dunning"];
 
 const DEFAULTS = {
   invoice: {
@@ -27,6 +27,21 @@ const DEFAULTS = {
       "",
       "anbei erhalten Sie unsere {{belegart}} {{belegnummer}} vom {{belegdatum}} über {{betrag}}.",
       "Wir bitten um Ausgleich des Betrages bis zum {{faelligkeit}}.",
+      "",
+      "Mit freundlichen Grüßen",
+      "{{firma}}",
+    ].join("\n"),
+  },
+  // Storno hat einen eigenen Text: die Rechnungsvorlage bittet um Zahlung, was
+  // bei einer Stornorechnung sachlich falsch waere. Der Betrag steht bewusst
+  // nicht im Text — er ist negativ und liest sich im Fliesstext unsauber.
+  invoice_storno: {
+    subject: "{{belegart}} {{belegnummer}}",
+    body: [
+      "Sehr geehrte Damen und Herren,",
+      "",
+      "anbei erhalten Sie unsere {{belegart}} {{belegnummer}} vom {{belegdatum}}.",
+      "Damit ist die ursprüngliche Rechnung vollständig storniert — eine Zahlung ist nicht erforderlich.",
       "",
       "Mit freundlichen Grüßen",
       "{{firma}}",
@@ -194,7 +209,9 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
   const table     = isInvoice ? "INVOICE" : "PARTIAL_PAYMENT";
   const numberCol = isInvoice ? "INVOICE_NUMBER" : "PARTIAL_PAYMENT_NUMBER";
   const dateCol   = isInvoice ? "INVOICE_DATE"   : "PARTIAL_PAYMENT_DATE";
-  const typeCols  = isInvoice ? ", INVOICE_TYPE" : "";
+  // Storno erkennt man je Belegart anders: bei Rechnungen am INVOICE_TYPE, bei
+  // Abschlagsrechnungen an der Verweisspalte auf den stornierten Beleg.
+  const typeCols  = isInvoice ? ", INVOICE_TYPE" : ", CANCELS_PARTIAL_PAYMENT_ID";
 
   const { data: doc, error } = await supabase
     .from(table)
@@ -240,15 +257,20 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
     firma = comp?.COMPANY_NAME_1 || "";
   }
 
+  const isStorno = isInvoice
+    ? String(doc.INVOICE_TYPE || "").toLowerCase() === "stornorechnung"
+    : doc.CANCELS_PARTIAL_PAYMENT_ID != null;
+
   const belegart = isInvoice
     ? (INVOICE_TYPE_LABELS[String(doc.INVOICE_TYPE || "").toLowerCase()] || "Rechnung")
-    : "Abschlagsrechnung";
+    : (isStorno ? "Storno-Abschlagsrechnung" : "Abschlagsrechnung");
 
   const number = doc[numberCol] || "";
 
   return {
     to:     doc.CONTACT_MAIL || "",
     number,
+    isStorno,
     dueDate: doc.DUE_DATE || null,
     values: {
       belegart,
@@ -288,11 +310,15 @@ function pick(given, fallback) {
 async function composeInvoiceEmail(supabase, { tenantId, docType, docId, subject, body }) {
   const ctx = await loadDocumentContext(supabase, { tenantId, docType, docId });
   if (!ctx) throw { status: 404, message: "Beleg nicht gefunden" };
-  const tpl = await resolveTemplate(supabase, { tenantId, key: "invoice" });
+  // Stornobelege bekommen die Storno-Vorlage — sonst stuende in der Mail eine
+  // Zahlungsaufforderung fuer einen Beleg, der nichts mehr zu zahlen laesst.
+  const key = ctx.isStorno ? "invoice_storno" : "invoice";
+  const tpl = await resolveTemplate(supabase, { tenantId, key });
   return {
-    to:      ctx.to,
-    subject: renderText(pick(subject, tpl.subject), ctx.values),
-    body:    renderText(pick(body,    tpl.body),    ctx.values),
+    to:       ctx.to,
+    isStorno: ctx.isStorno,
+    subject:  renderText(pick(subject, tpl.subject), ctx.values),
+    body:     renderText(pick(body,    tpl.body),    ctx.values),
   };
 }
 
