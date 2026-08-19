@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { FilterChip } from '@/components/ui/FilterChip'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import { StepIndicator } from '@/components/ui/StepIndicator'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Message } from '@/components/ui/Message'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import {
   fetchFeeGroups, fetchFeeMasters, fetchFeeZones,
   fetchFeeCalcMasters, fetchFeeCalcMaster,
@@ -23,6 +24,8 @@ import { Din276Editor } from '@/pages/projekte/Din276Editor'
 import { MischhonorarEditor } from '@/pages/projekte/MischhonorarEditor'
 import { ObjektlisteZonePicker } from '@/pages/projekte/ObjektlisteZonePicker'
 import { ZonenPunkteRechner } from '@/pages/projekte/ZonenPunkteRechner'
+import { RecentList } from '@/components/recents/RecentList'
+import { trackRecent, type RecentEntry } from '@/api/recents'
 
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
@@ -390,6 +393,32 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     })
   }
 
+  /**
+   * „Zuletzt verwendet"-Eintrag übernehmen: Honorarordnung nachladen und
+   * beide Auswahlfelder setzen. Die Gruppe steckt in META (beim Tracking
+   * mitgeschrieben) — ohne sie bliebe das Leistungsbild-Feld gesperrt.
+   */
+  async function selectRecentFeeMaster(entry: RecentEntry) {
+    const gid = (entry.META as { fee_group_id?: number | null } | null)?.fee_group_id
+    if (gid != null) {
+      await loadMasters(String(gid))
+      setFeeMasterId(String(entry.ENTITY_ID))
+      return
+    }
+    // Ohne Gruppen-Angabe (Alteintrag): in allen Honorarordnungen suchen.
+    for (const g of groups) {
+      try {
+        const r = await fetchFeeMasters(g.ID)
+        if ((r.data ?? []).some(m => String(m.ID) === String(entry.ENTITY_ID))) {
+          await loadMasters(String(g.ID))
+          setFeeMasterId(String(entry.ENTITY_ID))
+          return
+        }
+      } catch { /* nächste Gruppe versuchen */ }
+    }
+    setMsg({ text: 'Dieses Leistungsbild ist nicht mehr verfügbar.', type: 'error' })
+  }
+
   async function loadMasters(gid: string) {
     setFeeGroupId(gid); setFeeMasterId(''); setMasters([])
     if (!gid) return
@@ -424,6 +453,20 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   async function goNext1() {
     if (!feeMasterId) { setMsg({ text: 'Bitte Leistungsbild wählen', type: 'error' }); return }
     if (!isOfferMode && !projectId) { setMsg({ text: 'Bitte Projekt wählen', type: 'error' }); return }
+
+    // Es kann schon ein Entwurf existieren: „Weiter → Zurück → Weiter" hat
+    // bisher JEDES Mal eine neue Kalkulation angelegt und die vorige verwaist
+    // zurückgelassen (der Unmount-Cleanup räumt nur die zuletzt erzeugte auf).
+    // Gleiches Leistungsbild → vorhandenen Entwurf weiterverwenden;
+    // gewechseltes Leistungsbild → alten Entwurf löschen, dann neu anlegen.
+    if (calcMaster && !isEdit) {
+      if (String(calcMaster.FEE_MASTER_ID ?? '') === String(feeMasterId)) {
+        setMsg(null); setStep(2); return
+      }
+      try { await deleteFeeCalcMaster(calcMaster.ID) } catch { /* Entwurf bleibt liegen, kein Abbruchgrund */ }
+      setCalcMaster(null)
+    }
+
     setLoading(true); setMsg({ text: 'Anlegen der Honorarberechnung …', type: 'info' })
     try {
       // PROJECT_ID oder OFFER_ID muss beim Insert gesetzt sein (DB-Check
@@ -435,6 +478,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       const zonesRes = await fetchFeeZones(feeMasterId)
       setZones(zonesRes.data ?? [])
       populateBasis(row.data)
+      // Leistungsbild als „zuletzt verwendet" merken. fee_group_id in META,
+      // damit die Auswahl später beide Dropdowns wiederherstellen kann.
+      const m = masters.find(x => String(x.ID) === String(feeMasterId))
+      void trackRecent('fee_master', Number(feeMasterId),
+        m ? `${m.NAME_SHORT}${m.NAME_LONG ? ' – ' + m.NAME_LONG : ''}` : String(feeMasterId),
+        { fee_group_id: feeGroupId ? Number(feeGroupId) : null },
+      ).catch(() => { /* Tracking ist Komfort, kein Grund den Wizard zu stoppen */ })
       setMsg(null); setStep(2)
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message, type: 'error' })
@@ -772,6 +822,15 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               {masters.map(m => <option key={m.ID} value={m.ID}>{m.NAME_SHORT}{m.NAME_LONG ? ' – ' + m.NAME_LONG : ''}</option>)}
             </select>
           </div>
+
+          {/* Zuletzt verwendete Leistungsbilder — setzt Honorarordnung und
+              Leistungsbild in einem Schritt. fee_group_id kommt aus META. */}
+          <RecentList
+            type="fee_master"
+            title="Zuletzt verwendete Leistungsbilder"
+            limit={6}
+            onSelect={entry => { void selectRecentFeeMaster(entry) }}
+          />
         </div>
       )}
 
@@ -1504,12 +1563,24 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
   const [projektFilter, setProjektFilter] = useState<Set<string>>(new Set())
   const [didInitFilter, setDidInitFilter] = useState(false)
   const [showOfferCalcs, setShowOfferCalcs] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; label: string } | null>(null)
+  const [listMsg, setListMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['fee-calc-masters'],
     queryFn:  () => fetchFeeCalcMasters(),
   })
   const allRows = data?.data ?? []
+
+  // Löschen war hier bisher gar nicht möglich — verwaiste Kalkulationen
+  // (z. B. aus abgebrochenen Wizard-Läufen) ließen sich nur in der DB
+  // entfernen. Fehler werden ausgegeben statt verschluckt, sonst bliebe eine
+  // fehlende Berechtigung unsichtbar.
+  const deleteMut = useMutation({
+    mutationFn: (calcId: number) => deleteFeeCalcMaster(calcId),
+    onSuccess:  () => { setListMsg(null); void refetch() },
+    onError:    (e: unknown) => setListMsg({ text: `Löschen fehlgeschlagen: ${(e as Error).message}`, type: 'error' }),
+  })
 
   // Pre-select project filter when initialProjectId is provided
   useEffect(() => {
@@ -1612,6 +1683,8 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
         </button>
       </div>
 
+      {listMsg && <div style={{ marginBottom: 10 }}><Message text={listMsg.text} type={listMsg.type} /></div>}
+
       {isLoading && <p className="empty-note">Lade …</p>}
       {!isLoading && sorted.length === 0 && (
         <p className="empty-note">
@@ -1660,6 +1733,11 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                         onClick={() => openHonorarPdf(r.ID)}>
                         Übersicht
                       </button>
+                      <button type="button" className="row-action-btn row-action-btn--danger" title="Löschen"
+                        disabled={deleteMut.isPending}
+                        onClick={() => setConfirmDelete({ id: r.ID, label: r.NAME_LONG || r.NAME_SHORT || 'Kalkulation' })}>
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
                       {r.PROJECT_ID != null && (
                         <button type="button" className="btn-small" title="Zur Projektstruktur"
                           onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}>
@@ -1680,6 +1758,16 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
           </table>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDelete !== null}
+        title="Kalkulation löschen"
+        message={`Kalkulation „${confirmDelete?.label ?? ''}" endgültig löschen? Zugehörige Leistungsphasen, Zuschläge und Besonderen Leistungen werden mitgelöscht.`}
+        confirmLabel="Löschen"
+        confirmClass="danger"
+        onConfirm={() => { if (confirmDelete) deleteMut.mutate(confirmDelete.id); setConfirmDelete(null) }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   )
 }

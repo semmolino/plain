@@ -20,6 +20,7 @@ const ALLOWED_TYPES = new Set([
   "mahnung",
   "address",
   "project_structure",                // Strukturelement -- META.project_id pflicht
+  "fee_master",                       // HOAI-Leistungsbild -- META.fee_group_id fuer die Vorauswahl
   // Filter-Recents (pro Tab eigener Scope, damit Listen nicht durchmischen)
   "report_projektliste_filter",       // Reports -> Projektliste
   "report_trends_filter",             // Reports -> Trends

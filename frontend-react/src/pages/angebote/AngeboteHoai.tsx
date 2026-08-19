@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { Message }      from '@/components/ui/Message'
 import { Modal }        from '@/components/ui/Modal'
 import { fetchFeeCalcMasters, openHonorarPdf, deleteFeeCalcMaster } from '@/api/fee'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
@@ -24,9 +25,15 @@ export function AngeboteHoai({ initialOfferId }: Props) {
     enabled:  oid !== null,
   })
 
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
   const deleteMut = useMutation({
     mutationFn: (calcId: number) => deleteFeeCalcMaster(calcId),
-    onSuccess:  () => void refetch(),
+    onSuccess:  () => { setMsg(null); void refetch() },
+    // Ohne diesen Zweig blieb ein fehlgeschlagenes Löschen (fehlende
+    // Berechtigung, Serverfehler) völlig unsichtbar: die Zeile stand danach
+    // einfach weiter da, ohne Hinweis worauf es gescheitert ist.
+    onError: (e: unknown) => setMsg({ text: `Löschen fehlgeschlagen: ${(e as Error).message}`, type: 'error' }),
   })
 
   const feeCalcs = feeCalcData?.data ?? []
@@ -38,11 +45,13 @@ export function AngeboteHoai({ initialOfferId }: Props) {
   return (
     <div className="ls-wrap">
       <div style={{ marginBottom: 12 }}>
-        <button className="btn-small btn-save" onClick={() => setShowAdd(true)}>+ HOAI-Kalkulation hinzufügen</button>
+        <button className="btn-small btn-save" onClick={() => setShowAdd(true)}>+ Kalkulation hinzufügen</button>
       </div>
 
+      {msg && <div style={{ marginBottom: 10 }}><Message text={msg.text} type={msg.type} /></div>}
+
       {feeCalcs.length === 0 && (
-        <p className="ls-empty">Noch keine HOAI-Kalkulationen vorhanden.</p>
+        <p className="ls-empty">Noch keine Kalkulationen vorhanden.</p>
       )}
 
       {feeCalcs.length > 0 && (
@@ -78,7 +87,7 @@ export function AngeboteHoai({ initialOfferId }: Props) {
                     <button className="row-action-btn row-action-btn--danger" disabled={deleteMut.isPending} title="Löschen"
                       onClick={() => setConfirmState({
                         title: 'Kalkulation löschen',
-                        message: `HOAI-Kalkulation „${c.NAME_SHORT || c.NAME_LONG || 'Kalkulation'}" löschen?`,
+                        message: `Kalkulation „${c.NAME_SHORT || c.NAME_LONG || 'Kalkulation'}" löschen?`,
                         onConfirm: () => deleteMut.mutate(c.ID),
                       })}>
                       <Trash2 size={14} strokeWidth={2} />
@@ -91,12 +100,12 @@ export function AngeboteHoai({ initialOfferId }: Props) {
         </div>
       )}
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="HOAI-Kalkulation hinzufügen" className="modal-xl">
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Kalkulation hinzufügen" className="modal-xl">
         <HonorarWizard offerId={oid} onDone={() => { setShowAdd(false); void refetch() }} />
       </Modal>
 
       {editCalcId !== null && (
-        <Modal open={true} onClose={() => setEditCalcId(null)} title="HOAI-Kalkulation bearbeiten" className="modal-xl">
+        <Modal open={true} onClose={() => setEditCalcId(null)} title="Kalkulation bearbeiten" className="modal-xl">
           <HonorarWizard existingId={editCalcId} offerId={oid} onDone={() => { setEditCalcId(null); void refetch() }} />
         </Modal>
       )}

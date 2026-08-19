@@ -21,6 +21,8 @@ import {
   type OfferListItem, type ConvertOfferPayload, type UpdateOfferPayload,
 } from '@/api/angebote'
 import { BeauftragtModal } from './BeauftragtModal'
+import { AngeboteAnlegen } from './AngeboteAnlegen'
+import { Modal }          from '@/components/ui/Modal'
 
 const PAGE_SIZE = 25
 
@@ -29,7 +31,7 @@ const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.fo
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
-export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOffer?: (id: number, name: string) => void; onEditStammdaten?: (id: number) => void }) {
+export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated }: { onSelectOffer?: (id: number, name: string) => void; onEditStammdaten?: (id: number) => void; onOfferCreated?: (id: number) => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [search,        setSearch]        = useState('')
@@ -39,6 +41,9 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
   const [activeEmployee, setActiveEmployee] = useStickySet('angebote.employee')
   const [msg,           setMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [beauftragtRow, setBeauftragtRow] = useState<OfferListItem | null>(null)
+  // Anlegen lief frueher ueber einen eigenen Tab. Jetzt Primaeraktion in der
+  // Liste — wie "+ Neues Projekt" in der Projektliste.
+  const [showCreate,    setShowCreate]    = useState(false)
   const [convertErr,    setConvertErr]    = useState<string | null>(null)
   const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; confirmLabel?: string; onConfirm: () => void } | null>(null)
 
@@ -185,6 +190,11 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
             Offene Angebote
           </label>
         </FilterBar>
+        <Can permission="offers.create">
+          <button className="btn-primary btn-small" style={{ marginLeft: 'auto' }} onClick={() => setShowCreate(true)}>
+            + Neues Angebot
+          </button>
+        </Can>
       </div>
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
@@ -368,6 +378,10 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten }: { onSelectOff
         error={convertErr}
       />
     )}
+
+    <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Neues Angebot anlegen" className="modal-wide">
+      <AngeboteAnlegen onOfferCreated={id => { setShowCreate(false); onOfferCreated?.(id) }} />
+    </Modal>
 
     <ConfirmModal
       open={confirmState !== null}

@@ -828,3 +828,56 @@ reine UI-Änderung.
 
 Nebenbei: Die Beschriftung nennt nicht mehr „§ 54" — der Absatz, der das
 Verfahren angeblich trägt, regelt etwas anderes (siehe § 12.3).
+
+---
+
+## 16. Bedienung des Kalkulationsmoduls (19.08.2026, ohne Migration)
+
+Vier Punkte aus dem Test — drei Bedienthemen, ein echter Datenfehler.
+
+### 16.1 Zuletzt verwendete Leistungsbilder (Punkt 1)
+
+Der Wizard begann bisher immer bei „Honorarordnung wählen → Leistungsbild
+wählen", auch wenn dasselbe Leistungsbild zum zwanzigsten Mal an der Reihe war.
+Das generische Recents-Muster (`RECENT_VIEW`, Migration 0064) deckt das ab, es
+war nur nie angedockt: `fee_master` ist jetzt ein erlaubter Typ
+(`backend/services/recents.js`, `api/recents.ts`, `RecentList.tsx`).
+
+Beim Weiterklicken in Schritt 1 wird `trackRecent('fee_master', id, label,
+{ fee_group_id })` aufgerufen. Die Gruppen-ID im `META` ist nötig, weil das
+Leistungsbild allein die Auswahl nicht wiederherstellt — erst die Honorarordnung
+lädt die Liste, aus der es stammt. `selectRecentFeeMaster()` setzt deshalb
+zuerst die Gruppe, lädt die Master nach und wählt dann das Leistungsbild; fehlt
+das `META` (Einträge aus einer älteren Sitzung), sucht es die Gruppe über alle
+Gruppen.
+
+### 16.2 Verwaiste Kalkulationen (Punkt 2) — zwei getrennte Ursachen
+
+Im Test standen drei identische Zeilen `2021_55 Technische Ausrüstung` in der
+Liste, ohne dass sie sich löschen ließen. Das waren zwei Fehler übereinander:
+
+**Sie entstanden.** `goNext1()` legte bei *jedem* Klick auf „Weiter" einen neuen
+Kalkulations-Datensatz an. „Weiter → Zurück → Weiter" hinterließ also bei jedem
+Durchlauf einen Entwurf, und ein abgebrochener Wizard ließ ihn liegen. Jetzt
+prüft der Schritt zuerst, ob schon ein Entwurf für **dasselbe** Leistungsbild
+existiert (dann wird er weiterverwendet); wurde das Leistungsbild gewechselt,
+wird der alte Entwurf gelöscht, bevor der neue entsteht.
+
+**Sie ließen sich nicht entfernen.** Der Projekt-Tab hatte schlicht keinen
+Löschen-Knopf — die Route (`deleteFeeCalcMaster`) gab es längst. Ergänzt:
+Trash2-Zeilenaktion + `ConfirmModal`. In `AngeboteHoai` existierte der Knopf,
+aber die Mutation hatte keinen `onError`-Zweig: ein gescheitertes Löschen
+(fehlende Berechtigung, Serverfehler) sah exakt aus wie „nichts passiert". Beide
+Listen zeigen Fehler jetzt über `<Message>`.
+
+### 16.3 Tab-Struktur der Angebote (Punkte 3 + 4)
+
+- Tab **„HOAI" → „Kalkulationen"**, gleiche Benennung wie im Projektbereich.
+  Der Tab enthält seit den AHO-Heften ohnehin nicht mehr nur HOAI-Honorare.
+- Tab **„Anlegen" entfällt.** Ein Tab, der nach dem ersten Klick nichts mehr
+  anzeigt, ist kein Navigationsziel, sondern eine Aktion. `AngeboteAnlegen`
+  liegt jetzt hinter „+ Neues Angebot" in der Angebotsliste-Toolbar — dasselbe
+  Muster wie „+ Neues Projekt" in der Projektliste, samt
+  `<Can permission="offers.create">` und `modal-wide`. Das erzeugte Angebot
+  wird wie zuvor gemerkt und der Struktur-Tab geöffnet; nur der Weg dorthin
+  läuft über `onOfferCreated` aus der Liste.

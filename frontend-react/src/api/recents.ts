@@ -8,6 +8,7 @@ export type RecentEntityType =
   | 'mahnung'
   | 'address'
   | 'project_structure'
+  | 'fee_master'
   | 'report_filter'                // Legacy
   | 'report_projektliste_filter'
   | 'report_trends_filter'

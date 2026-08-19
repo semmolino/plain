@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import { Tabs }                 from '@/components/ui/Tabs'
 import { Modal }                from '@/components/ui/Modal'
 import { AngeboteListe }        from '@/pages/angebote/AngeboteListe'
-import { AngeboteAnlegen }      from '@/pages/angebote/AngeboteAnlegen'
 import { AngeboteStammdaten }   from '@/pages/angebote/AngeboteStammdaten'
 import { AngeboteStruktur }     from '@/pages/angebote/AngeboteStruktur'
 import { AngeboteHoai }         from '@/pages/angebote/AngeboteHoai'
@@ -12,13 +11,12 @@ import { fetchOffer }           from '@/api/angebote'
 import { useFilterTabs }        from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
 
-type Tab = 'liste' | 'anlegen' | 'struktur' | 'hoai'
+type Tab = 'liste' | 'struktur' | 'hoai'
 
 const TABS: { id: Tab; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'liste',      label: 'Angebotsliste',   permissions: ['offers.view'] },
-  { id: 'anlegen',    label: 'Anlegen',         permissions: ['offers.create'] },
   { id: 'struktur',   label: 'Angebotsstruktur',permissions: ['offers.edit'] },
-  { id: 'hoai',       label: 'HOAI',            permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
+  { id: 'hoai',       label: 'Kalkulationen',   permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
 ]
 
 const STORAGE_KEY = 'angebote-selected-oid'
@@ -87,8 +85,7 @@ export function AngebotePage() {
       )}
 
       <div className="master-tab-content">
-        {tab === 'liste'      && <AngeboteListe onSelectOffer={openOffer} onEditStammdaten={id => setEditStammdatenId(id)} />}
-        {tab === 'anlegen'    && <AngeboteAnlegen onOfferCreated={id => { persistOfferId(id); setTab('struktur') }} />}
+        {tab === 'liste'      && <AngeboteListe onSelectOffer={openOffer} onEditStammdaten={id => setEditStammdatenId(id)} onOfferCreated={id => { persistOfferId(id); setTab('struktur') }} />}
         {tab === 'struktur'   && <AngeboteStruktur   initialOfferId={selectedOfferId} onOfferChange={onOfferChange} />}
         {tab === 'hoai'       && <AngeboteHoai       initialOfferId={selectedOfferId} />}
       </div>
