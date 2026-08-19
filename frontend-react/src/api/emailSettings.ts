@@ -10,6 +10,8 @@ export interface EmailSettings {
   smtp_from: string
   from_name: string
   reply_to:  string
+  /** Blindkopie-Adresse fuer den Belegversand; leer = keine Kopie. */
+  bcc_to:    string
 }
 
 /** Speicher-Payload. */
@@ -18,6 +20,8 @@ export interface EmailSettingsPayload {
   smtp_from: string
   from_name: string
   reply_to:  string
+  /** Blindkopie-Adresse fuer den Belegversand; leer = keine Kopie. */
+  bcc_to:    string
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────

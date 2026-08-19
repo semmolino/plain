@@ -114,10 +114,14 @@ async function resolveSender({ supabase, tenantId, requireTenant }) {
   let fromAddress = platform.fromAddress;
   let fromName    = platform.fromName;
   let replyTo;
+  let bccTo;
 
   if (supabase && tenantId) {
     const { getTenantSenderConfig } = require("./emailSettingsService");
     const cfg = await getTenantSenderConfig(supabase, tenantId);
+    // Die BCC-Kopie haengt nicht am ENABLED-Schalter — der gilt nur fuer die
+    // Absenderidentitaet. Wer den System-Absender nutzt, will die Kopie genauso.
+    bccTo = cfg?.bccTo;
     if (cfg && (cfg.enabled || requireTenant)) {
       fromAddress = cfg.from     || platform.fromAddress;
       fromName    = cfg.fromName || platform.fromName;
@@ -138,6 +142,7 @@ async function resolveSender({ supabase, tenantId, requireTenant }) {
   return {
     from,
     replyTo,
+    bccTo,
     send: async (msg) => {
       try {
         await platform.transport.sendMail({
@@ -147,6 +152,9 @@ async function resolveSender({ supabase, tenantId, requireTenant }) {
           html:        msg.html || msg.text,
           text:        msg.text,
           replyTo:     msg.replyTo || replyTo,
+          // Nur der Belegversand fordert die Kopie an. Ohne diese Bedingung
+          // gingen auch Passwort-Reset- und Systemmails an die BCC-Adresse.
+          bcc:         msg.copyToTenant && bccTo ? bccTo : undefined,
           attachments: msg.attachments,
         });
       } catch (err) {
@@ -168,14 +176,17 @@ async function resolveSender({ supabase, tenantId, requireTenant }) {
  * @param {string}   [opts.text]        – plain-text fallback
  * @param {string}   [opts.replyTo]     – Antwort-an (override)
  * @param {Array}    [opts.attachments] – nodemailer-Style attachments
+ * @param {boolean}  [opts.copyToTenant] – true: zusaetzlich als BCC an die in
+ *   den E-Mail-Einstellungen hinterlegte Kopie-Adresse. Nur fuer Belege an
+ *   Kunden (Rechnungen, Mahnungen) setzen — nie fuer Konto-/Systemmails.
  * @throws {{ status: number, message: string }} when no transport is available
  */
-async function sendMail({ supabase, tenantId, requireTenant, to, subject, html, text, replyTo, attachments }) {
+async function sendMail({ supabase, tenantId, requireTenant, to, subject, html, text, replyTo, attachments, copyToTenant }) {
   const sender = await resolveSender({ supabase, tenantId, requireTenant });
   if (!sender) {
     throw { status: 503, message: "E-Mail-Versand ist nicht konfiguriert. Bitte SMTP_* (z.B. Eusend-Zugangsdaten) in Railway setzen oder in der Owner-Konsole hinterlegen." };
   }
-  await sender.send({ to, subject, html, text, replyTo, attachments });
+  await sender.send({ to, subject, html, text, replyTo, attachments, copyToTenant });
 }
 
 /**

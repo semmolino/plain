@@ -33,9 +33,12 @@ async function test(req, res, supabase) {
       tenantId:      req.tenantId,
       requireTenant: true,
       to,
-      subject: "PlaIn — Test-E-Mail",
-      text:    "Diese Testnachricht bestaetigt, dass deine Absender-Einstellungen in PlaIn funktionieren.",
-      html:    "<p>Diese Testnachricht bestätigt, dass deine Absender-Einstellungen in PlaIn funktionieren.</p>",
+      subject: "plan&simple — Test-E-Mail",
+      text:    "Diese Testnachricht bestaetigt, dass deine Absender-Einstellungen in plan&simple funktionieren.",
+      html:    "<p>Diese Testnachricht bestätigt, dass deine Absender-Einstellungen in plan&amp;simple funktionieren.</p>",
+      // Auch die Kopie-Adresse mittesten: sonst faellt ein Tippfehler dort erst
+      // beim ersten echten Beleg auf.
+      copyToTenant: true,
     });
     return res.json({ sent: true });
   } catch (e) {

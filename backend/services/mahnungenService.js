@@ -506,6 +506,7 @@ async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, em
     html:    composed.body ? `<pre style="font-family:inherit;white-space:pre-wrap">${composed.body}</pre>` : undefined,
     text:    composed.body,
     attachments: [{ filename, content: pdfBuffer, contentType: "application/pdf" }],
+    copyToTenant: true,
   });
 
   // Log to history

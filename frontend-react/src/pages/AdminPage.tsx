@@ -3593,6 +3593,7 @@ const EMPTY_EMAIL_FORM = {
   smtp_from: '',
   from_name: '',
   reply_to:  '',
+  bcc_to:    '',
 }
 
 function EmailVersandSection() {
@@ -3612,6 +3613,7 @@ function EmailVersandSection() {
       smtp_from: data.smtp_from,
       from_name: data.from_name,
       reply_to:  data.reply_to,
+      bcc_to:    data.bcc_to ?? '',
     })
   }, [data])
 
@@ -3641,6 +3643,7 @@ function EmailVersandSection() {
       smtp_from: form.smtp_from.trim(),
       from_name: form.from_name.trim(),
       reply_to:  form.reply_to.trim(),
+      bcc_to:    form.bcc_to.trim(),
     }
     saveMut.mutate(payload)
   }
@@ -3674,6 +3677,22 @@ function EmailVersandSection() {
         <div className="form-group">
           <label>Antwort-an / Reply-To (optional)</label>
           <input type="email" value={form.reply_to} onChange={set('reply_to')} placeholder="z. B. buero@meine-kanzlei.de" />
+        </div>
+      </div>
+
+      {/* Eigener Block: die Kopie haengt NICHT am Schalter "Eigenen Versand
+          aktivieren" — sie gilt auch beim System-Absender. */}
+      <div className="admin-block">
+        <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+          Kopie an mich (BCC) <HelpHint id="email.bcc" />
+        </h3>
+        <div className="form-group">
+          <label>Kopie-Adresse (optional)</label>
+          <input type="email" value={form.bcc_to} onChange={set('bcc_to')} placeholder="z. B. buero@meine-kanzlei.de" />
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0' }}>
+            Jede versendete Rechnung und Mahnung geht zusätzlich als Blindkopie an diese Adresse — der
+            Kunde sieht sie nicht. Leer lassen = keine Kopie.
+          </p>
         </div>
       </div>
 

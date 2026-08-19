@@ -91,6 +91,7 @@ module.exports = (supabase) => {
         html:        composed.body ? `<pre style="font-family:inherit;white-space:pre-wrap">${composed.body}</pre>` : undefined,
         text:        composed.body,
         attachments: [{ filename: `${safeName}.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
+        copyToTenant: true,
       });
       return res.json({ sent: true });
     } catch (e) {

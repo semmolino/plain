@@ -793,6 +793,25 @@ export const HELP = {
   },
 
   // ── E-Mail-Versand ───────────────────────────────────────────────────────
+  'email.bcc': {
+    title: 'Kopie an mich (BCC)',
+    body: (
+      <>
+        Weil der Versand über den System-Mailserver läuft und nicht über dein
+        Postfach, liegt dort keine Kopie im Ordner „Gesendet". Trägst du hier
+        eine Adresse ein, bekommst du jede versendete <strong>Rechnung,
+        Abschlags- und Stornorechnung sowie jede Mahnung</strong> zusätzlich als
+        Blindkopie — inklusive PDF-Anhang. Der Empfänger sieht diese Adresse
+        nicht.
+        <br />
+        <br />
+        Gilt unabhängig davon, ob du den System-Absender oder eine eigene
+        Absenderadresse nutzt. Konto-Mails wie „Passwort vergessen" werden
+        <strong> nicht</strong> kopiert. Die Testnachricht unten geht ebenfalls
+        an die Kopie-Adresse — damit lässt sich die Einstellung sofort prüfen.
+      </>
+    ),
+  },
   'email.smtp': {
     title: 'Absenderadresse',
     body: (

@@ -29,6 +29,11 @@ async function loadRow(supabase, tenantId) {
   return data || null;
 }
 
+/** Grobe Plausibilitaet — Tippfehler abfangen, nicht RFC 5322 nachbauen. */
+function isEmail(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
 /**
  * Liefert die fuer das Settings-UI sichere Repraesentation.
  */
@@ -39,6 +44,7 @@ async function getSettingsForApi(supabase, { tenantId }) {
     smtp_from: row?.SMTP_FROM || "",
     from_name: row?.FROM_NAME || "",
     reply_to:  row?.REPLY_TO  || "",
+    bcc_to:    row?.BCC_TO    || "",
   };
 }
 
@@ -49,23 +55,45 @@ async function getSettingsForApi(supabase, { tenantId }) {
  */
 async function saveSettings(supabase, { tenantId, body }) {
   const b = body || {};
+  // BCC geht an eine Adresse, die der Kunde NICHT sieht — ein Tippfehler
+  // schickt Belege still an jemand Fremdes. Deshalb hier hart pruefen.
+  const bcc = (b.bcc_to || "").trim();
+  if (bcc && !isEmail(bcc)) {
+    throw { status: 400, message: "Die Adresse für die Kopie (BCC) ist keine gültige E-Mail-Adresse." };
+  }
   const payload = {
     TENANT_ID:  tenantId,
     ENABLED:    !!b.enabled,
     SMTP_FROM:  (b.smtp_from || "").trim() || null,
     FROM_NAME:  (b.from_name || "").trim() || null,
     REPLY_TO:   (b.reply_to  || "").trim() || null,
+    BCC_TO:     bcc || null,
     UPDATED_AT: new Date().toISOString(),
   };
 
   const existing = await loadRow(supabase, tenantId);
-  if (existing) {
-    const { error } = await supabase.from(TABLE).update(payload).eq("TENANT_ID", tenantId);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from(TABLE).insert(payload);
-    if (error) throw error;
+  const write = async (data) => {
+    const { error } = existing
+      ? await supabase.from(TABLE).update(data).eq("TENANT_ID", tenantId)
+      : await supabase.from(TABLE).insert(data);
+    return error;
+  };
+
+  let error = await write(payload);
+  // Migration 0130 (Spalte BCC_TO) noch nicht eingespielt: die uebrigen
+  // Einstellungen trotzdem speichern — sonst blockiert eine fehlende Migration
+  // das ganze Formular. Nur wenn wirklich eine Kopie-Adresse gewuenscht ist,
+  // muss der Nutzer es erfahren.
+  if (error && isMissingRelation(error)) {
+    const { BCC_TO, ...ohneBcc } = payload;
+    const retryError = await write(ohneBcc);
+    if (retryError) throw retryError;
+    if (BCC_TO) {
+      throw { status: 503, message: "Kopie-Adresse konnte nicht gespeichert werden — Migration 0130 fehlt. Die übrigen Einstellungen wurden gespeichert." };
+    }
+    error = null;
   }
+  if (error) throw error;
 
   return getSettingsForApi(supabase, { tenantId });
 }
@@ -73,7 +101,7 @@ async function saveSettings(supabase, { tenantId, body }) {
 /**
  * Liefert die Absenderkonfiguration eines Tenants (kein Transport — die
  * SMTP-Verbindung baut emailService.js immer aus den globalen ENV-Variablen).
- * @returns {Promise<{enabled:boolean, from?:string, fromName?:string, replyTo?:string}|null>}
+ * @returns {Promise<{enabled:boolean, from?:string, fromName?:string, replyTo?:string, bccTo?:string}|null>}
  *   null, wenn fuer den Tenant nichts hinterlegt ist.
  */
 async function getTenantSenderConfig(supabase, tenantId) {
@@ -85,6 +113,9 @@ async function getTenantSenderConfig(supabase, tenantId) {
     from:     row.SMTP_FROM || undefined,
     fromName: row.FROM_NAME || undefined,
     replyTo:  row.REPLY_TO  || undefined,
+    // Haengt bewusst NICHT an ENABLED: die Kopie ist unabhaengig davon, ob der
+    // Mandant eine eigene Absenderidentitaet nutzt oder den System-Absender.
+    bccTo:    row.BCC_TO    || undefined,
   };
 }
 
