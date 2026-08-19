@@ -56,4 +56,18 @@ async function status(req, res, supabase) {
   }
 }
 
-module.exports = { publicKey, subscribe, unsubscribe, status };
+// POST /api/v1/push/test
+// Schickt eine Test-Benachrichtigung an alle Geräte des angemeldeten Kontos.
+async function test(req, res, supabase) {
+  try {
+    const { devices } = await svc.sendTestPush(supabase, {
+      tenantId: req.tenantId,
+      userId:   req.userId,
+    });
+    return res.json({ ok: true, devices });
+  } catch (e) {
+    return res.status(e?.status ?? 500).json({ error: e?.message || String(e) });
+  }
+}
+
+module.exports = { publicKey, subscribe, unsubscribe, status, test };

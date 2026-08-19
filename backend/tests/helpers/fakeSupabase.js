@@ -25,10 +25,14 @@ function makeFakeSupabase(initial = {}) {
       const v = r[f.col];
       switch (f.op) {
         case "eq":  return v === f.val;
+        case "neq": return v !== f.val;
         case "in":  return f.val.includes(v);
         case "gte": return v >= f.val;
         case "lte": return v <= f.val;
+        case "lt":  return v <  f.val;
         case "is":  return f.val === null ? (v === null || v === undefined) : v === f.val;
+        // .not(col, "is", null) — die einzige not-Form, die im Code vorkommt.
+        case "notIs": return f.val === null ? (v !== null && v !== undefined) : v !== f.val;
         default:    return true;
       }
     }));
@@ -73,10 +77,13 @@ function makeFakeSupabase(initial = {}) {
       upsert(p, opts) { mode = "upsert"; payload = p; onConflict = opts && opts.onConflict; return builder; },
       delete() { mode = "delete"; return builder; },
       eq(col, val)  { filters.push({ op: "eq",  col, val }); return builder; },
+      neq(col, val) { filters.push({ op: "neq", col, val }); return builder; },
       in(col, val)  { filters.push({ op: "in",  col, val }); return builder; },
       gte(col, val) { filters.push({ op: "gte", col, val }); return builder; },
       lte(col, val) { filters.push({ op: "lte", col, val }); return builder; },
+      lt(col, val)  { filters.push({ op: "lt",  col, val }); return builder; },
       is(col, val)  { filters.push({ op: "is",  col, val }); return builder; },
+      not(col, op, val) { filters.push({ op: op === "is" ? "notIs" : "neq", col, val }); return builder; },
       or() { return builder; },
       order(col, opts) { order = { col, asc: !opts || opts.ascending !== false }; return builder; },
       limit(n) { limitN = n; return builder; },

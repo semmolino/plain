@@ -12,7 +12,7 @@ const TYPE_KEY = "leistungsstand_reminder";
 //                                Leistungsstand-Liste, Filter "meine Projekte")
 async function checkLeistungsstandReminders(supabase) {
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = schedule.localDateStr(now);
 
   let configs;
   try {
@@ -156,16 +156,20 @@ async function resolveScheduleAudience(supabase, tenantId, cfg) {
   return ids;
 }
 
+// Tagesdatum in der App-Zeitzone (Europe/Berlin, s. notificationSchedule.js).
+// toISOString() waere hier falsch: nach 22:00 Ortszeit steht dort schon der
+// naechste Tag, und die ref_date-Idempotenz griffe ins Leere.
 function todayLocal() {
-  return new Date().toISOString().slice(0, 10);
+  return schedule.localDateStr();
 }
 
-// Boot: 5 Min nach Startup ersten Lauf, danach alle 6 Stunden
-// (haeufig genug, damit ein Tag nicht "verpasst" wird, aber idempotent via
-// LAST_FIRED_DATE).
+// Boot: 5 Min nach Startup ersten Lauf, danach stuendlich — damit eine auf
+// 09:00 gestellte Erinnerung auch um 09:xx rausgeht und nicht erst, wenn ein
+// grober Takt den Tag zufaellig trifft. Mehrfachlaeufe sind unschaedlich:
+// LAST_FIRED_DATE und die ref_date-Pruefung machen den Lauf idempotent.
 function startLeistungsstandReminderChecker(supabase) {
   const RUN_AFTER_MS = 5 * 60 * 1000;
-  const INTERVAL_MS  = 6 * 60 * 60 * 1000;
+  const INTERVAL_MS  = 60 * 60 * 1000;
 
   setTimeout(async () => {
     console.log("[LEISTUNGSSTAND_REMINDER] Initial-Lauf …");
@@ -182,6 +186,11 @@ function startLeistungsstandReminderChecker(supabase) {
 
 // Manueller Trigger: feuert fuer EINEN Tenant ohne Schedule-/Datums-Check
 // (fuer "Jetzt ausfuehren"-Button im Admin).
+//
+// Setzt LAST_FIRED_DATE bewusst NICHT — sonst gilt der regulaere Lauf
+// desselben Tages als erledigt, und genau die Erinnerung, die der Test
+// pruefen sollte, bleibt aus. Gegen Dopplungen wirkt die ref_date-Pruefung
+// je Projekt bzw. je Empfaenger in fireForTenant().
 async function runNowForTenant(supabase, tenantId) {
   const { data, error } = await supabase
     .from("NOTIFICATION_SCHEDULE_CONFIG")
@@ -192,9 +201,7 @@ async function runNowForTenant(supabase, tenantId) {
   if (error) throw error;
   if (!data) throw { status: 404, message: "Keine Konfiguration vorhanden" };
   if (!data.ENABLED) throw { status: 400, message: "Schedule ist deaktiviert" };
-  const created = await fireForTenant(supabase, data);
-  await schedule.markFired(supabase, data.ID, todayLocal());
-  return created;
+  return fireForTenant(supabase, data);
 }
 
 module.exports = {

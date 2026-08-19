@@ -2,6 +2,7 @@
 
 const { createNotification } = require("./notifications");
 const streakSvc              = require("./streaks");
+const schedule               = require("./notificationSchedule");
 
 /**
  * Liest die Tenant-Engagement-Konfig. Bei Fehler / fehlender Tabelle:
@@ -32,7 +33,7 @@ const TYPE_KEY = "hours_booking_reminder";
 // erreicht ist.
 async function checkHoursBookingReminders(supabase) {
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = schedule.localDateStr(now);
 
   let configs;
   try {
@@ -52,7 +53,7 @@ async function checkHoursBookingReminders(supabase) {
     if (!cfg.ENABLED) continue;
     if (!cfg.SCHEDULE_TIME_OF_DAY) continue;
     if (cfg.LAST_FIRED_DATE && String(cfg.LAST_FIRED_DATE).slice(0, 10) === todayStr) continue;
-    if (!hasReachedTime(cfg.SCHEDULE_TIME_OF_DAY, now)) continue;
+    if (!schedule.hasReachedTimeOfDay(cfg.SCHEDULE_TIME_OF_DAY, now)) continue;
 
     try {
       const created = await fireForTenant(supabase, cfg, todayStr);
@@ -70,15 +71,6 @@ async function checkHoursBookingReminders(supabase) {
   if (totalCreated > 0) {
     console.log(`[HOURS_BOOKING_REMINDER] Insgesamt ${totalCreated} Notification(s)`);
   }
-}
-
-function hasReachedTime(timeStr, now) {
-  // timeStr "HH:MM:SS"
-  const m = /^(\d{2}):(\d{2})/.exec(String(timeStr || ""));
-  if (!m) return false;
-  const targetMin  = Number(m[1]) * 60 + Number(m[2]);
-  const nowMin     = now.getHours() * 60 + now.getMinutes();
-  return nowMin >= targetMin;
 }
 
 async function fireForTenant(supabase, cfg, todayStr) {
@@ -154,9 +146,14 @@ async function fireForTenant(supabase, cfg, todayStr) {
   return created;
 }
 
-// Manueller Trigger (ignoriert Uhrzeit-Pruefung)
+// Manueller Trigger (ignoriert Uhrzeit-Pruefung).
+//
+// Setzt LAST_FIRED_DATE bewusst NICHT: sonst haelt ein Test am Vormittag den
+// regulaeren Lauf desselben Tages fuer erledigt, und die Erinnerung, die der
+// Test pruefen sollte, bleibt aus. Doppelte Benachrichtigungen verhindert
+// ohnehin die ref_date-Pruefung je Empfaenger in fireForTenant().
 async function runNowForTenant(supabase, tenantId) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = schedule.localDateStr();
   const { data, error } = await supabase
     .from("NOTIFICATION_SCHEDULE_CONFIG")
     .select("*")
@@ -166,12 +163,7 @@ async function runNowForTenant(supabase, tenantId) {
   if (error) throw error;
   if (!data) throw { status: 404, message: "Keine Konfiguration vorhanden" };
   if (!data.ENABLED) throw { status: 400, message: "Schedule ist deaktiviert" };
-  const created = await fireForTenant(supabase, data, todayStr);
-  await supabase
-    .from("NOTIFICATION_SCHEDULE_CONFIG")
-    .update({ LAST_FIRED_DATE: todayStr })
-    .eq("ID", data.ID);
-  return created;
+  return fireForTenant(supabase, data, todayStr);
 }
 
 // Boot: 5 Min nach Startup, dann stuendlich (damit eine 09:00-Schwelle

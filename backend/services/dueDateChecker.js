@@ -40,6 +40,57 @@ async function alreadyNotified(supabase, { tenantId, type, invoiceId, days }) {
   return Array.isArray(legacy) && legacy.length > 0;
 }
 
+// Summe der Zahlungseingaenge je Rechnung. In Bloecken abgefragt, damit die
+// in.(…)-Liste bei vielen Rechnungen nicht die URL sprengt.
+async function loadPaidGross(supabase, invoiceIds) {
+  const map = {};
+  const ids = Array.from(new Set((invoiceIds || []).filter(Boolean)));
+  const CHUNK = 200;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from("PAYMENT")
+      .select("INVOICE_ID, AMOUNT_PAYED_GROSS")
+      .in("INVOICE_ID", slice);
+    if (error) {
+      console.error("[DUE_DATE_CHECKER] Failed to load payments:", error.message);
+      continue;
+    }
+    for (const p of data || []) {
+      const v = parseFloat(String(p.AMOUNT_PAYED_GROSS ?? "0"));
+      if (!Number.isFinite(v)) continue;
+      map[p.INVOICE_ID] = (map[p.INVOICE_ID] || 0) + v;
+    }
+  }
+  return map;
+}
+
+// Brutto-Betrag der Rechnung: bevorzugt der gebuchte Wert, sonst aus Netto +
+// USt rekonstruiert (gleiche Reihenfolge wie in services/emailTemplates.js).
+function grossOf(inv) {
+  if (inv.TOTAL_AMOUNT_GROSS != null) {
+    const v = parseFloat(String(inv.TOTAL_AMOUNT_GROSS));
+    if (Number.isFinite(v)) return v;
+  }
+  if (inv.TOTAL_AMOUNT_NET != null) {
+    const net = parseFloat(String(inv.TOTAL_AMOUNT_NET));
+    if (Number.isFinite(net)) {
+      const vat = parseFloat(String(inv.VAT_PERCENT ?? 0));
+      return Math.round(net * (1 + (Number.isFinite(vat) ? vat : 0) / 100) * 100) / 100;
+    }
+  }
+  return null;
+}
+
+// Vollstaendig bezahlt? Ohne bezifferbaren Brutto-Betrag bewusst NEIN — dann
+// lieber einmal zu viel erinnern als eine offene Rechnung verschweigen.
+// Halber Cent Toleranz gegen Rundungsreste aus Teilzahlungen.
+function isSettled(inv, paidGross) {
+  const gross = grossOf(inv);
+  if (gross == null || gross <= 0) return false;
+  return paidGross >= gross - 0.005;
+}
+
 async function checkDueDates(supabase) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -47,7 +98,7 @@ async function checkDueDates(supabase) {
   // Load all booked, non-storno invoices with a due date across all tenants
   const { data: invoices, error } = await supabase
     .from("INVOICE")
-    .select("ID, TENANT_ID, INVOICE_NUMBER, DUE_DATE")
+    .select("ID, TENANT_ID, INVOICE_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET, VAT_PERCENT")
     .eq("STATUS_ID", 2)
     .neq("INVOICE_TYPE", "stornorechnung")
     .not("DUE_DATE", "is", null);
@@ -57,9 +108,17 @@ async function checkDueDates(supabase) {
     return;
   }
 
+  // Bezahlte Rechnungen sind weder faellig noch ueberfaellig. INVOICE traegt
+  // kein Bezahlt-Kennzeichen — der offene Betrag ergibt sich erst aus den
+  // PAYMENT-Zeilen, genau wie in der Rechnungsliste und im Mahnwesen.
+  const paidByInvoice = await loadPaidGross(supabase, (invoices || []).map(i => i.ID));
+
   let created = 0;
+  let skippedPaid = 0;
 
   for (const inv of invoices || []) {
+    if (isSettled(inv, paidByInvoice[inv.ID] || 0)) { skippedPaid++; continue; }
+
     const due = new Date(inv.DUE_DATE);
     due.setHours(0, 0, 0, 0);
     const diff = daysBetween(today, due); // positive = future, negative = past
@@ -102,8 +161,8 @@ async function checkDueDates(supabase) {
     }
   }
 
-  if (created > 0) {
-    console.log(`[DUE_DATE_CHECKER] Created ${created} notification(s)`);
+  if (created > 0 || skippedPaid > 0) {
+    console.log(`[DUE_DATE_CHECKER] Created ${created} notification(s), ${skippedPaid} bezahlte Rechnung(en) uebersprungen`);
   }
 }
 
@@ -126,4 +185,4 @@ function startDueDateChecker(supabase) {
   }, RUN_AFTER_MS);
 }
 
-module.exports = { startDueDateChecker };
+module.exports = { startDueDateChecker, checkDueDates };

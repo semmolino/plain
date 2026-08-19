@@ -680,11 +680,51 @@ export const HELP = {
     title: 'Wer bekommt Benachrichtigungen?',
     body: (
       <>
-        Pro Typ wählbar: <strong>Organisations-Standard</strong> (alle
-        Mitarbeiter) oder eine gezielte Empfängerliste aus Rollen, Abteilungen
-        und/oder einzelnen Mitarbeitern. Die Listen sind <strong>ODER-verknüpft</strong> —
-        wer in mindestens einer steht, erhält die Nachricht. „Bearbeiten" öffnet
-        die Auswahl je Typ.
+        Pro Typ über „Bearbeiten" wählbar:
+        <br />
+        <strong>Alle Mitarbeiter</strong> — jede Person im Büro.
+        <br />
+        <strong>Nur bestimmte Personen</strong> — ausschließlich die gewählten
+        Mitarbeiter, sonst niemand.
+        <br />
+        <strong>Nach Rollen und Abteilungen</strong> — alle Treffer aus Rollen
+        und Abteilungen, wahlweise ergänzt um einzelne Personen. Die Listen sind{' '}
+        <strong>ODER-verknüpft</strong>: wer in mindestens einer steht, erhält
+        die Nachricht.
+        <br />
+        Unter der Auswahl steht immer, wer damit tatsächlich erreicht wird —
+        inklusive Warnung, wenn am Ende niemand übrig bleibt.
+      </>
+    ),
+  },
+  'notifications.schedule.time': {
+    title: 'Uhrzeit des Zeitplans',
+    body: (
+      <>
+        Die Uhrzeit gilt in <strong>deutscher Zeit</strong> (inkl. Sommerzeit),
+        nicht in der Zeitzone des Servers. Die Erinnerung geht beim ersten
+        Durchlauf <strong>ab</strong> dieser Uhrzeit raus — geprüft wird
+        stündlich, es kann also einige Minuten später werden.
+        <br />
+        Pro Tag wird höchstens einmal erinnert. Wer bereits erledigt hat, worum
+        es geht (z. B. Stunden gebucht), wird übersprungen.
+      </>
+    ),
+  },
+  'notifications.budget.recipients': {
+    title: 'Empfänger einer Budget-Warnung',
+    body: (
+      <>
+        Alle angehakten Quellen zusammen ergeben die Empfänger:{' '}
+        <strong>Projektleiter</strong> des Projekts, die{' '}
+        <strong>verursachende Person</strong> (wer die auslösende Buchung erfasst
+        hat) und die Liste <strong>Weitere Personen</strong>.
+        <br />
+        Soll <strong>nur eine bestimmte Person</strong> die Warnung bekommen: die
+        beiden Haken abwählen und die Person unter „Weitere Personen" auswählen.
+        <br />
+        <strong>Stumm schalten</strong> überwacht das Budget weiter, verschickt
+        aber nichts.
       </>
     ),
   },

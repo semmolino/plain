@@ -54,8 +54,8 @@ import {
   type ArbzgSettings, type BreakRule,
 } from '@/api/arbzg'
 import {
-  fetchNotificationConfigs, upsertNotificationConfig,
-  type NotificationTypeConfig,
+  fetchNotificationConfigs, upsertNotificationConfig, previewNotificationAudience,
+  type NotificationTypeConfig, type UpsertNotificationConfigBody,
 } from '@/api/notificationConfig'
 import {
   fetchNotificationSchedule, upsertNotificationSchedule, runNotificationScheduleNow,
@@ -2766,12 +2766,17 @@ function BenachrichtigungenSection() {
 
   function summarizeAudience(c: NotificationTypeConfig): string {
     if (c.defaultAudienceKind === 'managed_by_rule') return 'Pro Regel / Datensatz konfiguriert'
-    if (c.audienceUseDefault) return 'Organisations-Standard (alle Mitarbeiter)'
-    if (c.audienceAllTenant)  return 'Alle Mitarbeiter'
+    if (c.audienceUseDefault || c.audienceAllTenant) return 'Alle Mitarbeiter'
     const parts: string[] = []
     if (c.audienceRoles?.length)       parts.push(`Rollen: ${c.audienceRoles.map(r => DASHBOARD_ROLE_LABELS[r] ?? r).join(', ')}`)
     if (c.audienceDepartments?.length) parts.push(`${c.audienceDepartments.length} Abteilung(en)`)
-    if (c.audienceEmployees?.length)   parts.push(`${c.audienceEmployees.length} Mitarbeiter`)
+    if (c.audienceEmployees?.length) {
+      // Ohne Rollen/Abteilungen ist die Personenliste die vollstaendige
+      // Empfaengermenge — nicht ein Zusatz zu etwas anderem.
+      parts.push(parts.length
+        ? `+ ${c.audienceEmployees.length} Mitarbeiter`
+        : `Nur ${c.audienceEmployees.length} bestimmte Person(en)`)
+    }
     return parts.length ? parts.join(' · ') : 'Niemand (Empfängerliste leer)'
   }
 
@@ -2854,6 +2859,7 @@ function LeistungsstandReminderBlock() {
   const [enabled,             setEnabled]             = useState(false)
   const [scheduleDays,        setScheduleDays]        = useState<number[]>([25])
   const [scheduleLastDay,     setScheduleLastDay]     = useState(false)
+  const [scheduleTimeOfDay,   setScheduleTimeOfDay]   = useState('09:00')
   const [notifyProjectPm,     setNotifyProjectPm]     = useState(true)
   const [projectStatusIds,    setProjectStatusIds]    = useState<number[]>([])
   const [audienceRoles,       setAudienceRoles]       = useState<string[]>([])
@@ -2879,6 +2885,7 @@ function LeistungsstandReminderBlock() {
     setEnabled(s.ENABLED)
     setScheduleDays(s.SCHEDULE_DAYS ?? [25])
     setScheduleLastDay(s.SCHEDULE_LAST_DAY)
+    setScheduleTimeOfDay((s.SCHEDULE_TIME_OF_DAY ?? '09:00').slice(0, 5))
     setNotifyProjectPm(s.NOTIFY_PROJECT_PM)
     setProjectStatusIds(s.PROJECT_STATUS_IDS ?? [])
     setAudienceRoles(s.AUDIENCE_ROLES ?? [])
@@ -2889,7 +2896,8 @@ function LeistungsstandReminderBlock() {
 
   const saveMut = useMutation({
     mutationFn: () => upsertNotificationSchedule(TYPE_KEY, {
-      enabled, scheduleDays, scheduleLastDay, notifyProjectPm, projectStatusIds,
+      enabled, scheduleDays, scheduleLastDay, scheduleTimeOfDay,
+      notifyProjectPm, projectStatusIds,
       audienceRoles, audienceDepartments, audienceEmployees,
     }),
     onSuccess: () => {
@@ -2971,6 +2979,23 @@ function LeistungsstandReminderBlock() {
                 />
                 <span>Zusätzlich am letzten Tag des Monats</span>
               </label>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }} htmlFor="ls-reminder-time">
+                  Uhrzeit
+                  <HelpHint id="notifications.schedule.time" />
+                </label>
+                <input
+                  id="ls-reminder-time"
+                  type="time"
+                  value={scheduleTimeOfDay}
+                  onChange={e => setScheduleTimeOfDay(e.target.value)}
+                  style={{ width: 120 }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  deutsche Zeit — die Erinnerung geht ab dieser Uhrzeit raus
+                </span>
+              </div>
             </div>
 
             {/* Projekt-Status-Filter */}
@@ -3159,8 +3184,9 @@ function HoursBookingReminderBlock() {
       {enabled && (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
               Uhrzeit (täglich)
+              <HelpHint id="notifications.schedule.time" />
             </label>
             <input
               type="time"
@@ -3169,9 +3195,9 @@ function HoursBookingReminderBlock() {
               style={{ width: 140 }}
             />
             <p className="admin-section-hint">
-              Sobald die Uhrzeit erreicht ist, geht eine Notification an alle aktiven
-              Mitarbeiter, die heute noch keine TEC-Zeile haben (Mitarbeiter mit
-              Buchung werden uebersprungen).
+              Deutsche Zeit. Sobald die Uhrzeit erreicht ist, geht eine Benachrichtigung an
+              alle aktiven Mitarbeiter, die heute noch keine Stunden gebucht haben
+              (Mitarbeiter mit Buchung werden übersprungen).
             </p>
           </div>
           {lastFiredDate && (
@@ -3201,6 +3227,69 @@ function HoursBookingReminderBlock() {
   )
 }
 
+// Empfänger-Modus des Dialogs.
+//
+// Das Datenmodell (AUDIENCE_USE_DEFAULT / _ALL_TENANT / _ROLES / _DEPARTMENTS
+// / _EMPLOYEES) konnte „nur diese eine Person" schon immer abbilden. Nur hieß
+// die Mitarbeiterliste „Plus folgende Mitarbeiter … zusätzlich zu den Rollen-
+// und Abteilungs-Treffern" — also genau das Gegenteil dessen, was sie kann.
+// Die drei Modi machen die Absicht wählbar, statt sie aus vier Feldern
+// erraten zu lassen.
+type AudienceMode = 'alle' | 'personen' | 'rollen'
+
+function modeFromConfig(c: NotificationTypeConfig): AudienceMode {
+  // audienceAllTenant ist gleichbedeutend mit „Organisations-Standard" und
+  // wird beim nächsten Speichern darauf normalisiert.
+  if (c.audienceUseDefault || c.audienceAllTenant) return 'alle'
+  if ((c.audienceRoles?.length ?? 0) > 0 || (c.audienceDepartments?.length ?? 0) > 0) return 'rollen'
+  return 'personen'
+}
+
+// Zeigt live, wer diesen Entwurf bekäme — aufgelöst vom Server mit derselben
+// Funktion, die beim Versand läuft. Der Dialog ließ vorher nur raten, ob eine
+// Auswahl die Empfänger einschränkt oder erweitert.
+function EmpfaengerVorschau({ typeKey, draft }: {
+  typeKey: string
+  draft: UpsertNotificationConfigBody
+}) {
+  const key = JSON.stringify(draft)
+  const { data, isFetching } = useQuery({
+    queryKey: ['notification-audience-preview', typeKey, key],
+    queryFn:  () => previewNotificationAudience(typeKey, draft),
+    // Der Entwurf ändert sich bei jedem Klick — kurz vorhalten reicht.
+    staleTime: 30_000,
+  })
+
+  const box: React.CSSProperties = {
+    background: 'var(--surface-2)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 12,
+  }
+
+  if (!data) {
+    return <div style={{ ...box, color: 'var(--text-3)' }}>Empfänger werden ermittelt …</div>
+  }
+  if (data.disabled) {
+    return <div style={{ ...box, color: 'var(--text-3)' }}>Typ ist abgeschaltet — es wird niemand benachrichtigt.</div>
+  }
+  if (data.tenantWide) {
+    return <div style={{ ...box }}><strong>Empfänger:</strong> alle Mitarbeiter</div>
+  }
+  if (data.recipients.length === 0) {
+    return (
+      <div style={{ ...box, borderColor: 'var(--warning)', background: 'var(--warning-bg)' }}>
+        <strong>Niemand ausgewählt.</strong> Mit dieser Einstellung wird diese Benachrichtigung
+        an niemanden verschickt.
+      </div>
+    )
+  }
+  return (
+    <div style={{ ...box, opacity: isFetching ? 0.6 : 1 }}>
+      <strong>Empfänger ({data.recipients.length}):</strong>{' '}
+      {data.recipients.map(r => r.name).join(', ')}
+    </div>
+  )
+}
+
 function BenachrichtigungEditModal({ open, config, onClose }: {
   open: boolean
   config: NotificationTypeConfig | null
@@ -3208,8 +3297,7 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
 }) {
   const qc = useQueryClient()
   const [enabled,             setEnabled]             = useState(true)
-  const [audienceUseDefault,  setAudienceUseDefault]  = useState(true)
-  const [audienceAllTenant,   setAudienceAllTenant]   = useState(false)
+  const [mode,                setMode]                = useState<AudienceMode>('alle')
   const [audienceRoles,       setAudienceRoles]       = useState<string[]>([])
   const [audienceDepartments, setAudienceDepartments] = useState<number[]>([])
   const [audienceEmployees,   setAudienceEmployees]   = useState<number[]>([])
@@ -3222,22 +3310,26 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
   useEffect(() => {
     if (!config) return
     setEnabled(config.enabled)
-    setAudienceUseDefault(config.audienceUseDefault)
-    setAudienceAllTenant(config.audienceAllTenant)
+    setMode(modeFromConfig(config))
     setAudienceRoles(config.audienceRoles ?? [])
     setAudienceDepartments(config.audienceDepartments ?? [])
     setAudienceEmployees(config.audienceEmployees ?? [])
   }, [config])
 
+  // Der Entwurf, so wie er gespeichert würde. Vorschau und Speichern nutzen
+  // exakt dasselbe Objekt — sonst zeigt die Vorschau irgendwann etwas
+  // anderes, als am Ende versendet wird.
+  const draft: UpsertNotificationConfigBody = {
+    enabled,
+    audienceUseDefault:  mode === 'alle',
+    audienceAllTenant:   false,
+    audienceRoles:       mode === 'rollen'   ? audienceRoles       : [],
+    audienceDepartments: mode === 'rollen'   ? audienceDepartments : [],
+    audienceEmployees:   mode === 'alle'     ? [] : audienceEmployees,
+  }
+
   const saveMut = useMutation({
-    mutationFn: () => upsertNotificationConfig(config!.typeKey, {
-      enabled,
-      audienceUseDefault,
-      audienceAllTenant,
-      audienceRoles,
-      audienceDepartments,
-      audienceEmployees,
-    }),
+    mutationFn: () => upsertNotificationConfig(config!.typeKey, draft),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notification-configs'] })
       onClose()
@@ -3245,7 +3337,6 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
   })
 
   if (!config) return null
-  const manualMode = !audienceUseDefault
 
   return (
     <Modal open={open} onClose={onClose} title={config.title}>
@@ -3260,88 +3351,85 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
         </label>
 
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Empfänger</div>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
-            <input
-              type="radio"
-              name="audMode"
-              checked={audienceUseDefault}
-              onChange={() => setAudienceUseDefault(true)}
-              disabled={!enabled}
-            />
-            <span>
-              <strong>Organisations-Standard</strong>
-              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block' }}>
-                Wirkt für alle Mitarbeiter (systemweit).
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Wer bekommt diese Benachrichtigung?</div>
+
+          {([
+            {
+              key:  'alle' as const,
+              titel: 'Alle Mitarbeiter',
+              hilfe: 'Jede Person im Büro erhält die Benachrichtigung.',
+            },
+            {
+              key:  'personen' as const,
+              titel: 'Nur bestimmte Personen',
+              hilfe: 'Ausschließlich die unten gewählten Mitarbeiter — sonst niemand.',
+            },
+            {
+              key:  'rollen' as const,
+              titel: 'Nach Rollen und Abteilungen',
+              hilfe: 'Alle Treffer aus Rollen und Abteilungen, wahlweise ergänzt um einzelne Personen.',
+            },
+          ]).map(opt => (
+            <label
+              key={opt.key}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}
+            >
+              <input
+                type="radio"
+                name="audMode"
+                checked={mode === opt.key}
+                onChange={() => setMode(opt.key)}
+                disabled={!enabled}
+              />
+              <span>
+                <strong>{opt.titel}</strong>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block' }}>{opt.hilfe}</span>
               </span>
-            </span>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-            <input
-              type="radio"
-              name="audMode"
-              checked={!audienceUseDefault}
-              onChange={() => setAudienceUseDefault(false)}
-              disabled={!enabled}
-            />
-            <span>
-              <strong>Manuell konfigurieren</strong>
-              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block' }}>
-                Empfänger werden aus Rollen / Abteilungen / Mitarbeitern kombiniert (OR-Verknüpfung).
-              </span>
-            </span>
-          </label>
+            </label>
+          ))}
         </div>
 
-        {manualMode && enabled && (
+        {enabled && mode !== 'alle' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingLeft: 24, borderLeft: '2px solid var(--border)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={audienceAllTenant}
-                onChange={e => setAudienceAllTenant(e.target.checked)}
-              />
-              <span>Alle Mitarbeiter (überspringt die Filter unten)</span>
-            </label>
+            {mode === 'rollen' && (
+              <>
+                <div className="form-group">
+                  <label>Rollen</label>
+                  <select
+                    multiple
+                    value={audienceRoles}
+                    onChange={e => setAudienceRoles(Array.from(e.target.selectedOptions, o => o.value))}
+                    style={{ minHeight: 70 }}
+                  >
+                    {Object.entries(DASHBOARD_ROLE_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                  <p className="admin-section-hint">Strg-/Cmd-Klick für Mehrfachauswahl.</p>
+                </div>
 
-            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
-              <label>Rollen</label>
+                <div className="form-group">
+                  <label>Abteilungen</label>
+                  <select
+                    multiple
+                    value={audienceDepartments.map(String)}
+                    onChange={e => setAudienceDepartments(
+                      Array.from(e.target.selectedOptions, o => Number(o.value))
+                    )}
+                    style={{ minHeight: 90 }}
+                  >
+                    {departments.map(d => (
+                      <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            <div className="form-group">
+              <label>{mode === 'personen' ? 'Diese Personen' : 'Zusätzlich diese Personen'}</label>
               <select
                 multiple
-                disabled={audienceAllTenant}
-                value={audienceRoles}
-                onChange={e => setAudienceRoles(Array.from(e.target.selectedOptions, o => o.value))}
-                style={{ minHeight: 70 }}
-              >
-                {Object.entries(DASHBOARD_ROLE_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-              <p className="admin-section-hint">Strg-/Cmd-Klick für Mehrfachauswahl.</p>
-            </div>
-
-            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
-              <label>Abteilungen</label>
-              <select
-                multiple
-                disabled={audienceAllTenant}
-                value={audienceDepartments.map(String)}
-                onChange={e => setAudienceDepartments(
-                  Array.from(e.target.selectedOptions, o => Number(o.value))
-                )}
-                style={{ minHeight: 90 }}
-              >
-                {departments.map(d => (
-                  <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group" style={{ opacity: audienceAllTenant ? 0.5 : 1 }}>
-              <label>Plus folgende Mitarbeiter</label>
-              <select
-                multiple
-                disabled={audienceAllTenant}
                 value={audienceEmployees.map(String)}
                 onChange={e => setAudienceEmployees(
                   Array.from(e.target.selectedOptions, o => Number(o.value))
@@ -3352,10 +3440,16 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
                   <option key={emp.ID} value={emp.ID}>{emp.SHORT_NAME}</option>
                 ))}
               </select>
-              <p className="admin-section-hint">Zusätzlich zu den Rollen- und Abteilungs-Treffern.</p>
+              <p className="admin-section-hint">
+                {mode === 'personen'
+                  ? 'Strg-/Cmd-Klick für mehrere Personen. Nur diese erhalten die Benachrichtigung.'
+                  : 'Optional — kommt zu den Rollen- und Abteilungs-Treffern hinzu.'}
+              </p>
             </div>
           </div>
         )}
+
+        <EmpfaengerVorschau typeKey={config.typeKey} draft={draft} />
 
         <DialogFooter>
           <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>

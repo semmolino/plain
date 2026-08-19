@@ -93,32 +93,83 @@ async function resolveAudience(supabase, tenantId, typeKey /*, context */) {
   if (eff.audienceUseDefault) {
     return null; // tenant-wide
   }
-
-  // Mixed-Modus: alle Treffer aus den vier Quellen sammeln (OR).
   if (eff.audienceAllTenant) return null;
 
-  const empIds = new Set();
-  const roles  = Array.isArray(eff.audienceRoles)       ? eff.audienceRoles.filter(Boolean) : [];
-  const depts  = Array.isArray(eff.audienceDepartments) ? eff.audienceDepartments.filter(x => x != null) : [];
-  const empls  = Array.isArray(eff.audienceEmployees)   ? eff.audienceEmployees.filter(x => x != null) : [];
+  return resolveEmployeeIds(supabase, tenantId, {
+    roles:       eff.audienceRoles,
+    departments: eff.audienceDepartments,
+    employees:   eff.audienceEmployees,
+  });
+}
 
-  if (roles.length || depts.length) {
+// Loest Rollen / Abteilungen / einzelne Mitarbeiter zu einer Empfaenger-Menge
+// auf (OR ueber alle drei Quellen).
+//
+// Eigene Funktion, damit die Empfaenger-VORSCHAU im Admin und der spaetere
+// VERSAND garantiert dasselbe Ergebnis liefern. Eine nachgebaute Vorschau
+// waere die naechste Stelle, die beim ersten Feld auseinanderlaeuft — und
+// eine Vorschau, der man nicht trauen kann, ist schlimmer als keine.
+//
+// Leere Konfiguration -> leere Menge. Bewusst KEIN Rueckfall auf
+// "dann eben alle": wer Empfaenger einschraenkt und sich vertut, soll keine
+// Rundmail an das ganze Buero ausloesen.
+async function resolveEmployeeIds(supabase, tenantId, { roles, departments, employees } = {}) {
+  const empIds = new Set();
+  const roleList = Array.isArray(roles)       ? roles.filter(Boolean) : [];
+  const deptList = Array.isArray(departments) ? departments.filter(x => x != null) : [];
+  const emplList = Array.isArray(employees)   ? employees.filter(x => x != null)   : [];
+
+  if (roleList.length || deptList.length) {
     let q = supabase.from('EMPLOYEE').select('ID').eq('TENANT_ID', tenantId);
     // OR per supabase-js: ein einziges OR mit allen Teilen
     const orParts = [];
-    if (roles.length) orParts.push(`DASHBOARD_ROLE.in.(${roles.map(r => `"${r}"`).join(',')})`);
-    if (depts.length) orParts.push(`DEPARTMENT_ID.in.(${depts.join(',')})`);
+    if (roleList.length) orParts.push(`DASHBOARD_ROLE.in.(${roleList.map(r => `"${r}"`).join(',')})`);
+    if (deptList.length) orParts.push(`DEPARTMENT_ID.in.(${deptList.join(',')})`);
     if (orParts.length) q = q.or(orParts.join(','));
     const { data } = await q;
     for (const r of (data || [])) empIds.add(Number(r.ID));
   }
-  for (const eid of empls) empIds.add(Number(eid));
+  for (const eid of emplList) empIds.add(Number(eid));
 
-  if (empIds.size === 0) {
-    // Konfiguration leer -> nichts senden (bewusst still, kein Auto-Tenantweit-Fallback)
-    return new Set();
-  }
   return empIds;
+}
+
+// Empfaenger-Vorschau fuer einen noch nicht gespeicherten Entwurf.
+// Liefert { tenantWide, recipients:[{id, name}] } — dieselbe Aufloesung wie
+// beim Versand, nur mit Namen statt IDs.
+async function previewAudience(supabase, tenantId, typeKey, body) {
+  const cat = await getCatalogEntry(supabase, typeKey);
+  const b = body || {};
+
+  if (cat && cat.DEFAULT_AUDIENCE_KIND === 'managed_by_rule') {
+    return { tenantWide: false, managedByRule: true, recipients: [] };
+  }
+  if (b.enabled === false) return { tenantWide: false, disabled: true, recipients: [] };
+  if (b.audienceUseDefault !== false || b.audienceAllTenant === true) {
+    return { tenantWide: true, recipients: [] };
+  }
+
+  const ids = await resolveEmployeeIds(supabase, tenantId, {
+    roles:       b.audienceRoles,
+    departments: b.audienceDepartments,
+    employees:   b.audienceEmployees,
+  });
+  if (ids.size === 0) return { tenantWide: false, recipients: [] };
+
+  const { data } = await supabase
+    .from('EMPLOYEE')
+    .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME')
+    .eq('TENANT_ID', tenantId)
+    .in('ID', Array.from(ids));
+
+  const recipients = (data || [])
+    .map(e => ({
+      id:   Number(e.ID),
+      name: e.SHORT_NAME || [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(' ') || `#${e.ID}`,
+    }))
+    .sort((a, b2) => a.name.localeCompare(b2.name, 'de'));
+
+  return { tenantWide: false, recipients };
 }
 
 // ── Admin-API ──────────────────────────────────────────────────────────────
@@ -193,6 +244,8 @@ module.exports = {
   loadCatalog,
   getEffectiveConfig,
   resolveAudience,
+  resolveEmployeeIds,
+  previewAudience,
   listAllForAdmin,
   upsertConfig,
 };

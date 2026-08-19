@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, X, Plus, BellOff, Bell } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { fetchActiveEmployees } from '@/api/projekte'
+import { HelpHint } from '@/components/ui/HelpHint'
+import { fetchActiveEmployees, type ActiveEmployee } from '@/api/projekte'
 import {
   fetchBudgetOverview,
   createBudgetRule,
@@ -31,6 +32,59 @@ interface RuleDraft {
   notify_booker:  boolean
   notify_cc:      number[]
   muted:          boolean
+}
+
+// Zeigt, wen diese Regel benachrichtigen würde. Dieselbe Zusammenstellung wie
+// im Backend (services/budgetWarnings.js → notifyBudgetWarning): PL, Auslöser
+// und die Personenliste werden zu EINER Empfängermenge vereinigt.
+//
+// Ohne die Vorschau war der Dialog nicht zu durchschauen: „CC-Empfänger" klang
+// nach einem Zusatz, obwohl es die einzige Stelle für eine feste Person ist —
+// und wer alle drei Felder leer lässt, benachrichtigt niemanden, ohne dass es
+// irgendwo stand.
+function EmpfaengerVorschau({ draft, employees, projectManagerId }: {
+  draft:            RuleDraft
+  employees:        ActiveEmployee[]
+  projectManagerId: number | null
+}) {
+  const teile: string[] = []
+
+  if (draft.notify_pm) {
+    const pl = employees.find(e => e.ID === projectManagerId)
+    teile.push(pl ? `Projektleiter (${pl.SHORT_NAME})`
+                  : 'Projektleiter (für dieses Projekt nicht gesetzt)')
+  }
+  if (draft.notify_booker) teile.push('wer die auslösende Buchung erfasst hat')
+  for (const id of draft.notify_cc) {
+    const emp = employees.find(e => e.ID === id)
+    if (emp) teile.push(emp.SHORT_NAME)
+  }
+
+  // Ein gesetzter PL-Haken ohne hinterlegten PL zählt nicht als Empfänger.
+  const erreichtNiemanden =
+    (!draft.notify_pm || !employees.some(e => e.ID === projectManagerId)) &&
+    !draft.notify_booker &&
+    draft.notify_cc.length === 0
+
+  const box: React.CSSProperties = {
+    background: 'var(--surface-2)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 12,
+  }
+
+  if (draft.muted) {
+    return <div style={{ ...box, color: 'var(--text-3)' }}>
+      Regel ist stumm geschaltet — es wird niemand benachrichtigt.
+    </div>
+  }
+  if (erreichtNiemanden) {
+    return (
+      <div style={{ ...box, borderColor: 'var(--warning)', background: 'var(--warning-bg)' }}>
+        <strong>Niemand ausgewählt.</strong> Diese Regel überwacht das Budget, benachrichtigt
+        aber niemanden.
+      </div>
+    )
+  }
+  return <div style={box}><strong>Empfänger:</strong> {teile.join(', ')}</div>
 }
 
 export function Budget({ initialProjectId }: Props) {
@@ -222,10 +276,10 @@ export function Budget({ initialProjectId }: Props) {
                         </td>
                         <td className="ls-td" style={{ fontSize: 12 }}>
                           {[
-                            r.NOTIFY_PM     && 'PL',
-                            r.NOTIFY_BOOKER && 'Booker',
-                            (r.NOTIFY_CC?.length ?? 0) > 0 && `+${r.NOTIFY_CC!.length} CC`,
-                          ].filter(Boolean).join(' · ') || '—'}
+                            r.NOTIFY_PM     && 'Projektleiter',
+                            r.NOTIFY_BOOKER && 'Verursacher',
+                            (r.NOTIFY_CC?.length ?? 0) > 0 && `${r.NOTIFY_CC!.length} Person(en)`,
+                          ].filter(Boolean).join(' · ') || 'niemand'}
                         </td>
                         <td className="ls-td">
                           {r.MUTED
@@ -315,24 +369,27 @@ export function Budget({ initialProjectId }: Props) {
               onChange={e => setDraft(d => ({ ...d, threshold_pct: e.target.value }))} />
           </div>
           <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+              Wer wird benachrichtigt?
+              <HelpHint id="notifications.budget.recipients" />
+            </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
               <input type="checkbox" checked={draft.notify_pm}
                 onChange={e => setDraft(d => ({ ...d, notify_pm: e.target.checked }))} />
-              <span>Projektleiter benachrichtigen</span>
+              <span>Projektleiter</span>
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
               <input type="checkbox" checked={draft.notify_booker}
                 onChange={e => setDraft(d => ({ ...d, notify_booker: e.target.checked }))} />
-              <span>Verursachende Mitarbeiter benachrichtigen</span>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
-              <input type="checkbox" checked={draft.muted}
-                onChange={e => setDraft(d => ({ ...d, muted: e.target.checked }))} />
-              <span>Regel stumm schalten</span>
+              <span>Verursachende Mitarbeiter (wer die Buchung ausgelöst hat)</span>
             </label>
           </div>
           <div className="form-group">
-            <label>CC-Empfänger (optional)</label>
+            {/* Hieß „CC-Empfänger (optional)". Das las sich, als ginge es nur
+                zusätzlich zu PL/Verursacher — dabei ist es die einzige Stelle,
+                an der sich eine feste Person eintragen lässt. Wer PL und
+                Verursacher abwählt, benachrichtigt genau diese Personen. */}
+            <label>Weitere Personen</label>
             <select multiple value={draft.notify_cc.map(String)}
               onChange={e => {
                 const sel = Array.from(e.target.selectedOptions).map(o => Number(o.value))
@@ -343,8 +400,23 @@ export function Budget({ initialProjectId }: Props) {
                 <option key={emp.ID} value={emp.ID}>{emp.SHORT_NAME}</option>
               ))}
             </select>
-            <p className="admin-section-hint">Strg-/Cmd-Klick für Mehrfachauswahl</p>
+            <p className="admin-section-hint">
+              Strg-/Cmd-Klick für Mehrfachauswahl. Für „nur diese eine Person" die beiden
+              Haken oben abwählen und hier die Person auswählen.
+            </p>
           </div>
+
+          <EmpfaengerVorschau
+            draft={draft}
+            employees={employees}
+            projectManagerId={overview?.project.PROJECT_MANAGER_ID ?? null}
+          />
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+            <input type="checkbox" checked={draft.muted}
+              onChange={e => setDraft(d => ({ ...d, muted: e.target.checked }))} />
+            <span>Regel stumm schalten (Überwachung läuft weiter, keine Benachrichtigung)</span>
+          </label>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
             <button className="btn-secondary" onClick={() => { setCreating(false); setEditingRule(null) }}>
               Abbrechen

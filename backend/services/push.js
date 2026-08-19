@@ -170,6 +170,55 @@ async function sendPushForNotification(supabase, { tenantId, userId = null, titl
   await Promise.allSettled(subs.map(sub => sendOne(supabase, sub, payloadStr)));
 }
 
+// ---------------------------------------------------------------------------
+// sendTestPush — Diagnose-Knopf im Profil.
+//
+// Geht denselben Weg wie eine echte Benachrichtigung (dieselbe Abfrage,
+// dieselbe Zustellung), schreibt aber KEINE NOTIFICATION-Zeile. Damit laesst
+// sich trennen, was bei einer ausbleibenden Erinnerung kaputt ist: der
+// Zustellkanal (Test kommt nicht an) oder die Zeitsteuerung (Test kommt an,
+// die geplante Erinnerung nicht).
+//
+// Anders als sendPushForNotification wird hier bewusst GEWARTET und ein
+// Ergebnis zurueckgemeldet — der Nutzer soll sehen, woran es liegt.
+// ---------------------------------------------------------------------------
+async function sendTestPush(supabase, { tenantId, userId }) {
+  if (!isConfigured()) {
+    throw { status: 400, message: "Push ist auf dem Server nicht konfiguriert (VAPID-Schlüssel fehlen)." };
+  }
+
+  const { data: subs, error } = await supabase
+    .from("PUSH_SUBSCRIPTION")
+    .select("ID, ENDPOINT, P256DH, AUTH")
+    .eq("TENANT_ID", tenantId)
+    .eq("USER_ID", String(userId));
+
+  if (error) throw { status: 500, message: error.message };
+  if (!Array.isArray(subs) || subs.length === 0) {
+    throw { status: 400, message: "Für dieses Konto ist kein Gerät registriert. Zuerst „Auf diesem Gerät aktivieren“." };
+  }
+
+  const payloadStr = JSON.stringify({
+    title: "Test-Benachrichtigung",
+    body:  "Wenn du das siehst, funktioniert der Push-Versand auf diesem Gerät.",
+    link:  "/profil",
+    tag:   "plain-push-test",
+  });
+
+  await Promise.allSettled(subs.map(sub => sendOne(supabase, sub, payloadStr)));
+
+  // sendOne raeumt tote Endpoints selbst weg. Was danach noch steht, hat den
+  // Push angenommen — die Zahl ist damit die ehrlichste Rueckmeldung, die
+  // sich ohne Zustellbestaetigung des Push-Dienstes geben laesst.
+  const { data: rest } = await supabase
+    .from("PUSH_SUBSCRIPTION")
+    .select("ID")
+    .eq("TENANT_ID", tenantId)
+    .eq("USER_ID", String(userId));
+
+  return { devices: Array.isArray(rest) ? rest.length : subs.length };
+}
+
 module.exports = {
   isConfigured,
   getPublicKey,
@@ -177,4 +226,5 @@ module.exports = {
   deleteSubscription,
   hasSubscription,
   sendPushForNotification,
+  sendTestPush,
 };

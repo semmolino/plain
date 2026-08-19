@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Camera, Trash2 , ChevronLeft, BellRing, BellOff, Smartphone } from 'lucide-react'
+import { Camera, Trash2 , ChevronLeft, BellRing, BellOff, Smartphone, Send } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { changePassword } from '@/api/auth'
 import { uploadAsset } from '@/api/stammdaten'
@@ -10,6 +10,7 @@ import { AchievementsSection } from '@/components/engagement/AchievementsSection
 import { MasterySection }      from '@/components/engagement/MasterySection'
 import { HelpHint }            from '@/components/ui/HelpHint'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { sendTestPush }          from '@/api/push'
 
 export function ProfilePage() {
   const navigate   = useNavigate()
@@ -178,8 +179,30 @@ const inputStyle: React.CSSProperties = {
 
 function PushNotificationsCard() {
   const push = usePushNotifications()
+  const [testState, setTestState] = useState<'idle' | 'busy' | 'sent' | 'failed'>('idle')
+  const [testMsg, setTestMsg] = useState<string | null>(null)
 
   const active = push.subscribed && push.permission === 'granted'
+
+  // Diagnose: geht den echten Versandweg (Server -> Push-Dienst -> Gerät).
+  // Kommt der Test an, eine geplante Erinnerung aber nicht, liegt es am
+  // Zeitplan und nicht am Kanal.
+  const runTest = async () => {
+    setTestState('busy')
+    setTestMsg(null)
+    try {
+      const { devices } = await sendTestPush()
+      setTestState('sent')
+      setTestMsg(
+        devices === 1
+          ? 'Test verschickt — sie sollte gleich auf diesem Gerät erscheinen.'
+          : `Test an ${devices} registrierte Geräte verschickt.`,
+      )
+    } catch (e) {
+      setTestState('failed')
+      setTestMsg(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   // Info-Zeile je nach Zustand (unter dem Schalter).
   let hint: React.ReactNode = null
@@ -233,6 +256,24 @@ function PushNotificationsCard() {
             : <><BellRing size={16} strokeWidth={2} />{push.busy ? 'Bitte warten …' : 'Auf diesem Gerät aktivieren'}</>}
         </button>
 
+        {active && (
+          <button
+            type="button"
+            onClick={() => void runTest()}
+            disabled={testState === 'busy'}
+            className="btn-secondary"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              minHeight: 44, padding: '0 16px', fontSize: 13, fontWeight: 600,
+              cursor: testState === 'busy' ? 'not-allowed' : 'pointer',
+            }}
+            title="Schickt eine Test-Benachrichtigung über den echten Versandweg an dieses Konto"
+          >
+            <Send size={15} strokeWidth={2} />
+            {testState === 'busy' ? 'Wird verschickt …' : 'Test-Benachrichtigung senden'}
+          </button>
+        )}
+
         <span style={{
           fontSize: 12,
           fontWeight: 600,
@@ -245,6 +286,23 @@ function PushNotificationsCard() {
       <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '12px 0 0', lineHeight: 1.5 }}>
         {hint}
       </p>
+
+      {testMsg && (
+        <p style={{
+          fontSize: 12,
+          margin: '8px 0 0',
+          color: testState === 'failed' ? 'var(--danger-strong)' : 'var(--success-strong)',
+        }}>
+          {testMsg}
+        </p>
+      )}
+
+      {testState === 'sent' && (
+        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '4px 0 0', lineHeight: 1.5 }}>
+          Kommt der Test an, eine geplante Erinnerung aber nicht, liegt es nicht am Gerät,
+          sondern am Zeitplan der Benachrichtigung (Einstellungen → Benachrichtigungen).
+        </p>
+      )}
 
       {push.error && (
         <p style={{ fontSize: 12, color: 'var(--danger-strong)', margin: '8px 0 0' }}>

@@ -4,6 +4,80 @@
 //
 // Generischer Tenant-Store fuer zeitgesteuerte Notification-Typen.
 // Lookup ueber (TENANT_ID, TYPE_KEY).
+//
+// ZEITZONE — warum das hier steht
+//   Die Uhrzeit im Zeitplan ist die Uhrzeit des Buero, nicht die des Servers.
+//   Auf Railway laeuft der Container in UTC; new Date().getHours() lieferte
+//   deshalb im Sommer zwei Stunden zu wenig, und eine auf 09:00 gestellte
+//   Erinnerung ging erst um 11:00 Ortszeit raus. Aus demselben Grund darf
+//   auch das Tagesdatum (LAST_FIRED_DATE, ref_date) nicht aus
+//   toISOString() kommen: abends nach 22:00 Ortszeit ist in UTC schon der
+//   naechste Tag, und die Erinnerung haette sich selbst uebersprungen.
+//
+//   Alle Zeitplan-Entscheidungen laufen deshalb ueber localParts() in der
+//   Zone aus APP_TIMEZONE (Vorgabe Europe/Berlin).
+
+const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Europe/Berlin';
+
+// Datum und Uhrzeit in der App-Zeitzone. 'sv-SE' formatiert als
+// "2026-08-19 14:35" — nah genug an ISO, um es ohne Nacharbeit zu zerlegen.
+let _fmt = null;
+function localParts(when = new Date()) {
+  if (!_fmt) {
+    try {
+      _fmt = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: APP_TIMEZONE,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      });
+    } catch (e) {
+      // Unbekannte Zone (Tippfehler in APP_TIMEZONE): lieber Serverzeit als
+      // gar keine Erinnerung — aber laut, damit es auffaellt.
+      console.warn(`[NOTIFICATION_SCHEDULE] Zeitzone "${APP_TIMEZONE}" unbekannt, nutze Serverzeit:`, e?.message || e);
+      _fmt = false;
+    }
+  }
+  if (!_fmt) {
+    const mm = String(when.getMonth() + 1).padStart(2, '0');
+    const dd = String(when.getDate()).padStart(2, '0');
+    return {
+      dateStr:    `${when.getFullYear()}-${mm}-${dd}`,
+      dayOfMonth: when.getDate(),
+      minutes:    when.getHours() * 60 + when.getMinutes(),
+    };
+  }
+  const s = _fmt.format(when);                    // "2026-08-19 14:35"
+  const m = /^(\d{4})-(\d{2})-(\d{2})\D+(\d{2}):(\d{2})/.exec(s);
+  if (!m) return { dateStr: s.slice(0, 10), dayOfMonth: Number(s.slice(8, 10)), minutes: 0 };
+  return {
+    dateStr:    `${m[1]}-${m[2]}-${m[3]}`,
+    dayOfMonth: Number(m[3]),
+    minutes:    Number(m[4]) * 60 + Number(m[5]),
+  };
+}
+
+// Tagesdatum in der App-Zeitzone (YYYY-MM-DD) — fuer LAST_FIRED_DATE und
+// die ref_date-Idempotenz der Checker.
+function localDateStr(when = new Date()) {
+  return localParts(when).dateStr;
+}
+
+// "HH:MM[:SS]" -> Minuten seit Mitternacht; null bei ungueltiger Eingabe.
+function timeToMinutes(timeStr) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(timeStr || ''));
+  if (!m) return null;
+  const h = Number(m[1]); const mm = Number(m[2]);
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
+}
+
+// Ist die konfigurierte Uhrzeit in der App-Zeitzone erreicht?
+// Ohne hinterlegte Uhrzeit: ja (der Typ ist dann nur tagesgenau geplant).
+function hasReachedTimeOfDay(timeStr, when = new Date()) {
+  const target = timeToMinutes(timeStr);
+  if (target == null) return true;
+  return localParts(when).minutes >= target;
+}
 
 async function getSchedule(supabase, { tenantId, typeKey }) {
   const { data } = await supabase
@@ -68,18 +142,29 @@ function parseTimeHhmm(v) {
   return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
 }
 
-// Schedule-Treffer-Pruefung: feuert dieses Schedule heute?
-function shouldFireToday(schedule, today = new Date()) {
-  if (!schedule || !schedule.ENABLED) return false;
-  const dayOfMonth = today.getDate();
+// Ist heute ein Tag, an dem dieses Schedule feuert? (nur Datum, ohne Uhrzeit)
+function isFireDay(schedule, today = new Date()) {
+  const { dateStr, dayOfMonth } = localParts(today);
   const days = Array.isArray(schedule.SCHEDULE_DAYS) ? schedule.SCHEDULE_DAYS : [];
   if (days.includes(dayOfMonth)) return true;
   if (schedule.SCHEDULE_LAST_DAY) {
-    const tomorrow = new Date(today);
-    tomorrow.setDate(dayOfMonth + 1);
-    if (tomorrow.getMonth() !== today.getMonth()) return true;
+    // Letzter Tag des Monats: der Folgetag liegt schon im naechsten Monat.
+    const [y, m] = dateStr.split('-').map(Number);
+    const letzter = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    if (dayOfMonth === letzter) return true;
   }
   return false;
+}
+
+// Schedule-Treffer-Pruefung: feuert dieses Schedule JETZT?
+// Tag UND — falls hinterlegt — Uhrzeit muessen erreicht sein. Vor dieser
+// Aenderung war SCHEDULE_TIME_OF_DAY beim Leistungsstand-Reminder gespeichert,
+// aber wirkungslos: die Erinnerung ging zu der Uhrzeit raus, zu der der
+// 6-Stunden-Takt des Checkers gerade den Tag traf.
+function shouldFireToday(schedule, today = new Date()) {
+  if (!schedule || !schedule.ENABLED) return false;
+  if (!isFireDay(schedule, today)) return false;
+  return hasReachedTimeOfDay(schedule.SCHEDULE_TIME_OF_DAY, today);
 }
 
 async function markFired(supabase, scheduleId, dateStr) {
@@ -94,5 +179,10 @@ module.exports = {
   listAllSchedules,
   upsertSchedule,
   shouldFireToday,
+  isFireDay,
+  hasReachedTimeOfDay,
+  localDateStr,
+  localParts,
   markFired,
+  APP_TIMEZONE,
 };

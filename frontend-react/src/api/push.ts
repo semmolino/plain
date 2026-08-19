@@ -15,3 +15,8 @@ export const subscribePush = (subscription: PushSubscriptionJSON) =>
 /** Subscription dieses Geräts entfernen (Opt-out). */
 export const unsubscribePush = (endpoint: string) =>
   apiClient.post<{ ok: boolean }>('/push/unsubscribe', { endpoint })
+
+/** Test-Benachrichtigung an alle eigenen Geräte. `devices` = wie viele
+ *  Registrierungen den Push angenommen haben. */
+export const sendTestPush = () =>
+  apiClient.post<{ ok: boolean; devices: number }>('/push/test', {})
