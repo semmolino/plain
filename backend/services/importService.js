@@ -1010,6 +1010,7 @@ const OPENING_BALANCE_FIELDS = [
   { key: "amount",         header: "Bereits berechnet (netto)", required: true,  example: "30000",       aliases: ["berechnet", "bereitsberechnet", "rechnungsbetrag", "betrag", "summe", "fakturiert", "invoiced"] , type: "money" },
   { key: "paid",           header: "Bereits bezahlt (netto, optional)", required: false, example: "30000", aliases: ["bezahlt", "bereitsbezahlt", "zahlung", "zahlbetrag", "payed", "paid", "eingegangen"] , type: "money" },
   { key: "doc_number",     header: "Belegnummer (optional)",    required: false, example: "RE-2023-044", aliases: ["belegnummer", "rechnungsnummer", "docnumber"] },
+  { key: "doc_date",       header: "Belegdatum (optional)",     required: false, example: "31.12.2025",  aliases: ["belegdatum", "datum", "rechnungsdatum", "docdate", "stichtag"], type: "date" },
 ];
 
 async function loadOpeningBalanceContext(supabase, tenantId) {
@@ -1088,7 +1089,14 @@ function buildOpeningBalanceEntry(mapped, ctx) {
     else paidVal = paid.value;
   }
 
+  // Belegdatum: ohne Angabe bleibt der Beleg datumslos (wie bisher) — mit
+  // Hinweis, weil er dann in Listen und Auswertungen ohne Datum steht.
+  const docDate = parseDateISO(mapped.doc_date);
+  if (docDate.invalid) { messages.push({ level: "error", text: "Belegdatum nicht erkannt (Format TT.MM.JJJJ oder JJJJ-MM-TT)" }); ok = false; }
+  else if (!docDate.value) messages.push({ level: "warn", text: "Ohne Belegdatum erscheint der Beleg datumslos in Listen und Auswertungen" });
+
   const dbRow = (proj && ok) ? {
+    docDate: docDate.value,
     projectId: proj.projectId, projectNumber: number, projectName: proj.name, companyId: proj.companyId,
     contractId: proj.contract.ID, invoiceAddressId: proj.contract.INVOICE_ADDRESS_ID ?? proj.addressId,
     invoiceContactId: proj.contract.INVOICE_CONTACT_ID ?? proj.contactId, addressId: proj.addressId,
@@ -1139,31 +1147,13 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
       if (!e.invoiceContactId) await supabase.from("PROJECT").update({ CONTACT_ID: contactId }).eq("ID", e.projectId).eq("TENANT_ID", tenantId).is("CONTACT_ID", null);
 
       const dist = distributeOpening(e.amount, e.btStructures);
-      let docId = null, vatPercent = 0;
-
-      if (docType === "invoice") {
-        // tenantId ist Pflicht (initInvoice bindet den Beleg an den Mandanten).
-        const { id } = await invSvc.initInvoice(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId, invoiceType: null, tenantId });
-        const upd = { IMPORT_BATCH_ID: batchId }; if (e.docNumber) upd.INVOICE_NUMBER = e.docNumber;
-        await supabase.from("INVOICE").update(upd).eq("ID", id);
-        const isRows = dist.map((d) => ({ INVOICE_ID: id, STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * d.extrasPercent / 100), TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
-        await invSvc.writeInvoiceStructureRows(supabase, { invoiceId: id, rows: isRows, deleteStructureIds: dist.map((d) => d.id) });
-        await invSvc.recomputeInvoiceTotals(supabase, id);
-        const { data: inv } = await supabase.from("INVOICE").select("*").eq("ID", id).single();
-        await invSvc.bookInvoice(supabase, { id, inv, tenantId, force: true, skipDocuments: true });
-        docId = id; vatPercent = num(inv.VAT_PERCENT);
-      } else {
-        // tenantId ist Pflicht (initPartialPayment bindet den Beleg an den Mandanten).
-        const { id } = await ppSvc.initPartialPayment(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId, tenantId });
-        const upd = { IMPORT_BATCH_ID: batchId }; if (e.docNumber) upd.PARTIAL_PAYMENT_NUMBER = e.docNumber;
-        await supabase.from("PARTIAL_PAYMENT").update(upd).eq("ID", id);
-        const psRows = dist.map((d) => ({ PARTIAL_PAYMENT_ID: id, STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * d.extrasPercent / 100), TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
-        await ppSvc.writePpsRows(supabase, { partialPaymentId: id, structureIds: dist.map((d) => d.id), rows: psRows });
-        await ppSvc.recomputePartialPaymentTotals(supabase, id);
-        const { data: pp } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", id).single();
-        await ppSvc.bookPartialPayment(supabase, { id, pp, tenantId, force: true, skipDocuments: true });
-        docId = id; vatPercent = num(pp.VAT_PERCENT);
-      }
+      const { docId, vatPercent } = await bookReferenceDocument(supabase, {
+        tenantId, batchId, employeeId, docType,
+        doc: {
+          companyId: e.companyId, projectId: e.projectId, contractId: e.contractId,
+          docNumber: e.docNumber, docDate: e.docDate, positions: dist,
+        },
+      });
 
       // Optional: „bereits bezahlt“ als echte Zahlung gegen den Beleg buchen.
       if (e.paid > 0) {
@@ -1178,17 +1168,19 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
 }
 
 // Bucht „bereits bezahlt“ als echte Zahlung gegen den Beleg (spiegelt routes/payments.js).
-async function recordOpeningPayment(supabase, { tenantId, batchId, docType, docId, projectId, contractId, paidNet, vatPercent, dist }) {
+async function recordOpeningPayment(supabase, { tenantId, batchId, docType, docId, projectId, contractId, paidNet, vatPercent, dist, paymentDate, purpose }) {
   const gross = fmt2(paidNet * (1 + num(vatPercent) / 100));
   const vat = fmt2(gross - paidNet);
-  const today = new Date().toISOString().slice(0, 10);
+  // Zahlungsdatum aus der Datei, sonst heute — eine Altzahlung auf „heute" zu
+  // datieren verzerrt jede Perioden-Auswertung.
+  const payDate = paymentDate || new Date().toISOString().slice(0, 10);
 
   const payRow = {
     PARTIAL_PAYMENT_ID: docType === "partial" ? docId : null,
     INVOICE_ID:         docType === "invoice" ? docId : null,
     AMOUNT_PAYED_GROSS: gross, AMOUNT_PAYED_NET: paidNet, AMOUNT_PAYED_VAT: vat,
-    PAYMENT_DATE: today, PROJECT_ID: projectId, CONTRACT_ID: contractId,
-    PURPOSE_OF_PAYMENT: "Anfangsbestand (Import)", COMMENT: null,
+    PAYMENT_DATE: payDate, PROJECT_ID: projectId, CONTRACT_ID: contractId,
+    PURPOSE_OF_PAYMENT: purpose || "Anfangsbestand (Import)", COMMENT: null,
     TENANT_ID: tenantId, AMOUNT_PAYED_EXTRAS_NET: null, IMPORT_BATCH_ID: batchId,
   };
   const { data: created, error } = await supabase.from("PAYMENT").insert([payRow]).select("ID").single();
@@ -1213,6 +1205,57 @@ async function recordOpeningPayment(supabase, { tenantId, batchId, docType, docI
   const { error: psErr } = await supabase.from("PAYMENT_STRUCTURE").insert(psRows);
   if (psErr) throw { status: 500, message: `Zahlungs-Struktur fehlgeschlagen: ${psErr.message}` };
   try { await insertProgressSnapshot(supabase, psRows.map((r) => ({ TENANT_ID: tenantId, STRUCTURE_ID: r.STRUCTURE_ID, PAYED: r.AMOUNT_PAYED_NET }))); } catch (_) { /* soft-fail */ }
+}
+
+/**
+ * Einen Referenzbeleg über die echte Beleg-Pipeline anlegen und buchen:
+ * init → Kopfdaten (Nummer/Datum/MwSt) → Belegpositionen → Summen → book.
+ * `skipDocuments` verhindert PDF und XRechnung — Altbelege werden nicht
+ * nachgebaut, sie sollen nur rechnerisch stimmen.
+ *
+ * Gemeinsamer Weg für Anfangsbestände (eine Summe je Projekt) und für einzeln
+ * importierte offene Posten, damit beide sich identisch verhalten.
+ */
+async function bookReferenceDocument(supabase, { tenantId, batchId, employeeId, docType, doc }) {
+  const isInvoice = docType === "invoice";
+  const svc = isInvoice ? invSvc : ppSvc;
+
+  const { id } = isInvoice
+    ? await svc.initInvoice(supabase, { companyId: doc.companyId, employeeId, projectId: doc.projectId, contractId: doc.contractId, invoiceType: null, tenantId })
+    : await svc.initPartialPayment(supabase, { companyId: doc.companyId, employeeId, projectId: doc.projectId, contractId: doc.contractId, tenantId });
+
+  const table = isInvoice ? "INVOICE" : "PARTIAL_PAYMENT";
+  const upd = { IMPORT_BATCH_ID: batchId };
+  if (doc.docNumber) upd[isInvoice ? "INVOICE_NUMBER" : "PARTIAL_PAYMENT_NUMBER"] = doc.docNumber;
+  // Belegdatum: ohne es steht der Beleg datumslos in Listen und Auswertungen.
+  if (doc.docDate) upd[isInvoice ? "INVOICE_DATE" : "PARTIAL_PAYMENT_DATE"] = doc.docDate;
+  if (doc.dueDate) upd.DUE_DATE = doc.dueDate;
+  // MwSt aus der Datei schlägt den Vertragssatz — historische Belege können
+  // einen anderen Satz tragen als der heute gültige.
+  if (doc.vatPercent != null) upd.VAT_PERCENT = doc.vatPercent;
+  if (doc.comment) upd.COMMENT = doc.comment;
+  await supabase.from(table).update(upd).eq("ID", id).eq("TENANT_ID", tenantId);
+
+  const structRows = doc.positions.map((d) => ({
+    [isInvoice ? "INVOICE_ID" : "PARTIAL_PAYMENT_ID"]: id,
+    STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * num(d.extrasPercent) / 100),
+    TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+  }));
+  const structureIds = doc.positions.map((d) => d.id);
+
+  if (isInvoice) {
+    await invSvc.writeInvoiceStructureRows(supabase, { invoiceId: id, rows: structRows, deleteStructureIds: structureIds });
+    await invSvc.recomputeInvoiceTotals(supabase, id);
+  } else {
+    await ppSvc.writePpsRows(supabase, { partialPaymentId: id, structureIds, rows: structRows });
+    await ppSvc.recomputePartialPaymentTotals(supabase, id);
+  }
+
+  const { data: row } = await supabase.from(table).select("*").eq("ID", id).single();
+  if (isInvoice) await invSvc.bookInvoice(supabase, { id, inv: row, tenantId, force: true, skipDocuments: true });
+  else await ppSvc.bookPartialPayment(supabase, { id, pp: row, tenantId, force: true, skipDocuments: true });
+
+  return { docId: id, vatPercent: num(row?.VAT_PERCENT) };
 }
 
 // Rollback der importierten Zahlungen (vor den Belegen, da sie diese referenzieren).
@@ -1305,6 +1348,308 @@ async function rollbackOpeningBalance({ supabase, tenantId, batchId }) {
   deleted += await reverseOpeningDocs(supabase, tenantId, batchId, "partial");
   deleted += await reverseOpeningDocs(supabase, tenantId, batchId, "invoice");
   return { deleted };
+}
+
+// ── Domäne: Offene Posten (Altbelege einzeln, mit Positionen) ────────────────
+// Anfangsbestände fassen je Projekt eine Summe zusammen — das genügt für alles,
+// was bezahlt und abgeschlossen ist. Offene Forderungen brauchen mehr: eigene
+// Nummer, Datum, Fälligkeit und Restbetrag, sonst lässt sich weder ein
+// Zahlungseingang zuordnen noch gemahnt werden.
+//
+// Eine Zeile = eine Belegposition. Zeilen mit derselben Belegnummer gehören zu
+// EINEM Beleg. Wer keine Positionen führt, schreibt eine Zeile je Beleg und
+// lässt die Positionsspalte leer — der Betrag wird dann wie beim Anfangsbestand
+// über die Pauschal-Knoten verteilt.
+const OPEN_ITEM_FIELDS = [
+  { key: "project_number", header: "Projektnummer",              required: true,  example: "P-2024-012",  aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
+  { key: "doc_number",     header: "Belegnummer",                required: true,  example: "RE-2025-044", aliases: ["belegnummer", "rechnungsnummer", "nr", "docnumber", "invoicenumber"], type: "text" },
+  { key: "doc_type",       header: "Belegart (Abschlag/Rechnung)", required: false, example: "Abschlag",  aliases: ["belegart", "art", "typ", "doctype", "type"], list: "docType" },
+  { key: "doc_date",       header: "Belegdatum",                 required: true,  example: "15.11.2025",  aliases: ["belegdatum", "datum", "rechnungsdatum", "docdate"], type: "date" },
+  { key: "due_date",       header: "Fällig am",                  required: false, example: "15.12.2025",  aliases: ["faellig", "faelligam", "faelligkeit", "duedate", "zahlungsziel"], type: "date" },
+  { key: "position",       header: "Position (Kürzel)",          required: false, example: "LP5",         aliases: ["position", "kuerzel", "leistung", "strukturkuerzel", "pos"] },
+  { key: "amount_net",     header: "Betrag netto",               required: true,  example: "12500",       aliases: ["betrag", "nettobetrag", "summe", "amount", "honorar", "rechnungsbetrag"], type: "money" },
+  { key: "vat_percent",    header: "MwSt %",                     required: false, example: "19",          aliases: ["mwst", "ust", "steuersatz", "vat", "vatpercent", "umsatzsteuer"] },
+  { key: "paid_net",       header: "Bereits bezahlt (netto)",    required: false, example: "",            aliases: ["bezahlt", "bereitsbezahlt", "zahlung", "paid", "eingegangen"], type: "money" },
+  { key: "paid_date",      header: "Zahlungsdatum",              required: false, example: "",            aliases: ["zahlungsdatum", "zahldatum", "paymentdate", "bezahltam"], type: "date" },
+  { key: "comment",        header: "Bemerkung",                  required: false, example: "",            aliases: ["bemerkung", "kommentar", "notiz", "text", "comment"] },
+];
+
+async function loadOpenItemContext(supabase, tenantId) {
+  const [projRes, contractRes, structRes, ppRes, invRes] = await Promise.all([
+    supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("CONTRACT").select("ID, PROJECT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, NAME_SHORT, NAME_LONG, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PARTIAL_PAYMENT").select("PARTIAL_PAYMENT_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("INVOICE").select("INVOICE_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
+  ]);
+
+  const contractByProject = new Map();
+  for (const c of contractRes.data || []) if (!contractByProject.has(c.PROJECT_ID)) contractByProject.set(c.PROJECT_ID, c);
+
+  // Nur Blätter sind abrechenbar (Knoten tragen nur Summen ihrer Kinder).
+  const fatherIds = new Set((structRes.data || []).map((r) => r.FATHER_ID).filter((x) => x != null));
+  const nodesByProject = new Map();
+  for (const st of structRes.data || []) {
+    if (fatherIds.has(st.ID)) continue;
+    if (!nodesByProject.has(st.PROJECT_ID)) nodesByProject.set(st.PROJECT_ID, []);
+    nodesByProject.get(st.PROJECT_ID).push({
+      id: st.ID, nameShort: st.NAME_SHORT || "", nameLong: st.NAME_LONG || "",
+      revenue: num(st.REVENUE), extrasPercent: num(st.EXTRAS_PERCENT), billingTypeId: Number(st.BILLING_TYPE_ID),
+    });
+  }
+
+  // Vergebene Belegnummern — eine importierte Altnummer darf nicht mit einer
+  // bestehenden kollidieren.
+  const takenNumbers = new Set();
+  for (const r of ppRes.data || []) if (r.PARTIAL_PAYMENT_NUMBER) takenNumbers.add(norm(r.PARTIAL_PAYMENT_NUMBER));
+  for (const r of invRes.data || []) if (r.INVOICE_NUMBER) takenNumbers.add(norm(r.INVOICE_NUMBER));
+
+  const projectsByNumber = new Map();
+  for (const p of projRes.data || []) {
+    if (!p.NAME_SHORT) continue;
+    const contract = contractByProject.get(p.ID) || null;
+    projectsByNumber.set(norm(p.NAME_SHORT), {
+      id: p.ID, name: p.NAME_LONG || p.NAME_SHORT, companyId: p.COMPANY_ID ?? null,
+      addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null, contract,
+      nodes: nodesByProject.get(p.ID) || [],
+    });
+  }
+
+  // Dubletten laufen hier über die Belegnummer (Fehler, nicht „überspringen").
+  return { projectsByNumber, takenNumbers, existingKeys: new Set() };
+}
+
+function buildOpenItemEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const number = s(mapped.project_number);
+  let proj = null;
+  if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
+  else {
+    proj = ctx.projectsByNumber.get(norm(number)) || null;
+    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}“ nicht gefunden` }); ok = false; }
+    else if (!proj.contract) { messages.push({ level: "error", text: "Projekt hat keinen Vertrag — zuerst Projekt-Honorar oder Projektstruktur importieren" }); ok = false; }
+    else if (!proj.nodes.some((n) => n.billingTypeId === 1)) { messages.push({ level: "error", text: "Projekt hat keine abrechenbare Pauschal-Position" }); ok = false; }
+  }
+
+  const docNumber = s(mapped.doc_number);
+  if (!docNumber) { messages.push({ level: "error", text: "Belegnummer fehlt (Pflichtfeld)" }); ok = false; }
+  else if (ctx.takenNumbers.has(norm(docNumber))) {
+    messages.push({ level: "error", text: `Belegnummer „${docNumber}“ ist bereits vergeben` }); ok = false;
+  }
+
+  const dt = norm(mapped.doc_type);
+  const docType = (dt.includes("rechnung") && !dt.includes("abschlag")) || dt === "invoice" ? "invoice" : "partial";
+
+  const docDate = parseDateISO(mapped.doc_date);
+  if (!s(mapped.doc_date)) { messages.push({ level: "error", text: "Belegdatum fehlt (Pflichtfeld)" }); ok = false; }
+  else if (docDate.invalid) { messages.push({ level: "error", text: "Belegdatum nicht erkannt (TT.MM.JJJJ oder JJJJ-MM-TT)" }); ok = false; }
+
+  const dueDate = parseDateISO(mapped.due_date);
+  if (dueDate.invalid) { messages.push({ level: "error", text: "Fälligkeitsdatum nicht erkannt" }); ok = false; }
+  else if (!dueDate.value) messages.push({ level: "warn", text: "Ohne Fälligkeit kann nicht gemahnt werden" });
+
+  const amtRaw = s(mapped.amount_net);
+  const amount = parseAmountDE(mapped.amount_net);
+  if (!amtRaw) { messages.push({ level: "error", text: "Betrag fehlt (Pflichtfeld)" }); ok = false; }
+  else if (amount.invalid || amount.value == null) { messages.push({ level: "error", text: `Betrag „${amtRaw}“ ist keine gültige Zahl` }); ok = false; }
+  else if (amount.value <= 0) { messages.push({ level: "error", text: "Betrag muss größer als 0 sein" }); ok = false; }
+
+  const vat = parseAmountDE(mapped.vat_percent);
+  if (s(mapped.vat_percent) && (vat.invalid || vat.value == null)) { messages.push({ level: "error", text: "MwSt-Satz ist keine gültige Zahl" }); ok = false; }
+
+  let paid = 0;
+  const paidRaw = s(mapped.paid_net);
+  if (paidRaw) {
+    const p = parseAmountDE(mapped.paid_net);
+    if (p.invalid || p.value == null) { messages.push({ level: "error", text: `Bezahlt „${paidRaw}“ ist keine gültige Zahl` }); ok = false; }
+    else if (p.value < 0) { messages.push({ level: "error", text: "Bezahlt darf nicht negativ sein" }); ok = false; }
+    else paid = p.value;
+  }
+  const paidDate = parseDateISO(mapped.paid_date);
+  if (paidDate.invalid) { messages.push({ level: "error", text: "Zahlungsdatum nicht erkannt" }); ok = false; }
+
+  // Position über das Kürzel des Strukturknotens auflösen (eindeutig sein muss es).
+  const posRaw = s(mapped.position);
+  let node = null;
+  if (posRaw && proj) {
+    const hits = proj.nodes.filter((n) => norm(n.nameShort) === norm(posRaw) || norm(n.nameLong) === norm(posRaw));
+    if (!hits.length) {
+      messages.push({ level: "error", text: `Position „${posRaw}“ nicht gefunden — Kürzel aus der Leistungsstruktur verwenden` }); ok = false;
+    } else if (hits.length > 1) {
+      messages.push({ level: "error", text: `Position „${posRaw}“ kommt im Projekt mehrfach vor — bitte eindeutig benennen` }); ok = false;
+    } else if (hits[0].billingTypeId !== 1) {
+      messages.push({ level: "error", text: `Position „${posRaw}“ ist eine Stunden-Position — dort entsteht der Umsatz aus den Buchungen` }); ok = false;
+    } else node = hits[0];
+  }
+
+  const dbRow = {
+    projectNumber: number, projectId: proj?.id ?? null, projectName: proj?.name ?? "",
+    companyId: proj?.companyId ?? null, contractId: proj?.contract?.ID ?? null,
+    addressId: proj?.contract?.INVOICE_ADDRESS_ID ?? proj?.addressId ?? null,
+    contactId: proj?.contract?.INVOICE_CONTACT_ID ?? proj?.contactId ?? null,
+    nodes: proj?.nodes ?? [],
+    docNumber, docType, docDate: docDate.value, dueDate: dueDate.value,
+    amount: amount.value ?? 0, vatPercent: vat.value ?? null,
+    paid, paidDate: paidDate.value, comment: s(mapped.comment) || null,
+    positionLabel: posRaw, node,
+  };
+
+  const display = {
+    number, doc: `${docNumber}${docType === "invoice" ? " (Rechnung)" : " (Abschlag)"}`,
+    datum: s(mapped.doc_date), position: posRaw,
+    betrag: amount.value != null ? amount.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : amtRaw,
+    bezahlt: paid ? paid.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : "",
+  };
+  return { ok, messages, dbRow, matchKey: norm(docNumber), display };
+}
+
+/**
+ * Zeilen zu Belegen bündeln und prüfen, was sich erst im Verbund zeigt:
+ * Kopfdaten müssen je Beleg zusammenpassen, Positionen dürfen nicht mit einer
+ * Sammelzeile gemischt werden, und die Summe muss zum Projekt passen.
+ */
+function finalizeOpenItemRows(rows, ctx) {
+  const byDoc = new Map();
+  for (const r of rows) {
+    const e = r._dbRow;
+    if (!e?.docNumber) continue;
+    const key = norm(e.docNumber);
+    if (!byDoc.has(key)) byDoc.set(key, []);
+    byDoc.get(key).push(r);
+  }
+
+  for (const [, group] of byDoc) {
+    const usable = group.filter((r) => r.status !== "error");
+    if (!usable.length) continue;
+    const head = usable[0]._dbRow;
+
+    // Ein Beleg gehört zu genau einem Projekt.
+    const projects = new Set(usable.map((r) => norm(r._dbRow.projectNumber)));
+    if (projects.size > 1) {
+      for (const r of usable) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Belegnummer „${head.docNumber}“ steht bei mehreren Projekten — Nummern müssen eindeutig sein` });
+      }
+      continue;
+    }
+
+    // Entweder Positionen oder eine Sammelzeile — nicht beides.
+    const withPos = usable.filter((r) => r._dbRow.node);
+    const withoutPos = usable.filter((r) => !r._dbRow.node);
+    if (withPos.length && withoutPos.length) {
+      for (const r of withoutPos) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Beleg „${head.docNumber}“ mischt Positionszeilen mit einer Zeile ohne Position — entweder alle Zeilen mit Position oder eine einzige ohne` });
+      }
+    }
+    if (withoutPos.length > 1) {
+      for (const r of withoutPos.slice(1)) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Beleg „${head.docNumber}“ hat mehrere Zeilen ohne Position — bitte je Position ein Kürzel angeben` });
+      }
+    }
+    // Dieselbe Position darf im selben Beleg nur einmal stehen.
+    const seenNode = new Set();
+    for (const r of withPos) {
+      const id = r._dbRow.node.id;
+      if (seenNode.has(id)) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Position „${r._dbRow.positionLabel}“ steht in Beleg „${head.docNumber}“ mehrfach` });
+      } else seenNode.add(id);
+    }
+
+    // Kopfdaten je Beleg: erste Zeile gewinnt, Abweichungen werden gemeldet.
+    for (const r of usable.slice(1)) {
+      const e = r._dbRow;
+      const abweichend = [];
+      if (e.docDate !== head.docDate) abweichend.push("Belegdatum");
+      if (e.dueDate !== head.dueDate) abweichend.push("Fälligkeit");
+      if (e.docType !== head.docType) abweichend.push("Belegart");
+      if (abweichend.length) r.messages.push({ level: "warn", text: `${abweichend.join(" und ")} weicht von der ersten Zeile des Belegs ab — es gilt die erste Zeile` });
+      e.docDate = head.docDate; e.dueDate = head.dueDate; e.docType = head.docType;
+    }
+
+    // Summe des Belegs gegen das Projekt prüfen (Honorar der Pauschal-Knoten).
+    const alive = group.filter((r) => r.status !== "error");
+    if (alive.length) {
+      const total = alive.reduce((a, r) => a + num(r._dbRow.amount), 0);
+      const paidTotal = alive.reduce((a, r) => a + num(r._dbRow.paid), 0);
+      if (paidTotal > total + 0.01) {
+        for (const r of alive) {
+          r.status = "error";
+          r.messages.push({ level: "error", text: `Beleg „${head.docNumber}“: bezahlt (${paidTotal.toFixed(2)}) übersteigt den Betrag (${total.toFixed(2)})` });
+        }
+      }
+    }
+
+    // Ein fehlerhafter Beleg wird als Ganzes verworfen — eine halbe Rechnung
+    // waere eine falsche Forderung.
+    const broken = group.filter((r) => r.status === "error");
+    if (broken.length) {
+      for (const r of group) {
+        if (r.status === "error") continue;
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Beleg „${head.docNumber}“ wird übersprungen — eine andere Zeile dieses Belegs ist fehlerhaft (Zeile ${broken[0].row})` });
+      }
+    }
+  }
+}
+
+async function commitOpenItemRows(rows, { supabase, tenantId, batchId, employeeId }) {
+  const byDoc = new Map();
+  for (const r of rows) {
+    const key = norm(r._dbRow.docNumber);
+    if (!byDoc.has(key)) byDoc.set(key, []);
+    byDoc.get(key).push(r);
+  }
+
+  let inserted = 0;
+  for (const [, group] of byDoc) {
+    const head = group[0]._dbRow;
+    try {
+      // Rechnungsempfänger sicherstellen (init… verlangt Adresse + Kontakt).
+      let contactId = head.contactId;
+      if (!head.addressId) throw { status: 400, message: "keine Rechnungsadresse am Vertrag" };
+      if (!contactId) {
+        const { data: cts } = await supabase.from("CONTACTS").select("ID").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", head.addressId).order("ID", { ascending: true }).limit(1);
+        contactId = cts?.[0]?.ID ?? null;
+        if (!contactId) throw { status: 400, message: "kein Ansprechpartner zur Rechnungsadresse — bitte Kontakt importieren" };
+      }
+      await supabase.from("CONTRACT").update({ INVOICE_ADDRESS_ID: head.addressId, INVOICE_CONTACT_ID: contactId }).eq("ID", head.contractId).eq("TENANT_ID", tenantId);
+
+      // Positionen: benannte Knoten, sonst Verteilung über die Pauschal-Knoten.
+      const withPos = group.filter((r) => r._dbRow.node);
+      const totalNet = group.reduce((a, r) => a + num(r._dbRow.amount), 0);
+      const positions = withPos.length
+        ? withPos.map((r) => ({ id: r._dbRow.node.id, extrasPercent: r._dbRow.node.extrasPercent, amt: fmt2(r._dbRow.amount) }))
+        : distributeOpening(fmt2(totalNet), head.nodes.filter((n) => n.billingTypeId === 1));
+
+      const { docId, vatPercent } = await bookReferenceDocument(supabase, {
+        tenantId, batchId, employeeId, docType: head.docType,
+        doc: {
+          companyId: head.companyId, projectId: head.projectId, contractId: head.contractId,
+          docNumber: head.docNumber, docDate: head.docDate, dueDate: head.dueDate,
+          vatPercent: head.vatPercent, comment: head.comment, positions,
+        },
+      });
+
+      const paidNet = fmt2(group.reduce((a, r) => a + num(r._dbRow.paid), 0));
+      if (paidNet > 0) {
+        await recordOpeningPayment(supabase, {
+          tenantId, batchId, docType: head.docType, docId, projectId: head.projectId, contractId: head.contractId,
+          paidNet, vatPercent, dist: positions,
+          paymentDate: head.paidDate || head.docDate,
+          purpose: `Zahlung zu ${head.docNumber} (Import)`,
+        });
+      }
+      inserted += group.length;
+    } catch (err) {
+      throw { status: err?.status || 500, message: `Beleg ${head.docNumber} fehlgeschlagen: ${err?.message || err}` };
+    }
+  }
+  return { inserted };
 }
 
 // ── Domäne: Kosten-Anfangsbestände (Kostenblöcke) ────────────────────────────
@@ -1535,6 +1880,24 @@ const DOMAINS = {
     buildEntry: buildOpeningBalanceEntry,
     commitRows: commitOpeningBalanceRows,
     rollbackExecute: rollbackOpeningBalance,
+  },
+  open_items: {
+    key: "open_items",
+    label: "Offene Posten (Altbelege)",
+    table: "PARTIAL_PAYMENT",
+    matchLabel: "Belegnummer",
+    fields: OPEN_ITEM_FIELDS,
+    exampleRows: [
+      { project_number: "P-2024-012", doc_number: "AR-2025-007", doc_type: "Abschlag", doc_date: "15.11.2025", due_date: "15.12.2025", position: "LP5",   amount_net: "12500", vat_percent: "19" },
+      { project_number: "P-2024-012", doc_number: "AR-2025-007", doc_type: "Abschlag", doc_date: "15.11.2025", due_date: "15.12.2025", position: "LP6-8", amount_net: "8000",  vat_percent: "19" },
+      { project_number: "P-2024-013", doc_number: "RE-2025-101", doc_type: "Rechnung", doc_date: "01.12.2025", due_date: "31.12.2025", position: "",       amount_net: "4200",  vat_percent: "19", paid_net: "2000", paid_date: "20.12.2025" },
+    ],
+    dedupeInFile: false,               // mehrere Positionszeilen je Beleg sind der Normalfall
+    loadContext: loadOpenItemContext,
+    buildEntry: buildOpenItemEntry,
+    finalizeRows: finalizeOpenItemRows,
+    commitRows: commitOpenItemRows,
+    rollbackExecute: rollbackOpeningBalance,   // reversiert Belege + Zahlungen des Stapels
   },
   opening_cost: {
     key: "opening_cost",
@@ -1847,6 +2210,7 @@ async function rollback({ batchId, supabase, tenantId }) {
 const FIXED_LISTS = {
   addressType: ADDRESS_TYPE_ALIASES.map((t) => t.label),
   billing:     ["Pauschal", "Stunden"],
+  docType:     ["Abschlag", "Rechnung"],
   yesNo:       ["ja", "nein"],
 };
 
@@ -1860,6 +2224,7 @@ const LIST_LABELS = {
   employeeShort: "Mitarbeiter (Kürzel)",
   addressName:   "Adresse/Firma",
   billing:       "Abrechnungsart",
+  docType:       "Belegart",
   yesNo:         "ja/nein",
 };
 
@@ -1960,6 +2325,21 @@ const TEMPLATE_HELP = {
     after: [
       "Projekte mit bereits gebuchten Belegen werden übersprungen.",
       "Beträge netto. „Bereits bezahlt“ darf „Bereits berechnet“ nicht übersteigen.",
+    ],
+  },
+  open_items: {
+    intro: "Rechnungen und Abschlagsrechnungen aus der alten Welt, die noch offen sind — mit eigener Nummer, Datum, Fälligkeit und Restbetrag. Sie werden als echte, gebuchte Belege angelegt (ohne PDF und ohne E-Rechnung), damit offene Posten, Zahlungszuordnung und Mahnwesen ab Tag 1 stimmen.",
+    before: [
+      "Projekte samt Leistungsstruktur importieren (Projekt-Honorar oder Projektstruktur) — die Belege hängen an deren Positionen.",
+      "Zur Rechnungsadresse muss ein Ansprechpartner vorhanden sein.",
+      "Belegnummern bereithalten: sie müssen eindeutig sein und dürfen mit keiner vorhandenen Nummer kollidieren.",
+    ],
+    after: [
+      "Eine Zeile = eine Belegposition. Zeilen mit derselben Belegnummer gehören zu EINEM Beleg; Belegdatum und Fälligkeit gelten aus der ersten Zeile.",
+      "Wer keine Positionen führt: eine Zeile je Beleg, Spalte „Position“ leer lassen — der Betrag wird dann über die Pauschal-Positionen des Projekts verteilt.",
+      "„Position“ meint das Kürzel aus der Leistungsstruktur (z. B. LP5). Es muss im Projekt eindeutig sein.",
+      "Bezahlte Altbelege gehören NICHT hierher, sondern als eine Summe je Projekt in „Anfangsbestände“.",
+      "Ein fehlerhafter Beleg wird als Ganzes übersprungen — eine halbe Rechnung wäre eine falsche Forderung.",
     ],
   },
   opening_cost: {
@@ -2194,7 +2574,7 @@ function listDomains() {
 module.exports = {
   // rein / testbar
   s, norm, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
-  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildProjectStructureEntry, finalizeProjectStructureRows, parseOutline, buildOpeningBalanceEntry, buildOpeningCostEntry,
+  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildProjectStructureEntry, finalizeProjectStructureRows, parseOutline, buildOpeningBalanceEntry, buildOpenItemEntry, finalizeOpenItemRows, buildOpeningCostEntry,
   // orchestriert
   preview, commit, errorReport, listBatches, rollback, buildTemplate, buildStructurePrefill, listDomains, DOMAINS,
 };

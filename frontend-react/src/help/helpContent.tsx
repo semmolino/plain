@@ -45,6 +45,25 @@ export const HELP = {
       </>
     ),
   },
+  'import.open_items': {
+    title: 'Offene Posten übernehmen',
+    body: (
+      <>
+        Hier kommen die Altbelege hinein, die noch <strong>nicht bezahlt</strong> sind. Sie werden als
+        echte, gebuchte Belege angelegt — ohne PDF und ohne E-Rechnung —, damit offene Posten,
+        Zahlungszuordnung und Mahnwesen ab Tag 1 stimmen.<br /><br />
+        <strong>Eine Zeile = eine Belegposition.</strong> Zeilen mit derselben Belegnummer bilden einen
+        Beleg; Belegdatum, Fälligkeit und Belegart gelten aus dessen erster Zeile. „Position" meint das
+        Kürzel aus der Leistungsstruktur (z. B. LP5) und muss im Projekt eindeutig sein. Wer keine
+        Positionen führt, schreibt eine Zeile je Beleg und lässt die Spalte leer — der Betrag verteilt
+        sich dann über die Pauschal-Positionen des Projekts.<br /><br />
+        <strong>Bezahlte Historie gehört nicht hierher.</strong> Für abgeschlossene Projekte genügt eine
+        Summe je Projekt unter „Anfangsbestände" — hunderte alte Belege einzeln zu erfassen bringt
+        keinen zusätzlichen Nutzen. Belegnummern müssen eindeutig sein; eine bereits vergebene Nummer
+        wird abgewiesen.
+      </>
+    ),
+  },
   'import.structure_tree': {
     title: 'Leistungsstruktur als Baum importieren',
     body: (

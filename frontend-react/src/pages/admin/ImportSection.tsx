@@ -55,7 +55,7 @@ export function ImportSection() {
   const batches = batchesData?.data ?? []
 
   // Empfohlene Reihenfolge der Bereiche + bereits importierte (für die Schritt-Übersicht).
-  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_fee', 'project_structure', 'opening_balance', 'opening_cost']
+  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_fee', 'project_structure', 'opening_balance', 'open_items', 'opening_cost']
   const orderedDomains = [...domains].sort((a, b) => {
     const ia = DOMAIN_ORDER.indexOf(a.key), ib = DOMAIN_ORDER.indexOf(b.key)
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
@@ -234,6 +234,19 @@ export function ImportSection() {
             Projekt + <em>Projekt-Honorar</em> (Struktur/Vertrag) sind importiert und ein Ansprechpartner ist
             vorhanden. Optional kann „bereits bezahlt" mitgegeben werden (wird als echte Zahlung gebucht).
             Projekte mit bereits gebuchten Belegen werden übersprungen.
+          </p>
+        )}
+        {domainKey === 'open_items' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0', display: 'flex', alignItems: 'flex-start' }}>
+            <span>
+              Hinweis: Für <strong>noch offene</strong> Altbelege — je Beleg Nummer, Datum, Fälligkeit und
+              Restbetrag, damit Zahlungseingänge zuzuordnen sind und gemahnt werden kann. Eine Zeile je
+              <em> Belegposition</em>; Zeilen mit derselben Belegnummer gehören zu einem Beleg. Ohne
+              Positionsführung: eine Zeile je Beleg, Spalte „Position" leer lassen.
+              Bereits <strong>bezahlte</strong> Historie gehört nicht hierher, sondern als eine Summe je
+              Projekt unter <em>Anfangsbestände</em>.
+            </span>
+            <HelpHint id="import.open_items" />
           </p>
         )}
         {domainKey === 'opening_cost' && (

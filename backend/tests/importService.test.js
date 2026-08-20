@@ -583,20 +583,31 @@ describe("buildOpeningBalanceEntry", () => {
 
 describe("buildPreview (opening_balance)", () => {
   const ctx = makeOpeningCtx();
-  const headers = ["Projektnummer", "Bereits berechnet (netto)"];
+  const headers = ["Projektnummer", "Bereits berechnet (netto)", "Belegdatum (optional)"];
   function preview(rows) {
-    const parsed = { headers, rows: rows.map(r => ({ "Projektnummer": r[0], "Bereits berechnet (netto)": r[1] })) };
+    const parsed = { headers, rows: rows.map(r => ({ "Projektnummer": r[0], "Bereits berechnet (netto)": r[1], "Belegdatum (optional)": r[2] ?? "" })) };
     return buildPreview({ domainKey: "opening_balance", parsed, mapping: null, ctx });
   }
   it("ok / duplicate (already booked) / error (unknown)", () => {
     const pv = preview([
-      ["P-2024-012", "30000"], // ok
-      ["p-booked",   "10000"], // duplicate (existing booked)
-      ["P-9999",     "1000"],  // error
+      ["P-2024-012", "30000", "31.12.2025"], // ok
+      ["p-booked",   "10000", "31.12.2025"], // duplicate (existing booked)
+      ["P-9999",     "1000",  "31.12.2025"], // error
     ]);
     expect(pv.summary.ok).toBe(1);
     expect(pv.summary.duplicate).toBe(1);
     expect(pv.summary.error).toBe(1);
+  });
+
+  it("warnt ohne Belegdatum — sonst steht der Beleg datumslos in den Listen", () => {
+    const pv = preview([["P-2024-012", "30000"]]);
+    expect(pv.summary.warning).toBe(1);
+    expect(pv.rows[0].messages.map(m => m.text).join()).toContain("datumslos");
+  });
+
+  it("uebernimmt ein deutsches Belegdatum als ISO-Datum", () => {
+    const e = buildOpeningBalanceEntry({ project_number: "P-2024-012", amount: "30000", doc_date: "31.12.2025" }, makeOpeningCtx());
+    expect(e.dbRow.docDate).toBe("2025-12-31");
   });
 });
 

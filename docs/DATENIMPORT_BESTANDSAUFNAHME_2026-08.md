@@ -55,6 +55,7 @@ dann Positionsebene** (§7).
 | 5 | `project_fee` | **generiert** Struktur (1 Position *oder* LP1–9 nach §34-Prozenten) + `PROJECT_PROGRESS` + `CONTRACT` | der schnelle Weg; seit I3 die Kurzform neben `project_structure` |
 | 5b | `project_structure` | **importiert den Baum** aus der Gliederungsnummer: Knoten + `PROJECT_PROGRESS` + `CONTRACT`, Elternwerte über `recalcParent` | seit 20.08.2026, s. §4.2 |
 | 6 | `opening_balance` | 1 Beleg je Projekt (Abschlag *oder* Rechnung) über die echte Beleg-Pipeline `init → Struktur → book(skipDocuments)`, optional Zahlung | konzeptionell richtig, **aktuell defekt** (§2.1) |
+| 6b | `open_items` | **einzelne offene Altbelege** mit Nummer, Datum, Fälligkeit, MwSt und **Positionen auf Strukturknoten** (Kürzel); optionale Teilzahlung | seit 20.08.2026, s. §5 |
 | 7 | `opening_cost` | 1 `TEC`-Zeile `LUMP_COST` je Projekt auf dem Blattknoten | funktioniert, sehr grob |
 
 ### 1.3  Was es *nicht* gibt
@@ -62,8 +63,7 @@ dann Positionsebene** (§7).
 Kein Import für: Projektteam (`EMPLOYEE2PROJECT`), Stundensätze/Rollen
 (`EMPLOYEE_CP_RATE`, `PROJECT_SP_RATES`, `PROJECT_BOOKING_PRICE`), Arbeitszeitmodelle, Abwesenheiten +
 Urlaubsanspruch, **Angebote** (`OFFER` + `OFFER_STRUCTURE`), Nachträge, DIN-276-Kosten, Textbausteine,
-eigene Stammdatenlisten (Projekttypen, Buchungsarten), **Einzelbuchungen** (`TEC`), **einzelne
-Rechnungen/Positionen**, Zahlungen einzeln, Mahnungen.
+eigene Stammdatenlisten (Projekttypen, Buchungsarten), **Einzelbuchungen** (`TEC`), Mahnungen.
 
 Ebenfalls nicht gebaut, obwohl im Konzept zugesagt: **Stichtag/Cut-over-Modell** (kommt nur im
 Konzepttext vor), **Zeilen abwählen**, **Dubletten zusammenführen** (`merge`), **Fehlerprotokoll zum
@@ -74,9 +74,8 @@ Einbindung in die Onboarding-Checkliste als eigener Schritt.
 
 ## 2  Gefundene Defekte
 
-> **Stand 20.08.2026:** §2.1 sowie 2.2 a, b, c, e und j sind behoben (Stufen I0 + I1, s. §7).
-> Offen bleiben d (Transaktionalität), f (Lookup-Grenzen), g (Zeilenabwahl),
-> h (Belegdatum) und i (Nummernkreis-Kollision).
+> **Stand 20.08.2026:** §2.1 sowie 2.2 a, b, c, e, h, i und j sind behoben (Stufen I0, I1, I4).
+> Offen bleiben d (Transaktionalität), f (Lookup-Grenzen) und g (Zeilenabwahl).
 
 ### 2.1  BLOCKER — `opening_balance` schlägt bei jedem Commit fehl *(behoben)*
 
@@ -117,8 +116,8 @@ der Demo-Mandant kann damit keine Belege erzeugen.
 | e | `parseBuffer` liest **nur das erste Tabellenblatt**, ohne Hinweis | Exporte mit Deckblatt/mehreren Blättern scheitern stumm oder importieren das Falsche |
 | f | Kontext-Lookups mit `.limit(100000)`, volle Tabellen im Speicher | ab mittleren Beständen teuer; keine Paginierung |
 | g | Vorschau max. 200 Zeilen, **keine Zeilenabwahl** (Fehlerprotokoll erledigt) | Zeilen lassen sich nur ganz oder gar nicht importieren |
-| h | Belegdatum bei `opening_balance` ist immer **heute** | Altbelege landen im laufenden Monat → Perioden-/Jahresauswertung verzerrt |
-| i | `docNumber` geht ungeprüft in `INVOICE_NUMBER`/`PARTIAL_PAYMENT_NUMBER` | Kollision mit dem Nummernkreis möglich |
+| h | ~~Belegdatum bei `opening_balance`~~ *(behoben)* | Korrektur zum ersten Befund: das Datum war nicht „heute", sondern **gar nicht gesetzt** — weder `init…` noch `book…` schreiben es, der Import tat es auch nicht. Belege standen datumslos in Listen und Auswertungen. Beide Domänen nehmen es jetzt aus der Datei; Zahlungen ebenso (statt „heute") |
+| i | ~~`docNumber` ungeprüft~~ *(teilweise behoben)* | `open_items` prüft gegen alle vergebenen Nummern des Mandanten und lehnt Kollisionen ab. Offen bleibt: der Nummernkreis-**Zähler** wird nicht angehoben — läuft er später in einen importierten Bereich, kollidiert die erste echte Rechnung |
 | j | ~~`xlsx@0.18.5` parst hochgeladene Fremddateien~~ *(behoben)* | CVE-2023-30533 + CVE-2024-22363. `xlsx` ist entfernt; Lesen und Schreiben laufen über `exceljs` (§8.1) |
 
 ---
@@ -248,6 +247,16 @@ Engine zu bauen statt einer Einmallösung.
 
 ## 5  Positionsebene: Rechnungen, Zahlungen, Buchungen
 
+> **Umgesetzt am 20.08.2026 (I4), nach der Entscheidung aus §8.3:** bezahlte Historie bleibt eine
+> Summe je Projekt (`opening_balance`), **offene Posten kommen einzeln** (`open_items`).
+> Eine Zeile = eine Belegposition, Zeilen gleicher Belegnummer bilden einen Beleg; die Position
+> zeigt über das **Kürzel** auf einen Strukturknoten (deshalb setzt das I3 voraus). Ohne
+> Positionsführung genügt eine Zeile je Beleg — der Betrag verteilt sich dann wie bisher.
+> Beide Domänen laufen jetzt durch **einen** gemeinsamen Weg (`bookReferenceDocument`), damit sie
+> sich nicht auseinanderentwickeln. Ein fehlerhafter Beleg fällt als Ganzes aus.
+> Nicht umgesetzt: Schlussrechnungs-Warnung bei unvollständiger Vorbeleg-Kette (s. §5.2), Skonto,
+> Mahnstufen. 18 Tests in `backend/tests/importService.openitems.test.js`.
+
 ### 5.1  Was heute passiert
 
 Nur Summen: `opening_balance` erzeugt **einen** Beleg je Projekt über die echte Beleg-Pipeline
@@ -310,7 +319,7 @@ und vermeidet die gesamte Validierungs-Kaskade. Ein echter Einzelbuchungs-Import
 | **I1 — Vorlagen 2.0** ✅ | 4-Blatt-Mappe mit Anleitung/Listen/Dropdowns aus dem Mandanten, `exceljs` statt `xlsx` inkl. Lesepfad, CSV mit Trennzeichen-/Codierungserkennung, Fehlerprotokoll als korrigierbare Excel-Datei | erledigt 20.08.2026 |
 | **I2 — Assistent** | Zeilenabwahl, Dubletten „zusammenführen", Mapping merken, Stichtag, Onboarding-Schritte, „importiert"-Badge | mittel — jetzt der nächste Schritt |
 | **I3 — Baum-Import** ✅ | Domäne `project_structure` (§4.2), Gliederungsnummer + Ebenen-Fallback, Alles-oder-nichts je Projekt, vorbefüllte HOAI-Vorlage, 21 Tests | erledigt 20.08.2026 |
-| **I4 — Belege** | Domäne `invoice_history` (Kopf + Positionen, Datum/MwSt/Nummer aus Datei, Zahlungen), setzt I3 voraus | groß |
+| **I4 — Belege** ✅ | Domäne `open_items` (Positionen über Strukturkürzel, Datum/MwSt/Nummer/Fälligkeit aus Datei, Teilzahlung), Belegdatum auch für `opening_balance`, 18 Tests | erledigt 20.08.2026 |
 | **I5 — Buchungen** | `TEC`-Anfangsbestand je Projekt × Mitarbeiter × Monat; Einzelbuchungen optional | mittel |
 | **I6 — Rest** | Projektteam, Sätze/Preise, Abwesenheiten, Angebote/Nachträge (nutzt I3) | je klein |
 
