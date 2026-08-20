@@ -1252,7 +1252,9 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
     else if (status === "warning") warning++;
     else if (status === "duplicate") duplicate++;
     else error++;
-    rows.push({ row: i + 2, status, messages, display: entry.display, _dbRow: entry.dbRow });
+    // `_raw` = die Originalzeile der Datei; sie speist das Fehlerprotokoll,
+    // das der Nutzer korrigiert und unverändert wieder hochladen kann.
+    rows.push({ row: i + 2, status, messages, display: entry.display, _dbRow: entry.dbRow, _raw: raw });
   });
 
   return { mapping: map, summary: { total: rows.length, ok, warning, duplicate, error }, rows };
@@ -1327,6 +1329,52 @@ async function commit({ domainKey, buffer, filename, mapping, sheetName, duplica
   }
 
   return { batchId, inserted, summary: pv.summary };
+}
+
+/**
+ * Fehlerprotokoll: die nicht importierbaren Zeilen als Excel — Originalspalten
+ * unverändert, dahinter Zeilennummer und Grund. Der Nutzer korrigiert die Datei
+ * und lädt sie erneut hoch; die beiden Zusatzspalten stören dabei nicht, weil
+ * die Zuordnung unbekannte Überschriften ignoriert.
+ */
+async function errorReport({ domainKey, buffer, mapping, sheetName, supabase, tenantId }) {
+  const def = getDomain(domainKey);
+  const parsed = await parseBuffer(buffer, sheetName);
+  const ctx = await def.loadContext(supabase, tenantId);
+  const pv = buildPreview({ domainKey, parsed, mapping, ctx });
+
+  const bad = pv.rows.filter((r) => r.status === "error");
+  if (!bad.length) throw { status: 400, message: "Keine fehlerhaften Zeilen — es gibt nichts zu korrigieren." };
+
+  const headers = [...parsed.headers, "Zeile", "Fehler"];
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "plan&simple";
+  const ws = wb.addWorksheet("Daten");
+  ws.addRow(headers);
+
+  for (const r of bad) {
+    const values = parsed.headers.map((h) => r._raw?.[h] ?? "");
+    values.push(r.row);
+    values.push(r.messages.filter((m) => m.level === "error").map((m) => m.text).join(" · "));
+    ws.addRow(values);
+  }
+
+  const head = ws.getRow(1);
+  head.font = { bold: true, color: { argb: TPL.accent } };
+  head.eachCell((cell) => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TPL.headBg } }; });
+  ws.getColumn(headers.length).font = { color: { argb: "FFB3261E" } };
+  headers.forEach((h, i) => {
+    const width = Math.max(h.length + 2, ...bad.map((r) => String(r._raw?.[parsed.headers[i]] ?? "").length + 2));
+    ws.getColumn(i + 1).width = Math.min(60, Math.max(12, width));
+  });
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+
+  const out = await wb.xlsx.writeBuffer();
+  return {
+    buffer: Buffer.from(out),
+    filename: `plan-und-simple_Fehler_${def.key}.xlsx`,
+    count: bad.length,
+  };
 }
 
 async function listBatches(supabase, tenantId) {
@@ -1708,5 +1756,5 @@ module.exports = {
   s, norm, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
   buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildOpeningBalanceEntry, buildOpeningCostEntry,
   // orchestriert
-  preview, commit, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
+  preview, commit, errorReport, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
 };

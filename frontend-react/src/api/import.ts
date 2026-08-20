@@ -100,6 +100,10 @@ export const previewImport = (domain: string, file: File, mapping?: Record<strin
 export const commitImport = (domain: string, file: File, mapping: Record<string, string>, duplicateMode: DuplicateMode, structureMode?: StructureMode, docType?: DocType) =>
   apiClient.post<{ data: ImportCommitResult }>(`/import/${domain}/commit`, buildForm(file, mapping, duplicateMode, structureMode, docType))
 
+/** Nicht importierbare Zeilen als Excel — zum Korrigieren und erneut Hochladen. */
+export const downloadImportErrors = (domain: string, file: File, mapping: Record<string, string>) =>
+  downloadWithAuth(`/import/${domain}/errors`, `plan-und-simple_Fehler_${domain}.xlsx`, buildForm(file, mapping))
+
 export const fetchImportBatches = () =>
   apiClient.get<{ data: ImportBatch[] }>('/import/batches')
 

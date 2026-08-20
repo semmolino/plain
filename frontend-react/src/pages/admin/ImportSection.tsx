@@ -8,7 +8,7 @@ import { HelpHint } from '@/components/ui/HelpHint'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/store/toastStore'
 import {
-  fetchImportDomains, fetchImportBatches, downloadImportTemplate,
+  fetchImportDomains, fetchImportBatches, downloadImportTemplate, downloadImportErrors,
   previewImport, commitImport, rollbackImportBatch,
   type ImportPreview, type DuplicateMode, type StructureMode, type DocType, type ImportRowStatus, type ImportBatch,
 } from '@/api/import'
@@ -296,7 +296,20 @@ export function ImportSection() {
               <SummaryChip icon={<Copy size={13} />} label="Dubletten" value={s?.duplicate ?? 0} color="#475569" bg="#f1f5f9" />
               <SummaryChip icon={<XCircle size={13} />} label="Fehler" value={s?.error ?? 0} color="#b91c1c" bg="#fef2f2" />
               <span style={{ fontSize: 12, color: 'var(--text-3)', alignSelf: 'center' }}>von {s?.total ?? 0} Zeilen</span>
+              {(s?.error ?? 0) > 0 && file && (
+                <button type="button" className="btn-small btn-secondary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 'auto' }}
+                  onClick={() => void downloadImportErrors(domainKey, file, mapping)}>
+                  <Download size={12} strokeWidth={2} /> Fehlerhafte Zeilen als Excel
+                </button>
+              )}
             </div>
+            {(s?.error ?? 0) > 0 && (
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px' }}>
+                Die Datei enthält die fehlerhaften Zeilen mit dem Grund in der letzten Spalte —
+                korrigieren und einfach wieder hochladen.
+              </p>
+            )}
 
             {(s?.duplicate ?? 0) > 0 && (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 10 }}>

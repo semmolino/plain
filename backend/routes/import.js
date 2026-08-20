@@ -26,6 +26,7 @@ module.exports = (supabase) => {
   router.get("/:domain/template",     GUARD, (req, res) => ctrl.getTemplate(req, res, supabase));
   router.post("/:domain/preview",     GUARD, upload.single("file"), (req, res) => ctrl.postPreview(req, res, supabase));
   router.post("/:domain/commit",      GUARD, upload.single("file"), (req, res) => ctrl.postCommit(req, res, supabase));
+  router.post("/:domain/errors",      GUARD, upload.single("file"), (req, res) => ctrl.postErrorReport(req, res, supabase));
 
   return router;
 };

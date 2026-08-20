@@ -23,7 +23,7 @@ jest.mock("../services/invoices", () => ({
 
 const ppSvc = require("../services/partialPayments");
 const invSvc = require("../services/invoices");
-const { commit, rollback, buildTemplate, parseBuffer } = require("../services/importService");
+const { commit, rollback, buildTemplate, parseBuffer, errorReport } = require("../services/importService");
 const { makeFakeSupabase } = require("./helpers/fakeSupabase");
 const { xlsxBuffer, csvBuffer } = require("./helpers/sheetFixture");
 
@@ -369,6 +369,56 @@ describe("commit + rollback (opening_cost)", () => {
     expect(res).toMatchObject({ rolledBack: true, deleted: 1 });
     expect(supabase._tables.TEC).toHaveLength(0);
     expect(supabase._tables.PROJECT_STRUCTURE[0].COSTS).toBe(0);
+  });
+});
+
+// ── Fehlerprotokoll ───────────────────────────────────────────────────────────
+describe("errorReport", () => {
+  const seed = () => makeFakeSupabase({
+    COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", NAME_SHORT: "DE" }],
+    ADDRESS: [],
+  });
+
+  it("liefert genau die fehlerhaften Zeilen samt Grund und bleibt wieder hochladbar", async () => {
+    const buffer = await fileOf([
+      ["Name 1 (Firma/Nachname) *", "PLZ", "Land"],
+      ["Gut GmbH", "10117", "Deutschland"],
+      ["", "10118", "Deutschland"],                 // Pflichtfeld fehlt
+      ["Falsches Land GmbH", "10119", "Atlantis"],  // Land nicht auflösbar
+    ]);
+
+    const rep = await errorReport({ domainKey: "address", buffer, mapping: null, supabase: seed(), tenantId: TENANT });
+    expect(rep.count).toBe(2);
+    expect(rep.filename).toContain("Fehler");
+
+    // Das Protokoll ist selbst wieder eine gueltige Importdatei: Originalspalten
+    // unveraendert, dahinter Zeile + Fehler.
+    const back = await parseBuffer(rep.buffer);
+    expect(back.headers).toEqual(["Name 1 (Firma/Nachname) *", "PLZ", "Land", "Zeile", "Fehler"]);
+    expect(back.rows).toHaveLength(2);
+    expect(back.rows[0]).toMatchObject({ PLZ: "10118", Zeile: 3 });
+    expect(back.rows[0]["Fehler"]).toContain("Name 1 fehlt");
+    expect(back.rows[1]["Fehler"]).toContain("Atlantis");
+
+    // Korrigiert man die Datei, laesst sie sich unveraendert importieren —
+    // die Zusatzspalten stoeren die Zuordnung nicht.
+    const supabase = seed();
+    const fixed = await fileOf([
+      ["Name 1 (Firma/Nachname) *", "PLZ", "Land", "Zeile", "Fehler"],
+      ["Jetzt Richtig GmbH", "10118", "Deutschland", 3, "Name 1 fehlt (Pflichtfeld)"],
+    ]);
+    const res = await run("address", fixed, supabase);
+    expect(res.inserted).toBe(1);
+    expect(supabase._tables.ADDRESS[0].ADDRESS_NAME_1).toBe("Jetzt Richtig GmbH");
+  });
+
+  it("sagt Bescheid, wenn es nichts zu korrigieren gibt", async () => {
+    const buffer = await fileOf([
+      ["Name 1 (Firma/Nachname) *", "PLZ"],
+      ["Gut GmbH", "10117"],
+    ]);
+    await expect(errorReport({ domainKey: "address", buffer, mapping: null, supabase: seed(), tenantId: TENANT }))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining("Keine fehlerhaften Zeilen") });
   });
 });
 

@@ -54,6 +54,22 @@ async function postCommit(req, res, supabase) {
   } catch (e) { fail(res, e); }
 }
 
+// Fehlerprotokoll: gleiche Datei + Zuordnung wie in der Vorschau, zurueck kommt
+// eine Excel-Datei mit genau den Zeilen, die nicht importierbar waren.
+async function postErrorReport(req, res, supabase) {
+  try {
+    if (!req.file) throw { status: 400, message: "Keine Datei hochgeladen" };
+    const { buffer, filename } = await svc.errorReport({
+      domainKey: req.params.domain, buffer: req.file.buffer,
+      mapping: parseMapping(req), sheetName: req.body?.sheetName || null,
+      supabase, tenantId: req.tenantId,
+    });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (e) { fail(res, e); }
+}
+
 async function getBatches(req, res, supabase) {
   try { res.json({ data: await svc.listBatches(supabase, req.tenantId) }); } catch (e) { fail(res, e); }
 }
@@ -65,4 +81,4 @@ async function postRollback(req, res, supabase) {
   } catch (e) { fail(res, e); }
 }
 
-module.exports = { getDomains, getTemplate, postPreview, postCommit, getBatches, postRollback };
+module.exports = { getDomains, getTemplate, postPreview, postCommit, postErrorReport, getBatches, postRollback };

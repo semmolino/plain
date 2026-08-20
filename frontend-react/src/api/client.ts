@@ -80,12 +80,16 @@ async function request<T>(
  * @param path  API path (e.g. /invoices/1/einvoice/ubl)
  * @param fileName  Suggested file name for the download dialog
  */
-export async function downloadWithAuth(path: string, fileName: string): Promise<void> {
+export async function downloadWithAuth(path: string, fileName: string, body?: FormData): Promise<void> {
   const token = useAuthStore.getState().token
   const headers: Record<string, string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_BASE}${path}`, { headers })
+  // Mit body wird daraus ein POST (z. B. Datei hochladen → Auswertung als Datei
+  // zurück). Content-Type setzt der Browser selbst, inklusive Multipart-Grenze.
+  const res = body
+    ? await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body })
+    : await fetch(`${API_BASE}${path}`, { headers })
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {

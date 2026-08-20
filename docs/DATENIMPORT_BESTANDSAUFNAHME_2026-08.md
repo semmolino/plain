@@ -74,7 +74,7 @@ Einbindung in die Onboarding-Checkliste als eigener Schritt.
 ## 2  Gefundene Defekte
 
 > **Stand 20.08.2026:** §2.1 sowie 2.2 a, b, c, e und j sind behoben (Stufen I0 + I1, s. §7).
-> Offen bleiben d (Transaktionalität), f (Lookup-Grenzen), g (Zeilenabwahl/Fehlerprotokoll),
+> Offen bleiben d (Transaktionalität), f (Lookup-Grenzen), g (Zeilenabwahl),
 > h (Belegdatum) und i (Nummernkreis-Kollision).
 
 ### 2.1  BLOCKER — `opening_balance` schlägt bei jedem Commit fehl *(behoben)*
@@ -115,7 +115,7 @@ der Demo-Mandant kann damit keine Belege erzeugen.
 | d | Commit ist **nicht transaktional** — schlägt Zeile 300 fehl, stehen 299 Zeilen bereits | teilweise importierte Stapel; Rollback existiert, aber der Nutzer muss ihn selbst auslösen |
 | e | `parseBuffer` liest **nur das erste Tabellenblatt**, ohne Hinweis | Exporte mit Deckblatt/mehreren Blättern scheitern stumm oder importieren das Falsche |
 | f | Kontext-Lookups mit `.limit(100000)`, volle Tabellen im Speicher | ab mittleren Beständen teuer; keine Paginierung |
-| g | Vorschau max. 200 Zeilen, **keine Zeilenabwahl**, kein Fehlerprotokoll | bei 800 Fehlern keine Arbeitsgrundlage |
+| g | Vorschau max. 200 Zeilen, **keine Zeilenabwahl** (Fehlerprotokoll erledigt) | Zeilen lassen sich nur ganz oder gar nicht importieren |
 | h | Belegdatum bei `opening_balance` ist immer **heute** | Altbelege landen im laufenden Monat → Perioden-/Jahresauswertung verzerrt |
 | i | `docNumber` geht ungeprüft in `INVOICE_NUMBER`/`PARTIAL_PAYMENT_NUMBER` | Kollision mit dem Nummernkreis möglich |
 | j | ~~`xlsx@0.18.5` parst hochgeladene Fremddateien~~ *(behoben)* | CVE-2023-30533 + CVE-2024-22363. `xlsx` ist entfernt; Lesen und Schreiben laufen über `exceljs` (§8.1) |
@@ -295,7 +295,7 @@ und vermeidet die gesamte Validierungs-Kaskade. Ein echter Einzelbuchungs-Import
 | Stufe | Inhalt | Aufwand |
 |---|---|---|
 | **I0 — Reparatur** ✅ | `tenantId` in `opening_balance` (+ Demo-Seed), `SORT_ORDER`/`CONTRACT_ID` bei `project_fee`, Beispielzeile auf eigenes Blatt, Blatt-Hinweis im Assistenten, 15 Integrationstests für Commit + Rollback | erledigt 20.08.2026 |
-| **I1 — Vorlagen 2.0** ⬤ | 4-Blatt-Mappe mit Anleitung/Listen/Dropdowns aus dem Mandanten ✅, `exceljs` statt `xlsx` inkl. Lesepfad ✅, CSV mit Trennzeichen-/Codierungserkennung ✅ — **offen: Fehlerprotokoll als Excel zurück** | überwiegend erledigt 20.08.2026 |
+| **I1 — Vorlagen 2.0** ✅ | 4-Blatt-Mappe mit Anleitung/Listen/Dropdowns aus dem Mandanten, `exceljs` statt `xlsx` inkl. Lesepfad, CSV mit Trennzeichen-/Codierungserkennung, Fehlerprotokoll als korrigierbare Excel-Datei | erledigt 20.08.2026 |
 | **I2 — Assistent** | Zeilenabwahl, Dubletten „zusammenführen", Mapping merken, Stichtag, Onboarding-Schritte, „importiert"-Badge | mittel |
 | **I3 — Baum-Import** | generischer Baum-Importer + Domäne `project_structure` (§4), Vorschau als Baum, Struktur-Vorlage aus HOAI-Katalog generieren | **groß — das Kernstück** |
 | **I4 — Belege** | Domäne `invoice_history` (Kopf + Positionen, Datum/MwSt/Nummer aus Datei, Zahlungen), setzt I3 voraus | groß |
