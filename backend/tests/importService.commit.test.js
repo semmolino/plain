@@ -5,7 +5,6 @@
 // genau deshalb blieb unbemerkt, dass die Anfangsbestaende den Mandanten nicht
 // mehr an initInvoice/initPartialPayment weiterreichen (Security-Fix 13e88c4).
 
-const XLSX = require("xlsx");
 
 // Belegerzeugung wird gemockt: hier interessiert der Import-Pfad, nicht die
 // Rechnungslogik. Muss VOR dem require des Service stehen (jest hoisting).
@@ -26,17 +25,13 @@ const ppSvc = require("../services/partialPayments");
 const invSvc = require("../services/invoices");
 const { commit, rollback, buildTemplate, parseBuffer } = require("../services/importService");
 const { makeFakeSupabase } = require("./helpers/fakeSupabase");
+const { xlsxBuffer, csvBuffer } = require("./helpers/sheetFixture");
 
 const TENANT = 7;
 const EMPLOYEE = 99;
 
 /** Array-of-Arrays → XLSX-Buffer (simuliert die hochgeladene Datei). */
-function fileOf(aoa) {
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Daten");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-}
+const fileOf = (aoa) => xlsxBuffer(aoa);
 
 const run = (domainKey, buffer, supabase, opts = {}) =>
   commit({ domainKey, buffer, filename: "test.xlsx", mapping: null, supabase, tenantId: TENANT, employeeId: EMPLOYEE, ...opts });
@@ -45,20 +40,112 @@ beforeEach(() => jest.clearAllMocks());
 
 // ── Vorlage ───────────────────────────────────────────────────────────────────
 describe("buildTemplate", () => {
-  it("laesst das Datenblatt leer und legt das Beispiel auf ein eigenes Blatt", () => {
-    const { buffer } = buildTemplate("address");
-    const parsed = parseBuffer(buffer);
+  const seed = () => makeFakeSupabase({
+    COUNTRY: [{ NAME_LONG: "Deutschland" }, { NAME_LONG: "Österreich" }],
+    GENDER: [{ GENDER: "weiblich" }, { GENDER: "männlich" }],
+    PROJECT_STATUS: [{ NAME_SHORT: "in Bearbeitung" }, { NAME_SHORT: "abgeschlossen" }],
+    PROJECT_TYPE: [{ TENANT_ID: TENANT, NAME_SHORT: "Neubau" }],
+    EMPLOYEE: [{ TENANT_ID: TENANT, SHORT_NAME: "MMu" }, { TENANT_ID: TENANT, SHORT_NAME: "TBe" }],
+    ADDRESS: [{ TENANT_ID: TENANT, ADDRESS_NAME_1: "Stadt Musterhausen" }],
+  });
 
+  it("liefert vier Blaetter und laesst das Datenblatt leer", async () => {
+    const { buffer, filename } = await buildTemplate("address", { supabase: seed(), tenantId: TENANT });
+    const parsed = await parseBuffer(buffer);
+
+    expect(filename).toContain("address");
+    expect(parsed.sheetNames).toEqual(["Anleitung", "Daten", "Beispiel", "Listen"]);
+    // Gelesen wird "Daten" — nicht das erste Blatt der Datei.
     expect(parsed.sheetName).toBe("Daten");
-    expect(parsed.sheetNames).toEqual(["Daten", "Beispiel"]);
     // Ueberschriften da, aber keine Datenzeile → die Beispielzeile kann nicht
     // versehentlich als echter Datensatz importiert werden.
     expect(parsed.rows).toHaveLength(0);
     expect(parsed.headers[0]).toBe("Name 1 (Firma/Nachname) *");
 
-    const wb = XLSX.read(buffer, { type: "buffer" });
-    const beispiel = XLSX.utils.sheet_to_json(wb.Sheets["Beispiel"], { defval: "", raw: false });
-    expect(beispiel).toHaveLength(1);
+    const beispiel = await parseBuffer(buffer, "Beispiel");
+    expect(beispiel.rows).toHaveLength(1);
+    expect(beispiel.rows[0]["Name 1 (Firma/Nachname) *"]).toBe("Mustermann Architekten GmbH");
+  });
+
+  it("fuellt die Auswahllisten aus dem Mandanten und haengt sie an die Spalten", async () => {
+    const { buffer } = await buildTemplate("project", { supabase: seed(), tenantId: TENANT });
+    const listen = await parseBuffer(buffer, "Listen");
+
+    expect(listen.headers).toEqual(expect.arrayContaining(["Status", "Projekttyp", "Mitarbeiter (Kürzel)", "Adresse/Firma"]));
+    const werte = listen.rows.flatMap(r => Object.values(r));
+    expect(werte).toEqual(expect.arrayContaining(["in Bearbeitung", "Neubau", "MMu", "Stadt Musterhausen"]));
+
+    // Datenvalidierung zeigt auf das Listen-Blatt (Dropdown in Excel).
+    const ExcelJS = require("exceljs");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.getWorksheet("Daten");
+    const statusCol = ws.getRow(1).values.indexOf("Status *");
+    expect(ws.getCell(2, statusCol).dataValidation).toMatchObject({ type: "list", formulae: [expect.stringContaining("Listen!")] });
+  });
+
+  it("kommt ohne Datenbank aus (feste Listen bleiben)", async () => {
+    const { buffer } = await buildTemplate("project_fee");
+    const listen = await parseBuffer(buffer, "Listen");
+    expect(listen.rows.flatMap(r => Object.values(r))).toEqual(expect.arrayContaining(["Pauschal", "Stunden"]));
+  });
+});
+
+// ── Dateiformate ──────────────────────────────────────────────────────────────
+describe("Dateiformate", () => {
+  const seed = () => makeFakeSupabase({
+    COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", NAME_SHORT: "DE" }],
+    ADDRESS: [],
+  });
+
+  it("liest Semikolon-CSV in Windows-1252 mit Umlauten", async () => {
+    const supabase = seed();
+    const buffer = csvBuffer([
+      ["Name 1 (Firma/Nachname) *", "Straße", "Ort"],
+      ["Müller & Söhne GmbH", "Bahnhofstraße 3", "Köln"],
+    ], { delimiter: ";", encoding: "latin1" });
+
+    const res = await run("address", buffer, supabase);
+
+    expect(res.inserted).toBe(1);
+    const a = supabase._tables.ADDRESS[0];
+    expect(a.ADDRESS_NAME_1).toBe("Müller & Söhne GmbH");
+    expect(a.STREET).toBe("Bahnhofstraße 3");
+    expect(a.CITY).toBe("Köln");
+  });
+
+  it("liest Komma-CSV mit UTF-8-BOM und Anfuehrungszeichen", async () => {
+    const supabase = seed();
+    const buffer = csvBuffer([
+      ["Name 1 (Firma/Nachname) *", "Ort"],
+      ['Meier, Schulz & Partner', "Berlin"],
+    ], { delimiter: ",", encoding: "utf8", bom: true });
+
+    await run("address", buffer, supabase);
+    expect(supabase._tables.ADDRESS[0].ADDRESS_NAME_1).toBe("Meier, Schulz & Partner");
+  });
+
+  it("erklaert bei alten .xls-Dateien, was zu tun ist", async () => {
+    // OLE2-Signatur = altes Binaerformat
+    const xls = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(64)]);
+    await expect(run("address", xls, seed()))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining(".xlsx") });
+  });
+
+  it("nimmt Zahlen- und Datumszellen so, wie Excel sie speichert", async () => {
+    const supabase = makeFakeSupabase({
+      PROJECT: [{ ID: 1, TENANT_ID: TENANT, NAME_SHORT: "P-1", NAME_LONG: "Projekt Eins" }],
+      PROJECT_STRUCTURE: [],
+      TENANT_SETTINGS: [],
+    });
+    // 80000.5 als echte Zahl — als Text gelesen waere daraus 800005 geworden.
+    const buffer = await xlsxBuffer([
+      ["Projektnummer *", "Honorarsumme (netto) *"],
+      ["P-1", 80000.5],
+    ]);
+
+    await run("project_fee", buffer, supabase, { structureMode: "single" });
+    expect(supabase._tables.PROJECT_STRUCTURE[0].REVENUE).toBe(80000.5);
   });
 });
 
@@ -77,7 +164,7 @@ describe("commit + rollback (address)", () => {
 
   it("schreibt nur die neue Zeile, taggt sie mit Mandant und Stapel", async () => {
     const supabase = seed();
-    const res = await run("address", file(), supabase, { duplicateMode: "skip" });
+    const res = await run("address", await file(), supabase, { duplicateMode: "skip" });
 
     expect(res.inserted).toBe(1);
     expect(res.summary).toMatchObject({ total: 2, ok: 1, duplicate: 1, error: 0 });
@@ -94,13 +181,13 @@ describe("commit + rollback (address)", () => {
 
   it("importiert Dubletten auf Wunsch mit", async () => {
     const supabase = seed();
-    const res = await run("address", file(), supabase, { duplicateMode: "import" });
+    const res = await run("address", await file(), supabase, { duplicateMode: "import" });
     expect(res.inserted).toBe(2);
   });
 
   it("rollback entfernt genau die importierten Zeilen", async () => {
     const supabase = seed();
-    const { batchId } = await run("address", file(), supabase, { duplicateMode: "skip" });
+    const { batchId } = await run("address", await file(), supabase, { duplicateMode: "skip" });
 
     const res = await rollback({ batchId, supabase, tenantId: TENANT });
 
@@ -112,7 +199,7 @@ describe("commit + rollback (address)", () => {
 
   it("rollback blockiert, wenn Live-Daten an der importierten Adresse haengen", async () => {
     const supabase = seed();
-    const { batchId } = await run("address", file(), supabase, { duplicateMode: "skip" });
+    const { batchId } = await run("address", await file(), supabase, { duplicateMode: "skip" });
     const imported = supabase._tables.ADDRESS.find(a => a.ADDRESS_NAME_1 === "Neu GmbH");
     supabase._tables.PROJECT = [{ ID: 1, TENANT_ID: TENANT, ADDRESS_ID: imported.ID }];
 
@@ -124,7 +211,7 @@ describe("commit + rollback (address)", () => {
 
   it("weist einen zweiten Rollback desselben Stapels ab", async () => {
     const supabase = seed();
-    const { batchId } = await run("address", file(), supabase, { duplicateMode: "skip" });
+    const { batchId } = await run("address", await file(), supabase, { duplicateMode: "skip" });
     await rollback({ batchId, supabase, tenantId: TENANT });
 
     await expect(rollback({ batchId, supabase, tenantId: TENANT }))
@@ -150,7 +237,7 @@ describe("commit + rollback (project_fee)", () => {
 
   it("legt Vertrag, Struktur und Fortschritt an — Struktur kennt den Vertrag", async () => {
     const supabase = seed();
-    const res = await run("project_fee", file(), supabase, { structureMode: "hoai" });
+    const res = await run("project_fee", await file(), supabase, { structureMode: "hoai" });
 
     expect(res.inserted).toBe(1);
 
@@ -175,7 +262,7 @@ describe("commit + rollback (project_fee)", () => {
     const supabase = seed();
     supabase._tables.CONTRACT = [{ ID: 55, TENANT_ID: TENANT, PROJECT_ID: 1 }];
 
-    await run("project_fee", file(), supabase, { structureMode: "single" });
+    await run("project_fee", await file(), supabase, { structureMode: "single" });
 
     expect(supabase._tables.CONTRACT).toHaveLength(1);          // kein zweiter Vertrag
     const nodes = supabase._tables.PROJECT_STRUCTURE;
@@ -185,7 +272,7 @@ describe("commit + rollback (project_fee)", () => {
 
   it("rollback raeumt Fortschritt, Struktur und Vertrag ab", async () => {
     const supabase = seed();
-    const { batchId } = await run("project_fee", file(), supabase, { structureMode: "hoai" });
+    const { batchId } = await run("project_fee", await file(), supabase, { structureMode: "hoai" });
 
     await rollback({ batchId, supabase, tenantId: TENANT });
 
@@ -196,7 +283,7 @@ describe("commit + rollback (project_fee)", () => {
 
   it("rollback blockiert, wenn am Projekt schon gebucht wurde", async () => {
     const supabase = seed();
-    const { batchId } = await run("project_fee", file(), supabase, { structureMode: "hoai" });
+    const { batchId } = await run("project_fee", await file(), supabase, { structureMode: "hoai" });
     supabase._tables.TEC = [{ ID: 1, TENANT_ID: TENANT, PROJECT_ID: 1 }];
 
     await expect(rollback({ batchId, supabase, tenantId: TENANT }))
@@ -223,7 +310,7 @@ describe("commit (opening_balance)", () => {
 
   it("reicht tenantId an initPartialPayment durch (Regression zu 13e88c4)", async () => {
     const supabase = seed();
-    const res = await run("opening_balance", file(), supabase, { docType: "partial" });
+    const res = await run("opening_balance", await file(), supabase, { docType: "partial" });
 
     expect(res.inserted).toBe(1);
     expect(ppSvc.initPartialPayment).toHaveBeenCalledTimes(1);
@@ -237,7 +324,7 @@ describe("commit (opening_balance)", () => {
 
   it("reicht tenantId an initInvoice durch", async () => {
     const supabase = seed();
-    await run("opening_balance", file(), supabase, { docType: "invoice" });
+    await run("opening_balance", await file(), supabase, { docType: "invoice" });
 
     expect(invSvc.initInvoice).toHaveBeenCalledWith(
       expect.anything(),
@@ -260,7 +347,7 @@ describe("commit + rollback (opening_cost)", () => {
 
   it("bucht einen Kostenblock auf den Blattknoten", async () => {
     const supabase = seed();
-    const res = await run("opening_cost", file(), supabase);
+    const res = await run("opening_cost", await file(), supabase);
 
     expect(res.inserted).toBe(1);
     const tec = supabase._tables.TEC;
@@ -275,7 +362,7 @@ describe("commit + rollback (opening_cost)", () => {
 
   it("rollback entfernt die Buchung und rechnet die Kosten zurueck", async () => {
     const supabase = seed();
-    const { batchId } = await run("opening_cost", file(), supabase);
+    const { batchId } = await run("opening_cost", await file(), supabase);
 
     const res = await rollback({ batchId, supabase, tenantId: TENANT });
 
@@ -289,7 +376,7 @@ describe("commit + rollback (opening_cost)", () => {
 describe("commit ohne importierbare Zeilen", () => {
   it("legt keinen Stapel an, wenn nur Fehlerzeilen kommen", async () => {
     const supabase = makeFakeSupabase({ COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", NAME_SHORT: "DE" }], ADDRESS: [] });
-    const buffer = fileOf([["Name 1 (Firma/Nachname) *", "PLZ"], ["", "10117"]]);
+    const buffer = await fileOf([["Name 1 (Firma/Nachname) *", "PLZ"], ["", "10117"]]);
 
     await expect(run("address", buffer, supabase)).rejects.toMatchObject({ status: 400 });
     expect(supabase._tables.IMPORT_BATCH).toBeUndefined();

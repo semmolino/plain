@@ -23,7 +23,7 @@ module.exports = (supabase) => {
   router.get("/domains",              GUARD, (req, res) => ctrl.getDomains(req, res));
   router.get("/batches",              GUARD, (req, res) => ctrl.getBatches(req, res, supabase));
   router.post("/batches/:id/rollback", GUARD, (req, res) => ctrl.postRollback(req, res, supabase));
-  router.get("/:domain/template",     GUARD, (req, res) => ctrl.getTemplate(req, res));
+  router.get("/:domain/template",     GUARD, (req, res) => ctrl.getTemplate(req, res, supabase));
   router.post("/:domain/preview",     GUARD, upload.single("file"), (req, res) => ctrl.postPreview(req, res, supabase));
   router.post("/:domain/commit",      GUARD, upload.single("file"), (req, res) => ctrl.postCommit(req, res, supabase));
 

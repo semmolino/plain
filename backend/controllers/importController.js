@@ -18,9 +18,11 @@ function getDomains(req, res) {
   try { res.json({ data: svc.listDomains() }); } catch (e) { fail(res, e); }
 }
 
-function getTemplate(req, res) {
+// Die Vorlage zieht ihre Auswahllisten aus dem Mandanten (Status, Kürzel,
+// Adressnamen …) — deshalb braucht sie supabase + tenantId.
+async function getTemplate(req, res, supabase) {
   try {
-    const { buffer, filename } = svc.buildTemplate(req.params.domain);
+    const { buffer, filename } = await svc.buildTemplate(req.params.domain, { supabase, tenantId: req.tenantId });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(buffer);
@@ -32,7 +34,7 @@ async function postPreview(req, res, supabase) {
     if (!req.file) throw { status: 400, message: "Keine Datei hochgeladen" };
     const data = await svc.preview({
       domainKey: req.params.domain, buffer: req.file.buffer, filename: req.file.originalname,
-      mapping: parseMapping(req), supabase, tenantId: req.tenantId,
+      mapping: parseMapping(req), sheetName: req.body?.sheetName || null, supabase, tenantId: req.tenantId,
     });
     res.json({ data });
   } catch (e) { fail(res, e); }
@@ -43,7 +45,7 @@ async function postCommit(req, res, supabase) {
     if (!req.file) throw { status: 400, message: "Keine Datei hochgeladen" };
     const data = await svc.commit({
       domainKey: req.params.domain, buffer: req.file.buffer, filename: req.file.originalname,
-      mapping: parseMapping(req), duplicateMode: req.body?.duplicateMode || "skip",
+      mapping: parseMapping(req), sheetName: req.body?.sheetName || null, duplicateMode: req.body?.duplicateMode || "skip",
       structureMode: req.body?.structureMode || "single",
       docType: req.body?.docType || "partial",
       supabase, tenantId: req.tenantId, employeeId: req.employeeId,

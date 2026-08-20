@@ -1,6 +1,6 @@
 "use strict";
 
-const XLSX = require("xlsx");
+const { xlsxBuffer } = require("./helpers/sheetFixture");
 const {
   normHeader,
   parseDateISO,
@@ -31,14 +31,6 @@ function makeCtx() {
   };
 }
 
-// Buffer aus Array-of-Arrays bauen (simuliert hochgeladene Datei).
-function xlsxBuffer(aoa) {
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-}
-
 // ── normHeader ────────────────────────────────────────────────────────────────
 describe("normHeader", () => {
   it("strips spaces, punctuation and case", () => {
@@ -49,12 +41,12 @@ describe("normHeader", () => {
 
 // ── parseBuffer ─────────────────────────────────────────────────────────────
 describe("parseBuffer", () => {
-  it("reads headers and rows from a sheet", () => {
-    const buf = xlsxBuffer([
+  it("reads headers and rows from a sheet", async () => {
+    const buf = await xlsxBuffer([
       ["Name 1 (Firma/Nachname)", "PLZ", "Ort"],
       ["Acme GmbH", "10115", "Berlin"],
     ]);
-    const { headers, rows } = parseBuffer(buf);
+    const { headers, rows } = await parseBuffer(buf);
     expect(headers).toEqual(["Name 1 (Firma/Nachname)", "PLZ", "Ort"]);
     expect(rows).toHaveLength(1);
     expect(rows[0]["Ort"]).toBe("Berlin");

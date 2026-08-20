@@ -12,7 +12,8 @@
  *   parseBuffer, buildAutoMapping, buildPreview, normHeader, norm.
  */
 
-const XLSX = require("xlsx");
+const ExcelJS = require("exceljs");
+const { readTable } = require("./spreadsheet");
 // Phase 3: Anfangsbestände werden über die bewährten Beleg-Services gebucht
 // (init → Struktur → book(skipDocuments)) statt von Hand geschrieben.
 const ppSvc = require("./partialPayments");
@@ -46,6 +47,9 @@ function parseDateISO(v) {
 }
 /** Währungsbetrag (DE/EN) → Zahl. Komma = Dezimaltrenner; reine 1.234.567-Gruppen = Tausender. */
 function parseAmountDE(v) {
+  // Echte Zahlenzelle: unverändert übernehmen. Der Umweg über den Text würde
+  // aus 1.234 (ein Komma-Wert) eine Tausendergruppe machen → 1234.
+  if (typeof v === "number") return Number.isFinite(v) ? { value: fmt2(v) } : { value: null, invalid: true };
   let t = s(v).replace(/[€\s]/g, "");
   if (!t) return { value: null };
   if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
@@ -88,17 +92,17 @@ for (const t of ADDRESS_TYPE_ALIASES) for (const a of t.aliases) addressTypeByTe
 const ADDRESS_FIELDS = [
   { key: "address_name_1",   header: "Name 1 (Firma/Nachname)", required: true,  example: "Mustermann Architekten GmbH", aliases: ["name", "name1", "firma", "company", "adressname", "nachname"] },
   { key: "address_name_2",   header: "Name 2 (Zusatz)",         required: false, example: "z. Hd. Herr Muster",          aliases: ["name2", "zusatz", "namenszusatz", "adresszusatz"] },
-  { key: "address_type",     header: "Kategorie",                required: false, example: "Kunde / Bauherr",            aliases: ["kategorie", "typ", "art", "adresstyp", "adressart", "addresstype", "category", "gruppe"] },
+  { key: "address_type",     header: "Kategorie",                required: false, example: "Kunde / Bauherr",            aliases: ["kategorie", "typ", "art", "adresstyp", "adressart", "addresstype", "category", "gruppe"] , list: "addressType" },
   { key: "street",           header: "Straße",                   required: false, example: "Musterstraße 12",            aliases: ["strasse", "street", "adresse"] },
-  { key: "post_code",        header: "PLZ",                      required: false, example: "10115",                      aliases: ["plz", "postleitzahl", "postcode", "zip"] },
+  { key: "post_code",        header: "PLZ",                      required: false, example: "10115",                      aliases: ["plz", "postleitzahl", "postcode", "zip"] , type: "text" },
   { key: "city",             header: "Ort",                      required: false, example: "Berlin",                     aliases: ["ort", "stadt", "city"] },
   { key: "post_office_box",  header: "Postfach",                 required: false, example: "",                           aliases: ["postfach", "pob", "postbox"] },
-  { key: "country",          header: "Land",                     required: false, example: "Deutschland",                aliases: ["land", "country", "staat"] },
-  { key: "customer_number",  header: "Kundennummer",             required: false, example: "K-1001",                     aliases: ["kundennummer", "kundennr", "kundenr", "customer", "customernumber"] },
-  { key: "tax_id",           header: "USt-IdNr.",                required: false, example: "DE123456789",                aliases: ["ustid", "ustidnr", "umsatzsteuer", "vat", "vatid", "taxid"] },
-  { key: "tax_number",       header: "Steuernummer",             required: false, example: "12/345/67890",               aliases: ["steuernummer", "steuernr", "stnr", "taxnumber"] },
-  { key: "buyer_reference",  header: "Leitweg-ID",               required: false, example: "",                           aliases: ["leitweg", "leitwegid", "buyerreference", "kaeuferreferenz"] },
-  { key: "phone",            header: "Telefon",                  required: false, example: "+49 30 1234567",             aliases: ["telefon", "tel", "phone", "festnetz", "telefonnummer"] },
+  { key: "country",          header: "Land",                     required: false, example: "Deutschland",                aliases: ["land", "country", "staat"] , list: "country" },
+  { key: "customer_number",  header: "Kundennummer",             required: false, example: "K-1001",                     aliases: ["kundennummer", "kundennr", "kundenr", "customer", "customernumber"] , type: "text" },
+  { key: "tax_id",           header: "USt-IdNr.",                required: false, example: "DE123456789",                aliases: ["ustid", "ustidnr", "umsatzsteuer", "vat", "vatid", "taxid"] , type: "text" },
+  { key: "tax_number",       header: "Steuernummer",             required: false, example: "12/345/67890",               aliases: ["steuernummer", "steuernr", "stnr", "taxnumber"] , type: "text" },
+  { key: "buyer_reference",  header: "Leitweg-ID",               required: false, example: "",                           aliases: ["leitweg", "leitwegid", "buyerreference", "kaeuferreferenz"] , type: "text" },
+  { key: "phone",            header: "Telefon",                  required: false, example: "+49 30 1234567",             aliases: ["telefon", "tel", "phone", "festnetz", "telefonnummer"] , type: "text" },
   { key: "email",            header: "E-Mail",                   required: false, example: "info@buero.de",              aliases: ["email", "mail", "emailadresse", "mailadresse"] },
   { key: "website",          header: "Webseite",                 required: false, example: "www.buero.de",               aliases: ["website", "webseite", "web", "homepage", "url", "internet"] },
   { key: "notes",            header: "Notizen",                  required: false, example: "",                           aliases: ["notizen", "notiz", "bemerkung", "bemerkungen", "anmerkung", "kommentar", "notes"] },
@@ -189,13 +193,13 @@ const EMPLOYEE_FIELDS = [
   { key: "short_name",       header: "Kürzel",         required: true,  example: "MMu",               aliases: ["kuerzel", "kurzzeichen", "shortname", "initialen", "krzl"] },
   { key: "first_name",       header: "Vorname",        required: true,  example: "Maria",             aliases: ["vorname", "firstname"] },
   { key: "last_name",        header: "Nachname",       required: true,  example: "Muster",            aliases: ["nachname", "name", "lastname", "familienname", "surname"] },
-  { key: "gender",           header: "Geschlecht",     required: true,  example: "weiblich",          aliases: ["geschlecht", "gender"] },
+  { key: "gender",           header: "Geschlecht",     required: true,  example: "weiblich",          aliases: ["geschlecht", "gender"] , list: "gender" },
   { key: "title",            header: "Titel",          required: false, example: "Dipl.-Ing.",        aliases: ["titel", "title"] },
   { key: "email",            header: "E-Mail",         required: false, example: "m.muster@buero.de", aliases: ["email", "mail", "emailadresse", "mailadresse"] },
-  { key: "mobile",           header: "Telefon/Mobil",  required: false, example: "+49 170 1234567",   aliases: ["mobil", "telefon", "mobile", "phone", "tel", "handy", "telefonnummer"] },
-  { key: "personnel_number", header: "Personalnummer", required: false, example: "P-001",             aliases: ["personalnummer", "persnr", "personalnr", "personnelnumber", "mitarbeiternummer", "pnr"] },
-  { key: "entry_date",       header: "Eintrittsdatum", required: false, example: "2022-03-01",        aliases: ["eintritt", "eintrittsdatum", "entrydate", "startdatum", "eingestelltam"] },
-  { key: "exit_date",        header: "Austrittsdatum", required: false, example: "",                  aliases: ["austritt", "austrittsdatum", "exitdate"] },
+  { key: "mobile",           header: "Telefon/Mobil",  required: false, example: "+49 170 1234567",   aliases: ["mobil", "telefon", "mobile", "phone", "tel", "handy", "telefonnummer"] , type: "text" },
+  { key: "personnel_number", header: "Personalnummer", required: false, example: "P-001",             aliases: ["personalnummer", "persnr", "personalnr", "personnelnumber", "mitarbeiternummer", "pnr"] , type: "text" },
+  { key: "entry_date",       header: "Eintrittsdatum", required: false, example: "2022-03-01",        aliases: ["eintritt", "eintrittsdatum", "entrydate", "startdatum", "eingestelltam"] , type: "date" },
+  { key: "exit_date",        header: "Austrittsdatum", required: false, example: "",                  aliases: ["austritt", "austrittsdatum", "exitdate"] , type: "date" },
 ];
 
 async function loadEmployeeContext(supabase, tenantId) {
@@ -292,18 +296,18 @@ function buildEmployeeEntry(mapped, ctx) {
 
 // ── Domäne: Kontakte (Ansprechpartner) ───────────────────────────────────────
 const CONTACT_FIELDS = [
-  { key: "address",    header: "Firma/Adresse (Zugehörigkeit)", required: true,  example: "Stadt Musterhausen", aliases: ["firma", "adresse", "unternehmen", "kunde", "bauherr", "company", "addressname"] },
-  { key: "salutation", header: "Anrede",                        required: true,  example: "Herr",               aliases: ["anrede", "salutation"] },
+  { key: "address",    header: "Firma/Adresse (Zugehörigkeit)", required: true,  example: "Stadt Musterhausen", aliases: ["firma", "adresse", "unternehmen", "kunde", "bauherr", "company", "addressname"] , list: "addressName" },
+  { key: "salutation", header: "Anrede",                        required: true,  example: "Herr",               aliases: ["anrede", "salutation"] , list: "salutation" },
   { key: "first_name", header: "Vorname",                       required: true,  example: "Thomas",             aliases: ["vorname", "firstname"] },
   { key: "last_name",  header: "Nachname",                      required: true,  example: "Beispiel",           aliases: ["nachname", "name", "lastname", "familienname", "surname"] },
-  { key: "gender",     header: "Geschlecht",                    required: false, example: "männlich",           aliases: ["geschlecht", "gender"] },
+  { key: "gender",     header: "Geschlecht",                    required: false, example: "männlich",           aliases: ["geschlecht", "gender"] , list: "gender" },
   { key: "title",      header: "Titel",                         required: false, example: "Dr.",                aliases: ["titel", "title"] },
   { key: "position",   header: "Funktion/Position",             required: false, example: "Bauleiter",          aliases: ["funktion", "position", "rolle", "jobtitle", "role", "taetigkeit"] },
   { key: "department", header: "Abteilung",                     required: false, example: "Hochbau",            aliases: ["abteilung", "department", "bereich", "team"] },
   { key: "email",      header: "E-Mail",                        required: false, example: "t.beispiel@muster.de", aliases: ["email", "mail", "emailadresse", "mailadresse"] },
-  { key: "mobile",     header: "Telefon/Mobil",                 required: false, example: "+49 170 1234567",    aliases: ["mobil", "telefon", "mobile", "phone", "tel", "handy", "telefonnummer"] },
-  { key: "phone",      header: "Festnetz",                      required: false, example: "+49 30 1234567",     aliases: ["festnetz", "festnetznummer", "landline", "telefonfestnetz"] },
-  { key: "is_primary", header: "Hauptkontakt (ja/nein)",        required: false, example: "ja",                 aliases: ["hauptkontakt", "primär", "primar", "primary", "isprimary", "haupt", "standardkontakt"] },
+  { key: "mobile",     header: "Telefon/Mobil",                 required: false, example: "+49 170 1234567",    aliases: ["mobil", "telefon", "mobile", "phone", "tel", "handy", "telefonnummer"] , type: "text" },
+  { key: "phone",      header: "Festnetz",                      required: false, example: "+49 30 1234567",     aliases: ["festnetz", "festnetznummer", "landline", "telefonfestnetz"] , type: "text" },
+  { key: "is_primary", header: "Hauptkontakt (ja/nein)",        required: false, example: "ja",                 aliases: ["hauptkontakt", "primär", "primar", "primary", "isprimary", "haupt", "standardkontakt"] , list: "yesNo" },
   { key: "notes",      header: "Notizen",                       required: false, example: "",                   aliases: ["notizen", "notiz", "bemerkung", "bemerkungen", "anmerkung", "kommentar", "notes"] },
 ];
 
@@ -413,10 +417,10 @@ function buildContactEntry(mapped, ctx) {
 const PROJECT_FIELDS = [
   { key: "project_number", header: "Projektnummer",            required: true,  example: "P-2024-012",                aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
   { key: "name_long",      header: "Projektname",              required: true,  example: "Neubau Kita Sonnenschein",  aliases: ["projektname", "name", "namelong", "bezeichnung", "projectname"] },
-  { key: "status",         header: "Status",                   required: true,  example: "in Bearbeitung",            aliases: ["status", "projektstatus", "projectstatus"] },
-  { key: "project_type",   header: "Projekttyp",               required: false, example: "Neubau",                    aliases: ["projekttyp", "typ", "type", "projecttype", "art"] },
-  { key: "manager",        header: "Projektleiter (Kürzel)",   required: true,  example: "MMu",                       aliases: ["projektleiter", "pl", "manager", "leiter", "verantwortlich", "projektverantwortlicher"] },
-  { key: "client",         header: "Bauherr/Auftraggeber",     required: true,  example: "Stadt Musterhausen",        aliases: ["bauherr", "auftraggeber", "kunde", "adresse", "client"] },
+  { key: "status",         header: "Status",                   required: true,  example: "in Bearbeitung",            aliases: ["status", "projektstatus", "projectstatus"] , list: "projectStatus" },
+  { key: "project_type",   header: "Projekttyp",               required: false, example: "Neubau",                    aliases: ["projekttyp", "typ", "type", "projecttype", "art"] , list: "projectType" },
+  { key: "manager",        header: "Projektleiter (Kürzel)",   required: true,  example: "MMu",                       aliases: ["projektleiter", "pl", "manager", "leiter", "verantwortlich", "projektverantwortlicher"] , list: "employeeShort" },
+  { key: "client",         header: "Bauherr/Auftraggeber",     required: true,  example: "Stadt Musterhausen",        aliases: ["bauherr", "auftraggeber", "kunde", "adresse", "client"] , list: "addressName" },
 ];
 
 async function loadProjectContext(supabase, tenantId) {
@@ -514,8 +518,8 @@ const HOAI_LP = [
 
 const PROJECT_FEE_FIELDS = [
   { key: "project_number", header: "Projektnummer",                  required: true,  example: "P-2024-012", aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
-  { key: "fee",            header: "Honorarsumme (netto)",           required: true,  example: "80000",      aliases: ["honorar", "honorarsumme", "summe", "betrag", "nettohonorar", "auftragssumme", "fee", "amount"] },
-  { key: "billing",        header: "Abrechnungsart (Pauschal/Stunden)", required: false, example: "Pauschal", aliases: ["abrechnungsart", "abrechnung", "billing", "billingtype", "art"] },
+  { key: "fee",            header: "Honorarsumme (netto)",           required: true,  example: "80000",      aliases: ["honorar", "honorarsumme", "summe", "betrag", "nettohonorar", "auftragssumme", "fee", "amount"] , type: "money" },
+  { key: "billing",        header: "Abrechnungsart (Pauschal/Stunden)", required: false, example: "Pauschal", aliases: ["abrechnungsart", "abrechnung", "billing", "billingtype", "art"] , list: "billing" },
 ];
 
 async function loadProjectFeeContext(supabase, tenantId) {
@@ -658,8 +662,8 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
 // Erzeugt über die App-Pipeline init → Belegstruktur → book(skipDocuments).
 const OPENING_BALANCE_FIELDS = [
   { key: "project_number", header: "Projektnummer",            required: true,  example: "P-2024-012",  aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
-  { key: "amount",         header: "Bereits berechnet (netto)", required: true,  example: "30000",       aliases: ["berechnet", "bereitsberechnet", "rechnungsbetrag", "betrag", "summe", "fakturiert", "invoiced"] },
-  { key: "paid",           header: "Bereits bezahlt (netto, optional)", required: false, example: "30000", aliases: ["bezahlt", "bereitsbezahlt", "zahlung", "zahlbetrag", "payed", "paid", "eingegangen"] },
+  { key: "amount",         header: "Bereits berechnet (netto)", required: true,  example: "30000",       aliases: ["berechnet", "bereitsberechnet", "rechnungsbetrag", "betrag", "summe", "fakturiert", "invoiced"] , type: "money" },
+  { key: "paid",           header: "Bereits bezahlt (netto, optional)", required: false, example: "30000", aliases: ["bezahlt", "bereitsbezahlt", "zahlung", "zahlbetrag", "payed", "paid", "eingegangen"] , type: "money" },
   { key: "doc_number",     header: "Belegnummer (optional)",    required: false, example: "RE-2023-044", aliases: ["belegnummer", "rechnungsnummer", "docnumber"] },
 ];
 
@@ -964,7 +968,7 @@ async function rollbackOpeningBalance({ supabase, tenantId, batchId }) {
 // Deckungsbeitrag/Wirtschaftlichkeit ab Tag 1.
 const OPENING_COST_FIELDS = [
   { key: "project_number", header: "Projektnummer",                      required: true,  example: "P-2024-012",                aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
-  { key: "cost",           header: "Bereits angefallene Kosten (netto)", required: true,  example: "45000",                     aliases: ["kosten", "kostenblock", "kostensumme", "aufwand", "betrag", "costs", "cost"] },
+  { key: "cost",           header: "Bereits angefallene Kosten (netto)", required: true,  example: "45000",                     aliases: ["kosten", "kostenblock", "kostensumme", "aufwand", "betrag", "costs", "cost"] , type: "money" },
   { key: "description",    header: "Bezeichnung (optional)",             required: false, example: "Personalkosten bis 06/2026", aliases: ["bezeichnung", "beschreibung", "text", "description", "kommentar"] },
 ];
 
@@ -1191,20 +1195,8 @@ function publicField(f) {
  * Gelesen wird das erste Tabellenblatt; `sheetNames` macht im UI sichtbar,
  * wenn die Datei weitere Blätter hat (sonst wird das stumm ignoriert).
  */
-function parseBuffer(buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) throw { status: 400, message: "Die Datei enthält keine Tabelle" };
-  const ws = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
-  let headers = rows.length ? Object.keys(rows[0]) : [];
-  // Blatt mit Überschriften, aber ohne Datenzeilen (= unausgefüllte Vorlage):
-  // Überschriften direkt aus Zeile 1 lesen, damit die Zuordnung sichtbar bleibt.
-  if (!headers.length) {
-    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false, blankrows: false });
-    headers = (aoa[0] || []).map((h) => s(h)).filter(Boolean);
-  }
-  return { headers, rows, sheetName, sheetNames: wb.SheetNames };
+function parseBuffer(buffer, sheetName) {
+  return readTable(buffer, { sheetName });
 }
 
 /** Auto-Zuordnung: Feld → passende Datei-Spalte anhand Header/Aliassen. */
@@ -1267,9 +1259,9 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
 }
 
 // ── Orchestrierung (mit supabase) ────────────────────────────────────────────
-async function preview({ domainKey, buffer, filename, mapping, supabase, tenantId }) {
+async function preview({ domainKey, buffer, filename, mapping, sheetName, supabase, tenantId }) {
   const def = getDomain(domainKey);
-  const parsed = parseBuffer(buffer);
+  const parsed = await parseBuffer(buffer, sheetName);
   if (!parsed.headers.length) throw { status: 400, message: "Die Datei enthält keine Spaltenüberschriften" };
   const ctx = await def.loadContext(supabase, tenantId);
   const pv = buildPreview({ domainKey, parsed, mapping, ctx });
@@ -1287,9 +1279,9 @@ async function preview({ domainKey, buffer, filename, mapping, supabase, tenantI
   };
 }
 
-async function commit({ domainKey, buffer, filename, mapping, duplicateMode, structureMode, docType, supabase, tenantId, employeeId }) {
+async function commit({ domainKey, buffer, filename, mapping, sheetName, duplicateMode, structureMode, docType, supabase, tenantId, employeeId }) {
   const def = getDomain(domainKey);
-  const parsed = parseBuffer(buffer);
+  const parsed = await parseBuffer(buffer, sheetName);
   const ctx = await def.loadContext(supabase, tenantId);
   const pv = buildPreview({ domainKey, parsed, mapping, ctx });
 
@@ -1416,30 +1408,293 @@ async function rollback({ batchId, supabase, tenantId }) {
   return { rolledBack: true, deleted };
 }
 
+// ── Vorlagen ─────────────────────────────────────────────────────────────────
+// Feste Wertelisten (systemweit, nicht mandantenabhängig).
+const FIXED_LISTS = {
+  addressType: ADDRESS_TYPE_ALIASES.map((t) => t.label),
+  billing:     ["Pauschal", "Stunden"],
+  yesNo:       ["ja", "nein"],
+};
+
+const LIST_LABELS = {
+  addressType:   "Kategorie",
+  country:       "Land",
+  gender:        "Geschlecht",
+  salutation:    "Anrede",
+  projectStatus: "Status",
+  projectType:   "Projekttyp",
+  employeeShort: "Mitarbeiter (Kürzel)",
+  addressName:   "Adresse/Firma",
+  billing:       "Abrechnungsart",
+  yesNo:         "ja/nein",
+};
+
 /**
- * Excel-Vorlage einer Domäne als Buffer.
- * Blatt 1 „Daten" trägt NUR die Überschriften — die Beispielzeile steht auf
- * Blatt 2 „Beispiel". Vorher stand sie im Datenblatt und wurde mitimportiert,
- * wenn der Nutzer sie nicht selbst gelöscht hat. Gelesen wird beim Upload
- * Blatt 1 (parseBuffer).
+ * Wertelisten für die Vorlage — die mandantenabhängigen kommen aus der
+ * Datenbank, damit in der Vorlage genau die Werte stehen, die der Import
+ * später auch auflösen kann.
  */
-function buildTemplate(domainKey) {
+async function loadTemplateLists(supabase, tenantId) {
+  const lists = { ...FIXED_LISTS };
+  if (!supabase) return lists;
+
+  const pick = (rows, col) => [...new Set((rows || []).map((r) => s(r[col])).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
+  const safe = async (fn) => { try { return await fn(); } catch { return { data: [] }; } };
+
+  const [countries, genders, salutations, statuses, types, employees, addresses] = await Promise.all([
+    safe(() => supabase.from("COUNTRY").select("NAME_LONG")),
+    safe(() => supabase.from("GENDER").select("GENDER")),
+    safe(() => supabase.from("SALUTATION").select("SALUTATION")),
+    safe(() => supabase.from("PROJECT_STATUS").select("NAME_SHORT")),
+    safe(() => supabase.from("PROJECT_TYPE").select("NAME_SHORT").eq("TENANT_ID", tenantId)),
+    safe(() => supabase.from("EMPLOYEE").select("SHORT_NAME").eq("TENANT_ID", tenantId).limit(2000)),
+    safe(() => supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(2000)),
+  ]);
+
+  lists.country       = pick(countries.data, "NAME_LONG");
+  lists.gender        = pick(genders.data, "GENDER");
+  lists.salutation    = pick(salutations.data, "SALUTATION");
+  lists.projectStatus = pick(statuses.data, "NAME_SHORT");
+  lists.projectType   = pick(types.data, "NAME_SHORT");
+  lists.employeeShort = pick(employees.data, "SHORT_NAME");
+  lists.addressName   = pick(addresses.data, "ADDRESS_NAME_1");
+  return lists;
+}
+
+// Anleitungstexte je Bereich. Bewusst hier und nicht in DOMAINS: die Registry
+// beschreibt die Technik, das hier ist Text fürs Blatt „Anleitung“.
+const TEMPLATE_HELP = {
+  address: {
+    intro: "Adressen sind Firmen und Personen, mit denen du zu tun hast: Bauherren, Fachplaner, Behörden, Nachunternehmer, Lieferanten. Sie sind die Grundlage für Projekte, Verträge und Rechnungen — deshalb ist dies der erste Import.",
+    before: ["Nichts. Adressen sind der Anfang der Kette."],
+    after: ["Danach: Kontakte (Ansprechpartner zu diesen Firmen), dann Mitarbeiter, dann Projekte."],
+  },
+  contact: {
+    intro: "Kontakte sind die Ansprechpartner zu einer Adresse — die Person, an die eine Rechnung adressiert wird.",
+    before: [
+      "Adressen importieren. Die Spalte „Firma/Adresse“ muss zu einem vorhandenen Adressnamen passen.",
+      "Ist keine eigene Spalte „Geschlecht“ vorhanden, leiten wir es aus der Anrede ab (Herr/Frau).",
+    ],
+    after: ["Ohne Ansprechpartner lässt sich später kein Beleg erzeugen — mindestens einer je Rechnungsadresse."],
+  },
+  employee: {
+    intro: "Deine Mitarbeiterinnen und Mitarbeiter als Stammdaten — Grundlage für Projektleitung, Zeiterfassung und Auswertungen.",
+    before: ["Nichts. Mitarbeiter hängen an keinem anderen Bereich."],
+    after: [
+      "Wichtig: Importierte Mitarbeiter haben KEINEN Zugang und KEINE Rolle. Login und Berechtigungen vergibst du danach unter Mitarbeiter.",
+      "Ebenfalls danach zu pflegen: Arbeitszeitmodell und Stundensätze — ohne sie bleiben Zeitkonto und Kostenauswertung leer.",
+    ],
+  },
+  project: {
+    intro: "Die Projekt-Stammdaten: Nummer, Name, Status, Typ, Projektleitung und Bauherr. Deine bisherigen Projektnummern bleiben erhalten.",
+    before: [
+      "Mitarbeiter importieren — die Projektleitung wird über das Kürzel zugeordnet.",
+      "Adressen importieren — der Bauherr wird über den Namen zugeordnet.",
+      "Tipp: Den Projekt-Nummernkreis (Einstellungen → Nummernkreise) auf einen Zähler oberhalb deiner höchsten importierten Nummer setzen.",
+    ],
+    after: ["Danach „Projekt-Honorar“: setzt Honorarsumme, Leistungsstruktur und Vertrag."],
+  },
+  project_fee: {
+    intro: "Setzt die Honorarsumme auf bereits importierte Projekte und erzeugt dabei die Leistungsstruktur und den Vertrag.",
+    before: [
+      "Projekte importieren. Die Zuordnung läuft über die Projektnummer.",
+      "Überlegen, ob die Summe als eine Position oder auf die Leistungsphasen LP1–9 verteilt werden soll — das wählst du beim Import.",
+    ],
+    after: ["Projekte, die bereits eine Leistungsstruktur haben, werden als Dublette übersprungen."],
+  },
+  opening_balance: {
+    intro: "Was auf einem laufenden Projekt bereits berechnet (und ggf. bezahlt) wurde. Wird als echter, gebuchter Beleg angelegt — ohne PDF und ohne E-Rechnung —, damit offene Posten und Auswertungen ab Tag 1 stimmen.",
+    before: [
+      "Projekte und Projekt-Honorar importieren (das Projekt braucht Struktur und Vertrag).",
+      "Zur Rechnungsadresse muss ein Ansprechpartner vorhanden sein.",
+      "Nur Pauschal-Positionen: Stunden-Projekte rechnen ihren Umsatz aus den Buchungen.",
+    ],
+    after: [
+      "Projekte mit bereits gebuchten Belegen werden übersprungen.",
+      "Beträge netto. „Bereits bezahlt“ darf „Bereits berechnet“ nicht übersteigen.",
+    ],
+  },
+  opening_cost: {
+    intro: "Bereits angefallene Kosten je Projekt als ein Kostenblock — keine Einzelbuchungen. Vor allem für Stunden-Projekte, damit Deckungsbeitrag und Wirtschaftlichkeit ab Tag 1 stimmen.",
+    before: ["Projekte importieren."],
+    after: ["Die Buchung landet auf dem untersten Strukturknoten des Projekts und zählt als Kosten, nicht als Arbeitszeit."],
+  },
+};
+
+const TPL = {
+  accent:  "FF1F3A5F",
+  headBg:  "FFEDF2F8",
+  reqBg:   "FFFDF3E3",
+  muted:   "FF6B7A8D",
+  DATA_ROWS: 500,      // so viele Zeilen bekommen Format + Auswahlliste
+};
+
+/** Überschrift der Vorlagen-Spalte (Pflichtfelder mit Stern). */
+const templateHeader = (f) => f.header + (f.required ? " *" : "");
+
+function styleHeaderRow(ws, fields) {
+  const row = ws.getRow(1);
+  row.height = 24;
+  fields.forEach((f, i) => {
+    const cell = row.getCell(i + 1);
+    cell.font = { bold: true, color: { argb: TPL.accent } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: f.required ? TPL.reqBg : TPL.headBg } };
+    cell.alignment = { vertical: "middle", wrapText: true };
+    cell.border = { bottom: { style: "thin", color: { argb: "FFB8C4D4" } } };
+    // Formathinweis als Zellkommentar — direkt an der Spalte, wo er gebraucht wird.
+    const hint = [
+      f.required ? "Pflichtfeld." : "Optional.",
+      f.type === "money" ? "Betrag netto, z. B. 12.500,00" : null,
+      f.type === "date"  ? "Datum, z. B. 31.12.2026" : null,
+      f.type === "text"  ? "Wird als Text übernommen (führende Nullen bleiben erhalten)." : null,
+      f.list ? "Bitte einen Wert aus der Auswahlliste verwenden (Blatt „Listen“)." : null,
+      f.example ? `Beispiel: ${f.example}` : null,
+    ].filter(Boolean).join("\n");
+    cell.note = hint;
+  });
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: fields.length } };
+}
+
+function applyColumnFormats(ws, fields) {
+  fields.forEach((f, i) => {
+    const col = ws.getColumn(i + 1);
+    col.width = Math.min(42, Math.max(12, Math.max(templateHeader(f).length, String(f.example || "").length) + 3));
+    if (f.type === "money") col.numFmt = "#,##0.00";
+    else if (f.type === "date") col.numFmt = "DD.MM.YYYY";
+    // PLZ, Steuernummer, Telefon: als Text formatieren, sonst frisst Excel
+    // führende Nullen und macht aus 01067 die Zahl 1067.
+    else if (f.type === "text") col.numFmt = "@";
+  });
+}
+
+/** Auswahllisten an die Datenspalten hängen (Verweis auf das Blatt „Listen"). */
+function applyValidations(ws, fields, listColumns) {
+  fields.forEach((f, i) => {
+    const ref = f.list && listColumns[f.list];
+    if (!ref) return;
+    for (let r = 2; r <= TPL.DATA_ROWS + 1; r++) {
+      ws.getCell(r, i + 1).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [ref],
+        showErrorMessage: false,      // Tippen bleibt erlaubt — die Liste ist Hilfe, keine Sperre
+      };
+    }
+  });
+}
+
+function buildListsSheet(ws, usedLists, lists) {
+  const columns = {};
+  usedLists.forEach((key, i) => {
+    const values = lists[key] || [];
+    const colIdx = i + 1;
+    const head = ws.getCell(1, colIdx);
+    head.value = LIST_LABELS[key] || key;
+    head.font = { bold: true, color: { argb: TPL.accent } };
+    head.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TPL.headBg } };
+    values.forEach((v, r) => { ws.getCell(r + 2, colIdx).value = v; });
+    ws.getColumn(colIdx).width = Math.min(42, Math.max(14, ...values.map((v) => String(v).length + 3), String(head.value).length + 3));
+    // Leere Liste (z. B. noch keine Mitarbeiter) → keine Auswahl anbieten.
+    if (values.length) {
+      const letter = ws.getColumn(colIdx).letter;
+      columns[key] = `Listen!$${letter}$2:$${letter}$${values.length + 1}`;
+    }
+  });
+  return columns;
+}
+
+function buildGuideSheet(ws, def, lists) {
+  const help = TEMPLATE_HELP[def.key] || {};
+  const hasLists = def.fields.some((f) => f.list && (lists[f.list] || []).length);
+  ws.getColumn(1).width = 4;
+  ws.getColumn(2).width = 104;
+
+  const lines = [];
+  const H = (t) => lines.push({ t, style: "h" });
+  const P = (t) => lines.push({ t, style: "p" });
+  const L = (t) => lines.push({ t: "•  " + t, style: "li" });
+
+  H(`Vorlage „${def.label}“ — so gehst du vor`);
+  P(help.intro || "");
+  P("");
+  H("1. Blätter dieser Datei");
+  L("„Daten“ — hier trägst du deine Daten ein. Nur dieses Blatt wird eingelesen.");
+  L("„Beispiel“ — eine ausgefüllte Musterzeile zum Abschauen. Wird nicht importiert.");
+  if (hasLists) L("„Listen“ — die erlaubten Werte aus deinem Konto. Speist die Auswahlfelder im Blatt „Daten“.");
+  P("");
+  H("2. Bevor du startest");
+  (help.before || ["Keine Vorarbeiten nötig."]).forEach(L);
+  P("");
+  H("3. Pflichtfelder");
+  P("Spalten mit * müssen gefüllt sein — Zeilen ohne sie werden nicht importiert:");
+  def.fields.filter((f) => f.required).forEach((f) => L(f.header));
+  P("");
+  H("4. Formate");
+  L("Beträge netto, Dezimaltrennzeichen Komma (12.500,00). Keine Währungszeichen nötig.");
+  L("Datum als TT.MM.JJJJ oder JJJJ-MM-TT.");
+  L("PLZ, Steuernummern und Telefonnummern bleiben Text — führende Nullen gehen nicht verloren.");
+  const listed = def.fields.filter((f) => f.list && (lists[f.list] || []).length);
+  if (listed.length) L(`Auswahlfelder (${listed.map((f) => f.header).join(", ")}): bitte einen Wert aus dem Blatt „Listen“ nehmen.`);
+  P("");
+  H("5. Und dann?");
+  L("Datei in plan&simple unter Einstellungen → Datenimport hochladen.");
+  L("Du siehst zuerst eine Vorschau mit Status je Zeile — gespeichert wird nichts ungefragt.");
+  L("Jeder Import ist ein Stapel und lässt sich im Ganzen wieder zurücksetzen.");
+  (help.after || []).forEach(L);
+
+  lines.forEach((line, i) => {
+    const cell = ws.getCell(i + 1, 2);
+    cell.value = line.t;
+    if (line.style === "h") cell.font = { bold: true, size: 12, color: { argb: TPL.accent } };
+    else if (line.style === "li") cell.font = { color: { argb: "FF243447" } };
+    else cell.font = { color: { argb: TPL.muted } };
+    cell.alignment = { wrapText: true, vertical: "top" };
+  });
+}
+
+/**
+ * Excel-Vorlage einer Domäne als Buffer — vier Blätter:
+ * „Anleitung“ (Vorgehen, Pflichtfelder, Formate), „Daten“ (nur Überschriften,
+ * mit Auswahllisten und Zellformaten), „Beispiel“ (Musterzeile) und „Listen“
+ * (erlaubte Werte aus dem Mandanten).
+ *
+ * Die Beispielzeile steht bewusst NICHT im Datenblatt — dort wurde sie
+ * mitimportiert, wenn der Nutzer sie nicht selbst gelöscht hat. Eingelesen
+ * wird beim Upload „Daten“ bzw. das erste Blatt.
+ */
+async function buildTemplate(domainKey, { supabase, tenantId } = {}) {
   const def = getDomain(domainKey);
-  const headers = def.fields.map((f) => f.header + (f.required ? " *" : ""));
-  const example = def.fields.map((f) => f.example ?? "");
-  // Spaltenbreite an der längeren von Überschrift/Beispiel ausrichten (10–40).
-  const cols = headers.map((h, i) => ({ wch: Math.min(40, Math.max(10, Math.max(h.length, String(example[i] ?? "").length) + 2)) }));
+  const lists = await loadTemplateLists(supabase, tenantId);
 
-  const wsData = XLSX.utils.aoa_to_sheet([headers]);
-  wsData["!cols"] = cols;
-  const wsExample = XLSX.utils.aoa_to_sheet([headers, example]);
-  wsExample["!cols"] = cols;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "plan&simple";
+  wb.created = new Date();
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, wsData, "Daten");
-  XLSX.utils.book_append_sheet(wb, wsExample, "Beispiel");
-  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  return { buffer, filename: `plan-und-simple_Vorlage_${def.key}.xlsx` };
+  const wsGuide   = wb.addWorksheet("Anleitung", { views: [{ showGridLines: false }] });
+  const wsData    = wb.addWorksheet("Daten");
+  const wsExample = wb.addWorksheet("Beispiel");
+  // „Listen" nur, wenn der Bereich überhaupt Auswahlfelder hat (Anfangsbestände
+  // haben keine) — ein leeres Blatt wäre nur Ballast.
+  const usedLists = [...new Set(def.fields.map((f) => f.list).filter(Boolean))]
+    .filter((k) => (lists[k] || []).length);
+  const wsLists   = usedLists.length ? wb.addWorksheet("Listen") : null;
+
+  buildGuideSheet(wsGuide, def, lists);
+
+  wsData.addRow(def.fields.map(templateHeader));
+  styleHeaderRow(wsData, def.fields);
+  applyColumnFormats(wsData, def.fields);
+
+  wsExample.addRow(def.fields.map(templateHeader));
+  wsExample.addRow(def.fields.map((f) => f.example ?? ""));
+  styleHeaderRow(wsExample, def.fields);
+  applyColumnFormats(wsExample, def.fields);
+
+  if (wsLists) applyValidations(wsData, def.fields, buildListsSheet(wsLists, usedLists, lists));
+
+  const buffer = await wb.xlsx.writeBuffer();
+  return { buffer: Buffer.from(buffer), filename: `plan-und-simple_Vorlage_${def.key}.xlsx` };
 }
 
 function listDomains() {
