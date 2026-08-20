@@ -151,7 +151,7 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
   }
 
   // 1) Draft anlegen
-  const { id } = await pp.initPartialPayment(supabase, { companyId, employeeId, projectId: project.ID, contractId });
+  const { id } = await pp.initPartialPayment(supabase, { companyId, employeeId, projectId: project.ID, contractId, tenantId: md.tenantId });
 
   try {
     const structures = await pp.loadProjectStructuresForContext(supabase, { contractId, projectId: project.ID });
@@ -299,6 +299,7 @@ async function makeFinalInvoice({ supabase, md, project, tl, cfg, rng, stats, lo
     projectId: project.ID,
     contractId,
     invoiceType: "schlussrechnung",
+    tenantId: md.tenantId,
   });
 
   try {

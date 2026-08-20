@@ -39,8 +39,12 @@ export interface ImportSummary {
 }
 
 export interface ImportPreview {
-  domain:    string
-  filename:  string | null
+  domain:     string
+  filename:   string | null
+  /** Gelesenes Tabellenblatt (immer das erste der Datei). */
+  sheetName:  string
+  /** Alle Blätter der Datei — weitere Blätter werden nicht gelesen. */
+  sheetNames: string[]
   headers:   string[]
   mapping:   Record<string, string>
   fields:    ImportFieldDef[]

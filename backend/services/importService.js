@@ -604,11 +604,31 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
       nodes = [{ NAME_SHORT: "Honorar", NAME_LONG: isPauschal ? "Honorar (Pauschal)" : "Honorar (Stunden)", REVENUE: isPauschal ? fmt2(e.fee) : 0 }];
     }
 
-    const structRows = nodes.map((n) => ({
+    // 1a) Vertrag zuerst — die Strukturknoten sollen ihn kennen (CONTRACT_ID).
+    //     Ein bereits vorhandener Vertrag wird verwendet, nicht ersetzt.
+    const { data: existing } = await supabase.from("CONTRACT").select("ID").eq("TENANT_ID", tenantId).eq("PROJECT_ID", e.projectId).limit(1);
+    let contractId = existing?.[0]?.ID ?? null;
+    if (contractId == null) {
+      const contractRow = {
+        NAME_SHORT: e.projectNumber, NAME_LONG: e.projectName, PROJECT_ID: e.projectId,
+        INVOICE_ADDRESS_ID: e.addressId, INVOICE_CONTACT_ID: e.contactId,
+        TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+        ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
+        ...(defaults.default_vat_id ? { VAT_ID: Number(defaults.default_vat_id) } : {}),
+      };
+      const { data: cRows, error: cErr } = await supabase.from("CONTRACT").insert([contractRow]).select("ID");
+      if (cErr) throw { status: 500, message: `Vertrag für Projekt ${e.projectNumber} fehlgeschlagen: ${cErr.message}` };
+      contractId = cRows?.[0]?.ID ?? null;
+    }
+
+    // SORT_ORDER in Zehnerschritten wie beim manuellen Anlegen — ohne ihn stehen
+    // alle Knoten auf 0 und die Leistungsphasen erscheinen in zufälliger Reihenfolge.
+    const structRows = nodes.map((n, i) => ({
       NAME_SHORT: n.NAME_SHORT, NAME_LONG: n.NAME_LONG, PROJECT_ID: e.projectId,
       BILLING_TYPE_ID: e.billingTypeId, FATHER_ID: null, REVENUE: n.REVENUE,
       EXTRAS_PERCENT: 0, EXTRAS: 0, COSTS: 0,
       REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+      SORT_ORDER: i * 10, CONTRACT_ID: contractId,
       TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
     }));
     const { data: created, error: psErr } = await supabase
@@ -627,19 +647,6 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
       if (prErr) throw { status: 500, message: `Fortschritt für Projekt ${e.projectNumber} fehlgeschlagen: ${prErr.message}` };
     }
 
-    // 3) Vertrag (nur wenn noch keiner existiert)
-    const { data: existing } = await supabase.from("CONTRACT").select("ID").eq("TENANT_ID", tenantId).eq("PROJECT_ID", e.projectId).limit(1);
-    if (!existing || existing.length === 0) {
-      const contractRow = {
-        NAME_SHORT: e.projectNumber, NAME_LONG: e.projectName, PROJECT_ID: e.projectId,
-        INVOICE_ADDRESS_ID: e.addressId, INVOICE_CONTACT_ID: e.contactId,
-        TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
-        ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
-        ...(defaults.default_vat_id ? { VAT_ID: Number(defaults.default_vat_id) } : {}),
-      };
-      const { error: cErr } = await supabase.from("CONTRACT").insert([contractRow]);
-      if (cErr) throw { status: 500, message: `Vertrag für Projekt ${e.projectNumber} fehlgeschlagen: ${cErr.message}` };
-    }
     done++;
   }
   return { inserted: done };
@@ -786,7 +793,8 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
       let docId = null, vatPercent = 0;
 
       if (docType === "invoice") {
-        const { id } = await invSvc.initInvoice(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId, invoiceType: null });
+        // tenantId ist Pflicht (initInvoice bindet den Beleg an den Mandanten).
+        const { id } = await invSvc.initInvoice(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId, invoiceType: null, tenantId });
         const upd = { IMPORT_BATCH_ID: batchId }; if (e.docNumber) upd.INVOICE_NUMBER = e.docNumber;
         await supabase.from("INVOICE").update(upd).eq("ID", id);
         const isRows = dist.map((d) => ({ INVOICE_ID: id, STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * d.extrasPercent / 100), TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
@@ -796,7 +804,8 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
         await invSvc.bookInvoice(supabase, { id, inv, tenantId, force: true, skipDocuments: true });
         docId = id; vatPercent = num(inv.VAT_PERCENT);
       } else {
-        const { id } = await ppSvc.initPartialPayment(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId });
+        // tenantId ist Pflicht (initPartialPayment bindet den Beleg an den Mandanten).
+        const { id } = await ppSvc.initPartialPayment(supabase, { companyId: e.companyId, employeeId, projectId: e.projectId, contractId: e.contractId, tenantId });
         const upd = { IMPORT_BATCH_ID: batchId }; if (e.docNumber) upd.PARTIAL_PAYMENT_NUMBER = e.docNumber;
         await supabase.from("PARTIAL_PAYMENT").update(upd).eq("ID", id);
         const psRows = dist.map((d) => ({ PARTIAL_PAYMENT_ID: id, STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * d.extrasPercent / 100), TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
@@ -1177,15 +1186,25 @@ function publicField(f) {
 }
 
 // ── Parsing / Mapping (rein) ─────────────────────────────────────────────────
-/** Buffer (XLSX/CSV) → { headers:string[], rows: object[] } (Zeilen nach Header). */
+/**
+ * Buffer (XLSX/CSV) → { headers, rows, sheetName, sheetNames }.
+ * Gelesen wird das erste Tabellenblatt; `sheetNames` macht im UI sichtbar,
+ * wenn die Datei weitere Blätter hat (sonst wird das stumm ignoriert).
+ */
 function parseBuffer(buffer) {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const sheetName = wb.SheetNames[0];
   if (!sheetName) throw { status: 400, message: "Die Datei enthält keine Tabelle" };
   const ws = wb.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
-  const headers = rows.length ? Object.keys(rows[0]) : [];
-  return { headers, rows };
+  let headers = rows.length ? Object.keys(rows[0]) : [];
+  // Blatt mit Überschriften, aber ohne Datenzeilen (= unausgefüllte Vorlage):
+  // Überschriften direkt aus Zeile 1 lesen, damit die Zuordnung sichtbar bleibt.
+  if (!headers.length) {
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false, blankrows: false });
+    headers = (aoa[0] || []).map((h) => s(h)).filter(Boolean);
+  }
+  return { headers, rows, sheetName, sheetNames: wb.SheetNames };
 }
 
 /** Auto-Zuordnung: Feld → passende Datei-Spalte anhand Header/Aliassen. */
@@ -1257,6 +1276,8 @@ async function preview({ domainKey, buffer, filename, mapping, supabase, tenantI
   return {
     domain: def.key,
     filename: filename || null,
+    sheetName: parsed.sheetName,
+    sheetNames: parsed.sheetNames,
     headers: parsed.headers,
     mapping: pv.mapping,
     fields: def.fields.map(publicField),
@@ -1395,14 +1416,28 @@ async function rollback({ batchId, supabase, tenantId }) {
   return { rolledBack: true, deleted };
 }
 
-/** Leere Excel-Vorlage einer Domäne (Header + Beispielzeile) als Buffer. */
+/**
+ * Excel-Vorlage einer Domäne als Buffer.
+ * Blatt 1 „Daten" trägt NUR die Überschriften — die Beispielzeile steht auf
+ * Blatt 2 „Beispiel". Vorher stand sie im Datenblatt und wurde mitimportiert,
+ * wenn der Nutzer sie nicht selbst gelöscht hat. Gelesen wird beim Upload
+ * Blatt 1 (parseBuffer).
+ */
 function buildTemplate(domainKey) {
   const def = getDomain(domainKey);
   const headers = def.fields.map((f) => f.header + (f.required ? " *" : ""));
   const example = def.fields.map((f) => f.example ?? "");
-  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+  // Spaltenbreite an der längeren von Überschrift/Beispiel ausrichten (10–40).
+  const cols = headers.map((h, i) => ({ wch: Math.min(40, Math.max(10, Math.max(h.length, String(example[i] ?? "").length) + 2)) }));
+
+  const wsData = XLSX.utils.aoa_to_sheet([headers]);
+  wsData["!cols"] = cols;
+  const wsExample = XLSX.utils.aoa_to_sheet([headers, example]);
+  wsExample["!cols"] = cols;
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, def.label);
+  XLSX.utils.book_append_sheet(wb, wsData, "Daten");
+  XLSX.utils.book_append_sheet(wb, wsExample, "Beispiel");
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
   return { buffer, filename: `plan-und-simple_Vorlage_${def.key}.xlsx` };
 }

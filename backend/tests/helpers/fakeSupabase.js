@@ -35,6 +35,8 @@ function makeFakeSupabase(initial = {}) {
     let onConflict = null;
     let order = null;
     let limitN = null;
+    let countMode = null;   // select("ID", { count: "exact", head: true })
+    let headOnly = false;
 
     const applyFilters = (rows) => rows.filter(r => filters.every(f => {
       const v = r[f.col];
@@ -78,16 +80,23 @@ function makeFakeSupabase(initial = {}) {
       if (mode === "delete") {
         const matched = new Set(applyFilters(rows));
         tables[table] = rows.filter(r => !matched.has(r));
-        return { data: null, error: null };
+        // PostgREST liefert bei delete().select() die geloeschten Zeilen zurueck —
+        // der Import-Rollback zaehlt genau daran, wie viel entfernt wurde.
+        return { data: [...matched].map(r => ({ ...r })), error: null };
       }
       let out = applyFilters(rows).map(r => ({ ...r }));
       if (order) out.sort((a, b) => ((a[order.col] > b[order.col] ? 1 : a[order.col] < b[order.col] ? -1 : 0) * (order.asc ? 1 : -1)));
       if (limitN != null) out = out.slice(0, limitN);
+      // { count: "exact" } liefert die Trefferzahl; mit head:true ohne Daten.
+      if (countMode) return { data: headOnly ? null : out, count: out.length, error: null };
       return { data: out, error: null };
     };
 
     const builder = {
-      select() { return builder; },
+      select(_cols, opts) {
+        if (opts && opts.count) { countMode = opts.count; headOnly = !!opts.head; }
+        return builder;
+      },
       insert(p) { mode = "insert"; payload = p; return builder; },
       update(p) { mode = "update"; payload = p; return builder; },
       upsert(p, opts) { mode = "upsert"; payload = p; onConflict = opts && opts.onConflict; return builder; },

@@ -259,6 +259,12 @@ export function ImportSection() {
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px' }}>
               Wir haben die Spalten deiner Datei automatisch zugeordnet. Stimmt etwas nicht, hier korrigieren.
             </p>
+            {preview.sheetNames?.length > 1 && (
+              <Message
+                type="info"
+                text={`Gelesen wird das Blatt „${preview.sheetName}". Weitere Blätter der Datei (${preview.sheetNames.filter(n => n !== preview.sheetName).join(', ')}) werden nicht importiert.`}
+              />
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
               {preview.fields.map(f => (
                 <div key={f.key} className="form-group" style={{ margin: 0 }}>
