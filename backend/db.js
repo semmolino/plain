@@ -87,6 +87,21 @@ function fetchOhnePraefix(eingabe, init) {
   return fetch(new Request(pfadKorrigieren(eingabe.url), eingabe), init);
 }
 
+// Ein frisch signiertes Token traegt iat = jetzt. PostgREST prueft iat OHNE
+// Toleranz und weist alles zurueck, dessen Ausstellungszeit auch nur eine
+// Sekunde in seiner Zukunft liegt:
+//     {"code":"PGRST301","message":"JWT issued at future"}   401
+//
+// Genau das passierte im Betrieb sporadisch — mal beim Lizenz-Laden, mal riss
+// es einen kompletten Checker-Lauf ab ("Zeitplaene nicht lesbar, skip: JWT
+// issued at future"). Es traf immer nur einzelne Laeufe, nie alle, und war
+// deshalb aus dem Log heraus kaum zu greifen.
+//
+// Das Token eine Minute rueckdatiert auszustellen kostet nichts und macht die
+// Pruefung gegen jede Uhrenabweichung unempfindlich. Die Gueltigkeitsdauer
+// bleibt davon unberuehrt, weil exp separat gesetzt wird.
+const IAT_RUECKDATIERUNG_SEK = 60;
+
 function scopedClient(schluessel, claims) {
   const jetzt = Date.now();
   const treffer = clients.get(schluessel);
@@ -94,7 +109,15 @@ function scopedClient(schluessel, claims) {
   // Abfrage ablaeuft, liefert 401 statt Daten.
   if (treffer && treffer.gueltigBis > jetzt + 30_000) return treffer.client;
 
-  const token = jwt.sign(claims, process.env.PGRST_JWT_SECRET, { expiresIn: `${TOKEN_MINUTEN}m` });
+  const jetztSek = Math.floor(jetzt / 1000);
+  const ablaufSek = jetztSek + TOKEN_MINUTEN * 60;
+  // iat/exp bewusst selbst setzen statt ueber expiresIn: sonst leitet
+  // jsonwebtoken exp aus dem rueckdatierten iat ab und verkuerzt die
+  // Gueltigkeit um dieselbe Minute.
+  const token = jwt.sign(
+    { ...claims, iat: jetztSek - IAT_RUECKDATIERUNG_SEK, exp: ablaufSek },
+    process.env.PGRST_JWT_SECRET,
+  );
   const client = createClient(POSTGREST_URL, token, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
@@ -103,7 +126,7 @@ function scopedClient(schluessel, claims) {
     },
   });
 
-  clients.set(schluessel, { client, gueltigBis: jetzt + TOKEN_MINUTEN * 60_000 });
+  clients.set(schluessel, { client, gueltigBis: ablaufSek * 1000 });
   return client;
 }
 

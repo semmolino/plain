@@ -243,3 +243,45 @@ describe("mit POSTGREST_URL", () => {
     });
   });
 });
+
+describe("Uhrenabweichung beim Token", () => {
+  const MIT = { POSTGREST_URL: "http://127.0.0.1:3001", PGRST_ROLE: "planandsimp_3252" };
+
+  // PostgREST prueft iat ohne Toleranz und antwortet auf ein Token, dessen
+  // Ausstellungszeit in seiner Zukunft liegt, mit 401 "JWT issued at future".
+  // Im Betrieb riss das sporadisch ganze Checker-Laeufe ab.
+  it("datiert iat zurueck, damit PostgREST nicht 'issued at future' meldet", () => {
+    const { db, runAsSystem } = ladeMit(MIT);
+    runAsSystem(() => {
+      const c = claimsVon(db);
+      const jetztSek = Math.floor(Date.now() / 1000);
+      expect(c.iat).toBeLessThan(jetztSek);
+      expect(jetztSek - c.iat).toBeGreaterThanOrEqual(30);
+    });
+  });
+
+  it("verkuerzt die Gueltigkeit dadurch nicht", () => {
+    const { db, runAsSystem } = ladeMit(MIT);
+    runAsSystem(() => {
+      const c = claimsVon(db);
+      const jetztSek = Math.floor(Date.now() / 1000);
+      // Fuenf Minuten ab JETZT, nicht ab dem rueckdatierten iat.
+      expect(c.exp - jetztSek).toBeGreaterThan(4 * 60 + 30);
+      expect(c.exp - jetztSek).toBeLessThanOrEqual(5 * 60);
+    });
+  });
+
+  it("erneuert auch nach der Rueckdatierung rechtzeitig", () => {
+    const { db, runAsSystem } = ladeMit(MIT);
+    const echtesJetzt = Date.now;
+    try {
+      runAsSystem(() => {
+        const ersteAusgabe = claimsVon(db).exp;
+        Date.now = () => echtesJetzt() + 6 * 60 * 1000;
+        expect(claimsVon(db).exp).toBeGreaterThan(ersteAusgabe);
+      });
+    } finally {
+      Date.now = echtesJetzt;
+    }
+  });
+});
