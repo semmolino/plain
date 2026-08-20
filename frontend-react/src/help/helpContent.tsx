@@ -36,10 +36,30 @@ export const HELP = {
     title: 'Vorlage verwenden',
     body: (
       <>
-        Die heruntergeladene Excel-Vorlage hat genau die richtigen Spalten (Pflichtfelder mit
-        <code> *</code>) und eine Beispielzeile. Wenn du sie nutzt, ordnet das System die Spalten
-        automatisch korrekt zu und es entstehen kaum Fehler. Eigene Dateien gehen auch — dann ggf. die
-        Zuordnung im nächsten Schritt anpassen.
+        Die heruntergeladene Excel-Vorlage hat vier Blätter: <strong>Anleitung</strong> (Vorgehen und
+        Reihenfolge), <strong>Daten</strong> (hier trägst du ein — Pflichtfelder mit <code>*</code>,
+        Auswahlfelder als Klappliste), <strong>Beispiel</strong> (Musterzeilen) und
+        <strong> Listen</strong> (die in deinem Konto erlaubten Werte, z. B. Status oder
+        Mitarbeiter-Kürzel). Eingelesen wird nur das Blatt „Daten". Eigene Dateien gehen auch — dann
+        ggf. die Zuordnung im nächsten Schritt anpassen.
+      </>
+    ),
+  },
+  'import.structure_tree': {
+    title: 'Leistungsstruktur als Baum importieren',
+    body: (
+      <>
+        Eine Zeile je Knoten. Die <strong>Gliederungsnummer</strong> bestimmt, was unter was liegt:
+        <code> 1</code>, <code>1.1</code>, <code>1.2</code>, <code>2</code> … — <code>1.1</code> ist ein
+        Unterpunkt von <code>1</code>. Aus ihr ergibt sich auch die Reihenfolge, unabhängig davon, wie
+        die Zeilen in der Datei sortiert sind.<br /><br />
+        <strong>Honorar und Abrechnungsart gehören an die untersten Zeilen.</strong> Übergeordnete
+        Zeilen rechnet plan&simple aus ihren Unterzeilen — ein dort eingetragener Betrag wird
+        ignoriert, damit beide Angaben nicht auseinanderlaufen. Stunden-Positionen bekommen kein
+        Honorar; ihr Umsatz entsteht später aus den Buchungen.<br /><br />
+        Ist eine Zeile eines Projekts fehlerhaft, wird das <strong>ganze Projekt</strong> übersprungen —
+        ein Baum ohne seinen Elternknoten wäre schlimmer als gar keiner. Wer keine Gliederungsnummern
+        hat, kann die Spalte „Ebene" (1/2/3) nutzen; dann zählt die Zeilenreihenfolge.
       </>
     ),
   },

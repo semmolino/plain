@@ -8,7 +8,7 @@ import { HelpHint } from '@/components/ui/HelpHint'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/store/toastStore'
 import {
-  fetchImportDomains, fetchImportBatches, downloadImportTemplate, downloadImportErrors,
+  fetchImportDomains, fetchImportBatches, downloadImportTemplate, downloadImportErrors, downloadStructurePrefill,
   previewImport, commitImport, rollbackImportBatch,
   type ImportPreview, type DuplicateMode, type StructureMode, type DocType, type ImportRowStatus, type ImportBatch,
 } from '@/api/import'
@@ -55,7 +55,7 @@ export function ImportSection() {
   const batches = batchesData?.data ?? []
 
   // Empfohlene Reihenfolge der Bereiche + bereits importierte (für die Schritt-Übersicht).
-  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_fee', 'opening_balance', 'opening_cost']
+  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_fee', 'project_structure', 'opening_balance', 'opening_cost']
   const orderedDomains = [...domains].sort((a, b) => {
     const ia = DOMAIN_ORDER.indexOf(a.key), ib = DOMAIN_ORDER.indexOf(b.key)
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
@@ -186,6 +186,15 @@ export function ImportSection() {
           </button>
           <HelpHint id="import.template" />
 
+          {/* Beim Baum ist Tippen die eigentliche Hürde — deshalb hier eine
+              Vorlage, die die eigenen Projekte samt HOAI-Phasen schon enthält. */}
+          {domainKey === 'project_structure' && (
+            <button type="button" className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() => { setErr(null); downloadStructurePrefill().catch((e: Error) => setErr(e.message)) }}>
+              <Download size={14} strokeWidth={2} /> Vorlage mit meinen Projekten füllen
+            </button>
+          )}
+
           <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={onPickFile} />
           <button type="button" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             onClick={() => fileInputRef.current?.click()}>
@@ -204,6 +213,18 @@ export function ImportSection() {
             Hinweis: Kontakte (Ansprechpartner) gehören zu einer <strong>Adresse/Firma</strong> — diese also
             <em> vorher</em> importieren. Anrede ist Pflicht; das Geschlecht wird, wenn keine eigene Spalte
             vorhanden ist, aus der Anrede (Herr/Frau) abgeleitet.
+          </p>
+        )}
+        {domainKey === 'project_structure' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0', display: 'flex', alignItems: 'flex-start' }}>
+            <span>
+              Hinweis: <strong>Alternative zu „Projekt-Honorar"</strong> — dort wird eine Summe gesetzt,
+              hier importierst du den vollständigen Leistungsbaum (Leistungsbilder, Phasen,
+              Bauabschnitte). Pro Projekt nur eines von beidem; Projekte mit vorhandener Struktur werden
+              übersprungen. Eine Zeile je Knoten, die <em>Gliederung</em> (1, 1.1, 1.2 …) bildet die
+              Hierarchie. Honorar und Abrechnungsart gehören an die untersten Zeilen.
+            </span>
+            <HelpHint id="import.structure_tree" />
           </p>
         )}
         {domainKey === 'opening_balance' && (

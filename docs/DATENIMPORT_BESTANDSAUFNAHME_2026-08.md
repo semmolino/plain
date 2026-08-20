@@ -52,13 +52,14 @@ dann Positionsebene** (§7).
 | 2 | `contact` | Adresse + Anrede Pflicht, Geschlecht aus Anrede ableitbar | **solide** |
 | 3 | `employee` | 10 Felder; **kein** Login, Rolle, Abteilung, Arbeitszeitmodell, Kostensatz | brauchbar, aber der Mitarbeiter ist danach für Zeiterfassung/Kosten **nicht arbeitsfähig** |
 | 4 | `project` | Nur Kopf: Nummer, Name, Status, Typ, PL, Bauherr. Status/PL/Bauherr Pflicht + über **Namen** aufgelöst | brauchbar; harte FK-Pflicht macht die Reihenfolge zwingend |
-| 5 | `project_fee` | **generiert** Struktur (1 Position *oder* LP1–9 nach §34-Prozenten) + `PROJECT_PROGRESS` + `CONTRACT` | Ersatz für den fehlenden Baum-Import — Kern des Problems |
+| 5 | `project_fee` | **generiert** Struktur (1 Position *oder* LP1–9 nach §34-Prozenten) + `PROJECT_PROGRESS` + `CONTRACT` | der schnelle Weg; seit I3 die Kurzform neben `project_structure` |
+| 5b | `project_structure` | **importiert den Baum** aus der Gliederungsnummer: Knoten + `PROJECT_PROGRESS` + `CONTRACT`, Elternwerte über `recalcParent` | seit 20.08.2026, s. §4.2 |
 | 6 | `opening_balance` | 1 Beleg je Projekt (Abschlag *oder* Rechnung) über die echte Beleg-Pipeline `init → Struktur → book(skipDocuments)`, optional Zahlung | konzeptionell richtig, **aktuell defekt** (§2.1) |
 | 7 | `opening_cost` | 1 `TEC`-Zeile `LUMP_COST` je Projekt auf dem Blattknoten | funktioniert, sehr grob |
 
 ### 1.3  Was es *nicht* gibt
 
-Kein Import für: **Projektstruktur als Baum**, Projektteam (`EMPLOYEE2PROJECT`), Stundensätze/Rollen
+Kein Import für: Projektteam (`EMPLOYEE2PROJECT`), Stundensätze/Rollen
 (`EMPLOYEE_CP_RATE`, `PROJECT_SP_RATES`, `PROJECT_BOOKING_PRICE`), Arbeitszeitmodelle, Abwesenheiten +
 Urlaubsanspruch, **Angebote** (`OFFER` + `OFFER_STRUCTURE`), Nachträge, DIN-276-Kosten, Textbausteine,
 eigene Stammdatenlisten (Projekttypen, Buchungsarten), **Einzelbuchungen** (`TEC`), **einzelne
@@ -193,7 +194,18 @@ für ein reines HOAI-Gebäudeprojekt vertretbar — er bricht, sobald ein Büro 
 hat (mehrere Leistungsbilder, TGA/Tragwerk, Bauabschnitte, LP-Splits, abweichende Prozentsätze,
 Nebenkosten je Knoten, Stunden-Teilbäume). Genau das ist der Regelfall bei Bestandsdaten.
 
-### 4.2  Vorschlag: Domäne `project_structure`
+### 4.2  Umgesetzt: Domäne `project_structure` (20.08.2026)
+
+> Gebaut wie unten vorgeschlagen. Abweichungen: **Zuschläge (SURCHARGE_1..3) sind nicht Teil von v1** —
+> ihre kumulative Rechnung lebt in `projekte.js` und wird nicht exportiert; falsch importierte
+> Zuschläge würden Honorarsummen still verfälschen. Sie bleiben in der Oberfläche pflegbar.
+> Zusätzlich gebaut: **„Vorlage mit meinen Projekten füllen"** — erzeugt für jedes Projekt ohne
+> Struktur ein Leistungsbild samt LP1–9, der Nutzer ergänzt nur die Beträge
+> (`GET /import/project_structure/prefill`).
+> Abgesichert durch 21 Tests in `backend/tests/importService.tree.test.js`, darunter der Rundlauf
+> „Vorlage erzeugen → Beträge eintragen → importieren".
+
+#### Der ursprüngliche Vorschlag
 
 **Dateiformat — eine Zeile je Knoten, Hierarchie über Gliederungsnummer:**
 
@@ -296,8 +308,8 @@ und vermeidet die gesamte Validierungs-Kaskade. Ein echter Einzelbuchungs-Import
 |---|---|---|
 | **I0 — Reparatur** ✅ | `tenantId` in `opening_balance` (+ Demo-Seed), `SORT_ORDER`/`CONTRACT_ID` bei `project_fee`, Beispielzeile auf eigenes Blatt, Blatt-Hinweis im Assistenten, 15 Integrationstests für Commit + Rollback | erledigt 20.08.2026 |
 | **I1 — Vorlagen 2.0** ✅ | 4-Blatt-Mappe mit Anleitung/Listen/Dropdowns aus dem Mandanten, `exceljs` statt `xlsx` inkl. Lesepfad, CSV mit Trennzeichen-/Codierungserkennung, Fehlerprotokoll als korrigierbare Excel-Datei | erledigt 20.08.2026 |
-| **I2 — Assistent** | Zeilenabwahl, Dubletten „zusammenführen", Mapping merken, Stichtag, Onboarding-Schritte, „importiert"-Badge | mittel |
-| **I3 — Baum-Import** | generischer Baum-Importer + Domäne `project_structure` (§4), Vorschau als Baum, Struktur-Vorlage aus HOAI-Katalog generieren | **groß — das Kernstück** |
+| **I2 — Assistent** | Zeilenabwahl, Dubletten „zusammenführen", Mapping merken, Stichtag, Onboarding-Schritte, „importiert"-Badge | mittel — jetzt der nächste Schritt |
+| **I3 — Baum-Import** ✅ | Domäne `project_structure` (§4.2), Gliederungsnummer + Ebenen-Fallback, Alles-oder-nichts je Projekt, vorbefüllte HOAI-Vorlage, 21 Tests | erledigt 20.08.2026 |
 | **I4 — Belege** | Domäne `invoice_history` (Kopf + Positionen, Datum/MwSt/Nummer aus Datei, Zahlungen), setzt I3 voraus | groß |
 | **I5 — Buchungen** | `TEC`-Anfangsbestand je Projekt × Mitarbeiter × Monat; Einzelbuchungen optional | mittel |
 | **I6 — Rest** | Projektteam, Sätze/Preise, Abwesenheiten, Angebote/Nachträge (nutzt I3) | je klein |

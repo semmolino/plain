@@ -20,6 +20,8 @@ const ppSvc = require("./partialPayments");
 const invSvc = require("./invoices");
 const { insertProgressSnapshot } = require("./projectProgress");
 const { recomputeStructure } = require("./buchungen");
+// recalcParent: Elternwerte aus den Kindern — dieselbe Rechnung wie im Wizard.
+const projekteSvc = require("./projekte");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 /** String-Wert sicher trimmen (null/undefined → ""). */
@@ -62,7 +64,7 @@ function parseAmountDE(v) {
 function fmt2(n) { return Math.round(n * 100) / 100; }
 /** Zahl sicher coercen (NaN/null → 0). */
 function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
-/** „Ja/Wahr"-artige Werte → true (für Flags wie Hauptkontakt). Leer/unklar → false. */
+/** „Ja/Wahr“-artige Werte → true (für Flags wie Hauptkontakt). Leer/unklar → false. */
 function parseBool(v) {
   const t = norm(v);
   if (!t) return false;
@@ -145,7 +147,7 @@ function buildAddressEntry(mapped, ctx) {
   } else {
     const found = ctx.countries.byName.get(norm(cin));
     if (found != null) countryId = found;
-    else { messages.push({ level: "error", text: `Land „${cin}" nicht gefunden` }); ok = false; }
+    else { messages.push({ level: "error", text: `Land „${cin}“ nicht gefunden` }); ok = false; }
   }
 
   // Kategorie (optional, fester Katalog): unbekannt → Warnung, Feld bleibt leer.
@@ -154,7 +156,7 @@ function buildAddressEntry(mapped, ctx) {
   if (atin) {
     const hit = addressTypeByText.get(norm(atin));
     if (hit != null) addressType = hit;
-    else messages.push({ level: "warn", text: `Kategorie „${atin}" nicht erkannt — bleibt leer (z. B. Kunde/Bauherr, Fachplaner, Behörde, Nachunternehmer, Lieferant, Sonstige)` });
+    else messages.push({ level: "warn", text: `Kategorie „${atin}“ nicht erkannt — bleibt leer (z. B. Kunde/Bauherr, Fachplaner, Behörde, Nachunternehmer, Lieferant, Sonstige)` });
   }
 
   const email = s(mapped.email);
@@ -257,7 +259,7 @@ function buildEmployeeEntry(mapped, ctx) {
   } else {
     const found = ctx.genders.byName.get(norm(gin));
     if (found != null) genderId = found;
-    else { messages.push({ level: "error", text: `Geschlecht „${gin}" nicht erkannt (z. B. weiblich/männlich/divers)` }); ok = false; }
+    else { messages.push({ level: "error", text: `Geschlecht „${gin}“ nicht erkannt (z. B. weiblich/männlich/divers)` }); ok = false; }
   }
 
   const email = s(mapped.email);
@@ -365,7 +367,7 @@ function buildContactEntry(mapped, ctx) {
   if (!ain) { messages.push({ level: "error", text: "Firma/Adresse fehlt (Pflichtfeld)" }); ok = false; }
   else {
     addressId = ctx.addrByName.get(norm(ain)) ?? null;
-    if (addressId == null) { messages.push({ level: "error", text: `Firma/Adresse „${ain}" nicht gefunden — zuerst Adressen importieren` }); ok = false; }
+    if (addressId == null) { messages.push({ level: "error", text: `Firma/Adresse „${ain}“ nicht gefunden — zuerst Adressen importieren` }); ok = false; }
   }
 
   // Anrede (Pflicht).
@@ -374,7 +376,7 @@ function buildContactEntry(mapped, ctx) {
   if (!sin) { messages.push({ level: "error", text: "Anrede fehlt (Pflichtfeld, z. B. Herr/Frau)" }); ok = false; }
   else {
     salutationId = ctx.salByName.get(norm(sin)) ?? null;
-    if (salutationId == null) { messages.push({ level: "error", text: `Anrede „${sin}" nicht gefunden (z. B. Herr/Frau)` }); ok = false; }
+    if (salutationId == null) { messages.push({ level: "error", text: `Anrede „${sin}“ nicht gefunden (z. B. Herr/Frau)` }); ok = false; }
   }
 
   // Geschlecht (Pflicht in der App): aus Spalte, sonst aus Anrede ableiten, sonst Default.
@@ -382,7 +384,7 @@ function buildContactEntry(mapped, ctx) {
   const gin = s(mapped.gender);
   if (gin) {
     genderId = ctx.genders.byName.get(norm(gin)) ?? null;
-    if (genderId == null) messages.push({ level: "warn", text: `Geschlecht „${gin}" nicht erkannt — aus Anrede abgeleitet` });
+    if (genderId == null) messages.push({ level: "warn", text: `Geschlecht „${gin}“ nicht erkannt — aus Anrede abgeleitet` });
   }
   if (genderId == null) genderId = deriveGenderFromSalutation(sin, ctx.genders);
   if (genderId == null) genderId = ctx.genders.default;
@@ -466,7 +468,7 @@ function buildProjectEntry(mapped, ctx) {
     const v = s(val);
     if (!v) { messages.push({ level: "error", text: `${label} fehlt (Pflichtfeld)` }); ok = false; return null; }
     const hit = map.get(norm(v));
-    if (hit == null) { messages.push({ level: "error", text: `${label} „${v}" nicht gefunden${hint ? ` — ${hint}` : ""}` }); ok = false; return null; }
+    if (hit == null) { messages.push({ level: "error", text: `${label} „${v}“ nicht gefunden${hint ? ` — ${hint}` : ""}` }); ok = false; return null; }
     return hit;
   };
   // Optionale FKs: gesetzt-aber-unbekannt → Warnung (Feld bleibt leer, Zeile bleibt importierbar).
@@ -474,7 +476,7 @@ function buildProjectEntry(mapped, ctx) {
     const v = s(val);
     if (!v) return null;
     const hit = map.get(norm(v));
-    if (hit == null) { messages.push({ level: "warn", text: `${label} „${v}" nicht gefunden — bleibt leer` }); return null; }
+    if (hit == null) { messages.push({ level: "warn", text: `${label} „${v}“ nicht gefunden — bleibt leer` }); return null; }
     return hit;
   };
   const statusId  = resolveReq(mapped.status,  ctx.statusByName, "Status",        "Status-Bezeichnung prüfen (Einstellungen → Stammdaten)");
@@ -553,13 +555,13 @@ function buildProjectFeeEntry(mapped, ctx) {
   if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
   else {
     proj = ctx.projectsByNumber.get(norm(number));
-    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}" nicht gefunden — zuerst das Projekt importieren/anlegen` }); ok = false; }
+    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}“ nicht gefunden — zuerst das Projekt importieren/anlegen` }); ok = false; }
   }
 
   const feeRaw = s(mapped.fee);
   const amount = parseAmountDE(feeRaw);
   if (!feeRaw) { messages.push({ level: "error", text: "Honorarsumme fehlt (Pflichtfeld)" }); ok = false; }
-  else if (amount.invalid || amount.value == null) { messages.push({ level: "error", text: `Honorarsumme „${feeRaw}" ist keine gültige Zahl` }); ok = false; }
+  else if (amount.invalid || amount.value == null) { messages.push({ level: "error", text: `Honorarsumme „${feeRaw}“ ist keine gültige Zahl` }); ok = false; }
   else if (amount.value < 0) { messages.push({ level: "error", text: "Honorarsumme darf nicht negativ sein" }); ok = false; }
 
   const bin = norm(mapped.billing);
@@ -656,8 +658,351 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
   return { inserted: done };
 }
 
+// ── Domäne: Projektstruktur (Leistungsbaum) ──────────────────────────────────
+// Die Hierarchie kommt über die Gliederungsnummer („1“, „1.1“, „1.1.2“) — sie
+// ist in Altsystemen fast immer vorhanden, im Blatt sichtbar und übersteht
+// Umsortieren. Ersatzweise wird eine Ebenen-Spalte (1/2/3) in Dateireihenfolge
+// gelesen; die ist bequemer zu tippen, aber ein Sortierklick in Excel zerstört
+// den Baum, deshalb nur als Rückfallebene.
+//
+// Geld gehört ausschließlich an die Blätter: Elternwerte rechnet die App aus
+// den Kindern (recalcParent), ein importierter Elternbetrag würde beim ersten
+// Speichern in der Oberfläche überschrieben.
+const MAX_STRUCTURE_DEPTH = 5;
+
+const PROJECT_STRUCTURE_FIELDS = [
+  { key: "project_number",  header: "Projektnummer",                   required: true,  example: "P-2024-012",                aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
+  { key: "outline",         header: "Gliederung",                      required: true,  example: "1.1",                       aliases: ["gliederung", "gliederungsnummer", "position", "pos", "ordnungszahl", "nr", "outline", "wbs", "stufe"], type: "text" },
+  { key: "name_short",      header: "Kürzel",                          required: true,  example: "LP1-4",                     aliases: ["kuerzel", "kurzzeichen", "shortname", "code", "krzl"] },
+  { key: "name_long",       header: "Bezeichnung",                     required: false, example: "Vorplanung bis Genehmigung", aliases: ["bezeichnung", "name", "namelong", "beschreibung", "leistung", "titel"] },
+  { key: "billing",         header: "Abrechnungsart (Pauschal/Stunden)", required: false, example: "Pauschal",                aliases: ["abrechnungsart", "abrechnung", "billing", "billingtype", "art"], list: "billing" },
+  { key: "revenue",         header: "Honorar netto",                   required: false, example: "27000",                     aliases: ["honorar", "honorarsumme", "betrag", "summe", "nettohonorar", "revenue", "wert"], type: "money" },
+  { key: "extras_percent",  header: "Nebenkosten %",                   required: false, example: "5",                         aliases: ["nebenkosten", "nk", "nkprozent", "nebenkostenprozent", "extras", "extraspercent", "zuschlagprozent"] },
+  { key: "level",           header: "Ebene (nur ohne Gliederung)",     required: false, example: "",                          aliases: ["ebene", "stufe", "level", "tiefe", "hierarchieebene"] },
+];
+
+async function loadProjectStructureContext(supabase, tenantId) {
+  const [projRes, structRes, contractRes, settingsRes] = await Promise.all([
+    supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT_STRUCTURE").select("PROJECT_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("CONTRACT").select("ID, PROJECT_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("TENANT_SETTINGS").select("KEY, VALUE").eq("TENANT_ID", tenantId),
+  ]);
+
+  const withStructure = new Set((structRes.data || []).map((r) => r.PROJECT_ID));
+  const contractByProject = new Map();
+  for (const c of contractRes.data || []) if (!contractByProject.has(c.PROJECT_ID)) contractByProject.set(c.PROJECT_ID, c.ID);
+
+  const projectsByNumber = new Map();
+  const existingKeys = new Set();
+  for (const p of projRes.data || []) {
+    if (!p.NAME_SHORT) continue;
+    projectsByNumber.set(norm(p.NAME_SHORT), {
+      id: p.ID, number: p.NAME_SHORT, name: p.NAME_LONG || p.NAME_SHORT,
+      addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null,
+      contractId: contractByProject.get(p.ID) ?? null,
+    });
+    if (withStructure.has(p.ID)) existingKeys.add(norm(p.NAME_SHORT));
+  }
+
+  const defaults = {};
+  for (const r of settingsRes.data || []) defaults[r.KEY] = r.VALUE;
+  return { projectsByNumber, existingKeys, defaults };
+}
+
+/** „1.2.3“, „1-2-3“, „1.2.3.“ → ["1","2","3"]; leer → null. */
+function parseOutline(v) {
+  const t = s(v).replace(/\s+/g, "");
+  if (!t) return null;
+  const parts = t.split(/[.\-/]/).filter((x) => x !== "");
+  if (!parts.length) return null;
+  return parts;
+}
+
+function buildProjectStructureEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const number = s(mapped.project_number);
+  let proj = null;
+  if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
+  else {
+    proj = ctx.projectsByNumber.get(norm(number)) || null;
+    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}“ nicht gefunden — zuerst das Projekt importieren/anlegen` }); ok = false; }
+  }
+
+  const nameShort = s(mapped.name_short);
+  if (!nameShort) { messages.push({ level: "error", text: "Kürzel fehlt (Pflichtfeld)" }); ok = false; }
+
+  // Hierarchie: Gliederungsnummer bevorzugt, sonst Ebene.
+  const outline = parseOutline(mapped.outline);
+  const levelRaw = s(mapped.level);
+  let level = null;
+  if (levelRaw) {
+    const n = parseInt(levelRaw, 10);
+    if (!Number.isFinite(n) || n < 1) { messages.push({ level: "error", text: `Ebene „${levelRaw}“ ist keine Zahl ab 1` }); ok = false; }
+    else level = n;
+  }
+  if (!outline && level == null) {
+    messages.push({ level: "error", text: "Gliederung fehlt — z. B. 1, 1.1, 1.2 (ersatzweise Spalte „Ebene“)" });
+    ok = false;
+  }
+  if (outline && outline.length > MAX_STRUCTURE_DEPTH) {
+    messages.push({ level: "error", text: `Gliederung ist ${outline.length} Ebenen tief — maximal ${MAX_STRUCTURE_DEPTH}` });
+    ok = false;
+  }
+
+  // Abrechnungsart: an Blättern Pflicht; ob die Zeile ein Blatt ist, entscheidet
+  // erst finalizeRows.
+  const bin = norm(mapped.billing);
+  let billingTypeId = null;
+  if (bin) billingTypeId = (bin.includes("stund") || bin.includes("tec") || bin.includes("zeit") || bin === "2") ? 2 : 1;
+
+  const revRaw = s(mapped.revenue);
+  const rev = parseAmountDE(mapped.revenue);
+  if (revRaw && (rev.invalid || rev.value == null)) { messages.push({ level: "error", text: `Honorar „${revRaw}“ ist keine gültige Zahl` }); ok = false; }
+  else if (rev.value != null && rev.value < 0) { messages.push({ level: "error", text: "Honorar darf nicht negativ sein" }); ok = false; }
+
+  const nkRaw = s(mapped.extras_percent);
+  const nk = parseAmountDE(mapped.extras_percent);
+  if (nkRaw && (nk.invalid || nk.value == null)) { messages.push({ level: "error", text: `Nebenkosten „${nkRaw}“ ist keine gültige Zahl` }); ok = false; }
+
+  const dbRow = {
+    projectNumber: number, projectId: proj?.id ?? null, projectName: proj?.name ?? "",
+    addressId: proj?.addressId ?? null, contactId: proj?.contactId ?? null, contractId: proj?.contractId ?? null,
+    outline, level, nameShort, nameLong: s(mapped.name_long) || nameShort,
+    billingTypeId, revenue: rev.value ?? 0, extrasPercent: nk.value ?? 0,
+    // von finalizeRows gesetzt:
+    parentKey: null, key: null, depth: outline ? outline.length : (level || 1), isLeaf: true, sortIndex: 0,
+  };
+
+  const display = {
+    number,
+    node: `${s(mapped.outline) || `Ebene ${level ?? "?"}`}  ${nameShort}`,
+    bezeichnung: dbRow.nameLong !== nameShort ? dbRow.nameLong : "",
+    abrechnung: billingTypeId === 2 ? "Stunden" : billingTypeId === 1 ? "Pauschal" : "",
+    honorar: rev.value ? rev.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : "",
+  };
+  // Der Baum wird nicht über die Projektnummer entdoppelt (viele Zeilen je
+  // Projekt); der Schlüssel meldet nur „Projekt hat bereits eine Struktur“.
+  return { ok, messages, dbRow, matchKey: norm(number), display };
+}
+
+/**
+ * Zeilenübergreifende Prüfung des Baums, je Projekt:
+ * Gliederung auflösen, Eltern finden, Blätter bestimmen, Geld dorthin zwingen.
+ * Ist eine Zeile eines Projekts fehlerhaft, fällt das ganze Projekt aus — ein
+ * halb importierter Baum (fehlender Elternknoten) wäre schlimmer als keiner.
+ */
+function finalizeProjectStructureRows(rows, ctx) {
+  const byProject = new Map();
+  for (const r of rows) {
+    const num = r._dbRow?.projectNumber;
+    if (!num) continue;
+    if (!byProject.has(num)) byProject.set(num, []);
+    byProject.get(num).push(r);
+  }
+
+  for (const [number, group] of byProject) {
+    const usable = group.filter((r) => r.status !== "error");
+    if (!usable.length) continue;
+
+    // 1) Schlüssel je Zeile: Gliederungsnummer oder — ersatzweise — aus der
+    //    Ebene und der Dateireihenfolge aufgebauter Pfad.
+    const stack = [];
+    for (const r of usable) {
+      const e = r._dbRow;
+      if (e.outline) {
+        e.key = e.outline.join(".");
+        e.parentKey = e.outline.length > 1 ? e.outline.slice(0, -1).join(".") : null;
+        e.depth = e.outline.length;
+        stack.length = e.depth;
+        stack[e.depth - 1] = e.key;
+      } else {
+        const depth = Math.min(e.level || 1, MAX_STRUCTURE_DEPTH);
+        e.depth = depth;
+        e.parentKey = depth > 1 ? (stack[depth - 2] ?? null) : null;
+        e.key = `${e.parentKey ? e.parentKey + "." : ""}${e.nameShort}#${r.row}`;
+        stack.length = depth;
+        stack[depth - 1] = e.key;
+        if (depth > 1 && !e.parentKey) {
+          r.status = "error";
+          r.messages.push({ level: "error", text: `Ebene ${depth} ohne übergeordnete Zeile davor` });
+        }
+      }
+    }
+
+    // 2) Doppelte Gliederungsnummern
+    const byKey = new Map();
+    for (const r of usable) {
+      const k = r._dbRow.key;
+      if (byKey.has(k)) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Gliederung „${k}“ kommt in diesem Projekt mehrfach vor` });
+      } else byKey.set(k, r);
+    }
+
+    // 3) Fehlende Elternzeilen
+    for (const r of usable) {
+      const p = r._dbRow.parentKey;
+      if (p && !byKey.has(p)) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Übergeordnete Zeile „${p}“ fehlt in der Datei` });
+      }
+    }
+
+    // 4) Blatt oder Knoten?
+    const parents = new Set(usable.map((r) => r._dbRow.parentKey).filter(Boolean));
+    for (const r of usable) {
+      const e = r._dbRow;
+      e.isLeaf = !parents.has(e.key);
+      // Vorschau: Einrückung sichtbar machen. Führende Leerzeichen überleben die
+      // Darstellung nicht, deshalb ein Zeichen je Ebene.
+      const indent = e.depth > 1 ? "›".repeat(e.depth - 1) + " " : "";
+      const label = e.outline ? e.outline.join(".") : `Ebene ${e.depth}`;
+      r.display.node = `${indent}${label}  ${e.nameShort}`;
+    }
+
+    // 5) Geld und Abrechnungsart gehören an die Blätter
+    for (const r of usable) {
+      const e = r._dbRow;
+      if (!e.isLeaf) {
+        if (e.revenue) {
+          r.messages.push({ level: "warn", text: "Übergeordnete Zeile: Honorar wird aus den Unterzeilen gerechnet und hier ignoriert" });
+          e.revenue = 0;
+        }
+        e.billingTypeId = e.billingTypeId ?? null;
+        continue;
+      }
+      if (!e.billingTypeId) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: "Abrechnungsart fehlt (bei unterster Ebene Pflicht: Pauschal oder Stunden)" });
+      } else if (e.billingTypeId === 2 && e.revenue) {
+        r.messages.push({ level: "warn", text: "Stunden-Position: Honorar entsteht aus den Buchungen und wird hier ignoriert" });
+        e.revenue = 0;
+      }
+    }
+
+    // 6) Geschwisterreihenfolge (Reihenfolge des Auftretens)
+    const perParent = new Map();
+    for (const r of usable) {
+      const p = r._dbRow.parentKey || "";
+      const n = perParent.get(p) || 0;
+      r._dbRow.sortIndex = n;
+      perParent.set(p, n + 1);
+    }
+
+    // 7) Alles-oder-nichts je Projekt
+    const broken = group.filter((r) => r.status === "error");
+    if (broken.length) {
+      for (const r of group) {
+        if (r.status === "error") continue;
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Projekt „${number}“ wird übersprungen — eine andere Zeile dieses Projekts ist fehlerhaft (Zeile ${broken[0].row})` });
+      }
+      continue;
+    }
+
+    const total = usable.reduce((a, r) => a + num(r._dbRow.revenue), 0);
+    if (!total && usable.some((r) => r._dbRow.billingTypeId === 1)) {
+      usable[0].messages.push({ level: "warn", text: "Kein Honorar hinterlegt — die Struktur entsteht mit 0,00 €" });
+    }
+  }
+}
+
+/**
+ * Commit je Projekt: Vertrag → Knoten flach anlegen → FATHER_ID im zweiten Pass
+ * setzen → Fortschritt → Elternwerte von unten nach oben rechnen.
+ * Das entspricht dem Weg, den auch das Anlegen im Wizard geht.
+ */
+async function commitProjectStructureRows(rows, { supabase, tenantId, batchId, ctx }) {
+  const defaults = ctx.defaults || {};
+  const byProject = new Map();
+  for (const r of rows) {
+    const num = r._dbRow.projectNumber;
+    if (!byProject.has(num)) byProject.set(num, []);
+    byProject.get(num).push(r);
+  }
+
+  let inserted = 0;
+  for (const [number, group] of byProject) {
+    const first = group[0]._dbRow;
+    try {
+      // 1) Vertrag zuerst — die Knoten sollen ihn kennen.
+      let contractId = first.contractId;
+      if (contractId == null) {
+        const contractRow = {
+          NAME_SHORT: number, NAME_LONG: first.projectName, PROJECT_ID: first.projectId,
+          INVOICE_ADDRESS_ID: first.addressId, INVOICE_CONTACT_ID: first.contactId,
+          TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+          ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
+          ...(defaults.default_vat_id ? { VAT_ID: Number(defaults.default_vat_id) } : {}),
+        };
+        const { data: cRows, error: cErr } = await supabase.from("CONTRACT").insert([contractRow]).select("ID");
+        if (cErr) throw { status: 500, message: cErr.message };
+        contractId = cRows?.[0]?.ID ?? null;
+      }
+
+      // 2) Alle Knoten flach — FATHER_ID ist erst nach dem Insert bekannt.
+      const ordered = [...group].sort((a, b) => a._dbRow.depth - b._dbRow.depth || a._dbRow.sortIndex - b._dbRow.sortIndex);
+      const structRows = ordered.map((r) => {
+        const e = r._dbRow;
+        const revenue = e.billingTypeId === 1 ? fmt2(e.revenue) : 0;
+        return {
+          NAME_SHORT: e.nameShort, NAME_LONG: e.nameLong, PROJECT_ID: e.projectId,
+          BILLING_TYPE_ID: e.billingTypeId, FATHER_ID: null, CONTRACT_ID: contractId,
+          REVENUE: revenue, EXTRAS_PERCENT: e.extrasPercent, EXTRAS: fmt2(revenue * e.extrasPercent / 100), COSTS: 0,
+          REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+          SORT_ORDER: e.sortIndex * 10,
+          TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+        };
+      });
+      const { data: created, error: psErr } = await supabase
+        .from("PROJECT_STRUCTURE").insert(structRows).select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT");
+      if (psErr) throw { status: 500, message: psErr.message };
+
+      // 3) Zweiter Pass: FATHER_ID über die Gliederungsschlüssel setzen.
+      const idByKey = new Map();
+      (created || []).forEach((row, i) => idByKey.set(ordered[i]._dbRow.key, row.ID));
+      for (const r of ordered) {
+        const e = r._dbRow;
+        if (!e.parentKey) continue;
+        const childId = idByKey.get(e.key), fatherId = idByKey.get(e.parentKey);
+        if (!childId || !fatherId) continue;
+        const { error: uErr } = await supabase.from("PROJECT_STRUCTURE").update({ FATHER_ID: fatherId }).eq("ID", childId).eq("TENANT_ID", tenantId);
+        if (uErr) throw { status: 500, message: uErr.message };
+      }
+
+      // 4) Fortschritts-Zeilen (ohne sie fehlen Leistungsstand und Reporting).
+      const progRows = (created || []).map((n) => ({
+        STRUCTURE_ID: n.ID, TENANT_ID: tenantId, REVENUE: n.REVENUE ?? 0,
+        EXTRAS_PERCENT: n.EXTRAS_PERCENT ?? 0, EXTRAS: n.EXTRAS ?? 0,
+        REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
+        IMPORT_BATCH_ID: batchId,
+      }));
+      if (progRows.length) {
+        const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert(progRows);
+        if (prErr) throw { status: 500, message: prErr.message };
+      }
+
+      // 5) Elternwerte von unten nach oben — dieselbe Rechnung wie in der App.
+      const parentKeys = [...new Set(ordered.map((r) => r._dbRow.parentKey).filter(Boolean))]
+        .sort((a, b) => b.split(".").length - a.split(".").length);
+      for (const key of parentKeys) {
+        const parentId = idByKey.get(key);
+        if (parentId) await projekteSvc.recalcParent(supabase, { parentId });
+      }
+
+      inserted += ordered.length;
+    } catch (err) {
+      throw { status: err?.status || 500, message: `Struktur für Projekt ${number} fehlgeschlagen: ${err?.message || err}` };
+    }
+  }
+  return { inserted };
+}
+
 // ── Domäne: Anfangsbestände / Altrechnungen ──────────────────────────────────
-// „bereits berechnet" je Projekt → echter, gebuchter Referenz-Beleg (Abschlags-
+// „bereits berechnet“ je Projekt → echter, gebuchter Referenz-Beleg (Abschlags-
 // rechnung ODER Rechnung), damit der Wert das Self-Healing-Recompute überlebt.
 // Erzeugt über die App-Pipeline init → Belegstruktur → book(skipDocuments).
 const OPENING_BALANCE_FIELDS = [
@@ -715,7 +1060,7 @@ function buildOpeningBalanceEntry(mapped, ctx) {
   if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
   else {
     proj = ctx.byNumber.get(norm(number)) || null;
-    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}" nicht gefunden` }); ok = false; }
+    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}“ nicht gefunden` }); ok = false; }
     else {
       if (!proj.contract) { messages.push({ level: "error", text: "Projekt hat keinen Vertrag — zuerst „Projekt-Honorar“ importieren" }); ok = false; }
       if (!proj.btStructures.length) { messages.push({ level: "error", text: "Keine abrechenbare Pauschal-Struktur (nur Pauschal-Projekte)" }); ok = false; }
@@ -725,7 +1070,7 @@ function buildOpeningBalanceEntry(mapped, ctx) {
   const feeRaw = s(mapped.amount);
   const amount = parseAmountDE(feeRaw);
   if (!feeRaw) { messages.push({ level: "error", text: "Betrag fehlt (Pflichtfeld)" }); ok = false; }
-  else if (amount.invalid || amount.value == null) { messages.push({ level: "error", text: `Betrag „${feeRaw}" ist keine gültige Zahl` }); ok = false; }
+  else if (amount.invalid || amount.value == null) { messages.push({ level: "error", text: `Betrag „${feeRaw}“ ist keine gültige Zahl` }); ok = false; }
   else if (amount.value <= 0) { messages.push({ level: "error", text: "Betrag muss größer als 0 sein" }); ok = false; }
   else if (proj && proj.btStructures.length) {
     const sumRev = proj.btStructures.reduce((a, n) => a + n.revenue, 0);
@@ -737,7 +1082,7 @@ function buildOpeningBalanceEntry(mapped, ctx) {
   const paidRaw = s(mapped.paid);
   if (paidRaw) {
     const paid = parseAmountDE(paidRaw);
-    if (paid.invalid || paid.value == null) { messages.push({ level: "error", text: `Bezahlt „${paidRaw}" ist keine gültige Zahl` }); ok = false; }
+    if (paid.invalid || paid.value == null) { messages.push({ level: "error", text: `Bezahlt „${paidRaw}“ ist keine gültige Zahl` }); ok = false; }
     else if (paid.value < 0) { messages.push({ level: "error", text: "Bezahlt darf nicht negativ sein" }); ok = false; }
     else if (amount.value != null && paid.value > amount.value + 0.01) { messages.push({ level: "error", text: "Bezahlt darf den berechneten Betrag nicht übersteigen" }); ok = false; }
     else paidVal = paid.value;
@@ -820,7 +1165,7 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
         docId = id; vatPercent = num(pp.VAT_PERCENT);
       }
 
-      // Optional: „bereits bezahlt" als echte Zahlung gegen den Beleg buchen.
+      // Optional: „bereits bezahlt“ als echte Zahlung gegen den Beleg buchen.
       if (e.paid > 0) {
         await recordOpeningPayment(supabase, { tenantId, batchId, docType, docId, projectId: e.projectId, contractId: e.contractId, paidNet: e.paid, vatPercent, dist });
       }
@@ -832,7 +1177,7 @@ async function commitOpeningBalanceRows(rows, { supabase, tenantId, batchId, opt
   return { inserted: done };
 }
 
-// Bucht „bereits bezahlt" als echte Zahlung gegen den Beleg (spiegelt routes/payments.js).
+// Bucht „bereits bezahlt“ als echte Zahlung gegen den Beleg (spiegelt routes/payments.js).
 async function recordOpeningPayment(supabase, { tenantId, batchId, docType, docId, projectId, contractId, paidNet, vatPercent, dist }) {
   const gross = fmt2(paidNet * (1 + num(vatPercent) / 100));
   const vat = fmt2(gross - paidNet);
@@ -1013,13 +1358,13 @@ function buildOpeningCostEntry(mapped, ctx) {
   if (!number) { messages.push({ level: "error", text: "Projektnummer fehlt (Pflichtfeld)" }); ok = false; }
   else {
     proj = ctx.byNumber.get(norm(number)) || null;
-    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}" nicht gefunden` }); ok = false; }
+    if (!proj) { messages.push({ level: "error", text: `Projekt „${number}“ nicht gefunden` }); ok = false; }
   }
 
   const costRaw = s(mapped.cost);
   const cost = parseAmountDE(costRaw);
   if (!costRaw) { messages.push({ level: "error", text: "Kostenbetrag fehlt (Pflichtfeld)" }); ok = false; }
-  else if (cost.invalid || cost.value == null) { messages.push({ level: "error", text: `Kosten „${costRaw}" ist keine gültige Zahl` }); ok = false; }
+  else if (cost.invalid || cost.value == null) { messages.push({ level: "error", text: `Kosten „${costRaw}“ ist keine gültige Zahl` }); ok = false; }
   else if (cost.value <= 0) { messages.push({ level: "error", text: "Kostenbetrag muss größer als 0 sein" }); ok = false; }
 
   if (proj && ok && proj.structureId == null) messages.push({ level: "warn", text: "Projekt ohne Leistungsstruktur — Kosten werden auf Projektebene gebucht" });
@@ -1063,6 +1408,26 @@ async function rollbackOpeningCost({ supabase, tenantId, batchId }) {
   await supabase.from("TEC").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
   for (const sid of structureIds) { try { await recomputeStructure(supabase, sid); } catch (_) { /* COSTS-Recompute soft-fail */ } }
   return { deleted: rows.length };
+}
+
+// Rollback-Schutz für die struktur-schreibenden Domänen: hängt am Projekt
+// inzwischen echte Arbeit (Rechnung, Buchung, Abschlag), wird nicht gelöscht.
+async function structureBatchBlockers({ supabase, tenantId, batchId }) {
+  const { data: structs } = await supabase
+    .from("PROJECT_STRUCTURE").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  const projectIds = [...new Set((structs || []).map((r) => r.PROJECT_ID).filter(Boolean))];
+  if (!projectIds.length) return [];
+  const blockers = [];
+  for (const dep of [{ table: "INVOICE", label: "Rechnung(en)" }, { table: "TEC", label: "Buchung(en)" }, { table: "PARTIAL_PAYMENT", label: "Abschlagszahlung(en)" }]) {
+    const { count, error } = await supabase
+      .from(dep.table).select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
+    if (error) {
+      if (/relation .* does not exist|column .* does not exist/i.test(error.message)) continue;
+      throw { status: 500, message: error.message };
+    }
+    if (count > 0) blockers.push(`${count}× ${dep.label}`);
+  }
+  return blockers;
 }
 
 const DOMAINS = {
@@ -1137,23 +1502,28 @@ const DOMAINS = {
     buildEntry: buildProjectFeeEntry,
     commitRows: commitProjectFeeRows,
     rollbackTables: ["PROJECT_PROGRESS", "PROJECT_STRUCTURE", "CONTRACT"], // PROGRESS vor STRUCTURE (FK)
-    async computeBlockers({ supabase, tenantId, batchId }) {
-      const { data: structs } = await supabase
-        .from("PROJECT_STRUCTURE").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
-      const projectIds = [...new Set((structs || []).map((r) => r.PROJECT_ID).filter(Boolean))];
-      if (!projectIds.length) return [];
-      const blockers = [];
-      for (const dep of [{ table: "INVOICE", label: "Rechnung(en)" }, { table: "TEC", label: "Buchung(en)" }, { table: "PARTIAL_PAYMENT", label: "Abschlagszahlung(en)" }]) {
-        const { count, error } = await supabase
-          .from(dep.table).select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
-        if (error) {
-          if (/relation .* does not exist|column .* does not exist/i.test(error.message)) continue;
-          throw { status: 500, message: error.message };
-        }
-        if (count > 0) blockers.push(`${count}× ${dep.label}`);
-      }
-      return blockers;
-    },
+    computeBlockers: async ({ supabase, tenantId, batchId }) => structureBatchBlockers({ supabase, tenantId, batchId }),
+  },
+  project_structure: {
+    key: "project_structure",
+    label: "Projektstruktur (Leistungsbaum)",
+    table: "PROJECT_STRUCTURE",
+    matchLabel: "Projektnummer",
+    fields: PROJECT_STRUCTURE_FIELDS,
+    exampleRows: [
+      { project_number: "P-2024-012", outline: "1",   name_short: "LB Gebäude", name_long: "Leistungsbild Gebäude",       billing: "",         revenue: "",      extras_percent: "5" },
+      { project_number: "P-2024-012", outline: "1.1", name_short: "LP1-4",      name_long: "Vorplanung bis Genehmigung",  billing: "Pauschal", revenue: "27000", extras_percent: "" },
+      { project_number: "P-2024-012", outline: "1.2", name_short: "LP5",        name_long: "Ausführungsplanung",          billing: "Pauschal", revenue: "25000", extras_percent: "" },
+      { project_number: "P-2024-012", outline: "1.3", name_short: "LP6-8",      name_long: "Vergabe und Bauüberwachung",  billing: "Pauschal", revenue: "28000", extras_percent: "" },
+      { project_number: "P-2024-012", outline: "2",   name_short: "BL",         name_long: "Besondere Leistungen",        billing: "Stunden",  revenue: "",      extras_percent: "" },
+    ],
+    dedupeInFile: false,               // viele Zeilen je Projekt sind der Normalfall
+    loadContext: loadProjectStructureContext,
+    buildEntry: buildProjectStructureEntry,
+    finalizeRows: finalizeProjectStructureRows,
+    commitRows: commitProjectStructureRows,
+    rollbackTables: ["PROJECT_PROGRESS", "PROJECT_STRUCTURE", "CONTRACT"],
+    computeBlockers: async ({ supabase, tenantId, batchId }) => structureBatchBlockers({ supabase, tenantId, batchId }),
   },
   opening_balance: {
     key: "opening_balance",
@@ -1218,7 +1588,6 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
   const map = mapping && Object.keys(mapping).length ? mapping : buildAutoMapping(parsed.headers, domainKey);
   const seen = new Set();
   const rows = [];
-  let ok = 0, warning = 0, duplicate = 0, error = 0;
 
   parsed.rows.forEach((raw, i) => {
     const mapped = {};
@@ -1238,7 +1607,9 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
       // schlägt "sauber". matchKey kann ein String oder mehrere Schlüssel sein
       // (z. B. Mitarbeiter: Mail/Kürzel/Pers.-Nr.).
       const keys = Array.isArray(entry.matchKey) ? entry.matchKey : [entry.matchKey];
-      if (keys.some((k) => seen.has(k))) {
+      // Bäume liefern absichtlich viele Zeilen je Projekt — dort ist eine
+      // wiederkehrende Projektnummer keine Dublette, sondern der Normalfall.
+      if (def.dedupeInFile !== false && keys.some((k) => seen.has(k))) {
         status = "duplicate"; messages.push({ level: "warn", text: "Dublette innerhalb der Datei" });
       } else if (keys.some((k) => ctx.existingKeys.has(k))) {
         status = "duplicate"; messages.push({ level: "warn", text: "Bereits im System vorhanden" });
@@ -1248,14 +1619,29 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
       keys.forEach((k) => seen.add(k));
     }
 
-    if (status === "ok") ok++;
-    else if (status === "warning") warning++;
-    else if (status === "duplicate") duplicate++;
-    else error++;
     // `_raw` = die Originalzeile der Datei; sie speist das Fehlerprotokoll,
     // das der Nutzer korrigiert und unverändert wieder hochladen kann.
     rows.push({ row: i + 2, status, messages, display: entry.display, _dbRow: entry.dbRow, _raw: raw });
   });
+
+  // Zeilenübergreifende Prüfung (Hierarchien): eine Baumzeile lässt sich nicht
+  // allein beurteilen — ob sie Blatt oder Knoten ist, sagt erst der Rest.
+  if (def.finalizeRows) {
+    def.finalizeRows(rows, ctx);
+    // Dort ergänzte Hinweise müssen den Status nachziehen, sonst bliebe eine
+    // Zeile „sauber“, obwohl an ihr eine Warnung hängt.
+    for (const r of rows) {
+      if (r.status === "ok" && r.messages.some((m) => m.level === "warn")) r.status = "warning";
+    }
+  }
+
+  let ok = 0, warning = 0, duplicate = 0, error = 0;
+  for (const r of rows) {
+    if (r.status === "ok") ok++;
+    else if (r.status === "warning") warning++;
+    else if (r.status === "duplicate") duplicate++;
+    else error++;
+  }
 
   return { mapping: map, summary: { total: rows.length, ok, warning, duplicate, error }, rows };
 }
@@ -1550,6 +1936,20 @@ const TEMPLATE_HELP = {
     ],
     after: ["Projekte, die bereits eine Leistungsstruktur haben, werden als Dublette übersprungen."],
   },
+  project_structure: {
+    intro: "Die Leistungsstruktur eines Projekts als Baum — Leistungsbilder, Leistungsphasen, Bauabschnitte, besondere Leistungen. Eine Zeile je Knoten; die Gliederungsnummer sagt, was unter was gehört.",
+    before: [
+      "Projekte importieren. Die Zuordnung läuft über die Projektnummer.",
+      "Gliederung vergeben: 1, 1.1, 1.2, 2 … — „1.1“ liegt unter „1“. Reihenfolge und Hierarchie kommen allein aus dieser Spalte.",
+      "Wer keine Gliederung hat, kann stattdessen die Spalte „Ebene“ (1/2/3) nutzen — dann zählt die Zeilenreihenfolge, und Sortieren in Excel zerstört den Baum.",
+    ],
+    after: [
+      "Honorar und Abrechnungsart gehören an die UNTERSTEN Zeilen. Übergeordnete Zeilen werden aus ihren Unterzeilen gerechnet; ein dort eingetragener Betrag wird ignoriert.",
+      "Stunden-Positionen bekommen kein Honorar — der Umsatz entsteht später aus den Buchungen.",
+      "Ist eine Zeile eines Projekts fehlerhaft, wird das ganze Projekt übersprungen — ein halber Baum wäre schlimmer als keiner.",
+      "Projekte, die bereits eine Struktur haben, werden übersprungen.",
+    ],
+  },
   opening_balance: {
     intro: "Was auf einem laufenden Projekt bereits berechnet (und ggf. bezahlt) wurde. Wird als echter, gebuchter Beleg angelegt — ohne PDF und ohne E-Rechnung —, damit offene Posten und Auswertungen ab Tag 1 stimmen.",
     before: [
@@ -1616,12 +2016,12 @@ function applyColumnFormats(ws, fields) {
   });
 }
 
-/** Auswahllisten an die Datenspalten hängen (Verweis auf das Blatt „Listen"). */
-function applyValidations(ws, fields, listColumns) {
+/** Auswahllisten an die Datenspalten hängen (Verweis auf das Blatt „Listen“). */
+function applyValidations(ws, fields, listColumns, rowCount = TPL.DATA_ROWS) {
   fields.forEach((f, i) => {
     const ref = f.list && listColumns[f.list];
     if (!ref) return;
-    for (let r = 2; r <= TPL.DATA_ROWS + 1; r++) {
+    for (let r = 2; r <= rowCount + 1; r++) {
       ws.getCell(r, i + 1).dataValidation = {
         type: "list",
         allowBlank: true,
@@ -1711,7 +2111,7 @@ function buildGuideSheet(ws, def, lists) {
  * mitimportiert, wenn der Nutzer sie nicht selbst gelöscht hat. Eingelesen
  * wird beim Upload „Daten“ bzw. das erste Blatt.
  */
-async function buildTemplate(domainKey, { supabase, tenantId } = {}) {
+async function buildTemplate(domainKey, { supabase, tenantId, prefillRows } = {}) {
   const def = getDomain(domainKey);
   const lists = await loadTemplateLists(supabase, tenantId);
 
@@ -1722,7 +2122,7 @@ async function buildTemplate(domainKey, { supabase, tenantId } = {}) {
   const wsGuide   = wb.addWorksheet("Anleitung", { views: [{ showGridLines: false }] });
   const wsData    = wb.addWorksheet("Daten");
   const wsExample = wb.addWorksheet("Beispiel");
-  // „Listen" nur, wenn der Bereich überhaupt Auswahlfelder hat (Anfangsbestände
+  // „Listen“ nur, wenn der Bereich überhaupt Auswahlfelder hat (Anfangsbestände
   // haben keine) — ein leeres Blatt wäre nur Ballast.
   const usedLists = [...new Set(def.fields.map((f) => f.list).filter(Boolean))]
     .filter((k) => (lists[k] || []).length);
@@ -1731,18 +2131,58 @@ async function buildTemplate(domainKey, { supabase, tenantId } = {}) {
   buildGuideSheet(wsGuide, def, lists);
 
   wsData.addRow(def.fields.map(templateHeader));
+  // Vorbefuellung: fertige Zeilen (z. B. der HOAI-Baum je Projekt), die der
+  // Nutzer nur noch um die Betraege ergaenzt.
+  (prefillRows || []).forEach((r) => wsData.addRow(def.fields.map((f) => r[f.key] ?? "")));
   styleHeaderRow(wsData, def.fields);
   applyColumnFormats(wsData, def.fields);
 
   wsExample.addRow(def.fields.map(templateHeader));
-  wsExample.addRow(def.fields.map((f) => f.example ?? ""));
+  // Manche Bereiche brauchen mehrere Zeilen, um verständlich zu sein — ein Baum
+  // ist mit einer einzelnen Zeile nicht zu erklären.
+  if (def.exampleRows) def.exampleRows.forEach((r) => wsExample.addRow(def.fields.map((f) => r[f.key] ?? "")));
+  else wsExample.addRow(def.fields.map((f) => f.example ?? ""));
   styleHeaderRow(wsExample, def.fields);
   applyColumnFormats(wsExample, def.fields);
 
-  if (wsLists) applyValidations(wsData, def.fields, buildListsSheet(wsLists, usedLists, lists));
+  if (wsLists) applyValidations(wsData, def.fields, buildListsSheet(wsLists, usedLists, lists), Math.max(TPL.DATA_ROWS, (prefillRows || []).length));
 
   const buffer = await wb.xlsx.writeBuffer();
-  return { buffer: Buffer.from(buffer), filename: `plan-und-simple_Vorlage_${def.key}.xlsx` };
+  const suffix = (prefillRows || []).length ? "_vorbefuellt" : "";
+  return { buffer: Buffer.from(buffer), filename: `plan-und-simple_Vorlage_${def.key}${suffix}.xlsx` };
+}
+
+/**
+ * Vorbefüllte Strukturvorlage: für jedes Projekt ohne Leistungsstruktur ein
+ * Leistungsbild mit den HOAI-Leistungsphasen darunter. Der Nutzer trägt nur noch
+ * die Beträge ein — Gliederung, Kürzel und Abrechnungsart stehen schon da.
+ *
+ * Das ist der bequemste Weg zu einem Baum: tippen muss niemand mehr, und die
+ * Projektnummern stimmen garantiert, weil sie aus dem Bestand kommen.
+ */
+async function buildStructurePrefill({ supabase, tenantId }) {
+  const ctx = await loadProjectStructureContext(supabase, tenantId);
+  const offen = [...ctx.projectsByNumber.values()]
+    .filter((p) => !ctx.existingKeys.has(norm(p.number)))
+    .sort((a, b) => String(a.number).localeCompare(String(b.number), "de", { numeric: true }));
+
+  if (!offen.length) {
+    throw { status: 400, message: "Alle Projekte haben bereits eine Leistungsstruktur — es gibt nichts vorzubereiten." };
+  }
+
+  const rows = [];
+  for (const p of offen) {
+    rows.push({ project_number: p.number, outline: "1", name_short: "LB", name_long: `Leistungsbild — ${p.name}` });
+    HOAI_LP.forEach((lp, i) => {
+      rows.push({
+        project_number: p.number, outline: `1.${i + 1}`,
+        name_short: lp.code, name_long: lp.name, billing: "Pauschal",
+      });
+    });
+  }
+
+  const tpl = await buildTemplate("project_structure", { supabase, tenantId, prefillRows: rows });
+  return { ...tpl, projects: offen.length, rows: rows.length };
 }
 
 function listDomains() {
@@ -1754,7 +2194,7 @@ function listDomains() {
 module.exports = {
   // rein / testbar
   s, norm, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
-  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildOpeningBalanceEntry, buildOpeningCostEntry,
+  buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildProjectStructureEntry, finalizeProjectStructureRows, parseOutline, buildOpeningBalanceEntry, buildOpeningCostEntry,
   // orchestriert
-  preview, commit, errorReport, listBatches, rollback, buildTemplate, listDomains, DOMAINS,
+  preview, commit, errorReport, listBatches, rollback, buildTemplate, buildStructurePrefill, listDomains, DOMAINS,
 };

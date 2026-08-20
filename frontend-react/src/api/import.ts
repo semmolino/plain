@@ -100,6 +100,10 @@ export const previewImport = (domain: string, file: File, mapping?: Record<strin
 export const commitImport = (domain: string, file: File, mapping: Record<string, string>, duplicateMode: DuplicateMode, structureMode?: StructureMode, docType?: DocType) =>
   apiClient.post<{ data: ImportCommitResult }>(`/import/${domain}/commit`, buildForm(file, mapping, duplicateMode, structureMode, docType))
 
+/** Strukturvorlage, bereits mit den eigenen Projekten und den HOAI-Phasen gefüllt. */
+export const downloadStructurePrefill = () =>
+  downloadWithAuth('/import/project_structure/prefill', 'plan-und-simple_Vorlage_project_structure_vorbefuellt.xlsx')
+
 /** Nicht importierbare Zeilen als Excel — zum Korrigieren und erneut Hochladen. */
 export const downloadImportErrors = (domain: string, file: File, mapping: Record<string, string>) =>
   downloadWithAuth(`/import/${domain}/errors`, `plan-und-simple_Fehler_${domain}.xlsx`, buildForm(file, mapping))
