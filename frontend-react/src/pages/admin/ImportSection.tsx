@@ -50,6 +50,8 @@ export function ImportSection() {
   const [err, setErr] = useState<string | null>(null)
   const [done, setDone] = useState<{ inserted: number } | null>(null)
   const [confirmRollback, setConfirmRollback] = useState<ImportBatch | null>(null)
+  // In der Vorschau abgewaehlte Zeilen (Zeilennummern der Datei).
+  const [excluded, setExcluded] = useState<Set<number>>(new Set())
 
   const { data: batchesData } = useQuery({ queryKey: ['import-batches'], queryFn: fetchImportBatches })
   const batches = batchesData?.data ?? []
@@ -83,10 +85,14 @@ export function ImportSection() {
   const commitMut = useMutation({
     mutationFn: () => commitImport(domainKey, file!, mapping, duplicateMode,
       domainKey === 'project_fee' ? structureMode : undefined,
-      domainKey === 'opening_balance' ? docType : undefined),
+      domainKey === 'opening_balance' ? docType : undefined,
+      [...excluded]),
     onSuccess: (res) => {
-      setDone({ inserted: res.data.inserted })
-      toast.success(`${res.data.inserted} Datensätze importiert`)
+      const { inserted, merged } = res.data
+      setDone({ inserted })
+      toast.success(merged
+        ? `${inserted} Datensätze angelegt, ${merged} zusammengeführt`
+        : `${inserted} Datensätze importiert`)
       invalidateAffected()
       resetWizard()
     },
@@ -96,7 +102,10 @@ export function ImportSection() {
   const rollbackMut = useMutation({
     mutationFn: (id: number) => rollbackImportBatch(id),
     onSuccess: (res) => {
-      toast.success(`Import zurückgesetzt — ${res.data.deleted} Datensätze entfernt`)
+      const { deleted, restored } = res.data
+      toast.success(restored
+        ? `Import zurückgesetzt — ${deleted} entfernt, ${restored} auf den vorherigen Stand gesetzt`
+        : `Import zurückgesetzt — ${deleted} Datensätze entfernt`)
       setConfirmRollback(null)
       invalidateAffected()
     },
@@ -104,13 +113,13 @@ export function ImportSection() {
   })
 
   function resetWizard() {
-    setFile(null); setPreview(null); setMapping({}); setDuplicateMode('skip'); setErr(null)
+    setFile(null); setPreview(null); setMapping({}); setDuplicateMode('skip'); setErr(null); setExcluded(new Set())
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; if (!f) return
-    setFile(f); setDone(null); setErr(null); setMapping({})
+    setFile(f); setDone(null); setErr(null); setMapping({}); setExcluded(new Set())
     previewMut.mutate({ f, map: null })
   }
 
@@ -122,7 +131,17 @@ export function ImportSection() {
   }
 
   const s = preview?.summary
-  const importableCount = s ? (s.ok + s.warning + (duplicateMode === 'import' ? s.duplicate : 0)) : 0
+  // Abgewaehlt wird nur, was in der Vorschau sichtbar ist (erste 200 Zeilen).
+  const excludedImportable = (preview?.rows ?? [])
+    .filter(r => excluded.has(r.row) && (r.status === 'ok' || r.status === 'warning' || (r.status === 'duplicate' && duplicateMode !== 'skip')))
+    .length
+  const importableCount = s
+    ? Math.max(0, s.ok + s.warning + (duplicateMode !== 'skip' ? s.duplicate : 0) - excludedImportable)
+    : 0
+
+  function toggleRow(row: number) {
+    setExcluded(prev => { const next = new Set(prev); if (next.has(row)) next.delete(row); else next.add(row); return next })
+  }
 
   return (
     <div className="admin-section">
@@ -291,7 +310,9 @@ export function ImportSection() {
               <HelpHint id="import.mapping" />
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px' }}>
-              Wir haben die Spalten deiner Datei automatisch zugeordnet. Stimmt etwas nicht, hier korrigieren.
+              {preview.mappingSource === 'remembered'
+                ? 'Wir haben die Zuordnung aus deinem letzten Import dieses Bereichs übernommen. Stimmt etwas nicht, hier korrigieren.'
+                : 'Wir haben die Spalten deiner Datei automatisch zugeordnet. Stimmt etwas nicht, hier korrigieren.'}
             </p>
             {/* Bei unseren Vorlagen ist „Daten“ das richtige Blatt — dann ist der
                 Hinweis nur Lärm. Er erscheint, wenn eine fremde Mappe hochgeladen
@@ -346,11 +367,26 @@ export function ImportSection() {
             )}
 
             {(s?.duplicate ?? 0) > 0 && (
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 10 }}>
-                <input type="checkbox" checked={duplicateMode === 'import'} onChange={e => setDuplicateMode(e.target.checked ? 'import' : 'skip')} />
-                Dubletten trotzdem importieren
-                <HelpHint id="import.duplicates" />
-              </label>
+              <div style={{ margin: '4px 0 12px', padding: 10, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2, #f8fafc)' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'inline-flex', alignItems: 'center' }}>
+                  {s?.duplicate} Dublette{(s?.duplicate ?? 0) === 1 ? '' : 'n'} — was soll damit passieren?
+                  <HelpHint id="import.duplicates" />
+                </div>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 4 }}>
+                  <input type="radio" name="dupmode" checked={duplicateMode === 'skip'} onChange={() => setDuplicateMode('skip')} />
+                  Überspringen — der Bestand bleibt unverändert
+                </label>
+                {preview.mergeable && (
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 4 }}>
+                    <input type="radio" name="dupmode" checked={duplicateMode === 'merge'} onChange={() => setDuplicateMode('merge')} />
+                    Zusammenführen — gefüllte Spalten der Datei ergänzen den vorhandenen Datensatz (leere Zellen überschreiben nichts)
+                  </label>
+                )}
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                  <input type="radio" name="dupmode" checked={duplicateMode === 'import'} onChange={() => setDuplicateMode('import')} />
+                  Trotzdem neu anlegen — erzeugt einen zweiten Datensatz
+                </label>
+              </div>
             )}
 
             {/* Kompakte Vorschau: feste Spaltenbreiten, kein Horizontal-Scroll;
@@ -358,13 +394,17 @@ export function ImportSection() {
             <div style={{ maxHeight: 420, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
               <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 12 }}>
                 <colgroup>
+                  <col style={{ width: 34 }} />
                   <col style={{ width: 44 }} />
                   <col style={{ width: 92 }} />
-                  <col style={{ width: '42%' }} />
+                  <col style={{ width: '38%' }} />
                   <col />
                 </colgroup>
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                    <th scope="col" style={{ padding: '6px 4px' }}>
+                      <span className="sr-only">Übernehmen</span>
+                    </th>
                     <th scope="col" style={{ textAlign: 'left', padding: '6px 8px' }}>Zeile</th>
                     <th scope="col" style={{ textAlign: 'left', padding: '6px 8px' }}>Status</th>
                     <th scope="col" style={{ textAlign: 'left', padding: '6px 8px' }}>Datensatz</th>
@@ -377,8 +417,20 @@ export function ImportSection() {
                     const hasErr = r.messages.some(m => m.level === 'error')
                     const hasWarn = r.messages.some(m => m.level === 'warn')
                     const noteColor = hasErr ? '#b91c1c' : hasWarn ? '#b45309' : 'var(--text-3)'
+                    const abgewaehlt = excluded.has(r.row)
+                    const waehlbar = r.status !== 'error'
                     return (
-                      <tr key={r.row} style={{ borderBottom: '1px solid var(--border-3)', verticalAlign: 'top' }}>
+                      <tr key={r.row} style={{ borderBottom: '1px solid var(--border-3)', verticalAlign: 'top', opacity: abgewaehlt ? 0.45 : 1 }}>
+                        <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                          {waehlbar && (
+                            <input
+                              type="checkbox"
+                              checked={!abgewaehlt}
+                              onChange={() => toggleRow(r.row)}
+                              aria-label={`Zeile ${r.row} übernehmen`}
+                            />
+                          )}
+                        </td>
                         <td style={{ padding: '6px 8px', color: 'var(--text-3)' }}>{r.row}</td>
                         <td style={{ padding: '6px 8px' }}><StatusBadge status={r.status} /></td>
                         <td style={{ padding: '6px 8px', wordBreak: 'break-word' }}>{data || '—'}</td>
@@ -389,7 +441,11 @@ export function ImportSection() {
                 </tbody>
               </table>
             </div>
-            {preview.truncated && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>Nur die ersten 200 Zeilen werden angezeigt; importiert werden alle.</p>}
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+              Einzelne Zeilen lassen sich über das Häkchen abwählen — sie werden dann nicht importiert.
+              {excluded.size > 0 && <> Aktuell abgewählt: <strong>{excluded.size}</strong>.</>}
+            </p>
+            {preview.truncated && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Nur die ersten 200 Zeilen werden angezeigt; importiert werden alle — abwählen geht daher nur für die sichtbaren.</p>}
 
             {domainKey === 'opening_balance' && (
               <div style={{ margin: '4px 0 12px', padding: 10, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2, #f8fafc)' }}>

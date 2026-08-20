@@ -6,6 +6,14 @@ function fail(res, e) {
   return res.status(e?.status || 500).json({ error: e?.message || String(e) });
 }
 
+/** Abgewaehlte Zeilennummern kommen als JSON-Array im multipart-Body. */
+function parseExcludeRows(req) {
+  const raw = req.body?.excludeRows;
+  if (!raw) return [];
+  try { const v = typeof raw === "string" ? JSON.parse(raw) : raw; return Array.isArray(v) ? v : []; }
+  catch { return []; }
+}
+
 /** mapping kommt im multipart-Body als JSON-String (oder fehlt → null = Auto). */
 function parseMapping(req) {
   const m = req.body?.mapping;
@@ -58,6 +66,7 @@ async function postCommit(req, res, supabase) {
       mapping: parseMapping(req), sheetName: req.body?.sheetName || null, duplicateMode: req.body?.duplicateMode || "skip",
       structureMode: req.body?.structureMode || "single",
       docType: req.body?.docType || "partial",
+      excludeRows: parseExcludeRows(req),
       supabase, tenantId: req.tenantId, employeeId: req.employeeId,
     });
     res.json({ data });

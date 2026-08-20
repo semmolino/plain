@@ -47,6 +47,10 @@ export interface ImportPreview {
   sheetNames: string[]
   headers:   string[]
   mapping:   Record<string, string>
+  /** 'remembered' = Zuordnung aus dem letzten Import dieses Bereichs übernommen. */
+  mappingSource: 'auto' | 'remembered' | 'manual'
+  /** Ob dieser Bereich Dubletten mit dem Bestand zusammenführen kann. */
+  mergeable: boolean
   fields:    ImportFieldDef[]
   summary:   ImportSummary
   rows:      ImportPreviewRow[]
@@ -56,6 +60,7 @@ export interface ImportPreview {
 export interface ImportCommitResult {
   batchId:  number
   inserted: number
+  merged?:  number
   summary:  ImportSummary
 }
 
@@ -72,7 +77,7 @@ export interface ImportBatch {
   rolledBackAt: string | null
 }
 
-export type DuplicateMode = 'skip' | 'import'
+export type DuplicateMode = 'skip' | 'import' | 'merge'
 export type StructureMode = 'single' | 'hoai'
 export type DocType = 'partial' | 'invoice'
 
@@ -84,21 +89,22 @@ export const fetchImportDomains = () =>
 export const downloadImportTemplate = (domain: string) =>
   downloadWithAuth(`/import/${domain}/template`, `plan-und-simple_Vorlage_${domain}.xlsx`)
 
-function buildForm(file: File, mapping?: Record<string, string> | null, duplicateMode?: DuplicateMode, structureMode?: StructureMode, docType?: DocType) {
+function buildForm(file: File, mapping?: Record<string, string> | null, duplicateMode?: DuplicateMode, structureMode?: StructureMode, docType?: DocType, excludeRows?: number[]) {
   const fd = new FormData()
   fd.append('file', file)
   if (mapping && Object.keys(mapping).length) fd.append('mapping', JSON.stringify(mapping))
   if (duplicateMode) fd.append('duplicateMode', duplicateMode)
   if (structureMode) fd.append('structureMode', structureMode)
   if (docType) fd.append('docType', docType)
+  if (excludeRows && excludeRows.length) fd.append('excludeRows', JSON.stringify(excludeRows))
   return fd
 }
 
 export const previewImport = (domain: string, file: File, mapping?: Record<string, string> | null) =>
   apiClient.post<{ data: ImportPreview }>(`/import/${domain}/preview`, buildForm(file, mapping))
 
-export const commitImport = (domain: string, file: File, mapping: Record<string, string>, duplicateMode: DuplicateMode, structureMode?: StructureMode, docType?: DocType) =>
-  apiClient.post<{ data: ImportCommitResult }>(`/import/${domain}/commit`, buildForm(file, mapping, duplicateMode, structureMode, docType))
+export const commitImport = (domain: string, file: File, mapping: Record<string, string>, duplicateMode: DuplicateMode, structureMode?: StructureMode, docType?: DocType, excludeRows?: number[]) =>
+  apiClient.post<{ data: ImportCommitResult }>(`/import/${domain}/commit`, buildForm(file, mapping, duplicateMode, structureMode, docType, excludeRows))
 
 /** Strukturvorlage, bereits mit den eigenen Projekten und den HOAI-Phasen gefüllt. */
 export const downloadStructurePrefill = () =>
@@ -112,4 +118,4 @@ export const fetchImportBatches = () =>
   apiClient.get<{ data: ImportBatch[] }>('/import/batches')
 
 export const rollbackImportBatch = (id: number) =>
-  apiClient.post<{ data: { rolledBack: boolean; deleted: number } }>(`/import/batches/${id}/rollback`, {})
+  apiClient.post<{ data: { rolledBack: boolean; deleted: number; restored?: number } }>(`/import/batches/${id}/rollback`, {})

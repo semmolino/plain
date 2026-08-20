@@ -110,8 +110,16 @@ export const HELP = {
     body: (
       <>
         Eine Dublette ist ein Datensatz, den es bereits gibt oder der doppelt in der Datei steht
-        (erkannt z. B. an Name + PLZ). Standardmäßig werden Dubletten übersprungen, damit nichts
-        doppelt entsteht. Nur aktivieren, wenn du sie bewusst zusätzlich anlegen willst.
+        (erkannt z. B. an Name + PLZ). Du hast drei Möglichkeiten:<br /><br />
+        <strong>Überspringen</strong> (Standard) — der Bestand bleibt unangetastet.<br />
+        <strong>Zusammenführen</strong> — die gefüllten Spalten der Datei ergänzen den vorhandenen
+        Datensatz. Leere Zellen überschreiben nichts, ein Import ergänzt also, statt auszuradieren.
+        Auch das lässt sich zurücksetzen: der vorherige Stand der geänderten Felder wird im Import-Stapel
+        mitgeschrieben.<br />
+        <strong>Trotzdem neu anlegen</strong> — erzeugt einen zweiten Datensatz. Nur sinnvoll, wenn es
+        sich wirklich um zwei verschiedene handelt.<br /><br />
+        Zusammenführen gibt es dort, wo ein Datensatz eindeutig zuzuordnen ist (Adressen, Kontakte,
+        Mitarbeiter, Projekte) — nicht bei zusammengesetzten Importen wie Struktur oder Belegen.
       </>
     ),
   },

@@ -124,11 +124,16 @@ async function loadAddressContext(supabase, tenantId) {
 
   // Bestand für Dubletten-Erkennung: Name 1 + PLZ.
   const existingKeys = new Set();
+  const existingIds = new Map();          // Schlüssel → ID, für „zusammenführen"
   const { data: addrs } = await supabase
-    .from("ADDRESS").select("ADDRESS_NAME_1, POST_CODE").eq("TENANT_ID", tenantId).limit(100000);
-  for (const a of addrs || []) existingKeys.add(norm(a.ADDRESS_NAME_1) + "|" + norm(a.POST_CODE));
+    .from("ADDRESS").select("ID, ADDRESS_NAME_1, POST_CODE").eq("TENANT_ID", tenantId).limit(100000);
+  for (const a of addrs || []) {
+    const key = norm(a.ADDRESS_NAME_1) + "|" + norm(a.POST_CODE);
+    existingKeys.add(key);
+    if (!existingIds.has(key)) existingIds.set(key, a.ID);
+  }
 
-  return { countries: { byName, default: def }, existingKeys };
+  return { countries: { byName, default: def }, existingKeys, existingIds };
 }
 
 function buildAddressEntry(mapped, ctx) {
@@ -229,14 +234,17 @@ async function loadEmployeeContext(supabase, tenantId) {
 
   // Bestand für Dubletten: pro Mitarbeiter mehrere Schlüssel (Mail/Kürzel/Pers.-Nr.)
   const existingKeys = new Set();
+  const existingIds = new Map();
   const { data: emps } = await supabase
-    .from("EMPLOYEE").select("SHORT_NAME, MAIL, PERSONNEL_NUMBER").eq("TENANT_ID", tenantId).limit(100000);
+    .from("EMPLOYEE").select("ID, SHORT_NAME, MAIL, PERSONNEL_NUMBER").eq("TENANT_ID", tenantId).limit(100000);
   for (const e of emps || []) {
-    if (e.MAIL) existingKeys.add("mail:" + norm(e.MAIL));
-    if (e.SHORT_NAME) existingKeys.add("short:" + norm(e.SHORT_NAME));
-    if (e.PERSONNEL_NUMBER) existingKeys.add("pnr:" + norm(e.PERSONNEL_NUMBER));
+    const keys = [];
+    if (e.MAIL) keys.push("mail:" + norm(e.MAIL));
+    if (e.SHORT_NAME) keys.push("short:" + norm(e.SHORT_NAME));
+    if (e.PERSONNEL_NUMBER) keys.push("pnr:" + norm(e.PERSONNEL_NUMBER));
+    for (const k of keys) { existingKeys.add(k); if (!existingIds.has(k)) existingIds.set(k, e.ID); }
   }
-  return { genders: { byName, byId, default: def }, existingKeys };
+  return { genders: { byName, byId, default: def }, existingKeys, existingIds };
 }
 
 function buildEmployeeEntry(mapped, ctx) {
@@ -325,7 +333,7 @@ async function loadContactContext(supabase, tenantId) {
     supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("SALUTATION").select("ID, SALUTATION"),   // global
     supabase.from("GENDER").select("ID, GENDER"),            // global
-    supabase.from("CONTACTS").select("ADDRESS_ID, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("CONTACTS").select("ID, ADDRESS_ID, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
   ]);
 
   const addrByName = new Map();
@@ -346,10 +354,13 @@ async function loadContactContext(supabase, tenantId) {
   }
 
   const existingKeys = new Set();
+  const existingIds = new Map();
   for (const c of contactRes.data || []) {
-    existingKeys.add(`${c.ADDRESS_ID}|` + norm(`${c.FIRST_NAME || ""} ${c.LAST_NAME || ""}`));
+    const key = `${c.ADDRESS_ID}|` + norm(`${c.FIRST_NAME || ""} ${c.LAST_NAME || ""}`);
+    existingKeys.add(key);
+    if (c.ID != null && !existingIds.has(key)) existingIds.set(key, c.ID);
   }
-  return { addrByName, salByName, genders: { byName: gByName, default: gDefault }, existingKeys };
+  return { addrByName, salByName, genders: { byName: gByName, default: gDefault }, existingKeys, existingIds };
 }
 
 function buildContactEntry(mapped, ctx) {
@@ -432,7 +443,7 @@ async function loadProjectContext(supabase, tenantId) {
     supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId),
     supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("PROJECT").select("NAME_SHORT").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId).limit(100000),
   ]);
 
   const companyId = companyRes.data?.[0]?.ID ?? null;
@@ -449,9 +460,14 @@ async function loadProjectContext(supabase, tenantId) {
   const addrByName = new Map();
   for (const a of addrRes.data || []) if (a.ADDRESS_NAME_1) addrByName.set(norm(a.ADDRESS_NAME_1), a.ID);
   const existingKeys = new Set();
-  for (const p of projRes.data || []) if (p.NAME_SHORT) existingKeys.add(norm(p.NAME_SHORT));
+  const existingIds = new Map();
+  for (const p of projRes.data || []) {
+    if (!p.NAME_SHORT) continue;
+    existingKeys.add(norm(p.NAME_SHORT));
+    if (p.ID != null && !existingIds.has(norm(p.NAME_SHORT))) existingIds.set(norm(p.NAME_SHORT), p.ID);
+  }
 
-  return { companyId, statusByName, typeByName, empByName, addrByName, existingKeys };
+  return { companyId, statusByName, typeByName, empByName, addrByName, existingKeys, existingIds };
 }
 
 function buildProjectEntry(mapped, ctx) {
@@ -1778,6 +1794,7 @@ async function structureBatchBlockers({ supabase, tenantId, batchId }) {
 const DOMAINS = {
   address: {
     key: "address",
+    mergeable: true,                   // Dubletten können mit der Datei zusammengeführt werden
     label: "Adressen",
     table: "ADDRESS",
     matchLabel: "Name 1 + PLZ",
@@ -1791,6 +1808,7 @@ const DOMAINS = {
   },
   employee: {
     key: "employee",
+    mergeable: true,                   // Dubletten können mit der Datei zusammengeführt werden
     label: "Mitarbeiter",
     table: "EMPLOYEE",
     matchLabel: "E-Mail / Kürzel / Personalnummer",
@@ -1806,6 +1824,7 @@ const DOMAINS = {
   },
   contact: {
     key: "contact",
+    mergeable: true,                   // Dubletten können mit der Datei zusammengeführt werden
     label: "Kontakte",
     table: "CONTACTS",
     matchLabel: "Adresse + Name",
@@ -1822,6 +1841,7 @@ const DOMAINS = {
   },
   project: {
     key: "project",
+    mergeable: true,                   // Dubletten können mit der Datei zusammengeführt werden
     label: "Projekte",
     table: "PROJECT",
     matchLabel: "Projektnummer",
@@ -1984,7 +2004,7 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
 
     // `_raw` = die Originalzeile der Datei; sie speist das Fehlerprotokoll,
     // das der Nutzer korrigiert und unverändert wieder hochladen kann.
-    rows.push({ row: i + 2, status, messages, display: entry.display, _dbRow: entry.dbRow, _raw: raw });
+    rows.push({ row: i + 2, status, messages, display: entry.display, _dbRow: entry.dbRow, _raw: raw, _matchKey: entry.matchKey });
   });
 
   // Zeilenübergreifende Prüfung (Hierarchien): eine Baumzeile lässt sich nicht
@@ -2010,12 +2030,105 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
 }
 
 // ── Orchestrierung (mit supabase) ────────────────────────────────────────────
+/** ID des bestehenden Datensatzes zu einer als Dublette erkannten Zeile. */
+function findExistingId(ctx, row) {
+  if (!ctx.existingIds) return null;
+  const keys = Array.isArray(row._matchKey) ? row._matchKey : [row._matchKey];
+  for (const k of keys) {
+    const id = ctx.existingIds.get(k);
+    if (id != null) return id;
+  }
+  return null;
+}
+
+/**
+ * Dubletten zusammenführen: die gefüllten Felder der Datei auf den bestehenden
+ * Datensatz schreiben. Leere Zellen lassen den Bestand in Ruhe — ein Import
+ * soll ergänzen, nicht ausradieren.
+ *
+ * Der vorherige Stand genau der geänderten Felder wandert als `undo` in den
+ * Stapel, damit auch ein Zusammenführen zurückgenommen werden kann. Ohne das
+ * wäre „Import zurücksetzen" für diesen Modus eine leere Zusage.
+ */
+async function mergeExistingRows(rows, { supabase, tenantId, def, ctx }) {
+  const undo = [];
+  let merged = 0;
+
+  for (const r of rows) {
+    const id = findExistingId(ctx, r);
+    if (id == null) continue;
+
+    // Nur gefüllte Felder übernehmen.
+    const payload = {};
+    for (const [col, val] of Object.entries(r._dbRow || {})) {
+      if (val === null || val === undefined || val === "") continue;
+      payload[col] = val;
+    }
+    if (!Object.keys(payload).length) continue;
+
+    // Spaltennamen quoten — ADDRESS trägt z. B. "TAX-ID", und ein Bindestrich
+    // im unquotierten Select ist für PostgREST ein Syntaxfehler.
+    const cols = Object.keys(payload).map((c) => `"${c}"`).join(",");
+    const { data: before, error: selErr } = await supabase
+      .from(def.table).select(cols).eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+    if (selErr) throw { status: 500, message: selErr.message };
+
+    const { error: updErr } = await supabase
+      .from(def.table).update(payload).eq("ID", id).eq("TENANT_ID", tenantId);
+    if (updErr) throw { status: 500, message: updErr.message };
+
+    undo.push({ table: def.table, id, before: before || {} });
+    merged++;
+  }
+  return { merged, undo };
+}
+
+/**
+ * Zuletzt verwendete Spaltenzuordnung dieses Mandanten für diese Domäne.
+ * Wer denselben Export monatlich einspielt, soll seine Zuordnung nicht jedes Mal
+ * neu klicken. `MAPPING_JSON` wurde bisher zwar geschrieben, aber nie gelesen.
+ */
+async function loadRememberedMapping(supabase, tenantId, domainKey) {
+  const { data, error } = await supabase
+    .from("IMPORT_BATCH").select("MAPPING_JSON")
+    .eq("TENANT_ID", tenantId).eq("DOMAIN", domainKey).eq("STATUS", "committed")
+    .order("CREATED_AT", { ascending: false }).limit(1);
+  if (error || !data?.length) return null;
+  const m = data[0].MAPPING_JSON;
+  return m && typeof m === "object" ? m : null;
+}
+
+/** Gemerkte Zuordnung auf die Spalten der aktuellen Datei eindampfen. */
+function applyRememberedMapping(remembered, headers, domainKey) {
+  const auto = buildAutoMapping(headers, domainKey);
+  if (!remembered) return { mapping: auto, source: "auto" };
+  const known = new Set(headers);
+  const usable = {};
+  for (const [field, header] of Object.entries(remembered)) {
+    if (known.has(header)) usable[field] = header;
+  }
+  if (!Object.keys(usable).length) return { mapping: auto, source: "auto" };
+  return { mapping: { ...auto, ...usable }, source: "remembered" };
+}
+
 async function preview({ domainKey, buffer, filename, mapping, sheetName, supabase, tenantId }) {
   const def = getDomain(domainKey);
   const parsed = await parseBuffer(buffer, sheetName);
   if (!parsed.headers.length) throw { status: 400, message: "Die Datei enthält keine Spaltenüberschriften" };
   const ctx = await def.loadContext(supabase, tenantId);
-  const pv = buildPreview({ domainKey, parsed, mapping, ctx });
+
+  // Ohne ausdrückliche Zuordnung: die des letzten Imports vorschlagen, sonst
+  // die automatische. Der Nutzer kann beides im nächsten Schritt korrigieren.
+  let effective = mapping;
+  let mappingSource = "manual";
+  if (!mapping || !Object.keys(mapping).length) {
+    const remembered = await loadRememberedMapping(supabase, tenantId, def.key);
+    const applied = applyRememberedMapping(remembered, parsed.headers, def.key);
+    effective = applied.mapping;
+    mappingSource = applied.source;
+  }
+
+  const pv = buildPreview({ domainKey, parsed, mapping: effective, ctx });
   return {
     domain: def.key,
     filename: filename || null,
@@ -2023,6 +2136,8 @@ async function preview({ domainKey, buffer, filename, mapping, sheetName, supaba
     sheetNames: parsed.sheetNames,
     headers: parsed.headers,
     mapping: pv.mapping,
+    mappingSource,
+    mergeable: !!def.mergeable,
     fields: def.fields.map(publicField),
     summary: pv.summary,
     rows: pv.rows.slice(0, 200).map((r) => ({ row: r.row, status: r.status, messages: r.messages, display: r.display })),
@@ -2030,15 +2145,32 @@ async function preview({ domainKey, buffer, filename, mapping, sheetName, supaba
   };
 }
 
-async function commit({ domainKey, buffer, filename, mapping, sheetName, duplicateMode, structureMode, docType, supabase, tenantId, employeeId }) {
+async function commit({ domainKey, buffer, filename, mapping, sheetName, duplicateMode, structureMode, docType, excludeRows, supabase, tenantId, employeeId }) {
   const def = getDomain(domainKey);
   const parsed = await parseBuffer(buffer, sheetName);
   const ctx = await def.loadContext(supabase, tenantId);
   const pv = buildPreview({ domainKey, parsed, mapping, ctx });
 
-  // Importiert werden gültige Zeilen (sauber + mit Warnung); Dubletten nur bei duplicateMode='import'.
-  const wanted = pv.rows.filter((r) => r.status === "ok" || r.status === "warning" || (r.status === "duplicate" && duplicateMode === "import"));
-  if (!wanted.length) throw { status: 400, message: "Keine importierbaren Zeilen (alle leer, fehlerhaft oder Dubletten)." };
+  const mode = duplicateMode === "merge" && def.mergeable ? "merge"
+    : duplicateMode === "import" ? "import" : "skip";
+
+  // In der Vorschau abgewählte Zeilen bleiben draußen.
+  const excluded = new Set((excludeRows || []).map(Number).filter(Number.isFinite));
+
+  // Importiert werden gültige Zeilen (sauber + mit Warnung); Dubletten nur,
+  // wenn der Nutzer sie ausdrücklich anlegen oder zusammenführen will.
+  const wanted = pv.rows.filter((r) => !excluded.has(r.row) &&
+    (r.status === "ok" || r.status === "warning" || (r.status === "duplicate" && mode !== "skip")));
+  if (!wanted.length) throw { status: 400, message: "Keine importierbaren Zeilen (alle leer, fehlerhaft, abgewählt oder Dubletten)." };
+
+  // Beim Zusammenführen werden bestehende Datensätze aktualisiert statt neu
+  // angelegt. Damit auch DAS rückgängig zu machen ist, wird der vorherige Stand
+  // der geänderten Felder im Stapel mitgeschrieben.
+  const toMerge = mode === "merge"
+    ? wanted.filter((r) => r.status === "duplicate" && findExistingId(ctx, r) != null)
+    : [];
+  const mergeSet = new Set(toMerge);
+  const toInsert = wanted.filter((r) => !mergeSet.has(r));
 
   // 1) Stapel anlegen
   const { data: batch, error: bErr } = await supabase.from("IMPORT_BATCH").insert([{
@@ -2063,7 +2195,7 @@ async function commit({ domainKey, buffer, filename, mapping, sheetName, duplica
   }
 
   // 2b) Standard: ein Insert pro Zeile in die Domänen-Tabelle (gechunkt).
-  const dbRows = wanted.map((r) => ({ ...r._dbRow, TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
+  const dbRows = toInsert.map((r) => ({ ...r._dbRow, TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
   let inserted = 0;
   try {
     for (let i = 0; i < dbRows.length; i += 500) {
@@ -2077,7 +2209,24 @@ async function commit({ domainKey, buffer, filename, mapping, sheetName, duplica
     throw { status: 500, message: `Import teilweise fehlgeschlagen (${inserted}/${dbRows.length} geschrieben): ${e.message}. Stapel #${batchId} kann zurückgesetzt werden.` };
   }
 
-  return { batchId, inserted, summary: pv.summary };
+  // 2c) Zusammenführen: bestehende Datensätze mit den gefüllten Feldern der
+  //     Datei aktualisieren. Leere Zellen überschreiben nichts.
+  let merged = 0, undo = [];
+  if (toMerge.length) {
+    try {
+      const r = await mergeExistingRows(toMerge, { supabase, tenantId, def, ctx });
+      merged = r.merged; undo = r.undo;
+    } catch (e) {
+      await supabase.from("IMPORT_BATCH").update({ ROW_OK: inserted }).eq("ID", batchId).eq("TENANT_ID", tenantId);
+      throw { status: e?.status || 500, message: `Zusammenführen fehlgeschlagen: ${e?.message || e}. Stapel #${batchId} kann zurückgesetzt werden.` };
+    }
+    await supabase.from("IMPORT_BATCH").update({
+      ROW_OK: inserted + merged,
+      SUMMARY_JSON: { ...pv.summary, structureMode: structureMode || null, docType: docType || null, merged, undo },
+    }).eq("ID", batchId).eq("TENANT_ID", tenantId);
+  }
+
+  return { batchId, inserted, merged, summary: pv.summary };
 }
 
 /**
@@ -2152,6 +2301,18 @@ async function rollback({ batchId, supabase, tenantId }) {
 
   const def = getDomain(batch.DOMAIN);
 
+  // Zusammengeführte Datensätze zuerst auf ihren alten Stand zurücksetzen —
+  // sie wurden aktualisiert, nicht angelegt, und tragen deshalb keine
+  // Stapel-Kennung, an der ein Löschen ansetzen könnte.
+  const undo = Array.isArray(batch.SUMMARY_JSON?.undo) ? batch.SUMMARY_JSON.undo : [];
+  let restored = 0;
+  for (const u of undo) {
+    if (!u?.table || u.id == null || !u.before) continue;
+    const { error } = await supabase.from(u.table).update(u.before).eq("ID", u.id).eq("TENANT_ID", tenantId);
+    if (error) throw { status: 500, message: `Zusammengeführter Datensatz konnte nicht zurückgesetzt werden: ${error.message}` };
+    restored++;
+  }
+
   // Domänen mit eigener Rollback-Logik (z. B. Anfangsbestände: gebuchte Finanz-
   // Aggregate reversieren statt nur Zeilen löschen).
   if (def.rollbackExecute) {
@@ -2159,7 +2320,7 @@ async function rollback({ batchId, supabase, tenantId }) {
     await supabase.from("IMPORT_BATCH")
       .update({ STATUS: "rolled_back", ROLLED_BACK_AT: new Date().toISOString() })
       .eq("ID", batchId).eq("TENANT_ID", tenantId);
-    return { rolledBack: true, deleted: r?.deleted ?? 0 };
+    return { rolledBack: true, deleted: r?.deleted ?? 0, restored };
   }
 
   // Schutz: hängen Live-Daten an den importierten Datensätzen? Dann blockieren.
@@ -2202,7 +2363,7 @@ async function rollback({ batchId, supabase, tenantId }) {
   await supabase.from("IMPORT_BATCH")
     .update({ STATUS: "rolled_back", ROLLED_BACK_AT: new Date().toISOString() })
     .eq("ID", batchId).eq("TENANT_ID", tenantId);
-  return { rolledBack: true, deleted };
+  return { rolledBack: true, deleted, restored };
 }
 
 // ── Vorlagen ─────────────────────────────────────────────────────────────────

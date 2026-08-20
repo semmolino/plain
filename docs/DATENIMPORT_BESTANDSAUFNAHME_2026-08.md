@@ -65,10 +65,14 @@ Kein Import für: Projektteam (`EMPLOYEE2PROJECT`), Stundensätze/Rollen
 Urlaubsanspruch, **Angebote** (`OFFER` + `OFFER_STRUCTURE`), Nachträge, DIN-276-Kosten, Textbausteine,
 eigene Stammdatenlisten (Projekttypen, Buchungsarten), **Einzelbuchungen** (`TEC`), Mahnungen.
 
-Ebenfalls nicht gebaut, obwohl im Konzept zugesagt: **Stichtag/Cut-over-Modell** (kommt nur im
-Konzepttext vor), **Zeilen abwählen**, **Dubletten zusammenführen** (`merge`), **Fehlerprotokoll zum
-Download**, **Mapping je Mandant merken** (`MAPPING_JSON` wird geschrieben, aber **nie gelesen**),
-Einbindung in die Onboarding-Checkliste als eigener Schritt.
+Ebenfalls nicht gebaut, obwohl im Konzept zugesagt: Einbindung in die Onboarding-Checkliste als
+eigener Schritt und eine „importiert"-Kennzeichnung am Datensatz.
+
+Zum **Stichtag/Cut-over-Modell** eine bewusste Entscheidung (20.08.2026, I2): *nicht* gebaut.
+Seit I4 trägt jeder Beleg sein eigenes Datum aus der Datei — ein zusätzliches globales Stichtagsdatum
+wäre eine zweite Quelle für denselben Wert, und zwei Stellen, die das Datum eines Belegs bestimmen,
+sind schlechter als eine. Als Erzählung im Onboarding („alles davor ist Anfangsbestand") bleibt der
+Begriff sinnvoll — als Datenfeld nicht.
 
 ---
 
@@ -298,10 +302,10 @@ und vermeidet die gesamte Validierungs-Kaskade. Ein echter Einzelbuchungs-Import
 
 | Thema | Heute | Soll |
 |---|---|---|
-| **Stichtag** | nicht vorhanden | Ein Datum je Mandant (`TENANT_SETTINGS`), sichtbar im Assistenten; alle Anfangsbestände beziehen sich darauf, Belegdatum = Stichtag statt heute |
-| **Zeilen abwählen** | nein | Checkbox je Vorschauzeile (Konzept §2.2.4) |
-| **Dubletten** | nur „überspringen/trotzdem" | dritter Modus **zusammenführen** (Update statt Insert) |
-| **Fehlerprotokoll** | nein | Download der Fehlerzeilen **als Excel mit Fehlerspalte** → korrigieren → erneut hochladen |
+| **Stichtag** | bewusst nicht gebaut (s. §1.3) | Belegdatum kommt je Beleg aus der Datei |
+| **Zeilen abwählen** | ✅ Checkbox je Vorschauzeile (nur für die sichtbaren ersten 200) | — |
+| **Dubletten** | ✅ überspringen / **zusammenführen** / trotzdem anlegen — Zusammenführen ergänzt nur gefüllte Spalten und ist über den Stapel umkehrbar | — |
+| **Fehlerprotokoll** | ✅ Download der Fehlerzeilen als Excel mit Fehlerspalte, direkt wieder hochladbar | — |
 | **Mapping merken** | `MAPPING_JSON` wird geschrieben, nie gelesen | letztes Mapping je Mandant + Domäne als Vorschlag laden |
 | **Transaktionalität** | Teil-Import möglich | Chunk-Fehler → automatischer Rollback des Stapels, oder „Stapel #N zurücksetzen" direkt im Fehler-Toast |
 | **Herkunft sichtbar** | nur in „Letzte Importe" | Badge „importiert" am Datensatz (Adresse, Projekt, Beleg) — `IMPORT_BATCH_ID` liegt vor |
@@ -317,7 +321,7 @@ und vermeidet die gesamte Validierungs-Kaskade. Ein echter Einzelbuchungs-Import
 |---|---|---|
 | **I0 — Reparatur** ✅ | `tenantId` in `opening_balance` (+ Demo-Seed), `SORT_ORDER`/`CONTRACT_ID` bei `project_fee`, Beispielzeile auf eigenes Blatt, Blatt-Hinweis im Assistenten, 15 Integrationstests für Commit + Rollback | erledigt 20.08.2026 |
 | **I1 — Vorlagen 2.0** ✅ | 4-Blatt-Mappe mit Anleitung/Listen/Dropdowns aus dem Mandanten, `exceljs` statt `xlsx` inkl. Lesepfad, CSV mit Trennzeichen-/Codierungserkennung, Fehlerprotokoll als korrigierbare Excel-Datei | erledigt 20.08.2026 |
-| **I2 — Assistent** | Zeilenabwahl, Dubletten „zusammenführen", Mapping merken, Stichtag, Onboarding-Schritte, „importiert"-Badge | mittel — jetzt der nächste Schritt |
+| **I2 — Assistent** ⬤ | Zeilenabwahl ✅, Dubletten zusammenführen ✅ (umkehrbar), Mapping merken ✅, Stichtag bewusst verworfen — **offen: Onboarding-Schritte und „importiert"-Badge** | überwiegend erledigt 20.08.2026 |
 | **I3 — Baum-Import** ✅ | Domäne `project_structure` (§4.2), Gliederungsnummer + Ebenen-Fallback, Alles-oder-nichts je Projekt, vorbefüllte HOAI-Vorlage, 21 Tests | erledigt 20.08.2026 |
 | **I4 — Belege** ✅ | Domäne `open_items` (Positionen über Strukturkürzel, Datum/MwSt/Nummer/Fälligkeit aus Datei, Teilzahlung), Belegdatum auch für `opening_balance`, 18 Tests | erledigt 20.08.2026 |
 | **I5 — Buchungen** | `TEC`-Anfangsbestand je Projekt × Mitarbeiter × Monat; Einzelbuchungen optional | mittel |
