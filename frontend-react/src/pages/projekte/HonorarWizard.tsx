@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { FilterChip } from '@/components/ui/FilterChip'
-import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
+import { useConfirm } from '@/hooks/useConfirm'
+import { ChevronLeft, ChevronRight, Trash2, Check } from 'lucide-react'
 import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -187,6 +188,7 @@ interface WizardProps {
 }
 
 export function HonorarWizard({ existingId, initialProjectId, offerId, initialFatherId, onDone }: WizardProps) {
+  const [confirm, confirmDialog] = useConfirm()
   const qc = useQueryClient()
   const isEdit      = !!existingId
   const isOfferMode = !!offerId
@@ -619,7 +621,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
         const confirmMsg = check.hasTec
           ? 'Das übergeordnete Element enthält bereits Buchungen. Diese werden auf das erste neue Element übertragen. Fortfahren?'
           : 'Das übergeordnete Element enthält bereits Werte. Fortfahren?'
-        if (!confirm(confirmMsg)) return
+        if (!(await confirm({ title: 'Werte übertragen', message: confirmMsg, confirmLabel: 'Fortfahren', confirmClass: 'btn-primary' }))) return
       }
     } catch (e: unknown) {
       setMsg({ text: (e as Error).message ?? 'Fehler beim Prüfen', type: 'error' }); return
@@ -1531,9 +1533,12 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           <button className="btn-primary" type="button" onClick={finish} disabled={loading || !fatherId}>Projektstruktur anlegen</button>
         )}
         {step === 6 && !isEdit && isOfferMode && (
-          <button className="btn-primary" type="button" onClick={() => void finishOffer()} disabled={loading}>Fertig ✓</button>
+          <button className="btn-primary" type="button" onClick={() => void finishOffer()} disabled={loading}>
+            <Check size={14} strokeWidth={2.5} /> Fertig
+          </button>
         )}
       </div>
+      {confirmDialog}
     </div>
   )
 }

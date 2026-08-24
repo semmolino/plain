@@ -4,6 +4,7 @@ import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
+import { useColumnPriority, type PrioLevel } from '@/hooks/useColumnPriority'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
 import { useNavigate } from 'react-router-dom'
@@ -233,22 +234,37 @@ const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set() }
 
 type ColKey = 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'seHeld' | 'payable' | 'paid' | 'open' | 'statusLabel'
 
-interface ColDef { key: ColKey; label: string; className?: string; defaultVisible: boolean }
+interface ColDef {
+  key: ColKey; label: string; className?: string; defaultVisible: boolean
+  /**
+   * Ab welcher Platzstufe die Spalte gezeigt wird (siehe useColumnPriority).
+   * 1 = immer · 2 = ab Tablet · 3 = nur auf breitem Bildschirm.
+   * Ohne Angabe: 1.
+   */
+  prio?: PrioLevel
+}
 // Status steht bewusst VOR den Betraegen: er ist die haeufigste Scan-Dimension
 // („was ist offen / ueberfaellig?"). Ganz rechts lag er hinter der fixierten
 // Aktionsspalte und war beim horizontalen Scrollen als Erstes verdeckt.
+//
+// Die Stufen: Zum WIEDERERKENNEN einer Rechnung braucht man Nummer, Datum und
+// Projekt, zum HANDELN Status und Brutto — das ist Stufe 1. Netto und Offene
+// Posten sind haeufig genug fuer Stufe 2. Sicherheitseinbehalt und Forderung
+// sind Nachrechen-Details und duerfen als Erstes weichen (so entschieden am
+// 24.08.2026). Wer sie braucht, holt sie ueber „Spalten" zurueck — eine
+// bewusste Auswahl dort schlaegt die automatische Ausblendung immer.
 const COLUMNS: ColDef[] = [
   { key: 'typ',         label: 'Typ',             defaultVisible: true  },
   { key: 'date',        label: 'Datum',           defaultVisible: true  },
   { key: 'statusLabel', label: 'Status',          defaultVisible: true  },
   { key: 'project',     label: 'Projekt',         defaultVisible: true  },
   { key: 'address',     label: 'Adresse',         defaultVisible: false },
-  { key: 'net',         label: 'Netto €',         className: 'num', defaultVisible: true  },
+  { key: 'net',         label: 'Netto €',         className: 'num', defaultVisible: true,  prio: 2 },
   { key: 'gross',       label: 'Brutto €',        className: 'num', defaultVisible: true  },
-  { key: 'seHeld',      label: 'SEB €',           className: 'num', defaultVisible: true  },
-  { key: 'payable',     label: 'Forderung €',     className: 'num', defaultVisible: true  },
+  { key: 'seHeld',      label: 'SEB €',           className: 'num', defaultVisible: true,  prio: 3 },
+  { key: 'payable',     label: 'Forderung €',     className: 'num', defaultVisible: true,  prio: 3 },
   { key: 'paid',        label: 'Bezahlt €',       className: 'num', defaultVisible: false },
-  { key: 'open',        label: 'Offene Posten €', className: 'num', defaultVisible: true  },
+  { key: 'open',        label: 'Offene Posten €', className: 'num', defaultVisible: true,  prio: 2 },
 ]
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
@@ -316,6 +332,15 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     () => new Set(COLUMNS.filter(c => !c.defaultVisible).map(c => c.key)),
     { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as ColKey[] : []) },
   )
+  // Spalten, die der Nutzer im Waehler selbst an- oder abgewaehlt hat. Fuer
+  // diese gilt die automatische Ausblendung nach Platz NICHT mehr — sonst
+  // haekelt man „SEB €" an und es passiert nichts, weil der Bildschirm zu
+  // schmal ist. Wer sich entscheidet, hat entschieden.
+  const [touchedCols,   setTouchedCols]   = useStickyState<Set<ColKey>>(
+    'rechnungen.colsTouched',
+    () => new Set<ColKey>(),
+    { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as ColKey[] : []) },
+  )
   const [colPanelOpen,  setColPanelOpen]  = useState(false)
   const colPanelRef = useRef<HTMLDivElement>(null)
   // Steuert die REIHENFOLGE der Spalten (Aktionen vorne auf dem Handy) —
@@ -334,8 +359,18 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   }, [colPanelOpen])
 
   function setDimFilter(dim: FilterDim, vals: Set<string>) { setActiveFilters(prev => ({ ...prev, [dim]: vals })) }
-  function toggleCol(key: ColKey) { setHiddenCols(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s }) }
-  const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key))
+  function toggleCol(key: ColKey) {
+    setHiddenCols(prev => { const s = new Set(prev); if (s.has(key)) s.delete(key); else s.add(key); return s })
+    setTouchedCols(prev => new Set(prev).add(key))
+  }
+  // Wieviel Platz ist da? Danach fallen Spalten der Stufen 2 und 3 weg.
+  const prio = useColumnPriority()
+  /** true, wenn die Spalte allein aus Platzgruenden fehlt (nicht abgewaehlt). */
+  function ausPlatzgruenden(c: ColDef) {
+    return (c.prio ?? 1) > prio && !touchedCols.has(c.key) && !hiddenCols.has(c.key)
+  }
+  const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key) && !ausPlatzgruenden(c))
+  const platzVersteckt = COLUMNS.filter(ausPlatzgruenden)
   // Diese Tabelle ist auf 1280px rund 230px breiter als ihr Container. Der
   // Hook markiert den Container, solange rechts Inhalt liegt — daran haengt
   // die sichtbare Kante an der fixierten Aktionsspalte.
@@ -816,8 +851,18 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                 <label key={c.key} className="pl-col-option">
                   <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
                   {c.label}
+                  {/* Ohne diesen Hinweis stuende hier ein Haken bei einer
+                      Spalte, die man nicht sieht — die Liste wuerde ueber
+                      ihren eigenen Zustand luegen. Anhaken holt sie zurueck. */}
+                  {ausPlatzgruenden(c) && <span className="pl-col-hint">kein Platz</span>}
                 </label>
               ))}
+              {platzVersteckt.length > 0 && (
+                <div className="pl-col-panel-note">
+                  {platzVersteckt.length === 1 ? 'Eine Spalte ist' : `${platzVersteckt.length} Spalten sind`} wegen der
+                  Fensterbreite ausgeblendet. Anhaken zeigt sie dauerhaft.
+                </div>
+              )}
             </div>
           )}
         </div>

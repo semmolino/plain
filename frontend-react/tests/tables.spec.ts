@@ -87,3 +87,71 @@ test('kein waagerechter Seitenlauf trotz ueberlaufender Tabellen', async ({ page
     expect(s.body, `${url} laeuft seitlich ueber`).toBeLessThanOrEqual(s.view + 2)
   }
 })
+
+/**
+ * Spaltenstufen der Rechnungsliste.
+ *
+ * Entscheidung vom 24.08.2026: Sicherheitseinbehalt und Forderung sind
+ * Nachrechen-Details und duerfen bei wenig Platz als Erste weichen. Die
+ * Tests halten die Wirkung fest — und vor allem die beiden Zusagen, die das
+ * Ausblenden erst vertretbar machen: Es wird ehrlich angezeigt, und eine
+ * bewusste Auswahl im Spaltenwaehler schlaegt es.
+ */
+
+async function spalten(page: import('@playwright/test').Page) {
+  return page.$$eval('.master-table thead th', ths =>
+    ths.map(th => (th.textContent || '').replace(/[▲▼]/g, '').trim()).filter(Boolean))
+}
+
+test('Rechnungsliste — auf breitem Bildschirm passt die Tabelle vollstaendig', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+
+  expect(await spalten(page)).toContain('SEB €')
+  const ueber = await page.locator('.table-scroll').first()
+    .evaluate(el => el.scrollWidth - el.clientWidth)
+  expect(ueber, 'ab 1520px darf nichts mehr ueberlaufen').toBe(0)
+})
+
+test('Rechnungsliste — auf schmalem Bildschirm weichen SEB und Forderung', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+
+  const s = await spalten(page)
+  expect(s).not.toContain('SEB €')
+  expect(s).not.toContain('Forderung €')
+  // Was zum Wiedererkennen und Handeln noetig ist, bleibt.
+  for (const pflicht of ['Nummer', 'Datum', 'Status', 'Projekt', 'Brutto €']) {
+    expect(s, `${pflicht} gehoert zur Grundausstattung`).toContain(pflicht)
+  }
+})
+
+test('Rechnungsliste — der Spaltenwaehler verschweigt die Ausblendung nicht', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+
+  await page.getByRole('button', { name: 'Spalten' }).click()
+  const zeile = page.locator('.pl-col-option', { hasText: 'SEB €' })
+  // Haken steht — die Spalte ist nicht abgewaehlt, nur ohne Platz.
+  await expect(zeile.locator('input[type=checkbox]')).toBeChecked()
+  await expect(zeile.locator('.pl-col-hint')).toHaveText('kein Platz')
+  await expect(page.locator('.pl-col-panel-note')).toContainText('Fensterbreite')
+})
+
+test('Rechnungsliste — bewusste Auswahl schlaegt die automatische Ausblendung', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+  expect(await spalten(page)).not.toContain('SEB €')
+
+  await page.getByRole('button', { name: 'Spalten' }).click()
+  const kasten = page.locator('.pl-col-option', { hasText: 'SEB €' }).locator('input[type=checkbox]')
+  await kasten.uncheck()   // abwaehlen …
+  await kasten.check()     // … und bewusst wieder anwaehlen
+  await page.keyboard.press('Escape')
+
+  expect(await spalten(page), 'nach bewusster Auswahl muss die Spalte da sein').toContain('SEB €')
+})

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Trash2, MousePointerClick } from 'lucide-react'
+import { Trash2, MousePointerClick, ArrowDownToLine } from 'lucide-react'
+import { useConfirm } from '@/hooks/useConfirm'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { Message }       from '@/components/ui/Message'
 import { Modal }         from '@/components/ui/Modal'
@@ -53,6 +54,7 @@ function depthOf(id: string, parentMap: Map<string, string | null>): number {
 }
 
 export function ProjektStruktur({ initialProjectId }: { initialProjectId?: number }) {
+  const [confirm, confirmDialog] = useConfirm()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [selectedPid, setSelectedPidState] = useState<number | null>(() => {
@@ -221,15 +223,23 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       }
       return rows
     },
-    onSuccess: (rows) => {
+    onSuccess: async (rows) => {
       void qc.invalidateQueries({ queryKey: ['structure', selectedPid] })
-      setSaveMsg({ text: 'Gespeichert ✅', type: 'success' })
+      setSaveMsg({ text: 'Gespeichert', type: 'success' })
       setEdits({})
       setTimeout(() => setSaveMsg(null), 3000)
       const toInherit = rows.filter(r => r.nkChanged && parentIds.has(String(r.id)))
+      // Nacheinander, nicht parallel: Wer drei Elemente geaendert hat, soll
+      // drei Rueckfragen hintereinander sehen und nicht drei Dialoge
+      // uebereinander. Das `await` haelt die Schleife an, bis geantwortet ist.
       for (const r of toInherit) {
-        if (confirm(`NK % (${r.nk} %) für „${r.name}" auch an alle untergeordneten Elemente übertragen?`))
-          inheritMut.mutate({ id: r.id, val: r.nk })
+        const ok = await confirm({
+          title: 'Nebenkosten vererben',
+          message: `„${r.name}" hat jetzt ${r.nk} % Nebenkosten. Sollen alle untergeordneten Elemente denselben Satz bekommen?`,
+          confirmLabel: 'Übertragen',
+          confirmClass: 'btn-primary',
+        })
+        if (ok) inheritMut.mutate({ id: r.id, val: r.nk })
       }
     },
     onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
@@ -470,7 +480,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
           const confirmMsg = check.hasTec
             ? 'Das übergeordnete Element enthält bereits Werte und/oder Buchungen. Diese werden auf das neue Element übertragen. Möchten Sie fortfahren?'
             : 'Das übergeordnete Element enthält bereits Werte. Diese werden auf das neue Element übertragen. Möchten Sie fortfahren?'
-          if (!confirm(confirmMsg)) return
+          if (!(await confirm({ title: 'Werte übertragen', message: confirmMsg, confirmLabel: 'Fortfahren', confirmClass: 'btn-primary' }))) return
           addMut.mutate({ ...addForm, transfer_parent_values: true } as typeof addForm & { transfer_parent_values: boolean })
           return
         }
@@ -588,7 +598,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
             const confirmMsg = check.hasTec
               ? 'Das Zielelement enthält bereits Werte und/oder Buchungen. Diese werden auf das verschobene Element übertragen. Möchten Sie fortfahren?'
               : 'Das Zielelement enthält bereits Werte. Diese werden auf das verschobene Element übertragen. Möchten Sie fortfahren?'
-            if (!confirm(confirmMsg)) return
+            if (!(await confirm({ title: 'Werte übertragen', message: confirmMsg, confirmLabel: 'Fortfahren', confirmClass: 'btn-primary' }))) return
             // Transfer father's values/TEC to the first element being moved
             await transferFatherToChild(fatherId, ordered[0])
           }
@@ -939,13 +949,21 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                   value={nkVal}
                                   onChange={e => setField(node.STRUCTURE_ID, 'nk', e.target.value)} />
                                 {isParent && (
-                                  <button className="btn-small" style={{ padding: '2px 6px', fontSize: 10 }}
+                                  <button className="btn-small btn-icon-only"
                                     disabled={inheritMut.isPending}
+                                    aria-label={`Nebenkosten von ${nameShort} an alle untergeordneten Elemente übertragen`}
                                     title="NK % an alle Kind-Elemente vererben"
-                                    onClick={() => {
-                                      if (confirm(`NK % (${nkVal} %) an alle untergeordneten Elemente von „${nameShort}" übertragen?`))
-                                        inheritMut.mutate({ id: node.STRUCTURE_ID, val: Number(nkVal) })
-                                    }}>↓</button>
+                                    onClick={async () => {
+                                      const ok = await confirm({
+                                        title: 'Nebenkosten vererben',
+                                        message: `Alle untergeordneten Elemente von „${nameShort}" bekommen ${nkVal} % Nebenkosten. Bisherige eigene Werte dort werden überschrieben.`,
+                                        confirmLabel: 'Übertragen',
+                                        confirmClass: 'btn-primary',
+                                      })
+                                      if (ok) inheritMut.mutate({ id: node.STRUCTURE_ID, val: Number(nkVal) })
+                                    }}>
+                                    <ArrowDownToLine size={13} strokeWidth={2} />
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -1219,6 +1237,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
         </div>
       )
     })()}
+    {confirmDialog}
     </div>
   )
 }

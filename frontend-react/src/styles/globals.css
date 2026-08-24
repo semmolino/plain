@@ -1822,6 +1822,20 @@ input::placeholder { color: var(--text-4); }
 }
 .pl-col-option:hover { background: var(--accent-bg); }
 
+/* Spalte ist angehakt, aber wegen der Fensterbreite nicht zu sehen. Ohne
+   diesen Hinweis widerspraeche der Haken dem, was auf dem Bildschirm steht. */
+.pl-col-hint {
+  margin-left: auto; font-size: var(--fs-label); font-weight: 600;
+  letter-spacing: var(--ls-eyebrow); text-transform: uppercase;
+  color: var(--text-3); background: var(--dim);
+  padding: 1px var(--space-2); border-radius: var(--radius-sm); white-space: nowrap;
+}
+.pl-col-panel-note {
+  padding: var(--space-2) 14px var(--space-3);
+  font-size: 12px; line-height: 1.45; color: var(--text-3);
+  border-top: 1px solid var(--border-3); margin-top: var(--space-1); max-width: 260px;
+}
+
 /* Filter chips */
 .filter-chip-wrap { position: relative; display: inline-flex; align-items: center; }
 .filter-chip-btn {
@@ -1880,6 +1894,15 @@ input::placeholder { color: var(--text-4); }
   transition: background 0.12s;
 }
 .btn-small:hover { background: var(--bg); transform: none; box-shadow: none; }
+/* Quadratischer Knopf, der nur ein Icon traegt. Ohne diese Klasse bekamen
+   solche Knoepfe die Waagerecht-Polsterung von .btn-small und wurden zu
+   schmalen Rechtecken; die Beschriftung fuer Screenreader gehoert in
+   aria-label. 30x30 ist die Hoehe von .btn-small — dieselbe Zeile, gleiche
+   Optik. */
+.btn-icon-only {
+  padding: 0; width: 30px; min-width: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 .btn-save { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 .btn-save:hover { background: var(--accent-bg2); }
 /* Kombination btn-primary + btn-small: btn-small (spaeter definiert) ueberschrieb
@@ -2079,9 +2102,13 @@ input::placeholder { color: var(--text-4); }
 .admin-section-hint { font-size: 12px; color: var(--text-3); margin-bottom: 14px; }
 .admin-block { margin-bottom: 20px; padding: 14px 16px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-sm); }
 .admin-block-title { font-size: var(--fs-eyebrow); font-weight: var(--fw-heading); color: var(--text-3); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); margin-bottom: 10px; }
-.admin-input-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Beschriftung ueber dem Feld statt als loser Text hinter dem Knopf. */
+.admin-input-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.admin-input-row-controls { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .admin-single-input { flex: 1; min-width: 160px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; outline: none; background: var(--surface); color: var(--text); }
-.admin-field-label { font-size: 11px; color: var(--text-5); }
+/* --text-5 ist laut CLAUDE.md rein dekorativ und ausdruecklich NICHT fuer
+   lesbaren Text. Eine Feldbeschriftung muss man lesen koennen -> --text-2. */
+.admin-field-label { font-size: var(--fs-label); font-weight: 600; text-transform: uppercase; letter-spacing: var(--ls-eyebrow); color: var(--text-2); }
 .admin-company-selector { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 .admin-company-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; cursor: pointer; color: var(--text-2); transition: background 0.15s, border-color 0.15s; }
 .admin-company-btn:hover { background: var(--dim); }
@@ -2828,6 +2855,19 @@ input::placeholder { color: var(--text-4); }
 .ls-row-parent td { background: var(--surface-2); }
 .ls-row-parent .ls-td { color: var(--text-3); }
 .ls-row-leaf:hover td { background: var(--accent-tint); }
+/* Kennungsspalten (Projektnummer, Rechnungsnummer, Kuerzel).
+
+   Auf 390px brach „P-2023-088" am Bindestrich in zwei Zeilen um — die
+   Zeilenhoehen schwankten dadurch zwischen 220 und 250px und fuenf Zeilen
+   fuellten den ganzen Bildschirm. Eine Kennung ist ein Wort, auch wenn
+   Bindestriche drin stehen.
+
+   tabular-nums haelt die Ziffern in einer Spalte untereinander, sodass sich
+   Nummern beim Ueberfliegen vergleichen lassen. */
+.cell-id, .cell-id * {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .ls-col-short { width: 140px; }
 .ls-col-name  { min-width: 180px; }
 /* Numerische Spalten — Header UND Zellen rechtsbuendig */
@@ -3250,7 +3290,10 @@ input::placeholder { color: var(--text-4); }
 .toast-error   { background: var(--danger-strong); color: var(--danger-fg); }
 .toast-info    { background: var(--info-strong); color: var(--info-fg); }
 .toast-message { flex: 1; }
-.toast-close   { background: none; border: none; color: inherit; opacity: 0.7; cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1; min-width: 20px; min-height: 20px; }
+/* 24x24 ist die Untergrenze aus WCAG 2.5.8; vorher 20x20. Nicht die 44px
+   aus CLAUDE.md: Die Meldung verschwindet von selbst, der Knopf ist eine
+   Abkuerzung, und 44px wuerden die schmale Leiste sprengen. */
+.toast-close   { background: none; border: none; color: inherit; opacity: 0.7; cursor: pointer; padding: 0; line-height: 1; min-width: 24px; min-height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
 .toast-close:hover { opacity: 1; }
 
 /* ── Row overflow menu (Rechnungen, etc.) ────────────────────────────────── */

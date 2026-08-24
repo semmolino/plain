@@ -12,6 +12,7 @@ import {
   setProjectMute,
   type BudgetWarningRule,
 } from '@/api/budgetWarnings'
+import { useConfirm } from '@/hooks/useConfirm'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtEur = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
@@ -88,6 +89,7 @@ function EmpfaengerVorschau({ draft, employees, projectManagerId }: {
 }
 
 export function Budget({ initialProjectId }: Props) {
+  const [confirm, confirmDialog] = useConfirm()
   const [pid, setPid] = useState<number | null>(initialProjectId ?? null)
   const [editingRule, setEditingRule] = useState<BudgetWarningRule | null>(null)
   const [creating, setCreating] = useState(false)
@@ -292,8 +294,13 @@ export function Budget({ initialProjectId }: Props) {
                           <button className="row-action-btn" title="Bearbeiten" onClick={() => openEdit(r)}>
                             <Pencil size={14} strokeWidth={2} />
                           </button>
-                          <button className="row-action-btn" title="Löschen" onClick={() => {
-                            if (window.confirm(`Regel bei ${Number(r.THRESHOLD_PCT).toFixed(0)} % wirklich löschen?`)) deleteMut.mutate(r.ID)
+                          <button className="row-action-btn" title="Löschen" onClick={async () => {
+                            const ok = await confirm({
+                              title: 'Regel löschen',
+                              message: `Die Warnregel bei ${Number(r.THRESHOLD_PCT).toFixed(0)} % wird gelöscht. Bei dieser Schwelle wird dann nicht mehr gewarnt.`,
+                              confirmLabel: 'Löschen',
+                            })
+                            if (ok) deleteMut.mutate(r.ID)
                           }}>
                             <X size={12} strokeWidth={2.5} />
                           </button>
@@ -432,6 +439,7 @@ export function Budget({ initialProjectId }: Props) {
           </div>
         </div>
       </Modal>
+      {confirmDialog}
     </div>
   )
 }
