@@ -1,5 +1,6 @@
-import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, Fragment } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
+import { todayIso, nextPersonnelNumber } from '@/utils/vorbelegung'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useSearchParams } from 'react-router-dom'
@@ -68,8 +69,8 @@ function fmtBalance(n: number) {
   return n >= 0 ? `+${s}` : `−${s}`
 }
 
-function emptyCreateForm(): CreateEmployeePayload {
-  return { short_name: '', title: '', first_name: '', last_name: '', email: '', mobile: '', personnel_number: '', gender_id: '', department_id: null, entry_date: '' }
+function emptyCreateForm(personnelNumber = '', entryDate = ''): CreateEmployeePayload {
+  return { short_name: '', title: '', first_name: '', last_name: '', email: '', mobile: '', personnel_number: personnelNumber, gender_id: '', department_id: null, entry_date: entryDate }
 }
 
 // Inline-Status-Optionen (Liste). Aktiv=1, Inaktiv=2.
@@ -2866,6 +2867,14 @@ export function MitarbeiterPage() {
   const departments = deptData?.data ?? []
   const workModels = wtmData?.data   ?? []
 
+  // Vorbelegter Zustand für „Neuer Mitarbeiter": nächste Personalnummer und
+  // Eintritt heute. Bewusst beim Öffnen des Dialogs berechnet, damit der
+  // Vorschlag den aktuell geladenen Bestand berücksichtigt.
+  const newEmployeeForm = useCallback(
+    () => emptyCreateForm(nextPersonnelNumber(employees.map(e => e.PERSONNEL_NUMBER)), todayIso()),
+    [employees],
+  )
+
   // ── Inline-Edit (Abteilung / Status direkt in der Liste) ──
   const canEditEmp = usePermission('employees.edit')
   const deptOpts: InlineOption[] = useMemo(
@@ -2980,7 +2989,7 @@ export function MitarbeiterPage() {
           + 'Einladung in der Mitarbeiterakte erneut senden.'
         )
       }
-      setForm(emptyCreateForm())
+      setForm(newEmployeeForm())
       setCreateWmModelId(''); setCreateWmValidFrom('')
       setCreateCpRate(''); setCreateCpValidFrom('')
       setShowCreate(false)
@@ -3043,7 +3052,7 @@ export function MitarbeiterPage() {
                   className="btn-primary btn-small"
                   style={{ marginLeft: 'auto' }}
                   onClick={() => {
-                    setForm(emptyCreateForm())
+                    setForm(newEmployeeForm())
                     setCreateWmModelId(''); setCreateWmValidFrom('')
                     setCreateCpRate(''); setCreateCpValidFrom('')
                     setCreateMsg(null)

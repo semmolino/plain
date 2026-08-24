@@ -22,6 +22,7 @@ import {
 import { ApiRequestError } from '@/api/client'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
+import { useDueDatePreset } from '@/hooks/useTenantDefaults'
 import { API_BASE }     from '@/api/client'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
@@ -58,7 +59,8 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
 
   // Step 1 fields
   const [detDate,  setDetDate]  = useState(todayIso())
-  const [dueDate,  setDueDate]  = useState('')
+  // Fälligkeit folgt der Vorbelegung „Zahlungsziel" (Einstellungen → Vorbelegungen).
+  const [dueDate, setDueDate, resetDueDate, paymentTermDays] = useDueDatePreset(detDate)
   const [bpStart,  setBpStart]  = useState('')
   const [bpFinish, setBpFinish] = useState('')
   const [comment,  setComment]  = useState('')
@@ -309,7 +311,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
     setStep(0); setDraftId(null); setProjectId(null); setProjectLabel('')
     setCompanyId(null); setContractId(null); setContractLabel(''); setContractsForProject([])
     setEmployeeId('')
-    setDetDate(todayIso()); setDueDate(''); setBpStart(''); setBpFinish(''); setComment('')
+    setDetDate(todayIso()); resetDueDate(); setBpStart(''); setBpFinish(''); setComment('')
     setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set()); setHasBt2(false)
     setShowDiscounts(false); setD1Pct(''); setD2Pct(''); setShowSkonto(false); setCashDiscPct(''); setCashDiscDays(''); setSeEnabled(false); setSePct(''); setSeBasis('BRUTTO')
     setMsg(null)
@@ -480,7 +482,11 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
           <p className="wizard-step-title">Rechnungsdetails</p>
           <div className="form-row">
             <FormField label="Datum"            id="ppd"  type="date" value={detDate}  onChange={e => setDetDate(e.target.value)} />
-            <FormField label="Fälligkeitsdatum" id="ppdd" type="date" value={dueDate}  onChange={e => setDueDate(e.target.value)} />
+            <FormField
+              label="Fälligkeitsdatum" id="ppdd" type="date"
+              value={dueDate} onChange={e => setDueDate(e.target.value)}
+              hint={paymentTermDays !== null ? `Zahlungsziel: ${paymentTermDays} Kalendertage ab Rechnungsdatum` : undefined}
+            />
           </div>
           <div className="form-row">
             <FormField label="Leistungszeitraum von" id="ppbs" type="date" value={bpStart}  onChange={e => setBpStart(e.target.value)} />

@@ -4,13 +4,15 @@ import { Message }   from '@/components/ui/Message'
 import { HelpHint }  from '@/components/ui/HelpHint'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { ADDRESS_TYPES, type Address, type Contact, type AddressPayload, type ContactPayload } from '@/api/stammdaten'
+import { salutationForGender } from '@/utils/vorbelegung'
 
 // ── Leere Formularwerte ─────────────────────────────────────────────────────
 
-export function emptyAddr(): AddressPayload {
+/** @param defaultCountryId Vorbelegung „Land" aus den Einstellungen ('' = keine). */
+export function emptyAddr(defaultCountryId = ''): AddressPayload {
   return {
     address_name_1: '', address_name_2: '', street: '', post_office_box: '',
-    post_code: '', city: '', country_id: '', address_type: '',
+    post_code: '', city: '', country_id: defaultCountryId, address_type: '',
     phone: '', email: '', website: '',
     customer_number: '', tax_id: '', tax_number: '',
     buyer_reference: '', peppol_endpoint_id: '', peppol_scheme_id: '', notes: '',
@@ -227,17 +229,30 @@ export function ContactForm({ vals, setK, onPrimaryChange, addrTxt, setAddrTxt, 
         <FormField label="Festnetz"  id={`${formId}-ph`} value={vals.phone ?? ''}  onChange={e => setK('phone')(e.target.value)}  type="tel" />
       </div>
       <div className="form-group">
-        <label htmlFor={`${formId}-sal`}>Anrede*</label>
-        <select id={`${formId}-sal`} value={String(vals.salutation_id ?? '')} onChange={e => setK('salutation_id')(e.target.value)} required>
+        <label htmlFor={`${formId}-gen`}>Geschlecht*</label>
+        <select
+          id={`${formId}-gen`}
+          value={String(vals.gender_id ?? '')}
+          required
+          onChange={e => {
+            const v = e.target.value
+            setK('gender_id')(v)
+            // Anrede folgt dem Geschlecht — unten weiterhin frei änderbar.
+            const sal = salutationForGender(v, genders, salutations)
+            if (sal) setK('salutation_id')(sal)
+          }}
+        >
           <option value="">Bitte wählen …</option>
-          {salutations.map(s => <option key={s.ID} value={s.ID}>{s.SALUTATION}</option>)}
+          {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
         </select>
       </div>
       <div className="form-group">
-        <label htmlFor={`${formId}-gen`}>Geschlecht*</label>
-        <select id={`${formId}-gen`} value={String(vals.gender_id ?? '')} onChange={e => setK('gender_id')(e.target.value)} required>
+        <label htmlFor={`${formId}-sal`} style={{ display: 'inline-flex', alignItems: 'center' }}>
+          Anrede* <HelpHint id="addresses.salutation" />
+        </label>
+        <select id={`${formId}-sal`} value={String(vals.salutation_id ?? '')} onChange={e => setK('salutation_id')(e.target.value)} required>
           <option value="">Bitte wählen …</option>
-          {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
+          {salutations.map(s => <option key={s.ID} value={s.ID}>{s.SALUTATION}</option>)}
         </select>
       </div>
       <Autocomplete

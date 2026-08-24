@@ -13,6 +13,7 @@ import { fetchOfferStatuses } from '@/api/angebote'
 import { fetchProjectManagers } from '@/api/projekte'
 import { fetchCompanies }      from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
+import { useFeature } from '@/store/licenseStore'
 import { BeauftragtModal } from './BeauftragtModal'
 
 interface EditForm {
@@ -74,6 +75,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
   const statuses  = statusData?.data  ?? []
   const managers  = mgrData?.data     ?? []
   const companies = companyData?.data ?? []
+  const multiCompany = useFeature('enterprise.multi_company')
   const contacts  = contactData?.data ?? []
 
   const searchAddresses = useCallback(async (q: string) => {
@@ -179,11 +181,24 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
 
       {companies.length > 1 && (
         <div className="form-group">
-          <label>Firma</label>
-          <select value={form.company_id} onChange={e => setF('company_id')(e.target.value)}>
+          <label htmlFor="os-company">Firma</label>
+          {/* Mehrere Firmen je Mandant sind ein Enterprise-Merkmal — ohne die
+              Lizenz bleibt die Zuordnung sichtbar, aber unveränderlich. */}
+          <select
+            id="os-company"
+            value={form.company_id}
+            onChange={e => setF('company_id')(e.target.value)}
+            disabled={!multiCompany}
+          >
             <option value="">—</option>
             {companies.map(c => <option key={c.ID} value={c.ID}>{c.COMPANY_NAME_1}</option>)}
           </select>
+          {!multiCompany && (
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
+              Dein Tarif sieht eine Firma je Mandant vor — es gilt die Vorbelegung aus
+              Einstellungen → Vorbelegungen.
+            </p>
+          )}
         </div>
       )}
 

@@ -14,6 +14,7 @@
 
 const ExcelJS = require("exceljs");
 const { readTable } = require("./spreadsheet");
+const { contractDefaults } = require("./contractDefaults");
 // Phase 3: Anfangsbestände werden über die bewährten Beleg-Services gebucht
 // (init → Struktur → book(skipDocuments)) statt von Hand geschrieben.
 const ppSvc = require("./partialPayments");
@@ -635,8 +636,7 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
         NAME_SHORT: e.projectNumber, NAME_LONG: e.projectName, PROJECT_ID: e.projectId,
         INVOICE_ADDRESS_ID: e.addressId, INVOICE_CONTACT_ID: e.contactId,
         TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
-        ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
-        ...(defaults.default_vat_id ? { VAT_ID: Number(defaults.default_vat_id) } : {}),
+        ...contractDefaults(defaults),
       };
       const { data: cRows, error: cErr } = await supabase.from("CONTRACT").insert([contractRow]).select("ID");
       if (cErr) throw { status: 500, message: `Vertrag für Projekt ${e.projectNumber} fehlgeschlagen: ${cErr.message}` };
@@ -951,8 +951,7 @@ async function commitProjectStructureRows(rows, { supabase, tenantId, batchId, c
           NAME_SHORT: number, NAME_LONG: first.projectName, PROJECT_ID: first.projectId,
           INVOICE_ADDRESS_ID: first.addressId, INVOICE_CONTACT_ID: first.contactId,
           TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
-          ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
-          ...(defaults.default_vat_id ? { VAT_ID: Number(defaults.default_vat_id) } : {}),
+          ...contractDefaults(defaults),
         };
         const { data: cRows, error: cErr } = await supabase.from("CONTRACT").insert([contractRow]).select("ID");
         if (cErr) throw { status: 500, message: cErr.message };

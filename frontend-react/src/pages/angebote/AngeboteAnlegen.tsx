@@ -7,6 +7,8 @@ import { fetchProjectManagers } from '@/api/projekte'
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress, fetchDefaults } from '@/api/stammdaten'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
+import { presetId } from '@/utils/vorbelegung'
+import { useFeature } from '@/store/licenseStore'
 
 function todayIso() { return new Date().toISOString().slice(0, 10) }
 function addDays(iso: string, days: number): string {
@@ -52,8 +54,19 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
   const companies = companyData?.data ?? []
   const contacts  = contactData?.data ?? []
 
-  if (companies.length === 1 && !basic.company_id)
-    setBasic(f => ({ ...f, company_id: String(companies[0].ID) }))
+  // Vorbelegungen (Einstellungen → Vorbelegungen). Mehrere Firmen je Mandant
+  // sind ein Enterprise-Merkmal — ohne die Lizenz bleibt die Firma gesetzt,
+  // aber nicht änderbar.
+  const multiCompany = useFeature('enterprise.multi_company')
+
+  const presetCompany = presetId(companies, defData?.data?.default_company_id)
+    || (companies.length === 1 || !multiCompany ? String(companies[0]?.ID ?? '') : '')
+  if (presetCompany && !basic.company_id)
+    setBasic(f => (f.company_id ? f : { ...f, company_id: presetCompany }))
+
+  const presetStatus = presetId(statuses, defData?.data?.default_offer_status_id)
+  if (presetStatus && !basic.offer_status_id)
+    setBasic(f => (f.offer_status_id ? f : { ...f, offer_status_id: presetStatus }))
 
   // Standard-Angebotsdauer aus den Vorbelegungen: „Gültig bis" = Angebotsdatum
   // + N Tage. Greift beim Laden der Vorbelegung UND bei jeder Änderung des
@@ -143,11 +156,22 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
 
           {companies.length > 1 && (
             <div className="form-group">
-              <label>Firma*</label>
-              <select value={basic.company_id} onChange={e => setB('company_id')(e.target.value)}>
+              <label htmlFor="of-company">Firma*</label>
+              <select
+                id="of-company"
+                value={basic.company_id}
+                onChange={e => setB('company_id')(e.target.value)}
+                disabled={!multiCompany}
+              >
                 <option value="">Bitte wählen …</option>
                 {companies.map(c => <option key={c.ID} value={c.ID}>{c.COMPANY_NAME_1}</option>)}
               </select>
+              {!multiCompany && (
+                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
+                  Dein Tarif sieht eine Firma je Mandant vor — es gilt die Vorbelegung aus
+                  Einstellungen → Vorbelegungen.
+                </p>
+              )}
             </div>
           )}
 

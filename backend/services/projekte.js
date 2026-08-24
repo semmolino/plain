@@ -1,5 +1,7 @@
 "use strict";
 
+const { contractDefaults } = require("./contractDefaults");
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -286,8 +288,7 @@ async function createProject(supabase, { body, tenantId }) {
     INVOICE_ADDRESS_ID: project.ADDRESS_ID,
     INVOICE_CONTACT_ID: project.CONTACT_ID,
     TENANT_ID: project.TENANT_ID,
-    ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
-    ...(defaults.default_vat_id      ? { VAT_ID:      Number(defaults.default_vat_id)      } : {}),
+    ...contractDefaults(defaults),
   };
 
   let contractInsertError = null;

@@ -34,6 +34,7 @@ import {
   type WorkingTimeModel, type WorkingTimeModelPayload, type CountryState,
 } from '@/api/stammdaten'
 import { fetchProjectStatuses, type ProjectStatus } from '@/api/projekte'
+import { fetchOfferStatuses } from '@/api/angebote'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useAssetBlobUrl } from '@/hooks/useAssetBlobUrl'
 import { fetchNumberRanges, saveNumberRanges, fetchNumberRangeTemplates, saveNumberRangeTemplate } from '@/api/numberRanges'
@@ -1055,6 +1056,15 @@ function VorbelegungenSection() {
   const [offerValidDays, setOfferValidDays] = useState('')
   const [cashDiscPct,    setCashDiscPct]    = useState('')
   const [cashDiscDays,   setCashDiscDays]   = useState('')
+  const [countryId,      setCountryId]      = useState('')
+  const [companyId,      setCompanyId]      = useState('')
+  const [projStatusId,   setProjStatusId]   = useState('')
+  const [offerStatusId,  setOfferStatusId]  = useState('')
+  const [seEnabled,      setSeEnabled]      = useState(false)
+  const [sePct,          setSePct]          = useState('')
+  const [seBasis,        setSeBasis]        = useState<'BRUTTO' | 'NETTO'>('BRUTTO')
+  const [seLegalRef,     setSeLegalRef]     = useState('')
+  const [paymentTermDays, setPaymentTermDays] = useState('')
   const [timerEnabled,   setTimerEnabled]   = useState(true)
   const [bwEnabled,      setBwEnabled]      = useState(true)
   const [bwPcts,         setBwPcts]         = useState('')
@@ -1063,10 +1073,18 @@ function VorbelegungenSection() {
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
+  const { data: countryData } = useQuery({ queryKey: ['countries'],        queryFn: fetchCountries })
+  const { data: compData    } = useQuery({ queryKey: ['companies'],        queryFn: fetchCompanies })
+  const { data: psData      } = useQuery({ queryKey: ['project-statuses'], queryFn: fetchProjectStatuses })
+  const { data: osData      } = useQuery({ queryKey: ['offer-statuses'],   queryFn: fetchOfferStatuses })
   const { data: defData, isLoading } = useQuery({ queryKey: ['defaults'], queryFn: fetchDefaults })
 
   const currencies = currData?.data ?? []
   const vatList    = vatData?.data  ?? []
+  const countries  = countryData?.data ?? []
+  const companies  = compData?.data    ?? []
+  const projStatuses  = psData?.data ?? []
+  const offerStatuses = osData?.data ?? []
 
   useEffect(() => {
     if (!defData?.data) return
@@ -1075,6 +1093,15 @@ function VorbelegungenSection() {
     setOfferValidDays(defData.data.offer_valid_days ?? '')
     setCashDiscPct(defData.data.default_cash_discount_percent ?? '')
     setCashDiscDays(defData.data.default_cash_discount_days ?? '')
+    setCountryId(defData.data.default_country_id ?? '')
+    setCompanyId(defData.data.default_company_id ?? '')
+    setProjStatusId(defData.data.default_project_status_id ?? '')
+    setOfferStatusId(defData.data.default_offer_status_id ?? '')
+    setSeEnabled(defData.data.default_se_enabled === 'true')
+    setSePct(defData.data.default_se_percent ?? '')
+    setSeBasis(defData.data.default_se_basis === 'NETTO' ? 'NETTO' : 'BRUTTO')
+    setSeLegalRef(defData.data.default_se_legal_reference ?? '')
+    setPaymentTermDays(defData.data.default_payment_term_days ?? '')
     // timer_enabled: fehlt = aktiv (Default)
     setTimerEnabled(defData.data.timer_enabled !== 'false')
     // Budget-Warnungen: Defaults wenn nicht persistiert
@@ -1093,6 +1120,16 @@ function VorbelegungenSection() {
       await putDefault('offer_valid_days',               offerValidDays || null)
       await putDefault('default_cash_discount_percent', cashDiscPct    || null)
       await putDefault('default_cash_discount_days',    cashDiscDays   || null)
+      await putDefault('default_country_id',            countryId      || null)
+      await putDefault('default_company_id',            companyId      || null)
+      await putDefault('default_project_status_id',     projStatusId   || null)
+      await putDefault('default_offer_status_id',       offerStatusId  || null)
+      await putDefault('default_payment_term_days',     paymentTermDays || null)
+      // Sicherheitseinbehalt: nur den eingeschalteten Zustand persistieren.
+      await putDefault('default_se_enabled',            seEnabled ? 'true' : null)
+      await putDefault('default_se_percent',            seEnabled ? (sePct || null) : null)
+      await putDefault('default_se_basis',              seEnabled ? seBasis : null)
+      await putDefault('default_se_legal_reference',    seEnabled ? (seLegalRef.trim() || null) : null)
       // Stempeluhr: nur den deaktivierten Zustand persistieren (Default = aktiv)
       await putDefault('timer_enabled', timerEnabled ? null : 'false')
       // Budget-Warnungen
@@ -1113,10 +1150,65 @@ function VorbelegungenSection() {
 
   return (
     <div className="admin-section">
-      <p className="admin-section-hint">Diese Werte werden automatisch bei der Erstellung neuer Verträge vorbelegt.</p>
+      <p className="admin-section-hint">
+        Diese Werte belegen neue Datensätze vor — Adressen, Projekte, Angebote, Verträge und
+        Rechnungen. Jede Vorbelegung bleibt im jeweiligen Formular überschreibbar.
+      </p>
       {isLoading && <p className="empty-note">Laden …</p>}
       {!isLoading && (
         <>
+          <div className="admin-block">
+            <h3 className="admin-block-title">Adressen</h3>
+            <div className="form-group">
+              <label htmlFor="def-country">Land</label>
+              <select id="def-country" value={countryId} onChange={e => setCountryId(e.target.value)}>
+                <option value="">— keine Vorbelegung —</option>
+                {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.NAME_SHORT}</option>)}
+              </select>
+            </div>
+            <p className="admin-section-hint">Land, mit dem eine neue Adresse startet.</p>
+          </div>
+
+          <div className="admin-block">
+            <h3 className="admin-block-title">Projekte &amp; Angebote</h3>
+            {companies.length > 1 ? (
+              <div className="form-group">
+                <label htmlFor="def-company">Firma</label>
+                <select id="def-company" value={companyId} onChange={e => setCompanyId(e.target.value)}>
+                  <option value="">— keine Vorbelegung —</option>
+                  {companies.map(c => <option key={c.ID} value={c.ID}>{c.COMPANY_NAME_1}</option>)}
+                </select>
+                <p className="admin-section-hint">
+                  Firma, mit der neue Projekte und Angebote starten.
+                </p>
+              </div>
+            ) : (
+              <p className="admin-section-hint">
+                Es ist genau eine Firma hinterlegt — sie wird in Projekten und Angeboten
+                automatisch gesetzt. Mehrere Firmen pro Mandant sind ein Enterprise-Merkmal.
+              </p>
+            )}
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="def-pstatus">Projektstatus</label>
+                <select id="def-pstatus" value={projStatusId} onChange={e => setProjStatusId(e.target.value)}>
+                  <option value="">— keine Vorbelegung —</option>
+                  {projStatuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="def-ostatus">Angebotsstatus</label>
+                <select id="def-ostatus" value={offerStatusId} onChange={e => setOfferStatusId(e.target.value)}>
+                  <option value="">— keine Vorbelegung —</option>
+                  {offerStatuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+                </select>
+              </div>
+            </div>
+            <p className="admin-section-hint">
+              Status, mit dem ein neu angelegtes Projekt bzw. Angebot startet.
+            </p>
+          </div>
+
           <div className="admin-block">
             <h3 className="admin-block-title">Vertrag</h3>
             <div className="form-group">
@@ -1172,6 +1264,72 @@ function VorbelegungenSection() {
               </div>
             </div>
             <p className="admin-section-hint">Diese Werte werden beim Anlegen eines Vertrags vorbelegt und können pro Vertrag überschrieben werden.</p>
+          </div>
+          <div className="admin-block">
+            <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              Sicherheitseinbehalt (Vorbelegung für neue Verträge) <HelpHint id="invoice.sicherheitseinbehalt" />
+            </h3>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={seEnabled}
+                onChange={e => setSeEnabled(e.target.checked)}
+              />
+              <span>Sicherheitseinbehalt vereinbart</span>
+            </label>
+            {seEnabled && (
+              <div style={{ paddingLeft: 22, marginTop: 10 }}>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="def-se-pct">Prozent (%)</label>
+                    <input
+                      id="def-se-pct" type="number" min={0} max={100} step={0.01}
+                      value={sePct}
+                      onChange={e => setSePct(e.target.value)}
+                      placeholder="z. B. 5"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="def-se-basis">Basis</label>
+                    <select id="def-se-basis" value={seBasis} onChange={e => setSeBasis(e.target.value === 'NETTO' ? 'NETTO' : 'BRUTTO')}>
+                      <option value="BRUTTO">vom Brutto</option>
+                      <option value="NETTO">vom Netto</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="def-se-ref">Rechtsgrundlage</label>
+                  <input
+                    id="def-se-ref" type="text"
+                    value={seLegalRef}
+                    onChange={e => setSeLegalRef(e.target.value)}
+                    placeholder="z. B. § 17 VOB/B"
+                  />
+                </div>
+              </div>
+            )}
+            <p className="admin-section-hint">
+              Greift nur für neu angelegte Verträge. Bestehende Verträge bleiben unverändert und
+              lassen sich im Projekt unter „Verträge" anpassen.
+            </p>
+          </div>
+          <div className="admin-block">
+            <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              Zahlungsziel <HelpHint id="invoice.payment_term" />
+            </h3>
+            <div className="form-group">
+              <label htmlFor="def-payterm">Zahlungsziel (Kalendertage)</label>
+              <input
+                id="def-payterm" type="number" min={0} max={365} step={1}
+                value={paymentTermDays}
+                onChange={e => setPaymentTermDays(e.target.value)}
+                placeholder="z. B. 14"
+              />
+            </div>
+            <p className="admin-section-hint">
+              Belegt das Fälligkeitsdatum in Abschlags-, Einzel-, Teilschluss-/Schluss- und
+              Gutschrift-Assistenten vor: Rechnungsdatum plus diese Anzahl Kalendertage.
+            </p>
           </div>
           <div className="admin-block">
             <h3 className="admin-block-title">Stempeluhr</h3>

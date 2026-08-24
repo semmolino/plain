@@ -370,5 +370,19 @@ Choose dimensions meaningful to the data — typical examples: Projekt, Mitarbei
 - TypeScript is strict in the frontend; `npx tsc --noEmit` must pass before committing
 - The backend is plain JS (no TypeScript)
 - Nunjucks templates use `| money` filter (→ `fmtMoney`) and `| date_de` filter
-- `TENANT_SETTINGS` keys used in code: `default_vat_id`, `default_currency_id`
+- **Vorbelegungen** liegen als `TENANT_SETTINGS`-Zeilen (KEY/VALUE) unter
+  `GET/PUT /stammdaten/defaults` und werden zentral in Einstellungen →
+  Vorbelegungen gepflegt. Keys: `default_vat_id`, `default_currency_id`,
+  `default_country_id`, `default_company_id`, `default_project_status_id`,
+  `default_offer_status_id`, `offer_valid_days`, `default_cash_discount_percent`,
+  `default_cash_discount_days`, `default_se_enabled`, `default_se_percent`,
+  `default_se_basis`, `default_se_legal_reference`, `default_payment_term_days`.
+  Eine neue Vorbelegung braucht **keine Migration** — Feld in `VorbelegungenSection`
+  (AdminPage) ergänzen und am Verwendungsort lesen. Frontend-Zugriff über
+  `useTenantDefaults` / `presetId` (`hooks/useTenantDefaults.ts`,
+  `utils/vorbelegung.ts`), damit alle Formulare denselben Query-Key `['defaults']`
+  teilen. Vertragsspalten werden **ausschließlich** in
+  `backend/services/contractDefaults.js` gefüllt — vier Stellen legen Verträge an
+  (Projektanlage, Angebots-Umwandlung, zweimal Import), und genau dieses Driften
+  hatte dazu geführt, dass die Skonto-Vorbelegung nirgends angewendet wurde.
 - The `dueDateChecker` service runs on a timer at startup — checks invoice due dates

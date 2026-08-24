@@ -17,6 +17,7 @@ import { useToast }  from '@/store/toastStore'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
 import { AddrForm, ContactForm, emptyAddr, emptyContact, addressToPayload, contactToPayload } from '@/pages/adressen/addressForms'
+import { useDefaultString } from '@/hooks/useTenantDefaults'
 import { downloadCsv, downloadText, contactVCard } from '@/utils/exportData'
 import { FilterBar } from '@/components/ui/FilterBar'
 import {
@@ -103,6 +104,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   const [sortKey,      setSortKey]      = useStickyState<AddrSortKey>('adressen.sortKey', 'ADDRESS_NAME_1')
   const [sortDir,      setSortDir]      = useStickyState<'asc'|'desc'>('adressen.sortDir', 'asc')
   const [editAddr,     setEditAddr]     = useState<Address | null>(null)
+  const defaultCountryId = useDefaultString('default_country_id')
   const [form,         setForm]         = useState<AddressPayload>(emptyAddr)
   const [editForm,     setEditForm]     = useState<AddressPayload>(emptyAddr)
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -200,7 +202,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['addresses'] })
       setMsg({ text: 'Adresse gespeichert ✅', type: 'success' })
-      setForm(emptyAddr())
+      setForm(emptyAddr(defaultCountryId))
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
@@ -245,7 +247,7 @@ function AdressenSection({ initialSearch, openAddressId, onShowKontakte }: Adres
   }
 
   function openCreate() {
-    setForm(emptyAddr())
+    setForm(emptyAddr(defaultCountryId))
     setMsg(null)
     setCreateOpen(true)
   }

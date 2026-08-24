@@ -1,5 +1,7 @@
 'use strict';
 
+const { contractDefaults } = require('./contractDefaults');
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function fmt2(n) {
@@ -1283,8 +1285,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     INVOICE_ADDRESS_ID: project.ADDRESS_ID,
     INVOICE_CONTACT_ID: project.CONTACT_ID,
     TENANT_ID:          tenantId,
-    ...(defaults.default_currency_id ? { CURRENCY_ID: Number(defaults.default_currency_id) } : {}),
-    ...(defaults.default_vat_id      ? { VAT_ID:      Number(defaults.default_vat_id)      } : {}),
+    ...contractDefaults(defaults),
   };
   {
     const { error } = await supabase.from('CONTRACT').insert([contractRow]);

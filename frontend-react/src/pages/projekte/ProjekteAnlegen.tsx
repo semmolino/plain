@@ -12,6 +12,9 @@ import {
 import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
 import { fetchBookingTypes, BOOKING_KIND_LABEL, type BookingType } from '@/api/bookingTypes'
+import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { presetId } from '@/utils/vorbelegung'
+import { useFeature } from '@/store/licenseStore'
 
 // ── Wizard state ──────────────────────────────────────────────────────────────
 
@@ -76,9 +79,21 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
   // Nur globale Buchungsarten lassen sich vor der Anlage projektbezogen bepreisen.
   const bookingTypes = (bookingTypeData?.data ?? []).filter((t: BookingType) => t.SCOPE === 'global')
 
-  // Auto-select company when there is exactly one
-  if (companies.length === 1 && !basic.company_id) {
-    setBasic(f => ({ ...f, company_id: String(companies[0].ID) }))
+  // Vorbelegungen (Einstellungen → Vorbelegungen). Mehrere Firmen je Mandant
+  // sind ein Enterprise-Merkmal — ohne die Lizenz bleibt die Firma gesetzt,
+  // aber nicht änderbar.
+  const defaults     = useTenantDefaults()
+  const multiCompany = useFeature('enterprise.multi_company')
+
+  const presetCompany = presetId(companies, defaults.default_company_id)
+    || (companies.length === 1 || !multiCompany ? String(companies[0]?.ID ?? '') : '')
+  if (presetCompany && !basic.company_id) {
+    setBasic(f => (f.company_id ? f : { ...f, company_id: presetCompany }))
+  }
+
+  const presetStatus = presetId(statuses, defaults.default_project_status_id)
+  if (presetStatus && !basic.project_status_id) {
+    setBasic(f => (f.project_status_id ? f : { ...f, project_status_id: presetStatus }))
   }
 
   const searchAddresses = useCallback(async (q: string) => {
@@ -208,11 +223,22 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
           <h3 className="wizard-step-title">Schritt 1: Basisdaten</h3>
           {companies.length > 1 && (
             <div className="form-group">
-              <label>Firma*</label>
-              <select value={basic.company_id} onChange={e => setB('company_id')(e.target.value)}>
+              <label htmlFor="pj-company">Firma*</label>
+              <select
+                id="pj-company"
+                value={basic.company_id}
+                onChange={e => setB('company_id')(e.target.value)}
+                disabled={!multiCompany}
+              >
                 <option value="">Bitte wählen …</option>
                 {companies.map(c => <option key={c.ID} value={c.ID}>{c.COMPANY_NAME_1}</option>)}
               </select>
+              {!multiCompany && (
+                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
+                  Dein Tarif sieht eine Firma je Mandant vor — es gilt die Vorbelegung aus
+                  Einstellungen → Vorbelegungen.
+                </p>
+              )}
             </div>
           )}
           <div className="form-group">

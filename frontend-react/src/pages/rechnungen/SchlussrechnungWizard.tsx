@@ -24,6 +24,7 @@ import {
 import { ApiRequestError } from '@/api/client'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
+import { useDueDatePreset } from '@/hooks/useTenantDefaults'
 import { API_BASE }     from '@/api/client'
 
 const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
@@ -60,7 +61,8 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
 
   // Step 1
   const [detDate,  setDetDate]  = useState(todayIso())
-  const [dueDate,  setDueDate]  = useState('')
+  // Fälligkeit folgt der Vorbelegung „Zahlungsziel" (Einstellungen → Vorbelegungen).
+  const [dueDate, setDueDate, resetDueDate, paymentTermDays] = useDueDatePreset(detDate)
   const [bpStart,  setBpStart]  = useState('')
   const [bpFinish, setBpFinish] = useState('')
   const [comment,  setComment]  = useState('')
@@ -353,7 +355,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
     setStep(0); setDraftId(null); setProjectId(null); setProjectLabel('')
     setContractId(null); setContractLabel(''); setContractsForProject([])
     setEmployeeId('')
-    setDetDate(todayIso()); setDueDate(''); setBpStart(''); setBpFinish(''); setComment('')
+    setDetDate(todayIso()); resetDueDate(); setBpStart(''); setBpFinish(''); setComment('')
     setPhases([]); setPhaseChecked(new Set()); setPhaseTotals(null)
     setDeductions([]); setDeductAmounts({}); setDedSelected(new Set()); setDedTotals(null); setDedWarn(null)
     setShowDiscounts(false); setD1Pct(''); setD2Pct(''); setShowSkonto(false); setCashDiscPct(''); setCashDiscDays('')
@@ -587,7 +589,11 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <p className="wizard-step-title">Rechnungsdetails</p>
           <div className="form-row">
             <FormField label="Rechnungsdatum"   id="srd"  type="date" value={detDate}  onChange={e => setDetDate(e.target.value)} />
-            <FormField label="Fälligkeitsdatum" id="srdd" type="date" value={dueDate}  onChange={e => setDueDate(e.target.value)} />
+            <FormField
+              label="Fälligkeitsdatum" id="srdd" type="date"
+              value={dueDate} onChange={e => setDueDate(e.target.value)}
+              hint={paymentTermDays !== null ? `Zahlungsziel: ${paymentTermDays} Kalendertage ab Rechnungsdatum` : undefined}
+            />
           </div>
           <div className="form-row">
             <FormField label="Leistungszeitraum von" id="srbs" type="date" value={bpStart}  onChange={e => setBpStart(e.target.value)} />

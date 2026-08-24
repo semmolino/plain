@@ -303,6 +303,17 @@ export const HELP = {
       </>
     ),
   },
+  'addresses.salutation': {
+    title: 'Anrede',
+    body: (
+      <>
+        Wird automatisch aus dem gewählten Geschlecht gesetzt und lässt sich hier
+        überschreiben — etwa bei akademischem Titel oder abweichender
+        Ansprache. Die Anrede erscheint in der Briefanrede von Rechnungen,
+        Angeboten und Mahnungen.
+      </>
+    ),
+  },
   'addresses.notes': {
     title: 'Notizen',
     body: (
@@ -398,6 +409,20 @@ export const HELP = {
         Preisnachlass für schnelle Zahlung: der Kunde darf z. B. <strong>2 %</strong>
         abziehen, wenn er innerhalb von <strong>14 Tagen</strong> zahlt. Wird als
         Vorbelegung übernommen und ist pro Vertrag/Rechnung überschreibbar.
+      </>
+    ),
+  },
+  'invoice.payment_term': {
+    title: 'Zahlungsziel',
+    body: (
+      <>
+        Frist, bis zu der die Rechnung bezahlt sein soll — gerechnet in
+        <strong> Kalendertagen ab Rechnungsdatum</strong> (nicht Werktagen). Aus
+        der Vorbelegung errechnet der Assistent das Fälligkeitsdatum; pro Beleg
+        bleibt es überschreibbar. Es steuert außerdem, ab wann eine Rechnung als
+        überfällig gilt und ins Mahnwesen läuft.<br /><br />
+        Nicht mit <strong>Skonto-Tagen</strong> verwechseln: die sind die kürzere
+        Frist für den Abzug, das Zahlungsziel die eigentliche Fälligkeit.
       </>
     ),
   },
