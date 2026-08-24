@@ -1,15 +1,16 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
-import { useColumnPriority, type PrioLevel } from '@/hooks/useColumnPriority'
+import { useFitColumns } from '@/hooks/useFitColumns'
+import { SortTh } from '@/components/ui/SortTh'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Mail, SlidersHorizontal } from 'lucide-react'
+import { Mail, SlidersHorizontal, Pencil, FileText } from 'lucide-react'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { RowMenu } from '@/components/ui/RowMenu'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
@@ -234,53 +235,49 @@ const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set() }
 
 type ColKey = 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'seHeld' | 'payable' | 'paid' | 'open' | 'statusLabel'
 
-interface ColDef {
-  key: ColKey; label: string; className?: string; defaultVisible: boolean
-  /**
-   * Ab welcher Platzstufe die Spalte gezeigt wird (siehe useColumnPriority).
-   * 1 = immer · 2 = ab Tablet · 3 = nur auf breitem Bildschirm.
-   * Ohne Angabe: 1.
-   */
-  prio?: PrioLevel
-}
+interface ColDef { key: ColKey; label: string; className?: string; defaultVisible: boolean }
 // Status steht bewusst VOR den Betraegen: er ist die haeufigste Scan-Dimension
 // („was ist offen / ueberfaellig?"). Ganz rechts lag er hinter der fixierten
 // Aktionsspalte und war beim horizontalen Scrollen als Erstes verdeckt.
 //
-// Die Stufen: Zum WIEDERERKENNEN einer Rechnung braucht man Nummer, Datum und
-// Projekt, zum HANDELN Status und Brutto — das ist Stufe 1. Netto und Offene
-// Posten sind haeufig genug fuer Stufe 2. Sicherheitseinbehalt und Forderung
-// sind Nachrechen-Details und duerfen als Erstes weichen (so entschieden am
-// 24.08.2026). Wer sie braucht, holt sie ueber „Spalten" zurueck — eine
-// bewusste Auswahl dort schlaegt die automatische Ausblendung immer.
+// Welche Spalte bei Platzmangel weicht, steht NICHT hier, sondern in
+// `WEGFALLBAR` weiter unten — als Reihenfolge, nicht als feste Stufe. Der
+// Unterschied ist wesentlich: Eine Stufe („ab 1520px alles zeigen") ist eine
+// Vorhersage darueber, wann etwas passt, und die war mit echten Daten falsch.
+// Eine Reihenfolge ist nur eine Rangfolge; wie viele davon tatsaechlich
+// weichen, misst `useFitColumns` nach dem Rendern.
 const COLUMNS: ColDef[] = [
   { key: 'typ',         label: 'Typ',             defaultVisible: true  },
   { key: 'date',        label: 'Datum',           defaultVisible: true  },
   { key: 'statusLabel', label: 'Status',          defaultVisible: true  },
   { key: 'project',     label: 'Projekt',         defaultVisible: true  },
   { key: 'address',     label: 'Adresse',         defaultVisible: false },
-  { key: 'net',         label: 'Netto €',         className: 'num', defaultVisible: true,  prio: 2 },
+  { key: 'net',         label: 'Netto €',         className: 'num', defaultVisible: true  },
   { key: 'gross',       label: 'Brutto €',        className: 'num', defaultVisible: true  },
-  { key: 'seHeld',      label: 'SEB €',           className: 'num', defaultVisible: true,  prio: 3 },
-  { key: 'payable',     label: 'Forderung €',     className: 'num', defaultVisible: true,  prio: 3 },
+  { key: 'seHeld',      label: 'SEB €',           className: 'num', defaultVisible: true  },
+  { key: 'payable',     label: 'Forderung €',     className: 'num', defaultVisible: true  },
   { key: 'paid',        label: 'Bezahlt €',       className: 'num', defaultVisible: false },
-  { key: 'open',        label: 'Offene Posten €', className: 'num', defaultVisible: true,  prio: 2 },
+  { key: 'open',        label: 'Offene Posten €', className: 'num', defaultVisible: true  },
 ]
+
+/**
+ * Rangfolge beim Platzmangel — unwichtigste zuerst.
+ *
+ * Zum WIEDERERKENNEN einer Rechnung braucht man Nummer, Datum und Projekt,
+ * zum HANDELN Status und Brutto. Die stehen deshalb nicht in dieser Liste und
+ * bleiben immer. Sicherheitseinbehalt und Forderung sind Nachrechen-Details
+ * und weichen als Erste (so entschieden am 24.08.2026); danach Netto (aus
+ * Brutto ableitbar), dann Offene Posten, zuletzt der Typ — der steht auch im
+ * farbigen Zeilenrand und in der Detailansicht.
+ */
+const WEGFALLBAR: ColKey[] = ['seHeld', 'payable', 'net', 'open', 'typ']
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
 type SortKey = 'number' | 'typ' | 'date' | 'project' | 'address' | 'net' | 'gross' | 'seHeld' | 'payable' | 'paid' | 'open' | 'statusLabel'
 
-function SortTh({ label, k, sortKey, dir, onClick, className }: {
-  label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'
-  onClick: (k: SortKey) => void; className?: string
-}) {
-  return (
-    <th scope="col" className={`sortable-th${className ? ' ' + className : ''}`} onClick={() => onClick(k)}>
-      {label} {sortKey === k ? (dir === 'asc' ? '▲' : '▼') : ''}
-    </th>
-  )
-}
+// Die lokale SortTh-Kopie ist entfallen — sie hatte weder Tastaturbedienung
+// noch `aria-sort`. Diese Liste nutzt jetzt `components/ui/SortTh`.
 
 // ── Payment modal target ──────────────────────────────────────────────────────
 
@@ -363,18 +360,23 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     setHiddenCols(prev => { const s = new Set(prev); if (s.has(key)) s.delete(key); else s.add(key); return s })
     setTouchedCols(prev => new Set(prev).add(key))
   }
-  // Wieviel Platz ist da? Danach fallen Spalten der Stufen 2 und 3 weg.
-  const prio = useColumnPriority()
-  /** true, wenn die Spalte allein aus Platzgruenden fehlt (nicht abgewaehlt). */
-  function ausPlatzgruenden(c: ColDef) {
-    return (c.prio ?? 1) > prio && !touchedCols.has(c.key) && !hiddenCols.has(c.key)
-  }
-  const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key) && !ausPlatzgruenden(c))
-  const platzVersteckt = COLUMNS.filter(ausPlatzgruenden)
-  // Diese Tabelle ist auf 1280px rund 230px breiter als ihr Container. Der
-  // Hook markiert den Container, solange rechts Inhalt liegt — daran haengt
-  // die sichtbare Kante an der fixierten Aktionsspalte.
-  const scrollRef = useScrollEdges<HTMLDivElement>()
+  // Ein Element, zwei Beobachter: der eine misst, ob Spalten weichen muessen,
+  // der andere markiert die Kante an der fixierten Aktionsspalte. Beide sind
+  // Callback-Refs, also werden sie hier zu einem zusammengefasst.
+  const edgeRef = useScrollEdges<HTMLDivElement>()
+
+  // Reihenfolge = unwichtigste zuerst. Der Hook laesst nur so viele weg, wie
+  // noetig sind — auf einem breiten Bildschirm faellt gar nichts weg.
+  // Wer eine Spalte im Waehler bewusst anhakt, ist hier ausgenommen.
+  const wegfallbar = useMemo(
+    () => WEGFALLBAR.filter(k => !touchedCols.has(k) && !hiddenCols.has(k)),
+    [touchedCols, hiddenCols],
+  )
+  const [platzWeg, fitRef] = useFitColumns<ColKey>(wegfallbar, [hiddenCols.size])
+  const setBox = useCallback((el: HTMLDivElement | null) => { fitRef(el); edgeRef(el) }, [fitRef, edgeRef])
+
+  const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key) && !platzWeg.has(c.key))
+  const platzVersteckt = COLUMNS.filter(c => platzWeg.has(c.key))
   const [sortKey, setSortKey] = useStickyState<SortKey>('rechnungen.sortKey', 'date')
   const [sortDir, setSortDir] = useStickyState<'asc'|'desc'>('rechnungen.sortDir', 'desc')
 
@@ -797,7 +799,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     }
   }
 
-  const sp = { sortKey, dir: sortDir, onClick: toggleSort }
+  const sp = { sortKey, dir: sortDir, onSort: toggleSort }
   const remaining = payTarget ? (Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100) : null
 
   return (
@@ -854,7 +856,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                   {/* Ohne diesen Hinweis stuende hier ein Haken bei einer
                       Spalte, die man nicht sieht — die Liste wuerde ueber
                       ihren eigenen Zustand luegen. Anhaken holt sie zurueck. */}
-                  {ausPlatzgruenden(c) && <span className="pl-col-hint">kein Platz</span>}
+                  {platzWeg.has(c.key) && <span className="pl-col-hint">kein Platz</span>}
                 </label>
               ))}
               {platzVersteckt.length > 0 && (
@@ -916,7 +918,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
 
       {isLoading && <ListLoading columns={6} />}
       {!isLoading && (
-        <div className="list-section table-scroll" ref={scrollRef}>
+        <div className="list-section table-scroll" ref={setBox}>
           {/* Diese Tabelle hat so viele Spalten, dass sie auf ueblichen
               Breiten horizontal scrollt — daher die rechts fixierte
               Aktionsspalte. Schmalere Listen bekommen den Modifier nicht. */}
@@ -935,9 +937,9 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                       <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Alle auswählen" />
                     </th>
                   )}
-                <SortTh label="Nummer" k="number" {...sp} />
+                <SortTh label="Nummer" column="number" {...sp} />
                 {visibleCols.map(c => (
-                  <SortTh key={c.key} label={c.label} k={c.key} {...sp} className={c.className} />
+                  <SortTh key={c.key} label={c.label} column={c.key} {...sp} className={c.className} />
                 ))}
                 {!narrow && <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>}
               </tr>
@@ -955,10 +957,24 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                           dort rund 180px und zwangen zum Seitwaerts-Scrollen.
                           Die jeweils andere Variante ist per CSS ausgeblendet und
                           damit auch aus Tab-Reihenfolge und Screenreader raus. */}
+                      {/* Icons statt der Woerter „Details" und „PDF": Das Paar
+                          belegte rund 150px, die Icons rund 70. Auf einem
+                          1024px-Bildschirm war genau dieser Unterschied der
+                          Grund, warum die Tabelle noch ueberlief, nachdem
+                          bereits alle entbehrlichen Spalten weggelassen waren.
+                          `title` UND `aria-label`, weil das Wort sonst
+                          ersatzlos verschwaende — Lucide-Icons sind laut
+                          CLAUDE.md ohnehin die Vorgabe (PDF -> FileText). */}
                       <span className="doc-actions-inline">
-                        <button className="btn-small" onClick={() => openDetail(row)}>Details</button>
+                        <button className="row-action-btn" onClick={() => openDetail(row)}
+                          title="Details" aria-label={`Details zu ${row.number}`}>
+                          <Pencil size={14} strokeWidth={1.75} />
+                        </button>
                         <Can permission="invoices.download_pdf">
-                          <button className="btn-small" onClick={() => openPdf(row)}>PDF</button>
+                          <button className="row-action-btn" onClick={() => openPdf(row)}
+                            title="PDF" aria-label={`PDF zu ${row.number}`}>
+                            <FileText size={14} strokeWidth={1.75} />
+                          </button>
                         </Can>
                       </span>
                       {/* „Mail" und „Zahlung" sind ins ⋯-Menue gewandert. Beide
