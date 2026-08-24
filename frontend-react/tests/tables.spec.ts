@@ -26,6 +26,12 @@ const UEBERLAUFENDE_LISTEN: [string, string][] = [
 
 for (const [name, url] of UEBERLAUFENDE_LISTEN) {
   test(`${name} — verborgene Spalten sind an der fixierten Spalte erkennbar`, async ({ page }) => {
+    // Bewusst schmal: Seit die Rechnungsliste ihre Spalten selbst anpasst,
+    // passt sie auf Desktop-Breiten — dort gaebe es nichts zu verdecken und
+    // die Kante waere (richtigerweise) aus. Der Fall, den dieser Test
+    // absichert, tritt erst auf, wenn selbst die Grundausstattung nicht mehr
+    // hineinpasst.
+    await page.setViewportSize({ width: 700, height: 800 })
     await mockDemo(page)
     await page.goto(url)
     await hideDevtools(page)
@@ -103,15 +109,45 @@ async function spalten(page: import('@playwright/test').Page) {
     ths.map(th => (th.textContent || '').replace(/[▲▼]/g, '').trim()).filter(Boolean))
 }
 
-test('Rechnungsliste — auf breitem Bildschirm passt die Tabelle vollstaendig', async ({ page }) => {
-  await page.setViewportSize({ width: 1600, height: 900 })
+const ueberstand = (page: import('@playwright/test').Page) =>
+  page.locator('.table-scroll').first().evaluate(el => el.scrollWidth - el.clientWidth)
+
+test('Rechnungsliste — passt auf Desktop-Breiten in ihren Container', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'prueft Fensterbreiten, nicht Geraete')
+  // Der Kern der Sache. Zuerst stufte die Liste nach festen Pixelschwellen,
+  // die an einer zu ordentlichen Fixture ermittelt waren („ab 1520px passt
+  // alles"). Mit realistischen Werten lief sie auf JEDER Breite ueber, und
+  // die fixierte Aktionsspalte schnitt Betraege mittendrin ab. Jetzt misst
+  // die Liste selbst und laesst so viele Spalten weg, wie noetig sind.
   await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
   await page.locator('.master-table').waitFor()
 
-  expect(await spalten(page)).toContain('SEB €')
-  const ueber = await page.locator('.table-scroll').first()
-    .evaluate(el => el.scrollWidth - el.clientWidth)
-  expect(ueber, 'ab 1520px darf nichts mehr ueberlaufen').toBe(0)
+  for (const w of [1280, 1440, 1600, 1920]) {
+    await page.setViewportSize({ width: w, height: 900 })
+    await expect.poll(() => ueberstand(page), { message: `Ueberstand bei ${w}px` })
+      .toBeLessThanOrEqual(1)
+  }
+})
+
+test('Rechnungsliste — weggelassene Spalten kehren beim Aufziehen zurueck', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'prueft Fensterbreiten, nicht Geraete')
+  // Der erste Anlauf holte Spalten zurueck, sobald „freier Platz" da war.
+  // Weil die Tabelle width:100% hat, fuellt sie ihren Container nach jedem
+  // Weglassen aber wieder vollstaendig aus — freier Platz entstand nie, und
+  // einmal weggelassene Spalten waeren fuer immer weg gewesen.
+  await page.setViewportSize({ width: 1100, height: 900 })
+  await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+  await expect.poll(() => spalten(page)).not.toContain('SEB €')
+
+  await page.setViewportSize({ width: 1920, height: 900 })
+  await expect.poll(() => spalten(page), { message: 'SEB muss auf breitem Fenster zurueckkommen' })
+    .toContain('SEB €')
+
+  await page.setViewportSize({ width: 1100, height: 900 })
+  await expect.poll(() => spalten(page)).not.toContain('SEB €')
+  // Am Ende steht die Tabelle ruhig — kein Hin und Her an der Grenze.
+  await expect.poll(() => ueberstand(page)).toBeLessThanOrEqual(1)
 })
 
 test('Rechnungsliste — auf schmalem Bildschirm weichen SEB und Forderung', async ({ page }) => {

@@ -32,6 +32,9 @@ export function SortTh<K extends string>({ label, column, sortKey, dir, onSort, 
   return (
     <th
       scope="col"
+      // `useFitColumns` misst die Spaltenbreiten ueber dieses Attribut, um
+      // ausrechnen zu koennen, wie viele Spalten weichen muessen.
+      data-col={column}
       className={['sortable-th', className].filter(Boolean).join(' ')}
       aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
       tabIndex={0}

@@ -44,13 +44,27 @@ const projects = PROJECTS.map(([short, long, status, typ, mgr, addr], i) => ({
 // STATUS_ID 2 = gebucht, sonst Entwurf. Negative Betraege + CANCELS_INVOICE_ID
 // erzeugen Storno-Zeilen (.row-status-cancelled) — die brauchte es, um die
 // Darstellung der fixierten Aktionsspalte auf farbigen Zeilen zu pruefen.
+//
+// ACHTUNG bei Aenderungen: Die Laenge der Werte ist hier Teil des Testfalls.
+// Diese Fixture stand zuerst auf kurzen Bezeichnungen („Abschlag") und
+// vierstelligen Betraegen. Damit passte die Rechnungsliste in Tests, die in
+// der echten Instanz laengst ueberlief — dort steht „Abschlagsrechnung" und
+// es gibt sechsstellige Betraege. Ein Spaltenlayout, das nur mit kurzen
+// Werten passt, ist nicht geprueft, sondern geschmeichelt. Wer hier kuerzt,
+// nimmt den Breiten-Tests die Aussagekraft.
 const INVOICES = [
-  ['RE-2025-0041', '2025-07-02', '2025-08-01', 112_400,   1, 'Abschlag'],
-  ['RE-2025-0042', '2025-07-08', '2025-08-07',  38_900.5, 2, 'Abschlag'],
-  ['RE-2025-0043', '2025-07-15', '2025-07-29',   4_250,   2, 'Schluss'],
-  ['RE-2025-0044', '2025-07-21', '2025-08-20', -38_900.5, 2, 'Storno'],
-  ['RE-2025-0045', '2025-07-28', '2025-08-27',   1_980.4, 2, 'Schluss'],
-  ['RE-2025-0046', '2025-08-01', '2025-08-31',  -4_250,   2, 'Storno'],
+  ['RE-2026-0041', '2026-07-02', '2026-08-01',  112_400,    1, 'Abschlagsrechnung'],
+  ['RE-2026-0042', '2026-07-08', '2026-08-07',   38_900.5,  2, 'Abschlagsrechnung'],
+  ['RE-2026-0043', '2026-07-15', '2026-07-29',    4_250,    2, 'Schlussrechnung'],
+  ['RE-2026-0044', '2026-07-21', '2026-08-20',  -38_900.5,  2, 'Stornorechnung'],
+  ['RE-2026-0045', '2026-07-28', '2026-08-27',    1_980.4,  2, 'Schlussrechnung'],
+  ['RE-2026-0046', '2026-08-01', '2026-08-31',   -4_250,    2, 'Stornorechnung'],
+  ['RE-2026-0047', '2026-08-04', '2026-09-03',  247_318.75, 2, 'Abschlagsrechnung'],
+  ['RE-2026-0048', '2026-08-07', '2026-09-06',  863_940.2,  2, 'Abschlagsrechnung'],
+  ['RE-2026-0049', '2026-08-11', '2026-09-10',   17_559.03, 1, 'Teilschlussrechnung'],
+  ['RE-2026-0050', '2026-08-14', '2026-09-13',  105_374.45, 2, 'Schlussrechnung'],
+  ['RE-2026-0051', '2026-08-18', '2026-09-17',    6_715.17, 2, 'Abschlagsrechnung'],
+  ['RE-2026-0052', '2026-08-20', '2026-09-19', 1_284_006.9, 2, 'Abschlagsrechnung'],
 ]
 
 const invoices = INVOICES.map(([nr, date, due, net, status, typ], i) => ({
