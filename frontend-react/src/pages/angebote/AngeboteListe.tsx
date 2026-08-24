@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useStickyState, useStickySet } from '@/hooks/useStickyState'
+import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, FileText, FolderOpen, CheckCircle2, XCircle, Trash2, FileSignature } from 'lucide-react'
@@ -110,6 +111,10 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
   })
 
   const rows = data?.data ?? []
+  // Auch diese Tabelle laeuft auf 1280px ueber ihren Container hinaus
+  // (gemessen 1205px in 1048px). Markiert den Container, solange rechts
+  // Inhalt liegt — daran haengt die Kante an der fixierten Spalte.
+  const scrollRef = useScrollEdges<HTMLDivElement>()
 
   // ── Inline-Edit (Status / Wahrscheinlichkeit / Datumsfelder direkt in der Liste) ──
   const canEdit = usePermission('offers.edit')
@@ -222,17 +227,17 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
       {isLoading && <ListLoading columns={6} />}
 
       {!isLoading && (
-        <div className="list-section table-scroll">
-          {/* Bewusst OHNE die fixierte Aktionsspalte: die Zeilen zeigen je
-              nach Status unterschiedlich viele Knoepfe (Beauftragen,
-              Ablehnen, Projekt oeffnen). Die Spalte bekommt dadurch pro
-              Zeile eine andere Breite und ueberlappt fixiert die Daten.
-              Voraussetzung waere ein konstanter Satz Inline-Aktionen mit
-              ⋯-Menue wie in der Rechnungsliste — siehe Notiz unten. */}
-          {/* Die Aktionsspalte ist jetzt konstant breit (Bearbeiten, PDF, ⋯) —
-              damit laesst sie sich rechts fixieren, ohne die Daten zu
-              ueberlappen. Die Tabelle ist auch auf ueblichen Desktop-Breiten
-              breiter als ihr Container. */}
+        <div className="list-section table-scroll" ref={scrollRef}>
+          {/* Die Aktionsspalte ist konstant breit (Bearbeiten, PDF, ⋯) und
+              deshalb rechts fixiert. Zuvor zeigten die Zeilen je nach Status
+              unterschiedlich viele Knoepfe; die Spalte bekam pro Zeile eine
+              andere Breite und ueberlappte fixiert die Daten — deswegen ging
+              es erst nach dem Umbau auf ⋯-Menue wie in der Rechnungsliste.
+
+              Die Tabelle ist auch auf ueblichen Desktop-Breiten breiter als
+              ihr Container (gemessen 1205px in 1048px). Inhalt laeuft also
+              unter der fixierten Spalte durch — `useScrollEdges` oben macht
+              das an ihrer linken Kante sichtbar. */}
           <table className="master-table master-table--sticky-actions">
             <thead>
               <tr>

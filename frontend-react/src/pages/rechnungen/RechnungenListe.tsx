@@ -3,6 +3,7 @@ import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
+import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
 import { useNavigate } from 'react-router-dom'
@@ -335,6 +336,10 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   function setDimFilter(dim: FilterDim, vals: Set<string>) { setActiveFilters(prev => ({ ...prev, [dim]: vals })) }
   function toggleCol(key: ColKey) { setHiddenCols(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s }) }
   const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key))
+  // Diese Tabelle ist auf 1280px rund 230px breiter als ihr Container. Der
+  // Hook markiert den Container, solange rechts Inhalt liegt — daran haengt
+  // die sichtbare Kante an der fixierten Aktionsspalte.
+  const scrollRef = useScrollEdges<HTMLDivElement>()
   const [sortKey, setSortKey] = useStickyState<SortKey>('rechnungen.sortKey', 'date')
   const [sortDir, setSortDir] = useStickyState<'asc'|'desc'>('rechnungen.sortDir', 'desc')
 
@@ -866,7 +871,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
 
       {isLoading && <ListLoading columns={6} />}
       {!isLoading && (
-        <div className="list-section table-scroll">
+        <div className="list-section table-scroll" ref={scrollRef}>
           {/* Diese Tabelle hat so viele Spalten, dass sie auf ueblichen
               Breiten horizontal scrollt — daher die rechts fixierte
               Aktionsspalte. Schmalere Listen bekommen den Modifier nicht. */}

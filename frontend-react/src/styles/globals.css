@@ -1702,6 +1702,34 @@ input::placeholder { color: var(--text-4); }
   position: sticky; right: 0; z-index: 1;
   background-color: var(--surface);
   box-shadow: -6px 0 8px -8px rgba(var(--shadow-color), 0.35);
+  transition: box-shadow 0.15s;
+}
+
+/* Die Kante, an der Inhalt unter der fixierten Spalte durchlaeuft.
+
+   Die Grundregel oben setzt `-6px 0 8px -8px`: 8px Weichzeichnung gegen 8px
+   negativen Radius — der Schatten hebt sich rechnerisch selbst auf und ist
+   nicht zu sehen. Damit stand die Spalte als undurchsichtige Flaeche ueber
+   den Daten, ohne sich als Ueberlagerung zu erkennen zu geben. Auf
+   /rechnungen liegen bei 1280px im Ausgangszustand SEB, Forderung und Offene
+   Posten darunter (gemessen: Aktionen 1100-1264px ueber Daten 1081-1330px).
+
+   Das ist normales Verhalten einer fixierten Spalte, KEIN Stapelfehler — die
+   Spalte hoeher zu legen ist richtig, sonst liefen die Zahlen ueber die
+   Knoepfe. Der Fehler war, dass es unsichtbar geschah.
+
+   Die Kante erscheint nur, solange rechts wirklich etwas liegt
+   (`data-more-right` von useScrollEdges). Ganz nach rechts gescrollt ist
+   nichts mehr verdeckt — dann waere sie eine Behauptung ohne Deckung. */
+.table-scroll[data-more-right] .master-table--sticky-actions th.doc-actions,
+.table-scroll[data-more-right] .master-table--sticky-actions td.doc-actions {
+  box-shadow: -14px 0 14px -10px rgba(var(--shadow-color), 0.5);
+}
+/* Ohne Bewegung (Systemeinstellung) faellt der Uebergang weg — die Kante
+   selbst bleibt, sie ist Information, keine Verzierung. */
+@media (prefers-reduced-motion: reduce) {
+  .master-table--sticky-actions th.doc-actions,
+  .master-table--sticky-actions td.doc-actions { transition: none; }
 }
 .doc-actions { align-items: center; }
 
@@ -2125,7 +2153,35 @@ input::placeholder { color: var(--text-4); }
 
 /* ── Phase 4: Projekte ───────────────────────────────────────────────────── */
 
-.table-scroll { overflow-x: auto; }
+/* Waagerecht scrollende Tabellen.
+
+   Vorher stand hier nur `overflow-x: auto`. Das ist funktional richtig und
+   haelt die Regel „kein horizontaler Seitenlauf" ein — aber es sagt niemandem,
+   DASS es etwas zu scrollen gibt: Bildlaufleisten sind unter Windows und macOS
+   ueberlagert und erscheinen erst waehrend des Scrollens. Eine Tabelle, die
+   ueber ihren Container hinauslaeuft, sieht deshalb aus wie eine, die passt.
+   Gemessen am 24.08.2026: /rechnungen 1279px in 1048px, /angebote 1205px in
+   1048px — auf einem 1280px-Bildschirm, nicht erst auf dem Handy.
+
+   Zwei Hinweise, absichtlich getrennt:
+   1. Eine duenne, dauerhaft sichtbare Bildlaufleiste. Gilt fuer alle
+      Scroll-Container ohne Zutun der Aufrufstellen.
+   2. Die Kante an der fixierten Aktionsspalte (siehe dort) — sie zeigt, dass
+      Inhalt UNTER der Spalte durchlaeuft. Braucht `useScrollEdges`. */
+.table-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-4) transparent;
+}
+.table-scroll::-webkit-scrollbar { height: 10px; }
+.table-scroll::-webkit-scrollbar-track { background: transparent; }
+.table-scroll::-webkit-scrollbar-thumb {
+  background: var(--text-4);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--radius-pill);
+}
+.table-scroll:hover::-webkit-scrollbar-thumb { background: var(--text-3); background-clip: padding-box; }
 
 .buchungen-summary {
   display: flex; gap: 20px; flex-wrap: wrap;
