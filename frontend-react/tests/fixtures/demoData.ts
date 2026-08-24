@@ -112,11 +112,40 @@ const offers = OFFERS.map(([short, long, status, prob, total], i) => ({
   PROJECT_NAME: i === 1 ? PROJECTS[1][0] : null,
 }))
 
+// Feldnamen wie im echten Address-Typ (src/api/stammdaten.ts) — die frühere
+// Fassung hiess NAME_1 / ZIP / COUNTRY und passte zu keinem Feld, das die
+// Liste liest. Zusammen mit der falschen Route (siehe unten) war die
+// Adressliste dadurch in JEDEM Test leer und damit nie sichtbar geprüft.
 const addresses = PROJECTS.map(([, , , , , addr], i) => ({
-  ID: i + 1, NAME_1: addr, NAME_2: '', STREET: 'Musterweg ' + (i + 3),
-  ZIP: String(88000 + i), CITY: ['Ravensburg', 'Friedrichshafen', 'Weingarten'][i % 3],
-  COUNTRY: 'DE', EMAIL: 'info@kunde-' + i + '.de', PHONE: '0751 12345-' + i,
-  CATEGORY_NAME: i % 2 ? 'Bauherr' : 'Fachplaner', IS_ACTIVE: true,
+  ID: i + 1,
+  ADDRESS_NAME_1: addr as string,
+  ADDRESS_NAME_2: i % 3 === 0 ? 'Abteilung Hochbau, Zimmer 214' : null,
+  STREET:    'Musterweg ' + (i + 3),
+  POST_CODE: String(88000 + i),
+  CITY:      ['Ravensburg', 'Friedrichshafen', 'Weingarten'][i % 3],
+  POST_OFFICE_BOX: null,
+  COUNTRY_ID: 'DE', COUNTRY: 'Deutschland',
+  CUSTOMER_NUMBER: 'K-' + String(1000 + i),
+  TAX_ID: 'DE' + (811_000_000 + i * 137),
+  BUYER_REFERENCE: i % 2 ? '04011000-12345-34' : null,
+  PEPPOL_ENDPOINT_ID: null, PEPPOL_SCHEME_ID: null,
+  ADDRESS_TYPE: (i % 4) + 1,
+  TAX_NUMBER: null,
+  PHONE: '0751 12345-' + i,
+  EMAIL: 'info@kunde-' + i + '.de',
+  WEBSITE: null, NOTES: null,
+}))
+
+const contacts = [
+  ['Dr.',  'Andrea',  'Ansprechpartner'],
+  [null,   'Thomas',  'Kern'],
+  [null,   'Sabine',  'Braun-Hofmeister'],
+  ['Prof.', 'Michael', 'Messina'],
+].map(([title, vn, nn], i) => ({
+  ID: i + 1, TITLE: title, FIRST_NAME: vn as string, LAST_NAME: nn as string,
+  EMAIL: `${String(vn).toLowerCase()}.${String(nn).toLowerCase()}@kunde.de`,
+  MOBILE: '0170 1234' + i, SALUTATION_ID: null, GENDER_ID: null,
+  ADDRESS_ID: i + 1, ADDRESS_NAME_1: PROJECTS[i][5],
 }))
 
 /** Deckt die verschiedenen Namensfelder der Stammdaten-Typen ab —
@@ -145,6 +174,13 @@ export async function mockDemo(page: Page) {
     ['projekte/managers',    { data: named(['M. Messina', 'T. Kern', 'S. Braun']) }],
     ['projekte/departments', { data: named(['Hochbau', 'Tiefbau']) }],
     ['invoices',             { data: invoices }],
+    // Die Adressliste ruft /stammdaten/addresses/list, nicht /adressen. Der
+    // alte Eintrag traf nie zu, der Auffang-Mock lieferte `{ data: [] }`, und
+    // die Liste stand in jedem Test auf ihrem Leerzustand — dieselbe Falle
+    // wie zuvor bei der Angebotsliste und der Uebersicht.
+    ['stammdaten/addresses/list', { data: addresses }],
+    ['stammdaten/contacts/list',  { data: contacts }],
+    ['stammdaten/countries',      { data: [{ ID: 'DE', NAME: 'Deutschland' }, { ID: 'AT', NAME: 'Österreich' }] }],
     ['adressen',             { data: addresses }],
     ['angebote/statuses',    { data: named(['Entwurf', 'Angebot', 'Beauftragt', 'Abgelehnt']) }],
     ['angebote',             { data: offers }],
