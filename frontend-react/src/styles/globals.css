@@ -1519,7 +1519,7 @@ input::placeholder { color: var(--text-4); }
 }
 
 /* ── List section ────────────────────────────────────────────────────────── */
-.list-section { overflow-x: auto; }
+/* .list-section wird zusammen mit .table-scroll weiter unten gesetzt. */
 /* Bedienleiste ueber Listen. `.list-toolbar` ist der kanonische Name;
    `.pl-toolbar` (8 Stellen) war eine zweite, leicht abweichende Variante
    derselben Sache — gleiche Werte, damit sich beide identisch verhalten.
@@ -1721,8 +1721,10 @@ input::placeholder { color: var(--text-4); }
    Die Kante erscheint nur, solange rechts wirklich etwas liegt
    (`data-more-right` von useScrollEdges). Ganz nach rechts gescrollt ist
    nichts mehr verdeckt — dann waere sie eine Behauptung ohne Deckung. */
-.table-scroll[data-more-right] .master-table--sticky-actions th.doc-actions,
-.table-scroll[data-more-right] .master-table--sticky-actions td.doc-actions {
+.table-scroll[data-more-right]  .master-table--sticky-actions th.doc-actions,
+.table-scroll[data-more-right]  .master-table--sticky-actions td.doc-actions,
+.list-section[data-more-right]  .master-table--sticky-actions th.doc-actions,
+.list-section[data-more-right]  .master-table--sticky-actions td.doc-actions {
   box-shadow: -14px 0 14px -10px rgba(var(--shadow-color), 0.5);
 }
 /* Ohne Bewegung (Systemeinstellung) faellt der Uebergang weg — die Kante
@@ -1731,10 +1733,22 @@ input::placeholder { color: var(--text-4); }
   .master-table--sticky-actions th.doc-actions,
   .master-table--sticky-actions td.doc-actions { transition: none; }
 }
-.doc-actions { align-items: center; }
+/* `align-items` stand hier als zweite, getrennte Regel fuer dieselbe Klasse.
+   Sie wirkte nur zusammen mit dem `display: flex` weiter unten — beides ist
+   entfallen, die Ausrichtung laeuft jetzt ueber `vertical-align` an der Zelle. */
 
 /* Einheitliche Zeilenhoehe: Inhalt einzeilig mit Auslassung statt Umbruch.
-   Der vollstaendige Text steht im title-Attribut und in der Detailansicht. */
+   Der vollstaendige Text steht im title-Attribut und in der Detailansicht.
+
+   Warum das mehr ist als Kosmetik: Ohne die Regel schwanken die Zeilenhoehen
+   mit der Textlaenge — in der Projektliste zwischen 46 und 66px, je nachdem
+   ob Name oder Adresse umbrechen. Eine Liste, deren Zeilen unterschiedlich
+   hoch sind, laesst sich nicht ueberfliegen: Das Auge verliert die Spur, und
+   auf einen Bildschirm passen weniger Eintraege.
+
+   Als eigener Modifier, weil das nichts mit der fixierten Aktionsspalte zu
+   tun hat — die brachte es bisher nur zufaellig mit. */
+.master-table--einzeilig tbody td,
 .master-table--sticky-actions tbody td {
   white-space: nowrap;
   overflow: hidden;
@@ -1950,7 +1964,29 @@ input::placeholder { color: var(--text-4); }
   background: var(--danger-strong);
   border-color: var(--danger-strong);
 }
-.doc-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+/* Aktionszelle in Tabellen (19 Stellen in 10 Dateien).
+
+   Hier stand `display: flex`. Auf einer <td> ist das ein Layoutfehler mit
+   sichtbarer Folge: Eine Tabellenzelle mit `display: flex` ist keine
+   Tabellenzelle mehr. Der Browser erzeugt an ihrer Stelle eine ANONYME Zelle
+   und steckt den Flex-Kasten hinein. Die anonyme Zelle traegt keine
+   Hintergrundfarbe — deshalb lag ueber der rechten Spalte in jeder Liste ein
+   weisser Streifen, der die Zebrastreifen und die Hover-Farbe der Zeile
+   durchschnitt und in der Hoehe nicht zur Zeile passte. In der
+   Rechnungsliste fiel es weniger auf, weil die fixierte Spalte dort
+   ohnehin eine eigene deckende Farbe setzt; in der Projektliste stand der
+   Streifen offen sichtbar neben den Zeilen.
+
+   Die Zelle bleibt also eine Zelle. Die Knoepfe stehen nebeneinander, weil
+   sie selbst inline-flex sind — JSX erzeugt zwischen Elementen auf eigenen
+   Zeilen keinen Textknoten, es entstehen also keine ungewollten Luecken. */
+th.doc-actions, td.doc-actions {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.doc-actions > *        { vertical-align: middle; }
+.doc-actions > * + *    { margin-left: var(--space-1); }
+.doc-actions-inline     { display: inline-flex; gap: var(--space-1); vertical-align: middle; }
 
 /* Hinweis auf das Rechtsklick-Menue in Projekt- und Angebotsstruktur. Bewusst
    ruhig gehalten (Meta-Textgroesse, --text-3): er soll die Funktion auffindbar
@@ -2195,20 +2231,25 @@ input::placeholder { color: var(--text-4); }
       Scroll-Container ohne Zutun der Aufrufstellen.
    2. Die Kante an der fixierten Aktionsspalte (siehe dort) — sie zeigt, dass
       Inhalt UNTER der Spalte durchlaeuft. Braucht `useScrollEdges`. */
-.table-scroll {
+/* `.list-section` ist derselbe Fall unter anderem Namen — es gibt drei
+   Bezeichnungen fuer dieselbe Sache (wie schon bei den Bedienleisten
+   .list-toolbar / .pl-toolbar / .ls-toolbar). Bis das zusammengefuehrt ist,
+   gilt die Regel fuer beide. */
+.table-scroll,
+.list-section {
   overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--text-4) transparent;
 }
-.table-scroll::-webkit-scrollbar { height: 10px; }
-.table-scroll::-webkit-scrollbar-track { background: transparent; }
-.table-scroll::-webkit-scrollbar-thumb {
+.table-scroll::-webkit-scrollbar, .list-section::-webkit-scrollbar { height: 10px; }
+.table-scroll::-webkit-scrollbar-track, .list-section::-webkit-scrollbar-track { background: transparent; }
+.table-scroll::-webkit-scrollbar-thumb, .list-section::-webkit-scrollbar-thumb {
   background: var(--text-4);
   border: 3px solid transparent;
   background-clip: padding-box;
   border-radius: var(--radius-pill);
 }
-.table-scroll:hover::-webkit-scrollbar-thumb { background: var(--text-3); background-clip: padding-box; }
+.table-scroll:hover::-webkit-scrollbar-thumb, .list-section:hover::-webkit-scrollbar-thumb { background: var(--text-3); background-clip: padding-box; }
 
 .buchungen-summary {
   display: flex; gap: 20px; flex-wrap: wrap;

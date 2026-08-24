@@ -191,3 +191,82 @@ test('Rechnungsliste — bewusste Auswahl schlaegt die automatische Ausblendung'
 
   expect(await spalten(page), 'nach bewusster Auswahl muss die Spalte da sein').toContain('SEB €')
 })
+
+/**
+ * Projektliste.
+ *
+ * Zwei getrennte Befunde, beide am 24.08.2026 aus Screenshots der echten
+ * Instanz entstanden:
+ *
+ * 1. Ueber der rechten Spalte lag ein weisser Streifen, der Zebrastreifen und
+ *    Hover-Farbe durchschnitt. Ursache war `display: flex` auf einer <td> —
+ *    damit ist die Zelle keine Tabellenzelle mehr, der Browser erzeugt eine
+ *    anonyme Ersatzzelle, und die traegt keinen Hintergrund.
+ * 2. Zeilenhoehen schwankten zwischen 46 und 66px, weil Name und Adresse
+ *    umbrachen. Eine Liste mit ungleich hohen Zeilen laesst sich nicht
+ *    ueberfliegen.
+ *
+ * Rangfolge beim Platzmangel (vom Nutzer festgelegt): Typ, Abteilung,
+ * Intern, zuletzt Adresse.
+ */
+
+test('Projektliste — Aktionszelle bleibt eine Tabellenzelle', async ({ page }) => {
+  await mockDemo(page); await page.goto('/projekte'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+
+  const zelle = page.locator('.master-table tbody td.doc-actions').first()
+  // `display: flex` auf einer td nimmt sie aus dem Tabellenlayout — genau das
+  // erzeugte den weissen Streifen.
+  await expect(zelle).toHaveCSS('display', 'table-cell')
+
+  // Gegenprobe am sichtbaren Ergebnis: Die Aktionszelle muss dieselbe
+  // Hintergrundfarbe tragen wie die uebrigen Zellen ihrer Zeile.
+  const gleich = await page.evaluate(() => {
+    const zeile = document.querySelector('.master-table tbody tr:nth-child(2)')!
+    const zellen = [...zeile.querySelectorAll('td')]
+    const farben = zellen.map(td => getComputedStyle(td).backgroundColor)
+    return farben.every(f => f === farben[0])
+  })
+  expect(gleich, 'die Aktionszelle faellt farblich aus der Zeile').toBe(true)
+})
+
+test('Projektliste — alle Zeilen sind gleich hoch', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await mockDemo(page); await page.goto('/projekte'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+
+  const hoehen = await page.$$eval('.master-table tbody tr',
+    trs => trs.map(tr => Math.round(tr.getBoundingClientRect().height)))
+  expect(hoehen.length).toBeGreaterThan(3)
+  // Spannweite statt exakter Gleichheit: Rahmen und Teilpixel ergeben je nach
+  // Zeile 47 oder 48px. Der Befund, den dieser Test absichert, war ein
+  // Unterschied von 20px (46 gegen 66) durch umbrechende Texte.
+  const spanne = Math.max(...hoehen) - Math.min(...hoehen)
+  expect(spanne, `Zeilenhoehen: ${[...new Set(hoehen)].sort().join(', ')}`).toBeLessThanOrEqual(2)
+})
+
+test('Projektliste — Spalten weichen in der festgelegten Reihenfolge', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'prueft Fensterbreiten, nicht Geraete')
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await mockDemo(page); await page.goto('/projekte'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+
+  // Alle Zusatzspalten einschalten, damit die volle Breite gefordert wird.
+  await page.getByRole('button', { name: 'Spalten' }).click()
+  for (const l of ['Typ', 'Abteilung', 'Adresse']) {
+    const cb = page.locator('.pl-col-option', { hasText: l }).locator('input[type=checkbox]').first()
+    if (!(await cb.isChecked())) await cb.check()
+  }
+  await page.keyboard.press('Escape')
+  await expect.poll(() => spalten(page)).toContain('Typ')
+
+  // Enger: Typ und Abteilung gehen zuerst, Adresse bleibt am laengsten.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect.poll(() => spalten(page)).not.toContain('Typ')
+  expect(await spalten(page)).toContain('Adresse')
+
+  // Und die Liste passt dabei weiterhin in ihren Container.
+  await expect
+    .poll(() => page.locator('.list-section').first().evaluate(el => el.scrollWidth - el.clientWidth))
+    .toBeLessThanOrEqual(1)
+})
