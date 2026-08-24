@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
+import { SortTh } from '@/components/ui/SortTh'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -45,16 +46,6 @@ const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set(), 
 // null = all, true = only internal, false = only external
 type InternalFilter = null | boolean
 
-
-function SortTh({ label, k, sortKey, dir, onClick }: {
-  label: string; k: SortKey; sortKey: SortKey; dir: 'asc'|'desc'; onClick: (k: SortKey) => void
-}) {
-  return (
-    <th scope="col" className="sortable-th" onClick={() => onClick(k)}>
-      {label} {sortKey === k ? (dir === 'asc' ? '▲' : '▼') : ''}
-    </th>
-  )
-}
 
 type ContactOption = { ID: number; FIRST_NAME: string; LAST_NAME: string }
 type ContractConfirm = { contractId: number; addressId: number | null; contactId: number | null }
@@ -352,7 +343,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
     } catch { /* ignore */ }
   }
 
-  const sortProps = { sortKey, dir: sortDir, onClick: toggleSort }
+  const sortProps = { sortKey, dir: sortDir, onSort: toggleSort }
   // Frueher gab es zusaetzlich eine „Oeffnen"-Spalte; die Zeile selbst ist
   // jetzt anklickbar, das Kuerzel dient als fokussierbarer Einstieg.
   const actionColSpan = 1
@@ -437,12 +428,12 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
             <table className="master-table">
               <thead>
                 <tr>
-                  <SortTh label="Kürzel"   k="NAME_SHORT"   {...sortProps} />
-                  <SortTh label="Name"     k="NAME_LONG"    {...sortProps} />
-                  <SortTh label="Status"   k="STATUS_NAME"  {...sortProps} />
-                  <SortTh label="Leitung"  k="MANAGER_NAME" {...sortProps} />
+                  <SortTh label="Kürzel"   column="NAME_SHORT"   {...sortProps} />
+                  <SortTh label="Name"     column="NAME_LONG"    {...sortProps} />
+                  <SortTh label="Status"   column="STATUS_NAME"  {...sortProps} />
+                  <SortTh label="Leitung"  column="MANAGER_NAME" {...sortProps} />
                   {visibleOptCols.map(c => (
-                    <SortTh key={c.key} label={c.label} k={c.key} {...sortProps} />
+                    <SortTh key={c.key} label={c.label} column={c.key} {...sortProps} />
                   ))}
                   <th scope="col" style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Intern</th>
                   <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>

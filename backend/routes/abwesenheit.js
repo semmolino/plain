@@ -247,7 +247,8 @@ async function notifyAbsenceReply(supabase, tenantId, absence) {
         await createNotification(supabase, {
           tenantId, userId: String(empId), type: "absence_request",
           title: "Antwort auf Rückfrage", body: `${who} hat auf eine Rückfrage geantwortet.`,
-          link: "/mitarbeiter?tab=abwesenheiten", metadata: { absenceId: absence.ID, employeeId: absence.EMPLOYEE_ID },
+          link: `/mitarbeiter?tab=abwesenheiten&sub=inbox&absence=${absence.ID}`,
+          metadata: { absenceId: absence.ID, employeeId: absence.EMPLOYEE_ID },
         });
       } catch (_) { /* einzelne Fehler schlucken */ }
     }
@@ -256,6 +257,15 @@ async function notifyAbsenceReply(supabase, tenantId, absence) {
 
 // In-App-Benachrichtigung an den Antragsteller: Entscheidung oder Rueckfrage.
 // outcome: 'APPROVED' | 'REJECTED' | 'CLARIFICATION'.
+//
+// Der Link zeigt auf "Meine Anträge" im Abwesenheits-Modul — dort steht der
+// Antrag mit Verlauf und, bei einer Rückfrage, dem Antwortfeld. Bis 08/2026
+// ging er auf /profil; die Seite kennt Abwesenheiten gar nicht, eine Rückfrage
+// lief damit ins Leere.
+function absenceDeepLink(absence) {
+  return `/mitarbeiter?tab=abwesenheiten&sub=my&absence=${absence.ID}`;
+}
+
 async function notifyAbsenceDecision(supabase, tenantId, absence, outcome) {
   try {
     const typeName = await loadTypeName(supabase, tenantId, absence.ABSENCE_TYPE_ID);
@@ -267,9 +277,12 @@ async function notifyAbsenceDecision(supabase, tenantId, absence, outcome) {
     const title = MAP[outcome] || MAP.APPROVED;
     let body = `${typeName}, ${fmtRangeDe(absence)}`;
     if (absence.DECISION_NOTE) body += ` — ${absence.DECISION_NOTE}`;
+    // Steht am Ende, damit es auch in der gekuerzten Push-Vorschau ankommt,
+    // dass die Benachrichtigung eine Handlung erwartet.
+    if (outcome === "CLARIFICATION") body += " — zum Antworten öffnen.";
     await createNotification(supabase, {
       tenantId, userId: String(absence.EMPLOYEE_ID), type: "absence_decision",
-      title, body, link: "/profil",
+      title, body, link: absenceDeepLink(absence),
       metadata: { absenceId: absence.ID, outcome },
     });
   } catch (_) { /* niemals werfen */ }

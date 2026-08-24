@@ -48,6 +48,23 @@ export function NotificationBell() {
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [open])
 
+  /**
+   * Alte Benachrichtigungen zeigen auf Ziele, die es so nicht mehr gibt. Sie
+   * stehen unveraenderlich in der Datenbank, also wird der Link beim Klick
+   * korrigiert statt die Daten zu migrieren.
+   */
+  function upgradeLink(n: Notification): string {
+    // Mahnungen verlinkten frueher ohne Tab-Parameter.
+    if (n.TYPE === 'mahnung_due' && n.LINK === '/rechnungen') return '/rechnungen?tab=mahnungen'
+    // Abwesenheits-Entscheidungen zeigten auf /profil — dort gibt es weder den
+    // Antrag noch ein Antwortfeld fuer Rueckfragen.
+    if (n.TYPE === 'absence_decision' && n.LINK === '/profil') {
+      const id = (n.METADATA as { absenceId?: number } | null)?.absenceId
+      return `/mitarbeiter?tab=abwesenheiten&sub=my${id ? `&absence=${id}` : ''}`
+    }
+    return n.LINK!
+  }
+
   async function handleClick(n: Notification) {
     setOpen(false)
     // Read-Marking darf die Navigation nie verschlucken — z.B. wenn ein
@@ -61,11 +78,7 @@ export function NotificationBell() {
       }
     }
     if (n.LINK) {
-      // Upgrade old mahnung_due notifications that still link to /rechnungen without tab param
-      const link = (n.TYPE === 'mahnung_due' && n.LINK === '/rechnungen')
-        ? '/rechnungen?tab=mahnungen'
-        : n.LINK
-      navigate(link)
+      navigate(upgradeLink(n))
     }
   }
 

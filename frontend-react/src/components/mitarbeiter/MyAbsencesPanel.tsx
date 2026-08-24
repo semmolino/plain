@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import { useToast } from '@/store/toastStore'
@@ -51,8 +51,12 @@ function needsReply(a: Absence): boolean {
 /**
  * Self-Service-Panel „Meine Abwesenheiten": Resturlaub, Antrag stellen/bearbeiten,
  * auf Rückfragen antworten, offene Anträge zurückziehen, genehmigte stornieren.
+ *
+ * @param focusAbsenceId Antrag aus einer Benachrichtigung (Deep-Link). Er wird
+ *   hervorgehoben und in den sichtbaren Bereich gescrollt; steht eine Rückfrage
+ *   offen, klappt das Antwortfeld gleich auf.
  */
-export function MyAbsencesPanel() {
+export function MyAbsencesPanel({ focusAbsenceId = null }: { focusAbsenceId?: number | null } = {}) {
   const qc = useQueryClient()
   const toast = useToast()
   const employeeId = useAuthStore(s => s.employeeId)
@@ -77,6 +81,20 @@ export function MyAbsencesPanel() {
   const [msg,   setMsg]   = useState<string | null>(null)
   const [replyId, setReplyId] = useState<number | null>(null)
   const [replyText, setReplyText] = useState('')
+
+  // Deep-Link: einmal je verlinktem Antrag hinscrollen und ggf. das Antwortfeld
+  // oeffnen. Der Ref verhindert, dass ein spaeteres Schliessen des Feldes durch
+  // ein Neu-Rendern wieder ueberschrieben wird.
+  const focusCardRef = useRef<HTMLDivElement | null>(null)
+  const handledFocusRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (focusAbsenceId == null || handledFocusRef.current === focusAbsenceId) return
+    const target = absences.find(a => a.ID === focusAbsenceId)
+    if (!target) return                       // Liste noch nicht geladen
+    handledFocusRef.current = focusAbsenceId
+    if (target.STATUS === 'REQUESTED' && needsReply(target)) setReplyId(focusAbsenceId)
+    focusCardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focusAbsenceId, absences])
 
   const resetForm = () => { setShowForm(false); setEditId(null); setFType(''); setFFrom(''); setFTo(''); setFHalf(false); setFNote(''); setMsg(null) }
   const openNew  = () => { resetForm(); setShowForm(true) }
@@ -166,8 +184,18 @@ export function MyAbsencesPanel() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {absences.map((a: Absence) => {
             const s = STATUS[a.STATUS]
+            const focused = a.ID === focusAbsenceId
             return (
-              <div key={a.ID} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px' }}>
+              <div
+                key={a.ID}
+                ref={focused ? focusCardRef : undefined}
+                style={{
+                  border: focused ? '2px solid var(--accent)' : '1px solid var(--border)',
+                  background: focused ? 'var(--accent-tint)' : undefined,
+                  borderRadius: 6,
+                  padding: focused ? '7px 11px' : '8px 12px',
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <span style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                     {fmtDe(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDe(a.DATE_TO)}` : ''}{a.HALF_DAY ? ' (½)' : ''}

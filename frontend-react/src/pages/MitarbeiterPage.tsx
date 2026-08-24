@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback, Fragment } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
+import { SortTh } from '@/components/ui/SortTh'
 import { todayIso, nextPersonnelNumber } from '@/utils/vorbelegung'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
@@ -58,7 +59,7 @@ const TABS: { id: string; label: string; permissions: string[]; feature?: string
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 
-type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'MAIL'
+type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'PERSONNEL_NUMBER' | 'MAIL'
 type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'abwesenheit' | 'projekte' | 'rolle' | 'zugang'
 
 function fmtH(n: number) {
@@ -160,20 +161,6 @@ function SegmentNav<T extends string>({ items, active, onChange, style }: {
 }
 
 // ── FilterChip ────────────────────────────────────────────────────────────────
-
-
-// ── SortTh ────────────────────────────────────────────────────────────────────
-
-function SortTh({ label, sortKey, current, dir, onClick }: {
-  label: string; sortKey: SortKey; current: SortKey; dir: 'asc' | 'desc'; onClick: (k: SortKey) => void
-}) {
-  const active = current === sortKey
-  return (
-    <th scope="col" className="sortable-th" onClick={() => onClick(sortKey)}>
-      {label} {active ? (dir === 'asc' ? '▲' : '▼') : ''}
-    </th>
-  )
-}
 
 // ── Rolle-Sektion (innerhalb der Mitarbeiter-Akte) ───────────────────────────
 
@@ -1940,15 +1927,24 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
 // ── Abwesenheiten-Tab (Genehmigungs-Postfach + Team-Kalender) ─────────────────
 
 type AbsSub = 'inbox' | 'calendar' | 'my' | 'entitlements'
+const ABS_SUBS: AbsSub[] = ['inbox', 'calendar', 'my', 'entitlements']
 
 function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
+  // Deep-Link aus einer Benachrichtigung: ?sub=my&absence=42 fuehrt direkt zum
+  // betroffenen Antrag. Ohne das landete der Nutzer nur irgendwo im Modul und
+  // musste den Antrag selbst suchen.
+  const [absSearchParams, setAbsSearchParams] = useSearchParams()
+  const linkedSub     = absSearchParams.get('sub') as AbsSub | null
+  const linkedAbsence = Number(absSearchParams.get('absence')) || null
   const qc = useQueryClient()
   const toast = useToast()
   const canApprove = usePermission('absence.approve')
   const canView    = usePermission('absence.view')
   const canRequest = usePermission('absence.request')
   const canManage  = usePermission('absence.manage')
-  const [sub, setSub] = useState<AbsSub>(canView ? 'inbox' : 'my')
+  const [sub, setSub] = useState<AbsSub>(
+    linkedSub && ABS_SUBS.includes(linkedSub) ? linkedSub : (canView ? 'inbox' : 'my'),
+  )
   const now = new Date()
   const [year, setYear]   = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -2010,14 +2006,26 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // Wechselt der Nutzer den Bereich, ist der Deep-Link abgearbeitet. Ohne das
+  // Aufraeumen bliebe ?sub=…&absence=… in der Adresse stehen und wuerde den
+  // alten Antrag bei jeder Rueckkehr erneut hervorheben.
+  function changeSub(next: AbsSub) {
+    setSub(next)
+    if (absSearchParams.has('sub') || absSearchParams.has('absence')) {
+      const p = new URLSearchParams(absSearchParams)
+      p.delete('sub'); p.delete('absence')
+      setAbsSearchParams(p, { replace: true })
+    }
+  }
+
   function prevMonth() { if (month === 1) { setMonth(12); setYear(y => y - 1) } else setMonth(m => m - 1) }
   function nextMonth() { if (month === 12) { setMonth(1); setYear(y => y + 1) } else setMonth(m => m + 1) }
 
   return (
     <div>
-      <SegmentNav items={subItems} active={sub} onChange={setSub} />
+      <SegmentNav items={subItems} active={sub} onChange={changeSub} />
 
-      {sub === 'my' && <MyAbsencesPanel />}
+      {sub === 'my' && <MyAbsencesPanel focusAbsenceId={linkedAbsence} />}
 
       {sub === 'entitlements' && canManage && <EntitlementsBulkEditor employees={employees} />}
 
@@ -2033,7 +2041,9 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                 </tr></thead>
                 <tbody>
                   {inbox.map((a: Absence) => (
-                    <tr key={a.ID}>
+                    // Aus einer Benachrichtigung verlinkter Antrag wird
+                    // hervorgehoben — die Liste kann lang sein.
+                    <tr key={a.ID} style={a.ID === linkedAbsence ? { background: 'var(--accent-tint)' } : undefined}>
                       <td><strong>{a.EMPLOYEE_SHORT_NAME}</strong> {a.EMPLOYEE_FIRST_NAME} {a.EMPLOYEE_LAST_NAME}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         {fmtDateShort(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDateShort(a.DATE_TO)}` : ''}{a.HALF_DAY ? ' (½)' : ''}
@@ -3005,7 +3015,7 @@ export function MitarbeiterPage() {
   const setF = (k: keyof CreateEmployeePayload) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
 
-  const sortProps = { current: sortKey, dir: sortDir, onClick: toggleSort }
+  const sortProps = { sortKey, dir: sortDir, onSort: toggleSort }
 
   // Die FilterBar zeigt die Anzahl selbst an; ein separates Flag braucht es
   // seit der Umstellung nicht mehr.
@@ -3080,10 +3090,11 @@ export function MitarbeiterPage() {
                 <table className="master-table">
                   <thead>
                     <tr>
-                      <SortTh label="Kürzel"    sortKey="SHORT_NAME" {...sortProps} />
-                      <SortTh label="Vorname"   sortKey="FIRST_NAME" {...sortProps} />
-                      <SortTh label="Nachname"  sortKey="LAST_NAME"  {...sortProps} />
-                      <SortTh label="E-Mail"    sortKey="MAIL"       {...sortProps} />
+                      <SortTh label="Kürzel"      column="SHORT_NAME"       {...sortProps} />
+                      <SortTh label="Vorname"     column="FIRST_NAME"       {...sortProps} />
+                      <SortTh label="Nachname"    column="LAST_NAME"        {...sortProps} />
+                      <SortTh label="Personalnr." column="PERSONNEL_NUMBER" {...sortProps} />
+                      <SortTh label="E-Mail"      column="MAIL"             {...sortProps} />
                       <th scope="col">Abteilung</th>
                       <th scope="col">Modell</th>
                       {canViewBookings && (
@@ -3101,6 +3112,9 @@ export function MitarbeiterPage() {
                         <td>{r.SHORT_NAME}</td>
                         <td>{r.FIRST_NAME}</td>
                         <td>{r.LAST_NAME}</td>
+                        <td className="cell-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {r.PERSONNEL_NUMBER || <span style={{ color: 'var(--text-3)' }}>—</span>}
+                        </td>
                         <td>{r.MAIL}</td>
                         <td onClick={e => e.stopPropagation()}>
                           <InlineSelect

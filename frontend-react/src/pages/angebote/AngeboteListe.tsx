@@ -8,6 +8,8 @@ import { rowClickHandler } from '@/utils/rowClick'
 import { RowMenu } from '@/components/ui/RowMenu'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { FilterChip } from '@/components/ui/FilterChip'
+import { SortTh } from '@/components/ui/SortTh'
+import { compareRows } from '@/utils/sortRows'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { usePermission } from '@/store/permissionsStore'
 import { InlineSelect, InlineDate, InlineNumber, type InlineOption } from '@/components/ui/InlineEdit'
@@ -31,12 +33,22 @@ const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.fo
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
+// Sortierbare Spalten. Angebotssumme und Wahrscheinlichkeit sind Zahlen und
+// muessen als solche verglichen werden — die Datumsspalten liegen im
+// ISO-Format vor und sortieren als Text richtig.
+type SortKey = 'NAME_SHORT' | 'NAME_LONG' | 'STATUS_NAME' | 'EMPLOYEE_NAME' | 'ADDRESS_NAME'
+             | 'TOTAL_AMOUNT' | 'PROBABILITY' | 'OFFER_DATE' | 'VALID_UNTIL'
+
+const NUMERIC_KEYS: readonly SortKey[] = ['TOTAL_AMOUNT', 'PROBABILITY']
+
 export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated }: { onSelectOffer?: (id: number, name: string) => void; onEditStammdaten?: (id: number) => void; onOfferCreated?: (id: number) => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [search,        setSearch]        = useState('')
   const [page,          setPage]          = useState(1)
   const [onlyOpen,      setOnlyOpen]      = useStickyState<boolean>('angebote.onlyOpen', false)
+  const [sortKey,       setSortKey]       = useStickyState<SortKey>('angebote.sortKey', 'NAME_SHORT')
+  const [sortDir,       setSortDir]       = useStickyState<'asc'|'desc'>('angebote.sortDir', 'asc')
   const [activeStatus,   setActiveStatus]   = useStickySet('angebote.status')
   const [activeEmployee, setActiveEmployee] = useStickySet('angebote.employee')
   const [msg,           setMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -128,14 +140,22 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
     if (q) result = result.filter(r =>
       `${r.NAME_SHORT} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q)
     )
-    return result
-  }, [rows, search, onlyOpen, rejectedId, activeStatus, activeEmployee])
+    return [...result].sort((a, b) => compareRows(a, b, sortKey, sortDir, NUMERIC_KEYS))
+  }, [rows, search, onlyOpen, rejectedId, activeStatus, activeEmployee, sortKey, sortDir])
 
   const totalSum = useMemo(() => filtered.reduce((s, r) => s + (r.TOTAL_AMOUNT ?? 0), 0), [filtered])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage   = Math.min(page, totalPages)
   const pageRows   = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('asc') }
+    setPage(1)
+  }
+
+  const sortProps = { sortKey, dir: sortDir, onSort: toggleSort }
 
   function requestDelete(r: OfferListItem) {
     setConfirmState({
@@ -216,16 +236,16 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
           <table className="master-table master-table--sticky-actions">
             <thead>
               <tr>
-                <th scope="col">Nr.</th>
-                <th scope="col">Titel</th>
-                <th scope="col">Status</th>
-                <th scope="col">Ansprechpartner</th>
-                <th scope="col">Adresse</th>
-                <th scope="col" className="num">Angebotssumme</th>
-                <th scope="col" className="num">Wahrsch.</th>
-                <th scope="col">Angebotsdatum</th>
-                <th scope="col">Gültig bis</th>
-                <th scope="col"></th>
+                <SortTh label="Nr."             column="NAME_SHORT"    {...sortProps} />
+                <SortTh label="Titel"           column="NAME_LONG"     {...sortProps} />
+                <SortTh label="Status"          column="STATUS_NAME"   {...sortProps} />
+                <SortTh label="Ansprechpartner" column="EMPLOYEE_NAME" {...sortProps} />
+                <SortTh label="Adresse"         column="ADDRESS_NAME"  {...sortProps} />
+                <SortTh label="Angebotssumme"   column="TOTAL_AMOUNT"  className="num" {...sortProps} />
+                <SortTh label="Wahrsch."        column="PROBABILITY"   className="num" {...sortProps} />
+                <SortTh label="Angebotsdatum"   column="OFFER_DATE"    {...sortProps} />
+                <SortTh label="Gültig bis"      column="VALID_UNTIL"   {...sortProps} />
+                <th scope="col"><span className="sr-only">Aktionen</span></th>
               </tr>
             </thead>
             <tbody>
