@@ -3,6 +3,8 @@ import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { SortTh } from '@/components/ui/SortTh'
+import { useFitColumns } from '@/hooks/useFitColumns'
+import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -182,7 +184,25 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
     setHiddenCols(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s })
   }
 
-  const visibleOptCols = OPT_COLS.filter(c => !hiddenCols.has(c.key))
+  /**
+   * Rangfolge beim Platzmangel — unwichtigste zuerst (so festgelegt am
+   * 24.08.2026). Kürzel, Name, Status und Leitung stehen nicht darin und
+   * bleiben immer: ohne sie ist die Zeile nicht wiederzuerkennen.
+   *
+   * `IS_INTERNAL` ist kein Eintrag aus dem Spaltenwaehler, sondern die fest
+   * eingebaute Haekchen-Spalte — sie wird ueber `zeigeIntern` gesteuert.
+   */
+  const WEGFALLBAR = ['TYPE_NAME', 'DEPARTMENT_NAME', 'IS_INTERNAL', 'ADDRESS_NAME'] as const
+  const wegfallbar = useMemo(
+    () => WEGFALLBAR.filter(k => k === 'IS_INTERNAL' || !hiddenCols.has(k as OptColKey)) as unknown as string[],
+    [hiddenCols],
+  )
+  const [platzWeg, fitRef] = useFitColumns<string>(wegfallbar, [hiddenCols.size])
+  const edgeRef = useScrollEdges<HTMLDivElement>()
+  const setBox  = useCallback((el: HTMLDivElement | null) => { fitRef(el); edgeRef(el) }, [fitRef, edgeRef])
+  const zeigeIntern = !platzWeg.has('IS_INTERNAL')
+
+  const visibleOptCols = OPT_COLS.filter(c => !hiddenCols.has(c.key) && !platzWeg.has(c.key))
 
   const deleteMut = useMutation({
     mutationFn: deleteProject,
@@ -424,8 +444,8 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
       {isLoading && <ListLoading columns={6} />}
       {!isLoading && (
         <>
-          <div className="list-section">
-            <table className="master-table">
+          <div className="list-section" ref={setBox}>
+            <table className="master-table master-table--einzeilig">
               <thead>
                 <tr>
                   <SortTh label="Kürzel"   column="NAME_SHORT"   {...sortProps} />
@@ -435,7 +455,10 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                   {visibleOptCols.map(c => (
                     <SortTh key={c.key} label={c.label} column={c.key} {...sortProps} />
                   ))}
-                  <th scope="col" style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Intern</th>
+                  {zeigeIntern && (
+                    <th scope="col" data-col="IS_INTERNAL"
+                      style={{ textAlign: 'center', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Intern</th>
+                  )}
                   <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>
                 </tr>
               </thead>
@@ -495,18 +518,24 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                           />
                         </td>
                       }
-                      return <td key={c.key}>{p[c.key] ?? '—'}</td>
+                      // Seit die Zeilen einzeilig sind, koennen lange Werte
+                      // (z.B. Adressen) mit Auslassung enden — der volle Text
+                      // gehoert deshalb ins title-Attribut.
+                      return <td key={c.key} title={p[c.key] ?? undefined}>{p[c.key] ?? '—'}</td>
                     })}
-                    <td style={{ textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={p.IS_INTERNAL ?? false}
-                        title="Internes Projekt"
-                        disabled={internalMut.isPending}
-                        onChange={e => internalMut.mutate({ id: p.ID, val: e.target.checked })}
-                        style={{ width: 16, height: 16, cursor: 'pointer' }}
-                      />
-                    </td>
+                    {zeigeIntern && (
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={p.IS_INTERNAL ?? false}
+                          title="Internes Projekt"
+                          aria-label={`${p.NAME_SHORT} ist ein internes Projekt`}
+                          disabled={internalMut.isPending}
+                          onChange={e => internalMut.mutate({ id: p.ID, val: e.target.checked })}
+                          style={{ width: 16, height: 16, cursor: 'pointer' }}
+                        />
+                      </td>
+                    )}
                     <td className="doc-actions">
                       <Can permission="projects.edit">
                         <button className="row-action-btn" onClick={() => openEdit(p)} title="Bearbeiten">
