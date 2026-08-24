@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, useId, Fragment } from 'react'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { RollenSection } from '@/pages/admin/RollenSection'
 import { BuchungsartenSection } from '@/pages/admin/BuchungsartenSection'
@@ -149,24 +149,32 @@ function SingleInputMutation({
   label: string; placeholder?: string; onSubmit: (v: string) => void; isPending: boolean
 }) {
   const [val, setVal] = useState('')
+  // Die Beschriftung stand vorher als <span> NACH dem Knopf: optisch ein
+  // graues Wort, das rechts neben „Hinzufügen" in der Luft hing, und
+  // technisch ohne jede Verbindung zum Feld — ein Klick darauf fokussierte
+  // nichts, ein Screenreader las „Eingabefeld" ohne Namen.
+  const id = useId()
   return (
     <div className="admin-input-row">
-      <input
-        className="admin-single-input"
-        placeholder={placeholder ?? 'Name eingeben …'}
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && val.trim()) { onSubmit(val.trim()); setVal('') } }}
-      />
-      <button
-        className="btn-small btn-save"
-        disabled={isPending || !val.trim()}
-        onClick={() => { onSubmit(val.trim()); setVal('') }}
-        type="button"
-      >
-        {isPending ? '…' : 'Hinzufügen'}
-      </button>
-      <span className="admin-field-label">{label}</span>
+      <label className="admin-field-label" htmlFor={id}>{label}</label>
+      <div className="admin-input-row-controls">
+        <input
+          id={id}
+          className="admin-single-input"
+          placeholder={placeholder ?? 'Name eingeben …'}
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && val.trim()) { onSubmit(val.trim()); setVal('') } }}
+        />
+        <button
+          className="btn-small btn-save"
+          disabled={isPending || !val.trim()}
+          onClick={() => { onSubmit(val.trim()); setVal('') }}
+          type="button"
+        >
+          {isPending ? 'Wird angelegt …' : 'Hinzufügen'}
+        </button>
+      </div>
     </div>
   )
 }

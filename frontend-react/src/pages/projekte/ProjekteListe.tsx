@@ -447,14 +447,14 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                     onClick={onSelectProject ? rowClickHandler(() => onSelectProject(p.ID)) : undefined}
                     style={p.IS_INTERNAL ? { opacity: 0.7 } : undefined}
                   >
-                    <td>
+                    <td className="cell-id">
                       {/* Das Kuerzel ist der fokussierbare Einstieg in die Zeile —
                           es ersetzt die frueher in JEDER Zeile wiederholte
                           Schaltflaeche „Oeffnen" und bleibt per Tab erreichbar. */}
                       {onSelectProject
                         ? <button className="link-btn" onClick={() => onSelectProject(p.ID)}>{p.NAME_SHORT}</button>
                         : p.NAME_SHORT}
-                      {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6, fontSize: 10 }}>intern</span>}
+                      {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6 }}>intern</span>}
                     </td>
                     <td><span className="cell-clamp" title={p.NAME_LONG}>{p.NAME_LONG}</span></td>
                     <td>
