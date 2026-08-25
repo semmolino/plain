@@ -21,7 +21,47 @@
    im Standard.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+/* ── Schriften: selbst gehostet ───────────────────────────────────────────
+   Zuerst stand hier ein @import auf fonts.googleapis.com. Das laedt bei
+   jedem Seitenaufruf von Google und uebertraegt dabei die IP des Nutzers —
+   fuer ein deutsches SaaS ein DSGVO-Problem (LG Muenchen I, 20.01.2022,
+   Az. 3 O 17493/20). Deshalb dasselbe Verfahren wie bei Hanken Grotesk:
+   Variable Fonts in /public/fonts, eine Datei je Zeichensatz-Bereich.
+   Geladen werden nur latin und latin-ext; kyrillisch, griechisch und
+   vietnamesisch waeren totes Gewicht.
+   Lizenzen: Plus Jakarta Sans und Geist Mono stehen unter SIL OFL 1.1. */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/PlusJakartaSans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/PlusJakartaSans-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/GeistMono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/GeistMono-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 :root {
   /* ── Palette ──────────────────────────────────────────────────────────── */
@@ -719,3 +759,141 @@ input:focus, select:focus, textarea:focus { border-color: var(--ae-tinte); }
 
 [data-theme="dark"] .tab-btn.active { background: var(--ae-lime); color: #0a0a0f; }
 [data-theme="dark"] .tab-btn:hover  { background: rgba(255,255,255,0.07); }
+
+/* ═══ 14 · REPORTING ═══════════════════════════════════════════════════════
+   Die Auswertungen haben eine eigene Klassenwelt (prognose-*, unk-*,
+   trends-*, daten-filter-*, ls-*). Ohne sie war Reporting halb neu und halb
+   alt: Reiter und Tabellen in der Sprache der Vorlage, Kacheln und
+   Umschalter im Standard. */
+
+/* Zeitraum-Umschalter (Aktuell / Stichtag / Zeitraum) als Pillen. */
+.daten-filter-mode-btn {
+  border-radius: 80px;
+  min-height: 36px;
+  padding: 0 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-color: rgba(19,19,19,0.12);
+  transition: background-color var(--ae-uebergang), color var(--ae-uebergang), border-color var(--ae-uebergang);
+}
+.daten-filter-mode-btn:hover  { background: var(--ae-grau-100); }
+.daten-filter-mode-btn.active {
+  background: var(--ae-tinte);
+  color: #ffffff;
+  border-color: var(--ae-tinte);
+}
+.daten-filter-dates input[type="date"] { border-radius: 80px; padding: 6px 14px; height: 36px; }
+
+/* Prognose-Kacheln: dieselbe Anatomie wie die Bento-Kacheln der Uebersicht —
+   Label klein in Mono, Wert gross und eng. */
+.prognose-grid { gap: 10px; }
+.prognose-tile {
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--ae-grau-100);
+  padding: 14px 16px;
+  gap: 4px;
+}
+.prognose-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.prognose-value {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.prognose-sub { font-size: 11.5px; color: var(--text-3); }
+.prognose-section { border-radius: var(--radius-lg); }
+
+/* Unternehmenskennzahlen: Karten in der Kachelsprache, Ampel ueber die
+   Flaeche links statt ueber einen Rahmenstrich. */
+.unk-grid { gap: 12px; }
+.unk-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-3);
+  padding: 18px;
+  transition: transform var(--ae-uebergang);
+}
+.unk-card:hover { transform: translateY(-2px); }
+.unk-card--good { border-left: 4px solid var(--ae-lime); }
+.unk-card--warn { border-left: 4px solid var(--warning); }
+.unk-card--bad  { border-left: 4px solid var(--danger); }
+.unk-card--na   { background: var(--ae-grau-100); }
+.unk-card-value {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.unk-card-note { font-size: 11.5px; color: var(--text-3); }
+.unk-title { letter-spacing: -0.04em; font-weight: 600; }
+
+/* Periodenumschalter der Kennzahlen als Pillengruppe. */
+.unk-period-tabs { border-radius: 80px; border-color: rgba(19,19,19,0.12); }
+.unk-period-tab {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+}
+.unk-period-tab.active { background: var(--ae-tinte); color: #ffffff; }
+
+/* Trends: Abschnitte als grosse Karten wie die Diagrammtafeln der Vorlage. */
+.trends-section {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-3);
+}
+.trends-section-title { letter-spacing: -0.03em; font-weight: 600; }
+.trends-section-subtitle { color: var(--text-3); }
+.trends-range-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Leistungsphasen-Tabellen wie die Rechnungsliste behandeln. */
+.ls-table-wrap { border-radius: var(--radius-lg); border-color: var(--border-3); }
+.ls-th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-2);
+}
+.ls-badge-prev {
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+/* Diagrammtafeln (Verlauf, Trends) in der Kartensprache. */
+.timeline-wrap {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-3);
+  box-shadow: none;
+}
+.timeline-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+[data-theme="dark"] .prognose-tile      { background: #1a1a21; }
+[data-theme="dark"] .unk-card--na       { background: #1a1a21; }
+[data-theme="dark"] .unk-period-tab.active,
+[data-theme="dark"] .daten-filter-mode-btn.active { background: var(--ae-lime); color: #0a0a0f; border-color: var(--ae-lime); }
+[data-theme="dark"] .daten-filter-mode-btn:hover  { background: rgba(255,255,255,0.07); }

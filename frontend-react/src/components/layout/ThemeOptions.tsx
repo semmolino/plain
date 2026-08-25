@@ -16,13 +16,15 @@ import { fetchDefaults } from '@/api/stammdaten'
 const THEMES = [
   // BEWUSST hartkodiert: ein Swatch muss die Farbe SEINES Themes zeigen,
   // nicht die des gerade aktiven. Tokens waeren hier alle identisch.
-  { id: 'light',             label: 'Hell',                  swatch: '#2563eb', group: 'Standard' },
-  { id: 'dark',              label: 'Dunkel',                swatch: '#7a7ac6', group: 'Standard' },
-  { id: 'architecture-foto', label: 'Architektur',           swatch: '#c97b5a', group: 'Branche' },
-  { id: 'civil-foto',        label: 'Tiefbau',               swatch: '#c8965a', group: 'Branche' },
-  { id: 'urban-foto',        label: 'Stadt- und Verkehr',    swatch: '#e9b94c', group: 'Branche' },
-  { id: 'tga-foto',          label: 'TGA',                   swatch: '#c79252', group: 'Branche' },
-  { id: 'structural-foto',   label: 'Tragwerk',              swatch: '#4c6680', group: 'Branche' },
+  { id: 'light',             label: 'Hell',                  swatch: '#d6fd70', group: 'Standard' },
+  { id: 'dark',              label: 'Dunkel',                swatch: '#a3e635', group: 'Standard' },
+  // Die fuenf Branchen-Themes sind in dieser Design-Variante NICHT waehlbar.
+  // Grund: skin.css setzt die Farbtokens in :root, die Branchenbloecke in
+  // globals.css ueberschreiben sie per [data-theme=…] wieder. Man bekaeme
+  // die Farben der Branche mit der Formensprache von Aeline — halb neu,
+  // halb alt, und in keiner Hinsicht beurteilbar. Zum Zurueckholen genuegt
+  // es, die Zeilen wieder einzusetzen; THEME_PHOTOS in config/themePhotos.ts
+  // ist auf string typisiert und kennt sie weiterhin.
 ] as const
 
 export type ThemeId = typeof THEMES[number]['id']

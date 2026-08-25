@@ -3590,9 +3590,9 @@ th.doc-actions, td.doc-actions {
 
 .unk-card { display: flex; gap: 14px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .unk-card--na { opacity: 0.6; background: var(--surface-2); }
-.unk-card--good { border-left: 3px solid #16a34a; }
-.unk-card--warn { border-left: 3px solid #d97706; }
-.unk-card--bad  { border-left: 3px solid #dc2626; }
+.unk-card--good { border-left: 3px solid var(--success); }
+.unk-card--warn { border-left: 3px solid var(--warning); }
+.unk-card--bad  { border-left: 3px solid var(--danger); }
 
 .unk-card-icon { flex-shrink: 0; color: var(--accent); margin-top: 2px; }
 .unk-card--na .unk-card-icon { color: var(--text-3); }

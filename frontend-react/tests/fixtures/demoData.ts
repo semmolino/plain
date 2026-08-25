@@ -156,6 +156,62 @@ const named = (n: string[]) => n.map((name, i) => ({
 
 /** Registriert Auth + Beispieldaten. Reihenfolge wie in den anderen Specs:
  *  Catch-All zuerst, spezifische Routen danach. */
+// Reporting-Zeilen, abgeleitet aus denselben Projekten wie oben, damit
+// Projektliste und Auswertung dieselben Namen und Nummern zeigen. Ohne sie
+// meldet jeder Reporting-Reiter "Keine Projekte vorhanden" — die Berichte
+// waren dadurch weder zu gestalten noch zu beurteilen.
+//
+// Die Werte sind bewusst uneinheitlich: ein Projekt ueber Budget, eines
+// nahezu fertig, eines frisch gestartet. Eine zu ordentliche Fixture hat in
+// dieser Anwendung schon einmal echte Darstellungsfehler verdeckt (siehe
+// Kommentar zur Rechnungsliste weiter unten).
+const reportRows = projects.map((p, i) => {
+  const budget      = [1_240_000, 486_500, 92_400, 2_150_000, 318_700, 745_000, 64_900, 1_580_000][i] ?? 250_000
+  const standPct    = [72, 94, 18, 41, 100, 63, 8, 55][i] ?? 50
+  const kostenQuote = [0.78, 1.12, 0.21, 0.39, 0.96, 0.58, 0.05, 0.61][i] ?? 0.6
+  const stand       = Math.round(budget * standPct) / 100
+  const kosten      = Math.round(budget * kostenQuote)
+  const abgerechnet = Math.round(stand * 0.82)
+  const bezahlt     = Math.round(abgerechnet * 0.74)
+  return {
+    PROJECT_ID: p.ID,
+    NAME_SHORT: p.NAME_SHORT, NAME_LONG: p.NAME_LONG,
+    PROJECT_STATUS_ID: p.PROJECT_STATUS_ID, PROJECT_STATUS_NAME_SHORT: p.STATUS_NAME,
+    PROJECT_TYPE_ID: p.PROJECT_TYPE_ID,     PROJECT_TYPE_NAME_SHORT:   p.TYPE_NAME,
+    PROJECT_MANAGER_ID: p.PROJECT_MANAGER_ID, PROJECT_MANAGER_DISPLAY: p.MANAGER_NAME,
+    ADDRESS_ID: p.ADDRESS_ID, ADDRESS_NAME: p.ADDRESS_NAME,
+    COMPANY_ID: 1, COMPANY_NAME: 'Messina Architekten GmbH',
+    DEPARTMENT_ID: p.DEPARTMENT_ID, DEPARTMENT_NAME: p.DEPARTMENT_NAME,
+    BUDGET_TOTAL_NET: budget,
+    LEISTUNGSSTAND_PERCENT: standPct,
+    LEISTUNGSSTAND_VALUE: stand,
+    HOURS_TOTAL: Math.round(budget / 95),
+    COST_TOTAL: kosten,
+    COST_RATIO: kostenQuote,
+    REMAINING_BUDGET_NET: budget - kosten,
+    BILLED_NET_TOTAL: abgerechnet,
+    OPEN_NET_TOTAL: stand - abgerechnet,
+    PAYED_NET_TOTAL: bezahlt,
+    SALES_TOTAL: abgerechnet,
+    QTY_EXT_TOTAL: 0,
+  }
+})
+
+// Zeitreihe: 18 Monatspunkte, damit die Verlaufsdiagramme eine Kurve zeigen
+// und nicht eine waagerechte Null.
+const timeline = Array.from({ length: 18 }, (_, i) => {
+  const d = new Date(Date.UTC(2025, 2 + i, 1))
+  const f = (i + 1) / 18
+  return {
+    DATE: d.toISOString().substring(0, 10),
+    HONORAR_NET:          Math.round(6_677_500 * Math.min(1, f * 1.15)),
+    LEISTUNGSSTAND_VALUE: Math.round(6_677_500 * f * 0.62),
+    KOSTEN_TOTAL:         Math.round(6_677_500 * f * 0.48),
+    ABGERECHNET_NET:      Math.round(6_677_500 * f * 0.51),
+    BEZAHLT_NET:          Math.round(6_677_500 * f * 0.38),
+  }
+})
+
 // Benachrichtigungen: ohne sie zeigt das Overlay nur seinen Leerzustand —
 // und damit gerade nicht das, was daran zu beurteilen waere.
 const NOTIFICATIONS = [
@@ -183,6 +239,19 @@ export async function mockDemo(page: Page) {
   // sonst auch die Seiten-Navigation ab und liefert JSON statt der App.
   const routes: Array<[string, unknown]> = [
     ['notifications', { data: NOTIFICATIONS, unread_count: 3 }],
+    ['reports/projects/list',     { data: reportRows }],
+    ['reports/projects/timeline', { data: timeline }],
+    // Das Dashboard zieht seine Zahlen aus eigenen Endpunkten, nicht aus der
+    // Projektliste. Ohne sie stand dort ueberall 0,00 EUR — die Kacheln waren
+    // damit nicht zu beurteilen. DashboardProject ist eine Teilmenge von
+    // ProjectListRow, deshalb dieselben Zeilen.
+    ['reports/dashboard/projects',  { data: reportRows }],
+    ['reports/dashboard/by-status', { data: [
+      { STATUS_NAME: 'Laufend',       PROJECT_COUNT: 5 },
+      { STATUS_NAME: 'Angebot',       PROJECT_COUNT: 1 },
+      { STATUS_NAME: 'Pausiert',      PROJECT_COUNT: 1 },
+      { STATUS_NAME: 'Abgeschlossen', PROJECT_COUNT: 1 },
+    ] }],
     ['auth/me',              { employee_id: 1, tenant_id: 1, email: 'simon@buero.de', short_name: 'SM', company_name: 'Messina Architekten GmbH' }],
     ['permissions/me',       { keys: [], unrestricted: true }],
     ['license/me',           { unrestricted: true, plan_id: null, state: null, capabilities: [], limits: {} }],

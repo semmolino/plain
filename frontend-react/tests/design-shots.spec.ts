@@ -80,7 +80,9 @@ for (const [vpName, width, height] of VIEWPORTS) {
       // Diagramme und Skeletons brauchen einen Moment, sonst landet der
       // Ladezustand im Bild statt der Seite.
       await page.waitForLoadState('networkidle').catch(() => {})
-      await page.waitForTimeout(600)
+      // Chart.js animiert seine Reihen rund 1s ein. Mit 600ms standen auf
+      // den Bildern Achsen und Legende, aber keine Linien.
+      await page.waitForTimeout(1600)
 
       const zuOeffnen = OEFFNEN[name]
       if (zuOeffnen) {

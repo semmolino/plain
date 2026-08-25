@@ -189,7 +189,12 @@ test.describe('Theming', () => {
   // Die weisse Wortmarke galt nur fuer data-theme="dark". In allen Branchen-
   // Themes stand der dunkle Schriftzug auf dunkler Chrome-Flaeche — sichtbar
   // blieb nur das blaue „&".
-  for (const theme of ['tga-foto', 'urban-foto', 'architecture-foto', 'dark']) {
+  // In der Design-Variante "Aeline" sind die Branchen-Themes nicht
+  // waehlbar (Begruendung in components/layout/ThemeOptions.tsx). Ein
+  // localStorage-Wert dafuer wird von pickInitial verworfen, die App faellt
+  // auf "Hell" zurueck — der Test pruefte dann nicht mehr, was sein Name
+  // sagt. Bleibt "dark", das es weiterhin gibt.
+  for (const theme of ['dark']) {
     test(`Wortmarke in der Seitennavigation ist sichtbar (${theme})`, async ({ page, viewport }) => {
       if ((viewport?.width ?? 0) < 1024) return   // Seitennavigation ist mobil ausgeblendet
       await page.addInitScript(t => { localStorage.setItem('plain-theme-1', t) }, theme)

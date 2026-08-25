@@ -1,0 +1,48 @@
+Schriften in diesem Verzeichnis — Herkunft und Lizenz
+=====================================================
+
+Alle drei Familien stehen unter der SIL Open Font License 1.1 (Volltext in
+OFL.txt). Die Lizenz erlaubt Einbettung und kommerzielle Nutzung; sie
+verlangt, dass die Schriften nicht einzeln verkauft werden und dass der
+Lizenztext beiliegt.
+
+Selbst gehostet wird bewusst: Ein @import von fonts.googleapis.com laedt bei
+jedem Seitenaufruf von Google und uebertraegt dabei die IP-Adresse des
+Nutzers. Fuer ein in Deutschland betriebenes SaaS ist das ein DSGVO-Problem
+(LG Muenchen I, Urteil vom 20.01.2022, Az. 3 O 17493/20).
+
+
+Hanken Grotesk        HankenGrotesk-variable.woff2
+                      HankenGrotesk-variable-italic.woff2
+  Copyright 2021 The Hanken Grotesk Project Authors
+  https://github.com/marcologous/hanken-grotesk
+  Verwendung: Grundschrift im Standard-Design.
+
+Plus Jakarta Sans     PlusJakartaSans-latin.woff2
+                      PlusJakartaSans-latin-ext.woff2
+  Copyright The Plus Jakarta Sans Project Authors
+  https://github.com/tokotype/PlusJakartaSans
+  Verwendung: Grundschrift der Design-Variante "Aeline" (styles/skin.css).
+
+Geist Mono            GeistMono-latin.woff2
+                      GeistMono-latin-ext.woff2
+  Copyright 2023 Vercel, Inc.
+  https://github.com/vercel/geist-font
+  Verwendung: Label, Spaltenkoepfe, Betraege und Knopfbeschriftungen der
+  Design-Variante "Aeline".
+
+
+Zeichensatz-Bereiche
+--------------------
+Von Plus Jakarta Sans und Geist Mono liegen nur die Bereiche "latin" und
+"latin-ext" bei. Kyrillisch, Griechisch und Vietnamesisch waeren im
+Auslieferungspaket totes Gewicht — die Oberflaeche ist deutschsprachig. Die
+zugehoerigen unicode-range-Angaben stehen in styles/skin.css; ohne sie
+wuerde der Browser beide Dateien laden statt nur die benoetigte.
+
+Aktualisieren: Die Dateien stammen aus der Google-Fonts-API. Neue Fassung
+holt man, indem man die CSS-Datei unter
+https://fonts.googleapis.com/css2?family=<Familie>:wght@<Achse>&display=swap
+abruft und daraus die woff2-Verweise der Bloecke /* latin */ und
+/* latin-ext */ herunterlaedt. Die unicode-range-Angaben in skin.css muessen
+dabei mitgezogen werden.

@@ -1730,7 +1730,7 @@ function DashboardFilterBar({
       {showDimensions && abteilungen.length > 1 && (
         <div className="dash-filter-group">
           <span className="dash-filter-label">Abteilung</span>
-          <select className="inline-select" value={filters.abteilung}
+          <select className="inline-select" aria-label="Abteilung" value={filters.abteilung}
             onChange={e => onChange({ abteilung: e.target.value })}>
             <option value="">Alle</option>
             {abteilungen.map(a => <option key={a} value={a}>{a}</option>)}
@@ -1741,7 +1741,7 @@ function DashboardFilterBar({
       {showDimensions && plOptions.length > 1 && (
         <div className="dash-filter-group">
           <span className="dash-filter-label">Projektleiter</span>
-          <select className="inline-select" value={filters.projektleiter}
+          <select className="inline-select" aria-label="Projektleiter" value={filters.projektleiter}
             onChange={e => onChange({ projektleiter: e.target.value })}>
             <option value="">Alle</option>
             {plOptions.map(pl => <option key={pl} value={pl}>{pl}</option>)}
@@ -1752,7 +1752,7 @@ function DashboardFilterBar({
       {showDimensions && statusOptions.length > 1 && (
         <div className="dash-filter-group">
           <span className="dash-filter-label">Status</span>
-          <select className="inline-select" value={filters.status}
+          <select className="inline-select" aria-label="Status" value={filters.status}
             onChange={e => onChange({ status: e.target.value })}>
             <option value="">Alle</option>
             {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
