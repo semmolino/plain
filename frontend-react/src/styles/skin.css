@@ -1,23 +1,233 @@
-/* ── Design-Variante (Skin) ───────────────────────────────────────────────
-   Diese Datei ist auf main und design/base ABSICHTLICH leer.
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESIGN-VARIANTE: AELINE
+   Vorlage: https://aeline.webflow.io/
+   Werte ausgelesen aus dem Stylesheet der Vorlage.
 
-   Jeder Design-Branch (design/<name>) fuellt genau sie — dadurch ist der
-   Unterschied zwischen zwei Design-Varianten eine Datei, nicht ein Umbau
-   quer durch die Anwendung.
+   Charakter: hell und technisch. Kraeftiges Elektroblau (#2453ff) als
+   einziger Akzent, dazu ein Limeton (#d6fd70) als Signalfarbe fuer
+   Hervorhebungen. Zahlen und Kurzkennzeichen laufen in einer Monospace
+   (Geist Mono) — die Vorlage setzt sie sogar auf Buttons. Die enge
+   Laufweite (-0.02em) macht Ueberschriften kompakter.
 
-   Was hier hineingehoert:
-     1. Token-Ueberschreibungen in :root  (Farbe, Schrift, Radius, Dichte)
-     2. Dieselben Ueberschreibungen fuer [data-theme="dark"], falls die
-        Variante ein dunkles Gegenstueck haben soll
-     3. Komponenten-Anatomie, soweit sie sich NICHT ueber Tokens ausdruecken
-        laesst (z.B. Buttons flach statt erhoben, Tabellenzeilen mit
-        Trennlinie statt Zebra)
+   Diese Variante behaelt die Seitennavigation. Die Vorlage ist zwar eine
+   Website mit Kopfleiste, ihr Charakter (Mono-Details, Datendichte,
+   technische Anmutung) passt aber zu einer Bedienoberflaeche mit
+   Seitenleiste — und im Vergleich mit den Topbar-Varianten wird der
+   Unterschied ueberhaupt erst sichtbar.
 
-   Was hier NICHT hineingehoert:
-     - Aenderungen an einzelnen Seiten. Wenn ein Design das braucht, fehlt
-       ein Token — dann lieber globals.css um das Token erweitern.
-     - Die Layout-Anordnung. Die haengt an ACTIVE_SHELL in
-       components/layout/shells/index.ts.
+   Die dunkle Fassung nutzt den eigenen Dark-Satz der Vorlage
+   (#0a0a0f mit Indigo/Cyan) statt einer abgedunkelten Kopie.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-   Geladen wird die Datei in main.tsx NACH globals.css, damit sie ohne
-   !important gewinnt. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ── Neutralskala (aus --grey--grey-*) ────────────────────────────────── */
+  --bg:        #f2f2f2;   /* grey-100 */
+  --surface:   #ffffff;
+  --surface-2: #ececec;   /* grey-200 */
+  --surface-3: #f7f7f7;
+  --dim:       rgba(19,19,19,0.04);
+  --dim-2:     rgba(19,19,19,0.025);
+
+  --text:   #131313;                 /* grey-900 */
+  --text-2: rgba(19,19,19,0.74);
+  --text-3: #585858;                 /* grey-400 — die Sekundaerfarbe der Vorlage */
+  --text-4: rgba(19,19,19,0.46);
+  --text-5: rgba(19,19,19,0.32);
+
+  --border:   rgba(19,19,19,0.11);
+  --border-2: rgba(19,19,19,0.08);
+  --border-3: rgba(19,19,19,0.06);
+  --border-4: rgba(19,19,19,0.05);
+
+  /* ── Akzent: Elektroblau ──────────────────────────────────────────────── */
+  --accent:       #2453ff;
+  --accent-dark:  #003cff;
+  --accent-bg:    #eef1ff;
+  --accent-bg2:   #dbe2ff;
+  --accent-tint:  rgba(36,83,255,0.04);
+  --accent-tint2: rgba(36,83,255,0.08);
+  --accent-tint3: rgba(36,83,255,0.12);
+  --accent-ring:  rgba(36,83,255,0.22);
+  --accent-rgb:   36,83,255;
+  --accent-fg:    #ffffff;
+
+  --brand-glyph:       #2453ff;
+  --brand-glyph-empty: rgba(36,83,255,0.18);
+
+  --chrome:          #ffffff;
+  --chrome-border:   rgba(19,19,19,0.09);
+  --chrome-text:     #131313;
+  --chrome-icon:     #585858;
+  --chrome-hover-bg: rgba(19,19,19,0.05);
+  --chrome-shadow-h: none;
+
+  --nav-active:   #2453ff;
+  --nav-inactive: #585858;
+
+  --btn:   #131313;   --btn-h: #2f2f2f;   --btn-fg: #ffffff;
+  --cta:   #2453ff;   --cta-h: #003cff;   --cta-fg: #ffffff;
+
+  --overlay:     rgba(19,19,19,0.45);
+  --notif-badge: #ff3336;
+  --notif-dot:   #2453ff;
+  --timer-color: #2f7d1c;
+
+  /* ── Status ───────────────────────────────────────────────────────────
+     Das Rot der Vorlage (#ff3336) erreicht auf Weiss nur 3,0:1 und ist als
+     Textfarbe nicht verwendbar; abgedunkelt fuer Schrift, Originalton fuer
+     Flaechen und Punkte. Das Lime (#d6fd70) traegt als Textfarbe ueberhaupt
+     nicht — es ist in der Vorlage eine Flaechenfarbe und wird hier auch nur
+     so verwendet. */
+  --success:        #2f7d1c;
+  --success-strong: #246313;
+  --success-bg:     #eafbd6;         /* aus dem Limeton abgeleitet */
+  --danger:         #d61b1e;
+  --danger-strong:  #ff3336;
+  --danger-bg:      #ffe8e8;
+  --warning:        #8a6100;
+  --warning-strong: #6b4b00;
+  --warning-bg:     #fdfbd4;         /* aus --base--yellow */
+  --info:           #1a44e0;
+  --info-strong:    #003cff;
+  --info-bg:        #eef1ff;
+  --accent2:        #6b3fd4;
+  --accent2-strong: #5430ad;
+  --accent2-bg:     #efe9ff;
+
+  /* ── Typografie ───────────────────────────────────────────────────────── */
+  --font-sans:    'Plus Jakarta Sans', 'Hanken Grotesk', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono:    'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --fw-title:     700;
+  --fw-heading:   600;
+
+  /* ── Form und Dichte ──────────────────────────────────────────────────── */
+  --radius-sm:   8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --btn-radius:   12px;
+  --input-radius: 12px;
+  --control-h:   38px;
+
+  --border-width: 1px;
+  --card-shadow: none;
+  --shadow-sm: none;
+  --shadow-md: 0 2px 12px rgba(19,19,19,0.06);
+  --shadow-lg: 0 10px 30px rgba(19,19,19,0.10);
+
+  --row-py: 9px;
+  --row-px: 9px;
+
+  --nav-width:       208px;
+  --nav-indicator:   3px;
+  --nav-item-radius: 8px;
+
+  /* Diagramme: Blau/Cyan/Violett der Vorlage plus Lime als Signalreihe. */
+  --chart-1: #2453ff;
+  --chart-2: #06b6d4;
+  --chart-3: #a8c93a;
+  --chart-4: #7c3aed;
+  --chart-5: #38c6f6;
+  --chart-6: #ff3336;
+  --chart-7: #d97706;
+  --chart-8: #585858;
+  --chart-tooltip-bg: rgba(19,19,19,0.94);
+  --chart-tooltip-fg: #ffffff;
+}
+
+/* ── Dunkle Fassung: der eigene Dark-Satz der Vorlage ─────────────────────
+   bg-primary #0a0a0f, Text weiss in Alpha-Stufen, Raender als weisse
+   Transparenzen, Akzente Indigo/Cyan. */
+[data-theme="dark"] {
+  --bg:        #0a0a0f;
+  --surface:   #131318;
+  --surface-2: #1a1a21;
+  --surface-3: #16161c;
+  --dim:       rgba(255,255,255,0.04);
+  --dim-2:     rgba(255,255,255,0.025);
+
+  --text:   #ffffff;
+  --text-2: rgba(255,255,255,0.80);
+  --text-3: rgba(255,255,255,0.62);
+  --text-4: rgba(255,255,255,0.45);
+  --text-5: rgba(255,255,255,0.30);
+
+  --border:   rgba(255,255,255,0.12);
+  --border-2: rgba(255,255,255,0.09);
+  --border-3: rgba(255,255,255,0.07);
+  --border-4: rgba(255,255,255,0.05);
+
+  --accent:       #6d7cff;
+  --accent-dark:  #8a95ff;
+  --accent-bg:    rgba(79,70,229,0.16);
+  --accent-bg2:   rgba(79,70,229,0.26);
+  --accent-tint:  rgba(109,124,255,0.06);
+  --accent-tint2: rgba(109,124,255,0.10);
+  --accent-tint3: rgba(109,124,255,0.14);
+  --accent-ring:  rgba(109,124,255,0.30);
+  --accent-rgb:   109,124,255;
+  --accent-fg:    #0a0a0f;
+
+  --brand-glyph:       #6d7cff;
+  --brand-glyph-empty: rgba(109,124,255,0.22);
+
+  --chrome:          #0f0f14;
+  --chrome-border:   rgba(255,255,255,0.10);
+  --chrome-text:     #ffffff;
+  --chrome-icon:     rgba(255,255,255,0.62);
+  --chrome-hover-bg: rgba(255,255,255,0.07);
+
+  --nav-active:   #6d7cff;
+  --nav-inactive: rgba(255,255,255,0.58);
+
+  --btn:   #6d7cff;  --btn-h: #8a95ff;  --btn-fg: #0a0a0f;
+  --cta:   #6d7cff;  --cta-h: #8a95ff;  --cta-fg: #0a0a0f;
+
+  --overlay:      rgba(0,0,0,0.68);
+  --hover-bg:     rgba(255,255,255,0.06);
+  --shadow-color: 0,0,0;
+  --timer-color:  #a3e635;
+
+  --success:        #7fd94f;  --success-strong: #a8e87f;  --success-bg: rgba(127,217,79,0.16);
+  --danger:         #ff6b6d;  --danger-strong:  #ff9092;  --danger-bg:  rgba(255,51,54,0.18);
+  --warning:        #f0c651;  --warning-strong: #f5d982;  --warning-bg: rgba(240,198,81,0.16);
+  --info:           #6d7cff;  --info-strong:    #8a95ff;  --info-bg:    rgba(79,70,229,0.18);
+  --accent2:        #b191ff;  --accent2-strong: #c9b0ff;  --accent2-bg: rgba(124,58,237,0.20);
+
+  --chart-1: #6d7cff;
+  --chart-2: #22d3ee;
+  --chart-3: #a3e635;
+  --chart-4: #a78bfa;
+  --chart-5: #38c6f6;
+  --chart-6: #ff6b6d;
+  --chart-7: #fbbf24;
+  --chart-8: rgba(255,255,255,0.45);
+  --chart-tooltip-bg: rgba(26,26,33,0.96);
+  --chart-tooltip-fg: #ffffff;
+}
+
+/* ── Komponenten-Anatomie ────────────────────────────────────────────────── */
+
+/* Engere Laufweite in Ueberschriften — Kennzeichen der Vorlage. */
+h1, h2, h3, .page-title, .modal-title, .section-title { letter-spacing: -0.02em; }
+
+/* Zahlen und Kurzkennzeichen in Mono: in dieser Vorlage ein Stilmittel,
+   in einer Rechnungsliste zugleich eine echte Lesehilfe — gleiche
+   Ziffernbreite laesst Betraege sauber untereinander stehen. */
+.master-table td.num, .dash-table td.num, .ls-td.ls-col-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+/* Aktiver Navigationseintrag: gefuellte Flaeche plus farbige Kante. */
+.side-nav-item { margin: 1px 6px; border-radius: var(--nav-item-radius); }
+.side-nav-item.active { background: var(--accent-bg); }
+
+/* Buttons flach, klar gerundet. */
+.btn, .btn-primary, .btn-secondary { border-radius: var(--btn-radius); box-shadow: none; }
+
+/* Karten mit Kontur statt Schatten. */
+.card, .kpi-tile, .timeline-wrap, .dash-card { box-shadow: none; border: 1px solid var(--border); }
