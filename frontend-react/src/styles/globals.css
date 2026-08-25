@@ -1188,6 +1188,13 @@ input::placeholder { color: var(--text-4); }
   .app-main    { padding-bottom: 16px; }
 }
 
+/* Marker-Klassen der Layout-Huellen. Sie tragen selbst kein Aussehen,
+   sondern dienen als Anker fuer huellenspezifische Regeln (siehe unten und
+   in styles/skin.css). Ohne eigene Regel meldet check:design sie zu Recht
+   als undefiniert. */
+.shell-sidebar { display: flex; flex-direction: column; min-height: 100dvh; }
+.shell-topbar  { display: flex; flex-direction: column; min-height: 100dvh; }
+
 /* ── Topbar-Huelle ──────────────────────────────────────────────────────
    Alternative Anordnung: Navigation waagerecht in der Kopfzeile, keine
    Seitenleiste. Wird ueber ACTIVE_SHELL in components/layout/shells/index.ts
