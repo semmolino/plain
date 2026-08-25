@@ -12,12 +12,13 @@ function baseData(overrides = {}) {
     buyerReference: "TEST-REF",
     seller: { name: "Architektur GmbH", street: "Hauptstr. 1", city: "Munchen", postCode: "80331", countryId: "DE" },
     buyer:  { name: "Bauherr AG",       street: "Bauplatz 9",   city: "Berlin",  postCode: "10115", countryId: "DE" },
-    lines:  [{ name: "Honorar HOAI Lph 1", quantity: 1, unitCode: "C62", lineTotal: 1000, vatCategory: "S" }],
+    lines:  [{ description: "Honorar HOAI Lph 1", quantity: 1, unitCode: "C62", lineTotal: 1000, vatCategory: "S" }],
     vatBreakdown: [{ category: "S", percent: 19, basis: 1000, amount: 190 }],
     allowances: [],
     totals: {
-      lineNetTotal: 1000,
-      netTotal: 1000,
+      lineTotal: 1000,
+      allowanceTotal: 0,
+      chargeTotal: 0,
       taxBasis: 1000,
       taxAmount: 190,
       grandTotal: 1190,
@@ -112,5 +113,42 @@ describe("validateEInvoiceData", () => {
     });
     const r = validateEInvoiceData(data);
     expect(r.errors.some(e => e.code === "BR-CO-17")).toBe(false);
+  });
+
+  // ── Regression N1: der Validator muss die Feldnamen lesen, die
+  //    loadInvoiceData tatsaechlich liefert (description / totals.lineTotal).
+  //    Vorher pruefte er l.name und t.netTotal — Felder, die es nie gab.
+
+  it("liest die Positions-Bezeichnung aus description (BR-22)", () => {
+    const data = baseData({
+      lines: [{ description: "", quantity: 1, unitCode: "C62", lineTotal: 1000, vatCategory: "S" }],
+    });
+    const r = validateEInvoiceData(data);
+    expect(r.errors.some(e => e.code === "BR-22")).toBe(true);
+  });
+
+  it("liest die Positionssumme aus totals.lineTotal (BR-12)", () => {
+    const { lineTotal, ...totalsOhneSumme } = baseData().totals;
+    const r = validateEInvoiceData(baseData({ totals: totalsOhneSumme }));
+    expect(r.errors.some(e => e.code === "BR-12")).toBe(true);
+  });
+
+  // ── N2: BT-109 muss zur Positionssumme passen
+
+  it("flags Abweichung zwischen Positionssumme und Gesamt-Netto (BR-CO-13)", () => {
+    const data = baseData({
+      totals: { ...baseData().totals, taxBasis: 1100 },   // Positionssumme ist 1000
+    });
+    const r = validateEInvoiceData(data);
+    expect(r.errors.some(e => e.code === "BR-CO-13")).toBe(true);
+  });
+
+  it("rechnet Nachlaesse und Zuschlaege in BR-CO-13 ein", () => {
+    const data = baseData({
+      // 1000 - 100 + 50 = 950
+      totals: { ...baseData().totals, allowanceTotal: 100, chargeTotal: 50, taxBasis: 950 },
+    });
+    const r = validateEInvoiceData(data);
+    expect(r.errors.some(e => e.code === "BR-CO-13")).toBe(false);
   });
 });

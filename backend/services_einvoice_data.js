@@ -531,7 +531,11 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const flip = v => negateForStorno ? -v : v;
   if (negateForStorno) {
     for (const l of lines) {
-      l.unitPrice = flip(l.unitPrice);
+      // BT-146 (Einzelpreis) darf nach BR-27 nicht negativ sein — Pruefportale
+      // weisen das fatal ab. Die korrigierende Bewegung wird deshalb ueber die
+      // negative Menge BT-129 ausgedrueckt, die zulaessig ist. So bleibt
+      // Menge x Einzelpreis = Positionsbetrag rechnerisch konsistent.
+      l.quantity  = flip(l.quantity);
       l.lineTotal = flip(l.lineTotal);
     }
     for (const a of allowances) { a.amount = flip(a.amount); }

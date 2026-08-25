@@ -314,7 +314,7 @@ function buildLineItem(line, data, profile) {
       <ram:SpecifiedLineTradeAgreement>
         <ram:NetPriceProductTradePrice>
           <ram:ChargeAmount>${n2(line.unitPrice)}</ram:ChargeAmount>
-          <ram:BasisQuantity unitCode="${x(line.unitCode)}">${n2(line.quantity)}</ram:BasisQuantity>
+          <ram:BasisQuantity unitCode="${x(line.unitCode)}">${n2(1)}</ram:BasisQuantity>
         </ram:NetPriceProductTradePrice>
       </ram:SpecifiedLineTradeAgreement>` : ''}
       <ram:SpecifiedLineTradeDelivery>

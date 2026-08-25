@@ -164,7 +164,7 @@ function buildLineItem(line, cur) {
     </cac:Item>
     <cac:Price>
       <cbc:PriceAmount currencyID="${x(cur)}">${n2(line.unitPrice)}</cbc:PriceAmount>
-      <cbc:BaseQuantity unitCode="${x(line.unitCode)}">${n2(line.quantity)}</cbc:BaseQuantity>
+      <cbc:BaseQuantity unitCode="${x(line.unitCode)}">${n2(1)}</cbc:BaseQuantity>
     </cac:Price>
   </cac:InvoiceLine>`;
 }

@@ -114,7 +114,7 @@ function validateEInvoiceData(data, opts = {}) {
   // ── BR-21..27: Each line must have ID, name, quantity, unit, net amount ─────
   lines.forEach((l, i) => {
     const lineLabel = `Position ${i + 1}`;
-    if (!nonEmpty(l.name)) {
+    if (!nonEmpty(l.description)) {
       errors.push(mkError('BR-22', 'BT-153', `${lineLabel}: Bezeichnung fehlt.`));
     }
     if (!Number.isFinite(Number(l.quantity))) {
@@ -200,7 +200,7 @@ function validateEInvoiceData(data, opts = {}) {
 
   // ── BR-12..15: Totals must be present ───────────────────────────────────────
   const t = data.totals || {};
-  if (!Number.isFinite(Number(t.netTotal)) && !Number.isFinite(Number(t.lineNetTotal))) {
+  if (!Number.isFinite(Number(t.lineTotal))) {
     errors.push(mkError('BR-12', 'BT-106', 'Summe der Positions-Nettobetrage (BT-106) fehlt.'));
   }
   if (!Number.isFinite(Number(t.taxBasis))) {
@@ -215,10 +215,28 @@ function validateEInvoiceData(data, opts = {}) {
 
   // ── BR-CO-10: sum(lineTotal) == netTotal (within tolerance) ─────────────────
   const lineSum = fmt2(lines.reduce((s, l) => s + Number(l.lineTotal || 0), 0));
-  const lineNetTotal = Number(t.lineNetTotal ?? t.netTotal ?? lineSum);
+  const lineNetTotal = Number(t.lineTotal ?? lineSum);
   if (abs(lineSum - lineNetTotal) > ROUNDING_TOLERANCE) {
     errors.push(mkError('BR-CO-10', 'BT-106',
       `Summe Positions-Netto: ${lineSum.toFixed(2)} weicht ab von BT-106 (${fmt2(lineNetTotal).toFixed(2)}).`));
+  }
+
+  // BR-CO-13: BT-109 = BT-106 - BT-107 + BT-108
+  // Ohne diese Pruefung faellt eine Drift zwischen der Summe der je Position
+  // gerundeten Betraege und dem gespeicherten Dokument-Netto erst beim
+  // Empfaenger auf, wo sie zur Ablehnung fuehrt.
+  const docAllowanceTotal = Number(t.allowanceTotal ?? 0);
+  const docChargeTotal    = Number(t.chargeTotal ?? 0);
+  if (Number.isFinite(Number(t.taxBasis))) {
+    const expectedBasis = fmt2(lineNetTotal - docAllowanceTotal + docChargeTotal);
+    if (abs(Number(t.taxBasis) - expectedBasis) > ROUNDING_TOLERANCE) {
+      errors.push(mkError('BR-CO-13', 'BT-109',
+        `Gesamt-Netto (BT-109): erwartet ${expectedBasis.toFixed(2)} `
+        + `(Positionssumme ${fmt2(lineNetTotal).toFixed(2)} `
+        + `- Nachlasse ${fmt2(docAllowanceTotal).toFixed(2)} `
+        + `+ Zuschlage ${fmt2(docChargeTotal).toFixed(2)}), `
+        + `ist ${fmt2(Number(t.taxBasis)).toFixed(2)}.`));
+    }
   }
 
   // ── BR-CO-15: gross = taxBasis + tax (tolerance) ────────────────────────────
