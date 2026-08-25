@@ -35,6 +35,7 @@ import {
   type TimelinePoint,
 } from '@/api/reports'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
+import { useChartTheme } from '@/theme/chartTheme'
 import { RecentList } from '@/components/recents/RecentList'
 import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 import { useChartDefaults } from '@/theme/useChartDefaults'
@@ -217,13 +218,13 @@ const COLUMNS: ColDef[] = [
     key: 'cpi', label: 'CPI', className: 'num', defaultVisible: false,
     render: r => {
       const evm = computeEvm(r)
-      const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : evm.cpiStatus === 'bad' ? '#b91c1c' : 'var(--text-3)'
+      const color = evm.cpiStatus === 'good' ? 'var(--success)' : evm.cpiStatus === 'warn' ? 'var(--warning)' : evm.cpiStatus === 'bad' ? 'var(--danger-strong)' : 'var(--text-3)'
       return <span style={{ color, fontWeight: evm.cpi != null ? 600 : undefined }}>{fmtCpi(evm.cpi)}</span>
     },
     sortValue:   r  => computeEvm(r).cpi ?? -999,
     renderTotal: rs => {
       const cpi = portfolioCpi(rs)
-      const color = cpi == null ? undefined : cpi >= 0.95 ? '#16a34a' : cpi >= 0.80 ? '#b45309' : '#b91c1c'
+      const color = cpi == null ? undefined : cpi >= 0.95 ? 'var(--success)' : cpi >= 0.80 ? 'var(--warning)' : 'var(--danger-strong)'
       return <span style={{ color, fontWeight: 600 }}>{fmtCpi(cpi)}</span>
     },
   },
@@ -238,12 +239,12 @@ const COLUMNS: ColDef[] = [
     render: r => {
       const vac = computeEvm(r).vac
       if (vac == null) return '—'
-      return <span style={{ color: vac >= 0 ? '#16a34a' : '#b91c1c' }}>{fmtEur(vac)}</span>
+      return <span style={{ color: vac >= 0 ? 'var(--success)' : 'var(--danger-strong)' }}>{fmtEur(vac)}</span>
     },
     sortValue:   r  => computeEvm(r).vac ?? 0,
     renderTotal: rs => {
       const total = rs.reduce((s, r) => s + (computeEvm(r).vac ?? 0), 0)
-      return <span style={{ color: total >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 600 }}>{fmtEur(total)}</span>
+      return <span style={{ color: total >= 0 ? 'var(--success)' : 'var(--danger-strong)', fontWeight: 600 }}>{fmtEur(total)}</span>
     },
   },
 ]
@@ -290,6 +291,8 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
     enabled:  filterReady,
   })
 
+  const ct = useChartTheme()
+
   const points: TimelinePoint[] = data?.data ?? []
 
   if (!filterReady) return null
@@ -316,8 +319,8 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Honorar inkl. NK',
         data: points.map(p => p.HONORAR_NET),
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59,130,246,0.07)',
+        borderColor: ct.series[0],
+        backgroundColor: ct.alpha(ct.series[0], 0.07),
         fill: true,
         tension: 0.35,
         pointRadius: points.length > 60 ? 0 : 3,
@@ -327,7 +330,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Leistungsstand €',
         data: points.map(p => p.LEISTUNGSSTAND_VALUE),
-        borderColor: '#10b981',
+        borderColor: ct.series[1],
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -338,7 +341,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Kosten €',
         data: points.map(p => p.KOSTEN_TOTAL),
-        borderColor: '#f59e0b',
+        borderColor: ct.series[2],
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -349,7 +352,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Abgerechnet €',
         data: points.map(p => p.ABGERECHNET_NET),
-        borderColor: '#8b5cf6',
+        borderColor: ct.series[3],
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -361,7 +364,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Bezahlt €',
         data: points.map(p => p.BEZAHLT_NET),
-        borderColor: '#06b6d4',
+        borderColor: ct.series[4],
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -389,9 +392,9 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: '#f9fafb',
-        bodyColor: '#d1d5db',
+        backgroundColor: ct.tooltipBg,
+        titleColor: ct.tooltipFg,
+        bodyColor: ct.tooltipFg,
         padding: 12,
         cornerRadius: 8,
         callbacks: {
@@ -402,14 +405,14 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
     },
     scales: {
       x: {
-        grid: { color: 'var(--text-3)' },
-        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: '#6b7280' },
+        grid: { color: ct.grid },
+        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: ct.textMuted },
       },
       y: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: ct.grid },
         ticks: {
           font: { size: 11 },
-          color: 'var(--text-3)',
+          color: ct.textMuted,
           callback: (v) => FMT_EUR0_CHART.format(Number(v)),
         },
       },

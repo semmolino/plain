@@ -5,11 +5,11 @@ import { useGamificationConfig } from '@/hooks/useGamificationConfig'
 import { BrandGlyph } from '@/components/brand/BrandGlyph'
 
 const LEVEL_COLORS: Record<string, { bg: string; fg: string; bar: string }> = {
-  noch_nicht_erkundet: { bg: 'var(--surface-2)', fg: 'var(--text-3)', bar: '#d1d5db' },
-  anfaenger:           { bg: 'var(--info-bg)', fg: 'var(--info)', bar: '#60a5fa' },
-  vertraut:            { bg: 'var(--success-bg)', fg: 'var(--success)', bar: '#4ade80' },
-  profi:               { bg: 'var(--warning-bg)', fg: 'var(--warning)', bar: '#f59e0b' },
-  experte:             { bg: 'var(--accent2-bg)', fg: 'var(--accent2)', bar: '#a78bfa' },
+  noch_nicht_erkundet: { bg: 'var(--surface-2)', fg: 'var(--text-3)', bar: 'var(--text-5)' },
+  anfaenger:           { bg: 'var(--info-bg)', fg: 'var(--info)', bar: 'var(--info)' },
+  vertraut:            { bg: 'var(--success-bg)', fg: 'var(--success)', bar: 'var(--success)' },
+  profi:               { bg: 'var(--warning-bg)', fg: 'var(--warning)', bar: 'var(--warning)' },
+  experte:             { bg: 'var(--accent2-bg)', fg: 'var(--accent2)', bar: 'var(--accent2)' },
 }
 
 // Reifegrad-Stufen 0…4 → das & füllt sich über die gesamte Reife (Stufe + Fortschritt).

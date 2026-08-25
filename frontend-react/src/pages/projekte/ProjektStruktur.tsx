@@ -787,7 +787,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                           <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{currentProject.NAME_LONG}</td>
                           <td><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
-                          <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : rootSurcharges < 0 ? '#dc2626' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
+                          <td className="num"><span style={{ color: rootSurcharges > 0 ? 'var(--success)' : rootSurcharges < 0 ? 'var(--danger)' : 'var(--text-5)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
                           <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges !== 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
                           <td style={{ textAlign: 'left' }}><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
@@ -933,7 +933,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               {(() => {
                                 const sv = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
                                 return sv !== 0
-                                  ? <span style={{ color: sv > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{fmtEur(sv)}</span>
+                                  ? <span style={{ color: sv > 0 ? 'var(--success)' : 'var(--danger)', fontSize: 12 }}>{fmtEur(sv)}</span>
                                   : <span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span>
                               })()}
                             </td>

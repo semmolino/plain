@@ -158,7 +158,7 @@ export function ProfilePage() {
             disabled={saving}
             style={{
               marginTop: 4, padding: '8px 16px', fontSize: 13, fontWeight: 600,
-              background: saving ? '#93c5fd' : '#2563eb', color: '#fff',
+              background: saving ? 'var(--accent-bg2)' : 'var(--accent)', color: 'var(--accent-fg)',
               border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer',
             }}
           >

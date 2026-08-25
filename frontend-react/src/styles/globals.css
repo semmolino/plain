@@ -159,6 +159,55 @@
   --accent-rgb: 37,99,235;
   --hover-bg:   rgba(17,24,39,0.06);
   --focus-ring: 0 0 0 3px var(--accent-ring);
+
+  /* ── Diagramm-Palette ───────────────────────────────────────────────
+     Kategoriale Serienfarben — bewusst KEINE Status-Tokens: eine Datenreihe
+     „Kosten" ist keine Fehlermeldung. Ein Design, das nur --accent tauscht,
+     liesse die Auswertungen sonst in der alten Palette stehen.
+     ACHTUNG: Chart.js zeichnet auf <canvas>, dort ist var(…) KEINE gueltige
+     Farbe. Gelesen werden diese Tokens in theme/chartTheme.ts (readToken). */
+  --chart-1: #3b82f6;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #8b5cf6;
+  --chart-5: #06b6d4;
+  --chart-6: #ef4444;
+  --chart-7: #ec4899;
+  --chart-8: #84cc16;
+  --chart-tooltip-bg: rgba(17,24,39,0.92);
+  --chart-tooltip-fg: #f9fafb;
+
+  /* ── Ampel (4 Stufen) ────────────────────────────────────────────────
+     Die Projekt-Ampel braucht vier Abstufungen; die Status-Tokens kennen nur
+     drei. Eigene Skala, damit ein Skin sie geschlossen mitziehen kann. */
+  --ampel-1: var(--danger);    /* rot    */
+  --ampel-2: #ea580c;          /* orange */
+  --ampel-3: #ca8a04;          /* gelb   */
+  --ampel-4: var(--success);   /* gruen  */
+  --ampel-0: var(--text-4);    /* unbestimmt */
+
+  /* ── Struktur-Tokens ─────────────────────────────────────────────────
+     Was ein Design-Wechsel ausser der Farbe veraendert: Schrift, Dichte,
+     Formensprache. Steht hier, damit eine Design-Variante das geschlossen
+     umstellen kann, ohne Selektoren anzufassen. */
+  --font-sans:    'Hanken Grotesk', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --font-display: var(--font-sans);   /* Titel duerfen abweichen */
+  --font-mono:    ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --border-width: 1px;               /* Rahmenstaerke global */
+  --card-border:  var(--border-width) solid var(--border);
+  --card-shadow:  var(--shadow-sm);
+
+  --nav-width:       200px;          /* Breite der Seitennavigation */
+  --nav-indicator:   3px;            /* Balken am aktiven Eintrag */
+  --nav-item-radius: 0;
+
+  --row-py: 8px;                     /* Tabellendichte */
+  --row-px: 8px;
+
+  --btn-radius:   var(--radius-md);
+  --input-radius: var(--radius-md);
+  --control-h:    36px;              /* Inputs/Selects in Filterleisten */
 }
 
 [data-theme="modern"] {
@@ -411,6 +460,21 @@
   --timer-color: #4ade80;
   --dim:   rgba(255,255,255,0.04);
   --dim-2: rgba(255,255,255,0.025);
+
+  /* Diagramm-Serie im Dunkeln heller und gesaettigter, damit sie auf dem
+     dunklen Untergrund klar steht. Stand vorher als Array in chartTheme.ts. */
+  --chart-1: #60a5fa;
+  --chart-2: #34d399;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-5: #22d3ee;
+  --chart-6: #f87171;
+  --chart-7: #f472b6;
+  --chart-8: #a3e635;
+  --chart-tooltip-bg: rgba(40,40,48,0.96);
+
+  --ampel-2: #fb923c;
+  --ampel-3: #fcd34d;
 }
 
 /* ── Branchen-Themes ────────────────────────────────────────────────────── */
@@ -647,7 +711,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
@@ -1086,7 +1150,7 @@ input::placeholder { color: var(--text-4); }
   .app-layout { height: 100dvh; overflow: hidden; }
   .side-nav {
     display: flex; flex-direction: column;
-    width: 200px; flex-shrink: 0;
+    width: var(--nav-width); flex-shrink: 0;
     background: var(--chrome);
     border-right: 1px solid var(--chrome-border);
     padding: 8px 0;
@@ -1103,7 +1167,7 @@ input::placeholder { color: var(--text-4); }
     padding: 10px 16px;
     color: var(--nav-inactive);
     text-decoration: none; font-size: 13px; font-weight: 600;
-    border-left: 3px solid transparent;
+    border-left: var(--nav-indicator) solid transparent;
     transition: color 0.13s, background 0.13s;
     white-space: nowrap;
   }
@@ -1600,7 +1664,7 @@ input::placeholder { color: var(--text-4); }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.master-table td { padding: 8px; border-bottom: 1px solid var(--border-4); vertical-align: middle; }
+.master-table td { padding: var(--row-py) var(--row-px); border-bottom: 1px solid var(--border-4); vertical-align: middle; }
 /* Kennungen und Datumsangaben duerfen nicht umbrechen: „RE-2025-0046" wurde
    in der Rechnungsliste sonst dreizeilig und „2025-08-01" zweizeilig, was
    die Zeilenhoehe verdreifacht hat. */
@@ -2171,7 +2235,7 @@ th.doc-actions, td.doc-actions {
 .validation-item:last-child { border-bottom: none; }
 .validation-item.error    { background: var(--danger-bg); }
 .validation-item.warning  { background: var(--warning-bg); }
-.validation-code          { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--text-3); }
+.validation-code          { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
 .validation-msg           { color: var(--text); line-height: 1.4; }
 
 /* ── E-Rechnung Anlagen (Branch 9) ───────────────────────────────────────── */
@@ -2230,7 +2294,7 @@ th.doc-actions, td.doc-actions {
 .nr-token-chip-example {
   font-size: 10px;
   color: var(--accent2);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   background: rgba(255,255,255,0.7);
   padding: 1px 5px;
   border-radius: 4px;
@@ -2256,7 +2320,7 @@ th.doc-actions, td.doc-actions {
 }
 .nr-template-explain-literal {
   color: var(--text-2);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   background: var(--surface);
   padding: 1px 6px;
   border-radius: 4px;

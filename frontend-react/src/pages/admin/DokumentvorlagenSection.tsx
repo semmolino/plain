@@ -17,6 +17,9 @@ import {
 
 // Kuratierte, dezent-professionelle Hausfarben + freie Farbwahl.
 const ACCENT_PALETTE = [
+  // BEWUSST hartkodiert: Akzentfarben fuer das erzeugte PDF-Dokument.
+  // Sie gehoeren zum Dokument, nicht zur App-Oberflaeche, und duerfen sich
+  // beim Theme-Wechsel NICHT mitaendern.
   '#111827', '#1e3a5f', '#0f766e', '#7c2d12', '#5b21b6',
   '#9f1239', '#15803d', '#b45309', '#0369a1', '#3f3f46',
 ]
@@ -48,6 +51,8 @@ const A4_PREVIEW_WIDTH = 794 // A4-Breite bei 96dpi — die Vorschau wird darauf
 function PresetThumb({ accent, serif, logoPosition }: { accent: string; serif: boolean; logoPosition: LogoPosition }) {
   const justify = logoPosition === 'left' ? 'flex-start' : logoPosition === 'center' ? 'center' : 'flex-end'
   return (
+    /* BEWUSST hartkodiert: Miniatur eines Blatt Papiers. Papier ist auch
+       im dunklen Theme weiss. */
     <div style={{ width: 132, height: 92, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 5, fontFamily: serif ? 'Georgia, "Times New Roman", serif' : 'Arial, Helvetica, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: justify }}>
         <div style={{ width: 26, height: 9, background: '#d1d5db', borderRadius: 2 }} />
@@ -274,7 +279,7 @@ export function DokumentvorlagenSection() {
                     title={p.label}
                     style={{
                       padding: 5, borderRadius: 8, cursor: 'pointer', background: 'transparent',
-                      border: active ? '2px solid var(--text)' : '1px solid #e5e7eb',
+                      border: active ? '2px solid var(--text)' : '1px solid var(--border)',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
                     }}
                   >
@@ -306,7 +311,7 @@ export function DokumentvorlagenSection() {
                     aria-label={`Hausfarbe ${c}`}
                     style={{
                       width: 32, height: 32, borderRadius: 8, background: c, cursor: 'pointer',
-                      border: active ? '2px solid var(--text)' : '1px solid #d1d5db',
+                      border: active ? '2px solid var(--text)' : '1px solid var(--border)',
                       boxShadow: active ? '0 0 0 2px #fff inset' : 'none',
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     }}
@@ -319,7 +324,7 @@ export function DokumentvorlagenSection() {
                 title="Eigene Farbe"
                 style={{
                   width: 32, height: 32, borderRadius: 8, cursor: 'pointer', overflow: 'hidden',
-                  border: !accentInPalette ? '2px solid var(--text)' : '1px dashed #9ca3af',
+                  border: !accentInPalette ? '2px solid var(--text)' : '1px dashed var(--text-4)',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   background: !accentInPalette ? theme.brand.accentColor : '#fff',
                 }}
@@ -330,7 +335,7 @@ export function DokumentvorlagenSection() {
                   onChange={e => setAccent(e.target.value)}
                   style={{ opacity: 0, width: 0, height: 0 }}
                 />
-                {accentInPalette && <span style={{ fontSize: 13, color: '#6b7280' }}>+</span>}
+                {accentInPalette && <span style={{ fontSize: 13, color: 'var(--text-3)' }}>+</span>}
               </label>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>

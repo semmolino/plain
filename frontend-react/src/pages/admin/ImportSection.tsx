@@ -184,8 +184,8 @@ export function ImportSection() {
                       display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px',
                       borderRadius: 999, fontSize: 12, cursor: 'pointer', fontWeight: active ? 600 : 500,
                       border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
-                      background: active ? 'var(--accent)' : (imported ? '#ecfdf5' : 'var(--surface)'),
-                      color: active ? '#fff' : (imported ? '#047857' : 'var(--text-2)'),
+                      background: active ? 'var(--accent)' : (imported ? 'var(--success-bg)' : 'var(--surface)'),
+                      color: active ? '#fff' : (imported ? 'var(--success-strong)' : 'var(--text-2)'),
                     }}
                   >
                     <span style={{ opacity: 0.7 }}>{i + 1}.</span>
@@ -346,10 +346,10 @@ export function ImportSection() {
 
             {/* Summen-Chips */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-              <SummaryChip icon={<CheckCircle2 size={13} />} label="sauber" value={s?.ok ?? 0} color="#047857" bg="#ecfdf5" />
-              <SummaryChip icon={<AlertTriangle size={13} />} label="mit Warnung" value={s?.warning ?? 0} color="#b45309" bg="#fffbeb" />
-              <SummaryChip icon={<Copy size={13} />} label="Dubletten" value={s?.duplicate ?? 0} color="#475569" bg="#f1f5f9" />
-              <SummaryChip icon={<XCircle size={13} />} label="Fehler" value={s?.error ?? 0} color="#b91c1c" bg="#fef2f2" />
+              <SummaryChip icon={<CheckCircle2 size={13} />} label="sauber" value={s?.ok ?? 0} color="var(--success-strong)" bg="var(--success-bg)" />
+              <SummaryChip icon={<AlertTriangle size={13} />} label="mit Warnung" value={s?.warning ?? 0} color="var(--warning)" bg="var(--warning-bg)" />
+              <SummaryChip icon={<Copy size={13} />} label="Dubletten" value={s?.duplicate ?? 0} color="var(--text-2)" bg="var(--surface-2)" />
+              <SummaryChip icon={<XCircle size={13} />} label="Fehler" value={s?.error ?? 0} color="var(--danger-strong)" bg="var(--danger-bg)" />
               <span style={{ fontSize: 12, color: 'var(--text-3)', alignSelf: 'center' }}>von {s?.total ?? 0} Zeilen</span>
               {(s?.error ?? 0) > 0 && file && (
                 <button type="button" className="btn-small btn-secondary"
@@ -416,7 +416,7 @@ export function ImportSection() {
                     const data = Object.values(r.display).map(v => (v ?? '').toString().trim()).filter(Boolean).join('  ·  ')
                     const hasErr = r.messages.some(m => m.level === 'error')
                     const hasWarn = r.messages.some(m => m.level === 'warn')
-                    const noteColor = hasErr ? '#b91c1c' : hasWarn ? '#b45309' : 'var(--text-3)'
+                    const noteColor = hasErr ? 'var(--danger-strong)' : hasWarn ? 'var(--warning)' : 'var(--text-3)'
                     const abgewaehlt = excluded.has(r.row)
                     const waehlbar = r.status !== 'error'
                     return (

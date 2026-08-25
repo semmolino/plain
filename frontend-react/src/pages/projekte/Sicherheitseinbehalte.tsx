@@ -96,7 +96,7 @@ function SeUebersicht({ onSelectProject }: { onSelectProject: (id: number) => vo
                     ) : '—'}
                   </td>
                   <td className="ls-td ls-right">
-                    <span style={{ color: r.open_sum > 0 ? '#92400e' : undefined, fontWeight: r.open_sum > 0 ? 600 : 400 }}>
+                    <span style={{ color: r.open_sum > 0 ? 'var(--warning-strong)' : undefined, fontWeight: r.open_sum > 0 ? 600 : 400 }}>
                       {fmtEur(r.open_sum)}
                     </span>
                     {r.open_count > 0 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}> · {r.open_count}</span>}

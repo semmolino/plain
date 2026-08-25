@@ -18,6 +18,7 @@ import { fetchProjectsShort } from '@/api/projekte'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { RecentList } from '@/components/recents/RecentList'
 import { useChartDefaults } from '@/theme/useChartDefaults'
+import { useChartTheme } from '@/theme/chartTheme'
 import {
   fetchProjectReportHeader,
   fetchProjectReportStructure,
@@ -81,20 +82,21 @@ function buildAncestorPath(
 
 // ── Timeline chart ────────────────────────────────────────────────────────────
 
-const CHART_COLORS = {
-  honorar:       '#3b82f6',
-  leistungsstand:'#10b981',
-  kosten:        '#f59e0b',
-  abgerechnet:   '#8b5cf6',
-  bezahlt:       '#06b6d4',
-}
-
 function fmtDateDE(iso: string) {
   const d = new Date(iso + 'T00:00:00')
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function ProjectTimeline({ projectId, filter }: { projectId: number; filter: DateFilter }) {
+  const ct = useChartTheme()
+  // Benannte Serienfarben aus --chart-1..5 (siehe theme/chartTheme.ts).
+  const CHART_COLORS = {
+    honorar:        ct.series[0],
+    leistungsstand: ct.series[1],
+    kosten:         ct.series[2],
+    abgerechnet:    ct.series[3],
+    bezahlt:        ct.series[4],
+  }
   const { data, isLoading } = useQuery({
     queryKey: ['project-timeline', projectId, filter],
     queryFn:  () => fetchProjectTimeline(projectId, filter),
@@ -128,7 +130,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         label: 'Honorar inkl. NK',
         data: points.map(p => p.HONORAR_NET),
         borderColor: CHART_COLORS.honorar,
-        backgroundColor: 'rgba(59,130,246,0.07)',
+        backgroundColor: ct.alpha(CHART_COLORS.honorar, 0.07),
         fill: true,
         tension: 0.35,
         pointRadius: points.length > 60 ? 0 : 3,
@@ -200,9 +202,9 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: '#f9fafb',
-        bodyColor: '#d1d5db',
+        backgroundColor: ct.tooltipBg,
+        titleColor: ct.tooltipFg,
+        bodyColor: ct.tooltipFg,
         padding: 12,
         cornerRadius: 8,
         callbacks: {
@@ -213,19 +215,19 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
     },
     scales: {
       x: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: ct.grid },
         ticks: {
           maxRotation: 45,
           maxTicksLimit: 12,
           font: { size: 11 },
-          color: 'var(--text-3)',
+          color: ct.textMuted,
         },
       },
       y: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: ct.grid },
         ticks: {
           font: { size: 11 },
-          color: 'var(--text-3)',
+          color: ct.textMuted,
           callback: (v) => FMT_EUR0.format(Number(v)),
         },
       },
@@ -511,7 +513,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
             const avgBurn = computeBurnRate(tl.map(p => p.KOSTEN_TOTAL))
             const moRem   = monthsRemaining(evm.etc, avgBurn)
             if (evm.cpi == null) return null
-            const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+            const cpiColor = evm.cpiStatus === 'good' ? 'var(--success)' : evm.cpiStatus === 'warn' ? 'var(--warning)' : 'var(--danger-strong)'
             const fmtM    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(v)} Mon.`
             const fmtB    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0, style: 'currency', currency: 'EUR' }).format(v)}/Mon.`
             return (
@@ -530,7 +532,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">VAC (Ergebnisabweichung)</span>
-                    <span className="prognose-value" style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c' }}>{fmtEur(evm.vac)}</span>
+                    <span className="prognose-value" style={{ color: (evm.vac ?? 0) >= 0 ? 'var(--success)' : 'var(--danger-strong)' }}>{fmtEur(evm.vac)}</span>
                     <span className="prognose-sub">{(evm.vac ?? 0) >= 0 ? 'Projekt im Plan' : 'Prognose: Überschreitung'}</span>
                   </div>
                   <div className="prognose-tile">
@@ -625,7 +627,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                         </td>
                         {(() => {
                           const evm = computeEvm({ BUDGET_TOTAL_NET: s.HONORAR_NET, LEISTUNGSSTAND_VALUE: s.EARNED_VALUE_NET, COST_TOTAL: s.COST_TOTAL })
-                          const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : evm.cpiStatus === 'bad' ? '#b91c1c' : 'var(--text-3)'
+                          const color = evm.cpiStatus === 'good' ? 'var(--success)' : evm.cpiStatus === 'warn' ? 'var(--warning)' : evm.cpiStatus === 'bad' ? 'var(--danger-strong)' : 'var(--text-3)'
                           return (
                             <>
                               <td className="num" style={{ color, fontWeight: evm.cpi != null ? 600 : undefined }}>{fmtCpi(evm.cpi)}</td>
@@ -664,7 +666,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                           <td className="num"><strong>{totKq != null ? fmtPct(totKq) : '—'}</strong></td>
                           {(() => {
                             const totEvm = computeEvm({ BUDGET_TOTAL_NET: totHonorar, LEISTUNGSSTAND_VALUE: totEarned, COST_TOTAL: totCost })
-                            const col = totEvm.cpiStatus === 'good' ? '#16a34a' : totEvm.cpiStatus === 'warn' ? '#b45309' : totEvm.cpiStatus === 'bad' ? '#b91c1c' : undefined
+                            const col = totEvm.cpiStatus === 'good' ? 'var(--success)' : totEvm.cpiStatus === 'warn' ? 'var(--warning)' : totEvm.cpiStatus === 'bad' ? 'var(--danger-strong)' : undefined
                             return (
                               <>
                                 <td className="num" style={{ color: col }}><strong>{fmtCpi(totEvm.cpi)}</strong></td>

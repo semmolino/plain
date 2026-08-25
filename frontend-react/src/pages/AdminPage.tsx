@@ -1510,7 +1510,7 @@ function MonatsabschlussSection() {
         {statuses.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Keine Projektstatus vorhanden.</p>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {statuses.map((s: ProjectStatus) => (
-            <label key={s.ID} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, background: selectedStatuses.includes(s.ID) ? '#eff6ff' : '#f3f4f6', border: `1px solid ${selectedStatuses.includes(s.ID) ? '#93c5fd' : '#e5e7eb'}`, borderRadius: 4, padding: '4px 10px' }}>
+            <label key={s.ID} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, background: selectedStatuses.includes(s.ID) ? 'var(--accent-bg)' : 'var(--surface-2)', border: `1px solid ${selectedStatuses.includes(s.ID) ? 'var(--accent-bg2)' : 'var(--border)'}`, borderRadius: 4, padding: '4px 10px' }}>
               <input
                 type="checkbox"
                 checked={selectedStatuses.includes(s.ID)}
@@ -1731,7 +1731,7 @@ function ArbeitszeitmodelleSection() {
                     <td style={{ padding: '3px 8px 3px 0', fontWeight: 600 }}>{m.NAME}</td>
                     <td style={{ padding: '3px 8px 3px 0', color: 'var(--text-2)' }}>{getStateLabel(m.COUNTRY_CODE, m.STATE_CODE)}</td>
                     {[m.MON, m.TUE, m.WED, m.THU, m.FRI, m.SAT, m.SUN].map((h, i) => (
-                      <td key={i} style={{ textAlign: 'center', padding: '3px 4px', color: h === 0 ? '#d1d5db' : '#374151' }}>{h}</td>
+                      <td key={i} style={{ textAlign: 'center', padding: '3px 4px', color: h === 0 ? 'var(--text-5)' : 'var(--text-2)' }}>{h}</td>
                     ))}
                     <td style={{ textAlign: 'right', padding: '3px 0 3px 4px', fontVariantNumeric: 'tabular-nums', color: 'var(--text-2)' }}>{weekHours}</td>
                     <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
@@ -2039,11 +2039,11 @@ function KostensatzSection() {
   function toggleSelect(id: number) { setSelected(p => { const s = new Set(p); s.has(id) ? s.delete(id) : s.add(id); return s }) }
 
   const diffColor = (cur: number | null, calc: number) => {
-    if (cur == null || cur === 0) return '#6b7280'
+    if (cur == null || cur === 0) return 'var(--text-3)'
     const pct = (calc - cur) / cur * 100
-    if (pct > 10) return '#dc2626'
-    if (pct > 0)  return '#d97706'
-    return '#059669'
+    if (pct > 10) return 'var(--danger)'
+    if (pct > 0)  return 'var(--warning)'
+    return 'var(--success)'
   }
 
   return (

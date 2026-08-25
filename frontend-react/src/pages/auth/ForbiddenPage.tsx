@@ -12,7 +12,7 @@ export function ForbiddenPage() {
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       gap: 16, padding: 24, textAlign: 'center',
     }}>
-      <ShieldAlert size={64} strokeWidth={1.5} color="#dc2626" />
+      <ShieldAlert size={64} strokeWidth={1.5} color="var(--danger)" />
       <h1 style={{ fontSize: 'var(--fs-page-title)', fontWeight: 'var(--fw-title)', margin: 0 }}>Keine Berechtigung</h1>
       <p style={{ fontSize: 14, color: 'var(--text-3)', margin: 0, maxWidth: 420 }}>
         {from ? <>Du hast keinen Zugriff auf <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4 }}>{from}</code>.<br/></> : null}

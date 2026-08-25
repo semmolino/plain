@@ -28,8 +28,13 @@ export function readToken(name: string, fallback = '#000'): string {
  * eine Datenreihe „Kosten" ist keine Fehlermeldung. Im dunklen Theme heller
  * und gesaettigter, damit sie auf #131316 klar stehen.
  */
-const SERIES_LIGHT = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#ec4899', '#84cc16']
-const SERIES_DARK  = ['#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#22d3ee', '#f87171', '#f472b6', '#a3e635']
+// Fallbacks nur fuer den Fall, dass die Tokens fehlen (SSR/Test ohne CSS).
+const SERIES_FALLBACK = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ef4444', '#ec4899', '#84cc16']
+
+/** Serienfarben aus --chart-1..8. Die Dark-Variante steckt im Theme-Block. */
+function readSeries(): string[] {
+  return SERIES_FALLBACK.map((fb, i) => readToken(`--chart-${i + 1}`, fb))
+}
 
 export interface ChartTheme {
   series:     string[]
@@ -39,6 +44,8 @@ export interface ChartTheme {
   surface:    string
   tooltipBg:  string
   tooltipFg:  string
+  /** Neutrale Flaeche — Soll-Balken, „noch offen"-Anteile. Keine Datenreihe. */
+  neutral:    string
   /** Serienfarbe mit Deckkraft — fuer Flaechen unter Linien / Balken. */
   alpha:      (hex: string, a: number) => string
 }
@@ -56,13 +63,14 @@ export function useChartTheme(): ChartTheme {
   const isDark    = useIsDarkTheme()
 
   return useMemo(() => ({
-    series:    isDark ? SERIES_DARK : SERIES_LIGHT,
+    series:    readSeries(),
     text:      readToken('--text-2', '#374151'),
     textMuted: readToken('--text-3', '#6b7280'),
     grid:      readToken('--border-3', 'rgba(0,0,0,0.06)'),
     surface:   readToken('--surface', '#ffffff'),
-    tooltipBg: isDark ? 'rgba(40,40,48,0.96)' : 'rgba(17,24,39,0.92)',
-    tooltipFg: '#f9fafb',
+    tooltipBg: readToken('--chart-tooltip-bg', isDark ? 'rgba(40,40,48,0.96)' : 'rgba(17,24,39,0.92)'),
+    tooltipFg: readToken('--chart-tooltip-fg', '#f9fafb'),
+    neutral:   readToken('--text-4', 'rgba(17,24,39,0.47)'),
     alpha:     hexToRgba,
     // themeName steuert die Neuberechnung: die Tokens am <html> aendern sich
     // erst NACH dem Attributwechsel, den useThemeName beobachtet.

@@ -772,7 +772,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
                       {/* Typ badge */}
                       <td onClick={e => e.stopPropagation()}>
-                        <span style={{ fontSize: 11, background: r.sourceType === 'invoice' ? '#e0f2fe' : '#fce7f3', color: r.sourceType === 'invoice' ? '#0369a1' : '#9d174d', borderRadius: 4, padding: '1px 6px' }}>
+                        <span style={{ fontSize: 11, background: r.sourceType === 'invoice' ? 'var(--info-bg)' : 'var(--accent2-bg)', color: r.sourceType === 'invoice' ? 'var(--info)' : 'var(--accent2)', borderRadius: 4, padding: '1px 6px' }}>
                           {r.sourceType === 'invoice' ? 'Rechnung' : 'Anzahlung'}
                         </span>
                       </td>

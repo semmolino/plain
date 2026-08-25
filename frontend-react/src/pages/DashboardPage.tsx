@@ -15,6 +15,7 @@ import { BrandGlyph } from '@/components/brand/BrandGlyph'
 import { useSession } from '@/hooks/useSession'
 import { WelcomeSection } from '@/components/onboarding/WelcomePanel'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
+import { useChartTheme } from '@/theme/chartTheme'
 import {
   fetchDashboardKpis,
   fetchDashboardProjects,
@@ -185,8 +186,9 @@ function CardTitle({ children, hint, style }: { children: React.ReactNode; hint?
 }
 
 function DonutChart({ billed, open, remaining }: { billed: number; open: number; remaining: number }) {
+  const ct      = useChartTheme()
   const total   = billed + open + remaining
-  const colors  = ['rgba(34,197,94,0.75)', 'rgba(59,130,246,0.75)', 'rgba(156,163,175,0.45)']
+  const colors  = [ct.alpha(ct.series[1], 0.75), ct.alpha(ct.series[0], 0.75), ct.neutral]
   const labels  = ['Abgerechnet', 'Offene Leistung', 'Noch zu erbringen']
   const values  = [billed, open, remaining]
   return (
@@ -251,6 +253,8 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
     staleTime: 300000,
   })
 
+  const ct = useChartTheme()
+
   const points: TimelinePoint[] = data?.data ?? []
   if (isLoading) return <div className="timeline-wrap"><p className="empty-note">Laden …</p></div>
   if (points.length === 0) return null
@@ -261,11 +265,11 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
   const chartData = {
     labels,
     datasets: [
-      { label: 'Honorar inkl. NK', data: points.map(p => p.HONORAR_NET), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.07)', fill: true, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Leistungsstand €', data: points.map(p => p.LEISTUNGSSTAND_VALUE), borderColor: '#10b981', backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Kosten €', data: points.map(p => p.KOSTEN_TOTAL), borderColor: '#f59e0b', backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Abgerechnet €', data: points.map(p => p.ABGERECHNET_NET), borderColor: '#8b5cf6', backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 1.5 },
-      { label: 'Bezahlt €', data: points.map(p => p.BEZAHLT_NET), borderColor: '#06b6d4', backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 1.5 },
+      { label: 'Honorar inkl. NK', data: points.map(p => p.HONORAR_NET), borderColor: ct.series[0], backgroundColor: ct.alpha(ct.series[0], 0.07), fill: true, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Leistungsstand €', data: points.map(p => p.LEISTUNGSSTAND_VALUE), borderColor: ct.series[1], backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Kosten €', data: points.map(p => p.KOSTEN_TOTAL), borderColor: ct.series[2], backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Abgerechnet €', data: points.map(p => p.ABGERECHNET_NET), borderColor: ct.series[3], backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 1.5 },
+      { label: 'Bezahlt €', data: points.map(p => p.BEZAHLT_NET), borderColor: ct.series[4], backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 1.5 },
     ],
   }
 
@@ -276,13 +280,13 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
     plugins: {
       legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, font: { size: 12 } } },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)', titleColor: '#f9fafb', bodyColor: '#d1d5db', padding: 12, cornerRadius: 8,
+        backgroundColor: ct.tooltipBg, titleColor: ct.tooltipFg, bodyColor: ct.tooltipFg, padding: 12, cornerRadius: 8,
         callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}` },
       },
     },
     scales: {
-      x: { grid: { color: 'var(--text-3)' }, ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: '#6b7280' } },
-      y: { grid: { color: 'var(--text-3)' }, ticks: { font: { size: 11 }, color: '#6b7280', callback: (v) => FMT_EUR0.format(Number(v)) } },
+      x: { grid: { color: ct.grid }, ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: ct.textMuted } },
+      y: { grid: { color: ct.grid }, ticks: { font: { size: 11 }, color: ct.textMuted, callback: (v) => FMT_EUR0.format(Number(v)) } },
     },
   }
 
@@ -872,7 +876,7 @@ function AbsenceOverviewCard() {
 
   const line = (a: Absence) => (
     <div key={a.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0' }}>
-      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af' }} />
+      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || 'var(--text-4)' }} />
       <strong style={{ minWidth: 44 }}>{nameOf(a)}</strong>
       <span style={{ color: 'var(--text-3)' }}>{a.TYPE_NAME}</span>
       <span style={{ marginLeft: 'auto', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmtRange(a)}</span>
@@ -919,6 +923,7 @@ function ProjektleiterView({ riskProjects, dateFrom, dateTo }: { riskProjects: R
 // ── Mitarbeiter view ─────────────────────────────────────────────────────────
 
 function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
+  const ct = useChartTheme()
   if (!months.length) return null
   const labels   = months.map(m => `${MONTHS_DE[m.month - 1]} ${m.year}`)
   const required = months.map(m => Math.round(m.required * 10) / 10)
@@ -931,16 +936,16 @@ function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
         data={{
           labels,
           datasets: [
-            { type: 'bar',  label: 'Soll (h)',        data: required, backgroundColor: 'rgba(156,163,175,0.45)', borderRadius: 4, yAxisID: 'yH' },
-            { type: 'bar',  label: 'Ist (h)',          data: actual,   backgroundColor: 'rgba(59,130,246,0.65)',  borderRadius: 4, yAxisID: 'yH' },
-            { type: 'line', label: 'Saldo kum. (h)',   data: cumul,    borderColor: '#f59e0b', backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
+            { type: 'bar',  label: 'Soll (h)',        data: required, backgroundColor: ct.neutral, borderRadius: 4, yAxisID: 'yH' },
+            { type: 'bar',  label: 'Ist (h)',          data: actual,   backgroundColor: ct.alpha(ct.series[0], 0.65), borderRadius: 4, yAxisID: 'yH' },
+            { type: 'line', label: 'Saldo kum. (h)',   data: cumul,    borderColor: ct.series[2], backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
           ],
         }}
         options={{
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 10 } } },
           scales: {
-            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: 'var(--text-3)' } },
+            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: ct.grid } },
             yS: { type: 'linear', position: 'right', ticks: { font: { size: 10 }, callback: v => `${Number(v) >= 0 ? '+' : ''}${v} h` }, grid: { display: false } },
             x:  { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
           },
@@ -1088,7 +1093,7 @@ const ACTION_MAP: Record<string, string> = {
 }
 
 const AMPEL_COLORS: Record<string, string> = {
-  rot: '#dc2626', orange: '#ea580c', gelb: '#ca8a04', gruen: '#16a34a',
+  rot: 'var(--ampel-1)', orange: 'var(--ampel-2)', gelb: 'var(--ampel-3)', gruen: 'var(--ampel-4)',
 }
 
 const AMPEL_LABELS: Record<string, string> = {
@@ -1099,7 +1104,7 @@ function ampelDot(ampel: string, size = 10) {
   return (
     <span style={{
       display: 'inline-block', width: size, height: size, borderRadius: '50%',
-      background: AMPEL_COLORS[ampel] ?? '#9ca3af', flexShrink: 0,
+      background: AMPEL_COLORS[ampel] ?? 'var(--ampel-0)', flexShrink: 0,
       verticalAlign: 'middle',
     }} />
   )
@@ -1151,21 +1156,21 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
               <tr><td>Kosten</td><td>{fmtEur(project.COST_TOTAL)}</td></tr>
               <tr>
                 <td>Deckungsbeitrag</td>
-                <td style={{ color: project.db < 0 ? '#b91c1c' : '#16a34a', fontWeight: 700 }}>
+                <td style={{ color: project.db < 0 ? 'var(--danger-strong)' : 'var(--success)', fontWeight: 700 }}>
                   {fmtEur(project.db)}
                 </td>
               </tr>
               <tr><td>Abgerechnet</td><td>{fmtEur(project.BILLED_NET_TOTAL)}</td></tr>
-              <tr><td>Zur Abrechnung</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? '#1d4ed8' : undefined }}>{fmtEur(project.OPEN_NET_TOTAL)}</td></tr>
+              <tr><td>Zur Abrechnung</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? 'var(--accent-dark)' : undefined }}>{fmtEur(project.OPEN_NET_TOTAL)}</td></tr>
               {(() => {
                 const evm = computeEvm(project)
                 if (evm.cpi == null) return null
-                const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+                const cpiColor = evm.cpiStatus === 'good' ? 'var(--success)' : evm.cpiStatus === 'warn' ? 'var(--warning)' : 'var(--danger-strong)'
                 return (<>
                   <tr><td colSpan={2}><div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} /></td></tr>
                   <tr><td>CPI (Effizienz)</td><td style={{ color: cpiColor, fontWeight: 700 }}>{fmtCpi(evm.cpi)}</td></tr>
                   <tr><td>EAC (Progn. Kosten)</td><td>{fmtEur(evm.eac)}</td></tr>
-                  <tr><td>VAC (Abweichung)</td><td style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 700 }}>{fmtEur(evm.vac)}</td></tr>
+                  <tr><td>VAC (Abweichung)</td><td style={{ color: (evm.vac ?? 0) >= 0 ? 'var(--success)' : 'var(--danger-strong)', fontWeight: 700 }}>{fmtEur(evm.vac)}</td></tr>
                 </>)
               })()}
             </tbody>
@@ -1315,7 +1320,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                     key={p.PROJECT_ID}
                     className="clickable-row"
                     onClick={() => setSelected(p)}
-                    style={{ borderLeft: `4px solid ${AMPEL_COLORS[p.ampel] ?? '#9ca3af'}` }}
+                    style={{ borderLeft: `4px solid ${AMPEL_COLORS[p.ampel] ?? 'var(--ampel-0)'}` }}
                   >
                     <td style={{ padding: 0 }}></td>
                     <td>
@@ -1333,7 +1338,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                       {(() => {
                         const evm = computeEvm(p)
                         if (evm.cpi == null) return <span style={{ color: 'var(--text-3)' }}>–</span>
-                        const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+                        const color = evm.cpiStatus === 'good' ? 'var(--success)' : evm.cpiStatus === 'warn' ? 'var(--warning)' : 'var(--danger-strong)'
                         return <span style={{ color, fontWeight: 600 }}>{fmtCpi(evm.cpi)}</span>
                       })()}
                     </td>
@@ -1537,6 +1542,7 @@ function AbrechnungView({ billing, openPosten }: { billing: BillingSummaryData |
 // ── Personal / HR analytics view ──────────────────────────────────────────────
 
 function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: TeamHoursData | null; snapshot: CompanySnapshot | null; dateFrom: string; dateTo: string }) {
+  const ct = useChartTheme()
   if (!teamHours) return <p className="empty-note">Laden …</p>
   const { employees, months } = teamHours
   const periodLabel = months.length > 0
@@ -1547,10 +1553,7 @@ function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: Te
   const totalHours = employees.reduce((s, e) => s + e.total, 0)
   const avgHours   = employees.length > 0 ? totalHours / employees.length : 0
 
-  const colors = [
-    'rgba(59,130,246,0.75)', 'rgba(16,185,129,0.75)', 'rgba(245,158,11,0.75)',
-    'rgba(139,92,246,0.75)', 'rgba(236,72,153,0.75)',  'rgba(6,182,212,0.75)',
-  ]
+  const colors = [0, 1, 2, 3, 6, 4].map(i => ct.alpha(ct.series[i], 0.75))
   const topEmps = employees.slice(0, 6)
 
   const datasets = topEmps.map((emp, i) => ({

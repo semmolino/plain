@@ -14,6 +14,8 @@ import { fetchDefaults } from '@/api/stammdaten'
  */
 
 const THEMES = [
+  // BEWUSST hartkodiert: ein Swatch muss die Farbe SEINES Themes zeigen,
+  // nicht die des gerade aktiven. Tokens waeren hier alle identisch.
   { id: 'light',             label: 'Hell',                  swatch: '#2563eb', group: 'Standard' },
   { id: 'dark',              label: 'Dunkel',                swatch: '#7a7ac6', group: 'Standard' },
   { id: 'architecture-foto', label: 'Architektur',           swatch: '#c97b5a', group: 'Branche' },

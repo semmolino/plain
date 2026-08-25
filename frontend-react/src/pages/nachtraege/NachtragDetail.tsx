@@ -180,7 +180,7 @@ export function NachtragDetail() {
                     <td>{Number(n.BILLING_TYPE_ID) === 2 ? 'Stunden' : Number(n.BILLING_TYPE_ID) === 1 ? 'Pauschal' : '—'}</td>
                     <td style={{ textAlign: 'right' }}>{fmtEur(n.REVENUE)}</td>
                     <td>
-                      <span style={{ fontSize: 11, color: n.APPROVAL_STATE === 'APPROVED' ? '#16a34a' : n.APPROVAL_STATE === 'PARTIAL' ? '#7c3aed' : '#6b7280' }}>
+                      <span style={{ fontSize: 11, color: n.APPROVAL_STATE === 'APPROVED' ? 'var(--success)' : n.APPROVAL_STATE === 'PARTIAL' ? 'var(--accent2)' : 'var(--text-3)' }}>
                         {APPROVAL_LABELS[n.APPROVAL_STATE] ?? n.APPROVAL_STATE}
                         {n.APPROVED_AMOUNT_NET != null && n.APPROVAL_STATE !== 'OPEN' ? ` (${fmtEur(n.APPROVED_AMOUNT_NET)})` : ''}
                       </span>

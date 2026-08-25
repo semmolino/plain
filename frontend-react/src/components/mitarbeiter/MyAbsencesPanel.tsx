@@ -31,7 +31,7 @@ export function ClarificationThread({ a }: { a: Absence }) {
     <div style={{ marginTop: 6, borderLeft: '2px solid var(--border)', paddingLeft: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
       {log.map((e, i) => (
         <div key={i} style={{ fontSize: 12 }}>
-          <span style={{ fontWeight: 600, color: e.role === 'approver' ? '#b45309' : '#374151' }}>
+          <span style={{ fontWeight: 600, color: e.role === 'approver' ? 'var(--warning)' : 'var(--text-2)' }}>
             {e.role === 'approver' ? 'Rückfrage' : 'Antwort'}:
           </span>{' '}
           <span style={{ color: 'var(--text-2)', whiteSpace: 'pre-line' }}>{e.text}</span>
@@ -137,7 +137,7 @@ export function MyAbsencesPanel({ focusAbsenceId = null }: { focusAbsenceId?: nu
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-          {bal && <>Resturlaub {year}: <strong style={{ color: bal.remaining < 0 ? '#dc2626' : '#059669' }}>{bal.remaining} T</strong> (von {Math.round((bal.entitled + bal.carryover) * 10) / 10} T)</>}
+          {bal && <>Resturlaub {year}: <strong style={{ color: bal.remaining < 0 ? 'var(--danger)' : 'var(--success)' }}>{bal.remaining} T</strong> (von {Math.round((bal.entitled + bal.carryover) * 10) / 10} T)</>}
         </div>
         {!showForm && <button type="button" className="btn-small btn-save" onClick={openNew}>+ Antrag stellen</button>}
       </div>
@@ -162,7 +162,7 @@ export function MyAbsencesPanel({ focusAbsenceId = null }: { focusAbsenceId?: nu
             <div className="form-group"><label>Von</label><input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} /></div>
             <div className="form-group"><label>Bis</label><input type="date" value={fTo} onChange={e => setFTo(e.target.value)} /></div>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: singleDay ? '#374151' : '#9ca3af', margin: '4px 0 8px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: singleDay ? 'var(--text-2)' : 'var(--text-4)', margin: '4px 0 8px' }}>
             <input type="checkbox" checked={fHalf} disabled={!singleDay} onChange={e => setFHalf(e.target.checked)} />
             Halber Tag (nur bei eintägiger Abwesenheit)
           </label>
@@ -201,7 +201,7 @@ export function MyAbsencesPanel({ focusAbsenceId = null }: { focusAbsenceId?: nu
                     {fmtDe(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDe(a.DATE_TO)}` : ''}{a.HALF_DAY ? ' (½)' : ''}
                   </span>
                   <span style={{ color: 'var(--text-3)' }}>
-                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || 'var(--text-4)', marginRight: 6 }} />
                     {a.TYPE_NAME} · {a.DAYS} T
                   </span>
                   <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10 }}>{s.label}</span>

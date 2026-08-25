@@ -19,9 +19,9 @@ const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.fo
 const fmtDate = (v: string | null | undefined) => v ? new Date(v).toLocaleDateString('de-DE') : '—'
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: '#6b7280', ANNOUNCED: '#0891b2', SUBMITTED: '#2563eb', IN_REVIEW: '#d97706',
-  PARTIALLY_COMMISSIONED: '#7c3aed', COMMISSIONED: '#16a34a', REJECTED: '#dc2626',
-  WITHDRAWN: '#9ca3af', DISPUTED: '#b91c1c',
+  DRAFT: 'var(--text-3)', ANNOUNCED: 'var(--info)', SUBMITTED: 'var(--accent)', IN_REVIEW: 'var(--warning)',
+  PARTIALLY_COMMISSIONED: 'var(--accent2)', COMMISSIONED: 'var(--success)', REJECTED: 'var(--danger)',
+  WITHDRAWN: 'var(--text-4)', DISPUTED: 'var(--danger-strong)',
 }
 
 const CATEGORY_ENTRIES = Object.entries(CATEGORY_LABELS) as [NachtragCategory, string][]
@@ -162,7 +162,7 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
                   <td>
                     <span style={{
                       display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, color: '#fff',
-                      background: STATUS_COLORS[r.STATUS_CODE ?? ''] ?? '#6b7280',
+                      background: STATUS_COLORS[r.STATUS_CODE ?? ''] ?? 'var(--text-3)',
                     }}>{r.STATUS_NAME ?? '—'}</span>
                   </td>
                   <td style={{ textAlign: 'right' }}>{fmtEur(r.AMOUNT_CLAIMED_NET)}</td>

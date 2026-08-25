@@ -28,10 +28,10 @@ const MODULE_LABELS: Record<string, string> = {
 }
 
 const CATEGORY_COLOR: Record<string, string> = {
-  reading:        '#16a34a',
-  editing:        '#2563eb',
-  destructive:    '#dc2626',
-  administration: '#7c3aed',
+  reading:        'var(--success)',
+  editing:        'var(--accent)',
+  destructive:    'var(--danger)',
+  administration: 'var(--accent2)',
 }
 
 export function RollenSection() {
@@ -142,7 +142,7 @@ export function RollenSection() {
 function RoleRow({ role, onEdit, onDelete, onDuplicate }: { role: UserRole; onEdit: () => void; onDelete: () => void; onDuplicate: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
-      <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: role.COLOR || '#6b7280', flexShrink: 0 }} />
+      <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: role.COLOR || 'var(--text-3)', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <strong style={{ fontSize: 14 }}>{role.NAME_SHORT}</strong>
@@ -209,7 +209,7 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
     setForm({
       name_short: d.NAME_SHORT,
       name_long:  d.NAME_LONG  || '',
-      color:      d.COLOR      || '#2563eb',
+      color:      d.COLOR      || 'var(--accent)',
       is_default: d.IS_DEFAULT,
     })
     setSelected(new Set(d.PERMISSION_IDS))
@@ -330,7 +330,7 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
                       {perms.map(p => (
                         <label key={p.ID} title={p.DESCRIPTION_DE || ''} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', padding: '2px 4px', borderRadius: 4 }}>
                           <input type="checkbox" checked={selected.has(p.ID)} onChange={() => toggle(p.ID)} />
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLOR[p.CATEGORY ?? ''] || '#9ca3af', flexShrink: 0 }} />
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLOR[p.CATEGORY ?? ''] || 'var(--text-4)', flexShrink: 0 }} />
                           {p.LABEL_DE}
                         </label>
                       ))}

@@ -1267,12 +1267,12 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                           <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--text-3)' }}>
                             {fmtEur(effect?.effectiveBase)}
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 600, color: (effect?.amount ?? 0) >= 0 ? '#166534' : '#991b1b' }}>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: (effect?.amount ?? 0) >= 0 ? 'var(--success-strong)' : 'var(--danger-strong)' }}>
                             {fmtEur(effect?.amount)}
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             <button type="button" className="btn-small" title="LPH-Filter und Modus bearbeiten"
-                              style={{ fontSize: 11, padding: '2px 6px', background: isExpanded ? '#dbeafe' : undefined }}
+                              style={{ fontSize: 11, padding: '2px 6px', background: isExpanded ? 'var(--accent-bg2)' : undefined }}
                               onClick={() => setExpandedSurchargeIdx(isExpanded ? null : idx)}>
                               {isExpanded ? 'Schließe Details' : 'Öffne Details'}
                             </button>
@@ -1351,7 +1351,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 <tfoot>
                   <tr>
                     <th scope="col" colSpan={4}>Summe Zuschläge / Nachlässe</th>
-                    <th scope="col" style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? '#166534' : '#991b1b' }}>
+                    <th scope="col" style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? 'var(--success-strong)' : 'var(--danger-strong)' }}>
                       {fmtEur(totalSurchargeAmt)}
                     </th>
                     <th scope="col" colSpan={2}></th>
@@ -1724,7 +1724,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                         : '—'}
                   </td>
                   <td style={{ textAlign: 'right' }}>{fmtEurShort(r.grundhonorar)}</td>
-                  <td style={{ textAlign: 'right', color: (r.zuschlaegeSum ?? 0) !== 0 ? ((r.zuschlaegeSum ?? 0) >= 0 ? '#166534' : '#991b1b') : undefined }}>
+                  <td style={{ textAlign: 'right', color: (r.zuschlaegeSum ?? 0) !== 0 ? ((r.zuschlaegeSum ?? 0) >= 0 ? 'var(--success-strong)' : 'var(--danger-strong)') : undefined }}>
                     {(r.zuschlaegeSum ?? 0) !== 0 ? fmtEurShort(r.zuschlaegeSum) : '—'}
                   </td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtEurShort(r.gesamthonorar)}</td>

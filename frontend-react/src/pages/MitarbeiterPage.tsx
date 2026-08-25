@@ -196,14 +196,14 @@ function RoleSection({ employeeId, roles, mapping }: {
             <label key={r.ID} style={{
               display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
               border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
-              background: on ? '#f0f9ff' : 'transparent',
+              background: on ? 'var(--accent-bg)' : 'transparent',
             }}>
               <input type="checkbox" checked={on} onChange={() => setSelected(prev => {
                 const next = new Set(prev)
                 if (next.has(r.ID)) next.delete(r.ID); else next.add(r.ID)
                 return next
               })} />
-              <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || '#6b7280' }} />
+              <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || 'var(--text-3)' }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{r.NAME_SHORT}</div>
                 {r.NAME_LONG && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.NAME_LONG}</div>}
@@ -395,8 +395,8 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
         {stat('Anspruch', bal ? `${bal.entitled} T` : '…')}
         {stat('Übertrag', bal ? `${bal.carryover} T` : '…')}
         {stat('Genommen', bal ? `${bal.taken} T` : '…')}
-        {bal && !!bal.forfeited && bal.forfeited > 0 && stat('Verfallen', `${bal.forfeited} T`, '#dc2626')}
-        {stat('Resturlaub', bal ? `${bal.remaining} T` : '…', bal && bal.remaining < 0 ? '#dc2626' : '#059669')}
+        {bal && !!bal.forfeited && bal.forfeited > 0 && stat('Verfallen', `${bal.forfeited} T`, 'var(--danger)')}
+        {stat('Resturlaub', bal ? `${bal.remaining} T` : '…', bal && bal.remaining < 0 ? 'var(--danger)' : 'var(--success)')}
         <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', textAlign: 'right' }}>
           Urlaub {year} ({bal?.carryoverExpires ? `Übertrag verfällt ${bal.carryoverExpiryLabel ?? '31.03.'}` : 'Übertrag automatisch'})
           {bal && !!bal.atRisk && bal.atRisk > 0 && (
@@ -459,7 +459,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
                     <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} />
                   </div>
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: singleDay ? 'var(--text-2)' : '#9ca3af', margin: '4px 0 8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: singleDay ? 'var(--text-2)' : 'var(--text-4)', margin: '4px 0 8px' }}>
                   <input type="checkbox" checked={fHalf} disabled={!singleDay} onChange={e => setFHalf(e.target.checked)} />
                   Halber Tag (nur bei eintägiger Abwesenheit)
                 </label>
@@ -499,7 +499,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
                   {a.HALF_DAY && <span style={{ color: 'var(--text-3)' }}> (½)</span>}
                 </td>
                 <td style={{ padding: '5px 8px 5px 0' }}>
-                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || 'var(--text-4)', marginRight: 6 }} />
                   {a.TYPE_NAME || '—'}
                 </td>
                 <td style={{ padding: '5px 8px 5px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{a.DAYS}</td>
@@ -729,7 +729,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const avatarHue = [...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 0)
   const avatarBg = `hsl(${avatarHue}, 50%, 45%)`
   const initials = `${employee.FIRST_NAME?.[0] ?? ''}${employee.LAST_NAME?.[0] ?? ''}`.toUpperCase() || '?'
-  const balColor = (n: number) => n > 0 ? '#059669' : n < 0 ? '#dc2626' : '#6b7280'
+  const balColor = (n: number) => n > 0 ? 'var(--success)' : n < 0 ? 'var(--danger)' : 'var(--text-3)'
 
   return (
     <>
@@ -752,8 +752,8 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{employee.SHORT_NAME}</span>
             <span style={{
               fontSize: 11, padding: '1px 7px', borderRadius: 10, fontWeight: 500,
-              background: employee.ACTIVE === 2 ? '#fee2e2' : '#dcfce7',
-              color:      employee.ACTIVE === 2 ? '#b91c1c' : '#166534',
+              background: employee.ACTIVE === 2 ? 'var(--danger-bg)' : 'var(--success-bg)',
+              color:      employee.ACTIVE === 2 ? 'var(--danger-strong)' : 'var(--success-strong)',
             }}>{employee.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}</span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
@@ -773,7 +773,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Saldo (laufend)</div>
               <div style={{ fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums',
-                            color: runningBalance != null ? balColor(runningBalance) : '#9ca3af' }}>
+                            color: runningBalance != null ? balColor(runningBalance) : 'var(--text-4)' }}>
                 {runningBalance != null ? fmtBalance(runningBalance) : '…'}
               </div>
             </div>
@@ -1213,7 +1213,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
   }
   function si(field: string) { return sortField === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '' }
 
-  const balanceColor = (n: number) => n > 0 ? '#059669' : n < 0 ? '#dc2626' : '#6b7280'
+  const balanceColor = (n: number) => n > 0 ? 'var(--success)' : n < 0 ? 'var(--danger)' : 'var(--text-3)'
 
   function sortFlat(rows: EmployeeReportRow[]) {
     return [...rows].sort((a, b) => {
@@ -1628,7 +1628,7 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
   const runningData = runningRes?.data
   const isClosed = closeStatusRes?.data != null
 
-  const balanceColor = (n: number) => n > 0 ? '#059669' : n < 0 ? '#dc2626' : '#6b7280'
+  const balanceColor = (n: number) => n > 0 ? 'var(--success)' : n < 0 ? 'var(--danger)' : 'var(--text-3)'
 
   async function toggleMonthClose() {
     setCloseLoading(true)
@@ -1719,8 +1719,8 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
                       const isExpanded = expandedDays.has(d.date)
                       const hasBookings = d.bookings && d.bookings.length > 0
                       const rowStyle: React.CSSProperties = {
-                        background: isWeekend ? '#f9fafb' : undefined,
-                        color:      isWeekend ? '#9ca3af' : undefined,
+                        background: isWeekend ? 'var(--surface-3)' : undefined,
+                        color:      isWeekend ? 'var(--text-4)' : undefined,
                       }
                       return (
                         <>
@@ -1753,7 +1753,7 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
                                 </div>
                               )}
                             </td>
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: d.required > 0 ? balanceColor(d.balance) : '#d1d5db', fontWeight: d.required > 0 ? 600 : 400 }}>
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: d.required > 0 ? balanceColor(d.balance) : 'var(--text-5)', fontWeight: d.required > 0 ? 600 : 400 }}>
                               {d.required > 0 ? fmtBalance(d.balance) : '—'}
                             </td>
                           </tr>
@@ -2057,7 +2057,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                           ) : null
                         })()}
                       </td>
-                      <td><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af', marginRight: 6 }} />{a.TYPE_NAME}</td>
+                      <td><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || 'var(--text-4)', marginRight: 6 }} />{a.TYPE_NAME}</td>
                       <td className="num">{a.DAYS}</td>
                       <td style={{ fontSize: 12, color: 'var(--text-3)' }}>
                         {a.NOTE || '—'}
@@ -2093,7 +2093,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
           while (d <= to) {
             if (d.getFullYear() === year && d.getMonth() + 1 === month) {
               if (!byEmp.has(a.EMPLOYEE_ID)) byEmp.set(a.EMPLOYEE_ID, new Map())
-              byEmp.get(a.EMPLOYEE_ID)!.set(d.getDate(), { color: a.TYPE_COLOR || '#9ca3af', status: a.STATUS, name: a.TYPE_NAME || '', half: a.HALF_DAY })
+              byEmp.get(a.EMPLOYEE_ID)!.set(d.getDate(), { color: a.TYPE_COLOR || 'var(--text-4)', status: a.STATUS, name: a.TYPE_NAME || '', half: a.HALF_DAY })
             }
             d.setDate(d.getDate() + 1)
           }
@@ -2113,7 +2113,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                     <th scope="col" style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>Mitarbeiter</th>
                     {dayList.map(day => {
                       const we = [0, 6].includes(new Date(year, month - 1, day).getDay())
-                      return <th scope="col" key={day} style={{ textAlign: 'center', padding: '2px 3px', color: we ? '#d1d5db' : '#6b7280', fontWeight: 500 }}>{day}</th>
+                      return <th scope="col" key={day} style={{ textAlign: 'center', padding: '2px 3px', color: we ? 'var(--text-5)' : 'var(--text-3)', fontWeight: 500 }}>{day}</th>
                     })}
                   </tr>
                 </thead>
@@ -2130,7 +2130,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                             <td key={day}
                               title={cell ? `${cell.name}${cell.status === 'REQUESTED' ? ' (beantragt)' : ''}${cell.half ? ' ½' : ''}` : ''}
                               style={{ textAlign: 'center', padding: 0, height: 22, borderLeft: '1px solid var(--border-3)',
-                                background: cell ? cell.color : (we ? '#f9fafb' : undefined),
+                                background: cell ? cell.color : (we ? 'var(--surface-3)' : undefined),
                                 opacity: cell && cell.status === 'REQUESTED' ? 0.45 : 1 }}>
                               {cell && cell.status === 'REQUESTED' ? <span style={{ color: '#fff', fontSize: 9 }}>?</span> : ''}
                             </td>
@@ -2533,7 +2533,7 @@ function MonthsOverviewTab() {
                       : 'Offen – klicken zum Abschließen'}
                     style={{
                       background: 'none', border: 'none', cursor: busy ? 'default' : 'pointer', fontSize: 16,
-                      color: m.closed ? '#059669' : '#d1d5db', lineHeight: 1,
+                      color: m.closed ? 'var(--success)' : 'var(--text-5)', lineHeight: 1,
                     }}
                     onClick={() => toggle(emp, m.year, m.month, m.closed)}
                   >
@@ -2810,7 +2810,7 @@ function EmployeeRoleBadge({ employeeId, roles, mapping, onClick }: {
     }}>
       {assigned.map(r => (
         <span key={r.ID} style={{
-          background: r.COLOR || '#6b7280', color: '#fff',
+          background: r.COLOR || 'var(--text-3)', color: '#fff',
           fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
         }}>
           {r.NAME_SHORT}
@@ -3131,7 +3131,7 @@ export function MitarbeiterPage() {
                             <td className="num" style={{ fontVariantNumeric: 'tabular-nums' }}
                                 title={bal ? `Monatssaldo (akt. Monat): ${fmtBalance(bal.BALANCE)}` : undefined}>
                               {bal
-                                ? <span style={{ color: run > 0 ? '#059669' : run < 0 ? '#dc2626' : '#6b7280', fontWeight: 600 }}>{fmtBalance(run)}</span>
+                                ? <span style={{ color: run > 0 ? 'var(--success)' : run < 0 ? 'var(--danger)' : 'var(--text-3)', fontWeight: 600 }}>{fmtBalance(run)}</span>
                                 : <span style={{ color: 'var(--text-3)' }}>—</span>}
                             </td>
                           )
@@ -3151,7 +3151,7 @@ export function MitarbeiterPage() {
                             <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => { setEditInitialSection('rolle'); setEditRow(r) }} />
                           </Can>
                         </td>
-                        <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : '#d1d5db', fontSize: 12 }}>
+                        <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : 'var(--text-5)', fontSize: 12 }}>
                           {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Projektleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
                         </td>
                         <td className="doc-actions" onClick={e => e.stopPropagation()}>

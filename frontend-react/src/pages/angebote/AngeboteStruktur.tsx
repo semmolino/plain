@@ -687,7 +687,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                       <td></td>
                       <td><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
                       <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootRevenueBasis)}</span></td>
-                      <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges > 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
+                      <td className="num"><span style={{ color: rootSurcharges > 0 ? 'var(--success)' : 'var(--text-5)', fontSize: 12 }}>{rootSurcharges > 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
                       <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges > 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
                       <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
                       <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
@@ -853,7 +853,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         </td>
                         <td className="num">
                           {displaySurcharges !== 0 ? (
-                            <span style={{ color: displaySurcharges > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{fmtEur(displaySurcharges)}</span>
+                            <span style={{ color: displaySurcharges > 0 ? 'var(--success)' : 'var(--danger)', fontSize: 12 }}>{fmtEur(displaySurcharges)}</span>
                           ) : (
                             <span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span>
                           )}
