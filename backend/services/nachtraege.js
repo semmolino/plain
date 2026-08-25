@@ -27,6 +27,7 @@ function computeSurcharges(revenueBasis, settings) {
   const s2Cumul = !!(settings?.SURCHARGE_2_CUMUL ?? true);
   const s3Label = settings?.SURCHARGE_3_LABEL ?? null;
   const s3Pct   = Number(settings?.SURCHARGE_3_PCT ?? 0);
+  const s3Cumul = !!(settings?.SURCHARGE_3_CUMUL ?? true);
 
   const s1Active = s1Label !== null && s1Label !== '' && s1Pct !== 0;
   const s1Eur    = s1Active ? r2(revenueBasis * s1Pct / 100) : 0;
