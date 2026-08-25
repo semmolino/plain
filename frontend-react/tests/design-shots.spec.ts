@@ -44,10 +44,29 @@ for (const [vpName, width, height] of VIEWPORTS) {
       // zweimal (einmal je Playwright-Projekt) mit falschem Namen.
       test.skip(testInfo.project.name !== 'desktop', 'nur einmal aufnehmen')
 
+      // Laufzeitfehler muessen den Lauf scheitern lassen. Ohne diese Pruefung
+      // meldete er "bestanden", waehrend auf jedem Bild der rote
+      // Fehlerbildschirm von Vite stand — die Seite wartet nur auf .app-main,
+      // und das Fehler-Overlay hat den auch.
+      const fehler: string[] = []
+      page.on('pageerror', e => fehler.push(e.message))
+
       await page.setViewportSize({ width, height })
       await mockDemo(page)
       await page.goto(url)
       await hideDevtools(page)
+
+      // Ab 1024px klemmt globals.css .app-layout auf Viewport-Hoehe; gescrollt
+      // wird nur .app-main. fullPage sieht davon nichts und liefert genau
+      // einen Bildschirm — fuer eine Designdurchsicht zu wenig. Fuer die
+      // Aufnahme wird die Klemmung geloest, damit das ganze Blatt entsteht.
+      await page.addStyleTag({ content: `
+        @media (min-width: 1024px) {
+          .app-layout { height: auto !important; overflow: visible !important; }
+          .app-main   { overflow: visible !important; }
+        }
+      ` })
+
       await page.locator('.app-main').waitFor()
 
       // Diagramme und Skeletons brauchen einen Moment, sonst landet der
@@ -59,6 +78,8 @@ for (const [vpName, width, height] of VIEWPORTS) {
         path: `design-shots/${DESIGN}/${vpName}/${name}.png`,
         fullPage: true,
       })
+
+      if (fehler.length) throw new Error('Laufzeitfehler auf ' + url + ': ' + fehler.join(' · '))
     })
   }
 }
