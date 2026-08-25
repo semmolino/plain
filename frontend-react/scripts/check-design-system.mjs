@@ -17,13 +17,18 @@
  * Aufruf:  npm run check:design        (Fehler -> Exit 1)
  *          npm run check:design -- -v  (zusaetzlich Details)
  */
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const CSS_PATH = join(ROOT, 'src/styles/globals.css')
+// skin.css gehoert dazu: die Design-Varianten definieren dort eigene Klassen
+// und Tokens. Ohne diese Datei meldet die Pruefung sie als undefiniert,
+// obwohl sie im Browser greifen — sie laedt in main.tsx nach globals.css.
+const SKIN_PATH = join(ROOT, 'src/styles/skin.css')
 const css = readFileSync(CSS_PATH, 'utf8')
+  + (existsSync(SKIN_PATH) ? readFileSync(SKIN_PATH, 'utf8') : '')
 const verbose = process.argv.includes('-v')
 
 const problems = []
