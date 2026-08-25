@@ -27,7 +27,15 @@ const VIEWPORTS: [string, number, number][] = [
   ['mobile',   390, 844],
 ]
 
+/** Routen, bei denen vor der Aufnahme noch etwas geoeffnet wird. */
+const OEFFNEN: Record<string, string> = {
+  // Overlays sind sonst auf keinem Bild zu sehen, obwohl sie eines der
+  // auffaelligsten Bauteile eines Designs sind.
+  overlay: '.notif-bell-btn',
+}
+
 const ROUTEN: [string, string][] = [
+  ['overlay',      '/'],
   ['uebersicht',   '/'],
   ['projekte',     '/projekte'],
   ['rechnungen',   '/rechnungen'],
@@ -73,6 +81,12 @@ for (const [vpName, width, height] of VIEWPORTS) {
       // Ladezustand im Bild statt der Seite.
       await page.waitForLoadState('networkidle').catch(() => {})
       await page.waitForTimeout(600)
+
+      const zuOeffnen = OEFFNEN[name]
+      if (zuOeffnen) {
+        await page.locator(zuOeffnen).click()
+        await page.waitForTimeout(250)
+      }
 
       await page.screenshot({
         path: `design-shots/${DESIGN}/${vpName}/${name}.png`,
