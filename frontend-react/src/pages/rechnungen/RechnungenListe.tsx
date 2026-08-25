@@ -373,10 +373,22 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     [touchedCols, hiddenCols],
   )
   const [platzWeg, fitRef] = useFitColumns<ColKey>(wegfallbar, [hiddenCols.size])
+
+  /**
+   * Spaltenzahl der Kopfzeile — Grundlage fuer den colSpan der Leerzeile.
+   *
+   * Vorher stand dort `3 + visibleCols.length` von Hand. Die 3 waren Auswahl,
+   * Nummer und Aktionen. Auf dem Handy stimmt das nicht: Dort steht die
+   * Aktionsspalte VORNE und ERSETZT die Auswahlspalte, es sind also nur zwei.
+   * Gemessen bei 390px: sechs Kopfspalten gegen colSpan 7. Ein zu grosser
+   * colSpan spannt eine Phantomspalte auf und verbreitert die Tabelle — auf
+   * dem Geraet, auf dem der Platz ohnehin am knappsten ist.
+   */
   const setBox = useCallback((el: HTMLDivElement | null) => { fitRef(el); edgeRef(el) }, [fitRef, edgeRef])
 
   const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key) && !platzWeg.has(c.key))
   const platzVersteckt = COLUMNS.filter(c => platzWeg.has(c.key))
+  const spaltenZahl = (narrow ? 2 : 3) + visibleCols.length
   const [sortKey, setSortKey] = useStickyState<SortKey>('rechnungen.sortKey', 'date')
   const [sortDir, setSortDir] = useStickyState<'asc'|'desc'>('rechnungen.sortDir', 'desc')
 
@@ -1070,7 +1082,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                 )
               })}
               {!rows.length && (
-                <tr><td colSpan={3 + visibleCols.length} className="empty-note">
+                <tr><td colSpan={spaltenZahl} className="empty-note">
                   {(search.trim() || onlyOpen || activeFilters.status.size > 0 || activeFilters.typ.size > 0)
                     ? 'Keine Rechnungen für diese Filter.'
                     : 'Noch keine Rechnungen — erstelle sie über „Abschlagsrechnungen" / „Einzelrechnung" oder direkt aus „Abrechenbare Projekte".'}

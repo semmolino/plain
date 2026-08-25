@@ -270,3 +270,41 @@ test('Projektliste — Spalten weichen in der festgelegten Reihenfolge', async (
     .poll(() => page.locator('.list-section').first().evaluate(el => el.scrollWidth - el.clientWidth))
     .toBeLessThanOrEqual(1)
 })
+
+/**
+ * colSpan der Leerzeilen.
+ *
+ * Ein colSpan, der groesser ist als die Kopfzeile, spannt eine Phantomspalte
+ * auf und verbreitert die Tabelle — ausgerechnet dort, wo der Platz ohnehin
+ * knapp ist. Beide Listen hatten den Fehler, aus je eigenem Grund:
+ *
+ * - Projektliste rechnete die Intern-Spalte als feste Groesse ein, obwohl sie
+ *   seit den Spaltenstufen wegfallen kann (gemessen bei 700px: 5 Kopfspalten
+ *   gegen colSpan 6).
+ * - Rechnungsliste rechnete mit drei festen Spalten (Auswahl, Nummer,
+ *   Aktionen). Auf dem Handy steht die Aktionsspalte aber VORNE und ERSETZT
+ *   die Auswahlspalte — es sind nur zwei (bei 390px: 6 gegen 7).
+ *
+ * Beide Zahlen werden jetzt aus denselben Groessen abgeleitet wie die
+ * Kopfzeile. Der Test prueft genau diese Gleichheit, ueber alle Breiten, an
+ * denen Spalten weichen.
+ */
+for (const [liste, url] of [['Projektliste', '/projekte'], ['Rechnungsliste', '/rechnungen']] as [string, string][]) {
+  test(`${liste} — colSpan der Leerzeile passt bei jeder Breite zur Spaltenzahl`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'prueft Fensterbreiten, nicht Geraete')
+    for (const w of [390, 560, 700, 1100, 1280, 1920]) {
+      await page.setViewportSize({ width: w, height: 800 })
+      await mockDemo(page); await page.goto(url); await hideDevtools(page)
+      await page.locator('.master-table').waitFor()
+      // Suche ohne Treffer erzwingt die Leerzeile mit dem colSpan.
+      await page.locator('input[type=search]').first().fill('zzzz-gibtsnicht')
+
+      await expect.poll(async () => page.evaluate(() => {
+        const t = document.querySelector('.master-table')!
+        const leer = t.querySelector('tbody td[colspan]')
+        return `${t.querySelectorAll('thead tr th').length}/${leer ? leer.getAttribute('colspan') : '-'}`
+      }), { message: `${url} bei ${w}px (Kopfspalten/colSpan)` })
+        .toMatch(/^(\d+)\/\1$/)
+    }
+  })
+}

@@ -366,7 +366,24 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   const sortProps = { sortKey, dir: sortDir, onSort: toggleSort }
   // Frueher gab es zusaetzlich eine „Oeffnen"-Spalte; die Zeile selbst ist
   // jetzt anklickbar, das Kuerzel dient als fokussierbarer Einstieg.
-  const actionColSpan = 1
+  /**
+   * Spaltenzahl der Kopfzeile — Grundlage fuer jeden colSpan im Tabellenrumpf.
+   *
+   * Vorher stand an beiden Stellen `5 + visibleOptCols.length + 1` von Hand.
+   * Die 5 enthielt die Intern-Spalte als feste Groesse. Seit die bei wenig
+   * Platz wegfaellt, war die Zahl dort um eins zu gross: gemessen bei 700px
+   * fuenf Kopfspalten gegen colSpan 6. Ein zu grosser colSpan erzeugt eine
+   * Phantomspalte, die die Tabelle verbreitert — ausgerechnet in der Lage, in
+   * der ohnehin der Platz fehlt.
+   *
+   * Deshalb aus denselben Groessen abgeleitet, aus denen auch die Kopfzeile
+   * entsteht. Wer eine Spalte ergaenzt, aendert nur noch eine Stelle.
+   */
+  const spaltenZahl =
+    4                              // Kuerzel, Name, Status, Leitung
+    + visibleOptCols.length        // Typ / Abteilung / Adresse, soweit sichtbar
+    + (zeigeIntern ? 1 : 0)
+    + 1                            // Aktionen
 
   return (
     <>
@@ -556,14 +573,14 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                   </tr>
                 ))}
                 {!pageRows.length && (
-                  <tr><td colSpan={5 + visibleOptCols.length + actionColSpan} className="empty-note">
+                  <tr><td colSpan={spaltenZahl} className="empty-note">
                     {hasActiveFilter ? 'Keine Projekte für diese Filter.' : 'Noch keine Projekte angelegt. Lege oben rechts mit „+ Neues Projekt" das erste an.'}
                   </td></tr>
                 )}
               </tbody>
               <tfoot>
                 <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
-                  <td colSpan={5 + visibleOptCols.length + actionColSpan} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
+                  <td colSpan={spaltenZahl} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                     {processed.length !== projects.length ? `${processed.length} / ${projects.length} Einträge` : `${projects.length} Einträge`}
                   </td>
                 </tr>
