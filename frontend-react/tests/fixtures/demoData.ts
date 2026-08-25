@@ -156,6 +156,23 @@ const named = (n: string[]) => n.map((name, i) => ({
 
 /** Registriert Auth + Beispieldaten. Reihenfolge wie in den anderen Specs:
  *  Catch-All zuerst, spezifische Routen danach. */
+// Benachrichtigungen: ohne sie zeigt das Overlay nur seinen Leerzustand —
+// und damit gerade nicht das, was daran zu beurteilen waere.
+const NOTIFICATIONS = [
+  { ID: 1, TYPE: 'invoice_overdue', TITLE: 'Rechnung überfällig',
+    BODY: 'RE-2026-0043 (Umbau Verwaltungsgebäude Nordflügel) ist seit 12 Tagen fällig.',
+    LINK: '/rechnungen', READ_AT: null,  CREATED_AT: '2026-08-25T08:12:00Z', METADATA: null },
+  { ID: 2, TYPE: 'budget_critical', TITLE: 'Budget zu 94 % ausgeschöpft',
+    BODY: 'P-2024-004 Erweiterung Produktionshalle Werk II',
+    LINK: '/projekte', READ_AT: null,  CREATED_AT: '2026-08-25T07:40:00Z', METADATA: null },
+  { ID: 3, TYPE: 'absence_request', TITLE: 'Urlaubsantrag wartet auf Freigabe',
+    BODY: 'T. Kern, 14.09.–25.09.2026 (10 Tage)',
+    LINK: '/mitarbeiter', READ_AT: null, CREATED_AT: '2026-08-24T16:05:00Z', METADATA: null },
+  { ID: 4, TYPE: 'offer_expiring', TITLE: 'Angebot läuft in 3 Tagen ab',
+    BODY: 'A-2025-014 Stadt Ravensburg, 112.400,00 €',
+    LINK: '/angebote', READ_AT: '2026-08-24T09:00:00Z', CREATED_AT: '2026-08-24T09:00:00Z', METADATA: null },
+]
+
 export async function mockDemo(page: Page) {
   await page.addInitScript(a => { localStorage.setItem('plain_auth', JSON.stringify(a)) }, AUTH)
 
@@ -165,6 +182,7 @@ export async function mockDemo(page: Page) {
   // WICHTIG: alle Muster auf /api/v1/ verankern. Ein loses /\/adressen/ faengt
   // sonst auch die Seiten-Navigation ab und liefert JSON statt der App.
   const routes: Array<[string, unknown]> = [
+    ['notifications', { data: NOTIFICATIONS, unread_count: 3 }],
     ['auth/me',              { employee_id: 1, tenant_id: 1, email: 'simon@buero.de', short_name: 'SM', company_name: 'Messina Architekten GmbH' }],
     ['permissions/me',       { keys: [], unrestricted: true }],
     ['license/me',           { unrestricted: true, plan_id: null, state: null, capabilities: [], limits: {} }],
