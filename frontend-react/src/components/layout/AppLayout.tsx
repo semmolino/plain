@@ -1,112 +1,18 @@
-import { useState, useRef, useEffect } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAuthStore } from '@/store/authStore'
+import { useEffect } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { usePermissionsStore } from '@/store/permissionsStore'
 import { useLicenseStore, useLicenseReadOnly } from '@/store/licenseStore'
 import { useToast } from '@/store/toastStore'
-import { BottomNav } from './BottomNav'
-import { SideNav }   from './SideNav'
-import { NotificationBell } from './NotificationBell'
-import { TimerBar } from './TimerBar'
-import { ThemeOptions, useAppliedTheme } from './ThemeOptions'
 import { ToastContainer } from '@/components/ui/Toast'
-import { BrandMark } from '@/components/brand/BrandLogo'
 import { fetchDefaults } from '@/api/stammdaten'
-import { fetchMyAvatar } from '@/api/mitarbeiter'
+import { ACTIVE_SHELL } from './shells'
 
-function UserMenu() {
-  const [open,       setOpen]       = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const [themesOpen, setThemesOpen] = useState(false)
-  const theme = useAppliedTheme()
-  const wrapRef   = useRef<HTMLDivElement>(null)
-  const shortName = useAuthStore(s => s.shortName)
-  const clearAuth = useAuthStore(s => s.clearAuth)
-  const navigate  = useNavigate()
-  const qc        = useQueryClient()
-  const { data: avatarData } = useQuery({ queryKey: ['my-avatar'], queryFn: fetchMyAvatar, staleTime: 60_000 })
-  const avatarUri = avatarData?.data?.data_uri ?? null
-
-  useEffect(() => {
-    if (!open) return
-    function onPointerDown(e: PointerEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false)
-        setConfirming(false)
-      }
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [open])
-
-  function handleLogout() {
-    qc.clear()
-    clearAuth()
-    usePermissionsStore.getState().clear()
-    useLicenseStore.getState().clear()
-    navigate('/login')
-  }
-
-  return (
-    <div className="user-menu-wrap" ref={wrapRef}>
-      <button
-        className="user-menu-btn"
-        onClick={() => { setOpen(v => !v); setConfirming(false) }}
-        aria-label="Benutzermenü"
-      >
-        {avatarUri ? (
-          <img
-            src={avatarUri}
-            alt=""
-            style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
-          />
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="8" r="4"/>
-            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-          </svg>
-        )}
-        {shortName && <span className="user-menu-name">{shortName}</span>}
-      </button>
-
-      {open && (
-        <div className="user-menu-panel">
-          <button className="user-menu-item" onClick={() => { navigate('/profil'); setOpen(false) }}>
-            Profil
-          </button>
-
-          {/* Farbthema hing vorher als eigenes Dropdown dauerhaft in der
-              Kopfzeile. Man stellt es einmal ein — der Platz dort gehoert
-              zu den wertvollsten der App. */}
-          <button
-            className="user-menu-item"
-            onClick={() => setThemesOpen(v => !v)}
-            aria-expanded={themesOpen}
-          >
-            Darstellung
-          </button>
-          {themesOpen && <ThemeOptions current={theme.current} onSelect={theme.select} />}
-
-          {confirming ? (
-            <div className="user-menu-confirm">
-              <span className="user-menu-confirm-text">Wirklich abmelden?</span>
-              <div className="user-menu-confirm-btns">
-                <button className="user-menu-confirm-yes" onClick={handleLogout}>Ja</button>
-                <button className="user-menu-confirm-no"  onClick={() => setConfirming(false)}>Nein</button>
-              </div>
-            </div>
-          ) : (
-            <button className="user-menu-item danger" onClick={() => setConfirming(true)}>
-              Abmelden
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
+/**
+ * Rahmen aller geschuetzten Seiten. Enthaelt nur noch die uebergreifende
+ * Logik (Permissions-Refresh, 403/402-Handler, Vorbelegungen); die sichtbare
+ * Anordnung liefert die aktive Huelle aus ./shells.
+ */
 export function AppLayout() {
   // Stempeluhr kann tenant-weit deaktiviert werden — default aktiv.
   const { data: defData } = useQuery({
@@ -149,31 +55,13 @@ export function AppLayout() {
     return () => { g.__onLicenseDenied = undefined }
   }, [toast])
 
+  const Shell = ACTIVE_SHELL
   return (
-    <div className="app-layout">
-      {/* Ohne Skip-Link muessen Tastaturnutzer auf jeder Seite Header und
-          Navigation komplett durchtabben, bevor sie den Inhalt erreichen. */}
-      <a href="#hauptinhalt" className="skip-link">Zum Hauptinhalt springen</a>
-      <header className="app-header">
-        <div className="app-header-left">
-          <BrandMark size={26} className="app-header-brand" />
-          {timerEnabled && <TimerBar />}
-        </div>
-        <div className="app-header-right">
-          <NotificationBell />
-          <UserMenu />
-        </div>
-      </header>
-      <div className="app-body">
-        <SideNav />
-        <main className="app-main" id="hauptinhalt" tabIndex={-1}>
-          <ToastContainer />
-          <LicenseReadOnlyBanner />
-          <Outlet />
-        </main>
-      </div>
-      <BottomNav />
-    </div>
+    <Shell timerEnabled={timerEnabled}>
+      <ToastContainer />
+      <LicenseReadOnlyBanner />
+      <Outlet />
+    </Shell>
   )
 }
 

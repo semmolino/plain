@@ -1181,6 +1181,49 @@ input::placeholder { color: var(--text-4); }
   .app-main    { padding-bottom: 16px; }
 }
 
+/* ── Topbar-Huelle ──────────────────────────────────────────────────────
+   Alternative Anordnung: Navigation waagerecht in der Kopfzeile, keine
+   Seitenleiste. Wird ueber ACTIVE_SHELL in components/layout/shells/index.ts
+   gewaehlt — siehe TopbarShell.tsx. Unterhalb von 1024px ist sie inaktiv,
+   dort uebernimmt weiterhin die BottomNav. */
+.top-nav { display: none; }
+
+@media (min-width: 1024px) {
+  .top-nav {
+    display: flex; align-items: center; gap: var(--space-1);
+    margin-left: var(--space-5);
+    min-width: 0;
+  }
+  .top-nav-item {
+    display: flex; align-items: center; gap: var(--space-2);
+    /* 44px Mindesthoehe wie jedes andere Ziel — die Kopfzeile ist da keine
+       Ausnahme, auch wenn hier meist mit der Maus geklickt wird. */
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    border-radius: var(--nav-item-radius);
+    color: var(--nav-inactive);
+    text-decoration: none; font-size: 13px; font-weight: 600;
+    white-space: nowrap;
+    border-bottom: var(--nav-indicator) solid transparent;
+    transition: color 0.13s, background 0.13s, border-color 0.13s;
+  }
+  .top-nav-item:hover  { background: var(--chrome-hover-bg); color: var(--chrome-text); }
+  .top-nav-item.active { color: var(--nav-active); border-bottom-color: var(--nav-active); }
+  .top-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -2px; }
+  .tn-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+
+  /* Zehn Eintraege mit Text passen erst ab ~1280px neben Marke, Stempeluhr
+     und Benutzermenue. Darunter bleiben die Symbole — lieber knapp als
+     umgebrochen oder waagerecht scrollend. */
+  .shell-topbar .app-header { gap: var(--space-3); }
+  .shell-topbar .app-header-left { min-width: 0; flex: 1; }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .top-nav-item .tn-label { display: none; }
+  .top-nav-item { padding: 0 var(--space-2); }
+}
+
 /* ── Dashboard page ──────────────────────────────────────────────────────── */
 .dash-page { padding: 16px 16px 0; }
 

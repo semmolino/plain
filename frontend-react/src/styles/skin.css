@@ -1,0 +1,23 @@
+/* ── Design-Variante (Skin) ───────────────────────────────────────────────
+   Diese Datei ist auf main und design/base ABSICHTLICH leer.
+
+   Jeder Design-Branch (design/<name>) fuellt genau sie — dadurch ist der
+   Unterschied zwischen zwei Design-Varianten eine Datei, nicht ein Umbau
+   quer durch die Anwendung.
+
+   Was hier hineingehoert:
+     1. Token-Ueberschreibungen in :root  (Farbe, Schrift, Radius, Dichte)
+     2. Dieselben Ueberschreibungen fuer [data-theme="dark"], falls die
+        Variante ein dunkles Gegenstueck haben soll
+     3. Komponenten-Anatomie, soweit sie sich NICHT ueber Tokens ausdruecken
+        laesst (z.B. Buttons flach statt erhoben, Tabellenzeilen mit
+        Trennlinie statt Zebra)
+
+   Was hier NICHT hineingehoert:
+     - Aenderungen an einzelnen Seiten. Wenn ein Design das braucht, fehlt
+       ein Token — dann lieber globals.css um das Token erweitern.
+     - Die Layout-Anordnung. Die haengt an ACTIVE_SHELL in
+       components/layout/shells/index.ts.
+
+   Geladen wird die Datei in main.tsx NACH globals.css, damit sie ohne
+   !important gewinnt. */

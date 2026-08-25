@@ -1,18 +1,14 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { MoreHorizontal } from 'lucide-react'
-import { usePermissionsStore } from '@/store/permissionsStore'
-import { useLicenseStore } from '@/store/licenseStore'
-import { NAV_ITEMS, MOBILE_PRIMARY_COUNT, type NavItem } from './navItems'
+import { MOBILE_PRIMARY_COUNT, type NavItem } from './navItems'
+import { useVisibleNavItems } from './useVisibleNavItems'
 
 /** Maximale Anzahl Spalten in der Leiste — darueber wird "Mehr" eingeblendet. */
 const MAX_BAR_ITEMS = MOBILE_PRIMARY_COUNT + 1
 
 export function BottomNav() {
-  const unrestricted    = usePermissionsStore(s => s.unrestricted)
-  const keys            = usePermissionsStore(s => s.keys)
-  const licUnrestricted = useLicenseStore(s => s.unrestricted)
-  const caps            = useLicenseStore(s => s.capabilities)
+  const visible = useVisibleNavItems()
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
 
@@ -25,11 +21,6 @@ export function BottomNav() {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [moreOpen])
-
-  const visible = NAV_ITEMS.filter(it =>
-    (unrestricted || it.permissions.some(p => keys.has(p))) &&
-    (licUnrestricted || !it.feature || caps.has(it.feature))
-  )
 
   // Passt alles in die Leiste, braucht es kein "Mehr".
   const needsMore = visible.length > MAX_BAR_ITEMS

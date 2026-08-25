@@ -1,18 +1,9 @@
 import { NavLink } from 'react-router-dom'
-import { usePermissionsStore } from '@/store/permissionsStore'
-import { useLicenseStore } from '@/store/licenseStore'
 import { BrandWordmark } from '@/components/brand/BrandLogo'
-import { NAV_ITEMS } from './navItems'
+import { useVisibleNavItems } from './useVisibleNavItems'
 
 export function SideNav() {
-  const unrestricted = usePermissionsStore(s => s.unrestricted)
-  const keys         = usePermissionsStore(s => s.keys)
-  const licUnrestricted = useLicenseStore(s => s.unrestricted)
-  const caps            = useLicenseStore(s => s.capabilities)
-  const visibleItems = NAV_ITEMS.filter(it =>
-    (unrestricted || it.permissions.some(p => keys.has(p))) &&
-    (licUnrestricted || !it.feature || caps.has(it.feature))
-  )
+  const visibleItems = useVisibleNavItems()
   return (
     <nav className="side-nav" aria-label="Hauptnavigation">
       <div className="side-nav-brand">
