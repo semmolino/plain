@@ -10,7 +10,7 @@ import {
 } from 'chart.js'
 import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
-import { TrendingUp, Banknote, HardHat, Clock, Check, type LucideIcon } from 'lucide-react'
+import { TrendingUp, Banknote, HardHat, Clock, Check, ArrowUpRight, type LucideIcon } from 'lucide-react'
 import { BrandGlyph } from '@/components/brand/BrandGlyph'
 import { useSession } from '@/hooks/useSession'
 import { WelcomeSection } from '@/components/onboarding/WelcomePanel'
@@ -123,15 +123,53 @@ function computeDateRange(z: ZeitraumKey): { dateFrom: string; dateTo: string } 
 
 // ── Shared sub-components ────────────────────────────────────────────────────
 
-function KpiCard({ label, value, meta, accent, hint }: { label: string; value: string; meta?: string; accent?: boolean; hint?: React.ReactNode }) {
+/**
+ * Kennzahlkachel.
+ *
+ * `tone` und `breit` kommen aus der Design-Variante "Aeline": deren Bento
+ * gliedert ueber den Kontrast dunkel/limette/weiss und ueber unterschiedlich
+ * breite Kacheln, nicht ueber Rahmen. Ohne Angabe bleibt die Kachel weiss und
+ * einspaltig — die uebrigen Aufrufstellen aendern sich dadurch nicht.
+ */
+function KpiCard({ label, value, meta, accent, hint, tone, breit }: {
+  label: string; value: string; meta?: string; accent?: boolean; hint?: React.ReactNode
+  tone?: 'dunkel' | 'lime'; breit?: boolean
+}) {
+  const klassen = ['kpi-card',
+    accent ? 'kpi-card-accent' : '',
+    tone   ? `kpi-card--${tone}` : '',
+    breit  ? 'kpi-card--breit' : '',
+  ].filter(Boolean).join(' ')
   return (
-    <div className={`kpi-card${accent ? ' kpi-card-accent' : ''}`}>
+    <div className={klassen}>
       <div className="kpi-label" style={hint ? { display: 'flex', alignItems: 'center', gap: 4 } : undefined}>
         {label}{hint && <InfoHint>{hint}</InfoHint>}
       </div>
       <div className="kpi-value">{value}</div>
       {meta && <div className="kpi-meta">{meta}</div>}
     </div>
+  )
+}
+
+/**
+ * Einstiegskachel in ein Modul — nach dem Vorbild der Leistungskarten der
+ * Vorlage: grosse Zahl oben, Bezeichnung und Pfeil unten. Die Farbfassung
+ * traegt die Gliederung, deshalb ist sie Pflichtangabe.
+ */
+function ModulKachel({ to, name, zahl, sub, ton }: {
+  to: string; name: string; zahl: string; sub: string; ton: 'dunkel' | 'lime' | 'blau' | 'hell'
+}) {
+  return (
+    <Link to={to} className={`ae-module${ton === 'hell' ? '' : ` ae-module--${ton}`}`}>
+      <div>
+        <div className="ae-module-name">{name}</div>
+        <div className="ae-module-zahl">{zahl}</div>
+      </div>
+      <div className="ae-module-fuss">
+        <span className="ae-module-sub">{sub}</span>
+        <span className="ae-module-pfeil" aria-hidden="true"><ArrowUpRight size={17} strokeWidth={2.25} /></span>
+      </div>
+    </Link>
   )
 }
 
@@ -572,11 +610,25 @@ function GeschaeftsleitungView({
       {subPage === 'uebersicht' && (<>
         <AlertStrip alerts={alerts} />
 
+        <div className="ae-module-grid">
+          <ModulKachel to="/projekte"    ton="dunkel" name="Projekte"    zahl={String(activeCount)}
+                       sub="Aktive Projekte im gewählten Zeitraum" />
+          <ModulKachel to="/rechnungen"  ton="lime"   name="Rechnungen"  zahl={String(openPosten?.length ?? 0)}
+                       sub="Offene Posten warten auf Zahlung" />
+          {/* employees kann fehlen, obwohl teamHours gesetzt ist: liefert die
+              Schnittstelle ein leeres Array statt des Objekts, ist teamHours
+              wahr, teamHours.employees aber undefined. */}
+          <ModulKachel to="/mitarbeiter" ton="hell"   name="Mitarbeiter" zahl={String(teamHours?.employees?.length ?? 0)}
+                       sub="Mit Buchungen im Zeitraum" />
+          <ModulKachel to="/projekte"    ton="blau"   name="Achtung"     zahl={String(atRiskCount)}
+                       sub="Projekte über Budget oder in Schieflage" />
+        </div>
+
         <div className="kpi-grid">
-          <KpiCard label="Honorar gesamt"   value={fmtEur(honorar)}    />
+          <KpiCard label="Honorar gesamt"   value={fmtEur(honorar)}    tone="dunkel" breit />
           <KpiCard label="Offene Leistung"  value={fmtEur(offeneLeist)} />
           <KpiCard label="Leistungsstand"   value={fmtEur(leistung)}   meta={`${fmtPct(leistPct)} des Honorars`} />
-          <KpiCard label="Aktive Projekte"  value={String(activeCount)} />
+          <KpiCard label="Aktive Projekte"  value={String(activeCount)} tone="lime" />
           <KpiCard
             label="Auftragsreichweite"
             value={fmtMonths(snapshot?.kpis?.auftragsreichweite ?? null)}

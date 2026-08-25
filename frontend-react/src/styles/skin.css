@@ -1,47 +1,64 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    DESIGN-VARIANTE: AELINE
    Vorlage: https://aeline.webflow.io/
-   Werte ausgelesen aus dem Stylesheet der Vorlage.
 
-   Charakter: hell und technisch. Kraeftiges Elektroblau (#2453ff) als
-   einziger Akzent, dazu ein Limeton (#d6fd70) als Signalfarbe fuer
-   Hervorhebungen. Zahlen und Kurzkennzeichen laufen in einer Monospace
-   (Geist Mono) — die Vorlage setzt sie sogar auf Buttons. Die enge
-   Laufweite (-0.02em) macht Ueberschriften kompakter.
+   Nicht nur Farben getauscht, sondern die Bauteile der Vorlage uebernommen.
+   Aus ihrem Stylesheet ausgelesen:
 
-   Diese Variante behaelt die Seitennavigation. Die Vorlage ist zwar eine
-   Website mit Kopfleiste, ihr Charakter (Mono-Details, Datendichte,
-   technische Anmutung) passt aber zu einer Bedienoberflaeche mit
-   Seitenleiste — und im Vergleich mit den Topbar-Varianten wird der
-   Unterschied ueberhaupt erst sichtbar.
+     .button            Limette #d6fd70, dunkle Schrift, border-radius 5rem,
+                        VERSALIEN in Geist Mono, letter-spacing .12em,
+                        min-height 2.5/3rem, Uebergang cubic-bezier(.19,1,.22,1)
+     .button-arrow      dieselbe Pille mit dunklem Kreis (2.5rem) und Pfeil
+     .expertise_cards   Bento: grauer Container (#f2f2f2), Innenabstand .75rem,
+                        Radius 1.5rem, darin weisse Kacheln mit Radius .75rem
+     Typografie         Plus Jakarta Sans, Ueberschriften Weight 500 (nicht fett)
+                        mit letter-spacing -.06em, Fliesstext -.02em
+     Palette            #d6fd70 Limette · #131313 Tinte · #f2f2f2/#ececec Grau
+                        #2453ff Blau · #ff3336 Rot · #f1ee46 Gelb
 
-   Die dunkle Fassung nutzt den eigenen Dark-Satz der Vorlage
-   (#0a0a0f mit Indigo/Cyan) statt einer abgedunkelten Kopie.
+   Die Hierarchie traegt hier die GROESSE und der Kontrast dunkel/hell/limette,
+   nicht das Schriftgewicht. Deshalb sind Ueberschriften bewusst leichter als
+   im Standard.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
 
 :root {
-  /* ── Neutralskala (aus --grey--grey-*) ────────────────────────────────── */
-  --bg:        #f2f2f2;   /* grey-100 */
+  /* ── Palette ──────────────────────────────────────────────────────────── */
+  --ae-lime:      #d6fd70;
+  --ae-lime-tief: #c4ef52;
+  --ae-tinte:     #131313;
+  --ae-tinte-2:   #2f2f2f;
+  --ae-grau-100:  #f2f2f2;
+  --ae-grau-200:  #ececec;
+  --ae-grau-300:  #c7c7c7;
+  --ae-grau-400:  #585858;
+  --ae-blau:      #2453ff;
+  --ae-rot:       #ff3336;
+  --ae-gelb:      #f1ee46;
+
+  /* Seite WEISS, Kachelgruppen grau — so herum baut es die Vorlage
+     (.expertise_cards liegt als grauer Block auf weissem Grund und
+     enthaelt weisse Karten). Umgekehrt faellt der Bento-Rahmen mit dem
+     Seitengrund zusammen und die Gruppierung ist unsichtbar. */
+  --bg:        #ffffff;
   --surface:   #ffffff;
-  --surface-2: #ececec;   /* grey-200 */
+  --surface-2: #f2f2f2;
   --surface-3: #f7f7f7;
   --dim:       rgba(19,19,19,0.04);
   --dim-2:     rgba(19,19,19,0.025);
 
-  --text:   #131313;                 /* grey-900 */
+  --text:   #131313;
   --text-2: rgba(19,19,19,0.74);
-  --text-3: #585858;                 /* grey-400 — die Sekundaerfarbe der Vorlage */
+  --text-3: #585858;
   --text-4: rgba(19,19,19,0.46);
   --text-5: rgba(19,19,19,0.32);
 
-  --border:   rgba(19,19,19,0.11);
-  --border-2: rgba(19,19,19,0.08);
-  --border-3: rgba(19,19,19,0.06);
-  --border-4: rgba(19,19,19,0.05);
+  --border:   rgba(19,19,19,0.10);
+  --border-2: rgba(19,19,19,0.075);
+  --border-3: rgba(19,19,19,0.055);
+  --border-4: rgba(19,19,19,0.04);
 
-  /* ── Akzent: Elektroblau ──────────────────────────────────────────────── */
   --accent:       #2453ff;
   --accent-dark:  #003cff;
   --accent-bg:    #eef1ff;
@@ -49,7 +66,7 @@
   --accent-tint:  rgba(36,83,255,0.04);
   --accent-tint2: rgba(36,83,255,0.08);
   --accent-tint3: rgba(36,83,255,0.12);
-  --accent-ring:  rgba(36,83,255,0.22);
+  --accent-ring:  rgba(36,83,255,0.24);
   --accent-rgb:   36,83,255;
   --accent-fg:    #ffffff;
 
@@ -57,94 +74,496 @@
   --brand-glyph-empty: rgba(36,83,255,0.18);
 
   --chrome:          #ffffff;
-  --chrome-border:   rgba(19,19,19,0.09);
+  --chrome-border:   rgba(19,19,19,0.10);
   --chrome-text:     #131313;
   --chrome-icon:     #585858;
   --chrome-hover-bg: rgba(19,19,19,0.05);
   --chrome-shadow-h: none;
 
-  --nav-active:   #2453ff;
+  --nav-active:   #131313;
   --nav-inactive: #585858;
 
-  --btn:   #131313;   --btn-h: #2f2f2f;   --btn-fg: #ffffff;
-  --cta:   #2453ff;   --cta-h: #003cff;   --cta-fg: #ffffff;
+  /* Primaerknopf ist die Limette, nicht das Blau — so macht es die Vorlage. */
+  --btn:   #d6fd70;   --btn-h: #c4ef52;   --btn-fg: #131313;
+  --cta:   #d6fd70;   --cta-h: #c4ef52;   --cta-fg: #131313;
 
-  --overlay:     rgba(19,19,19,0.45);
+  --overlay:     rgba(19,19,19,0.55);
   --notif-badge: #ff3336;
-  --notif-dot:   #2453ff;
+  --notif-badge-fg: #ffffff;
+  --notif-dot:   #d6fd70;
   --timer-color: #2f7d1c;
 
   /* ── Status ───────────────────────────────────────────────────────────
-     Das Rot der Vorlage (#ff3336) erreicht auf Weiss nur 3,0:1 und ist als
-     Textfarbe nicht verwendbar; abgedunkelt fuer Schrift, Originalton fuer
-     Flaechen und Punkte. Das Lime (#d6fd70) traegt als Textfarbe ueberhaupt
-     nicht — es ist in der Vorlage eine Flaechenfarbe und wird hier auch nur
-     so verwendet. */
-  --success:        #2f7d1c;
-  --success-strong: #246313;
-  --success-bg:     #eafbd6;         /* aus dem Limeton abgeleitet */
-  --danger:         #d61b1e;
-  /* --*-strong ist in globals.css die SCHRIFT auf der --*-bg-Flaeche
-     (.status-badge), nicht die kraeftigere Variante — im hellen Design
-     also DUNKLER als der Grundton. Das Original #ff3336 kam dort auf
-     2,4:1. */
-  --danger-strong:  #a81416;
-  --danger-bg:      #ffe8e8;
-  --warning:        #8a6100;
-  --warning-strong: #6b4b00;
-  --warning-bg:     #fdfbd4;         /* aus --base--yellow */
-  --info:           #1a44e0;
-  --info-strong:    #003cff;
-  --info-bg:        #eef1ff;
-  --accent2:        #6b3fd4;
-  --accent2-strong: #5430ad;
-  --accent2-bg:     #efe9ff;
+     --*-strong ist in globals.css die SCHRIFT auf der --*-bg-Flaeche
+     (.status-badge) — im hellen Design also dunkler als der Grundton. */
+  --success:        #2f7d1c;   --success-strong: #246313;   --success-bg: #eafbd6;
+  --danger:         #d61b1e;   --danger-strong:  #a81416;   --danger-bg:  #ffe8e8;
+  --warning:        #8a6100;   --warning-strong: #6b4b00;   --warning-bg: #fdfbd4;
+  --info:           #1a44e0;   --info-strong:    #003cff;   --info-bg:    #eef1ff;
+  --accent2:        #6b3fd4;   --accent2-strong: #5430ad;   --accent2-bg: #efe9ff;
 
   /* ── Typografie ───────────────────────────────────────────────────────── */
   --font-sans:    'Plus Jakarta Sans', 'Hanken Grotesk', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   --font-display: var(--font-sans);
   --font-mono:    'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --fw-title:     700;
+  /* Weight 500 statt 800: die Vorlage traegt Hierarchie ueber Groesse und
+     Farbkontrast, nicht ueber Fettung. */
+  --fw-title:     500;
   --fw-heading:   600;
+  --fs-page-title: 30px;
 
-  /* ── Form und Dichte ──────────────────────────────────────────────────── */
-  --radius-sm:   8px;
-  --radius-md:  12px;
-  --radius-lg:  16px;
-  --btn-radius:   12px;
-  --input-radius: 12px;
-  --control-h:   38px;
+  /* ── Form ─────────────────────────────────────────────────────────────── */
+  --radius-sm:  10px;
+  --radius-md:  12px;   /* .75rem — kleine Karten der Vorlage */
+  --radius-lg:  24px;   /* 1.5rem — grosse Karten der Vorlage */
+  --btn-radius:   80px; /* 5rem — Pille */
+  --input-radius: 80px;
+  --control-h:   40px;  /* 2.5rem */
 
   --border-width: 1px;
   --card-shadow: none;
   --shadow-sm: none;
-  --shadow-md: 0 2px 12px rgba(19,19,19,0.06);
-  --shadow-lg: 0 10px 30px rgba(19,19,19,0.10);
+  --shadow-md: 0 2px 14px rgba(19,19,19,0.06);
+  --shadow-lg: 0 18px 48px rgba(19,19,19,0.14);
 
-  --row-py: 9px;
-  --row-px: 9px;
+  --row-py: 11px;
+  --row-px: 12px;
 
-  --nav-width:       208px;
-  --nav-indicator:   3px;
-  --nav-item-radius: 8px;
+  --nav-width:       212px;
+  --nav-indicator:   0px;
+  --nav-item-radius: 80px;
 
-  /* Diagramme: Blau/Cyan/Violett der Vorlage plus Lime als Signalreihe. */
   --chart-1: #2453ff;
-  --chart-2: #06b6d4;
-  --chart-3: #a8c93a;
+  --chart-2: #8fc22a;
+  --chart-3: #f1a33a;
   --chart-4: #7c3aed;
   --chart-5: #38c6f6;
   --chart-6: #ff3336;
-  --chart-7: #d97706;
+  --chart-7: #0891b2;
   --chart-8: #585858;
-  --chart-tooltip-bg: rgba(19,19,19,0.94);
+  --chart-tooltip-bg: rgba(19,19,19,0.96);
   --chart-tooltip-fg: #ffffff;
+
+  --ae-uebergang: .3s cubic-bezier(.19,1,.22,1);
 }
 
-/* ── Dunkle Fassung: der eigene Dark-Satz der Vorlage ─────────────────────
-   bg-primary #0a0a0f, Text weiss in Alpha-Stufen, Raender als weisse
-   Transparenzen, Akzente Indigo/Cyan. */
+/* ═══ 1 · TYPOGRAFIE ═══════════════════════════════════════════════════════
+   Enge Laufweite ist das auffaelligste Merkmal der Vorlage. Sie staffelt
+   sich: je groesser die Schrift, desto enger. */
+h1, .page-title { letter-spacing: -0.06em; font-weight: 500; }
+h2               { letter-spacing: -0.05em; font-weight: 500; }
+h3, .section-title, .modal-title { letter-spacing: -0.04em; font-weight: 600; }
+body             { letter-spacing: -0.02em; }
+
+/* Versal-Label laufen in der Vorlage in Mono mit weiter Sperrung — das
+   Gegenstueck zur engen Ueberschrift. */
+.kpi-label, .eyebrow, .field-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+
+/* ═══ 2 · BUTTONS ══════════════════════════════════════════════════════════
+   .button der Vorlage: Limettenpille, dunkle Versalien in Mono, .12em
+   Sperrung, weicher Uebergang. Bewusst NUR fuer Haupt- und Sekundaeraktionen
+   — Zeilensymbole bleiben ruhig, sonst schreit die Liste. */
+.btn-primary,
+.btn-secondary,
+.btn {
+  border-radius: var(--btn-radius);
+  min-height: 40px;
+  padding: 8px 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  box-shadow: none;
+  transition: transform var(--ae-uebergang), background-color var(--ae-uebergang), color var(--ae-uebergang);
+}
+.btn-primary {
+  background: var(--ae-lime);
+  color: var(--ae-tinte);
+  border-color: var(--ae-lime);
+}
+.btn-primary:hover { background: var(--ae-lime-tief); transform: translateY(-1px); }
+
+.btn-secondary, .btn {
+  background: transparent;
+  color: var(--ae-tinte);
+  border-color: rgba(19,19,19,0.16);
+}
+.btn-secondary:hover, .btn:hover { background: var(--ae-tinte); color: #ffffff; border-color: var(--ae-tinte); }
+
+/* Die Pfeil-Variante: Pille mit dunklem Kreis rechts (.button-arrow der
+   Vorlage). Anwendbar ueber class="btn-primary ae-arrow". */
+.ae-arrow {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 5px 5px 5px 20px;
+}
+.ae-arrow::after {
+  content: '';
+  width: 30px; height: 30px; border-radius: 50%;
+  background-color: var(--ae-tinte);
+  flex-shrink: 0;
+  /* Pfeil schraeg nach oben rechts, wie in der Vorlage. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17 17 7M9 7h8v8'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  transition: transform var(--ae-uebergang);
+}
+.ae-arrow:hover::after { transform: translate(2px, -2px); }
+
+/* Zeilenaktionen und Symbolknoepfe bleiben unaufgeregt: rund, ohne Versalien. */
+.row-action-btn { border-radius: 50%; min-height: 30px; }
+.row-action-btn:hover { background: var(--ae-tinte); color: #ffffff; }
+
+/* ═══ 3 · BEDIENLEISTE ═════════════════════════════════════════════════════
+   Suche und Filter als Pillen — dieselbe Rundung wie die Buttons. */
+.list-search, .pl-toolbar .list-search, .ls-toolbar .list-search {
+  border-radius: var(--input-radius);
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid rgba(19,19,19,0.12);
+  background: var(--surface);
+}
+.list-search:focus { border-color: var(--ae-tinte); box-shadow: none; outline: none; }
+
+.filter-chip-btn {
+  border-radius: var(--btn-radius);
+  min-height: 36px;
+  padding: 0 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(19,19,19,0.12);
+  background: var(--surface);
+}
+.filter-chip-btn:hover { background: var(--ae-tinte); color: #ffffff; border-color: var(--ae-tinte); }
+.filter-chip-dropdown { border-radius: var(--radius-md); border: 1px solid var(--border); box-shadow: var(--shadow-lg); }
+
+/* ═══ 4 · BENTO-KACHELN (Uebersicht) ═══════════════════════════════════════
+   .expertise_cards der Vorlage: ein grauer Container mit Innenabstand, darin
+   Kacheln mit kleinerem Radius. Der Rahmen ist Teil des Musters — nicht die
+   Kachel steht auf der Seite, sondern die Gruppe. */
+.kpi-grid {
+  background: var(--ae-grau-100);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  gap: 12px;
+  grid-template-columns: repeat(4, 1fr);
+}
+.kpi-card {
+  background: var(--surface);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 132px;
+  transition: transform var(--ae-uebergang);
+}
+.kpi-card:hover { transform: translateY(-2px); }
+
+.kpi-label {
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin: 0;
+  text-transform: uppercase;
+}
+/* Die Zahl ist der Zweck der Kachel — gross, leicht, eng. */
+.kpi-value {
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+  margin-top: auto;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-meta { font-size: 11.5px; color: var(--text-3); margin: 0; }
+
+/* Farbfassungen der Kachel — der Kontrast dunkel/limette/weiss ist in der
+   Vorlage das eigentliche Gliederungsmittel. */
+.kpi-card--dunkel { background: var(--ae-tinte); color: #ffffff; }
+.kpi-card--dunkel .kpi-label { color: rgba(255,255,255,0.66); }
+.kpi-card--dunkel .kpi-value { color: #ffffff; }
+.kpi-card--dunkel .kpi-meta  { color: rgba(255,255,255,0.66); }
+
+.kpi-card--lime { background: var(--ae-lime); }
+.kpi-card--lime .kpi-label { color: rgba(19,19,19,0.68); }
+.kpi-card--lime .kpi-value { color: var(--ae-tinte); }
+.kpi-card--lime .kpi-meta  { color: rgba(19,19,19,0.68); }
+
+.kpi-card--breit { grid-column: span 2; }
+
+/* Der Akzentrand fuer Warnwerte wuerde die Kachelform brechen — hier traegt
+   die Flaeche das Signal. */
+.kpi-card-accent { border-left: none; background: var(--danger-bg); }
+.kpi-card-accent .kpi-value { color: var(--danger-strong); }
+
+@media (max-width: 1023px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px)  { .kpi-grid { grid-template-columns: 1fr; } .kpi-card--breit { grid-column: span 1; } }
+
+/* ═══ 5 · MODULKACHELN ═════════════════════════════════════════════════════
+   Einstiege in Projekte, Mitarbeiter, Rechnungen — gebaut wie die
+   Leistungskarten der Vorlage: grosse Zahl oben, Text unten, Pfeil rechts. */
+.ae-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.ae-module {
+  position: relative;
+  display: flex; flex-direction: column; justify-content: space-between;
+  gap: 26px;
+  min-height: 158px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--border-3);
+  transition: transform var(--ae-uebergang);
+}
+.ae-module:hover { transform: translateY(-3px); }
+.ae-module:focus-visible { outline: 2px solid var(--ae-tinte); outline-offset: 3px; }
+.ae-module--dunkel { background: var(--ae-tinte); border-color: var(--ae-tinte); color: #ffffff; }
+.ae-module--lime   { background: var(--ae-lime); border-color: var(--ae-lime); color: var(--ae-tinte); }
+.ae-module--blau   { background: var(--ae-blau); border-color: var(--ae-blau); color: #ffffff; }
+
+.ae-module-zahl {
+  font-size: 40px; font-weight: 500; letter-spacing: -0.06em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ae-module-name {
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  opacity: 0.74;
+}
+.ae-module-fuss { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.ae-module-sub  { font-size: 12.5px; opacity: 0.74; max-width: 24ch; line-height: 1.35; }
+.ae-module-pfeil {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ae-tinte); color: #ffffff;
+  transition: transform var(--ae-uebergang);
+}
+.ae-module--dunkel .ae-module-pfeil { background: var(--ae-lime); color: var(--ae-tinte); }
+.ae-module--blau   .ae-module-pfeil { background: #ffffff; color: var(--ae-blau); }
+.ae-module:hover .ae-module-pfeil { transform: translate(2px, -2px); }
+
+/* ═══ 6 · PROJEKTKACHELN ═══════════════════════════════════════════════════ */
+.ae-karten {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(298px, 1fr));
+  gap: 12px;
+}
+.ae-karte {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border-3);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: transform var(--ae-uebergang), border-color var(--ae-uebergang);
+}
+.ae-karte:hover { transform: translateY(-3px); border-color: rgba(19,19,19,0.22); }
+.ae-karte:focus-visible { outline: 2px solid var(--ae-tinte); outline-offset: 2px; }
+
+.ae-karte-kopf { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ae-karte-nr {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.1em; color: var(--text-3);
+}
+.ae-karte-titel {
+  font-size: 17px; font-weight: 500; letter-spacing: -0.03em; line-height: 1.28;
+  margin: 0;
+}
+.ae-karte-zeile { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--text-3); }
+.ae-karte-wert  { font-family: var(--font-mono); font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.ae-karte-fuss { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 2px; }
+.ae-karten-leer { grid-column: 1 / -1; }
+
+/* Sortierung: im Kachelraster gibt es keine Spaltenkoepfe, also sitzt sie
+   als Pille in der Bedienleiste. */
+.ae-sort { display: inline-flex; align-items: center; }
+.ae-sort select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23585858' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+.ae-sort select:hover { background-color: var(--ae-tinte); color: #ffffff; border-color: var(--ae-tinte); }
+
+/* ═══ 7 · TABELLE (Rechnungen) ═════════════════════════════════════════════
+   Die Vorlage kennt keine Tabellen. Uebertragen wird ihre Logik: die Gruppe
+   sitzt in einem gerundeten Rahmen, Kopfzeilen laufen in Mono-Versalien,
+   Zahlen in Mono, Trennung ueber sehr feine Linien statt Rahmen. */
+.master-table-wrap, .ls-table-wrap {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-3);
+  overflow: hidden;
+}
+.master-table th {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-2);
+  padding-top: 14px; padding-bottom: 14px;
+}
+.master-table td { border-bottom: 1px solid var(--border-4); }
+.master-table tbody tr { transition: background-color .15s; }
+.master-table tbody tr:hover { background: var(--ae-grau-100); }
+
+/* Betraege und Nummern in Mono: gleiche Ziffernbreite laesst sie fluchten. */
+.master-table td.num, .dash-table td.num, .ls-td.ls-col-num {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
+}
+
+/* Statusfahnen als Pillen in Mono-Versalien. */
+.status-badge, .mahnstufe-badge {
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+}
+
+/* ═══ 8 · NAVIGATION ═══════════════════════════════════════════════════════ */
+.side-nav-item {
+  margin: 2px 10px;
+  padding: 10px 14px;
+  border-radius: var(--nav-item-radius);
+  border-left: none;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: background-color var(--ae-uebergang), color var(--ae-uebergang);
+}
+.side-nav-item.active {
+  background: var(--ae-tinte);
+  color: #ffffff;
+  border-left: none;
+}
+.side-nav-item.active .sn-icon { color: var(--ae-lime); }
+
+/* ═══ 9 · OVERLAY / BENACHRICHTIGUNGEN ═════════════════════════════════════
+   Das schwebende dunkle Kaertchen der Vorlage: kraeftig gerundet, dunkler
+   Grund, weisse Schrift, Limette als Signal. Genau die Anmutung des
+   Einblenders unten links auf der Vorlagenseite. */
+.notif-panel {
+  background: var(--ae-tinte);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(19,19,19,0.34);
+  overflow: hidden;
+  padding: 6px;
+}
+.notif-panel-header {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.66);
+  border-bottom: none;
+  padding: 12px 14px 10px;
+}
+.notif-read-all {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ae-lime);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.notif-read-all:hover { text-decoration: underline; }
+
+.notif-list { padding: 0 6px 6px; }
+.notif-item {
+  border-radius: var(--radius-md);
+  border-bottom: none;
+  background: rgba(255,255,255,0.05);
+  color: #ffffff;
+  margin-bottom: 4px;
+  padding: 12px 14px;
+  transition: background-color var(--ae-uebergang);
+}
+.notif-item:hover { background: rgba(255,255,255,0.12); }
+.notif-item.read  { background: transparent; opacity: 0.62; }
+.notif-title { color: #ffffff; font-weight: 500; letter-spacing: -0.01em; }
+.notif-body  { color: rgba(255,255,255,0.70); }
+.notif-time  {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.52);
+}
+.notif-dot   { background: var(--ae-lime); }
+.notif-empty { color: rgba(255,255,255,0.58); padding: 18px 14px; }
+
+/* Benutzermenue in derselben Sprache. */
+.user-menu-panel {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-2);
+  box-shadow: 0 18px 44px rgba(19,19,19,0.16);
+  padding: 6px;
+  overflow: hidden;
+}
+.user-menu-item { border-radius: var(--radius-md); padding: 10px 12px; }
+.user-menu-btn  { border-radius: 999px; }
+
+/* ═══ 10 · DIALOGE ═════════════════════════════════════════════════════════ */
+.modal, .modal-content, .modal-box {
+  border-radius: var(--radius-lg);
+  border: none;
+  box-shadow: 0 30px 80px rgba(19,19,19,0.28);
+}
+.modal-title { letter-spacing: -0.04em; font-weight: 600; }
+
+/* Eingabefelder etwas runder, passend zu den Pillen. */
+input[type="text"], input[type="email"], input[type="number"], input[type="date"],
+input[type="search"], input[type="tel"], select, textarea {
+  border-radius: var(--radius-sm);
+}
+input:focus, select:focus, textarea:focus { border-color: var(--ae-tinte); }
+
+/* ═══ 11 · KARTEN ALLGEMEIN ════════════════════════════════════════════════ */
+.card, .timeline-wrap, .dash-card, .panel {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-3);
+  box-shadow: none;
+}
+
+/* ── Dunkle Fassung ──────────────────────────────────────────────────────
+   Der eigene Dark-Satz der Vorlage (#0a0a0f mit Indigo/Cyan). */
 [data-theme="dark"] {
+  --ae-tinte:    #0a0a0f;
+  --ae-grau-100: #1a1a21;
+  --ae-grau-200: #232329;
+
   --bg:        #0a0a0f;
   --surface:   #131318;
   --surface-2: #1a1a21;
@@ -167,15 +586,9 @@
   --accent-dark:  #8a95ff;
   --accent-bg:    rgba(79,70,229,0.16);
   --accent-bg2:   rgba(79,70,229,0.26);
-  --accent-tint:  rgba(109,124,255,0.06);
-  --accent-tint2: rgba(109,124,255,0.10);
-  --accent-tint3: rgba(109,124,255,0.14);
   --accent-ring:  rgba(109,124,255,0.30);
   --accent-rgb:   109,124,255;
   --accent-fg:    #0a0a0f;
-
-  --brand-glyph:       #6d7cff;
-  --brand-glyph-empty: rgba(109,124,255,0.22);
 
   --chrome:          #0f0f14;
   --chrome-border:   rgba(255,255,255,0.10);
@@ -183,13 +596,10 @@
   --chrome-icon:     rgba(255,255,255,0.62);
   --chrome-hover-bg: rgba(255,255,255,0.07);
 
-  --nav-active:   #6d7cff;
+  --nav-active:   #d6fd70;
   --nav-inactive: rgba(255,255,255,0.58);
 
-  --btn:   #6d7cff;  --btn-h: #8a95ff;  --btn-fg: #0a0a0f;
-  --cta:   #6d7cff;  --cta-h: #8a95ff;  --cta-fg: #0a0a0f;
-
-  --overlay:      rgba(0,0,0,0.68);
+  --overlay:      rgba(0,0,0,0.70);
   --hover-bg:     rgba(255,255,255,0.06);
   --shadow-color: 0,0,0;
   --timer-color:  #a3e635;
@@ -200,38 +610,92 @@
   --info:           #6d7cff;  --info-strong:    #8a95ff;  --info-bg:    rgba(79,70,229,0.18);
   --accent2:        #b191ff;  --accent2-strong: #c9b0ff;  --accent2-bg: rgba(124,58,237,0.20);
 
-  --chart-1: #6d7cff;
-  --chart-2: #22d3ee;
-  --chart-3: #a3e635;
-  --chart-4: #a78bfa;
-  --chart-5: #38c6f6;
-  --chart-6: #ff6b6d;
-  --chart-7: #fbbf24;
-  --chart-8: rgba(255,255,255,0.45);
+  --chart-1: #6d7cff;  --chart-2: #a3e635;  --chart-3: #fbbf24;  --chart-4: #a78bfa;
+  --chart-5: #38c6f6;  --chart-6: #ff6b6d;  --chart-7: #22d3ee;  --chart-8: rgba(255,255,255,0.45);
   --chart-tooltip-bg: rgba(26,26,33,0.96);
   --chart-tooltip-fg: #ffffff;
 }
+[data-theme="dark"] .kpi-grid { background: #131318; }
+[data-theme="dark"] .kpi-card { background: #1a1a21; }
+[data-theme="dark"] .side-nav-item.active { background: var(--ae-lime); color: #0a0a0f; }
+[data-theme="dark"] .side-nav-item.active .sn-icon { color: #0a0a0f; }
+[data-theme="dark"] .master-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .notif-panel { background: #1a1a21; }
+[data-theme="dark"] .btn-secondary:hover,
+[data-theme="dark"] .btn:hover { background: var(--ae-lime); color: #0a0a0f; border-color: var(--ae-lime); }
 
-/* ── Komponenten-Anatomie ────────────────────────────────────────────────── */
-
-/* Engere Laufweite in Ueberschriften — Kennzeichen der Vorlage. */
-h1, h2, h3, .page-title, .modal-title, .section-title { letter-spacing: -0.02em; }
-
-/* Zahlen und Kurzkennzeichen in Mono: in dieser Vorlage ein Stilmittel,
-   in einer Rechnungsliste zugleich eine echte Lesehilfe — gleiche
-   Ziffernbreite laesst Betraege sauber untereinander stehen. */
-.master-table td.num, .dash-table td.num, .ls-td.ls-col-num {
+/* ═══ 12 · UNTERNAVIGATION & KLEINE KNOEPFE ════════════════════════════════
+   Die Reiter der Uebersicht und die Sekundaerknoepfe liefen noch im
+   Standardstil — eckig und blau. In dieser Vorlage ist alles Bedienbare
+   eine Pille, und die aktive Auswahl ist dunkel gefuellt. */
+.dash-subnav { border-bottom: none; padding-bottom: 0; }
+.dash-subnav-btn {
+  border-radius: 80px;
+  padding: 8px 16px;
+  min-height: 36px;
   font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: -0.01em;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid rgba(19,19,19,0.12);
+  transition: background-color var(--ae-uebergang), color var(--ae-uebergang), border-color var(--ae-uebergang);
 }
+.dash-subnav-btn:hover  { background: var(--ae-grau-100); }
+.dash-subnav-btn.active { background: var(--ae-tinte); color: #ffffff; border-color: var(--ae-tinte); }
 
-/* Aktiver Navigationseintrag: gefuellte Flaeche plus farbige Kante. */
-.side-nav-item { margin: 1px 6px; border-radius: var(--nav-item-radius); }
-.side-nav-item.active { background: var(--accent-bg); }
+/* Segment-Navigation (Mitarbeiter, Rechnungen) in derselben Sprache. */
+.seg-nav-btn { border-radius: 80px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.seg-nav-btn.active { background: var(--ae-tinte); color: #ffffff; }
 
-/* Buttons flach, klar gerundet. */
-.btn, .btn-primary, .btn-secondary { border-radius: var(--btn-radius); box-shadow: none; }
+/* Kleine Knoepfe: Pille, aber ohne Versalien — sie stehen oft in Zeilen und
+   wuerden sonst mit dem Inhalt konkurrieren. */
+.btn-small, .btn-sm {
+  border-radius: 80px;
+  min-height: 34px;
+  padding: 6px 14px;
+  box-shadow: none;
+}
+.btn-primary.btn-small { background: var(--ae-lime); color: var(--ae-tinte); border-color: var(--ae-lime); }
+.btn-primary.btn-small:hover { background: var(--ae-lime-tief); }
 
-/* Karten mit Kontur statt Schatten. */
-.card, .kpi-tile, .timeline-wrap, .dash-card { box-shadow: none; border: 1px solid var(--border); }
+[data-theme="dark"] .dash-subnav-btn.active { background: var(--ae-lime); color: #0a0a0f; border-color: var(--ae-lime); }
+[data-theme="dark"] .seg-nav-btn.active     { background: var(--ae-lime); color: #0a0a0f; }
+
+/* ═══ 13 · SEITENREITER ════════════════════════════════════════════════════
+   Die Reiter liefen noch als Unterstrich-Navigation in Akzentfarbe. In
+   dieser Vorlage gibt es keine Unterstriche — Auswahl wird gefuellt
+   gezeigt. */
+.tab-btn {
+  border-radius: 80px;
+  border-bottom: none;
+  padding: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background-color var(--ae-uebergang), color var(--ae-uebergang);
+}
+.tab-btn:hover { background: var(--ae-grau-100); color: var(--text); }
+.tab-btn.active {
+  background: var(--ae-tinte);
+  color: #ffffff;
+  border-bottom-color: transparent;
+}
+.tabs { gap: 4px; }
+
+/* Spaltenwaehler (heisst hier „Felder auf der Kachel") als Pille. */
+.pl-col-btn {
+  border-radius: 80px;
+  min-height: 36px;
+  padding: 0 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pl-col-btn:hover { background: var(--ae-tinte); color: #ffffff; border-color: var(--ae-tinte); }
+.pl-col-panel { border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+
+[data-theme="dark"] .tab-btn.active { background: var(--ae-lime); color: #0a0a0f; }
+[data-theme="dark"] .tab-btn:hover  { background: rgba(255,255,255,0.07); }

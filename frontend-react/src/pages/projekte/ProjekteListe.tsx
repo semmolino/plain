@@ -1,11 +1,9 @@
-import { useState, useMemo, useRef, useCallback, useEffect, Fragment } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
-import { SortTh } from '@/components/ui/SortTh'
 import { useFitColumns } from '@/hooks/useFitColumns'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
-import { useRowDisclosure, useDetailPanelId, RowExpandButton, RowDetailRow, type DetailFeld } from '@/components/ui/RowDetail'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -28,7 +26,6 @@ import {
   type Project,
 } from '@/api/projekte'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
-import { rowClickHandler } from '@/utils/rowClick'
 
 const PAGE_SIZE = 25
 type SortKey = 'NAME_SHORT' | 'NAME_LONG' | 'STATUS_NAME' | 'MANAGER_NAME' | 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
@@ -78,7 +75,10 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   })
   const [hiddenCols,    setHiddenCols]    = useStickyState<Set<OptColKey>>(
     'projekte.cols',
-    () => new Set(OPT_COLS.filter(c => !c.defaultVisible).map(c => c.key)),
+    // Auf einer Kachel ist Platz fuer alle Felder — anders als in einer
+    // Tabellenzeile, wo defaultVisible:false sinnvoll war. Der Waehler
+    // blendet hier also aus, statt ein.
+    () => new Set<OptColKey>(),
     { serialize: s => [...s], deserialize: raw => new Set(Array.isArray(raw) ? raw as OptColKey[] : []) },
   )
   const [colPanelOpen,    setColPanelOpen]    = useState(false)
@@ -172,12 +172,6 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
 
   function setDimFilter(dim: FilterDim, vals: Set<string>) {
     setActiveFilters(prev => ({ ...prev, [dim]: vals }))
-    setPage(1)
-  }
-
-  function toggleSort(k: SortKey) {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(k); setSortDir('asc') }
     setPage(1)
   }
 
@@ -364,7 +358,6 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
     } catch { /* ignore */ }
   }
 
-  const sortProps = { sortKey, dir: sortDir, onSort: toggleSort }
   // Frueher gab es zusaetzlich eine „Oeffnen"-Spalte; die Zeile selbst ist
   // jetzt anklickbar, das Kuerzel dient als fokussierbarer Einstieg.
   /**
@@ -380,37 +373,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
    * Deshalb aus denselben Groessen abgeleitet, aus denen auch die Kopfzeile
    * entsteht. Wer eine Spalte ergaenzt, aendert nur noch eine Stelle.
    */
-  const spaltenZahl =
-    4                              // Kuerzel, Name, Status, Leitung
-    + visibleOptCols.length        // Typ / Abteilung / Adresse, soweit sichtbar
-    + (zeigeIntern ? 1 : 0)
-    + 1                            // Aktionen
 
-  // ── Aufklappbare Detailzeile ──────────────────────────────────────────
-  const detail    = useRowDisclosure()
-  const panelIdOf = useDetailPanelId()
-
-  /**
-   * Was zeigt der Aufklappbereich? Genau die Spalten, die wegen der
-   * Fensterbreite entfallen sind — nicht die, die der Nutzer im Waehler
-   * bewusst abgewaehlt hat. Wer eine Spalte abwaehlt, will sie nicht sehen;
-   * wer sie durch Platzmangel verliert, hat das nicht entschieden.
-   *
-   * Beschriftung und Wert kommen aus denselben Quellen wie die Tabellenzelle
-   * (OPT_COLS fuer das Label, dasselbe Feld am Projekt fuer den Wert), damit
-   * Tabelle und Bereich nicht auseinanderlaufen koennen.
-   */
-  function detailFelder(pr: Project): DetailFeld[] {
-    const felder: DetailFeld[] = []
-    for (const c of OPT_COLS) {
-      if (!platzWeg.has(c.key)) continue
-      felder.push({ label: c.label, wert: pr[c.key] ?? '—' })
-    }
-    if (platzWeg.has('IS_INTERNAL')) {
-      felder.push({ label: 'Intern', wert: pr.IS_INTERNAL ? 'Ja' : 'Nein' })
-    }
-    return felder
-  }
 
   return (
     <>
@@ -421,6 +384,28 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1) }}
         />
+        {/* Im Kachelraster gibt es keine Spaltenkoepfe, an denen sich
+            sortieren liesse — die Sortierung sitzt deshalb hier. */}
+        <label className="ae-sort">
+          <span className="sr-only">Sortieren nach</span>
+          <select
+            className="filter-chip-btn"
+            value={`${sortKey}:${sortDir}`}
+            onChange={e => {
+              const [k, d] = e.target.value.split(':')
+              setSortKey(k as SortKey)
+              setSortDir(d as 'asc' | 'desc')
+              setPage(1)
+            }}
+          >
+            <option value="NAME_SHORT:asc">Kürzel A–Z</option>
+            <option value="NAME_SHORT:desc">Kürzel Z–A</option>
+            <option value="NAME_LONG:asc">Name A–Z</option>
+            <option value="NAME_LONG:desc">Name Z–A</option>
+            <option value="STATUS_NAME:asc">Status A–Z</option>
+            <option value="MANAGER_NAME:asc">Leitung A–Z</option>
+          </select>
+        </label>
         {/* Auf dem Handy hinter „Filter" eingeklappt (siehe FilterBar). */}
         <FilterBar
           activeCount={activeFilters.status.size + activeFilters.typ.size + activeFilters.manager.size + (internalFilter !== null ? 1 : 0)}
@@ -447,7 +432,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
           <button className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SlidersHorizontal size={13} strokeWidth={2} />Spalten</button>
           {colPanelOpen && (
             <div className="pl-col-panel">
-              <div className="pl-col-panel-title">Optionale Spalten</div>
+              <div className="pl-col-panel-title">Felder auf der Kachel</div>
               {OPT_COLS.map(c => (
                 <label key={c.key} className="pl-col-option">
                   <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
@@ -489,116 +474,87 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
       {!isLoading && (
         <>
           <div className="list-section" ref={setBox}>
-            <table className="master-table master-table--einzeilig master-table--aufklappbar">
-              <thead>
-                <tr>
-                  <SortTh label="Kürzel"   column="NAME_SHORT"   {...sortProps} />
-                  <SortTh label="Name"     column="NAME_LONG"    {...sortProps} />
-                  <SortTh label="Status"   column="STATUS_NAME"  {...sortProps} />
-                  <SortTh label="Leitung"  column="MANAGER_NAME" {...sortProps} />
-                  {visibleOptCols.map(c => (
-                    <SortTh key={c.key} label={c.label} column={c.key} {...sortProps} />
-                  ))}
-                  {zeigeIntern && (
-                    <th scope="col" data-col="IS_INTERNAL"
-                      style={{ textAlign: 'center', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Intern</th>
-                  )}
-                  <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map(p => {
-                  const schluessel = String(p.ID)
-                  const panelId    = panelIdOf(schluessel)
-                  const felder     = detailFelder(p)
-                  const offen      = detail.istOffen(schluessel)
-                  return (
-                  // Datenzeile und Detailzeile in EINEM Fragment: Beim
-                  // Sortieren wandert der aufgeklappte Zustand mit der Zeile.
-                  <Fragment key={p.ID}>
-                  <tr
-                    className={onSelectProject ? 'clickable-row' : undefined}
-                    onClick={onSelectProject ? rowClickHandler(() => onSelectProject(p.ID)) : undefined}
-                    style={p.IS_INTERNAL ? { opacity: 0.7 } : undefined}
-                  >
-                    <td className="cell-id">
-                      {/* Der Chevron sitzt IN dieser Zelle, nicht in einer
-                          eigenen Spalte — eine eigene Spalte kostet auf Touch
-                          44px und aendert die Spaltenzahl. Er erscheint nur,
-                          wenn wirklich etwas verborgen ist. */}
-                      <RowExpandButton
-                        sichtbar={felder.length > 0}
-                        offen={offen}
-                        onToggle={() => detail.toggle(schluessel)}
-                        bezeichnung={`Projekt ${p.NAME_SHORT}`}
-                        panelId={panelId}
-                      />
-                      {/* Das Kuerzel ist der fokussierbare Einstieg in die Zeile —
-                          es ersetzt die frueher in JEDER Zeile wiederholte
-                          Schaltflaeche „Oeffnen" und bleibt per Tab erreichbar. */}
-                      {onSelectProject
-                        ? <button className="link-btn" onClick={() => onSelectProject(p.ID)}>{p.NAME_SHORT}</button>
-                        : p.NAME_SHORT}
-                      {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6 }}>intern</span>}
-                    </td>
-                    <td><span className="cell-clamp" title={p.NAME_LONG}>{p.NAME_LONG}</span></td>
-                    <td>
-                      <InlineSelect
-                        value={p.PROJECT_STATUS_ID} options={statusOpts} allowEmpty={false}
-                        readOnly={!canEdit} ariaLabel="Status" fallbackLabel={p.STATUS_NAME || undefined}
-                        onChange={v => v && inlineMut.mutate({ id: p.ID, body: { project_status_id: Number(v) } })}
-                      />
-                    </td>
-                    <td>
-                      <InlineSelect
-                        value={p.PROJECT_MANAGER_ID} options={managerOpts} allowEmpty={false}
-                        readOnly={!canEdit} ariaLabel="Projektleitung" fallbackLabel={p.MANAGER_NAME || undefined}
-                        onChange={v => v && inlineMut.mutate({ id: p.ID, body: { project_manager_id: Number(v) } })}
-                      />
-                    </td>
-                    {visibleOptCols.map(c => {
-                      if (c.key === 'ADDRESS_NAME') {
-                        return p.ADDRESS_ID
-                          ? <td key={c.key}><button className="link-cell" onClick={() => navigate('/adressen', { state: { openAddressId: p.ADDRESS_ID } })}>{p.ADDRESS_NAME ?? '—'}</button></td>
-                          : <td key={c.key}>{p.ADDRESS_NAME ?? '—'}</td>
-                      }
-                      if (c.key === 'TYPE_NAME') {
-                        return <td key={c.key}>
-                          <InlineSelect
-                            value={p.PROJECT_TYPE_ID} options={typeOpts} placeholder="—"
-                            readOnly={!canEdit} ariaLabel="Typ" fallbackLabel={p.TYPE_NAME || undefined}
-                            onChange={v => inlineMut.mutate({ id: p.ID, body: { project_type_id: v ? Number(v) : null } })}
-                          />
-                        </td>
-                      }
-                      if (c.key === 'DEPARTMENT_NAME') {
-                        return <td key={c.key}>
-                          <InlineSelect
-                            value={p.DEPARTMENT_ID} options={deptOpts} placeholder="—"
-                            readOnly={!canEdit} ariaLabel="Abteilung" fallbackLabel={p.DEPARTMENT_NAME || undefined}
-                            onChange={v => inlineMut.mutate({ id: p.ID, body: { department_id: v ? Number(v) : null } })}
-                          />
-                        </td>
-                      }
-                      // Seit die Zeilen einzeilig sind, koennen lange Werte
-                      // (z.B. Adressen) mit Auslassung enden — der volle Text
-                      // gehoert deshalb ins title-Attribut.
-                      return <td key={c.key} title={p[c.key] ?? undefined}>{p[c.key] ?? '—'}</td>
-                    })}
-                    {zeigeIntern && (
-                      <td style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={p.IS_INTERNAL ?? false}
-                          title="Internes Projekt"
-                          aria-label={`${p.NAME_SHORT} ist ein internes Projekt`}
-                          disabled={internalMut.isPending}
-                          onChange={e => internalMut.mutate({ id: p.ID, val: e.target.checked })}
-                          style={{ width: 16, height: 16, cursor: 'pointer' }}
+            {/* Kachelraster statt Tabelle — Design-Variante "Aeline".
+                Die Vorlage kennt keine Tabellen; Projekte sind wenige und
+                gut als Karte lesbar. Sortierung wandert dafuer in die
+                Bedienleiste (siehe Auswahlfeld oben), Spaltenwahl und
+                aufklappbare Detailzeile entfallen in dieser Variante —
+                auf der Karte steht ohnehin jedes Feld. */}
+            <div className="ae-karten">
+              {pageRows.map(p => (
+                <div key={p.ID} className="ae-karte">
+                  <div className="ae-karte-kopf">
+                    <span className="ae-karte-nr">{p.NAME_SHORT}</span>
+                    <InlineSelect
+                      value={p.PROJECT_STATUS_ID} options={statusOpts} allowEmpty={false}
+                      readOnly={!canEdit} ariaLabel="Status" fallbackLabel={p.STATUS_NAME || undefined}
+                      onChange={v => v && inlineMut.mutate({ id: p.ID, body: { project_status_id: Number(v) } })}
+                    />
+                  </div>
+
+                  <h3 className="ae-karte-titel">{p.NAME_LONG || p.NAME_SHORT}</h3>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div className="ae-karte-zeile">
+                      <span>Leitung</span>
+                      <span className="ae-karte-wert">
+                        <InlineSelect
+                          value={p.PROJECT_MANAGER_ID} options={managerOpts} allowEmpty={false}
+                          readOnly={!canEdit} ariaLabel="Projektleitung" fallbackLabel={p.MANAGER_NAME || undefined}
+                          onChange={v => v && inlineMut.mutate({ id: p.ID, body: { project_manager_id: Number(v) } })}
                         />
-                      </td>
-                    )}
-                    <td className="doc-actions">
+                      </span>
+                    </div>
+                    {visibleOptCols.some(c => c.key === 'TYPE_NAME') && (
+                    <div className="ae-karte-zeile">
+                      <span>Typ</span>
+                      <span className="ae-karte-wert">
+                        <InlineSelect
+                          value={p.PROJECT_TYPE_ID} options={typeOpts} placeholder="—"
+                          readOnly={!canEdit} ariaLabel="Typ" fallbackLabel={p.TYPE_NAME || undefined}
+                          onChange={v => inlineMut.mutate({ id: p.ID, body: { project_type_id: v ? Number(v) : null } })}
+                        />
+                      </span>
+                    </div>)}
+                    {visibleOptCols.some(c => c.key === 'DEPARTMENT_NAME') && (
+                    <div className="ae-karte-zeile">
+                      <span>Abteilung</span>
+                      <span className="ae-karte-wert">
+                        <InlineSelect
+                          value={p.DEPARTMENT_ID} options={deptOpts} placeholder="—"
+                          readOnly={!canEdit} ariaLabel="Abteilung" fallbackLabel={p.DEPARTMENT_NAME || undefined}
+                          onChange={v => inlineMut.mutate({ id: p.ID, body: { department_id: v ? Number(v) : null } })}
+                        />
+                      </span>
+                    </div>)}
+                    {visibleOptCols.some(c => c.key === 'ADDRESS_NAME') && (
+                    <div className="ae-karte-zeile">
+                      <span>Adresse</span>
+                      <span className="ae-karte-wert">
+                        {p.ADDRESS_ID
+                          ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { openAddressId: p.ADDRESS_ID } })}>{p.ADDRESS_NAME ?? '—'}</button>
+                          : (p.ADDRESS_NAME ?? '—')}
+                      </span>
+                    </div>)}
+                    {zeigeIntern && (
+                    <div className="ae-karte-zeile">
+                      <span>Intern</span>
+                      <span className="ae-karte-wert">
+                        <button
+                          className="link-cell"
+                          disabled={!canEdit}
+                          onClick={() => internalMut.mutate({ id: p.ID, val: !p.IS_INTERNAL })}
+                          title="Internes Projekt umschalten"
+                        >{p.IS_INTERNAL ? 'Ja' : 'Nein'}</button>
+                      </span>
+                    </div>)}
+                  </div>
+
+                  <div className="ae-karte-fuss">
+                    {onSelectProject
+                      ? <button className="btn-primary ae-arrow" onClick={() => onSelectProject(p.ID)}>Öffnen</button>
+                      : <span />}
+                    <span style={{ display: 'flex', gap: 4 }}>
                       <Can permission="projects.edit">
                         <button className="row-action-btn" onClick={() => openEdit(p)} title="Bearbeiten">
                           <Pencil size={14} strokeWidth={2} />
@@ -614,25 +570,21 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                           <Trash2 size={14} strokeWidth={2} />
                         </button>
                       </Can>
-                    </td>
-                  </tr>
-                  <RowDetailRow offen={offen} panelId={panelId} spalten={spaltenZahl} felder={felder} />
-                  </Fragment>
-                )})}
-                {!pageRows.length && (
-                  <tr><td colSpan={spaltenZahl} className="empty-note">
-                    {hasActiveFilter ? 'Keine Projekte für diese Filter.' : 'Noch keine Projekte angelegt. Lege oben rechts mit „+ Neues Projekt" das erste an.'}
-                  </td></tr>
-                )}
-              </tbody>
-              <tfoot>
-                <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
-                  <td colSpan={spaltenZahl} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
-                    {processed.length !== projects.length ? `${processed.length} / ${projects.length} Einträge` : `${projects.length} Einträge`}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {!pageRows.length && (
+                <p className="empty-note ae-karten-leer">
+                  {hasActiveFilter ? 'Keine Projekte für diese Filter.' : 'Noch keine Projekte angelegt. Lege oben rechts mit „+ Neues Projekt" das erste an.'}
+                </p>
+              )}
+            </div>
+
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 12 }}>
+              {processed.length !== projects.length ? `${processed.length} / ${projects.length} Einträge` : `${projects.length} Einträge`}
+            </p>
           </div>
           {totalPages > 1 && (
             <div className="pagination">
