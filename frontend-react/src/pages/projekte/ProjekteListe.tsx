@@ -1,10 +1,11 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect, Fragment } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { SortTh } from '@/components/ui/SortTh'
 import { useFitColumns } from '@/hooks/useFitColumns'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
+import { useRowDisclosure, useDetailPanelId, RowExpandButton, RowDetailRow, type DetailFeld } from '@/components/ui/RowDetail'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -385,6 +386,32 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
     + (zeigeIntern ? 1 : 0)
     + 1                            // Aktionen
 
+  // ── Aufklappbare Detailzeile ──────────────────────────────────────────
+  const detail    = useRowDisclosure()
+  const panelIdOf = useDetailPanelId()
+
+  /**
+   * Was zeigt der Aufklappbereich? Genau die Spalten, die wegen der
+   * Fensterbreite entfallen sind — nicht die, die der Nutzer im Waehler
+   * bewusst abgewaehlt hat. Wer eine Spalte abwaehlt, will sie nicht sehen;
+   * wer sie durch Platzmangel verliert, hat das nicht entschieden.
+   *
+   * Beschriftung und Wert kommen aus denselben Quellen wie die Tabellenzelle
+   * (OPT_COLS fuer das Label, dasselbe Feld am Projekt fuer den Wert), damit
+   * Tabelle und Bereich nicht auseinanderlaufen koennen.
+   */
+  function detailFelder(pr: Project): DetailFeld[] {
+    const felder: DetailFeld[] = []
+    for (const c of OPT_COLS) {
+      if (!platzWeg.has(c.key)) continue
+      felder.push({ label: c.label, wert: pr[c.key] ?? '—' })
+    }
+    if (platzWeg.has('IS_INTERNAL')) {
+      felder.push({ label: 'Intern', wert: pr.IS_INTERNAL ? 'Ja' : 'Nein' })
+    }
+    return felder
+  }
+
   return (
     <>
       <div className="pl-toolbar">
@@ -462,7 +489,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
       {!isLoading && (
         <>
           <div className="list-section" ref={setBox}>
-            <table className="master-table master-table--einzeilig">
+            <table className="master-table master-table--einzeilig master-table--aufklappbar">
               <thead>
                 <tr>
                   <SortTh label="Kürzel"   column="NAME_SHORT"   {...sortProps} />
@@ -480,14 +507,32 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map(p => (
+                {pageRows.map(p => {
+                  const schluessel = String(p.ID)
+                  const panelId    = panelIdOf(schluessel)
+                  const felder     = detailFelder(p)
+                  const offen      = detail.istOffen(schluessel)
+                  return (
+                  // Datenzeile und Detailzeile in EINEM Fragment: Beim
+                  // Sortieren wandert der aufgeklappte Zustand mit der Zeile.
+                  <Fragment key={p.ID}>
                   <tr
-                    key={p.ID}
                     className={onSelectProject ? 'clickable-row' : undefined}
                     onClick={onSelectProject ? rowClickHandler(() => onSelectProject(p.ID)) : undefined}
                     style={p.IS_INTERNAL ? { opacity: 0.7 } : undefined}
                   >
                     <td className="cell-id">
+                      {/* Der Chevron sitzt IN dieser Zelle, nicht in einer
+                          eigenen Spalte — eine eigene Spalte kostet auf Touch
+                          44px und aendert die Spaltenzahl. Er erscheint nur,
+                          wenn wirklich etwas verborgen ist. */}
+                      <RowExpandButton
+                        sichtbar={felder.length > 0}
+                        offen={offen}
+                        onToggle={() => detail.toggle(schluessel)}
+                        bezeichnung={`Projekt ${p.NAME_SHORT}`}
+                        panelId={panelId}
+                      />
                       {/* Das Kuerzel ist der fokussierbare Einstieg in die Zeile —
                           es ersetzt die frueher in JEDER Zeile wiederholte
                           Schaltflaeche „Oeffnen" und bleibt per Tab erreichbar. */}
@@ -571,7 +616,9 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                       </Can>
                     </td>
                   </tr>
-                ))}
+                  <RowDetailRow offen={offen} panelId={panelId} spalten={spaltenZahl} felder={felder} />
+                  </Fragment>
+                )})}
                 {!pageRows.length && (
                   <tr><td colSpan={spaltenZahl} className="empty-note">
                     {hasActiveFilter ? 'Keine Projekte für diese Filter.' : 'Noch keine Projekte angelegt. Lege oben rechts mit „+ Neues Projekt" das erste an.'}

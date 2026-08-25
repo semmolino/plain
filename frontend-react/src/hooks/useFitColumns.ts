@@ -78,8 +78,13 @@ export function useFitColumns<K extends string>(
       if (key) breiten.current.set(key, th.getBoundingClientRect().width)
     }
 
-    const platz    = sc.clientWidth
-    const ueber    = tabelle.scrollWidth - platz
+    const platz = sc.clientWidth
+    // Am CONTAINER messen, nicht an der Tabelle. Beide Werte unterscheiden
+    // sich um bis zu einem Pixel (Aufrundung), und der Container ist der,
+    // der tatsaechlich scrollt — genau diese Groesse soll auf null gehen.
+    // Mit der Tabellenbreite gerechnet blieb ein Rest von 2px stehen, den
+    // der Hook nicht mehr sah, weil er selbst nur 1 gemessen hat.
+    const ueber = sc.scrollWidth - platz
     const breiteVon = (k: K) => breiten.current.get(k) ?? 100
 
     setWeg(bisher => {

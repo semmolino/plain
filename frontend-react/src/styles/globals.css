@@ -1779,6 +1779,63 @@ input::placeholder { color: var(--text-4); }
 /* Zebrastreifen: bei 10+ Spalten verrutscht das Auge sonst leicht in die
    Nachbarzeile. tbody-Kinder, damit der sticky Header unberuehrt bleibt. */
 .master-table tbody tr:nth-child(even) td { background: var(--dim-2); }
+
+/* ── Aufklappbare Detailzeile ────────────────────────────────────────────
+   Fuer Listen, die Spalten aus Platzmangel weglassen (siehe useFitColumns).
+   Der Bereich zeigt genau die weggefallenen Werte als Beschriftung/Wert-Paare.
+
+   Zebrastreifen: Die Grundregel oben zaehlt ueber :nth-child. Eine
+   eingeschobene Detailzeile verschiebt damit jede Streifenfarbe darunter —
+   ab der ersten aufgeklappten Zeile waere das Muster gekippt. `of
+   :not(.row-detail)` zaehlt nur die Datenzeilen. Bewusst NUR fuer
+   --aufklappbar-Tabellen, damit die uebrigen Listen unberuehrt bleiben; und
+   bewusst als Paar (even UND odd), damit in einem Browser ohne `of` beide
+   Regeln ausfallen und die Grundregel greift, statt die Streifen zu
+   verlieren. */
+.master-table--aufklappbar tbody tr:nth-child(even of :not(.row-detail)) td { background: var(--dim-2); }
+.master-table--aufklappbar tbody tr:nth-child(odd  of :not(.row-detail)) td { background: transparent; }
+
+.row-expand-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; min-width: 24px;
+  margin-right: var(--space-1); vertical-align: middle;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--text-3); border-radius: var(--radius-sm);
+}
+.row-expand-btn:hover { background: var(--hover-bg); color: var(--text); }
+/* Ein Attribut traegt den Zustand fuer Auge UND Screenreader: aria-expanded
+   dreht zugleich den Pfeil. Kein zweiter Zustand, der abweichen koennte. */
+.row-expand-btn svg { transition: transform 0.15s; }
+.row-expand-btn[aria-expanded="true"] svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .row-expand-btn svg { transition: none; } }
+
+.master-table tbody tr.row-detail td {
+  background: var(--surface-2);
+  padding: var(--space-3) var(--space-4);
+  /* Die einzeilige Regel der Liste gilt hier ausdruecklich NICHT — im
+     Aufklappbereich soll Text umbrechen duerfen. */
+  white-space: normal; overflow: visible; text-overflow: clip; max-width: none;
+  border-bottom: 1px solid var(--border-3);
+  box-shadow: inset 3px 0 0 var(--accent-bg);
+}
+.row-detail-list {
+  margin: 0; display: grid; gap: var(--space-2) var(--space-6);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+.row-detail-list > div { min-width: 0; }
+.row-detail-list dt {
+  font-size: var(--fs-label); font-weight: 600; text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow); color: var(--text-3); margin: 0 0 1px;
+}
+.row-detail-list dd {
+  margin: 0; font-size: 13px; color: var(--text);
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+
+/* Auf Touch-Geraeten die Trefferflaeche aus CLAUDE.md. */
+@media (pointer: coarse), (max-width: 640px) {
+  .row-expand-btn { width: 44px; height: 44px; min-width: 44px; margin-right: 0; }
+}
 .master-table tbody tr:hover td { background: var(--accent-tint); }
 
 /* Summenzeile deutlich vom Datenbereich absetzen — vorher lief sie optisch

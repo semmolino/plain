@@ -308,3 +308,139 @@ for (const [liste, url] of [['Projektliste', '/projekte'], ['Rechnungsliste', '/
     }
   })
 }
+
+
+/**
+ * Die Projektliste hat Typ, Abteilung und Adresse standardmaessig ABGEWAEHLT.
+ * Dann faellt auch nichts aus Platzmangel weg und es gibt (richtigerweise)
+ * keinen Aufklapp-Knopf. Fuer die Tests unten werden sie eingeschaltet.
+ */
+async function alleSpaltenAn(page: import('@playwright/test').Page, url: string) {
+  if (!url.includes('projekte')) return
+  await page.getByRole('button', { name: 'Spalten' }).click()
+  for (const l of ['Typ', 'Abteilung', 'Adresse']) {
+    const cb = page.locator('.pl-col-option', { hasText: l }).locator('input[type=checkbox]').first()
+    if (!(await cb.isChecked())) await cb.check()
+  }
+  await page.keyboard.press('Escape')
+}
+
+/**
+ * Aufklappbare Detailzeile.
+ *
+ * Sie faengt genau die Werte auf, die `useFitColumns` wegen der Fensterbreite
+ * weggelassen hat. Ohne sie waeren diese Werte auf schmalen Geraeten gar
+ * nicht mehr erreichbar — der Spaltenwaehler hilft dort nicht, weil ohnehin
+ * kein Platz ist.
+ *
+ * Muster ist Disclosure (WAI-ARIA APG): echter Knopf mit aria-expanded, kein
+ * tabIndex an der <tr>, keine erfundene Rolle. Der Zeilenklick bleibt frei —
+ * in der Projektliste oeffnet er das Projekt, und dieselbe Geste darf nicht
+ * in zwei Listen Verschiedenes tun.
+ */
+for (const [liste, url, breite] of [
+  ['Projektliste',   '/projekte',   1100],
+  ['Rechnungsliste', '/rechnungen', 1280],
+] as [string, string, number][]) {
+
+  test(`${liste} — Detailzeile zeigt genau die weggelassenen Spalten`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'prueft eine bestimmte Fensterbreite')
+    await page.setViewportSize({ width: breite, height: 800 })
+    await mockDemo(page); await page.goto(url); await hideDevtools(page)
+    await page.locator('.master-table').waitFor()
+    await alleSpaltenAn(page, url)
+
+    const knopf = page.locator('.row-expand-btn').first()
+    await expect(knopf, 'bei dieser Breite fallen Spalten weg, also muss es den Knopf geben').toBeVisible()
+    await expect(knopf).toHaveAttribute('aria-expanded', 'false')
+
+    const sichtbar = await spalten(page)
+    await knopf.click()
+    await expect(knopf).toHaveAttribute('aria-expanded', 'true')
+
+    const panel = page.locator('tr.row-detail').first()
+    await expect(panel).toBeVisible()
+
+    // Genau die weggelassenen — keine, die schon in der Tabelle steht.
+    const felder = await panel.locator('dt').allTextContents()
+    expect(felder.length).toBeGreaterThan(0)
+    for (const f of felder) {
+      expect(sichtbar, `„${f}" steht schon in der Tabelle und gehoert nicht ins Panel`).not.toContain(f)
+    }
+
+    // Die Detailzeile steht unmittelbar hinter IHRER Datenzeile.
+    const direktDanach = await panel.evaluate(el => {
+      const vor = el.previousElementSibling
+      return vor?.tagName === 'TR' && !vor.classList.contains('row-detail')
+    })
+    expect(direktDanach, 'die Detailzeile muss direkt hinter ihrer Datenzeile stehen').toBe(true)
+  })
+
+  test(`${liste} — Aufklappen verbreitert die Tabelle nicht`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'prueft eine bestimmte Fensterbreite')
+    // Der Sinn der Sache: Ein <td colSpan> ist so breit wie die TABELLE.
+    // Waere die zu breit, muesste man die Detailangaben genauso seitwaerts
+    // scrollen wie vorher die Spalten — das Panel brauchte dann niemand.
+    await page.setViewportSize({ width: breite, height: 800 })
+    await mockDemo(page); await page.goto(url); await hideDevtools(page)
+    await page.locator('.master-table').waitFor()
+    await alleSpaltenAn(page, url)
+
+    const behaelter = page.locator('.table-scroll, .list-section').first()
+    await expect.poll(() => behaelter.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
+    await page.locator('.row-expand-btn').first().click()
+    await expect(page.locator('tr.row-detail')).toHaveCount(1)
+    await expect.poll(() => behaelter.evaluate(el => el.scrollWidth - el.clientWidth),
+      { message: 'die Detailzeile hat die Tabelle verbreitert' }).toBeLessThanOrEqual(1)
+  })
+
+  test(`${liste} — colSpan der Detailzeile passt zur Spaltenzahl`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'prueft eine bestimmte Fensterbreite')
+    await page.setViewportSize({ width: breite, height: 800 })
+    await mockDemo(page); await page.goto(url); await hideDevtools(page)
+    await page.locator('.master-table').waitFor()
+    await alleSpaltenAn(page, url)
+    await page.locator('.row-expand-btn').first().click()
+    const r = await page.evaluate(() => ({
+      kopf: document.querySelectorAll('.master-table thead th').length,
+      span: Number(document.querySelector('tr.row-detail td')!.getAttribute('colspan')),
+    }))
+    expect(r.span).toBe(r.kopf)
+  })
+}
+
+test('Detailzeile — Fokus bleibt beim Umschalten auf dem Knopf', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'prueft eine bestimmte Fensterbreite')
+  // Ein Fokussprung ins Panel waere ein unangekuendigter Kontextwechsel
+  // (WCAG 3.2.1). Der Inhalt folgt im DOM, der naechste Tabulator reicht.
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+  const knopf = page.locator('.row-expand-btn').first()
+  await knopf.click()
+  expect(await knopf.evaluate(el => document.activeElement === el)).toBe(true)
+  await knopf.click()
+  expect(await knopf.evaluate(el => document.activeElement === el)).toBe(true)
+  await expect(page.locator('tr.row-detail')).toHaveCount(0)
+})
+
+test('Detailzeile — auf breitem Bildschirm gibt es den Knopf gar nicht', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'prueft eine bestimmte Fensterbreite')
+  // Ein Bedienelement, das ein leeres Panel oeffnet, verspricht mehr als es
+  // haelt. Faellt keine Spalte weg, ist auch nichts nachzureichen.
+  await page.setViewportSize({ width: 1920, height: 900 })
+  await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+  await expect.poll(() => page.locator('.row-expand-btn').count()).toBe(0)
+})
+
+test('Detailzeile — Trefferflaeche auf dem Handy mindestens 44px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockDemo(page); await page.goto('/projekte'); await hideDevtools(page)
+  await page.locator('.master-table').waitFor()
+  const knopf = page.locator('.row-expand-btn').first()
+  await expect(knopf).toBeVisible()
+  const box = await knopf.boundingBox()
+  expect(box!.width,  'CLAUDE.md fordert 44x44').toBeGreaterThanOrEqual(44)
+  expect(box!.height, 'CLAUDE.md fordert 44x44').toBeGreaterThanOrEqual(44)
+})

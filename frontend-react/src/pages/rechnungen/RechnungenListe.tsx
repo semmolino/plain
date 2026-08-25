@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
+import { useRowDisclosure, useDetailPanelId, RowExpandButton, RowDetailRow, type DetailFeld } from '@/components/ui/RowDetail'
 import { useFitColumns } from '@/hooks/useFitColumns'
 import { SortTh } from '@/components/ui/SortTh'
 import { RecentList } from '@/components/recents/RecentList'
@@ -389,6 +390,72 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   const visibleCols = COLUMNS.filter(c => !hiddenCols.has(c.key) && !platzWeg.has(c.key))
   const platzVersteckt = COLUMNS.filter(c => platzWeg.has(c.key))
   const spaltenZahl = (narrow ? 2 : 3) + visibleCols.length
+
+  /**
+   * Inhalt einer Zelle — EINE Quelle fuer die Tabelle UND den Aufklappbereich.
+   *
+   * Vorher stand die if-Kette direkt im Rumpf und lieferte fertige `<td>`.
+   * Damit haette der Aufklappbereich seine Werte ein zweites Mal berechnen
+   * muessen, und die beiden waeren mit der Zeit auseinandergelaufen — genau
+   * das Muster, das in diesem Projekt schon FilterChip und SortTh vervielfacht
+   * hat. Die Funktion liefert deshalb nur den INHALT; wer ihn in `<td>` oder
+   * in ein Beschriftung/Wert-Paar setzt, entscheidet die Aufrufstelle.
+   */
+  function zellInhalt(row: UnifiedRow, key: ColKey): { inhalt: React.ReactNode; className?: string; title?: string } {
+    switch (key) {
+      case 'typ':  return { inhalt: row.typ }
+      case 'date': return { inhalt: fmtDate(row.date), className: 'cell-nowrap' }
+      case 'project': return {
+        title:  row.project ?? undefined,
+        inhalt: row.projectId !== null
+          ? <button className="link-btn" style={{ fontSize: 13 }}
+              onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>
+              {row.project ?? '—'}
+            </button>
+          : (row.project ?? '—'),
+      }
+      case 'address': return {
+        inhalt: row.address
+          ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button>
+          : '—',
+      }
+      case 'net':   return { inhalt: fmtEur(row.net),   className: 'num' }
+      case 'gross': return { inhalt: fmtEur(row.gross), className: 'num' }
+      case 'seHeld': {
+        if (row.seHeld == null) return { inhalt: '—', className: 'num' }
+        const v = row.seHeld
+        // Original-AR: positiv → als Abzug "− X" zeigen.
+        // Storno-AR:    negativ → als Rückbuchung "+ X" zeigen.
+        return { inhalt: v >= 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`, className: 'num' }
+      }
+      case 'payable': return {
+        className: 'num',
+        inhalt: row.payable != null && (row.seHeld != null || row.seRelease != null)
+          ? <strong>{fmtEur(row.payable)}</strong>
+          : fmtEur(row.payable),
+      }
+      case 'paid': return { inhalt: fmtEur(row.paid), className: 'num' }
+      case 'open': return { inhalt: fmtEur(row.open), className: 'num' }
+      case 'statusLabel': return {
+        inhalt: <>
+          <span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span>
+          {row.isOverdue && <span className="status-badge overdue" title={`Fällig: ${row.dueDate}`}>Überfällig</span>}
+        </>,
+      }
+    }
+  }
+
+  // ── Aufklappbare Detailzeile ──────────────────────────────────────────
+  const detail    = useRowDisclosure()
+  const panelIdOf = useDetailPanelId()
+
+  /** Genau die Spalten, die wegen der Fensterbreite entfallen sind — nicht
+   *  die, die der Nutzer im Waehler bewusst abgewaehlt hat. */
+  function detailFelder(row: UnifiedRow): DetailFeld[] {
+    return COLUMNS
+      .filter(c => platzWeg.has(c.key))
+      .map(c => ({ label: c.label, wert: zellInhalt(row, c.key).inhalt }))
+  }
   const [sortKey, setSortKey] = useStickyState<SortKey>('rechnungen.sortKey', 'date')
   const [sortDir, setSortDir] = useStickyState<'asc'|'desc'>('rechnungen.sortDir', 'desc')
 
@@ -934,7 +1001,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
           {/* Diese Tabelle hat so viele Spalten, dass sie auf ueblichen
               Breiten horizontal scrollt — daher die rechts fixierte
               Aktionsspalte. Schmalere Listen bekommen den Modifier nicht. */}
-          <table className="master-table master-table--sticky-actions">
+          <table className="master-table master-table--sticky-actions master-table--aufklappbar">
             <thead>
               <tr>
                 {/* Auf dem Handy steht die Aktionsspalte VORNE: als letzte
@@ -1047,38 +1114,42 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                       </RowMenu>
                     </td>
                 )
+                const felder  = detailFelder(row)
+                const panelId = panelIdOf(row.key)
+                const offen   = detail.istOffen(row.key)
                 return (
-                  <tr key={row.key} className={`row-status-${row.statusClass}`}>
+                  // Datenzeile und Detailzeile in EINEM Fragment: Beim
+                  // Sortieren wandert der aufgeklappte Zustand mit der Zeile.
+                  <Fragment key={row.key}>
+                  <tr className={`row-status-${row.statusClass}`}>
                     {narrow && actionsCell}
                     {!narrow && (
                       <td style={{ padding: '4px', textAlign: 'center' }}>
-                        <input type="checkbox" checked={selected.has(row.key)} onChange={() => toggleRowSel(row.key)} />
+                        <input type="checkbox" checked={selected.has(row.key)} onChange={() => toggleRowSel(row.key)}
+                          aria-label={`${row.number ?? 'Zeile'} auswählen`} />
                       </td>
                     )}
-                    <td className="cell-nowrap">{row.number ?? '—'}</td>
+                    <td className="cell-nowrap">
+                      {/* Der Chevron sitzt IN der Nummernzelle statt in einer
+                          eigenen Spalte — die kostete auf Touch 44px und
+                          aenderte die Spaltenzahl samt jedem colSpan. */}
+                      <RowExpandButton
+                        sichtbar={felder.length > 0}
+                        offen={offen}
+                        onToggle={() => detail.toggle(row.key)}
+                        bezeichnung={`Rechnung ${row.number ?? ''}`.trim()}
+                        panelId={panelId}
+                      />
+                      {row.number ?? '—'}
+                    </td>
                     {visibleCols.map(c => {
-                      if (c.key === 'typ')         return <td key={c.key}>{row.typ}</td>
-                      if (c.key === 'date')        return <td key={c.key} className="cell-nowrap">{fmtDate(row.date)}</td>
-                      if (c.key === 'project')     return <td key={c.key} title={row.project ?? undefined}>{row.projectId !== null ? <button className="link-btn" style={{ fontSize: 13 }} onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: row.projectId } })}>{row.project ?? '—'}</button> : (row.project ?? '—')}</td>
-                      if (c.key === 'address')     return <td key={c.key}>{row.address ? <button className="link-cell" onClick={() => navigate('/adressen', { state: { searchAddress: row.address } })}>{row.address}</button> : '—'}</td>
-                      if (c.key === 'net')         return <td key={c.key} className="num">{fmtEur(row.net)}</td>
-                      if (c.key === 'gross')       return <td key={c.key} className="num">{fmtEur(row.gross)}</td>
-                      if (c.key === 'seHeld') {
-                        if (row.seHeld == null) return <td key={c.key} className="num">—</td>
-                        const v = row.seHeld
-                        // Original-AR: positiv → als Abzug "− X" zeigen.
-                        // Storno-AR:    negativ → als Rückbuchung "+ X" zeigen.
-                        const label = v >= 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`
-                        return <td key={c.key} className="num">{label}</td>
-                      }
-                      if (c.key === 'payable')     return <td key={c.key} className="num">{row.payable != null && (row.seHeld != null || row.seRelease != null) ? <strong>{fmtEur(row.payable)}</strong> : fmtEur(row.payable)}</td>
-                      if (c.key === 'paid')        return <td key={c.key} className="num">{fmtEur(row.paid)}</td>
-                      if (c.key === 'open')        return <td key={c.key} className="num">{fmtEur(row.open)}</td>
-                      if (c.key === 'statusLabel') return <td key={c.key}><span className={`status-badge ${row.statusClass}`}>{row.statusLabel}</span>{row.isOverdue && <span className="status-badge overdue" title={`Fällig: ${row.dueDate}`}>Überfällig</span>}</td>
-                      return null
+                      const z = zellInhalt(row, c.key)
+                      return <td key={c.key} className={z.className} title={z.title}>{z.inhalt}</td>
                     })}
                     {!narrow && actionsCell}
                   </tr>
+                  <RowDetailRow offen={offen} panelId={panelId} spalten={spaltenZahl} felder={felder} />
+                  </Fragment>
                 )
               })}
               {!rows.length && (
