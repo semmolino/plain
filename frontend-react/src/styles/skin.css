@@ -84,7 +84,11 @@
   --success-strong: #246313;
   --success-bg:     #eafbd6;         /* aus dem Limeton abgeleitet */
   --danger:         #d61b1e;
-  --danger-strong:  #ff3336;
+  /* --*-strong ist in globals.css die SCHRIFT auf der --*-bg-Flaeche
+     (.status-badge), nicht die kraeftigere Variante — im hellen Design
+     also DUNKLER als der Grundton. Das Original #ff3336 kam dort auf
+     2,4:1. */
+  --danger-strong:  #a81416;
   --danger-bg:      #ffe8e8;
   --warning:        #8a6100;
   --warning-strong: #6b4b00;
