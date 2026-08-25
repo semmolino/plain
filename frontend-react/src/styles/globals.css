@@ -844,10 +844,17 @@ body {
    Theme ausser dem Default hat dort eine dunkle Flaeche (gemessen: Luminanz
    0.005–0.064). Vorher galt die weisse Wortmarke nur fuer data-theme="dark" —
    in allen Branchen-Themes war der Schriftzug dunkel auf dunkel, sichtbar
-   blieb nur das blaue „&". Bewusst auf .side-nav-brand begrenzt: Login und
-   Signup stehen dort auf hellem --bg und brauchen weiter die Farbversion. */
-[data-theme] .side-nav-brand .brand-wordmark-color { display: none; }
-[data-theme] .side-nav-brand .brand-wordmark-white { display: block; }
+   blieb nur das blaue „&". Bewusst begrenzt auf die Stellen, die auf
+   --chrome liegen: Login und Signup stehen auf hellem --bg und brauchen
+   weiter die Farbversion.
+
+   Gilt gleichermassen fuer die Kopfleisten-Huelle (TopbarShell), in der
+   die Marke nicht in .side-nav-brand sitzt, sondern links in der
+   Kopfzeile — dort trat derselbe Fehler sonst erneut auf. */
+[data-theme] .side-nav-brand .brand-wordmark-color,
+[data-theme] .shell-topbar .app-header-left .brand-wordmark-color { display: none; }
+[data-theme] .side-nav-brand .brand-wordmark-white,
+[data-theme] .shell-topbar .app-header-left .brand-wordmark-white { display: block; }
 .brand-mark { display: block; border-radius: 6px; }
 .auth-subtitle { font-size: 13px; color: var(--text-3); margin-top: 2px; margin-bottom: 24px; }
 .auth-title  { font-size: var(--fs-page-title); font-weight: var(--fw-title); margin-bottom: 20px; color: var(--text); }
