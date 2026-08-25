@@ -127,7 +127,7 @@
   --shadow-lg: 0 18px 48px rgba(19,19,19,0.14);
 
   --row-py: 11px;
-  --row-px: 12px;
+  --row-px: 6px;   /* mehr laesst die Rechnungsliste ueberlaufen */
 
   --nav-width:       212px;
   --nav-indicator:   0px;
@@ -354,6 +354,12 @@ body             { letter-spacing: -0.02em; }
   background: var(--ae-tinte); color: #ffffff;
   transition: transform var(--ae-uebergang);
 }
+/* Auf Blau traegt die 74-prozentige Deckkraft nicht: Weiss auf #2453ff
+   kommt damit auf rund 3:1 und faellt bei axe durch. Auf dem dunklen und
+   dem limettenen Grund ist der Abstand gross genug, dort bleibt sie. */
+.ae-module--blau .ae-module-name,
+.ae-module--blau .ae-module-sub { opacity: 1; color: rgba(255,255,255,0.94); }
+
 .ae-module--dunkel .ae-module-pfeil { background: var(--ae-lime); color: var(--ae-tinte); }
 .ae-module--blau   .ae-module-pfeil { background: #ffffff; color: var(--ae-blau); }
 .ae-module:hover .ae-module-pfeil { transform: translate(2px, -2px); }
@@ -417,37 +423,51 @@ body             { letter-spacing: -0.02em; }
   border: 1px solid var(--border-3);
   overflow: hidden;
 }
+/* Mono-Versalien mit weiter Sperrung sind das Kennzeichen der Vorlage —
+   in einer 15-spaltigen Tabelle kosten sie aber so viel Breite, dass die
+   Spaltenanpassung sie nicht mehr unterbringt (gemessen: 125px Ueberlauf
+   auf 1100px). Deshalb hier enger gesetzt als in Kacheln und Knoepfen. */
 .master-table th {
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  /* KEINE Versalien: deutsche Spaltenkoepfe wie
+     "Teilschluss-/Schlussrechnung" werden dadurch rund ein Siebtel
+     breiter, und die Spaltenanpassung pendelt sich nach einem
+     Groessenwechsel nicht mehr ein. Die Monospace allein traegt die
+     Sprache der Vorlage hier ausreichend. */
   color: var(--text-3);
   background: var(--surface);
   border-bottom: 1px solid var(--border-2);
-  padding-top: 14px; padding-bottom: 14px;
+  padding-top: 13px; padding-bottom: 13px;
 }
 .master-table td { border-bottom: 1px solid var(--border-4); }
 .master-table tbody tr { transition: background-color .15s; }
 .master-table tbody tr:hover { background: var(--ae-grau-100); }
 
 /* Betraege und Nummern in Mono: gleiche Ziffernbreite laesst sie fluchten. */
+/* Mono-Ziffern sind breiter als proportionale. In den Betragsspalten ist
+   das die Lesehilfe, die diese Vorlage nahelegt — aber sie kostet Breite,
+   und die hat eine 15-spaltige Rechnungsliste nicht. Daher enger gesetzt. */
 .master-table td.num, .dash-table td.num, .ls-td.ls-col-num {
   font-family: var(--font-mono);
-  font-size: 12.5px;
-  letter-spacing: -0.01em;
+  font-size: 12.5px;   /* nicht kleiner: CLAUDE.md setzt 13px als Untergrenze
+                          fuer Fliesstext, Mono wirkt bei 12.5px gleich gross */
+  letter-spacing: -0.04em;
 }
 
 /* Statusfahnen als Pillen in Mono-Versalien. */
 .status-badge, .mahnstufe-badge {
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  /* 11px ist die Untergrenze aus CLAUDE.md fuer Meta-/Label-Text. Breite
+     wird ueber Polsterung und Sperrung geholt, nicht ueber die Schrift. */
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
   text-transform: uppercase;
-  padding: 3px 10px;
+  padding: 2px 6px;
 }
 
 /* ═══ 8 · NAVIGATION ═══════════════════════════════════════════════════════ */

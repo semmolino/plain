@@ -271,7 +271,13 @@ const COLUMNS: ColDef[] = [
  * Brutto ableitbar), dann Offene Posten, zuletzt der Typ — der steht auch im
  * farbigen Zeilenrand und in der Detailansicht.
  */
-const WEGFALLBAR: ColKey[] = ['seHeld', 'payable', 'net', 'open', 'typ']
+// 'paid' ist in der Design-Variante "Aeline" ergaenzt: deren Monospace in
+// den Betragsspalten und die Versal-Badges im Status brauchen rund 46px mehr
+// Breite als die Standardschrift. Bei 1100px reichten die bisherigen fuenf
+// Raenge dadurch nicht mehr aus, und die Liste stand ueber. Die Schrift
+// dafuer weiter zu verkleinern schied aus — 11px fuer Meta und 13px fuer
+// Fliesstext sind in CLAUDE.md als Untergrenze festgehalten.
+const WEGFALLBAR: ColKey[] = ['seHeld', 'payable', 'net', 'open', 'typ', 'paid']
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
