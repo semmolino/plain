@@ -177,13 +177,47 @@ BR-CO-26 verlangt mindestens eines aus BT-29, BT-30 oder BT-31. BT-32 (Steuernum
 
 Abgesichert durch 2 Tests (nur Steuernummer → Warnung, keine Kennung → Error).
 
-### N10 — Sicherheitseinbehalt verletzt BR-CO-16 und blockiert die eigene Buchung [belegt]
+### N10 — Sicherheitseinbehalt verletzt BR-CO-16 und blockiert die eigene Buchung [belegt] — 🔶 AUSGEMESSEN 26.08.2026, Entscheidung offen
 
 `services_einvoice_data.js:500` zieht den Einbehalt direkt vom Zahlbetrag ab, ausgegeben in `cii.js:296` / `ubl.js:322`. BT-114 schreibt kein Builder, der Einbehalt ist in keiner Summenposition abgebildet (bewusst nur als Note).
 
 Beim Empfänger ist BT-115 um den Einbehalt zu niedrig → BR-CO-16, harte Abweisung. Intern reißt dieselbe Differenz die 0,02-EUR-Toleranz (`validator:237-244`) — eine Rechnung mit Sicherheitseinbehalt ist **nur mit `force=true` buchbar**.
 
 **Braucht eine fachliche Entscheidung, keinen Code-Fix:** Einbehalt als dokumentweiter Nachlass (BG-20) mit korrekter USt-Behandlung, als BT-113, oder solche Rechnungen bewusst aus der E-Rechnung heraushalten.
+
+## Messung vom 26.08.2026
+
+Beispiel: Abschlagsrechnung 10.000 € netto, 19 % USt → 11.900 € brutto, Einbehalt 5 % vom Brutto = 595 €. Alle Zahlen durch `validateEInvoiceData` geprüft.
+
+| Variante | BT-109 | BT-112 | BT-113 | BT-115 | buchbar |
+|---|---|---|---|---|---|
+| **heute** — Einbehalt direkt vom Zahlbetrag | 10.000 | 11.900 | 0 | 11.305 | **nein**, BR-CO-16 |
+| **A** — Einbehalt als BT-113 | 10.000 | 11.900 | 595 | 11.305 | ja |
+| **B** — Einbehalt als BG-20 (Nachlass) | 9.405 | 11.191,95 | 0 | 11.191,95 | ja |
+| **D** — nur im Text, BT-115 bleibt voll | 10.000 | 11.900 | 0 | 11.900 | ja |
+
+**Der Befund gilt in beide Richtungen.** Auch die Auflösung fällt über BR-CO-16: die Schlussrechnung erhöht den Zahlbetrag um den Einbehalt (4.760 € brutto → 5.355 € fällig), und BT-115 ist dann *größer* als BT-112 − BT-113. Das stand so nicht im ursprünglichen Befund.
+
+**Variante B scheidet aus.** Sie senkt die USt von 1.900 € auf 1.786,95 € — 113,05 € Differenz. Das widerspricht der ausdrücklichen Modellvorgabe in `migrations/0047_security_retention.sql`: *„SE does NOT reduce the VAT base — full USt due on the gross amount."* Der Einbehalt ist bereits versteuert; ihn als Nachlass zu führen, würde ihn ein zweites Mal aus der Bemessungsgrundlage nehmen.
+
+**Variante A allein reicht nicht.** Sie löst den Einbehalt, aber die Auflösung bräuchte ein **negatives BT-113** — und BT-113 ist nach BR-2 nicht-negativ. Der hauseigene Validator würde es durchlassen (er prüft nur die Arithmetik), ein echtes Prüfportal nicht.
+
+## Was tatsächlich trägt
+
+Variante A auf der Abschlagsseite, kombiniert mit einer geänderten Definition von BT-113 auf der Schlussrechnung:
+
+| Beleg | BT-113 wird gefüllt mit | BT-112 | BT-113 | BT-115 |
+|---|---|---|---|---|
+| Abschlagsrechnung | dem einbehaltenen Betrag | 11.900 | 595 | 11.305 |
+| Schlussrechnung | dem **tatsächlich geflossenen** Betrag (Abschlag brutto − Einbehalt) | 16.660 | 11.305 | 5.355 |
+
+Beide buchbar, USt unangetastet, keine negativen Beträge, und die Auflösung braucht keinen eigenen Mechanismus mehr — der Einbehalt kommt zurück, weil er nie als gezahlt galt.
+
+**Der entscheidende Punkt: kein einziger Betrag ändert sich.** Heute rechnet die Schlussrechnung 16.660 − 11.900 + 595 = 5.355; neu 16.660 − 11.305 = 5.355. Die Umstellung ist rein darstellerisch — was der Kunde zahlt, bleibt auf den Cent gleich.
+
+**Was bleibt unschön:** auf der Abschlagsrechnung heißt BT-113 „Bezahlter Betrag", der Einbehalt ist aber nicht bezahlt, sondern zurückbehalten. Das ist eine Dehnung der Semantik. Sie wird dadurch abgefedert, dass der bestehende Hinweistext (`buildSecurityRetentionNote`) den Sachverhalt bereits im Klartext erklärt. Die Alternative wäre Variante D — normativ sauberer, aber dann liest das ERP des Empfängers BT-115 = 11.900 und überweist den vollen Betrag.
+
+**Offen: die Entscheidung.** Betroffen wären `services_einvoice_data.js` (Befüllung von `prepaidGross`) und der Auflösungspfad in `services/finalInvoices.js`.
 
 ### N11 — CII: Elementreihenfolge im Settlement-Block [unsicher: gegen XSD prüfen]
 
