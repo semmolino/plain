@@ -476,7 +476,16 @@ export const HELP = {
       <>
         Prozentuale Auf- oder Abschläge auf das Honorar — z. B. Umbau-/
         Bestandszuschlag, Komplexitätszuschlag oder ein vereinbarter Nachlass.
-        Mehrere können kumulativ oder jeweils auf die Grundsumme wirken.
+        <br /><br />
+        <strong>Parallel</strong> (Voreinstellung) — jeder Zuschlag rechnet auf die
+        Honorarbasis, unabhängig von den anderen.
+        <br />
+        <strong>Kumulativ</strong> — der Zuschlag rechnet auf die Honorarbasis
+        <em> plus die Summe aller vorher aufgeführten Zuschläge</em>. Wichtig, wenn die
+        Zuschläge verschiedene Leistungsphasen betreffen: aufgestockt wird mit der
+        <strong> vollen</strong> Summe der vorherigen Zuschläge, auch mit dem Anteil, der auf
+        Leistungsphasen entfällt, die dieser Zuschlag gar nicht umfasst. Die Reihenfolge
+        der Zeilen bestimmt das Ergebnis mit.
       </>
     ),
   },

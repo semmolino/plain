@@ -44,6 +44,43 @@ function resolveRevenueStrategy() {
   return calculateRevenueLinearInterpolation;
 }
 
+// B3: ZONE_PERCENT beschreibt bei den Honorartafel-Leistungsbildern die Lage
+// zwischen Mindest- und Hoechstsatz. Ausserhalb von 0-100 gibt es dort nichts
+// zu beschreiben -- bei 150 % entstand ein Honorar ueber dem Tafel-Hoechstsatz,
+// ohne jeden Hinweis.
+//
+// Bei zwei Typen ist die Spalte bewusst zweckentfremdet und die Grenze gilt
+// deshalb ausdruecklich NICHT: 'percent_of_baukosten' fuehrt dort einen frei
+// vereinbarten Honorarsatz, 'flaechenaequivalent_brandschutz' den Faktor f
+// (170-191 laut AHO Heft 17). Eine pauschale Klemmung waere dort falsch.
+const ZONE_PERCENT_FREE_BASE_TYPES = new Set([
+  'percent_of_baukosten',
+  'flaechenaequivalent_brandschutz',
+]);
+
+/**
+ * Prueft ZONE_PERCENT gegen 0-100, aber nur fuer Honorartafel-Leistungsbilder.
+ * @returns {Promise<string|null>} Fehlertext oder null, wenn zulaessig.
+ */
+async function zonePercentRangeError(supabase, feeMasterId, zonePercent) {
+  const pct = toNumberOrNull(zonePercent);
+  if (pct === null) return null;              // leer/nicht gesetzt
+  if (pct >= 0 && pct <= 100) return null;
+
+  try {
+    const { data: fm } = await supabase
+      .from("FEE_MASTERS").select("BASE_TYPE").eq("ID", feeMasterId).maybeSingle();
+    if (fm && ZONE_PERCENT_FREE_BASE_TYPES.has(fm.BASE_TYPE)) return null;
+  } catch (_) {
+    // Spalte/Migration fehlt -> wie Tafel-Typ behandeln, so wie es auch
+    // calculateRevenueFields tut.
+  }
+
+  return `Zonenanteil muss zwischen 0 und 100 % liegen (erhalten: ${pct} %). `
+    + `Er beschreibt die Lage zwischen Mindest- und Hoechstsatz der Honorartafel; `
+    + `ausserhalb dieser Spanne gibt es keinen Tafelwert.`;
+}
+
 async function calculateRevenueFields(supabase, { feeMasterId, zoneId, zonePercent, costsByKey }) {
   const empty = { REVENUE_K0: null, REVENUE_K1: null, REVENUE_K2: null, REVENUE_K3: null, REVENUE_K4: null };
   if (!feeMasterId) return empty;
@@ -323,6 +360,8 @@ async function interpolateHonorarForZone(supabase, { feeMasterId, zoneId, zonePe
 
 module.exports = {
   toNumberOrNull,
+  zonePercentRangeError,
+  ZONE_PERCENT_FREE_BASE_TYPES,
   calculateRevenueFields,
   interpolateHonorarForZone,
   getRevenueByKx,

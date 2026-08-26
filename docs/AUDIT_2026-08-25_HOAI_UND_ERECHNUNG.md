@@ -339,7 +339,7 @@ Das ist eine Architekturentscheidung und gehört zu den offenen Punkten, nicht i
 
 ## B — Fachlich zu klären
 
-### B1 — Kumulativer Zuschlag ignoriert den LPH-Filter der vorherigen Zuschläge
+### B1 — Kumulativer Zuschlag ignoriert den LPH-Filter der vorherigen Zuschläge — ✅ ENTSCHIEDEN 26.08.2026
 
 `services_pdf_render.js:1366-1369` und identisch `frontend-react/src/pages/projekte/HonorarWizard.tsx:108-112`: der laufende Zwischenstand summiert **alle** vorherigen Zuschlagsbeträge, auch solche, die auf andere Leistungsphasen entfallen.
 
@@ -351,7 +351,17 @@ Szenario (der Katalogfall aus Migration 0126): Grundhonorar 100.000 €, LPH 8 =
 
 Der UI-Hinweis (`HonorarWizard.tsx:1302`) sagt „Honorarbasis + Summe vorheriger Zuschläge" — der Code tut also, was dort steht. Zu entscheiden ist, ob diese Semantik bei abweichenden LPH-Filtern gewollt ist. „Parallel" ist Default, der Fall tritt nur bei bewusster Umschaltung auf.
 
-### B2 — Tafel-Ränder werden still auf den Randwert geklemmt
+**Entscheidung: Semantik bleibt, Hinweis wird geschärft.** Die Rechnung ist damit ausdrücklich gewollt und kein Befund mehr — sie muss nur erkennbar sein.
+
+Umgesetzt:
+
+- Kurztext am Schalter: „Summe **aller** vorherigen Zuschläge" statt „Summe vorheriger Zuschläge".
+- Neuer Hinweis, der **nur** erscheint, wenn der Fall tatsächlich vorliegt (kumulativ, nicht die erste Zeile, und ein LPH-Filter gesetzt): der Zuschlag stockt auf die volle Summe der vorherigen auf, auch auf deren Anteil für hier nicht ausgewählte Leistungsphasen.
+- `helpContent.tsx` → `hoai.zuschlag`: „parallel" und „kumulativ" sind jetzt getrennt erklärt, samt dem Hinweis, dass die Reihenfolge der Zeilen das Ergebnis mitbestimmt.
+
+Der Hinweis erscheint bewusst nicht bei jedem kumulativen Zuschlag — ohne abweichenden LPH-Filter gibt es nichts zu warnen, und ein dauernd sichtbarer Hinweis wird überlesen.
+
+### B2 — Tafel-Ränder werden still auf den Randwert geklemmt — 🔶 RECHTSLAGE GEKLÄRT, Umsetzung offen
 
 `services/stammdaten.js:21-35` (`findBounds`): unterhalb des kleinsten und oberhalb des größten Basiswerts fallen untere und obere Grenze auf dieselbe Zeile zurück, die Interpolation (`:39`) gibt den Randwert zurück. Geprüft mit den echten Tafelwerten aus Migration 0115 (FM 1, Zone III, Zonenprozent 0):
 
@@ -365,7 +375,21 @@ Ein 40-Mio-Projekt bekommt dasselbe Grundhonorar wie ein 25-Mio-Projekt, ohne Hi
 
 **Rechtsgrundlage ungeprüft:** die HOAI trifft für Kosten außerhalb der Tafel eine Regelung; der Verordnungstext lag beim Audit nicht vor, deshalb wird bewusst kein Paragraph genannt. Zu klären: welche Behandlung vorgeschrieben ist und ob mindestens eine Warnung angezeigt werden muss. Die Randfälle sind in `tests/stammdaten.service.test.js` nicht abgedeckt.
 
-### B3 — `ZONE_PERCENT` wird nirgends auf 0–100 begrenzt
+**Nachgetragen 26.08.2026 — § 7 Abs. 2 HOAI:**
+
+> „Liegen die ermittelten anrechenbaren Kosten oder Flächen außerhalb der in den Honorartafeln dieser Verordnung festgelegten Honorarsätze, sind die Honorare frei vereinbar."
+
+Damit steht fest: **außerhalb der Tafel gibt es kein Tafelhonorar.** Das stille Klemmen auf den Randwert gibt eine Zahl aus, die die Verordnung an dieser Stelle nicht kennt.
+
+**Extrapolieren scheidet aus.** Die Honorartafeln sind in sich geschlossen und enthalten keinen Parameter dafür, wie sich das Honorar oberhalb weiterentwickelt — eine lineare Fortschreibung wäre eine Erfindung, keine Auslegung.
+
+**Entschiedene Richtung: Erweiterungstabellen integrieren.** Für Honorare oberhalb der Tafelwerte gibt es anerkannte, veröffentlichte Tafeln der staatlichen Bauverwaltungen — die **RiFT** (Richtlinien der Staatlichen Vermögens- und Hochbauverwaltung Baden-Württemberg) sowie entsprechende Regelungen in Bayern und Nordrhein-Westfalen. Sie beschreiben je Leistungsbild, wie oberhalb der Tafel weitergerechnet wird, und werden bei Streitigkeiten — besonders bei öffentlichen Auftraggebern — als Grundlage herangezogen.
+
+Das ist ein eigenes Vorhaben, kein Handgriff: es braucht die Tafeldaten selbst, eine Zuordnung je Leistungsbild und eine Entscheidung, welche Landesregelung Vorrang hat. Offen und bewusst nicht nebenbei umgesetzt.
+
+**Bis dahin ungelöst.** Der heutige Zustand — Randwert ohne jeden Hinweis — bleibt bestehen. Ein 40-Mio-Projekt bekommt weiterhin das Honorar eines 25-Mio-Projekts, ein 10.000-€-Projekt das eines 25.000-€-Projekts. Der kleinste sinnvolle Zwischenschritt wäre, den Fall überhaupt zu erkennen und zu kennzeichnen (`findBounds` weiß es bereits, sagt es nur niemandem), damit niemand eine Zahl unterschreibt, die so nicht gilt.
+
+### B3 — `ZONE_PERCENT` wird nirgends auf 0–100 begrenzt — ✅ BEHOBEN 26.08.2026
 
 `services/stammdaten.js:114` und `:130`, serverseitig `controllers/stammdaten.js:301/320` ohne Prüfung, Eingabefeld `HonorarWizard.tsx:888` ohne `min`/`max`.
 
@@ -373,7 +397,28 @@ Szenario: FM 1, Zone III, K0 = 500.000 €, Höchstsatz laut Tafel 78.449 €. B
 
 **Achtung bei einer Korrektur:** das Feld ist für `percent_of_baukosten` und `flaechenaequivalent_brandschutz` bewusst zweckentfremdet (`services/stammdaten.js:56-91`) — eine pauschale Klemmung wäre dort falsch. Analog ist `FEE_SURCHARGES.MAX_PERCENT` laut Migration 0126 ausdrücklich nur ein Oberflächen-Hinweis; `saveFeeCalcSurcharges` (`controllers/stammdaten.js:1673-1690`) nimmt jeden Prozentsatz an.
 
-### B4 — Punktverteilung § 44 vs. § 48 gegenläufig
+**Entscheidung: auf 0–100 begrenzen, aber nur bei den Honorartafel-Typen.**
+
+Die Prüfung sitzt als `zonePercentRangeError` in `services/stammdaten.js` — dort, wo `BASE_TYPE` ohnehin gelesen wird, statt in jedem Aufrufer erneut. Die Ausnahmeliste steht als benannte Konstante `ZONE_PERCENT_FREE_BASE_TYPES` daneben, damit ein künftiger zweckentfremdeter Typ an einer Stelle ergänzt wird.
+
+| Fall | Reaktion |
+|---|---|
+| Honorartafel-Typ, 0–100 | zulässig |
+| Honorartafel-Typ, außerhalb | **400**, mit Erklärung was der Wert beschreibt |
+| `percent_of_baukosten` (frei vereinbarter Satz) | unbegrenzt |
+| `flaechenaequivalent_brandschutz` (Faktor f, 170–191) | unbegrenzt |
+| leerer Wert | durchgelassen |
+| `BASE_TYPE`-Spalte fehlt | wie Tafel-Typ — dieselbe Annahme, die `calculateRevenueFields` schon trifft |
+
+Zwei Schreibwege sind gesichert: `patchFeeCalcMasterBasis` und `saveFeeCalcZoneSplits` (die Zonenanteile des TGA-Mischhonorars nach § 54 — dort gibt es keinen zweckentfremdeten Typ, die Grenze gilt immer).
+
+**Bewusst nicht mitgeändert:** ein bereits gespeicherter Wert außerhalb der Spanne blockiert nicht das Bearbeiten anderer Felder — geprüft wird nur, was gerade gesetzt wird. Sonst wäre ein Altbestand nicht mehr editierbar.
+
+Im Wizard trägt das Feld `min`/`max` **nur**, wenn es kein zweckentfremdeter Typ ist, plus die Erklärung „0 % = Mindestsatz, 100 % = Höchstsatz".
+
+Abgesichert durch 7 Tests. `FEE_SURCHARGES.MAX_PERCENT` bleibt wie beschrieben ein reiner Oberflächen-Hinweis — das war nicht Teil der Entscheidung.
+
+### B4 — Punktverteilung § 44 vs. § 48 gegenläufig — ✅ GEPRÜFT 26.08.2026: kein Fehler
 
 In `migrations/0127_hoai_zonen_punktesystem.sql`:
 
@@ -384,9 +429,23 @@ In `migrations/0127_hoai_zonen_punktesystem.sql`:
 
 Beide Systeme summieren korrekt auf 40; die im Kopf der Migration beschriebene Summenprüfung kann eine Vertauschung **innerhalb** eines Leistungsbilds prinzipiell nicht entdecken. **Bitte gegen den Volltext von § 48 Abs. 2 prüfen** — hier wird bewusst keine Punktzahl aus dem Gedächtnis zitiert.
 
+**Geprüft am 26.08.2026 gegen den Verordnungstext — die Daten sind korrekt.** Die Punkte stehen in **Absatz 3** (Absatz 2 listet nur die Merkmale, deshalb war der Befund dort nicht zu finden):
+
+| | § 44 Ingenieurbauwerke (FM 11) | § 48 Verkehrsanlagen (FM 12) |
+|---|---|---|
+| 1 geologische/baugrundtechnische Gegebenheiten | 5 | 5 |
+| 2 technische Ausrüstung und Ausstattung | 5 | 5 |
+| 3 Einbindung in die Umgebung | **5** | **15** |
+| 4 Umfang der Funktionsbereiche | 10 | 10 |
+| 5 fachspezifische Bedingungen | **15** | **5** |
+
+Migration `0127` trifft beide exakt, ebenso die Zonenbänder aus Absatz 4 (bis 10 / 11–17 / 18–25 / 26–33 / 34–40) für FM 11 und FM 12.
+
+**Die Gegenläufigkeit ist die Verordnung selbst, nicht ein Tippfehler** — die beiden Leistungsbilder gewichten diese zwei Merkmale bewusst umgekehrt. Erledigt ohne Codeänderung.
+
 Alle übrigen Invarianten wurden maschinell geprüft und halten: 30 Punktesysteme, Summe der Höchstpunktzahlen gleich Obergrenze der höchsten Zone, Bänder lückenlos und überlappungsfrei ab 0, keine Zone ohne Kriterien.
 
-### B5 — Doppelte Honorartafel-Zeilen für FEE_MASTER 1 und 1001
+### B5 — Doppelte Honorartafel-Zeilen für FEE_MASTER 1 und 1001 — ✅ ENTSCHIEDEN 26.08.2026: bleibt
 
 `0115_hoai_reference_seed.sql:263-282` wiederholt die Zeilen 243–262 wertgleich unter neuen IDs, weiterhin mit `FEE_MASTER_ID = 1`. Dasselbe in `0123_hoai_2013_fassung.sql:313-332` für FM 1001. FM 1 hat damit 40 statt 20 Tafelzeilen.
 
@@ -394,11 +453,32 @@ Heute **kein** Rechenfehler, weil die Duplikate wertidentisch sind. Das Risiko i
 
 Frage: sollen die Duplikate per Migration entfernt werden? (FM 9 „Innenräume" hat mit den Zeilen 181–200 eine eigene, wertgleiche Tafel — das ist konsistent und kein Datenverlust.)
 
-### B6 — Rundung: Verteilungsrest und uneinheitliche `round2`-Varianten
+**Entscheidung 26.08.2026: unverändert lassen.** Die Duplikate wurden gegengeprüft und sind wertgleich (Zeilen 21–40 wiederholen 1–20 für FM 1 Wert für Wert), es entsteht heute kein Rechenfehler.
+
+**Damit bleibt die Falle bewusst stehen:** wird eine Tafelzeile je korrigiert, muss die Korrektur auf **beide** Kopien angewandt werden — sonst hängt das Honorar davon ab, welche Zeile `findBounds` zuerst sieht, und `.order("BASE")` hat keinen Tie-Break. Das gehört in die Notiz jeder künftigen Tafel-Migration.
+
+### B6 — Rundung: Verteilungsrest und uneinheitliche `round2`-Varianten — ✅ TEILWEISE BEHOBEN 26.08.2026
 
 - **Verteilungsrest:** die Anteile in `computeSurchargeAllocations` (`controllers/stammdaten.js:1841-1848`) bleiben ungerundet, gerundet wird erst je Strukturzeile (`:605-607`, `:1912-1914`), ohne Restbetrags-Ausgleich. Szenario: 3 LPH à 1.000,00 €, Zuschlag 100,00 € → je 33,333… → 3 × 1.033,33 = **3.099,99 €** statt 3.100,00 €. Ein Cent, aber die Zuschlagszeile im PDF weist 100,00 € aus. `distributeAcrossRemaining` (`services/partialPayments.js:222-231`) macht es richtig und legt den Rest auf die letzte Position — das ist das Vorbild.
 - **Zwei `round2`-Varianten:** mit `Number.EPSILON` nur in `din276.js:15` und `mischhonorar.js:36`; ohne in `angebote.js:7/12`, `invoices.js:25`, `finalInvoices.js:21`, `partialPayments.js:25`, `stammdaten.js:66/89/154`, `nachtraege.js:16/21`. Bei Halbwerten laufen die Varianten auseinander. Die als Hausregel gedachte EPSILON-Variante ist die Minderheit.
 - **Zwischenrundung:** `computeMischhonorar` (`services/mischhonorar.js:58`) rundet das Einzelhonorar je Zone innerhalb der Schleife und summiert dann gerundete Werte. Bei 2–3 Zonen ≤ 1–2 Cent, widerspricht aber der Regel, Interpolationsergebnisse nicht vorzeitig zu runden.
+
+**Behoben: der Verteilungsrest.** `computeSurchargeAllocations` verteilt jetzt über einen neuen Helfer `distributeWithRemainder`, der alle Anteile bis auf den letzten rundet und dem letzten den Rest gibt — dasselbe Vorgehen wie `distributeAcrossRemaining` in `services/partialPayments.js`, das der Befund als Vorbild nennt. Auch die Aufteilung zwischen Leistungsphasen und Besonderen Leistungen ist so gebildet, dass beide Hälften zusammen exakt den Zuschlag ergeben.
+
+**Beim Testen kam heraus, dass der naheliegende Test nichts beweist.** Die alte Fassung ließ die Anteile *ungerundet*, deren Summe war also exakt — der Cent ging erst verloren, als die Verbraucher (`:605-607`, `:1922`) jede Strukturzeile einzeln runden. Ein Test, der die rohen Anteile summiert, wäre auch vorher grün gewesen. Der Test rundet deshalb jeden Anteil einzeln, so wie es die Verbraucher tun; ein Kommentar im Test hält fest, warum. Gegen den Stand vor dem Fix schlagen 5 der 8 Tests fehl:
+
+| Zuschlag | vorher | jetzt |
+|---|---|---|
+| 100,00 € auf 3 gleiche LPH | 99,99 € | 100,00 € |
+| 987,65 € auf 4 ungleiche LPH | 987,64 € | 987,65 € |
+| drei Zuschläge zusammen | 133,35 € | 133,34 € |
+
+Der Fehler ging also in **beide** Richtungen, nicht nur nach unten.
+
+**Offen bleiben die beiden anderen Punkte** — sie gehören zusammen und brauchen eine Festlegung, keine Korrektur:
+
+- **14 Rundungshelfer, 2 davon mit `Number.EPSILON`** (`din276.js`, `mischhonorar.js`). Die EPSILON-Variante rundet Halbwerte zuverlässiger auf und entspricht damit dem kaufmännischen Runden; sie ist aber die Minderheit. Eine Vereinheitlichung verschiebt Ergebnisse an anderer Stelle um Cents — sie gehört bewusst entschieden und nicht nebenbei gemacht.
+- **Zwischenrundung im Mischhonorar** hängt an derselben Frage und sollte zusammen mit ihr angefasst werden.
 
 ## C — Auslegungsfragen (kein Befund, nur Bestätigung)
 
@@ -414,7 +494,10 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 # Teil 3 — Bereits behoben
 
-**Stand 26.08.2026:** N1–N8 (außer dem offenen Teil von N5), N12, N13, R7, R9, S4, S6 und S7 (E-Rechnung), N9 und S2 teilweise, sowie A1 und A2 (HOAI).
+**Stand 26.08.2026:**
+
+- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N12, N13, R7, R9, S4, S6, S7; N9 und S2 teilweise.
+- **HOAI:** A1, A2, B1, B3, B5 (entschieden), B4 (geprüft: kein Fehler), B6 teilweise.
 
 | Befund | Geänderte Dateien | Abgesichert durch |
 |---|---|---|
@@ -436,8 +519,12 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | S7 | `docs/EINVOICE_ANALYSIS.md` | Warnkopf, Inhalt unverändert |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
 | A2 | `services/finalInvoices.js`, `tests/finalInvoices.phases.test.js` | 3 Tests, gegen den Stand vor dem Fix gegengeprüft (2 rot) |
+| B1 | `HonorarWizard.tsx`, `help/helpContent.tsx` | `tsc -b` grün; Entscheidung: Semantik bleibt |
+| B3 | `services/stammdaten.js`, `controllers/stammdaten.js`, `HonorarWizard.tsx`, `tests/stammdaten.zonepercent.test.js` | 7 Tests, inkl. der beiden Ausnahmetypen |
+| B4 | — | gegen § 44/§ 48 Abs. 3 und 4 geprüft, Daten korrekt |
+| B6 (Verteilungsrest) | `controllers/stammdaten.js`, `tests/stammdaten.surcharge_alloc.test.js` | 8 Tests, gegen den Stand vor dem Fix gegengeprüft (5 rot) |
 
-Volle Test-Suite nach allen Änderungen: **35 Suites, 522 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.)
+Volle Test-Suite nach allen Änderungen: **37 Suites, 537 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
 
 ## Was die zweite Runde am Buchen ändert
 
@@ -483,7 +570,11 @@ Der dritte Fall belegt, dass das Flag jetzt tatsächlich ausgewertet wird.
 3. ~~**N12 / N13**~~ ✅ — erledigt. Beim Umsetzen kam heraus, dass der fehlerhafte Pfad über die Oberfläche gar nicht erreichbar war (kein Aufrufer übergab `format=ubl`). Der Befund war richtig, seine Dringlichkeit geringer als angenommen.
 4. ~~**N3 / N4**~~ ✅ — erledigt.
 5. **R6** — vor der ersten Korrektur festlegen, wie mit bereits gebuchten und versendeten Belegen umgegangen wird: kontrollierter Neu-Render mit neuem Snapshot (nur zulässig, solange nicht ausgeliefert) oder Storno plus Korrekturrechnung. Diese Entscheidung gehört vor die Fixes, nicht danach.
-6. **N10** und **B1–B4** — fachliche Entscheidungen, kein Code. Sollten gesammelt entschieden werden.
+6. ~~**B1–B6**~~ — am 26.08.2026 entschieden und, wo nötig, umgesetzt. Ergebnis: B1 bleibt wie es ist (Hinweis geschärft), B3 begrenzt, B4 war kein Fehler, B5 bleibt bewusst stehen, B6 zur Hälfte behoben.
+   **Offen bleiben zwei Punkte, beide mit klarer nächster Handlung:**
+   - **B2** — Rechtslage geklärt (§ 7 Abs. 2 HOAI: außerhalb der Tafel frei vereinbar, Extrapolation unzulässig). Nächster Schritt ist die Integration der RiFT-Erweiterungstabellen; bis dahin ist der Randwert ohne Hinweis weiterhin falsch.
+   - **B6 Rundungskonvention** — 14 Rundungshelfer, 2 mit `Number.EPSILON`. Vereinheitlichung verschiebt Cents und braucht eine bewusste Festlegung; die Zwischenrundung im Mischhonorar hängt daran.
+7. **N10** — fachliche Entscheidung zur E-Rechnung, kein Code.
 
 ## Nicht geprüft
 

@@ -885,7 +885,18 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           )}
           <div className="form-group">
             <label>{isPercentOfBaukosten ? 'Honorarsatz %' : isFlaechenaequivalent ? 'Faktor f (Jahr der Beauftragung)' : 'Zonenanteil %'}</label>
-            <input type="number" step="0.01" value={basis.ZONE_PERCENT} onChange={e => setBasis(b => ({ ...b, ZONE_PERCENT: e.target.value }))} />
+            <input
+              type="number" step="0.01"
+              {...(isPercentOfBaukosten || isFlaechenaequivalent ? {} : { min: 0, max: 100 })}
+              value={basis.ZONE_PERCENT}
+              onChange={e => setBasis(b => ({ ...b, ZONE_PERCENT: e.target.value }))}
+            />
+            {!isPercentOfBaukosten && !isFlaechenaequivalent && (
+              <p className="admin-section-hint">
+                0–100 % beschreibt die Lage zwischen Mindest- und Höchstsatz der Honorartafel.
+                0 % = Mindestsatz, 100 % = Höchstsatz.
+              </p>
+            )}
             {isPercentOfBaukosten && (
               <p className="admin-section-hint">
                 Frei vereinbarter Prozentsatz der Bemessungsgrundlage (kein gesetzliches Zonenband) —
@@ -1299,10 +1310,17 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                                 </button>
                                 <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 8 }}>
                                   {r.CALC_MODE === 'cumulative' && idx > 0
-                                    ? 'Zuschlag auf Honorarbasis + Summe vorheriger Zuschläge'
+                                    ? 'Zuschlag auf Honorarbasis + Summe aller vorherigen Zuschläge'
                                     : 'Zuschlag auf Honorarbasis'}
                                 </span>
                               </div>
+                              {r.CALC_MODE === 'cumulative' && idx > 0 && r.LPH_FILTER && (
+                                <p className="admin-section-hint" style={{ marginTop: 0, marginBottom: 8 }}>
+                                  Dieser Zuschlag gilt nur für ausgewählte Leistungsphasen, stockt aber auf die
+                                  <strong> volle</strong> Summe der vorherigen Zuschläge auf — auch auf deren Anteil
+                                  für Leistungsphasen, die hier nicht ausgewählt sind.
+                                </p>
+                              )}
                               {blItems.length > 0 && (
                                 <div style={{ marginBottom: 8 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>

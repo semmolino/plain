@@ -299,6 +299,14 @@ async function patchFeeCalcMasterBasis(req, res, supabase) {
 
     const effectiveZoneId = 'ZONE_ID' in body ? body.ZONE_ID : existing.ZONE_ID;
     const effectiveZonePercent = 'ZONE_PERCENT' in body ? body.ZONE_PERCENT : existing.ZONE_PERCENT;
+
+    // B3: nur pruefen, was gerade gesetzt wird -- ein bereits gespeicherter
+    // Wert ausserhalb der Spanne soll das Bearbeiten anderer Felder nicht
+    // blockieren.
+    if ('ZONE_PERCENT' in body) {
+      const zpErr = await svc.zonePercentRangeError(supabase, existing.FEE_MASTER_ID, body.ZONE_PERCENT);
+      if (zpErr) return res.status(400).json({ error: zpErr });
+    }
     const revenueFields = await svc.calculateRevenueFields(supabase, { feeMasterId: existing.FEE_MASTER_ID, zoneId: effectiveZoneId, zonePercent: effectiveZonePercent, costsByKey });
 
     // Only include fields that were explicitly provided in the request body
@@ -1804,10 +1812,50 @@ async function getHonorarPdf(req, res, supabase) {
 
 // ── HOAI → Projektstruktur sync ───────────────────────────────────────────────
 
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * Verteilt einen Betrag proportional auf Empfaenger und legt den Rundungsrest
+ * auf den letzten Empfaenger. Ohne diesen Ausgleich fehlten Cents: 100,00 EUR
+ * auf 3 gleich grosse Leistungsphasen ergaben 3 x 33,33 = 99,99 EUR, waehrend
+ * die Zuschlagszeile im PDF 100,00 EUR auswies (Audit B6).
+ *
+ * Gleiches Vorgehen wie distributeAcrossRemaining in services/partialPayments.js.
+ *
+ * @param {number} amount   zu verteilender Betrag (bereits auf 2 Stellen)
+ * @param {Array<{key: any, weight: number}>} parts  Empfaenger mit Gewicht
+ * @returns {Map<any, number>} je Empfaenger ein auf 2 Stellen gerundeter Anteil
+ */
+function distributeWithRemainder(amount, parts) {
+  const out = new Map();
+  const eligible = parts.filter(p => p.weight > 0);
+  if (!eligible.length) return out;
+
+  const totalWeight = eligible.reduce((s, p) => s + p.weight, 0);
+  if (totalWeight <= 0) return out;
+
+  const target = r2(amount);
+  let running = 0;
+  eligible.forEach((p, idx) => {
+    if (idx === eligible.length - 1) {
+      out.set(p.key, r2(target - running));
+    } else {
+      const share = r2((target * p.weight) / totalWeight);
+      out.set(p.key, share);
+      running = r2(running + share);
+    }
+  });
+  return out;
+}
+
 /**
  * Splits each surcharge's stored AMOUNT proportionally between the LPH phases it
  * targets (via LPH_FILTER) and the BL items it targets (via BL_FILTER).
  * Returns two plain objects: lphAlloc {phaseId → share} and blAlloc {blId → share}.
+ *
+ * B6: Die Anteile werden je Zuschlag gerundet und mit Restausgleich verteilt.
+ * Vorher blieben sie ungerundet und wurden erst je Strukturzeile gerundet --
+ * die Summe der Zeilen wich dann um Cents vom ausgewiesenen Zuschlag ab.
  */
 function computeSurchargeAllocations(phases, surchargeRows, blItems) {
   const allPhaseIds = (phases || []).map(p => p.ID);
@@ -1839,21 +1887,26 @@ function computeSurchargeAllocations(phases, surchargeRows, blItems) {
     const totalBase = lphBase + blBase;
     if (totalBase === 0) continue;
 
+    // Erst die beiden Haelften bilden, und zwar so, dass sie zusammen genau
+    // den Zuschlag ergeben -- die zweite ist der Rest der ersten.
+    const lphAmt = lphBase > 0 ? r2(r2(amount) * (lphBase / totalBase)) : 0;
+    const blAmt  = blBase  > 0 ? r2(r2(amount) - lphAmt)                : 0;
+
     if (lphBase > 0) {
-      const lphAmt = amount * (lphBase / totalBase);
-      for (const p of selectedPhases) {
-        const pRev = Number(p.PHASE_REVENUE) || 0;
-        if (pRev === 0) continue;
-        lphAlloc[p.ID] = (lphAlloc[p.ID] || 0) + (pRev / lphBase) * lphAmt;
+      const shares = distributeWithRemainder(lphAmt, selectedPhases.map(p => ({
+        key: p.ID, weight: Number(p.PHASE_REVENUE) || 0,
+      })));
+      for (const [phaseId, share] of shares) {
+        lphAlloc[phaseId] = r2((lphAlloc[phaseId] || 0) + share);
       }
     }
 
     if (blBase > 0) {
-      const blAmt = amount * (blBase / totalBase);
-      for (const b of selectedBlItems) {
-        const bAmt = Number(b.AMOUNT) || 0;
-        if (bAmt === 0) continue;
-        blAlloc[b.ID] = (blAlloc[b.ID] || 0) + (bAmt / blBase) * blAmt;
+      const shares = distributeWithRemainder(blAmt, selectedBlItems.map(b => ({
+        key: b.ID, weight: Number(b.AMOUNT) || 0,
+      })));
+      for (const [blId, share] of shares) {
+        blAlloc[blId] = r2((blAlloc[blId] || 0) + share);
       }
     }
   }
@@ -2084,6 +2137,17 @@ async function saveFeeCalcZoneSplits(req, res, supabase) {
     await supabase.from("FEE_CALC_ZONE_SPLIT")
       .delete().eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
 
+    // B3: die Zonenanteile des TGA-Mischhonorars sind immer Tafel-Semantik
+    // (§ 54) -- hier gibt es keinen zweckentfremdeten Typ.
+    for (const s of incoming) {
+      const pct = s.zone_percent != null ? Number(s.zone_percent) : null;
+      if (pct !== null && Number.isFinite(pct) && (pct < 0 || pct > 100)) {
+        return res.status(400).json({
+          error: `Zonenanteil muss zwischen 0 und 100 % liegen (erhalten: ${pct} %).`,
+        });
+      }
+    }
+
     const rows = incoming
       .filter((s) => s.zone_id && Number(s.amount) > 0)
       .map((s, i) => ({
@@ -2133,4 +2197,6 @@ module.exports = {
   listFeeCalcSurcharges, saveFeeCalcSurcharges,
   listFeeCalcBl, saveFeeCalcBl,
   getHonorarPdf,
+  // Reine Rechenlogik, fuer Tests exportiert.
+  computeSurchargeAllocations, distributeWithRemainder,
 };
