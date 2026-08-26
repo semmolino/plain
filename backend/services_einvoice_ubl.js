@@ -46,9 +46,42 @@ function amt(v, cur, tag) {
 
 // ── Building blocks ───────────────────────────────────────────────────────────
 
+// R2/R5: Gegenstueck zu den gleichnamigen Funktionen in
+// services_einvoice_cii.js. Bewusst dupliziert statt in ein weiteres Modul
+// gezogen -- die beiden Builder teilen sonst keinen Code, und ein Modul fuer
+// zwei kleine Funktionen waere mehr Verwaltung als Nutzen. Wer eine aendert,
+// aendert beide.
+
+// BT-20. Faellt auf den frueheren Inline-Text zurueck, damit handgebaute
+// Datenobjekte (Tests) weiter funktionieren.
+function paymentTermsNoteOf(data) {
+  if (typeof data.paymentTermsNote === 'string' && data.paymentTermsNote) {
+    return data.paymentTermsNote;
+  }
+  const basis = data.dueDate ? `Zahlbar bis ${data.dueDate}` : 'Zahlbar sofort netto';
+  if (!data.cashDiscount || !data.dueDate) return basis;
+  const cd = data.cashDiscount;
+  return `#SKONTO#TAGE=${Math.round(cd.days)}#PROZENT=${Number(cd.percent).toFixed(2)}#
+${basis}`;
+}
+
+// Anhaenge ohne Inhalt aussortieren, statt "undefined" ins XML zu schreiben.
+function usableAttachments(data) {
+  const atts = Array.isArray(data.attachments) ? data.attachments : [];
+  const ok = atts.filter(a => typeof a?.base64 === 'string' && a.base64.length > 0);
+  if (ok.length !== atts.length) {
+    console.warn('[EINVOICE][ATTACHMENTS] Anhaenge ohne Inhalt uebersprungen', {
+      gesamt: atts.length, uebersprungen: atts.length - ok.length,
+    });
+  }
+  return ok;
+}
+
 function buildAttachmentsUbl(data) {
   // Branch 9 (BG-24): cac:AdditionalDocumentReference mit cbc:EmbeddedDocumentBinaryObject
-  const atts = Array.isArray(data.attachments) ? data.attachments : [];
+  // R5: siehe usableAttachments -- ohne base64 stand frueher literal
+  // "undefined" im Element.
+  const atts = usableAttachments(data);
   if (atts.length === 0) return '';
   return atts.map(a => `
   <cac:AdditionalDocumentReference>
@@ -146,10 +179,10 @@ ${data.vatBreakdown.map(vb => `
   </cac:TaxTotal>`;
 }
 
-function buildLineItem(line, cur) {
+function buildLineItem(line, cur, idx = 0) {
   return `
   <cac:InvoiceLine>
-    <cbc:ID>${line.id}</cbc:ID>
+    <cbc:ID>${x(line.id ?? idx + 1)}</cbc:ID>
     ${line.note ? `<cbc:Note>${x(line.note)}</cbc:Note>` : ''}
     <cbc:InvoicedQuantity unitCode="${x(line.unitCode)}">${n2(line.quantity)}</cbc:InvoicedQuantity>
     <cbc:LineExtensionAmount currencyID="${x(cur)}">${n2(line.lineTotal)}</cbc:LineExtensionAmount>
@@ -199,16 +232,18 @@ function generateUblXml(data, opts = {}) {
   const customization = flavor === 'PEPPOL' ? PEPPOL_CUSTOMIZATION_ID : XRECHNUNG_CUSTOMIZATION_ID;
   const profile       = BILLING_PROFILE_ID;
   const typeCode  = data.typeCodeUbl ?? data.typeCode ?? '380';
-  const lineItems = data.lines.map(l => buildLineItem(l, cur)).join('\n');
+  const lineItems = data.lines.map((l, i) => buildLineItem(l, cur, i)).join('\n');
 
-  // Skonto note: XRechnung machine-readable format
-  // BR-CO-25: always emit payment terms (due date note or fallback text)
-  // Skonto only combined with due date (mirrors CII-SR-408 guidance)
-  let paymentTermsNote = data.dueDate ? `Zahlbar bis ${x(data.dueDate)}` : 'Zahlbar sofort netto';
-  if (data.cashDiscount && data.dueDate) {
-    const cd = data.cashDiscount;
-    paymentTermsNote = `#SKONTO#TAGE=${Math.round(cd.days)}#PROZENT=${n2(cd.percent)}#\n${paymentTermsNote}`;
-  }
+  // R2: BT-20 kommt aus einer Quelle, die CII genauso liest. Vorher baute
+  // jede Datei ihren eigenen Text -- und CII schrieb ihn gar nicht, sodass
+  // dieselbe Rechnung im UBL maschinenlesbares Skonto trug und im
+  // Hybrid-PDF nur Fliesstext.
+  const paymentTermsNote = paymentTermsNoteOf(data);
+
+  // R1: BT-72. CII gab das Lieferdatum aus, UBL kannte es gar nicht --
+  // gleiche Datenlage, zwei verschiedene Dokumente. Wird das Datum nicht
+  // erfunden (siehe buildDelivery in cii.js), bleibt die Gruppe weg.
+  const deliveryDate = data.deliveryDate || data.billingPeriodEnd || data.billingPeriodStart || null;
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
@@ -242,7 +277,6 @@ ${buildAttachmentsUbl(data)}
   <cac:AccountingSupplierParty>
     <cac:Party>
       ${buildEndpointId(s, s.email, flavor)}
-      <cac:PartyName><cbc:Name>${x(s.name)}</cbc:Name></cac:PartyName>
       <cac:PostalAddress>
         ${s.street   ? `<cbc:StreetName>${x(s.street)}</cbc:StreetName>` : ''}
         ${s.city     ? `<cbc:CityName>${x(s.city)}</cbc:CityName>` : ''}
@@ -274,7 +308,6 @@ ${buildAttachmentsUbl(data)}
   <cac:AccountingCustomerParty>
     <cac:Party>
       ${buildEndpointId(b, b.email, flavor)}
-      <cac:PartyName><cbc:Name>${x(b.name)}</cbc:Name></cac:PartyName>
       <cac:PostalAddress>
         ${b.street   ? `<cbc:StreetName>${x(b.street)}</cbc:StreetName>` : ''}
         ${b.city     ? `<cbc:CityName>${x(b.city)}</cbc:CityName>` : ''}
@@ -297,6 +330,11 @@ ${buildAttachmentsUbl(data)}
       </cac:Contact>` : ''}
     </cac:Party>
   </cac:AccountingCustomerParty>
+
+  ${deliveryDate ? `
+  <cac:Delivery>
+    <cbc:ActualDeliveryDate>${x(deliveryDate)}</cbc:ActualDeliveryDate>
+  </cac:Delivery>` : ''}
 
   ${s.iban ? `
   <cac:PaymentMeans>

@@ -148,8 +148,11 @@ function buildBuyer(data) {
 }
 
 function buildDelivery(data) {
-  // EXTENDED requires ActualDeliverySupplyChainEvent; use billing end or invoice date
-  const deliveryDate = data.billingPeriodEnd || data.billingPeriodStart || data.date;
+  // R1: Frueher fiel das Lieferdatum notfalls auf das Rechnungsdatum zurueck.
+  // BT-72 ist aber eine inhaltliche Aussage -- "geliefert am" --, die dann
+  // niemand geprueft hatte. Ist der Leistungszeitraum unbekannt, bleibt die
+  // Gruppe jetzt leer, statt ein Datum zu behaupten. BG-13 ist optional.
+  const deliveryDate = data.deliveryDate || data.billingPeriodEnd || data.billingPeriodStart;
   if (!deliveryDate) return '<ram:ApplicableHeaderTradeDelivery/>';
   return `
     <ram:ApplicableHeaderTradeDelivery>
@@ -217,8 +220,40 @@ function buildAllowances(data) {
       </ram:SpecifiedTradeAllowanceCharge>`).join('\n');
 }
 
+
+// R2/R5: gemeinsame Hilfen fuer beide Builder-Dateien. Bewusst dupliziert
+// statt in ein weiteres Modul gezogen -- cii.js und ubl.js teilen sonst
+// keinen Code, und ein Modul fuer zwei kleine Funktionen waere mehr
+// Verwaltung als Nutzen. Wer eine aendert, aendert beide.
+
+// BT-20. Faellt auf den frueheren Inline-Text zurueck, damit handgebaute
+// Datenobjekte (Tests) weiter funktionieren.
+function paymentTermsNoteOf(data) {
+  if (typeof data.paymentTermsNote === 'string' && data.paymentTermsNote) {
+    return data.paymentTermsNote;
+  }
+  const basis = data.dueDate ? `Zahlbar bis ${data.dueDate}` : 'Zahlbar sofort netto';
+  if (!data.cashDiscount || !data.dueDate) return basis;
+  const cd = data.cashDiscount;
+  return `#SKONTO#TAGE=${Math.round(cd.days)}#PROZENT=${Number(cd.percent).toFixed(2)}#
+${basis}`;
+}
+
+// Anhaenge ohne Inhalt aussortieren, statt "undefined" ins XML zu schreiben.
+function usableAttachments(data) {
+  const atts = Array.isArray(data.attachments) ? data.attachments : [];
+  const ok = atts.filter(a => typeof a?.base64 === 'string' && a.base64.length > 0);
+  if (ok.length !== atts.length) {
+    console.warn('[EINVOICE][ATTACHMENTS] Anhaenge ohne Inhalt uebersprungen', {
+      gesamt: atts.length, uebersprungen: atts.length - ok.length,
+    });
+  }
+  return ok;
+}
+
 function buildPaymentTerms(data, profile) {
   if (!profile.hasPaymentTerms) return '';
+  const termsNote = paymentTermsNoteOf(data);
   const hasDue    = !!data.dueDate;
   const hasSkonto = !!data.cashDiscount;
 
@@ -240,15 +275,19 @@ function buildPaymentTerms(data, profile) {
 
   return `
       <ram:SpecifiedTradePaymentTerms>
-        ${hasDue
+        ${termsNote ? `<ram:Description>${x(termsNote)}</ram:Description>` : ''}${hasDue
           ? `<ram:DueDateDateTime>${dateElem(data.dueDate)}</ram:DueDateDateTime>`
-          : `<ram:Description>Zahlbar sofort netto</ram:Description>`}${skontoBlock}
+          : ''}${skontoBlock}
       </ram:SpecifiedTradePaymentTerms>`;
 }
 
 function buildAttachmentsCii(data) {
   // Branch 9 (BG-24): AdditionalReferencedDocument mit base64 Binary Object
-  const atts = Array.isArray(data.attachments) ? data.attachments : [];
+  // R5: Ohne base64 wurde frueher literal "undefined" in das Element
+  // interpoliert -- ein Dokument, das der Empfaenger nicht dekodieren kann,
+  // das aber wie ein Anhang aussieht. Solche Zeilen jetzt weglassen und
+  // melden; ein fehlender Anhang ist besser als ein kaputter.
+  const atts = usableAttachments(data);
   if (atts.length === 0) return '';
   return atts.map(a => `
       <ram:AdditionalReferencedDocument>
@@ -301,12 +340,12 @@ function buildMonetarySummation(data, profile) {
       </ram:SpecifiedTradeSettlementHeaderMonetarySummation>`;
 }
 
-function buildLineItem(line, data, profile) {
+function buildLineItem(line, data, profile, idx = 0) {
   const cur = data.currency;
   return `
     <ram:IncludedSupplyChainTradeLineItem>
       <ram:AssociatedDocumentLineDocument>
-        <ram:LineID>${line.id}</ram:LineID>
+        <ram:LineID>${x(line.id ?? idx + 1)}</ram:LineID>
         ${profile.hasLineNotes && line.note
           ? `<ram:IncludedNote><ram:Content>${x(line.note)}</ram:Content></ram:IncludedNote>`
           : ''}
@@ -350,7 +389,7 @@ function generateCiiXml(data, profileKey = 'EXTENDED') {
 
   const typeCode  = data.typeCodeCii ?? data.typeCode ?? '380';
   const lineItems = profile.hasLines
-    ? data.lines.map(l => buildLineItem(l, data, profile)).join('\n')
+    ? data.lines.map((l, i) => buildLineItem(l, data, profile, i)).join('\n')
     : '';
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>

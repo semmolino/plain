@@ -245,6 +245,26 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     amount:  fmt2(doc.CASH_DISCOUNT),
   } : null;
 
+  // R2: BT-20 wird einmal hier gebildet, nicht zweimal in den Buildern.
+  // Vorher schrieb UBL die KoSIT-Konvention (#SKONTO#TAGE=..#PROZENT=..#) und
+  // CII nur einen strukturierten Block ohne Text -- wer das Hybrid-PDF bekam,
+  // sah das Skonto nur im Fliesstext, wer das UBL bekam, sah es maschinen-
+  // lesbar. Dieselbe Rechnung, zwei Aussagen. Beide Builder lesen jetzt
+  // diesen einen Wert.
+  //
+  // Skonto nur zusammen mit einem Faelligkeitsdatum -- ohne Bezugspunkt ist
+  // eine Skontofrist sinnlos (CII-SR-408 verlangt es ausserdem).
+  const paymentTermsNote = (() => {
+    const basis = doc.DUE_DATE && asIsoDate(doc.DUE_DATE)
+      ? `Zahlbar bis ${asIsoDate(doc.DUE_DATE)}`
+      : 'Zahlbar sofort netto';
+    if (!cashDiscount || !doc.DUE_DATE) return basis;
+    const tage    = Math.round(cashDiscount.days);
+    const prozent = cashDiscount.percent.toFixed(2);
+    return `#SKONTO#TAGE=${tage}#PROZENT=${prozent}#
+${basis}`;
+  })();
+
   // ── 9. Canceled document reference (Storno) ───────────────────────────────
 
   let canceledDocNumber = null;
@@ -644,6 +664,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     deductions,
     allowances,
     cashDiscount,
+    paymentTermsNote,
     securityRetention,
 
     totals: totalsOut,

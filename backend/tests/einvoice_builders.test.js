@@ -24,7 +24,7 @@ function baseData(overrides = {}) {
       name: "Bauherr AG", street: "Bauplatz 9", city: "Berlin", postCode: "10115", countryId: "DE",
       vatId: "DE987654321",
     },
-    lines: [{ position: 1, description: "Honorar HOAI Lph 1", quantity: 1, unitCode: "C62", unitPrice: 1000, lineTotal: 1000, vatCategory: "S", vatPercent: 19 }],
+    lines: [{ id: 1, description: "Honorar HOAI Lph 1", quantity: 1, unitCode: "C62", unitPrice: 1000, lineTotal: 1000, vatCategory: "S", vatPercent: 19 }],
     vatBreakdown: [{ category: "S", percent: 19, basis: 1000, amount: 190 }],
     allowances: [],
     attachments: [],
@@ -72,5 +72,82 @@ describe("CII- und UBL-Builder", () => {
       expect(cii).toContain(wert);
       expect(ubl).toContain(wert);
     }
+  });
+});
+
+// ── R1/R2/R5/S5: Stellen, an denen dieselbe Datenlage zwei verschiedene
+//    Dokumente ergab. Alle vier stammen aus dem Audit vom 25.08.2026.
+
+describe("CII und UBL sagen dasselbe (R1, R2, R5, S5)", () => {
+  const mitSkonto = () => baseData({
+    dueDate: "2026-07-09",
+    cashDiscount: { percent: 2, days: 14, amount: 20 },
+    billingPeriodStart: "2026-05-01",
+    billingPeriodEnd: "2026-05-31",
+  });
+
+  it("geben das Lieferdatum in beiden Syntaxen aus (R1)", () => {
+    const { cii, ubl } = both(mitSkonto());
+    expect(cii).toContain("ActualDeliverySupplyChainEvent");
+    expect(cii).toContain("20260531");
+    // UBL kannte cac:Delivery vorher gar nicht.
+    expect(ubl).toContain("<cac:Delivery>");
+    expect(ubl).toContain("<cbc:ActualDeliveryDate>2026-05-31</cbc:ActualDeliveryDate>");
+  });
+
+  it("erfinden kein Lieferdatum, wenn kein Leistungszeitraum vorliegt (R1)", () => {
+    // Frueher fiel CII auf das Rechnungsdatum zurueck -- eine inhaltliche
+    // Aussage ueber den Liefertag, die niemand geprueft hatte.
+    const { cii, ubl } = both(baseData());
+    expect(cii).not.toContain("ActualDeliverySupplyChainEvent");
+    expect(ubl).not.toContain("<cac:Delivery>");
+  });
+
+  it("tragen die Skonto-Konvention in beiden Syntaxen (R2)", () => {
+    const { cii, ubl } = both(mitSkonto());
+    const konvention = "#SKONTO#TAGE=14#PROZENT=2.00#";
+    // Vorher stand sie nur im UBL; wer das Hybrid-PDF bekam, sah das Skonto
+    // ausschliesslich als Fliesstext.
+    expect(ubl).toContain(konvention);
+    expect(cii).toContain(konvention);
+  });
+
+  it("behalten CII den strukturierten Skonto-Block zusaetzlich", () => {
+    const { cii } = both(mitSkonto());
+    expect(cii).toContain("ApplicableTradePaymentDiscountTerms");
+    expect(cii).toContain("<ram:CalculationPercent>2.00</ram:CalculationPercent>");
+  });
+
+  it("behaupten keinen Handelsnamen, den niemand erfasst hat (S5)", () => {
+    const { cii, ubl } = both(baseData());
+    // BT-28/BT-45 sind optional; vorher schrieb UBL denselben String wie in
+    // RegistrationName und behauptete damit einen Handelsnamen.
+    expect(ubl).not.toContain("<cac:PartyName>");
+    expect(ubl).toContain("<cbc:RegistrationName>Architektur GmbH</cbc:RegistrationName>");
+    expect(cii).not.toContain("PartyName");
+  });
+
+  it("lassen Anhaenge ohne Inhalt weg statt undefined zu schreiben (R5)", () => {
+    const data = baseData({
+      attachments: [
+        { id: 1, fileName: "ok.pdf", mimeType: "application/pdf", base64: "SGFsbG8=" },
+        { id: 2, fileName: "kaputt.pdf", mimeType: "application/pdf" },   // kein base64
+      ],
+    });
+    const { cii, ubl } = both(data);
+    for (const doc of [cii, ubl]) {
+      expect(doc).not.toContain("undefined");
+      expect(doc).toContain("SGFsbG8=");
+      expect(doc).not.toContain("kaputt.pdf");
+    }
+  });
+
+  it("bilden BT-20 aus einer Quelle, wenn die Daten sie mitbringen (R2)", () => {
+    // loadInvoiceData liefert paymentTermsNote; beide Builder muessen ihn
+    // uebernehmen statt einen eigenen zu bauen.
+    const data = baseData({ paymentTermsNote: "Zahlbar in Naturalien" });
+    const { cii, ubl } = both(data);
+    expect(cii).toContain("Zahlbar in Naturalien");
+    expect(ubl).toContain("Zahlbar in Naturalien");
   });
 });

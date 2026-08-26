@@ -252,13 +252,31 @@ Bewusst beibehalten: ein **gefüllter** Belegwert gewinnt weiterhin gegen die St
 
 Abgesichert durch 5 Tests; gegen den Stand vor dem Fix schlagen 4 der 12 Tests der Datei fehl.
 
+### N15 — BT-126 (Positionsnummer) ungeschützt interpoliert [verifiziert] — ✅ BEHOBEN 26.08.2026
+
+**Nicht Teil des ursprünglichen Audits — gefunden beim Test zu R5.**
+
+`cii.js` schrieb `<ram:LineID>${line.id}</ram:LineID>`, `ubl.js` `<cbc:ID>${line.id}</cbc:ID>` — beide ohne Escaping und ohne Rückfall. Fehlt `line.id`, steht literal `undefined` in **BT-126**, und das ist nach BR-21 ein Pflichtfeld: der Beleg ist damit ungültig, sieht aber vollständig aus.
+
+Dieselbe Klasse wie R5, nur an einer Stelle, die weh tut. Über `loadInvoiceData` ist das Feld heute immer gesetzt (`id: idx + 1`) — der Fehler war also latent, nicht aktiv. Aufgefallen ist er, weil ein Test-Fixture das Feld `position` statt `id` nannte und das erzeugte XML daraufhin `undefined` enthielt.
+
+**Behoben:** `${x(line.id ?? idx + 1)}` in beiden Buildern — escaped, und mit der Position als Rückfall.
+
+**Zweite Lehre aus derselben Stelle:** auch dieses Fixture war von Hand gebaut und benutzte einen Feldnamen, den es nicht gibt. Das ist nach N1 und N14 der dritte Fall — die handgebauten Fixtures der Builder-Tests sind noch nicht durch S2 abgedeckt, weil S2 nur den Validator abdeckt. Ein Test, der `loadInvoiceData` gegen die **Builder** laufen lässt, wäre der nächste konsequente Schritt.
+
 ## Risiken
 
-- **R1 — Lieferdatum (BT-72) nur in CII.** `cii.js:146-156` erzeugt `ActualDeliverySupplyChainEvent`, UBL hat kein `cac:Delivery`. Zusätzlich erfindet CII bei fehlendem Leistungszeitraum ein Lieferdatum gleich dem Rechnungsdatum — eine inhaltliche Aussage, die niemand geprüft hat.
-- **R2 — Skonto divergiert.** `cii.js:228-234` gibt einen strukturierten Block und keine `ram:Description`; `ubl.js:203-207` schreibt immer die KoSIT-Konvention in BT-20. Die XRechnung erwartet die Konvention in beiden Syntaxen. Wer das Hybrid-PDF bekommt, sieht das Skonto nur im Fließtext.
+- **R1 — Lieferdatum (BT-72) nur in CII.** ✅ **BEHOBEN 26.08.2026**. `cii.js:146-156` erzeugt `ActualDeliverySupplyChainEvent`, UBL hat kein `cac:Delivery`. Zusätzlich erfindet CII bei fehlendem Leistungszeitraum ein Lieferdatum gleich dem Rechnungsdatum — eine inhaltliche Aussage, die niemand geprüft hat.
+  **Behoben, beide Hälften.** UBL hat jetzt `cac:Delivery`/`cbc:ActualDeliveryDate` (zwischen `AccountingCustomerParty` und `PaymentMeans`, wo die UBL-Sequenz es verlangt). Und der Rückfall auf das Rechnungsdatum ist weg: ist der Leistungszeitraum unbekannt, bleibt die Gruppe leer, statt einen Liefertag zu behaupten. BG-13 ist optional — ein fehlendes Datum ist zulässig, ein falsches nicht.
+- **R2 — Skonto divergiert.** ✅ **BEHOBEN 26.08.2026**. `cii.js:228-234` gibt einen strukturierten Block und keine `ram:Description`; `ubl.js:203-207` schreibt immer die KoSIT-Konvention in BT-20. Die XRechnung erwartet die Konvention in beiden Syntaxen. Wer das Hybrid-PDF bekommt, sieht das Skonto nur im Fließtext.
+  **Behoben an der Wurzel statt an beiden Enden:** BT-20 wird jetzt **einmal** in `loadInvoiceData` gebildet (`data.paymentTermsNote`) und von beiden Buildern gelesen. Vorher baute jede Datei ihren eigenen Text — deshalb konnten sie überhaupt auseinanderlaufen. CII schreibt die KoSIT-Konvention jetzt in `ram:Description` und behält den strukturierten `ApplicableTradePaymentDiscountTerms`-Block zusätzlich.
+  Beide Builder haben einen Rückfall auf den früheren Inline-Text, damit handgebaute Datenobjekte weiter funktionieren.
+  **[unsicher]** Die Reihenfolge `Description` vor `DueDateDateTime` folgt der D16B-Sequenz, ist aber nicht gegen die XSD geprüft — derselbe Vorbehalt wie bei N11.
 - **R3 — Peppol-Endpunkte nur in UBL, Peppol im Validator gar nicht.** `data.js:138-139/169-170` lädt sie, `ubl.js:175-186` nutzt sie, **CII ignoriert sie vollständig**. `validateEInvoiceData` nimmt `opts.profile` entgegen (`:50`), wertet es aber nirgends aus.
 - **R4 — Peppol: Gutschrift als Invoice.** `ubl.js:197/219` erzeugt für Typcode 381 immer ein `Invoice`-Wurzelelement; Peppol BIS 3.0 verlangt CreditNote. [unsicher: Peppol-Codeliste lag nicht vor] — für XRechnung ist 381 zulässig, betrifft nur `generatePeppolXml`.
-- **R5 — Anhänge.** `cii.js:254` / `ubl.js:54` setzen `application/octet-stream` als Default; BT-125 ist codelisten-beschränkt [unsicher: keine Regelnummer]. Zusätzlich wird `a.base64` ungeprüft interpoliert — fehlt das Feld, steht literal `undefined` im XML. Der Attachment-Loader fällt weich aus (`data.js:76-81`): fehlt die Migration, gehen Anhänge stillschweigend verloren.
+- **R5 — Anhänge.** ✅ **TEILWEISE BEHOBEN 26.08.2026**. `cii.js:254` / `ubl.js:54` setzen `application/octet-stream` als Default; BT-125 ist codelisten-beschränkt [unsicher: keine Regelnummer]. Zusätzlich wird `a.base64` ungeprüft interpoliert — fehlt das Feld, steht literal `undefined` im XML. Der Attachment-Loader fällt weich aus (`data.js:76-81`): fehlt die Migration, gehen Anhänge stillschweigend verloren.
+  **Behoben: das `undefined`.** Beide Builder sortieren Anhänge ohne `base64` jetzt über `usableAttachments` aus und melden das. Ein fehlender Anhang ist besser als einer, der wie ein Anhang aussieht und nicht dekodierbar ist.
+  **Offen bleibt der MIME-Typ**: `application/octet-stream` als Vorgabewert steht weiterhin da. BT-125 ist codelisten-beschränkt, die Codeliste lag auch dieser Runde nicht vor.
 - **R6 — Nur die UBL-Fassung wird eingefroren.** ✅ **BEHOBEN 26.08.2026** (Migration 0133 noch einzuspielen). `services/invoices.js:993-1013` erzeugt beim Buchen ausschließlich UBL und setzt `DOCUMENT_XML_PROFILE` auf `xrechnung-ubl`. Der CII-Endpunkt liefert den Snapshot nur bei Profil `zugferd-*` (`controllers/invoices.js:775`) — trifft nie zu. CII und Hybrid-PDF werden bei **jedem Abruf neu** erzeugt. Sobald einer der obigen Befunde behoben wird, ändert sich rückwirkend das CII-Dokument bereits versendeter Rechnungen, während UBL eingefroren bleibt: zwei widersprüchliche Fassungen desselben Belegs. Der manuelle Snapshot-Endpunkt (`:798-818`) verhält sich dagegen korrekt und überschreibt kein gesetztes Asset.
 
   **Eingetreten, bevor er behoben war.** Das Audit stellt diesen Punkt bewusst *vor* die Korrekturen (Teil 4, Schritt 5). Gearbeitet wurde in umgekehrter Reihenfolge — N3, N4, N5, N8 und N13 haben CII und Hybrid-PDF bereits gebuchter Belege rückwirkend verändert, während deren UBL eingefroren blieb. **Ohne Schaden, weil zum Zeitpunkt der Korrekturen ausschließlich Testdaten existierten** und noch kein Beleg an einen echten Empfänger gegangen war. Die Reihenfolge war trotzdem falsch herum.
@@ -291,10 +309,11 @@ Abgesichert durch 5 Tests; gegen den Stand vor dem Fix schlagen 4 der 12 Tests d
   Ursprünglicher Wortlaut: 33 Testdateien, für die E-Rechnung nur `einvoice_validator.test.js`. Kein Test prüfte ein CII- oder UBL-Element. Der erste sinnvolle Test wäre kein XML-Test, sondern einer, der `loadInvoiceData` gegen ein Fixture laufen lässt und dessen Ergebnis in `validateEInvoiceData` steckt — das hätte N1 sofort gefunden.
 - **S3 — Geladene, nie geschriebene Felder.** `seller.creditorId` (BT-90), `seller.postOfficeBox`, `buyer.debitorNumber` (BT-46) werden aus der DB geholt und von keinem Builder ausgegeben. BT-46 wäre der naheliegende Kandidat, um N9 zu entschärfen.
 - **S4 — Falscher Regelcode.** ✅ **BEHOBEN 26.08.2026**. `validator:255` führte die Leitweg-ID unter `BR-DE-1`; das ist nach KoSIT die Regel zu den Zahlungsinformationen. Die Warnung läuft jetzt unter `BR-DE-15`, `BR-DE-1` ist an die IBAN-Prüfung aus N6 gegangen — vorher wäre derselbe Code doppelt vergeben gewesen, was erst beim Fix von N6 auffiel. Der Test prüft beides: BR-DE-15 kommt, BR-DE-1 kommt nicht. Die Codenummer selbst bleibt [unsicher].
-- **S5 — UBL erfindet einen Handelsnamen.** `ubl.js:241/259` und `:273/286` schreiben denselben String in `cac:PartyName` (BT-28/BT-45) und `RegistrationName` (BT-27/BT-44). Damit wird ein Handelsname behauptet, den niemand erfasst hat. CII gibt nur `ram:Name` aus und ist hier sauberer.
+- **S5 — UBL erfindet einen Handelsnamen.** ✅ **BEHOBEN 26.08.2026**. `ubl.js:241/259` und `:273/286` schreiben denselben String in `cac:PartyName` (BT-28/BT-45) und `RegistrationName` (BT-27/BT-44). Damit wird ein Handelsname behauptet, den niemand erfasst hat. CII gibt nur `ram:Name` aus und ist hier sauberer.
+  **Behoben:** `cac:PartyName` ist für Verkäufer und Käufer entfallen. BT-28/BT-45 sind optional; `RegistrationName` (BT-27/BT-44) trägt weiterhin den Namen, den es wirklich gibt.
 - **S6 — Doppelte Konstante.** ✅ **BEHOBEN 26.08.2026**. `ubl.js:20` und `:26` definierten zwei Profil-IDs mit identischem Wert; die Fallunterscheidung in `:196` war wirkungslos. Von den beiden Auflösungen, die der Befund anbietet, trifft die zweite zu: die XRechnung verwendet das Peppol-Billing-Profil bewusst mit, die Werte sind also **absichtlich** gleich, nicht versehentlich. Jetzt eine Konstante `BILLING_PROFILE_ID` mit einem Kommentar, der das festhält — und dem Hinweis, dass die Weiche zurückgehört, falls die Werte je auseinanderlaufen. **Am erzeugten XML ändert sich nichts:** der neue Wert ist byteweise identisch mit beiden alten.
 - **S7 — `docs/EINVOICE_ANALYSIS.md` ist überholt.** ✅ **BEHOBEN 26.08.2026** — das Dokument trägt jetzt einen Warnkopf, der es als historisch kennzeichnet, die überholten Stellen einzeln benennt und auf dieses Audit verweist. Inhaltlich unverändert gelassen: als Zeitdokument hat es weiterhin Wert, als Referenz nicht. Stand Juni 2026, führt als fehlend auf: PDF/A-3-Einbettung, BT-11, BT-13, HUR-Stundenpositionen, Käuferkontakt und die Kategorien AE/E/G/K/O — alles inzwischen implementiert. Der dort als kritisch zitierte Fallback für BT-10 existiert nicht mehr. Das Dokument führt einen Reviewer aktiv in die Irre und sollte überarbeitet oder als historisch gekennzeichnet werden.
-- **S8 — REG-Note dupliziert die Verkäuferadresse.** `cii.js:91-97` schreibt die Firmenanschrift zusätzlich als `IncludedNote`. Nur CII.
+- **S8 — REG-Note dupliziert die Verkäuferadresse.** `cii.js:91-97` schreibt die Firmenanschrift zusätzlich als `IncludedNote`. Nur CII. — **Bewusst nicht geändert (26.08.2026).** Der Subject-Code `REG` ist die anerkannte Stelle für regulatorische Angaben zum Verkäufer; deutsche Prüfportale können eine solche Note erwarten. Sie zu entfernen, um eine Dopplung zu beseitigen, tauscht ein kosmetisches Problem gegen ein mögliches echtes. Die Dopplung kostet nichts — die Divergenz zu UBL bleibt bestehen und ist hier hinnehmbar.
 - **S9 — Legacy-Feld.** `data.js:570` existiert nur noch als Fallback in `cii.js:347` und `ubl.js:197`. Wird es entfernt, fällt CII stillschweigend auf den UBL-Typcode zurück.
 
 ---
@@ -537,7 +556,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 **Stand 26.08.2026:**
 
-- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N12, N13, N14, R6, R7, R9, S2, S4, S6, S7; N9 teilweise.
+- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N12–N15, R1, R2, R6, R7, R9, S2, S4, S5, S6, S7; N9 und R5 teilweise. S8 bewusst belassen.
 - **HOAI:** A1, A2, B1, B3, B5 (entschieden), B4 (geprüft: kein Fehler), B6 teilweise.
 
 | Befund | Geänderte Dateien | Abgesichert durch |
@@ -559,6 +578,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | S2 | `tests/einvoice_data_to_validator.test.js` | 12 Tests; gegen künstlich wieder eingebautes N1 gegengeprüft |
 | N14 | `services_einvoice_data.js`, dieselbe Testdatei | 5 Tests, gegen den Stand vor dem Fix gegengeprüft (4 rot) |
 | R6 | `migrations/0133`, `services/einvoiceSnapshot.js`, `services/generatedAssets.js`, beide Buchungs- und beide Lesewege | 8 Tests — **Migration noch einzuspielen** |
+| R1, R2, R5, S5, N15 | `services_einvoice_data.js`, `services_einvoice_cii.js`, `services_einvoice_ubl.js`, `tests/einvoice_builders.test.js` | 7 neue Tests; gegen den Stand vor dem Fix gegengeprüft (6 rot) |
 | S6 | `services_einvoice_ubl.js` | neuer Wert byteweise identisch mit beiden alten |
 | S7 | `docs/EINVOICE_ANALYSIS.md` | Warnkopf, Inhalt unverändert |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
@@ -568,7 +588,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | B4 | — | gegen § 44/§ 48 Abs. 3 und 4 geprüft, Daten korrekt |
 | B6 (Verteilungsrest) | `controllers/stammdaten.js`, `tests/stammdaten.surcharge_alloc.test.js` | 8 Tests, gegen den Stand vor dem Fix gegengeprüft (5 rot) |
 
-Volle Test-Suite nach allen Änderungen: **39 Suites, 557 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
+Volle Test-Suite nach allen Änderungen: **39 Suites, 564 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
 
 ## Was die zweite Runde am Buchen ändert
 
