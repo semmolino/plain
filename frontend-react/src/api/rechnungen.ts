@@ -382,12 +382,12 @@ export function downloadPpPeppol(
 export function downloadInvoicePdfHybrid(
   id: number,
   invoiceNumber: string | null | undefined,
-  opts?: { format?: 'cii' | 'ubl'; profile?: string }
+  opts?: { profile?: string }
 ): Promise<void> {
-  const format  = opts?.format  ?? 'cii'
+  // Der ZUGFeRD/Factur-X-Container ist fuer CII definiert; das Backend
+  // lehnt format=ubl hier ab. Reines UBL laeuft ueber downloadInvoiceEinvoice.
   const profile = opts?.profile ?? 'EN16931'
-  const params  = new URLSearchParams({ download: '1', format })
-  if (format === 'cii') params.set('profile', profile)
+  const params  = new URLSearchParams({ download: '1', profile })
   const num      = invoiceNumber || String(id)
   const fileName = `Rechnung_${num}_ZUGFeRD.pdf`
   return downloadWithAuth(`/invoices/${id}/pdf-hybrid?${params}`, fileName)
@@ -465,12 +465,11 @@ export function downloadPpEinvoice(
 export function downloadPpPdfHybrid(
   id: number,
   ppNumber: string | null | undefined,
-  opts?: { format?: 'cii' | 'ubl'; profile?: string }
+  opts?: { profile?: string }
 ): Promise<void> {
-  const format  = opts?.format  ?? 'cii'
+  // Siehe downloadInvoicePdfHybrid: immer CII.
   const profile = opts?.profile ?? 'EN16931'
-  const params  = new URLSearchParams({ download: '1', format })
-  if (format === 'cii') params.set('profile', profile)
+  const params  = new URLSearchParams({ download: '1', profile })
   const num      = ppNumber || String(id)
   const fileName = `Abschlagsrechnung_${num}_ZUGFeRD.pdf`
   return downloadWithAuth(`/partial-payments/${id}/pdf-hybrid?${params}`, fileName)

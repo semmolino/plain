@@ -681,8 +681,8 @@ async function validateInvoice(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/invoices/:id/pdf-hybrid?profile=EN16931&format=cii|ubl
-// Hybrid PDF mit eingebetteter ZUGFeRD / Factur-X / XRechnung XML
+// GET /api/invoices/:id/pdf-hybrid?profile=EN16931
+// Hybrid PDF mit eingebetteter ZUGFeRD / Factur-X XML (immer CII)
 // ---------------------------------------------------------------------------
 async function getPdfHybrid(req, res, supabase) {
   try {
@@ -690,7 +690,19 @@ async function getPdfHybrid(req, res, supabase) {
     if (!invoiceId || Number.isNaN(invoiceId)) return res.status(400).json({ error: "invalid id" });
 
     const profile  = String(req.query.profile || "EN16931").toUpperCase();
-    const format   = String(req.query.format  || "cii").toLowerCase();   // 'cii' | 'ubl'
+    const format   = String(req.query.format  || "cii").toLowerCase();   // nur 'cii', siehe N12
+
+    // N12: Der ZUGFeRD/Factur-X-Container ist fuer CII definiert. Ein UBL-
+    // Dokument darin erzeugte ein XMP mit fx:DocumentType und Factur-X-
+    // Namespace ueber einem Inhalt, den kein Reader so parsen kann — der
+    // Empfaenger sah ein reines PDF, die Rechnung galt als nicht
+    // elektronisch. Reines UBL gibt es weiterhin ueber /einvoice?format=ubl.
+    if (format === "ubl") {
+      return res.status(400).json({
+        error: "Das Hybrid-PDF traegt immer CII (ZUGFeRD/Factur-X). "
+             + "Fuer UBL den XML-Endpunkt /einvoice?format=ubl verwenden.",
+      });
+    }
     const download = String(req.query.download || "") === "1";
     const templateId = req.query.template_id ? parseInt(String(req.query.template_id), 10) : null;
 
@@ -710,12 +722,11 @@ async function getPdfHybrid(req, res, supabase) {
       loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId),
     ]);
 
-    const xml = format === "ubl"
-      ? generateUblXml(data)
-      : generateCiiXml(data, profile);
+    // Immer CII: der Container laesst nichts anderes zu (siehe N12 oben).
+    const xml = generateCiiXml(data, profile);
 
-    const xmlProfileKey = format === "ubl" ? "XRECHNUNG" : profile;
-    const xmlFilename   = format === "ubl" ? "xrechnung.xml" : "factur-x.xml";
+    const xmlProfileKey = profile;
+    const xmlFilename   = "factur-x.xml";
 
     const { data: invRow } = await supabase
       .from("INVOICE")

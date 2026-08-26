@@ -122,7 +122,9 @@ async function embedXmlIntoPdf({
 
   // 1. XML als embedded file mit AFRelationship=Alternative
   await pdfDoc.attach(xmlBytes, useFilename, {
-    mimeType: 'application/xml',
+    // N13: Factur-X/ZUGFeRD schreibt text/xml vor, nicht application/xml.
+    // Strenge Validatoren beanstanden den Unterschied.
+    mimeType: 'text/xml',
     description: `${profileKey} E-Invoice`,
     creationDate: new Date(),
     modificationDate: new Date(),

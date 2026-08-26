@@ -176,7 +176,7 @@ Auffällig: innerhalb `ApplicableTradeTax` (`:174-182`) folgt die Reihenfolge ex
 
 **Vor einer Umstellung gegen die ZUGFeRD-2.x-XSD prüfen.** Betrifft nur Storno- und Schlussrechnungen mit Referenzen. UBL setzt `cac:BillingReference` (`ubl.js:233`) korrekt.
 
-### N12 — Hybrid-PDF: UBL-XML in einem ZUGFeRD/Factur-X-Container [verifiziert]
+### N12 — Hybrid-PDF: UBL-XML in einem ZUGFeRD/Factur-X-Container [verifiziert] — ✅ BEHOBEN
 
 `controllers/invoices.js:713-718`, identisch `controllers/partialPayments.js:1031-1036`: bei `format=ubl` wird `generateUblXml` verwendet und die Datei `xrechnung.xml` genannt, sonst CII und `factur-x.xml`.
 
@@ -186,11 +186,32 @@ Damit landet ein UBL-Dokument im PDF, während `services_einvoice_pdf_embed.js:8
 
 Der CII-Weg (`format=cii`) ist strukturell in Ordnung.
 
-### N13 — MIME-Typ des eingebetteten XML [belegt] / [unsicher: keine BR-Nummer, Spezifikationsanforderung]
+**Behoben am 26.08.2026.** Beide `getPdfHybrid`-Endpunkte erzeugen jetzt ausschließlich CII und benennen die Datei ausschließlich `factur-x.xml`. `format=ubl` wird mit 400 abgelehnt statt still ein Dokument zu erzeugen, das beim Empfänger als reines PDF ankommt.
+
+**Warum ablehnen statt stillschweigend auf CII umstellen:** wer `format=ubl` anfragt, will UBL. Ein Dokument mit anderem Inhalt zurückzugeben, würde denselben Fehler nur besser verstecken. Die Fehlermeldung nennt den richtigen Weg (`/einvoice?format=ubl` liefert reines UBL, unverändert).
+
+Im Frontend ist die `format`-Option aus `downloadInvoicePdfHybrid` und `downloadPpPdfHybrid` (`api/rechnungen.ts`) entfernt. Sie war nie belegt — beide Aufrufstellen in `RechnungenListe.tsx` übergeben keine Optionen und liefen auf den Vorgabewert `cii`. **Der Fehler war also über die Oberfläche nicht erreichbar**, nur über einen direkten API-Aufruf. Das mindert den Befund, hebt ihn aber nicht auf: der Endpunkt ist öffentlich und die Weiche war ausdrücklich vorgesehen.
+
+`npx tsc -b` läuft durch.
+
+### N13 — MIME-Typ des eingebetteten XML [belegt] / [unsicher: keine BR-Nummer, Spezifikationsanforderung] — ✅ BEHOBEN
 
 `services_einvoice_pdf_embed.js:125` setzt `application/xml`. Factur-X/ZUGFeRD schreibt `text/xml` vor. pdf-lib kodiert den Wert korrekt, der Wert selbst ist falsch. Strenge Validatoren beanstanden das, tolerante Reader ignorieren es.
 
 **Korrekt dagegen:** `AFRelationship.Alternative` (`:129`) ist die richtige Deklaration, und pdf-lib trägt den Filespec tatsächlich ins `/AF`-Array des Katalogs ein — der im Kopfkommentar behauptete AF-Eintrag existiert wirklich. `/UF` wird ebenfalls gesetzt.
+
+**Behoben am 26.08.2026:** `mimeType: 'text/xml'` in `services_einvoice_pdf_embed.js`.
+
+Damit schließt sich zugleich die Lücke aus S2 für dieses Modul: `tests/einvoice_pdf_embed.test.js` ist der erste Test, der ein erzeugtes Dokument tatsächlich ansieht statt nur die Vorprüfung. Vier Fälle, gegen die Rohdarstellung des PDF geprüft (pdf-lib kodiert den Schrägstrich als `#2F`):
+
+| geprüft | Erwartung |
+|---|---|
+| MIME-Typ | `text#2Fxml` vorhanden, `application#2Fxml` **nicht** |
+| Dateiname und `/AF` | `factur-x.xml`, `/AF`, `/Alternative` |
+| XMP | `fx:DocumentType` und Factur-X-Namespace |
+| Ergebnis | wieder ladbar, 1 Seite, Titel gesetzt |
+
+Die zweite Zusicherung im ersten Fall ist die eigentliche Absicherung — ohne sie wäre der Test auch mit dem alten Wert grün geblieben, wenn der Typ irgendwo doppelt stünde.
 
 ## Risiken
 
@@ -350,7 +371,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 # Teil 3 — Bereits behoben
 
-**Stand 26.08.2026:** N1, N2, N3, N4, N6, N7, R7 und S4 (E-Rechnung), N9 teilweise, sowie A1 (HOAI).
+**Stand 26.08.2026:** N1, N2, N3, N4, N6, N7, N12, N13, R7 und S4 (E-Rechnung), N9 teilweise, sowie A1 (HOAI).
 
 | Befund | Geänderte Dateien | Abgesichert durch |
 |---|---|---|
@@ -363,9 +384,11 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | N9 (teilweise) | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | 2 Tests; BT-30 bleibt offen |
 | R7 | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | 4 Tests (G, K, Käufer-USt-IdNr, Z ohne Grund) |
 | S4 | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | Test prüft beide Richtungen |
+| N12 | `controllers/invoices.js`, `controllers/partialPayments.js`, `frontend-react/src/api/rechnungen.ts` | `tsc -b` grün; über die Oberfläche war der Pfad nie erreichbar |
+| N13 | `services_einvoice_pdf_embed.js`, `tests/einvoice_pdf_embed.test.js` | 4 Tests gegen das erzeugte PDF |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
 
-Volle Test-Suite nach allen Änderungen: **32 Suites, 509 Tests, alle grün.** (25.08.2026: 499 Tests. Die 10 neuen gehören zu N6, N7, N9, R7 und S4.)
+Volle Test-Suite nach allen Änderungen: **33 Suites, 513 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests. Die 14 neuen gehören zu N6, N7, N9, R7, S4 und N13.)
 
 ## Was die zweite Runde am Buchen ändert
 
@@ -408,7 +431,7 @@ Der dritte Fall belegt, dass das Flag jetzt tatsächlich ausgewertet wird.
 
 1. ~~**N1**~~ ✅ — erledigt, ebenso ~~**N7**~~, ~~**N9**~~ (teilweise), ~~**R7**~~ und als Zugabe ~~**N6**~~ und ~~**S4**~~. Der Validator ist damit auf dem Stand, den er ohne weitere Stammdaten-Erweiterung erreichen kann. Was hier offen bleibt: **BT-30 (Registernummer)** als saubere Lösung von N9 — eine Stammdaten-Erweiterung, keine Validator-Änderung.
 2. **A2** — Doppelfakturierung ist der teuerste denkbare Fehler. Zunächst klären, ob die Cache-Drift produktiv vorkommt; falls ja, `savePhases` auf denselben Selbstheilungs-Pfad wie `getPhases` umstellen.
-3. **N12 / N13** — das Hybrid-PDF ist der Weg, den die Zielbranche tatsächlich versendet; ein Container mit UBL-Inhalt fällt beim Empfänger auf ein reines PDF zurück.
+3. ~~**N12 / N13**~~ ✅ — erledigt. Beim Umsetzen kam heraus, dass der fehlerhafte Pfad über die Oberfläche gar nicht erreichbar war (kein Aufrufer übergab `format=ubl`). Der Befund war richtig, seine Dringlichkeit geringer als angenommen.
 4. ~~**N3 / N4**~~ ✅ — erledigt.
 5. **R6** — vor der ersten Korrektur festlegen, wie mit bereits gebuchten und versendeten Belegen umgegangen wird: kontrollierter Neu-Render mit neuem Snapshot (nur zulässig, solange nicht ausgeliefert) oder Storno plus Korrekturrechnung. Diese Entscheidung gehört vor die Fixes, nicht danach.
 6. **N10** und **B1–B4** — fachliche Entscheidungen, kein Code. Sollten gesammelt entschieden werden.
