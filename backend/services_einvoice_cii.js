@@ -86,7 +86,10 @@ function buildNotes(data) {
       const refs = (se.release.rows || []).map(r => `${r.number}: ${n2(r.amount)} EUR`).join('; ');
       parts.push(`Aufloesung Sicherheitseinbehalt aus frueheren Abschlagsrechnungen (bereits versteuert): ${n2(se.release.total)} EUR${refs ? ` (${refs})` : ''}.`);
     }
-    notes.push(`    <ram:IncludedNote><ram:Content>${x(parts.join(' '))}</ram:Content></ram:IncludedNote>`);
+    // Betreffcode PMT (UNCL 4451) -- die von der XRechnung-FAQ vorgesehene
+    // Stelle fuer Sicherheitseinbehalte. In CII strukturiert, in UBL als
+    // #PMT#-Praefix.
+    notes.push(`    <ram:IncludedNote><ram:Content>${x(parts.join(' '))}</ram:Content><ram:SubjectCode>PMT</ram:SubjectCode></ram:IncludedNote>`);
   }
   const regContent = [
     data.seller.name,

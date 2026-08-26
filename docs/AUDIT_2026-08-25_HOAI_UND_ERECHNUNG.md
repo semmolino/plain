@@ -177,7 +177,7 @@ BR-CO-26 verlangt mindestens eines aus BT-29, BT-30 oder BT-31. BT-32 (Steuernum
 
 Abgesichert durch 2 Tests (nur Steuernummer → Warnung, keine Kennung → Error).
 
-### N10 — Sicherheitseinbehalt verletzt BR-CO-16 und blockiert die eigene Buchung [belegt] — 🔶 AUSGEMESSEN 26.08.2026, Entscheidung offen
+### N10 — Sicherheitseinbehalt verletzt BR-CO-16 und blockiert die eigene Buchung [belegt] — ✅ BEHOBEN 26.08.2026
 
 `services_einvoice_data.js:500` zieht den Einbehalt direkt vom Zahlbetrag ab, ausgegeben in `cii.js:296` / `ubl.js:322`. BT-114 schreibt kein Builder, der Einbehalt ist in keiner Summenposition abgebildet (bewusst nur als Note).
 
@@ -217,7 +217,44 @@ Beide buchbar, USt unangetastet, keine negativen Beträge, und die Auflösung br
 
 **Was bleibt unschön:** auf der Abschlagsrechnung heißt BT-113 „Bezahlter Betrag", der Einbehalt ist aber nicht bezahlt, sondern zurückbehalten. Das ist eine Dehnung der Semantik. Sie wird dadurch abgefedert, dass der bestehende Hinweistext (`buildSecurityRetentionNote`) den Sachverhalt bereits im Klartext erklärt. Die Alternative wäre Variante D — normativ sauberer, aber dann liest das ERP des Empfängers BT-115 = 11.900 und überweist den vollen Betrag.
 
-**Offen: die Entscheidung.** Betroffen wären `services_einvoice_data.js` (Befüllung von `prepaidGross`) und der Auflösungspfad in `services/finalInvoices.js`.
+## Entscheidung: keine der drei Varianten — der Normgeber gibt sie vor
+
+Die offene Frage war, ob BT-113 zulässig ist. Die Antwort kommt nicht aus einer Abwägung, sondern aus der **offiziellen XRechnung-FAQ von XStandards Einkauf**:
+
+> „Sicherheitseinbehalte mindern den Forderungsbetrag einer Rechnung **nicht** und zielen auf eine von der Rechnungsfälligkeit unabhängige Auszahlung ab. In XRechnung können sie daher **nicht** als Nachlass auf Dokumenten- (BG-20) oder Positionsebene (BG-27/BG-DEX-03) ausgedrückt werden."
+
+> „Bürgschaften oder Sicherheitseinbehalte werden im Rahmen der Vertragsschließung zwischen Auftraggeber und Auftragnehmer vereinbart und sind daher von der Rechnungsabwicklung unabhängig zu sehen. **Eine explizite Abbildung ist im semantischen Modell der XRechnung nicht vorgesehen.** Alternativ können diese **nachrichtlich** – bspw. unter Verwendung des Betreffcodes „PMT" (für Payment Information) aus der Codeliste 4451 – als **Invoice Note (BT-21/BT-22)** in den Rechnungen aufgeführt werden."
+
+Damit fallen **alle drei** im Befund vorgeschlagenen Varianten:
+
+| Variante | warum sie ausscheidet |
+|---|---|
+| BG-20 (Nachlass) | vom Normgeber **ausdrücklich ausgeschlossen**; senkt zudem die USt um 113,05 € |
+| BT-113 (bezahlter Betrag) | der Einbehalt ist nicht gezahlt. Der Forderungsbetrag darf nicht gemindert werden — genau das täte BT-113 |
+| aus der E-Rechnung heraushalten | unnötig: es gibt einen vorgesehenen Weg |
+
+**Der Einbehalt ist keine Größe der Rechnung, sondern eine Zahlungsmodalität.** Das ist der Punkt, den alle drei Varianten verfehlt haben.
+
+## Umgesetzt
+
+**Abschlagsrechnung** — BT-115 bleibt der volle Bruttobetrag (11.900 €), der Einbehalt wird nirgends abgezogen. Er steht als Hinweis mit Betreffcode **PMT**: in CII strukturiert als `<ram:SubjectCode>PMT</ram:SubjectCode>`, in UBL als `#PMT#`-Präfix vor dem Notentext — so bindet EN 16931 BT-21 in der UBL-Syntax. Der Hinweistext bestand bereits (`buildSecurityRetentionNote`) und nennt Prozentsatz, Basis, Betrag und die Rechtsgrundlage aus dem Vertrag.
+
+**Schlussrechnung** — BT-113 wird mit dem **vereinnahmten** Betrag gefüllt (11.305 €), nicht mit dem fakturierten (11.900 €). Das war schon vorher falsch, unabhängig von N10: der einbehaltene Anteil war in BT-113 enthalten, obwohl er nie geflossen ist. § 14 Abs. 5 UStG verlangt in der Endrechnung ausdrücklich den Abzug der **„vereinnahmten Teilentgelte"**.
+
+Der frühere Auflösungs-Mechanismus im XML entfällt damit ersatzlos: der Einbehalt kommt zurück, **weil er nie als gezahlt galt**.
+
+| Beleg | BT-112 | BT-113 | BT-115 | BR-CO-16 |
+|---|---|---|---|---|
+| Abschlag mit Einbehalt | 11.900 | 0 | **11.900** | erfüllt |
+| Schlussrechnung | 16.660 | **11.305** | 5.355 | erfüllt |
+
+**Der Zahlbetrag der Schlussrechnung ändert sich nicht:** früher 16.660 − 11.900 + 595 = 5.355, jetzt 16.660 − 11.305 = 5.355.
+
+**Was sich sichtbar ändert:** auf der Abschlagsrechnung steht in BT-115 jetzt der volle Betrag, während das PDF weiterhin „Zahlungsbetrag 11.305 €" ausweist. Das ist gewollt und entspricht der Trennung, die der Normgeber macht — die Rechnung *fordert* 11.900, der Auftraggeber *behält* davon 595 ein. Das PDF unterscheidet beides bereits sauber („Rechnungssumme brutto" gegen „Zahlungsbetrag"), es musste nicht angefasst werden. Der Einbehalt ist ohnehin ein Recht des Zahlenden — er übt es selbst aus und überweist nicht versehentlich zu viel.
+
+**Die USt bleibt in jedem Fall unangetastet**, wie es `migrations/0047` vorgibt.
+
+Abgesichert durch 9 Tests; gegen den Stand vor dem Fix schlagen 5 davon fehl.
 
 ### N11 — CII: Elementreihenfolge im Settlement-Block [unsicher: gegen XSD prüfen]
 
@@ -590,7 +627,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 **Stand 26.08.2026:**
 
-- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N12–N15, R1, R2, R6, R7, R9, S2, S4, S5, S6, S7; N9 und R5 teilweise. S8 bewusst belassen.
+- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N10, N12–N15, R1, R2, R6, R7, R9, S2, S4, S5, S6, S7; N9 und R5 teilweise. S8 bewusst belassen.
 - **HOAI:** A1, A2, B1, B3, B5 (entschieden), B4 (geprüft: kein Fehler), B6 teilweise.
 
 | Befund | Geänderte Dateien | Abgesichert durch |
@@ -613,6 +650,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | N14 | `services_einvoice_data.js`, dieselbe Testdatei | 5 Tests, gegen den Stand vor dem Fix gegengeprüft (4 rot) |
 | R6 | `migrations/0133`, `services/einvoiceSnapshot.js`, `services/generatedAssets.js`, beide Buchungs- und beide Lesewege | 8 Tests — **Migration noch einzuspielen** |
 | R1, R2, R5, S5, N15 | `services_einvoice_data.js`, `services_einvoice_cii.js`, `services_einvoice_ubl.js`, `tests/einvoice_builders.test.js` | 7 neue Tests; gegen den Stand vor dem Fix gegengeprüft (6 rot) |
+| N10 | `services_einvoice_data.js`, beide Builder, `tests/einvoice_security_retention.test.js` | 9 Tests; gegen den Stand vor dem Fix gegengeprüft (5 rot) |
 | S6 | `services_einvoice_ubl.js` | neuer Wert byteweise identisch mit beiden alten |
 | S7 | `docs/EINVOICE_ANALYSIS.md` | Warnkopf, Inhalt unverändert |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
@@ -622,7 +660,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | B4 | — | gegen § 44/§ 48 Abs. 3 und 4 geprüft, Daten korrekt |
 | B6 (Verteilungsrest) | `controllers/stammdaten.js`, `tests/stammdaten.surcharge_alloc.test.js` | 8 Tests, gegen den Stand vor dem Fix gegengeprüft (5 rot) |
 
-Volle Test-Suite nach allen Änderungen: **39 Suites, 564 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
+Volle Test-Suite nach allen Änderungen: **40 Suites, 573 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
 
 ## Was die zweite Runde am Buchen ändert
 
@@ -672,7 +710,7 @@ Der dritte Fall belegt, dass das Flag jetzt tatsächlich ausgewertet wird.
    **Offen bleiben zwei Punkte, beide mit klarer nächster Handlung:**
    - **B2** — Rechtslage geklärt (§ 7 Abs. 2 HOAI: außerhalb der Tafel frei vereinbar, Extrapolation unzulässig). Nächster Schritt ist die Integration der RiFT-Erweiterungstabellen; bis dahin ist der Randwert ohne Hinweis weiterhin falsch.
    - **B6 Rundungskonvention** — 14 Rundungshelfer, 2 mit `Number.EPSILON`. Vereinheitlichung verschiebt Cents und braucht eine bewusste Festlegung; die Zwischenrundung im Mischhonorar hängt daran.
-7. **N10** — fachliche Entscheidung zur E-Rechnung, kein Code.
+7. ~~**N10**~~ ✅ — erledigt. Die erwartete fachliche Abwägung entfiel: die XRechnung-FAQ gibt den Weg vor und schließt zwei der drei im Befund vorgeschlagenen Varianten ausdrücklich aus. **Lehre für die übrigen offenen Punkte:** vor der Abwägung nachsehen, ob der Normgeber die Frage schon beantwortet hat.
 
 ## Nicht geprüft
 

@@ -136,7 +136,10 @@ function buildSecurityRetentionNote(data) {
     const refs = (se.release.rows || []).map(r => `${r.number}: ${n2(r.amount)} EUR`).join('; ');
     lines.push(`Aufloesung Sicherheitseinbehalt aus frueheren Abschlagsrechnungen (bereits versteuert): ${n2(se.release.total)} EUR${refs ? ` (${refs})` : ''}.`);
   }
-  return `<cbc:Note>${x(lines.join(' '))}</cbc:Note>`;
+  // BT-21 wird in UBL als #CODE#-Praefix vor dem Notentext ausgedrueckt.
+  // PMT (Payment Information) aus UNCL 4451 ist der Code, den die
+  // XRechnung-FAQ fuer Sicherheitseinbehalte vorsieht.
+  return `<cbc:Note>${x('#PMT#' + lines.join(' '))}</cbc:Note>`;
 }
 
 function buildAllowanceCharges(data) {

@@ -442,7 +442,7 @@ ${basis}`;
       const ppIds = dedRows.map(r => r.PARTIAL_PAYMENT_ID);
       const { data: partials } = await supabase
         .from('PARTIAL_PAYMENT')
-        .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET')
+        .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET, SE_AMOUNT')
         .in('ID', ppIds);
 
       const ppMap = Object.fromEntries((partials ?? []).map(p => [p.ID, p]));
@@ -450,12 +450,18 @@ ${basis}`;
         const pp    = ppMap[d.PARTIAL_PAYMENT_ID] ?? {};
         const gross = fmt2(pp.TOTAL_AMOUNT_GROSS ?? 0);
         const net   = fmt2(d.DEDUCTION_AMOUNT_NET ?? pp.TOTAL_AMOUNT_NET ?? 0);
+        // N10: Was die Abschlagsrechnung gefordert hat, und was davon
+        // tatsaechlich geflossen ist, sind zwei verschiedene Betraege --
+        // der Sicherheitseinbehalt wurde nie gezahlt.
+        const retained = fmt2(pp.SE_AMOUNT ?? 0);
         return {
           number:      pp.PARTIAL_PAYMENT_NUMBER ?? String(d.PARTIAL_PAYMENT_ID),
           date:        asIsoDate(pp.PARTIAL_PAYMENT_DATE),
           netAmount:   net,
           vatAmount:   fmt2(gross - net),
-          grossAmount: gross,
+          grossAmount: gross,             // fakturiert
+          retainedAmount: retained,       // davon einbehalten
+          paidAmount:  fmt2(gross - retained),  // davon vereinnahmt
         };
       });
     }
@@ -485,8 +491,17 @@ ${basis}`;
     ? (stored(doc.TOTAL_AMOUNT_GROSS) ?? fmt2(taxBasis + taxAmount))
     : taxBasis;
 
-  // Prepaid = gross already invoiced via prior ARs (Schlussrechnung only)
-  const prepaidGross = fmt2(deductions.reduce((s, d) => s + d.grossAmount, 0));
+  // N10/BT-113 — "Bezahlter Betrag". Frueher stand hier die Summe der
+  // FAKTURIERTEN Bruttobetraege der Abschlagsrechnungen. Der einbehaltene
+  // Anteil ist darin enthalten, wurde aber nie gezahlt -- BT-113 behauptete
+  // also eine Zahlung, die es nicht gab.
+  //
+  // Massgeblich ist das Vereinnahmte: § 14 Abs. 5 UStG verlangt in der
+  // Endrechnung den Abzug der "vereinnahmten Teilentgelte", nicht der
+  // fakturierten. Beides zusammen ergibt denselben Zahlbetrag wie bisher --
+  // der Einbehalt kommt zurueck, weil er nie als gezahlt galt, und die
+  // frueher noetige "+ Aufloesung" entfaellt.
+  const prepaidGross = fmt2(deductions.reduce((s, d) => s + d.paidAmount, 0));
 
   // ── Sicherheitseinbehalt (Phase 4) ────────────────────────────────────────
   // SE held in THIS doc → reduces payable (customer pays less).
@@ -537,8 +552,25 @@ ${basis}`;
     hasRelease: seReleaseTotal > 0,
   };
 
-  // DuePayable = what remains to be paid now (with SE adjustments)
-  const duePayable   = fmt2(grandTotal - prepaidGross - seHeldAmount + seReleaseTotal);
+  // N10 — BT-115. Der Sicherheitseinbehalt wird hier NICHT mehr abgezogen.
+  //
+  // Die offizielle XRechnung-FAQ (XStandards Einkauf) ist dazu eindeutig:
+  // "Sicherheitseinbehalte mindern den Forderungsbetrag einer Rechnung nicht
+  // und zielen auf eine von der Rechnungsfaelligkeit unabhaengige Auszahlung
+  // ab. In XRechnung koennen sie daher nicht als Nachlass auf Dokumenten-
+  // (BG-20) oder Positionsebene ausgedrueckt werden." Eine eigene Abbildung
+  // sieht das semantische Modell nicht vor; vorgesehen ist ein Hinweis mit
+  // Betreffcode PMT (BT-21/BT-22) -- siehe buildSecurityRetentionNote.
+  //
+  // Vorher wurde der Einbehalt direkt vom Zahlbetrag abgezogen und die
+  // Aufloesung wieder addiert. Beides verletzte BR-CO-16 (BT-115 muss
+  // BT-112 - BT-113 sein), und zwar in beide Richtungen: solche Rechnungen
+  // waren nur mit force=true buchbar.
+  //
+  // Der Einbehalt ist damit keine Groesse der Rechnung mehr, sondern eine
+  // Zahlungsmodalitaet. Das PDF weist ihn weiterhin aus ("Rechnungssumme
+  // brutto" gegen "Zahlungsbetrag") -- der Unterschied zu BT-115 ist gewollt.
+  const duePayable   = fmt2(grandTotal - prepaidGross);
 
   const vatBreakdown = [{
     rate:        effectiveVatPercent,
