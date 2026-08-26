@@ -28,7 +28,22 @@
  */
 
 const VAT_CATEGORIES_ALLOWED = new Set(['S', 'AE', 'E', 'Z', 'O', 'G', 'K']);
-const VAT_CATEGORIES_REQUIRE_REASON = new Set(['AE', 'E', 'Z', 'O', 'G', 'K']);
+// Regeln je USt-Kategorie ausser S. Ersetzt das frueher definierte, aber
+// nirgends benutzte VAT_CATEGORIES_REQUIRE_REASON — dadurch fehlten G und K
+// in der Pruefung komplett. Z verlangt bewusst KEINEN Befreiungsgrund; die
+// alte Konstante fuehrte Z faelschlich mit.
+// ACHTUNG: Die Codes BR-G-* und BR-IC-* sowie die Zuordnung der -02/-03
+// Varianten sind nicht gegen den KoSIT-Katalog gegengeprueft.
+const VAT_CATEGORY_RULES = {
+  AE: { label: 'Reverse Charge',        rateCode: 'BR-AE-01', reasonCode: 'BR-AE-10', hint: '§13b UStG',
+        sellerVatCode: 'BR-AE-02', buyerVatCode: 'BR-AE-03' },
+  E:  { label: 'Steuerbefreit',         rateCode: 'BR-E-01',  reasonCode: 'BR-E-10',  hint: '' },
+  Z:  { label: 'Nullsatz',              rateCode: 'BR-Z-01',  reasonCode: null,       hint: '' },
+  O:  { label: 'Nicht steuerbar',       rateCode: 'BR-O-01',  reasonCode: 'BR-O-10',  hint: 'z.B. §19 Kleinunternehmer' },
+  G:  { label: 'Ausfuhrlieferung',      rateCode: 'BR-G-01',  reasonCode: 'BR-G-10',  hint: 'Drittland' },
+  K:  { label: 'Innergemeinschaftlich', rateCode: 'BR-IC-01', reasonCode: 'BR-IC-10', hint: 'EU-Lieferung',
+        sellerVatCode: 'BR-IC-02', buyerVatCode: 'BR-IC-03' },
+};
 const ROUNDING_TOLERANCE = 0.02;   // EUR
 
 function fmt2(n) { return Math.round(Number(n || 0) * 100) / 100; }
@@ -92,6 +107,39 @@ function validateEInvoiceData(data, opts = {}) {
     errors.push(mkError('BR-09', 'BT-40', 'Verkaufer-Landercode fehlt.'));
   }
 
+  // BG-6: Verkaufer-Kontakt. Die Builder geben die Gruppe nur aus, wenn die
+  // Felder gefuellt sind — eine unvollstandige BG-6 (etwa Ansprechpartner
+  // ohne Telefon) wird vom Pruefportal abgewiesen. Quelle der Daten ist der
+  // EMPLOYEE des Belegs.
+  // ACHTUNG: Die Codes BR-DE-5/6/7 stammen aus der XRechnung-CIUS und sind
+  // nicht gegen den aktuellen KoSIT-Katalog gegengeprueft.
+  if (!nonEmpty(data.seller?.contactName)) {
+    errors.push(mkError('BR-DE-5', 'BT-41', 'Verkaufer-Ansprechpartner fehlt (BG-6) — beim Mitarbeiter hinterlegen.'));
+  }
+  if (!nonEmpty(data.seller?.contactPhone)) {
+    errors.push(mkError('BR-DE-6', 'BT-42', 'Verkaufer-Telefonnummer fehlt (BG-6) — beim Mitarbeiter hinterlegen.'));
+  }
+  if (!nonEmpty(data.seller?.contactEmail)) {
+    errors.push(mkError('BR-DE-7', 'BT-43', 'Verkaufer-E-Mail fehlt (BG-6) — beim Mitarbeiter hinterlegen.'));
+  }
+
+  // BR-CO-26: mindestens eine Verkaufer-Kennung. Die Norm verlangt BT-29,
+  // BT-30 oder BT-31 — die Steuernummer BT-32 erfuellt sie nicht. Das
+  // Datenmodell kennt derzeit nur BT-31 und BT-32; BT-29/BT-30 gibt kein
+  // Builder aus. Fehlt beides, ist der Beleg sicher unbrauchbar (Error);
+  // liegt nur die Steuernummer vor, haengt es am Validator des Empfaengers
+  // (Warnung) — die belastbare Loesung waere ein Registernummer-Feld BT-30.
+  const sellerHasVatId = nonEmpty(data.seller?.vatId);
+  const sellerHasTaxId = nonEmpty(data.seller?.taxId);
+  if (!sellerHasVatId && !sellerHasTaxId) {
+    errors.push(mkError('BR-CO-26', 'BT-31',
+      'Weder USt-IdNr (BT-31) noch Steuernummer (BT-32) hinterlegt — die Rechnung wird abgewiesen.'));
+  } else if (!sellerHasVatId) {
+    warnings.push(mkWarning('BR-CO-26', 'BT-31',
+      'Nur Steuernummer (BT-32) hinterlegt. BR-CO-26 verlangt BT-29, BT-30 oder BT-31 — '
+      + 'Empfaenger koennen die Rechnung deshalb abweisen.'));
+  }
+
   // ── BR-07/10: Buyer name (BT-44) ────────────────────────────────────────────
   if (!nonEmpty(data.buyer?.name)) {
     errors.push(mkError('BR-07', 'BT-44', 'Kaufer-Name fehlt.'));
@@ -151,40 +199,21 @@ function validateEInvoiceData(data, opts = {}) {
       if (!isPositive(rate)) {
         errors.push(mkError('BR-S-02', 'BT-119', 'Steuerkategorie S (Standardsatz) erfordert einen Steuersatz > 0.'));
       }
-    }
-
-    // BR-AE-01/02: reverse charge requires exemption reason and rate 0
-    if (cat === 'AE') {
-      if (rate !== 0) {
-        errors.push(mkError('BR-AE-01', 'BT-119', 'Steuerkategorie AE (Reverse Charge) verlangt einen Steuersatz von 0.'));
-      }
-      if (!nonEmpty(vb.exemptionReasonText) && !nonEmpty(vb.exemptionReasonCode)) {
-        errors.push(mkError('BR-AE-10', 'BT-120', 'Steuerkategorie AE (Reverse Charge) verlangt einen Befreiungsgrund (§13b UStG).'));
-      }
-    }
-
-    // BR-E: tax exempt requires exemption reason
-    if (cat === 'E') {
-      if (rate !== 0) {
-        errors.push(mkError('BR-E-01', 'BT-119', 'Steuerkategorie E (Steuerbefreit) verlangt einen Steuersatz von 0.'));
-      }
-      if (!nonEmpty(vb.exemptionReasonText) && !nonEmpty(vb.exemptionReasonCode)) {
-        errors.push(mkError('BR-E-10', 'BT-120', 'Steuerkategorie E (Steuerbefreit) verlangt einen Befreiungsgrund.'));
-      }
-    }
-
-    // BR-Z: zero rated
-    if (cat === 'Z' && rate !== 0) {
-      errors.push(mkError('BR-Z-01', 'BT-119', 'Steuerkategorie Z (Nullsatz) verlangt einen Steuersatz von 0.'));
-    }
-
-    // BR-O: out of scope (§19 Kleinunternehmer)
-    if (cat === 'O') {
-      if (rate !== 0) {
-        errors.push(mkError('BR-O-01', 'BT-119', 'Steuerkategorie O (Nicht steuerbar) verlangt einen Steuersatz von 0.'));
-      }
-      if (!nonEmpty(vb.exemptionReasonText) && !nonEmpty(vb.exemptionReasonCode)) {
-        errors.push(mkError('BR-O-10', 'BT-120', 'Steuerkategorie O (z.B. §19 Kleinunternehmer) verlangt einen Befreiungsgrund.'));
+    } else {
+      // Alle uebrigen Kategorien verlangen Satz 0 und — ausser Z — einen
+      // Befreiungsgrund. Tabellengesteuert, damit eine zugelassene Kategorie
+      // nicht wieder stillschweigend ungeprueft bleibt.
+      const rules = VAT_CATEGORY_RULES[cat];
+      if (rules) {
+        const label = rules.hint ? `${rules.label}, ${rules.hint}` : rules.label;
+        if (rate !== 0) {
+          errors.push(mkError(rules.rateCode, 'BT-119',
+            `Steuerkategorie ${cat} (${label}) verlangt einen Steuersatz von 0.`));
+        }
+        if (rules.reasonCode && !nonEmpty(vb.exemptionReasonText) && !nonEmpty(vb.exemptionReasonCode)) {
+          errors.push(mkError(rules.reasonCode, 'BT-120',
+            `Steuerkategorie ${cat} (${label}) verlangt einen Befreiungsgrund.`));
+        }
       }
     }
 
@@ -197,6 +226,24 @@ function validateEInvoiceData(data, opts = {}) {
       }
     }
   });
+
+  // Reverse Charge und innergemeinschaftliche Lieferung verlangen die
+  // USt-IdNr BEIDER Parteien. Beide Felder liegen im Datenmodell vor, wurden
+  // bisher aber nicht geprueft — eine §13b-Rechnung ohne Kaeufer-USt-IdNr
+  // lief durch und wurde erst beim Empfaenger abgewiesen.
+  const categoriesInUse = new Set(vatBreakdown.map(vb => vb.category || vb.categoryCode || 'S'));
+  for (const cat of ['AE', 'K']) {
+    if (!categoriesInUse.has(cat)) continue;
+    const rules = VAT_CATEGORY_RULES[cat];
+    if (!nonEmpty(data.seller?.vatId)) {
+      errors.push(mkError(rules.sellerVatCode, 'BT-31',
+        `Steuerkategorie ${cat} (${rules.label}) verlangt die USt-IdNr des Verkaufers.`));
+    }
+    if (!nonEmpty(data.buyer?.vatId)) {
+      errors.push(mkError(rules.buyerVatCode, 'BT-48',
+        `Steuerkategorie ${cat} (${rules.label}) verlangt die USt-IdNr des Kaufers.`));
+    }
+  }
 
   // ── BR-12..15: Totals must be present ───────────────────────────────────────
   const t = data.totals || {};
@@ -261,16 +308,29 @@ function validateEInvoiceData(data, opts = {}) {
     }
   }
 
-  // ── BR-IBAN: IBAN-Format pruefen (sofern angegeben) ─────────────────────────
+  // ── BR-DE-1: Zahlungsinformationen (BG-16) ─────────────────────────
+  // Beide Builder haengen den KOMPLETTEN Zahlungsblock an die IBAN
+  // (cii.js buildPaymentMeans, ubl.js cac:PaymentMeans) und kennen als
+  // Zahlungsart nur die SEPA-Ueberweisung (TypeCode 58). Ohne IBAN entsteht
+  // deshalb kein BG-16 — nicht etwa ein unvollstaendiges, sondern gar keins.
+  // Beim Empfaenger ist das eine harte Abweisung, hier war es bisher nicht
+  // einmal eine Warnung: geprueft wurde nur das Format einer vorhandenen IBAN.
   const iban = String(data.seller?.iban ?? '').replace(/\s+/g, '').toUpperCase();
-  if (iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) {
+  if (!iban) {
+    errors.push(mkError('BR-DE-1', 'BT-84',
+      'IBAN fehlt — ohne sie enthaelt die Rechnung keine Zahlungsinformationen (BG-16) '
+      + 'und wird abgewiesen. In den Firmenstammdaten hinterlegen.'));
+  } else if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) {
     warnings.push(mkWarning('BR-DE-IBAN', 'BT-84', `IBAN-Format wirkt ungultig: "${iban}"`));
   }
 
-  // ── BR-DE-1: BuyerReference (Leitweg-ID) — NUR Warnung ──────────────────────
+  // ── BR-DE-15: BuyerReference (Leitweg-ID) — NUR Warnung ──────────────────────
   // Hinweis: Pflicht fur B2G, optional fur B2B. Auf Wunsch keine Hartpflicht.
+  // Der Code hiess bis 25.08.2026 BR-DE-1 — das ist nach KoSIT die Regel zu den
+  // Zahlungsinformationen (direkt darueber) und war damit doppelt vergeben.
+  // ACHTUNG: BR-DE-15 ist nicht gegen den KoSIT-Katalog gegengeprueft.
   if (!nonEmpty(data.buyerReference)) {
-    warnings.push(mkWarning('BR-DE-1', 'BT-10',
+    warnings.push(mkWarning('BR-DE-15', 'BT-10',
       'Leitweg-ID/Kauferreferenz fehlt -- bei offentlichen Auftraggebern Pflicht (B2G).'));
   }
 

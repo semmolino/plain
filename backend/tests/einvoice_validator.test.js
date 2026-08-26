@@ -10,8 +10,16 @@ function baseData(overrides = {}) {
     typeCodeUbl: "380",
     currency: "EUR",
     buyerReference: "TEST-REF",
-    seller: { name: "Architektur GmbH", street: "Hauptstr. 1", city: "Munchen", postCode: "80331", countryId: "DE" },
-    buyer:  { name: "Bauherr AG",       street: "Bauplatz 9",   city: "Berlin",  postCode: "10115", countryId: "DE" },
+    seller: {
+      name: "Architektur GmbH", street: "Hauptstr. 1", city: "Munchen", postCode: "80331", countryId: "DE",
+      vatId: "DE123456789", taxId: "143/815/09321",
+      contactName: "S. Messina", contactPhone: "+49 89 1234567", contactEmail: "info@example.de",
+      iban: "DE02120300000000202051", bic: "BYLADEM1001",
+    },
+    buyer:  {
+      name: "Bauherr AG", street: "Bauplatz 9", city: "Berlin", postCode: "10115", countryId: "DE",
+      vatId: "DE987654321",
+    },
     lines:  [{ description: "Honorar HOAI Lph 1", quantity: 1, unitCode: "C62", lineTotal: 1000, vatCategory: "S" }],
     vatBreakdown: [{ category: "S", percent: 19, basis: 1000, amount: 190 }],
     allowances: [],
@@ -101,10 +109,12 @@ describe("validateEInvoiceData", () => {
     expect(r.errors.some(e => e.code === "BR-CO-16")).toBe(true);
   });
 
-  it("emits warning when Leitweg-ID fehlt (BR-DE-1) — kein Error", () => {
+  it("emits warning when Leitweg-ID fehlt (BR-DE-15) — kein Error", () => {
     const r = validateEInvoiceData(baseData({ buyerReference: "" }));
     expect(r.ok).toBe(true);
-    expect(r.warnings.some(w => w.code === "BR-DE-1")).toBe(true);
+    expect(r.warnings.some(w => w.code === "BR-DE-15")).toBe(true);
+    // BR-DE-1 gehoert zu den Zahlungsinformationen und darf hier nicht auftauchen.
+    expect(r.warnings.some(w => w.code === "BR-DE-1")).toBe(false);
   });
 
   it("tolerates 0.01 Rundungsdifferenzen", () => {
@@ -150,5 +160,92 @@ describe("validateEInvoiceData", () => {
     });
     const r = validateEInvoiceData(data);
     expect(r.errors.some(e => e.code === "BR-CO-13")).toBe(false);
+  });
+
+  // ── N7: Verkaeufer-Kontakt BG-6 muss vollstaendig sein
+
+  it("flags fehlenden Ansprechpartner (BG-6)", () => {
+    const r = validateEInvoiceData(baseData({
+      seller: { ...baseData().seller, contactName: "" },
+    }));
+    expect(r.errors.some(e => e.btField === "BT-41")).toBe(true);
+  });
+
+  it("flags Ansprechpartner ohne Telefonnummer", () => {
+    const r = validateEInvoiceData(baseData({
+      seller: { ...baseData().seller, contactPhone: "" },
+    }));
+    expect(r.errors.some(e => e.btField === "BT-42")).toBe(true);
+  });
+
+  // ── N9: BR-CO-26 — Steuernummer allein genuegt der Norm nicht
+
+  it("warnt, wenn nur die Steuernummer vorliegt (BR-CO-26)", () => {
+    const r = validateEInvoiceData(baseData({
+      seller: { ...baseData().seller, vatId: "" },
+    }));
+    expect(r.warnings.some(w => w.code === "BR-CO-26")).toBe(true);
+    expect(r.errors.some(e => e.code === "BR-CO-26")).toBe(false);
+  });
+
+  it("flags fehlende Verkaeufer-Kennung ganz (BR-CO-26)", () => {
+    const r = validateEInvoiceData(baseData({
+      seller: { ...baseData().seller, vatId: "", taxId: "" },
+    }));
+    expect(r.errors.some(e => e.code === "BR-CO-26")).toBe(true);
+  });
+
+  // ── R7: Kategorien G und K wurden vorher gar nicht geprueft
+
+  it("flags Ausfuhrlieferung ohne Befreiungsgrund (Kategorie G)", () => {
+    const r = validateEInvoiceData(baseData({
+      vatBreakdown: [{ category: "G", percent: 0, basis: 1000, amount: 0 }],
+      totals: { ...baseData().totals, taxAmount: 0, grandTotal: 1000, duePayable: 1000 },
+    }));
+    expect(r.errors.some(e => e.code === "BR-G-10")).toBe(true);
+  });
+
+  it("flags innergemeinschaftliche Lieferung mit Steuersatz (Kategorie K)", () => {
+    const r = validateEInvoiceData(baseData({
+      vatBreakdown: [{ category: "K", percent: 19, basis: 1000, amount: 190,
+                       exemptionReasonText: "Innergemeinschaftliche Lieferung" }],
+    }));
+    expect(r.errors.some(e => e.code === "BR-IC-01")).toBe(true);
+  });
+
+  it("verlangt bei Reverse Charge die USt-IdNr des Kaeufers (BT-48)", () => {
+    const r = validateEInvoiceData(baseData({
+      buyer: { ...baseData().buyer, vatId: "" },
+      vatBreakdown: [{ category: "AE", percent: 0, basis: 1000, amount: 0,
+                       exemptionReasonText: "Reverse Charge gem. §13b UStG" }],
+      totals: { ...baseData().totals, taxAmount: 0, grandTotal: 1000, duePayable: 1000 },
+    }));
+    expect(r.errors.some(e => e.btField === "BT-48")).toBe(true);
+  });
+
+  // ── N6: ohne IBAN entsteht gar kein Zahlungsblock (BG-16)
+
+  it("flags fehlende IBAN (BG-16)", () => {
+    const r = validateEInvoiceData(baseData({
+      seller: { ...baseData().seller, iban: "" },
+    }));
+    expect(r.errors.some(e => e.code === "BR-DE-1" && e.btField === "BT-84")).toBe(true);
+    expect(r.ok).toBe(false);
+  });
+
+  it("meldet eine unplausible IBAN weiterhin nur als Warnung", () => {
+    const r = validateEInvoiceData(baseData({
+      seller: { ...baseData().seller, iban: "DE00" },
+    }));
+    expect(r.warnings.some(w => w.code === "BR-DE-IBAN")).toBe(true);
+    expect(r.errors.some(e => e.btField === "BT-84")).toBe(false);
+  });
+
+  it("verlangt bei Nullsatz KEINEN Befreiungsgrund (Kategorie Z)", () => {
+    const r = validateEInvoiceData(baseData({
+      vatBreakdown: [{ category: "Z", percent: 0, basis: 1000, amount: 0 }],
+      totals: { ...baseData().totals, taxAmount: 0, grandTotal: 1000, duePayable: 1000 },
+    }));
+    expect(r.errors.some(e => e.btField === "BT-120")).toBe(false);
   });
 });

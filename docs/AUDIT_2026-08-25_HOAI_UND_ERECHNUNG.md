@@ -109,17 +109,33 @@ Der frühere `-`-Fallback ist beseitigt; das leere Element ist der Nachfolgebefu
 
 Syntax: beide.
 
-### N6 — Ohne IBAN fehlt die komplette Zahlungsinformation (BG-16) [belegt]
+### N6 — Ohne IBAN fehlt die komplette Zahlungsinformation (BG-16) [belegt] — ✅ BEHOBEN
 
 `services_einvoice_cii.js:160` bricht ohne IBAN ab, `services_einvoice_ubl.js:297` stellt den gesamten `cac:PaymentMeans`-Block unter dieselbe Bedingung.
 
 Ein Mandant ohne gepflegte IBAN erzeugt eine Rechnung ohne BG-16 → Abweisung. Der Validator prüft die IBAN nur auf Format und nur, wenn sie vorhanden ist (`:247-250`, nur `warning`). Eine fehlende IBAN wird nirgends beanstandet.
 
-### N7 — Verkäufer-Ansprechpartner (BG-6) ist optional statt Pflicht [belegt]
+**Behoben am 26.08.2026** in `services_einvoice_validator.js`. Die Formatprüfung ist um den Fall „gar keine IBAN" ergänzt, als `error` unter `BR-DE-1`/BT-84 mit dem Hinweis auf die Firmenstammdaten. Eine vorhandene, aber unplausible IBAN bleibt bewusst eine Warnung — sie erzeugt ein BG-16, nur womöglich ein falsches.
+
+Die Builder bleiben unverändert: beide kennen als Zahlungsart nur die SEPA-Überweisung (TypeCode 58), und ohne IBAN ist dieser Block inhaltlich leer. Eine Rechnung ohne Bankverbindung ist damit nicht mehr ohne `force=true` buchbar — das ist gewollt, weil sie beim Empfänger ohnehin durchfällt.
+
+Abgesichert durch 2 Tests (fehlende IBAN → Error, unplausible IBAN → weiterhin nur Warnung).
+
+### N7 — Verkäufer-Ansprechpartner (BG-6) ist optional statt Pflicht [belegt] — ✅ BEHOBEN
 
 `services_einvoice_cii.js:106-111`, `services_einvoice_ubl.js:261-266`: Kontaktblock nur bei vorhandenem `contactName`, Telefon und Mail einzeln bedingt.
 
 Fehlt beim `EMPLOYEE` die Telefonnummer (`services_einvoice_data.js:147`), entsteht ein BG-6 ohne BT-42 → Abweisung. Der Validator prüft BG-6 überhaupt nicht.
+
+**Behoben am 26.08.2026** in `services_einvoice_validator.js`. Alle drei Felder der Gruppe werden jetzt einzeln als `error` geprüft: BT-41 (`BR-DE-5`), BT-42 (`BR-DE-6`), BT-43 (`BR-DE-7`). Die Meldung nennt die Stelle zum Nachpflegen („beim Mitarbeiter hinterlegen"), weil die Daten aus dem `EMPLOYEE` des Belegs stammen.
+
+Die Feldnamen `contactName`/`contactPhone`/`contactEmail` wurden gegen `services_einvoice_data.js:598-600` gegengeprüft — genau die Divergenz, die N1 ausgemacht hat.
+
+**Nicht gesichert:** die Zuordnung der Codes BR-DE-5/6/7 stammt aus der XRechnung-CIUS und ist nicht gegen den aktuellen KoSIT-Katalog geprüft. Ein Kommentar im Code hält das fest. Der Befund selbst (drei Pflichtfelder) hängt nicht daran.
+
+**Auswirkung im Betrieb:** ein Mitarbeiter ohne Telefon oder Mail blockiert das Buchen (422, mit `force=true` übersteuerbar). Die Builder haben diese Rechnung vorher erzeugt — der Empfänger hat sie abgewiesen.
+
+Abgesichert durch 2 Tests.
 
 ### N8 — Postleitzahlen werden nicht geprüft, Adressfelder divergieren [belegt]
 
@@ -127,11 +143,22 @@ Der Validator prüft nur die Stadt: `:86` (Verkäufer, `error`), `:102` (Käufer
 
 **Divergenz:** CII schreibt `PostcodeCode`, `LineOne`, `CityName` des Verkäufers immer, auch leer (`services_einvoice_cii.js:113-115`); UBL lässt sie bei Leere weg (`services_einvoice_ubl.js:243-245`). Gleiche Datenlage, zwei verschiedene Dokumente.
 
-### N9 — Steuernummer allein erfüllt BR-CO-26 nicht [belegt]
+### N9 — Steuernummer allein erfüllt BR-CO-26 nicht [belegt] — ✅ TEILWEISE BEHOBEN
 
 `services_einvoice_data.js:128-130` → `services_einvoice_cii.js:119-120`, `services_einvoice_ubl.js:248-257`.
 
 BR-CO-26 verlangt mindestens eines aus BT-29, BT-30 oder BT-31. BT-32 (Steuernummer, Schema `FC`) erfüllt sie nicht. Ein Büro ohne USt-IdNr — bei Kleinunternehmern nach §19 UStG der Normalfall, und genau dafür ist Kategorie `O` in `:199` vorgesehen — erzeugt nur `PartyTaxScheme` mit `FC`. BT-29/BT-30 schreibt kein Builder.
+
+**Sichtbar gemacht am 26.08.2026** in `services_einvoice_validator.js`, zweistufig:
+
+| Datenlage | Reaktion | Begründung |
+|---|---|---|
+| weder BT-31 noch BT-32 | `error` | der Beleg ist sicher unbrauchbar |
+| nur BT-32 (Steuernummer) | `warning` | ob es durchgeht, entscheidet der Validator des Empfängers |
+
+**Warum nur teilweise:** die belastbare Lösung ist ein Feld für die Registernummer BT-30, das ein Builder auch ausgibt. Das ist eine Stammdaten-Erweiterung (Migration + Firmenmaske + beide Builder) und keine Validator-Änderung. Bis dahin ist der Kleinunternehmer-Fall gewarnt, nicht gelöst — ein `error` an dieser Stelle würde ihn vom Buchen aussperren, ohne dass er im Produkt etwas dagegen tun kann.
+
+Abgesichert durch 2 Tests (nur Steuernummer → Warnung, keine Kennung → Error).
 
 ### N10 — Sicherheitseinbehalt verletzt BR-CO-16 und blockiert die eigene Buchung [belegt]
 
@@ -173,7 +200,8 @@ Der CII-Weg (`format=cii`) ist strukturell in Ordnung.
 - **R4 — Peppol: Gutschrift als Invoice.** `ubl.js:197/219` erzeugt für Typcode 381 immer ein `Invoice`-Wurzelelement; Peppol BIS 3.0 verlangt CreditNote. [unsicher: Peppol-Codeliste lag nicht vor] — für XRechnung ist 381 zulässig, betrifft nur `generatePeppolXml`.
 - **R5 — Anhänge.** `cii.js:254` / `ubl.js:54` setzen `application/octet-stream` als Default; BT-125 ist codelisten-beschränkt [unsicher: keine Regelnummer]. Zusätzlich wird `a.base64` ungeprüft interpoliert — fehlt das Feld, steht literal `undefined` im XML. Der Attachment-Loader fällt weich aus (`data.js:76-81`): fehlt die Migration, gehen Anhänge stillschweigend verloren.
 - **R6 — Nur die UBL-Fassung wird eingefroren.** `services/invoices.js:993-1013` erzeugt beim Buchen ausschließlich UBL und setzt `DOCUMENT_XML_PROFILE` auf `xrechnung-ubl`. Der CII-Endpunkt liefert den Snapshot nur bei Profil `zugferd-*` (`controllers/invoices.js:775`) — trifft nie zu. CII und Hybrid-PDF werden bei **jedem Abruf neu** erzeugt. Sobald einer der obigen Befunde behoben wird, ändert sich rückwirkend das CII-Dokument bereits versendeter Rechnungen, während UBL eingefroren bleibt: zwei widersprüchliche Fassungen desselben Belegs. Der manuelle Snapshot-Endpunkt (`:798-818`) verhält sich dagegen korrekt und überschreibt kein gesetztes Asset.
-- **R7 — Kategorien G und K ungeprüft, AE/K ohne Käufer-USt-IdNr.** `data.js:189-192` lässt `G`/`K` zu, `validator:140-199` prüft für beide weder Satz 0 noch Befreiungsgrund. Die Konstante `VAT_CATEGORIES_REQUIRE_REASON` (`:31`) ist definiert und wird **nirgends benutzt** — die Kategorienprüfung ist stattdessen als Kette einzelner Blöcke ausgeschrieben, in der `G` und `K` fehlen. Bei Reverse Charge verlangt EN 16931 die USt-IdNr beider Parteien; `buyer.vatId` ist vorhanden (`data.js:165`), wird aber nicht geprüft. Eine §13b-Rechnung ohne Käufer-USt-IdNr — im Baubereich der Normalfall — geht durch und wird abgewiesen.
+- **R7 — Kategorien G und K ungeprüft, AE/K ohne Käufer-USt-IdNr.** ✅ **BEHOBEN 26.08.2026**. `data.js:189-192` lässt `G`/`K` zu, `validator:140-199` prüft für beide weder Satz 0 noch Befreiungsgrund. Die Konstante `VAT_CATEGORIES_REQUIRE_REASON` (`:31`) ist definiert und wird **nirgends benutzt** — die Kategorienprüfung ist stattdessen als Kette einzelner Blöcke ausgeschrieben, in der `G` und `K` fehlen. Bei Reverse Charge verlangt EN 16931 die USt-IdNr beider Parteien; `buyer.vatId` ist vorhanden (`data.js:165`), wird aber nicht geprüft. Eine §13b-Rechnung ohne Käufer-USt-IdNr — im Baubereich der Normalfall — geht durch und wird abgewiesen.
+  **Behoben:** die ausgeschriebene Blockkette ist durch eine Tabelle `VAT_CATEGORY_RULES` ersetzt, die alle sechs Kategorien außer `S` führt; die tote Konstante `VAT_CATEGORIES_REQUIRE_REASON` ist weg. Die Tabelle ist die Struktur, die der Befund verlangt: eine in `data.js` zugelassene Kategorie kann nicht mehr stillschweigend ungeprüft bleiben. `Z` führt bewusst **keinen** Befreiungsgrund — die alte Konstante führte es fälschlich mit, das war der zweite Fehler in derselben Zeile. Für `AE` und `K` wird zusätzlich die USt-IdNr **beider** Parteien verlangt. Abgesichert durch 4 Tests. **Nicht gesichert:** die Codes `BR-G-*` und `BR-IC-*` sowie die Zuordnung der `-02`/`-03`-Varianten.
 - **R8 — Nur eine USt-Zeile möglich.** `data.js:502-509` baut `vatBreakdown` immer als genau ein Element. Gemischte Sätze (7 % / 19 %) sind nicht darstellbar. Solange die Erfassung das nicht zulässt, konsistent — sobald doch, entsteht ein stilles Falschdokument statt einer Ablehnung.
 - **R9 — Fallbacks überschreiben legitime Nullwerte.** `data.js:439-445` nutzt `||` statt `??`: ein gespeicherter Wert 0 ist falsy und wird durch die Berechnung ersetzt. Bei einer Nullrechnung oder bewusst auf 0 gesetzter Steuer weicht das XML von der Buchhaltung ab.
 
@@ -182,7 +210,7 @@ Der CII-Weg (`format=cii`) ist strukturell in Ordnung.
 - **S1 — `services_bt_mapping.js` ist toter Code.** `loadBtMapping` hat im gesamten Repository **keinen Aufrufer**; die Mappingdatei liegt vor. Falls reaktiviert, sind die bekannten Schwächen real: `normalizeBt` (`:12-15`) matcht das BT-Muster an beliebiger Stelle, sodass `XBT-1` zu `BT-1` wird; die verbreiteten Schreibweisen mit Leerzeichen, Unterstrich oder Halbgeviertstrich (Excel-Autokorrektur) liefern `null`; `:62` verwirft solche Zeilen ohne Zähler oder Log. Fehlende Zeilen sind ununterscheidbar von nie existierenden. Empfehlung: verankertes Muster plus Rückgabe der verworfenen Zeilennummern. `_cache` (`:10`) wird nie invalidiert.
 - **S2 — Keine Tests auf das erzeugte XML.** 33 Testdateien, für die E-Rechnung nur `einvoice_validator.test.js`. Kein Test prüft ein CII- oder UBL-Element. Der erste sinnvolle Test wäre kein XML-Test, sondern einer, der `loadInvoiceData` gegen ein Fixture laufen lässt und dessen Ergebnis in `validateEInvoiceData` steckt — das hätte N1 sofort gefunden.
 - **S3 — Geladene, nie geschriebene Felder.** `seller.creditorId` (BT-90), `seller.postOfficeBox`, `buyer.debitorNumber` (BT-46) werden aus der DB geholt und von keinem Builder ausgegeben. BT-46 wäre der naheliegende Kandidat, um N9 zu entschärfen.
-- **S4 — Falscher Regelcode.** `validator:255` führt die Leitweg-ID unter `BR-DE-1`; das ist nach KoSIT die Regel zu den Zahlungsinformationen. Richtig wäre BR-DE-15 [unsicher].
+- **S4 — Falscher Regelcode.** ✅ **BEHOBEN 26.08.2026**. `validator:255` führte die Leitweg-ID unter `BR-DE-1`; das ist nach KoSIT die Regel zu den Zahlungsinformationen. Die Warnung läuft jetzt unter `BR-DE-15`, `BR-DE-1` ist an die IBAN-Prüfung aus N6 gegangen — vorher wäre derselbe Code doppelt vergeben gewesen, was erst beim Fix von N6 auffiel. Der Test prüft beides: BR-DE-15 kommt, BR-DE-1 kommt nicht. Die Codenummer selbst bleibt [unsicher].
 - **S5 — UBL erfindet einen Handelsnamen.** `ubl.js:241/259` und `:273/286` schreiben denselben String in `cac:PartyName` (BT-28/BT-45) und `RegistrationName` (BT-27/BT-44). Damit wird ein Handelsname behauptet, den niemand erfasst hat. CII gibt nur `ram:Name` aus und ist hier sauberer.
 - **S6 — Doppelte Konstante.** `ubl.js:20` und `:26` definieren zwei Profil-IDs mit identischem Wert; die Fallunterscheidung in `:196` ist wirkungslos. Entweder ist ein Wert falsch, oder die Unterscheidung kann entfallen.
 - **S7 — `docs/EINVOICE_ANALYSIS.md` ist überholt.** Stand Juni 2026, führt als fehlend auf: PDF/A-3-Einbettung, BT-11, BT-13, HUR-Stundenpositionen, Käuferkontakt und die Kategorien AE/E/G/K/O — alles inzwischen implementiert. Der dort als kritisch zitierte Fallback für BT-10 existiert nicht mehr. Das Dokument führt einen Reviewer aktiv in die Irre und sollte überarbeitet oder als historisch gekennzeichnet werden.
@@ -322,7 +350,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 # Teil 3 — Bereits behoben
 
-**Stand 25.08.2026:** N1, N2, N3 und N4 (E-Rechnung) sowie A1 (HOAI).
+**Stand 26.08.2026:** N1, N2, N3, N4, N6, N7, R7 und S4 (E-Rechnung), N9 teilweise, sowie A1 (HOAI).
 
 | Befund | Geänderte Dateien | Abgesichert durch |
 |---|---|---|
@@ -330,11 +358,30 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | N2 | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | 2 Tests (Abweichung + Verrechnung) |
 | N3 | `services_einvoice_data.js` | XML-Render eines Stornos, beide Syntaxen |
 | N4 | `services_einvoice_cii.js`, `services_einvoice_ubl.js` | XML-Render, beide Syntaxen |
+| N6 | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | 2 Tests (fehlende IBAN → Error, unplausible → Warnung) |
+| N7 | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | 2 Tests, Feldnamen gegen `services_einvoice_data.js` geprüft |
+| N9 (teilweise) | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | 2 Tests; BT-30 bleibt offen |
+| R7 | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | 4 Tests (G, K, Käufer-USt-IdNr, Z ohne Grund) |
+| S4 | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | Test prüft beide Richtungen |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
 
-Volle Test-Suite nach allen Änderungen: **32 Suites, 499 Tests, alle grün.**
+Volle Test-Suite nach allen Änderungen: **32 Suites, 509 Tests, alle grün.** (25.08.2026: 499 Tests. Die 10 neuen gehören zu N6, N7, N9, R7 und S4.)
 
-**Noch offen aus diesem Block:** ein Test, der `loadInvoiceData` gegen `validateEInvoiceData` laufen lässt (S2). Die jetzigen Tests prüfen den Validator gegen ein handgebautes Fixture — dass Fixture und echtes Datenmodell übereinstimmen, prüft weiterhin niemand automatisch. Genau diese Lücke hat N1 so lange verdeckt.
+## Was die zweite Runde am Buchen ändert
+
+Die Vorprüfung ist ein Gate: `!v.ok && !force` wirft 422 und verhindert das Buchen (`services/invoices.js`, `services/partialPayments.js`, `services/finalInvoices.js`). Drei der neuen Regeln sind `error` und können deshalb Belege blockieren, die gestern noch durchgingen:
+
+| Regel | blockiert, wenn … | im Produkt behebbar unter |
+|---|---|---|
+| BR-DE-5/6/7 (N7) | dem Mitarbeiter fehlt Name, Telefon oder Mail | Mitarbeiter → Stammdaten |
+| BR-DE-1 (N6) | die Firma hat keine IBAN | Einstellungen → Firma |
+| BR-CO-26 (N9) | weder USt-IdNr noch Steuernummer | Einstellungen → Firma |
+
+In allen drei Fällen hätte der Empfänger die Rechnung abgewiesen — das Gate zieht die Ablehnung nur nach vorn, an eine Stelle, an der sie noch reparierbar ist. Jede Meldung nennt die Maske zum Nachpflegen. `force=true` bleibt als Notbuchung offen.
+
+**Vor dem Ausrollen prüfenswert:** ob bestehende Mandanten diese Stammdaten gepflegt haben. Ein Mandant ohne IBAN merkt es sonst erst bei der nächsten Buchung.
+
+**Noch offen aus diesem Block:** ein Test, der `loadInvoiceData` gegen `validateEInvoiceData` laufen lässt (S2). Mit jeder neuen Validator-Regel wächst dieser Punkt: die zweite Runde prüft sechs weitere Felder gegen ein handgebautes Fixture. Die Feldnamen wurden für N6/N7/N9 einzeln von Hand gegen `services_einvoice_data.js` gegengeprüft — das ersetzt keinen Test, es wiederholt nur die Sorgfalt, die N1 einmal gefehlt hat. Die jetzigen Tests prüfen den Validator gegen ein handgebautes Fixture — dass Fixture und echtes Datenmodell übereinstimmen, prüft weiterhin niemand automatisch. Genau diese Lücke hat N1 so lange verdeckt.
 
 **A1 · `s3Cumul`** — behoben am 25.08.2026 in `backend/services/nachtraege.js`. Die fehlende Zeile wurde eins zu eins aus `services/angebote.js:21` übernommen:
 
@@ -359,7 +406,7 @@ Der dritte Fall belegt, dass das Flag jetzt tatsächlich ausgewertet wird.
 
 # Teil 4 — Empfohlene Reihenfolge
 
-1. ~~**N1**~~ ✅ — erledigt. Die Vorprüfung ist damit überhaupt erst wirksam. **N7, N9 und R7** lassen sich jetzt sinnvoll im Validator nachrüsten und sind der nächste naheliegende Schritt.
+1. ~~**N1**~~ ✅ — erledigt, ebenso ~~**N7**~~, ~~**N9**~~ (teilweise), ~~**R7**~~ und als Zugabe ~~**N6**~~ und ~~**S4**~~. Der Validator ist damit auf dem Stand, den er ohne weitere Stammdaten-Erweiterung erreichen kann. Was hier offen bleibt: **BT-30 (Registernummer)** als saubere Lösung von N9 — eine Stammdaten-Erweiterung, keine Validator-Änderung.
 2. **A2** — Doppelfakturierung ist der teuerste denkbare Fehler. Zunächst klären, ob die Cache-Drift produktiv vorkommt; falls ja, `savePhases` auf denselben Selbstheilungs-Pfad wie `getPhases` umstellen.
 3. **N12 / N13** — das Hybrid-PDF ist der Weg, den die Zielbranche tatsächlich versendet; ein Container mit UBL-Inhalt fällt beim Empfänger auf ein reines PDF zurück.
 4. ~~**N3 / N4**~~ ✅ — erledigt.
