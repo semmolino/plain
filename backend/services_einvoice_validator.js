@@ -102,6 +102,14 @@ function validateEInvoiceData(data, opts = {}) {
     errors.push(mkError('BR-08', 'BT-37', 'Verkaufer-Stadt fehlt.'));
   }
 
+  // N8: BT-38 wurde nie geprueft. Die Schwere folgt der bestehenden
+  // Behandlung der Stadt: beim Verkaufer Fehler, beim Kaufer Warnung.
+  // Die Asymmetrie zwischen beiden Parteien ist damit unveraendert — sie
+  // gehoert entschieden, nicht nebenbei geaendert.
+  if (!nonEmpty(data.seller?.postCode)) {
+    errors.push(mkError('BR-DE-3', 'BT-38', 'Verkaufer-Postleitzahl fehlt — in den Firmenstammdaten hinterlegen.'));
+  }
+
   // ── BR-09: Seller country code (BT-40) ──────────────────────────────────────
   if (!nonEmpty(data.seller?.countryId)) {
     errors.push(mkError('BR-09', 'BT-40', 'Verkaufer-Landercode fehlt.'));
@@ -148,6 +156,9 @@ function validateEInvoiceData(data, opts = {}) {
   // ── BR-11: Buyer postal address (BG-8) ──────────────────────────────────────
   if (!nonEmpty(data.buyer?.city)) {
     warnings.push(mkWarning('BR-11', 'BT-52', 'Kaufer-Stadt fehlt — Buchung erlaubt, aber XRechnung-konform sollte BG-8 vollstandig sein.'));
+  }
+  if (!nonEmpty(data.buyer?.postCode)) {
+    warnings.push(mkWarning('BR-DE-8', 'BT-53', 'Kaufer-Postleitzahl fehlt — Buchung erlaubt, aber XRechnung-konform sollte BG-8 vollstandig sein.'));
   }
   if (!nonEmpty(data.buyer?.countryId)) {
     errors.push(mkError('BR-55', 'BT-55', 'Kaufer-Landercode fehlt.'));

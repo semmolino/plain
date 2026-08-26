@@ -436,12 +436,18 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   // Bei Reverse-Charge / Steuerbefreit (Kategorie != 'S') wird kein
   // Steuerbetrag ausgewiesen — auch wenn die DB-Spalte aus Altdaten noch
   // einen Wert haelt, ueberschreiben wir mit 0.
-  const taxBasis   = fmt2(toNum(doc.TOTAL_AMOUNT_NET) || fmt2(lineTotal - allowanceTotal));
+  // R9: frueher stand hier "toNum(x) || berechnet". Ein gespeicherter Wert 0
+  // ist falsy und wurde damit durch die Berechnung ersetzt — bei einer
+  // Nullrechnung oder bewusst auf 0 gesetzter Steuer wich das XML von der
+  // Buchhaltung ab. toNum(null) ist ebenfalls 0, deshalb entscheidet die
+  // Rohspalte: NULL heisst "nicht gerechnet", 0 heisst "wirklich null".
+  const stored = (v) => (v !== null && v !== undefined && v !== '' ? fmt2(toNum(v)) : null);
+  const taxBasis   = stored(doc.TOTAL_AMOUNT_NET)   ?? fmt2(lineTotal - allowanceTotal);
   const taxAmount  = vatCategory === 'S'
-    ? fmt2(toNum(doc.TAX_AMOUNT_NET) || fmt2(taxBasis * vatPercent / 100))
+    ? (stored(doc.TAX_AMOUNT_NET)     ?? fmt2(taxBasis * vatPercent / 100))
     : 0;
   const grandTotal = vatCategory === 'S'
-    ? fmt2(toNum(doc.TOTAL_AMOUNT_GROSS) || fmt2(taxBasis + taxAmount))
+    ? (stored(doc.TOTAL_AMOUNT_GROSS) ?? fmt2(taxBasis + taxAmount))
     : taxBasis;
 
   // Prepaid = gross already invoiced via prior ARs (Schlussrechnung only)

@@ -99,13 +99,19 @@ Verifiziert am erzeugten XML für das Storno einer Stundenrechnung (−37,5 Std.
 
 −37,5 × 120 ÷ 1 = −4500 — in beiden Syntaxen konsistent, kein negativer Preis mehr.
 
-### N5 — Leere Käuferreferenz wird als leeres Element geschrieben [belegt] / [unsicher: BR-DE-15 vs. BR-DE-1]
+### N5 — Leere Käuferreferenz wird als leeres Element geschrieben [belegt] / [unsicher: BR-DE-15 vs. BR-DE-1] — ✅ BEHOBEN
 
 `services_einvoice_cii.js:376` und `services_einvoice_ubl.js:224` geben das Element immer aus, notfalls leer.
 
 Zwei Probleme. Der Kommentar in `services_einvoice_validator.js:253` hält fest, BT-10 sei „Pflicht für B2G, optional für B2B" — für die XRechnung-CIUS verlangt das KoSIT-Schematron BT-10 für **jede** XRechnung. Und ein leeres `cbc:BuyerReference` ist schlechter als gar keins, weil es zusätzlich über die Leerelement-Prüfung fällt. Der Validator meldet nur eine Warnung, unter einem vermutlich falschen Regelcode (siehe S4).
 
 Der frühere `-`-Fallback ist beseitigt; das leere Element ist der Nachfolgebefund.
+
+**Behoben am 26.08.2026.** Beide Builder geben das Element nur noch aus, wenn eine Käuferreferenz vorliegt. Der Regelcode der Warnung ist auf `BR-DE-15` korrigiert (siehe S4) — die im Befundtitel offene Frage ist damit im Sinne von BR-DE-15 entschieden, die Nummer selbst bleibt ungeprüft.
+
+**Nicht entschieden:** ob BT-10 zur Hartpflicht werden soll. Der Kommentar im Validator behauptet weiterhin „Pflicht für B2G, optional für B2B"; der Befund hält dagegen, dass das KoSIT-Schematron BT-10 für jede XRechnung verlangt. Das ist eine Entscheidung mit derselben Wirkung wie N6/N7 — sie würde Belege ohne Leitweg-ID vom Buchen aussperren. Bewusst offen gelassen.
+
+Abgesichert durch `tests/einvoice_builders.test.js` (2 Tests: kein leeres Element, vorhandene Referenz bleibt).
 
 Syntax: beide.
 
@@ -137,11 +143,22 @@ Die Feldnamen `contactName`/`contactPhone`/`contactEmail` wurden gegen `services
 
 Abgesichert durch 2 Tests.
 
-### N8 — Postleitzahlen werden nicht geprüft, Adressfelder divergieren [belegt]
+### N8 — Postleitzahlen werden nicht geprüft, Adressfelder divergieren [belegt] — ✅ BEHOBEN
 
 Der Validator prüft nur die Stadt: `:86` (Verkäufer, `error`), `:102` (Käufer, nur `warning`). PLZ (BT-38, BT-53) wird nie geprüft.
 
 **Divergenz:** CII schreibt `PostcodeCode`, `LineOne`, `CityName` des Verkäufers immer, auch leer (`services_einvoice_cii.js:113-115`); UBL lässt sie bei Leere weg (`services_einvoice_ubl.js:243-245`). Gleiche Datenlage, zwei verschiedene Dokumente.
+
+**Behoben am 26.08.2026**, beide Hälften:
+
+- **Prüfung:** BT-38 (Verkäufer) als `error`, BT-53 (Käufer) als `warning`.
+- **Divergenz:** der Verkäuferblock in CII lässt leere Felder jetzt weg, wie UBL es schon tat. Beim Durchsehen zeigte sich, dass der **Käuferblock in CII bereits konditional war** — abgewichen ist nur der Verkäuferblock, nicht die ganze Datei.
+
+**Warum die Schwere ungleich verteilt bleibt:** sie folgt exakt der bestehenden Behandlung der Stadt (Verkäufer `error` in `:86`, Käufer `warning` in `:102`). Diese Asymmetrie ist Teil des Befunds und gehört entschieden, nicht nebenbei mitgeändert: Käuferadressen kommen aus dem Adressbuch und sind bei Bestandsdaten oft unvollständig — ein `error` würde dort Belege sperren, deren Empfänger sie problemlos annimmt. Ein Kommentar im Code hält das fest.
+
+**Nicht gesichert:** die Codes BR-DE-3 und BR-DE-8.
+
+Abgesichert durch 2 Validator-Tests und 2 Builder-Tests.
 
 ### N9 — Steuernummer allein erfüllt BR-CO-26 nicht [belegt] — ✅ TEILWEISE BEHOBEN
 
@@ -224,12 +241,13 @@ Die zweite Zusicherung im ersten Fall ist die eigentliche Absicherung — ohne s
 - **R7 — Kategorien G und K ungeprüft, AE/K ohne Käufer-USt-IdNr.** ✅ **BEHOBEN 26.08.2026**. `data.js:189-192` lässt `G`/`K` zu, `validator:140-199` prüft für beide weder Satz 0 noch Befreiungsgrund. Die Konstante `VAT_CATEGORIES_REQUIRE_REASON` (`:31`) ist definiert und wird **nirgends benutzt** — die Kategorienprüfung ist stattdessen als Kette einzelner Blöcke ausgeschrieben, in der `G` und `K` fehlen. Bei Reverse Charge verlangt EN 16931 die USt-IdNr beider Parteien; `buyer.vatId` ist vorhanden (`data.js:165`), wird aber nicht geprüft. Eine §13b-Rechnung ohne Käufer-USt-IdNr — im Baubereich der Normalfall — geht durch und wird abgewiesen.
   **Behoben:** die ausgeschriebene Blockkette ist durch eine Tabelle `VAT_CATEGORY_RULES` ersetzt, die alle sechs Kategorien außer `S` führt; die tote Konstante `VAT_CATEGORIES_REQUIRE_REASON` ist weg. Die Tabelle ist die Struktur, die der Befund verlangt: eine in `data.js` zugelassene Kategorie kann nicht mehr stillschweigend ungeprüft bleiben. `Z` führt bewusst **keinen** Befreiungsgrund — die alte Konstante führte es fälschlich mit, das war der zweite Fehler in derselben Zeile. Für `AE` und `K` wird zusätzlich die USt-IdNr **beider** Parteien verlangt. Abgesichert durch 4 Tests. **Nicht gesichert:** die Codes `BR-G-*` und `BR-IC-*` sowie die Zuordnung der `-02`/`-03`-Varianten.
 - **R8 — Nur eine USt-Zeile möglich.** `data.js:502-509` baut `vatBreakdown` immer als genau ein Element. Gemischte Sätze (7 % / 19 %) sind nicht darstellbar. Solange die Erfassung das nicht zulässt, konsistent — sobald doch, entsteht ein stilles Falschdokument statt einer Ablehnung.
-- **R9 — Fallbacks überschreiben legitime Nullwerte.** `data.js:439-445` nutzt `||` statt `??`: ein gespeicherter Wert 0 ist falsy und wird durch die Berechnung ersetzt. Bei einer Nullrechnung oder bewusst auf 0 gesetzter Steuer weicht das XML von der Buchhaltung ab.
+- **R9 — Fallbacks überschreiben legitime Nullwerte.** ✅ **BEHOBEN 26.08.2026**. `data.js:439-445` nutzte `||` statt `??`: ein gespeicherter Wert 0 ist falsy und wurde durch die Berechnung ersetzt. Bei einer Nullrechnung oder bewusst auf 0 gesetzter Steuer wich das XML von der Buchhaltung ab.
+  **Der vorgeschlagene Fix `??` allein hätte nicht gewirkt:** `toNum(null)` liefert ebenfalls 0, der Nullish-Operator hätte also nie gegriffen. Entscheiden muss die **Rohspalte** vor der Umwandlung — dafür jetzt ein Helfer `stored(v)`, der `null` zurückgibt, wenn die Spalte leer ist, und sonst den gerundeten Wert. Dass die Spalten nullable sind, ist über die Reporting-Views belegt (`COALESCE("TOTAL_AMOUNT_NET", 0)`, u.a. `migrations/0008`): NULL heißt „nicht gerechnet", 0 heißt „wirklich null".
 
 ## Sauberkeit
 
 - **S1 — `services_bt_mapping.js` ist toter Code.** `loadBtMapping` hat im gesamten Repository **keinen Aufrufer**; die Mappingdatei liegt vor. Falls reaktiviert, sind die bekannten Schwächen real: `normalizeBt` (`:12-15`) matcht das BT-Muster an beliebiger Stelle, sodass `XBT-1` zu `BT-1` wird; die verbreiteten Schreibweisen mit Leerzeichen, Unterstrich oder Halbgeviertstrich (Excel-Autokorrektur) liefern `null`; `:62` verwirft solche Zeilen ohne Zähler oder Log. Fehlende Zeilen sind ununterscheidbar von nie existierenden. Empfehlung: verankertes Muster plus Rückgabe der verworfenen Zeilennummern. `_cache` (`:10`) wird nie invalidiert.
-- **S2 — Keine Tests auf das erzeugte XML.** 33 Testdateien, für die E-Rechnung nur `einvoice_validator.test.js`. Kein Test prüft ein CII- oder UBL-Element. Der erste sinnvolle Test wäre kein XML-Test, sondern einer, der `loadInvoiceData` gegen ein Fixture laufen lässt und dessen Ergebnis in `validateEInvoiceData` steckt — das hätte N1 sofort gefunden.
+- **S2 — Keine Tests auf das erzeugte XML.** ✅ **TEILWEISE BEHOBEN 26.08.2026** — `tests/einvoice_builders.test.js` (4 Tests auf CII- und UBL-Elemente) und `tests/einvoice_pdf_embed.test.js` (4 Tests auf das erzeugte PDF). **Offen bleibt der wichtigere Teil**, den der Befund selbst als ersten Schritt nennt: ein Test, der `loadInvoiceData` gegen ein Fixture laufen lässt. Die neuen Tests bauen ihre Daten weiterhin von Hand — genau die Lücke, die N1 verdeckt hat. Ursprünglicher Wortlaut: 33 Testdateien, für die E-Rechnung nur `einvoice_validator.test.js`. Kein Test prüfte ein CII- oder UBL-Element. Der erste sinnvolle Test wäre kein XML-Test, sondern einer, der `loadInvoiceData` gegen ein Fixture laufen lässt und dessen Ergebnis in `validateEInvoiceData` steckt — das hätte N1 sofort gefunden.
 - **S3 — Geladene, nie geschriebene Felder.** `seller.creditorId` (BT-90), `seller.postOfficeBox`, `buyer.debitorNumber` (BT-46) werden aus der DB geholt und von keinem Builder ausgegeben. BT-46 wäre der naheliegende Kandidat, um N9 zu entschärfen.
 - **S4 — Falscher Regelcode.** ✅ **BEHOBEN 26.08.2026**. `validator:255` führte die Leitweg-ID unter `BR-DE-1`; das ist nach KoSIT die Regel zu den Zahlungsinformationen. Die Warnung läuft jetzt unter `BR-DE-15`, `BR-DE-1` ist an die IBAN-Prüfung aus N6 gegangen — vorher wäre derselbe Code doppelt vergeben gewesen, was erst beim Fix von N6 auffiel. Der Test prüft beides: BR-DE-15 kommt, BR-DE-1 kommt nicht. Die Codenummer selbst bleibt [unsicher].
 - **S5 — UBL erfindet einen Handelsnamen.** `ubl.js:241/259` und `:273/286` schreiben denselben String in `cac:PartyName` (BT-28/BT-45) und `RegistrationName` (BT-27/BT-44). Damit wird ein Handelsname behauptet, den niemand erfasst hat. CII gibt nur `ram:Name` aus und ist hier sauberer.
@@ -388,7 +406,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 # Teil 3 — Bereits behoben
 
-**Stand 26.08.2026:** N1, N2, N3, N4, N6, N7, N12, N13, R7 und S4 (E-Rechnung), N9 teilweise, sowie A1 und A2 (HOAI).
+**Stand 26.08.2026:** N1–N8 (außer dem offenen Teil von N5), N12, N13, R7, R9 und S4 (E-Rechnung), N9 und S2 teilweise, sowie A1 und A2 (HOAI).
 
 | Befund | Geänderte Dateien | Abgesichert durch |
 |---|---|---|
@@ -403,10 +421,13 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | S4 | `services_einvoice_validator.js`, `tests/einvoice_validator.test.js` | Test prüft beide Richtungen |
 | N12 | `controllers/invoices.js`, `controllers/partialPayments.js`, `frontend-react/src/api/rechnungen.ts` | `tsc -b` grün; über die Oberfläche war der Pfad nie erreichbar |
 | N13 | `services_einvoice_pdf_embed.js`, `tests/einvoice_pdf_embed.test.js` | 4 Tests gegen das erzeugte PDF |
+| N5 | `services_einvoice_cii.js`, `services_einvoice_ubl.js`, `tests/einvoice_builders.test.js` | 2 Tests, gegen den Stand vor dem Fix gegengeprüft |
+| N8 | `services_einvoice_validator.js`, `services_einvoice_cii.js`, Tests in beiden Dateien | 2 Validator- + 2 Builder-Tests |
+| R9 | `services_einvoice_data.js` | Nullable-Annahme über die Reporting-Views belegt |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
 | A2 | `services/finalInvoices.js`, `tests/finalInvoices.phases.test.js` | 3 Tests, gegen den Stand vor dem Fix gegengeprüft (2 rot) |
 
-Volle Test-Suite nach allen Änderungen: **34 Suites, 516 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests. Die 17 neuen gehören zu N6, N7, N9, R7, S4, N13 und A2.)
+Volle Test-Suite nach allen Änderungen: **35 Suites, 522 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.)
 
 ## Was die zweite Runde am Buchen ändert
 

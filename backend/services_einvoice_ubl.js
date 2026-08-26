@@ -221,7 +221,7 @@ function generateUblXml(data, opts = {}) {
   ${buildSecurityRetentionNote(data)}
   <cbc:DocumentCurrencyCode>${x(cur)}</cbc:DocumentCurrencyCode>
   ${data.buyerAccountingRef ? `<cbc:AccountingCost>${x(data.buyerAccountingRef)}</cbc:AccountingCost>` : ''}
-  <cbc:BuyerReference>${x(data.buyerReference || '')}</cbc:BuyerReference>
+  ${data.buyerReference ? `<cbc:BuyerReference>${x(data.buyerReference)}</cbc:BuyerReference>` : ''}
 
   ${data.billingPeriodStart || data.billingPeriodEnd ? `
   <cac:InvoicePeriod>

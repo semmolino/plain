@@ -223,6 +223,23 @@ describe("validateEInvoiceData", () => {
     expect(r.errors.some(e => e.btField === "BT-48")).toBe(true);
   });
 
+  // ── N8: Postleitzahlen wurden nie geprueft
+
+  it("flags fehlende Verkaeufer-PLZ (BT-38)", () => {
+    const r = validateEInvoiceData(baseData({
+      seller: { ...baseData().seller, postCode: "" },
+    }));
+    expect(r.errors.some(e => e.btField === "BT-38")).toBe(true);
+  });
+
+  it("warnt bei fehlender Kaeufer-PLZ, blockiert aber nicht (BT-53)", () => {
+    const r = validateEInvoiceData(baseData({
+      buyer: { ...baseData().buyer, postCode: "" },
+    }));
+    expect(r.warnings.some(w => w.btField === "BT-53")).toBe(true);
+    expect(r.ok).toBe(true);
+  });
+
   // ── N6: ohne IBAN entsteht gar kein Zahlungsblock (BG-16)
 
   it("flags fehlende IBAN (BG-16)", () => {

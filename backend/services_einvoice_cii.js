@@ -98,6 +98,10 @@ function buildNotes(data) {
   return notes.join('\n');
 }
 
+// N8: Adressfelder werden weggelassen statt leer geschrieben. UBL machte das
+// schon so, CII schrieb PostcodeCode/LineOne/CityName immer — gleiche
+// Datenlage, zwei verschiedene Dokumente. Der Kaeuferblock war bereits
+// konditional; nur der Verkaeuferblock wich ab.
 function buildSeller(data, profile) {
   const s = data.seller;
   return `
@@ -110,9 +114,9 @@ function buildSeller(data, profile) {
           ${s.contactEmail ? `<ram:EmailURIUniversalCommunication><ram:URIID>${x(s.contactEmail)}</ram:URIID></ram:EmailURIUniversalCommunication>` : ''}
         </ram:DefinedTradeContact>` : ''}
         <ram:PostalTradeAddress>
-          <ram:PostcodeCode>${x(s.postCode)}</ram:PostcodeCode>
-          <ram:LineOne>${x(s.street)}</ram:LineOne>
-          <ram:CityName>${x(s.city)}</ram:CityName>
+          ${s.postCode ? `<ram:PostcodeCode>${x(s.postCode)}</ram:PostcodeCode>` : ''}
+          ${s.street   ? `<ram:LineOne>${x(s.street)}</ram:LineOne>` : ''}
+          ${s.city     ? `<ram:CityName>${x(s.city)}</ram:CityName>` : ''}
           <ram:CountryID>${x(s.countryId)}</ram:CountryID>
         </ram:PostalTradeAddress>
         ${s.email ? `<ram:URIUniversalCommunication><ram:URIID schemeID="EM">${x(s.email)}</ram:URIID></ram:URIUniversalCommunication>` : ''}
@@ -373,7 +377,7 @@ ${buildNotes(data)}
   <rsm:SupplyChainTradeTransaction>
 ${lineItems}
     <ram:ApplicableHeaderTradeAgreement>
-      <ram:BuyerReference>${x(data.buyerReference || '')}</ram:BuyerReference>
+      ${data.buyerReference ? `<ram:BuyerReference>${x(data.buyerReference)}</ram:BuyerReference>` : ''}
 ${buildSeller(data, profile)}
 ${buildBuyer(data)}
       ${data.orderNumber    ? `<ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>${x(data.orderNumber)}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>` : ''}
