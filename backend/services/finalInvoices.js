@@ -108,6 +108,70 @@ async function recomputeTotal(supabase, invoiceId) {
 // Service functions
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Selbstheilende Neuberechnung von INVOICED / PARTIAL_PAYMENTS je Struktur,
+// aus den Rohdaten statt aus den gecachten Spalten von PROJECT_STRUCTURE.
+//
+// A2 (Audit 25.08.2026): Dieser Block sass frueher nur in getPhases. savePhases
+// rechnete daneben aus der gecachten Spalte ps.INVOICED — bei gedriftetem Cache
+// zeigte der Vorschlag einen anderen Betrag als den, der fakturiert wurde, und
+// zwar ohne Warnung. Beide Wege gehen jetzt durch diese eine Funktion.
+//
+// Storno-Paare (Original + Stornorechnung) heben sich auf null auf; STATUS 3
+// (stornoiertes Original) muss deshalb mitgelesen werden.
+//
+// Bei jedem Fehler ist ok=false — der Aufrufer faellt dann auf die gecachten
+// Spalten zurueck. Lieber der alte Wert als gar keiner.
+// ---------------------------------------------------------------------------
+async function recomputeBilledByStructure(supabase, { contractId, excludeInvoiceId = null }) {
+  const recomputedInvoiced = new Map();
+  const recomputedPartial  = new Map();
+  if (!contractId) return { ok: false, invoiced: recomputedInvoiced, partial: recomputedPartial };
+  try {
+    const { data: otherInvs } = await supabase
+      .from("INVOICE")
+      .select("ID")
+      .eq("CONTRACT_ID", contractId)
+      .neq("ID", excludeInvoiceId)
+      .in("STATUS_ID", [2, 3]);
+    const otherInvIds = (otherInvs || []).map(i => i.ID);
+    if (otherInvIds.length > 0) {
+      const { data: invStructs } = await supabase
+        .from("INVOICE_STRUCTURE")
+        .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+        .in("INVOICE_ID", otherInvIds);
+      for (const r of invStructs || []) {
+        const sid = String(r.STRUCTURE_ID);
+        recomputedInvoiced.set(sid,
+          round2((recomputedInvoiced.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+      }
+    }
+    // STATUS 2 (gebucht) + 3 (stornoiertes Original) — beide nötig, sonst
+    // sieht die Funktion nach AR-Storno nur die Storno-Hälfte (-X) und
+    // das Original (+X) rutscht durch. Wie bei loadPreviouslyBilledByStructure.
+    const { data: pps } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select("ID")
+      .eq("CONTRACT_ID", contractId)
+      .in("STATUS_ID", [2, 3]);
+    const ppIds = (pps || []).map(p => p.ID);
+    if (ppIds.length > 0) {
+      const { data: ppStructs } = await supabase
+        .from("PARTIAL_PAYMENT_STRUCTURE")
+        .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+        .in("PARTIAL_PAYMENT_ID", ppIds);
+      for (const r of ppStructs || []) {
+        const sid = String(r.STRUCTURE_ID);
+        recomputedPartial.set(sid,
+          round2((recomputedPartial.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+      }
+    }
+    return { ok: true, invoiced: recomputedInvoiced, partial: recomputedPartial };
+  } catch (_) {
+    return { ok: false, invoiced: recomputedInvoiced, partial: recomputedPartial };
+  }
+}
+
 async function getPhases(supabase, { id, tenantId }) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
@@ -140,55 +204,14 @@ async function getPhases(supabase, { id, tenantId }) {
     .eq("INVOICE_ID", id);
   const selectedMap = new Map((isRows || []).map((r) => [String(r.STRUCTURE_ID), r]));
 
-  // Self-healing recompute of INVOICED + PARTIAL_PAYMENTS per structure
-  // from raw INVOICE_STRUCTURE / PARTIAL_PAYMENT_STRUCTURE, ignoring possibly
-  // drifted cached columns. Storno-Pairs (orig + Stornorechnung) net to zero.
-  const recomputedInvoiced = new Map();
-  const recomputedPartial  = new Map();
-  let recomputeOk = false;
-  if (inv.CONTRACT_ID) {
-    try {
-      const { data: otherInvs } = await supabase
-        .from("INVOICE")
-        .select("ID")
-        .eq("CONTRACT_ID", inv.CONTRACT_ID)
-        .neq("ID", id)
-        .in("STATUS_ID", [2, 3]);
-      const otherInvIds = (otherInvs || []).map(i => i.ID);
-      if (otherInvIds.length > 0) {
-        const { data: invStructs } = await supabase
-          .from("INVOICE_STRUCTURE")
-          .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
-          .in("INVOICE_ID", otherInvIds);
-        for (const r of invStructs || []) {
-          const sid = String(r.STRUCTURE_ID);
-          recomputedInvoiced.set(sid,
-            round2((recomputedInvoiced.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
-        }
-      }
-      // STATUS 2 (gebucht) + 3 (stornoiertes Original) — beide nötig, sonst
-      // sieht die Funktion nach AR-Storno nur die Storno-Hälfte (-X) und
-      // das Original (+X) rutscht durch. Wie bei loadPreviouslyBilledByStructure.
-      const { data: pps } = await supabase
-        .from("PARTIAL_PAYMENT")
-        .select("ID")
-        .eq("CONTRACT_ID", inv.CONTRACT_ID)
-        .in("STATUS_ID", [2, 3]);
-      const ppIds = (pps || []).map(p => p.ID);
-      if (ppIds.length > 0) {
-        const { data: ppStructs } = await supabase
-          .from("PARTIAL_PAYMENT_STRUCTURE")
-          .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
-          .in("PARTIAL_PAYMENT_ID", ppIds);
-        for (const r of ppStructs || []) {
-          const sid = String(r.STRUCTURE_ID);
-          recomputedPartial.set(sid,
-            round2((recomputedPartial.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
-        }
-      }
-      recomputeOk = true;
-    } catch (_) { /* fall back to cached cols */ }
-  }
+  // Selbstheilende Neuberechnung, siehe recomputeBilledByStructure (A2).
+  const recomputed = await recomputeBilledByStructure(supabase, {
+    contractId: inv.CONTRACT_ID,
+    excludeInvoiceId: id,
+  });
+  const recomputedInvoiced = recomputed.invoiced;
+  const recomputedPartial  = recomputed.partial;
+  const recomputeOk        = recomputed.ok;
 
   // Fill-First-Attribution für alreadyBilled:
   // Wenn die Recompute-Daten verfügbar sind, summieren wir die gesamte
@@ -261,7 +284,7 @@ async function getPhases(supabase, { id, tenantId }) {
 async function savePhases(supabase, { id, tenantId, structureIds }) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
-    .select("ID, STATUS_ID, TENANT_ID")
+    .select("ID, STATUS_ID, TENANT_ID, CONTRACT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -278,12 +301,23 @@ async function savePhases(supabase, { id, tenantId, structureIds }) {
       .in("ID", structureIds);
     if (psErr) throw new Error(psErr.message);
 
+    // A2: dieselbe Quelle wie getPhases. Vorher stand hier ausschliesslich die
+    // gecachte Spalte ps.INVOICED — wich sie vom neu gerechneten Wert ab, zeigte
+    // der Vorschlag einen Betrag und fakturiert wurde ein anderer.
+    const recomputed = await recomputeBilledByStructure(supabase, {
+      contractId: inv.CONTRACT_ID,
+      excludeInvoiceId: id,
+    });
+
     const rows = (psRows || []).map((ps) => {
       const revenue = toNum(ps.REVENUE_COMPLETION);
       const extras = round2((revenue * toNum(ps.EXTRAS_PERCENT)) / 100);
       const totalEarned = round2(revenue + extras);
-      // Only subtract amounts already invoiced via previous FINAL invoices (not Abschlagsrechnungen)
-      const billedFinal = round2(toNum(ps.INVOICED));
+      // Nur was ueber fruehere Schlussrechnungen fakturiert wurde, nicht die
+      // Abschlagsrechnungen. Ohne Neuberechnung wie bisher aus dem Cache.
+      const billedFinal = recomputed.ok
+        ? round2(recomputed.invoiced.get(String(ps.ID)) || 0)
+        : round2(toNum(ps.INVOICED));
       const remaining = Math.max(0, round2(totalEarned - billedFinal));
       const remainingRevenue = totalEarned > 0 ? round2(remaining * revenue / totalEarned) : remaining;
       const remainingExtras = round2(remaining - remainingRevenue);

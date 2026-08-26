@@ -264,7 +264,7 @@ Für `services/nachtraege.js` existiert kein Test.
 
 **Status:** behoben, siehe Teil 3.
 
-### A2 — Rechnungsvorschlag und Speichern rechnen unterschiedlich [verifiziert]
+### A2 — Rechnungsvorschlag und Speichern rechnen unterschiedlich [verifiziert] — ✅ BEHOBEN
 
 `getPhases` (`services/finalInvoices.js:143-148`, `:227-232`) rechnet `INVOICED` / `PARTIAL_PAYMENTS` bewusst aus den Rohdaten neu; der Kommentar in `:143` sagt wörtlich, dass die gecachten Spalten gedriftet sein können. Angezeigt wird das Ergebnis in `:252-253`.
 
@@ -277,6 +277,23 @@ Zahlenszenario: `REVENUE_COMPLETION` 100.000 €, `EXTRAS_PERCENT` 0. Real abger
 - **30.000 € doppelt, ohne Warnung**
 
 Betrifft bestehende Rechnungen, sobald die Cache-Spalte je gedriftet ist — genau der Fall, den der Code selbst als real annimmt. Zu klären: kommen solche Drifts in produktiven Mandanten vor?
+
+**Behoben am 26.08.2026** in `services/finalInvoices.js`.
+
+**Die offene Frage wurde nicht beantwortet, sondern umgangen.** Ob Drifts produktiv vorkommen, ließ sich ohne Produktionsdaten nicht klären — und die Frage entscheidet den Fix auch nicht: dass Vorschlag und Speichern verschieden rechnen, ist unabhängig davon ein Fehler. Ein Betrag anzeigen und einen anderen fakturieren ist in keinem Datenzustand richtig.
+
+Der Selbstheilungs-Block aus `getPhases` liegt jetzt als `recomputeBilledByStructure(supabase, { contractId, excludeInvoiceId })` daneben; beide Wege rufen ihn auf. Bei einem Fehler liefert er `ok: false`, und der Aufrufer fällt wie bisher auf die gecachte Spalte zurück — die Änderung kann also nichts blockieren, was vorher funktioniert hat.
+
+`savePhases` liest zusätzlich `CONTRACT_ID` mit; ohne Vertrag greift die Neuberechnung nicht, dann bleibt es beim alten Verhalten.
+
+**Verifiziert gegen das Szenario aus dem Befund** (`tests/finalInvoices.phases.test.js`, 3 Tests). Die Tests wurden gegen den Stand **vor** dem Fix laufen gelassen — dort schlagen zwei fehl:
+
+| Cache-Spalte | real fakturiert | savePhases vorher | savePhases jetzt |
+|---|---|---|---|
+| 0 (gedriftet) | 30.000 € | **100.000 €** | 70.000 € |
+| 30.000 € (sauber) | 30.000 € | 70.000 € | 70.000 € |
+
+Die erste Zeile ist die Doppelfakturierung aus dem Befund, reproduziert. Der dritte Test prüft die Übereinstimmung selbst: für vier verschiedene Cache-Werte muss `savePhases` genau das liefern, was `getPhases` anzeigt.
 
 ### A3 — Zuschläge haben zwei Quellen der Wahrheit [belegt]
 
@@ -371,7 +388,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 # Teil 3 — Bereits behoben
 
-**Stand 26.08.2026:** N1, N2, N3, N4, N6, N7, N12, N13, R7 und S4 (E-Rechnung), N9 teilweise, sowie A1 (HOAI).
+**Stand 26.08.2026:** N1, N2, N3, N4, N6, N7, N12, N13, R7 und S4 (E-Rechnung), N9 teilweise, sowie A1 und A2 (HOAI).
 
 | Befund | Geänderte Dateien | Abgesichert durch |
 |---|---|---|
@@ -387,8 +404,9 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | N12 | `controllers/invoices.js`, `controllers/partialPayments.js`, `frontend-react/src/api/rechnungen.ts` | `tsc -b` grün; über die Oberfläche war der Pfad nie erreichbar |
 | N13 | `services_einvoice_pdf_embed.js`, `tests/einvoice_pdf_embed.test.js` | 4 Tests gegen das erzeugte PDF |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
+| A2 | `services/finalInvoices.js`, `tests/finalInvoices.phases.test.js` | 3 Tests, gegen den Stand vor dem Fix gegengeprüft (2 rot) |
 
-Volle Test-Suite nach allen Änderungen: **33 Suites, 513 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests. Die 14 neuen gehören zu N6, N7, N9, R7, S4 und N13.)
+Volle Test-Suite nach allen Änderungen: **34 Suites, 516 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests. Die 17 neuen gehören zu N6, N7, N9, R7, S4, N13 und A2.)
 
 ## Was die zweite Runde am Buchen ändert
 
@@ -430,7 +448,7 @@ Der dritte Fall belegt, dass das Flag jetzt tatsächlich ausgewertet wird.
 # Teil 4 — Empfohlene Reihenfolge
 
 1. ~~**N1**~~ ✅ — erledigt, ebenso ~~**N7**~~, ~~**N9**~~ (teilweise), ~~**R7**~~ und als Zugabe ~~**N6**~~ und ~~**S4**~~. Der Validator ist damit auf dem Stand, den er ohne weitere Stammdaten-Erweiterung erreichen kann. Was hier offen bleibt: **BT-30 (Registernummer)** als saubere Lösung von N9 — eine Stammdaten-Erweiterung, keine Validator-Änderung.
-2. **A2** — Doppelfakturierung ist der teuerste denkbare Fehler. Zunächst klären, ob die Cache-Drift produktiv vorkommt; falls ja, `savePhases` auf denselben Selbstheilungs-Pfad wie `getPhases` umstellen.
+2. ~~**A2**~~ ✅ — erledigt. Die vorgeschaltete Frage („kommt die Drift produktiv vor?") wurde übersprungen: sie entscheidet den Fix nicht. Zwei Wege, die denselben Betrag verschieden rechnen, sind unabhängig von der Datenlage falsch. **Offen bleibt trotzdem**, ob produktiv Drifts existieren — das ist jetzt keine Frage der Korrektheit mehr, sondern eine der Datenhygiene (siehe A3, das dieselbe Wurzel hat).
 3. ~~**N12 / N13**~~ ✅ — erledigt. Beim Umsetzen kam heraus, dass der fehlerhafte Pfad über die Oberfläche gar nicht erreichbar war (kein Aufrufer übergab `format=ubl`). Der Befund war richtig, seine Dringlichkeit geringer als angenommen.
 4. ~~**N3 / N4**~~ ✅ — erledigt.
 5. **R6** — vor der ersten Korrektur festlegen, wie mit bereits gebuchten und versendeten Belegen umgegangen wird: kontrollierter Neu-Render mit neuem Snapshot (nur zulässig, solange nicht ausgeliefert) oder Storno plus Korrekturrechnung. Diese Entscheidung gehört vor die Fixes, nicht danach.
