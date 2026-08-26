@@ -1041,18 +1041,34 @@ async function getPdfHybrid(req, res, supabase) {
       loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId),
     ]);
 
+    // select("*"): die CII-Spalten aus Migration 0133 sind optional.
+    const { data: ppRow } = await supabase
+      .from("PARTIAL_PAYMENT")
+      .select("*")
+      .eq("ID", ppId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+
     // Immer CII: der Container laesst nichts anderes zu (siehe N12 oben).
-    const xml = generateCiiXml(data, profile);
+    //
+    // R6: bei einem gebuchten Beleg die eingefrorene Fassung einbetten statt
+    // neu zu erzeugen. Vorher hatte dieser Endpunkt gar keine Snapshot-
+    // Pruefung — das Hybrid-PDF aenderte sich also bei jedem Abruf mit,
+    // sobald an den Buildern etwas korrigiert wurde.
+    let xml = null;
+    if (String(ppRow?.STATUS_ID) === "2" && ppRow?.DOCUMENT_XML_CII_ASSET_ID) {
+      xml = await svc.readXmlAssetString({
+        supabase, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_XML_CII_ASSET_ID,
+      });
+      if (!xml) {
+        console.warn("[PDF_HYBRID_PP] CII-Snapshot nicht lesbar, wird live erzeugt", { id: ppId });
+      }
+    }
+    if (!xml) xml = generateCiiXml(data, profile);
 
     const xmlProfileKey = profile;
     const xmlFilename   = "factur-x.xml";
 
-    const { data: ppRow } = await supabase
-      .from("PARTIAL_PAYMENT")
-      .select("PARTIAL_PAYMENT_NUMBER")
-      .eq("ID", ppId)
-      .eq("TENANT_ID", req.tenantId)
-      .maybeSingle();
     const pdfName = `Abschlagsrechnung_${ppRow?.PARTIAL_PAYMENT_NUMBER || ppId}_ZUGFeRD.pdf`;
 
     const hybrid = await embedXmlIntoPdf({
@@ -1088,9 +1104,12 @@ async function getEinvoiceCii(req, res, supabase) {
   const download = String(req.query.download || "") === "1";
   const preview  = String(req.query.preview  || "") === "1";
 
+  // select("*") statt einer Spaltenliste: die CII-Spalten aus Migration 0133
+  // sind optional. Eine namentliche Auswahl wuerde fehlschlagen, solange die
+  // Migration nicht eingespielt ist.
   const { data: ppRow, error: ppRowErr } = await supabase
     .from("PARTIAL_PAYMENT")
-    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, DOCUMENT_XML_PROFILE, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
+    .select("*")
     .eq("ID", ppId)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
@@ -1101,6 +1120,22 @@ async function getEinvoiceCii(req, res, supabase) {
   const fname      = `ZUGFeRD_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
   const profileKey = `zugferd-${profile.toLowerCase()}`;
 
+  // R6: eingefrorene CII-Fassung, siehe Migration 0133. Die
+  // DOCUMENT_XML_*-Spalten tragen ausschliesslich das UBL.
+  const ciiSnapshotId = ppRow.DOCUMENT_XML_CII_ASSET_ID
+    && ppRow.DOCUMENT_XML_CII_PROFILE === profileKey
+    ? ppRow.DOCUMENT_XML_CII_ASSET_ID
+    : null;
+
+  if (!preview && String(ppRow.STATUS_ID) === "2" && ciiSnapshotId) {
+    try {
+      return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ciiSnapshotId, dispositionName: fname, download });
+    } catch (snapErr) {
+      console.warn("[EINVOICE_CII_PP] CII-Snapshot fehlt auf der Platte, wird live erzeugt", { partial_payment_id: ppRow.ID, asset_id: ciiSnapshotId });
+    }
+  }
+
+  // Altbestand: vor 0133 gebuchte Belege haben keinen CII-Snapshot.
   if (!preview && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_XML_ASSET_ID && ppRow.DOCUMENT_XML_PROFILE === profileKey) {
     try {
       return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });

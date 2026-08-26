@@ -80,6 +80,22 @@ async function streamXmlAsset({ supabase, res, assetId, tenantId, dispositionNam
   return true;
 }
 
+// Eingefrorenes XML als String lesen -- fuer Verbraucher, die es weiter-
+// verarbeiten statt auszuliefern (das Hybrid-PDF bettet es ein).
+// Gibt null zurueck, wenn Zeile oder Datei fehlen; der Aufrufer faellt dann
+// auf den Live-Pfad zurueck.
+async function readXmlAssetString({ supabase, assetId, tenantId }) {
+  if (!assetId) return null;
+  try {
+    const asset = await loadAssetRow({ supabase, assetId, tenantId });
+    if (!asset?.STORAGE_KEY) return null;
+    const buf = await storage.getBuffer(asset.STORAGE_KEY);
+    return buf ? buf.toString('utf8') : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Gemeinsamer Kern fuer PDF und XML. Die beiden oeffentlichen Funktionen
 // darunter unterscheiden sich nur in Endung, MIME-Typ und Vorgabewert.
 async function storeGeneratedAsset({ supabase, companyId, fileName, buffer, ext, mimeType, assetType, fallbackName }) {
@@ -143,6 +159,7 @@ module.exports = {
   loadAssetRow,
   streamPdfAsset,
   streamXmlAsset,
+  readXmlAssetString,
   storeGeneratedPdfAsAsset,
   storeGeneratedXmlAsAsset,
   bestEffortDeleteAsset,

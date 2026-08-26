@@ -5,9 +5,11 @@ const { renderDocumentPdf } = require("../services_pdf_render");
 const { insertProgressSnapshot } = require("./projectProgress");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
+const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const {
   streamPdfAsset,
   streamXmlAsset,
+  readXmlAssetString,
   storeGeneratedPdfAsAsset,
   storeGeneratedXmlAsAsset,
   bestEffortDeleteAsset,
@@ -813,6 +815,25 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
     throw { status: 500, message: upErr.message };
   }
 
+  // R6: die CII-Fassung genauso einfrieren wie die UBL-Fassung. Ohne das
+  // wurde sie bei jedem Abruf neu erzeugt und aenderte sich rueckwirkend,
+  // sobald an den Buildern etwas korrigiert wurde -- waehrend das UBL
+  // desselben Belegs eingefroren blieb.
+  //
+  // Best-effort und bewusst NACH dem Status-Update: schlaegt es fehl
+  // (etwa weil Migration 0133 noch nicht eingespielt ist), bleibt die
+  // Buchung gueltig und der Abruf faellt auf den Live-Pfad zurueck. Der
+  // Beleg ist fachlich vollstaendig, sobald PDF und UBL stehen.
+  if (!skipDocuments) {
+    await freezeCiiSnapshot(supabase, {
+      docType: "PARTIAL_PAYMENT",
+      docId: parseInt(id, 10),
+      tenantId: pp.TENANT_ID ?? tenantId ?? null,
+      companyId: pp.COMPANY_ID,
+      fileBase: `ZUGFeRD_${pp.PARTIAL_PAYMENT_NUMBER || pp.ID}`,
+    });
+  }
+
   const { data: project, error: projErr } = await supabase.from("PROJECT").select("ID, PARTIAL_PAYMENTS").eq("ID", pp.PROJECT_ID).maybeSingle();
   if (projErr || !project) {
     await supabase.from("PARTIAL_PAYMENT").update({ STATUS_ID: 1, DOCUMENT_PDF_ASSET_ID: null, DOCUMENT_XML_ASSET_ID: null }).eq("ID", id);
@@ -1031,6 +1052,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
 module.exports = {
   streamPdfAsset,
   streamXmlAsset,
+  readXmlAssetString,
   storeGeneratedPdfAsAsset,
   storeGeneratedXmlAsAsset,
   bestEffortDeleteAsset,

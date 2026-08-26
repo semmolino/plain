@@ -259,7 +259,21 @@ Abgesichert durch 5 Tests; gegen den Stand vor dem Fix schlagen 4 der 12 Tests d
 - **R3 — Peppol-Endpunkte nur in UBL, Peppol im Validator gar nicht.** `data.js:138-139/169-170` lädt sie, `ubl.js:175-186` nutzt sie, **CII ignoriert sie vollständig**. `validateEInvoiceData` nimmt `opts.profile` entgegen (`:50`), wertet es aber nirgends aus.
 - **R4 — Peppol: Gutschrift als Invoice.** `ubl.js:197/219` erzeugt für Typcode 381 immer ein `Invoice`-Wurzelelement; Peppol BIS 3.0 verlangt CreditNote. [unsicher: Peppol-Codeliste lag nicht vor] — für XRechnung ist 381 zulässig, betrifft nur `generatePeppolXml`.
 - **R5 — Anhänge.** `cii.js:254` / `ubl.js:54` setzen `application/octet-stream` als Default; BT-125 ist codelisten-beschränkt [unsicher: keine Regelnummer]. Zusätzlich wird `a.base64` ungeprüft interpoliert — fehlt das Feld, steht literal `undefined` im XML. Der Attachment-Loader fällt weich aus (`data.js:76-81`): fehlt die Migration, gehen Anhänge stillschweigend verloren.
-- **R6 — Nur die UBL-Fassung wird eingefroren.** `services/invoices.js:993-1013` erzeugt beim Buchen ausschließlich UBL und setzt `DOCUMENT_XML_PROFILE` auf `xrechnung-ubl`. Der CII-Endpunkt liefert den Snapshot nur bei Profil `zugferd-*` (`controllers/invoices.js:775`) — trifft nie zu. CII und Hybrid-PDF werden bei **jedem Abruf neu** erzeugt. Sobald einer der obigen Befunde behoben wird, ändert sich rückwirkend das CII-Dokument bereits versendeter Rechnungen, während UBL eingefroren bleibt: zwei widersprüchliche Fassungen desselben Belegs. Der manuelle Snapshot-Endpunkt (`:798-818`) verhält sich dagegen korrekt und überschreibt kein gesetztes Asset.
+- **R6 — Nur die UBL-Fassung wird eingefroren.** ✅ **BEHOBEN 26.08.2026** (Migration 0133 noch einzuspielen). `services/invoices.js:993-1013` erzeugt beim Buchen ausschließlich UBL und setzt `DOCUMENT_XML_PROFILE` auf `xrechnung-ubl`. Der CII-Endpunkt liefert den Snapshot nur bei Profil `zugferd-*` (`controllers/invoices.js:775`) — trifft nie zu. CII und Hybrid-PDF werden bei **jedem Abruf neu** erzeugt. Sobald einer der obigen Befunde behoben wird, ändert sich rückwirkend das CII-Dokument bereits versendeter Rechnungen, während UBL eingefroren bleibt: zwei widersprüchliche Fassungen desselben Belegs. Der manuelle Snapshot-Endpunkt (`:798-818`) verhält sich dagegen korrekt und überschreibt kein gesetztes Asset.
+
+  **Eingetreten, bevor er behoben war.** Das Audit stellt diesen Punkt bewusst *vor* die Korrekturen (Teil 4, Schritt 5). Gearbeitet wurde in umgekehrter Reihenfolge — N3, N4, N5, N8 und N13 haben CII und Hybrid-PDF bereits gebuchter Belege rückwirkend verändert, während deren UBL eingefroren blieb. **Ohne Schaden, weil zum Zeitpunkt der Korrekturen ausschließlich Testdaten existierten** und noch kein Beleg an einen echten Empfänger gegangen war. Die Reihenfolge war trotzdem falsch herum.
+
+  **Behoben:** die CII-Fassung bekommt eigene Spalten (`DOCUMENT_XML_CII_ASSET_ID`, `_PROFILE`, `_RENDERED_AT`, Migration `0133`) und wird beim Buchen genauso eingefroren wie die UBL-Fassung. Neu ist `services/einvoiceSnapshot.js`; beide Buchungswege rufen es auf, beide CII-Endpunkte und **beide Hybrid-PDF-Endpunkte** lesen es.
+
+  Das Hybrid-PDF hatte vorher überhaupt keine Snapshot-Prüfung — es war der Pfad, der am stärksten driftete, und zugleich der, den die Zielbranche tatsächlich versendet.
+
+  **Bewusst best-effort:** schlägt das Einfrieren fehl, bleibt die Buchung gültig und der Abruf fällt auf den Live-Pfad zurück. Ein Beleg ist fachlich vollständig, sobald PDF und UBL stehen — die Buchung an einer Snapshot-Optimierung scheitern zu lassen wäre die schlechtere Wahl. Alle betroffenen Abfragen nutzen `select("*")`, damit sie ohne die Migration nicht brechen.
+
+  **Bereits gebuchte Belege bekommen ihren CII-Snapshot nicht nachträglich.** Ein Nach-Rendern würde genau den Zustand festschreiben, den die Korrekturen seit dem Audit verändert haben — es sähe nach Konservierung aus und wäre das Gegenteil. Sie laufen weiter über den Live-Pfad; wer sie einfrieren will, nutzt den bestehenden manuellen Snapshot-Endpunkt bewusst und einzeln.
+
+  Abgesichert durch 8 Tests, darunter der eigentliche Zweck: nach dem Einfrieren ändern nachträgliche Änderungen an den Belegdaten das Dokument nicht mehr.
+
+  **⚠️ Migration `0133_einvoice_cii_snapshot.sql` ist noch nicht eingespielt.** Bis dahin verhält sich alles wie bisher, und beim Buchen erscheint je Beleg eine Warnung `[EINVOICE_CII_SNAPSHOT] nicht eingefroren` im Log.
 - **R7 — Kategorien G und K ungeprüft, AE/K ohne Käufer-USt-IdNr.** ✅ **BEHOBEN 26.08.2026**. `data.js:189-192` lässt `G`/`K` zu, `validator:140-199` prüft für beide weder Satz 0 noch Befreiungsgrund. Die Konstante `VAT_CATEGORIES_REQUIRE_REASON` (`:31`) ist definiert und wird **nirgends benutzt** — die Kategorienprüfung ist stattdessen als Kette einzelner Blöcke ausgeschrieben, in der `G` und `K` fehlen. Bei Reverse Charge verlangt EN 16931 die USt-IdNr beider Parteien; `buyer.vatId` ist vorhanden (`data.js:165`), wird aber nicht geprüft. Eine §13b-Rechnung ohne Käufer-USt-IdNr — im Baubereich der Normalfall — geht durch und wird abgewiesen.
   **Behoben:** die ausgeschriebene Blockkette ist durch eine Tabelle `VAT_CATEGORY_RULES` ersetzt, die alle sechs Kategorien außer `S` führt; die tote Konstante `VAT_CATEGORIES_REQUIRE_REASON` ist weg. Die Tabelle ist die Struktur, die der Befund verlangt: eine in `data.js` zugelassene Kategorie kann nicht mehr stillschweigend ungeprüft bleiben. `Z` führt bewusst **keinen** Befreiungsgrund — die alte Konstante führte es fälschlich mit, das war der zweite Fehler in derselben Zeile. Für `AE` und `K` wird zusätzlich die USt-IdNr **beider** Parteien verlangt. Abgesichert durch 4 Tests. **Nicht gesichert:** die Codes `BR-G-*` und `BR-IC-*` sowie die Zuordnung der `-02`/`-03`-Varianten.
 - **R8 — Nur eine USt-Zeile möglich.** `data.js:502-509` baut `vatBreakdown` immer als genau ein Element. Gemischte Sätze (7 % / 19 %) sind nicht darstellbar. Solange die Erfassung das nicht zulässt, konsistent — sobald doch, entsteht ein stilles Falschdokument statt einer Ablehnung.
@@ -523,7 +537,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 **Stand 26.08.2026:**
 
-- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N12, N13, N14, R7, R9, S2, S4, S6, S7; N9 teilweise.
+- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N12, N13, N14, R6, R7, R9, S2, S4, S6, S7; N9 teilweise.
 - **HOAI:** A1, A2, B1, B3, B5 (entschieden), B4 (geprüft: kein Fehler), B6 teilweise.
 
 | Befund | Geänderte Dateien | Abgesichert durch |
@@ -544,6 +558,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | R9 | `services_einvoice_data.js` | Nullable-Annahme über die Reporting-Views belegt |
 | S2 | `tests/einvoice_data_to_validator.test.js` | 12 Tests; gegen künstlich wieder eingebautes N1 gegengeprüft |
 | N14 | `services_einvoice_data.js`, dieselbe Testdatei | 5 Tests, gegen den Stand vor dem Fix gegengeprüft (4 rot) |
+| R6 | `migrations/0133`, `services/einvoiceSnapshot.js`, `services/generatedAssets.js`, beide Buchungs- und beide Lesewege | 8 Tests — **Migration noch einzuspielen** |
 | S6 | `services_einvoice_ubl.js` | neuer Wert byteweise identisch mit beiden alten |
 | S7 | `docs/EINVOICE_ANALYSIS.md` | Warnkopf, Inhalt unverändert |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
@@ -553,7 +568,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | B4 | — | gegen § 44/§ 48 Abs. 3 und 4 geprüft, Daten korrekt |
 | B6 (Verteilungsrest) | `controllers/stammdaten.js`, `tests/stammdaten.surcharge_alloc.test.js` | 8 Tests, gegen den Stand vor dem Fix gegengeprüft (5 rot) |
 
-Volle Test-Suite nach allen Änderungen: **38 Suites, 549 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
+Volle Test-Suite nach allen Änderungen: **39 Suites, 557 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
 
 ## Was die zweite Runde am Buchen ändert
 
@@ -598,7 +613,7 @@ Der dritte Fall belegt, dass das Flag jetzt tatsächlich ausgewertet wird.
 2. ~~**A2**~~ ✅ — erledigt. Die vorgeschaltete Frage („kommt die Drift produktiv vor?") wurde übersprungen: sie entscheidet den Fix nicht. Zwei Wege, die denselben Betrag verschieden rechnen, sind unabhängig von der Datenlage falsch. **Offen bleibt trotzdem**, ob produktiv Drifts existieren — das ist jetzt keine Frage der Korrektheit mehr, sondern eine der Datenhygiene (siehe A3, das dieselbe Wurzel hat).
 3. ~~**N12 / N13**~~ ✅ — erledigt. Beim Umsetzen kam heraus, dass der fehlerhafte Pfad über die Oberfläche gar nicht erreichbar war (kein Aufrufer übergab `format=ubl`). Der Befund war richtig, seine Dringlichkeit geringer als angenommen.
 4. ~~**N3 / N4**~~ ✅ — erledigt.
-5. **R6** — vor der ersten Korrektur festlegen, wie mit bereits gebuchten und versendeten Belegen umgegangen wird: kontrollierter Neu-Render mit neuem Snapshot (nur zulässig, solange nicht ausgeliefert) oder Storno plus Korrekturrechnung. Diese Entscheidung gehört vor die Fixes, nicht danach.
+5. ~~**R6**~~ ✅ — erledigt, aber **in der falschen Reihenfolge**: die Korrekturen kamen zuerst, das Einfrieren danach. Folgenlos geblieben, weil zu dem Zeitpunkt ausschließlich Testdaten existierten und kein Beleg versendet war. Die Frage nach dem Umgang mit bereits ausgelieferten Belegen hat sich damit erübrigt, statt beantwortet zu werden — bei echten Kundendaten wäre sie zu beantworten gewesen. **Migration 0133 noch einzuspielen.**
 6. ~~**B1–B6**~~ — am 26.08.2026 entschieden und, wo nötig, umgesetzt. Ergebnis: B1 bleibt wie es ist (Hinweis geschärft), B3 begrenzt, B4 war kein Fehler, B5 bleibt bewusst stehen, B6 zur Hälfte behoben.
    **Offen bleiben zwei Punkte, beide mit klarer nächster Handlung:**
    - **B2** — Rechtslage geklärt (§ 7 Abs. 2 HOAI: außerhalb der Tafel frei vereinbar, Extrapolation unzulässig). Nächster Schritt ist die Integration der RiFT-Erweiterungstabellen; bis dahin ist der Randwert ohne Hinweis weiterhin falsch.

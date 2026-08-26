@@ -722,18 +722,34 @@ async function getPdfHybrid(req, res, supabase) {
       loadInvoiceData(supabase, invoiceId, "INVOICE", req.tenantId),
     ]);
 
+    // select("*"): die CII-Spalten aus Migration 0133 sind optional.
+    const { data: invRow } = await supabase
+      .from("INVOICE")
+      .select("*")
+      .eq("ID", invoiceId)
+      .eq("TENANT_ID", req.tenantId)
+      .maybeSingle();
+
     // Immer CII: der Container laesst nichts anderes zu (siehe N12 oben).
-    const xml = generateCiiXml(data, profile);
+    //
+    // R6: bei einem gebuchten Beleg die eingefrorene Fassung einbetten statt
+    // neu zu erzeugen. Vorher hatte dieser Endpunkt gar keine Snapshot-
+    // Pruefung — das Hybrid-PDF aenderte sich also bei jedem Abruf mit,
+    // sobald an den Buildern etwas korrigiert wurde.
+    let xml = null;
+    if (String(invRow?.STATUS_ID) === "2" && invRow?.DOCUMENT_XML_CII_ASSET_ID) {
+      xml = await svc.readXmlAssetString({
+        supabase, tenantId: req.tenantId, assetId: invRow.DOCUMENT_XML_CII_ASSET_ID,
+      });
+      if (!xml) {
+        console.warn("[PDF_HYBRID_INV] CII-Snapshot nicht lesbar, wird live erzeugt", { id: invoiceId });
+      }
+    }
+    if (!xml) xml = generateCiiXml(data, profile);
 
     const xmlProfileKey = profile;
     const xmlFilename   = "factur-x.xml";
 
-    const { data: invRow } = await supabase
-      .from("INVOICE")
-      .select("INVOICE_NUMBER")
-      .eq("ID", invoiceId)
-      .eq("TENANT_ID", req.tenantId)
-      .maybeSingle();
     const pdfName = `Rechnung_${invRow?.INVOICE_NUMBER || invoiceId}_ZUGFeRD.pdf`;
 
     const hybrid = await embedXmlIntoPdf({
@@ -769,9 +785,12 @@ async function getEinvoiceCii(req, res, supabase) {
   const download = String(req.query.download || "") === "1";
   const preview  = String(req.query.preview  || "") === "1";
 
+  // select("*") statt einer Spaltenliste: die CII-Spalten aus Migration 0133
+  // sind optional. Eine namentliche Auswahl wuerde fehlschlagen, solange die
+  // Migration nicht eingespielt ist.
   const { data: invRow, error: invRowErr } = await supabase
     .from("INVOICE")
-    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, DOCUMENT_XML_PROFILE, INVOICE_NUMBER, COMPANY_ID")
+    .select("*")
     .eq("ID", invoiceId)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
@@ -782,7 +801,26 @@ async function getEinvoiceCii(req, res, supabase) {
   const fname      = `ZUGFeRD_${invRow.INVOICE_NUMBER || invRow.ID}.xml`;
   const profileKey = `zugferd-${profile.toLowerCase()}`;
 
-  // Serve snapshot only if format matches
+  // R6: Die CII-Fassung liegt seit Migration 0133 in eigenen Spalten. Die
+  // frueher hier geprueften DOCUMENT_XML_*-Spalten tragen ausschliesslich das
+  // UBL — die Bedingung DOCUMENT_XML_PROFILE === "zugferd-..." konnte deshalb
+  // nie zutreffen, und CII wurde bei jedem Abruf neu erzeugt.
+  const ciiSnapshotId = invRow.DOCUMENT_XML_CII_ASSET_ID
+    && invRow.DOCUMENT_XML_CII_PROFILE === profileKey
+    ? invRow.DOCUMENT_XML_CII_ASSET_ID
+    : null;
+
+  if (!preview && String(invRow.STATUS_ID) === "2" && ciiSnapshotId) {
+    try {
+      return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ciiSnapshotId, dispositionName: fname, download });
+    } catch (snapErr) {
+      console.warn("[EINVOICE_CII_INV] CII-Snapshot fehlt auf der Platte, wird live erzeugt", { invoice_id: invRow.ID, asset_id: ciiSnapshotId });
+    }
+  }
+
+  // Altbestand: vor 0133 gebuchte Belege haben keinen CII-Snapshot. Die alte
+  // Bedingung bleibt stehen, damit ein per Hand gesetztes zugferd-Profil
+  // weiterhin bedient wird.
   if (!preview && String(invRow.STATUS_ID) === "2" && invRow.DOCUMENT_XML_ASSET_ID && invRow.DOCUMENT_XML_PROFILE === profileKey) {
     try {
       return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: invRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
