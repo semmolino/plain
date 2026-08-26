@@ -1,5 +1,23 @@
 # E-Rechnungs-Analyse — Bestand, Lücken, Empfehlungen
 
+> ## ⚠️ HISTORISCHES DOKUMENT — Stand Juni 2026, nicht mehr gültig
+>
+> Dieses Dokument beschreibt den Stand von Juni 2026 und ist seitdem an
+> mehreren Stellen überholt. **Als Grundlage für ein Review nicht mehr
+> verwenden** — maßgeblich ist `docs/AUDIT_2026-08-25_HOAI_UND_ERECHNUNG.md`.
+>
+> Inzwischen umgesetzt und hier trotzdem noch als fehlend geführt:
+> PDF/A-3-Einbettung, BT-11, BT-13, HUR-Stundenpositionen, Käuferkontakt und
+> die USt-Kategorien AE/E/G/K/O. Der unten als kritisch beschriebene
+> `-`-Fallback für BT-10 existiert nicht mehr.
+>
+> Der Abschnitt „Was gut ist" nennt die Profil-IDs als korrekt und die
+> XML-Erzeugung als solide — das Audit vom 25.08.2026 hat in derselben Kette
+> dreizehn Normverstöße gefunden, darunter einen Validator, der wegen
+> abweichender Feldnamen für **jede** Rechnung fehlschlug (N1).
+>
+> Aufgehoben als Zeitdokument, nicht als Referenz.
+
 > Stand: Juni 2026.
 > Branche: Architekten / Planer.
 > Vergleichsbasis: aktuelle Standards XRechnung 3.0.2, ZUGFeRD 2.4 / Factur-X 1.07, Peppol BIS Billing 3.0, EN 16931.

@@ -16,13 +16,17 @@
 
 const XRECHNUNG_CUSTOMIZATION_ID =
   'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
-const XRECHNUNG_PROFILE_ID =
-  'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
 
 // Branch 11: Peppol BIS Billing 3.0 (PEPPOL BIS 3.0)
 const PEPPOL_CUSTOMIZATION_ID =
   'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0';
-const PEPPOL_PROFILE_ID =
+
+// S6: Die ProfileID ist fuer beide Varianten dieselbe -- die XRechnung
+// verwendet das Peppol-Billing-Profil bewusst mit. Vorher standen hier zwei
+// Konstanten mit identischem Wert und eine Fallunterscheidung, die nichts
+// unterschied: sie las sich wie ein Unterschied, den es nicht gibt.
+// Muessen die Werte je auseinanderlaufen, gehoert die Weiche zurueck.
+const BILLING_PROFILE_ID =
   'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
 
 // ── XML helpers ───────────────────────────────────────────────────────────────
@@ -193,7 +197,7 @@ function generateUblXml(data, opts = {}) {
   const t   = data.totals;
 
   const customization = flavor === 'PEPPOL' ? PEPPOL_CUSTOMIZATION_ID : XRECHNUNG_CUSTOMIZATION_ID;
-  const profile       = flavor === 'PEPPOL' ? PEPPOL_PROFILE_ID       : XRECHNUNG_PROFILE_ID;
+  const profile       = BILLING_PROFILE_ID;
   const typeCode  = data.typeCodeUbl ?? data.typeCode ?? '380';
   const lineItems = data.lines.map(l => buildLineItem(l, cur)).join('\n');
 

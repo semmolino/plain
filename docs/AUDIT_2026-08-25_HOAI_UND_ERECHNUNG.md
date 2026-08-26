@@ -251,8 +251,8 @@ Die zweite Zusicherung im ersten Fall ist die eigentliche Absicherung — ohne s
 - **S3 — Geladene, nie geschriebene Felder.** `seller.creditorId` (BT-90), `seller.postOfficeBox`, `buyer.debitorNumber` (BT-46) werden aus der DB geholt und von keinem Builder ausgegeben. BT-46 wäre der naheliegende Kandidat, um N9 zu entschärfen.
 - **S4 — Falscher Regelcode.** ✅ **BEHOBEN 26.08.2026**. `validator:255` führte die Leitweg-ID unter `BR-DE-1`; das ist nach KoSIT die Regel zu den Zahlungsinformationen. Die Warnung läuft jetzt unter `BR-DE-15`, `BR-DE-1` ist an die IBAN-Prüfung aus N6 gegangen — vorher wäre derselbe Code doppelt vergeben gewesen, was erst beim Fix von N6 auffiel. Der Test prüft beides: BR-DE-15 kommt, BR-DE-1 kommt nicht. Die Codenummer selbst bleibt [unsicher].
 - **S5 — UBL erfindet einen Handelsnamen.** `ubl.js:241/259` und `:273/286` schreiben denselben String in `cac:PartyName` (BT-28/BT-45) und `RegistrationName` (BT-27/BT-44). Damit wird ein Handelsname behauptet, den niemand erfasst hat. CII gibt nur `ram:Name` aus und ist hier sauberer.
-- **S6 — Doppelte Konstante.** `ubl.js:20` und `:26` definieren zwei Profil-IDs mit identischem Wert; die Fallunterscheidung in `:196` ist wirkungslos. Entweder ist ein Wert falsch, oder die Unterscheidung kann entfallen.
-- **S7 — `docs/EINVOICE_ANALYSIS.md` ist überholt.** Stand Juni 2026, führt als fehlend auf: PDF/A-3-Einbettung, BT-11, BT-13, HUR-Stundenpositionen, Käuferkontakt und die Kategorien AE/E/G/K/O — alles inzwischen implementiert. Der dort als kritisch zitierte Fallback für BT-10 existiert nicht mehr. Das Dokument führt einen Reviewer aktiv in die Irre und sollte überarbeitet oder als historisch gekennzeichnet werden.
+- **S6 — Doppelte Konstante.** ✅ **BEHOBEN 26.08.2026**. `ubl.js:20` und `:26` definierten zwei Profil-IDs mit identischem Wert; die Fallunterscheidung in `:196` war wirkungslos. Von den beiden Auflösungen, die der Befund anbietet, trifft die zweite zu: die XRechnung verwendet das Peppol-Billing-Profil bewusst mit, die Werte sind also **absichtlich** gleich, nicht versehentlich. Jetzt eine Konstante `BILLING_PROFILE_ID` mit einem Kommentar, der das festhält — und dem Hinweis, dass die Weiche zurückgehört, falls die Werte je auseinanderlaufen. **Am erzeugten XML ändert sich nichts:** der neue Wert ist byteweise identisch mit beiden alten.
+- **S7 — `docs/EINVOICE_ANALYSIS.md` ist überholt.** ✅ **BEHOBEN 26.08.2026** — das Dokument trägt jetzt einen Warnkopf, der es als historisch kennzeichnet, die überholten Stellen einzeln benennt und auf dieses Audit verweist. Inhaltlich unverändert gelassen: als Zeitdokument hat es weiterhin Wert, als Referenz nicht. Stand Juni 2026, führt als fehlend auf: PDF/A-3-Einbettung, BT-11, BT-13, HUR-Stundenpositionen, Käuferkontakt und die Kategorien AE/E/G/K/O — alles inzwischen implementiert. Der dort als kritisch zitierte Fallback für BT-10 existiert nicht mehr. Das Dokument führt einen Reviewer aktiv in die Irre und sollte überarbeitet oder als historisch gekennzeichnet werden.
 - **S8 — REG-Note dupliziert die Verkäuferadresse.** `cii.js:91-97` schreibt die Firmenanschrift zusätzlich als `IncludedNote`. Nur CII.
 - **S9 — Legacy-Feld.** `data.js:570` existiert nur noch als Fallback in `cii.js:347` und `ubl.js:197`. Wird es entfernt, fällt CII stillschweigend auf den UBL-Typcode zurück.
 
@@ -328,6 +328,14 @@ Zahlenszenario: Grundhonorar 100.000 €, Umbauzuschlag 20 % → gespeichert 20.
 - Differenz: 4.000 € zwischen Beleg-Anhang und fakturierter Summe
 
 Gebuchte Belege bleiben unverändert — `controllers/invoices.js:603` liefert für `STATUS_ID = 2` das eingefrorene `DOCUMENT_PDF_ASSET_ID`. Betroffen sind Entwürfe und alle Vorschauen vor dem Buchen.
+
+**Nachtrag 26.08.2026 — nicht behoben, aber genauer eingegrenzt.** Bei der Umsetzung von A2 wurde derselbe Fix hier geprüft und **bewusst nicht** angewendet. Zwei Punkte, die der Befund noch nicht hatte:
+
+1. **`AMOUNT` ist kein Nutzereingabefeld.** `saveFeeCalcSurcharges` (`controllers/stammdaten.js:1679`) berechnet es beim Speichern immer als `PERCENT / 100 × BASE_AMOUNT`. Es ist damit derselbe Fall wie `PROJECT_STRUCTURE.INVOICED` in A2: ein zwischengespeichertes Ergebnis, kein Datum. Eine Neuberechnung würde also keine Nutzereingabe verwerfen — das war die Frage, an der der Fix hätte scheitern können.
+
+2. **Die Basis kommt aus dem Frontend, nicht aus dem Backend.** `BASE_AMOUNT` wird im Wizard gerechnet und mitgeschickt (`HonorarWizard.tsx:584` liefert bei kumulativen Zuschlägen die bereits aufgestockte Basis). Das Backend hat **keine eigene Quelle** für die Basis — es glaubt, was ankommt. Deshalb ist A3 nicht der gleiche Handgriff wie A2: dort lag die richtige Rechnung schon im Backend und musste nur an zwei Stellen dieselbe sein. Hier müsste erst entschieden werden, **ob das Backend diese Rechnung überhaupt besitzen soll**.
+
+Das ist eine Architekturentscheidung und gehört zu den offenen Punkten, nicht in eine Aufräumrunde. Empfehlung: die Zuschlagsrechnung ins Backend ziehen (eine Funktion, von Renderer, Sync und Speicherpfad benutzt), das Frontend rechnet dann nur noch für die Anzeige. Solange das nicht entschieden ist, bleibt A3 offen — auch `patchFeeCalcMasterBasis` (dritter Punkt des Befunds) sollte erst danach angefasst werden.
 
 ## B — Fachlich zu klären
 
@@ -406,7 +414,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 # Teil 3 — Bereits behoben
 
-**Stand 26.08.2026:** N1–N8 (außer dem offenen Teil von N5), N12, N13, R7, R9 und S4 (E-Rechnung), N9 und S2 teilweise, sowie A1 und A2 (HOAI).
+**Stand 26.08.2026:** N1–N8 (außer dem offenen Teil von N5), N12, N13, R7, R9, S4, S6 und S7 (E-Rechnung), N9 und S2 teilweise, sowie A1 und A2 (HOAI).
 
 | Befund | Geänderte Dateien | Abgesichert durch |
 |---|---|---|
@@ -424,6 +432,8 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | N5 | `services_einvoice_cii.js`, `services_einvoice_ubl.js`, `tests/einvoice_builders.test.js` | 2 Tests, gegen den Stand vor dem Fix gegengeprüft |
 | N8 | `services_einvoice_validator.js`, `services_einvoice_cii.js`, Tests in beiden Dateien | 2 Validator- + 2 Builder-Tests |
 | R9 | `services_einvoice_data.js` | Nullable-Annahme über die Reporting-Views belegt |
+| S6 | `services_einvoice_ubl.js` | neuer Wert byteweise identisch mit beiden alten |
+| S7 | `docs/EINVOICE_ANALYSIS.md` | Warnkopf, Inhalt unverändert |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
 | A2 | `services/finalInvoices.js`, `tests/finalInvoices.phases.test.js` | 3 Tests, gegen den Stand vor dem Fix gegengeprüft (2 rot) |
 
