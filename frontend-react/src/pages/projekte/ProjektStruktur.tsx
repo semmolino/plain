@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2, MousePointerClick, ArrowDownToLine } from 'lucide-react'
 import { useConfirm } from '@/hooks/useConfirm'
+import { useAnchoredPosition } from '@/hooks/useAnchoredPosition'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { Message }       from '@/components/ui/Message'
 import { Modal }         from '@/components/ui/Modal'
@@ -90,6 +91,11 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const [contextMenu, setContextMenu]             = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
   const contextMenuRef                            = useRef<HTMLDivElement>(null)
   const longPressRef                              = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Long-Press auf dem Handy setzt x=0 — das Menü wird dann zentriert statt verankert
+  const contextMenuStyle = useAnchoredPosition(
+    contextMenuRef,
+    contextMenu && contextMenu.x !== 0 ? contextMenu : null,
+  )
 
   const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: structData, isLoading } = useQuery({
@@ -1181,7 +1187,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       const isMultiDelete = contextMenu.nodeId != null && selectedIds.has(contextMenu.nodeId) && selectedIds.size > 1
       const style: React.CSSProperties = contextMenu.x === 0
         ? { position: 'fixed', top: '40%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 1500 }
-        : { position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 1500 }
+        : contextMenuStyle
       return (
         <div className="struct-context-menu" ref={contextMenuRef} style={style}>
           <button onClick={() => {

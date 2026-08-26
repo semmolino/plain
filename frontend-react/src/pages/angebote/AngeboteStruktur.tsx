@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, Percent, MousePointerClick } from 'lucide-react'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { useAnchoredPosition } from '@/hooks/useAnchoredPosition'
 import { Message }      from '@/components/ui/Message'
 import { Modal }        from '@/components/ui/Modal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -61,6 +62,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const [offerSurchargePanel, setOfferSurchargePanel] = useState<boolean>(false)
   const [offerSurchargeEdit,  setOfferSurchargeEdit]  = useState<SurchargeEdit | null>(null)
   const contextMenuRef                              = useRef<HTMLDivElement>(null)
+  const contextMenuStyle                            = useAnchoredPosition(contextMenuRef, contextMenu)
   const offerAcRef                                  = useRef<HTMLDivElement>(null)
   const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
   const [elementSearch, setElementSearch]   = useState('')
@@ -1089,7 +1091,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     {contextMenu && (() => {
       const cmNode = contextMenu.nodeId != null ? structure.find(n => n.ID === contextMenu.nodeId) : undefined
       const isMultiDelete = contextMenu.nodeId != null && selectedIds.has(contextMenu.nodeId) && selectedIds.size > 1
-      const style: React.CSSProperties = { position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 1500 }
+      const style: React.CSSProperties = contextMenuStyle
       return (
         <div className="struct-context-menu" ref={contextMenuRef} style={style}>
           <button onClick={() => {

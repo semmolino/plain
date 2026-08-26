@@ -2423,6 +2423,10 @@ th.doc-actions, td.doc-actions {
   min-width: 180px;
   display: flex; flex-direction: column; gap: 2px;
   animation: ctx-in 0.1s ease;
+  /* Notbremse, falls das Menü höher wird als das Fenster — die Position selbst
+     klappt useAnchoredPosition um */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 @keyframes ctx-in {
   from { opacity: 0; transform: scale(0.96); }
