@@ -33,6 +33,21 @@ function fmt2(n) {
   return Math.round(toNum(n) * 100) / 100;
 }
 
+// Erste nicht-leere Angabe gewinnen. Die Belege tragen die Stamm daten
+// denormalisiert mit (COMPANY_*, EMPLOYEE_*, ADDRESS_*); ist so eine Spalte
+// LEER statt NULL, sprang der frueher benutzte ??-Operator NICHT auf die
+// Stammdaten zurueck -- er greift nur bei null/undefined. Ergebnis: ein
+// Buero mit gepflegter IBAN erzeugte einen Beleg ohne Zahlungsinformationen.
+// Seit N6/N7/N8 als Fehler pruefen, haette das die Rechnung sogar am Buchen
+// gehindert. Fuer Textfelder heisst leer immer "nicht gesetzt".
+function firstNonEmpty(...values) {
+  for (const v of values) {
+    const t = String(v ?? '').trim();
+    if (t) return t;
+  }
+  return '';
+}
+
 function isCountryCode(v) {
   return /^[A-Z]{2}$/.test(String(v ?? '').trim());
 }
@@ -129,8 +144,8 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   // COMPANY_TAX_NUMBER = Steuernummer (FC scheme, e.g. 78910/12345)
   const sellerTaxId = String(doc.COMPANY_TAX_NUMBER ?? '').trim();
 
-  const sellerIban        = String(doc.COMPANY_IBAN         ?? company?.IBAN        ?? '').trim();
-  const sellerBic         = String(doc.COMPANY_BIC          ?? company?.BIC         ?? '').trim();
+  const sellerIban        = firstNonEmpty(doc.COMPANY_IBAN, company?.IBAN);
+  const sellerBic         = firstNonEmpty(doc.COMPANY_BIC, company?.BIC);
   const sellerCreditorId  = String(doc['COMPANY_CREDITOR-ID']                        ?? '').trim();
   const sellerPostOffBox  = String(doc.COMPANY_POST_OFFICE_BOX                       ?? '').trim();
 
@@ -144,16 +159,16 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const contactName  = String(doc.EMPLOYEE ?? '').trim()
     || [employee?.FIRST_NAME, employee?.LAST_NAME].filter(Boolean).join(' ')
     || String(employee?.SHORT_NAME ?? '').trim();
-  const contactPhone = String(doc.EMPLOYEE_PHONE ?? employee?.MOBILE ?? employee?.PHONE ?? '').trim();
-  const contactEmail = String(doc.EMPLOYEE_MAIL  ?? employee?.MAIL   ?? '').trim();
+  const contactPhone = firstNonEmpty(doc.EMPLOYEE_PHONE, employee?.MOBILE, employee?.PHONE);
+  const contactEmail = firstNonEmpty(doc.EMPLOYEE_MAIL, employee?.MAIL);
 
   // ── 4. Buyer (ADDRESS) ────────────────────────────────────────────────────
 
   const address = await one(supabase, 'ADDRESS', doc[addressIdField], tenantId);
 
-  const buyerName = String(
-    doc.ADDRESS_NAME_1 ?? address?.ADDRESS_NAME_1 ?? doc.ADDRESS_NAME_2 ?? address?.ADDRESS_NAME_2 ?? ''
-  ).trim();
+  const buyerName = firstNonEmpty(
+    doc.ADDRESS_NAME_1, address?.ADDRESS_NAME_1, doc.ADDRESS_NAME_2, address?.ADDRESS_NAME_2
+  );
   if (!buyerName) throw new InvoiceDataError('Käufername (BT-44) fehlt. Bitte Rechnungsadresse prüfen.');
 
   let buyerCountry = doc.ADDRESS_COUNTRY ?? null;
@@ -162,8 +177,8 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   }
   if (!isCountryCode(buyerCountry)) buyerCountry = 'DE';
 
-  const buyerVatId         = normalizeVatId(doc.ADDRESS_VAT_ID ?? address?.VAT_ID ?? '', buyerCountry);
-  const buyerDebitorNumber = String(doc.ADDRESS_DEBITOR_NUMBER ?? address?.DEBITOR_NUMBER ?? '').trim();
+  const buyerVatId         = normalizeVatId(firstNonEmpty(doc.ADDRESS_VAT_ID, address?.VAT_ID), buyerCountry);
+  const buyerDebitorNumber = firstNonEmpty(doc.ADDRESS_DEBITOR_NUMBER, address?.DEBITOR_NUMBER);
 
   // Branch 11: Peppol-Endpoint (Kaeufer aus ADDRESS)
   const buyerPeppolEndpointId = String(address?.PEPPOL_ENDPOINT_ID ?? '').trim();
@@ -588,10 +603,10 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
     buyerReference: String(doc.BUYER_REFERENCE ?? doc.ADDRESS_REFERENCE_NUMBER ?? '').trim(),
 
     seller: {
-      name:          String(doc.COMPANY_NAME_1 ?? company?.COMPANY_NAME_1 ?? '').trim(),
-      street:        String(doc.COMPANY_STREET     ?? company?.STREET    ?? '').trim(),
-      city:          String(doc.COMPANY_CITY       ?? company?.CITY      ?? '').trim(),
-      postCode:      String(doc.COMPANY_POST_CODE  ?? company?.POST_CODE ?? '').trim(),
+      name:          firstNonEmpty(doc.COMPANY_NAME_1, company?.COMPANY_NAME_1),
+      street:        firstNonEmpty(doc.COMPANY_STREET,    company?.STREET),
+      city:          firstNonEmpty(doc.COMPANY_CITY,      company?.CITY),
+      postCode:      firstNonEmpty(doc.COMPANY_POST_CODE, company?.POST_CODE),
       countryId:     sellerCountry,
       vatId:         sellerVatId,
       taxId:         sellerTaxId,
@@ -611,9 +626,9 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
       name:               buyerName,
       peppolEndpointId:   buyerPeppolEndpointId,
       peppolSchemeId:     buyerPeppolSchemeId,
-      street:        String(doc.ADDRESS_STREET    ?? address?.STREET    ?? '').trim(),
-      city:          String(doc.ADDRESS_CITY      ?? address?.CITY      ?? '').trim(),
-      postCode:      String(doc.ADDRESS_POST_CODE ?? address?.POST_CODE ?? '').trim(),
+      street:        firstNonEmpty(doc.ADDRESS_STREET,    address?.STREET),
+      city:          firstNonEmpty(doc.ADDRESS_CITY,      address?.CITY),
+      postCode:      firstNonEmpty(doc.ADDRESS_POST_CODE, address?.POST_CODE),
       countryId:     buyerCountry,
       vatId:         buyerVatId,
       debitorNumber: buyerDebitorNumber,

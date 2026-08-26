@@ -230,6 +230,28 @@ Damit schließt sich zugleich die Lücke aus S2 für dieses Modul: `tests/einvoi
 
 Die zweite Zusicherung im ersten Fall ist die eigentliche Absicherung — ohne sie wäre der Test auch mit dem alten Wert grün geblieben, wenn der Typ irgendwo doppelt stünde.
 
+### N14 — Leere Belegspalte hebelt den Rückgriff auf die Stammdaten aus [verifiziert] — ✅ BEHOBEN 26.08.2026
+
+**Nicht Teil des ursprünglichen Audits — gefunden vom Test aus S2, am Tag seiner Entstehung.**
+
+Die Belege tragen die Stammdaten denormalisiert mit (`COMPANY_*`, `EMPLOYEE_*`, `ADDRESS_*`). An 14 Stellen las `services_einvoice_data.js` sie nach dem Muster
+
+    String(doc.COMPANY_IBAN ?? company?.IBAN ?? '').trim()
+
+`??` greift nur bei `null`/`undefined`. Steht in der Belegspalte ein **leerer String** — bei denormalisierten Spalten der Normalfall, nicht die Ausnahme —, gewinnt dieser leere String, und die gepflegten Stammdaten werden nie gelesen.
+
+Betroffen waren: IBAN, BIC, Telefon und Mail des Ansprechpartners, Käufername, USt-IdNr und Debitorennummer des Käufers sowie Name, Straße, PLZ und Ort **beider** Parteien.
+
+**Warum das jetzt schwerer wiegt als vorher:** solange N6/N7/N8 nicht geprüft wurden, entstand daraus ein unvollständiges XML, das der Empfänger abwies. Seit diese Felder als `error` geprüft werden, **blockiert es das Buchen** — ein Büro mit vollständig gepflegter Firma und Mitarbeiterakte hätte keine Rechnung mehr buchen können, weil eine leere Spalte im Beleg den Rückgriff verhindert. Die drei Korrekturen von heute Vormittag haben diesen latenten Fehler scharf gestellt.
+
+**Behoben** durch einen Helfer `firstNonEmpty(...)`, der über `null`, `undefined` **und** leere bzw. reine Leerzeichen-Strings hinweg zur nächsten Quelle geht. Alle 14 Stellen umgestellt.
+
+Bewusst beibehalten: ein **gefüllter** Belegwert gewinnt weiterhin gegen die Stammdaten — der Beleg friert den Stand zum Buchungszeitpunkt ein, eine spätere Stammdatenänderung darf ihn nicht rückwirkend überschreiben. Ein Test hält das fest.
+
+**Abgrenzung zu R9:** dort ging es um Zahlen, wo `0` ein gültiger Wert ist und deshalb die Rohspalte entscheiden muss. Hier geht es um Text, wo leer nie etwas bedeutet. Gegenläufige Regeln, gleiche Wurzel — ein Fallback, der nicht zwischen „nicht gesetzt" und „auf leer gesetzt" unterscheidet.
+
+Abgesichert durch 5 Tests; gegen den Stand vor dem Fix schlagen 4 der 12 Tests der Datei fehl.
+
 ## Risiken
 
 - **R1 — Lieferdatum (BT-72) nur in CII.** `cii.js:146-156` erzeugt `ActualDeliverySupplyChainEvent`, UBL hat kein `cac:Delivery`. Zusätzlich erfindet CII bei fehlendem Leistungszeitraum ein Lieferdatum gleich dem Rechnungsdatum — eine inhaltliche Aussage, die niemand geprüft hat.
@@ -247,7 +269,12 @@ Die zweite Zusicherung im ersten Fall ist die eigentliche Absicherung — ohne s
 ## Sauberkeit
 
 - **S1 — `services_bt_mapping.js` ist toter Code.** `loadBtMapping` hat im gesamten Repository **keinen Aufrufer**; die Mappingdatei liegt vor. Falls reaktiviert, sind die bekannten Schwächen real: `normalizeBt` (`:12-15`) matcht das BT-Muster an beliebiger Stelle, sodass `XBT-1` zu `BT-1` wird; die verbreiteten Schreibweisen mit Leerzeichen, Unterstrich oder Halbgeviertstrich (Excel-Autokorrektur) liefern `null`; `:62` verwirft solche Zeilen ohne Zähler oder Log. Fehlende Zeilen sind ununterscheidbar von nie existierenden. Empfehlung: verankertes Muster plus Rückgabe der verworfenen Zeilennummern. `_cache` (`:10`) wird nie invalidiert.
-- **S2 — Keine Tests auf das erzeugte XML.** ✅ **TEILWEISE BEHOBEN 26.08.2026** — `tests/einvoice_builders.test.js` (4 Tests auf CII- und UBL-Elemente) und `tests/einvoice_pdf_embed.test.js` (4 Tests auf das erzeugte PDF). **Offen bleibt der wichtigere Teil**, den der Befund selbst als ersten Schritt nennt: ein Test, der `loadInvoiceData` gegen ein Fixture laufen lässt. Die neuen Tests bauen ihre Daten weiterhin von Hand — genau die Lücke, die N1 verdeckt hat. Ursprünglicher Wortlaut: 33 Testdateien, für die E-Rechnung nur `einvoice_validator.test.js`. Kein Test prüfte ein CII- oder UBL-Element. Der erste sinnvolle Test wäre kein XML-Test, sondern einer, der `loadInvoiceData` gegen ein Fixture laufen lässt und dessen Ergebnis in `validateEInvoiceData` steckt — das hätte N1 sofort gefunden.
+- **S2 — Keine Tests auf das erzeugte XML.** ✅ **BEHOBEN 26.08.2026**, in zwei Schritten.
+  **Zuerst** `tests/einvoice_builders.test.js` (4 Tests auf CII- und UBL-Elemente) und `tests/einvoice_pdf_embed.test.js` (4 Tests auf das erzeugte PDF).
+  **Dann der Test, den der Befund selbst als ersten sinnvollen nennt:** `tests/einvoice_data_to_validator.test.js` lässt `loadInvoiceData` gegen ein Fixture laufen und steckt **dessen** Ergebnis in `validateEInvoiceData`. Die zentrale Zusicherung ist, dass ein vollständig gepflegter Beleg **null** Fehler erzeugt; kommt einer, liest eine Regel ein Feld, das das Datenmodell nicht liefert.
+  **Gegenprobe gemacht:** mit künstlich wieder eingebautem N1 (`l.description` → `l.name`, `t.lineTotal` → `t.netTotal`) meldet der Test genau die Fehler aus dem Befund — BR-22 je Position und BR-12 einmal. Der Test hätte N1 also gefunden.
+  Schon beim Schreiben hat er zwei Dinge geliefert: die echten Spaltennamen (`COMPANY_NAME_1`, `POST_CODE` — nicht die naheliegenden) und den neuen Befund **N14**.
+  Ursprünglicher Wortlaut: 33 Testdateien, für die E-Rechnung nur `einvoice_validator.test.js`. Kein Test prüfte ein CII- oder UBL-Element. Der erste sinnvolle Test wäre kein XML-Test, sondern einer, der `loadInvoiceData` gegen ein Fixture laufen lässt und dessen Ergebnis in `validateEInvoiceData` steckt — das hätte N1 sofort gefunden.
 - **S3 — Geladene, nie geschriebene Felder.** `seller.creditorId` (BT-90), `seller.postOfficeBox`, `buyer.debitorNumber` (BT-46) werden aus der DB geholt und von keinem Builder ausgegeben. BT-46 wäre der naheliegende Kandidat, um N9 zu entschärfen.
 - **S4 — Falscher Regelcode.** ✅ **BEHOBEN 26.08.2026**. `validator:255` führte die Leitweg-ID unter `BR-DE-1`; das ist nach KoSIT die Regel zu den Zahlungsinformationen. Die Warnung läuft jetzt unter `BR-DE-15`, `BR-DE-1` ist an die IBAN-Prüfung aus N6 gegangen — vorher wäre derselbe Code doppelt vergeben gewesen, was erst beim Fix von N6 auffiel. Der Test prüft beides: BR-DE-15 kommt, BR-DE-1 kommt nicht. Die Codenummer selbst bleibt [unsicher].
 - **S5 — UBL erfindet einen Handelsnamen.** `ubl.js:241/259` und `:273/286` schreiben denselben String in `cac:PartyName` (BT-28/BT-45) und `RegistrationName` (BT-27/BT-44). Damit wird ein Handelsname behauptet, den niemand erfasst hat. CII gibt nur `ram:Name` aus und ist hier sauberer.
@@ -496,7 +523,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 
 **Stand 26.08.2026:**
 
-- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N12, N13, R7, R9, S4, S6, S7; N9 und S2 teilweise.
+- **E-Rechnung:** N1–N8 (außer dem offenen Teil von N5), N12, N13, N14, R7, R9, S2, S4, S6, S7; N9 teilweise.
 - **HOAI:** A1, A2, B1, B3, B5 (entschieden), B4 (geprüft: kein Fehler), B6 teilweise.
 
 | Befund | Geänderte Dateien | Abgesichert durch |
@@ -515,6 +542,8 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | N5 | `services_einvoice_cii.js`, `services_einvoice_ubl.js`, `tests/einvoice_builders.test.js` | 2 Tests, gegen den Stand vor dem Fix gegengeprüft |
 | N8 | `services_einvoice_validator.js`, `services_einvoice_cii.js`, Tests in beiden Dateien | 2 Validator- + 2 Builder-Tests |
 | R9 | `services_einvoice_data.js` | Nullable-Annahme über die Reporting-Views belegt |
+| S2 | `tests/einvoice_data_to_validator.test.js` | 12 Tests; gegen künstlich wieder eingebautes N1 gegengeprüft |
+| N14 | `services_einvoice_data.js`, dieselbe Testdatei | 5 Tests, gegen den Stand vor dem Fix gegengeprüft (4 rot) |
 | S6 | `services_einvoice_ubl.js` | neuer Wert byteweise identisch mit beiden alten |
 | S7 | `docs/EINVOICE_ANALYSIS.md` | Warnkopf, Inhalt unverändert |
 | A1 | `services/nachtraege.js` | Funktion isoliert ausgeführt, 4 Fälle |
@@ -524,7 +553,7 @@ Punktesystem-Invarianten aller 30 Systeme; Tafeldaten-Vollständigkeit und Monot
 | B4 | — | gegen § 44/§ 48 Abs. 3 und 4 geprüft, Daten korrekt |
 | B6 (Verteilungsrest) | `controllers/stammdaten.js`, `tests/stammdaten.surcharge_alloc.test.js` | 8 Tests, gegen den Stand vor dem Fix gegengeprüft (5 rot) |
 
-Volle Test-Suite nach allen Änderungen: **37 Suites, 537 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
+Volle Test-Suite nach allen Änderungen: **38 Suites, 549 Tests, alle grün.** (25.08.2026: 32 Suites, 499 Tests.) `npx tsc -b` grün.
 
 ## Was die zweite Runde am Buchen ändert
 
@@ -540,7 +569,7 @@ In allen drei Fällen hätte der Empfänger die Rechnung abgewiesen — das Gate
 
 **Vor dem Ausrollen prüfenswert:** ob bestehende Mandanten diese Stammdaten gepflegt haben. Ein Mandant ohne IBAN merkt es sonst erst bei der nächsten Buchung.
 
-**Noch offen aus diesem Block:** ein Test, der `loadInvoiceData` gegen `validateEInvoiceData` laufen lässt (S2). Mit jeder neuen Validator-Regel wächst dieser Punkt: die zweite Runde prüft sechs weitere Felder gegen ein handgebautes Fixture. Die Feldnamen wurden für N6/N7/N9 einzeln von Hand gegen `services_einvoice_data.js` gegengeprüft — das ersetzt keinen Test, es wiederholt nur die Sorgfalt, die N1 einmal gefehlt hat. Die jetzigen Tests prüfen den Validator gegen ein handgebautes Fixture — dass Fixture und echtes Datenmodell übereinstimmen, prüft weiterhin niemand automatisch. Genau diese Lücke hat N1 so lange verdeckt.
+**Erledigt am 26.08.2026:** der Test, der `loadInvoiceData` gegen `validateEInvoiceData` laufen lässt (S2). Er hat sich sofort bezahlt gemacht — der neue Befund N14 stammt von ihm, und er hätte N1 nachweislich gefunden. Die jetzigen Tests prüfen den Validator gegen ein handgebautes Fixture — dass Fixture und echtes Datenmodell übereinstimmen, prüft weiterhin niemand automatisch. Genau diese Lücke hat N1 so lange verdeckt.
 
 **A1 · `s3Cumul`** — behoben am 25.08.2026 in `backend/services/nachtraege.js`. Die fehlende Zeile wurde eins zu eins aus `services/angebote.js:21` übernommen:
 
