@@ -63,8 +63,8 @@ meine Nachmessung — sie ist die vergleichbare.
 | **Zeilenhöhen /projekte mobil** | 220–250 px, schwankend | **62 px, konstant** | **gelöst ✓** |
 | Kante am Tabellenüberlauf | keine | `useScrollEdges` + `data-more-right` in 3 Listen | ✓ |
 | `--space-*`-Nutzung | 64 | **77** | +20 % ✓ |
-| `aria-sort` (echte Verwendungen) | 3 | **4** | +1 |
-| `SortTh`-Kopien | 5 | **4** | −1 |
+| `aria-sort` (Rohtreffer) | 3 | **4** | +1 |
+| `SortTh`-Kopien (korrigiert gezählt) | 7 | **6** | −1 |
 | Unicode statt Lucide | 60 in 12 Dateien | **58 in 10 Dateien** | −3 % |
 | `onClick` auf `div`/`tr`/`span` | 25 | **10** | −60 % ✓ |
 | Inline-Styles | 2.224 | **2.225** | **+1 — steht** |
@@ -99,7 +99,7 @@ Klassen geprüft."*
   nicht. Was vorher ein gemeinsamer Befund war, ist jetzt eine Spaltung — und die
   Regressionsprüfung deckt nur die migrierte Hälfte ab.
 
-**Zwei Korrekturen am Messprotokoll** (damit der nächste Lauf nicht darauf hereinfällt):
+**Drei Korrekturen am Messprotokoll** (damit der nächste Lauf nicht darauf hereinfällt):
 
 1. Die Unicode-Zeile aus dem Aufgabentext liefert ohne UTF-8-Locale **30.184** statt 58 —
    `grep -E` vergleicht dann byteweise und trifft Teilbytes beliebiger Mehrbyte-Zeichen.
@@ -109,6 +109,14 @@ Klassen geprüft."*
    eigenen, versprechensbasierten `confirm({…})`. Die Zahl allein liest sich als
    Verschlechterung (6 → 11) und ist in Wahrheit die vollständige Lösung. Der Befehl
    muss auf `window\.confirm\(` verengt werden.
+3. **Die Kopien-Zeile hat zwei Jahre lang zu wenig gezählt.** Das Muster
+   `"function $c(\|const $c = "` verlangt eine öffnende Klammer direkt hinter dem Namen
+   und übersieht damit jede **generische** Deklaration —
+   `function SortTh<K extends string>(…)`. Genau so sind die Kopien in
+   `DashboardPage.tsx:141` und `AdressenPage.tsx:80` geschrieben. Korrekt gezählt mit
+   `grep -rlE "(function|const) $c\b"` sind es **6** lokale `SortTh`, nicht 4 — und am
+   Vormonats-Commit **7**, nicht 5. Die Richtung des Deltas stimmte, die Höhe nicht.
+   *(Gefunden hat das die Codex-Prüfung an diesem PR; die Kennzahl ist hier korrigiert.)*
 
 ---
 
@@ -319,21 +327,37 @@ Vormonats (Wächter erweitern) ist nicht umgesetzt.
 | Inline-Styles | 2.224 | 2.225 | nein |
 | Hex in TSX | 224 | 224 | nein |
 | `rgba(` in TSX | — | 71 | nein |
-| Schrift unter dem eigenen Minimum | 8 CSS-Regeln + 14 inline | **8 CSS-Regeln (10 px ×7, 9 px ×1) + 11 inline (10 px)** | nein |
+| Schrift unter dem eigenen Minimum | 8 CSS-Regeln + 14 inline | **8 CSS-Regeln (10 px ×7, 9 px ×1) + 12 inline (10 px ×10, 9 px ×1, 8 px ×1)** | nein |
 | Rohe px in `globals.css` | 1.898 | **1.936** | nein |
 | `--space-*`-Nutzung | 64 | **77** | nein |
 
 Die Schriftgrößen unter dem eigenen Minimum stehen namentlich in
-`globals.css:1018, 1242, 2231, 2471, 2832, 2984, 3978, 4069` (`2832` ist mit **9 px** der
-härteste Fall) sowie inline in `RollenSection.tsx:150/155`, `Buchungen.tsx:638/643` und
-sieben Stellen in `MitarbeiterPage.tsx`. CLAUDE.md setzt 13 px für Fließtext und 11 px für
-Meta.
+`globals.css:1018, 1242, 2231, 2471, 2832, 2984, 3978, 4069` sowie inline in
+`RollenSection.tsx:150/155`, `Buchungen.tsx:638/643` und sieben Stellen in
+`MitarbeiterPage.tsx`. CLAUDE.md setzt 13 px für Fließtext und 11 px für Meta.
+
+Die beiden härtesten Fälle liegen **unter** 10 px und damit weiter unter der eigenen
+Grenze, als die Sammelzahl vermuten lässt:
+
+| Ort | Größe | CLAUDE.md fordert |
+|---|---|---|
+| `DokumentvorlagenSection.tsx:59` | **8 px** | 11 px (Meta) |
+| `MitarbeiterPage.tsx:2135` | **9 px** | 11 px (Meta) |
+| `globals.css:2832` | **9 px** | 11 px (Meta) |
 
 Zwei Reste der Zentralisierung, beide mit Zahl:
 
-- **`SortTh` liegt noch 4× lokal**: `HonorarWizard.tsx`, `EinzelprojektTab.tsx`,
-  `ProjektlisteTab.tsx`, `MahnungenListe.tsx` (Vormonat: 5). `aria-sort` steht damit an
-  **2 von 88 Tabellen** (`components/ui/SortTh.tsx:39`, `DashboardPage.tsx:151`).
+- **`SortTh` liegt noch 6× lokal** (Vormonat: 7): `HonorarWizard.tsx`,
+  `EinzelprojektTab.tsx`, `ProjektlisteTab.tsx`, `MahnungenListe.tsx:158`,
+  `DashboardPage.tsx:141`, `AdressenPage.tsx:80`. Nur 4 Dateien beziehen die gemeinsame
+  Komponente.
+  Die Folge ist schärfer als eine Duplikat-Zählung: **`tabIndex` und `onKeyDown` stehen
+  ausschließlich in `components/ui/SortTh.tsx:39–46`**. In allen sechs Kopien ist die
+  Kopfzelle ein `<th>` mit `onClick` und ohne Tabstopp — **Sortieren ist dort reine
+  Mausfunktion**. `aria-sort` erreicht 2 von 7 Umsetzungen; eine davon
+  (`DashboardPage.tsx:151`) meldet Screenreadern eine Sortierrichtung, die per Tastatur
+  gar nicht änderbar ist. Die Adressliste (`AdressenPage.tsx:80`) hat weder das eine
+  noch das andere.
 - **Das Lupen-Icon des Suchfelds ist weiterhin nicht theme-fähig**: `globals.css:1543`
   und `1551` betten das SVG als Data-URI mit fest kodiertem `stroke='%236b7280'` bzw.
   `%23909090` ein. In sechs Themes bleibt die Lupe grau. Vorschlag 7 des Vormonats,
@@ -364,7 +388,8 @@ Offen bleibt, was pro Feld und pro Tabelle einzeln anzufassen ist:
 | `<label>` ohne `htmlFor` | 53 von 426 verknüpft (**88 % offen**) | 07.08. |
 | `title=` als einzige Erklärung | **315** (24.08.: 311, 07.08.: 293) | wächst |
 | `<caption>` in Tabellen | 0 von 88 | 07.08. |
-| `aria-sort` | 4 Treffer, davon 2 echte Verwendungen bei 88 Tabellen | 24.08. |
+| `aria-sort` | 4 Rohtreffer, davon 2 echte Umsetzungen bei 7 Sortierkopf-Varianten | 24.08. |
+| Sortieren per Tastatur | **1 von 7** Umsetzungen (`components/ui/SortTh.tsx`); 6 Kopien ohne `tabIndex`/`onKeyDown` | neu gemessen |
 
 **Geprüft und entwarnt:** In der Rechnungsliste messen auf dem Handy zwei Zeilenknöpfe
 („Details zu …", „PDF zu …") **0×0 px** — das sieht nach fokussierbaren Geisterzielen aus.
@@ -410,7 +435,7 @@ Punkte 1, 3 und 4 sind Fehlerkorrekturen, keine Gestaltungsvorschläge.
 | 9 | **`useTabParam`** für die sieben Reiterseiten | 14 Einstellungsreiter werden verlinkbar; drei Mechanismen werden einer |
 | 10 | **Optimistische Updates** (`useOptimisticPatch`) für Inline-Edit, Statuswechsel, Häkchen | 0 von 241 Mutationen aktualisieren lokal; jede wartet auf Server + Refetch |
 | 11 | **`Ctrl/Cmd+K`-Sprungfeld** über die fünf Objektarten und die Einstellungen | Kürzt den häufigsten Weg im Produkt von vier Schritten auf einen |
-| 12 | **`SortTh`: die 4 Kopien migrieren** | `aria-sort` und Tastaturbedienung für alle Tabellen statt für zwei |
+| 12 | **`SortTh`: die 6 Kopien migrieren** — darunter `AdressenPage.tsx:80` und `DashboardPage.tsx:141` | Sortieren ist heute in 6 von 7 Umsetzungen reine Mausfunktion; die gemeinsame Komponente bringt `tabIndex`, `onKeyDown` und `aria-sort` mit |
 | 13 | **`FormField` in den 15 Dateien mit den meisten rohen Feldern** | 121 von 600 — danach lässt sich `'label'` aus `KNOWN_GAPS` in `axe.spec.ts` streichen |
 | 14 | **Zeilenziele auf dem Desktop auf 40–44 px** und Löschen hinter das ⋯-Menü | /projekte: 5 von 5 Zielen unter der eigenen Regel, das Hauptziel 15 px hoch |
 
@@ -476,7 +501,8 @@ grep -ro 'style={{'            src --include='*.tsx' | wc -l        # 2225
 grep -ro 'htmlFor'             src --include='*.tsx' | wc -l        # 53
 grep -ro '<label'              src --include='*.tsx' | wc -l        # 426
 grep -ro 'aria-live'           src --include='*.tsx' | wc -l        # 3 (2 echte Regionen)
-grep -ro 'aria-sort'           src --include='*.tsx' | wc -l        # 4 (2 echte Verwendungen)
+grep -ro 'aria-sort'           src --include='*.tsx' | wc -l        # 4 Rohtreffer
+                                                                    # (2 echte von 7 Sortierkoepfen)
 grep -ro 'title='              src --include='*.tsx' | wc -l        # 315
 grep -ro 'onMutate\|setQueryData'  src --include='*.tsx' | wc -l    # 0
 grep -ro 'invalidateQueries'       src --include='*.tsx' | wc -l    # 241
@@ -498,15 +524,27 @@ grep -rlE '[✕✓✔✖▶⏭⏹✎🗑📋⚠★]' src --include='*.tsx' | whi
 # Schrift unter dem eigenen Minimum
 grep -nE 'font-size:\s*([0-9]|10)px' src/styles/globals.css   # 8 Regeln: 1018 1242 2231
                                                               # 2471 2832(9px) 2984 3978 4069
-grep -rnE 'fontSize:\s*(10|9|8)\b'   src --include='*.tsx'    # 11 Stellen
+# -o dazu, sonst ist der Wert in langen Zeilen abgeschnitten und man zaehlt blind:
+grep -rnoE 'fontSize:\s*(10|9|8)\b'  src --include='*.tsx'    # 12 Stellen
+# 10px x10 · MitarbeiterPage:2135 = 9px · DokumentvorlagenSection:59 = 8px
 
 # Kopierte Bausteine statt gemeinsamer Komponenten
+# ACHTUNG: das frueher hier stehende Muster "function $c(\|const $c = " verlangt eine
+# Klammer direkt hinter dem Namen und uebersieht jede generische Deklaration
+# (`function SortTh<K extends string>(…)`) — es zaehlte 4 statt 6. \b statt "(".
 for c in SortTh FilterChip RowMenu StepIndicator FormField; do
   echo "$c zentral: $(grep -rl "components/ui/$c" src --include='*.tsx' | wc -l)  \
-lokal: $(grep -rln "function $c(\|const $c = " src --include='*.tsx' | grep -v "ui/$c" | wc -l)"
+lokal: $(grep -rlE "(function|const) $c\b" src --include='*.tsx' | grep -v "ui/$c" | wc -l)"
 done
-# SortTh zentral 4 / lokal 4  ·  FilterChip 11/0  ·  RowMenu 3/0
+# SortTh zentral 4 / lokal 6  ·  FilterChip 11/0  ·  RowMenu 3/0
 # StepIndicator 5/0  ·  FormField 15/0   (121 <FormField> gegen 600 rohe Felder)
+# SortTh-Kopien: HonorarWizard · EinzelprojektTab · ProjektlisteTab ·
+#                MahnungenListe:158 · DashboardPage:141 · AdressenPage:80
+# Am Vormonats-Commit 451d79e mit demselben Muster: 7 Kopien.
+
+# Tastaturbedienung der Sortierkoepfe — nur die gemeinsame Komponente hat sie
+grep -rn 'tabIndex\|onKeyDown' src/components/ui/SortTh.tsx | wc -l   # 2
+# in allen 6 Kopien: 0
 
 npm run check:design
 # Design-System in Ordnung — 92 Tokens, 7 Themes, 638 Klassen geprueft.  (3 Pruefungen)
