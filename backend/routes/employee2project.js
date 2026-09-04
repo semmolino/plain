@@ -1,8 +1,30 @@
 "use strict";
 const express = require("express");
+const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
   const router = express.Router();
+
+  // Wer das Projektteam aendert, aendert das Projekt -> projects.edit.
+  //
+  // SP_RATE ist davon getrennt: der Stundensatz fliesst in Kostenrechnung und
+  // Nachkalkulation, und der Rechtekatalog fuehrt ihn nicht ohne Grund als
+  // eigenes Paar (projects.hourly_rates.view/.edit). Ein Projektleiter darf
+  // sein Team zusammenstellen, ohne deshalb Saetze setzen zu duerfen.
+  //
+  // Vor dieser Aenderung trug KEINER der drei mutierenden Endpunkte eine
+  // Pruefung — die Datei importierte requirePermission nicht einmal. Jeder
+  // angemeldete Mitarbeiter konnte sich jedem Projekt des Mandanten zuordnen
+  // und Saetze setzen (Sicherheitsaudit 2026-09-03, H2).
+  const TEAM_GUARD = requirePermission("projects.edit");
+
+  /** 403, wenn die Nutzlast einen Stundensatz setzt und das Recht dafuer fehlt. */
+  function satzGuard(req, res, next) {
+    const b = req.body || {};
+    if (b.sp_rate === undefined) return next();
+    if (req.hasPermission("projects.hourly_rates.edit")) return next();
+    return res.status(403).json({ error: "Fehlende Berechtigung: projects.hourly_rates.edit" });
+  }
 
   // GET /preset?employee_id=&project_id=
   router.get("/preset", async (req, res) => {
@@ -16,6 +38,10 @@ module.exports = (supabase) => {
       .select("ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
       .eq("EMPLOYEE_ID", employeeId)
       .eq("PROJECT_ID", projectId)
+      // Als einziger Endpunkt dieser Datei fehlte hier der Mandantenfilter.
+      // RLS faengt es ab, aber die zweite Linie gehoert dazu — sonst haengt
+      // die Trennung an einer Umgebungsvariablen.
+      .eq("TENANT_ID", req.tenantId)
       .limit(1);
 
     if (error) return res.status(500).json({ error: error.message });
@@ -105,7 +131,7 @@ module.exports = (supabase) => {
   });
 
   // POST /project/:projectId — add employee to project
-  router.post("/project/:projectId", async (req, res) => {
+  router.post("/project/:projectId", TEAM_GUARD, satzGuard, async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!projectId) return res.status(400).json({ error: "projectId fehlt" });
 
@@ -131,7 +157,7 @@ module.exports = (supabase) => {
   });
 
   // PATCH /:id — update role / rate
-  router.patch("/:id", async (req, res) => {
+  router.patch("/:id", TEAM_GUARD, satzGuard, async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: "ID fehlt" });
 
@@ -156,7 +182,7 @@ module.exports = (supabase) => {
   });
 
   // DELETE /:id — remove employee from project
-  router.delete("/:id", async (req, res) => {
+  router.delete("/:id", TEAM_GUARD, async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: "ID fehlt" });
 

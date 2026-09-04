@@ -3541,19 +3541,25 @@ function LeistungsstandReminderBlock() {
 
         <Message text={msg?.text ?? null} type={msg?.type} />
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-          <button className="btn-primary"
-            disabled={saveMut.isPending || isLoading}
-            onClick={() => { setMsg(null); saveMut.mutate() }}>
-            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
-          </button>
-          <button className="btn-secondary"
-            disabled={runMut.isPending || !enabled || !scheduleData?.data}
-            onClick={() => runMut.mutate()}
-            title="Erinnerung sofort ausloesen, unabhaengig vom Zeitplan">
-            {runMut.isPending ? 'Läuft …' : 'Jetzt ausführen'}
-          </button>
-        </div>
+        {/* Lesen bleibt fuer alle offen, Aendern und Ausloesen nicht: ein
+            umgestellter Zeitplan schaltet Erinnerungen still ab, und "Jetzt
+            ausfuehren" verschickt echte E-Mails. Das Backend gatet dieselben
+            beiden Aktionen (Sicherheitsaudit 2026-09-03, H3). */}
+        <Can permission="settings.notifications.edit">
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+            <button className="btn-primary"
+              disabled={saveMut.isPending || isLoading}
+              onClick={() => { setMsg(null); saveMut.mutate() }}>
+              {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+            </button>
+            <button className="btn-secondary"
+              disabled={runMut.isPending || !enabled || !scheduleData?.data}
+              onClick={() => runMut.mutate()}
+              title="Erinnerung sofort ausloesen, unabhaengig vom Zeitplan">
+              {runMut.isPending ? 'Läuft …' : 'Jetzt ausführen'}
+            </button>
+          </div>
+        </Can>
       </div>
     </div>
   )
@@ -3661,19 +3667,22 @@ function HoursBookingReminderBlock() {
 
       <Message text={msg?.text ?? null} type={msg?.type} />
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button className="btn-primary"
-          disabled={saveMut.isPending || isLoading}
-          onClick={() => { setMsg(null); saveMut.mutate() }}>
-          {saveMut.isPending ? 'Speichert …' : 'Speichern'}
-        </button>
-        <button className="btn-secondary"
-          disabled={runMut.isPending || !enabled || !scheduleData?.data}
-          onClick={() => runMut.mutate()}
-          title="Erinnerung sofort ausloesen, unabhaengig von der Uhrzeit">
-          {runMut.isPending ? 'Läuft …' : 'Jetzt ausführen'}
-        </button>
-      </div>
+      {/* Siehe oben: Schreiben und Ausloesen sind gegated, Lesen nicht. */}
+      <Can permission="settings.notifications.edit">
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button className="btn-primary"
+            disabled={saveMut.isPending || isLoading}
+            onClick={() => { setMsg(null); saveMut.mutate() }}>
+            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+          </button>
+          <button className="btn-secondary"
+            disabled={runMut.isPending || !enabled || !scheduleData?.data}
+            onClick={() => runMut.mutate()}
+            title="Erinnerung sofort ausloesen, unabhaengig von der Uhrzeit">
+            {runMut.isPending ? 'Läuft …' : 'Jetzt ausführen'}
+          </button>
+        </div>
+      </Can>
     </div>
   )
 }

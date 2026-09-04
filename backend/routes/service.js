@@ -6,6 +6,7 @@ const { requirePermission, requireAnyPermission } = require("../middleware/permi
 const { sendMail } = require("../services/emailService");
 const { stripImageMetadata } = require("../services/imageStrip");
 const objectStorage = require("../services/objectStorage");
+const { sendeDateiSicher } = require("../services/fileResponse");
 
 // ── Routen: Service-Bereich (Phase 0 — Fundament) ─────────────────────────────
 // Liefert das Zugangs-Gate (Haftungs-/Nutzungsbestätigung) und die Verwaltung
@@ -659,9 +660,7 @@ module.exports = (supabase) => {
       if (!att || att.TENANT_ID !== req.tenantId) return res.status(404).json({ error: "Nicht gefunden" });
       const obj = await objectStorage.getStream(att.STORAGE_KEY);
       if (!obj) return res.status(404).json({ error: "Datei fehlt" });
-      res.setHeader("Content-Type", att.MIME_TYPE || "application/octet-stream");
-      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(att.FILENAME || "anhang")}"`);
-      obj.stream.pipe(res);
+      sendeDateiSicher(res, obj.stream, att.MIME_TYPE, att.FILENAME);
     });
 
     // DELETE (nur Eigentümer)

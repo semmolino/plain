@@ -172,7 +172,9 @@ module.exports = (supabase) => {
   });
 
   // POST /preview: rendert ein Template lokal (ohne Counter zu verbrauchen).
-  router.post("/templates/preview", async (req, res) => {
+  // Nur eine Vorschau (kein Counter-Verbrauch, kein Schreibvorgang), aber sie
+  // gehoert zur Nummernkreis-Konfiguration wie die beiden Endpunkte darueber.
+  router.post("/templates/preview", requirePermission("settings.numbers.edit"), async (req, res) => {
     try {
       const { template, counter } = req.body || {};
       const v = tmplSvc.validateTemplate(String(template || ""));

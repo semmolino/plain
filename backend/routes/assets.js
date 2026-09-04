@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const multer = require("multer");
 const { checkStorageLimit } = require("../middleware/limits");
 const objectStorage = require("../services/objectStorage");
+const { sendeDateiSicher } = require("../services/fileResponse");
 
 function isTableMissingErr(err, tableName) {
   const msg = String(err?.message || "").toLowerCase();
@@ -55,9 +56,48 @@ module.exports = (supabase) => {
     },
   });
 
+  // ── Wer darf was hochladen? ────────────────────────────────────────────────
+  //
+  // Ein pauschales Gate ginge hier nicht: das Profilfoto ist bewusst
+  // Selbstbedienung (ProfilePage), waehrend Logo, Unterschrift und
+  // Login-Hintergrund zur Firmenkonfiguration gehoeren. Vor dieser Aenderung
+  // trug der Endpunkt gar keine Pruefung — jeder angemeldete Mitarbeiter
+  // konnte beliebige Dateien ablegen (Sicherheitsaudit 2026-09-03).
+  //
+  // Die Zuordnung nutzt ausschliesslich bestehende Rechte aus Migration 0062;
+  // eine eigene Upload-Permission waere ein zweiter Schalter fuer dieselbe
+  // Entscheidung. Die fuenf Arten entsprechen den Aufrufstellen im Frontend.
+  const UPLOAD_RECHT = {
+    AVATAR:             null,                               // Selbstbedienung: eigenes Profilfoto
+    LOGO:               "settings.company.edit",
+    SIGNATURE:          "settings.company.edit",
+    TENANT_HERO:        "settings.company.edit",            // Login-Branding
+    INVOICE_ATTACHMENT: "invoices.edit",
+  };
+
+  /**
+   * Fail-closed: eine unbekannte Art verlangt das Konfigurationsrecht. Wer
+   * eine neue Upload-Art ergaenzt, traegt sie oben ein — bis dahin ist sie
+   * eingeschraenkt statt offen. Das ist die Richtung, in die ein Versehen
+   * hier fallen soll.
+   */
+  function uploadGuard(req, res, next) {
+    const art = String(req.body?.asset_type || "OTHER").toUpperCase().trim();
+    const recht = Object.prototype.hasOwnProperty.call(UPLOAD_RECHT, art)
+      ? UPLOAD_RECHT[art]
+      : "settings.company.edit";
+    if (recht === null) return next();
+    if (req.hasPermission(recht)) return next();
+    return res.status(403).json({ error: `Fehlende Berechtigung: ${recht}` });
+  }
+
   // POST /api/assets/upload
   // multipart/form-data: file, asset_type
-  router.post("/upload", upload.single("file"), async (req, res) => {
+  // upload.single() MUSS vor uploadGuard laufen: asset_type steckt im
+  // multipart-Body und ist vorher schlicht nicht lesbar. Die Datei liegt dann
+  // im Arbeitsspeicher (memoryStorage), nicht auf der Platte — ein abgelehnter
+  // Upload hinterlaesst also nichts.
+  router.post("/upload", upload.single("file"), uploadGuard, async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: "file is required" });
 
@@ -143,9 +183,7 @@ module.exports = (supabase) => {
       const obj = await objectStorage.getStream(data.STORAGE_KEY);
       if (!obj) return res.status(404).json({ error: "file missing on disk" });
 
-      res.setHeader("Content-Type", data.MIME_TYPE || "application/octet-stream");
-      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(data.FILE_NAME || "asset")}"`);
-      obj.stream.pipe(res);
+      sendeDateiSicher(res, obj.stream, data.MIME_TYPE, data.FILE_NAME);
     } catch (e) {
       res.status(500).json({ error: String(e?.message || e) });
     }
