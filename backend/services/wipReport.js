@@ -31,8 +31,10 @@ const { loadParentSurchargesByProject } = require("./reportSurcharges");
 
 const METHODS = ["hk", "erloes"];
 
-const SETTING_COST_FACTOR = "wip_cost_factor_percent";
-const SETTING_METHOD      = "wip_method_default";
+const SETTING_COST_FACTOR     = "wip_cost_factor_percent";
+const SETTING_METHOD          = "wip_method_default";
+const SETTING_TAX_COST_FACTOR = "wip_tax_cost_factor_percent";
+const SETTING_TARGET_RATIO    = "wip_target_cost_ratio_percent";
 
 const num = (v) => {
   const n = Number(v);
@@ -51,6 +53,15 @@ const FLAG_NO_PERFORMANCE = "no_performance"; // Kosten gebucht, kein Leistungss
 const FLAG_PREPAYMENT     = "prepayment";     // mehr abgerechnet als geleistet
 const FLAG_LOSS_RISK      = "loss_risk";      // Kosten übersteigen den erzielbaren Erlös
 const FLAG_NO_SNAPSHOT    = "no_snapshot";    // kein Leistungsstand-Snapshot ≤ Stichtag
+const FLAG_PROGRESS_GAP   = "progress_gap";   // gepflegter und rechnerischer Leistungsstand klaffen
+
+/**
+ * Ab wie vielen Prozentpunkten Abstand zwischen gepflegtem und rechnerischem
+ * Leistungsstand die Zeile markiert wird. Bewusst eine Konstante und keine
+ * Einstellung: der Wert entscheidet nichts, er lenkt nur den Blick, und ein
+ * weiterer Regler kostet mehr Erklärung als er einbringt.
+ */
+const PROGRESS_GAP_THRESHOLD_POINTS = 15;
 
 /**
  * Ermittelt aus den Basisgrößen eines Projekts die Abschlusswerte.
@@ -60,7 +71,12 @@ const FLAG_NO_SNAPSHOT    = "no_snapshot";    // kein Leistungsstand-Snapshot �
  * @param {number}  input.performance        L — Leistungswert
  * @param {number}  input.billed             R — kumuliert abgerechnet
  * @param {number}  input.cost               K — angefallene Kosten
- * @param {number} [input.costFactorPercent] f — Bewertungsfaktor in Prozent (Default 100)
+ * @param {number} [input.costFactorPercent]    f — Bewertungsfaktor in Prozent (Default 100)
+ * @param {number} [input.taxCostFactorPercent] Bewertungsfaktor der Steuerbilanz;
+ *                 fehlt er, entfällt der zweite Wertansatz
+ * @param {number} [input.performancePercent]   gepflegter Leistungsstand in Prozent
+ * @param {number} [input.targetCostRatioPercent] Zielkostenquote für die Gegenprobe;
+ *                 fehlt sie, entfällt der rechnerische Leistungsstand
  * @returns {object} Zeile mit allen Ergebnisgrößen und `flags`
  */
 function computeWipRow(input) {
@@ -88,10 +104,39 @@ function computeWipRow(input) {
   const lossRisk    = Math.max(0, costUnbilled - unbilled);
   const unrealized  = unbilled - wipHk;
 
+  // ── Zweiter Wertansatz für die Steuerbilanz ────────────────────────────────
+  // Nur der Kostenfaktor unterscheidet sich; die verlustfreie Bewertung gilt
+  // auch steuerlich (Teilwert, § 6 Abs. 1 Nr. 2 EStG). Was steuerlich fehlt,
+  // ist die Rückstellung für den Überhang (§ 5 Abs. 4a EStG) — die bildet
+  // dieser Report ohnehin nicht, er weist den Prüfbedarf nur aus.
+  const hasTaxFactor = input.taxCostFactorPercent != null && input.taxCostFactorPercent !== "";
+  const taxFactor    = hasTaxFactor ? num(input.taxCostFactorPercent) / 100 : null;
+  const costUnbilledTax = taxFactor == null ? null : K * (1 - billedRatio) * taxFactor;
+  const wipTax          = costUnbilledTax == null ? null : Math.min(costUnbilledTax, unbilled);
+
+  // ── Gegenprobe: rechnerischer Leistungsstand ───────────────────────────────
+  // Ohne Kostenplan im Datenmodell ist die erwartete Gesamtkostengröße eine
+  // Annahme: Auftragswert × Zielkostenquote. Das ist keine zweite
+  // Bewertungsgrundlage, sondern eine Plausibilitätsprüfung — sie zeigt, ob
+  // der gepflegte Leistungsstand zum Kostenverbrauch passt.
+  const hasTarget   = input.targetCostRatioPercent != null && input.targetCostRatioPercent !== "";
+  const targetRatio = hasTarget ? num(input.targetCostRatioPercent) / 100 : null;
+  const expectedCost = targetRatio != null && targetRatio > 0 ? B * targetRatio : null;
+  const progressCalc = expectedCost && expectedCost > 0 ? (100 * K) / expectedCost : null;
+
+  const performancePercent = input.performancePercent == null ? null : num(input.performancePercent);
+  // Positiv = mehr Kosten verbraucht, als Leistung gemeldet ist.
+  const progressGap = progressCalc != null && performancePercent != null
+    ? progressCalc - performancePercent
+    : null;
+
   const flags = [];
   if (L === 0 && K > 0)  flags.push(FLAG_NO_PERFORMANCE);
   if (prepayment > 0)    flags.push(FLAG_PREPAYMENT);
   if (lossRisk   > 0)    flags.push(FLAG_LOSS_RISK);
+  if (progressGap != null && Math.abs(progressGap) >= PROGRESS_GAP_THRESHOLD_POINTS) {
+    flags.push(FLAG_PROGRESS_GAP);
+  }
 
   return {
     ORDER_VALUE_NET:     round2(B),
@@ -106,6 +151,10 @@ function computeWipRow(input) {
     PREPAYMENT_NET:      round2(prepayment),
     LOSS_RISK_NET:       round2(lossRisk),
     UNREALIZED_GAIN_NET: round2(unrealized),
+    COST_UNBILLED_TAX_NET: costUnbilledTax == null ? null : round2(costUnbilledTax),
+    WIP_TAX_NET:           wipTax          == null ? null : round2(wipTax),
+    PROGRESS_CALC_PERCENT: progressCalc    == null ? null : round2(progressCalc),
+    PROGRESS_GAP_POINTS:   progressGap     == null ? null : round2(progressGap),
     flags,
   };
 }
@@ -131,10 +180,14 @@ function aggregateWip(rows) {
     prepayments:         sum("PREPAYMENT_NET"),
     lossRisk:            sum("LOSS_RISK_NET"),
     unrealizedGain:      sum("UNREALIZED_GAIN_NET"),
+    // Steuerbilanz nur summieren, wenn der zweite Faktor gepflegt ist —
+    // sonst waere 0 eine Aussage, die niemand getroffen hat.
+    wipTax:              (rows || []).some(r => r.WIP_TAX_NET != null) ? sum("WIP_TAX_NET") : null,
     noSnapshotCount:     countFlag(FLAG_NO_SNAPSHOT),
     noPerformanceCount:  countFlag(FLAG_NO_PERFORMANCE),
     prepaymentCount:     countFlag(FLAG_PREPAYMENT),
     lossRiskCount:       countFlag(FLAG_LOSS_RISK),
+    progressGapCount:    countFlag(FLAG_PROGRESS_GAP),
   };
 }
 
@@ -252,6 +305,22 @@ async function resolveCostFactor(supabase, tenantId, override) {
   return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 100;
 }
 
+/**
+ * Optionale Prozent-Einstellung. Anders als der Bewertungsfaktor hat sie
+ * keinen Standardwert: fehlt sie, bleibt die zugehoerige Spalte leer. Ein
+ * geratener Wert waere hier schlimmer als gar keiner — er saehe aus wie eine
+ * Angabe des Mandanten.
+ */
+async function resolveOptionalPercent(supabase, tenantId, key, override, { max = 100 } = {}) {
+  const raw = override != null && override !== ""
+    ? override
+    : await readSetting(supabase, tenantId, key);
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > max) return null;
+  return n;
+}
+
 async function resolveDefaultMethod(supabase, tenantId, override) {
   if (METHODS.includes(override)) return override;
   const raw = await readSetting(supabase, tenantId, SETTING_METHOD);
@@ -261,8 +330,10 @@ async function resolveDefaultMethod(supabase, tenantId, override) {
 /**
  * Eine Stichtagsauswertung: Zeilen + Summen.
  * `withDetails=false` liefert nur die Summen (für den Vergleichsstichtag).
+ *
+ * @param {object} valuation { costFactorPercent, taxCostFactorPercent, targetCostRatioPercent }
  */
-async function evaluateAsOf(supabase, tenantId, asOf, costFactorPercent, withDetails) {
+async function evaluateAsOf(supabase, tenantId, asOf, valuation, withDetails) {
   const { rows: baseRows, historic } = await loadBaseRows(supabase, tenantId, asOf);
 
   const projectIds = baseRows.map(r => r.PROJECT_ID).filter(Boolean);
@@ -283,7 +354,13 @@ async function evaluateAsOf(supabase, tenantId, asOf, costFactorPercent, withDet
     // und würden die Liste zumüllen (Vorlagen, Altbestand, noch nicht gestartet).
     if (!orderValue && !performance && !billed && !cost) continue;
 
-    const computed = computeWipRow({ orderValue, performance, billed, cost, costFactorPercent });
+    const computed = computeWipRow({
+      orderValue, performance, billed, cost,
+      performancePercent: r.LEISTUNGSSTAND_PERCENT,
+      costFactorPercent:      valuation.costFactorPercent,
+      taxCostFactorPercent:   valuation.taxCostFactorPercent,
+      targetCostRatioPercent: valuation.targetCostRatioPercent,
+    });
     const snapshotDate = snapshots.get(pid) || null;
     const flags = [...computed.flags];
     if (historic && !snapshotDate) flags.push(FLAG_NO_SNAPSHOT);
@@ -322,6 +399,8 @@ async function evaluateAsOf(supabase, tenantId, asOf, costFactorPercent, withDet
  * @param {string} [opts.compareTo]         Vergleichsstichtag (ISO) für die Bestandsveränderung
  * @param {number} [opts.costFactorPercent] Bewertungsfaktor, sonst Mandanteneinstellung
  * @param {string} [opts.method]            'hk' | 'erloes', sonst Mandanteneinstellung
+ * @param {number} [opts.taxCostFactorPercent]   zweiter Faktor für die Steuerbilanz (optional)
+ * @param {number} [opts.targetCostRatioPercent] Zielkostenquote für die Gegenprobe (optional)
  */
 async function buildWipReport(supabase, tenantId, opts = {}) {
   const asOf = isIsoDate(opts.asOf) ? opts.asOf : todayIso();
@@ -332,10 +411,18 @@ async function buildWipReport(supabase, tenantId, opts = {}) {
 
   const costFactorPercent = await resolveCostFactor(supabase, tenantId, opts.costFactorPercent);
   const method = await resolveDefaultMethod(supabase, tenantId, opts.method);
+  const taxCostFactorPercent = await resolveOptionalPercent(
+    supabase, tenantId, SETTING_TAX_COST_FACTOR, opts.taxCostFactorPercent);
+  // Die Zielkostenquote darf ueber 100 % liegen — ein Projekt, das mehr kosten
+  // soll als es einbringt, ist eine Fehlkalkulation, aber keine Fehleingabe.
+  const targetCostRatioPercent = await resolveOptionalPercent(
+    supabase, tenantId, SETTING_TARGET_RATIO, opts.targetCostRatioPercent, { max: 500 });
 
-  const current = await evaluateAsOf(supabase, tenantId, asOf, costFactorPercent, true);
+  const valuation = { costFactorPercent, taxCostFactorPercent, targetCostRatioPercent };
+
+  const current = await evaluateAsOf(supabase, tenantId, asOf, valuation, true);
   const previous = compareTo
-    ? await evaluateAsOf(supabase, tenantId, compareTo, costFactorPercent, false)
+    ? await evaluateAsOf(supabase, tenantId, compareTo, valuation, false)
     : null;
 
   // Vergleichswert je Projekt, damit die Tabelle die Veränderung zeigen kann.
@@ -355,6 +442,9 @@ async function buildWipReport(supabase, tenantId, opts = {}) {
     compareTo,
     method,
     costFactorPercent,
+    taxCostFactorPercent,
+    targetCostRatioPercent,
+    progressGapThreshold: PROGRESS_GAP_THRESHOLD_POINTS,
     historic: current.historic,
     rows: current.rows,
     totals: current.totals,
@@ -366,6 +456,7 @@ async function buildWipReport(supabase, tenantId, opts = {}) {
       noPerformanceCount:  current.totals.noPerformanceCount,
       prepaymentCount:     current.totals.prepaymentCount,
       lossRiskCount:       current.totals.lossRiskCount,
+      progressGapCount:    current.totals.progressGapCount,
     },
   };
 }
@@ -417,10 +508,12 @@ async function saveClosing(supabase, tenantId, opts = {}) {
     AS_OF_DATE:              report.asOf,
     METHOD:                  report.method,
     COST_FACTOR_PERCENT:     report.costFactorPercent,
+    TAX_COST_FACTOR_PERCENT: report.taxCostFactorPercent,
     COMPARE_TO_DATE:         report.compareTo,
     LABEL:                   opts.label ? String(opts.label).slice(0, 200) : null,
     TOTAL_WIP_HK:            report.totals.wipHk,
     TOTAL_WIP_REVENUE:       report.totals.wipRevenue,
+    TOTAL_WIP_TAX:           report.totals.wipTax,
     TOTAL_PREPAYMENTS:       report.totals.prepayments,
     TOTAL_LOSS_RISK:         report.totals.lossRisk,
     PROJECT_COUNT:           report.totals.projectCount,
@@ -428,6 +521,15 @@ async function saveClosing(supabase, tenantId, opts = {}) {
     CREATED_BY_EMPLOYEE_ID:  opts.employeeId ?? null,
     CREATED_BY_NAME:         createdByName,
   };
+
+  // Ohne gepflegten Steuerfaktor die Spalten gar nicht mitschicken: Migration
+  // 0138 wird von Hand eingespielt, und ein Mandant, der die Steuerbilanz nicht
+  // nutzt, soll nicht am Festschreiben scheitern, weil sie noch aussteht.
+  const withTax = report.taxCostFactorPercent != null;
+  if (!withTax) {
+    delete head.TAX_COST_FACTOR_PERCENT;
+    delete head.TOTAL_WIP_TAX;
+  }
 
   const { data: created, error: headErr } = await supabase
     .from("WIP_CLOSING").insert([head]).select("ID").single();
@@ -450,6 +552,8 @@ async function saveClosing(supabase, tenantId, opts = {}) {
     HOURS_TOTAL:          r.HOURS_TOTAL,
     UNBILLED_NET:         r.UNBILLED_NET,
     COST_UNBILLED_NET:    r.COST_UNBILLED_NET,
+    COST_UNBILLED_TAX_NET: r.COST_UNBILLED_TAX_NET,
+    WIP_TAX_NET:           r.WIP_TAX_NET,
     WIP_HK_NET:           r.WIP_HK_NET,
     WIP_REVENUE_NET:      r.WIP_REVENUE_NET,
     PREPAYMENT_NET:       r.PREPAYMENT_NET,
@@ -457,7 +561,11 @@ async function saveClosing(supabase, tenantId, opts = {}) {
     UNREALIZED_GAIN_NET:  r.UNREALIZED_GAIN_NET,
     SNAPSHOT_DATE:        r.SNAPSHOT_DATE,
     FLAGS:                (r.flags || []).join(",") || null,
-  }));
+  })).map(line => {
+    if (withTax) return line;
+    const { COST_UNBILLED_TAX_NET: _c, WIP_TAX_NET: _w, ...rest } = line;
+    return rest;
+  });
 
   if (lines.length > 0) {
     const { error: lineErr } = await supabase.from("WIP_CLOSING_LINE").insert(lines);
@@ -475,7 +583,7 @@ async function saveClosing(supabase, tenantId, opts = {}) {
 async function listClosings(supabase, tenantId) {
   const { data, error } = await supabase
     .from("WIP_CLOSING")
-    .select("ID, AS_OF_DATE, METHOD, COST_FACTOR_PERCENT, COMPARE_TO_DATE, LABEL, TOTAL_WIP_HK, TOTAL_WIP_REVENUE, TOTAL_PREPAYMENTS, TOTAL_LOSS_RISK, PROJECT_COUNT, MISSING_SNAPSHOT_COUNT, CREATED_BY_NAME, created_at")
+    .select("ID, AS_OF_DATE, METHOD, COST_FACTOR_PERCENT, TAX_COST_FACTOR_PERCENT, COMPARE_TO_DATE, LABEL, TOTAL_WIP_HK, TOTAL_WIP_REVENUE, TOTAL_WIP_TAX, TOTAL_PREPAYMENTS, TOTAL_LOSS_RISK, PROJECT_COUNT, MISSING_SNAPSHOT_COUNT, CREATED_BY_NAME, created_at")
     .eq("TENANT_ID", tenantId)
     .order("AS_OF_DATE", { ascending: false });
   if (error) throw { status: 500, message: error.message };
@@ -546,4 +654,6 @@ module.exports = {
   FLAG_PREPAYMENT,
   FLAG_LOSS_RISK,
   FLAG_NO_SNAPSHOT,
+  FLAG_PROGRESS_GAP,
+  PROGRESS_GAP_THRESHOLD_POINTS,
 };

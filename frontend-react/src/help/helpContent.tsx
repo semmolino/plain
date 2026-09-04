@@ -597,6 +597,46 @@ export const HELP = {
       </>
     ),
   },
+  'report.tfl.steuerbilanz': {
+    title: 'Wertansatz Steuerbilanz',
+    body: (
+      <>
+        Handels- und Steuerbilanz können bei den teilfertigen Leistungen
+        auseinanderfallen: die Wertuntergrenze der Herstellungskosten ist
+        steuerlich anders gezogen (R 6.3 EStR). Sobald in den Vorbelegungen ein
+        zweiter Kostenfaktor gepflegt ist, steht der steuerliche Wert als eigene
+        Spalte daneben — ohne Faktor bleibt die Spalte aus.
+        <br /><br />
+        Der ausgewiesene Drohverlust ist rein handelsrechtlich: steuerlich sind
+        Drohverlustrückstellungen nicht ansetzbar (§ 5 Abs. 4a EStG). Die
+        verlustfreie Bewertung selbst gilt in beiden Bilanzen.
+      </>
+    ),
+  },
+  'report.tfl.gegenprobe': {
+    title: 'Leistungsstand rechnerisch',
+    body: (
+      <>
+        Der gepflegte Leistungsstand ist eine Einschätzung — und genau da hakt
+        ein Prüfer nach. Die Gegenprobe misst denselben Fortschritt am
+        Kostenverbrauch: erwartete Gesamtkosten (Auftragswert × Zielkostenquote)
+        gegen die bisher gebuchten Kosten.
+        <br /><br />
+        <strong>Positive Abweichung</strong> heißt: mehr Kosten verbraucht, als
+        Leistung gemeldet ist — entweder ist der Leistungsstand zu vorsichtig
+        gepflegt, oder das Projekt läuft aus dem Ruder.
+        <strong> Negative Abweichung</strong> heißt: sehr effizient — oder der
+        Leistungsstand ist zu optimistisch. Letzteres bläht bei der Methode
+        „Leistungswert" den Aktivposten auf; beim HGB-Ansatz ist der Wert durch
+        die Kosten gedeckelt und deshalb robuster.
+        <br /><br />
+        Das ist ausdrücklich <strong>keine</strong> zweite Bewertungsgrundlage:
+        die Zielkostenquote unterstellt jedem Projekt dieselbe Marge. Sie lenkt
+        den Blick, sie ersetzt keine Prüfung. Ohne gepflegte Zielkostenquote in
+        den Vorbelegungen bleiben die Spalten aus.
+      </>
+    ),
+  },
   'report.tfl.anzahlungen': {
     title: 'Erhaltene Anzahlungen',
     body: (

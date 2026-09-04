@@ -87,6 +87,43 @@ Abwertung / Drohverlust  D    = max(0, K_u − U)
 Nicht realisierter Gewinn G   = U − TFL_HK               (nur Anzeige, PoC-Sicht)
 ```
 
+### 3.3a Zweiter Wertansatz und Gegenprobe (Nachtrag 2026-09-04)
+
+Beides ist **optional** und bleibt ohne gepflegte Einstellung ganz aus — eine
+leere Spalte erklärt sich nicht von selbst, und eine 0 wäre dort eine Aussage,
+die niemand getroffen hat.
+
+**Steuerbilanz.** Ein zweiter Kostenfaktor `f_tax`
+(`wip_tax_cost_factor_percent`) liefert `TFL_Steuer = min(K × (1−q) × f_tax, U)`.
+Die verlustfreie Bewertung gilt auch steuerlich (Teilwert, § 6 Abs. 1 Nr. 2
+EStG); was steuerlich fehlt, ist die Rückstellung für den Überhang (§ 5 Abs. 4a
+EStG) — die bildet der Report ohnehin nicht, er weist den Prüfbedarf aus.
+
+**Gegenprobe.** Der gepflegte Leistungsstand ist eine Einschätzung. Die
+Gegenprobe misst denselben Fortschritt am Kostenverbrauch:
+
+```
+erwartete Gesamtkosten   K_erw = B × Zielkostenquote
+Leistungsstand rechnerisch     = 100 × K / K_erw
+Abweichung (Punkte)            = rechnerisch − gepflegt
+```
+
+Ab 15 Punkten Abstand wird die Zeile markiert (Konstante, bewusst kein
+weiterer Regler). Positiv heißt: mehr Kosten verbraucht als Leistung gemeldet.
+Negativ heißt: sehr effizient — oder der Leistungsstand ist zu optimistisch;
+das bläht bei der Erlösmethode den Aktivposten auf, während der HGB-Wert durch
+die Kosten gedeckelt und deshalb robuster ist.
+
+Warum nur eine Näherung und kein echtes cost-to-cost: **im Datenmodell gibt es
+keine unabhängige Plangröße.** `PROJECT_STRUCTURE.COSTS` ist der Verbrauch,
+nicht ein Budget; `EMPLOYEE2PROJECT` kennt nur einen Stundensatz, kein
+Kontingent; und die vorhandene EAC-Prognose rechnet `Budget / CPI` mit
+`CPI = Leistungswert / Kosten`, leitet sich also aus dem Leistungsstand ab und
+ist als Gegenprobe zirkulär. Die Zielkostenquote unterstellt jedem Projekt
+dieselbe Marge — deshalb ist das eine Plausibilitätsprüfung und ausdrücklich
+keine zweite Bewertungsgrundlage. Ein echtes Kostenbudget je Projektelement
+bleibt als eigenes Vorhaben offen (siehe Abschnitt 10).
+
 `q` ist nach beiden Seiten begrenzt: über 1 wäre nichts mehr unfertig,
 unter 0 (Stornos überwiegen die Abrechnungen) stiege der Kostenansatz über die
 gebuchten Kosten hinaus.
@@ -195,6 +232,8 @@ die Aussage darüber, ob der Stichtagswert überhaupt belegt ist.
 |---|---|---|
 | `wip_cost_factor_percent` | `100` | Anteil der gebuchten Vollkosten als Herstellungskosten |
 | `wip_method_default` | `hk` | Vorbelegte Bewertungsmethode |
+| `wip_tax_cost_factor_percent` | leer = aus | Zweiter Kostenfaktor für den Wertansatz der Steuerbilanz |
+| `wip_target_cost_ratio_percent` | leer = aus | Zielkostenquote für die Gegenprobe |
 
 Gepflegt in Einstellungen → Vorbelegungen, jeweils mit `HelpHint`. Ein
 vorbelegter Statusfilter ist bewusst entfallen: die Statusauswahl passiert im
@@ -297,7 +336,18 @@ in `backend/tests/wipReport.test.js`.
 * Keine Buchungssätze, kein DATEV-Export — der Report liefert die Werte, die
   Buchung macht der Steuerberater.
 * Keine automatische Drohverlustrückstellung — nur der Hinweis auf den
-  Prüfbedarf.
+  Prüfbedarf. Handelsrechtlich; steuerlich ist sie gar nicht ansetzbar
+  (§ 5 Abs. 4a EStG).
+* Kein Umschalter zwischen Brutto- und Nettoausweis. Beides ist zulässig
+  (§ 266 Abs. 3 C 3 bzw. § 268 Abs. 5 S. 2 HGB), aber das ist ein Wahlrecht der
+  **Bilanz**, nicht des Reports: die beiden Größen stehen je Projekt getrennt
+  bereit, die Darstellung entscheidet der Bilanzierende. Eine saldierte Spalte
+  würde außerdem einladen, sie aufzusummieren — genau der § 246-Abs.-2-Fehler.
+* Keine Unterscheidung zwischen Abschlagsrechnung und Teilschlussrechnung nach
+  Teilabnahme. Auf den Wert wirkt beides identisch; unterschiedlich wäre nur
+  der Ausweis eines Überhangs, und den offenen Forderungsbestand liefert das
+  Rechnungsbuch. Der Report sagt deshalb ausdrücklich, dass „erhaltene
+  Anzahlung" den Überhang der Abrechnung über die Leistung meint.
 * Keine IFRS-PoC-Bilanzierung — der Leistungswert wird als Controlling-Sicht
   ausgewiesen, nicht als Bilanzansatz.
 * Keine Änderung an bestehenden Reports oder an der Leistungsstandpflege.
@@ -316,3 +366,19 @@ in `backend/tests/wipReport.test.js`.
   `0136_rbac_wip_report.sql`, `0137_wip_closing.sql`
 
 ---
+
+---
+
+## 10. Offen: echtes Kostenbudget
+
+Die Gegenprobe (3.3a) ist eine Näherung, weil eine Plangröße fehlt. Ein
+`COST_BUDGET` je Projektelement — gepflegt im Projekt, im Import mitgeführt und
+in den Snapshots fortgeschrieben — würde zwei Dinge auf einmal ermöglichen:
+
+* cost-to-cost als **wählbare Fortschrittsmethode** statt als Plausibilitätsprüfung
+* Budget-Warnungen gegen ein echtes Kostenbudget. Heute warnen sie bei Kosten
+  gegen **Honorar**, also erst, wenn der Deckungsbeitrag bereits bei null steht —
+  ein Margenalarm, kein Budgetalarm.
+
+Das gehört ins Projekt und nicht in den Report und ist deshalb bewusst nicht
+Teil dieses Vorhabens (Entscheidung 2026-09-04).

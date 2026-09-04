@@ -1080,6 +1080,8 @@ function VorbelegungenSection() {
   const [bwNotifyBooker, setBwNotifyBooker] = useState(true)
   const [wipCostFactor, setWipCostFactor] = useState('')
   const [wipMethod,     setWipMethod]     = useState<'hk' | 'erloes'>('hk')
+  const [wipTaxFactor,  setWipTaxFactor]  = useState('')
+  const [wipTargetRatio, setWipTargetRatio] = useState('')
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -1124,6 +1126,9 @@ function VorbelegungenSection() {
     // Leer lassen, wenn nicht gesetzt — der Platzhalter zeigt den Default 100 %.
     setWipCostFactor(defData.data.wip_cost_factor_percent ?? '')
     setWipMethod(defData.data.wip_method_default === 'erloes' ? 'erloes' : 'hk')
+    // Beide ohne Standardwert: ungepflegt heisst „Spalte aus", nicht „0 %".
+    setWipTaxFactor(defData.data.wip_tax_cost_factor_percent ?? '')
+    setWipTargetRatio(defData.data.wip_target_cost_ratio_percent ?? '')
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -1154,6 +1159,8 @@ function VorbelegungenSection() {
       // Teilfertige Leistungen: nur speichern, was vom Default abweicht.
       await putDefault('wip_cost_factor_percent', wipCostFactor.trim() || null)
       await putDefault('wip_method_default',      wipMethod === 'erloes' ? 'erloes' : null)
+      await putDefault('wip_tax_cost_factor_percent',   wipTaxFactor.trim()   || null)
+      await putDefault('wip_target_cost_ratio_percent', wipTargetRatio.trim() || null)
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['defaults'] })
@@ -1431,6 +1438,42 @@ function VorbelegungenSection() {
                 Kosten entstehen über den Vollkostensatz und enthalten die Gemeinkostenumlage;
                 Vertriebskosten sind nach § 255 Abs. 2 S. 4 HGB nicht aktivierungsfähig. Den
                 Prozentsatz gibt üblicherweise der Steuerberater vor. Ohne Angabe: 100 %.
+              </p>
+            </div>
+            <div className="form-group">
+              <label htmlFor="def-wip-tax-factor">
+                Bewertungsfaktor Steuerbilanz (%)
+                <HelpHint id="report.tfl.steuerbilanz" />
+              </label>
+              <input
+                id="def-wip-tax-factor" type="number" min={0} max={100} step={1}
+                value={wipTaxFactor}
+                onChange={e => setWipTaxFactor(e.target.value)}
+                placeholder="leer = kein zweiter Wertansatz"
+              />
+              <p className="admin-section-hint">
+                Nur ausfüllen, wenn Handels- und Steuerbilanz unterschiedlich bewerten. Dann
+                zeigt der Report beide Werte nebeneinander. Leer lassen heißt: kein zweiter
+                Wertansatz — nicht „0 %".
+              </p>
+            </div>
+            <div className="form-group">
+              <label htmlFor="def-wip-target-ratio">
+                Zielkostenquote für die Gegenprobe (%)
+                <HelpHint id="report.tfl.gegenprobe" />
+              </label>
+              <input
+                id="def-wip-target-ratio" type="number" min={0} max={500} step={1}
+                value={wipTargetRatio}
+                onChange={e => setWipTargetRatio(e.target.value)}
+                placeholder="z. B. 65"
+              />
+              <p className="admin-section-hint">
+                Mit welchem Kostenanteil am Honorar ein Projekt kalkuliert ist. Der Report
+                rechnet daraus einen zweiten Leistungsstand aus dem Kostenverbrauch und
+                markiert Projekte, bei denen beide Werte auseinanderlaufen. Reine
+                Plausibilitätsprüfung, keine Bewertungsgrundlage — ohne Angabe bleiben die
+                Spalten aus.
               </p>
             </div>
             <div className="form-group">

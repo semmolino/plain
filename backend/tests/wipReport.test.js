@@ -8,6 +8,8 @@ const {
   FLAG_NO_PERFORMANCE,
   FLAG_PREPAYMENT,
   FLAG_LOSS_RISK,
+  FLAG_PROGRESS_GAP,
+  PROGRESS_GAP_THRESHOLD_POINTS,
 } = require("../services/wipReport");
 
 // Basisfall, von dem die meisten Tests abweichen: 100.000 Auftrag, 60 % geleistet,
@@ -202,5 +204,97 @@ describe("wipTotalForMethod / stockChange", () => {
 
   it("ohne Vergleichsstichtag gibt es keine Bestandsveraenderung", () => {
     expect(stockChange(now, null, "hk")).toBeNull();
+  });
+});
+
+// ── Zweiter Wertansatz: Steuerbilanz ─────────────────────────────────────────
+
+describe("computeWipRow — Steuerbilanz", () => {
+  it("rechnet mit dem eigenen Faktor, ohne den Handelswert zu beruehren", () => {
+    const r = computeWipRow({ ...base, costFactorPercent: 100, taxCostFactorPercent: 90 });
+    expect(r.WIP_HK_NET).toBe(10000);
+    expect(r.COST_UNBILLED_TAX_NET).toBe(9000);
+    expect(r.WIP_TAX_NET).toBe(9000);
+  });
+
+  it("die verlustfreie Bewertung gilt auch steuerlich", () => {
+    const r = computeWipRow({
+      orderValue: 50000, performance: 30000, billed: 20000, cost: 60000,
+      costFactorPercent: 100, taxCostFactorPercent: 100,
+    });
+    expect(r.WIP_TAX_NET).toBe(10000);   // auf den erzielbaren Erloes gedeckelt
+  });
+
+  it("ohne gepflegten Faktor bleibt der Wert leer statt 0", () => {
+    const r = computeWipRow(base);
+    expect(r.WIP_TAX_NET).toBeNull();
+    expect(r.COST_UNBILLED_TAX_NET).toBeNull();
+  });
+
+  it("die Summe bleibt leer, solange keine Zeile einen Steuerwert hat", () => {
+    expect(aggregateWip([computeWipRow(base)]).wipTax).toBeNull();
+    expect(aggregateWip([computeWipRow({ ...base, taxCostFactorPercent: 90 })]).wipTax).toBe(9000);
+  });
+});
+
+// ── Gegenprobe: rechnerischer Leistungsstand ─────────────────────────────────
+
+describe("computeWipRow — Gegenprobe ueber die Zielkostenquote", () => {
+  it("misst den Kostenverbrauch an den erwarteten Gesamtkosten", () => {
+    // erwartete Gesamtkosten = 100.000 x 60 % = 60.000; verbraucht 30.000 -> 50 %
+    const r = computeWipRow({ ...base, performancePercent: 60, targetCostRatioPercent: 60 });
+    expect(r.PROGRESS_CALC_PERCENT).toBe(50);
+    expect(r.PROGRESS_GAP_POINTS).toBe(-10);
+  });
+
+  it("markiert erst ab der Schwelle", () => {
+    const knapp = computeWipRow({ ...base, performancePercent: 60, targetCostRatioPercent: 60 });
+    expect(knapp.flags).not.toContain(FLAG_PROGRESS_GAP);
+
+    // 30.000 von erwarteten 37.500 -> 80 % rechnerisch gegen 60 % gepflegt
+    const klar = computeWipRow({ ...base, performancePercent: 60, targetCostRatioPercent: 37.5 });
+    expect(klar.PROGRESS_CALC_PERCENT).toBe(80);
+    expect(klar.PROGRESS_GAP_POINTS).toBe(20);
+    expect(klar.flags).toContain(FLAG_PROGRESS_GAP);
+  });
+
+  it("markiert auch die andere Richtung — zu optimistisch gepflegt", () => {
+    const r = computeWipRow({ ...base, performancePercent: 90, targetCostRatioPercent: 60 });
+    expect(r.PROGRESS_GAP_POINTS).toBe(-40);
+    expect(r.flags).toContain(FLAG_PROGRESS_GAP);
+  });
+
+  it("ohne Zielkostenquote gibt es keine Gegenprobe", () => {
+    const r = computeWipRow({ ...base, performancePercent: 60 });
+    expect(r.PROGRESS_CALC_PERCENT).toBeNull();
+    expect(r.PROGRESS_GAP_POINTS).toBeNull();
+    expect(r.flags).not.toContain(FLAG_PROGRESS_GAP);
+  });
+
+  it("ohne Auftragswert gibt es keine erwarteten Gesamtkosten", () => {
+    const r = computeWipRow({
+      orderValue: 0, performance: 0, billed: 0, cost: 5000,
+      performancePercent: 0, targetCostRatioPercent: 60,
+    });
+    expect(r.PROGRESS_CALC_PERCENT).toBeNull();
+  });
+
+  it("die Schwelle ist die dokumentierte Konstante", () => {
+    expect(PROGRESS_GAP_THRESHOLD_POINTS).toBe(15);
+  });
+
+  it("die Gegenprobe aendert den Bilanzansatz nicht", () => {
+    const ohne = computeWipRow(base);
+    const mit  = computeWipRow({ ...base, performancePercent: 90, targetCostRatioPercent: 60 });
+    expect(mit.WIP_HK_NET).toBe(ohne.WIP_HK_NET);
+    expect(mit.WIP_REVENUE_NET).toBe(ohne.WIP_REVENUE_NET);
+  });
+
+  it("zaehlt die Ausreisser in der Verdichtung", () => {
+    const rows = [
+      computeWipRow({ ...base, performancePercent: 60, targetCostRatioPercent: 60 }),
+      computeWipRow({ ...base, performancePercent: 90, targetCostRatioPercent: 60 }),
+    ];
+    expect(aggregateWip(rows).progressGapCount).toBe(1);
   });
 });

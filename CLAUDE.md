@@ -179,7 +179,10 @@ ihren Mandanten).
   Abs. 2 HGB), und der HGB-Wert enthält **keinen** anteiligen Gewinn (§ 252
   Abs. 1 Nr. 4 HGB). Stichtagswerte in der Vergangenheit hängen an den
   `PROJECT_PROGRESS`-Snapshots — fehlt einer, weist der Report das aus statt
-  eine 0 zu zeigen. Konzept: `docs/TEILFERTIGE_LEISTUNGEN_CONCEPT.md`.
+  eine 0 zu zeigen. Optional daneben: ein zweiter Wertansatz für die
+  Steuerbilanz und eine Gegenprobe des Leistungsstands über eine
+  Zielkostenquote — beide bleiben ohne gepflegte Einstellung ganz aus, statt
+  eine 0 zu behaupten. Konzept: `docs/TEILFERTIGE_LEISTUNGEN_CONCEPT.md`.
 
 ---
 

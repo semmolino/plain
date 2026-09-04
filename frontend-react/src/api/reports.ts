@@ -533,7 +533,7 @@ export const fetchTrends = (groupBy: TrendsGroupBy, dateFrom?: string, dateTo?: 
 // Konzept und Herleitung: docs/TEILFERTIGE_LEISTUNGEN_CONCEPT.md
 
 /** Marker je Zeile — eine 0 kann „nichts geleistet" oder „nie erfasst" heißen. */
-export type WipFlag = 'no_performance' | 'prepayment' | 'loss_risk' | 'no_snapshot'
+export type WipFlag = 'no_performance' | 'prepayment' | 'loss_risk' | 'no_snapshot' | 'progress_gap'
 
 export type WipMethod = 'hk' | 'erloes'
 
@@ -576,6 +576,14 @@ export interface WipRow {
   LOSS_RISK_NET:             number
   /** G — nicht realisierter Gewinn */
   UNREALIZED_GAIN_NET:       number
+  /** Kostenanteil nach dem Faktor der Steuerbilanz; null ohne gepflegten Faktor */
+  COST_UNBILLED_TAX_NET:     number | null
+  /** Wertansatz der Steuerbilanz; null ohne gepflegten Faktor */
+  WIP_TAX_NET:               number | null
+  /** Gegenprobe: Kostenverbrauch gemessen an Auftragswert × Zielkostenquote */
+  PROGRESS_CALC_PERCENT:     number | null
+  /** Abstand in Prozentpunkten, positiv = mehr Kosten verbraucht als gemeldet */
+  PROGRESS_GAP_POINTS:       number | null
   /** Letzter Leistungsstand-Snapshot ≤ Stichtag */
   SNAPSHOT_DATE:             string | null
   flags:                     WipFlag[]
@@ -597,10 +605,13 @@ export interface WipTotals {
   prepayments:        number
   lossRisk:           number
   unrealizedGain:     number
+  /** null, solange keine Zeile einen Steuerwert hat */
+  wipTax:             number | null
   noSnapshotCount:    number
   noPerformanceCount: number
   prepaymentCount:    number
   lossRiskCount:      number
+  progressGapCount:   number
 }
 
 export interface WipReport {
@@ -608,6 +619,12 @@ export interface WipReport {
   compareTo:         string | null
   method:            WipMethod
   costFactorPercent: number
+  /** Zweiter Kostenfaktor für die Steuerbilanz; null = nicht gepflegt */
+  taxCostFactorPercent:   number | null
+  /** Zielkostenquote der Gegenprobe; null = nicht gepflegt */
+  targetCostRatioPercent: number | null
+  /** Ab wie vielen Punkten Abstand eine Zeile markiert wird */
+  progressGapThreshold:   number
   historic:          boolean
   rows:              WipRow[]
   totals:            WipTotals
@@ -619,6 +636,7 @@ export interface WipReport {
     noPerformanceCount: number
     prepaymentCount:    number
     lossRiskCount:      number
+    progressGapCount:   number
   }
 }
 
@@ -650,10 +668,12 @@ export interface WipClosing {
   AS_OF_DATE:             string
   METHOD:                 WipMethod
   COST_FACTOR_PERCENT:    number
+  TAX_COST_FACTOR_PERCENT: number | null
   COMPARE_TO_DATE:        string | null
   LABEL:                  string | null
   TOTAL_WIP_HK:           number
   TOTAL_WIP_REVENUE:      number
+  TOTAL_WIP_TAX:          number | null
   TOTAL_PREPAYMENTS:      number
   TOTAL_LOSS_RISK:        number
   PROJECT_COUNT:          number

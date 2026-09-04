@@ -72,7 +72,8 @@ type ColKey =
   | 'status' | 'manager' | 'typ' | 'abteilung'
   | 'order' | 'performance' | 'lstPct' | 'billed' | 'unbilled'
   | 'cost' | 'costUnbilled' | 'wip' | 'prepayment'
-  | 'lossRisk' | 'gain' | 'hours' | 'compare' | 'change' | 'snapshot'
+  | 'lossRisk' | 'gain' | 'hours' | 'wipTax' | 'progressCalc' | 'progressGap'
+  | 'compare' | 'change' | 'snapshot'
 
 type SortField = 'name' | ColKey
 
@@ -84,6 +85,10 @@ interface ColDef {
   defaultVisible: boolean
   /** Nur mit Vergleichsstichtag sinnvoll. */
   needsCompare?:  boolean
+  /** Nur mit gepflegtem Steuerfaktor sinnvoll. */
+  needsTaxFactor?: boolean
+  /** Nur mit gepflegter Zielkostenquote sinnvoll. */
+  needsTargetRatio?: boolean
   render:      (r: WipRow, method: WipMethod) => React.ReactNode
   sortValue:   (r: WipRow, method: WipMethod) => number | string
   total?:      (rows: WipRow[], method: WipMethod) => React.ReactNode
@@ -142,6 +147,26 @@ const COLUMNS: ColDef[] = [
     render: r => fmtH(r.HOURS_TOTAL), sortValue: r => r.HOURS_TOTAL,
     total: rows => fmtH(sumBy(rows, r => r.HOURS_TOTAL)) },
 
+  { key: 'wipTax', label: 'Teilfertig (Steuerbilanz)', numeric: true, defaultVisible: true,
+    needsTaxFactor: true, help: 'report.tfl.steuerbilanz',
+    render: r => fmtEur(r.WIP_TAX_NET), sortValue: r => r.WIP_TAX_NET ?? 0,
+    total: rows => fmtEur(sumBy(rows, r => r.WIP_TAX_NET ?? 0)) },
+
+  { key: 'progressCalc', label: 'Leistungsstand rechn.', numeric: true, defaultVisible: true,
+    needsTargetRatio: true, help: 'report.tfl.gegenprobe',
+    render: r => fmtPct(r.PROGRESS_CALC_PERCENT), sortValue: r => r.PROGRESS_CALC_PERCENT ?? -1 },
+  { key: 'progressGap', label: 'Abweichung', numeric: true, defaultVisible: true,
+    needsTargetRatio: true, help: 'report.tfl.gegenprobe',
+    render: r => {
+      if (r.PROGRESS_GAP_POINTS == null) return '—'
+      const auffaellig = (r.flags ?? []).includes('progress_gap')
+      const text = `${r.PROGRESS_GAP_POINTS > 0 ? '+' : ''}${FMT_PCT.format(r.PROGRESS_GAP_POINTS)}`
+      return auffaellig
+        ? <span style={{ color: 'var(--warning-strong)', fontWeight: 600 }}>{text}</span>
+        : <span>{text}</span>
+    },
+    sortValue: r => r.PROGRESS_GAP_POINTS ?? 0 },
+
   { key: 'compare', label: 'Vergleichswert', numeric: true, defaultVisible: true, needsCompare: true,
     help: 'report.tfl.bestandsveraenderung',
     render: r => fmtEur(r.COMPARE_WIP_NET), sortValue: r => r.COMPARE_WIP_NET ?? 0,
@@ -161,6 +186,7 @@ const FLAG_LABEL: Record<string, string> = {
   no_performance: 'Leistungsstand nicht gepflegt',
   prepayment:     'mehr abgerechnet als geleistet',
   loss_risk:      'drohender Verlust',
+  progress_gap:   'Leistungsstand passt nicht zum Kostenverbrauch',
 }
 
 function SortTh({ label, field, current, dir, onSort, numeric, help }: {
@@ -309,9 +335,16 @@ export function TeilfertigeLeistungenTab() {
     return rows
   }, [allRows, search, activeFilters])
 
+  // Spalten, deren Grundlage nicht gepflegt ist, werden gar nicht erst gezeigt:
+  // eine leere Spalte erklaert sich nicht von selbst.
   const visibleCols = useMemo(
-    () => COLUMNS.filter(c => !hiddenCols.has(c.key) && (!c.needsCompare || !!report?.compareTo)),
-    [hiddenCols, report?.compareTo],
+    () => COLUMNS.filter(c =>
+      !hiddenCols.has(c.key) &&
+      (!c.needsCompare     || !!report?.compareTo) &&
+      (!c.needsTaxFactor   || report?.taxCostFactorPercent   != null) &&
+      (!c.needsTargetRatio || report?.targetCostRatioPercent != null)
+    ),
+    [hiddenCols, report?.compareTo, report?.taxCostFactorPercent, report?.targetCostRatioPercent],
   )
 
   const sorted = useMemo(() => {
@@ -333,7 +366,9 @@ export function TeilfertigeLeistungenTab() {
     prepayments: sumBy(sorted, r => r.PREPAYMENT_NET),
     lossRisk:    sumBy(sorted, r => r.LOSS_RISK_NET),
     change:      report?.compareTo ? sumBy(sorted, r => r.CHANGE_WIP_NET ?? 0) : null,
-  }), [sorted, effectiveMethod, report?.compareTo])
+    wipTax:      report?.taxCostFactorPercent != null ? sumBy(sorted, r => r.WIP_TAX_NET ?? 0) : null,
+    gapCount:    sorted.filter(r => (r.flags ?? []).includes('progress_gap')).length,
+  }), [sorted, effectiveMethod, report?.compareTo, report?.taxCostFactorPercent])
 
   const activeFilterCount = Object.values(activeFilters).reduce((n, s) => n + s.size, 0)
   const isFiltered = activeFilterCount > 0 || search.trim() !== ''
@@ -355,16 +390,18 @@ export function TeilfertigeLeistungenTab() {
       'Projekt-Nr', 'Projekt', 'Status', 'Projektleiter',
       'Auftragswert', 'Leistungswert', 'Leistungsstand %', 'Abgerechnet',
       'Unfertig', 'Kosten', 'Kosten unfertig',
-      'Teilfertig (HGB)', 'Teilfertig (Leistungswert)',
+      'Teilfertig (HGB)', 'Teilfertig (Leistungswert)', 'Teilfertig (Steuerbilanz)',
       'Erhaltene Anzahlung', 'Drohverlust', 'Nicht realisierter Gewinn',
+      'Leistungsstand rechnerisch %', 'Abweichung Punkte',
       'Stunden', 'Snapshot', 'Hinweise',
     ]
     const rows = sorted.map(r => [
       r.NAME_SHORT, r.NAME_LONG, r.PROJECT_STATUS_NAME_SHORT, r.PROJECT_MANAGER_DISPLAY,
       csvNum(r.ORDER_VALUE_NET), csvNum(r.PERFORMANCE_NET), csvNum(r.PERFORMANCE_PERCENT), csvNum(r.BILLED_NET),
       csvNum(r.UNBILLED_NET), csvNum(r.COST_NET), csvNum(r.COST_UNBILLED_NET),
-      csvNum(r.WIP_HK_NET), csvNum(r.WIP_REVENUE_NET),
+      csvNum(r.WIP_HK_NET), csvNum(r.WIP_REVENUE_NET), csvNum(r.WIP_TAX_NET),
       csvNum(r.PREPAYMENT_NET), csvNum(r.LOSS_RISK_NET), csvNum(r.UNREALIZED_GAIN_NET),
+      csvNum(r.PROGRESS_CALC_PERCENT), csvNum(r.PROGRESS_GAP_POINTS),
       csvNum(r.HOURS_TOTAL), r.SNAPSHOT_DATE ?? '',
       (r.flags ?? []).map(f => FLAG_LABEL[f] ?? f).join(' | '),
     ])
@@ -434,6 +471,16 @@ export function TeilfertigeLeistungenTab() {
               <span className="daten-kpi-value">{fmtEur(viewTotals.prepayments)}</span>
               <span className="kpi-meta">nicht mit den Aktiva verrechnet</span>
             </div>
+            {viewTotals.wipTax != null && (
+              <div className="daten-kpi-tile">
+                <span className="daten-kpi-label">
+                  Teilfertig (Steuerbilanz)
+                  <HelpHint id="report.tfl.steuerbilanz" />
+                </span>
+                <span className="daten-kpi-value">{fmtEur(viewTotals.wipTax)}</span>
+                <span className="kpi-meta">Kostenansatz {fmtPct(report.taxCostFactorPercent)}</span>
+              </div>
+            )}
             {viewTotals.change != null && (
               <div className="daten-kpi-tile">
                 <span className="daten-kpi-label">
@@ -454,6 +501,24 @@ export function TeilfertigeLeistungenTab() {
                   {fmtEur(viewTotals.lossRisk)}
                 </span>
                 <span className="kpi-meta">{report.dataQuality.lossRiskCount} Projekt(e)</span>
+              </div>
+            )}
+            {report.targetCostRatioPercent != null && (
+              <div className="daten-kpi-tile">
+                <span className="daten-kpi-label">
+                  Leistungsstand prüfen
+                  <HelpHint id="report.tfl.gegenprobe" />
+                </span>
+                <span
+                  className="daten-kpi-value"
+                  style={viewTotals.gapCount > 0 ? { color: 'var(--warning-strong)' } : undefined}
+                >
+                  {viewTotals.gapCount}
+                </span>
+                <span className="kpi-meta">
+                  {viewTotals.gapCount === 1 ? 'Projekt weicht' : 'Projekte weichen'} über
+                  {' '}{report.progressGapThreshold} Punkte ab
+                </span>
               </div>
             )}
             <div className="daten-kpi-tile">
@@ -511,7 +576,11 @@ export function TeilfertigeLeistungenTab() {
               {colPanelOpen && (
                 <div className="pl-col-panel">
                   <div className="pl-col-panel-title">Sichtbare Spalten</div>
-                  {COLUMNS.map(c => (
+                  {COLUMNS.filter(c =>
+                    (!c.needsCompare     || !!report?.compareTo) &&
+                    (!c.needsTaxFactor   || report?.taxCostFactorPercent   != null) &&
+                    (!c.needsTargetRatio || report?.targetCostRatioPercent != null)
+                  ).map(c => (
                     <label key={c.key} className="pl-col-option">
                       <input type="checkbox" checked={!hiddenCols.has(c.key)} onChange={() => toggleCol(c.key)} />
                       {c.label}
@@ -625,7 +694,9 @@ export function TeilfertigeLeistungenTab() {
                  Auftragspreisen. Enthält den anteiligen Gewinn und ist damit kein
                  Bilanzansatz nach HGB.`}
             {' '}Aktiva und erhaltene Anzahlungen sind je Projekt getrennt ermittelt
-            (§ 246 Abs. 2 HGB).
+            (§ 246 Abs. 2 HGB). „Erhaltene Anzahlung" meint den Überhang der
+            Abrechnung über die erbrachte Leistung — der offene Forderungsbestand
+            steht im Rechnungsbuch und ist hier nicht enthalten.
           </p>
 
           {/* ── Festgeschriebene Abschlüsse ── */}

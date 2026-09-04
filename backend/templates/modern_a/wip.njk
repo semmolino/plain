@@ -145,6 +145,13 @@ body {
       <div class="hint">gegenüber {{ compareTo | date_de }}</div>
     </div>
     {% endif %}
+    {% if totals.wipTax != None %}
+    <div class="total-card">
+      <div class="caption">Teilfertige Leistungen (Steuerbilanz)</div>
+      <div class="amount">{{ totals.wipTax | money }}</div>
+      <div class="hint">Kostenansatz {{ taxCostFactorPercent | round(2) }}&thinsp;%</div>
+    </div>
+    {% endif %}
     {% if totals.lossRisk > 0 %}
     <div class="total-card warn">
       <div class="caption">Drohverlust — Prüfbedarf</div>
@@ -222,7 +229,21 @@ body {
     {{ costFactorPercent | round(2) }}&thinsp;% der gebuchten Kosten bewertet.
     {% endif %}
     Aktivüberhänge und erhaltene Anzahlungen sind je Projekt getrennt ermittelt
-    und nicht verrechnet (§ 246 Abs. 2 HGB).
+    und nicht verrechnet (§ 246 Abs. 2 HGB). „Erhaltene Anzahlung" meint hier
+    den Überhang der Abrechnung über die erbrachte Leistung — der offene
+    Forderungsbestand steht im Rechnungsbuch und ist hier nicht enthalten.
+    {% if totals.wipTax != None %}
+    Der Wertansatz der Steuerbilanz ist mit
+    {{ taxCostFactorPercent | round(2) }}&thinsp;% der gebuchten Kosten
+    gerechnet; ein Drohverlust ist steuerlich nicht rückstellungsfähig
+    (§ 5 Abs. 4a EStG).
+    {% endif %}
+    {% if dataQuality.progressGapCount > 0 %}
+    Bei {{ dataQuality.progressGapCount }} Projekt(en) weicht der gepflegte
+    Leistungsstand um mehr als {{ progressGapThreshold }} Punkte von dem ab,
+    was der Kostenverbrauch bei einer Zielkostenquote von
+    {{ targetCostRatioPercent | round(2) }}&thinsp;% erwarten lässt.
+    {% endif %}
     {% if dataQuality.noSnapshotCount > 0 %}
     Für {{ dataQuality.noSnapshotCount }} Projekt(e) liegt zum Stichtag kein
     Leistungsstand-Snapshot vor; deren Leistungswert ist deshalb nicht belegt.
