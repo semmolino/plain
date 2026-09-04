@@ -199,13 +199,13 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
       let amount = round2(targetCum - alreadyBilled);
       if (amount > maxBillable) amount = maxBillable;
       if (amount > 0.005) {
-        await pp.applyPerformanceAmount(supabase, { partialPaymentId: id, contractId, projectId: project.ID, amount });
+        await pp.applyPerformanceAmount(supabase, { partialPaymentId: id, contractId, projectId: project.ID, amount, tenantId: md.tenantId });
       }
     }
 
     // 4) BT2-Summen aus zugeordneten TEC in die AR schreiben
     if (bt2Ids.length > 0) {
-      await pp.updateBt2FromTec(supabase, { partialPaymentId: id, contractId, projectId: project.ID });
+      await pp.updateBt2FromTec(supabase, { partialPaymentId: id, contractId, projectId: project.ID, tenantId: md.tenantId });
     }
 
     // 5) Summen berechnen

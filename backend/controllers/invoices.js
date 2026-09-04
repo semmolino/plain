@@ -170,12 +170,13 @@ async function getBillingProposal(req, res, supabase) {
         contractId: inv.CONTRACT_ID,
         projectId: inv.PROJECT_ID,
         amount: perfSuggested,
+        tenantId: req.tenantId,
       });
     }
 
     // Compute bookings sum from TEC entries already assigned to this invoice (no auto-assignment).
     if (bt2Ids.length > 0) {
-      await svc.updateBt2FromTec(supabase, { invoiceId: id, contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
+      await svc.updateBt2FromTec(supabase, { invoiceId: id, contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID, tenantId: req.tenantId });
     }
 
     const totals = await svc.recomputeInvoiceTotals(supabase, id);
@@ -221,12 +222,13 @@ async function putPerformance(req, res, supabase) {
       contractId: inv.CONTRACT_ID,
       projectId: inv.PROJECT_ID,
       amount,
+      tenantId: req.tenantId,
     });
 
     const structures = await svc.loadProjectStructuresForContext(supabase, { contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
     const bt2Ids = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
     if (bt2Ids.length > 0) {
-      await svc.updateBt2FromTec(supabase, { invoiceId: id, contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
+      await svc.updateBt2FromTec(supabase, { invoiceId: id, contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID, tenantId: req.tenantId });
     }
 
     const totals = await svc.recomputeInvoiceTotals(supabase, id);
@@ -323,6 +325,7 @@ async function postTec(req, res, supabase) {
         contractId: inv.CONTRACT_ID,
         projectId: inv.PROJECT_ID,
         amount: svc.toNum(perfAmount),
+        tenantId: req.tenantId,
       });
     }
 
@@ -352,7 +355,7 @@ async function postTec(req, res, supabase) {
       }
     }
 
-    const bt2 = await svc.updateBt2FromTec(supabase, { invoiceId: id, contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
+    const bt2 = await svc.updateBt2FromTec(supabase, { invoiceId: id, contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID, tenantId: req.tenantId });
 
     const structures = await svc.loadProjectStructuresForContext(supabase, { contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID });
     const bt1Ids = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 1).map((s) => s.ID);

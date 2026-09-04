@@ -3,6 +3,7 @@ const express = require("express");
 const { requirePermission } = require("../middleware/permissions");
 const { createNotification } = require("../services/notifications");
 const { getEmployeeCountryState } = require("../services/costRateCalc");
+const { exakterWert } = require("../services/pgrestFilter");
 
 // ── Feiertage ─────────────────────────────────────────────────────────────────
 // Laedt die Feiertage (Land/Bundesland) im Bereich [from,to] als Set von
@@ -14,7 +15,7 @@ async function loadHolidaySet(supabase, countryCode, stateCode, from, to) {
     let q = supabase.from("PUBLIC_HOLIDAY").select("HOLIDAY_DATE")
       .eq("COUNTRY_CODE", countryCode || "DE")
       .gte("HOLIDAY_DATE", from).lte("HOLIDAY_DATE", to);
-    q = stateCode ? q.or(`STATE_CODE.is.null,STATE_CODE.eq.${stateCode}`) : q.is("STATE_CODE", null);
+    q = stateCode ? q.or(`STATE_CODE.is.null,STATE_CODE.eq.${exakterWert(stateCode)}`) : q.is("STATE_CODE", null);
     const { data } = await q;
     return new Set((data || []).map(r => String(r.HOLIDAY_DATE).slice(0, 10)));
   } catch (_) { return new Set(); }

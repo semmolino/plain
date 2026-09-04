@@ -6,6 +6,7 @@ const { insertProgressSnapshot } = require("./projectProgress");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
+const { suchwert } = require("./pgrestFilter");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -302,9 +303,15 @@ async function recomputeInvoiceTotals(supabase, invoiceId) {
 }
 
 async function applyPerformanceAmount(supabase, { invoiceId, contractId, projectId, amount, tenantId = undefined }) {
-  if (tenantId === undefined && projectId) {
-    const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
-    tenantId = projT?.TENANT_ID ?? null;
+  // Frueher wurde der Mandant hier aus dem ANGEFRAGTEN Projekt abgeleitet,
+  // wenn der Aufrufer keinen mitgab. Das bestaetigt nur, dass ein fremder
+  // Datensatz zu seinem eigenen Mandanten gehoert — die Pruefung war
+  // wirkungslos, und geschriebene Zeilen haetten den fremden Mandanten
+  // uebernommen. RLS faengt das heute ab, aber damit haengt die Trennung an
+  // einer Umgebungsvariablen statt an zwei Linien
+  // (Sicherheitsaudit 2026-09-03, M3; Muster siehe services/tenantGuard.js).
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw { status: 500, message: "applyPerformanceAmount: tenantId ist erforderlich" };
   }
   const structures = await loadProjectStructuresForContext(supabase, { contractId, projectId });
   const bt1 = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 1);
@@ -351,9 +358,10 @@ async function applyPerformanceAmount(supabase, { invoiceId, contractId, project
 }
 
 async function updateBt2FromTec(supabase, { invoiceId, contractId, projectId, tenantId = undefined }) {
-  if (tenantId === undefined && projectId) {
-    const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
-    tenantId = projT?.TENANT_ID ?? null;
+  // Mandant aus der Sitzung, nicht aus dem angefragten Projekt
+  // (Sicherheitsaudit 2026-09-03, M3).
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw { status: 500, message: "updateBt2FromTec: tenantId ist erforderlich" };
   }
   const structures = await loadProjectStructuresForContext(supabase, { contractId, projectId });
   const bt2Ids = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
@@ -429,7 +437,8 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
       .order("INVOICE_DATE", { ascending: false })
       .limit(limit);
     if (q) {
-      const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      // Frueher nur % und _ — Strukturzeichen (Komma, Klammer) blieben durch.
+      const esc = suchwert(q);
       q1 = q1.or(`INVOICE_NUMBER.ilike.%${esc}%`);
     }
     return q1;

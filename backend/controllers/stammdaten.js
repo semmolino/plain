@@ -4,6 +4,7 @@ const { findAssetForTenant } = require("../services/assetAccess");
 const objectStorage = require("../services/objectStorage");
 const svc  = require("../services/stammdaten");
 const misch = require("../services/mischhonorar");
+const { suchwert } = require("../services/pgrestFilter");
 
 // Reichert FEE_CALCULATION_MASTER-Rows um Merkmale des Leistungsbilds an:
 //   BASE_TYPE            Bemessungsgrundlage (Migration 0054)
@@ -1077,7 +1078,7 @@ async function searchContacts(req, res, supabase) {
   if (!parsedAddressId || Number.isNaN(parsedAddressId)) return res.json({ data: [] });
   if (!q || q.length < 2) return res.json({ data: [] });
 
-  const { data, error } = await supabase.from("CONTACTS").select("ID, FIRST_NAME, LAST_NAME, ADDRESS_ID").eq("TENANT_ID", req.tenantId).eq("ADDRESS_ID", parsedAddressId).or(`FIRST_NAME.ilike.%${q}%,LAST_NAME.ilike.%${q}%`).order("LAST_NAME", { ascending: true }).limit(20);
+  const { data, error } = await supabase.from("CONTACTS").select("ID, FIRST_NAME, LAST_NAME, ADDRESS_ID").eq("TENANT_ID", req.tenantId).eq("ADDRESS_ID", parsedAddressId).or(`FIRST_NAME.ilike.%${suchwert(q)}%,LAST_NAME.ilike.%${suchwert(q)}%`).order("LAST_NAME", { ascending: true }).limit(20);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -1235,7 +1236,7 @@ async function searchVat(req, res, supabase) {
 async function searchPaymentMeans(req, res, supabase) {
   const q = (req.query.q || "").toString().trim();
   if (!q || q.length < 2) return res.json({ data: [] });
-  const { data, error } = await supabase.from("PAYMENT_MEANS").select("ID, NAME_SHORT, NAME_LONG").or(`NAME_SHORT.ilike.%${q}%,NAME_LONG.ilike.%${q}%`).order("NAME_SHORT", { ascending: true }).limit(20);
+  const { data, error } = await supabase.from("PAYMENT_MEANS").select("ID, NAME_SHORT, NAME_LONG").or(`NAME_SHORT.ilike.%${suchwert(q)}%,NAME_LONG.ilike.%${suchwert(q)}%`).order("NAME_SHORT", { ascending: true }).limit(20);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }

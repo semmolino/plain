@@ -6,6 +6,7 @@ const { requirePermission } = require("../middleware/permissions");
 const { enforceLimit } = require("../middleware/limits");
 const objectStorage = require("../services/objectStorage");
 const { sendInvite } = require("../services/accountInvite");
+const { suchwert } = require("../services/pgrestFilter");
 
 // Returns an error message string if a duplicate is found, otherwise null.
 // excludeId: skip this employee ID (used on update to ignore self).
@@ -628,12 +629,16 @@ router.get("/month-close-overview", requirePermission("employees.bookings.view_a
 router.get("/search", async (req, res) => {
   const q = (req.query.q || "").toString().trim();
   if (!q || q.length < 2) return res.json({ data: [] });
+  // Ohne Neutralisierung liesse sich ueber ein Komma eine zusaetzliche
+  // Bedingung einschleusen und damit EMPLOYEE.PASSWORD zeichenweise
+  // ausfragen (Sicherheitsaudit 2026-09-03, M1).
+  const sq = suchwert(q);
 
   const { data, error } = await supabase
     .from("EMPLOYEE")
     .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
     .eq("TENANT_ID", req.tenantId)
-    .or(`SHORT_NAME.ilike.%${q}%,FIRST_NAME.ilike.%${q}%,LAST_NAME.ilike.%${q}%`)
+    .or(`SHORT_NAME.ilike.%${sq}%,FIRST_NAME.ilike.%${sq}%,LAST_NAME.ilike.%${sq}%`)
     .order("SHORT_NAME", { ascending: true })
     .limit(20);
 

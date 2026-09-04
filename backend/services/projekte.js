@@ -1,6 +1,7 @@
 "use strict";
 
 const { contractDefaults } = require("./contractDefaults");
+const { suchwert } = require("./pgrestFilter");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -500,11 +501,12 @@ async function patchProject(supabase, { id, body, tenantId }) {
 }
 
 async function searchProjects(supabase, { q, tenantId }) {
+  const sq = suchwert(q);
   const { data, error } = await supabase
     .from("PROJECT")
     .select("ID, NAME_SHORT, NAME_LONG, COMPANY_ID")
     .eq("TENANT_ID", tenantId)
-    .or(`NAME_SHORT.ilike.%${q}%,NAME_LONG.ilike.%${q}%`)
+    .or(`NAME_SHORT.ilike.%${sq}%,NAME_LONG.ilike.%${sq}%`)
     .order("NAME_SHORT", { ascending: true })
     .limit(20);
   if (error) throw error;
@@ -513,12 +515,13 @@ async function searchProjects(supabase, { q, tenantId }) {
 
 async function searchContracts(supabase, { projectId, q, tenantId }) {
   projectId = await assertProjectInTenant(supabase, projectId, tenantId);
+  const sq = suchwert(q);
   const query = (table, cols) =>
     supabase
       .from(table)
       .select(cols)
       .eq("PROJECT_ID", projectId)
-      .or(`NAME_SHORT.ilike.%${q}%,NAME_LONG.ilike.%${q}%`)
+      .or(`NAME_SHORT.ilike.%${sq}%,NAME_LONG.ilike.%${sq}%`)
       .order("NAME_SHORT", { ascending: true })
       .limit(20);
 

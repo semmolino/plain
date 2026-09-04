@@ -1,5 +1,7 @@
 'use strict';
 
+const { exakterWert } = require("./pgrestFilter");
+
 // ArbZG validator service
 // ---------------------------------------------------------------------------
 // Settings loader (TENANT_SETTINGS), active-work-model lookup, break-rule
@@ -166,7 +168,7 @@ async function isPublicHoliday(supabase, dateStr, countryCode, stateCode) {
     .eq('COUNTRY_CODE', countryCode || 'DE')
     .eq('HOLIDAY_DATE', dateStr);
   if (stateCode) {
-    q.or(`STATE_CODE.is.null,STATE_CODE.eq.${stateCode}`);
+    q.or(`STATE_CODE.is.null,STATE_CODE.eq.${exakterWert(stateCode)}`);
   } else {
     q.is('STATE_CODE', null);
   }

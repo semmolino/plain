@@ -528,6 +528,7 @@ async function getBillingProposal(req, res, supabase) {
         contractId: pp.CONTRACT_ID,
         projectId: pp.PROJECT_ID,
         amount: performanceSuggested,
+        tenantId: req.tenantId,
       });
       performanceAmount = r.performance_amount;
     }
@@ -539,7 +540,7 @@ async function getBillingProposal(req, res, supabase) {
   // The user selects which entries to include manually in the wizard.
   let bookingsSum = 0;
   try {
-    const bt2Res = await svc.updateBt2FromTec(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID });
+    const bt2Res = await svc.updateBt2FromTec(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID, tenantId: req.tenantId });
     bookingsSum = bt2Res.bookings_sum;
   } catch (e) {
     return res.status(500).json({ error: "Buchungen konnten nicht geladen/zugeordnet werden: " + e.message });
@@ -582,8 +583,8 @@ async function putPerformance(req, res, supabase) {
   if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
 
   try {
-    const r = await svc.applyPerformanceAmount(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID, amount });
-    const bt2Res = await svc.updateBt2FromTec(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID });
+    const r = await svc.applyPerformanceAmount(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID, amount, tenantId: req.tenantId });
+    const bt2Res = await svc.updateBt2FromTec(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID, tenantId: req.tenantId });
     const totals = await svc.recomputePartialPaymentTotals(supabase, id);
     return res.json({
       data: {
@@ -677,6 +678,7 @@ async function postTec(req, res, supabase) {
         contractId: pp.CONTRACT_ID,
         projectId: pp.PROJECT_ID,
         amount: performanceAmountProvided,
+        tenantId: req.tenantId,
       });
     }
   } catch (e) {
@@ -703,7 +705,7 @@ async function postTec(req, res, supabase) {
   }
 
   try {
-    const bt2Res = await svc.updateBt2FromTec(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID });
+    const bt2Res = await svc.updateBt2FromTec(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID, tenantId: req.tenantId });
     const structures = await svc.loadProjectStructuresForContext(supabase, { contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID });
     const bt1Ids = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 1).map((s) => s.ID);
     const bt1Sum = await svc.sumPpsForPartialPayment(supabase, { partialPaymentId: id, structureIds: bt1Ids });

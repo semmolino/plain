@@ -6,6 +6,7 @@ const { insertProgressSnapshot } = require("./projectProgress");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
+const { suchwert } = require("./pgrestFilter");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -316,9 +317,11 @@ async function recomputePartialPaymentTotals(supabase, partialPaymentId) {
 }
 
 async function applyPerformanceAmount(supabase, { partialPaymentId, contractId, projectId, amount, tenantId = undefined }) {
-  if (tenantId === undefined && projectId) {
-    const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
-    tenantId = projT?.TENANT_ID ?? null;
+  // Siehe die Zwillingsfunktion in services/invoices.js: der Mandant kommt aus
+  // der Sitzung, nicht aus dem angefragten Projekt
+  // (Sicherheitsaudit 2026-09-03, M3).
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw { status: 500, message: "applyPerformanceAmount: tenantId ist erforderlich" };
   }
 
   const structures = await loadProjectStructuresForContext(supabase, { contractId, projectId });
@@ -374,9 +377,10 @@ async function applyPerformanceAmount(supabase, { partialPaymentId, contractId, 
 }
 
 async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projectId, tenantId = undefined }) {
-  if (tenantId === undefined && projectId) {
-    const { data: projT } = await supabase.from("PROJECT").select("TENANT_ID").eq("ID", projectId).maybeSingle();
-    tenantId = projT?.TENANT_ID ?? null;
+  // Mandant aus der Sitzung, nicht aus dem angefragten Projekt
+  // (Sicherheitsaudit 2026-09-03, M3).
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw { status: 500, message: "updateBt2FromTec: tenantId ist erforderlich" };
   }
 
   const structures = await loadProjectStructuresForContext(supabase, { contractId, projectId });
@@ -437,7 +441,8 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
       .limit(limit);
     if (statusId) q1 = q1.eq("STATUS_ID", statusId);
     if (q) {
-      const esc = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      // Frueher nur % und _ — Strukturzeichen (Komma, Klammer) blieben durch.
+      const esc = suchwert(q);
       q1 = q1.or(`PARTIAL_PAYMENT_NUMBER.ilike.%${esc}%,CONTACT.ilike.%${esc}%`);
     }
     return q1;
