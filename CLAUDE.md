@@ -158,6 +158,39 @@ zusätzlich `DEFAULT public.current_tenant_id()` auf jede `TENANT_ID`-Spalte als
 Netz darunter. Reine `.update()`-Aufrufe sind nicht betroffen (die Zeile behält
 ihren Mandanten).
 
+**Migrationen laufen ohne Mandanten-Claim — RLS blockiert sie fail-closed.**
+Ein `psql`-Lauf trägt kein JWT. Jede Migration, die eine Tabelle mit
+`TENANT_ID` **liest** oder **schreibt**, sieht deshalb null Zeilen und meldet
+trotzdem Erfolg. Genau so ist Migration `0136` beim ersten Einspielen ins
+Leere gelaufen: `INSERT INTO "ROLE_PERMISSION" … SELECT FROM "USER_ROLE"` fand
+keine Rolle, die neue Permission hing an niemandem, und der Report war für
+alle unsichtbar — ohne eine einzige Fehlermeldung.
+
+Deshalb an den Anfang jeder solchen Migration:
+
+```sql
+SET request.jwt.claims = '{"sys":"true"}';   -- is_system_request() → true
+-- … INSERT/UPDATE/SELECT auf mandantenbezogene Tabellen …
+RESET request.jwt.claims;
+```
+
+Reines DDL (`CREATE TABLE`, `ALTER TABLE`, `CREATE FUNCTION`) und globale
+Kataloge ohne `TENANT_ID` (`PERMISSION`, `CAPABILITY_PERMISSION`,
+`LICENSE_*`) brauchen das nicht. Und: **nach dem Einspielen gegenprüfen** —
+mit gesetztem Claim, sonst prüft man dieselbe Blindheit noch einmal.
+
+**Generierte Seeds nicht vergessen**: wer eine Permission an eine
+Lizenz-Capability hängt, ändert `capabilities.manifest.js`, lässt
+`npm run license:gen` laufen **und spielt `0070b` neu ein**. Ohne die Zeile in
+`CAPABILITY_PERMISSION` gilt das Recht als „keiner Capability zugeordnet" und
+wirkt in jedem Tarif (fail-open).
+
+**Neue Mandanten bekommen ihre Rollen nicht aus den Migrationen**, sondern aus
+`seedTenantRbacAndAssignAdmin` in `routes/auth.js`. Dort vergibt „Projektleiter"
+pauschal alles aus `MODULE IN (…, "reports", …)`. Eine neue Permission in einem
+dieser Module fällt also automatisch an den Projektleiter — wenn das nicht
+gewollt ist, in `nichtFuerProjektleiter` eintragen.
+
 **Key tables**: `TENANT`, `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRUCTURE`, `PROJECT_PROGRESS`, `EMPLOYEE2PROJECT`, `CONTRACT`, `INVOICE`, `PARTIAL_PAYMENT`, `OFFER`, `OFFER_STRUCTURE`, `BILLING_TYPE`, `ROLE`, `VAT`, `TENANT_SETTINGS`, `WIP_CLOSING`/`WIP_CLOSING_LINE`.
 
 **BILLING_TYPE_ID**: `1` = fixed-fee (Pauschal), `2` = hourly (Stunden/TEC).

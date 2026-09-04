@@ -81,12 +81,20 @@ async function seedTenantRbacAndAssignAdmin(supabase, tenantId, employeeId) {
     const byModule  = (mods) => perms.filter(p => mods.includes(p.MODULE)).map(p => p.ID);
     const byKey     = (keys) => perms.filter(p => keys.includes(p.KEY)).map(p => p.ID);
 
+    // Rechte, die NICHT ueber byModule("reports") an den Projektleiter fallen
+    // duerfen. Der Report "Teilfertige Leistungen" zeigt Kosten, Marge und den
+    // nicht realisierten Gewinn je Projekt — eine kaufmaennische Abschlusszahl
+    // fuer Administrator, Geschaeftsleitung und Buchhaltung, nicht fuer jeden
+    // Projektleiter (siehe Migration 0136).
+    const nichtFuerProjektleiter = new Set(byKey(["reports.wip.view"]));
+
     const roleDefs = [
       { name: "Administrator",    long: "Voller Zugriff auf alle Funktionen",                          color: "#dc2626", isDefault: false, permIds: allIds },
       { name: "Geschäftsleitung", long: "Voller Lesezugriff, Rechnungen buchen, keine Konfiguration",  color: "#7c3aed", isDefault: false,
         permIds: uniq([...byCat("reading"), ...byKey(["invoices.book","invoices.send_email","dunning.send","reports.export"])]) },
       { name: "Projektleiter",    long: "Projekte/Angebote/Rechnungen voll, keine Mitarbeiterverwaltung", color: "#2563eb", isDefault: false,
-        permIds: byModule(["dashboard","addresses","projects","reports","invoices","dunning","offers"]) },
+        permIds: byModule(["dashboard","addresses","projects","reports","invoices","dunning","offers"])
+          .filter(id => !nichtFuerProjektleiter.has(id)) },
       { name: "Buchhaltung",      long: "Rechnungen/Mahnungen voll, Projekte/Angebote nur lesen",       color: "#16a34a", isDefault: false,
         permIds: uniq([...byModule(["invoices","dunning","reports","addresses","dashboard"]), ...byKey(["projects.view","offers.view","employees.view"])]) },
       { name: "Mitarbeiter",      long: "Basis-Zugriff: Übersicht + eigene Stunden",                    color: "#6b7280", isDefault: true,
