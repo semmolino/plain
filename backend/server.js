@@ -174,7 +174,15 @@ const { startNachtragFristenChecker }        = require("./services/nachtragFrist
 const { makeMiddleware: makeSessionGuard } = require("./middleware/sessionGuard");
 const sessionGuard = makeSessionGuard(supabase);
 
-const authChain = [authMiddleware, tenantScope, sessionGuard, licenseMiddleware, permissionsMiddleware];
+// Die Limiter gehoeren HINTER authMiddleware: sie zaehlen pro Mitarbeiter,
+// nicht pro IP — ein Buero hinter einer NAT-Adresse wuerde sich sonst
+// gegenseitig aussperren, und zwar am Monatsende beim Rechnungslauf. Vor
+// authMiddleware gibt es noch keine req.employeeId.
+// Und hinter sessionGuard: ein zurueckgenommenes Token soll kein Kontingent
+// verbrauchen.
+const { heavyLimiter, apiLimiter } = require("./middleware/rateLimit");
+
+const authChain = [authMiddleware, tenantScope, sessionGuard, apiLimiter, heavyLimiter, licenseMiddleware, permissionsMiddleware];
 
 app.use("/api/v1/stammdaten",        ...authChain, stammdatenRoutes);
 app.use("/api/v1/mitarbeiter",       ...authChain, mitarbeiterRoutes);

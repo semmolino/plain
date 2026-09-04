@@ -8,6 +8,7 @@ const {
 } = require("../middleware/rateLimit");
 const { verifySessionToken } = require("../middleware/auth");
 const { revokeSessions } = require("../middleware/sessionGuard");
+const { bremsen, registriereFehlversuch, loescheFehlversuche } = require("../middleware/loginAttempts");
 
 function jwtSecret() {
   const s = process.env.JWT_SECRET;
@@ -177,6 +178,12 @@ module.exports = (supabase) => {
       return res.status(400).json({ error: "E-Mail ist erforderlich." });
     }
 
+    // Fehlversuchsbremse je Konto: das IP-Limit oben hilft nicht gegen einen
+    // Angriff, der ueber viele Adressen verteilt auf EIN Konto zielt.
+    // Bewusst nur bremsen, nicht sperren — eine Sperre waere ein Weg, einen
+    // bekannten Nutzer gezielt auszusperren (siehe middleware/loginAttempts.js).
+    await bremsen(email);
+
     // ALLE Treffer holen, nicht maybeSingle().
     //
     // WARUM: EMPLOYEE.MAIL hat keinen Unique-Index, und die Dublettenpruefung
@@ -198,12 +205,14 @@ module.exports = (supabase) => {
 
     if (empErr) {
       console.error("[LOGIN] Lookup-Fehler:", empErr.message);
+      registriereFehlversuch(email);
       return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
     }
 
     // likeEscape ist die erste Schranke, der exakte Vergleich die zweite.
     const treffer = (kandidaten || []).filter((e) => mailMatches(e.MAIL, email));
     if (treffer.length === 0) {
+      registriereFehlversuch(email);
       return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
     }
 
@@ -225,6 +234,7 @@ module.exports = (supabase) => {
     }
 
     if (passende.length === 0) {
+      registriereFehlversuch(email);
       return res.status(401).json({ error: "E-Mail oder Passwort falsch." });
     }
 
@@ -238,6 +248,9 @@ module.exports = (supabase) => {
              + "Bitte den Administrator bitten, eines der Passwörter zu ändern.",
       });
     }
+
+    // Wer das richtige Passwort kennt, ist kein Rateangriff — Bremse aufheben.
+    loescheFehlversuche(email);
 
     const employee = passende[0];
 
