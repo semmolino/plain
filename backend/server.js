@@ -71,6 +71,14 @@ const corsMw = cors({
 app.use("/api", corsMw);
 app.use(bodyParser.json());
 
+// Serverfehler nach aussen neutralisieren (Sicherheitsaudit 2026-09-03, M8).
+// GANZ FRUEH einhaengen: er muss auch fuer die oeffentlichen Router gelten
+// (auth, webhooks, tracking, branding), die unterhalb der authChain laufen.
+// Fachliche Fehler mit status < 500 bleiben unberuehrt — nur Serverfehler
+// verlieren ihre Originalmeldung, und die steht dann mit Kennung im Protokoll.
+const { makeMiddleware: makeErrorSanitizer } = require("./middleware/errorSanitizer");
+app.use(makeErrorSanitizer());
+
 // Kein Client, sondern ein Stellvertreter: er loest bei jedem Zugriff auf, in
 // wessen Auftrag gerade gearbeitet wird (siehe db.js). Ohne POSTGREST_URL ist
 // das unveraendert der bisherige Client mit dem Service-Key — die 36 Router

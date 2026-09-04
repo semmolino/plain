@@ -378,7 +378,7 @@ module.exports = (supabase) => {
     if (updErr) return res.status(500).json({ error: updErr.message });
     if (!geaendert || geaendert.length !== 1) {
       console.error(`[CHANGE-PASSWORD] Kein Schreibvorgang fuer EMPLOYEE ${decoded.employee_id} (${geaendert?.length ?? 0} Zeilen)`);
-      return res.status(500).json({ error: "Das Passwort konnte nicht gespeichert werden. Bitte Administrator kontaktieren." });
+      return res.status(500).json({ error: "Das Passwort konnte nicht gespeichert werden. Bitte Administrator kontaktieren.", userFacing: true });
     }
     // Alte Sitzungen beenden. Wer sein Passwort aendert, erwartet, dass ein
     // mitgelesenes Token damit wertlos wird — und genau das war es bisher nicht
@@ -436,10 +436,10 @@ module.exports = (supabase) => {
         if (mailErr?.status === 503) {
           // Kein Versand konfiguriert — Link ins Log fuer Admin-Abruf.
           console.log(`[PASSWORD RESET] ${employee.MAIL}: ${resetUrl}`);
-          return res.status(500).json({ error: "E-Mail-Versand nicht konfiguriert. Bitte Administrator kontaktieren." });
+          return res.status(500).json({ error: "E-Mail-Versand nicht konfiguriert. Bitte Administrator kontaktieren.", userFacing: true });
         }
         console.error("[PASSWORD RESET] Mail error:", mailErr?.message || mailErr);
-        return res.status(500).json({ error: "E-Mail konnte nicht gesendet werden. Bitte Administrator kontaktieren." });
+        return res.status(500).json({ error: "E-Mail konnte nicht gesendet werden. Bitte Administrator kontaktieren.", userFacing: true });
       }
     }
 
@@ -495,7 +495,7 @@ module.exports = (supabase) => {
     if (updErr) return res.status(500).json({ error: updErr.message });
     if (!geaendert || geaendert.length !== 1) {
       console.error(`[RESET-CONFIRM] Kein Schreibvorgang fuer EMPLOYEE ${decoded.employee_id} (${geaendert?.length ?? 0} Zeilen)`);
-      return res.status(500).json({ error: "Das Passwort konnte nicht gespeichert werden. Bitte Administrator kontaktieren." });
+      return res.status(500).json({ error: "Das Passwort konnte nicht gespeichert werden. Bitte Administrator kontaktieren.", userFacing: true });
     }
     // Der haeufigste Grund fuer ein Zuruecksetzen ist ein verlorenes oder
     // kompromittiertes Passwort. Dann muessen alle laufenden Sitzungen enden.

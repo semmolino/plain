@@ -438,7 +438,9 @@ module.exports = (supabase) => {
       companyName:  company?.COMPANY_NAME_1 ?? null,
     });
 
-    if (!invite.sent) return res.status(500).json({ error: invite.reason, ...(invite.url ? { url: invite.url } : {}) });
+    // Der Grund ist hier fuer den Administrator gedacht (kein SMTP, Adresse
+    // fehlt) und enthaelt keine Datenbankinterna.
+    if (!invite.sent) return res.status(500).json({ error: invite.reason, userFacing: true, ...(invite.url ? { url: invite.url } : {}) });
     res.json({ sent: true, mail: emp.MAIL });
   });
 
