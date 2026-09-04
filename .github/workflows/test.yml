@@ -43,6 +43,36 @@ jobs:
         env:
           JWT_SECRET: test-secret-ci
 
+  security:
+    name: Sicherheitsscan
+    runs-on: ubuntu-latest
+
+    # Prueft die QUELLE gegen scripts/security-baseline.json: fehlschlagen laesst
+    # nur NEUES. Der bekannte Bestand steht in docs/SECURITY_AUDIT_2026-09-03.md
+    # und soll schrumpfen — waechst die Baseline, gehoert eine Begruendung in den
+    # Commit. Konzept: docs/SECURITY_AUDIT_CONCEPT.md
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Bei Push/PR ohne --deps: schnell, kein Netz noetig, keine Abhaengigkeit
+      # von der Tagesform der Advisory-Datenbank.
+      - name: Quellcode-Scan
+        run: node scripts/security-scan.mjs
+
+      # Im naechtlichen Lauf zusaetzlich npm audit. Hohe Funde werden gezeigt,
+      # scheitern lassen nur kritische — sonst faerbt ein Advisory in einer
+      # Entwicklungsabhaengigkeit jeden Commit rot.
+      - name: Abhaengigkeiten pruefen
+        if: github.event_name == 'schedule'
+        run: |
+          npm ci --prefix backend --ignore-scripts
+          npm ci --prefix frontend-react --ignore-scripts
+          node scripts/security-scan.mjs --deps
+
   frontend-typecheck:
     name: Frontend (TypeScript)
     runs-on: ubuntu-latest

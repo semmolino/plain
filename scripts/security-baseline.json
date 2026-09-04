@@ -1,0 +1,7 @@
+{
+  "erzeugt": "2026-09-03",
+  "hinweis": "Bekannter Bestand. Nur NEUE Verstoesse lassen den Lauf fehlschlagen. Diese Liste soll schrumpfen, nicht wachsen.",
+  "eintraege": [
+    "E1|backend/server.js|contentSecurityPolicy: false"
+  ]
+}
