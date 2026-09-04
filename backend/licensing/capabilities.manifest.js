@@ -121,7 +121,7 @@ const capabilities = [
   { key: "reports.standard", module: "reports", labelDe: "Standard-Reports", type: "boolean",
     permissions: ["reports.view"], since: SINCE },
   { key: "reports.advanced", module: "reports", labelDe: "Erweiterte Auswertungen & Export", type: "boolean",
-    permissions: ["reports.export", "reports.scope.all"], since: SINCE },
+    permissions: ["reports.export", "reports.scope.all", "reports.wip.view"], since: SINCE },
 
   // ── Mitarbeiter ──────────────────────────────────────────────────────────────
   { key: "employees.management", module: "employees", labelDe: "Mitarbeiterverwaltung", type: "boolean",

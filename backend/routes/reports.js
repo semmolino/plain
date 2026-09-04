@@ -1,5 +1,7 @@
 const express = require("express");
 const { requirePermission } = require("../middleware/permissions");
+const wipSvc = require("../services/wipReport");
+const { loadParentSurchargesByProject: loadSurcharges } = require("../services/reportSurcharges");
 
 /**
  * Reporting endpoints
@@ -99,44 +101,14 @@ module.exports = (supabase) => {
     return null;
   }
 
-  // Compute sum of parent (non-leaf) SURCHARGES_TOTAL per project PLUS the
-  // project-level (root) SURCHARGES_TOTAL — these are the surcharges that the
-  // leaf-based reporting views miss.
+  // Zuschläge der Nicht-Blattknoten und der Projektebene, die die blattbasierten
+  // Views nicht sehen. Logik liegt in services/reportSurcharges.js, damit der
+  // Report „Teilfertige Leistungen" dieselbe Korrektur benutzt und nicht eine
+  // zweite Kopie davon.
   // Returns Map<projectId(string), surchargeSum(number)>
-  async function loadParentSurchargesByProject(projectIds) {
-    const out = new Map();
-    if (!projectIds || projectIds.length === 0) return out;
+  const loadParentSurchargesByProject = (projectIds, tenantId) =>
+    loadSurcharges(supabase, tenantId, projectIds);
 
-    // 1) Non-leaf structure-node surcharges
-    const { data: structRows } = await supabase
-      .from("PROJECT_STRUCTURE")
-      .select("PROJECT_ID, ID, FATHER_ID, SURCHARGES_TOTAL")
-      .in("PROJECT_ID", projectIds);
-    const fatherIds = new Set((structRows || []).filter(r => r.FATHER_ID != null).map(r => String(r.FATHER_ID)));
-    for (const r of (structRows || [])) {
-      if (!fatherIds.has(String(r.ID))) continue; // skip leaves
-      const pid = String(r.PROJECT_ID);
-      const inc = Number(r.SURCHARGES_TOTAL || 0);
-      if (!inc) continue;
-      out.set(pid, (out.get(pid) || 0) + inc);
-    }
-
-    // 2) Project-level (root) surcharges — Option A
-    try {
-      const { data: projRows } = await supabase
-        .from("PROJECT")
-        .select("ID, SURCHARGES_TOTAL")
-        .in("ID", projectIds);
-      for (const p of (projRows || [])) {
-        const sur = Number(p.SURCHARGES_TOTAL || 0);
-        if (!sur) continue;
-        const pid = String(p.ID);
-        out.set(pid, (out.get(pid) || 0) + sur);
-      }
-    } catch (_) { /* column may not exist yet (migration not run) — soft-fail */ }
-
-    return out;
-  }
   const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 
   // Aggregierter Projektverlauf (kumulierte Honorar/Leistung/Kosten/Abgerechnet/
@@ -222,7 +194,7 @@ module.exports = (supabase) => {
     if (sortedDates.length === 0) return [];
 
     const distinctProjectIds = [...new Set(structures.map(s => s.PROJECT_ID).filter(Boolean))];
-    const parentSurchargesMap = await loadParentSurchargesByProject(distinctProjectIds);
+    const parentSurchargesMap = await loadParentSurchargesByProject(distinctProjectIds, tenantId);
     let totalParentSurcharges = 0;
     for (const v of parentSurchargesMap.values()) totalParentSurcharges += v;
 
@@ -318,7 +290,7 @@ module.exports = (supabase) => {
     if (!data)  return res.status(404).json({ error: "Project report header not found" });
 
     // Add parent-level surcharges (leaf-based view misses these)
-    const parentSurchargesMap = await loadParentSurchargesByProject([projectId]);
+    const parentSurchargesMap = await loadParentSurchargesByProject([projectId], tenantId);
     const parentSurcharges = parentSurchargesMap.get(String(projectId)) || 0;
     if (parentSurcharges) {
       data.BUDGET_TOTAL_NET    = round2(Number(data.BUDGET_TOTAL_NET || 0) + parentSurcharges);
@@ -796,7 +768,7 @@ module.exports = (supabase) => {
 
     // Add parent-level surcharges per project
     const projectIds = rows.map(r => r.PROJECT_ID).filter(Boolean);
-    const parentSurchargesMap = await loadParentSurchargesByProject(projectIds);
+    const parentSurchargesMap = await loadParentSurchargesByProject(projectIds, tenantId);
     for (const row of rows) {
       const sur = parentSurchargesMap.get(String(row.PROJECT_ID)) || 0;
       if (!sur) continue;
@@ -907,7 +879,7 @@ module.exports = (supabase) => {
       if (sortedDates.length === 0) return res.json({ data: [] });
 
       // Parent-level surcharges (leaf-based loop misses these)
-      const parentSurchargesMap = await loadParentSurchargesByProject([projectId]);
+      const parentSurchargesMap = await loadParentSurchargesByProject([projectId], tenantId);
       const parentSurcharges = parentSurchargesMap.get(String(projectId)) || 0;
 
       // 8. Compute cumulative values at each event date
@@ -1058,7 +1030,7 @@ module.exports = (supabase) => {
     // Add parent-level surcharges per project
     const rows = data || [];
     const projectIds = rows.map(r => r.PROJECT_ID).filter(Boolean);
-    const parentSurchargesMap = await loadParentSurchargesByProject(projectIds);
+    const parentSurchargesMap = await loadParentSurchargesByProject(projectIds, tenantId);
     for (const row of rows) {
       const sur = parentSurchargesMap.get(String(row.PROJECT_ID)) || 0;
       if (!sur) continue;
@@ -1216,7 +1188,7 @@ module.exports = (supabase) => {
 
     // Add parent-level surcharges per project (leaf-based view misses these)
     const projIds = (data || []).map(p => p.PROJECT_ID).filter(Boolean);
-    const parentSurchargesMap = await loadParentSurchargesByProject(projIds);
+    const parentSurchargesMap = await loadParentSurchargesByProject(projIds, tenantId);
 
     const result = (data || []).map(p => {
       const sur       = parentSurchargesMap.get(String(p.PROJECT_ID)) || 0;
@@ -1983,6 +1955,117 @@ module.exports = (supabase) => {
       res.json({ data: result });
     } catch (e) {
       res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
+  // ── Teilfertige Leistungen (kaufmaennischer Abschluss-Report) ─────────────
+  // Konzept: docs/TEILFERTIGE_LEISTUNGEN_CONCEPT.md
+  //
+  // Der Report ist eine Unternehmenszahl, keine Projektkennzahl. Ohne
+  // reports.scope.all saehe der Nutzer eine auf seine Projekte gefilterte
+  // Summe — die sieht aus wie eine Bilanzposition, ist aber keine. Deshalb
+  // 403 statt Teilsumme.
+  function requireFullScope(req, res, next) {
+    if (req.reportScopeProjectIds === null) return next();
+    return res.status(403).json({
+      error: "Teilfertige Leistungen ist eine Unternehmensauswertung und verlangt das Recht auf alle Projekte (reports.scope.all).",
+    });
+  }
+
+  const wipChain = [requirePermission("reports.wip.view"), requireFullScope];
+
+  function wipOptions(req) {
+    return {
+      asOf:              (req.query.as_of      || "").toString().trim() || undefined,
+      compareTo:         (req.query.compare_to || "").toString().trim() || undefined,
+      method:            (req.query.method     || "").toString().trim() || undefined,
+      costFactorPercent: req.query.cost_factor != null && req.query.cost_factor !== ""
+        ? req.query.cost_factor
+        : undefined,
+    };
+  }
+
+  router.get("/wip", ...wipChain, async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    try {
+      const data = await wipSvc.buildWipReport(supabase, tenantId, wipOptions(req));
+      res.json({ data });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  router.get("/wip/pdf", ...wipChain, requirePermission("reports.export"), async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    try {
+      const { renderWipPdf } = require("../services_pdf_render");
+      const { pdf, report } = await renderWipPdf({ supabase, tenantId, opts: wipOptions(req) });
+      res.set("Content-Type", "application/pdf");
+      res.set("Content-Disposition", `inline; filename="Teilfertige_Leistungen_${report.asOf}.pdf"`);
+      res.send(pdf);
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  // Festschreiben ist Abschlussarbeit — dasselbe Recht wie beim Monatsabschluss.
+  router.post("/wip/close", ...wipChain, requirePermission("settings.monthly_close.edit"), async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    try {
+      const body = req.body || {};
+      const data = await wipSvc.saveClosing(supabase, tenantId, {
+        asOf:              body.as_of,
+        compareTo:         body.compare_to,
+        method:            body.method,
+        costFactorPercent: body.cost_factor,
+        label:             body.label,
+        employeeId:        req.employeeId ?? null,
+      });
+      res.json({ data });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  router.get("/wip/closings", ...wipChain, async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    try {
+      const data = await wipSvc.listClosings(supabase, tenantId);
+      res.json({ data });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  router.get("/wip/closings/:id", ...wipChain, async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Ungueltige ID." });
+    try {
+      const data = await wipSvc.getClosing(supabase, tenantId, id, {
+        withDrift: req.query.drift === "1" || req.query.drift === "true",
+      });
+      res.json({ data });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  router.delete("/wip/closings/:id", ...wipChain, requirePermission("settings.monthly_close.edit"), async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Ungueltige ID." });
+    try {
+      const data = await wipSvc.deleteClosing(supabase, tenantId, id);
+      res.json({ data });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
     }
   });
 

@@ -1315,6 +1315,42 @@ async function renderMonatsabschlussPdf({ supabase, tenantId }) {
   return { pdf, report };
 }
 
+// ── Teilfertige Leistungen ───────────────────────────────────────────────────
+// Das Blatt, das an den Steuerberater geht: Stichtag, Bewertungsmethode und
+// Bewertungsfaktor stehen im Kopf, die Rechtsgrundlage in der Fussnote. Ohne
+// diese Angaben ist die Zahl nicht pruefbar.
+
+async function renderWipPdf({ supabase, tenantId, opts = {} }) {
+  const wipSvc = require('./services/wipReport');
+  const report = await wipSvc.buildWipReport(supabase, tenantId, opts);
+
+  const { data: companies } = await supabase
+    .from('COMPANY')
+    .select('ID, COMPANY_NAME_1, COMPANY_NAME_2')
+    .eq('TENANT_ID', tenantId)
+    .limit(1);
+  const co = companies?.[0];
+  const sellerName = co ? [co.COMPANY_NAME_1, co.COMPANY_NAME_2].filter(Boolean).join(' ') : '';
+  const logoDataUri = await resolveLogoDataUri({
+    supabase, tplLogoAssetId: null, tenantId, companyId: co?.ID ?? null,
+  });
+
+  const context = {
+    ...report,
+    methodLabel: report.method === 'erloes'
+      ? 'Leistungswert (Controlling)'
+      : 'Herstellkosten (HGB)',
+    wipTotal:    wipSvc.wipTotalForMethod(report.totals, report.method),
+    generatedAt: new Date().toISOString(),
+    seller:      { name: sellerName },
+    logoDataUri,
+  };
+
+  const html = env().render(path.join('modern_a', 'wip.njk'), context);
+  const pdf  = await renderPdf({ html });
+  return { pdf, report };
+}
+
 // ── Honorar data helper (shared by honorar PDF and invoice PDF) ───────────────
 
 async function buildHonorarCalcData(supabase, calcMasterId, tenantId) {
@@ -1701,4 +1737,4 @@ async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice
   return { pdf, html };
 }
 
-module.exports = { renderDocumentPdf, renderOfferPdf, renderNachtragPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc };
+module.exports = { renderDocumentPdf, renderOfferPdf, renderNachtragPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderWipPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc };

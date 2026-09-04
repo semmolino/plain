@@ -459,7 +459,8 @@
   --dim:   rgba(42,42,46,0.04);
   --dim-2: rgba(42,42,46,0.025);
   --cta-fg:    #231f1c;
-  --notif-badge-fg: #231f1c;
+
+  --notif-badge-fg: #231f1c;
 
 }
 
@@ -504,7 +505,8 @@
   --dim:   rgba(58,53,48,0.04);
   --dim-2: rgba(58,53,48,0.025);
   --cta-fg:    #3a3530;
-  --notif-badge-fg: #3a3530;
+
+  --notif-badge-fg: #3a3530;
 
 }
 
@@ -549,7 +551,8 @@
   --dim:   rgba(28,39,51,0.04);
   --dim-2: rgba(28,39,51,0.025);
   --cta-fg:    #1c2733;
-  --notif-badge-fg: #1c2733;
+
+  --notif-badge-fg: #1c2733;
 
 }
 
@@ -594,7 +597,8 @@
   --dim:   rgba(31,78,84,0.04);
   --dim-2: rgba(31,78,84,0.025);
   --cta-fg:    #122e32;
-  --notif-badge-fg: #122e32;
+
+  --notif-badge-fg: #122e32;
 
 }
 
@@ -639,7 +643,8 @@
   --dim:   rgba(44,53,64,0.04);
   --dim-2: rgba(44,53,64,0.025);
   --cta-fg:    #ffffff;
-  --notif-badge-fg: #ffffff;
+
+  --notif-badge-fg: #ffffff;
 
 }
 
@@ -2681,6 +2686,23 @@ th.doc-actions, td.doc-actions {
   font-size: 18px; font-weight: 800; color: var(--text);
 }
 .daten-kpi-value.accent { color: var(--accent); }
+
+/* ── Teilfertige Leistungen: Zeilen-Marker ────────────────────────────────────
+   Die Marker sind Teil des Ergebnisses, nicht Dekoration: eine 0 in der
+   Teilfertig-Spalte kann „nichts geleistet" oder „nie erfasst" heissen. */
+.tfl-flags {
+  display: flex; flex-wrap: wrap; gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+.tfl-flag {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--warning-bg);
+  color: var(--warning-strong);
+  font-size: 11px; font-weight: 600; line-height: 1.5;
+  white-space: nowrap;
+}
 
 /* ── Prognose / EVM section ──────────────────────────────────────────────────── */
 .prognose-section {

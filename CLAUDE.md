@@ -158,7 +158,7 @@ zusätzlich `DEFAULT public.current_tenant_id()` auf jede `TENANT_ID`-Spalte als
 Netz darunter. Reine `.update()`-Aufrufe sind nicht betroffen (die Zeile behält
 ihren Mandanten).
 
-**Key tables**: `TENANT`, `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRUCTURE`, `PROJECT_PROGRESS`, `EMPLOYEE2PROJECT`, `CONTRACT`, `INVOICE`, `PARTIAL_PAYMENT`, `OFFER`, `OFFER_STRUCTURE`, `BILLING_TYPE`, `ROLE`, `VAT`, `TENANT_SETTINGS`.
+**Key tables**: `TENANT`, `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRUCTURE`, `PROJECT_PROGRESS`, `EMPLOYEE2PROJECT`, `CONTRACT`, `INVOICE`, `PARTIAL_PAYMENT`, `OFFER`, `OFFER_STRUCTURE`, `BILLING_TYPE`, `ROLE`, `VAT`, `TENANT_SETTINGS`, `WIP_CLOSING`/`WIP_CLOSING_LINE`.
 
 **BILLING_TYPE_ID**: `1` = fixed-fee (Pauschal), `2` = hourly (Stunden/TEC).
 
@@ -171,6 +171,15 @@ ihren Mandanten).
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
+- **Teilfertige Leistungen** (`services/wipReport.js`, Report unter Projektdaten):
+  der kaufmännische Abschluss. Je Projekt und Stichtag `unfertig = max(0,
+  Leistungswert − abgerechnet)`, HGB-Ansatz `min(Kostenanteil, unfertig)`.
+  Zwei Regeln sind bindend und nicht „Aufräumsache": Aktivposten und erhaltene
+  Anzahlungen werden **projektweise getrennt** geführt und nie saldiert (§ 246
+  Abs. 2 HGB), und der HGB-Wert enthält **keinen** anteiligen Gewinn (§ 252
+  Abs. 1 Nr. 4 HGB). Stichtagswerte in der Vergangenheit hängen an den
+  `PROJECT_PROGRESS`-Snapshots — fehlt einer, weist der Report das aus statt
+  eine 0 zu zeigen. Konzept: `docs/TEILFERTIGE_LEISTUNGEN_CONCEPT.md`.
 
 ---
 
@@ -380,7 +389,7 @@ Choose dimensions meaningful to the data — typical examples: Projekt, Mitarbei
 
 ## Development notes
 
-- **Test suite**: Jest (backend, 24 tests) + Playwright (frontend, smoke tests). Run with `npm test --prefix backend` and `npx playwright test` in `frontend-react/`.
+- **Test suite**: Jest (backend) + Playwright (frontend, smoke tests). Run with `npm test --prefix backend` and `npx playwright test` in `frontend-react/`.
 - TypeScript is strict in the frontend; `npx tsc --noEmit` must pass before committing
 - The backend is plain JS (no TypeScript)
 - Nunjucks templates use `| money` filter (→ `fmtMoney`) and `| date_de` filter

@@ -148,6 +148,7 @@ INSERT INTO "CAPABILITY_PERMISSION" ("CAPABILITY_KEY","PERMISSION_KEY") VALUES
   ('reports.standard', 'reports.view'),
   ('reports.advanced', 'reports.export'),
   ('reports.advanced', 'reports.scope.all'),
+  ('reports.advanced', 'reports.wip.view'),
   ('employees.management', 'employees.view'),
   ('employees.management', 'employees.create'),
   ('employees.management', 'employees.edit'),

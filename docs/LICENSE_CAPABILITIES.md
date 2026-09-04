@@ -5,7 +5,7 @@
 > Architektur: [LICENSE_TIERS_CONCEPT.md](LICENSE_TIERS_CONCEPT.md) ·
 > Workflow: [LICENSE_DEVELOPMENT_CHECKLIST.md](LICENSE_DEVELOPMENT_CHECKLIST.md).
 
-**Stand:** 2026-06-15 · 12 Module · 43 Capabilities · 98 Permission-Verknuepfungen
+**Stand:** 2026-06-15 · 12 Module · 43 Capabilities · 99 Permission-Verknuepfungen
 
 Jede **Capability** ist ein Schalter, den du je Lizenztyp in der Matrix an/aus stellst.
 Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten dahinter liegen
@@ -76,7 +76,7 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 | Capability | Typ | Enthaltene Funktionen |
 |---|---|---|
 | **Standard-Reports**<br>`reports.standard` | boolean | Reporting sehen |
-| **Erweiterte Auswertungen & Export**<br>`reports.advanced` | boolean | Reports exportieren; Reporting: alle Projekte |
+| **Erweiterte Auswertungen & Export**<br>`reports.advanced` | boolean | Reports exportieren; Reporting: alle Projekte; Teilfertige Leistungen sehen |
 
 ## Mitarbeiter `employees`
 

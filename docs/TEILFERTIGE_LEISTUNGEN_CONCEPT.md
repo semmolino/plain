@@ -1,8 +1,12 @@
 # Konzept — Report „Teilfertige Leistungen"
 
-Status: **Entwurf, wartet auf Freigabe**
+Status: **freigegeben und umgesetzt** (2026-09-04)
 Autor: Claude Code · Stand: 2026-09-04
 Branch: `claude/report-teilfertige-leistungen-iy8lgp`
+
+Getroffene Entscheidungen: eigene Permission `reports.wip.view` · Umfang
+Stufe 1 + 2 (Live-Report **und** Festschreiben) · vorbelegte Methode
+Herstellkosten (HGB).
 
 ---
 
@@ -65,7 +69,7 @@ ohne Sonderbehandlung das kumulierte Abrechnungsvolumen.
 ### 3.2 Ableitung
 
 ```
-Abrechnungsgrad          q    = L > 0 ? min(1, R / L) : (R > 0 ? 1 : 0)
+Abrechnungsgrad          q    = L > 0 ? min(1, max(0, R / L)) : (R > 0 ? 1 : 0)
 
 Unfertiger Leistungsanteil
 (zu Auftragspreisen)     U    = max(0, L − R)
@@ -82,6 +86,10 @@ Teilfertige Leistung
 Abwertung / Drohverlust  D    = max(0, K_u − U)
 Nicht realisierter Gewinn G   = U − TFL_HK               (nur Anzeige, PoC-Sicht)
 ```
+
+`q` ist nach beiden Seiten begrenzt: über 1 wäre nichts mehr unfertig,
+unter 0 (Stornos überwiegen die Abrechnungen) stiege der Kostenansatz über die
+gebuchten Kosten hinaus.
 
 Sonderfall `L = 0 ∧ R = 0 ∧ K > 0` (Kosten gebucht, Leistungsstand nie
 gepflegt): `q = 0`, also `K_u = K × f`, aber `U = 0` und damit `TFL_HK = 0`.
@@ -146,7 +154,10 @@ Weitere Zeilen-Marker: `R > L` → „Erhaltene Anzahlung"; `K_u > U` →
 ### 5.1 Backend
 
 **Kein neues SQL für die Berechnung** — die vorhandene RPC liefert alle
-Basisgrößen stichtagsscharf.
+Basisgrößen stichtagsscharf. Dazu kam beim Umsetzen genau eine
+Datenbankfunktion, `fn_wip_snapshot_dates` (Migration 0137): PostgREST kann
+kein `MAX … GROUP BY`, und das Snapshot-Datum je Projekt ist keine Kür, sondern
+die Aussage darüber, ob der Stichtagswert überhaupt belegt ist.
 
 * `backend/services/wipReport.js` — gesamte Rechenlogik als reine Funktionen
   (`computeWipRow`, `aggregateWip`), damit sie ohne Datenbank testbar ist,
@@ -157,9 +168,19 @@ Basisgrößen stichtagsscharf.
     `status_ids` (optional). Antwort: `{ asOf, compareTo, costFactor, rows[], totals, dataQuality }`.
   * `GET /reports/wip/pdf` — gleiche Parameter, `reports.export`.
 * Datenbeschaffung: `fn_project_list_report` je Stichtag (zweimal bei
-  Vergleichsstichtag), Zuschläge der Nicht-Blattknoten wie in `/projects/list`
-  über `loadParentSurchargesByProject`, dazu eine Abfrage auf
-  `PROJECT_PROGRESS` für das Snapshot-Datum je Projekt.
+  Vergleichsstichtag) für einen Stichtag in der Vergangenheit,
+  `VW_REPORT_PROJECT_DETAIL` für „heute" — dieselbe Trennung wie „Aktuell" ↔
+  „Stichtag" im übrigen Reporting, weil `PROJECT_STRUCTURE` den letzten
+  Snapshot überholen kann. Dazu die Zuschläge der Nicht-Blattknoten und
+  `fn_wip_snapshot_dates` für das Snapshot-Datum je Projekt.
+* Die Zuschlagskorrektur lag als Closure in `routes/reports.js`. Sie ist beim
+  Umsetzen nach `services/reportSurcharges.js` gezogen und an beiden Stellen
+  von dort bezogen worden — eine zweite Kopie wäre eine zweite Stelle, an der
+  ein künftiger Zuschlagstyp vergessen wird. Der Mandantenfilter ist dabei
+  ergänzt worden (vorher trug ihn nur RLS).
+* Projekte ohne jede Bewegung zum Stichtag (kein Auftragswert, keine Leistung,
+  keine Kosten, keine Abrechnung) fallen aus der Liste — sonst stünden
+  Vorlagen und Altbestand im Abschluss.
 * PDF: `backend/templates/modern_a/wip.njk` (Aufbau analog `monatsabschluss.njk`),
   `renderWipPdf` in `services_pdf_render.js` — Kopf mit Stichtag, Methode und
   Bewertungsfaktor, Projekttabelle, Summenblock, Fußnote zur Bewertungsmethode.
@@ -174,9 +195,11 @@ Basisgrößen stichtagsscharf.
 |---|---|---|
 | `wip_cost_factor_percent` | `100` | Anteil der gebuchten Vollkosten als Herstellungskosten |
 | `wip_method_default` | `hk` | Vorbelegte Bewertungsmethode |
-| `wip_status_ids` | leer = alle | Projektstatus, die in den Abschluss einfließen |
 
-Gepflegt in Einstellungen → Vorbelegungen, jeweils mit `HelpHint`.
+Gepflegt in Einstellungen → Vorbelegungen, jeweils mit `HelpHint`. Ein
+vorbelegter Statusfilter ist bewusst entfallen: die Statusauswahl passiert im
+Report über Filter-Chips (clientseitig, wie in jeder anderen Liste), eine
+zweite Stelle dafür wäre eine zweite Wahrheit.
 
 ### 5.3 Frontend
 
@@ -214,18 +237,28 @@ Spalten-Headern (`help?: HelpId`) und an den KPI-Kacheln.
 ### 5.5 Berechtigungen
 
 Der Report zeigt Kosten, Margen und den nicht realisierten Gewinn je Projekt —
-das ist sensibler als die bestehende Projektliste. Vorschlag: eigene Permission
-`reports.wip.view` (Migration `0136_rbac_wip_report.sql`), Default-Rollen
-**Administrator, Geschäftsleitung, Buchhaltung** — bewusst *nicht*
-Projektleiter und Mitarbeiter. Der Endpoint verlangt zusätzlich die
-Gesamtsicht: eine auf eigene Projekte gefilterte Abschlusssumme wäre eine
-irreführende Zahl, deshalb ist `reports.wip.view` ohne `reports.scope.all`
-nicht sinnvoll und der Endpoint antwortet dann mit 403 statt mit einer
-Teilsumme. → **Entscheidung durch den Nutzer, siehe Abschnitt 7.**
+das ist sensibler als die bestehende Projektliste. Umgesetzt als eigene
+Permission `reports.wip.view` (Migration `0136_rbac_wip_report.sql`),
+Default-Rollen **Administrator, Geschäftsleitung, Buchhaltung** — bewusst
+*nicht* Projektleiter und Mitarbeiter. Wichtig dabei: die Rolle
+„Projektleiter" bekommt in 0062 pauschal alles aus `MODULE='reports'`, mit
+`reports.view` hätte also jeder Projektleiter die Abschlusszahlen.
+
+Der Endpoint verlangt zusätzlich die Gesamtsicht (`reports.scope.all`): eine
+auf eigene Projekte gefilterte Abschlusssumme sieht aus wie eine
+Bilanzposition, ist aber keine — deshalb 403 statt Teilsumme.
+
+Lizenzseitig hängt `reports.wip.view` im Capability-Manifest an
+`reports.advanced` (`backend/licensing/capabilities.manifest.js`, Seed 0070b
+und `docs/LICENSE_CAPABILITIES.md` sind daraus neu generiert).
+
+Das Festschreiben (`POST /reports/wip/close`, `DELETE …/closings/:id`) hängt an
+der bestehenden `settings.monthly_close.edit` — Festschreiben ist
+Abschlussarbeit und braucht kein eigenes Recht.
 
 ---
 
-## 6. Optionale Stufe 2 — Abschluss festschreiben
+## 6. Stufe 2 — Abschluss festschreiben (umgesetzt)
 
 Ein Stichtagswert, der sich im Nachhinein ändert, ist für einen Jahresabschluss
 wertlos: nachgebuchte Stunden, ein Storno oder eine Leistungsstandkorrektur
@@ -243,18 +276,21 @@ Empfehlung: mitnehmen. Ohne Festschreibung wandert die Bilanzzahl.
 
 ---
 
-## 7. Offene Entscheidungen
+## 7. Entschieden (2026-09-04)
 
-1. **Berechtigung** — eigene `reports.wip.view` (Empfehlung, Default
-   Administrator/Geschäftsleitung/Buchhaltung) oder die bestehende
-   `reports.view` wiederverwenden (dann sieht jeder Projektleiter die
-   Unternehmenszahlen)?
-2. **Umfang** — Stufe 1 (Live-Report, keine Migration außer RBAC) oder
-   Stufe 1 + 2 (zusätzlich Festschreiben mit zwei neuen Tabellen)?
-3. **Vorbelegte Methode** — „Herstellkosten (HGB)" (Empfehlung, das ist die
-   Bilanzzahl) oder „Leistungswert" (die Controlling-Zahl)?
+| Frage | Entscheidung |
+|---|---|
+| Berechtigung | eigene `reports.wip.view`, Default Administrator / Geschäftsleitung / Buchhaltung |
+| Umfang | Stufe 1 **und** Stufe 2 — Live-Report plus Festschreiben |
+| Vorbelegte Methode | Herstellkosten (HGB); im Report umschaltbar |
 
----
+### Was beim Umsetzen aufgefallen ist
+
+Der Abrechnungsgrad `q` war zunächst nur nach oben begrenzt (`min(1, R/L)`).
+Überwiegen die Stornos die Abrechnungen, wird `R` negativ, `q` damit negativ
+und `(1 − q) > 1` — der Kostenansatz lag dann **über** den gebuchten Kosten.
+Die Grenze nach unten (`max(0, …)`) ist nachgezogen; der Fall steht als Test
+in `backend/tests/wipReport.test.js`.
 
 ## 8. Was dieser Report bewusst nicht tut
 
@@ -265,3 +301,18 @@ Empfehlung: mitnehmen. Ohne Festschreibung wandert die Bilanzzahl.
 * Keine IFRS-PoC-Bilanzierung — der Leistungswert wird als Controlling-Sicht
   ausgewiesen, nicht als Bilanzansatz.
 * Keine Änderung an bestehenden Reports oder an der Leistungsstandpflege.
+
+---
+
+## 9. Prüfen
+
+* `npx jest tests/wipReport.test.js` — 30 Tests auf den Rechenkern
+  (Grenzfälle: `R > L`, `R < 0`, `L = 0`, Drohverlust-Deckelung,
+  Bewertungsfaktor, Rundung, Bestandsveränderung, Saldierungsverbot)
+* `npx playwright test tests/teilfertig.spec.ts` — der Tab mit gemockter API:
+  Aktiva und Passiva getrennt, Bestandsveränderung, Methodenwechsel,
+  Snapshot-Marker, kein waagerechter Seitenlauf
+* Migrationen **manuell** einspielen, in dieser Reihenfolge:
+  `0136_rbac_wip_report.sql`, `0137_wip_closing.sql`
+
+---

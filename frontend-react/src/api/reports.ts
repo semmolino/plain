@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, openPdfWithAuth } from './client'
 
 export interface DashboardKpis {
   HONORAR_GESAMT:      number | null
@@ -528,3 +528,146 @@ export const fetchTrends = (groupBy: TrendsGroupBy, dateFrom?: string, dateTo?: 
   if (dateTo)   qs.set('date_to',   dateTo)
   return apiClient.get<{ data: TrendPeriod[] }>(`/reports/trends?${qs}`)
 }
+
+// ── Teilfertige Leistungen (kaufmännischer Abschluss) ─────────────────────────
+// Konzept und Herleitung: docs/TEILFERTIGE_LEISTUNGEN_CONCEPT.md
+
+/** Marker je Zeile — eine 0 kann „nichts geleistet" oder „nie erfasst" heißen. */
+export type WipFlag = 'no_performance' | 'prepayment' | 'loss_risk' | 'no_snapshot'
+
+export type WipMethod = 'hk' | 'erloes'
+
+export interface WipRow {
+  PROJECT_ID:                number
+  NAME_SHORT:                string | null
+  NAME_LONG:                 string | null
+  PROJECT_STATUS_ID:         number | null
+  PROJECT_STATUS_NAME_SHORT: string | null
+  PROJECT_TYPE_ID:           number | null
+  PROJECT_TYPE_NAME_SHORT:   string | null
+  PROJECT_MANAGER_ID:        number | null
+  PROJECT_MANAGER_DISPLAY:   string | null
+  DEPARTMENT_NAME:           string | null
+  ADDRESS_NAME:              string | null
+  /** B — Auftragswert */
+  ORDER_VALUE_NET:           number
+  /** L — Leistungswert */
+  PERFORMANCE_NET:           number
+  PERFORMANCE_PERCENT:       number | null
+  /** R — kumuliert abgerechnet */
+  BILLED_NET:                number
+  /** K — angefallene Kosten */
+  COST_NET:                  number
+  HOURS_TOTAL:               number
+  PAYED_NET_TOTAL:           number
+  /** Abrechnungsgrad in % */
+  BILLED_RATIO:              number
+  /** U — unfertig, zu Auftragspreisen */
+  UNBILLED_NET:              number
+  /** K_u — Kosten der unfertigen Leistung */
+  COST_UNBILLED_NET:         number
+  /** Teilfertige Leistung nach HGB (Herstellkosten) */
+  WIP_HK_NET:                number
+  /** Teilfertige Leistung zum Leistungswert (Controlling) */
+  WIP_REVENUE_NET:           number
+  /** A — erhaltene Anzahlung (Passivseite) */
+  PREPAYMENT_NET:            number
+  /** D — Drohverlust-Hinweis */
+  LOSS_RISK_NET:             number
+  /** G — nicht realisierter Gewinn */
+  UNREALIZED_GAIN_NET:       number
+  /** Letzter Leistungsstand-Snapshot ≤ Stichtag */
+  SNAPSHOT_DATE:             string | null
+  flags:                     WipFlag[]
+  /** Nur mit Vergleichsstichtag gesetzt */
+  COMPARE_WIP_NET?:          number
+  CHANGE_WIP_NET?:           number
+}
+
+export interface WipTotals {
+  projectCount:       number
+  orderValue:         number
+  performance:        number
+  billed:             number
+  cost:               number
+  unbilled:           number
+  costUnbilled:       number
+  wipHk:              number
+  wipRevenue:         number
+  prepayments:        number
+  lossRisk:           number
+  unrealizedGain:     number
+  noSnapshotCount:    number
+  noPerformanceCount: number
+  prepaymentCount:    number
+  lossRiskCount:      number
+}
+
+export interface WipReport {
+  asOf:              string
+  compareTo:         string | null
+  method:            WipMethod
+  costFactorPercent: number
+  historic:          boolean
+  rows:              WipRow[]
+  totals:            WipTotals
+  compareTotals:     WipTotals | null
+  stockChange:       { wip: number; prepayments: number } | null
+  dataQuality: {
+    historic:           boolean
+    noSnapshotCount:    number
+    noPerformanceCount: number
+    prepaymentCount:    number
+    lossRiskCount:      number
+  }
+}
+
+export interface WipQuery {
+  asOf?:       string
+  compareTo?:  string
+  method?:     WipMethod
+  costFactor?: string
+}
+
+function wipQs(q: WipQuery): string {
+  const p = new URLSearchParams()
+  if (q.asOf)       p.set('as_of',       q.asOf)
+  if (q.compareTo)  p.set('compare_to',  q.compareTo)
+  if (q.method)     p.set('method',      q.method)
+  if (q.costFactor) p.set('cost_factor', q.costFactor)
+  const s = p.toString()
+  return s ? `?${s}` : ''
+}
+
+export const fetchWipReport = (q: WipQuery = {}) =>
+  apiClient.get<{ data: WipReport }>(`/reports/wip${wipQs(q)}`)
+
+export const openWipPdf = (q: WipQuery = {}) =>
+  openPdfWithAuth(`/reports/wip/pdf${wipQs(q)}`)
+
+export interface WipClosing {
+  ID:                     number
+  AS_OF_DATE:             string
+  METHOD:                 WipMethod
+  COST_FACTOR_PERCENT:    number
+  COMPARE_TO_DATE:        string | null
+  LABEL:                  string | null
+  TOTAL_WIP_HK:           number
+  TOTAL_WIP_REVENUE:      number
+  TOTAL_PREPAYMENTS:      number
+  TOTAL_LOSS_RISK:        number
+  PROJECT_COUNT:          number
+  MISSING_SNAPSHOT_COUNT: number
+  CREATED_BY_NAME:        string | null
+  created_at:             string
+}
+
+export const fetchWipClosings = () =>
+  apiClient.get<{ data: WipClosing[] }>('/reports/wip/closings')
+
+export const createWipClosing = (body: {
+  as_of?: string; compare_to?: string; method?: WipMethod; cost_factor?: string; label?: string
+}) => apiClient.post<{ data: { id: number; asOf: string; projectCount: number } }>('/reports/wip/close', body)
+
+export const deleteWipClosing = (id: number) =>
+  apiClient.delete<{ data: { ok: boolean } }>(`/reports/wip/closings/${id}`)

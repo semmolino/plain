@@ -1078,6 +1078,8 @@ function VorbelegungenSection() {
   const [bwPcts,         setBwPcts]         = useState('')
   const [bwNotifyPm,     setBwNotifyPm]     = useState(true)
   const [bwNotifyBooker, setBwNotifyBooker] = useState(true)
+  const [wipCostFactor, setWipCostFactor] = useState('')
+  const [wipMethod,     setWipMethod]     = useState<'hk' | 'erloes'>('hk')
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -1119,6 +1121,9 @@ function VorbelegungenSection() {
     setBwPcts(defData.data.budget_warning_default_pcts ?? '')
     setBwNotifyPm(defData.data.budget_warning_notify_pm !== 'false')
     setBwNotifyBooker(defData.data.budget_warning_notify_booker !== 'false')
+    // Leer lassen, wenn nicht gesetzt — der Platzhalter zeigt den Default 100 %.
+    setWipCostFactor(defData.data.wip_cost_factor_percent ?? '')
+    setWipMethod(defData.data.wip_method_default === 'erloes' ? 'erloes' : 'hk')
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -1146,6 +1151,9 @@ function VorbelegungenSection() {
       await putDefault('budget_warning_default_pcts',  bwPcts.trim() || null)
       await putDefault('budget_warning_notify_pm',     bwNotifyPm ? null : 'false')
       await putDefault('budget_warning_notify_booker', bwNotifyBooker ? null : 'false')
+      // Teilfertige Leistungen: nur speichern, was vom Default abweicht.
+      await putDefault('wip_cost_factor_percent', wipCostFactor.trim() || null)
+      await putDefault('wip_method_default',      wipMethod === 'erloes' ? 'erloes' : null)
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['defaults'] })
@@ -1399,6 +1407,46 @@ function VorbelegungenSection() {
                 />
                 <span>Verursachende Mitarbeiter benachrichtigen</span>
               </label>
+            </div>
+          </div>
+
+          <div className="admin-block">
+            <h3 className="admin-block-title">
+              Teilfertige Leistungen
+              <HelpHint id="report.tfl.was" />
+            </h3>
+            <div className="form-group">
+              <label htmlFor="def-wip-factor">
+                Bewertungsfaktor Kosten (%)
+                <HelpHint id="report.tfl.kostenfaktor" />
+              </label>
+              <input
+                id="def-wip-factor" type="number" min={0} max={100} step={1}
+                value={wipCostFactor}
+                onChange={e => setWipCostFactor(e.target.value)}
+                placeholder="100"
+              />
+              <p className="admin-section-hint">
+                Anteil der gebuchten Kosten, der als Herstellungskosten angesetzt wird. Die
+                Kosten entstehen über den Vollkostensatz und enthalten die Gemeinkostenumlage;
+                Vertriebskosten sind nach § 255 Abs. 2 S. 4 HGB nicht aktivierungsfähig. Den
+                Prozentsatz gibt üblicherweise der Steuerberater vor. Ohne Angabe: 100 %.
+              </p>
+            </div>
+            <div className="form-group">
+              <label htmlFor="def-wip-method">
+                Vorbelegte Bewertungsmethode
+                <HelpHint id="report.tfl.methode" />
+              </label>
+              <select id="def-wip-method" value={wipMethod}
+                onChange={e => setWipMethod(e.target.value === 'erloes' ? 'erloes' : 'hk')}>
+                <option value="hk">Herstellkosten (HGB) — Bilanzansatz</option>
+                <option value="erloes">Leistungswert — Controlling-Sicht</option>
+              </select>
+              <p className="admin-section-hint">
+                Mit welcher Methode der Report startet. Im Report selbst bleibt sie
+                umschaltbar.
+              </p>
             </div>
           </div>
 

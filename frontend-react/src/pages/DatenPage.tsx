@@ -6,14 +6,17 @@ import { EinzelprojektTab }            from '@/pages/daten/EinzelprojektTab'
 import { UnternehmenskennzahlenTab }   from '@/pages/daten/UnternehmenskennzahlenTab'
 import { TrendsTab }                   from '@/pages/daten/TrendsTab'
 import { LeistungsphasenMatrixTab }    from '@/pages/daten/LeistungsphasenMatrixTab'
+import { TeilfertigeLeistungenTab }    from '@/pages/daten/TeilfertigeLeistungenTab'
 import { useLicenseFilterTabs }        from '@/store/licenseStore'
+import { useFilterTabs }               from '@/store/permissionsStore'
 
-type Tab = 'projektliste' | 'einzelprojekt' | 'leistungsphasen' | 'kennzahlen' | 'trends'
+type Tab = 'projektliste' | 'einzelprojekt' | 'leistungsphasen' | 'teilfertig' | 'kennzahlen' | 'trends'
 
-const TABS: { id: Tab; label: string; feature?: string }[] = [
+const TABS: { id: Tab; label: string; feature?: string; permissions?: string[] }[] = [
   { id: 'projektliste',    label: 'Alle Projekte'          },
   { id: 'einzelprojekt',   label: 'Projekt'                },
   { id: 'leistungsphasen', label: 'Leistungsphasen',        feature: 'reports.advanced' },
+  { id: 'teilfertig',      label: 'Teilfertige Leistungen', feature: 'reports.advanced', permissions: ['reports.wip.view'] },
   { id: 'kennzahlen',      label: 'Unternehmenskennzahlen', feature: 'reports.advanced' },
   { id: 'trends',          label: 'Trends',                 feature: 'reports.advanced' },
 ]
@@ -40,11 +43,12 @@ export function DatenPage() {
   return (
     <div className="master-page">
       <h1 className="master-title">Projektdaten</h1>
-      <Tabs tabs={useLicenseFilterTabs(TABS)} active={tab} onChange={handleTabChange} />
+      <Tabs tabs={useLicenseFilterTabs(useFilterTabs(TABS))} active={tab} onChange={handleTabChange} />
       <div className="master-tab-content">
         {tab === 'projektliste'    && <ProjektlisteTab />}
         {tab === 'einzelprojekt'   && <EinzelprojektTab initialProjectId={initProjId} />}
         {tab === 'leistungsphasen' && <LeistungsphasenMatrixTab />}
+        {tab === 'teilfertig'      && <TeilfertigeLeistungenTab />}
         {tab === 'kennzahlen'      && <UnternehmenskennzahlenTab />}
         {tab === 'trends'          && <TrendsTab />}
       </div>

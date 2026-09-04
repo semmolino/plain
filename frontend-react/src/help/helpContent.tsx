@@ -531,6 +531,120 @@ export const HELP = {
       </>
     ),
   },
+  // ── Teilfertige Leistungen (kaufmännischer Abschluss) ───────────────────
+  'report.tfl.was': {
+    title: 'Teilfertige Leistungen',
+    body: (
+      <>
+        Erbrachte, aber noch nicht abgerechnete Leistungen. In der Bilanz stehen
+        sie im Umlaufvermögen als „unfertige Leistungen" (§ 266 Abs. 2 B I 2
+        HGB). Ohne diesen Posten wäre das Ergebnis systematisch falsch: die
+        Kosten stecken schon in der GuV, der zugehörige Erlös noch nicht.
+        Berechnet je Projekt aus Leistungsstand minus abgerechnet — nie über
+        Projekte hinweg verrechnet.
+      </>
+    ),
+  },
+  'report.tfl.methode': {
+    title: 'Bewertungsmethode',
+    body: (
+      <>
+        <strong>Herstellkosten (HGB)</strong> ist die Bilanzzahl: angesetzt
+        werden die Kosten, die auf die noch nicht abgerechnete Leistung
+        entfallen, begrenzt auf den noch erzielbaren Erlös (§ 255 Abs. 2,
+        § 253 Abs. 4 HGB). Ein anteiliger Gewinn ist nicht enthalten — der wird
+        erst mit der Abrechnung realisiert (§ 252 Abs. 1 Nr. 4 HGB).
+        <br /><br />
+        <strong>Leistungswert</strong> ist die Controlling-Sicht: der noch nicht
+        fakturierte Leistungsanteil zu Auftragspreisen, inklusive Marge. Gut für
+        die eigene Steuerung, aber kein Bilanzansatz.
+        <br /><br />
+        Die Differenz beider Werte ist der nicht realisierte Gewinn.
+      </>
+    ),
+  },
+  'report.tfl.auftragswert': {
+    title: 'Auftragswert',
+    body: (
+      <>
+        Vereinbartes Honorar zum Stichtag inklusive Nebenkosten und Zuschläge —
+        bei einem Stichtag in der Vergangenheit der damalige Stand, nicht der
+        heutige. Freigegebene Nachträge sind enthalten, sobald sie in der
+        Projektstruktur stehen.
+      </>
+    ),
+  },
+  'report.tfl.unfertig': {
+    title: 'Unfertiger Leistungsanteil',
+    body: (
+      <>
+        Leistungsstand minus bereits abgerechnet, zu Auftragspreisen. Das ist
+        die Obergrenze für den Bilanzansatz: mehr als den noch erzielbaren
+        Erlös darf der Vorratsposten nicht wert sein.
+      </>
+    ),
+  },
+  'report.tfl.kostenfaktor': {
+    title: 'Bewertungsfaktor Kosten',
+    body: (
+      <>
+        Die gebuchten Kosten entstehen über den Vollkostensatz — darin steckt
+        auch die Gemeinkostenumlage. Vertriebskosten dürfen nach § 255 Abs. 2
+        S. 4 HGB aber nicht aktiviert werden. Mit dem Faktor legt man fest,
+        welcher Anteil der gebuchten Kosten als Herstellungskosten angesetzt
+        wird (Standard 100 %). Den Prozentsatz gibt üblicherweise der
+        Steuerberater vor; gepflegt wird er in Einstellungen → Vorbelegungen.
+      </>
+    ),
+  },
+  'report.tfl.anzahlungen': {
+    title: 'Erhaltene Anzahlungen',
+    body: (
+      <>
+        Ist bei einem Projekt mehr abgerechnet als geleistet, entsteht kein
+        negativer Vorrat, sondern ein Passivposten (§ 266 Abs. 3 C 3 HGB).
+        Deshalb stehen Aktiva und Anzahlungen hier getrennt und werden nicht
+        gegeneinander verrechnet — § 246 Abs. 2 HGB verbietet das.
+      </>
+    ),
+  },
+  'report.tfl.bestandsveraenderung': {
+    title: 'Bestandsveränderung',
+    body: (
+      <>
+        Der Bestand an teilfertigen Leistungen zum Stichtag minus dem Bestand
+        zum Vergleichsstichtag. Das ist der Wert, der in der GuV gebucht wird
+        („Erhöhung/Verminderung des Bestands an unfertigen Leistungen",
+        § 275 Abs. 2 Nr. 2 HGB) — nicht der Bestand selbst.
+      </>
+    ),
+  },
+  'report.tfl.drohverlust': {
+    title: 'Drohverlust',
+    body: (
+      <>
+        Übersteigen die Kosten der unfertigen Leistung den damit noch
+        erzielbaren Erlös, wird der Vorratsposten gedeckelt (verlustfreie
+        Bewertung, § 253 Abs. 4 HGB). Der Überhang steht hier als Hinweis: er
+        deutet auf eine Rückstellung für drohende Verluste (§ 249 Abs. 1 HGB)
+        oder auf einen Nachtrag hin. Der Report bildet keine Rückstellung — er
+        zeigt nur den Prüfbedarf.
+      </>
+    ),
+  },
+  'report.tfl.stichtag_snapshot': {
+    title: 'Snapshot zum Stichtag',
+    body: (
+      <>
+        Der Leistungsstand vergangener Stichtage kommt aus den
+        Projekt-Snapshots. Liegt für ein Projekt kein Snapshot zum Stichtag vor,
+        ist sein Leistungswert nicht belegt — die Spalte zeigt dann „fehlt".
+        Snapshots entstehen automatisch beim Monatsabschluss (Einstellungen →
+        Monatsabschluss) oder von Hand über den Projekt-Snapshot im Projekt.
+        Für den Stichtag „heute" wird der Live-Stand verwendet.
+      </>
+    ),
+  },
   'report.leistungsstand': {
     title: 'Leistungsstand',
     body: (

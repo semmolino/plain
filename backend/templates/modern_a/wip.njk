@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 9.5pt;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+.logo-area { display: flex; justify-content: flex-end; margin-bottom: 6mm; min-height: 4mm; }
+.logo-area img { max-height: 20mm; max-width: 70mm; object-fit: contain; }
+
+.header-block { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5mm; }
+.header-meta { font-size: 9pt; color: #6b7280; text-align: right; }
+.header-meta .company { font-size: 10pt; font-weight: 600; color: #1a1a1a; margin-bottom: 1mm; }
+
+.doc-title    { font-size: 16pt; font-weight: 700; color: #111827; margin-bottom: 1mm; }
+.doc-subtitle { font-size: 10pt; color: #6b7280; }
+
+.divider { border-top: 0.5pt solid #d1d5db; margin: 3mm 0 5mm 0; }
+
+/* ── Kopfangaben zur Bewertung ─────────────────────────────── */
+.meta-grid {
+  display: flex;
+  gap: 6mm;
+  flex-wrap: wrap;
+  font-size: 8.5pt;
+  color: #374151;
+  margin-bottom: 5mm;
+}
+.meta-grid .item { min-width: 32mm; }
+.meta-grid .label { color: #6b7280; display: block; font-size: 8pt; }
+.meta-grid .value { font-weight: 600; }
+
+/* ── Summenblock ───────────────────────────────────────────── */
+.totals {
+  display: flex;
+  gap: 4mm;
+  margin-bottom: 6mm;
+}
+.total-card {
+  flex: 1;
+  border: 0.5pt solid #d1d5db;
+  border-radius: 2mm;
+  padding: 3mm;
+}
+.total-card .caption { font-size: 8pt; color: #6b7280; margin-bottom: 1mm; }
+.total-card .amount  { font-size: 13pt; font-weight: 700; font-variant-numeric: tabular-nums; }
+.total-card .hint    { font-size: 7.5pt; color: #9ca3af; margin-top: 1mm; }
+.total-card.warn { border-color: #fcd34d; background: #fffbeb; }
+
+/* ── Tabelle ───────────────────────────────────────────────── */
+.wip-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 6mm; }
+.wip-table thead tr { background: #f3f4f6; }
+.wip-table th {
+  text-align: left; font-weight: 600; color: #374151;
+  padding: 1.6mm 1.6mm;
+  border-bottom: 0.5pt solid #9ca3af; border-top: 0.5pt solid #9ca3af;
+}
+.wip-table th.r { text-align: right; }
+.wip-table td { padding: 1.4mm 1.6mm; border-bottom: 0.3pt solid #e5e7eb; vertical-align: top; }
+.wip-table td.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wip-table tbody tr:nth-child(even) td { background: #f9fafb; }
+.wip-table .summary-row td {
+  font-weight: 700; border-top: 0.5pt solid #9ca3af; background: #f3f4f6 !important;
+}
+.marker { font-size: 7pt; color: #92400e; display: block; }
+
+/* ── Fußnote ───────────────────────────────────────────────── */
+.method-note {
+  font-size: 8pt; color: #4b5563;
+  border: 0.5pt solid #e5e7eb; border-radius: 2mm;
+  padding: 3mm; margin-bottom: 5mm;
+}
+.method-note strong { color: #111827; }
+.report-footer {
+  margin-top: 8mm; font-size: 8pt; color: #9ca3af;
+  border-top: 0.3pt solid #e5e7eb; padding-top: 2mm;
+  display: flex; justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="logo-area">
+    {% if logoDataUri %}<img src="{{ logoDataUri }}" alt="Logo">{% endif %}
+  </div>
+
+  <div class="header-block">
+    <div>
+      <div class="doc-title">Teilfertige Leistungen</div>
+      <div class="doc-subtitle">Stichtag {{ asOf | date_de }}{% if compareTo %} · Vergleich {{ compareTo | date_de }}{% endif %}</div>
+    </div>
+    <div class="header-meta">
+      {% if seller %}<div class="company">{{ seller.name }}</div>{% endif %}
+      <div>Erstellt am {{ generatedAt | date_de }}</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="meta-grid">
+    <div class="item">
+      <span class="label">Bewertungsmethode</span>
+      <span class="value">{{ methodLabel }}</span>
+    </div>
+    <div class="item">
+      <span class="label">Bewertungsfaktor Kosten</span>
+      <span class="value">{{ costFactorPercent | round(2) }}&thinsp;%</span>
+    </div>
+    <div class="item">
+      <span class="label">Projekte mit Bewegung</span>
+      <span class="value">{{ totals.projectCount }}</span>
+    </div>
+    {% if dataQuality.noSnapshotCount > 0 %}
+    <div class="item">
+      <span class="label">Ohne Leistungsstand-Snapshot</span>
+      <span class="value">{{ dataQuality.noSnapshotCount }}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="totals">
+    <div class="total-card">
+      <div class="caption">Teilfertige Leistungen (Aktiva)</div>
+      <div class="amount">{{ wipTotal | money }}</div>
+      <div class="hint">{{ methodLabel }}</div>
+    </div>
+    <div class="total-card">
+      <div class="caption">Erhaltene Anzahlungen (Passiva)</div>
+      <div class="amount">{{ totals.prepayments | money }}</div>
+      <div class="hint">nicht mit den Aktiva verrechnet</div>
+    </div>
+    {% if stockChange %}
+    <div class="total-card">
+      <div class="caption">Bestandsveränderung</div>
+      <div class="amount">{{ stockChange.wip | money }}</div>
+      <div class="hint">gegenüber {{ compareTo | date_de }}</div>
+    </div>
+    {% endif %}
+    {% if totals.lossRisk > 0 %}
+    <div class="total-card warn">
+      <div class="caption">Drohverlust — Prüfbedarf</div>
+      <div class="amount">{{ totals.lossRisk | money }}</div>
+      <div class="hint">{{ dataQuality.lossRiskCount }} Projekt(e)</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if rows and rows.length > 0 %}
+  <table class="wip-table">
+    <thead>
+      <tr>
+        <th style="width:16mm">Nr.</th>
+        <th>Projekt</th>
+        <th class="r" style="width:19mm">Auftragswert</th>
+        <th class="r" style="width:19mm">Leistungswert</th>
+        <th class="r" style="width:19mm">Abgerechnet</th>
+        <th class="r" style="width:17mm">Unfertig</th>
+        <th class="r" style="width:17mm">Kosten unf.</th>
+        <th class="r" style="width:19mm">Teilfertig</th>
+        <th class="r" style="width:19mm">Anzahlung</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.NAME_SHORT }}</td>
+        <td>
+          {{ r.NAME_LONG }}
+          {% if 'no_snapshot' in r.flags %}<span class="marker">kein Snapshot zum Stichtag</span>{% endif %}
+          {% if 'no_performance' in r.flags %}<span class="marker">Leistungsstand nicht gepflegt</span>{% endif %}
+          {% if 'loss_risk' in r.flags %}<span class="marker">drohender Verlust</span>{% endif %}
+        </td>
+        <td class="r">{{ r.ORDER_VALUE_NET   | money }}</td>
+        <td class="r">{{ r.PERFORMANCE_NET   | money }}</td>
+        <td class="r">{{ r.BILLED_NET        | money }}</td>
+        <td class="r">{{ r.UNBILLED_NET      | money }}</td>
+        <td class="r">{{ r.COST_UNBILLED_NET | money }}</td>
+        <td class="r">{{ (r.WIP_REVENUE_NET if method == 'erloes' else r.WIP_HK_NET) | money }}</td>
+        <td class="r">{{ r.PREPAYMENT_NET    | money }}</td>
+      </tr>
+      {% endfor %}
+
+      <tr class="summary-row">
+        <td colspan="2">Gesamt ({{ totals.projectCount }} Projekte)</td>
+        <td class="r">{{ totals.orderValue   | money }}</td>
+        <td class="r">{{ totals.performance  | money }}</td>
+        <td class="r">{{ totals.billed       | money }}</td>
+        <td class="r">{{ totals.unbilled     | money }}</td>
+        <td class="r">{{ totals.costUnbilled | money }}</td>
+        <td class="r">{{ wipTotal            | money }}</td>
+        <td class="r">{{ totals.prepayments  | money }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#6b7280; margin-top:6mm;">
+    Zum Stichtag {{ asOf | date_de }} gibt es kein Projekt mit Auftragswert, Leistung, Kosten oder Abrechnung.
+  </p>
+  {% endif %}
+
+  <div class="method-note">
+    {% if method == 'erloes' %}
+    <strong>Bewertung zum Leistungswert (Controlling-Sicht).</strong>
+    Ausgewiesen wird der zu Auftragspreisen bewertete, noch nicht abgerechnete
+    Leistungsanteil (Leistungsstand − abgerechnet). Dieser Wert enthält den
+    anteiligen Gewinn und ist damit <strong>kein Bilanzansatz</strong> nach HGB.
+    {% else %}
+    <strong>Bewertung zu Herstellungskosten (§ 255 Abs. 2 HGB).</strong>
+    Angesetzt sind die auf die noch nicht abgerechnete Leistung entfallenden
+    Kosten, begrenzt auf den noch erzielbaren Erlös (verlustfreie Bewertung,
+    § 253 Abs. 4 HGB). Ein anteiliger Gewinn ist nicht enthalten
+    (Realisationsprinzip, § 252 Abs. 1 Nr. 4 HGB). Der Kostenanteil ist mit
+    {{ costFactorPercent | round(2) }}&thinsp;% der gebuchten Kosten bewertet.
+    {% endif %}
+    Aktivüberhänge und erhaltene Anzahlungen sind je Projekt getrennt ermittelt
+    und nicht verrechnet (§ 246 Abs. 2 HGB).
+    {% if dataQuality.noSnapshotCount > 0 %}
+    Für {{ dataQuality.noSnapshotCount }} Projekt(e) liegt zum Stichtag kein
+    Leistungsstand-Snapshot vor; deren Leistungswert ist deshalb nicht belegt.
+    {% endif %}
+  </div>
+
+  <div class="report-footer">
+    <span>Teilfertige Leistungen &mdash; Stichtag {{ asOf | date_de }}</span>
+    <span>{{ seller.name if seller }}</span>
+  </div>
+
+</div>
+
+</body>
+</html>
