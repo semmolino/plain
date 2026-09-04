@@ -6,6 +6,8 @@ const { sendMail: _sendMail } = require("../services/emailService");
 const {
   loginLimiter, passwordLimiter, resetRequestLimiter, resetConfirmLimiter, signupLimiter,
 } = require("../middleware/rateLimit");
+const { verifySessionToken } = require("../middleware/auth");
+const { revokeSessions } = require("../middleware/sessionGuard");
 
 function jwtSecret() {
   const s = process.env.JWT_SECRET;
@@ -280,9 +282,12 @@ module.exports = (supabase) => {
     const token = (req.headers.authorization || "").replace("Bearer ", "").trim();
     if (!token) return res.status(401).json({ error: "Nicht authentifiziert" });
 
+    // Dieser Router laeuft VOR der authChain — die Zweckpruefung der
+    // Middleware greift hier nicht. Deshalb dieselbe Funktion direkt: ein
+    // Reset-Token ist keine Sitzung (Sicherheitsaudit 2026-09-03, M2).
     let decoded;
     try {
-      decoded = jwt.verify(token, jwtSecret());
+      decoded = verifySessionToken(token, jwtSecret());
     } catch {
       return res.status(401).json({ error: "Ungültiger Token" });
     }
@@ -319,9 +324,11 @@ module.exports = (supabase) => {
     const token = (req.headers.authorization || "").replace("Bearer ", "").trim();
     if (!token) return res.status(401).json({ error: "Nicht authentifiziert" });
 
+    // Wie bei /me: die Zweckpruefung muss hier selbst erfolgen. Ohne sie
+    // liesse sich ein Passwort-Reset-Token wie eine Sitzung verwenden.
     let decoded;
     try {
-      decoded = jwt.verify(token, jwtSecret());
+      decoded = verifySessionToken(token, jwtSecret());
     } catch {
       return res.status(401).json({ error: "Ungültiger Token" });
     }
@@ -360,7 +367,12 @@ module.exports = (supabase) => {
       console.error(`[CHANGE-PASSWORD] Kein Schreibvorgang fuer EMPLOYEE ${decoded.employee_id} (${geaendert?.length ?? 0} Zeilen)`);
       return res.status(500).json({ error: "Das Passwort konnte nicht gespeichert werden. Bitte Administrator kontaktieren." });
     }
-    return res.json({ success: true });
+    // Alte Sitzungen beenden. Wer sein Passwort aendert, erwartet, dass ein
+    // mitgelesenes Token damit wertlos wird — und genau das war es bisher nicht
+    // (Sicherheitsaudit 2026-09-03, M4). Der eigene aktuelle Token faellt
+    // dabei mit; das Frontend meldet danach neu an.
+    await revokeSessions(supabase, decoded.employee_id);
+    return res.json({ success: true, reauth_required: true });
   });
 
   // ── Password reset request ────────────────────────────────────────────────
@@ -472,6 +484,9 @@ module.exports = (supabase) => {
       console.error(`[RESET-CONFIRM] Kein Schreibvorgang fuer EMPLOYEE ${decoded.employee_id} (${geaendert?.length ?? 0} Zeilen)`);
       return res.status(500).json({ error: "Das Passwort konnte nicht gespeichert werden. Bitte Administrator kontaktieren." });
     }
+    // Der haeufigste Grund fuer ein Zuruecksetzen ist ein verlorenes oder
+    // kompromittiertes Passwort. Dann muessen alle laufenden Sitzungen enden.
+    await revokeSessions(supabase, decoded.employee_id);
     return res.json({ success: true });
   });
 

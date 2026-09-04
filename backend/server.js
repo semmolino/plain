@@ -166,7 +166,15 @@ const { startNachtragFristenChecker }        = require("./services/nachtragFrist
 // keinen req.tenantId, und dahinter greifen bereits licenseMiddleware und
 // permissionsMiddleware auf die Datenbank zu — die brauchen den Mandanten
 // schon.
-const authChain = [authMiddleware, tenantScope, licenseMiddleware, permissionsMiddleware];
+// sessionGuard MUSS hinter tenantScope stehen und nicht in authMiddleware: er
+// liest EMPLOYEE, und ohne Mandanten-Claim liefert RLS null Zeilen — die
+// Pruefung wuerde dann jeden aussperren statt nur zurueckgenommene Sitzungen.
+// Er gehoert VOR licenseMiddleware und permissionsMiddleware, damit ein
+// zurueckgenommenes Token gar nicht erst Rechte laedt.
+const { makeMiddleware: makeSessionGuard } = require("./middleware/sessionGuard");
+const sessionGuard = makeSessionGuard(supabase);
+
+const authChain = [authMiddleware, tenantScope, sessionGuard, licenseMiddleware, permissionsMiddleware];
 
 app.use("/api/v1/stammdaten",        ...authChain, stammdatenRoutes);
 app.use("/api/v1/mitarbeiter",       ...authChain, mitarbeiterRoutes);

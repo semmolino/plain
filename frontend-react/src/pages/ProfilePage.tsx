@@ -45,6 +45,14 @@ export function ProfilePage() {
       setCurrentPw('')
       setNewPw('')
       setConfirmPw('')
+      // Ein Passwortwechsel beendet serverseitig alle Sitzungen — auch die
+      // eigene (Migration 0134). Ohne saubere Abmeldung liefe die Oberfläche
+      // mit einem toten Token weiter. Kurz warten, damit die Bestätigung
+      // lesbar bleibt, dann zur Anmeldung.
+      setTimeout(() => {
+        useAuthStore.getState().clearAuth()
+        navigate('/login')
+      }, 2500)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Passwort konnte nicht geändert werden.')
     } finally {
@@ -102,7 +110,9 @@ export function ProfilePage() {
             borderRadius: 6, padding: '10px 14px', fontSize: 13,
             color: 'var(--success-strong)', marginBottom: 14,
           }}>
-            Passwort erfolgreich geändert.
+            Passwort erfolgreich geändert. Aus Sicherheitsgründen werden alle
+            angemeldeten Geräte abgemeldet — Sie werden gleich zur Anmeldung
+            weitergeleitet.
           </div>
         )}
         {error && (

@@ -59,6 +59,19 @@ async function request<T>(
         if (typeof handler === 'function') handler(message)
       } catch { /* ignore */ }
     }
+    // 401 bei bestehender Sitzung: das Token gilt nicht mehr. Seit der
+    // Sitzungs-Rücknahme (Migration 0134) passiert das auch mitten in der
+    // Arbeit — nach Passwortwechsel, Rollenentzug oder Deaktivierung, nicht
+    // erst nach 8 Stunden. Ohne diesen Zweig liefe die Oberfläche mit einem
+    // toten Token weiter und zeigte nur noch Fehler.
+    //
+    // Nur wenn vorher ein Token da war: ein fehlgeschlagener Login antwortet
+    // ebenfalls mit 401, darf aber keinen Abmelde-Reflex auslösen.
+    if (res.status === 401 && token) {
+      try {
+        useAuthStore.getState().clearAuth()
+      } catch { /* ignore */ }
+    }
     // Lizenz: 402 = Funktion nicht im Tarif -> Upgrade-Hinweis-Hook
     if (res.status === 402) {
       try {

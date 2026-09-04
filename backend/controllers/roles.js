@@ -1,5 +1,7 @@
 "use strict";
 
+const { revokeSessions } = require("../middleware/sessionGuard");
+
 /**
  * Controller fuer Rollen-Verwaltung + Permissions (RBAC Phase 0)
  *
@@ -469,6 +471,12 @@ async function setEmployeeRoles(req, res, supabase) {
       const { error } = await supabase.from("EMPLOYEE_ROLE").insert(rows);
       if (error) return res.status(500).json({ error: error.message });
     }
+
+    // Rechte wirken sofort, nicht erst in bis zu 8 Stunden: die laufenden
+    // Sitzungen dieses Mitarbeiters enden. Ohne das behaelt ein gerade
+    // entzogenes Recht bis zum Token-Ablauf seine Wirkung
+    // (Sicherheitsaudit 2026-09-03, M4).
+    await revokeSessions(supabase, employeeId);
 
     return res.json({ ok: true });
   } catch (e) {
