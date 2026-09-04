@@ -221,12 +221,14 @@ Einstellungen → Benachrichtigungen → „Zustellung prüfen".
 - Sitzungs-Rücknahme über `EMPLOYEE.SESSION_EPOCH` (`middleware/sessionGuard.js`): Passwortwechsel, Reset und Rollenänderung beenden laufende Sitzungen sofort. **Der Guard hängt in der authChain hinter `tenantScope`** — davor liegt kein Mandanten-Claim an, und die EMPLOYEE-Abfrage würde unter RLS null Zeilen liefern, also jeden aussperren.
 - Upload-Rechte nach `asset_type` (`routes/assets.js`): `AVATAR` ist Selbstbedienung, alles andere verlangt ein bestehendes Recht; unbekannte Arten fail-closed.
 
-**Offen (Stand 2026-09-03):**
-- Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7)
-- Kein globales Rate-Limit auf teure Endpunkte (PDF-Rendering, Reports) (M6)
-- Datenbankmeldungen erreichen den Client (`error.message`, ~176 Stellen) (M8)
+- Drosselung teurer Endpunkte (PDF, Reports) **pro Konto, nicht pro IP** (`middleware/rateLimit.js`) — ein Büro hinter einer NAT-Adresse darf sich nicht selbst aussperren. Die Limiter hängen deshalb hinter `authMiddleware`.
+- Progressive Verzögerung bei Fehlversuchen **je Konto** (`middleware/loginAttempts.js`) — bewusst keine Sperre: die wäre ein Weg, einen bekannten Nutzer gezielt auszusperren.
+- Serverfehler tragen nach außen eine allgemeine Meldung plus Fehlerkennung (`middleware/errorSanitizer.js`); das Original steht im Protokoll. Fachfehler mit `status < 500` bleiben unberührt. Ein 500er, dessen Meldung der Nutzer braucht, kennzeichnet sich mit `userFacing: true`.
+
+**Offen (Stand 2026-09-04):**
+- Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht
 - CSP bewusst abgeschaltet (SPA-Bundles, PDF) — erhöht die Wirkung jeder Datei-Auslieferungslücke (N2)
-- Registrierung ohne E-Mail-Bestätigung (N3); keine Kontosperre, nur IP-Limit (N6)
+- Registrierung ohne E-Mail-Bestätigung (N3) — Eingriff in den Onboarding-Ablauf, bewusst zu entscheiden
 
 ---
 

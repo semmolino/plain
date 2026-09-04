@@ -23,8 +23,13 @@ Der Scanner zählt **23 → 1 Befund** (der bewusst abgeschaltete CSP-Hinweis). 
 | M3 | Mandant aus dem Objekt (4 Stellen) | **behoben** — `tenantId` ist Pflicht, 13 Aufrufstellen nachgezogen |
 | M4 | Sitzungen nicht zurücknehmbar | **behoben und scharf** — Migration 0134 am 2026-09-03 eingespielt |
 | M5 | `node_modules` versioniert | **behoben** — 1.822 Dateien aus dem Index (Platte unberührt) |
+| M6 | teure Endpunkte ungedrosselt | **behoben** — Limits pro Konto, nicht pro IP (`middleware/rateLimit.js`) |
+| M8 | Datenbankmeldungen erreichen den Client | **behoben** — Filter in `middleware/errorSanitizer.js`, Fehlerkennung im Protokoll |
 | N1 | veralteter Sicherheitsabschnitt | **behoben** — `CLAUDE.md` neu geschrieben |
-| M6, M7, M8, N2–N6 | Rate-Limits, Klartext-Passwörter, Fehlermeldungen, CSP, Signup, Kontosperre | offen |
+| N6 | keine Bremse je Konto | **behoben** — progressive Verzögerung (`middleware/loginAttempts.js`), bewusst keine Sperre |
+| M7 | Klartext-Passwörter login-fähig | offen — braucht eine Zahl aus der Datenbank, siehe unten |
+| N2 | CSP abgeschaltet | offen (bewusst) |
+| N3 | Registrierung ohne E-Mail-Bestätigung | offen — Produktentscheidung, siehe unten |
 
 ### M4 — Sitzungs-Rücknahme
 
@@ -48,6 +53,35 @@ Beteiligte Teile: `middleware/sessionGuard.js` (Prüfung + `revokeSessions`), `m
 ### Noch zu beobachten
 
 **Rollen:** Wer Projektteams pflegt oder Benachrichtigungs-Zeitpläne stellt, braucht jetzt `projects.edit` bzw. `settings.notifications.edit`. Rollen ohne diese Rechte verlieren die Funktion — beabsichtigt, aber es sollte zum Team passen. Fällt im Alltag als 403 auf.
+
+**Fehlerkennungen:** Serverfehler zeigen ab jetzt eine allgemeine Meldung plus eine sechsstellige Kennung. Wenn ein Nutzer „Fehler a3f9c1" meldet, steht die Originalmeldung mit Mandant und Mitarbeiter im Anwendungsprotokoll. Beim lokalen Entwickeln (`NODE_ENV=development`) bleibt die Originalmeldung in der Antwort.
+
+---
+
+## Die zwei letzten offenen Punkte
+
+### M7 — Klartext-Passwörter (braucht eine Zahl)
+
+`routes/auth.js` vergleicht Passwörter ohne bcrypt-Präfix direkt als Zeichenkette — ein Rückfall für Konten aus der Frühphase. Ob es solche Konten überhaupt noch gibt, sagt nur die Datenbank. Der Befehl gibt eine Zahl aus, keine Passwörter:
+
+```
+scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -c "SELECT COUNT(*) FROM \"EMPLOYEE\" WHERE \"PASSWORD\" IS NOT NULL AND \"PASSWORD\" NOT LIKE '"'"'$2%'"'"';"'
+```
+
+- **Ergebnis 0:** Der Zweig kann ersatzlos entfernt werden — reine Code-Änderung.
+- **Ergebnis > 0:** Die betroffenen Konten brauchen vorher einen erzwungenen Reset. Das ist eine Ansage an echte Menschen und kein reiner Code-Schritt; der Zweig fällt erst danach.
+
+Nebenbei ist der Vergleich nicht zeitkonstant. Ohne Klartextkonten erledigt sich das mit dem Zweig.
+
+### N3 — Registrierung ohne E-Mail-Bestätigung (Produktentscheidung)
+
+`POST /auth/signup` legt Mandant, Firma und Erst-Mitarbeiter ohne jede Prüfung der Adresse an — zehn pro Stunde und IP. Kein Sicherheitsleck, aber:
+
+- niemand belegt, dass die Adresse dem Anmelder gehört (Tippfehler sperren sich selbst aus, Passwort-Reset geht ins Leere),
+- Mandanten mit fremden Firmennamen sind anlegbar,
+- jeder angelegte Mandant zählt gegen Speicher und Datenbank.
+
+Die Behebung ist keine Sicherheitskorrektur, sondern ein Eingriff in den Onboarding-Ablauf: Doppel-Opt-In heißt eine Zwischenseite, eine Bestätigungsmail, ein Token-Ablauf und ein Zustand „angelegt, aber unbestätigt" samt Aufräumen. Das gehört bewusst entschieden und nicht nebenbei im Audit gemacht.
 
 ---
 
