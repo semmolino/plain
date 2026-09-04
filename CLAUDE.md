@@ -198,23 +198,35 @@ Einstellungen → Benachrichtigungen → „Zustellung prüfen".
 
 ---
 
-## Security model — current state and known gaps
+## Security model — Stand und offene Punkte
 
-**What is in place:**
-- bcrypt password hashing (new accounts; legacy plaintext accounts still exist — see auth.js login fallback)
-- JWT authentication on all non-`/auth` routes
-- Tenant isolation at application layer (services filter by tenantId from JWT)
-- HTTPS via Scalingo
+> Maßgeblich sind `docs/SECURITY_AUDIT_CONCEPT.md` (Prüfbereiche, Schweregrade,
+> Befundformat) und `docs/SECURITY_AUDIT_2026-09-03.md` (Befunde und ihr Stand).
+> Dieser Abschnitt ist die Kurzfassung — **beim Beheben eines Befundes hier
+> mitziehen.** Eine Liste, die Behobenes als offen führt, lenkt von den echten
+> Lücken ab und zählt im Audit selbst als Befund (N1).
 
-**Known gaps (must fix before public launch):**
-- `JWT_SECRET` falls back to hardcoded `"plain-dev-secret-change-me"` if env var is missing — tokens are forgeable in that state
-- `app.use(cors())` allows all origins — no allowlist
-- Der frühere Weg (Supabase service-role key, RLS komplett umgangen) gilt nur noch, wenn `POSTGREST_URL` NICHT gesetzt ist. Auf Scalingo läuft alles über PostgREST mit Mandanten-Claim.
-- No rate limiting on auth endpoints (login, signup, password reset) — brute-force vulnerable
-- File uploads stored in `backend/uploads/` with no apparent size/type validation visible
-- No input sanitization middleware (XSS protection relies on Supabase parameterization + React's default escaping)
-- No CSRF protection (mitigated by Bearer token auth, but worth noting)
-- Password reset tokens reuse the same JWT secret with no invalidation mechanism (a used reset link stays valid for 1h)
+**Vorhanden:**
+- bcrypt-Passworthashes (Altkonten mit Klartext sind weiterhin möglich — Rückfall in `routes/auth.js`)
+- JWT auf allen Routen außer `/auth`, `/webhooks`, `/track`, `/branding`; Reset-Token werden als Sitzung abgelehnt (`middleware/auth.js` → `verifySessionToken`)
+- **Mandantentrennung zweilinig**: Anwendungsfilter *und* RLS in der Datenbank (`FORCE ROW LEVEL SECURITY`, fail-closed ohne Claim — `db.js`, `backend/scripts/migration/05_rls_scalingo.sql`)
+- Startabbruch bei fehlendem/unsicherem `JWT_SECRET`, fehlender Dateiablage oder fehlendem Datenbankweg (`server.js`)
+- CORS-Allowlist (`CORS_ORIGINS`/`FRONTEND_URL`), nur auf `/api`; helmet; `trust proxy`
+- Rate-Limiter auf allen fünf Auth-Wegen; Reset-Links sind One-Time (Passwort-Fingerabdruck)
+- Upload: MIME-Allowlist + 10 MB; Auslieferung über `services/fileResponse.js` (Inline-Allowlist, `nosniff`, Sandbox-CSP)
+- Sucheingaben in PostgREST-Filtern über `services/pgrestFilter.js` neutralisiert
+- Owner-Konsole: eigenes Secret, eigene Audience, 2 h TTL, TOTP, Audit-Log, `SESSION_EPOCH`
+- Automatischer Scan: `node scripts/security-scan.mjs` (CI-Job `security`, täglich mit `--deps`)
+
+- Sitzungs-Rücknahme über `EMPLOYEE.SESSION_EPOCH` (`middleware/sessionGuard.js`): Passwortwechsel, Reset und Rollenänderung beenden laufende Sitzungen sofort. **Der Guard hängt in der authChain hinter `tenantScope`** — davor liegt kein Mandanten-Claim an, und die EMPLOYEE-Abfrage würde unter RLS null Zeilen liefern, also jeden aussperren.
+- Upload-Rechte nach `asset_type` (`routes/assets.js`): `AVATAR` ist Selbstbedienung, alles andere verlangt ein bestehendes Recht; unbekannte Arten fail-closed.
+
+**Offen (Stand 2026-09-03):**
+- Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7)
+- Kein globales Rate-Limit auf teure Endpunkte (PDF-Rendering, Reports) (M6)
+- Datenbankmeldungen erreichen den Client (`error.message`, ~176 Stellen) (M8)
+- CSP bewusst abgeschaltet (SPA-Bundles, PDF) — erhöht die Wirkung jeder Datei-Auslieferungslücke (N2)
+- Registrierung ohne E-Mail-Bestätigung (N3); keine Kontosperre, nur IP-Limit (N6)
 
 ---
 
