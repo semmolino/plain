@@ -43,6 +43,8 @@ app.use("/api/console/auth", require("./routes/auth"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/catalog"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/plans"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/tenants"));
+// Offene Registrierungen: E-Mail bestaetigt, Freigabe offen (Audit 2026-09-03, N3)
+app.use("/api/console", consoleAuth, writeLimiter, require("./routes/signups"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/audit"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/suggestions"));
 app.use("/api/console", consoleAuth, writeLimiter, require("./routes/serviceRequests"));

@@ -5,6 +5,7 @@ import { MatrixView } from './pages/Matrix'
 import { InboxView } from './pages/Inbox'
 import { PlansView } from './pages/Plans'
 import { TenantsView } from './pages/Tenants'
+import { SignupsView } from './pages/Signups'
 import { AuditView } from './pages/Audit'
 import { FunctionsView } from './pages/Functions'
 import { CatalogView } from './pages/Catalog'
@@ -28,6 +29,7 @@ const TABS: TabDef[] = [
   { id: 'matrix', label: 'Matrix', group: 'license' },
   { id: 'plans', label: 'Pläne', group: 'license' },
   { id: 'tenants', label: 'Tenants', group: 'license' },
+  { id: 'signups', label: 'Registrierungen', group: 'license' },
   { id: 'functions', label: 'Funktionen', group: 'license' },
   { id: 'catalog', label: 'Katalog', group: 'license' },
   { id: 'overrides', label: 'Ausnahmen', group: 'license' },
@@ -160,6 +162,7 @@ export function App() {
         {tab === 'matrix' && <MatrixView focusRef={ref} />}
         {tab === 'plans' && <PlansView />}
         {tab === 'tenants' && <TenantsView focusRef={ref} />}
+        {tab === 'signups' && <SignupsView />}
         {tab === 'functions' && <FunctionsView focusRef={ref} />}
         {tab === 'catalog' && <CatalogView />}
         {tab === 'overrides' && <OverridesView />}

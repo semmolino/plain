@@ -68,14 +68,32 @@ export async function signup(data: {
   password: string
   companyName: string
   shortName: string
-}): Promise<void> {
+}): Promise<{ pending: boolean; message: string }> {
   const res = await fetch('/api/v1/auth/signup', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(data),
   })
+  const body = await res.json().catch(() => ({})) as { error?: string; pending?: boolean; message?: string }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string }
     throw new Error(body.error ?? 'Fehler beim Registrieren')
   }
+  // Seit Migration 0135 ist ein Konto nach der Registrierung noch nicht
+  // nutzbar: erst E-Mail bestätigen, dann Freigabe durch den Betreiber.
+  return {
+    pending: body.pending ?? false,
+    message: body.message ?? 'Konto erstellt.',
+  }
+}
+
+/** Bestätigt die E-Mail-Adresse nach der Registrierung (Token aus dem Link). */
+export async function confirmSignup(token: string): Promise<{ state: string; message: string }> {
+  const res = await fetch('/api/v1/auth/confirm-signup', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ token }),
+  })
+  const body = await res.json().catch(() => ({})) as { error?: string; state?: string; message?: string }
+  if (!res.ok) throw new Error(body.error ?? 'Der Link konnte nicht bestätigt werden.')
+  return { state: body.state ?? 'pending_approval', message: body.message ?? 'Bestätigt.' }
 }

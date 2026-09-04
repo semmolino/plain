@@ -29,7 +29,7 @@ Der Scanner zählt **23 → 1 Befund** (der bewusst abgeschaltete CSP-Hinweis). 
 | N6 | keine Bremse je Konto | **behoben** — progressive Verzögerung (`middleware/loginAttempts.js`), bewusst keine Sperre |
 | M7 | Klartext-Passwörter login-fähig | offen — braucht eine Zahl aus der Datenbank, siehe unten |
 | N2 | CSP abgeschaltet | offen (bewusst) |
-| N3 | Registrierung ohne E-Mail-Bestätigung | offen — Produktentscheidung, siehe unten |
+| N3 | Registrierung ohne E-Mail-Bestätigung | **behoben** — zwei Tore, Migration 0135 einzuspielen |
 
 ### M4 — Sitzungs-Rücknahme
 
@@ -58,7 +58,7 @@ Beteiligte Teile: `middleware/sessionGuard.js` (Prüfung + `revokeSessions`), `m
 
 ---
 
-## Die zwei letzten offenen Punkte
+## Die letzten offenen Punkte
 
 ### M7 — Klartext-Passwörter (braucht eine Zahl)
 
@@ -73,15 +73,34 @@ scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -c "SELECT COU
 
 Nebenbei ist der Vergleich nicht zeitkonstant. Ohne Klartextkonten erledigt sich das mit dem Zweig.
 
-### N3 — Registrierung ohne E-Mail-Bestätigung (Produktentscheidung)
+### N3 — Registrierung: zwei Tore (behoben, Migration 0135 ausstehend)
 
-`POST /auth/signup` legt Mandant, Firma und Erst-Mitarbeiter ohne jede Prüfung der Adresse an — zehn pro Stunde und IP. Kein Sicherheitsleck, aber:
+**Nur der Signup neuer Mandanten war betroffen.** Der andere Weg — ein bestehender Mandant legt einen Mitarbeiter an — hatte den Adressnachweis schon eingebaut: der Admin legt das Konto **ohne Passwort** an, der Mitarbeiter setzt es über einen Einladungslink an seine Adresse, und eine Anmeldung ohne gesetztes Passwort ist serverseitig gesperrt ([accountInvite.js](backend/services/accountInvite.js)). Dort war nichts zu tun.
 
-- niemand belegt, dass die Adresse dem Anmelder gehört (Tippfehler sperren sich selbst aus, Passwort-Reset geht ins Leere),
-- Mandanten mit fremden Firmennamen sind anlegbar,
-- jeder angelegte Mandant zählt gegen Speicher und Datenbank.
+`POST /auth/signup` dagegen legte Mandant, Firma und Erst-Nutzer in einem Zug an, mit sofort nutzbarem Passwort. Jetzt zwei Tore, in dieser Reihenfolge:
 
-Die Behebung ist keine Sicherheitskorrektur, sondern ein Eingriff in den Onboarding-Ablauf: Doppel-Opt-In heißt eine Zwischenseite, eine Bestätigungsmail, ein Token-Ablauf und ein Zustand „angelegt, aber unbestätigt" samt Aufräumen. Das gehört bewusst entschieden und nicht nebenbei im Audit gemacht.
+1. **E-Mail-Bestätigung** — Link, 24 h gültig, landet auf `/registrierung-bestaetigen`.
+2. **Freigabe durch den Betreiber** — Owner-Konsole → Tab „Registrierungen".
+
+Bis beide durch sind, ist die Anmeldung gesperrt ([auth.js](backend/routes/auth.js), geprüft **nach** der Passwortprüfung: wer das Passwort nicht kennt, erfährt über den Zustand eines Mandanten nichts). In einem später abgelehnten Mandanten entsteht damit kein einziger Datensatz.
+
+**Zustände** (`TENANTS.SIGNUP_STATE`): `pending_email` → `pending_approval` → `active`. Der Spaltenstandard ist `active`, nicht `pending_email` — Import, Demo-Daten und manuelles SQL sollen weiterhin benutzbare Mandanten erzeugen. Die Sperre sitzt an genau einer Stelle, nicht im Default.
+
+**Ablehnen löscht** (Entscheidung vom 2026-09-04): Mandant, Firma und Erst-Nutzer werden unwiderruflich entfernt. Zwei Schranken:
+
+- Gelöscht wird **nur** im Zustand *pending* — ein freigegebener Mandant mit echten Daten ist über diesen Weg nicht erreichbar, auch nicht mit von Hand gesetzter ID.
+- Die Ablehnung landet im Änderungsprotokoll (Firma, Adresse, Grund, wer). Die Daten sind weg, die Entscheidung bleibt nachvollziehbar.
+- In der Konsole muss der Firmenname abgetippt werden. In einer Liste gleich aussehender Zeilen wäre ein Fehlklick sonst ein Datenverlust ohne Weg zurück.
+
+**Benachrichtigungen:** Der Anmelder bekommt Bestätigungs-, Freigabe- und Ablehnungsmail. Die Plattform-Admins werden über einen neuen Antrag informiert — Empfänger sind die aktiven `PLATFORM_ADMIN`-Adressen, keine eigene Umgebungsvariable, die man beim Betreiberwechsel vergessen könnte. Geht eine Mail nicht raus, sagt die Konsole es und die Freigabe gilt trotzdem.
+
+**Einzuspielen:**
+
+```
+scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -f backend/migrations/0135_tenant_signup_approval.sql'
+```
+
+Ohne die Migration verhält sich alles wie bisher: die Sperre greift nicht (`loginSperre` lässt einen leeren Zustand durch), und die Konsole zeigt einen Hinweis statt einer leeren Liste. Eine fehlende Migration darf niemanden aussperren.
 
 ---
 
@@ -211,12 +230,12 @@ Teure Endpunkte sind ungedrosselt: PDF-Erzeugung startet je Aufruf **Playwright-
 
 ## Niedrig / Hinweis
 
-- **N1 · `CLAUDE.md` führt behobene Lücken als offen** ([CLAUDE.md:210-213](CLAUDE.md#L210-L213)). Wer den Abschnitt liest, sucht an den falschen Stellen. Nach diesem Audit aktualisieren.
+- **N1 · `CLAUDE.md` führt behobene Lücken als offen**. Wer den Abschnitt liest, sucht an den falschen Stellen. → **behoben**, Abschnitt neu geschrieben.
 - **N2 · CSP abgeschaltet** (`server.js:52`) — bewusste Entscheidung wegen SPA-Bundles und PDF-Auslieferung. Folge: Befunde wie H1 wiegen schwerer. Mittelfristig eine CSP mit `script-src 'self'` prüfen.
-- **N3 · Registrierung ohne E-Mail-Bestätigung** — 10 Mandanten pro Stunde und IP sind anlegbar. Kein Sicherheits-, aber ein Missbrauchs- und Kostenrisiko.
-- **N4 · `routes_gates.test.js` prüft nur zwei Dateien** — genau die aus dem Pentest. Neue Router fielen nicht auf; der Scanner deckt das jetzt breit ab.
+- **N3 · Registrierung ohne E-Mail-Bestätigung** — 10 Mandanten pro Stunde und IP sind anlegbar. Kein Sicherheits-, aber ein Missbrauchs- und Kostenrisiko. → **behoben**, siehe „Die letzten offenen Punkte".
+- **N4 · `routes_gates.test.js` prüft nur zwei Dateien** — genau die aus dem Pentest. Neue Router fielen nicht auf. → **behoben** durch `scripts/security-scan.mjs` (Check G1 über alle Router).
 - **N5 · Reset-Link im Klartext im Log**, wenn kein Mailversand konfiguriert ist ([auth.js:413](backend/routes/auth.js#L413)). Bewusst, aber Log-Zugriff = Kontoübernahme.
-- **N6 · Keine Kontosperre** — der Limiter zählt pro IP; verteilte Versuche über viele Adressen laufen weiter. Ein Zähler pro Konto wäre die Ergänzung.
+- **N6 · Keine Kontosperre** — der Limiter zählt pro IP; verteilte Versuche über viele Adressen laufen weiter. → **behoben** als progressive Verzögerung je Konto (bewusst keine Sperre, `middleware/loginAttempts.js`).
 
 ---
 

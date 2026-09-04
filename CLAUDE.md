@@ -223,12 +223,12 @@ Einstellungen → Benachrichtigungen → „Zustellung prüfen".
 
 - Drosselung teurer Endpunkte (PDF, Reports) **pro Konto, nicht pro IP** (`middleware/rateLimit.js`) — ein Büro hinter einer NAT-Adresse darf sich nicht selbst aussperren. Die Limiter hängen deshalb hinter `authMiddleware`.
 - Progressive Verzögerung bei Fehlversuchen **je Konto** (`middleware/loginAttempts.js`) — bewusst keine Sperre: die wäre ein Weg, einen bekannten Nutzer gezielt auszusperren.
+- **Registrierung neuer Mandanten braucht zwei Tore** (`services/signupApproval.js`, Migration 0135): E-Mail-Bestätigung des Anmelders, dann Freigabe in der Owner-Konsole (Tab „Registrierungen"). Bis dahin ist die Anmeldung gesperrt — geprüft **nach** der Passwortprüfung, damit der Zustand eines Mandanten nichts über ihn verrät. Ablehnen löscht den Antrag, aber **nur** im Zustand pending. Der Spaltenstandard von `SIGNUP_STATE` ist `active`: Import, Demo-Daten und manuelles SQL sollen weiterhin benutzbare Mandanten erzeugen.
 - Serverfehler tragen nach außen eine allgemeine Meldung plus Fehlerkennung (`middleware/errorSanitizer.js`); das Original steht im Protokoll. Fachfehler mit `status < 500` bleiben unberührt. Ein 500er, dessen Meldung der Nutzer braucht, kennzeichnet sich mit `userFacing: true`.
 
 **Offen (Stand 2026-09-04):**
 - Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht
 - CSP bewusst abgeschaltet (SPA-Bundles, PDF) — erhöht die Wirkung jeder Datei-Auslieferungslücke (N2)
-- Registrierung ohne E-Mail-Bestätigung (N3) — Eingriff in den Onboarding-Ablauf, bewusst zu entscheiden
 
 ---
 

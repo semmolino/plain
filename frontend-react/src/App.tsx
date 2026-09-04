@@ -12,6 +12,7 @@ import { AppLayout }      from '@/components/layout/AppLayout'
 import { LoginPage }         from '@/pages/auth/LoginPage'
 import { SignupPage }        from '@/pages/auth/SignupPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
+import { ConfirmSignupPage } from '@/pages/auth/ConfirmSignupPage'
 
 // App pages — lazy-loaded per route
 const DashboardPage   = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -55,6 +56,8 @@ export default function App() {
             <Route path="/login/:slug"    element={<LoginPage />} />
             <Route path="/signup"         element={<SignupPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* Landeseite des Bestaetigungslinks aus der Registrierungsmail */}
+            <Route path="/registrierung-bestaetigen" element={<ConfirmSignupPage />} />
 
             {/* Protected — all wrapped in AppLayout */}
             <Route

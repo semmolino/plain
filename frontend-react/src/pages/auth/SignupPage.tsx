@@ -28,9 +28,12 @@ export function SignupPage() {
     setMsg({ text: 'Konto wird erstellt …', type: 'info' })
 
     try {
-      await signup({ email, password, companyName: company, shortName })
-      setMsg({ text: 'Konto erstellt. Bitte jetzt anmelden.', type: 'success' })
-      setTimeout(() => navigate('/login'), 1500)
+      const res = await signup({ email, password, companyName: company, shortName })
+      // Nicht mehr zur Anmeldung weiterleiten: die ist bis zur Bestätigung
+      // und Freigabe gesperrt (Migration 0135). Ein automatischer Sprung auf
+      // den Login würde den Nutzer vor eine Tür schicken, die noch zu ist.
+      setMsg({ text: res.message, type: 'success' })
+      if (!res.pending) setTimeout(() => navigate('/login'), 1500)
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : 'Fehler beim Registrieren.', type: 'error' })
       setLoading(false)

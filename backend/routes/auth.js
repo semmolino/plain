@@ -9,6 +9,7 @@ const {
 const { verifySessionToken } = require("../middleware/auth");
 const { revokeSessions } = require("../middleware/sessionGuard");
 const { bremsen, registriereFehlversuch, loescheFehlversuche } = require("../middleware/loginAttempts");
+const signup = require("../services/signupApproval");
 
 function jwtSecret() {
   const s = process.env.JWT_SECRET;
@@ -263,6 +264,27 @@ module.exports = (supabase) => {
       return res.status(403).json({ error: "Kein Mandant zugewiesen. Bitte Administrator kontaktieren." });
     }
 
+    // Zwei Tore vor der ersten Anmeldung eines neu registrierten Mandanten:
+    // bestaetigte E-Mail-Adresse und Freigabe durch den Plattformbetreiber
+    // (Sicherheitsaudit 2026-09-03, N3; Migration 0135). Geprueft wird ERST
+    // hier — nach der Passwortpruefung: wer das Passwort nicht kennt, soll
+    // ueber den Zustand eines Mandanten nichts erfahren.
+    //
+    // Fehlt die Spalte (Migration nicht eingespielt), liefert die Abfrage
+    // einen Fehler; dann wird durchgelassen. Eine fehlende Migration darf
+    // niemanden aussperren.
+    const { data: tenantRow, error: tenantStateErr } = await supabase
+      .from("TENANTS")
+      .select("SIGNUP_STATE")
+      .eq("ID", tenantId)
+      .maybeSingle();
+    if (tenantStateErr) {
+      console.warn("[LOGIN] SIGNUP_STATE nicht lesbar, lasse durch:", tenantStateErr.message);
+    } else {
+      const sperre = signup.loginSperre(tenantRow?.SIGNUP_STATE);
+      if (sperre) return res.status(403).json({ error: sperre, userFacing: true, signup_pending: true });
+    }
+
     const token = issueToken({
       employee_id: employee.ID,
       tenant_id:   tenantId,
@@ -503,6 +525,45 @@ module.exports = (supabase) => {
     return res.json({ success: true });
   });
 
+  // ── E-Mail-Bestätigung nach der Registrierung ─────────────────────────────
+  // Erstes der beiden Tore aus N3. Öffentlich (der Anmelder hat noch keine
+  // Sitzung) und mit demselben Limiter wie die Reset-Bestätigung: der Token
+  // ist signiert, aber ein Endpunkt, der Token prüft, soll nicht beliebig oft
+  // befragt werden können.
+  router.post("/confirm-signup", resetConfirmLimiter, async (req, res) => {
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ error: "Token fehlt." });
+
+    try {
+      const ergebnis = await signup.bestaetigeEmail(supabase, token);
+
+      if (ergebnis.schonAktiv) {
+        return res.json({ success: true, state: "active", message: "Ihr Zugang ist bereits freigegeben. Sie können sich anmelden." });
+      }
+      if (ergebnis.schonBestaetigt) {
+        return res.json({
+          success: true, state: "pending_approval",
+          message: "Ihre E-Mail-Adresse ist bereits bestätigt. Wir prüfen Ihr Konto und geben es zeitnah frei.",
+        });
+      }
+
+      // Zweites Tor anstossen: den Betreiber informieren. Best-effort — der
+      // Antrag ist in der Konsole ohnehin sichtbar, und der Anmelder hat
+      // seinen Teil erledigt.
+      await signup.benachrichtigeBetreiber(supabase, {
+        tenantId: ergebnis.tenantId, firma: ergebnis.firma, email: ergebnis.email,
+      });
+
+      return res.json({
+        success: true, state: "pending_approval",
+        message: "Danke — Ihre E-Mail-Adresse ist bestätigt. Wir prüfen Ihr Konto und geben es zeitnah frei. "
+               + "Sie erhalten eine Nachricht, sobald die Anmeldung möglich ist.",
+      });
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e), userFacing: !!e?.status });
+    }
+  });
+
   // ── Sign up ───────────────────────────────────────────────────────────────
   // Creates a new tenant: TENANT + COMPANY + Supabase Auth user + first EMPLOYEE.
   router.post("/signup", signupLimiter, async (req, res) => {
@@ -536,9 +597,14 @@ module.exports = (supabase) => {
       }
 
       // 2. Create TENANTS record
+      //
+      // SIGNUP_STATE ausdruecklich auf pending_email: der Spaltenstandard ist
+      // 'active', damit Import, Demo-Daten und manuelles SQL weiterhin
+      // benutzbare Mandanten erzeugen. Die Sperre gehoert an genau diese eine
+      // Stelle und nicht in den Default (Migration 0135).
       const { data: tenant, error: tenantError } = await supabase
         .from("TENANTS")
-        .insert([{ TENANT: companyName }])
+        .insert([{ TENANT: companyName, SIGNUP_STATE: signup.ZUSTAND.MAIL_OFFEN }])
         .select("ID")
         .single();
 
@@ -582,7 +648,29 @@ module.exports = (supabase) => {
       // Best-effort: eine fehlende Lizenz darf die Registrierung nicht kippen.
       await assignDefaultLicense(supabase, tenantId);
 
-      return res.json({ success: true, message: "Konto erstellt. Bitte anmelden." });
+      // 7. Bestaetigungsmail. NICHT best-effort wie die Schritte davor: ohne
+      // diese Mail kommt der Anmelder nie in sein Konto, und ein stilles
+      // "Konto erstellt" waere dann eine Luege. Schlaegt der Versand fehl,
+      // wird der halbfertige Mandant wieder abgeraeumt — sonst blockiert die
+      // Adresse spaeter die Dublettenpruefung eines zweiten Versuchs.
+      try {
+        await signup.sendeBestaetigungsmail({ req, tenantId, email, firma: companyName });
+      } catch (mailErr) {
+        console.error("[SIGNUP][MAIL]", mailErr?.message || mailErr);
+        await supabase.from("EMPLOYEE").delete().eq("TENANT_ID", tenantId).catch(() => {});
+        await supabase.from("COMPANY").delete().eq("TENANT_ID", tenantId).catch(() => {});
+        await supabase.from("TENANTS").delete().eq("ID", tenantId).catch(() => {});
+        return res.status(500).json({
+          error: "Die Bestätigungs-E-Mail konnte nicht versendet werden. Bitte später erneut versuchen.",
+          userFacing: true,
+        });
+      }
+
+      return res.json({
+        success: true,
+        pending: true,
+        message: "Fast fertig: Bitte bestätigen Sie den Link in der E-Mail, die wir Ihnen gerade geschickt haben.",
+      });
     } catch (e) {
       console.error("[SIGNUP]", e?.message || e);
       return res.status(500).json({ error: e?.message || "Unbekannter Fehler beim Registrieren." });

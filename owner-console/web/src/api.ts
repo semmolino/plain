@@ -396,6 +396,16 @@ export interface PlatformEmailPayload {
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────
+export interface SignupRequest {
+  TENANT_ID: number
+  FIRMA: string | null
+  STATE: 'pending_email' | 'pending_approval'
+  EMAIL: string | null
+  KUERZEL: string | null
+  ANGELEGT_AM: string
+  EMAIL_BESTAETIGT_AM: string | null
+}
+
 export const api = {
   login: (email: string, password: string, totp?: string) =>
     req<{ token: string; email: string }>('/auth/login', {
@@ -484,6 +494,17 @@ export const api = {
     }),
 
   tenants: () => req<{ tenants: TenantLicense[]; unlicensed: number }>('/tenants'),
+
+  // Offene Registrierungen (Audit 2026-09-03, N3): der Anmelder hat seine
+  // Adresse bestaetigt, die Freigabe durch den Betreiber fehlt noch.
+  signups: () => req<{ signups: SignupRequest[]; migration_fehlt?: boolean }>('/signups'),
+  approveSignup: (tenantId: number) =>
+    req<{ ok: true; tenant_id: number; mail_versandt: boolean; email: string | null }>(
+      `/signups/${tenantId}/approve`, { method: 'POST' }),
+  // Ablehnen LOESCHT den Antrag samt Mandant, Firma und Erst-Nutzer.
+  rejectSignup: (tenantId: number, reason?: string) =>
+    req<{ ok: true; deleted: true; tenant_id: number; mail_versandt: boolean; email: string | null }>(
+      `/signups/${tenantId}/reject`, { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) }),
   setTenantPlan: (tenantId: number, planId: number) =>
     req<{ tenant_license: TenantLicense }>(`/tenants/${tenantId}/plan`, {
       method: 'PATCH',
