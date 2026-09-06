@@ -5,6 +5,7 @@ import { ListLoading } from '@/components/ui/Skeleton'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { negativeStyle } from '@/utils/money'
 import { Message } from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Can } from '@/components/ui/Can'
@@ -36,6 +37,8 @@ const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maxim
 const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const fmtEur = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
+/** Betrag als Zelle: negative Werte rot („rote Zahlen"), siehe utils/money.ts. */
+const money = (v: number | null | undefined) => <span style={negativeStyle(v)}>{fmtEur(v)}</span>
 const fmtPct = (v: number | null | undefined) => v == null ? '—' : `${FMT_PCT.format(v)} %`
 const fmtH   = (v: number | null | undefined) => v == null ? '—' : `${FMT_H.format(v)} h`
 const fmtDate = (iso: string | null | undefined) => {
@@ -109,48 +112,48 @@ const COLUMNS: ColDef[] = [
     render: r => r.DEPARTMENT_NAME ?? '—', sortValue: r => r.DEPARTMENT_NAME ?? '' },
 
   { key: 'order', label: 'Auftragswert', numeric: true, defaultVisible: true, help: 'report.tfl.auftragswert',
-    render: r => fmtEur(r.ORDER_VALUE_NET), sortValue: r => r.ORDER_VALUE_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.ORDER_VALUE_NET)) },
+    render: r => money(r.ORDER_VALUE_NET), sortValue: r => r.ORDER_VALUE_NET,
+    total: rows => money(sumBy(rows, r => r.ORDER_VALUE_NET)) },
   { key: 'performance', label: 'Leistungswert', numeric: true, defaultVisible: true, help: 'report.leistungsstand',
-    render: r => fmtEur(r.PERFORMANCE_NET), sortValue: r => r.PERFORMANCE_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.PERFORMANCE_NET)) },
+    render: r => money(r.PERFORMANCE_NET), sortValue: r => r.PERFORMANCE_NET,
+    total: rows => money(sumBy(rows, r => r.PERFORMANCE_NET)) },
   { key: 'lstPct', label: 'Leistungsstand', numeric: true, defaultVisible: false, help: 'report.leistungsstand',
     render: r => fmtPct(r.PERFORMANCE_PERCENT), sortValue: r => r.PERFORMANCE_PERCENT ?? -1 },
   { key: 'billed', label: 'Abgerechnet', numeric: true, defaultVisible: true,
-    render: r => fmtEur(r.BILLED_NET), sortValue: r => r.BILLED_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.BILLED_NET)) },
+    render: r => money(r.BILLED_NET), sortValue: r => r.BILLED_NET,
+    total: rows => money(sumBy(rows, r => r.BILLED_NET)) },
   { key: 'unbilled', label: 'Unfertig', numeric: true, defaultVisible: true, help: 'report.tfl.unfertig',
-    render: r => fmtEur(r.UNBILLED_NET), sortValue: r => r.UNBILLED_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.UNBILLED_NET)) },
+    render: r => money(r.UNBILLED_NET), sortValue: r => r.UNBILLED_NET,
+    total: rows => money(sumBy(rows, r => r.UNBILLED_NET)) },
   { key: 'cost', label: 'Kosten', numeric: true, defaultVisible: false,
-    render: r => fmtEur(r.COST_NET), sortValue: r => r.COST_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.COST_NET)) },
+    render: r => money(r.COST_NET), sortValue: r => r.COST_NET,
+    total: rows => money(sumBy(rows, r => r.COST_NET)) },
   { key: 'costUnbilled', label: 'Kosten unfertig', numeric: true, defaultVisible: true, help: 'report.tfl.kostenfaktor',
-    render: r => fmtEur(r.COST_UNBILLED_NET), sortValue: r => r.COST_UNBILLED_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.COST_UNBILLED_NET)) },
+    render: r => money(r.COST_UNBILLED_NET), sortValue: r => r.COST_UNBILLED_NET,
+    total: rows => money(sumBy(rows, r => r.COST_UNBILLED_NET)) },
   { key: 'wip', label: 'Teilfertig', numeric: true, defaultVisible: true, help: 'report.tfl.was',
-    render: (r, m) => fmtEur(wipValue(r, m)), sortValue: (r, m) => wipValue(r, m),
-    total: (rows, m) => fmtEur(sumBy(rows, r => wipValue(r, m))) },
+    render: (r, m) => money(wipValue(r, m)), sortValue: (r, m) => wipValue(r, m),
+    total: (rows, m) => money(sumBy(rows, r => wipValue(r, m))) },
   { key: 'prepayment', label: 'Erh. Anzahlung', numeric: true, defaultVisible: true, help: 'report.tfl.anzahlungen',
-    render: r => fmtEur(r.PREPAYMENT_NET), sortValue: r => r.PREPAYMENT_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.PREPAYMENT_NET)) },
+    render: r => money(r.PREPAYMENT_NET), sortValue: r => r.PREPAYMENT_NET,
+    total: rows => money(sumBy(rows, r => r.PREPAYMENT_NET)) },
   { key: 'lossRisk', label: 'Drohverlust', numeric: true, defaultVisible: true, help: 'report.tfl.drohverlust',
     render: r => r.LOSS_RISK_NET > 0
       ? <span style={{ color: 'var(--danger-strong)' }}>{fmtEur(r.LOSS_RISK_NET)}</span>
       : fmtEur(0),
     sortValue: r => r.LOSS_RISK_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.LOSS_RISK_NET)) },
+    total: rows => money(sumBy(rows, r => r.LOSS_RISK_NET)) },
   { key: 'gain', label: 'Nicht real. Gewinn', numeric: true, defaultVisible: false, help: 'report.tfl.methode',
-    render: r => fmtEur(r.UNREALIZED_GAIN_NET), sortValue: r => r.UNREALIZED_GAIN_NET,
-    total: rows => fmtEur(sumBy(rows, r => r.UNREALIZED_GAIN_NET)) },
+    render: r => money(r.UNREALIZED_GAIN_NET), sortValue: r => r.UNREALIZED_GAIN_NET,
+    total: rows => money(sumBy(rows, r => r.UNREALIZED_GAIN_NET)) },
   { key: 'hours', label: 'Stunden', numeric: true, defaultVisible: false,
     render: r => fmtH(r.HOURS_TOTAL), sortValue: r => r.HOURS_TOTAL,
     total: rows => fmtH(sumBy(rows, r => r.HOURS_TOTAL)) },
 
   { key: 'wipTax', label: 'Teilfertig (Steuerbilanz)', numeric: true, defaultVisible: true,
     needsTaxFactor: true, help: 'report.tfl.steuerbilanz',
-    render: r => fmtEur(r.WIP_TAX_NET), sortValue: r => r.WIP_TAX_NET ?? 0,
-    total: rows => fmtEur(sumBy(rows, r => r.WIP_TAX_NET ?? 0)) },
+    render: r => money(r.WIP_TAX_NET), sortValue: r => r.WIP_TAX_NET ?? 0,
+    total: rows => money(sumBy(rows, r => r.WIP_TAX_NET ?? 0)) },
 
   { key: 'progressCalc', label: 'Leistungsstand rechn.', numeric: true, defaultVisible: true,
     needsTargetRatio: true, help: 'report.tfl.gegenprobe',
@@ -169,12 +172,12 @@ const COLUMNS: ColDef[] = [
 
   { key: 'compare', label: 'Vergleichswert', numeric: true, defaultVisible: true, needsCompare: true,
     help: 'report.tfl.bestandsveraenderung',
-    render: r => fmtEur(r.COMPARE_WIP_NET), sortValue: r => r.COMPARE_WIP_NET ?? 0,
-    total: rows => fmtEur(sumBy(rows, r => r.COMPARE_WIP_NET ?? 0)) },
+    render: r => money(r.COMPARE_WIP_NET), sortValue: r => r.COMPARE_WIP_NET ?? 0,
+    total: rows => money(sumBy(rows, r => r.COMPARE_WIP_NET ?? 0)) },
   { key: 'change', label: 'Veränderung', numeric: true, defaultVisible: true, needsCompare: true,
     help: 'report.tfl.bestandsveraenderung',
-    render: r => fmtEur(r.CHANGE_WIP_NET), sortValue: r => r.CHANGE_WIP_NET ?? 0,
-    total: rows => fmtEur(sumBy(rows, r => r.CHANGE_WIP_NET ?? 0)) },
+    render: r => money(r.CHANGE_WIP_NET), sortValue: r => r.CHANGE_WIP_NET ?? 0,
+    total: rows => money(sumBy(rows, r => r.CHANGE_WIP_NET ?? 0)) },
 
   { key: 'snapshot', label: 'Snapshot', numeric: false, defaultVisible: true, help: 'report.tfl.stichtag_snapshot',
     render: r => r.SNAPSHOT_DATE ? fmtDate(r.SNAPSHOT_DATE) : <span style={{ color: 'var(--warning-strong)' }}>fehlt</span>,

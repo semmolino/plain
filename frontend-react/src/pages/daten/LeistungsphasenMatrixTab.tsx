@@ -8,12 +8,15 @@ import { Bar } from 'react-chartjs-2'
 import { fetchPhaseMatrix, type PhaseCell, type PhaseMatrixProject } from '@/api/reports'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { useChartTheme } from '@/theme/chartTheme'
+import { negativeStyle } from '@/utils/money'
 
 const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H    = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtEur   = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
+/** Betrag als Zelle: negative Werte rot („rote Zahlen"), siehe utils/money.ts. */
+const money = (v: number | null | undefined) => <span style={negativeStyle(v)}>{fmtEur(v)}</span>
 const fmtH     = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct   = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
@@ -191,12 +194,12 @@ export function LeistungsphasenMatrixTab() {
               return (
                 <tr key={ph.num}>
                   <td><strong>{ph.label}</strong></td>
-                  <td className="num">{fmtEur(ph.HONORAR_NET)}</td>
-                  <td className="num">{fmtEur(ph.EARNED_VALUE_NET)}</td>
+                  <td className="num">{money(ph.HONORAR_NET)}</td>
+                  <td className="num">{money(ph.EARNED_VALUE_NET)}</td>
                   <td className="num">{fmtH(ph.HOURS_TOTAL)}</td>
-                  <td className="num">{fmtEur(ph.COST_TOTAL)}</td>
+                  <td className="num">{money(ph.COST_TOTAL)}</td>
                   <td className="num">{ph.KOSTENQUOTE != null ? fmtPct(ph.KOSTENQUOTE * 100) : '—'}</td>
-                  <td className="num" style={{ color: ph.DB < 0 ? 'var(--danger)' : undefined }}>{fmtEur(ph.DB)}</td>
+                  <td className="num">{money(ph.DB)}</td>
                   <td className="num" style={{ color: over ? 'var(--danger-strong)' : undefined, fontWeight: over ? 600 : undefined }}>{fmtPct(ph.HOURS_SHARE)}</td>
                   <td className="num">{fmtPct(ph.HONORAR_SHARE)}</td>
                 </tr>

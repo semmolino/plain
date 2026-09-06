@@ -4,6 +4,7 @@ import { TrendingUp, Users, Clock, CalendarRange, BarChart3, AlertCircle } from 
 import { fetchCompanyKpis, type CompanyKpiPeriod } from '@/api/reports'
 import { RecentList } from '@/components/recents/RecentList'
 import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
+import { negativeStyle } from '@/utils/money'
 
 const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_EURK = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -79,11 +80,15 @@ function KpiCard({ label, value, formula, note, unavailable, icon, highlight = '
 
 // ── Base data strip ───────────────────────────────────────────────────────────
 
-function BaseDataRow({ label, value }: { label: string; value: string }) {
+function BaseDataRow({ label, value, num }: {
+  label: string; value: string
+  /** Rohwert — nur noetig bei Geldbetraegen: negative werden rot gesetzt. */
+  num?: number | null
+}) {
   return (
     <div className="unk-base-row">
       <span className="unk-base-label">{label}</span>
-      <span className="unk-base-value">{value}</span>
+      <span className="unk-base-value" style={negativeStyle(num)}>{value}</span>
     </div>
   )
 }
@@ -283,12 +288,12 @@ export function UnternehmenskennzahlenTab() {
               Basisdaten {periodLabel}
             </summary>
             <div className="unk-base-strip">
-              <BaseDataRow label="Umsatz (Rechnungen + Abschläge)" value={fmtEur(raw?.revenue ?? null)} />
-              <BaseDataRow label="Einzelkosten (Zeitbuchungen CP_TOT)" value={fmtEur(raw?.directCosts ?? null)} />
+              <BaseDataRow label="Umsatz (Rechnungen + Abschläge)" value={fmtEur(raw?.revenue ?? null)} num={raw?.revenue ?? null} />
+              <BaseDataRow label="Einzelkosten (Zeitbuchungen CP_TOT)" value={fmtEur(raw?.directCosts ?? null)} num={raw?.directCosts ?? null} />
               <BaseDataRow label="Projektstunden (Zeitbuchungen)" value={fmtH(raw?.totalHours ?? null)} />
               <BaseDataRow label="Aktive Mitarbeiter" value={raw?.employeeCount != null ? String(raw.employeeCount) : '–'} />
               <BaseDataRow label="Mitarbeiter mit Buchungen" value={raw?.projectEmployeeCount != null ? String(raw.projectEmployeeCount) : '–'} />
-              <BaseDataRow label="Auftragsbestand (alle Projekte)" value={fmtEur(raw?.backlog ?? null)} />
+              <BaseDataRow label="Auftragsbestand (alle Projekte)" value={fmtEur(raw?.backlog ?? null)} num={raw?.backlog ?? null} />
             </div>
           </details>
         </>

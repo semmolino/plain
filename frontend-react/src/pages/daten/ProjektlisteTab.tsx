@@ -9,6 +9,7 @@ import type { HelpId } from '@/help/helpContent'
 import { KpiValue } from '@/components/ui/KpiValue'
 import { useTenantDefaults } from '@/hooks/useTenantDefaults'
 import { cpiLevel, vacLevel, readCpiThresholds, type CpiThresholds } from '@/utils/kpiLevel'
+import { negativeStyle, negativeOr } from '@/utils/money'
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
@@ -168,15 +169,17 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'lstEur', label: 'Lst.€', className: 'num', defaultVisible: true,
-    render:      r  => fmtEur(r.LEISTUNGSSTAND_VALUE),
+    render:      r  => <span style={negativeStyle(r.LEISTUNGSSTAND_VALUE)}>{fmtEur(r.LEISTUNGSSTAND_VALUE)}</span>,
     sortValue:   r  => r.LEISTUNGSSTAND_VALUE ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)),
+    renderTotal: rs => { const v = sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)
+      return <span style={negativeStyle(v)}>{fmtEur(v)}</span> },
   },
   {
     key: 'rest', label: 'Restbudget', className: 'num', help: 'report.restbudget', defaultVisible: true,
-    render:      r  => fmtEur(r.REMAINING_BUDGET_NET),
+    render:      r  => <span style={negativeStyle(r.REMAINING_BUDGET_NET)}>{fmtEur(r.REMAINING_BUDGET_NET)}</span>,
     sortValue:   r  => r.REMAINING_BUDGET_NET ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.REMAINING_BUDGET_NET)),
+    renderTotal: rs => { const v = sumRows(rs, r => r.REMAINING_BUDGET_NET)
+      return <span style={negativeStyle(v)}>{fmtEur(v)}</span> },
   },
   {
     key: 'hoursInt', label: 'Std.int.', className: 'num', defaultVisible: true,
@@ -198,9 +201,10 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'open', label: 'Abrechenbar', className: 'num', help: 'report.abrechenbar', defaultVisible: true,
-    render:      r  => <span className="accent">{fmtEur(r.OPEN_NET_TOTAL)}</span>,
+    render:      r  => <span style={negativeOr(r.OPEN_NET_TOTAL, 'var(--accent)')}>{fmtEur(r.OPEN_NET_TOTAL)}</span>,
     sortValue:   r  => r.OPEN_NET_TOTAL ?? 0,
-    renderTotal: rs => <span className="accent">{fmtEur(sumRows(rs, r => r.OPEN_NET_TOTAL))}</span>,
+    renderTotal: rs => { const v = sumRows(rs, r => r.OPEN_NET_TOTAL)
+      return <span style={negativeOr(v, 'var(--accent)')}>{fmtEur(v)}</span> },
   },
   {
     key: 'payed', label: 'Bezahlt', className: 'num', defaultVisible: false,
@@ -239,7 +243,7 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'eac', label: 'EAC (Prognose)', className: 'num', defaultVisible: false,
-    render:      r  => fmtEur(computeEvm(r).eac),
+    render:      r  => <span style={negativeStyle(computeEvm(r).eac)}>{fmtEur(computeEvm(r).eac)}</span>,
     sortValue:   r  => computeEvm(r).eac ?? 0,
     renderTotal: rs => fmtEur(rs.reduce((s, r) => s + (computeEvm(r).eac ?? Number(r.BUDGET_TOTAL_NET) ?? 0), 0)),
   },
