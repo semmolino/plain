@@ -188,10 +188,18 @@ for (const [name, sel] of THEMES) {
   // Navigation liegt auf --chrome, NICHT auf --surface. Diese Zeilen fehlten
   // zunaechst; axe hat die Luecke im gerenderten Bild gefunden — die
   // Nav-Beschriftungen lagen in allen sieben Themes zwischen 2.59 und 3.35.
+  //
+  // --nav-inactive verlangt 7:1 und nicht 4.5:1, und das ist kein Uebereifer:
+  // Nach der ersten Korrektur lagen ALLE sieben Themes zwischen 4.61 und 4.68
+  // — also exakt auf die AA-Schwelle getrimmt. Im Produkt war der inaktive
+  // Navigationstext trotzdem schwer zu lesen. 4.5:1 ist die Untergrenze fuer
+  // Fliesstext, kein Ziel fuer 11–13-px-Label auf dunklem Grund. Wer den Wert
+  // hier senkt, holt sich den Befund zurueck.
   const chrome = hex2rgb(t['--chrome'])
+  const NAV_MIN = { '--nav-inactive': 7 }
   for (const tok of ['--nav-inactive', '--nav-active', '--chrome-icon', '--chrome-text']) {
     const c = resolve(t[tok], chrome)
-    if (c) checks.push([`${tok} auf --chrome`, ratio(c, chrome), 4.5])
+    if (c) checks.push([`${tok} auf --chrome`, ratio(c, chrome), NAV_MIN[tok] ?? 4.5])
   }
   // Schrift auf farbigen Flaechen
   for (const [surfTok, fgTok] of [

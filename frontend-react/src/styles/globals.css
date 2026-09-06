@@ -19,57 +19,60 @@
 
 /* ── Design tokens ───────────────────────────────────────────────────────── */
 :root {
-  --bg:         #f4f6fb;
+  --bg:         #eef2f7;
   --surface:    #ffffff;
-  --surface-2:  #f8f9fb;
-  --surface-3:  #f9fafb;
+  --surface-2:  #e3e9f1;
+  --surface-3:  #eef2f7;
 
   /* --text-2/-3 sind WCAG-AA-tauglich (>= 4.5:1 auf --bg UND --surface).
      --text-4 erreicht 3:1 (Schwelle fuer UI-Elemente/Platzhalter),
      --text-5 ist rein dekorativ — NICHT fuer lesbaren Text verwenden. */
-  --text:       #111827;
-  --text-2:     rgba(17,24,39,0.70);
-  --text-3:     rgba(17,24,39,0.60);
-  --text-4:     rgba(17,24,39,0.47);
-  --text-5:     rgba(17,24,39,0.38);
+  --text:       #10233d;
+  --text-2:     rgba(16,35,61,0.72);
+  --text-3:     rgba(16,35,61,0.64);
+  --text-4:     rgba(16,35,61,0.50);
+  --text-5:     rgba(16,35,61,0.38);
 
-  --border:     rgba(17,24,39,0.10);
-  --border-2:   rgba(17,24,39,0.08);
-  --border-3:   rgba(17,24,39,0.06);
-  --border-4:   rgba(17,24,39,0.05);
+  --border:     rgba(16,35,61,0.11);
+  --border-2:   rgba(16,35,61,0.09);
+  --border-3:   rgba(16,35,61,0.06);
+  --border-4:   rgba(16,35,61,0.04);
 
-  --accent:       #2563eb;
-  --accent-dark:  #1d4ed8;
-  --accent-bg:    #eff6ff;
-  --accent-bg2:   #dbeafe;
-  --accent-tint:  rgba(37,99,235,0.04);
-  --accent-tint2: rgba(37,99,235,0.08);
-  --accent-tint3: rgba(37,99,235,0.10);
-  --accent-ring:  rgba(37,99,235,0.15);
+  --accent:       #1b4f8f;
+  --accent-dark:  #143a6b;
+  --accent-bg:    #e8eefa;
+  --accent-bg2:   #cfdcf3;
+  --accent-tint:  rgba(27,79,143,0.04);
+  --accent-tint2: rgba(27,79,143,0.08);
+  --accent-tint3: rgba(27,79,143,0.10);
+  --accent-ring:  rgba(27,79,143,0.28);
 
   /* Marken-"&" (BrandGlyph) — Belohnungs-/Fortschritts-Icon. Default = Akzent. */
   --brand-glyph: var(--accent);
-  --brand-glyph-empty: rgba(37,99,235,0.18);
+  --brand-glyph-empty: rgba(27,79,143,0.20);
 
-  /* Chrome = app-header + bottom-nav background */
-  --chrome:          #ffffff;
-  --chrome-border:   rgba(17,24,39,0.08);
-  --chrome-shadow-h: 0 1px 6px rgba(17,24,39,0.05);
-  --chrome-shadow-n: 0 -2px 12px rgba(17,24,39,0.06);
-  --chrome-text:     #111827;
-  --chrome-icon:     rgba(17,24,39,0.60);
-  --chrome-hover-bg: rgba(17,24,39,0.06);
+  /* Chrome = Kopfzeile, Seiten- und Bottom-Navigation.
+     Seit Palette „Blaupause" ist sie auch im hellen Theme DUNKEL — damit
+     haben alle sieben Themes eine dunkle Chrome, was zwei Regeln weiter
+     unten vereinfacht (weisse Wortmarke, siehe .side-nav-brand). */
+  --chrome:          #10233d;
+  --chrome-border:   rgba(255,255,255,0.08);
+  --chrome-shadow-h: 0 2px 12px rgba(16,35,61,0.28);
+  --chrome-shadow-n: 0 -4px 20px rgba(16,35,61,0.28);
+  --chrome-text:     #ffffff;
+  --chrome-icon:     rgba(255,255,255,0.70);
+  --chrome-hover-bg: rgba(255,255,255,0.10);
 
-  --nav-active:   #2563eb;
-  --nav-inactive:#72747a;
+  --nav-active:   #8ab4e8;
+  --nav-inactive: #a5aebc;
 
   /* Primary action button (auth, modal confirm) */
-  --btn:   #1a1a2e;
-  --btn-h: #2d2d4e;
+  --btn:   #10233d;
+  --btn-h: #1d3654;
 
   /* CTA = prominent action button in content area (tbr-next, wizard active step) */
-  --cta:   #2563eb;
-  --cta-h: #1d4ed8;
+  --cta:   #1b4f8f;
+  --cta-h: #143a6b;
 
   /* Schriftfarbe AUF --btn/--cta. Als Token, damit Themes mit hellem
      Button-Hintergrund (dark) auf dunkle Schrift wechseln koennen —
@@ -80,12 +83,12 @@
 
   --notif-badge: #dc2626;
   --notif-badge-fg: #ffffff;
-  --notif-dot:   #2563eb;
-  --overlay:     rgba(17,24,39,0.45);
+  --notif-dot:   #1b4f8f;
+  --overlay:     rgba(16,35,61,0.48);
   --timer-color: #16a34a;
 
-  --dim:   rgba(17,24,39,0.04);
-  --dim-2: rgba(17,24,39,0.025);
+  --dim:   rgba(16,35,61,0.04);
+  --dim-2: rgba(16,35,61,0.025);
 
   /* Typografie-Skala — zentrale Steuerung fuer Titel/Headings.
      Hierarchie laeuft ueber die GROESSE; Gewicht bewusst nur 700/800
@@ -122,7 +125,7 @@
   /* ── Schatten-Skala ────────────────────────────────────────────────────
      Theme-abhaengig (--shadow-color), damit Schatten im Dark-Theme
      nicht unsichtbar werden. */
-  --shadow-color: 17,24,39;
+  --shadow-color: 16,35,61;
   --shadow-sm: 0 1px 2px  rgba(var(--shadow-color),0.06);
   --shadow-md: 0 2px 8px  rgba(var(--shadow-color),0.08);
   --shadow-lg: 0 8px 24px rgba(var(--shadow-color),0.12);
@@ -180,8 +183,8 @@
      --accent-rgb und --hover-bg wurden im Code bereits per var(…) genutzt,
      waren aber nirgends definiert: der Fokusring war dadurch in JEDEM Theme
      blau (Fallback 59,130,246) und Hover im Dark-Theme dunkler statt heller. */
-  --accent-rgb: 37,99,235;
-  --hover-bg:   rgba(17,24,39,0.06);
+  --accent-rgb: 27,79,143;
+  --hover-bg:   rgba(16,35,61,0.06);
   --focus-ring: 0 0 0 3px var(--accent-ring);
 }
 
@@ -248,7 +251,7 @@
   --chrome-icon:     #808080;
   --chrome-hover-bg: rgba(255,255,255,0.06);
   --nav-active:   #7a7ac6;
-  --nav-inactive:#7d7d7d;
+  --nav-inactive: #9d9d9d;
   --btn:   #7a7ac6;
   --btn-h: #8888d0;
   --cta:   #7a7ac6;
@@ -301,7 +304,7 @@
   --chrome-icon:     rgba(245,243,239,0.65);
   --chrome-hover-bg: rgba(245,243,239,0.10);
   --nav-active:#cb8061;
-  --nav-inactive:#939293;
+  --nav-inactive: #b7b6b7;
   --btn:   #2a2a2e;
   --btn-h: #3a3a3f;
   --cta:   #c97b5a;
@@ -347,7 +350,7 @@
   --chrome-icon:     rgba(239,232,219,0.65);
   --chrome-hover-bg: rgba(239,232,219,0.10);
   --nav-active:   #c8965a;
-  --nav-inactive:#a4a09a;
+  --nav-inactive: #c7c5c1;
   --btn:   #3a3530;
   --btn-h: #4d4640;
   --cta:   #c8965a;
@@ -393,7 +396,7 @@
   --chrome-icon:     rgba(233,238,243,0.65);
   --chrome-hover-bg: rgba(233,238,243,0.10);
   --nav-active:   #e9b94c;
-  --nav-inactive:#888f97;
+  --nav-inactive: #acb1b7;
   --btn:   #1c2733;
   --btn-h: #2c3a48;
   --cta:   #e9b94c;
@@ -439,7 +442,7 @@
   --chrome-icon:#a8bbbf;
   --chrome-hover-bg: rgba(228,235,240,0.10);
   --nav-active:#d7b284;
-  --nav-inactive:#a8bbbe;
+  --nav-inactive: #dae2e3;
   --btn:   #1f4e54;
   --btn-h: #2d6b73;
   --cta:   #c79252;
@@ -485,7 +488,7 @@
   --chrome-icon:     rgba(233,234,237,0.65);
   --chrome-hover-bg: rgba(233,234,237,0.10);
   --nav-active:   #8aa3c0;
-  --nav-inactive:#9b9fa5;
+  --nav-inactive: #c0c3c6;
   --btn:   #2c3540;
   --btn-h: #3d4a59;
   --cta:   #4c6680;
@@ -633,14 +636,15 @@ body {
 [data-theme="dark"] .brand-wordmark-color { display: none; }
 [data-theme="dark"] .brand-wordmark-white { display: block; }
 
-/* Die Marke in der Seitennavigation liegt IMMER auf --chrome, und jedes
-   Theme ausser dem Default hat dort eine dunkle Flaeche (gemessen: Luminanz
-   0.005–0.064). Vorher galt die weisse Wortmarke nur fuer data-theme="dark" —
-   in allen Branchen-Themes war der Schriftzug dunkel auf dunkel, sichtbar
-   blieb nur das blaue „&". Bewusst auf .side-nav-brand begrenzt: Login und
-   Signup stehen dort auf hellem --bg und brauchen weiter die Farbversion. */
-[data-theme] .side-nav-brand .brand-wordmark-color { display: none; }
-[data-theme] .side-nav-brand .brand-wordmark-white { display: block; }
+/* Die Marke in der Seitennavigation liegt IMMER auf --chrome, und seit
+   Palette „Blaupause" ist die Chrome in JEDEM der sieben Themes dunkel —
+   auch im hellen. Der Selektor stand vorher auf [data-theme] und nahm damit
+   ausgerechnet das Default-Theme aus; mit dunkler Kopfzeile haette dort der
+   farbige Schriftzug dunkel auf dunkel gestanden. Bewusst auf
+   .side-nav-brand begrenzt: Login und Signup liegen auf hellem --bg und
+   brauchen weiter die Farbversion. */
+.side-nav-brand .brand-wordmark-color { display: none; }
+.side-nav-brand .brand-wordmark-white { display: block; }
 .brand-mark { display: block; border-radius: 6px; }
 .auth-subtitle { font-size: 13px; color: var(--text-3); margin-top: 2px; margin-bottom: 24px; }
 .auth-title  { font-size: var(--fs-page-title); font-weight: var(--fw-title); margin-bottom: 20px; color: var(--text); }
@@ -880,7 +884,17 @@ input::placeholder { color: var(--text-4); }
   transition: color 0.13s;
 }
 .bottom-nav-item:hover { transform: none; box-shadow: none; background: transparent; color: var(--chrome-text); }
-.bottom-nav-item.active { color: var(--nav-active); }
+/* Der aktive Eintrag war allein ueber die Farbe markiert (WCAG 1.4.1) und
+   nach dem Anheben des inaktiven Texts in fuenf Themes sogar dunkler als
+   seine Nachbarn. Jetzt: helles Label plus Balken oben in --nav-active,
+   spiegelbildlich zum Balken links in der Seitennavigation. */
+.bottom-nav-item { position: relative; }
+.bottom-nav-item.active { color: var(--chrome-text); }
+.bottom-nav-item.active::before {
+  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 28px; height: 3px; border-radius: 0 0 3px 3px;
+  background: var(--nav-active);
+}
 .bottom-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -3px; border-radius: 4px; }
 .bn-icon  { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; }
 /* 11px = Untergrenze aus CLAUDE.md (vorher 9px). Bei max. 5 Spalten passt
@@ -923,7 +937,7 @@ input::placeholder { color: var(--text-4); }
   transition: color 0.13s, background 0.13s;
 }
 .bn-more-item:hover  { background: var(--chrome-hover-bg); color: var(--chrome-text); }
-.bn-more-item.active { color: var(--nav-active); }
+.bn-more-item.active { color: var(--chrome-text); box-shadow: inset 3px 0 0 var(--nav-active); }
 .bn-more-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -3px; }
 
 @media (min-width: 1024px) {
@@ -965,7 +979,15 @@ input::placeholder { color: var(--text-4); }
     white-space: nowrap;
   }
   .side-nav-item:hover  { background: var(--chrome-hover-bg); color: var(--chrome-text); }
-  .side-nav-item.active { color: var(--nav-active); border-left-color: var(--nav-active); background: var(--accent-tint); }
+  /* Aktiv = Label in --chrome-text, Balken in --nav-active. Vorher trug die
+     Akzentfarbe beides: als 13-px-Text auf dunkler Chrome lag sie je nach
+     Theme bei 4.6–4.8:1 und war schwer zu lesen. Der Balken traegt die
+     Identitaet, das Label die Lesbarkeit. */
+  .side-nav-item.active {
+    color: var(--chrome-text);
+    border-left-color: var(--nav-active);
+    background: var(--chrome-hover-bg);
+  }
   .side-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -2px; border-radius: 2px; }
   .sn-icon  { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; }
   .sn-label { font-size: 13px; }
