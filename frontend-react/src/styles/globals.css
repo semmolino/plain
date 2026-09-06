@@ -19,60 +19,57 @@
 
 /* ── Design tokens ───────────────────────────────────────────────────────── */
 :root {
-  --bg:         #eef2f7;
+  --bg:         #f4f6fb;
   --surface:    #ffffff;
-  --surface-2:  #e3e9f1;
-  --surface-3:  #eef2f7;
+  --surface-2:  #f8f9fb;
+  --surface-3:  #f9fafb;
 
   /* --text-2/-3 sind WCAG-AA-tauglich (>= 4.5:1 auf --bg UND --surface).
      --text-4 erreicht 3:1 (Schwelle fuer UI-Elemente/Platzhalter),
      --text-5 ist rein dekorativ — NICHT fuer lesbaren Text verwenden. */
-  --text:       #10233d;
-  --text-2:     rgba(16,35,61,0.72);
-  --text-3:     rgba(16,35,61,0.64);
-  --text-4:     rgba(16,35,61,0.50);
-  --text-5:     rgba(16,35,61,0.38);
+  --text:       #111827;
+  --text-2:     rgba(17,24,39,0.70);
+  --text-3:     rgba(17,24,39,0.60);
+  --text-4:     rgba(17,24,39,0.47);
+  --text-5:     rgba(17,24,39,0.38);
 
-  --border:     rgba(16,35,61,0.11);
-  --border-2:   rgba(16,35,61,0.09);
-  --border-3:   rgba(16,35,61,0.06);
-  --border-4:   rgba(16,35,61,0.04);
+  --border:     rgba(17,24,39,0.10);
+  --border-2:   rgba(17,24,39,0.08);
+  --border-3:   rgba(17,24,39,0.06);
+  --border-4:   rgba(17,24,39,0.05);
 
-  --accent:       #1b4f8f;
-  --accent-dark:  #143a6b;
-  --accent-bg:    #e8eefa;
-  --accent-bg2:   #cfdcf3;
-  --accent-tint:  rgba(27,79,143,0.04);
-  --accent-tint2: rgba(27,79,143,0.08);
-  --accent-tint3: rgba(27,79,143,0.10);
-  --accent-ring:  rgba(27,79,143,0.28);
+  --accent:       #2563eb;
+  --accent-dark:  #1d4ed8;
+  --accent-bg:    #eff6ff;
+  --accent-bg2:   #dbeafe;
+  --accent-tint:  rgba(37,99,235,0.04);
+  --accent-tint2: rgba(37,99,235,0.08);
+  --accent-tint3: rgba(37,99,235,0.10);
+  --accent-ring:  rgba(37,99,235,0.15);
 
   /* Marken-"&" (BrandGlyph) — Belohnungs-/Fortschritts-Icon. Default = Akzent. */
   --brand-glyph: var(--accent);
-  --brand-glyph-empty: rgba(27,79,143,0.20);
+  --brand-glyph-empty: rgba(37,99,235,0.18);
 
-  /* Chrome = Kopfzeile, Seiten- und Bottom-Navigation.
-     Seit Palette „Blaupause" ist sie auch im hellen Theme DUNKEL — damit
-     haben alle sieben Themes eine dunkle Chrome, was zwei Regeln weiter
-     unten vereinfacht (weisse Wortmarke, siehe .side-nav-brand). */
-  --chrome:          #10233d;
-  --chrome-border:   rgba(255,255,255,0.08);
-  --chrome-shadow-h: 0 2px 12px rgba(16,35,61,0.28);
-  --chrome-shadow-n: 0 -4px 20px rgba(16,35,61,0.28);
-  --chrome-text:     #ffffff;
-  --chrome-icon:     rgba(255,255,255,0.70);
-  --chrome-hover-bg: rgba(255,255,255,0.10);
+  /* Chrome = app-header + bottom-nav background */
+  --chrome:          #ffffff;
+  --chrome-border:   rgba(17,24,39,0.08);
+  --chrome-shadow-h: 0 1px 6px rgba(17,24,39,0.05);
+  --chrome-shadow-n: 0 -2px 12px rgba(17,24,39,0.06);
+  --chrome-text:     #111827;
+  --chrome-icon:     rgba(17,24,39,0.60);
+  --chrome-hover-bg: rgba(17,24,39,0.06);
 
-  --nav-active:   #8ab4e8;
-  --nav-inactive: #a5aebc;
+  --nav-active:   #2563eb;
+  --nav-inactive: #56575c;
 
   /* Primary action button (auth, modal confirm) */
-  --btn:   #10233d;
-  --btn-h: #1d3654;
+  --btn:   #1a1a2e;
+  --btn-h: #2d2d4e;
 
   /* CTA = prominent action button in content area (tbr-next, wizard active step) */
-  --cta:   #1b4f8f;
-  --cta-h: #143a6b;
+  --cta:   #2563eb;
+  --cta-h: #1d4ed8;
 
   /* Schriftfarbe AUF --btn/--cta. Als Token, damit Themes mit hellem
      Button-Hintergrund (dark) auf dunkle Schrift wechseln koennen —
@@ -83,12 +80,12 @@
 
   --notif-badge: #dc2626;
   --notif-badge-fg: #ffffff;
-  --notif-dot:   #1b4f8f;
-  --overlay:     rgba(16,35,61,0.48);
+  --notif-dot:   #2563eb;
+  --overlay:     rgba(17,24,39,0.45);
   --timer-color: #16a34a;
 
-  --dim:   rgba(16,35,61,0.04);
-  --dim-2: rgba(16,35,61,0.025);
+  --dim:   rgba(17,24,39,0.04);
+  --dim-2: rgba(17,24,39,0.025);
 
   /* Typografie-Skala — zentrale Steuerung fuer Titel/Headings.
      Hierarchie laeuft ueber die GROESSE; Gewicht bewusst nur 700/800
@@ -125,7 +122,7 @@
   /* ── Schatten-Skala ────────────────────────────────────────────────────
      Theme-abhaengig (--shadow-color), damit Schatten im Dark-Theme
      nicht unsichtbar werden. */
-  --shadow-color: 16,35,61;
+  --shadow-color: 17,24,39;
   --shadow-sm: 0 1px 2px  rgba(var(--shadow-color),0.06);
   --shadow-md: 0 2px 8px  rgba(var(--shadow-color),0.08);
   --shadow-lg: 0 8px 24px rgba(var(--shadow-color),0.12);
@@ -183,8 +180,8 @@
      --accent-rgb und --hover-bg wurden im Code bereits per var(…) genutzt,
      waren aber nirgends definiert: der Fokusring war dadurch in JEDEM Theme
      blau (Fallback 59,130,246) und Hover im Dark-Theme dunkler statt heller. */
-  --accent-rgb: 27,79,143;
-  --hover-bg:   rgba(16,35,61,0.06);
+  --accent-rgb: 37,99,235;
+  --hover-bg:   rgba(17,24,39,0.06);
   --focus-ring: 0 0 0 3px var(--accent-ring);
 }
 
@@ -636,15 +633,19 @@ body {
 [data-theme="dark"] .brand-wordmark-color { display: none; }
 [data-theme="dark"] .brand-wordmark-white { display: block; }
 
-/* Die Marke in der Seitennavigation liegt IMMER auf --chrome, und seit
-   Palette „Blaupause" ist die Chrome in JEDEM der sieben Themes dunkel —
-   auch im hellen. Der Selektor stand vorher auf [data-theme] und nahm damit
-   ausgerechnet das Default-Theme aus; mit dunkler Kopfzeile haette dort der
-   farbige Schriftzug dunkel auf dunkel gestanden. Bewusst auf
-   .side-nav-brand begrenzt: Login und Signup liegen auf hellem --bg und
-   brauchen weiter die Farbversion. */
-.side-nav-brand .brand-wordmark-color { display: none; }
-.side-nav-brand .brand-wordmark-white { display: block; }
+/* Die Marke in der Seitennavigation liegt IMMER auf --chrome, und jedes
+   Theme ausser dem Default hat dort eine dunkle Flaeche. Vorher galt die
+   weisse Wortmarke nur fuer data-theme="dark" — in allen Branchen-Themes
+   war der Schriftzug dunkel auf dunkel, sichtbar blieb nur das blaue „&".
+   Bewusst auf .side-nav-brand begrenzt: Login und Signup stehen dort auf
+   hellem --bg und brauchen weiter die Farbversion.
+
+   ACHTUNG beim naechsten Palettenversuch: Der Selektor haengt am Attribut
+   und nimmt damit das Default-Theme aus. Wer der hellen Palette eine dunkle
+   Kopfzeile gibt, muss diese beiden Zeilen unbedingt machen — sonst steht
+   der farbige Schriftzug dunkel auf dunkel. */
+[data-theme] .side-nav-brand .brand-wordmark-color { display: none; }
+[data-theme] .side-nav-brand .brand-wordmark-white { display: block; }
 .brand-mark { display: block; border-radius: 6px; }
 .auth-subtitle { font-size: 13px; color: var(--text-3); margin-top: 2px; margin-bottom: 24px; }
 .auth-title  { font-size: var(--fs-page-title); font-weight: var(--fw-title); margin-bottom: 20px; color: var(--text); }

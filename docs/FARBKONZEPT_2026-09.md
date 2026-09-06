@@ -2,10 +2,11 @@
 
 **Stand:** 06.09.2026 · **Branch:** `claude/projektcontrolling-color-palettes-n9tb7u` · **Basis:** 4.511 Zeilen `globals.css`, 7 Theme-Blöcke, 7 auswählbare Themes
 
-> **Umsetzungsstand: abgeschlossen.** Alle Schritte aus §8 sind umgesetzt. Die
-> Palettenwahl ist gefallen: **C „Blaupause“** ist seit September 2026 das helle
-> Standard-Theme. Dazu kam ein Befund, der erst beim Ansehen der Vorschau
-> auffiel und alle sieben Themes betraf — §6.1.
+> **Umsetzungsstand.** Die Ebenen 2 und 3 (Bedeutung, Daten) sind umgesetzt und
+> im Produkt: Controlling-Ampel, Geld-Konvention, CVD-taugliche Diagrammfarben,
+> Prüfregeln. **Ebene 1 — die Markenpalette — ist zurückgesetzt.** Palette C war
+> zwei Tage im Produkt und wurde zurückgenommen; die Gründe stehen in §6.2. Das
+> helle Theme ist wieder das ursprüngliche mit weißer Kopfzeile.
 
 Alle Kontrast- und Farbabstandswerte in diesem Dokument sind gerechnet, nicht geschätzt. Nachrechnen:
 
@@ -268,6 +269,46 @@ Endpunkte als Text auf Weiß: 7,87:1 und 6,67:1 — beide AA-tauglich, falls die
 ## 6 · Ebene 1 — vier Markenpaletten zur Auswahl
 
 Alle vier sind vollständig durchgerechnet; jedes Token-Paar der Prüfliste aus §7 liegt über der Schwelle. Sie ersetzen das heutige `light`-Theme; die fünf Branchen-Themes bleiben unangetastet.
+
+### 6.2 · Palette C ist zurückgesetzt — was die Vorschau nicht gezeigt hat
+
+C war vom 6. bis 8. September im Produkt und ist zurückgenommen. Drei Rückmeldungen,
+alle in dieselbe Richtung:
+
+1. **„Der weiße Hintergrund sah insgesamt besser aus, jetzt ist alles so grau."**
+   `--bg` ging von `#f4f6fb` (fast weiß) auf `#eef2f7` und `--surface-2` von
+   `#f8f9fb` auf `#e3e9f1`. In der Vorschau war das ein Ausschnitt; über eine ganze
+   Arbeitsfläche summiert es sich zu einem spürbar grauen Eindruck.
+2. **„Das Blau ist zu dunkel."** `#1b4f8f` statt `#2563eb`.
+3. **„Auf dem Handy ist die Menüleiste ausgeblendet."** Ein funktionaler Bruch ließ
+   sich nicht reproduzieren — die Leiste rendert mit sechs erreichbaren Einträgen.
+   Die wahrscheinliche Ursache ist die Farbe: `syncThemeColor()` schreibt `--chrome`
+   nach `<meta name="theme-color">`, und damit färbte sich auf dem Handy die
+   Browserleiste dunkelblau. Zusammen mit der ebenfalls dunklen Bottom-Navigation
+   entsteht unten ein durchgehendes dunkles Band, in dem die Leiste nicht mehr als
+   eigenes Bedienelement zu erkennen ist.
+
+**Was daraus zu lernen ist — der Fehler lag in der Methode, nicht im Farbwert.**
+Die Vorschau zeigte einen Ausschnitt auf hellem Papiergrund, bei 1280 px, ohne
+Systemleiste. Drei Dinge, die eine solche Vorschau nicht zeigen kann und die man
+deshalb vorher direkt in der App prüfen muss:
+
+- **Flächenwirkung.** Ein grauer Grund wirkt auf 200 px anders als auf einem
+  ganzen Bildschirm voller Listen.
+- **Die Systemleiste.** `theme-color` ist Teil der Palette, taucht aber in keinem
+  Screenshot der App auf.
+- **Das Handy überhaupt.** Die Vorschau war eine Desktop-Ansicht.
+
+Praktisch heißt das: Der nächste Palettenversuch läuft **zuerst als Theme neben
+den bestehenden**, wird auf einem echten Gerät benutzt und ersetzt den Standard
+erst danach — nicht umgekehrt.
+
+**Was bleibt.** Alles außer den Markenfarben: die Navigations-Korrektur (§6.1),
+die Controlling-Ampel (§4), die Geld-Konvention (§4.5), die Diagrammfarben (§5)
+und die Prüfregeln (§7). Der inaktive Navigationstext liegt auch im
+zurückgesetzten hellen Theme auf 7:1 (`#56575c` statt `#72747a`).
+
+---
 
 ### 6.1 · Der Navigationstext — gefunden beim Ansehen, nicht beim Rechnen
 
@@ -543,7 +584,9 @@ Schritt 9 ist die einzige verbleibende Entscheidung. Die Ampel aus Schritt 6 wur
 
 ## 9 · Was ich von dir brauche
 
-1. ~~**Palette**~~ — entschieden: **C, Blaupause**, ersetzt das `light`-Theme.
+1. ~~**Palette**~~ — C war entschieden und ist **zurückgesetzt** (§6.2). Offen ist
+   damit wieder: A, B, D — oder beim heutigen Blau bleiben. Der nächste Versuch
+   läuft als Theme daneben, nicht als Ersatz.
    Damit hat jedes der sieben Themes eine dunkle Kopfzeile. Das hat nebenbei die
    Wortmarken-Regel vereinfacht: Der Selektor `[data-theme]` nahm ausgerechnet das
    Default-Theme aus — mit dunkler Kopfzeile hätte dort der farbige Schriftzug
