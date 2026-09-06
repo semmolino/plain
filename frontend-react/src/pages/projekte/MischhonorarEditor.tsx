@@ -8,9 +8,8 @@ import {
   fetchFeeZoneSplits, saveFeeZoneSplits,
   type FeeZone, type MischhonorarResult,
 } from '@/api/fee'
+import { money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
 interface Row { zoneId: number | ''; zonePercent: string; amount: string }
 
@@ -144,7 +143,7 @@ export function MischhonorarEditor({ open, onClose, calcMasterId, zones, onAppli
               <tfoot>
                 <tr className="sum-row">
                   <td colSpan={2}><strong>Anrechenbare Gesamtkosten (K0)</strong></td>
-                  <td className="num"><strong>{fmtEur(akGesamt)}</strong></td>
+                  <td className="num"><strong>{money(akGesamt)}</strong></td>
                   <td />
                 </tr>
               </tfoot>
@@ -173,17 +172,17 @@ export function MischhonorarEditor({ open, onClose, calcMasterId, zones, onAppli
                     {result.herleitung.map((h, i) => (
                       <tr key={i}>
                         <td>{zoneName(h.zoneId)}</td>
-                        <td className="num">{fmtEur(h.amount)}</td>
-                        <td className="num">{fmtEur(h.hVoll)}</td>
+                        <td className="num">{money(h.amount)}</td>
+                        <td className="num">{money(h.hVoll)}</td>
                         <td className="num">{h.anteilPct}</td>
-                        <td className="num">{fmtEur(h.einzelhonorar)}</td>
+                        <td className="num">{money(h.einzelhonorar)}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="sum-row">
                       <td colSpan={4}><strong>Mischhonorar (Grundhonorar-Basis)</strong></td>
-                      <td className="num"><strong>{fmtEur(result.honorar)}</strong></td>
+                      <td className="num"><strong>{money(result.honorar)}</strong></td>
                     </tr>
                   </tfoot>
                 </table>

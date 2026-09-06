@@ -76,6 +76,7 @@ import {
   type EmailTemplateKey,
 } from '@/api/emailTemplates'
 import { useAuthStore } from '@/store/authStore'
+import { fmtEur, money } from '@/utils/money'
 
 const PAGE_TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'stammdaten',              label: 'Stammdaten',              permissions: ['settings.basedata.view','settings.basedata.edit'] },
@@ -1655,7 +1656,7 @@ function MonatsabschlussSection() {
         {statuses.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Keine Projektstatus vorhanden.</p>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {statuses.map((s: ProjectStatus) => (
-            <label key={s.ID} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, background: selectedStatuses.includes(s.ID) ? '#eff6ff' : '#f3f4f6', border: `1px solid ${selectedStatuses.includes(s.ID) ? '#93c5fd' : '#e5e7eb'}`, borderRadius: 4, padding: '4px 10px' }}>
+            <label key={s.ID} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, background: selectedStatuses.includes(s.ID) ? 'var(--accent-bg)' : 'var(--surface-2)', border: `1px solid ${selectedStatuses.includes(s.ID) ? 'var(--info-bg)' : 'var(--border)'}`, borderRadius: 4, padding: '4px 10px' }}>
               <input
                 type="checkbox"
                 checked={selectedStatuses.includes(s.ID)}
@@ -1876,7 +1877,7 @@ function ArbeitszeitmodelleSection() {
                     <td style={{ padding: '3px 8px 3px 0', fontWeight: 600 }}>{m.NAME}</td>
                     <td style={{ padding: '3px 8px 3px 0', color: 'var(--text-2)' }}>{getStateLabel(m.COUNTRY_CODE, m.STATE_CODE)}</td>
                     {[m.MON, m.TUE, m.WED, m.THU, m.FRI, m.SAT, m.SUN].map((h, i) => (
-                      <td key={i} style={{ textAlign: 'center', padding: '3px 4px', color: h === 0 ? '#d1d5db' : '#374151' }}>{h}</td>
+                      <td key={i} style={{ textAlign: 'center', padding: '3px 4px', color: h === 0 ? 'var(--border)' : 'var(--text-2)' }}>{h}</td>
                     ))}
                     <td style={{ textAlign: 'right', padding: '3px 0 3px 4px', fontVariantNumeric: 'tabular-nums', color: 'var(--text-2)' }}>{weekHours}</td>
                     <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
@@ -2004,7 +2005,6 @@ function ArbeitszeitmodelleSection() {
 
 // ── Kostensatz-Rechner ────────────────────────────────────────────────────────
 
-const FMT_EUR_KS = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
 const FMT_H_KS   = (n: number) => n.toFixed(2).replace('.', ',') + ' h'
 const FMT_PCT_KS = (n: number) => n.toFixed(1).replace('.', ',') + ' %'
 
@@ -2184,11 +2184,11 @@ function KostensatzSection() {
   function toggleSelect(id: number) { setSelected(p => { const s = new Set(p); s.has(id) ? s.delete(id) : s.add(id); return s }) }
 
   const diffColor = (cur: number | null, calc: number) => {
-    if (cur == null || cur === 0) return '#6b7280'
+    if (cur == null || cur === 0) return 'var(--text-3)'
     const pct = (calc - cur) / cur * 100
-    if (pct > 10) return '#dc2626'
-    if (pct > 0)  return '#d97706'
-    return '#059669'
+    if (pct > 10) return 'var(--danger)'
+    if (pct > 0)  return 'var(--warning)'
+    return 'var(--success)'
   }
 
   return (
@@ -2272,7 +2272,7 @@ function KostensatzSection() {
           <tfoot>
             <tr className="sum-row">
               <td colSpan={2}><strong>Gesamt</strong></td>
-              <td style={{ textAlign: 'right' }}><strong>{FMT_EUR_KS.format(totalOverhead)}</strong></td>
+              <td style={{ textAlign: 'right' }}><strong>{money(totalOverhead)}</strong></td>
               <td></td>
             </tr>
           </tfoot>
@@ -2439,11 +2439,11 @@ function KostensatzSection() {
                           </td>
                           <td><strong>{r.short_name}</strong> <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>{r.first_name} {r.last_name}</span></td>
                           <td style={{ textAlign: 'right' }}>{FMT_H_KS(bd.productive_hours)}</td>
-                          <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.direct_cost_per_h)}</td>
-                          <td style={{ textAlign: 'right' }}>{FMT_EUR_KS.format(bd.overhead_per_h)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{FMT_EUR_KS.format(bd.vollkostensatz)}</td>
-                          {imp && <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--info)' }}>{FMT_EUR_KS.format(bd.import_rate)}</td>}
-                          <td style={{ textAlign: 'right', color: 'var(--text-3)' }}>{r.current_cp_rate != null ? FMT_EUR_KS.format(r.current_cp_rate) : '—'}</td>
+                          <td style={{ textAlign: 'right' }}>{money(bd.direct_cost_per_h)}</td>
+                          <td style={{ textAlign: 'right' }}>{money(bd.overhead_per_h)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{money(bd.vollkostensatz)}</td>
+                          {imp && <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--info)' }}>{money(bd.import_rate)}</td>}
+                          <td style={{ textAlign: 'right', color: 'var(--text-3)' }}>{r.current_cp_rate != null ? fmtEur(r.current_cp_rate) : '—'}</td>
                           <td style={{ textAlign: 'right', fontWeight: 600, color: diffColor(r.current_cp_rate, rate) }}>
                             {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(1).replace('.', ',')} %` : '—'}
                           </td>
@@ -2464,15 +2464,15 @@ function KostensatzSection() {
                                 </div>
                                 <div className="ks-breakdown-group">
                                   <div className="ks-breakdown-label">Personalkosten</div>
-                                  <div><span>Bruttogehalt</span><span><strong>{FMT_EUR_KS.format(bd.annual_salary)}</strong></span></div>
-                                  <div><span>AG-Sozialabgaben</span><span><strong>{FMT_EUR_KS.format(bd.social_contrib_eur)}</strong></span></div>
-                                  <div><span>= Direktkosten/Jahr</span><span><strong>{FMT_EUR_KS.format(bd.direct_cost_total)}</strong></span></div>
+                                  <div><span>Bruttogehalt</span><span><strong>{money(bd.annual_salary)}</strong></span></div>
+                                  <div><span>AG-Sozialabgaben</span><span><strong>{money(bd.social_contrib_eur)}</strong></span></div>
+                                  <div><span>= Direktkosten/Jahr</span><span><strong>{money(bd.direct_cost_total)}</strong></span></div>
                                 </div>
                                 <div className="ks-breakdown-group">
                                   <div className="ks-breakdown-label">Gemeinkosten</div>
-                                  <div><span>Gesamt</span><span><strong>{FMT_EUR_KS.format(bd.overhead_total)}</strong></span></div>
+                                  <div><span>Gesamt</span><span><strong>{money(bd.overhead_total)}</strong></span></div>
                                   <div><span>Anteil</span><span><strong>{FMT_PCT_KS(bd.overhead_share_pct)}</strong></span></div>
-                                  <div><span>= zugeteilt</span><span><strong>{FMT_EUR_KS.format(bd.overhead_allocated)}</strong></span></div>
+                                  <div><span>= zugeteilt</span><span><strong>{money(bd.overhead_allocated)}</strong></span></div>
                                 </div>
                               </div>
                             </td>

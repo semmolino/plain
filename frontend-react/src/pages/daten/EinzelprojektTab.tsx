@@ -32,24 +32,28 @@ import { LeistungsphasenReport } from '@/pages/daten/LeistungsphasenReport'
 import { useTenantDefaults } from '@/hooks/useTenantDefaults'
 import { cpiLevel, vacLevel, readCpiThresholds, KPI_COLOR } from '@/utils/kpiLevel'
 import { KpiValue } from '@/components/ui/KpiValue'
+import { NO_VALUE, fmtEur, fmtEur0, money, negativeOr, negativeStyle } from '@/utils/money'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtH    = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct  = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
 type SortField = 'path' | 'honorar' | 'lstPct' | 'lstEur' | 'rest' | 'hours' | 'cost' | 'kq'
 
-function KpiTile({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function KpiTile({ label, value, accent, num }: {
+  label: string; value: string; accent?: boolean
+  /** Rohwert — nur noetig, wenn die Kachel einen Geldbetrag zeigt: ein
+   *  negativer Betrag wird rot gesetzt („rote Zahlen"). */
+  num?: number | null
+}) {
+  const style = accent ? negativeOr(num, 'var(--accent)') : negativeStyle(num)
   return (
     <div className="daten-kpi-tile">
       <span className="daten-kpi-label">{label}</span>
-      <span className={`daten-kpi-value${accent ? ' accent' : ''}`}>{value}</span>
+      <span className="daten-kpi-value" style={style}>{value}</span>
     </div>
   )
 }
@@ -85,11 +89,11 @@ function buildAncestorPath(
 // ── Timeline chart ────────────────────────────────────────────────────────────
 
 const CHART_COLORS = {
-  honorar:       '#3b82f6',
-  leistungsstand:'#10b981',
-  kosten:        '#f59e0b',
-  abgerechnet:   '#8b5cf6',
-  bezahlt:       '#06b6d4',
+  honorar:       'var(--info)',
+  leistungsstand:'var(--success)',
+  kosten:        'var(--warning)',
+  abgerechnet:   'var(--accent2)',
+  bezahlt:       'var(--info)',
 }
 
 function fmtDateDE(iso: string) {
@@ -204,13 +208,13 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       },
       tooltip: {
         backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: '#f9fafb',
-        bodyColor: '#d1d5db',
+        titleColor: 'var(--surface-2)',
+        bodyColor: 'var(--border)',
         padding: 12,
         cornerRadius: 8,
         callbacks: {
           label: (ctx) =>
-            `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}`,
+            `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}`,
         },
       },
     },
@@ -229,7 +233,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         ticks: {
           font: { size: 11 },
           color: 'var(--text-3)',
-          callback: (v) => FMT_EUR0.format(Number(v)),
+          callback: (v) => fmtEur0(Number(v)),
         },
       },
     },
@@ -497,15 +501,15 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
           </div>
 
           <div className="daten-kpi-grid">
-            <KpiTile label="HONORAR inkl. Nebenkosten"  value={fmtEur(header.BUDGET_TOTAL_NET)} />
+            <KpiTile label="HONORAR inkl. Nebenkosten"  value={fmtEur(header.BUDGET_TOTAL_NET)} num={header.BUDGET_TOTAL_NET} />
             <KpiTile label="Leistungsstand %"            value={fmtPct(header.LEISTUNGSSTAND_PERCENT)} />
-            <KpiTile label="Leistungsstand (€)"          value={fmtEur(header.LEISTUNGSSTAND_VALUE)} />
-            <KpiTile label="Resthonorar"                  value={fmtEur(header.REMAINING_BUDGET_NET)} />
+            <KpiTile label="Leistungsstand (€)"          value={fmtEur(header.LEISTUNGSSTAND_VALUE)} num={header.LEISTUNGSSTAND_VALUE} />
+            <KpiTile label="Resthonorar"                  value={fmtEur(header.REMAINING_BUDGET_NET)} num={header.REMAINING_BUDGET_NET} />
             <KpiTile label="Stunden (int.)"               value={fmtH(header.HOURS_TOTAL)} />
-            <KpiTile label="Kosten (int.)"                value={fmtEur(header.COST_TOTAL)} />
-            <KpiTile label="Abgerechnet (Netto)"          value={fmtEur(header.BILLED_NET_TOTAL)} />
-            <KpiTile label="ABRECHENBAR (Netto)"          value={fmtEur(header.OPEN_NET_TOTAL)} accent />
-            <KpiTile label="Bezahlt (Netto)"              value={fmtEur(header.PAYED_NET_TOTAL)} />
+            <KpiTile label="Kosten (int.)"                value={fmtEur(header.COST_TOTAL)} num={header.COST_TOTAL} />
+            <KpiTile label="Abgerechnet (Netto)"          value={fmtEur(header.BILLED_NET_TOTAL)} num={header.BILLED_NET_TOTAL} />
+            <KpiTile label="ABRECHENBAR (Netto)"          value={fmtEur(header.OPEN_NET_TOTAL)} num={header.OPEN_NET_TOTAL} accent />
+            <KpiTile label="Bezahlt (Netto)"              value={fmtEur(header.PAYED_NET_TOTAL)} num={header.PAYED_NET_TOTAL} />
             {header.COST_RATIO != null && (
               <KpiTile label="Kostenquote"                value={fmtPct((header.COST_RATIO ?? 0) * 100)} />
             )}
@@ -527,7 +531,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                            : cpiLvl === 'watch' ? 'Leicht überbudget — beobachten'
                            : 'Überbudget — Handlungsbedarf'
             const fmtM    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(v)} Mon.`
-            const fmtB    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0, style: 'currency', currency: 'EUR' }).format(v)}/Mon.`
+            const fmtB    = (v: number | null) => v == null ? NO_VALUE : `${fmtEur0(v)}/Mon.`
             return (
               <div className="prognose-section">
                 <div className="prognose-title">Prognose</div>
@@ -539,17 +543,17 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">EAC (Progn. Gesamtkosten)</span>
-                    <span className="prognose-value">{fmtEur(evm.eac)}</span>
+                    <span className="prognose-value" style={negativeStyle(evm.eac)}>{money(evm.eac)}</span>
                     <span className="prognose-sub">von {fmtEur(header.BUDGET_TOTAL_NET)} Budget</span>
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">VAC (Ergebnisabweichung)</span>
-                    <span className="prognose-value" style={{ color: KPI_COLOR[vacLevel(evm.vac)] }}>{fmtEur(evm.vac)}</span>
+                    <span className="prognose-value" style={{ color: KPI_COLOR[vacLevel(evm.vac)] }}>{money(evm.vac)}</span>
                     <span className="prognose-sub">{(evm.vac ?? 0) >= 0 ? 'Projekt im Plan' : 'Prognose: Überschreitung'}</span>
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">ETC (Noch zu erwartende Kosten)</span>
-                    <span className="prognose-value">{fmtEur(evm.etc)}</span>
+                    <span className="prognose-value">{money(evm.etc)}</span>
                     <span className="prognose-sub">verbleibend bis Abschluss</span>
                   </div>
                   {avgBurn != null && (
@@ -628,12 +632,12 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                           )}
                           <strong>{s.displayLabel}</strong>
                         </td>
-                        <td className="num">{fmtEur(s.HONORAR_NET)}</td>
+                        <td className="num">{money(s.HONORAR_NET)}</td>
                         <td className="num">{fmtPct(s.LEISTUNGSSTAND_PERCENT)}</td>
-                        <td className="num">{fmtEur(s.EARNED_VALUE_NET)}</td>
-                        <td className="num">{fmtEur(s.REST_HONORAR)}</td>
+                        <td className="num">{money(s.EARNED_VALUE_NET)}</td>
+                        <td className="num">{money(s.REST_HONORAR)}</td>
                         <td className="num">{fmtH(s.HOURS_TOTAL)}</td>
-                        <td className="num">{fmtEur(s.COST_TOTAL)}</td>
+                        <td className="num">{money(s.COST_TOTAL)}</td>
                         <td className="num">
                           {s.KOSTENQUOTE != null ? fmtPct(s.KOSTENQUOTE * 100) : '—'}
                         </td>
@@ -643,7 +647,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                           return (
                             <>
                               <td className="num"><KpiValue level={lvl}>{fmtCpi(evm.cpi)}</KpiValue></td>
-                              <td className="num">{fmtEur(evm.eac)}</td>
+                              <td className="num">{money(evm.eac)}</td>
                             </>
                           )
                         })()}
@@ -669,19 +673,19 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                       return (
                         <tr className="sum-row">
                           <td><strong>Gesamt</strong></td>
-                          <td className="num"><strong>{fmtEur(totHonorar)}</strong></td>
+                          <td className="num"><strong>{money(totHonorar)}</strong></td>
                           <td className="num"><strong>{fmtPct(totLstPct)}</strong></td>
-                          <td className="num"><strong>{fmtEur(totEarned)}</strong></td>
-                          <td className="num"><strong>{fmtEur(totRest)}</strong></td>
+                          <td className="num"><strong>{money(totEarned)}</strong></td>
+                          <td className="num"><strong>{money(totRest)}</strong></td>
                           <td className="num"><strong>{fmtH(totHours)}</strong></td>
-                          <td className="num"><strong>{fmtEur(totCost)}</strong></td>
+                          <td className="num"><strong>{money(totCost)}</strong></td>
                           <td className="num"><strong>{totKq != null ? fmtPct(totKq) : '—'}</strong></td>
                           {(() => {
                             const totEvm = computeEvm({ BUDGET_TOTAL_NET: totHonorar, LEISTUNGSSTAND_VALUE: totEarned, COST_TOTAL: totCost })
                             return (
                               <>
                                 <td className="num"><KpiValue level={cpiLevel(totEvm.cpi, cpiT)}><strong>{fmtCpi(totEvm.cpi)}</strong></KpiValue></td>
-                                <td className="num"><strong>{fmtEur(totEvm.eac)}</strong></td>
+                                <td className="num"><strong>{money(totEvm.eac)}</strong></td>
                               </>
                             )
                           })()}

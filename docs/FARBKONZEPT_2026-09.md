@@ -166,6 +166,25 @@ Jede farbcodierte Aussage braucht einen zweiten Kanal. Umgesetzt in `components/
 
 Das ist nicht nur Barrierefreiheit: Ein Wert mit Symbol ist auch für Normalsichtige im Augenwinkel schneller erfassbar als ein Farbwechsel.
 
+### 4.5 Negative Beträge — „rote Zahlen"
+
+Getrennt von der Ampel, aber derselben Ebene zugehörig: **ein negativer Betrag wird rot gesetzt.** Das ist die älteste und stabilste Konvention im Rechnungswesen (§2) und keine Bewertung — sie sagt nichts über Handlungsbedarf, nur über das Vorzeichen.
+
+Sie war im Reporting an genau **einer** Stelle umgesetzt (Deckungsbeitrag im Leistungsphasen-Report). Überall sonst standen negative Beträge schwarz; „Abrechenbar" stand bei Überzahlung sogar blau, weil die Spalte pauschal die Akzentfarbe trug.
+
+`utils/money.ts` stellt zwei Helfer bereit:
+
+```ts
+negativeStyle(v)              // rot, wenn v < 0 — sonst nichts
+negativeOr(v, 'var(--accent)') // rot bei v < 0, sonst die vorhandene Farbe
+```
+
+**Warum `--kpi-critical` und nicht `--danger`:** Ein negativer Betrag ist keine Fehlermeldung. `--danger` heißt „Fehler / löschen"; die Controlling-Farbe gehört zu Ebene 2 und ist gegen alle Theme-Untergründe geprüft. Die bestehende `--danger`-Verwendung im Leistungsphasen-Report ist mitgezogen, damit es nicht zwei fast identische Rottöne für dieselbe Aussage gibt.
+
+**Zweiter Kanal ist das Minuszeichen** — es steht immer im formatierten Text. Deshalb hier kein zusätzliches Symbol wie bei der Ampel; WCAG 1.4.1 ist damit erfüllt.
+
+Umgesetzt in allen sieben Reporting-Ansichten (Projektliste, Einzelprojekt, Leistungsphasen-Report und -Matrix, Teilfertige Leistungen, Trends, Unternehmenskennzahlen). Die Grenze ist `< 0`, nicht `<= 0`: Null ist kein Verlust, sonst wäre jede leere Spalte rot. Geprüft in `money.test.ts`.
+
 **Wo die Ampel steht.** Ersetzt wurden die fünf Stellen, an denen bereits eingefärbt wurde — dieselbe Ampel lag fünfmal als hartkodiertes `#16a34a`/`#b45309`/`#b91c1c` im TSX:
 
 | Datei | Stelle |
@@ -467,6 +486,7 @@ Bewusst so geschnitten, dass jeder Schritt für sich Nutzen bringt und die Palet
 | 6 | KPI-Tokens einführen (§4.2), fünf hartkodierte Ampeln ersetzen | `globals.css`, `utils/kpiLevel.ts`, `ui/KpiValue.tsx`, 3 Seiten | **erledigt** |
 | 7 | Schwellen als `TENANT_SETTINGS` (§4.3) | `VorbelegungenSection` | **erledigt** |
 | 8 | Hilfetexte für die KPI-Ampel (`helpContent.tsx`) | 4 Einträge | **erledigt** |
+| 8b | Negative Beträge rot in allen Reporting-Ansichten (§4.5) | `utils/money.ts` + 7 Ansichten | **erledigt** |
 | 9 | **Gewählte Palette als neues `light`-Theme einsetzen** | 1 Token-Block | wartet auf Entscheidung |
 
 Ein CI-Schritt war nicht nötig: `npm run check:design` läuft bereits im Job

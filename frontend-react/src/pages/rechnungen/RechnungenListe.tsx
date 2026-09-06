@@ -37,6 +37,7 @@ import {
   type Invoice, type PartialPayment, type Payment,
 } from '@/api/rechnungen'
 import { fetchEmailTemplates } from '@/api/emailTemplates'
+import { fmtEur, money } from '@/utils/money'
 
 interface EditDraftPayload {
   id:            number
@@ -53,8 +54,6 @@ interface EditDraftPayload {
   cashDiscDays:  number
 }
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtDate = (v: string | null | undefined) => v ? v.slice(0, 10) : '—'
 
 function todayIso() { return new Date().toISOString().slice(0, 10) }
@@ -431,7 +430,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       case 'payable': return {
         className: 'num',
         inhalt: row.payable != null && (row.seHeld != null || row.seRelease != null)
-          ? <strong>{fmtEur(row.payable)}</strong>
+          ? <strong>{money(row.payable)}</strong>
           : fmtEur(row.payable),
       }
       case 'paid': return { inhalt: fmtEur(row.paid), className: 'num' }
@@ -1167,16 +1166,16 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                   {rows.length !== allRows.length ? `${rows.length} / ${allRows.length}` : `${allRows.length}`}
                 </td>
                 {visibleCols.map(c => {
-                  if (c.key === 'net')     return <td key={c.key} className="num"><strong>{fmtEur(totals.net)}</strong></td>
-                  if (c.key === 'gross')   return <td key={c.key} className="num"><strong>{fmtEur(totals.gross)}</strong></td>
+                  if (c.key === 'net')     return <td key={c.key} className="num"><strong>{money(totals.net)}</strong></td>
+                  if (c.key === 'gross')   return <td key={c.key} className="num"><strong>{money(totals.gross)}</strong></td>
                   if (c.key === 'seHeld') {
                     const v = totals.seHeld
                     const label = v === 0 ? '—' : v > 0 ? `− ${fmtEur(v)}` : `+ ${fmtEur(-v)}`
                     return <td key={c.key} className="num"><strong>{label}</strong></td>
                   }
-                  if (c.key === 'payable') return <td key={c.key} className="num"><strong>{fmtEur(totals.payable)}</strong></td>
-                  if (c.key === 'paid')    return <td key={c.key} className="num"><strong>{fmtEur(totals.paid)}</strong></td>
-                  if (c.key === 'open')    return <td key={c.key} className="num"><strong>{fmtEur(totals.open)}</strong></td>
+                  if (c.key === 'payable') return <td key={c.key} className="num"><strong>{money(totals.payable)}</strong></td>
+                  if (c.key === 'paid')    return <td key={c.key} className="num"><strong>{money(totals.paid)}</strong></td>
+                  if (c.key === 'open')    return <td key={c.key} className="num"><strong>{money(totals.open)}</strong></td>
                   return <td key={c.key}></td>
                 })}
                 <td></td>
@@ -1201,7 +1200,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         <Modal open title={`Storno – ${stornoState.label}`} onClose={() => setStornoState(null)}>
           <div style={{ padding: '4px 0 16px' }}>
             {stornoState.hasPayments ? (
-              <p>Für <strong>{stornoState.label}</strong> existieren {stornoState.payCount} Zahlung(en) über {FMT_EUR.format(stornoState.payTotal)}.<br />Wie soll storniert werden?</p>
+              <p>Für <strong>{stornoState.label}</strong> existieren {stornoState.payCount} Zahlung(en) über {fmtEur(stornoState.payTotal)}.<br />Wie soll storniert werden?</p>
             ) : (
               <p>Stornorechnung für <strong>{stornoState.label}</strong> erstellen?</p>
             )}
@@ -1257,7 +1256,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
             <tr>
               <td style={{ padding: '3px 12px 3px 0', fontSize: 13, color: bold ? undefined : 'rgba(17,24,39,0.6)', paddingLeft: indent ? 16 : 0 }}>{label}</td>
               <td style={{ padding: '3px 0', fontSize: 13, fontWeight: bold ? 600 : undefined, textAlign: 'right' }}>
-                {minus ? '− ' : ''}{fmtEur(Math.abs(amt))}
+                {minus ? '− ' : ''}{money(Math.abs(amt))}
               </td>
             </tr>
           )
@@ -1342,7 +1341,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     {existingPayments.map(p => (
                       <tr key={p.ID} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '4px 0', color: 'var(--text-3)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
-                        <td style={{ padding: '4px 6px', fontWeight: 500 }}>{fmtEur(p.AMOUNT_PAYED_GROSS)}</td>
+                        <td style={{ padding: '4px 6px', fontWeight: 500 }}>{money(p.AMOUNT_PAYED_GROSS)}</td>
                         <td style={{ padding: '4px 0', color: 'var(--text-3)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
                         <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>
                           <button
@@ -1365,10 +1364,10 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
             {payTarget.totalGross != null && (
               <div style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span>
-                  Rechnungsbetrag: <strong>{fmtEur(payTarget.totalGross)}</strong>
+                  Rechnungsbetrag: <strong>{money(payTarget.totalGross)}</strong>
                   {payTarget.paidGross != null && payTarget.paidGross > 0 && (
-                    <> · bereits bezahlt: <strong>{fmtEur(payTarget.paidGross)}</strong>
-                    · offen: <strong>{fmtEur(remaining)}</strong></>
+                    <> · bereits bezahlt: <strong>{money(payTarget.paidGross)}</strong>
+                    · offen: <strong>{money(remaining)}</strong></>
                   )}
                 </span>
                 <button
@@ -1387,7 +1386,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                   <span style={{ flex: 1, fontSize: 13, color: 'var(--text-2)' }}>
                     <strong>{payTarget.cashDiscountPct} % Skonto</strong> verfügbar
                     {payTarget.cashDiscountDays > 0 && ` (innerhalb von ${payTarget.cashDiscountDays} Tagen)`}
-                    {' – '}Betrag abzgl. Skonto: <strong>{fmtEur(skontoAmt)}</strong>
+                    {' – '}Betrag abzgl. Skonto: <strong>{money(skontoAmt)}</strong>
                   </span>
                   <button
                     type="button"

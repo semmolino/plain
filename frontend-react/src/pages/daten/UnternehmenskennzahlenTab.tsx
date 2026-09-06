@@ -4,12 +4,9 @@ import { TrendingUp, Users, Clock, CalendarRange, BarChart3, AlertCircle } from 
 import { fetchCompanyKpis, type CompanyKpiPeriod } from '@/api/reports'
 import { RecentList } from '@/components/recents/RecentList'
 import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
+import { fmtEur, fmtEur0, negativeStyle } from '@/utils/money'
 
-const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-const FMT_EURK = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_NUM  = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
-const fmtEur   = (v: number | null) => v == null ? '–' : FMT_EUR.format(v)
-const fmtEurK  = (v: number | null) => v == null ? '–' : FMT_EURK.format(v)
 const fmtPct   = (v: number | null) => v == null ? '–' : `${FMT_NUM.format(v)} %`
 const fmtH     = (v: number | null) => v == null ? '–' : `${FMT_NUM.format(v)} h`
 const fmtM     = (v: number | null) => v == null ? '–' : `${FMT_NUM.format(v)} Mon.`
@@ -79,11 +76,15 @@ function KpiCard({ label, value, formula, note, unavailable, icon, highlight = '
 
 // ── Base data strip ───────────────────────────────────────────────────────────
 
-function BaseDataRow({ label, value }: { label: string; value: string }) {
+function BaseDataRow({ label, value, num }: {
+  label: string; value: string
+  /** Rohwert — nur noetig bei Geldbetraegen: negative werden rot gesetzt. */
+  num?: number | null
+}) {
   return (
     <div className="unk-base-row">
       <span className="unk-base-label">{label}</span>
-      <span className="unk-base-value">{value}</span>
+      <span className="unk-base-value" style={negativeStyle(num)}>{value}</span>
     </div>
   )
 }
@@ -229,7 +230,7 @@ export function UnternehmenskennzahlenTab() {
             <KpiCard
               icon={<Clock size={20} strokeWidth={1.75} />}
               label="Ø Kostenrate (Stundensatz)"
-              value={fmtEurK(kpis.mittlererStundensatz)}
+              value={fmtEur(kpis.mittlererStundensatz)}
               formula="Gesamte Einzelkosten / Projektstunden"
               note="Entspricht dem mittleren Kostenpreis je Projektstunde (ohne Gemeinkostenzuschlag)"
             />
@@ -283,12 +284,12 @@ export function UnternehmenskennzahlenTab() {
               Basisdaten {periodLabel}
             </summary>
             <div className="unk-base-strip">
-              <BaseDataRow label="Umsatz (Rechnungen + Abschläge)" value={fmtEur(raw?.revenue ?? null)} />
-              <BaseDataRow label="Einzelkosten (Zeitbuchungen CP_TOT)" value={fmtEur(raw?.directCosts ?? null)} />
+              <BaseDataRow label="Umsatz (Rechnungen + Abschläge)" value={fmtEur0(raw?.revenue ?? null)} num={raw?.revenue ?? null} />
+              <BaseDataRow label="Einzelkosten (Zeitbuchungen CP_TOT)" value={fmtEur0(raw?.directCosts ?? null)} num={raw?.directCosts ?? null} />
               <BaseDataRow label="Projektstunden (Zeitbuchungen)" value={fmtH(raw?.totalHours ?? null)} />
               <BaseDataRow label="Aktive Mitarbeiter" value={raw?.employeeCount != null ? String(raw.employeeCount) : '–'} />
               <BaseDataRow label="Mitarbeiter mit Buchungen" value={raw?.projectEmployeeCount != null ? String(raw.projectEmployeeCount) : '–'} />
-              <BaseDataRow label="Auftragsbestand (alle Projekte)" value={fmtEur(raw?.backlog ?? null)} />
+              <BaseDataRow label="Auftragsbestand (alle Projekte)" value={fmtEur0(raw?.backlog ?? null)} num={raw?.backlog ?? null} />
             </div>
           </details>
         </>

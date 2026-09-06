@@ -347,6 +347,88 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 - Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
 - Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
 
+**Keine hartkodierten Farben — geprüft, nicht erhofft.** `npm run check:design`
+lässt jede Hex-Farbe im TSX fehlschlagen. Es gibt genau drei legitime Ausnahmen,
+und jede steht mit Begründung in `COLOR_EXEMPT` (`scripts/check-design-system.mjs`):
+
+1. **Canvas** — Chart.js versteht `var(--token)` nicht (`theme/chartTheme.ts`).
+2. **Werte, die gespeichert oder ins PDF gerendert werden** — Farbwähler,
+   Vorlagen-Akzente. Dort ist eine CSS-Variable schlicht kein Farbwert.
+3. **Vorschauen von gedrucktem Papier** — bewusst papierweiß, dürfen im
+   Dark-Theme nicht mitkippen.
+
+Alles andere gehört an ein Token. Der UX-Audit 08/2026 zählte 812 Hex-Werte,
+im September 2026 waren es 226 — der Rest ist migriert. Im Dark-Theme lag
+`#374151` bei 1,65:1, also praktisch unsichtbar; das ist der Grund für die
+Regel. Achtung bei Lucide-Icons: `color="var(--x)"` landet als SVG-Attribut
+und greift dort **nicht** — `style={{ color: 'var(--x)' }}` nehmen (Lucide
+zeichnet mit `currentColor`).
+
+---
+
+## Farben mit Bedeutung — drei getrennte Ebenen
+
+Vollständige Herleitung samt Messwerten: `docs/FARBKONZEPT_2026-09.md`.
+Die Kurzfassung, weil sie bei jeder neuen Ansicht gilt:
+
+| Ebene | Wofür | Wechselt mit dem Theme? |
+|---|---|---|
+| **Marke** | Kopfzeile, Knöpfe, Akzent | **ja** — dafür gibt es die 7 Themes |
+| **Bedeutung** | „Soll ich hier hinschauen?" | **nein**, nur hell/dunkel |
+| **Daten** | Reihen in Diagrammen unterscheiden | **nein**, nur hell/dunkel |
+
+Bedeutungsfarben sind **Vokabular, nicht Dekoration**: Wer im Tragwerk-Theme
+lernt, dass Orange „beobachten" heißt, darf das nicht verlieren, weil der
+Kollege daneben ein anderes Theme eingestellt hat. Deshalb werden
+`--kpi-*` in keinem Branchen-Theme überschrieben.
+
+**Controlling-Ampel** (`utils/kpiLevel.ts` + `components/ui/KpiValue.tsx`):
+`--kpi-plan` · `--kpi-watch` · `--kpi-critical`. Die vierte Stufe
+`--kpi-good` existiert als Token, wird aber **nie vergeben** — ein Projekt,
+das seine Kosten deckt, ist der Normalfall und keine Auszeichnung. Färbt man
+jede gesunde Zeile grün, verliert Rot seine Wirkung. Die Schwellen liegen als
+`TENANT_SETTINGS` unter Einstellungen → Vorbelegungen; ungepflegt heißt hier
+**bisherige Werte**, nicht „Ampel aus" (anders als beim WIP-Report, wo eine
+fehlende Einstellung die Spalte ausblendet, statt eine Zahl zu behaupten).
+
+**Farbe ist nie der einzige Träger** (WCAG 1.4.1): Ampelstufen tragen Symbol
+und Klartext, negative Beträge das Minuszeichen.
+
+**Diagrammreihen** stehen in `theme/chartTheme.ts` (Okabe-Ito, ein Satz für
+hell und dunkel). Nicht frei Hand erweitern — die Prüfung rechnet den
+Farbabstand bei Protanopie und Deuteranopie nach und verlangt ΔE ≥ 15. Der
+alte Tailwind-Satz lag bei ΔE 1,1: „Deckungsbeitrag" und „Stunden" waren für
+rot-grün-schwache Nutzer identisch.
+
+---
+
+## Geldbeträge — ein Baustein, eine Konvention
+
+Alles über `frontend-react/src/utils/money.tsx`. **Kein eigener
+`Intl.NumberFormat` mit `currency` und kein eigenes `toLocaleString`** —
+`npm run check:design` lässt beides fehlschlagen.
+
+| Zweck | Nehmen |
+|---|---|
+| Betrag in einer Zelle/Kachel | `money(v)` — negative Werte rot |
+| Betrag ohne Nachkommastellen | `money0(v)` |
+| Zelle mit eigener Grundfarbe (z. B. Akzent) | `moneyOr(v, 'var(--accent)')` |
+| Reiner Text (Tooltip, `title`, aria-Label, Chart-Achse) | `fmtEur(v)` / `fmtEur0(v)` |
+| Eigene Zelle, nur der Stil | `negativeStyle(v)` / `negativeOr(v, …)` |
+
+**„Rote Zahlen"** ist Konvention, keine Bewertung — sie sagt nichts über
+Handlungsbedarf, nur über das Vorzeichen. Deshalb `--kpi-critical` und nicht
+`--danger` (das heißt „Fehler / löschen"), und kein Symbol wie bei der Ampel.
+Die Grenze ist `< 0`, nicht `<= 0`: Null ist kein Verlust.
+
+`NO_VALUE` („—") heißt **kein Wert**, nicht „0 €". Wo eine 0 fachlich stimmt,
+gehört auch eine 0 hin.
+
+Warum das eine eigene Regel ist: Es gab 28 eigene `fmtEur`-Definitionen in 27
+Dateien. Genau diese Streuung war der Grund, warum „rote Zahlen" im ganzen
+Produkt an **einer** Stelle umgesetzt war — es gab keinen gemeinsamen Ort, an
+den man die Regel hätte schreiben können.
+
 ---
 
 ## UI/UX — responsive & mobile rules

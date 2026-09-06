@@ -95,7 +95,7 @@ export function BatchEmailModal({
   function badge(k: string) {
     switch (state[k]) {
       case 'sending': return <span style={{ color: 'var(--text-3)' }}>sendet …</span>
-      case 'ok':      return <span style={{ color: 'var(--success, #059669)' }}>✓ gesendet</span>
+      case 'ok':      return <span style={{ color: 'var(--success, var(--success))' }}>✓ gesendet</span>
       case 'error':   return <span style={{ color: 'var(--danger)' }} title={errors[k]}>✗ Fehler</span>
       case 'skipped': return <span style={{ color: 'var(--text-3)' }}>übersprungen</span>
       default:        return <span style={{ color: 'var(--text-3)' }}>—</span>

@@ -16,9 +16,8 @@ import {
 import { fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
 type RowEdit = { nameShort: string; nameLong: string; billingTypeId: string; nk: string; budget: string; hours: string; rate: string }
 type AddForm = {
@@ -688,11 +687,11 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                       <td style={{ fontSize: 12, color: 'var(--text-3)' }}>Gesamt</td>
                       <td></td>
                       <td><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
-                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootRevenueBasis)}</span></td>
-                      <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges > 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
-                      <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges > 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
+                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(rootRevenueBasis)}</span></td>
+                      <td className="num"><span style={{ color: rootSurcharges > 0 ? 'var(--success)' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges > 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
+                      <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges > 0 ? 600 : undefined }}>{money(rootRevenueFinal)}</span></td>
                       <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
-                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
+                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(rootExtras)}</span></td>
                       <td>
                         <button
                           className="row-action-btn"
@@ -714,7 +713,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                           <td colSpan={11}>
                             <div className="surcharge-panel">
                               <div className="surcharge-panel-basis">
-                                Angebotszuschläge – Basis (Summe Wurzel-Honorar): <strong>{fmtEur(rootStructureRevenueSum)}</strong>
+                                Angebotszuschläge – Basis (Summe Wurzel-Honorar): <strong>{money(rootStructureRevenueSum)}</strong>
                               </div>
                               <div className="surcharge-grid">
                                 <div className="surcharge-grid-header">
@@ -740,7 +739,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                                   </div>
                                 ))}
                                 <div className="surcharge-grid-total">
-                                  Gesamt Angebotszuschläge: <strong>{fmtEur(computed.total)}</strong>
+                                  Gesamt Angebotszuschläge: <strong>{money(computed.total)}</strong>
                                 </div>
                               </div>
                               <div className="surcharge-panel-actions">
@@ -844,9 +843,9 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         </td>
                         <td className="num">
                           {isParent ? (
-                            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(displayRevenueBasis)}</span>
+                            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(displayRevenueBasis)}</span>
                           ) : isHourly ? (
-                            <span style={{ color: 'var(--text-3)', fontSize: 12 }} title="Honorar = Stunden × Satz (oben editierbar)">{fmtEur(hourlyEur)}</span>
+                            <span style={{ color: 'var(--text-3)', fontSize: 12 }} title="Honorar = Stunden × Satz (oben editierbar)">{money(hourlyEur)}</span>
                           ) : (
                             <input className="tbl-input" type="number" min={0} step={100}
                               style={{ width: 90, textAlign: 'right' }}
@@ -855,21 +854,21 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         </td>
                         <td className="num">
                           {displaySurcharges !== 0 ? (
-                            <span style={{ color: displaySurcharges > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{fmtEur(displaySurcharges)}</span>
+                            <span style={{ color: displaySurcharges > 0 ? 'var(--success)' : 'var(--danger)', fontSize: 12 }}>{money(displaySurcharges)}</span>
                           ) : (
                             <span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span>
                           )}
                         </td>
                         <td className="num">
                           <span style={{ fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
-                            {fmtEur(Number(n.REVENUE ?? 0))}
+                            {money(Number(n.REVENUE ?? 0))}
                           </span>
                         </td>
                         <td className="num">
                           <input className="tbl-input" type="number" min={0} max={100} step={0.1} style={{ width: 56 }}
                             value={nkVal} onChange={e => setField(n.ID, 'nk', e.target.value)} />
                         </td>
-                        <td className="num">{fmtEur(displayExtras)}</td>
+                        <td className="num">{money(displayExtras)}</td>
                         <td>
                           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                             <button
@@ -894,7 +893,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                           <td colSpan={11}>
                             <div className="surcharge-panel">
                               <div className="surcharge-panel-basis">
-                                Basis (Honorar): <strong>{fmtEur(surchargeBase)}</strong>
+                                Basis (Honorar): <strong>{money(surchargeBase)}</strong>
                               </div>
                               <div className="surcharge-grid">
                                 <div className="surcharge-grid-header">
@@ -925,7 +924,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                                   </div>
                                 ))}
                                 <div className="surcharge-grid-total">
-                                  Gesamt Zuschläge: <strong>{fmtEur(computed.total)}</strong>
+                                  Gesamt Zuschläge: <strong>{money(computed.total)}</strong>
                                 </div>
                               </div>
                               <div className="surcharge-panel-actions">
@@ -1017,7 +1016,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontSize: 11 }}>Honorar (berechnet)</label>
                   <div style={{ fontSize: 13, fontWeight: 600, padding: '6px 0' }}>
-                    {fmtEur((Number(addForm.QUANTITY) || 0) * (Number(addForm.SP_RATE) || 0))}
+                    {money((Number(addForm.QUANTITY) || 0) * (Number(addForm.SP_RATE) || 0))}
                   </div>
                 </div>
               </>
