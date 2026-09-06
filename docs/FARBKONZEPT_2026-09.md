@@ -1,11 +1,13 @@
 # Farbkonzept plan&simple — September 2026
 
-**Stand:** 05.09.2026 · **Branch:** `claude/projektcontrolling-color-palettes-n9tb7u` · **Basis:** 4.689 Zeilen `globals.css`, 11 Theme-Blöcke, 7 auswählbare Themes
+**Stand:** 06.09.2026 · **Branch:** `claude/projektcontrolling-color-palettes-n9tb7u` · **Basis:** 4.511 Zeilen `globals.css`, 7 Theme-Blöcke, 7 auswählbare Themes
+
+> **Umsetzungsstand:** Block 1 (§8, Schritte 1–5) ist umgesetzt — Diagrammfarben, Prüfregeln, Kontrastkorrekturen, tote Theme-Blöcke. Offen sind die KPI-Semantikebene (§4) und die Palettenwahl (§6).
 
 Alle Kontrast- und Farbabstandswerte in diesem Dokument sind gerechnet, nicht geschätzt. Nachrechnen:
 
 ```bash
-node frontend-react/scripts/color-check.mjs --series
+cd frontend-react && npm run check:design -- -v
 ```
 
 ---
@@ -22,7 +24,7 @@ Drei Befunde, die unabhängig von der Palettenwahl gelten:
 |---|---|---|---|
 | 1 | **Diagrammfarben brechen bei Rot-Grün-Blindheit zusammen** — „Deckungsbeitrag" (blau) und „Stunden" (violett) sind bei Deuteranopie nicht unterscheidbar | ΔE = **1,1** (Schwelle 15) | Kritisch |
 | 2 | **Keine Controlling-Semantik** — Rentabilität, Auslastung, Fälligkeit teilen sich die UI-Statusfarben | 0 KPI-Tokens | Hoch |
-| 3 | **Vier Themes verletzen den eigenen AA-Anspruch** in Details (Nav-Text, Akzent auf Zebrastreifen) | 4 von 11 Blöcken, 6 Paare | Mittel |
+| 3 | **Der Kontrastprüfer hatte blinde Flecken** — Akzenttext auf dem Zebrastreifen und Statusfarben als Text wurden nie geprüft | 22 Verstöße in 6 von 7 Themes | Mittel |
 
 Empfehlung in einem Satz: **Ebenen trennen** (Marke / Bedeutung / Daten), die Bedeutungsebene neu und controlling-spezifisch bauen, und für die Markenebene aus vier durchgerechneten Paletten wählen — Vorschlag **C „Blaupause"**.
 
@@ -30,7 +32,9 @@ Empfehlung in einem Satz: **Ebenen trennen** (Marke / Bedeutung / Daten), die Be
 
 ## 1 · Ausgangslage — was heute da ist
 
-**11 Theme-Blöcke, 7 auswählbar** (`components/layout/ThemeOptions.tsx`): `light`, `dark` und fünf Branchen-Themes (Architektur, Tiefbau, Stadt- und Verkehr, TGA, Tragwerk). Die Blöcke `modern`, `forest`, `earth`, `winter` liegen noch in `globals.css`, stehen aber in keiner Auswahl mehr — ~180 Zeilen toter Code.
+**7 Theme-Blöcke, 7 auswählbar** (`components/layout/ThemeOptions.tsx`): `light`, `dark` und fünf Branchen-Themes (Architektur, Tiefbau, Stadt- und Verkehr, TGA, Tragwerk).
+
+*Beim Anlegen dieses Konzepts waren es 11 Blöcke: `modern`, `forest`, `earth` und `winter` lagen noch in `globals.css`, standen aber in keiner Auswahl mehr. Die 178 Zeilen sind entfernt (§8 Schritt 4).*
 
 **Der Standard ist generisches Tailwind-Blau.** `--accent: #2563eb` ist `blue-600`. Die Farbe ist fachlich unauffällig und trägt keine Aussage über das Produkt — sie ist der Vorgabewert, den jedes Framework mitbringt. Alle fünf Branchen-Themes haben dagegen eine erkennbare Identität (Terrakotta, Ocker, Petrol). Ausgerechnet die Palette, die den meisten Nutzern zuerst begegnet, ist die einzige ohne Haltung.
 
@@ -45,7 +49,7 @@ Empfehlung in einem Satz: **Ebenen trennen** (Marke / Bedeutung / Daten), die Be
 
 Vier Farben tragen zwei getrennte Bedeutungswelten. Im Controlling ist das ein Problem, siehe §4.
 
-**Die Diagrammfarben sind Tailwind-Vollton** (`theme/chartTheme.ts`, `SERIES_LIGHT`). Sie sind explizit *nicht* aus den Statustokens abgeleitet — das ist richtig entschieden und im Code auch so begründet. Nur ist der gewählte Satz nicht auf Farbfehlsichtigkeit geprüft, siehe §5.
+**Die Diagrammfarben waren Tailwind-Vollton** (`theme/chartTheme.ts`, damals `SERIES_LIGHT`/`SERIES_DARK`). Sie sind explizit *nicht* aus den Statustokens abgeleitet — das ist richtig entschieden und im Code auch so begründet. Nur war der gewählte Satz nie auf Farbfehlsichtigkeit geprüft, siehe §5.
 
 ---
 
@@ -174,13 +178,17 @@ Das ist nicht nur Barrierefreiheit. Ein Delta mit Pfeil ist auch für Normalsich
 Okabe-Ito (auch „Wong-Palette", empfohlen von *Nature Methods*) ist der etablierte CVD-sichere Satz. Gemessen mit denselben Schwellen, sechs Reihen ohne Gelb und Schwarz:
 
 ```
-blau       #0072b2    fakturiert
-grün       #009e73    bezahlt
-orange     #e69f00    Backlog
-zinnober   #d55e00    Kosten
-purpur     #cc79a7    Stunden
-himmelblau #56b4e9    Deckungsbeitrag
+#0072b2  Blau        Deckungsbeitrag / Honorar
+#009e73  Grün        fakturiert / Leistung
+#e69f00  Orange      Backlog
+#cc79a7  Purpur      Stunden
+#56b4e9  Himmelblau  bezahlt
+#d55e00  Zinnober    Kosten
 ```
+
+Die Reihenfolge ist die der Indizes in `chartTheme.ts` — sie bleibt gegenüber
+dem alten Satz unverändert, weil einzelne Diagramme direkt auf `series[0]`,
+`series[1]` und `series[5]` zugreifen.
 
 | Sicht | kleinster Abstand |
 |---|---|
@@ -381,7 +389,9 @@ Grün trägt im Finanzumfeld die Assoziation Wachstum/Ertrag; als gedecktes Petr
 
 ## 7 · Prüfregeln
 
-Ergänzt die bestehenden Design-Token-Regeln in CLAUDE.md. Alle Regeln sind maschinell geprüft durch `frontend-react/scripts/color-check.mjs`.
+Ergänzt die bestehenden Design-Token-Regeln in CLAUDE.md. Alle Regeln sind maschinell geprüft durch `frontend-react/scripts/check-design-system.mjs` (`npm run check:design`), das bereits im CI-Job `frontend-typecheck` läuft.
+
+*Ursprünglich stand hier ein eigenes Skript `color-check.mjs`. Das war ein Duplikat — die Kontrastprüfung gab es schon. Die neuen Prüfungen sind in den bestehenden Prüfer eingebaut, das Zweitskript ist gelöscht.*
 
 **Kontrast** — jedes Paar aus der Liste in `PAIRS` muss in **jedem** Theme über der Schwelle liegen, nicht nur im Default. Neu gegenüber heute: `--accent` wird auch gegen `--surface-2` geprüft (Zebrastreifen in Tabellen — dort steht Akzenttext, und vier Themes fallen aktuell durch), und `--nav-inactive` gegen `--chrome`.
 
@@ -389,22 +399,39 @@ Ergänzt die bestehenden Design-Token-Regeln in CLAUDE.md. Alle Regeln sind masc
 
 **Doppelkodierung** — keine Aussage allein über Farbe (§4.4).
 
-**Rot-Sparsamkeit** — `--kpi-critical` und `--danger` nur bei Handlungsbedarf. Kein rotes Dauerelement in Listen; Kostenreihen sind neutral einzufärben.
+**Rot-Sparsamkeit** — `--kpi-critical` und `--danger` nur bei Handlungsbedarf. Kein rotes Dauerelement in Listen. Die Kostenreihe trägt Zinnober (`#d55e00`), nicht die Fehlerfarbe: Abstand ΔE 30 zu `--danger` `#bd2121`. Ein wirklich neutrales Grau wäre semantisch noch sauberer, kollidiert im Dark-Theme aber mit der Purpur-Reihe (ΔE 6,2 bei Deuteranopie) — gemessen, verworfen.
 
-**Ist-Zustand beim Anlegen dieses Konzepts** (`node scripts/color-check.mjs --series`):
+**Ist-Zustand beim Anlegen dieses Konzepts** — 22 Verstöße, gefunden erst durch
+die neuen Prüfungen:
 
 ```
-modern:      --nav-inactive auf --chrome         3,00 < 4,5
-earth:       --nav-inactive auf --chrome         3,32 < 4,5
-civil:       --accent auf --surface-2            4,18 < 4,5
-civil-foto:  --accent auf --surface-2            4,18 < 4,5
-tga:         --accent auf --surface-2            4,14 < 4,5
-tga-foto:    --accent auf --surface-2            4,14 < 4,5
-SERIES_LIGHT: Deuteranopie dE=1,1 · Protanopie dE=6,6 · Tritanopie dE=7,9
-SERIES_DARK:  Deuteranopie dE=2,2 · Protanopie dE=6,2 · Tritanopie dE=9,3
+6 Themes: --accent als Text auf --surface-2   4,13 – 4,28
+6 Themes: --success/--danger/--warning als Text auf getöntem --bg   3,96 – 4,47
+SERIES_LIGHT: Deuteranopie dE=1,1 · Protanopie dE=6,6
+SERIES_DARK:  Deuteranopie dE=2,2 · Protanopie dE=6,2
 ```
 
-`modern` und `earth` sind tote Blöcke (§1) — dort genügt Löschen statt Reparieren.
+Der zweite Block war die Überraschung: Die Statusfarben stehen nur auf `:root`,
+die Branchen-Themes haben aber getönte Hintergründe (`#efe8db`, `#e4ebf0`). Ein
+Fehlertext lag dort bei 3,96:1. Selbst im Standard-Theme war `--danger` mit
+4,47:1 knapp unter AA. Behoben durch drei global abgedunkelte Werte statt
+fünfzehn Theme-Überschreibungen:
+
+| Token | vorher | nachher | schlechtester Grund jetzt |
+|---|---|---|---|
+| `--success` | `#15803d` | `#126e34` | 4,76 ✓ |
+| `--danger` | `#dc2626` | `#bd2121` | 4,62 ✓ |
+| `--warning` | `#b45309` | `#9b4708` | 4,77 ✓ |
+
+Dazu vier Branchen-Akzente farbtonerhaltend abgedunkelt (`#9d6046`→`#945a42`,
+`#84633b`→`#7a5c37`, `#82682b`→`#796028`, `#856237`→`#7b5b33`).
+
+**Es bleibt eine gemeldete Warnung**, und zwar absichtlich: Orange (`#e69f00`)
+und Himmelblau (`#56b4e9`) liegen auf Weiß unter 3:1. Sie abzudunkeln würde den
+Deuteranopie-Abstand von 16,2 auf 4,3 drücken (§5.3) — der Kompromiss wäre
+schlechter als das Problem. Ausgeglichen wird am Verwendungsort: Flächen mit
+Rand, Linien ab 3px (in `TrendsTab.tsx` umgesetzt).
+
 
 ---
 
@@ -412,18 +439,22 @@ SERIES_DARK:  Deuteranopie dE=2,2 · Protanopie dE=6,2 · Tritanopie dE=9,3
 
 Bewusst so geschnitten, dass jeder Schritt für sich Nutzen bringt und die Palettenwahl **nicht** blockiert.
 
-| # | Schritt | Umfang | Hängt an Palettenwahl? |
+| # | Schritt | Umfang | Stand |
 |---|---|---|---|
-| 1 | Diagrammfarben auf Okabe-Ito umstellen (§5.2), Linien-/Flächenvariante trennen | `theme/chartTheme.ts`, ~30 Zeilen | nein |
-| 2 | KPI-Tokens einführen (§4.2), Kostenreihe entröten | `globals.css` + `chartTheme.ts` | nein |
-| 3 | `color-check.mjs` in den CI-Job hängen (neben `security-scan.mjs`) | `.github/workflows` | nein |
-| 4 | Tote Theme-Blöcke `modern`/`forest`/`earth`/`winter` entfernen | −180 Zeilen `globals.css` | nein |
-| 5 | Vier Befunde aus §7 in den Branchen-Themes beheben | 4 Token-Werte | nein |
-| 6 | **Gewählte Palette als neues `light`-Theme einsetzen** | 1 Token-Block | **ja** |
-| 7 | Schwellen als `TENANT_SETTINGS` + Einfärbung in Reporting/Projektliste (§4.3) | `VorbelegungenSection` + Reportseiten | nein |
-| 8 | Hilfetexte für die KPI-Ampel (`helpContent.tsx`, Regel aus CLAUDE.md) | 4 Einträge | nein |
+| 1 | Diagrammfarben auf Okabe-Ito umstellen (§5.2) | `theme/chartTheme.ts` | **erledigt** |
+| 2 | Prüfregeln in den bestehenden Prüfer einbauen (§7) | `scripts/check-design-system.mjs` | **erledigt** |
+| 3 | Kontrastbefunde beheben (Statusfarben, Branchen-Akzente) | 7 Token-Werte in `globals.css` | **erledigt** |
+| 4 | Tote Theme-Blöcke entfernen | −178 Zeilen `globals.css` | **erledigt** |
+| 5 | Backlog-Linie auf 3px (Ausgleich für §5.3) | `TrendsTab.tsx` | **erledigt** |
+| 6 | KPI-Tokens einführen (§4.2), Ampel in Listen/Reports | `globals.css` + Reportseiten | offen |
+| 7 | Schwellen als `TENANT_SETTINGS` (§4.3) | `VorbelegungenSection` | offen |
+| 8 | Hilfetexte für die KPI-Ampel (`helpContent.tsx`) | 4 Einträge | offen |
+| 9 | **Gewählte Palette als neues `light`-Theme einsetzen** | 1 Token-Block | wartet auf Entscheidung |
 
-Die Schritte 1–5 würde ich unabhängig von der Farbfrage machen — Schritt 1 behebt einen Barrierefreiheitsfehler, der heute im Produkt steht.
+Ein CI-Schritt war nicht nötig: `npm run check:design` läuft bereits im Job
+`frontend-typecheck` und ist zusätzlich `build`-Voraussetzung.
+
+Schritte 6–8 sind ein Produktfeature, kein Aufräumen: Sie führen eine neue Bedeutungsebene ein, die an Stellen sichtbar wird, an denen heute gar keine Einfärbung steht. Das gehört in eine eigene Iteration mit deinen Entscheidungen zu Schwellen und Anwendungsorten.
 
 **RBAC:** Keiner der Schritte legt einen mutierenden Endpunkt oder ein neues sichtbares Bedienelement an. Schritt 7 schreibt in `TENANT_SETTINGS` über den bestehenden `PUT /stammdaten/defaults` — die dort geltende Permission deckt das ab, eine neue ist nicht nötig.
 
@@ -433,7 +464,7 @@ Die Schritte 1–5 würde ich unabhängig von der Farbfrage machen — Schritt 1
 
 1. **Palette** — A, B, C oder D? Mein Vorschlag ist C „Blaupause" (Begründung in §6). B ist die richtige Wahl, wenn dir maximale Ruhe wichtiger ist als Wiedererkennung — kostet dann aber die Ausweichentscheidung bei `--kpi-plan` aus §6.0.
 2. **Ersetzen oder ergänzen?** Soll die gewählte Palette das `light`-Theme *ersetzen* (alle Bestandsnutzer sehen die Änderung) oder als achtes Theme *danebenstehen* (niemand wird überrascht, aber die Auswahlliste wächst weiter)?
-3. **Schritt 1 sofort?** Die Diagrammfarben sind für Rot-Grün-schwache Nutzer heute defekt. Ich kann das unabhängig von der Palettenentscheidung sofort umsetzen.
+3. **KPI-Ebene (§4) als nächstes?** Dafür brauche ich zwei Festlegungen: die Standard-Schwellen (§4.3 — mein Vorschlag: DB-Abweichung 5 % / 15 %, Forderung 14 / 30 Tage) und die Orte, an denen eingefärbt werden soll (Projektliste, Reporting-Kacheln, Rechnungsliste — oder enger).
 
 ---
 
@@ -454,4 +485,4 @@ Recherche vom 05.09.2026.
 - [Accessible Color Tokens for Enterprise Design Systems — Aufait UX](https://www.aufaitux.com/blog/color-tokens-enterprise-design-systems-best-practices/)
 - [accessible colours — data.europa.eu Data Visualisation Guide](https://data.europa.eu/apps/data-visualisation-guide/accessible-colours)
 
-Simulation der Farbfehlsichtigkeit nach Viénot, Brettel & Mollon (1999), implementiert in `frontend-react/scripts/color-check.mjs`.
+Simulation der Farbfehlsichtigkeit nach Viénot, Brettel & Mollon (1999), implementiert in `frontend-react/scripts/check-design-system.mjs`.

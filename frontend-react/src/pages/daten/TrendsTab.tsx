@@ -267,7 +267,11 @@ export function TrendsTab() {
       label: 'Auftragsbestand',
       data: periods.map(p => p.auftragsbestand),
       borderColor: C.backlog, backgroundColor: C.backlog + '22',
-      borderWidth: 2, fill: true, tension: 0.3,
+      // 3px statt 2: das Orange der Backlog-Reihe liegt auf weissem Grund bei
+      // 2.25:1. Abdunkeln ist keine Option — es zerstoert den Farbabstand bei
+      // Rot-Gruen-Schwaeche (siehe chartTheme.ts). Eine dickere Linie loest es
+      // stattdessen ueber die Flaeche.
+      borderWidth: 3, fill: true, tension: 0.3,
       pointRadius: dotR, pointHoverRadius: 5,
     }],
   }
