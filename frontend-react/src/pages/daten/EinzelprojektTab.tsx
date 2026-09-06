@@ -18,6 +18,7 @@ import { fetchProjectsShort } from '@/api/projekte'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { RecentList } from '@/components/recents/RecentList'
 import { useChartDefaults } from '@/theme/useChartDefaults'
+import { useChartTheme, useSeriesColors } from '@/theme/chartTheme'
 import {
   fetchProjectReportHeader,
   fetchProjectReportStructure,
@@ -93,14 +94,6 @@ function buildAncestorPath(
 
 // ── Timeline chart ────────────────────────────────────────────────────────────
 
-const CHART_COLORS = {
-  honorar:       'var(--info)',
-  leistungsstand:'var(--success)',
-  kosten:        'var(--warning)',
-  abgerechnet:   'var(--accent2)',
-  bezahlt:       'var(--info)',
-}
-
 function fmtDateDE(iso: string) {
   const d = new Date(iso + 'T00:00:00')
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -112,6 +105,9 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
     queryFn:  () => fetchProjectTimeline(projectId, filter),
     enabled:  projectId !== null,
   })
+
+  const t = useChartTheme()
+  const C = useSeriesColors()
 
   const points: TimelinePoint[] = data?.data ?? []
 
@@ -139,8 +135,8 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       {
         label: 'Honorar inkl. NK',
         data: points.map(p => p.HONORAR_NET),
-        borderColor: CHART_COLORS.honorar,
-        backgroundColor: 'rgba(59,130,246,0.07)',
+        borderColor: C.honorar,
+        backgroundColor: t.alpha(C.honorar, 0.07),
         fill: true,
         tension: 0.35,
         pointRadius: points.length > 60 ? 0 : 3,
@@ -150,7 +146,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       {
         label: 'Leistungsstand €',
         data: points.map(p => p.LEISTUNGSSTAND_VALUE),
-        borderColor: CHART_COLORS.leistungsstand,
+        borderColor: C.leistung,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -161,7 +157,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       {
         label: 'Kosten €',
         data: points.map(p => p.KOSTEN_TOTAL),
-        borderColor: CHART_COLORS.kosten,
+        borderColor: C.kosten,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -172,26 +168,26 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       {
         label: 'Abgerechnet €',
         data: points.map(p => p.ABGERECHNET_NET),
-        borderColor: CHART_COLORS.abgerechnet,
+        borderColor: C.fakturiert,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderDash: [6, 3],
         pointRadius: points.length > 60 ? 0 : 3,
         pointHoverRadius: 6,
-        borderWidth: 1.5,
+        borderWidth: 2,
       },
       {
         label: 'Bezahlt €',
         data: points.map(p => p.BEZAHLT_NET),
-        borderColor: CHART_COLORS.bezahlt,
+        borderColor: C.bezahlt,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderDash: [6, 3],
         pointRadius: points.length > 60 ? 0 : 3,
         pointHoverRadius: 6,
-        borderWidth: 1.5,
+        borderWidth: 2,
       },
     ],
   }
@@ -212,9 +208,9 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: 'var(--surface-2)',
-        bodyColor: 'var(--border)',
+        backgroundColor: t.tooltipBg,
+        titleColor: t.tooltipFg,
+        bodyColor: t.tooltipFg,
         padding: 12,
         cornerRadius: 8,
         callbacks: {
@@ -225,19 +221,19 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
     },
     scales: {
       x: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: t.grid },
         ticks: {
           maxRotation: 45,
           maxTicksLimit: 12,
           font: { size: 11 },
-          color: 'var(--text-3)',
+          color: t.textMuted,
         },
       },
       y: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: t.grid },
         ticks: {
           font: { size: 11 },
-          color: 'var(--text-3)',
+          color: t.textMuted,
           callback: (v) => fmtEur0(Number(v)),
         },
       },

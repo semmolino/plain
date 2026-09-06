@@ -42,6 +42,7 @@ import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import { RecentList } from '@/components/recents/RecentList'
 import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 import { useChartDefaults } from '@/theme/useChartDefaults'
+import { useChartTheme, useSeriesColors } from '@/theme/chartTheme'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -317,6 +318,9 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
     enabled:  filterReady,
   })
 
+  const t = useChartTheme()
+  const C = useSeriesColors()
+
   const points: TimelinePoint[] = data?.data ?? []
 
   if (!filterReady) return null
@@ -343,8 +347,8 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Honorar inkl. NK',
         data: points.map(p => p.HONORAR_NET),
-        borderColor: 'var(--info)',
-        backgroundColor: 'rgba(59,130,246,0.07)',
+        borderColor: C.honorar,
+        backgroundColor: t.alpha(C.honorar, 0.07),
         fill: true,
         tension: 0.35,
         pointRadius: points.length > 60 ? 0 : 3,
@@ -354,7 +358,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Leistungsstand €',
         data: points.map(p => p.LEISTUNGSSTAND_VALUE),
-        borderColor: 'var(--success)',
+        borderColor: C.leistung,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -365,7 +369,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Kosten €',
         data: points.map(p => p.KOSTEN_TOTAL),
-        borderColor: 'var(--warning)',
+        borderColor: C.kosten,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -376,26 +380,26 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Abgerechnet €',
         data: points.map(p => p.ABGERECHNET_NET),
-        borderColor: 'var(--accent2)',
+        borderColor: C.fakturiert,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderDash: [6, 3],
         pointRadius: points.length > 60 ? 0 : 3,
         pointHoverRadius: 6,
-        borderWidth: 1.5,
+        borderWidth: 2,
       },
       {
         label: 'Bezahlt €',
         data: points.map(p => p.BEZAHLT_NET),
-        borderColor: 'var(--info)',
+        borderColor: C.bezahlt,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderDash: [6, 3],
         pointRadius: points.length > 60 ? 0 : 3,
         pointHoverRadius: 6,
-        borderWidth: 1.5,
+        borderWidth: 2,
       },
     ],
   }
@@ -416,9 +420,9 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: 'var(--surface-2)',
-        bodyColor: 'var(--border)',
+        backgroundColor: t.tooltipBg,
+        titleColor: t.tooltipFg,
+        bodyColor: t.tooltipFg,
         padding: 12,
         cornerRadius: 8,
         callbacks: {
@@ -429,14 +433,14 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
     },
     scales: {
       x: {
-        grid: { color: 'var(--text-3)' },
-        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: 'var(--text-3)' },
+        grid: { color: t.grid },
+        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: t.textMuted },
       },
       y: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: t.grid },
         ticks: {
           font: { size: 11 },
-          color: 'var(--text-3)',
+          color: t.textMuted,
           callback: (v) => fmtEur0(Number(v)),
         },
       },

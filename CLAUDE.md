@@ -400,6 +400,25 @@ Farbabstand bei Protanopie und Deuteranopie nach und verlangt ΔE ≥ 15. Der
 alte Tailwind-Satz lag bei ΔE 1,1: „Deckungsbeitrag" und „Stunden" waren für
 rot-grün-schwache Nutzer identisch.
 
+Welche Kennzahl welche Farbe bekommt, steht **an einer Stelle**: `SERIES_ROLE`
+in derselben Datei, abgerufen über `useSeriesColors()` — nie über
+`t.series[3]`, der Index sagt nicht, was er bedeutet. Es gibt sechs Farben für
+sieben Kennzahlen (Gelb liegt auf Weiß bei 1,1:1, Schwarz ist die
+Achsenfarbe — beide fallen als Linie aus), zwei Paare teilen sich also je eine
+Farbe. Geteilt wird **nur, was nie im selben Diagramm steht**: Honorar/DB und
+Auftragsbestand/Stunden. `chartTheme.test.ts` führt die Diagramme auf und
+lässt jede Reihenkollision fehlschlagen.
+
+**Chart.js zeichnet auf `<canvas>` — dort ist `var(--token)` kein Farbwert,
+sondern Schwarz.** Der Browser meldet nichts. Genau daran sind Projektverlauf
+und Gesamtverlauf gestorben: die Hex-Regel oben hat die Umschreibung sogar
+verlangt, `tsc` sah einen `string`, die Kontrastprüfung liest CSS. Deshalb
+prüft `npm run check:design` jetzt die Gegenrichtung (jede CSS-Variable an
+einer Chart.js-Farboption in einer Diagrammdatei ist ein Befund), und
+`tests/charts.spec.ts` zählt am Ende die Farbtöne auf dem fertigen Canvas.
+Farben in Diagrammen kommen ausschließlich aus `useChartTheme()` /
+`useSeriesColors()` — auch Gitter, Achsen und Tooltip.
+
 ---
 
 ## Geldbeträge — ein Baustein, eine Konvention

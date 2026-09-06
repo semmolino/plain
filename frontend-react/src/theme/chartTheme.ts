@@ -43,14 +43,16 @@ export function readToken(name: string, fallback = '#000'): string {
  * scripts/check-design-system.mjs rechnet den Farbabstand nach.
  * Herleitung und Messwerte: docs/FARBKONZEPT_2026-09.md §5.
  */
-const SERIES = [
-  '#0072b2',  // 0 Blau        — Deckungsbeitrag / Honorar
-  '#009e73',  // 1 Gruen       — fakturiert / Leistung
-  '#e69f00',  // 2 Orange      — Backlog
-  '#cc79a7',  // 3 Purpur      — Stunden
-  '#56b4e9',  // 4 Himmelblau  — bezahlt
-  '#d55e00',  // 5 Zinnober    — Kosten
+export const SERIES = [
+  '#0072b2',  // 0 Blau
+  '#009e73',  // 1 Gruen
+  '#e69f00',  // 2 Orange
+  '#cc79a7',  // 3 Purpur
+  '#56b4e9',  // 4 Himmelblau
+  '#d55e00',  // 5 Zinnober
 ]
+// Welche Kennzahl welchen Platz bekommt, steht in SERIES_ROLE weiter unten —
+// nicht hier: der Index ist die Farbe, nicht die Bedeutung.
 
 export interface ChartTheme {
   series:     string[]
@@ -92,21 +94,63 @@ export function useChartTheme(): ChartTheme {
 }
 
 /**
+ * Rolle -> Platz im Farbsatz.
+ *
+ * Es gibt SECHS Farben, aber SIEBEN Kennzahlen im Reporting. Der Satz laesst
+ * sich nicht einfach erweitern: Okabe-Ito hat acht Farben, aber Gelb
+ * (#f0e442) liegt auf weissem Grund bei 1.1:1 und Schwarz ist die
+ * Achsenfarbe — als Linienfarbe faellt beides aus. Eine siebte Farbe frei
+ * Hand zu erfinden zerstoert den Abstand bei Rot-Gruen-Schwaeche; genau das
+ * prueft scripts/check-design-system.mjs nach.
+ *
+ * Zwei Kennzahlen teilen sich deshalb je eine Farbe. Die Regel dafuer ist
+ * nicht „irgendwelche zwei", sondern: **geteilt wird nur, was nie im selben
+ * Diagramm steht.** Honorar (Vertragswert, Projektverlauf) und
+ * Deckungsbeitrag (Ergebnis, Trends) kommen nie zusammen vor, Auftragsbestand
+ * und Stunden ebenso wenig. Innerhalb eines Diagramms ist damit jede Reihe
+ * eindeutig — festgehalten von chartTheme.test.ts.
+ */
+export const SERIES_ROLE = {
+  /** Vertragswert bzw. Ergebnis — Blau */
+  honorar:     0,
+  db:          0,
+  /** Erbrachte Leistung (Leistungsstand, Leistungswert) — Gruen */
+  leistung:    1,
+  /** Auftragsbestand bzw. geleistete Stunden — Orange */
+  backlog:     2,
+  stunden:     2,
+  /** Fakturiert / abgerechnet — Purpur */
+  fakturiert:  3,
+  /** Bezahlt — Himmelblau */
+  bezahlt:     4,
+  /**
+   * Kosten — Zinnober, NICHT --danger: geplante Kosten sind kein Fehler. Der
+   * Abstand zur Fehlerfarbe (#bd2121) betraegt dE=30, die beiden sind nicht
+   * zu verwechseln, und Rot bleibt fuer echten Handlungsbedarf frei.
+   */
+  kosten:      5,
+} as const
+
+export type SeriesRole = keyof typeof SERIES_ROLE
+
+/** Farbe zu einer Rolle, ohne Hook — fuer Tests und Nicht-Komponenten. */
+export function seriesColor(role: SeriesRole): string {
+  return SERIES[SERIES_ROLE[role]]
+}
+
+/**
  * Benannte Serienfarben fuer die Reporting-Diagramme. Gleiche Kennzahl =
  * gleiche Farbe ueber alle Tabs UND ueber alle Themes hinweg — eine
  * Bedeutungsfarbe darf sich nicht mit der Themewahl des Kollegen aendern.
+ *
+ * Immer ueber diese Namen gehen, nie ueber t.series[3]: der Index sagt
+ * nicht, was er bedeutet, und verschiebt sich beim naechsten Umbau.
  */
-export function useSeriesColors() {
+export function useSeriesColors(): Record<SeriesRole, string> {
   const t = useChartTheme()
-  return useMemo(() => ({
-    db:         t.series[0],  // Blau
-    fakturiert: t.series[1],  // Gruen
-    backlog:    t.series[2],  // Orange
-    stunden:    t.series[3],  // Purpur
-    bezahlt:    t.series[4],  // Himmelblau
-    // Zinnober, NICHT --danger: geplante Kosten sind kein Fehler. Der Abstand
-    // zur Fehlerfarbe (#bd2121) betraegt dE=30 — die beiden sind nicht zu
-    // verwechseln, und Rot bleibt fuer echten Handlungsbedarf frei.
-    kosten:     t.series[5],
-  }), [t])
+  return useMemo(() => {
+    const out = {} as Record<SeriesRole, string>
+    for (const role of Object.keys(SERIES_ROLE) as SeriesRole[]) out[role] = t.series[SERIES_ROLE[role]]
+    return out
+  }, [t])
 }
