@@ -9,7 +9,7 @@ import type { HelpId } from '@/help/helpContent'
 import { KpiValue } from '@/components/ui/KpiValue'
 import { useTenantDefaults } from '@/hooks/useTenantDefaults'
 import { cpiLevel, vacLevel, readCpiThresholds, type CpiThresholds } from '@/utils/kpiLevel'
-import { negativeStyle, negativeOr } from '@/utils/money'
+import { fmtEur, fmtEur0, money, moneyOr, negativeStyle } from '@/utils/money'
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
@@ -45,10 +45,8 @@ import { useChartDefaults } from '@/theme/useChartDefaults'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtH    = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct  = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
@@ -153,9 +151,9 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'honorar', label: 'Honorar Netto', className: 'num', defaultVisible: true,
-    render:      r  => fmtEur(r.BUDGET_TOTAL_NET),
+    render:      r  => money(r.BUDGET_TOTAL_NET),
     sortValue:   r  => r.BUDGET_TOTAL_NET ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.BUDGET_TOTAL_NET)),
+    renderTotal: rs => money(sumRows(rs, r => r.BUDGET_TOTAL_NET)),
   },
   {
     key: 'lstPct', label: 'Lst.%', className: 'num', help: 'report.leistungsstand', defaultVisible: true,
@@ -169,17 +167,15 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'lstEur', label: 'Lst.€', className: 'num', defaultVisible: true,
-    render:      r  => <span style={negativeStyle(r.LEISTUNGSSTAND_VALUE)}>{fmtEur(r.LEISTUNGSSTAND_VALUE)}</span>,
+    render:      r  => money(r.LEISTUNGSSTAND_VALUE),
     sortValue:   r  => r.LEISTUNGSSTAND_VALUE ?? 0,
-    renderTotal: rs => { const v = sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)
-      return <span style={negativeStyle(v)}>{fmtEur(v)}</span> },
+    renderTotal: rs => money(sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)),
   },
   {
     key: 'rest', label: 'Restbudget', className: 'num', help: 'report.restbudget', defaultVisible: true,
-    render:      r  => <span style={negativeStyle(r.REMAINING_BUDGET_NET)}>{fmtEur(r.REMAINING_BUDGET_NET)}</span>,
+    render:      r  => money(r.REMAINING_BUDGET_NET),
     sortValue:   r  => r.REMAINING_BUDGET_NET ?? 0,
-    renderTotal: rs => { const v = sumRows(rs, r => r.REMAINING_BUDGET_NET)
-      return <span style={negativeStyle(v)}>{fmtEur(v)}</span> },
+    renderTotal: rs => money(sumRows(rs, r => r.REMAINING_BUDGET_NET)),
   },
   {
     key: 'hoursInt', label: 'Std.int.', className: 'num', defaultVisible: true,
@@ -189,28 +185,27 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'cost', label: 'Kosten €', className: 'num', defaultVisible: false,
-    render:      r  => fmtEur(r.COST_TOTAL),
+    render:      r  => money(r.COST_TOTAL),
     sortValue:   r  => r.COST_TOTAL ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.COST_TOTAL)),
+    renderTotal: rs => money(sumRows(rs, r => r.COST_TOTAL)),
   },
   {
     key: 'billed', label: 'Abgerechnet', className: 'num', defaultVisible: true,
-    render:      r  => fmtEur(r.BILLED_NET_TOTAL),
+    render:      r  => money(r.BILLED_NET_TOTAL),
     sortValue:   r  => r.BILLED_NET_TOTAL ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.BILLED_NET_TOTAL)),
+    renderTotal: rs => money(sumRows(rs, r => r.BILLED_NET_TOTAL)),
   },
   {
     key: 'open', label: 'Abrechenbar', className: 'num', help: 'report.abrechenbar', defaultVisible: true,
-    render:      r  => <span style={negativeOr(r.OPEN_NET_TOTAL, 'var(--accent)')}>{fmtEur(r.OPEN_NET_TOTAL)}</span>,
+    render:      r  => moneyOr(r.OPEN_NET_TOTAL, 'var(--accent)'),
     sortValue:   r  => r.OPEN_NET_TOTAL ?? 0,
-    renderTotal: rs => { const v = sumRows(rs, r => r.OPEN_NET_TOTAL)
-      return <span style={negativeOr(v, 'var(--accent)')}>{fmtEur(v)}</span> },
+    renderTotal: rs => moneyOr(sumRows(rs, r => r.OPEN_NET_TOTAL), 'var(--accent)'),
   },
   {
     key: 'payed', label: 'Bezahlt', className: 'num', defaultVisible: false,
-    render:      r  => fmtEur(r.PAYED_NET_TOTAL),
+    render:      r  => money(r.PAYED_NET_TOTAL),
     sortValue:   r  => r.PAYED_NET_TOTAL ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.PAYED_NET_TOTAL)),
+    renderTotal: rs => money(sumRows(rs, r => r.PAYED_NET_TOTAL)),
   },
   {
     key: 'kq', label: 'Kostenquote', className: 'num', help: 'report.kostenquote', defaultVisible: false,
@@ -243,7 +238,7 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'eac', label: 'EAC (Prognose)', className: 'num', defaultVisible: false,
-    render:      r  => <span style={negativeStyle(computeEvm(r).eac)}>{fmtEur(computeEvm(r).eac)}</span>,
+    render:      r  => <span style={negativeStyle(computeEvm(r).eac)}>{money(computeEvm(r).eac)}</span>,
     sortValue:   r  => computeEvm(r).eac ?? 0,
     renderTotal: rs => fmtEur(rs.reduce((s, r) => s + (computeEvm(r).eac ?? Number(r.BUDGET_TOTAL_NET) ?? 0), 0)),
   },
@@ -255,14 +250,14 @@ const COLUMNS: ColDef[] = [
       return (
         <KpiValue level={vacLevel(vac)} bold={vac < 0}
           reason={vac < 0 ? 'Prognose liegt über dem Budget' : 'Prognose bleibt im Budget'}>
-          {fmtEur(vac)}
+          {money(vac)}
         </KpiValue>
       )
     },
     sortValue:   r  => computeEvm(r).vac ?? 0,
     renderTotal: rs => {
       const total = rs.reduce((s, r) => s + (computeEvm(r).vac ?? 0), 0)
-      return <KpiValue level={vacLevel(total)}>{fmtEur(total)}</KpiValue>
+      return <KpiValue level={vacLevel(total)}>{money(total)}</KpiValue>
     },
   },
 ]
@@ -294,8 +289,6 @@ function SortTh({ label, field, current, dir, onSort, className, help }: {
 
 // ── Aggregate timeline chart ──────────────────────────────────────────────────
 
-const FMT_EUR_CHART = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const FMT_EUR0_CHART = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 function fmtDateDE(iso: string) {
   const d = new Date(iso + 'T00:00:00')
@@ -335,7 +328,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Honorar inkl. NK',
         data: points.map(p => p.HONORAR_NET),
-        borderColor: '#3b82f6',
+        borderColor: 'var(--info)',
         backgroundColor: 'rgba(59,130,246,0.07)',
         fill: true,
         tension: 0.35,
@@ -346,7 +339,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Leistungsstand €',
         data: points.map(p => p.LEISTUNGSSTAND_VALUE),
-        borderColor: '#10b981',
+        borderColor: 'var(--success)',
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -357,7 +350,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Kosten €',
         data: points.map(p => p.KOSTEN_TOTAL),
-        borderColor: '#f59e0b',
+        borderColor: 'var(--warning)',
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -368,7 +361,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Abgerechnet €',
         data: points.map(p => p.ABGERECHNET_NET),
-        borderColor: '#8b5cf6',
+        borderColor: 'var(--accent2)',
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -380,7 +373,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Bezahlt €',
         data: points.map(p => p.BEZAHLT_NET),
-        borderColor: '#06b6d4',
+        borderColor: 'var(--info)',
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -409,27 +402,27 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       },
       tooltip: {
         backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: '#f9fafb',
-        bodyColor: '#d1d5db',
+        titleColor: 'var(--surface-2)',
+        bodyColor: 'var(--border)',
         padding: 12,
         cornerRadius: 8,
         callbacks: {
           label: (ctx) =>
-            `  ${ctx.dataset.label ?? ''}: ${FMT_EUR_CHART.format(ctx.parsed.y ?? 0)}`,
+            `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}`,
         },
       },
     },
     scales: {
       x: {
         grid: { color: 'var(--text-3)' },
-        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: '#6b7280' },
+        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: 'var(--text-3)' },
       },
       y: {
         grid: { color: 'var(--text-3)' },
         ticks: {
           font: { size: 11 },
           color: 'var(--text-3)',
-          callback: (v) => FMT_EUR0_CHART.format(Number(v)),
+          callback: (v) => fmtEur0(Number(v)),
         },
       },
     },

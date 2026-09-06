@@ -9,10 +9,9 @@ import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
 import { Message } from '@/components/ui/Message'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtE    = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtP    = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + '\u202f%'
 
 interface Props {
@@ -209,7 +208,7 @@ export function Leistungsstand({ initialProjectId }: Props) {
                         <span style={{ paddingLeft: depth * 16 }}>{n.NAME_SHORT}</span>
                       </td>
                       <td className="ls-td ls-col-name">{n.NAME_LONG}</td>
-                      <td className="ls-td ls-col-num ls-right">{fmtE(revenue)}</td>
+                      <td className="ls-td ls-col-num ls-right">{money(revenue)}</td>
                       <td className="ls-td ls-col-num ls-right">
                         {isLeaf ? (
                           <span className="ls-prev-wrap">
@@ -258,13 +257,13 @@ export function Leistungsstand({ initialProjectId }: Props) {
                       </td>
                       <td className="ls-td ls-col-num ls-right">
                         {isLeaf
-                          ? fmtE(newVal)
-                          : <span className="ls-muted">{fmtE(oldVal)}</span>}
+                          ? fmtEur(newVal)
+                          : <span className="ls-muted">{money(oldVal)}</span>}
                       </td>
                       <td className="ls-td ls-col-delta ls-right">
                         {isLeaf && Math.abs(deltaEur) >= 0.5 ? (
                           <span className={deltaEur > 0 ? 'ls-delta-pos' : 'ls-delta-neg'}>
-                            {deltaEur > 0 ? '+' : ''}{FMT_EUR.format(deltaEur)}
+                            {deltaEur > 0 ? '+' : ''}{money(deltaEur)}
                           </span>
                         ) : (
                           <span className="ls-muted">—</span>

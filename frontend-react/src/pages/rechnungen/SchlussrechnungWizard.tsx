@@ -26,9 +26,8 @@ import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
 import { useDueDatePreset } from '@/hooks/useTenantDefaults'
 import { API_BASE }     from '@/api/client'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtDate = (v: string | null | undefined) => v ? v.slice(0, 10) : '—'
 function todayIso() { return new Date().toISOString().slice(0, 10) }
 
@@ -708,8 +707,8 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                         />
                       </td>
                       <td>{phasePathLabel(p)}</td>
-                      <td className="num">{fmtEur(p.TOTAL_EARNED)}</td>
-                      <td className="num">{fmtEur(p.ALREADY_BILLED)}</td>
+                      <td className="num">{money(p.TOTAL_EARNED)}</td>
+                      <td className="num">{money(p.ALREADY_BILLED)}</td>
                       <td className="num">{checked ? fmtEur(thisInvoice) : '—'}</td>
                     </tr>
                   )
@@ -742,7 +741,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
           <p className="wizard-step-title">Abschlagsrechnungen abziehen</p>
           {phaseTotals && (
             <div className="billing-proposal-box" style={{ marginBottom: 14 }}>
-              <div className="bp-row"><span>Positionssumme Netto</span><strong>{fmtEur(phaseTotals.phaseTotal)}</strong></div>
+              <div className="bp-row"><span>Positionssumme Netto</span><strong>{money(phaseTotals.phaseTotal)}</strong></div>
             </div>
           )}
           {deductions.length === 0 && (
@@ -775,7 +774,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                       </td>
                       <td>{d.PARTIAL_PAYMENT_NUMBER ?? '—'}</td>
                       <td>{fmtDate(d.PARTIAL_PAYMENT_DATE)}</td>
-                      <td className="num">{fmtEur(d.AMOUNT_NET)}</td>
+                      <td className="num">{money(d.AMOUNT_NET)}</td>
                       <td>
                         <input
                           type="number" step="0.01"
@@ -922,7 +921,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
-                  <span>Netto nach Abzügen</span><span>{fmtEur(netAfter)}</span>
+                  <span>Netto nach Abzügen</span><span>{money(netAfter)}</span>
                 </div>
               </div>
             )}
@@ -963,9 +962,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                       return (
                         <tr key={p.ID}>
                           <td>{phasePathLabel(p)}</td>
-                          <td className="num">{fmtEur(p.TOTAL_EARNED)}</td>
-                          <td className="num">{fmtEur(p.ALREADY_BILLED)}</td>
-                          <td className="num">{fmtEur(thisInvoice)}</td>
+                          <td className="num">{money(p.TOTAL_EARNED)}</td>
+                          <td className="num">{money(p.ALREADY_BILLED)}</td>
+                          <td className="num">{money(thisInvoice)}</td>
                         </tr>
                       )
                     })}
@@ -993,7 +992,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                       <tr key={d.ID}>
                         <td>{d.PARTIAL_PAYMENT_NUMBER ?? '—'}</td>
                         <td>{fmtDate(d.PARTIAL_PAYMENT_DATE)}</td>
-                        <td className="num">{fmtEur(Number(deductAmounts[d.ID] ?? d.DEDUCTION_AMOUNT_NET ?? 0))}</td>
+                        <td className="num">{money(Number(deductAmounts[d.ID] ?? d.DEDUCTION_AMOUNT_NET ?? 0))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1057,9 +1056,9 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
             const payable       = Math.round((gross + seReleaseSum) * 100) / 100
             return (
               <div className="billing-proposal-box" style={{ marginBottom: 14 }}>
-                <div className="bp-row"><span>Positionen Netto</span><strong>{fmtEur(dedTotals.phaseTotal)}</strong></div>
+                <div className="bp-row"><span>Positionen Netto</span><strong>{money(dedTotals.phaseTotal)}</strong></div>
                 <div className="bp-row"><span>Abzüge Netto</span><strong>– {fmtEur(dedTotals.deductionsTotal)}</strong></div>
-                <div className="bp-row"><span>Netto Zwischensumme</span><strong>{fmtEur(base)}</strong></div>
+                <div className="bp-row"><span>Netto Zwischensumme</span><strong>{money(base)}</strong></div>
                 {totalDisc > 0 && (
                   <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
                     <span>./. Nachlässe</span><strong>− {fmtEur(totalDisc)}</strong>
@@ -1070,18 +1069,18 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                     <span>./. Skonto</span><strong>− {fmtEur(cdAmt)}</strong>
                   </div>
                 )}
-                <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{fmtEur(netAfterDiscAndSkonto)}</strong></div>
+                <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{money(netAfterDiscAndSkonto)}</strong></div>
                 {vatPct > 0 && (
-                  <div className="bp-row"><span>zzgl. {vatPct}&thinsp;% MwSt</span><strong>{fmtEur(taxAmount)}</strong></div>
+                  <div className="bp-row"><span>zzgl. {vatPct}&thinsp;% MwSt</span><strong>{money(taxAmount)}</strong></div>
                 )}
-                <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(gross)}</strong></div>
+                <div className="bp-row total"><span>Brutto gesamt</span><strong>{money(gross)}</strong></div>
                 {seReleaseSum > 0 && (
                   <div className="bp-row" style={{ color: 'var(--success)' }}>
                     <span>+ Auflösung Sicherheitseinbehalt</span><strong>+ {fmtEur(seReleaseSum)}</strong>
                   </div>
                 )}
                 {seReleaseSum > 0 && (
-                  <div className="bp-row total"><span>Zahlungsbetrag</span><strong>{fmtEur(payable)}</strong></div>
+                  <div className="bp-row total"><span>Zahlungsbetrag</span><strong>{money(payable)}</strong></div>
                 )}
               </div>
             )

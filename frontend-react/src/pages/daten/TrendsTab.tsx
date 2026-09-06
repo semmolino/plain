@@ -17,7 +17,7 @@ import {
 import { Chart } from 'react-chartjs-2'
 import { fetchTrends, type TrendPeriod, type TrendsGroupBy } from '@/api/reports'
 import { useSeriesColors } from '@/theme/chartTheme'
-import { negativeStyle } from '@/utils/money'
+import { fmtEur, fmtEur0, money, money0 } from '@/utils/money'
 import { useChartDefaults } from '@/theme/useChartDefaults'
 
 ChartJS.register(
@@ -30,16 +30,9 @@ ChartJS.register(
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
-const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-const FMT_EUR2 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_H    = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const FMT_PCT  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
-const fmtEur  = (v: number | null | undefined) => v == null ? '–' : FMT_EUR.format(v)
-const fmtEur2 = (v: number | null | undefined) => v == null ? '–' : FMT_EUR2.format(v)
-/** Betrag als Zelle: negative Werte rot („rote Zahlen"), siehe utils/money.ts. */
-const money  = (v: number | null | undefined) => <span style={negativeStyle(v)}>{fmtEur(v)}</span>
-const money2 = (v: number | null | undefined) => <span style={negativeStyle(v)}>{fmtEur2(v)}</span>
 const fmtH    = (v: number | null | undefined) => v == null ? '–' : FMT_H.format(v) + ' h'
 const fmtPct  = (v: number | null | undefined) => v == null ? '–' : FMT_PCT.format(v) + ' %'
 
@@ -231,7 +224,7 @@ export function TrendsTab() {
       ...(baseOpts('EUR') as any).plugins,
       tooltip: {
         mode: 'index', intersect: false,
-        callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${FMT_EUR.format(ctx.parsed.y)}` },
+        callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${fmtEur0(ctx.parsed.y)}` },
       },
     },
   }
@@ -239,21 +232,21 @@ export function TrendsTab() {
   const dbRows: TableRow[] = [
     {
       label: 'Fakturiert',
-      values: periods.map(p => money(p.fakturiert)),
-      avg: money(n > 0 ? totFakt / n : null),
-      total: money(totFakt),
+      values: periods.map(p => money0(p.fakturiert)),
+      avg: money0(n > 0 ? totFakt / n : null),
+      total: money0(totFakt),
     },
     {
       label: 'Kosten',
-      values: periods.map(p => money(p.kosten)),
-      avg: money(n > 0 ? totKost / n : null),
-      total: money(totKost),
+      values: periods.map(p => money0(p.kosten)),
+      avg: money0(n > 0 ? totKost / n : null),
+      total: money0(totKost),
     },
     {
       label: 'Deckungsbeitrag',
-      values: periods.map(p => money(p.db)),
-      avg: money(n > 0 ? totDb / n : null),
-      total: money(totDb),
+      values: periods.map(p => money0(p.db)),
+      avg: money0(n > 0 ? totDb / n : null),
+      total: money0(totDb),
       rowClass: 'trends-tr-bold',
     },
     {
@@ -287,7 +280,7 @@ export function TrendsTab() {
     plugins: {
       legend: { position: 'top' as const, labels: { font: { size: 11 }, boxWidth: 12 } },
       tooltip: {
-        callbacks: { label: (ctx: any) => `Auftragsbestand: ${FMT_EUR.format(ctx.parsed.y)}` },
+        callbacks: { label: (ctx: any) => `Auftragsbestand: ${fmtEur0(ctx.parsed.y)}` },
       },
     },
     scales: {
@@ -299,16 +292,16 @@ export function TrendsTab() {
   const backlogRows: TableRow[] = [
     {
       label: 'Auftragsbestand',
-      values: periods.map(p => money(p.auftragsbestand)),
+      values: periods.map(p => money0(p.auftragsbestand)),
       avg: '–',
-      total: money(periods[n - 1]?.auftragsbestand ?? null),
+      total: money0(periods[n - 1]?.auftragsbestand ?? null),
     },
     {
       label: 'Δ Vorperiode',
       values: periods.map((p, i) => {
         if (i === 0) return '–'
         const d = p.auftragsbestand - periods[i - 1].auftragsbestand
-        return (d >= 0 ? '+' : '') + FMT_EUR.format(d)
+        return (d >= 0 ? '+' : '') + fmtEur0(d)
       }),
       avg: '–',
       total: '–',
@@ -344,7 +337,7 @@ export function TrendsTab() {
         callbacks: {
           label: (ctx: any) =>
             ctx.dataset.yAxisID === 'y2'
-              ? `Ø Stundensatz: ${FMT_EUR2.format(ctx.parsed.y)}`
+              ? `Ø Stundensatz: ${fmtEur(ctx.parsed.y)}`
               : `Stunden: ${FMT_H.format(ctx.parsed.y)} h`,
         },
       },
@@ -370,15 +363,15 @@ export function TrendsTab() {
     },
     {
       label: 'Kosten',
-      values: periods.map(p => money(p.kosten)),
-      avg: money(n > 0 ? totKost / n : null),
-      total: money(totKost),
+      values: periods.map(p => money0(p.kosten)),
+      avg: money0(n > 0 ? totKost / n : null),
+      total: money0(totKost),
     },
     {
       label: 'Ø Stundensatz',
-      values: periods.map(p => money2(p.avg_stundensatz)),
-      avg: money2(avgSts),
-      total: money2(avgSts),
+      values: periods.map(p => money(p.avg_stundensatz)),
+      avg: money0(avgSts),
+      total: money0(avgSts),
       rowClass: 'trends-tr-pct',
     },
   ]
@@ -407,7 +400,7 @@ export function TrendsTab() {
       ...(baseOpts('EUR') as any).plugins,
       tooltip: {
         mode: 'index', intersect: false,
-        callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${FMT_EUR.format(ctx.parsed.y)}` },
+        callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${fmtEur0(ctx.parsed.y)}` },
       },
     },
   }
@@ -415,24 +408,24 @@ export function TrendsTab() {
   const cashRows: TableRow[] = [
     {
       label: 'Fakturiert',
-      values: periods.map(p => money(p.fakturiert)),
-      avg: money(n > 0 ? totFakt / n : null),
-      total: money(totFakt),
+      values: periods.map(p => money0(p.fakturiert)),
+      avg: money0(n > 0 ? totFakt / n : null),
+      total: money0(totFakt),
     },
     {
       label: 'Bezahlt',
-      values: periods.map(p => money(p.bezahlt)),
-      avg: money(n > 0 ? totBez / n : null),
-      total: money(totBez),
+      values: periods.map(p => money0(p.bezahlt)),
+      avg: money0(n > 0 ? totBez / n : null),
+      total: money0(totBez),
     },
     {
       label: 'Differenz',
       values: periods.map(p => {
         const d = p.fakturiert - p.bezahlt
-        return (d >= 0 ? '+' : '') + FMT_EUR.format(d)
+        return (d >= 0 ? '+' : '') + fmtEur0(d)
       }),
-      avg: money(n > 0 ? (totFakt - totBez) / n : null),
-      total: money(totFakt - totBez),
+      avg: money0(n > 0 ? (totFakt - totBez) / n : null),
+      total: money0(totFakt - totBez),
       rowClass: 'trends-tr-delta',
     },
     {

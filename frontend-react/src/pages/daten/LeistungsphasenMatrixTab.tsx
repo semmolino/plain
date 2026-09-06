@@ -8,15 +8,10 @@ import { Bar } from 'react-chartjs-2'
 import { fetchPhaseMatrix, type PhaseCell, type PhaseMatrixProject } from '@/api/reports'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { useChartTheme } from '@/theme/chartTheme'
-import { negativeStyle } from '@/utils/money'
+import { fmtEur, fmtEur0, money } from '@/utils/money'
 
-const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H    = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur   = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
-/** Betrag als Zelle: negative Werte rot („rote Zahlen"), siehe utils/money.ts. */
-const money = (v: number | null | undefined) => <span style={negativeStyle(v)}>{fmtEur(v)}</span>
 const fmtH     = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct   = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
@@ -71,11 +66,11 @@ function PortfolioBarChart({ labels, honorar, leistung, kosten }: {
     plugins: {
       legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, color: t.text, font: { size: 12 } } },
       tooltip: { backgroundColor: t.tooltipBg, titleColor: t.tooltipFg, bodyColor: t.tooltipFg, padding: 12, cornerRadius: 8,
-        callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}` } },
+        callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}` } },
     },
     scales: {
       x: { grid: { display: false }, ticks: { color: t.textMuted, font: { size: 11 } } },
-      y: { grid: { color: t.grid }, ticks: { color: t.textMuted, font: { size: 11 }, callback: (v) => FMT_EUR0.format(Number(v)) } },
+      y: { grid: { color: t.grid }, ticks: { color: t.textMuted, font: { size: 11 }, callback: (v) => fmtEur0(Number(v)) } },
     },
   }
   return (

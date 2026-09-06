@@ -32,17 +32,12 @@ import { LeistungsphasenReport } from '@/pages/daten/LeistungsphasenReport'
 import { useTenantDefaults } from '@/hooks/useTenantDefaults'
 import { cpiLevel, vacLevel, readCpiThresholds, KPI_COLOR } from '@/utils/kpiLevel'
 import { KpiValue } from '@/components/ui/KpiValue'
-import { negativeStyle, negativeOr } from '@/utils/money'
+import { NO_VALUE, fmtEur, fmtEur0, money, negativeOr, negativeStyle } from '@/utils/money'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
-/** Betrag als Zelle: negative Werte rot („rote Zahlen"), siehe utils/money.ts. */
-const money = (v: number | null | undefined) => <span style={negativeStyle(v)}>{fmtEur(v)}</span>
 const fmtH    = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct  = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
@@ -94,11 +89,11 @@ function buildAncestorPath(
 // ── Timeline chart ────────────────────────────────────────────────────────────
 
 const CHART_COLORS = {
-  honorar:       '#3b82f6',
-  leistungsstand:'#10b981',
-  kosten:        '#f59e0b',
-  abgerechnet:   '#8b5cf6',
-  bezahlt:       '#06b6d4',
+  honorar:       'var(--info)',
+  leistungsstand:'var(--success)',
+  kosten:        'var(--warning)',
+  abgerechnet:   'var(--accent2)',
+  bezahlt:       'var(--info)',
 }
 
 function fmtDateDE(iso: string) {
@@ -213,13 +208,13 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       },
       tooltip: {
         backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: '#f9fafb',
-        bodyColor: '#d1d5db',
+        titleColor: 'var(--surface-2)',
+        bodyColor: 'var(--border)',
         padding: 12,
         cornerRadius: 8,
         callbacks: {
           label: (ctx) =>
-            `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}`,
+            `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}`,
         },
       },
     },
@@ -238,7 +233,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         ticks: {
           font: { size: 11 },
           color: 'var(--text-3)',
-          callback: (v) => FMT_EUR0.format(Number(v)),
+          callback: (v) => fmtEur0(Number(v)),
         },
       },
     },
@@ -536,7 +531,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                            : cpiLvl === 'watch' ? 'Leicht überbudget — beobachten'
                            : 'Überbudget — Handlungsbedarf'
             const fmtM    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(v)} Mon.`
-            const fmtB    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0, style: 'currency', currency: 'EUR' }).format(v)}/Mon.`
+            const fmtB    = (v: number | null) => v == null ? NO_VALUE : `${fmtEur0(v)}/Mon.`
             return (
               <div className="prognose-section">
                 <div className="prognose-title">Prognose</div>
@@ -548,17 +543,17 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">EAC (Progn. Gesamtkosten)</span>
-                    <span className="prognose-value" style={negativeStyle(evm.eac)}>{fmtEur(evm.eac)}</span>
+                    <span className="prognose-value" style={negativeStyle(evm.eac)}>{money(evm.eac)}</span>
                     <span className="prognose-sub">von {fmtEur(header.BUDGET_TOTAL_NET)} Budget</span>
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">VAC (Ergebnisabweichung)</span>
-                    <span className="prognose-value" style={{ color: KPI_COLOR[vacLevel(evm.vac)] }}>{fmtEur(evm.vac)}</span>
+                    <span className="prognose-value" style={{ color: KPI_COLOR[vacLevel(evm.vac)] }}>{money(evm.vac)}</span>
                     <span className="prognose-sub">{(evm.vac ?? 0) >= 0 ? 'Projekt im Plan' : 'Prognose: Überschreitung'}</span>
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">ETC (Noch zu erwartende Kosten)</span>
-                    <span className="prognose-value">{fmtEur(evm.etc)}</span>
+                    <span className="prognose-value">{money(evm.etc)}</span>
                     <span className="prognose-sub">verbleibend bis Abschluss</span>
                   </div>
                   {avgBurn != null && (

@@ -27,6 +27,7 @@ import { ObjektlisteZonePicker } from '@/pages/projekte/ObjektlisteZonePicker'
 import { ZonenPunkteRechner } from '@/pages/projekte/ZonenPunkteRechner'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent, type RecentEntry } from '@/api/recents'
+import { fmtEur, money } from '@/utils/money'
 
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
@@ -62,10 +63,6 @@ function toNum(v: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function fmtEur(v: number | null | undefined) {
-  if (v == null) return '—'
-  return v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
-}
 
 function revenueByKx(row: FeeCalcMaster, kx: KX): number | null {
   const map: Record<KX, number | null> = {
@@ -1151,7 +1148,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                               onChange={e => updateBl({ AMOUNT: toNum(e.target.value) ?? 0 })} />
                           ) : (
                             <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>
-                              {fmtEur(computed)}
+                              {money(computed)}
                             </span>
                           )}
                         </td>
@@ -1166,7 +1163,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 <tfoot>
                   <tr>
                     <th scope="col" colSpan={6}>Summe Besondere Leistungen</th>
-                    <th scope="col" style={{ textAlign: 'right' }}>{fmtEur(blTotal)}</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>{money(blTotal)}</th>
                     <th scope="col"></th>
                   </tr>
                 </tfoot>
@@ -1198,21 +1195,21 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           <div className="admin-block" style={{ marginBottom: 12, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <div>
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Grundhonorar: </span>
-              <strong>{fmtEur(totalPhaseRev)}</strong>
+              <strong>{money(totalPhaseRev)}</strong>
             </div>
             {blTotal !== 0 && (
               <div>
                 <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ BL: </span>
-                <strong>{fmtEur(blTotal)}</strong>
+                <strong>{money(blTotal)}</strong>
               </div>
             )}
             <div>
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>+ Zuschläge: </span>
-              <strong>{fmtEur(totalSurchargeAmt)}</strong>
+              <strong>{money(totalSurchargeAmt)}</strong>
             </div>
             <div style={{ borderLeft: '2px solid var(--border)', paddingLeft: 16 }}>
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Gesamt: </span>
-              <strong style={{ fontSize: 15 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</strong>
+              <strong style={{ fontSize: 15 }}>{money(totalPhaseRev + blTotal + totalSurchargeAmt)}</strong>
             </div>
           </div>
 
@@ -1276,14 +1273,14 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                               onChange={e => updateSurcharge(idx, 'PERCENT', toNum(e.target.value))} />
                           </td>
                           <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--text-3)' }}>
-                            {fmtEur(effect?.effectiveBase)}
+                            {money(effect?.effectiveBase)}
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 600, color: (effect?.amount ?? 0) >= 0 ? '#166534' : '#991b1b' }}>
-                            {fmtEur(effect?.amount)}
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: (effect?.amount ?? 0) >= 0 ? 'var(--success-strong)' : 'var(--danger-strong)' }}>
+                            {money(effect?.amount)}
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             <button type="button" className="btn-small" title="LPH-Filter und Modus bearbeiten"
-                              style={{ fontSize: 11, padding: '2px 6px', background: isExpanded ? '#dbeafe' : undefined }}
+                              style={{ fontSize: 11, padding: '2px 6px', background: isExpanded ? 'var(--info-bg)' : undefined }}
                               onClick={() => setExpandedSurchargeIdx(isExpanded ? null : idx)}>
                               {isExpanded ? 'Schließe Details' : 'Öffne Details'}
                             </button>
@@ -1369,14 +1366,14 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 <tfoot>
                   <tr>
                     <th scope="col" colSpan={4}>Summe Zuschläge / Nachlässe</th>
-                    <th scope="col" style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? '#166534' : '#991b1b' }}>
-                      {fmtEur(totalSurchargeAmt)}
+                    <th scope="col" style={{ textAlign: 'right', color: totalSurchargeAmt >= 0 ? 'var(--success-strong)' : 'var(--danger-strong)' }}>
+                      {money(totalSurchargeAmt)}
                     </th>
                     <th scope="col" colSpan={2}></th>
                   </tr>
                   <tr>
                     <th scope="col" colSpan={4}>Gesamthonorar</th>
-                    <th scope="col" style={{ textAlign: 'right', fontSize: 14 }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</th>
+                    <th scope="col" style={{ textAlign: 'right', fontSize: 14 }}>{money(totalPhaseRev + blTotal + totalSurchargeAmt)}</th>
                     <th scope="col" colSpan={2}></th>
                   </tr>
                 </tfoot>
@@ -1417,27 +1414,27 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                   <tr key={p.ID}>
                     <td style={{ fontSize: 13 }}>{p.PHASE_LABEL}</td>
                     <td style={{ fontSize: 11, color: 'var(--text-3)' }}>Grundleistung</td>
-                    <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(p.PHASE_REVENUE)}</td>
+                    <td style={{ textAlign: 'right', fontSize: 12 }}>{money(p.PHASE_REVENUE)}</td>
                   </tr>
                 ))}
                 {/* Grundhonorar summary */}
                 <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface-3)' }}>
                   <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>Grundhonorar</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(totalPhaseRev)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{money(totalPhaseRev)}</td>
                 </tr>
                 {/* BL rows */}
                 {blTotal !== 0 && blItems.map((b, i) => blComputedAmounts[i] !== 0 && (
                   <tr key={`bl-${i}`}>
                     <td style={{ fontSize: 13 }}>{[b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || `BL ${i + 1}`}</td>
                     <td style={{ fontSize: 11, color: 'var(--text-3)' }}>Besondere Leistung</td>
-                    <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(blComputedAmounts[i])}</td>
+                    <td style={{ textAlign: 'right', fontSize: 12 }}>{money(blComputedAmounts[i])}</td>
                   </tr>
                 ))}
                 {/* BL sum */}
                 {blTotal !== 0 && (
                   <tr style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-3)' }}>
                     <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>+ Besondere Leistungen</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(blTotal)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{money(blTotal)}</td>
                   </tr>
                 )}
                 {/* Individual Zuschlag rows */}
@@ -1451,7 +1448,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                       <td style={{ fontSize: 11, color: 'var(--text-3)' }}>
                         {(r.PERCENT ?? 0) >= 0 ? 'Zuschlag' : 'Nachlass'} {r.PERCENT ?? 0}&nbsp;%
                       </td>
-                      <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtEur(eff.amount)}</td>
+                      <td style={{ textAlign: 'right', fontSize: 12 }}>{money(eff.amount)}</td>
                     </tr>
                   )
                 })}
@@ -1459,13 +1456,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 {totalSurchargeAmt !== 0 && (
                   <tr style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-3)' }}>
                     <td colSpan={2} style={{ fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>+ Zuschläge / Nachlässe</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{fmtEur(totalSurchargeAmt)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, padding: '6px 8px' }}>{money(totalSurchargeAmt)}</td>
                   </tr>
                 )}
                 {/* Gesamthonorar */}
                 <tr style={{ borderTop: '2px solid var(--text-4)' }}>
                   <td colSpan={2} style={{ fontWeight: 700, fontSize: 15, padding: '8px 8px' }}>Gesamthonorar</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 15, padding: '8px 8px' }}>{fmtEur(totalPhaseRev + blTotal + totalSurchargeAmt)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 15, padding: '8px 8px' }}>{money(totalPhaseRev + blTotal + totalSurchargeAmt)}</td>
                 </tr>
               </tbody>
             </table>
@@ -1567,10 +1564,6 @@ type WizardMode = null | { mode: 'create' } | { mode: 'edit'; id: number }
 
 type SortCol = 'nameShort' | 'nameLong' | 'project' | 'grundhonorar' | 'gesamthonorar'
 
-function fmtEurShort(v: number | null | undefined) {
-  if (v == null) return '—'
-  return v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
-}
 
 
 interface HonorarTabProps {
@@ -1741,11 +1734,11 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                         ? <span style={{ color: 'var(--accent2)' }}>{r.offerLabel}</span>
                         : '—'}
                   </td>
-                  <td style={{ textAlign: 'right' }}>{fmtEurShort(r.grundhonorar)}</td>
-                  <td style={{ textAlign: 'right', color: (r.zuschlaegeSum ?? 0) !== 0 ? ((r.zuschlaegeSum ?? 0) >= 0 ? '#166534' : '#991b1b') : undefined }}>
-                    {(r.zuschlaegeSum ?? 0) !== 0 ? fmtEurShort(r.zuschlaegeSum) : '—'}
+                  <td style={{ textAlign: 'right' }}>{money(r.grundhonorar)}</td>
+                  <td style={{ textAlign: 'right', color: (r.zuschlaegeSum ?? 0) !== 0 ? ((r.zuschlaegeSum ?? 0) >= 0 ? 'var(--success-strong)' : 'var(--danger-strong)') : undefined }}>
+                    {(r.zuschlaegeSum ?? 0) !== 0 ? fmtEur(r.zuschlaegeSum) : '—'}
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtEurShort(r.gesamthonorar)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{money(r.gesamthonorar)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button type="button" className="btn-small"

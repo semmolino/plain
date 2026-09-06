@@ -5,7 +5,7 @@ import { ListLoading } from '@/components/ui/Skeleton'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { HelpHint } from '@/components/ui/HelpHint'
-import { negativeStyle } from '@/utils/money'
+import { fmtEur, money } from '@/utils/money'
 import { Message } from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Can } from '@/components/ui/Can'
@@ -32,13 +32,9 @@ import {
  *     muss man sehen, sonst sieht eine 0 aus wie „nichts geleistet".
  */
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-const fmtEur = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
-/** Betrag als Zelle: negative Werte rot („rote Zahlen"), siehe utils/money.ts. */
-const money = (v: number | null | undefined) => <span style={negativeStyle(v)}>{fmtEur(v)}</span>
 const fmtPct = (v: number | null | undefined) => v == null ? '—' : `${FMT_PCT.format(v)} %`
 const fmtH   = (v: number | null | undefined) => v == null ? '—' : `${FMT_H.format(v)} h`
 const fmtDate = (iso: string | null | undefined) => {
@@ -139,7 +135,7 @@ const COLUMNS: ColDef[] = [
     total: rows => money(sumBy(rows, r => r.PREPAYMENT_NET)) },
   { key: 'lossRisk', label: 'Drohverlust', numeric: true, defaultVisible: true, help: 'report.tfl.drohverlust',
     render: r => r.LOSS_RISK_NET > 0
-      ? <span style={{ color: 'var(--danger-strong)' }}>{fmtEur(r.LOSS_RISK_NET)}</span>
+      ? <span style={{ color: 'var(--danger-strong)' }}>{money(r.LOSS_RISK_NET)}</span>
       : fmtEur(0),
     sortValue: r => r.LOSS_RISK_NET,
     total: rows => money(sumBy(rows, r => r.LOSS_RISK_NET)) },
@@ -463,7 +459,7 @@ export function TeilfertigeLeistungenTab() {
                 Teilfertige Leistungen (Aktiva)
                 <HelpHint id="report.tfl.was" />
               </span>
-              <span className="daten-kpi-value accent">{fmtEur(viewTotals.wip)}</span>
+              <span className="daten-kpi-value accent">{money(viewTotals.wip)}</span>
               <span className="kpi-meta">{methodLabel}</span>
             </div>
             <div className="daten-kpi-tile">
@@ -471,7 +467,7 @@ export function TeilfertigeLeistungenTab() {
                 Erhaltene Anzahlungen (Passiva)
                 <HelpHint id="report.tfl.anzahlungen" />
               </span>
-              <span className="daten-kpi-value">{fmtEur(viewTotals.prepayments)}</span>
+              <span className="daten-kpi-value">{money(viewTotals.prepayments)}</span>
               <span className="kpi-meta">nicht mit den Aktiva verrechnet</span>
             </div>
             {viewTotals.wipTax != null && (
@@ -480,7 +476,7 @@ export function TeilfertigeLeistungenTab() {
                   Teilfertig (Steuerbilanz)
                   <HelpHint id="report.tfl.steuerbilanz" />
                 </span>
-                <span className="daten-kpi-value">{fmtEur(viewTotals.wipTax)}</span>
+                <span className="daten-kpi-value">{money(viewTotals.wipTax)}</span>
                 <span className="kpi-meta">Kostenansatz {fmtPct(report.taxCostFactorPercent)}</span>
               </div>
             )}
@@ -490,7 +486,7 @@ export function TeilfertigeLeistungenTab() {
                   Bestandsveränderung
                   <HelpHint id="report.tfl.bestandsveraenderung" />
                 </span>
-                <span className="daten-kpi-value">{fmtEur(viewTotals.change)}</span>
+                <span className="daten-kpi-value">{money(viewTotals.change)}</span>
                 <span className="kpi-meta">gegenüber {fmtDate(report.compareTo)}</span>
               </div>
             )}
@@ -501,7 +497,7 @@ export function TeilfertigeLeistungenTab() {
                   <HelpHint id="report.tfl.drohverlust" />
                 </span>
                 <span className="daten-kpi-value" style={{ color: 'var(--danger-strong)' }}>
-                  {fmtEur(viewTotals.lossRisk)}
+                  {money(viewTotals.lossRisk)}
                 </span>
                 <span className="kpi-meta">{report.dataQuality.lossRiskCount} Projekt(e)</span>
               </div>
@@ -737,9 +733,9 @@ export function TeilfertigeLeistungenTab() {
                           <td>{c.METHOD === 'erloes' ? 'Leistungswert' : 'Herstellkosten'}</td>
                           <td className="num">{fmtPct(c.COST_FACTOR_PERCENT)}</td>
                           <td className="num">
-                            {fmtEur(c.METHOD === 'erloes' ? c.TOTAL_WIP_REVENUE : c.TOTAL_WIP_HK)}
+                            {money(c.METHOD === 'erloes' ? c.TOTAL_WIP_REVENUE : c.TOTAL_WIP_HK)}
                           </td>
-                          <td className="num">{fmtEur(c.TOTAL_PREPAYMENTS)}</td>
+                          <td className="num">{money(c.TOTAL_PREPAYMENTS)}</td>
                           <td className="num">{c.PROJECT_COUNT}</td>
                           <td>
                             {fmtDate(c.created_at)}

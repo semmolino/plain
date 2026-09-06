@@ -24,9 +24,8 @@ import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
 import { useDueDatePreset } from '@/hooks/useTenantDefaults'
 import { API_BASE }     from '@/api/client'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 function todayIso() { return new Date().toISOString().slice(0, 10) }
 
 const STEPS = ['Init', 'Details', 'Beträge', 'Buchen']
@@ -569,11 +568,11 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
             <p className="wizard-step-title">Beträge & Leistungsnachweise</p>
             {proposal && (
               <div className="billing-proposal-box">
-                <div className="bp-row"><span>Empfohlener Leistungsbetrag</span><strong>{fmtEur(proposal.performance_suggested)}</strong></div>
-                <div className="bp-row"><span>Leistungsbetrag (Netto)</span><strong>{fmtEur(perfAmt)}</strong></div>
-                {hasBt2 && <div className="bp-row"><span>Buchungen (ausgewählt)</span><strong>{fmtEur(selectedTecSum)}</strong></div>}
-                <div className="bp-row total"><span>Netto gesamt</span><strong>{fmtEur(liveNet)}</strong></div>
-                <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(liveGross)}</strong></div>
+                <div className="bp-row"><span>Empfohlener Leistungsbetrag</span><strong>{money(proposal.performance_suggested)}</strong></div>
+                <div className="bp-row"><span>Leistungsbetrag (Netto)</span><strong>{money(perfAmt)}</strong></div>
+                {hasBt2 && <div className="bp-row"><span>Buchungen (ausgewählt)</span><strong>{money(selectedTecSum)}</strong></div>}
+                <div className="bp-row total"><span>Netto gesamt</span><strong>{money(liveNet)}</strong></div>
+                <div className="bp-row total"><span>Brutto gesamt</span><strong>{money(liveGross)}</strong></div>
               </div>
             )}
             <div style={{ marginTop: 12 }}>
@@ -670,7 +669,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                       {d2Pct && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>= {fmtEur(d2Amt)}</span>}
                     </div>
                   )}
-                  {totalDisc > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Gesamt-Nachlass: <strong>{fmtEur(totalDisc)}</strong></div>}
+                  {totalDisc > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Gesamt-Nachlass: <strong>{money(totalDisc)}</strong></div>}
                 </div>
               )}
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
@@ -698,12 +697,12 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                       style={{ width: 70, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
                       placeholder="z. B. 14" />
                   </div>
-                  {cdAmt > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Skonto-Abzug: <strong>{fmtEur(cdAmt)}</strong></div>}
+                  {cdAmt > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Skonto-Abzug: <strong>{money(cdAmt)}</strong></div>}
                 </div>
               )}
               {(totalDisc > 0 || cdAmt > 0) && (
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 13 }}>
-                  Rechnungssumme netto nach Abzügen: <strong>{fmtEur(netAfter)}</strong>
+                  Rechnungssumme netto nach Abzügen: <strong>{money(netAfter)}</strong>
                 </div>
               )}
 
@@ -736,7 +735,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                         Netto
                       </label>
                     </div>
-                    {seAmt > 0 && <span style={{ fontSize: 12, color: 'var(--text-2)' }}>= <strong>{fmtEur(seAmt)}</strong></span>}
+                    {seAmt > 0 && <span style={{ fontSize: 12, color: 'var(--text-2)' }}>= <strong>{money(seAmt)}</strong></span>}
                   </div>
                 )}
               </div>
@@ -746,10 +745,10 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
               const hasDeductions = totalDisc > 0 || cdAmt > 0
               return (
                 <div className="billing-proposal-box">
-                  <div className="bp-row"><span>Leistungsbetrag Netto</span><strong>{fmtEur(proposal.performance_amount)}</strong></div>
-                  <div className="bp-row"><span>Buchungen Netto</span><strong>{fmtEur(proposal.bookings_sum)}</strong></div>
-                  <div className="bp-row"><span>Nebenkosten Netto</span><strong>{fmtEur(proposal.amount_extras_net)}</strong></div>
-                  <div className="bp-row"><span>Netto Zwischensumme</span><strong>{fmtEur(base)}</strong></div>
+                  <div className="bp-row"><span>Leistungsbetrag Netto</span><strong>{money(proposal.performance_amount)}</strong></div>
+                  <div className="bp-row"><span>Buchungen Netto</span><strong>{money(proposal.bookings_sum)}</strong></div>
+                  <div className="bp-row"><span>Nebenkosten Netto</span><strong>{money(proposal.amount_extras_net)}</strong></div>
+                  <div className="bp-row"><span>Netto Zwischensumme</span><strong>{money(base)}</strong></div>
                   {totalDisc > 0 && (
                     <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
                       <span>./. Nachlässe</span><strong>− {fmtEur(totalDisc)}</strong>
@@ -760,11 +759,11 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                       <span>./. Skonto</span><strong>− {fmtEur(cdAmt)}</strong>
                     </div>
                   )}
-                  <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{fmtEur(netAfter)}</strong></div>
+                  <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{money(netAfter)}</strong></div>
                   {vatPct > 0 && (
-                    <div className="bp-row"><span>zzgl. {vatPct}&thinsp;% MwSt.</span><strong>{fmtEur(taxAfter)}</strong></div>
+                    <div className="bp-row"><span>zzgl. {vatPct}&thinsp;% MwSt.</span><strong>{money(taxAfter)}</strong></div>
                   )}
-                  <div className="bp-row total"><span>Brutto gesamt</span><strong>{fmtEur(grossAfter)}</strong></div>
+                  <div className="bp-row total"><span>Brutto gesamt</span><strong>{money(grossAfter)}</strong></div>
                   {seEnabled && seAmt > 0 && (
                     <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
                       <span>./. Sicherheitseinbehalt {sePctNum}&thinsp;% vom {seBasis === 'BRUTTO' ? 'Brutto' : 'Netto'}</span>
@@ -772,7 +771,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                     </div>
                   )}
                   {seEnabled && seAmt > 0 && (
-                    <div className="bp-row total"><span>Sofort fällig</span><strong>{fmtEur(payable)}</strong></div>
+                    <div className="bp-row total"><span>Sofort fällig</span><strong>{money(payable)}</strong></div>
                   )}
                 </div>
               )

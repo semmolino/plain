@@ -168,7 +168,7 @@ export function ProfilePage() {
             disabled={saving}
             style={{
               marginTop: 4, padding: '8px 16px', fontSize: 13, fontWeight: 600,
-              background: saving ? '#93c5fd' : '#2563eb', color: '#fff',
+              background: saving ? 'var(--info-bg)' : 'var(--accent)', color: 'var(--accent-fg)',
               border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer',
             }}
           >
@@ -374,9 +374,9 @@ function ProfileAvatar({ shortName, email }: { shortName: string | null; email: 
       <div
         style={{
           width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
-          background: dataUri ? '#fff' : 'var(--accent-bg, #eff6ff)',
+          background: dataUri ? 'var(--surface)' : 'var(--accent-bg)',
           color: 'var(--accent)',
-          border: '1px solid var(--border, #e5e7eb)',
+          border: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 24, fontWeight: 700, flexShrink: 0,
         }}

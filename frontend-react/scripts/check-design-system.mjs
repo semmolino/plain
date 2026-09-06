@@ -210,6 +210,60 @@ for (const [name, sel] of THEMES) {
   }
 }
 
+// ── 3a. Hartkodierte Farben ───────────────────────────────────────────────
+/*
+ * Der UX-Audit 08/2026 zaehlte 812 hartkodierte Hex-Werte, im September waren
+ * es noch 226. Sie folgen keinem der sieben Themes: im Dark-Theme lag
+ * `#374151` bei 1.65:1 — praktisch unsichtbar.
+ *
+ * Es gibt drei legitime Ausnahmen, und nur drei:
+ *   1. Canvas — Chart.js versteht `var(--token)` nicht (theme/chartTheme.ts).
+ *   2. Werte, die GESPEICHERT oder ins PDF gerendert werden: Farbwaehler,
+ *      Vorlagen-Akzente. Dort ist eine CSS-Variable schlicht kein Farbwert.
+ *   3. Vorschauen von gedrucktem Papier — die sind bewusst papierweiss und
+ *      duerfen im Dark-Theme nicht mitkippen.
+ * Alles andere gehoert an ein Token. Wer eine Ausnahme braucht, traegt die
+ * Datei hier ein UND schreibt daneben, welcher der drei Faelle es ist.
+ */
+const COLOR_EXEMPT = new Map([
+  ['src/theme/chartTheme.ts',                      'Canvas: Chart.js kennt keine CSS-Variablen'],
+  ['src/components/layout/ThemeOptions.tsx',       'Vorschau-Swatches zeigen die Themes selbst'],
+  ['src/api/documentTemplates.ts',                 'PDF-Vorlagen: Werte landen im Dokument'],
+  ['src/pages/admin/DokumentvorlagenSection.tsx',  'PDF-Akzentpalette + Papier-Vorschau + srcdoc'],
+  ['src/pages/admin/RollenSection.tsx',            'Vorgabefarbe einer Rolle, wird gespeichert'],
+  ['src/pages/admin/AbwesenheitsartenSection.tsx', 'Vorgabefarbe einer Abwesenheitsart, wird gespeichert'],
+])
+for (const f of sources) {
+  const rel = f.replace(ROOT + '/', '').replace(/\\/g, '/')
+  if (COLOR_EXEMPT.has(rel)) continue
+  const text = stripComments(readFileSync(f, 'utf8'))
+  const hits = [...new Set([...text.matchAll(/#[0-9a-fA-F]{6}\b/g)].map(m => m[0]))]
+  if (hits.length) {
+    note('Farbe', `${rel}: ${hits.length} hartkodierte Farbe(n) (${hits.slice(0, 4).join(', ')}`
+      + `${hits.length > 4 ? ', …' : ''}) — Token aus globals.css verwenden`)
+  }
+}
+
+// ── 3b. Eigene Waehrungsformatierer ───────────────────────────────────────
+/*
+ * Es gab 28 eigene `fmtEur`-Definitionen in 27 Dateien und 36 eigene
+ * Intl-Instanzen — fast alle gleich, ein paar minimal verschieden. Genau
+ * diese Streuung war der Grund, warum die Konvention „rote Zahlen" im ganzen
+ * Produkt an EINER Stelle umgesetzt war: Es gab keinen gemeinsamen Ort, an
+ * den man sie haette schreiben koennen. Jetzt gibt es utils/money.tsx.
+ */
+const MONEY_MODULE = 'src/utils/money.tsx'
+for (const f of sources) {
+  const rel = f.replace(ROOT + '/', '').replace(/\\/g, '/')
+  if (rel === MONEY_MODULE) continue
+  const text = stripComments(readFileSync(f, 'utf8'))
+  if (/new Intl\.NumberFormat\([^)]*currency/s.test(text)
+    || /toLocaleString\([^)]*currency/s.test(text)) {
+    note('Geld', `${rel}: eigener Waehrungsformatierer — stattdessen `
+      + 'fmtEur/fmtEur0/money aus @/utils/money verwenden')
+  }
+}
+
 // ── 4. Diagrammreihen bei Farbfehlsichtigkeit ─────────────────────────────
 /*
  * Die Serienfarben liegen als JS-Konstanten in src/theme/chartTheme.ts, weil

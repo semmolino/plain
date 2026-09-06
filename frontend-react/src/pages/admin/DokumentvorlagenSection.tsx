@@ -330,7 +330,7 @@ export function DokumentvorlagenSection() {
                   onChange={e => setAccent(e.target.value)}
                   style={{ opacity: 0, width: 0, height: 0 }}
                 />
-                {accentInPalette && <span style={{ fontSize: 13, color: '#6b7280' }}>+</span>}
+                {accentInPalette && <span style={{ fontSize: 13, color: 'var(--text-3)' }}>+</span>}
               </label>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
