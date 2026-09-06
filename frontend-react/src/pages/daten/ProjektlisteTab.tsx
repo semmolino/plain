@@ -8,7 +8,7 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import type { HelpId } from '@/help/helpContent'
 import { KpiValue } from '@/components/ui/KpiValue'
 import { useTenantDefaults } from '@/hooks/useTenantDefaults'
-import { cpiLevel, vacLevel, readCpiThresholds, type CpiThresholds } from '@/utils/kpiLevel'
+import { cpiLevel, vacLevel, costRatioLevel, readCpiThresholds, type CpiThresholds } from '@/utils/kpiLevel'
 import { fmtEur, fmtEur0, money, moneyOr, negativeStyle } from '@/utils/money'
 
 function lsGet<T>(key: string, fallback: T): T {
@@ -209,12 +209,27 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'kq', label: 'Kostenquote', className: 'num', help: 'report.kostenquote', defaultVisible: false,
-    render:      r  => r.COST_RATIO != null ? fmtPct(r.COST_RATIO * 100) : '—',
+    render: (r, t) => {
+      if (r.COST_RATIO == null) return '—'
+      const text = fmtPct(r.COST_RATIO * 100)
+      // Derselbe Kleinprojekt-Schutz wie beim CPI: computeEvm liefert unter
+      // 500 EUR Budget oder 100 EUR Kosten kein Ergebnis. Ohne den Schutz
+      // waere eine Quote aus 40 EUR Leistung und 50 EUR Kosten „kritisch" —
+      // statistisches Rauschen, keine Aussage.
+      if (computeEvm(r).cpi == null) return text
+      return (
+        <KpiValue level={costRatioLevel(r.COST_RATIO, t)}
+          reason={`Kostenquote ${text} bei Schwelle ${fmtPct(100 / t.watch)} / ${fmtPct(100 / t.critical)}`}>
+          {text}
+        </KpiValue>
+      )
+    },
     sortValue:   r  => r.COST_RATIO ?? -1,
-    renderTotal: rs => {
+    renderTotal: (rs, t) => {
       const l = sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)
       const c = sumRows(rs, r => r.COST_TOTAL)
-      return l > 0 ? fmtPct((c / l) * 100) : '—'
+      if (l <= 0) return '—'
+      return <KpiValue level={costRatioLevel(c / l, t)}>{fmtPct((c / l) * 100)}</KpiValue>
     },
   },
   {

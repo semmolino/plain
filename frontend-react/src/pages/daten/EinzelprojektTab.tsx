@@ -30,7 +30,7 @@ import {
 } from '@/api/reports'
 import { LeistungsphasenReport } from '@/pages/daten/LeistungsphasenReport'
 import { useTenantDefaults } from '@/hooks/useTenantDefaults'
-import { cpiLevel, vacLevel, readCpiThresholds, KPI_COLOR } from '@/utils/kpiLevel'
+import { cpiLevel, vacLevel, costRatioLevel, readCpiThresholds, KPI_COLOR, type KpiLevel } from '@/utils/kpiLevel'
 import { KpiValue } from '@/components/ui/KpiValue'
 import { NO_VALUE, fmtEur, fmtEur0, money, negativeOr, negativeStyle } from '@/utils/money'
 
@@ -43,13 +43,18 @@ const fmtPct  = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.fo
 
 type SortField = 'path' | 'honorar' | 'lstPct' | 'lstEur' | 'rest' | 'hours' | 'cost' | 'kq'
 
-function KpiTile({ label, value, accent, num }: {
+function KpiTile({ label, value, accent, num, level }: {
   label: string; value: string; accent?: boolean
   /** Rohwert — nur noetig, wenn die Kachel einen Geldbetrag zeigt: ein
    *  negativer Betrag wird rot gesetzt („rote Zahlen"). */
   num?: number | null
+  /** Ampelstufe — fuer bewertete Kennzahlen wie die Kostenquote. Schliesst
+   *  sich mit `num` aus: ein Betrag wird nach Vorzeichen gefaerbt, eine
+   *  Kennzahl nach ihrer Stufe. */
+  level?: KpiLevel
 }) {
-  const style = accent ? negativeOr(num, 'var(--accent)') : negativeStyle(num)
+  const style = level ? { color: KPI_COLOR[level] }
+    : accent ? negativeOr(num, 'var(--accent)') : negativeStyle(num)
   return (
     <div className="daten-kpi-tile">
       <span className="daten-kpi-label">{label}</span>
@@ -511,7 +516,8 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
             <KpiTile label="ABRECHENBAR (Netto)"          value={fmtEur(header.OPEN_NET_TOTAL)} num={header.OPEN_NET_TOTAL} accent />
             <KpiTile label="Bezahlt (Netto)"              value={fmtEur(header.PAYED_NET_TOTAL)} num={header.PAYED_NET_TOTAL} />
             {header.COST_RATIO != null && (
-              <KpiTile label="Kostenquote"                value={fmtPct((header.COST_RATIO ?? 0) * 100)} />
+              <KpiTile label="Kostenquote"                value={fmtPct((header.COST_RATIO ?? 0) * 100)}
+                       level={computeEvm(header).cpi == null ? undefined : costRatioLevel(header.COST_RATIO, cpiT)} />
             )}
           </div>
 

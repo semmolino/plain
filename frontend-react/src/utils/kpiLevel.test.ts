@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  cpiLevel, vacLevel, readCpiThresholds, CPI_DEFAULTS, KPI_LABEL, KPI_COLOR,
+  cpiLevel, vacLevel, costRatioLevel, readCpiThresholds, CPI_DEFAULTS, KPI_LABEL, KPI_COLOR,
 } from './kpiLevel'
 
 describe('readCpiThresholds', () => {
@@ -107,5 +107,40 @@ describe('Darstellung', () => {
   // sie folgen keinem Theme.
   it('benutzt ausschliesslich Tokens, keine festen Farbwerte', () => {
     for (const v of Object.values(KPI_COLOR)) expect(v).not.toMatch(/#[0-9a-f]{3,6}/i)
+  })
+})
+
+describe('costRatioLevel', () => {
+  const t = CPI_DEFAULTS
+
+  // Der eigentliche Grund fuer diese Funktion: Kostenquote und CPI sind
+  // exakt kehrwertig (Migration 0032). Zwei Schwellenpaare fuer dieselbe
+  // Zahl wuerden auseinanderlaufen und in EINER Zeile widerspruechliche
+  // Stufen zeigen. Dieser Test haelt die Kopplung fest.
+  it('stimmt fuer jeden Wert mit cpiLevel ueberein', () => {
+    for (const cpi of [0.5, 0.79, 0.8, 0.9, 0.95, 1.0, 1.3, 2.0]) {
+      expect(costRatioLevel(1 / cpi, t)).toBe(cpiLevel(cpi, t))
+    }
+  })
+
+  it('setzt die Grenzen bei 105,3 % und 125 %', () => {
+    expect(costRatioLevel(1.0,   t)).toBe('plan')     // Kosten = Leistung
+    expect(costRatioLevel(1.05,  t)).toBe('plan')     // knapp unter 1/0,95
+    expect(costRatioLevel(1.06,  t)).toBe('watch')
+    expect(costRatioLevel(1.24,  t)).toBe('watch')
+    expect(costRatioLevel(1.26,  t)).toBe('critical') // ueber 1/0,80
+  })
+
+  it('folgt eigenen Schwellen mit', () => {
+    const eng = { watch: 1.05, critical: 0.99 }
+    expect(costRatioLevel(1 / 1.05, eng)).toBe('plan')
+    expect(costRatioLevel(1 / 1.00, eng)).toBe('watch')
+    expect(costRatioLevel(1 / 0.90, eng)).toBe('critical')
+  })
+
+  it('meldet fehlende und unsinnige Werte als unknown', () => {
+    for (const v of [null, undefined, NaN, 0, -1]) {
+      expect(costRatioLevel(v, t)).toBe('unknown')
+    }
   })
 })

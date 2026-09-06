@@ -106,3 +106,27 @@ export function vacLevel(vac: number | null | undefined): KpiLevel {
   if (vac == null || !Number.isFinite(vac)) return 'unknown'
   return vac >= 0 ? 'plan' : 'critical'
 }
+
+/**
+ * Stufe zu einer Kostenquote (Kosten geteilt durch Leistungswert).
+ *
+ * Bekommt bewusst KEINE eigenen Schwellen, sondern rechnet auf den CPI um.
+ * Grund: Beide Zahlen stammen aus derselben Formel und sind exakt
+ * kehrwertig. In den Reporting-Views (Migration 0032) gilt
+ *
+ *   COST_RATIO           = COST_TOTAL / EARNED_VALUE_NET
+ *   cpi (computeEvm)     = LEISTUNGSSTAND_VALUE / COST_TOTAL
+ *
+ * und `EARNED_VALUE_NET` wie `LEISTUNGSSTAND_VALUE` sind beide
+ * `REVENUE_COMPLETION_VALUE + EXTRAS_COMPLETION_VALUE`. Also gilt
+ * COST_RATIO = 1 / cpi.
+ *
+ * Zwei Schwellenpaare fuer dieselbe Zahl wuerden frueher oder spaeter
+ * auseinanderlaufen — und dann staende in EINER Zeile „beobachten" beim CPI
+ * und „im Plan" bei der Quote. Mit der Umrechnung ist das ausgeschlossen:
+ * Die Standardschwellen 0,95 / 0,80 entsprechen 105,3 % / 125 %.
+ */
+export function costRatioLevel(ratio: number | null | undefined, t: CpiThresholds): KpiLevel {
+  if (ratio == null || !Number.isFinite(ratio) || ratio <= 0) return 'unknown'
+  return cpiLevel(1 / ratio, t)
+}
