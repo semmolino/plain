@@ -506,8 +506,14 @@ export const HELP = {
     title: 'Kostenquote',
     body: (
       <>
-        Kosten im Verhältnis zum Honorar (Kosten ÷ Honorar). Niedriger ist besser;
-        über 100 % bedeutet, die Kosten übersteigen das Honorar.
+        Kosten im Verhältnis zur erbrachten Leistung. Niedriger ist besser;
+        über 100 % bedeutet, die Kosten übersteigen den Leistungswert.
+        <br /><br />
+        Die Quote ist der <strong>Kehrwert des CPI</strong> — dieselbe Zahl,
+        andersherum gelesen. Deshalb nutzt die Ampel hier auch dieselben
+        Schwellen: 0,95 und 0,80 beim CPI entsprechen 105,3 % und 125 % bei der
+        Quote. Damit können die beiden Spalten in einer Zeile nicht
+        widersprüchlich werden.
       </>
     ),
   },
