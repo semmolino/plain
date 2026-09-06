@@ -2,7 +2,10 @@
 
 **Stand:** 06.09.2026 · **Branch:** `claude/projektcontrolling-color-palettes-n9tb7u` · **Basis:** 4.511 Zeilen `globals.css`, 7 Theme-Blöcke, 7 auswählbare Themes
 
-> **Umsetzungsstand:** Blöcke 1 und 2 (§8, Schritte 1–8) sind umgesetzt — Diagrammfarben, Prüfregeln, Kontrastkorrekturen, tote Theme-Blöcke, KPI-Semantikebene mit pflegbaren Schwellen und Hilfetexten. Offen ist nur noch die Palettenwahl (§6).
+> **Umsetzungsstand: abgeschlossen.** Alle Schritte aus §8 sind umgesetzt. Die
+> Palettenwahl ist gefallen: **C „Blaupause“** ist seit September 2026 das helle
+> Standard-Theme. Dazu kam ein Befund, der erst beim Ansehen der Vorschau
+> auffiel und alle sieben Themes betraf — §6.1.
 
 Alle Kontrast- und Farbabstandswerte in diesem Dokument sind gerechnet, nicht geschätzt. Nachrechnen:
 
@@ -266,6 +269,46 @@ Endpunkte als Text auf Weiß: 7,87:1 und 6,67:1 — beide AA-tauglich, falls die
 
 Alle vier sind vollständig durchgerechnet; jedes Token-Paar der Prüfliste aus §7 liegt über der Schwelle. Sie ersetzen das heutige `light`-Theme; die fünf Branchen-Themes bleiben unangetastet.
 
+### 6.1 · Der Navigationstext — gefunden beim Ansehen, nicht beim Rechnen
+
+Beim Durchklicken der Palettenvorschau fiel auf, dass der Navigationstext auf der
+dunklen Kopfzeile schwer zu lesen ist. Die Messung zeigte: Das war **kein Problem
+von Palette C**, sondern eines aller sieben Themes.
+
+| Theme | inaktiver Nav-Text vorher | nachher |
+|---|---|---|
+| Hell | 4,67 | — (Kopfzeile ist jetzt dunkel, neuer Wert 7,05) |
+| Dunkel | 4,68 | 7,10 |
+| Architektur | 4,61 | 7,07 |
+| Tiefbau | 4,66 | 7,04 |
+| Stadt und Verkehr | 4,63 | 7,01 |
+| TGA | 4,62 | 7,02 |
+| Tragwerk | 4,67 | 7,02 |
+
+Alle sieben lagen zwischen 4,61 und 4,68 — **exakt auf die AA-Schwelle getrimmt**.
+Das ist kein Zufall, sondern das Ergebnis einer früheren Korrektur, die auf 4,5
+optimiert hat statt auf Lesbarkeit. 4,5:1 ist die Untergrenze für Fließtext, kein
+Ziel für 11–13-px-Label auf dunklem Grund. Palette C lag mit 5,53 sogar besser als
+alles im Produkt und war trotzdem schwer lesbar.
+
+**Die Lösung nutzt, was schon da war.** Der aktive Eintrag hat in `SideNav.tsx`
+längst einen Balken links in `--nav-active`. Der Balken kann die Identität tragen,
+dann muss die Schriftfarbe es nicht:
+
+- aktives Label → `--chrome-text` (weiß; 7,7–15,8:1 je nach Theme)
+- inaktive Label → 7:1 statt 4,6
+- Balken bleibt `--nav-active`, die Akzentfarbe ist also weiter sichtbar
+
+Die Bottom-Navigation hat dieselbe Behandlung bekommen, mit dem Balken oben statt
+links. Dort war der aktive Zustand vorher **reine Farbe** — nach dem Anheben des
+inaktiven Texts wäre er in fünf Themes sogar dunkler gewesen als seine Nachbarn.
+Zugleich war das ein WCAG-1.4.1-Verstoß, den bis dahin niemand gemeldet hatte.
+
+Damit es nicht zurückfällt, verlangt `check-design-system.mjs` für
+`--nav-inactive` jetzt **7:1** statt 4,5:1.
+
+---
+
 ### 6.0 · Eine Nebenbedingung, die vor der Geschmacksfrage kommt
 
 Wenn Ebene 2 (§4) eingeführt wird, darf der Markenakzent nicht wie eine Bedeutungsfarbe aussehen. Ein Knopf in derselben Farbe wie „im Plan" wird als Statusanzeige gelesen. Gemessener Farbabstand ΔE zwischen Akzent und der nächstliegenden KPI-Farbe:
@@ -500,8 +543,14 @@ Schritt 9 ist die einzige verbleibende Entscheidung. Die Ampel aus Schritt 6 wur
 
 ## 9 · Was ich von dir brauche
 
-1. **Palette** — A, B, C oder D? Mein Vorschlag ist C „Blaupause" (Begründung in §6). B ist die richtige Wahl, wenn dir maximale Ruhe wichtiger ist als Wiedererkennung — kostet dann aber die Ausweichentscheidung bei `--kpi-plan` aus §6.0.
-2. **Ersetzen oder ergänzen?** Soll die gewählte Palette das `light`-Theme *ersetzen* (alle Bestandsnutzer sehen die Änderung) oder als achtes Theme *danebenstehen* (niemand wird überrascht, aber die Auswahlliste wächst weiter)?
+1. ~~**Palette**~~ — entschieden: **C, Blaupause**, ersetzt das `light`-Theme.
+   Damit hat jedes der sieben Themes eine dunkle Kopfzeile. Das hat nebenbei die
+   Wortmarken-Regel vereinfacht: Der Selektor `[data-theme]` nahm ausgerechnet das
+   Default-Theme aus — mit dunkler Kopfzeile hätte dort der farbige Schriftzug
+   dunkel auf dunkel gestanden.
+2. ~~**Ersetzen oder ergänzen?**~~ — ersetzt. Bestandsnutzer sehen die Änderung;
+   wer die alte helle Kopfzeile will, hat keine Entsprechung mehr. Das war die
+   bewusste Entscheidung gegen ein achtes Theme in einer ohnehin langen Liste.
 3. **Soll die Ampel an weitere Stellen?** Sie ersetzt derzeit nur die fünf Orte, an denen vorher schon eingefärbt wurde (§4.4). Kandidaten wären die Rechnungsliste (Fälligkeit) und die Kostenquote-Spalte — beides bräuchte eigene Schwellen und ist deshalb bewusst nicht mitgelaufen.
 
 ---
