@@ -9,10 +9,11 @@
  * sah aus wie „Abbrechen", und Seitentitel erbten den <h1>-Default des
  * Browsers. Nichts davon faellt beim Entwickeln auf.
  *
- * Drei Pruefungen:
+ * Vier Pruefungen:
  *   1. var(--x) ohne Definition in globals.css
  *   2. className="…" ohne passende Regel in globals.css
  *   3. WCAG-AA-Kontrast fuer jedes auswaehlbare Theme
+ *   4. Farbabstand der Diagrammreihen bei Farbfehlsichtigkeit
  *
  * Aufruf:  npm run check:design        (Fehler -> Exit 1)
  *          npm run check:design -- -v  (zusaetzlich Details)
@@ -27,6 +28,7 @@ const css = readFileSync(CSS_PATH, 'utf8')
 const verbose = process.argv.includes('-v')
 
 const problems = []
+const warnings = []
 const note = (area, msg) => problems.push(`${area}: ${msg}`)
 
 // ── Dateien einsammeln ────────────────────────────────────────────────────
@@ -159,6 +161,30 @@ for (const [name, sel] of THEMES) {
     ['--accent als Text', onBoth('--accent'), 4.5],
   ]
 
+  // Zebrastreifen: --surface-2 ist der Grund JEDER zweiten Tabellenzeile, und
+  // dort steht Akzenttext (verlinkte Projekt-/Rechnungsnummern). Diese Zeile
+  // fehlte — vier Themes lagen dadurch unbemerkt zwischen 4.14 und 4.18.
+  const surface2 = hex2rgb(t['--surface-2'])
+  if (surface2) checks.push(['--accent als Text auf --surface-2',
+    ratio(resolve(t['--accent'], surface2), surface2), 4.5])
+
+  // Statusfarben werden nicht nur als Flaeche, sondern auch als Textfarbe
+  // benutzt (Betraege, Badges, Meldungstexte) — geprueft wurde bisher nur
+  // die Schrift AUF der Flaeche, nicht die Farbe selbst als Schrift.
+  for (const tok of ['--success', '--danger', '--warning', '--info', '--accent2']) {
+    if (t[tok]) checks.push([`${tok} als Text`, onBoth(tok), 4.5])
+  }
+
+  // Controlling-Ampel: ausschliesslich Textfarben, und sie stehen genauso auf
+  // dem Zebrastreifen wie auf der Karte. Sie werden in keinem Branchen-Theme
+  // ueberschrieben — genau deshalb muessen sie ueberall tragen.
+  for (const tok of ['--kpi-good', '--kpi-plan', '--kpi-watch', '--kpi-critical']) {
+    if (!t[tok]) { note('Token', `${tok} fehlt im Theme ${name}`); continue }
+    checks.push([`${tok} als Text`, onBoth(tok), 4.5])
+    if (surface2) checks.push([`${tok} auf --surface-2`,
+      ratio(resolve(t[tok], surface2), surface2), 4.5])
+  }
+
   // Navigation liegt auf --chrome, NICHT auf --surface. Diese Zeilen fehlten
   // zunaechst; axe hat die Luecke im gerenderten Bild gefunden — die
   // Nav-Beschriftungen lagen in allen sieben Themes zwischen 2.59 und 3.35.
@@ -184,7 +210,85 @@ for (const [name, sel] of THEMES) {
   }
 }
 
+// ── 4. Diagrammreihen bei Farbfehlsichtigkeit ─────────────────────────────
+/*
+ * Die Serienfarben liegen als JS-Konstanten in src/theme/chartTheme.ts, weil
+ * Chart.js auf ein <canvas> zeichnet und dort kein var(--token) versteht. Sie
+ * entgehen damit jeder CSS-Pruefung.
+ *
+ * Der Satz davor war Tailwind-Vollton und bei Rot-Gruen-Schwaeche unbrauchbar:
+ * "Deckungsbeitrag" (#3b82f6) und "Stunden" (#8b5cf6) lagen bei Deuteranopie
+ * bei dE=1.1 — also identisch. Beide stehen im Reporting im selben Diagramm.
+ * Simulation nach Vienot, Brettel & Mollon (1999), Abstand als CIE76-dE.
+ * Konzept: docs/FARBKONZEPT_2026-09.md §5.
+ */
+const MIN_DE = 15
+
+const toLin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) }
+const toGam = c => 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)
+const mul = (m, v) => m.map(r => r[0] * v[0] + r[1] * v[1] + r[2] * v[2])
+const RGB2LMS = [[0.31399022, 0.63951294, 0.04649755], [0.15537241, 0.75789446, 0.08670142], [0.01775239, 0.10944209, 0.87256922]]
+const LMS2RGB = [[5.47221206, -4.6419601, 0.16963708], [-1.1252419, 2.29317094, -0.1678952], [0.02980165, -0.19318073, 1.16364789]]
+const CVD = {
+  Protanopie:   [[0, 1.05118294, -0.05116099], [0, 1, 0], [0, 0, 1]],
+  Deuteranopie: [[1, 0, 0], [0.9513092, 0, 0.04866992], [0, 0, 1]],
+}
+const simulate = (rgb, kind) => mul(LMS2RGB, mul(CVD[kind], mul(RGB2LMS, rgb.map(toLin)))).map(toGam)
+
+function toLab(rgb) {
+  const [r, g, b] = rgb.map(toLin)
+  const X = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047
+  const Y = r * 0.2126 + g * 0.7152 + b * 0.0722
+  const Z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883
+  const f = v => v > 0.008856 ? Math.cbrt(v) : 7.787 * v + 16 / 116
+  const [fx, fy, fz] = [f(X), f(Y), f(Z)]
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]
+}
+const deltaE = (p, q) => { const a = toLab(p), b = toLab(q)
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) }
+
+const chartSrc = readFileSync(join(ROOT, 'src/theme/chartTheme.ts'), 'utf8')
+const seriesMatch = /const SERIES\s*=\s*\[([\s\S]*?)\]/.exec(chartSrc)
+if (!seriesMatch) {
+  note('Diagramm', 'SERIES nicht in chartTheme.ts gefunden')
+} else {
+  const list = [...seriesMatch[1].matchAll(/'(#[0-9a-fA-F]{6})'/g)].map(x => x[1])
+
+  for (const kind of ['Normalsicht', ...Object.keys(CVD)]) {
+    let worst = { d: Infinity }
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      const [p, q] = [i, j].map(k => kind === 'Normalsicht'
+        ? hex2rgb(list[k]) : simulate(hex2rgb(list[k]), kind))
+      const d = deltaE(p, q)
+      if (d < worst.d) worst = { d, a: list[i], b: list[j] }
+    }
+    if (worst.d < MIN_DE) {
+      note('Diagramm', `SERIES bei ${kind}: ${worst.a} und ${worst.b} `
+        + `liegen bei dE=${worst.d.toFixed(1)} (Ziel ${MIN_DE})`)
+    } else if (verbose) {
+      console.log(`  ok  ${'SERIES'.padEnd(18)} ${kind.padEnd(30)} dE=${worst.d.toFixed(1)}`)
+    }
+  }
+
+  // Derselbe Satz steht auf hellem UND dunklem Grund (es gibt nur einen).
+  // 3:1 ist die Schwelle fuer grafische Objekte. Das ist hier bewusst eine
+  // WARNUNG und kein Fehler: Abdunkeln bis 3:1 zieht alle Reihen auf ein
+  // Helligkeitsband, und genau ueber Helligkeit trennt Okabe-Ito — gemessen
+  // faellt der Deuteranopie-Abstand dabei von 16.2 auf 4.3. Der Kompromiss
+  // waere also schlechter als das Problem. Ausgleich am Verwendungsort:
+  // Flaechen mit 1px Rand in --surface, Linien mit borderWidth >= 3.
+  for (const ground of ['#ffffff', '#1c1c21']) {
+    const thin = list.filter(c => ratio(hex2rgb(c), hex2rgb(ground)) < 3)
+    if (thin.length) warnings.push('Diagramm: SERIES unter 3:1 auf '
+      + `${ground} (${thin.join(', ')}) — nur als Flaeche mit Rand oder als `
+      + 'Linie ab 3px verwenden, NICHT abdunkeln (siehe Kommentar im Skript)')
+  }
+}
+
 // ── Ergebnis ──────────────────────────────────────────────────────────────
+for (const w of warnings) console.warn('  ! ' + w)
+if (warnings.length) console.warn('')
+
 if (problems.length === 0) {
   console.log(`Design-System in Ordnung — ${definedVars.size} Tokens, `
     + `${THEMES.length} Themes, ${usedClasses.size} Klassen geprueft.`)

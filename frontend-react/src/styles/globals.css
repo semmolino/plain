@@ -130,15 +130,15 @@
   /* ── Status-Farben ─────────────────────────────────────────────────────
      Ersetzen die bisher hartkodierten Tailwind-Werte (#dc2626, #16a34a, …).
      Jeweils: Textfarbe (AA auf --surface), kraeftige Variante, Flaeche. */
-  --success:        #15803d;
+  --success:        #126e34;
   --success-strong: #166534;
   --success-bg:     #dcfce7;
   --success-fg:     #ffffff;   /* Schrift AUF --success-Flaechen */
-  --danger:         #dc2626;
+  --danger:         #bd2121;
   --danger-strong:  #b91c1c;
   --danger-bg:      #fee2e2;
   --danger-fg:      #ffffff;   /* Schrift AUF --danger-Flaechen */
-  --warning:        #b45309;
+  --warning:        #9b4708;
   --warning-strong: #92400e;
   --warning-bg:     #fef3c7;
   --warning-fg:     #ffffff;
@@ -146,6 +146,30 @@
   --info-fg:        #ffffff;
   --info-strong:    #1e40af;
   --info-bg:        #dbeafe;
+  /* ── Controlling-Ampel ─────────────────────────────────────────────────
+     Eigene Ebene NEBEN den Statusfarben, nicht statt ihnen: --success heisst
+     „gespeichert / gebucht", --kpi-good heisst „wirtschaftlich ueber Ziel".
+     Dieselbe Farbe fuer beides hat dazu gefuehrt, dass eine Kosten-
+     ueberschreitung aussah wie ein fehlgeschlagener Speichervorgang.
+
+     Bewusst in KEINEM Theme ueberschrieben ausser hell/dunkel: Bedeutungs-
+     farben sind Vokabular. Wer im Tragwerk-Theme lernt, dass Orange
+     „beobachten" heisst, darf das nicht verlieren, weil der Kollege daneben
+     das TGA-Theme eingestellt hat.
+
+     Die Zwischenstufe ist Petrol und nicht Gelb: „laeuft nach Plan" ist kein
+     abgeschwaechtes Problem, und drei warme Stufen erzeugen genau die
+     Alarmmuedigkeit, wegen der Rot am Ende niemand mehr liest.
+
+     Werte gegen ALLE 18 hellen Theme-Untergruende gerechnet (schlechtester
+     Wert je Token: 4.63 / 4.68 / 4.66 / 4.84) — die naheliegenden Toene
+     #15803d, #1f6f8b und #a15c07 lagen auf den getoenten Branchen-
+     Hintergruenden unter AA. Konzept: docs/FARBKONZEPT_2026-09.md §4. */
+  --kpi-good:     #127035;   /* ueber Ziel                                  */
+  --kpi-plan:     #1d6883;   /* im Plan                                     */
+  --kpi-watch:    #8f5206;   /* beobachten — Abweichung ohne Handlungsdruck */
+  --kpi-critical: #b91c1c;   /* Handlungsbedarf — jetzt, nicht im Quartal   */
+
   /* Zweitakzent (violett) — im Code fuer Abwesenheiten/Sonderfaelle genutzt,
      damit sie nicht mit Erfolg/Warnung/Fehler verwechselt werden. */
   --accent2:        #6d28d9;
@@ -159,184 +183,6 @@
   --accent-rgb: 37,99,235;
   --hover-bg:   rgba(17,24,39,0.06);
   --focus-ring: 0 0 0 3px var(--accent-ring);
-}
-
-[data-theme="modern"] {
-  --bg:        #f2ede1;
-  --surface-2: #f0ebe0;
-  --surface-3: #f2ede1;
-  --text:      #2d3f4f;
-  --text-2:    rgba(45,63,79,0.80);
-  --text-3:    rgba(45,63,79,0.74);
-  --text-4:    rgba(45,63,79,0.57);
-  --text-5:    rgba(45,63,79,0.42);
-  --border:    #d8cbb5;
-  --border-2:  #d8cbb5;
-  --border-3:  rgba(45,63,79,0.06);
-  --border-4:  rgba(45,63,79,0.04);
-  /* Akzent abgedunkelt (vorher #d4714e): weisse Schrift darauf lag bei 3.35:1,
-     als Textfarbe auf dem beigen --bg sogar bei 2.87:1 — beides unter AA.
-     Farbton bleibt Terrakotta, nur dunkler/gesaettigter. */
-  --accent:       #b04824;
-  --accent-dark:  #8f3a18;
-  --accent-bg:    #fdf0ea;
-  --accent-bg2:   #f9ddd0;
-  --accent-tint:  rgba(176,72,36,0.04);
-  --accent-tint2: rgba(176,72,36,0.08);
-  --accent-tint3: rgba(176,72,36,0.10);
-  --accent-ring:  rgba(176,72,36,0.30);
-  --accent-rgb:   176,72,36;
-  --hover-bg:     rgba(45,63,79,0.07);
-  --shadow-color: 45,63,79;
-  --chrome:          #2d3f4f;
-  --chrome-border:   rgba(255,255,255,0.08);
-  --chrome-shadow-h: 0 2px 12px rgba(45,63,79,0.30);
-  --chrome-shadow-n: 0 -4px 20px rgba(45,63,79,0.30);
-  --chrome-text:     #ffffff;
-  --chrome-icon:     rgba(255,255,255,0.65);
-  --chrome-hover-bg: rgba(255,255,255,0.10);
-  --nav-active:   #9fc4c0;
-  --nav-inactive: rgba(255,255,255,0.38);
-  --btn:   #2d3f4f;
-  --btn-h: #3d5265;
-  --cta:   #2d3f4f;
-  --cta-h: #3d5265;
-  --notif-badge: #d4714e;
-  --notif-dot:   #d4714e;
-  --dim:   rgba(45,63,79,0.04);
-  --dim-2: rgba(45,63,79,0.025);
-}
-
-[data-theme="forest"] {
-  --bg:        #f2f2f2;
-  --surface-2: #ebebeb;
-  --surface-3: #f2f2f2;
-  --text:      #1a1a1a;
-  --text-2:    rgba(26,26,26,0.70);
-  --text-3:    rgba(26,26,26,0.61);
-  --text-4:    rgba(26,26,26,0.47);
-  --text-5:    rgba(26,26,26,0.38);
-  --border:    #cbcbcb;
-  --border-2:  #cbcbcb;
-  --border-3:  rgba(26,26,26,0.07);
-  --border-4:  rgba(26,26,26,0.05);
-  --accent:       #174d38;
-  --accent-dark:  #1f6449;
-  --accent-bg:    #e8f2ee;
-  --accent-bg2:   #d0e8df;
-  --accent-tint:  rgba(23,77,56,0.04);
-  --accent-tint2: rgba(23,77,56,0.08);
-  --accent-tint3: rgba(23,77,56,0.10);
-  --accent-ring:  rgba(23,77,56,0.30);
-  --accent-rgb:   23,77,56;
-  --hover-bg:     rgba(26,26,26,0.07);
-  --shadow-color: 26,26,26;
-  --chrome:          #174d38;
-  --chrome-border:   rgba(255,255,255,0.10);
-  --chrome-shadow-h: 0 2px 12px rgba(23,77,56,0.30);
-  --chrome-shadow-n: 0 -4px 20px rgba(23,77,56,0.30);
-  --chrome-text:     #ffffff;
-  --chrome-icon:     rgba(255,255,255,0.65);
-  --chrome-hover-bg: rgba(255,255,255,0.10);
-  --nav-active:   #ffffff;
-  --nav-inactive: rgba(255,255,255,0.40);
-  --btn:   #174d38;
-  --btn-h: #1f6449;
-  --cta:   #174d38;
-  --cta-h: #1f6449;
-  --notif-badge: #4d1717;
-  --notif-dot:   #174d38;
-  --dim:   rgba(26,26,26,0.04);
-  --dim-2: rgba(26,26,26,0.025);
-}
-
-[data-theme="earth"] {
-  --bg:        #f4f2f0;
-  --surface-2: #eeecea;
-  --surface-3: #faf9f8;
-  --text:      #000000;
-  --text-2:    rgba(0,0,0,0.70);
-  --text-3:    rgba(0,0,0,0.56);
-  --text-4:    rgba(0,0,0,0.44);
-  --text-5:    rgba(0,0,0,0.38);
-  --border:    rgba(0,0,0,0.10);
-  --border-2:  rgba(0,0,0,0.08);
-  --border-3:  rgba(0,0,0,0.06);
-  --border-4:  rgba(0,0,0,0.04);
-  /* minimal abgedunkelt (vorher #a35e47): als Textfarbe auf dem
-     leicht getoenten --bg lag der Wert bei 4.43:1, knapp unter AA. */
-  --accent:       #9d5943;
-  --accent-dark:  #854a37;
-  --accent-bg:    rgba(163,94,71,0.08);
-  --accent-bg2:   rgba(163,94,71,0.06);
-  --accent-tint:  rgba(163,94,71,0.04);
-  --accent-tint2: rgba(163,94,71,0.08);
-  --accent-tint3: rgba(163,94,71,0.10);
-  --accent-ring:  rgba(163,94,71,0.30);
-  --accent-rgb:   163,94,71;
-  --hover-bg:     rgba(0,0,0,0.06);
-  --shadow-color: 0,0,0;
-  --chrome:          #464646;
-  --chrome-border:   rgba(255,255,255,0.08);
-  --chrome-shadow-h: 0 2px 12px rgba(0,0,0,0.22);
-  --chrome-shadow-n: 0 -4px 20px rgba(0,0,0,0.25);
-  --chrome-text:     #ffffff;
-  --chrome-icon:     rgba(255,255,255,0.65);
-  --chrome-hover-bg: rgba(255,255,255,0.10);
-  --nav-active:   #ffffff;
-  --nav-inactive: rgba(255,255,255,0.45);
-  --btn:   #464646;
-  --btn-h: #2e2e2e;
-  --cta:   #464646;
-  --cta-h: #2e2e2e;
-  --notif-badge: #a35e47;
-  --notif-dot:   #a35e47;
-  --dim:   rgba(0,0,0,0.04);
-  --dim-2: rgba(0,0,0,0.025);
-}
-
-[data-theme="winter"] {
-  --bg:        #eef7f9;
-  --surface-2: #e4f2f5;
-  --surface-3: #eef7f9;
-  --text:      #0b2e33;
-  --text-2:    rgba(11,46,51,0.72);
-  --text-3:    rgba(11,46,51,0.65);
-  --text-4:    rgba(11,46,51,0.52);
-  --text-5:    rgba(11,46,51,0.38);
-  --border:    #b8e3e9;
-  --border-2:  rgba(184,227,233,0.50);
-  --border-3:  rgba(184,227,233,0.30);
-  --border-4:  rgba(184,227,233,0.20);
-  /* minimal abgedunkelt (vorher #4f7c82 = 4.25:1 als Text auf --bg). */
-  --accent:       #4a747a;
-  --accent-dark:  #3a5d63;
-  --accent-bg:    rgba(79,124,130,0.10);
-  --accent-bg2:   rgba(79,124,130,0.08);
-  --accent-tint:  rgba(184,227,233,0.10);
-  --accent-tint2: rgba(184,227,233,0.14);
-  --accent-tint3: rgba(79,124,130,0.14);
-  --accent-ring:  rgba(79,124,130,0.32);
-  --accent-rgb:   79,124,130;
-  --hover-bg:     rgba(11,46,51,0.07);
-  --shadow-color: 11,46,51;
-  --chrome:          #0b2e33;
-  --chrome-border:   rgba(184,227,233,0.18);
-  --chrome-shadow-h: 0 2px 12px rgba(11,46,51,0.30);
-  --chrome-shadow-n: 0 -4px 20px rgba(11,46,51,0.35);
-  --chrome-text:     #b8e3e9;
-  --chrome-icon:     #93b1b5;
-  --chrome-hover-bg: rgba(184,227,233,0.12);
-  --nav-active:   #b8e3e9;
-  --nav-inactive: #93b1b5;
-  --btn:   #0b2e33;
-  --btn-h: #143d43;
-  --cta:   #0b2e33;
-  --cta-h: #143d43;
-  --notif-badge: #4f7c82;
-  --notif-dot:   #4f7c82;
-  --dim:   rgba(11,46,51,0.04);
-  --dim-2: rgba(11,46,51,0.025);
 }
 
 [data-theme="dark"] {
@@ -385,6 +231,12 @@
   --info-fg:        #0a1020;
   --info-strong:    #bfdbfe;
   --info-bg:        rgba(147,197,253,0.16);
+  /* Controlling-Ampel fuer dunklen Grund (min. 5.52:1 auf allen drei
+     Dark-Flaechen #131316 / #1c1c21 / #252529). */
+  --kpi-good:     #4ade80;
+  --kpi-plan:     #7cc4dd;
+  --kpi-watch:    #fbbf24;
+  --kpi-critical: #f87171;
   --accent2:        #c4b5fd;
   --accent2-strong: #ddd6fe;
   --accent2-bg:     rgba(196,181,253,0.16);
@@ -433,7 +285,7 @@
   --border-2:  rgba(42,42,46,0.08);
   --border-3:  rgba(42,42,46,0.06);
   --border-4:  rgba(42,42,46,0.04);
-  --accent:       #9d6046;
+  --accent:       #945a42;
   --accent-dark:  #82503a;
   --accent-bg:    #fbece4;
   --accent-bg2:   #f6dbcb;
@@ -479,7 +331,7 @@
   --border-2:  rgba(58,53,48,0.09);
   --border-3:  rgba(58,53,48,0.06);
   --border-4:  rgba(58,53,48,0.04);
-  --accent:       #84633b;
+  --accent:       #7a5c37;
   --accent-dark:  #6c5130;
   --accent-bg:    #f9efde;
   --accent-bg2:   #f1dfba;
@@ -525,7 +377,7 @@
   --border-2:  rgba(28,39,51,0.08);
   --border-3:  rgba(28,39,51,0.06);
   --border-4:  rgba(28,39,51,0.04);
-  --accent:       #82682b;
+  --accent:       #796028;
   --accent-dark:  #6b5523;
   --accent-bg:    #fcf3d8;
   --accent-bg2:   #f7e6ad;
@@ -571,7 +423,7 @@
   --border-2:  rgba(31,78,84,0.09);
   --border-3:  rgba(31,78,84,0.06);
   --border-4:  rgba(31,78,84,0.04);
-  --accent:       #856237;
+  --accent:       #7b5b33;
   --accent-dark:  #6e512e;
   --accent-bg:    #f7eadc;
   --accent-bg2:   #f0d7b6;

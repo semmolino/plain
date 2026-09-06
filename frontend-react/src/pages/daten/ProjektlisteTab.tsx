@@ -6,6 +6,9 @@ import { SlidersHorizontal } from 'lucide-react'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { FilterBar } from '@/components/ui/FilterBar'
 import type { HelpId } from '@/help/helpContent'
+import { KpiValue } from '@/components/ui/KpiValue'
+import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { cpiLevel, vacLevel, readCpiThresholds, type CpiThresholds } from '@/utils/kpiLevel'
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
@@ -102,9 +105,11 @@ interface ColDef {
   className?:     string
   help?:          HelpId
   defaultVisible: boolean
-  render:         (r: ProjectListRow) => React.ReactNode
+  /** `t` = CPI-Schwellen des Mandanten. Nur die Ampel-Spalten werten sie aus;
+   *  COLUMNS steht auf Modulebene und kann selbst keine Hooks lesen. */
+  render:         (r: ProjectListRow, t: CpiThresholds) => React.ReactNode
   sortValue:      (r: ProjectListRow) => number | string
-  renderTotal:    (rows: ProjectListRow[]) => React.ReactNode
+  renderTotal:    (rows: ProjectListRow[], t: CpiThresholds) => React.ReactNode
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -214,17 +219,22 @@ const COLUMNS: ColDef[] = [
     },
   },
   {
-    key: 'cpi', label: 'CPI', className: 'num', defaultVisible: false,
-    render: r => {
-      const evm = computeEvm(r)
-      const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : evm.cpiStatus === 'bad' ? '#b91c1c' : 'var(--text-3)'
-      return <span style={{ color, fontWeight: evm.cpi != null ? 600 : undefined }}>{fmtCpi(evm.cpi)}</span>
+    key: 'cpi', label: 'CPI', className: 'num', help: 'report.cpi', defaultVisible: false,
+    render: (r, t) => {
+      const cpi = computeEvm(r).cpi
+      const lvl = cpiLevel(cpi, t)
+      return (
+        <KpiValue level={lvl} reason={cpi == null
+          ? 'zu wenig Kosten oder Budget erfasst'
+          : `CPI ${cpi.toFixed(2)} bei Schwelle ${t.watch.toFixed(2)} / ${t.critical.toFixed(2)}`}>
+          {fmtCpi(cpi)}
+        </KpiValue>
+      )
     },
     sortValue:   r  => computeEvm(r).cpi ?? -999,
-    renderTotal: rs => {
+    renderTotal: (rs, t) => {
       const cpi = portfolioCpi(rs)
-      const color = cpi == null ? undefined : cpi >= 0.95 ? '#16a34a' : cpi >= 0.80 ? '#b45309' : '#b91c1c'
-      return <span style={{ color, fontWeight: 600 }}>{fmtCpi(cpi)}</span>
+      return <KpiValue level={cpiLevel(cpi, t)}>{fmtCpi(cpi)}</KpiValue>
     },
   },
   {
@@ -234,16 +244,21 @@ const COLUMNS: ColDef[] = [
     renderTotal: rs => fmtEur(rs.reduce((s, r) => s + (computeEvm(r).eac ?? Number(r.BUDGET_TOTAL_NET) ?? 0), 0)),
   },
   {
-    key: 'vac', label: 'VAC (Abweichung)', className: 'num', defaultVisible: false,
+    key: 'vac', label: 'VAC (Abweichung)', className: 'num', help: 'report.vac', defaultVisible: false,
     render: r => {
       const vac = computeEvm(r).vac
       if (vac == null) return '—'
-      return <span style={{ color: vac >= 0 ? '#16a34a' : '#b91c1c' }}>{fmtEur(vac)}</span>
+      return (
+        <KpiValue level={vacLevel(vac)} bold={vac < 0}
+          reason={vac < 0 ? 'Prognose liegt über dem Budget' : 'Prognose bleibt im Budget'}>
+          {fmtEur(vac)}
+        </KpiValue>
+      )
     },
     sortValue:   r  => computeEvm(r).vac ?? 0,
     renderTotal: rs => {
       const total = rs.reduce((s, r) => s + (computeEvm(r).vac ?? 0), 0)
-      return <span style={{ color: total >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 600 }}>{fmtEur(total)}</span>
+      return <KpiValue level={vacLevel(total)}>{fmtEur(total)}</KpiValue>
     },
   },
 ]
@@ -433,6 +448,11 @@ export function ProjektlisteTab() {
   useChartDefaults()
 
   const navigate = useNavigate()
+
+  // Schwellen der Controlling-Ampel (Einstellungen → Vorbelegungen). Ungepflegt
+  // heisst hier „Standardwerte", nicht „Ampel aus" — die Einfaerbung gab es
+  // vorher schon, sie wegzunehmen waere ein Rueckschritt.
+  const cpiT = readCpiThresholds(useTenantDefaults())
 
   const [mode,     setMode]     = useState<FilterMode>('now')
   const [asOfDate, setAsOfDate] = useState('')
@@ -703,7 +723,7 @@ export function ProjektlisteTab() {
                       {r.NAME_LONG && <span className="tree-name-long"> – {r.NAME_LONG}</span>}
                     </td>
                     {visibleCols.map(c => (
-                      <td key={c.key} className={c.className}>{c.render(r)}</td>
+                      <td key={c.key} className={c.className}>{c.render(r, cpiT)}</td>
                     ))}
                   </tr>
                 ))}
@@ -714,7 +734,7 @@ export function ProjektlisteTab() {
                     <td><strong>Gesamt ({sorted.length})</strong></td>
                     {visibleCols.map(c => (
                       <td key={c.key} className={c.className}>
-                        <strong>{c.renderTotal(sorted)}</strong>
+                        <strong>{c.renderTotal(sorted, cpiT)}</strong>
                       </td>
                     ))}
                   </tr>

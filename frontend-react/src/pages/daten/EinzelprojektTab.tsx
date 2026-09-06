@@ -29,6 +29,9 @@ import {
   type TimelinePoint,
 } from '@/api/reports'
 import { LeistungsphasenReport } from '@/pages/daten/LeistungsphasenReport'
+import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { cpiLevel, vacLevel, readCpiThresholds, KPI_COLOR } from '@/utils/kpiLevel'
+import { KpiValue } from '@/components/ui/KpiValue'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -249,6 +252,10 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
   useChartDefaults()
 
   const navigate = useNavigate()
+
+  // Schwellen der Controlling-Ampel (Einstellungen → Vorbelegungen).
+  const cpiT = readCpiThresholds(useTenantDefaults())
+
   const [pid,       setPid]      = useState<number | null>(initialProjectId ?? null)
   const [projectInput,         setProjectInput]         = useState('')
   const [projectDropdownOpen,  setProjectDropdownOpen]  = useState(false)
@@ -511,7 +518,14 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
             const avgBurn = computeBurnRate(tl.map(p => p.KOSTEN_TOTAL))
             const moRem   = monthsRemaining(evm.etc, avgBurn)
             if (evm.cpi == null) return null
-            const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+            // Farben aus der Controlling-Ampel statt hartkodiert: die frueheren
+            // Werte (#16a34a/#b45309/#b91c1c) folgten keinem Theme und teilten
+            // sich die Bedeutung mit den UI-Statusfarben.
+            const cpiLvl   = cpiLevel(evm.cpi, cpiT)
+            const cpiColor = KPI_COLOR[cpiLvl]
+            const cpiSub   = cpiLvl === 'plan' ? 'Im Plan'
+                           : cpiLvl === 'watch' ? 'Leicht überbudget — beobachten'
+                           : 'Überbudget — Handlungsbedarf'
             const fmtM    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(v)} Mon.`
             const fmtB    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0, style: 'currency', currency: 'EUR' }).format(v)}/Mon.`
             return (
@@ -521,7 +535,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                   <div className="prognose-tile">
                     <span className="prognose-label">CPI (Effizienz)</span>
                     <span className="prognose-value" style={{ color: cpiColor }}>{fmtCpi(evm.cpi)}</span>
-                    <span className="prognose-sub">{evm.cpiStatus === 'good' ? 'Unter Budget' : evm.cpiStatus === 'warn' ? 'Leicht überbudget' : 'Überbudget — Handlungsbedarf'}</span>
+                    <span className="prognose-sub">{cpiSub}</span>
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">EAC (Progn. Gesamtkosten)</span>
@@ -530,7 +544,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">VAC (Ergebnisabweichung)</span>
-                    <span className="prognose-value" style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c' }}>{fmtEur(evm.vac)}</span>
+                    <span className="prognose-value" style={{ color: KPI_COLOR[vacLevel(evm.vac)] }}>{fmtEur(evm.vac)}</span>
                     <span className="prognose-sub">{(evm.vac ?? 0) >= 0 ? 'Projekt im Plan' : 'Prognose: Überschreitung'}</span>
                   </div>
                   <div className="prognose-tile">
@@ -625,10 +639,10 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                         </td>
                         {(() => {
                           const evm = computeEvm({ BUDGET_TOTAL_NET: s.HONORAR_NET, LEISTUNGSSTAND_VALUE: s.EARNED_VALUE_NET, COST_TOTAL: s.COST_TOTAL })
-                          const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : evm.cpiStatus === 'bad' ? '#b91c1c' : 'var(--text-3)'
+                          const lvl = cpiLevel(evm.cpi, cpiT)
                           return (
                             <>
-                              <td className="num" style={{ color, fontWeight: evm.cpi != null ? 600 : undefined }}>{fmtCpi(evm.cpi)}</td>
+                              <td className="num"><KpiValue level={lvl}>{fmtCpi(evm.cpi)}</KpiValue></td>
                               <td className="num">{fmtEur(evm.eac)}</td>
                             </>
                           )
@@ -664,10 +678,9 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                           <td className="num"><strong>{totKq != null ? fmtPct(totKq) : '—'}</strong></td>
                           {(() => {
                             const totEvm = computeEvm({ BUDGET_TOTAL_NET: totHonorar, LEISTUNGSSTAND_VALUE: totEarned, COST_TOTAL: totCost })
-                            const col = totEvm.cpiStatus === 'good' ? '#16a34a' : totEvm.cpiStatus === 'warn' ? '#b45309' : totEvm.cpiStatus === 'bad' ? '#b91c1c' : undefined
                             return (
                               <>
-                                <td className="num" style={{ color: col }}><strong>{fmtCpi(totEvm.cpi)}</strong></td>
+                                <td className="num"><KpiValue level={cpiLevel(totEvm.cpi, cpiT)}><strong>{fmtCpi(totEvm.cpi)}</strong></KpiValue></td>
                                 <td className="num"><strong>{fmtEur(totEvm.eac)}</strong></td>
                               </>
                             )
