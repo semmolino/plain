@@ -272,6 +272,53 @@ for (const f of sources) {
   }
 }
 
+// ── 3c. CSS-Variablen auf dem Canvas ──────────────────────────────────────
+/*
+ * Der Umkehrfall von 3a und der teuerste Fehler der Umstellung: Chart.js
+ * zeichnet auf ein <canvas>, und dort ist `var(--token)` KEIN gueltiger
+ * Farbwert. Der Browser meldet das nicht — er nimmt Schwarz.
+ *
+ * Genau so wurden im Projektverlauf aus fuenf farbigen Linien fuenf schwarze.
+ * Der Typecheck sah nichts (es ist ein string), die Kontrastpruefung sah
+ * nichts (die liest CSS), und die Hex-Regel aus 3a hat die Umschreibung sogar
+ * VERLANGT. Deshalb diese Gegenprobe: in Diagrammdateien gehoeren Farben aus
+ * useChartTheme()/useSeriesColors(), die die Tokens zur Laufzeit aufloesen.
+ */
+const CANVAS_KEYS = [
+  'borderColor', 'backgroundColor', 'pointBackgroundColor', 'pointBorderColor',
+  'pointHoverBackgroundColor', 'pointHoverBorderColor', 'hoverBackgroundColor',
+  'hoverBorderColor', 'titleColor', 'bodyColor', 'footerColor', 'tickColor',
+  'multiKeyBackground', 'color',
+]
+/** Entfernt `style={{ … }}`-Bloecke: dort ist `var(--token)` richtig. */
+function stripInlineStyles(text) {
+  let out = '', i = 0
+  for (;;) {
+    const at = text.indexOf('style={{', i)
+    if (at < 0) return out + text.slice(i)
+    out += text.slice(i, at)
+    let depth = 0, j = at + 'style='.length
+    for (; j < text.length; j++) {
+      if (text[j] === '{') depth++
+      else if (text[j] === '}' && --depth === 0) { j++; break }
+    }
+    i = j
+  }
+}
+const CANVAS_RE = new RegExp(String.raw`\b(${CANVAS_KEYS.join('|')})\s*:[^,\n}]*var\(--`, 'g')
+for (const f of sources) {
+  const rel = f.replace(ROOT + '/', '').replace(/\\/g, '/')
+  const raw = readFileSync(f, 'utf8')
+  if (!/from ['"](react-chartjs-2|chart\.js)['"]/.test(raw)) continue
+  const text = stripInlineStyles(stripComments(raw))
+  const hits = [...new Set([...text.matchAll(CANVAS_RE)].map(m => m[0].trim()))]
+  if (hits.length) {
+    note('Canvas', `${rel}: ${hits.length} CSS-Variable(n) als Diagrammfarbe `
+      + `(${hits.slice(0, 3).join(' | ')}${hits.length > 3 ? ' | …' : ''}) — `
+      + 'Chart.js zeichnet das schwarz; useChartTheme()/useSeriesColors() verwenden')
+  }
+}
+
 // ── 4. Diagrammreihen bei Farbfehlsichtigkeit ─────────────────────────────
 /*
  * Die Serienfarben liegen als JS-Konstanten in src/theme/chartTheme.ts, weil

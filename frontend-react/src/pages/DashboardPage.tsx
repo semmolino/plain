@@ -65,6 +65,7 @@ import { RecapCard } from '@/components/engagement/RecapCard'
 import { DashboardHero } from '@/components/theme/DashboardHero'
 import { fetchSetupProgress } from '@/api/setupProgress'
 import { useChartDefaults } from '@/theme/useChartDefaults'
+import { useChartTheme, useSeriesColors } from '@/theme/chartTheme'
 import { fmtEur, fmtEur0, money, money0 } from '@/utils/money'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
@@ -250,6 +251,9 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
     staleTime: 300000,
   })
 
+  const t = useChartTheme()
+  const C = useSeriesColors()
+
   const points: TimelinePoint[] = data?.data ?? []
   if (isLoading) return <div className="timeline-wrap"><p className="empty-note">Laden …</p></div>
   if (points.length === 0) return null
@@ -260,11 +264,11 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
   const chartData = {
     labels,
     datasets: [
-      { label: 'Honorar inkl. NK', data: points.map(p => p.HONORAR_NET), borderColor: 'var(--info)', backgroundColor: 'rgba(59,130,246,0.07)', fill: true, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Leistungsstand €', data: points.map(p => p.LEISTUNGSSTAND_VALUE), borderColor: 'var(--success)', backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Kosten €', data: points.map(p => p.KOSTEN_TOTAL), borderColor: 'var(--warning)', backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Abgerechnet €', data: points.map(p => p.ABGERECHNET_NET), borderColor: 'var(--accent2)', backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 1.5 },
-      { label: 'Bezahlt €', data: points.map(p => p.BEZAHLT_NET), borderColor: 'var(--info)', backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 1.5 },
+      { label: 'Honorar inkl. NK', data: points.map(p => p.HONORAR_NET), borderColor: C.honorar, backgroundColor: t.alpha(C.honorar, 0.07), fill: true, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Leistungsstand €', data: points.map(p => p.LEISTUNGSSTAND_VALUE), borderColor: C.leistung, backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Kosten €', data: points.map(p => p.KOSTEN_TOTAL), borderColor: C.kosten, backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Abgerechnet €', data: points.map(p => p.ABGERECHNET_NET), borderColor: C.fakturiert, backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Bezahlt €', data: points.map(p => p.BEZAHLT_NET), borderColor: C.bezahlt, backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
     ],
   }
 
@@ -275,13 +279,13 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
     plugins: {
       legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, font: { size: 12 } } },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)', titleColor: 'var(--surface-2)', bodyColor: 'var(--border)', padding: 12, cornerRadius: 8,
+        backgroundColor: t.tooltipBg, titleColor: t.tooltipFg, bodyColor: t.tooltipFg, padding: 12, cornerRadius: 8,
         callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}` },
       },
     },
     scales: {
-      x: { grid: { color: 'var(--text-3)' }, ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: 'var(--text-3)' } },
-      y: { grid: { color: 'var(--text-3)' }, ticks: { font: { size: 11 }, color: 'var(--text-3)', callback: (v) => fmtEur0(Number(v)) } },
+      x: { grid: { color: t.grid }, ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: t.textMuted } },
+      y: { grid: { color: t.grid }, ticks: { font: { size: 11 }, color: t.textMuted, callback: (v) => fmtEur0(Number(v)) } },
     },
   }
 
@@ -917,6 +921,8 @@ function ProjektleiterView({ riskProjects, dateFrom, dateTo }: { riskProjects: R
 // ── Mitarbeiter view ─────────────────────────────────────────────────────────
 
 function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
+  const t = useChartTheme()
+  const C = useSeriesColors()
   if (!months.length) return null
   const labels   = months.map(m => `${MONTHS_DE[m.month - 1]} ${m.year}`)
   const required = months.map(m => Math.round(m.required * 10) / 10)
@@ -931,14 +937,14 @@ function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
           datasets: [
             { type: 'bar',  label: 'Soll (h)',        data: required, backgroundColor: 'rgba(156,163,175,0.45)', borderRadius: 4, yAxisID: 'yH' },
             { type: 'bar',  label: 'Ist (h)',          data: actual,   backgroundColor: 'rgba(59,130,246,0.65)',  borderRadius: 4, yAxisID: 'yH' },
-            { type: 'line', label: 'Saldo kum. (h)',   data: cumul,    borderColor: 'var(--warning)', backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
+            { type: 'line', label: 'Saldo kum. (h)',   data: cumul,    borderColor: C.stunden, backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
           ],
         }}
         options={{
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 10 } } },
           scales: {
-            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: 'var(--text-3)' } },
+            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: t.grid } },
             yS: { type: 'linear', position: 'right', ticks: { font: { size: 10 }, callback: v => `${Number(v) >= 0 ? '+' : ''}${v} h` }, grid: { display: false } },
             x:  { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
           },

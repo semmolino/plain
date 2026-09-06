@@ -219,17 +219,58 @@ Bewusst **keine neuen** eingefärbten Orte: Wo heute keine Ampel steht, ist das 
 Okabe-Ito (auch „Wong-Palette", empfohlen von *Nature Methods*) ist der etablierte CVD-sichere Satz. Gemessen mit denselben Schwellen, sechs Reihen ohne Gelb und Schwarz:
 
 ```
-#0072b2  Blau        Deckungsbeitrag / Honorar
-#009e73  Grün        fakturiert / Leistung
-#e69f00  Orange      Backlog
-#cc79a7  Purpur      Stunden
+#0072b2  Blau        Honorar / Deckungsbeitrag
+#009e73  Grün        Leistung (Leistungsstand, Leistungswert)
+#e69f00  Orange      Auftragsbestand / Stunden
+#cc79a7  Purpur      fakturiert / abgerechnet
 #56b4e9  Himmelblau  bezahlt
 #d55e00  Zinnober    Kosten
 ```
 
-Die Reihenfolge ist die der Indizes in `chartTheme.ts` — sie bleibt gegenüber
-dem alten Satz unverändert, weil einzelne Diagramme direkt auf `series[0]`,
-`series[1]` und `series[5]` zugreifen.
+**Sechs Farben, sieben Kennzahlen.** Der Satz lässt sich nicht einfach
+erweitern: Okabe-Ito hat acht Farben, aber Gelb (`#f0e442`) liegt auf weißem
+Grund bei 1,1:1 und Schwarz ist die Achsenfarbe — als Linienfarbe fällt beides
+aus, und eine selbst erfundene siebte Farbe zerstört die CVD-Abstände (§5.3).
+Zwei Paare teilen sich deshalb je eine Farbe. Die Regel dafür ist nicht
+„irgendwelche zwei", sondern: **geteilt wird nur, was nie im selben Diagramm
+steht.** Honorar (Vertragswert im Projektverlauf) und Deckungsbeitrag
+(Ergebnis in den Trends) kommen nie zusammen vor, Auftragsbestand und Stunden
+ebenso wenig.
+
+Die Zuordnung steht als `SERIES_ROLE` in `chartTheme.ts` und wird über
+`useSeriesColors()` abgerufen — nie über `series[3]`: Der Index sagt nicht,
+was er bedeutet, und verschiebt sich beim nächsten Umbau. `chartTheme.test.ts`
+führt alle Diagramme mit ihren Reihen auf und lässt jede Kollision
+fehlschlagen.
+
+### 5.2a Der teuerste Fehler der Umstellung: `var(--token)` auf dem Canvas
+
+Chart.js zeichnet auf ein `<canvas>`. Dort ist `var(--token)` **kein**
+Farbwert — der Browser meldet nichts und nimmt Schwarz. Bei der Umstellung auf
+Tokens (§7) wurden die Serienfarben von Projektverlauf, Gesamtverlauf und
+Übersicht mit umgeschrieben; aus fünf farbigen Linien wurden fünf schwarze,
+Legendenpunkte inklusive.
+
+Bemerkenswert ist, warum nichts davon aufgefallen ist:
+
+- Die Hex-Regel aus §7 hat die Umschreibung nicht nur zugelassen, sondern
+  **verlangt** — sie kannte die Ausnahme „Canvas" nur für `chartTheme.ts`.
+- `tsc` sah einen `string` und war zufrieden.
+- Die Kontrastprüfung liest CSS und kennt kein Canvas.
+- Die Playwright-Fixture mockte den Zeitreihen-Endpunkt nicht; das Diagramm
+  rendert im Test also gar nicht.
+
+Vier Prüfungen, vier blinde Flecken, exakt an derselben Stelle. Daraus drei
+Ergänzungen: `check:design` prüft jetzt die Gegenrichtung mit (jede
+CSS-Variable an einer Chart.js-Farboption in einer Diagrammdatei ist ein
+Befund — das fand sofort eine dritte, noch nicht gemeldete Stelle auf der
+Übersicht), `tests/charts.spec.ts` zählt die Farbtöne auf dem fertigen Canvas,
+und die Fixture liefert eine Zeitreihe, damit im Test überhaupt ein Diagramm
+entsteht.
+
+Die allgemeine Lehre daneben: Eine Regel, die auf *Schreibweise* prüft
+(„kein Hex"), braucht immer die Gegenprüfung auf *Wirkung* („kommt Farbe
+heraus"). Sonst verlagert sie den Fehler nur.
 
 | Sicht | kleinster Abstand |
 |---|---|

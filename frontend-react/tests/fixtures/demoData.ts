@@ -154,6 +154,25 @@ const named = (n: string[]) => n.map((name, i) => ({
   ID: i + 1, NAME: name, NAME_SHORT: name, NAME_LONG: name, SHORT_NAME: name,
 }))
 
+/**
+ * Zeitreihe fuer die Verlaufsdiagramme (Uebersicht, Projektliste,
+ * Einzelprojekt). Ohne sie liefert der Auffang-Mock `{ data: [] }`, das
+ * Diagramm rendert gar nicht — und genau deshalb ist niemandem aufgefallen,
+ * dass die fuenf Linien eine Zeit lang alle schwarz waren.
+ */
+const timeline = Array.from({ length: 24 }, (_, i) => {
+  const d = new Date(Date.UTC(2024, i, 1))
+  const g = (v: number, f: number) => Math.round(v * Math.min(1, (i + 1) / f))
+  return {
+    DATE:                 d.toISOString().slice(0, 10),
+    HONORAR_NET:          420_000,
+    LEISTUNGSSTAND_VALUE: g(390_000, 22),
+    KOSTEN_TOTAL:         g(268_000, 20),
+    ABGERECHNET_NET:      g(340_000, 26),
+    BEZAHLT_NET:          g(312_000, 30),
+  }
+})
+
 /** Registriert Auth + Beispieldaten. Reihenfolge wie in den anderen Specs:
  *  Catch-All zuerst, spezifische Routen danach. */
 export async function mockDemo(page: Page) {
@@ -189,6 +208,10 @@ export async function mockDemo(page: Page) {
     // `{ data: [] }`, worauf `snapshot.kpis` undefined war und die ganze
     // Seite mit einem Laufzeitfehler ausstieg — die Uebersicht war damit
     // nie im Test.
+    ['reports/project/\\d+/timeline',        { data: timeline }],
+    ['reports/projects/timeline',            { data: timeline }],
+    ['reports/dashboard/projects-timeline',  { data: timeline }],
+
     ['reports/dashboard/company-snapshot', { data: {
       periodMonths: 12,
       raw: { revenue: 812_400, directCosts: 496_100, totalHours: 14_820,
