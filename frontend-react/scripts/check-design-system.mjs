@@ -175,6 +175,16 @@ for (const [name, sel] of THEMES) {
     if (t[tok]) checks.push([`${tok} als Text`, onBoth(tok), 4.5])
   }
 
+  // Controlling-Ampel: ausschliesslich Textfarben, und sie stehen genauso auf
+  // dem Zebrastreifen wie auf der Karte. Sie werden in keinem Branchen-Theme
+  // ueberschrieben — genau deshalb muessen sie ueberall tragen.
+  for (const tok of ['--kpi-good', '--kpi-plan', '--kpi-watch', '--kpi-critical']) {
+    if (!t[tok]) { note('Token', `${tok} fehlt im Theme ${name}`); continue }
+    checks.push([`${tok} als Text`, onBoth(tok), 4.5])
+    if (surface2) checks.push([`${tok} auf --surface-2`,
+      ratio(resolve(t[tok], surface2), surface2), 4.5])
+  }
+
   // Navigation liegt auf --chrome, NICHT auf --surface. Diese Zeilen fehlten
   // zunaechst; axe hat die Luecke im gerenderten Bild gefunden — die
   // Nav-Beschriftungen lagen in allen sieben Themes zwischen 2.59 und 3.35.

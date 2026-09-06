@@ -15,6 +15,9 @@ import { BrandGlyph } from '@/components/brand/BrandGlyph'
 import { useSession } from '@/hooks/useSession'
 import { WelcomeSection } from '@/components/onboarding/WelcomePanel'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
+import { KpiValue } from '@/components/ui/KpiValue'
+import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { cpiLevel, vacLevel, readCpiThresholds, KPI_COLOR } from '@/utils/kpiLevel'
 import {
   fetchDashboardKpis,
   fetchDashboardProjects,
@@ -1130,6 +1133,8 @@ function SubNav({ options, active, onChange }: {
 // ── Projekt detail modal ──────────────────────────────────────────────────────
 
 function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClose: () => void }) {
+  // Schwellen der Controlling-Ampel (Einstellungen → Vorbelegungen).
+  const cpiT = readCpiThresholds(useTenantDefaults())
   const navigate = useNavigate()
   const flags    = project.flags ?? []
 
@@ -1160,12 +1165,11 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
               {(() => {
                 const evm = computeEvm(project)
                 if (evm.cpi == null) return null
-                const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
                 return (<>
                   <tr><td colSpan={2}><div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} /></td></tr>
-                  <tr><td>CPI (Effizienz)</td><td style={{ color: cpiColor, fontWeight: 700 }}>{fmtCpi(evm.cpi)}</td></tr>
+                  <tr><td>CPI (Effizienz)</td><td><KpiValue level={cpiLevel(evm.cpi, cpiT)}>{fmtCpi(evm.cpi)}</KpiValue></td></tr>
                   <tr><td>EAC (Progn. Kosten)</td><td>{fmtEur(evm.eac)}</td></tr>
-                  <tr><td>VAC (Abweichung)</td><td style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 700 }}>{fmtEur(evm.vac)}</td></tr>
+                  <tr><td>VAC (Abweichung)</td><td style={{ color: KPI_COLOR[vacLevel(evm.vac)], fontWeight: 700 }}>{fmtEur(evm.vac)}</td></tr>
                 </>)
               })()}
             </tbody>
@@ -1234,6 +1238,8 @@ const AMPEL_HINT = (
 )
 
 function RisikoView({ projects }: { projects: RiskProject[] }) {
+  // Schwellen der Controlling-Ampel (Einstellungen → Vorbelegungen).
+  const cpiT = readCpiThresholds(useTenantDefaults())
   const [ampelFilter, setAmpelFilter] = useState<AmpelFilter>('alle')
   const [selected, setSelected]       = useState<RiskProject | null>(null)
   const { field, dir, toggle, sort }  = useSort<RiskSortField>('ampel', 'asc')
@@ -1332,9 +1338,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                     <td className="num col-hide-mobile">
                       {(() => {
                         const evm = computeEvm(p)
-                        if (evm.cpi == null) return <span style={{ color: 'var(--text-3)' }}>–</span>
-                        const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
-                        return <span style={{ color, fontWeight: 600 }}>{fmtCpi(evm.cpi)}</span>
+                        return <KpiValue level={cpiLevel(evm.cpi, cpiT)}>{fmtCpi(evm.cpi)}</KpiValue>
                       })()}
                     </td>
                     <td className="num col-hide-mobile">

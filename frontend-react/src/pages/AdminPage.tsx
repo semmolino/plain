@@ -1082,6 +1082,8 @@ function VorbelegungenSection() {
   const [wipMethod,     setWipMethod]     = useState<'hk' | 'erloes'>('hk')
   const [wipTaxFactor,  setWipTaxFactor]  = useState('')
   const [wipTargetRatio, setWipTargetRatio] = useState('')
+  const [cpiWatch,      setCpiWatch]      = useState('')
+  const [cpiCritical,   setCpiCritical]   = useState('')
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -1129,6 +1131,11 @@ function VorbelegungenSection() {
     // Beide ohne Standardwert: ungepflegt heisst „Spalte aus", nicht „0 %".
     setWipTaxFactor(defData.data.wip_tax_cost_factor_percent ?? '')
     setWipTargetRatio(defData.data.wip_target_cost_ratio_percent ?? '')
+    // Leer lassen, wenn nicht gesetzt — der Platzhalter zeigt den Standard.
+    // Anders als beim WIP-Report heisst ungepflegt hier NICHT „Ampel aus":
+    // die Einfaerbung gab es vorher schon, sie faellt auf 0,95/0,80 zurueck.
+    setCpiWatch(defData.data.kpi_cpi_watch_threshold ?? '')
+    setCpiCritical(defData.data.kpi_cpi_critical_threshold ?? '')
   }, [defData?.data])
 
   const saveMut = useMutation({
@@ -1161,6 +1168,8 @@ function VorbelegungenSection() {
       await putDefault('wip_method_default',      wipMethod === 'erloes' ? 'erloes' : null)
       await putDefault('wip_tax_cost_factor_percent',   wipTaxFactor.trim()   || null)
       await putDefault('wip_target_cost_ratio_percent', wipTargetRatio.trim() || null)
+      await putDefault('kpi_cpi_watch_threshold',       cpiWatch.trim()      || null)
+      await putDefault('kpi_cpi_critical_threshold',    cpiCritical.trim()   || null)
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['defaults'] })
@@ -1489,6 +1498,51 @@ function VorbelegungenSection() {
               <p className="admin-section-hint">
                 Mit welcher Methode der Report startet. Im Report selbst bleibt sie
                 umschaltbar.
+              </p>
+            </div>
+          </div>
+
+          <div className="admin-block">
+            <h3 className="admin-block-title">
+              Controlling-Ampel
+              <HelpHint id="report.kpi_ampel" />
+            </h3>
+            <p className="admin-section-hint" style={{ marginTop: 0, marginBottom: 'var(--space-3)' }}>
+              Ab wann ein Projekt in Reports und auf der Übersicht farblich markiert wird.
+              Grundlage ist der CPI: erbrachte Leistung geteilt durch angefallene Kosten.
+              1,00 heißt „Leistung deckt die Kosten genau“.
+            </p>
+            <div className="form-group">
+              <label htmlFor="def-cpi-watch">
+                Schwelle „beobachten“ (CPI)
+                <HelpHint id="report.kpi_schwellen" />
+              </label>
+              <input
+                id="def-cpi-watch" type="number" min={0.1} max={5} step={0.01}
+                value={cpiWatch}
+                onChange={e => setCpiWatch(e.target.value)}
+                placeholder="0,95"
+              />
+              <p className="admin-section-hint">
+                Unterhalb dieses Werts gilt ein Projekt als beobachtungswürdig. Ohne
+                Angabe: 0,95.
+              </p>
+            </div>
+            <div className="form-group">
+              <label htmlFor="def-cpi-critical">
+                Schwelle „Handlungsbedarf“ (CPI)
+                <HelpHint id="report.kpi_schwellen" />
+              </label>
+              <input
+                id="def-cpi-critical" type="number" min={0.1} max={5} step={0.01}
+                value={cpiCritical}
+                onChange={e => setCpiCritical(e.target.value)}
+                placeholder="0,80"
+              />
+              <p className="admin-section-hint">
+                Unterhalb dieses Werts läuft ein Projekt aus dem Ruder. Muss kleiner sein
+                als die Schwelle „beobachten“ — sonst gilt wieder 0,95 / 0,80. Ohne
+                Angabe: 0,80.
               </p>
             </div>
           </div>

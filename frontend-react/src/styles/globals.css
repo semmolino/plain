@@ -146,6 +146,30 @@
   --info-fg:        #ffffff;
   --info-strong:    #1e40af;
   --info-bg:        #dbeafe;
+  /* ── Controlling-Ampel ─────────────────────────────────────────────────
+     Eigene Ebene NEBEN den Statusfarben, nicht statt ihnen: --success heisst
+     „gespeichert / gebucht", --kpi-good heisst „wirtschaftlich ueber Ziel".
+     Dieselbe Farbe fuer beides hat dazu gefuehrt, dass eine Kosten-
+     ueberschreitung aussah wie ein fehlgeschlagener Speichervorgang.
+
+     Bewusst in KEINEM Theme ueberschrieben ausser hell/dunkel: Bedeutungs-
+     farben sind Vokabular. Wer im Tragwerk-Theme lernt, dass Orange
+     „beobachten" heisst, darf das nicht verlieren, weil der Kollege daneben
+     das TGA-Theme eingestellt hat.
+
+     Die Zwischenstufe ist Petrol und nicht Gelb: „laeuft nach Plan" ist kein
+     abgeschwaechtes Problem, und drei warme Stufen erzeugen genau die
+     Alarmmuedigkeit, wegen der Rot am Ende niemand mehr liest.
+
+     Werte gegen ALLE 18 hellen Theme-Untergruende gerechnet (schlechtester
+     Wert je Token: 4.63 / 4.68 / 4.66 / 4.84) — die naheliegenden Toene
+     #15803d, #1f6f8b und #a15c07 lagen auf den getoenten Branchen-
+     Hintergruenden unter AA. Konzept: docs/FARBKONZEPT_2026-09.md §4. */
+  --kpi-good:     #127035;   /* ueber Ziel                                  */
+  --kpi-plan:     #1d6883;   /* im Plan                                     */
+  --kpi-watch:    #8f5206;   /* beobachten — Abweichung ohne Handlungsdruck */
+  --kpi-critical: #b91c1c;   /* Handlungsbedarf — jetzt, nicht im Quartal   */
+
   /* Zweitakzent (violett) — im Code fuer Abwesenheiten/Sonderfaelle genutzt,
      damit sie nicht mit Erfolg/Warnung/Fehler verwechselt werden. */
   --accent2:        #6d28d9;
@@ -207,6 +231,12 @@
   --info-fg:        #0a1020;
   --info-strong:    #bfdbfe;
   --info-bg:        rgba(147,197,253,0.16);
+  /* Controlling-Ampel fuer dunklen Grund (min. 5.52:1 auf allen drei
+     Dark-Flaechen #131316 / #1c1c21 / #252529). */
+  --kpi-good:     #4ade80;
+  --kpi-plan:     #7cc4dd;
+  --kpi-watch:    #fbbf24;
+  --kpi-critical: #f87171;
   --accent2:        #c4b5fd;
   --accent2-strong: #ddd6fe;
   --accent2-bg:     rgba(196,181,253,0.16);

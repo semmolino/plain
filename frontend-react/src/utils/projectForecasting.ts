@@ -6,7 +6,6 @@ export interface EvmMetrics {
   eac:       number | null   // Estimate At Completion      = Budget / CPI
   vac:       number | null   // Variance At Completion      = Budget − EAC  (positive = will finish under)
   etc:       number | null   // Estimate To Complete        = EAC − Actual Cost
-  cpiStatus: 'good' | 'warn' | 'bad' | 'neutral'
 }
 
 /** Compute EVM metrics from any project row that has the three core fields. */
@@ -21,7 +20,7 @@ export function computeEvm(row: {
 
   // Skip projects that are too small to produce meaningful metrics
   if (budget < 500 || ac < 100) {
-    return { cpi: null, eac: null, vac: null, etc: null, cpiStatus: 'neutral' }
+    return { cpi: null, eac: null, vac: null, etc: null }
   }
 
   const cpi = ev > 0 ? ev / ac : null
@@ -29,12 +28,11 @@ export function computeEvm(row: {
   const vac = eac != null ? budget - eac : null
   const etc = eac != null ? eac - ac     : null
 
-  const cpiStatus: EvmMetrics['cpiStatus'] =
-    cpi == null ? 'neutral' :
-    cpi >= 0.95 ? 'good'   :
-    cpi >= 0.80 ? 'warn'   : 'bad'
-
-  return { cpi, eac, vac, etc, cpiStatus }
+  // Die Bewertung des CPI steckt bewusst NICHT mehr hier: sie haengt an den
+  // Schwellen des Mandanten (Einstellungen → Vorbelegungen) und lebt deshalb
+  // in utils/kpiLevel.ts. Vorher standen 0.95/0.80 hier fest und die Farben
+  // fuenfmal kopiert im TSX daneben.
+  return { cpi, eac, vac, etc }
 }
 
 /** Format CPI as "0.92" or "–" */

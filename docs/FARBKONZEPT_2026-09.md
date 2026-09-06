@@ -2,7 +2,7 @@
 
 **Stand:** 06.09.2026 · **Branch:** `claude/projektcontrolling-color-palettes-n9tb7u` · **Basis:** 4.511 Zeilen `globals.css`, 7 Theme-Blöcke, 7 auswählbare Themes
 
-> **Umsetzungsstand:** Block 1 (§8, Schritte 1–5) ist umgesetzt — Diagrammfarben, Prüfregeln, Kontrastkorrekturen, tote Theme-Blöcke. Offen sind die KPI-Semantikebene (§4) und die Palettenwahl (§6).
+> **Umsetzungsstand:** Blöcke 1 und 2 (§8, Schritte 1–8) sind umgesetzt — Diagrammfarben, Prüfregeln, Kontrastkorrekturen, tote Theme-Blöcke, KPI-Semantikebene mit pflegbaren Schwellen und Hilfetexten. Offen ist nur noch die Palettenwahl (§6).
 
 Alle Kontrast- und Farbabstandswerte in diesem Dokument sind gerechnet, nicht geschätzt. Nachrechnen:
 
@@ -109,22 +109,24 @@ Die klassische dreistufige Ampel zwingt jede Kennzahl in „gut / mittel / schle
 
 ```css
 /* Ebene 2 — Controlling-Semantik. Theme-unabhängig, nur hell/dunkel. */
---kpi-good:      #15803d;   /* über Ziel — Deckungsbeitrag über Plan       */
---kpi-plan:      #1f6f8b;   /* im Plan — bewusst blau, keine Abstufung von Gelb */
---kpi-watch:     #a15c07;   /* beobachten — Abweichung ohne Handlungsdruck */
---kpi-critical:  #b91c1c;   /* Handlungsbedarf — jetzt, nicht im Quartal   */
+--kpi-good:     #127035;   /* über Ziel                                        */
+--kpi-plan:     #1d6883;   /* im Plan — bewusst petrol, keine Abstufung von Gelb */
+--kpi-watch:    #8f5206;   /* beobachten — Abweichung ohne Handlungsdruck      */
+--kpi-critical: #b91c1c;   /* Handlungsbedarf — jetzt, nicht im Quartal        */
 ```
 
-Gemessene Kontraste (Textfarbe, Schwelle AA 4,5:1):
+Die Werte sind gegen **alle 18 hellen Theme-Untergründe** gerechnet (Karte,
+Seitengrund und Zebrastreifen je Theme), nicht nur gegen das Standard-Theme.
+Drei der vier naheliegenden Töne fielen dabei durch:
 
-| Token | auf `--surface` (#fff) | auf `--bg` (#f4f6fb) |
-|---|---|---|
-| `--kpi-good` | 5,02 ✓ | 4,64 ✓ |
-| `--kpi-plan` | 5,67 ✓ | 5,24 ✓ |
-| `--kpi-watch` | 5,19 ✓ | 4,80 ✓ |
-| `--kpi-critical` | 6,47 ✓ | 5,98 ✓ |
+| Token | naheliegend | schlechtester Grund | endgültig | jetzt |
+|---|---|---|---|---|
+| `--kpi-good` | `#15803d` | 3,76 ✗ | `#127035` | 4,63 ✓ |
+| `--kpi-plan` | `#1f6f8b` | 4,24 ✗ | `#1d6883` | 4,68 ✓ |
+| `--kpi-watch` | `#a15c07` | 3,88 ✗ | `#8f5206` | 4,66 ✓ |
+| `--kpi-critical` | `#b91c1c` | 4,84 ✓ | `#b91c1c` | 4,84 ✓ |
 
-Im Dark-Theme aufgehellt, alle ≥ 6,1:1 auf `#1c1c21`:
+Im Dark-Theme aufgehellt, alle ≥ 5,52:1 auf den drei dunklen Flächen:
 
 ```css
 [data-theme="dark"] {
@@ -133,30 +135,46 @@ Im Dark-Theme aufgehellt, alle ≥ 6,1:1 auf `#1c1c21`:
 }
 ```
 
+**Es gibt bewusst keine Stufe „grün" in der Praxis.** `--kpi-good` existiert als
+Token, wird von `cpiLevel()` aber nie vergeben: Ein Projekt, das seine Kosten
+deckt, ist der Normalfall und keine Auszeichnung. Färbte man jede gesunde Zeile
+grün, wäre die Liste bunt und Rot verlöre seine Wirkung — genau die
+Alarmmüdigkeit aus §2. Markiert wird nur, was Aufmerksamkeit braucht.
+
 ### 4.3 Die Schwellen gehören nicht in den Code
 
-Wann ein Projekt „beobachten" ist, ist eine kaufmännische Entscheidung des Büros, keine Konstante. Ein Generalplaner rechnet mit anderen Margen als ein Zwei-Personen-Büro. Die Schwellen gehören deshalb als `TENANT_SETTINGS`-Zeilen unter Einstellungen → Vorbelegungen (keine Migration nötig, siehe CLAUDE.md):
+Wann ein Projekt „beobachten" ist, ist eine kaufmännische Entscheidung des Büros, keine Konstante. Ein Generalplaner rechnet mit anderen Margen als ein Zwei-Personen-Büro. Vorher standen die Grenzen als `0.95` / `0.80` fest in `projectForecasting.ts`.
+
+Jetzt liegen sie als `TENANT_SETTINGS` unter Einstellungen → Vorbelegungen → Controlling-Ampel (keine Migration nötig, siehe CLAUDE.md):
 
 ```
-kpi_db_watch_percent      Standard  5    → DB-Abweichung ab der markiert wird
-kpi_db_critical_percent   Standard 15
-kpi_overdue_watch_days    Standard 14    → Forderung ab X Tagen überfällig
-kpi_overdue_critical_days Standard 30
+kpi_cpi_watch_threshold      Standard 0,95   → ab hier „im Plan"
+kpi_cpi_critical_threshold   Standard 0,80   → ab hier „beobachten"
 ```
 
-Und, aus derselben Logik wie beim WIP-Report: **ohne gepflegte Einstellung bleibt die Einfärbung ganz aus**, statt eine erfundene Schwelle zu behaupten.
+**Abweichung von der WIP-Regel, bewusst:** Beim Report „Teilfertige Leistungen" heißt „nichts gepflegt" = „Spalte bleibt aus", weil dort sonst eine erfundene Zahl behauptet würde. Hier existierte die Einfärbung schon — sie bei ungepflegter Einstellung wegzunehmen wäre ein Rückschritt, kein Schutz vor Falschaussagen. Ungepflegt heißt deshalb: die bisherigen Werte gelten weiter.
+
+Unplausible Eingaben fallen auf den Standard zurück, statt die Ampel mit einer kaputten Grenze zu betreiben. Insbesondere muss `critical` unter `watch` liegen — sonst wäre die mittlere Stufe leer und ein Projekt spränge von „im Plan" direkt auf „Handlungsbedarf". Geprüft in `kpiLevel.test.ts`.
 
 ### 4.4 Doppelkodierung ist Pflicht
 
-Jede farbcodierte Aussage braucht einen zweiten Kanal. Konkret:
+Jede farbcodierte Aussage braucht einen zweiten Kanal. Umgesetzt in `components/ui/KpiValue.tsx`:
 
-- Deltas: Vorzeichen **und** Pfeil (`▲ +4,2 %` / `▼ −8,1 %`) — Lucide `TrendingUp`/`TrendingDown`, nie Unicode-Dreiecke (siehe Icon-Regeln in CLAUDE.md)
-- Zeilenstatus: der farbige Randstreifen links (`.row-status-*`) bleibt, bekommt aber zusätzlich ein Icon in der Statusspalte
-- Ampel-Punkte in Listen: `title`-Attribut mit Klartext (`„beobachten: DB 6,8 % unter Plan"`) — trägt Screenreader *und* Maus-Hover
+- **Symbol** bei den markierten Stufen (`TrendingDown` für „beobachten", `TriangleAlert` für „Handlungsbedarf") — bewusst keins bei „im Plan": ein Zeichen in jeder Zeile ist kein Signal mehr
+- **Klartext im `title`**, samt Begründung („beobachten: CPI 0,84 bei Schwelle 0,95 / 0,80") — trägt Maus-Hover und Screenreader gleichermaßen
+- **`.sr-only`-Text** mit der Stufe, weil `title` allein nicht von jeder Kombination aus Screenreader und Browser vorgelesen wird
 
-Das ist nicht nur Barrierefreiheit. Ein Delta mit Pfeil ist auch für Normalsichtige im Augenwinkel schneller erfassbar als ein Farbwechsel.
+Das ist nicht nur Barrierefreiheit: Ein Wert mit Symbol ist auch für Normalsichtige im Augenwinkel schneller erfassbar als ein Farbwechsel.
 
----
+**Wo die Ampel steht.** Ersetzt wurden die fünf Stellen, an denen bereits eingefärbt wurde — dieselbe Ampel lag fünfmal als hartkodiertes `#16a34a`/`#b45309`/`#b91c1c` im TSX:
+
+| Datei | Stelle |
+|---|---|
+| `daten/ProjektlisteTab.tsx` | Spalten CPI und VAC, samt Summenzeile |
+| `daten/EinzelprojektTab.tsx` | Prognose-Karte und Leistungsphasen-Tabelle |
+| `DashboardPage.tsx` | Projekt-Detaildialog und Risiko-Ansicht |
+
+Bewusst **keine neuen** eingefärbten Orte: Wo heute keine Ampel steht, ist das eine Produktentscheidung und keine Aufräumarbeit.
 
 ## 5 · Ebene 3 — Diagrammfarben
 
@@ -235,17 +253,17 @@ Wenn Ebene 2 (§4) eingeführt wird, darf der Markenakzent nicht wie eine Bedeut
 
 | Palette | Akzent | nächste KPI-Farbe | ΔE |
 |---|---|---|---|
-| A · Kontor | `#0e5a6e` | `--kpi-plan` | **9,6** ✗ |
-| B · Reißbrett | `#33556e` | `--kpi-plan` | **13,3** ✗ |
-| **C · Blaupause** | `#1b4f8f` | `--kpi-plan` | **29,4** ✓ |
-| D · Bilanz | `#0f6b5c` | `--kpi-plan` | 28,2 ✓ · zu `--kpi-good` 32,4 ✓ |
-| *heute* | `#2563eb` | `--kpi-plan` | 68,3 ✓ |
+| A · Kontor | `#0e5a6e` | `--kpi-plan` | **7,1** ✗ |
+| B · Reißbrett | `#33556e` | `--kpi-plan` | **10,8** ✗ |
+| **C · Blaupause** | `#1b4f8f` | `--kpi-plan` | **28,5** ✓ |
+| D · Bilanz | `#0f6b5c` | `--kpi-good` | 26,6 ✓ |
+| *heute* | `#2563eb` | `--kpi-plan` | 68,4 ✓ |
 
-A und B sind damit nicht ausgeschlossen — aber sie kosten eine Zusatzentscheidung: `--kpi-plan` müsste von Petrol weg, etwa auf ein kühleres `#2a5fa5`. Das ist machbar, verschiebt aber die Bedeutungsebene wegen einer Geschmacksfrage. C und D brauchen das nicht.
+A und B sind damit nicht ausgeschlossen — aber sie kosten eine Zusatzentscheidung: `--kpi-plan` müsste von Petrol weg, etwa auf ein kühleres `#2a5fa5`. Das ist machbar, verschiebt aber die Bedeutungsebene wegen einer Geschmacksfrage — und die steht seit Block 2 im Produkt. C und D brauchen das nicht.
 
 ### A · „Kontor" — Petrol + Kupfer
 
-Kaufmännisch-warm. Petrol als Struktur, Kupfer als CTA — ein Kontrastpaar, das die Hauptaktion herausspringen lässt, ohne dass die Fläche unruhig wird. Nächste Verwandtschaft zum bestehenden TGA-Theme. **Kollidiert mit `--kpi-plan`** (ΔE 9,6, §6.0) — bei dieser Wahl muss die KPI-Zwischenstufe ausweichen.
+Kaufmännisch-warm. Petrol als Struktur, Kupfer als CTA — ein Kontrastpaar, das die Hauptaktion herausspringen lässt, ohne dass die Fläche unruhig wird. Nächste Verwandtschaft zum bestehenden TGA-Theme. **Kollidiert mit `--kpi-plan`** (ΔE 7,1, §6.0) — bei dieser Wahl muss die KPI-Zwischenstufe ausweichen.
 
 ```css
 :root {
@@ -280,7 +298,7 @@ Kaufmännisch-warm. Petrol als Struktur, Kupfer als CTA — ein Kontrastpaar, da
 
 ### B · „Reißbrett" — Graphit + gedecktes Stahlblau
 
-Die konsequenteste Umsetzung des Recherche-Befunds „ruhige Struktur, Farbe nur für Daten". Warmneutraler Papiergrund, Graphit-Chrome, ein einziger zurückgenommener Akzent. Wirkt am wenigsten nach „Software", am meisten nach Werkzeug — und lässt die KPI-Farben aus §4 maximal wirken, weil sie die einzige Sättigung auf dem Schirm sind. Zwei Nachteile: geringste Wiedererkennung, im Screenshot-Vergleich mit Wettbewerbern der unauffälligste — und **Kollision mit `--kpi-plan`** (ΔE 13,3, §6.0), dieselbe Ausweichentscheidung wie bei A.
+Die konsequenteste Umsetzung des Recherche-Befunds „ruhige Struktur, Farbe nur für Daten". Warmneutraler Papiergrund, Graphit-Chrome, ein einziger zurückgenommener Akzent. Wirkt am wenigsten nach „Software", am meisten nach Werkzeug — und lässt die KPI-Farben aus §4 maximal wirken, weil sie die einzige Sättigung auf dem Schirm sind. Zwei Nachteile: geringste Wiedererkennung, im Screenshot-Vergleich mit Wettbewerbern der unauffälligste — und **Kollision mit `--kpi-plan`** (ΔE 10,8, §6.0), dieselbe Ausweichentscheidung wie bei A.
 
 ```css
 :root {
@@ -347,7 +365,7 @@ Das Blau, das die Recherche als B2B-Erwartung nahelegt — aber in der Variante,
 | `#fff` auf `--cta` | 8,20 ✓ |
 | `--nav-inactive` auf `--chrome` | 5,53 ✓ |
 
-**Warum diese als Empfehlung:** Sie bedient die belegbare Konvention (Blau im B2B/Finanzkontext ist erwartungskonform), löst zugleich das Austauschbarkeitsproblem aus §2 (Herkunft statt Framework-Vorgabe) und hat mit ΔE 29,4 den größten Abstand aller vier zur nächsten KPI-Farbe (§6.0) — sie erzwingt als einzige *keine* Folgeentscheidung auf der Bedeutungsebene.
+**Warum diese als Empfehlung:** Sie bedient die belegbare Konvention (Blau im B2B/Finanzkontext ist erwartungskonform), löst zugleich das Austauschbarkeitsproblem aus §2 (Herkunft statt Framework-Vorgabe) und hat mit ΔE 28,5 den größten Abstand aller vier zur nächsten KPI-Farbe (§6.0) — sie erzwingt als einzige *keine* Folgeentscheidung auf der Bedeutungsebene.
 
 ### D · „Bilanz" — Petrolgrün + Sand
 
@@ -383,7 +401,7 @@ Grün trägt im Finanzumfeld die Assoziation Wachstum/Ertrag; als gedecktes Petr
 | `#fff` auf `--cta` | 6,41 ✓ |
 | `--nav-inactive` auf `--chrome` | 5,74 ✓ |
 
-**Einschränkung, die vor der Wahl bekannt sein sollte:** Der gemessene Abstand zu `--kpi-good` ist mit ΔE 32,4 unkritisch — das Problem ist nicht Verwechslung, sondern **Konnotation**. Grün ist in der Anwendung als „erledigt / bezahlt / gebucht" belegt; ein grüner „Speichern"-Knopf liest sich für den Bruchteil einer Sekunde wie eine Erfolgsmeldung. Das ist ein weicheres Argument als die Zahlenkollision bei A und B, aber es ist eins.
+**Einschränkung, die vor der Wahl bekannt sein sollte:** Der gemessene Abstand zu `--kpi-good` ist mit ΔE 26,6 unkritisch — das Problem ist nicht Verwechslung, sondern **Konnotation**. Grün ist in der Anwendung als „erledigt / bezahlt / gebucht" belegt; ein grüner „Speichern"-Knopf liest sich für den Bruchteil einer Sekunde wie eine Erfolgsmeldung. Das ist ein weicheres Argument als die Zahlenkollision bei A und B, aber es ist eins.
 
 ---
 
@@ -446,15 +464,15 @@ Bewusst so geschnitten, dass jeder Schritt für sich Nutzen bringt und die Palet
 | 3 | Kontrastbefunde beheben (Statusfarben, Branchen-Akzente) | 7 Token-Werte in `globals.css` | **erledigt** |
 | 4 | Tote Theme-Blöcke entfernen | −178 Zeilen `globals.css` | **erledigt** |
 | 5 | Backlog-Linie auf 3px (Ausgleich für §5.3) | `TrendsTab.tsx` | **erledigt** |
-| 6 | KPI-Tokens einführen (§4.2), Ampel in Listen/Reports | `globals.css` + Reportseiten | offen |
-| 7 | Schwellen als `TENANT_SETTINGS` (§4.3) | `VorbelegungenSection` | offen |
-| 8 | Hilfetexte für die KPI-Ampel (`helpContent.tsx`) | 4 Einträge | offen |
+| 6 | KPI-Tokens einführen (§4.2), fünf hartkodierte Ampeln ersetzen | `globals.css`, `utils/kpiLevel.ts`, `ui/KpiValue.tsx`, 3 Seiten | **erledigt** |
+| 7 | Schwellen als `TENANT_SETTINGS` (§4.3) | `VorbelegungenSection` | **erledigt** |
+| 8 | Hilfetexte für die KPI-Ampel (`helpContent.tsx`) | 4 Einträge | **erledigt** |
 | 9 | **Gewählte Palette als neues `light`-Theme einsetzen** | 1 Token-Block | wartet auf Entscheidung |
 
 Ein CI-Schritt war nicht nötig: `npm run check:design` läuft bereits im Job
 `frontend-typecheck` und ist zusätzlich `build`-Voraussetzung.
 
-Schritte 6–8 sind ein Produktfeature, kein Aufräumen: Sie führen eine neue Bedeutungsebene ein, die an Stellen sichtbar wird, an denen heute gar keine Einfärbung steht. Das gehört in eine eigene Iteration mit deinen Entscheidungen zu Schwellen und Anwendungsorten.
+Schritt 9 ist die einzige verbleibende Entscheidung. Die Ampel aus Schritt 6 wurde bewusst nur dort eingebaut, wo vorher schon eingefärbt wurde — sie an neuen Stellen zu zeigen ist eine Produktentscheidung und gehört in eine eigene Iteration.
 
 **RBAC:** Keiner der Schritte legt einen mutierenden Endpunkt oder ein neues sichtbares Bedienelement an. Schritt 7 schreibt in `TENANT_SETTINGS` über den bestehenden `PUT /stammdaten/defaults` — die dort geltende Permission deckt das ab, eine neue ist nicht nötig.
 
@@ -464,7 +482,7 @@ Schritte 6–8 sind ein Produktfeature, kein Aufräumen: Sie führen eine neue B
 
 1. **Palette** — A, B, C oder D? Mein Vorschlag ist C „Blaupause" (Begründung in §6). B ist die richtige Wahl, wenn dir maximale Ruhe wichtiger ist als Wiedererkennung — kostet dann aber die Ausweichentscheidung bei `--kpi-plan` aus §6.0.
 2. **Ersetzen oder ergänzen?** Soll die gewählte Palette das `light`-Theme *ersetzen* (alle Bestandsnutzer sehen die Änderung) oder als achtes Theme *danebenstehen* (niemand wird überrascht, aber die Auswahlliste wächst weiter)?
-3. **KPI-Ebene (§4) als nächstes?** Dafür brauche ich zwei Festlegungen: die Standard-Schwellen (§4.3 — mein Vorschlag: DB-Abweichung 5 % / 15 %, Forderung 14 / 30 Tage) und die Orte, an denen eingefärbt werden soll (Projektliste, Reporting-Kacheln, Rechnungsliste — oder enger).
+3. **Soll die Ampel an weitere Stellen?** Sie ersetzt derzeit nur die fünf Orte, an denen vorher schon eingefärbt wurde (§4.4). Kandidaten wären die Rechnungsliste (Fälligkeit) und die Kostenquote-Spalte — beides bräuchte eigene Schwellen und ist deshalb bewusst nicht mitgelaufen.
 
 ---
 
