@@ -200,9 +200,15 @@ Geschmacksfrage verschoben.
 
 Der Farbton **h 280** hat außerdem einen Vorzug, der beim Rechnen aufgefallen ist
 und nicht geplant war: `--text` (`#111827`) liegt bei h 280 — die Schriftfarbe der
-Anwendung ist **schon** in dieser Farbtonfamilie. Auch die Landingpage liegt bei
-h 281–283. Der einzige Ausreißer ist die 295er-Gruppe: Logo-Ampersand, `theme-color`
-und `--btn` (`#1a1a2e`, h 295).
+Anwendung ist **schon** in dieser Farbtonfamilie. Der einzige Ausreißer ist die
+295er-Gruppe: Logo-Ampersand, `theme-color` und `--btn` (`#1a1a2e`, h 295).
+
+**Die Wahl hängt nicht am Landingpage-Entwurf.** Dass der auch bei h 281–283 liegt,
+ist Bestätigung, kein Argument — er ist ein Entwurf und wird ohnehin nachgezogen
+(§7.1). Tragend sind die beiden produktinternen Gründe: die eigene Schriftfarbe
+liegt dort, und der Korridor ist von beiden Seiten durch **Tokens im Produkt**
+begrenzt (`--kpi-plan` unten, `--accent2`/`--info` oben). Nimmt man den Entwurf aus
+der Betrachtung heraus, ändert sich am Ergebnis nichts.
 
 ### Die Wahl
 
@@ -241,12 +247,27 @@ viel Chroma nur, wo die Fläche klein ist.
 
 **Der Dark-Theme-Akzent gehört mit in die Familie.** Er ist heute `#9a9ade` —
 L\* 66, C\* 38, **h 294**, also ein Lavendel und farbtonmäßig gar nicht die
-Marke; dazu ΔE 11,0 zum dortigen `--accent2`. Im selben Farbton:
+Marke; dazu ΔE 11,0 zum dortigen `--accent2`.
 
-| | Wert | L\* | C\* | schlechtester dunkler Grund | dunkle Schrift darauf |
-|---|---|---|---|---|---|
-| heute | `#9a9ade` | 66 | 38 | — | — |
-| Vorschlag | **`#a0b5ec`** | 74 | 30 | **7,50** | **9,00** |
+> **Korrigiert am 07.09.2026.** Der erste Wert an dieser Stelle war `#a0b5ec`
+> (L\* 74, C\* 30) — nur nach Kontrast gewählt. Beim Gegenrechnen der Prüfregel aus
+> §8 fiel auf, dass er den Abstand zu `--accent2` (`#c4b5fd`) auf **ΔE 4,9** drückt
+> und damit **schlechter** ist als die 11,0 von heute. Ursache: Im Dark-Theme kann
+> der Farbton die beiden nicht trennen — unter Deuteranopie laufen Blau und Violett
+> zusammen, **es trennt nur die Helligkeit.** `#a0b5ec` lag mit L\* 74 zu dicht an
+> den L\* 77 von `--accent2`. Der Akzent muss deshalb im Dark-Theme *dunkler und
+> bunter* werden, nicht heller.
+
+| | Wert | L\* | C\* | ΔE zu `--accent2` | schl. dunkler Grund | dunkle Schrift darauf |
+|---|---|---|---|---|---|---|
+| heute | `#9a9ade` | 66 | 38 | 11,0 ✗ | — | — |
+| ~~erster Vorschlag~~ | ~~`#a0b5ec`~~ | 74 | 30 | **4,9** ✗ | 7,50 | 9,00 |
+| **Vorschlag** | **`#6b96df`** | 62 | 42 | **16,0** ✓ | **5,13** | **6,15** |
+
+`#6b96df` trägt im Dark-Theme **alle vier Rollen** und ersetzt damit die heutigen
+zwei Werte (`--accent` `#9a9ade` und `--btn`/`--cta`/`--nav-active` `#7a7ac6`):
+als Text 5,13:1 auf `--surface-2`, auf der Kopfzeile 6,47:1, mit `--btn-fg`
+(`#14141c`) darauf 6,15:1. `--accent2` bleibt violett — es muss nicht ausweichen.
 
 ### Das Warmneutral — der Gegenpart fürs Marketing
 
@@ -296,7 +317,8 @@ Absichtlich klein. Sechs Token-Werte, keine Struktur.
 | `--accent-tint…3`, `--accent-ring`, `--accent-rgb` | `37,99,235` | `45,102,177` | folgen dem Akzent |
 | `--nav-active` | `#2563eb` | `#2d66b1` | folgt dem Akzent |
 | `--info` | `#1d4ed8` | `#17559a` (= `brand-700`) | Befund 2: `--info` und `--accent` waren bei ΔE 9,2 zwei Namen für dieselbe Farbe. Ein Hinweis in Markenblau ist die verbreitete Konvention; zwei fast gleiche Blaus mit angeblich verschiedener Bedeutung sind keine. |
-| dark `--accent` / `--nav-active` / `--btn` / `--cta` | `#9a9ade` / `#7a7ac6` | `#a0b5ec` / `#7e94d8` | §4, behebt Befund 3 |
+| dark `--accent` / `--nav-active` / `--btn` / `--cta` | `#9a9ade` / `#7a7ac6` | **`#6b96df`** (ein Wert für alle vier) | §4, behebt Befund 3 |
+| dark `--info` | `#93c5fd` | `#6b96df` (= dark `--accent`) | lag bei ΔE 3,0 zu `--accent2` — der schlechteste Wert im ganzen Tokensatz |
 | `theme-color` in `index.html` | `#2b54e0` | *entfernen* | `syncThemeColor()` in `ThemeOptions.tsx` überschreibt den Wert ohnehin beim Start aus `--chrome`. Der feste Wert ist ein vierter Blauton, der nur bis zum ersten Frame sichtbar ist. |
 
 **Nicht angetastet:** `--bg`, `--surface`, `--surface-2`, `--surface-3`, `--text`,
@@ -326,9 +348,21 @@ Beides ist verteidigbar, aber nicht gleichzeitig:
 
 **Empfehlung: A.** Nicht wegen der Vertrauensstudie allein — der Unterschied
 zwischen „schwarzer Knopf in blauer Oberfläche" und „schwarzes Farbschema" ist
-größer, als die Studie hergibt. Sondern weil in Variante B die Markenfarbe im
-Produkt fast keine Fläche mehr hat und die Frage „welche Farbe hat plan&simple?"
-dann ehrlicherweise mit „weiß" zu beantworten wäre.
+größer, als die Studie hergibt. Zwei Gründe wiegen schwerer:
+
+1. **Das Produkt widerspricht sich hier schon selbst.** `--cta` ist bereits blau und
+   steht auf `.wizard-step.active` und `.tbr-next` — dem „nächsten Schritt", also der
+   handlungsförmigsten Aktion, die es gibt. `--btn` ist fast schwarz und steht auf
+   allem anderen. Es gibt bereits zwei Antworten auf dieselbe Frage; A vereinheitlicht
+   auf die, die an der wichtigsten Stelle schon gilt. B müsste dagegen auch `--cta`
+   umstellen und wäre damit der größere Eingriff, nicht der kleinere.
+2. In Variante B hat die Markenfarbe im Produkt fast keine Fläche mehr — die Frage
+   „welche Farbe hat plan&simple?" wäre ehrlicherweise mit „weiß" zu beantworten.
+
+Für B spricht, dass ein fast schwarzer Hauptknopf ein bewusster, verbreiteter Stil
+ist. Wer ihn behalten will, sollte ihn aber von h 295 auf die Tintenfamilie ziehen
+(`#1a1a2e` → `#171b2e`, h 288) und `--cta` mitnehmen — sonst bleibt die
+Widersprüchlichkeit, nur mit vertauschten Rollen.
 
 ---
 
@@ -350,6 +384,15 @@ Werte:
 Zu erzeugende Dateien (alle bestehen bereits, nur neu auszugeben):
 `wordmark-color.png`, `ampersand.png`, `icon-192/256/512.png`,
 `apple-touch-icon.png`, `favicon-16/32/48.png`.
+
+**Das Ampersand ist keine Marketingaufgabe, sondern Teil der Umstellung.** Die
+Wortmarke steht in der App-Kopfzeile unmittelbar neben der Navigation, und die
+trägt den Akzent. Zwischen dem heutigen Ampersand `#2a55d4` und `#2d66b1` liegen
+**ΔE 34** — das sind sichtbar zwei verschiedene Blaus im selben Bild. Heute fällt
+das nicht auf, weil `#2a55d4` und `#2563eb` nur ΔE 7,0 auseinanderliegen. Die
+beiden PNGs gehören deshalb in denselben Schritt wie der Tokenwechsel (§9 Schritt 4).
+Die **Schriftfarbe** der Wortmarke (`#23262b` → `#173056`) kann dagegen warten: sie
+berührt Briefkopf und Druck und ist eine Marketingentscheidung.
 
 **Fehlende Fassungen, die für Marketing gebraucht werden** und heute nicht
 existieren: eine **Vektorfassung** (SVG für Web, EPS/PDF für Druck — PNG skaliert
@@ -440,10 +483,31 @@ Druckdienstleister mit einem Fächer in der Hand, nicht für dieses Dokument.
 Diagrammreihen. Es prüft **nicht**, ob die UI-Farben untereinander unterscheidbar
 sind — deshalb sind die Befunde 1–3 der Kurzfassung durchgekommen. Vorschlag:
 
-1. **Farbabstand auch für UI-Farben.** `--accent`, `--accent2`, `--info` und die
-   vier `--kpi-*` gegeneinander, Minimum über Normalsicht/Protanopie/Deuteranopie,
-   Schwelle ΔE 15 wie bei den Diagrammreihen — je Theme. Genau diese Prüfung findet
-   `#2563eb`/`#6d28d9` bei 5,6.
+1. **Farbabstand auch für UI-Farben — aber eng gefasst.**
+
+   > **Korrigiert am 07.09.2026.** Hier stand zuerst: „`--accent`, `--accent2`,
+   > `--info` und die vier `--kpi-*` gegeneinander, Schwelle ΔE 15". Gerechnet
+   > **fällt diese Regel in allen sieben Themes durch** — und zwar zu Recht:
+   > `--kpi-watch` (`#8f5206`) und `--kpi-critical` (`#b91c1c`) liegen unter
+   > Rot-Grün-Schwäche bei **ΔE 2,8**. Das ist der Ampel-Metapher inhärent: Orange
+   > und Rot *sind* für rot-grün-schwache Nutzer kaum trennbar. Genau deshalb
+   > verlangt §4.4 des alten Konzepts dort Symbol **und** Klartext. Eine Regel, die
+   > eine bewusst doppelkodierte Farbe wie eine alleinstehende prüft, ist nicht
+   > streng, sondern falsch — und wäre am ersten Tag deaktiviert worden.
+
+   Die Regel muss auf das zielen, was sie meint: **Farben, die eine Unterscheidung
+   allein tragen.**
+
+   | Paar | Regel | heute | Vorschlag |
+   |---|---|---|---|
+   | `--accent` / `--accent2` | **Fehler** unter ΔE 15 — ein Verweis und ein Abwesenheits-Chip unterscheiden sich durch nichts als die Farbe | 5,6 (hell) · 11,0 (dunkel) ✗ | 33 (hell) · 16,0 (dunkel) ✓ |
+   | `--kpi-*` untereinander | **ausgenommen**, mit Begründung im Code: doppelkodiert durch Symbol + Klartext (§4.4). Stattdessen ist die Doppelkodierung zu prüfen, nicht der Abstand | 2,8 | 2,8 |
+   | `--info` | **ausgenommen**: absichtlich derselbe Ton wie der Akzent (§5), keine zwei Farben mit behauptetem Unterschied | ΔE 9,2 zum Akzent, aber als *eigene* Farbe deklariert | ein Wert |
+   | alles Übrige | **Warnung**, kein Fehler — z. B. dark `--accent2`/`--kpi-plan` bei ΔE 11,6: verschiedene Ansichten, KPI trägt Text | — | 11,6 ⚠ |
+
+   So gefasst ist die Regel **heute rot und nach der Umstellung grün** — die
+   Reihenfolge, die ein Regressionstest braucht. Landet sie vor der Umstellung im
+   CI, bricht der Build.
 2. **Ein Markenblau, nicht vier.** Der Akzentwert steht an drei Orten außerhalb von
    `globals.css` (`index.html`, die Logo-Dateien, die Landingpage). Prüfbar ist
    mindestens `index.html`: kein `theme-color` mit festem Wert, weil
@@ -463,16 +527,20 @@ auf einem echten Gerät benutzen, dann ersetzen.** Nicht umgekehrt.
 
 | # | Schritt | Umfang | Risiko |
 |---|---|---|---|
+| **Produkt** | | | |
 | 1 | Palette als **zusätzliches** Theme `trust` einhängen, in `ThemeOptions.tsx` sichtbar | 1 Token-Block, 1 Zeile | keins — nichts Bestehendes ändert sich |
 | 2 | **Eine Woche echt benutzen** — Desktop *und* Handy, Listen, Wizards, Dialoge, Systemleiste | — | das ist der Schritt, der beim letzten Mal fehlte |
-| 3 | Prüfregeln aus §8 ergänzen; Befunde 1–3 werden dann rot | `scripts/check-design-system.mjs` | Befunde im Bestand sind zu erwarten und sollen sichtbar werden |
-| 4 | Entscheidung zur Hauptaktion (§5 A oder B) umsetzen | `--btn`/`--cta` | sichtbar in Anmeldung und Dialogen |
-| 5 | Theme `trust` wird das `light`-Theme; `trust` verschwindet aus der Auswahl | Token-Block | Bestandsnutzer sehen die Änderung |
-| 6 | Logo-Dateien neu ausgeben, Vektor- und Einfarbfassung anlegen (§6) | `public/brand/` | — |
+| 3 | `trust` wird das `light`-Theme, Dark-Theme mitziehen (`#6b96df`), `--info` zusammenlegen, **Logo-PNGs neu ausgeben**, `theme-color` aus `index.html` entfernen | Token-Blöcke, `public/brand/`, 1 Zeile HTML | Bestandsnutzer sehen die Änderung |
+| 4 | Prüfregel aus §8 ergänzen — **erst jetzt**: vorher bricht sie den Build | `scripts/check-design-system.mjs` | wird mit Schritt 3 grün |
+| 5 | Hauptaktion (§5 A oder B) | `--btn`/`--cta` | sichtbar in Anmeldung und Dialogen — eigener Commit, allein zurücknehmbar |
+| **Marketing, im Anschluss** | | | |
+| 6 | Wortmarken-Schrift auf `brand-900`, Vektor- und Einfarbfassung anlegen (§6) | `public/brand/` + Druckvorlagen | berührt Briefkopf |
 | 7 | Landingpage auf die Familie ziehen (§7.1) | `docs/marketing/landingpage/index.html` | — |
-| 8 | `theme-color` aus `index.html` entfernen | 1 Zeile | — |
+| 8 | Druckfarbe im Softproof bestätigen (§7.3) | Dienstleister | — |
 
-Schritt 1 und 2 sind die eigentliche Prüfung. Alles ab 5 ist erst danach sinnvoll.
+Schritt 1 und 2 sind die eigentliche Prüfung — sie kosten nichts und sind
+zurücknehmbar. Alles ab 3 ist erst danach sinnvoll, und alles ab 6 erst, wenn die
+Farbe im Produkt steht: Logo und Website folgen der Anwendung, nicht umgekehrt.
 
 **RBAC:** kein mutierender Endpunkt, kein neues Bedienelement — keine neue
 Permission (`docs/RBAC_DEVELOPMENT_CHECKLIST.md`).
@@ -482,17 +550,31 @@ neuer Eintrag nötig.
 
 ---
 
-## 10 · Was ich von dir brauche
+## 10 · Empfehlung und offene Entscheidungen
 
-1. **Hauptaktion: A oder B?** (§5) — die einzige Entscheidung, die das Aussehen
-   spürbar ändert. Empfehlung A.
-2. **Wortmarke: Schrift auf `brand-900` umstellen?** (§6) Das berührt das Logo, also
-   Briefkopf, Visitenkarte, alles Gedruckte. Wenn die Marke unverändert bleiben soll,
-   funktioniert das Konzept auch mit `#23262b` weiter — dann bleibt ein Ton bei
-   h 270 stehen, was messbar, aber nicht sichtbar ist.
-3. **Wettbewerbsvergleich nachholen?** (§1, Kasten) Eine halbe Stunde Screenshots.
-   Ändert die Empfehlung nicht, macht aber eine Aussage belegbar, die derzeit
-   geliehen ist.
+**Produkt zuerst, Marketing im Anschluss** — in dieser Reihenfolge, weil die
+Markenfarbe im Produkt entschieden werden muss, bevor Logo und Website ihr folgen
+können. Umgekehrt geht es nicht.
+
+### Was ich empfehle
+
+| | Empfehlung | Begründung |
+|---|---|---|
+| **Akzent** | `#2d66b1` | Ergebnis des Korridors (§3), nicht Geschmack. Hält ohne den Landingpage-Entwurf. |
+| **Dark-Theme** | `#6b96df` für alle vier Rollen | §4 — behebt zugleich den schlechtesten Abstand im Tokensatz (dark `--info`/`--accent2`, ΔE 3,0) |
+| **Hauptaktion** | **A — Markenblau** | `--cta` ist dort schon blau, wo es am meisten Handlung ist (§5) |
+| **Logo-PNGs** | mit umstellen | ΔE 34 zwischen altem Ampersand und neuem Akzent, in derselben Kopfzeile (§6) |
+| **Wortmarken-Schrift** | zurückstellen | berührt Druck und Briefkopf → Marketingphase |
+| **Wettbewerbsvergleich** | zurückstellen | Marketing; ändert die Empfehlung nicht (§1) |
+
+### Offen für dich
+
+1. **Hauptaktion A oder B?** (§5) Die einzige Entscheidung, die das Aussehen der
+   Anwendung spürbar ändert — Anmeldung und alle Bestätigungsknöpfe in Dialogen.
+2. **Freigabe für Schritt 1–2** (§9): Palette als *zusätzliches* Theme einhängen und
+   eine Woche auf einem echten Gerät benutzen, Desktop **und** Handy. Das kostet
+   nichts und ist zurücknehmbar, weil sich am Bestand nichts ändert. Erst danach
+   Schritt 4.
 
 Nicht mehr offen: die Palettenwahl. Sie ist keine Geschmacksfrage mehr, sondern das
 Ergebnis der Box aus §3 — bei fünf gerechneten Grenzen bleibt kein Spielraum für
