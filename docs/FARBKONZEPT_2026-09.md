@@ -7,6 +7,18 @@
 > Prüfregeln. **Ebene 1 — die Markenpalette — ist zurückgesetzt.** Palette C war
 > zwei Tage im Produkt und wurde zurückgenommen; die Gründe stehen in §6.2. Das
 > helle Theme ist wieder das ursprüngliche mit weißer Kopfzeile.
+>
+> **Ebene 1 wird nicht mehr hier weitergeführt.** Die offenen Punkte aus §9 sind in
+> `docs/MARKENFARBKONZEPT_2026-09.md` beantwortet — dort auch die Erweiterung auf
+> Logo, Marketing und Druck, die hier ganz fehlte. Die Paletten A–D in §6 sind damit
+> **historisch**: sie wurden nach Handwerk und Geschmack ausgewählt, das neue Konzept
+> grenzt den zulässigen Bereich rechnerisch ein und landet bei `#2d66b1`.
+> Zwei Angaben in diesem Dokument sind dort korrigiert: die §6.0-Tabelle prüft den
+> Akzent nur gegen die KPI-Farben und übersieht dabei, dass `--accent` (`#2563eb`)
+> und `--accent2` (`#6d28d9`) bei Deuteranopie mit **ΔE 5,6** zusammenfallen; und der
+> BFSG-Hinweis in §2 ist zu scharf formuliert (B2B-Angebote sind von der Pflicht
+> ausgenommen — Zugänglichkeit bleibt Vertriebsargument bei öffentlichen
+> Auftraggebern, nicht Produktpflicht).
 
 Alle Kontrast- und Farbabstandswerte in diesem Dokument sind gerechnet, nicht geschätzt. Nachrechnen:
 
@@ -625,9 +637,11 @@ Schritt 9 ist die einzige verbleibende Entscheidung. Die Ampel aus Schritt 6 wur
 
 ## 9 · Was ich von dir brauche
 
-1. ~~**Palette**~~ — C war entschieden und ist **zurückgesetzt** (§6.2). Offen ist
-   damit wieder: A, B, D — oder beim heutigen Blau bleiben. Der nächste Versuch
-   läuft als Theme daneben, nicht als Ersatz.
+1. ~~**Palette**~~ — C war entschieden und ist **zurückgesetzt** (§6.2). Offen war
+   damit wieder: A, B, D — oder beim heutigen Blau bleiben. **Erledigt in
+   `docs/MARKENFARBKONZEPT_2026-09.md`:** keine der vier, sondern `#2d66b1` —
+   derselbe Farbton wie heute bei halber Sättigung und unveränderter Helligkeit.
+   Der nächste Versuch läuft weiterhin als Theme daneben, nicht als Ersatz.
    Damit hat jedes der sieben Themes eine dunkle Kopfzeile. Das hat nebenbei die
    Wortmarken-Regel vereinfacht: Der Selektor `[data-theme]` nahm ausgerechnet das
    Default-Theme aus — mit dunkler Kopfzeile hätte dort der farbige Schriftzug

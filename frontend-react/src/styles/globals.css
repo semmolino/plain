@@ -185,7 +185,8 @@
   --focus-ring: 0 0 0 3px var(--accent-ring);
 }
 
-[data-theme="dark"] {
+[data-theme="dark"],
+[data-theme="trust-dark"] {
   --bg:        #131316;
   --surface:   #1c1c21;
   --surface-2: #252529;
@@ -500,6 +501,103 @@
 
 }
 
+/* ── Vorschau-Themes „Markenblau" (trust / trust-dark) ────────────────────
+   ZEITLICH BEGRENZT. Zwei zusaetzliche Themes, damit die vorgeschlagene
+   Markenpalette im echten Produkt und auf einem echten Geraet benutzt werden
+   kann, BEVOR sie das Standard-Theme ersetzt. Genau dieser Schritt fehlte bei
+   Palette C: die damalige Vorschau war ein Desktop-Ausschnitt, und die drei
+   Rueckmeldungen (grauer Gesamteindruck, zu dunkles Blau, Systemleiste auf dem
+   Handy) waren daran nicht zu sehen.
+
+   Konzept und Herleitung: docs/MARKENFARBKONZEPT_2026-09.md
+   Nach der Entscheidung: entweder in :root bzw. [data-theme="dark"] ziehen und
+   diese Bloecke samt der drei Vorschau-PNGs loeschen — oder komplett entfernen.
+
+   Was hier bewusst NICHT steht: --bg, --surface, --surface-2, --text und
+   --chrome. Die Flaechen bleiben unangetastet, weil Pleasure zu 0.69 an der
+   Helligkeit haengt (Valdez & Mehrabian 1994) und weil die dunkle Kopfzeile
+   von Palette C auf dem Handy zusammen mit der Bottom-Nav ein durchgehendes
+   dunkles Band ergab. Geaendert wird nur die Akzentfamilie.
+
+   Variante A ist eingebaut: --btn folgt --cta und wird Markenblau, statt wie
+   heute fast schwarz (#1a1a2e) zu sein. Grund: --cta ist ohnehin schon blau
+   und steht auf dem „naechsten Schritt" in den Wizards — es gab bereits zwei
+   Antworten auf dieselbe Frage. */
+[data-theme="trust"] {
+  /* L* 43 · C* 46 · h 280. Untere Chroma-Grenze durch --kpi-plan (dE 27),
+     obere Helligkeitsgrenze durch AA auf --surface-2 (5.33:1 statt 4.78:1
+     heute). Abstand zu --accent2 unter Deuteranopie: dE 33 statt 5.6. */
+  --accent:       #2d66b1;
+  --accent-dark:  #17559a;
+  /* Tints sind FLAECHEN, nicht Marke — sie behalten deshalb exakt die
+     Helligkeit der heutigen Werte (L* 96,6 und 91,7 statt 93,1 und 86,1 im
+     ersten Entwurf) und aendern nur Farbton und Saettigung. Beim Ansehen des
+     Vorschau-Themes fiel auf, dass der Anmeldegrund sonst spuerbar dunkler
+     wird — genau die Flaechenwirkung, an der Palette C gescheitert ist, nur
+     eine Ebene tiefer. Akzenttext darauf: 5,29 bzw. 4,66. */
+  --accent-bg:    #f2f5ff;
+  --accent-bg2:   #e0e7fb;
+  --accent-tint:  rgba(45,102,177,0.04);
+  --accent-tint2: rgba(45,102,177,0.08);
+  --accent-tint3: rgba(45,102,177,0.10);
+  --accent-ring:  rgba(45,102,177,0.15);
+  --accent-rgb:   45,102,177;
+
+  --brand-glyph-empty: rgba(45,102,177,0.18);
+
+  --nav-active:   #2d66b1;
+
+  /* Variante A: eine Handlungsfarbe statt zwei. */
+  --btn:   #2d66b1;
+  --btn-h: #17559a;
+  --cta:   #2d66b1;
+  --cta-h: #17559a;
+
+  /* --info lag bei dE 9,2 zum Akzent — zwei Namen fuer dieselbe Farbe.
+     Jetzt ausdruecklich ein Ton aus der Markenfamilie (brand-700). */
+  --info:        #17559a;
+  --info-strong: #114076;
+  --info-bg:     #e6ebfa;
+
+  --notif-dot: #2d66b1;
+}
+
+[data-theme="trust-dark"] {
+  /* #6b96df — L* 62, C* 42, h 278. NICHT heller waehlen: im Dark-Theme trennt
+     der Farbton Blau und Violett nicht (unter Deuteranopie laufen beide
+     zusammen), es trennt nur die Helligkeit. Ein erster Vorschlag mit L* 74
+     druckte den Abstand zu --accent2 (#c4b5fd, L* 77) auf dE 4,9 — schlechter
+     als die 11,0 von heute. Mit L* 62: dE 16,0.
+     Ein Wert traegt alle vier Rollen: als Text 5,13:1 auf --surface-2, auf
+     --chrome 6,47:1, mit --btn-fg (#14141c) darauf 6,15:1. */
+  --accent:       #6b96df;
+  --accent-dark:  #85a6e6;
+  --accent-bg:    rgba(107,150,223,0.14);
+  --accent-bg2:   rgba(107,150,223,0.10);
+  --accent-tint:  rgba(107,150,223,0.05);
+  --accent-tint2: rgba(107,150,223,0.10);
+  --accent-tint3: rgba(107,150,223,0.14);
+  --accent-ring:  rgba(107,150,223,0.40);
+  --accent-rgb:   107,150,223;
+
+  --brand-glyph-empty: rgba(107,150,223,0.24);
+
+  --nav-active: #6b96df;
+  --btn:   #6b96df;
+  --btn-h: #85a6e6;
+  --cta:   #6b96df;
+  --cta-h: #85a6e6;
+
+  /* dark --info war #93c5fd und lag bei dE 3,0 zu --accent2 — der schlechteste
+     Abstand im ganzen Tokensatz. Faellt mit der Zusammenlegung weg. */
+  --info:        #6b96df;
+  --info-strong: #85a6e6;
+  --info-bg:     rgba(107,150,223,0.16);
+
+  --notif-badge: #6b96df;
+  --notif-dot:   #6b96df;
+}
+
 /* ── Reset / base ───────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -630,8 +728,10 @@ body {
 .brand-wordmark-color { display: block; }
 .brand-wordmark-white { display: none; }
 /* Dark-Theme: auch Login/Signup liegen auf dunklem Grund. */
-[data-theme="dark"] .brand-wordmark-color { display: none; }
-[data-theme="dark"] .brand-wordmark-white { display: block; }
+[data-theme="dark"] .brand-wordmark-color,
+[data-theme="trust-dark"] .brand-wordmark-color { display: none; }
+[data-theme="dark"] .brand-wordmark-white,
+[data-theme="trust-dark"] .brand-wordmark-white { display: block; }
 
 /* Die Marke in der Seitennavigation liegt IMMER auf --chrome, und jedes
    Theme ausser dem Default hat dort eine dunkle Flaeche. Vorher galt die
@@ -643,9 +743,15 @@ body {
    ACHTUNG beim naechsten Palettenversuch: Der Selektor haengt am Attribut
    und nimmt damit das Default-Theme aus. Wer der hellen Palette eine dunkle
    Kopfzeile gibt, muss diese beiden Zeilen unbedingt machen — sonst steht
-   der farbige Schriftzug dunkel auf dunkel. */
-[data-theme] .side-nav-brand .brand-wordmark-color { display: none; }
-[data-theme] .side-nav-brand .brand-wordmark-white { display: block; }
+   der farbige Schriftzug dunkel auf dunkel.
+
+   Und die Gegenrichtung, genau hier eingetreten: Das Vorschau-Theme "trust"
+   behaelt bewusst die WEISSE Kopfzeile (docs/MARKENFARBKONZEPT_2026-09.md §2).
+   Ohne das :not() haette die weisse Wortmarke dort weiss auf weiss gestanden —
+   sichtbar waere nur das „&" geblieben. "trust-dark" ist NICHT ausgenommen:
+   dessen Kopfzeile ist dunkel. */
+[data-theme]:not([data-theme="trust"]) .side-nav-brand .brand-wordmark-color { display: none; }
+[data-theme]:not([data-theme="trust"]) .side-nav-brand .brand-wordmark-white { display: block; }
 .brand-mark { display: block; border-radius: 6px; }
 .auth-subtitle { font-size: 13px; color: var(--text-3); margin-top: 2px; margin-bottom: 24px; }
 .auth-title  { font-size: var(--fs-page-title); font-weight: var(--fw-title); margin-bottom: 20px; color: var(--text); }

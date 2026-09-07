@@ -119,16 +119,44 @@ const THEMES = [
   ['urban-foto', '[data-theme="urban-foto"]'],
   ['tga-foto', '[data-theme="tga-foto"]'],
   ['structural-foto', '[data-theme="structural-foto"]'],
+  // Vorschau-Themes der neuen Markenpalette. Sie stehen in der Auswahl und
+  // muessen deshalb dieselben Schwellen halten wie alles andere — ein Theme,
+  // das nur „zum Ansehen" da ist, wird trotzdem benutzt.
+  ['trust', '[data-theme="trust"]'],
+  ['trust-dark', '[data-theme="trust-dark"]'],
 ]
 
+/*
+ * Alle Tokens eines Themes — gemergt ueber JEDEN Regelkopf, in dessen
+ * Selektorliste dieser Selektor steht, in Dokumentreihenfolge.
+ *
+ * Vorher nahm die Funktion `css.indexOf(sel)`, also den ERSTEN Treffer. Das
+ * ging gut, solange jedes Theme genau einen Block hatte. Sobald ein Theme
+ * aber auf einem anderen aufsetzt — `[data-theme="dark"], [data-theme="x"]`
+ * fuer den gemeinsamen Satz plus ein eigener Block mit den Abweichungen —
+ * fand die Funktion den gemeinsamen Block und die Abweichungen nie. Geprueft
+ * wurden dann die Werte des FALSCHEN Themes, und zwar lautlos: es kam ja eine
+ * plausible Zahl heraus. Genau so hat `trust-dark` beim ersten Lauf die Werte
+ * von `dark` gemeldet.
+ */
 function block(sel) {
-  const i = css.indexOf(sel); if (i < 0) return {}
-  const s = css.indexOf('{', i), e = css.indexOf('\n}', s)
   const o = {}
-  for (const line of css.slice(s + 1, e).split(/\r?\n/)) {
-    const m = line.match(/^\s*(--[\w-]+)\s*:\s*([^;]+);/); if (m) o[m[1]] = m[2].trim()
+  let from = 0
+  for (;;) {
+    const i = css.indexOf(sel, from); if (i < 0) return o
+    from = i + sel.length
+    const brace = css.indexOf('{', from); if (brace < 0) return o
+    // Nur echte Regelkoepfe: zwischen Selektor und "{" darf nur Leerraum oder
+    // ein weiterer [data-theme="…"] hinter einem Komma stehen. Damit fallen
+    // Nachfahren-Selektoren (`[data-theme="dark"] .status-badge`) und
+    // Erwaehnungen in Kommentaren heraus.
+    if (!/^(\s*,\s*\[data-theme="[\w-]+"\])*\s*$/.test(css.slice(from, brace))) continue
+    const e = css.indexOf('\n}', brace)
+    for (const line of css.slice(brace + 1, e < 0 ? css.length : e).split(/\r?\n/)) {
+      const m = line.match(/^\s*(--[\w-]+)\s*:\s*([^;]+);/); if (m) o[m[1]] = m[2].trim()
+    }
+    from = e < 0 ? css.length : e
   }
-  return o
 }
 const hex2rgb = h => { h = h.replace('#', ''); if (h.length === 3) h = [...h].map(c => c + c).join('')
   return [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16)) }

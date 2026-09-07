@@ -22,8 +22,12 @@ export function useThemeName(): string | null {
   return theme
 }
 
-/** Themes mit dunklem Untergrund — relevant fuer Canvas-Farben (Charts). */
-const DARK_THEMES = new Set(['dark'])
+/** Themes mit dunklem Untergrund — relevant fuer Canvas-Farben (Charts).
+ *
+ * Wer hier ein dunkles Theme vergisst, bekommt keinen Fehler: Chart.js
+ * zeichnet dann die hellen Serienfarben auf dunklen Grund, und weder tsc
+ * noch die Kontrastpruefung sehen das (die eine liest Typen, die andere CSS). */
+const DARK_THEMES = new Set(['dark', 'trust-dark'])
 
 export function useIsDarkTheme(): boolean {
   return DARK_THEMES.has(useThemeName() ?? '')
