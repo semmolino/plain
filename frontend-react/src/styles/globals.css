@@ -598,6 +598,112 @@
   --notif-dot:   #6b96df;
 }
 
+[data-theme="paper"] {
+  /* Vorschau „Papier hell" — die brauchbare Haelfte eines konkurrierenden
+     Vorschlags („Konstruktive Sicherheit"), zusammengefuehrt mit dem, was hier
+     gemessen ist.
+
+     UEBERNOMMEN, weil richtig gedacht:
+     - Warmer Grund statt kuehlem. Die Materialien der Zielgruppe sind Beton,
+       Holz, Stein — kein Kobaltblau. Kuehle Gruende sind die Vorgabe jedes
+       Frameworks, warme eine Entscheidung.
+     - Tinte statt Schwarz (#2e2923 statt #111827). Schwarz ist unter den
+       unbunten Farben das dominanteste (Valdez & Mehrabian 1994) und lag in
+       der einen ordentlichen Vertrauensstudie hinten (Alberts & van der
+       Geest 2011).
+     - Weisse Karten fuer die Datenzellen: maximaler Kontrast fuer Zahlen.
+
+     NICHT UEBERNOMMEN, weil gemessen falsch:
+     - Terracotta (#D95D39) als Akzent und CTA. Weiss darauf ergibt 3,77:1 —
+       unter AA fuer die Hauptaktion des Produkts. Und der Ton liegt mitten im
+       Alarm-Cluster: dE 12 zu --danger, 14 zu --kpi-critical, 14 zu
+       --kpi-watch, 14 zu --kpi-good (Minimum ueber Protanopie/Deuteranopie).
+       Unter Deuteranopie werden Terracotta, "Handlungsbedarf" und "ueber
+       Ziel" alle drei zu Olivtoenen. Ein Buchen-Knopf saehe aus wie eine
+       Warnung in derselben Tabelle.
+     - Sage Green (#4A7C59) als Erfolgsfarbe: dE 9 zur Diagrammreihe
+       "Leistung" (#009e73). Leistungsstand ist keine Erfolgsaussage.
+     - 60 % dunkle Flaeche als Dominanzfarbe. Das ist die grosse Version
+       dessen, was bei Palette C zurueckgemeldet wurde ("alles so grau",
+       "zu dunkel") — Pleasure haengt zu 0,69 an der Helligkeit.
+       Der Vorschlag widerspricht sich dort auch selbst: die 60-30-10-Tabelle
+       gibt dem Navy die Flaechen, der UI-Abschnitt laesst Datenzellen und
+       Hintergruende hell.
+
+     Erdtoene gehoeren also auf FLAECHEN, wo sie mit keiner Bedeutung
+     kollidieren koennen — nicht auf den Akzent. Der Akzent ist #3560c7
+     (Weg 2 aus §3b): haelt dE 18 zu --accent2 UND dE 18 zur Diagrammreihe
+     "Honorar/DB", an der #2d66b1 gescheitert ist.
+
+     Anmerkung fuer die Entscheidung: Die Erdton-Idee ist im Produkt nicht
+     neu — "Architektur" (#f5f3ef + Terracotta) und "Tiefbau" (#efe8db) sind
+     genau das. Neu ist hier der warme Grund als STANDARD, mit weisser
+     Kopfzeile und einem Akzent, der die Messungen haelt.
+     Konzept: docs/MARKENFARBKONZEPT_2026-09.md */
+  --bg:        #f8f5ef;
+  --surface:   #ffffff;
+  --surface-2: #f1ece3;
+  --surface-3: #f8f5ef;
+  --text:      #2e2923;
+  --text-2:    rgba(46,41,35,0.72);
+  --text-3:    rgba(46,41,35,0.66);
+  --text-4:    rgba(46,41,35,0.51);
+  --text-5:    rgba(46,41,35,0.38);
+  --border:    rgba(46,41,35,0.10);
+  --border-2:  rgba(46,41,35,0.08);
+  --border-3:  rgba(46,41,35,0.06);
+  --border-4:  rgba(46,41,35,0.04);
+
+  --accent:       #3560c7;
+  --accent-dark:  #25489a;
+  /* Chipflaechen bleiben warm — eine kuehle Tint auf warmem Grund liest sich
+     als Fehler, nicht als System. Aber deutlich zurueckgenommener als zuerst
+     gewaehlt: .auth-container legt einen Verlauf von --accent-bg nach --bg,
+     und bei C* 6 / h 80 kippte die ganze Anmeldeflaeche ins Pfirsichfarbene.
+     Jetzt C* 3,4 bei h 88 — das liest sich als Papier, nicht als Creme.
+     Beim Rechnen nicht zu sehen, beim Ansehen sofort. Akzenttext: 5,21:1. */
+  --accent-bg:    #f7f3ed;
+  --accent-bg2:   #eee9e0;
+  --accent-tint:  rgba(53,96,199,0.04);
+  --accent-tint2: rgba(53,96,199,0.08);
+  --accent-tint3: rgba(53,96,199,0.10);
+  --accent-ring:  rgba(53,96,199,0.15);
+  --accent-rgb:   53,96,199;
+
+  --brand-glyph-empty: rgba(53,96,199,0.18);
+
+  /* Kopfzeile bleibt weiss — der Handy-Befund von Palette C (Systemleiste und
+     Bottom-Nav als ein dunkles Band) darf nicht wiederkehren. */
+  --chrome:          #ffffff;
+  --chrome-border:   rgba(46,41,35,0.08);
+  --chrome-shadow-h: 0 1px 6px rgba(46,41,35,0.05);
+  --chrome-shadow-n: 0 -2px 12px rgba(46,41,35,0.06);
+  --chrome-text:     #2e2923;
+  /* 0.66 statt der 0.60 des Standard-Themes: Diese Tinte ist heller (L* 17
+     gegen L* 8), dieselbe Deckkraft ergaebe nur 3,98:1. Jetzt 4,79:1. */
+  --chrome-icon:     rgba(46,41,35,0.66);
+  --chrome-hover-bg: rgba(46,41,35,0.06);
+  --nav-active:   #3560c7;
+  --nav-inactive: #5b5651;   /* 7,25:1 auf weiss — der Prueferwert ist 7, nicht 4,5 */
+
+  /* Variante A: eine Handlungsfarbe. */
+  --btn:   #3560c7;
+  --btn-h: #25489a;
+  --cta:   #3560c7;
+  --cta-h: #25489a;
+
+  --info:        #25489a;
+  --info-strong: #1b3673;
+  --info-bg:     #f7f3ed;
+
+  --notif-dot: #3560c7;
+  --overlay:   rgba(46,41,35,0.45);
+  --hover-bg:  rgba(46,41,35,0.06);
+  --dim:       rgba(46,41,35,0.04);
+  --dim-2:     rgba(46,41,35,0.025);
+  --shadow-color: 46,41,35;
+}
+
 /* ── Reset / base ───────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -750,8 +856,8 @@ body {
    Ohne das :not() haette die weisse Wortmarke dort weiss auf weiss gestanden —
    sichtbar waere nur das „&" geblieben. "trust-dark" ist NICHT ausgenommen:
    dessen Kopfzeile ist dunkel. */
-[data-theme]:not([data-theme="trust"]) .side-nav-brand .brand-wordmark-color { display: none; }
-[data-theme]:not([data-theme="trust"]) .side-nav-brand .brand-wordmark-white { display: block; }
+[data-theme]:not([data-theme="trust"]):not([data-theme="paper"]) .side-nav-brand .brand-wordmark-color { display: none; }
+[data-theme]:not([data-theme="trust"]):not([data-theme="paper"]) .side-nav-brand .brand-wordmark-white { display: block; }
 .brand-mark { display: block; border-radius: 6px; }
 .auth-subtitle { font-size: 13px; color: var(--text-3); margin-top: 2px; margin-bottom: 24px; }
 .auth-title  { font-size: var(--fs-page-title); font-weight: var(--fw-title); margin-bottom: 20px; color: var(--text); }

@@ -388,6 +388,89 @@ wieder eine Frage von Wirkung und Druck — nicht von Zugänglichkeit.
 
 ---
 
+## 3c · Der Gegenvorschlag „Konstruktive Sicherheit", gemessen
+
+Ein konkurrierender Vorschlag lag vor: 60-30-10-Regel, **Deep Slate Navy**
+`#1A2530` als Dominanzfarbe (60 %), **Warm Off-White** `#F5F7FA` (30 %),
+**Structural Terracotta** `#D95D39` als Akzent und CTA (10 %), **Sage Green**
+`#4A7C59` für Erfolg. Begründung: Erdtöne als Brücke zu Beton, Holz, Stein.
+
+**Der Gedanke ist gut und wird hier übernommen.** Die Materialien der Zielgruppe
+sind nicht Kobaltblau. Ein warmer Grund ist eine Entscheidung, ein kühler ist
+die Vorgabe jedes Frameworks. Ebenso richtig: Tinte statt reinem Schwarz, und
+weiße Karten für die Datenzellen.
+
+**Drei Dinge halten die Messung nicht.**
+
+*① Der CTA erfüllt AA nicht.*
+
+| Paar | Wert | |
+|---|---|---|
+| Weiß auf Terracotta (der Knopf selbst) | **3,77** | ✗ |
+| Terracotta als Text auf Warm Off-White | **3,51** | ✗ |
+| Terracotta auf Deep Slate Navy | **4,13** | ✗ |
+| Sage Green auf Deep Slate Navy | **3,20** | ✗ |
+
+*② Terracotta liegt mitten im Alarm-Cluster* (Minimum über Normalsicht /
+Protanopie / Deuteranopie):
+
+| gegen | ΔE |
+|---|---|
+| `--danger` | **12** ✗ |
+| `--kpi-critical` | **14** ✗ |
+| `--kpi-watch` | **14** ✗ |
+| `--kpi-good` | **14** ✗ |
+| `--success` · `--warning` | **15** ✗ |
+
+Unter Deuteranopie wird Terracotta zu `#95952b`, `--kpi-critical` zu `#727200`,
+`--kpi-good` zu `#5d5d38` — alle drei Olivtöne. Ein „Buchen"-Knopf sähe für rund
+8 % der männlichen Nutzer aus wie eine Warnung in derselben Tabelle. Die
+Kostenreihe (`#d55e00`) liegt dagegen bei ΔE 19 und ist unkritisch — das hatte
+ich zuerst umgekehrt vermutet und nachgerechnet.
+
+*③ Sage Green kollidiert mit der Diagrammreihe „Leistung"* (`#009e73`) bei
+**ΔE 9**. Leistungsstand ist keine Erfolgsaussage.
+
+**Dazu ein Widerspruch im Vorschlag selbst:** Die Tabelle gibt dem Navy die
+Flächen (60 %), der UI-Abschnitt lässt „Datenzellen und Hintergründe im hellen
+Warm Off-White". Beides zusammen geht nicht. Wörtlich genommen wäre es eine
+dunkle Oberfläche als Standard — die große Version dessen, was bei Palette C
+zurückgemeldet wurde. Und die 60-30-10-Regel stammt aus Innenarchitektur, nicht
+aus datendichten Oberflächen: dort soll die neutrale Struktur weit über 60 %
+dominieren und Sättigung fast ausschließlich den Daten gehören.
+
+Am Rande, weil es die Neuheit einordnet: **Die Erdton-Idee steckt im Produkt
+schon** — „Architektur" (`#f5f3ef` + Terracotta `#945a42`, ΔE 19 zu diesem
+Terracotta) und „Tiefbau" (`#efe8db`) sind genau das, als Branchen-Themes.
+
+### Die Zusammenführung: Theme „Papier hell"
+
+**Erdtöne gehören auf Flächen, nicht auf den Akzent.** Umgesetzt als vierte
+Vorschau:
+
+| Token | Wert | |
+|---|---|---|
+| `--bg` / `--surface-3` | `#f8f5ef` | Papiergrund, L\* 96,6 · C\* 3,2 |
+| `--surface` | `#ffffff` | weiße Karten — Zahlen brauchen den Kontrast |
+| `--surface-2` | `#f1ece3` | warmer Zebrastreifen |
+| `--text` | `#2e2923` | Tinte, L\* 17 — weicher als Schwarz |
+| `--accent` / `--btn` / `--cta` | `#3560c7` | Weg 2 aus §3b: ΔE 18 zu `--accent2` **und** ΔE 18 zur Reihe „Honorar/DB" |
+| `--chrome` | `#ffffff` | Kopfzeile bleibt weiß — der Handy-Befund darf nicht wiederkehren |
+| `--nav-inactive` | `#5b5651` | 7,25:1 (der Prüfer verlangt hier 7, nicht 4,5) |
+
+Zwei Dinge sind erst beim Ansehen aufgefallen, nicht beim Rechnen:
+
+- **`--chrome-icon` brauchte mehr Deckkraft.** Dieselben 0,60 wie im
+  Standard-Theme ergaben nur 3,98:1, weil diese Tinte heller ist (L\* 17 gegen
+  L\* 8). Jetzt 0,66 → 4,79:1.
+- **Der erste warme Ton kippte ins Pfirsichfarbene.** `.auth-container` legt
+  einen Verlauf von `--accent-bg` nach `--bg`; bei C\* 6 / h 80 war die ganze
+  Anmeldefläche cremefarben. Zurückgenommen auf C\* 3,4 bei h 88 — jetzt liest
+  es sich als Papier. Dasselbe Muster wie bei den Tints in §2: die Rechnung
+  sagt nichts über die Flächenwirkung.
+
+---
+
 ## 4 · Die Markenfamilie
 
 Eine Farbe reicht nicht: Marketing braucht dunkle Flächen, die Anwendung braucht
@@ -721,6 +804,7 @@ können. Umgekehrt geht es nicht.
 | | Empfehlung | Begründung |
 |---|---|---|
 | **Akzent** | offen — §3b Weg 1, 2 oder 3 | Petrol ist verworfen. `#2d66b1` hat den Befund aus §3a und sollte **nicht** so bleiben. Kleinster Eingriff: Weg 1 (Marke unverändert, `--accent2` umziehen). |
+| **Flächen** | warm oder kühl — §3c | Theme „Papier hell" zeigt die warme Variante mit dem Akzent aus Weg 2. Erdtöne ja, aber auf Flächen; nicht auf dem Akzent (dort kollidieren sie mit der Ampel). |
 | **`--accent2`** | von Violett weg, Richtung Magenta | Der einzige Befund des heutigen Blaus. Betrifft nur Abwesenheiten. |
 | **`KPI_COLOR.plan`** | normale Textfarbe | §3a — der Normalfall hört auf, farbig zu sein. Gilt unabhängig von der Markenfarbe: heute trägt **jede gesunde Zeile** der Projektliste eine Farbe. |
 | **Dark-Theme** | `#6b96df` für alle vier Rollen | §4 — behebt zugleich den schlechtesten Abstand im Tokensatz (dark `--info`/`--accent2`, ΔE 3,0) |
