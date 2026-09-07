@@ -443,10 +443,11 @@ Am Rande, weil es die Neuheit einordnet: **Die Erdton-Idee steckt im Produkt
 schon** — „Architektur" (`#f5f3ef` + Terracotta `#945a42`, ΔE 19 zu diesem
 Terracotta) und „Tiefbau" (`#efe8db`) sind genau das, als Branchen-Themes.
 
-### Die Zusammenführung: Theme „Papier hell"
+### Die Zusammenführung: Theme „Papier hell" — gebaut und wieder entfernt
 
-**Erdtöne gehören auf Flächen, nicht auf den Akzent.** Umgesetzt als vierte
-Vorschau:
+**Erdtöne gehören auf Flächen, nicht auf den Akzent.** So gebaut, angesehen und
+auf Wunsch wieder entfernt — die Werte bleiben hier stehen, weil die Idee
+wiederkommen kann und dann nicht neu gerechnet werden muss:
 
 | Token | Wert | |
 |---|---|---|
@@ -771,7 +772,7 @@ auf einem echten Gerät benutzen, dann ersetzen.** Nicht umgekehrt.
 | # | Schritt | Umfang | Risiko |
 |---|---|---|---|
 | **Produkt** | | | |
-| 1 | Palette als **zusätzliches** Theme `trust` einhängen, in `ThemeOptions.tsx` sichtbar | 1 Token-Block, 1 Zeile | keins — nichts Bestehendes ändert sich |
+| 1 | Palette als **zusätzliches** Theme `trust` einhängen, in `ThemeOptions.tsx` sichtbar | 1 Token-Block, 1 Zeile | **erledigt** — `trust` und `trust-dark` sind in `main`, nichts Bestehendes geändert |
 | 2 | **Eine Woche echt benutzen** — Desktop *und* Handy, Listen, Wizards, Dialoge, Systemleiste | — | das ist der Schritt, der beim letzten Mal fehlte |
 | 3 | `trust` wird das `light`-Theme, Dark-Theme mitziehen (`#6b96df`), `--info` zusammenlegen, **Logo-PNGs neu ausgeben**, `theme-color` aus `index.html` entfernen | Token-Blöcke, `public/brand/`, 1 Zeile HTML | Bestandsnutzer sehen die Änderung |
 | 4 | Prüfregel aus §8 ergänzen — **erst jetzt**: vorher bricht sie den Build | `scripts/check-design-system.mjs` | wird mit Schritt 3 grün |
@@ -804,7 +805,7 @@ können. Umgekehrt geht es nicht.
 | | Empfehlung | Begründung |
 |---|---|---|
 | **Akzent** | offen — §3b Weg 1, 2 oder 3 | Petrol ist verworfen. `#2d66b1` hat den Befund aus §3a und sollte **nicht** so bleiben. Kleinster Eingriff: Weg 1 (Marke unverändert, `--accent2` umziehen). |
-| **Flächen** | warm oder kühl — §3c | Theme „Papier hell" zeigt die warme Variante mit dem Akzent aus Weg 2. Erdtöne ja, aber auf Flächen; nicht auf dem Akzent (dort kollidieren sie mit der Ampel). |
+| **Flächen** | kühl (Stand jetzt) | Die warme Variante („Papier hell", §3c) war gebaut und ist wieder entfernt. Werte sind dokumentiert, falls die Idee wiederkommt. |
 | **`--accent2`** | von Violett weg, Richtung Magenta | Der einzige Befund des heutigen Blaus. Betrifft nur Abwesenheiten. |
 | **`KPI_COLOR.plan`** | normale Textfarbe | §3a — der Normalfall hört auf, farbig zu sein. Gilt unabhängig von der Markenfarbe: heute trägt **jede gesunde Zeile** der Projektliste eine Farbe. |
 | **Dark-Theme** | `#6b96df` für alle vier Rollen | §4 — behebt zugleich den schlechtesten Abstand im Tokensatz (dark `--info`/`--accent2`, ΔE 3,0) |

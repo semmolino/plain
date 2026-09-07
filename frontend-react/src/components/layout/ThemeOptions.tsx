@@ -27,10 +27,6 @@ const THEMES = [
   // Herleitung: docs/MARKENFARBKONZEPT_2026-09.md
   { id: 'trust',             label: 'Markenblau hell',       swatch: '#2d66b1', group: 'Vorschau' },
   { id: 'trust-dark',        label: 'Markenblau dunkel',     swatch: '#6b96df', group: 'Vorschau' },
-  // Warme Flaechen (Papier, Kalkstein) mit einem Akzent, der die Messungen
-  // haelt. Erdtoene auf Flaechen statt auf dem Akzent — siehe Kommentar am
-  // [data-theme="paper"]-Block.
-  { id: 'paper',             label: 'Papier hell',           swatch: '#3560c7', group: 'Vorschau' },
 ] as const
 
 export type ThemeId = typeof THEMES[number]['id']

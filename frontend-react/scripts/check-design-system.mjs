@@ -124,7 +124,6 @@ const THEMES = [
   // das nur „zum Ansehen" da ist, wird trotzdem benutzt.
   ['trust', '[data-theme="trust"]'],
   ['trust-dark', '[data-theme="trust-dark"]'],
-  ['paper', '[data-theme="paper"]'],
 ]
 
 /*
