@@ -27,10 +27,6 @@ const THEMES = [
   // Herleitung: docs/MARKENFARBKONZEPT_2026-09.md
   { id: 'trust',             label: 'Markenblau hell',       swatch: '#2d66b1', group: 'Vorschau' },
   { id: 'trust-dark',        label: 'Markenblau dunkel',     swatch: '#6b96df', group: 'Vorschau' },
-  // Die Gegenoption. Nach der Nachrechnung die bessere: das Markenblau liegt
-  // bei Deuteranopie dE 4 von der Diagrammreihe "Honorar/Deckungsbeitrag",
-  // Petrol dE 17. Siehe Kommentar am [data-theme="petrol"]-Block.
-  { id: 'petrol',            label: 'Petrol hell',           swatch: '#0d6b74', group: 'Vorschau' },
 ] as const
 
 export type ThemeId = typeof THEMES[number]['id']

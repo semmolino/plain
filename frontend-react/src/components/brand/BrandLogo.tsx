@@ -27,9 +27,7 @@ export function BrandWordmark({ size = 28, className }: BrandProps) {
   // Beide Varianten bleiben im Markup: WELCHE sichtbar ist, entscheidet
   // weiterhin das CSS (es haengt nicht nur am Theme, sondern auch am Ort —
   // Seitennavigation gegen Login-Seite).
-  const color = theme === 'trust' ? '/brand/wordmark-trust.png'
-    : theme === 'petrol' ? '/brand/wordmark-petrol.png'
-    : '/brand/wordmark-color.png'
+  const color = theme === 'trust' ? '/brand/wordmark-trust.png' : '/brand/wordmark-color.png'
   const white = theme === 'trust-dark' ? '/brand/wordmark-trust-white.png' : '/brand/wordmark-white.png'
   return (
     <span className={`brand-wordmark${className ? ' ' + className : ''}`} role="img" aria-label="plan&simple">
@@ -42,9 +40,8 @@ export function BrandWordmark({ size = 28, className }: BrandProps) {
 /** Icon-Mark (blaues „&") — fuer kompakte Stellen wie den Mobile-Header. */
 export function BrandMark({ size = 24, className }: BrandProps) {
   const theme = useThemeName()
-  const src = theme === 'trust' || theme === 'trust-dark' ? '/brand/icon-256-trust.png'
-    : theme === 'petrol' ? '/brand/icon-256-petrol.png'
-    : '/brand/icon-256.png'
+  const src = theme === 'trust' || theme === 'trust-dark'
+    ? '/brand/icon-256-trust.png' : '/brand/icon-256.png'
   return (
     <img
       src={src}

@@ -57,10 +57,16 @@ wurden:
 | 2 | **`--accent` und `--info` sind fast dieselbe Farbe** — schon normalsichtig | ΔE **9,2** | Mittel |
 | 3 | Dasselbe im Dark-Theme: `--accent` `#9a9ade` gegen `--accent2` `#c4b5fd` | ΔE **11,0** | Mittel |
 
-Die Empfehlung in einem Satz: **die Sättigung radikal senken, die Helligkeit
-lassen, die Flächen nicht anfassen** — und den Farbton dorthin legen, wo das
-Produkt noch keine Bedeutung vergeben hat. Das ist **nicht** Blau, sondern
-**Petrol: `#0d6b74`**.
+Die Empfehlung in einem Satz: **die Sättigung senken, die Helligkeit lassen, die
+Flächen nicht anfassen.** Wie weit die Sättigung darf, ist in §3b beantwortet —
+und die Antwort ist: **nicht so weit, wie zuerst vorgeschlagen.**
+
+> **Petrol ist entschieden und verworfen (07.09.2026).** Der Vorschlag aus §3a
+> (`#0d6b74`) hielt alle Messungen und ist trotzdem raus: *„das Petrol gefällt
+> mir gar nicht."* Das ist ein zulässiger Grund — die Markenfarbe ist die eine
+> Ebene, auf der Geschmack entscheiden darf, solange die Messungen eingehalten
+> werden (§1). Die Analyse bleibt hier stehen, weil ihr Befund gegen das Blau
+> weiterbesteht: §3b löst ihn **innerhalb** der Blaufamilie.
 
 > **Korrigiert am 07.09.2026, §3a.** Dieses Dokument hat zuerst `#2d66b1`
 > empfohlen — ein entsättigtes Blau im selben Farbton wie heute. Das war
@@ -342,6 +348,43 @@ neue Marke und keine Nachjustierung.
 Im Dark-Theme liegt **jeder** helle Akzent nahe an einer Reihe (heute ΔE 5,
 Blau ΔE 9, Petrol ΔE 10) — das ist kein Argument für oder gegen Petrol, sondern
 eine Warnung, die für alle drei gilt.
+
+---
+
+## 3b · Blau, das die Messung hält — drei Wege
+
+Petrol ist verworfen, der Befund aus §3a bleibt: `#2d66b1` liegt bei
+Deuteranopie ΔE 4,1 von der Diagrammreihe „Honorar / Deckungsbeitrag". Die Frage
+ist damit nicht mehr „welcher Farbton", sondern: **welches Blau hält?**
+
+Die Suche über h 265–300, L\* 36–47, C\* 40–86 gegen den vollständigen festen
+Satz *plus* `--accent2` liefert 132 gültige Töne. Der Befund daraus ist
+unbequem, weil er meiner eigenen Richtung widerspricht:
+
+> **Die Rettung liegt in *mehr* Sättigung, nicht in weniger.** Bei L\* 43 und
+> h 295 kollidiert **jede** Chroma von 40 bis 60 mit der Reihe (ΔE 2–12) — die
+> Reihe liegt bei L\* 46, und ein Markenblau auf derselben Helligkeit ist unter
+> Rot-Grün-Schwäche dieselbe Farbe, egal wie gesättigt. Getrennt wird über
+> Helligkeit oder über deutlich mehr Chroma.
+
+Drei Wege, alle gerechnet:
+
+| Weg | Wert | L\* | C\* | schl. Grund | S-Blau | `--accent2` | Preis |
+|---|---|---|---|---|---|---|---|
+| **1 · Nur `--accent2` verschieben** | `#2563eb` *(heute)* | 46 | 80 | 4,78 | 38 ✓ | **6** ✗ → nach dem Umzug ✓ | Marke bleibt **unverändert**; Sättigung C\* 80 bleibt, also weiter Druckproblem und hohe Erregung |
+| **2 · Mittelweg** | `#3560c7` | 43 | 62 | **5,32** | 18 ✓ | 18 ✓ | Entsättigung −22 % statt −43 %; Druckvorteil größtenteils weg |
+| **3 · Tiefer** | `#1b4fb0` | 36 | 60 | **6,96** | 19 ✓ | 20 ✓ | Beste Ränder und bester Kontrast, aber L\* 36 — nahe an „zu dunkel" (Palette C lag bei 33,6) |
+
+**Weg 1 verdient die genaueste Betrachtung**, weil er der kleinste ist: Das
+heutige `#2563eb` hält gegen den gesamten festen Satz — Diagrammreihen, Rot,
+Bernstein, `--kpi-plan` — mit ΔE 38 bis 151. Es hat **genau einen** Befund, und
+der ist `--accent2` (Violett, ΔE 6 bei Deuteranopie). `--accent2` markiert
+Abwesenheiten. Zieht man diese eine Farbe Richtung Magenta, ist die
+Mandantenfarbe unangetastet und der Befund weg.
+
+Das heißt: **Die Marke muss sich vielleicht überhaupt nicht ändern.** Was sich
+ändern muss, ist der Zweitakzent. Ob man darüber hinaus entsättigt, ist dann
+wieder eine Frage von Wirkung und Druck — nicht von Zugänglichkeit.
 
 ---
 
@@ -677,8 +720,9 @@ können. Umgekehrt geht es nicht.
 
 | | Empfehlung | Begründung |
 |---|---|---|
-| **Akzent** | **`#0d6b74`** (Petrol) | §3a. `#2d66b1` liegt bei Deuteranopie ΔE 4 von der Diagrammreihe „Honorar/DB" — der Korridor in §3 war geerbt, nicht hergeleitet. |
-| **`KPI_COLOR.plan`** | normale Textfarbe | §3a — der Normalfall hört auf, farbig zu sein. Gilt unabhängig von der Markenfarbe und macht den Farbton frei. |
+| **Akzent** | offen — §3b Weg 1, 2 oder 3 | Petrol ist verworfen. `#2d66b1` hat den Befund aus §3a und sollte **nicht** so bleiben. Kleinster Eingriff: Weg 1 (Marke unverändert, `--accent2` umziehen). |
+| **`--accent2`** | von Violett weg, Richtung Magenta | Der einzige Befund des heutigen Blaus. Betrifft nur Abwesenheiten. |
+| **`KPI_COLOR.plan`** | normale Textfarbe | §3a — der Normalfall hört auf, farbig zu sein. Gilt unabhängig von der Markenfarbe: heute trägt **jede gesunde Zeile** der Projektliste eine Farbe. |
 | **Dark-Theme** | `#6b96df` für alle vier Rollen | §4 — behebt zugleich den schlechtesten Abstand im Tokensatz (dark `--info`/`--accent2`, ΔE 3,0) |
 | **Hauptaktion** | **A — Markenblau** | `--cta` ist dort schon blau, wo es am meisten Handlung ist (§5) |
 | **Logo-PNGs** | mit umstellen | ΔE 34 zwischen altem Ampersand und neuem Akzent, in derselben Kopfzeile (§6) |
