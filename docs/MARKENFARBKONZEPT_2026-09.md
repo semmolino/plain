@@ -170,6 +170,15 @@ Daraus die Regel, die dieses Konzept tragen muss:
 > aktiver Navigationsbalken, Wortmarke, Marketing-Kopfzeile) folgen dem Farbton
 > und dürfen tief sein.
 
+**Und die Regel gilt eine Ebene tiefer auch für die Tints.** Beim Ansehen des
+Vorschau-Themes im laufenden Produkt fiel auf, dass der Anmeldegrund spürbar
+dunkler wurde: `--accent-bg` trägt dort einen Verlauf, und der erste Entwurf hatte
+den Wert von L\* 96,6 auf 93,1 gezogen — dieselbe Flächenwirkung wie bei Palette C,
+nur kleiner und leichter zu übersehen. `--accent-bg` und `--accent-bg2` behalten
+deshalb **exakt die Helligkeit der heutigen Werte** und ändern nur Farbton und
+Sättigung. Aufgefallen ist das nicht beim Rechnen, sondern beim Hinsehen — genau
+dafür läuft die Palette erst als Theme daneben.
+
 Das heißt konkret: Von den heutigen Tokens ändern sich `--bg`, `--surface`,
 `--surface-2`, `--surface-3`, `--text` und `--chrome` **überhaupt nicht**. Der
 Vorschlag ist deutlich kleiner als Palette C — und die drei zurückgemeldeten Punkte
@@ -236,9 +245,9 @@ viel Chroma nur, wo die Fläche klein ist.
 
 | Stufe | Wert | L\* | C\* | auf `#fff` | Verwendung |
 |---|---|---|---|---|---|
-| `brand-50` | `#f4f6fe` | 97 | 4 | — | Marketing: sehr helle Abschnittsfläche |
-| `brand-100` | `#e6ebfa` | 93 | 8 | — | `--accent-bg` (Chips, aktive Zeile) |
-| `brand-200` | `#cdd7f5` | 86 | 16 | — | `--accent-bg2`, Ränder |
+| `brand-50` | `#f2f5ff` | 97 | 5 | — | `--accent-bg` (Chips, aktive Zeile, Anmeldegrund) |
+| `brand-100` | `#e0e7fb` | 92 | 11 | — | `--accent-bg2` |
+| `brand-200` | `#cdd7f5` | 86 | 16 | — | Ränder, Marketing-Abschnittsfläche |
 | `brand-400` | `#8aa0d5` | 66 | 30 | 2,60 | nur Deko/Ränder — **nicht für Text** |
 | **`brand-600`** | **`#2d66b1`** | 43 | 46 | **5,76** | **`--accent` · alles Interaktive** |
 | `brand-700` | `#17559a` | 36 | 44 | 7,49 | `--accent-dark`, Hover |
@@ -312,8 +321,8 @@ Absichtlich klein. Sechs Token-Werte, keine Struktur.
 |---|---|---|---|
 | `--accent` | `#2563eb` | `#2d66b1` | §3 |
 | `--accent-dark` | `#1d4ed8` | `#17559a` | Familie, §4 |
-| `--accent-bg` | `#eff6ff` | `#e6ebfa` | Familie |
-| `--accent-bg2` | `#dbeafe` | `#cdd7f5` | Familie |
+| `--accent-bg` | `#eff6ff` | `#f2f5ff` | Familie — **gleiche Helligkeit wie heute** (L\* 96,6) |
+| `--accent-bg2` | `#dbeafe` | `#e0e7fb` | Familie — **gleiche Helligkeit wie heute** (L\* 91,7) |
 | `--accent-tint…3`, `--accent-ring`, `--accent-rgb` | `37,99,235` | `45,102,177` | folgen dem Akzent |
 | `--nav-active` | `#2563eb` | `#2d66b1` | folgt dem Akzent |
 | `--info` | `#1d4ed8` | `#17559a` (= `brand-700`) | Befund 2: `--info` und `--accent` waren bei ΔE 9,2 zwei Namen für dieselbe Farbe. Ein Hinweis in Markenblau ist die verbreitete Konvention; zwei fast gleiche Blaus mit angeblich verschiedener Bedeutung sind keine. |
