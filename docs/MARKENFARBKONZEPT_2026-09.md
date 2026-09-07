@@ -57,9 +57,19 @@ wurden:
 | 2 | **`--accent` und `--info` sind fast dieselbe Farbe** — schon normalsichtig | ΔE **9,2** | Mittel |
 | 3 | Dasselbe im Dark-Theme: `--accent` `#9a9ade` gegen `--accent2` `#c4b5fd` | ΔE **11,0** | Mittel |
 
-Die Empfehlung in einem Satz: **denselben Farbton behalten, die Sättigung von
-C\* 80 auf C\* 46 nehmen, die Helligkeit lassen** — und diesen einen Wert dann
-überall einsetzen, wo heute vier verschiedene stehen. Vorschlag: **`#2d66b1`**.
+Die Empfehlung in einem Satz: **die Sättigung radikal senken, die Helligkeit
+lassen, die Flächen nicht anfassen** — und den Farbton dorthin legen, wo das
+Produkt noch keine Bedeutung vergeben hat. Das ist **nicht** Blau, sondern
+**Petrol: `#0d6b74`**.
+
+> **Korrigiert am 07.09.2026, §3a.** Dieses Dokument hat zuerst `#2d66b1`
+> empfohlen — ein entsättigtes Blau im selben Farbton wie heute. Das war
+> falsch, und zwar aus einem Grund, der sich messen lässt: `#2d66b1` liegt bei
+> Deuteranopie **ΔE 4,1** von `#0072b2`, der Diagrammreihe „Honorar /
+> Deckungsbeitrag" — der wichtigsten Datenreihe des Produkts. Der Korridor in
+> §3 war gegen `--kpi-plan` und `--accent2` geprüft, **nie gegen die
+> Diagrammfarben.** Ausgerechnet die Entsättigung, die das Konzept trägt, hat
+> die Marke in die Datenreihe hineingeschoben. §3a führt das aus.
 
 ---
 
@@ -234,6 +244,104 @@ der Betrachtung heraus, ändert sich am Ergebnis nichts.
 Der Vorschlag ist in **jeder** geprüften Dimension besser als der heutige Wert —
 auch im Kontrast, obwohl er weniger gesättigt ist. Das ist kein Zufall: Sättigung
 trägt nichts zur Leuchtdichte bei, aus der der Kontrastwert gerechnet wird.
+
+---
+
+## 3a · Korrektur: der Korridor war geerbt, nicht hergeleitet
+
+Auf die Frage, ob diese Wahl auch auf einem leeren Blatt herauskäme, lautet die
+ehrliche Antwort: **nein.** Zwei der fünf Grenzen in §3 sind keine Messungen,
+sondern **übernommene Entscheidungen** — und eine dritte, entscheidende Prüfung
+fehlte ganz.
+
+### Was geerbt war
+
+| Grenze in §3 | Was sie wirklich ist |
+|---|---|
+| C\* ≥ 46 („sonst zu nah an `--kpi-plan`") | `--kpi-plan` = `#1d6883` ist ein Petrol, das im vorigen Konzept gewählt wurde. Es steht im Code an **genau einer Stelle**: `KPI_COLOR.plan` in `utils/kpiLevel.ts`. |
+| h ≤ 286 („sonst zu nah an `--accent2`") | `--accent2` = `#6d28d9` ist die Farbe für Abwesenheiten — ebenfalls frei gewählt. Auf einem leeren Blatt wählt man den Zweitakzent **nach** der Marke. |
+| L\* ≥ 42 („Palette C war zu dunkel") | Rückmeldung zu einer Palette, die gleichzeitig die *Flächen* verdunkelt hat. Über die zulässige Helligkeit des **Akzents** sagt sie nichts. |
+
+Bleiben als echte Grenzen: L\* ≤ 47 (AA auf dem Zebrastreifen) und C\* ≤ ~52
+(Vertrauensforschung, Vierfarbdruck). Das ist kein Korridor, das ist eine
+Obergrenze — der Farbton war die ganze Zeit frei.
+
+### Was fehlte
+
+Der Satz, der auf einem leeren Blatt **wirklich** feststeht, ist ein anderer:
+
+1. **Die sechs Okabe-Ito-Diagrammfarben.** Man erfindet sie nicht selbst; jede
+   eigene Erweiterung zerstört die CVD-Abstände (nachgerechnet in
+   `FARBKONZEPT_2026-09.md` §5.3).
+2. **Rot = Handlungsbedarf, Bernstein = beobachten.** Gelernte Konvention.
+
+Gegen diesen Satz hatte ich nie gerechnet. Nachgeholt, engster Abstand im hellen
+Theme (Minimum über Normalsicht / Protanopie / Deuteranopie):
+
+| Akzent | L\* | C\* | schl. Grund | engster fester Ton |
+|---|---|---|---|---|
+| heute `#2563eb` | 46 | 80 | 4,78 | Serie Blau ΔE 38 — *aber* `--accent2` ΔE **6** ✗ |
+| ~~`#2d66b1`~~ | 43 | 46 | 5,33 | **Serie Blau ΔE 4** ✗ |
+| **`#0d6b74`** | 41 | **25** | **5,76** | Serie Purpur ΔE **17** ✓ |
+
+Unter Deuteranopie wird `#2d66b1` zu `#5858b2` und `#0072b2` zu `#5e5eb3`.
+Dieselbe Farbe. Für rund 8 % der männlichen Nutzer wäre ein Verweis nicht von
+der Honorarkurve zu unterscheiden.
+
+### Die Freiraumkarte
+
+Rechnet man den Mindestabstand zum festen Satz über alle Farbtöne, ist das
+Ergebnis überraschend flach: fast jeder Farbton erreicht bei mäßiger Sättigung
+ΔE 18–24. **Der Abstand entscheidet den Farbton also nicht.** Was ihn
+entscheidet, ist die **Bedeutung**, die im Produkt schon vergeben ist:
+
+- **Rot / Ziegel** (h 350–40) — Rot heißt „Handlungsbedarf". Ausgeschlossen.
+- **Bernstein / Oliv** (h 50–110) — heißt „beobachten". Ausgeschlossen.
+- **Grün** (h 130–170) — heißt „bezahlt / gebucht / gebucht"; dazu ISO 7010
+  Grün = Rettungsweg. Für Ingenieure doppelt belegt. Ausgeschlossen.
+- **Magenta / Pflaume** (h 310–340) — frei, aber liest sich nach Fintech-Start-up,
+  nicht nach Planungsbüro. Schwach auf dem Ziel „Zuverlässigkeit".
+- **Petrol / Blaugrün** (h 190–230) — **frei.** Kühl, technisch, ohne
+  Zweitbedeutung.
+- **Blau / Indigo** (h 250–290) — frei von Bedeutung, aber die Heimat der
+  wichtigsten Diagrammreihe, und die Farbe von über 70 % der SaaS-Anbieter.
+
+Petrol ist damit die einzige kühle Familie, die keine Bedeutung mitschleppt und
+nicht mit den Daten kollidiert. Es ist zugleich die Verschiebung um 15–30°, die
+die Differenzierungsempfehlung ohnehin nahelegt.
+
+### Der Preis, offen benannt
+
+Petrol ist nur frei, **wenn `--kpi-plan` aufhört, Petrol zu sein.** Und dafür
+gibt es einen Grund, der unabhängig von der Markenfarbe gilt:
+
+> `cpiLevel()` gibt für **jedes gesunde Projekt** `'plan'` zurück, und
+> `KpiValue` färbt das petrol. Jede gesunde Zeile der Projektliste trägt also
+> eine Farbe. Das ist genau die Alarmmüdigkeit, gegen die
+> `FARBKONZEPT_2026-09.md` §2 argumentiert — nur in Petrol statt in Grün.
+> Dasselbe Dokument begründet in §4.2 ausführlich, warum `--kpi-good` **nie**
+> vergeben wird („ein Projekt, das seine Kosten deckt, ist der Normalfall und
+> keine Auszeichnung"). Für `plan` gilt dasselbe Argument, es wurde dort nur
+> nicht gezogen.
+
+Die Empfehlung ist deshalb: **`KPI_COLOR.plan` auf die normale Textfarbe.**
+Markiert wird „beobachten" und „Handlungsbedarf" — nichts sonst. Die Liste wird
+ruhiger, `--kpi-plan` wird überhaupt nicht mehr gebraucht, und der Farbton ist
+frei. Eine Zeile Code.
+
+**Was gegen Petrol spricht**, damit es vollständig ist: Alberts & van der Geest
+haben Blau vorn gemessen, nicht Petrol — sie haben Petrol aber auch nie
+getestet, es waren vier grobe Schemata (rot / blau / grün / schwarz). Ein
+messbarer Vertrauensnachteil für einen kühlen Nachbarton von Blau lässt sich
+daraus nicht ableiten, ein Vorteil aber auch nicht. Und Petrol ist inzwischen
+die häufigste „Nicht-Blau"-Wahl im B2B-SaaS — der Differenzierungsgewinn ist
+kleiner, als er aussieht. Dazu ist es für das bestehende Logo der größere
+Eingriff: aus einem lebhaften Indigo wird ein tiefes Blaugrün, das ist eine
+neue Marke und keine Nachjustierung.
+
+Im Dark-Theme liegt **jeder** helle Akzent nahe an einer Reihe (heute ΔE 5,
+Blau ΔE 9, Petrol ΔE 10) — das ist kein Argument für oder gegen Petrol, sondern
+eine Warnung, die für alle drei gilt.
 
 ---
 
@@ -569,7 +677,8 @@ können. Umgekehrt geht es nicht.
 
 | | Empfehlung | Begründung |
 |---|---|---|
-| **Akzent** | `#2d66b1` | Ergebnis des Korridors (§3), nicht Geschmack. Hält ohne den Landingpage-Entwurf. |
+| **Akzent** | **`#0d6b74`** (Petrol) | §3a. `#2d66b1` liegt bei Deuteranopie ΔE 4 von der Diagrammreihe „Honorar/DB" — der Korridor in §3 war geerbt, nicht hergeleitet. |
+| **`KPI_COLOR.plan`** | normale Textfarbe | §3a — der Normalfall hört auf, farbig zu sein. Gilt unabhängig von der Markenfarbe und macht den Farbton frei. |
 | **Dark-Theme** | `#6b96df` für alle vier Rollen | §4 — behebt zugleich den schlechtesten Abstand im Tokensatz (dark `--info`/`--accent2`, ΔE 3,0) |
 | **Hauptaktion** | **A — Markenblau** | `--cta` ist dort schon blau, wo es am meisten Handlung ist (§5) |
 | **Logo-PNGs** | mit umstellen | ΔE 34 zwischen altem Ampersand und neuem Akzent, in derselben Kopfzeile (§6) |

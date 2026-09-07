@@ -598,6 +598,67 @@
   --notif-dot:   #6b96df;
 }
 
+[data-theme="petrol"] {
+  /* Die Gegenoption zu "trust", und nach der Nachrechnung die bessere.
+     L* 41 · C* 25 · h 210.
+
+     Warum es diese Option ueberhaupt gibt: Der Korridor, aus dem #2d66b1
+     stammt, war von --kpi-plan (Petrol) und --accent2 (Violett) begrenzt —
+     zwei Tokens, die im Produkt stehen, aber selbst frei gewaehlt sind.
+     Gegen die Diagrammreihen war er NIE geprueft. Ergebnis: #2d66b1 liegt
+     bei Deuteranopie dE 4,1 von "Serie Blau" (#0072b2, Honorar/DB) — also
+     praktisch identisch mit der wichtigsten Datenreihe des Produkts.
+     Gerechnet gegen den gesamten festen Satz (6 Okabe-Ito-Reihen, Rot,
+     Bernstein), engster Abstand im hellen Theme:
+        heute  #2563eb  dE 38   (aber dE 6 zu --accent2)
+        trust  #2d66b1  dE  4   <- Befund
+        petrol #0d6b74  dE 17   <- haelt als einziges alles
+     Dazu besserer Kontrast (5,76 statt 5,33) und Chroma 25 statt 46, also
+     ohne Muehe im Vierfarbdruck. Herleitung: docs/MARKENFARBKONZEPT_2026-09.md
+
+     Petrol ist frei, weil Rot ("Handlung"), Bernstein ("beobachten") und
+     Gruen ("bezahlt/gebucht") im Produkt belegt sind — es ist die einzige
+     kuehle Familie, die keine Bedeutung mitschleppt. */
+  --accent:       #0d6b74;
+  --accent-dark:  #005a5f;
+  --accent-bg:    #ecf8f8;   /* L* 96,6 — exakt wie heute */
+  --accent-bg2:   #d5eced;   /* L* 91,7 — exakt wie heute */
+  --accent-tint:  rgba(13,107,116,0.04);
+  --accent-tint2: rgba(13,107,116,0.08);
+  --accent-tint3: rgba(13,107,116,0.10);
+  --accent-ring:  rgba(13,107,116,0.15);
+  --accent-rgb:   13,107,116;
+
+  --brand-glyph-empty: rgba(13,107,116,0.18);
+
+  --nav-active: #0d6b74;
+
+  /* Variante A, wie in "trust". */
+  --btn:   #0d6b74;
+  --btn-h: #005a5f;
+  --cta:   #0d6b74;
+  --cta-h: #005a5f;
+
+  --info:        #005a5f;
+  --info-strong: #004a4f;
+  --info-bg:     #ecf8f8;
+
+  --notif-dot: #0d6b74;
+
+  /* Der Normalfall hoert auf, farbig zu sein.
+     cpiLevel() gibt fuer JEDES gesunde Projekt 'plan' zurueck, und KpiValue
+     faerbt das petrol — jede gesunde Zeile der Projektliste traegt also eine
+     Farbe. Das ist genau die Alarmmuedigkeit, gegen die das Konzept in §2
+     argumentiert, nur in Petrol statt in Gruen. Markiert werden sollte, was
+     Aufmerksamkeit braucht: "beobachten" und "Handlungsbedarf".
+     Hier als Token-Ueberschreibung, damit die Vorschau ohne Eingriff in
+     gemeinsamen Code auskommt. Richtig umgesetzt gehoert das in
+     KPI_COLOR.plan (utils/kpiLevel.ts) und gilt dann fuer alle Themes —
+     dann wird --kpi-plan ueberhaupt nicht mehr gebraucht.
+     Wert = --text des hellen Themes, damit die Kontrastpruefung greift. */
+  --kpi-plan: #111827;
+}
+
 /* ── Reset / base ───────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
