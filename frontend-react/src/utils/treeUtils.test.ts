@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildStructureTree, flattenTree } from './treeUtils'
+import { buildStructureTree, flattenTree, parentStructureIds, structurePaths } from './treeUtils'
 import type { StructureNode } from '@/api/projekte'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,5 +119,47 @@ describe('flattenTree', () => {
     const flat = flattenTree(tree)
     const ids = flat.map(f => f.node.STRUCTURE_ID)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+})
+
+// ── parentStructureIds / structurePaths ──────────────────────────────────────
+//
+// Gebucht und umgebucht wird nur auf Blaetter, und ein Element ist erst mit
+// seinem Pfad eindeutig: „LP5" gibt es in zwei Zweigen — genau deshalb wird
+// falsch gebucht.
+
+describe('parentStructureIds', () => {
+  it('nennt nur Elemente mit Kindern', () => {
+    const rows = [node(1, null), node(2, 1), node(3, 2), node(4, null)]
+    expect(parentStructureIds(rows)).toEqual(new Set([1, 2]))
+  })
+
+  it('ist bei einer flachen Struktur leer (alles Blaetter)', () => {
+    expect(parentStructureIds([node(1, null), node(2, null)]).size).toBe(0)
+  })
+})
+
+describe('structurePaths', () => {
+  const rows = [
+    node(1, null, { NAME_SHORT: 'LP1', NAME_LONG: 'Grundlagen' }),
+    node(2, 1,    { NAME_SHORT: 'LP5', NAME_LONG: 'Ausführungsplanung' }),
+    node(3, 2,    { NAME_SHORT: 'a',   NAME_LONG: '' }),
+  ]
+
+  it('setzt Vorfahren mit Kuerzel vor Kuerzel und Langtext des Elements', () => {
+    const paths = structurePaths(rows)
+    expect(paths.get(1)).toBe('LP1: Grundlagen')
+    expect(paths.get(2)).toBe('LP1 > LP5: Ausführungsplanung')
+    expect(paths.get(3)).toBe('LP1 > LP5 > a')
+  })
+
+  it('haengt sich bei einem zyklischen FATHER_ID nicht auf', () => {
+    const zyklus = [
+      node(1, 2, { NAME_SHORT: 'A', NAME_LONG: '' }),
+      node(2, 1, { NAME_SHORT: 'B', NAME_LONG: '' }),
+    ]
+    const paths = structurePaths(zyklus)
+    expect(paths.get(1)).toBe('B > A')
+    expect(paths.get(2)).toBe('A > B')
   })
 })

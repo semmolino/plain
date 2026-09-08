@@ -2,7 +2,7 @@
 
 const arbzg = require("./arbzg");
 const budgetWarnings = require("./budgetWarnings");
-const { assertProjectInTenant, assertStructureInTenant, assertTecInTenant } = require("./tenantGuard");
+const { assertProjectInTenant, assertStructureInTenant, assertTecInTenant, NOT_FOUND } = require("./tenantGuard");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1055,6 +1055,409 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Umbuchen — Buchungen auf ein anderes Projektelement / Projekt verschieben
+// ---------------------------------------------------------------------------
+//
+// Warum ein eigener Weg und nicht patchBuchung je Zeile:
+//
+//   * Es ist eine Korrektur, keine Bearbeitung. Sie darf NUR das Ziel und die
+//     daraus folgenden Saetze anfassen — Menge, Datum, Person und Beschreibung
+//     bleiben, wie gebucht wurde. patchBuchung schreibt alles, was im Body steht.
+//   * Abgerechnete Buchungen muessen gesperrt sein. patchBuchung prueft
+//     INVOICE_ID/PARTIAL_PAYMENT_ID bewusst nicht — sonst liesse sich ein
+//     Tippfehler in der Beschreibung nach dem Rechnungslauf nicht mehr
+//     geradeziehen. Beim Umbuchen ist die Sperre dagegen der Kern der Sache:
+//     eine gestellte Rechnung darf ihre Grundlage nicht verlieren.
+//   * Eine Auswahl von 200 Zeilen soll EIN Vorgang sein — eine Vorschau, eine
+//     Bestaetigung, je Zeile ein Protokolleintrag, und die Summen der
+//     betroffenen Strukturknoten am Ende genau einmal neu gerechnet.
+//
+// Nicht geprueft wird der Monatsabschluss (EMPLOYEE_MONTH_CLOSE): er friert die
+// Zeiterfassung eines Mitarbeiters ein, und Datum, Person und Menge bleiben
+// hier unberuehrt — die Stundensumme des abgeschlossenen Monats also auch.
+
+/** Ein Beleg macht die Buchung unantastbar. `0` gilt wie NULL als „kein Beleg" —
+ *  so lesen es auch die Rechnungswege (isNullOrZero in services/invoices.js);
+ *  Altbestand traegt dort teils 0 statt NULL. */
+const belegLos = (v) => v === null || v === undefined || String(v) === "0";
+const istAbgerechnet = (r) => !belegLos(r.INVOICE_ID) || !belegLos(r.PARTIAL_PAYMENT_ID);
+
+// Deckel gegen einen Aufruf, der die halbe Tabelle in einem Rutsch verschiebt:
+// jede Zeile zieht eine Protokollzeile und die Neuberechnung ihrer Struktur nach.
+const REBOOK_MAX = 500;
+
+const REBOOK_SKIP_REASON = {
+  not_found: "Buchung nicht gefunden",
+  billed:    "bereits abgerechnet",
+  draft:     "Entwurf der Stempeluhr — erst bestätigen",
+  break:     "Pause — liegt auf keinem Projektelement",
+  unchanged: "liegt bereits auf dem Ziel",
+};
+
+/** Prueft das Ziel und liefert es samt Klartextnamen fuer Meldung und Protokoll. */
+async function loadRebookTarget(supabase, { targetProjectId, targetStructureId, tenantId }) {
+  const projectId   = await assertProjectInTenant(supabase, targetProjectId, tenantId);
+  const structureId = parseInt(String(targetStructureId), 10);
+  if (!Number.isFinite(structureId)) throw NOT_FOUND();
+
+  // Diese Abfrage IST die Besitzpruefung des Elements (Filter auf TENANT_ID,
+  // fehlende Zeile -> 404, nicht unterscheidbar von „fremd"); sie holt die
+  // Namen fuer Meldung und Protokoll gleich mit, statt assertStructureInTenant
+  // dieselbe Zeile ein zweites Mal lesen zu lassen.
+  const { data: node, error: nodeErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("ID, PROJECT_ID, NAME_SHORT, NAME_LONG")
+    .eq("ID", structureId)
+    .eq("TENANT_ID", tenantId)
+    .maybeSingle();
+  if (nodeErr) throw { status: 500, message: "Ziel-Projektelement nicht lesbar: " + nodeErr.message };
+  if (!node) throw NOT_FOUND();
+  if (Number(node.PROJECT_ID) !== Number(projectId)) {
+    throw { status: 400, message: "Das Ziel-Projektelement gehört nicht zum Zielprojekt." };
+  }
+
+  // Gleiche Regel wie beim Anlegen: gebucht wird auf Blaetter. Ein Knoten mit
+  // Unterpositionen summiert seine Kinder — eine Buchung darauf zaehlte doppelt.
+  const { data: kinder, error: kinderErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("ID")
+    .eq("FATHER_ID", structureId)
+    .eq("TENANT_ID", tenantId)
+    .limit(1);
+  if (kinderErr) throw { status: 500, message: "Ziel-Projektelement nicht lesbar: " + kinderErr.message };
+  if (kinder && kinder.length > 0) {
+    throw { status: 400, message: "Umbuchen ist nur auf Blatt-Elemente (ohne Unterpositionen) möglich." };
+  }
+
+  const { data: projekt } = await supabase
+    .from("PROJECT")
+    .select("ID, NAME_SHORT, NAME_LONG")
+    .eq("ID", projectId)
+    .eq("TENANT_ID", tenantId)
+    .maybeSingle();
+
+  return {
+    projectId,
+    structureId,
+    projectName:   projekt?.NAME_SHORT || `#${projectId}`,
+    structureName: node.NAME_LONG ? `${node.NAME_SHORT}: ${node.NAME_LONG}` : (node.NAME_SHORT || `#${structureId}`),
+  };
+}
+
+/**
+ * Umbuchen — mit `dryRun: true` als Vorschau (schreibt nichts).
+ *
+ * Die Vorschau laeuft durch DENSELBEN Code wie die Ausfuehrung; nur der
+ * Schreibteil am Ende faellt weg. Eine zweite, „ungefaehrliche" Kopie der
+ * Pruefungen waere genau die Stelle, an der Vorschau und Ergebnis
+ * auseinanderlaufen — und die Vorschau ist hier die Entscheidungsgrundlage
+ * des Nutzers.
+ *
+ * @returns {Promise<{target, moved:Array, skipped:Array, warnings:Array, movedCount:number}>}
+ */
+async function rebookBuchungen(supabase, {
+  ids, targetProjectId, targetStructureId, reason = "", dryRun = false, tenantId, employeeId = null,
+}) {
+  if (tenantId === undefined || tenantId === null || tenantId === "") {
+    throw new Error("rebookBuchungen: tenantId ist erforderlich");
+  }
+  const idList = [...new Set((Array.isArray(ids) ? ids : []).map(v => parseInt(String(v), 10)).filter(Number.isFinite))];
+  if (!idList.length) throw { status: 400, message: "Keine Buchungen ausgewählt." };
+  if (idList.length > REBOOK_MAX) {
+    throw { status: 400, message: `Es lassen sich höchstens ${REBOOK_MAX} Buchungen auf einmal umbuchen (ausgewählt: ${idList.length}).` };
+  }
+  if (!targetProjectId || !targetStructureId) {
+    throw { status: 400, message: "Zielprojekt und Ziel-Projektelement sind erforderlich." };
+  }
+
+  const target = await loadRebookTarget(supabase, { targetProjectId, targetStructureId, tenantId });
+
+  const { data: rows, error: rowsErr } = await supabase
+    .from("TEC")
+    .select(`
+      ID, TENANT_ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID, DATE_VOUCHER,
+      QUANTITY_INT, QUANTITY_EXT, CP_RATE, CP_TOT, SP_RATE, SP_TOT,
+      POSTING_DESCRIPTION, STATUS, BOOKING_KIND, ENTRY_KIND,
+      INVOICE_ID, PARTIAL_PAYMENT_ID
+    `)
+    .in("ID", idList)
+    .eq("TENANT_ID", tenantId);
+  if (rowsErr) throw { status: 500, message: "Buchungen nicht lesbar: " + rowsErr.message };
+
+  const byId = new Map((rows || []).map(r => [Number(r.ID), r]));
+
+  // Klartext fuer die Herkunft — Projekt- und Elementnamen einmal fuer alle
+  // beteiligten IDs, nicht je Zeile.
+  const quellProjektIds   = [...new Set((rows || []).map(r => r.PROJECT_ID).filter(v => v != null).map(Number))];
+  const quellStrukturIds  = [...new Set((rows || []).map(r => r.STRUCTURE_ID).filter(v => v != null).map(Number))];
+  const [projektNamen, strukturNamen] = await Promise.all([
+    (async () => {
+      if (!quellProjektIds.length) return new Map();
+      const { data } = await supabase.from("PROJECT").select("ID, NAME_SHORT").in("ID", quellProjektIds).eq("TENANT_ID", tenantId);
+      return new Map((data || []).map(p => [Number(p.ID), p.NAME_SHORT || `#${p.ID}`]));
+    })(),
+    (async () => {
+      if (!quellStrukturIds.length) return new Map();
+      const { data } = await supabase.from("PROJECT_STRUCTURE").select("ID, NAME_SHORT, NAME_LONG").in("ID", quellStrukturIds).eq("TENANT_ID", tenantId);
+      return new Map((data || []).map(s => [Number(s.ID), s.NAME_LONG ? `${s.NAME_SHORT}: ${s.NAME_LONG}` : (s.NAME_SHORT || `#${s.ID}`)]));
+    })(),
+  ]);
+
+  // Belegnummern der gesperrten Zeilen — „bereits abgerechnet" ohne Nummer
+  // laesst den Nutzer suchen.
+  const invoiceIds = [...new Set((rows || []).filter(r => !belegLos(r.INVOICE_ID)).map(r => Number(r.INVOICE_ID)))];
+  const partialIds = [...new Set((rows || []).filter(r => !belegLos(r.PARTIAL_PAYMENT_ID)).map(r => Number(r.PARTIAL_PAYMENT_ID)))];
+  const [invoiceNr, partialNr] = await Promise.all([
+    (async () => {
+      if (!invoiceIds.length) return new Map();
+      const { data } = await supabase.from("INVOICE").select("ID, INVOICE_NUMBER").in("ID", invoiceIds).eq("TENANT_ID", tenantId);
+      return new Map((data || []).map(i => [Number(i.ID), i.INVOICE_NUMBER || `#${i.ID}`]));
+    })(),
+    (async () => {
+      if (!partialIds.length) return new Map();
+      const { data } = await supabase.from("PARTIAL_PAYMENT").select("ID, PARTIAL_PAYMENT_NUMBER").in("ID", partialIds).eq("TENANT_ID", tenantId);
+      return new Map((data || []).map(p => [Number(p.ID), p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`]));
+    })(),
+  ]);
+
+  const skipped = [];
+  const kandidaten = [];
+
+  for (const id of idList) {
+    const r = byId.get(id);
+    // Nicht gefunden heisst hier auch „fremder Mandant" — die Abfrage oben ist
+    // mandantengefiltert. Bewusst nicht unterscheidbar (siehe tenantGuard).
+    if (!r) { skipped.push({ ID: id, reason: "not_found", message: REBOOK_SKIP_REASON.not_found }); continue; }
+
+    const beschreibung = {
+      ID:           Number(r.ID),
+      DATE_VOUCHER: r.DATE_VOUCHER,
+      QUANTITY_INT: Number(r.QUANTITY_INT ?? 0),
+      POSTING_DESCRIPTION: r.POSTING_DESCRIPTION || "",
+      FROM_PROJECT_ID:     r.PROJECT_ID != null ? Number(r.PROJECT_ID) : null,
+      FROM_PROJECT_NAME:   r.PROJECT_ID != null ? (projektNamen.get(Number(r.PROJECT_ID)) || null) : null,
+      FROM_STRUCTURE_ID:   r.STRUCTURE_ID != null ? Number(r.STRUCTURE_ID) : null,
+      FROM_STRUCTURE_NAME: r.STRUCTURE_ID != null ? (strukturNamen.get(Number(r.STRUCTURE_ID)) || null) : null,
+    };
+
+    if (istAbgerechnet(r)) {
+      const belege = [
+        !belegLos(r.INVOICE_ID)         ? `Rechnung ${invoiceNr.get(Number(r.INVOICE_ID)) || `#${r.INVOICE_ID}`}` : null,
+        !belegLos(r.PARTIAL_PAYMENT_ID) ? `Abschlag ${partialNr.get(Number(r.PARTIAL_PAYMENT_ID)) || `#${r.PARTIAL_PAYMENT_ID}`}` : null,
+      ].filter(Boolean).join(" · ");
+      skipped.push({ ...beschreibung, reason: "billed", message: `${REBOOK_SKIP_REASON.billed} (${belege})` });
+      continue;
+    }
+    if (r.STATUS === "DRAFT") {
+      skipped.push({ ...beschreibung, reason: "draft", message: REBOOK_SKIP_REASON.draft });
+      continue;
+    }
+    if (r.ENTRY_KIND === "BREAK") {
+      skipped.push({ ...beschreibung, reason: "break", message: REBOOK_SKIP_REASON.break });
+      continue;
+    }
+    if (Number(r.PROJECT_ID) === target.projectId && Number(r.STRUCTURE_ID) === target.structureId) {
+      skipped.push({ ...beschreibung, reason: "unchanged", message: REBOOK_SKIP_REASON.unchanged });
+      continue;
+    }
+    kandidaten.push({ row: r, beschreibung });
+  }
+
+  // ── Saetze des Zielprojekts ───────────────────────────────────────────────
+  // Der Stundensatz haengt an der Mitarbeiter/Projekt-Zuordnung, nicht an der
+  // Buchung: nach dem Umbuchen gilt der Satz des Zielprojekts, sonst rechnet
+  // das Ziel mit einem Preis, der dort nie vereinbart wurde. Fehlt die
+  // Zuordnung, bleibt der alte Satz stehen und die Antwort sagt das — eine
+  // stillschweigende 0 waere ein verschwundener Erloes.
+  // Der Kostensatz (CP_RATE) bleibt in jedem Fall: er kommt aus
+  // EMPLOYEE_CP_RATE und ist projektunabhaengig.
+  const presetCache = new Map();
+  const zielPreset = async (mitarbeiterId) => {
+    const key = Number(mitarbeiterId);
+    if (!presetCache.has(key)) {
+      presetCache.set(key, await loadEmployee2Project(supabase, key, target.projectId));
+    }
+    return presetCache.get(key);
+  };
+
+  const moved    = [];
+  const warnings = [];
+
+  for (const { row: r, beschreibung } of kandidaten) {
+    // Pauschalen/Stueckleistungen tragen einen frei erfassten Preis, keinen
+    // Stundensatz aus der Zuordnung — der bleibt unberuehrt.
+    const istSpezial = SPECIAL_KINDS.has(r.BOOKING_KIND);
+    const update = { PROJECT_ID: target.projectId, STRUCTURE_ID: target.structureId };
+
+    let spRateAfter = Number(r.SP_RATE ?? 0);
+    let spTotAfter  = Number(r.SP_TOT ?? 0);
+    let rateNote    = null;
+
+    if (!istSpezial) {
+      const preset = await zielPreset(r.EMPLOYEE_ID);
+      if (preset && preset.SP_RATE != null) {
+        spRateAfter = Number(preset.SP_RATE);
+        spTotAfter  = fmt2(Number(r.QUANTITY_EXT ?? 0) * spRateAfter);
+        update.SP_RATE         = spRateAfter;
+        update.SP_TOT          = spTotAfter;
+        update.ROLE_ID         = preset.ROLE_ID ?? null;
+        update.ROLE_NAME_SHORT = preset.ROLE_NAME_SHORT ?? null;
+        update.ROLE_NAME_LONG  = preset.ROLE_NAME_LONG ?? null;
+        if (fmt2(Number(r.SP_RATE ?? 0)) !== fmt2(spRateAfter)) rateNote = "rate_changed";
+      } else {
+        rateNote = "no_assignment";
+      }
+    }
+
+    moved.push({
+      ...beschreibung,
+      SP_RATE_BEFORE: fmt2(Number(r.SP_RATE ?? 0)),
+      SP_RATE_AFTER:  fmt2(spRateAfter),
+      SP_TOT_BEFORE:  fmt2(Number(r.SP_TOT ?? 0)),
+      SP_TOT_AFTER:   fmt2(spTotAfter),
+      RATE_NOTE:      rateNote,
+      _update:        update,
+      _row:           r,
+    });
+  }
+
+  const rateChanged  = moved.filter(m => m.RATE_NOTE === "rate_changed");
+  const noAssignment = moved.filter(m => m.RATE_NOTE === "no_assignment");
+  if (rateChanged.length) {
+    warnings.push({
+      code: "rate_changed",
+      count: rateChanged.length,
+      message: `${rateChanged.length} ${rateChanged.length === 1 ? "Buchung erhält" : "Buchungen erhalten"} den Stundensatz des Zielprojekts — der abrechenbare Erlös ändert sich dadurch.`,
+    });
+  }
+  if (noAssignment.length) {
+    warnings.push({
+      code: "no_assignment",
+      count: noAssignment.length,
+      message: `${noAssignment.length} ${noAssignment.length === 1 ? "Buchung betrifft einen Mitarbeiter" : "Buchungen betreffen Mitarbeiter"} ohne Stundensatz im Zielprojekt — dort bleibt der bisherige Satz stehen.`,
+    });
+  }
+  const billed = skipped.filter(s => s.reason === "billed");
+  if (billed.length) {
+    warnings.push({
+      code: "billed",
+      count: billed.length,
+      message: `${billed.length} ${billed.length === 1 ? "Buchung ist" : "Buchungen sind"} bereits abgerechnet und ${billed.length === 1 ? "bleibt" : "bleiben"} unverändert.`,
+    });
+  }
+
+  const antwort = {
+    target: {
+      PROJECT_ID:     target.projectId,
+      PROJECT_NAME:   target.projectName,
+      STRUCTURE_ID:   target.structureId,
+      STRUCTURE_NAME: target.structureName,
+    },
+    moved:      moved.map(({ _update, _row, ...rest }) => rest),
+    movedCount: moved.length,
+    skipped,
+    warnings,
+  };
+
+  if (dryRun) return antwort;
+  if (!moved.length) return { ...antwort, rebooked: 0 };
+
+  // ── Schreiben ─────────────────────────────────────────────────────────────
+  // Zeilen mit identischer Nutzlast in einem Aufruf: das Ziel ist fuer alle
+  // gleich, die Saetze unterscheiden sich nur je Mitarbeiter/Buchungsart.
+  const gruppen = new Map();
+  for (const m of moved) {
+    const key = JSON.stringify(m._update);
+    if (!gruppen.has(key)) gruppen.set(key, { update: m._update, ids: [] });
+    gruppen.get(key).ids.push(m.ID);
+  }
+  // Bricht eine Gruppe ab, laufen Protokoll und Neuberechnung TROTZDEM ueber
+  // das, was schon verschoben ist — und der Fehler wird danach gemeldet.
+  // Ohne das stehen Kosten und Erloes der betroffenen Knoten falsch da, und
+  // zwar still: die Zeilen sind umgebucht, die Summen zeigen den alten Stand.
+  // Eine Transaktion gibt es hier nicht (kein rohes SQL im App-Code).
+  const verschobenIds = new Set();
+  let updateFehler = null;
+  for (const { update, ids: gruppenIds } of gruppen.values()) {
+    const { error: updErr } = await supabase
+      .from("TEC")
+      .update(update)
+      .in("ID", gruppenIds)
+      .eq("TENANT_ID", tenantId);
+    if (updErr) { updateFehler = updErr; break; }
+    for (const id of gruppenIds) verschobenIds.add(id);
+  }
+  const verschoben = moved.filter(m => verschobenIds.has(m.ID));
+
+  // Protokoll. Es steht bewusst NACH dem Update: ein Eintrag ohne Umbuchung
+  // wäre eine falsche Auskunft, eine Umbuchung ohne Eintrag nur eine
+  // unvollstaendige — und der Fehler wird gemeldet, nicht geschluckt.
+  const protokoll = verschoben.map(m => ({
+    TENANT_ID:            tenantId,
+    TEC_ID:               m.ID,
+    DATE_VOUCHER:         m.DATE_VOUCHER || null,
+    BOOKING_EMPLOYEE_ID:  m._row.EMPLOYEE_ID ?? null,
+    QUANTITY_INT:         Number(m._row.QUANTITY_INT ?? 0),
+    CP_TOT:               Number(m._row.CP_TOT ?? 0),
+    FROM_PROJECT_ID:      m.FROM_PROJECT_ID,
+    FROM_PROJECT_NAME:    m.FROM_PROJECT_NAME,
+    FROM_STRUCTURE_ID:    m.FROM_STRUCTURE_ID,
+    FROM_STRUCTURE_NAME:  m.FROM_STRUCTURE_NAME,
+    TO_PROJECT_ID:        target.projectId,
+    TO_PROJECT_NAME:      target.projectName,
+    TO_STRUCTURE_ID:      target.structureId,
+    TO_STRUCTURE_NAME:    target.structureName,
+    SP_RATE_BEFORE:       m.SP_RATE_BEFORE,
+    SP_RATE_AFTER:        m.SP_RATE_AFTER,
+    SP_TOT_BEFORE:        m.SP_TOT_BEFORE,
+    SP_TOT_AFTER:         m.SP_TOT_AFTER,
+    REASON:               String(reason || "").trim().slice(0, 500) || null,
+    CREATED_BY_EMPLOYEE_ID: employeeId ?? null,
+  }));
+  let logFehler = null;
+  if (protokoll.length) {
+    const { error: logErr } = await supabase.from("TEC_REBOOKING").insert(protokoll);
+    // Fehlt die Tabelle (Migration 0139 nicht eingespielt), ist das kein Grund,
+    // die Umbuchung als gescheitert zu melden — sie hat stattgefunden.
+    if (logErr && !/relation .* does not exist/i.test(logErr.message)) logFehler = logErr;
+  }
+
+  // ── Summen der betroffenen Strukturknoten ─────────────────────────────────
+  // Quelle UND Ziel: dem einen fehlen die Kosten jetzt, dem anderen kommen
+  // sie zu. Jede Struktur genau einmal, auch wenn 50 Zeilen aus ihr kommen.
+  const betroffeneStrukturen = new Set(verschoben.length ? [target.structureId] : []);
+  for (const m of verschoben) if (m.FROM_STRUCTURE_ID != null) betroffeneStrukturen.add(m.FROM_STRUCTURE_ID);
+  for (const sid of betroffeneStrukturen) await recomputeStructure(supabase, sid);
+
+  // Budget-Warnungen je betroffenem Projekt (Reset auf der Quelle, evtl.
+  // Auslösung auf dem Ziel). Weich: eine fehlgeschlagene Auswertung darf eine
+  // erfolgte Umbuchung nicht als Fehler erscheinen lassen.
+  const projektStrukturen = new Map();
+  const merken = (projectId, structureId) => {
+    if (projectId == null || structureId == null) return;
+    const key = Number(projectId);
+    if (!projektStrukturen.has(key)) projektStrukturen.set(key, new Set());
+    projektStrukturen.get(key).add(Number(structureId));
+  };
+  if (verschoben.length) merken(target.projectId, target.structureId);
+  for (const m of verschoben) merken(m.FROM_PROJECT_ID, m.FROM_STRUCTURE_ID);
+  for (const [projectId, structureIds] of projektStrukturen) {
+    try {
+      await budgetWarnings.evaluateAfterTecChange(supabase, {
+        tenantId, projectId, structureIds, triggerEmployeeId: employeeId ?? null, triggerTecId: null,
+      });
+    } catch (e) {
+      console.warn(`[BUDGET_WARNING] rebookBuchungen eval failed (Projekt ${projectId}): ${e?.message || e}`);
+    }
+  }
+
+  if (updateFehler) throw { status: 500, message: `Fehler beim Umbuchen nach ${verschoben.length} von ${moved.length} Buchungen: ${updateFehler.message}` };
+  if (logFehler)    throw { status: 500, message: "Umbuchung erfolgte, Protokoll fehlgeschlagen: " + logFehler.message };
+
+  return { ...antwort, rebooked: verschoben.length };
+}
+
 module.exports = {
   recomputeStructure,
   createBuchung,
@@ -1062,6 +1465,7 @@ module.exports = {
   updateSpecialBuchung,
   patchBuchung,
   deleteBuchung,
+  rebookBuchungen,
   listBuchungenByProject,
   createTimerDraft,
   listDraftsByEmployee,

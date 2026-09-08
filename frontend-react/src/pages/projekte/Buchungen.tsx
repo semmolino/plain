@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
 import { Modal }       from '@/components/ui/Modal'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, ArrowRightLeft } from 'lucide-react'
 import { usePermissionsStore } from '@/store/permissionsStore'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FormField }   from '@/components/ui/FormField'
@@ -27,6 +27,9 @@ import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { RecentList } from '@/components/recents/RecentList'
+import { UmbuchenModal } from './UmbuchenModal'
+import { parentStructureIds, structurePaths } from '@/utils/treeUtils'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { trackRecent } from '@/api/recents'
 
 const FMT_NUM = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
@@ -113,6 +116,10 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   const showRevenue = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.revenue.view'))
   const showCosts   = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.costs.view'))
   const canSpecial  = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.special.create'))
+  // Umbuchen steht unter einem eigenen Recht: es verschiebt Kosten und Erlös
+  // zwischen Projekten (Migration 0139).
+  const canRebook   = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.rebook'))
+  const narrow      = useIsNarrow()
   const [specialKind, setSpecialKind] = useState<BookingKind | null>(null)
   const [editSpecial, setEditSpecial] = useState<Buchung | null>(null)
   const [pauseModal,  setPauseModal]  = useState<{ mode: 'create' | 'edit'; row?: Buchung } | null>(null)
@@ -138,6 +145,10 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   const [cpRateFound,  setCpRateFound]  = useState<boolean | null>(null)
   const [extTouched,   setExtTouched]   = useState(false)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  // Mehrfachauswahl für das Umbuchen. Auf Handy-Breite entfällt sie (die
+  // Spalte kostet dort 44px) — einzeln umbuchen geht über die Zeilenaktion.
+  const [selected,    setSelected]    = useState<Set<number>>(new Set())
+  const [rebookRows,  setRebookRows]  = useState<Buchung[] | null>(null)
 
   const { data: projectsData }  = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }       = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
@@ -189,8 +200,10 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   const buchungen = buchData?.data   ?? []
   const structure = structData?.data ?? []
 
-  const nodeById = useMemo(() => new Map(structure.map(n => [n.STRUCTURE_ID, n])), [structure])
-  const parentIds = useMemo(() => new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID))), [structure])
+  const parentIds = useMemo(() => parentStructureIds(structure), [structure])
+  // Pfade („LP1 > LP5: Ausführungsplanung") kommen aus treeUtils — derselbe
+  // Baustein, den der Umbuchen-Dialog für das Zielprojekt nutzt.
+  const pathCache = useMemo(() => structurePaths(structure), [structure])
 
   const childrenMap = useMemo(() => {
     const m = new Map<number, number[]>()
@@ -215,36 +228,16 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     return result
   }
 
-  function structPath(id: number): string {
-    const cur = nodeById.get(id)
-    if (!cur) return ''
-    const leaf = cur.NAME_LONG ? `${cur.NAME_SHORT}: ${cur.NAME_LONG}` : cur.NAME_SHORT
-    const ancestors: string[] = []
-    let fatherId = cur.FATHER_ID ? Number(cur.FATHER_ID) : null
-    while (fatherId != null) {
-      const parent = nodeById.get(fatherId)
-      if (!parent) break
-      ancestors.unshift(parent.NAME_SHORT)
-      fatherId = parent.FATHER_ID ? Number(parent.FATHER_ID) : null
-    }
-    return ancestors.length ? `${ancestors.join(' > ')} > ${leaf}` : leaf
-  }
-
   const allStructureSorted = useMemo(() =>
-    [...structure].sort((a, b) => structPath(a.STRUCTURE_ID).localeCompare(structPath(b.STRUCTURE_ID), 'de', { numeric: true })),
-    [structure, nodeById]
+    [...structure].sort((a, b) =>
+      (pathCache.get(a.STRUCTURE_ID) ?? '').localeCompare(pathCache.get(b.STRUCTURE_ID) ?? '', 'de', { numeric: true })),
+    [structure, pathCache]
   )
 
   const leafStructure = useMemo(() =>
-    allStructureSorted.filter(n => !parentIds.has(String(n.STRUCTURE_ID))),
+    allStructureSorted.filter(n => !parentIds.has(n.STRUCTURE_ID)),
     [allStructureSorted, parentIds]
   )
-
-  const pathCache = useMemo(() => {
-    const m = new Map<number, string>()
-    for (const n of structure) m.set(n.STRUCTURE_ID, structPath(n.STRUCTURE_ID))
-    return m
-  }, [structure, nodeById])
 
   const filterDescendants = useMemo(() => {
     if (!filterStruct) return null
@@ -313,6 +306,30 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   const totalExtH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) || isBreakRow(b) ? 0 : Number(b.QUANTITY_EXT) || 0), 0)
   const totalCost = visibleBuchungen.reduce((s, b) => s + (Number(b.CP_TOT) || 0), 0)
   const totalRev  = visibleBuchungen.reduce((s, b) => s + (Number(b.SP_TOT) || 0), 0)
+
+  // ── Auswahl fürs Umbuchen ─────────────────────────────────────────────────
+  // Auswählbar ist, was sich überhaupt verschieben lässt: Pausen liegen auf
+  // keinem Projektelement, abgerechnete Buchungen stecken in einem Beleg.
+  // Entwürfe der Stempeluhr erkennt erst der Server (STATUS ist nicht in der
+  // Liste) — er überspringt sie und sagt es in der Vorschau.
+  const isRebookable = (b: Buchung) => !isBilled(b) && !isBreakRow(b)
+  const selectableRows = useMemo(() => visibleBuchungen.filter(isRebookable), [visibleBuchungen])
+  const selectedRows   = useMemo(() => selectableRows.filter(b => selected.has(b.ID)), [selectableRows, selected])
+  const allSelected    = selectableRows.length > 0 && selectableRows.every(b => selected.has(b.ID))
+  const showSelectCol  = canRebook && !narrow
+
+  function toggleAllSelected() {
+    setSelected(allSelected ? new Set() : new Set(selectableRows.map(b => b.ID)))
+  }
+  function toggleRowSelected(id: number) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  // Projektwechsel: eine Auswahl aus dem alten Projekt darf nicht stehen bleiben.
+  useEffect(() => { setSelected(new Set()) }, [pid])
 
   function toggleSort(col: SortCol) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -610,10 +627,40 @@ export function Buchungen({ initialProjectId }: Props = {}) {
               </Modal>
               {!showForm && <Message text={msg?.text ?? null} type={msg?.type} />}
 
+              {/* Sammelaktion: erscheint erst mit einer Auswahl. */}
+              {showSelectCol && selectedRows.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13, flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--text-3)' }}>{selectedRows.length} ausgewählt</span>
+                  <button
+                    type="button"
+                    className="btn-small"
+                    style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => { setMsg(null); setRebookRows(selectedRows) }}
+                  >
+                    <ArrowRightLeft size={13} strokeWidth={2} />
+                    Umbuchen ({selectedRows.length})
+                  </button>
+                  <button type="button" className="btn-small" style={{ width: 'auto', color: 'var(--text-3)' }} onClick={() => setSelected(new Set())}>
+                    Auswahl aufheben
+                  </button>
+                </div>
+              )}
+
               <div className="list-section">
                 <table className="master-table">
                   <thead>
                     <tr>
+                      {showSelectCol && (
+                        <th scope="col" style={{ width: 32, padding: '6px 4px' }}>
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={toggleAllSelected}
+                            disabled={selectableRows.length === 0}
+                            aria-label="Alle umbuchbaren Buchungen auswählen"
+                          />
+                        </th>
+                      )}
                       <th scope="col" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('date')}>Datum{sortIndicator('date')}</th>
                       <th scope="col" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('employee')}>Mitarbeiter{sortIndicator('employee')}</th>
                       <th scope="col" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('path')}>Strukturpfad{sortIndicator('path')}</th>
@@ -628,6 +675,18 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                   <tbody>
                     {visibleBuchungen.map(b => (
                       <tr key={b.ID}>
+                        {showSelectCol && (
+                          <td style={{ padding: '6px 4px' }}>
+                            {isRebookable(b) && (
+                              <input
+                                type="checkbox"
+                                checked={selected.has(b.ID)}
+                                onChange={() => toggleRowSelected(b.ID)}
+                                aria-label={`Buchung vom ${fmtDate(b.DATE_VOUCHER)} auswählen`}
+                              />
+                            )}
+                          </td>
+                        )}
                         <td>{fmtDate(b.DATE_VOUCHER)}</td>
                         <td>{b.EMPLOYEE?.SHORT_NAME}</td>
                         <td style={{ fontSize: 13, color: 'var(--text-3)' }}>
@@ -660,6 +719,11 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                               <button className="row-action-btn" onClick={() => isBreakRow(b) ? setPauseModal({ mode: 'edit', row: b }) : isSpecialKind(b.BOOKING_KIND) ? setEditSpecial(b) : openEdit(b)} title="Bearbeiten">
                                 <Pencil size={14} strokeWidth={2} />
                               </button>
+                              {canRebook && !isBreakRow(b) && (
+                                <button className="row-action-btn" onClick={() => { setMsg(null); setRebookRows([b]) }} title="Umbuchen — auf anderes Projektelement/Projekt verschieben">
+                                  <ArrowRightLeft size={14} strokeWidth={2} />
+                                </button>
+                              )}
                               <button className="row-action-btn row-action-btn--danger" onClick={() => confirmDelete(b)} title="Löschen">
                                 <Trash2 size={14} strokeWidth={2} />
                               </button>
@@ -670,11 +734,11 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                         </td>
                       </tr>
                     ))}
-                    {!visibleBuchungen.length && <tr><td colSpan={6 + (showRevenue ? 2 : 0) + (showCosts ? 1 : 0)} className="empty-note">Keine Buchungen</td></tr>}
+                    {!visibleBuchungen.length && <tr><td colSpan={6 + (showRevenue ? 2 : 0) + (showCosts ? 1 : 0) + (showSelectCol ? 1 : 0)} className="empty-note">Keine Buchungen</td></tr>}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
-                      <td colSpan={3} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
+                      <td colSpan={showSelectCol ? 4 : 3} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                         {visibleBuchungen.length !== buchungen.length
                           ? `${visibleBuchungen.length} / ${buchungen.length} Einträge`
                           : `${buchungen.length} Einträge`}
@@ -790,6 +854,19 @@ export function Buchungen({ initialProjectId }: Props = {}) {
             setPauseModal(null)
             setMsg({ text, type: 'success' })
             void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
+          }}
+        />
+      )}
+
+      {rebookRows !== null && rebookRows.length > 0 && pid !== null && (
+        <UmbuchenModal
+          bookings={rebookRows}
+          sourceProjectId={pid}
+          onClose={() => setRebookRows(null)}
+          onDone={(text) => {
+            setRebookRows(null)
+            setSelected(new Set())
+            setMsg({ text, type: 'success' })
           }}
         />
       )}
