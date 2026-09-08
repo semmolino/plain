@@ -9,6 +9,10 @@
 -- DB editierbar (Owner-Konsole). Darum INSERT ... ON CONFLICT DO NOTHING:
 -- ein erneuter Seed legt NUR fehlende Zeilen an und überschreibt KEINE in der
 -- Konsole vorgenommenen Änderungen (Label/Modul/Position/Einheit).
+--
+-- @repeatable — laeuft bei jeder Inhaltsaenderung erneut (siehe scripts/migrate.js).
+--   Deshalb ist JEDE Anweisung hier wiederholbar zu halten:
+--   INSERT ... ON CONFLICT DO NOTHING, kein DELETE, kein TRUNCATE.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- 1. Module
