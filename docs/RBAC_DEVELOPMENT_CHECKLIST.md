@@ -167,6 +167,38 @@ ergänzt werden sollte. Sonst kann sich ein Tenant ungewollt aussperren.
 
 ---
 
+## Schritt 6 — Nach dem Einspielen gegenprüfen (mit Claim!)
+
+Eine eingespielte Migration ist noch kein vergebenes Recht. Ein `psql`-Lauf
+trägt kein JWT, RLS blockt fail-closed, und `INSERT INTO "ROLE_PERMISSION" …
+SELECT FROM "USER_ROLE"` findet dann **keine Rolle** — ohne eine einzige
+Fehlermeldung. Genau so war `reports.wip.view` nach `0136` für alle unsichtbar.
+
+Wer danach ohne Claim nachsieht, prüft dieselbe Blindheit ein zweites Mal.
+Vorlage dafür ist `backend/scripts/verify_0139_booking_rebook.sql` — sie setzt
+den Claim selbst, prüft zuerst, **ob er wirkt**, und gibt eine Liste aus
+OK/FEHLER-Zeilen aus:
+
+```
+scalingo --app planandsimple run \
+  'psql "$SCALINGO_POSTGRESQL_URL" -f backend/scripts/verify_0139_booking_rebook.sql'
+```
+
+Für eine andere Permission genügt die Zeile `\set perm` am Dateianfang; die
+Abschnitte zu Katalog, Rollen und Capability gelten unverändert. Zwei Regeln,
+die dabei nicht verhandelbar sind:
+
+- **Eine leere Ergebnismenge ist kein Erfolg.** „0 fehlende Rollen" heißt
+  entweder „alles vergeben" oder „ich sehe gar keine Rollen" — das Skript muss
+  diese Fälle unterscheiden, sonst wiederholt es den Fehler von `0136`.
+- **Kein Fehlalarm.** `information_schema.role_table_grants` zeigt nur Grants,
+  die die fragende Rolle sehen darf, und meldete im Test „0 von 8 Rechten" bei
+  vollständigen Rechten. Rechte deshalb über `pg_class.relacl` /
+  `aclexplode()` lesen. Einem Prüfskript, das einmal zu Unrecht schreit,
+  glaubt danach niemand mehr.
+
+---
+
 ## Praktische Beispiele
 
 ### Beispiel 1 — Neuer „Export Excel" Button für Rechnungen
