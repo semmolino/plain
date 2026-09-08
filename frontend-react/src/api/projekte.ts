@@ -363,6 +363,70 @@ export const updateBuchung = (id: number, body: UpdateBuchungPayload) =>
 export const deleteBuchung = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/buchungen/${id}`)
 
+// ── Umbuchen ──────────────────────────────────────────────────────────────────
+// Buchungen auf ein anderes Projektelement/Projekt verschieben. Zwei Aufrufe
+// mit derselben Nutzlast: `/vorschau` rechnet nur (schreibt nichts), der zweite
+// führt aus. Beide hängen an der Permission `projects.bookings.rebook`.
+
+/** Grund, warum eine ausgewählte Buchung nicht verschoben wird. */
+export type RebookSkipReason = 'not_found' | 'billed' | 'draft' | 'break' | 'unchanged'
+
+export interface RebookMoved {
+  ID:                  number
+  DATE_VOUCHER:        string | null
+  QUANTITY_INT:        number
+  POSTING_DESCRIPTION: string
+  FROM_PROJECT_ID:     number | null
+  FROM_PROJECT_NAME:   string | null
+  FROM_STRUCTURE_ID:   number | null
+  FROM_STRUCTURE_NAME: string | null
+  // Erlösfelder fehlen, wenn der Benutzer `projects.bookings.revenue.view`
+  // nicht hat — der Server entfernt sie dann aus der Antwort.
+  SP_RATE_BEFORE?:     number
+  SP_RATE_AFTER?:      number
+  SP_TOT_BEFORE?:      number
+  SP_TOT_AFTER?:       number
+  /** 'rate_changed' = Satz des Zielprojekts greift · 'no_assignment' = dort kein Satz hinterlegt */
+  RATE_NOTE:           'rate_changed' | 'no_assignment' | null
+}
+
+export interface RebookSkipped {
+  ID:                   number
+  reason:               RebookSkipReason
+  message:              string
+  DATE_VOUCHER?:        string | null
+  POSTING_DESCRIPTION?: string
+  FROM_STRUCTURE_NAME?: string | null
+}
+
+export interface RebookResult {
+  target: {
+    PROJECT_ID:     number
+    PROJECT_NAME:   string
+    STRUCTURE_ID:   number
+    STRUCTURE_NAME: string
+  }
+  moved:      RebookMoved[]
+  movedCount: number
+  skipped:    RebookSkipped[]
+  warnings:   Array<{ code: string; count: number; message: string }>
+  /** Nur in der Antwort der Ausführung, nicht in der Vorschau. */
+  rebooked?:  number
+}
+
+export interface RebookPayload {
+  ids:                 number[]
+  target_project_id:   number
+  target_structure_id: number
+  reason?:             string
+}
+
+export const previewRebookBuchungen = (body: RebookPayload) =>
+  apiClient.post<{ success: boolean; data: RebookResult }>('/buchungen/umbuchen/vorschau', body)
+
+export const rebookBuchungen = (body: RebookPayload) =>
+  apiClient.post<{ success: boolean; data: RebookResult }>('/buchungen/umbuchen', body)
+
 export interface Employee2ProjectPreset {
   found:           boolean
   SP_RATE:         number | null

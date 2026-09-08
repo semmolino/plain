@@ -90,6 +90,7 @@ INSERT INTO "CAPABILITY_PERMISSION" ("CAPABILITY_KEY","PERMISSION_KEY") VALUES
   ('core.time_tracking', 'projects.bookings.create'),
   ('core.time_tracking', 'projects.bookings.edit'),
   ('core.time_tracking', 'projects.bookings.delete'),
+  ('core.time_tracking', 'projects.bookings.rebook'),
   ('projects.management', 'projects.view'),
   ('projects.management', 'projects.create'),
   ('projects.management', 'projects.edit'),

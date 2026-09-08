@@ -201,6 +201,28 @@ export const HELP = {
       </>
     ),
   },
+  'bookings.rebook': {
+    title: 'Buchungen umbuchen',
+    body: (
+      <>
+        Verschiebt Buchungen auf ein anderes <strong>Projektelement</strong> — auf Wunsch
+        auch in ein anderes <strong>Projekt</strong>. Für den Fall, dass versehentlich auf
+        die falsche Position gebucht wurde. Menge, Datum, Mitarbeiter und Beschreibung
+        bleiben unverändert.
+        <br /><strong>Abgerechnete Buchungen sind gesperrt.</strong> Steckt eine Buchung in
+        einer Rechnung oder einem Abschlag, bleibt sie liegen — sonst verliert ein
+        gestellter Beleg seine Grundlage. Die Vorschau nennt die betroffene Belegnummer;
+        korrigiert wird über Storno bzw. Gutschrift.
+        <br /><strong>Der Stundensatz richtet sich nach dem Ziel.</strong> Er kommt aus der
+        Mitarbeiter/Projekt-Zuordnung des Zielprojekts, nicht aus der Buchung — der
+        abrechenbare Erlös kann sich dadurch ändern. Die Vorschau zeigt vorher, um wie
+        viel. Ist im Zielprojekt kein Satz hinterlegt, bleibt der bisherige stehen.
+        Der Kostensatz bleibt immer: er hängt am Mitarbeiter, nicht am Projekt.
+        <br />Kosten- und Erlössummen werden bei Quelle <em>und</em> Ziel neu gerechnet.
+        Jede Umbuchung wird mit Grund protokolliert.
+      </>
+    ),
+  },
   'bookings.text_snippets': {
     title: 'Textbausteine',
     body: (

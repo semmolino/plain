@@ -204,6 +204,18 @@ gewollt ist, in `nichtFuerProjektleiter` eintragen.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
+- **Umbuchen von Buchungen** (`rebookBuchungen` in `services/buchungen.js`,
+  `POST /buchungen/umbuchen[/vorschau]`, Recht `projects.bookings.rebook` aus
+  Migration `0139`): verschiebt TEC-Zeilen auf ein anderes Projektelement, auch
+  über Projektgrenzen. Zwei Regeln sind bindend: eine Buchung mit `INVOICE_ID`
+  oder `PARTIAL_PAYMENT_ID` ist **gesperrt** (ein gestellter Beleg darf seine
+  Grundlage nicht verlieren — Korrektur läuft über Storno/Gutschrift), und
+  `COSTS`/`REVENUE` werden bei **Quelle und Ziel** neu gerechnet, auch wenn ein
+  Schreibvorgang mitten in der Auswahl abbricht. Der Stundensatz kommt nach dem
+  Umbuchen aus der `EMPLOYEE2PROJECT`-Zuordnung des Ziels (fehlt sie, bleibt der
+  alte Satz und die Antwort sagt das); der Kostensatz bleibt, er hängt am
+  Mitarbeiter. Die Vorschau ist derselbe Lauf mit `dryRun` — keine zweite Kopie
+  der Prüfungen. Jede Umbuchung landet in `TEC_REBOOKING`.
 - **Teilfertige Leistungen** (`services/wipReport.js`, Report unter Projektdaten):
   der kaufmännische Abschluss. Je Projekt und Stichtag `unfertig = max(0,
   Leistungswert − abgerechnet)`, HGB-Ansatz `min(Kostenanteil, unfertig)`.

@@ -159,6 +159,45 @@ async function patchDraftDescription(req, res, supabase) {
   }
 }
 
+// ── Umbuchen ────────────────────────────────────────────────────────────────
+//
+// Zwei Endpunkte, EIN Service-Aufruf: die Vorschau ist derselbe Lauf mit
+// dryRun=true. Sie ist die Entscheidungsgrundlage des Nutzers ("welche
+// Buchungen sind gesperrt, welcher Satz aendert sich?") — eine zweite,
+// harmlosere Kopie der Pruefungen waere die Stelle, an der Vorschau und
+// Ergebnis auseinanderlaufen.
+async function rebookHandler(req, res, supabase, dryRun) {
+  const b = req.body || {};
+  try {
+    const data = await svc.rebookBuchungen(supabase, {
+      ids:               b.ids,
+      targetProjectId:   b.target_project_id,
+      targetStructureId: b.target_structure_id,
+      reason:            b.reason,
+      dryRun,
+      tenantId:          req.tenantId,
+      employeeId:        req.employeeId,
+    });
+
+    // Felder-Filter wie in listBuchungenByProject: wer Erloese nicht sehen
+    // darf, bekommt die Betraege auch hier nicht. Der Hinweis, DASS sich der
+    // Satz aendert, bleibt — er nennt keine Zahl und ist die Grundlage der
+    // Entscheidung.
+    const showRevenue = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.revenue.view");
+    if (!showRevenue) {
+      data.moved = (data.moved || []).map(({ SP_RATE_BEFORE, SP_RATE_AFTER, SP_TOT_BEFORE, SP_TOT_AFTER, ...rest }) => rest);
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || String(err) });
+  }
+}
+
+const previewRebook = (req, res, supabase) => rebookHandler(req, res, supabase, true);
+const rebook        = (req, res, supabase) => rebookHandler(req, res, supabase, false);
+
 // ── Workstart-Status (Stempeluhr-Auto-Popup) ─────────────────────────────────
 //
 // Liefert dem Frontend zwei Werte fuer die Login-Logik:
@@ -215,6 +254,8 @@ module.exports = {
   updateSpecialBuchung,
   patchBuchung,
   deleteBuchung,
+  previewRebook,
+  rebook,
   listBuchungenByProject,
   createTimerDraft,
   listDraftsByEmployee,
