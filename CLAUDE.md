@@ -179,11 +179,14 @@ Kataloge ohne `TENANT_ID` (`PERMISSION`, `CAPABILITY_PERMISSION`,
 `LICENSE_*`) brauchen das nicht. Und: **nach dem Einspielen gegenprüfen** —
 mit gesetztem Claim, sonst prüft man dieselbe Blindheit noch einmal.
 
-**Generierte Seeds nicht vergessen**: wer eine Permission an eine
-Lizenz-Capability hängt, ändert `capabilities.manifest.js`, lässt
-`npm run license:gen` laufen **und spielt `0070b` neu ein**. Ohne die Zeile in
-`CAPABILITY_PERMISSION` gilt das Recht als „keiner Capability zugeordnet" und
-wirkt in jedem Tarif (fail-open).
+**Generierte Seeds**: wer eine Permission an eine Lizenz-Capability hängt,
+ändert `capabilities.manifest.js` und lässt `npm run license:gen` laufen — das
+Einspielen von `0070b` übernimmt der Deploy-Hook, weil die Datei
+`-- @repeatable` trägt und über ihren Inhalts-Hash läuft. **Die generierte
+Datei mit committen**: bleibt sie liegen, ändert sich der Hash nicht und die
+Zeile in `CAPABILITY_PERMISSION` entsteht nie — das Recht gilt dann als
+„keiner Capability zugeordnet" und wirkt in jedem Tarif (fail-open). Genau
+diese Kette prüft `backend/tests/migrate.plan.test.js` mit.
 
 **Neue Mandanten bekommen ihre Rollen nicht aus den Migrationen**, sondern aus
 `seedTenantRbacAndAssignAdmin` in `routes/auth.js`. Dort vergibt „Projektleiter"
@@ -239,9 +242,33 @@ beziehen sich auf diesen früheren Stand.
 
 1. Push to `main` → Scalingo baut über das Node-Buildpack (`scalingo-postbuild` in der
    Root-`package.json`), Start über `Procfile` → `bin/start-web.sh`
-2. **SQL-Migrationen manuell einspielen**, gegen die Scalingo-Datenbank (NICHT mehr im Supabase-Editor):
-   `scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -f backend/migrations/0129_….sql'`
-   Dateien liegen in `backend/migrations/`, nummeriert `0001_…`
+2. **SQL-Migrationen laufen im `postdeploy`-Hook mit** (seit 09/2026, `Procfile` →
+   `node backend/scripts/migrate.js --auto`). Der Hook läuft synchron am Ende jedes
+   Deploys in einem One-off-Container; **schlägt er fehl, schlägt der Deploy fehl**
+   (Status `hook-error`) und die alte Version bleibt online. Neue Migration also nur
+   nach `backend/migrations/` legen und pushen — nichts von Hand einspielen.
+
+   Drei Regeln dazu, jede aus einem konkreten Schaden entstanden:
+   - **`APPLIED_BASELINE.txt` ist die Grenze.** Bis 09/2026 lief jede Migration von
+     Hand, `_migrations` ist produktiv deshalb leer, obwohl die Datenbank auf dem
+     Stand aller Dateien ist. Was in der Baseline steht, wird **vermerkt und nie
+     ausgeführt** — sonst liefen 151 Dateien erneut, inklusive Daten-Migrationen und
+     Seeds ohne `ON CONFLICT`. **Neue Dateien gehören NICHT hinein**, sonst laufen
+     sie nie.
+   - **Generierte Seeds tragen `-- @repeatable`** und werden über ihren Inhalts-Hash
+     eingespielt, nicht über den Dateinamen (siehe unten, `0070b`). Sie müssen
+     deshalb wiederholbar geschrieben sein: `INSERT … ON CONFLICT DO NOTHING`,
+     kein `DELETE`, kein `TRUNCATE`.
+   - **Der RLS-Claim bleibt Sache der Migration.** Der Runner verbindet sich mit
+     `pg` und trägt kein JWT — eine Migration, die mandantenbezogene Tabellen liest
+     oder schreibt, muss `SET request.jwt.claims` selbst setzen (siehe Database
+     conventions). Daran ist `0136` gescheitert, nicht am Einspielweg.
+
+   Notbremse: `MIGRATE_ON_DEPLOY=false` → der Hook berichtet nur und ändert nichts.
+   Von Hand geht weiterhin:
+   `scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -f backend/migrations/0139_….sql'`
+   Dateien liegen in `backend/migrations/`, nummeriert `0001_…`; Status ansehen mit
+   `node backend/scripts/migrate.js --status`.
 3. Umgebungsvariablen über `scalingo --app planandsimple env-set …` bzw. das Dashboard:
    `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `SMTP_*`, `FRONTEND_URL`
 4. Runbook: `docs/SCALINGO_DEPLOY_RUNBOOK.md`

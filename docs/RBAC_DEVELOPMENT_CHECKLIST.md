@@ -174,6 +174,12 @@ trägt kein JWT, RLS blockt fail-closed, und `INSERT INTO "ROLE_PERMISSION" …
 SELECT FROM "USER_ROLE"` findet dann **keine Rolle** — ohne eine einzige
 Fehlermeldung. Genau so war `reports.wip.view` nach `0136` für alle unsichtbar.
 
+Seit 09/2026 spielt der `postdeploy`-Hook die Migration selbst ein (siehe
+CLAUDE.md, Abschnitt Deployment) — **der Claim bleibt aber Sache der
+Migrationsdatei**, denn der Runner verbindet sich mit `pg` und trägt kein JWT.
+Am Einspielweg ändert sich also nichts an dieser Regel; nur der Zeitpunkt ist
+jetzt der Deploy statt ein Aufruf von Hand.
+
 Wer danach ohne Claim nachsieht, prüft dieselbe Blindheit ein zweites Mal.
 Vorlage dafür ist `backend/scripts/verify_0139_booking_rebook.sql` — sie setzt
 den Claim selbst, prüft zuerst, **ob er wirkt**, und gibt eine Liste aus
