@@ -33,7 +33,7 @@ plain/
 │   ├── services_pdf_render.js # Playwright PDF renderer, Nunjucks env
 │   ├── services_einvoice_*.js # XRechnung/CII/UBL builders
 │   ├── templates/modern_a/   # Nunjucks PDF templates (invoice.njk, offer.njk, …)
-│   └── migrations/            # SQL files — MANUELL gegen die Scalingo-DB einspielen
+│   └── migrations/            # SQL files — laufen im postdeploy-Hook (s. Deployment)
 ├── frontend-react/
 │   └── src/
 │       ├── api/               # One file per domain — apiClient wrappers + TypeScript types
