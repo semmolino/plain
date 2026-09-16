@@ -109,8 +109,8 @@
     },
     {
       "id": "02-hourly-rate",
-      "status": "planned",
-      "note": "SP_* -> HOURLY_RATE*. Beruehrt die Honorarkalkulation - hoai-kalkulation-reviewer einplanen.",
+      "status": "done",
+      "note": "SP_* -> HOURLY_RATE*. Beruehrt die Honorarkalkulation - hoai-kalkulation-reviewer einplanen. ERLEDIGT 2026-09-16: Migrationen 0142/0143 per postdeploy-Hook, verify gruen, alle Report-Objekte gegen echte Daten geprueft.",
       "tables": [
         {
           "from": "EMPLOYEE2PROJECT",
