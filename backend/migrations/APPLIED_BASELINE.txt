@@ -108,7 +108,6 @@
 0074_tenant_email_settings.sql
 0075_rbac_email_settings_permission.sql
 0076_employee_avatar.sql
-0076_tenant_email_domain.sql
 0077_notification_labels_umlauts.sql
 0078_rbac_document_template_permission.sql
 0079_booking_types.sql
@@ -127,7 +126,6 @@
 0092_import_contact.sql
 0093_import_opening_balance.sql
 0094_import_opening_payment.sql
-0095_import_opening_cost.sql
 0096_rbac_service.sql
 0097_lph_blocks.sql
 0097_service_area.sql
@@ -169,9 +167,6 @@
 0130_email_bcc.sql
 0131_tenant_id_default.sql
 0132_suggestion_org_release.sql
-0133_einvoice_cii_snapshot.sql
-0134_employee_session_epoch.sql
-0135_tenant_signup_approval.sql
 0136_rbac_wip_report.sql
 0137_wip_closing.sql
 0138_wip_closing_tax.sql

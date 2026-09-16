@@ -127,8 +127,19 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // Je Block kommen zwei dazu: die ALTER-Anweisungen und die SQL-Objekte, die
     // ALTER nicht anfasst. Auf der Produktionsdatenbank sind sie bereits
     // vermerkt; eine frisch aufgebaute Datenbank braucht sie.
+    //
+    // 0076, 0095, 0133, 0134, 0135 standen faelschlich in der Baseline: dort
+    // vermerkt, aber nie ausgefuehrt. Aufgefallen ist es erst durch
+    // scripts/migration-drift.mjs — bis dahin waren SESSION_EPOCH (Sitzungs-
+    // ruecknahme) und SIGNUP_STATE (Registrierungssperre) still wirkungslos.
+    // Sie stehen jetzt ausserhalb der Baseline, damit der Deploy sie einspielt.
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
+      "0076_tenant_email_domain.sql",
+      "0095_import_opening_cost.sql",
+      "0133_einvoice_cii_snapshot.sql",
+      "0134_employee_session_epoch.sql",
+      "0135_tenant_signup_approval.sql",
       "0139_booking_rebook.sql",
       "0140_01_cost_rate.sql",
       "0141_01_cost_rate_sql_objects.sql",
