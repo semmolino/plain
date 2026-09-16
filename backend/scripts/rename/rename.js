@@ -7,7 +7,8 @@
  *
  * Usage (run from anywhere):
  *   node backend/scripts/rename/rename.js check   [--block ID]
- *   node backend/scripts/rename/rename.js sql     [--block ID]
+ *   node backend/scripts/rename/rename.js sql       [--block ID]
+ *   node backend/scripts/rename/rename.js functions [--block ID]
  *   node backend/scripts/rename/rename.js apply   [--block ID] [--write]
  *   node backend/scripts/rename/rename.js guard   [--block ID]
  *   node backend/scripts/rename/rename.js verify  [--block ID]
@@ -21,6 +22,10 @@
  *           assembles at runtime, which no search can rewrite.
  * sql     - writes the next numbered up-migration plus a matching down file,
  *           each ending in NOTIFY pgrst so PostgREST drops its schema cache.
+ * functions - the other half of the rename, which ALTER does not do: plpgsql
+ *           bodies and the output column names of views. Reads the live
+ *           definitions, applies the same replacement and writes a second
+ *           migration. Run it AFTER "sql", so the numbering follows.
  * apply   - the codemod. Dry-run unless --write is passed; --write without
  *           --block is refused, because blocks are meant to land one at a time.
  * guard   - fails if any old identifier is still present in the code.
@@ -271,6 +276,167 @@ function manualColumns(blocks) {
   return out;
 }
 
+
+// ------------------------------------------------- SQL objects (functions/views)
+
+/**
+ * ALTER ... RENAME moves a table, its indexes, constraints and policies, because
+ * Postgres tracks those by OID. It does NOT touch two things:
+ *
+ *   - plpgsql bodies, which are plain text. They keep the old name and break
+ *     when someone calls them, not when the rename runs.
+ *   - the OUTPUT column names of views and of RETURNS TABLE signatures. Those
+ *     keep pointing at the old spelling, so the API keeps serving the old key
+ *     while the table underneath already carries the new one.
+ *
+ * Both are the same mechanical replacement the codemod does to the JS. Doing it
+ * by hand would mean rewriting fn_project_report_header - 250 lines of plpgsql -
+ * once per block in seven of the eight blocks. So it is generated here instead,
+ * as a separate file that still gets read before it is applied.
+ */
+
+/** Views and matviews that depend on the given ones, transitively. */
+async function dependentViews(client, oids) {
+  if (oids.length === 0) return [];
+  const { rows } = await client.query(
+    `WITH RECURSIVE dep AS (
+       SELECT c.oid, 0 AS lvl
+         FROM pg_class c
+        WHERE c.oid = ANY($1::oid[])
+       UNION ALL
+       SELECT c2.oid, dep.lvl + 1
+         FROM dep
+         JOIN pg_depend d  ON d.refobjid = dep.oid
+         JOIN pg_rewrite r ON r.oid = d.objid
+         JOIN pg_class c2  ON c2.oid = r.ev_class
+        WHERE c2.relkind IN ('v', 'm') AND c2.oid <> dep.oid AND dep.lvl < 20
+     )
+     SELECT n.nspname AS schema, c.relname AS name, c.relkind AS kind,
+            max(dep.lvl) AS lvl, pg_get_viewdef(c.oid, true) AS def
+       FROM dep
+       JOIN pg_class c ON c.oid = dep.oid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind IN ('v', 'm')
+      GROUP BY n.nspname, c.relname, c.relkind, c.oid
+      ORDER BY lvl`,
+    [oids]
+  );
+  return rows;
+}
+
+async function affectedSqlObjects(client, blocks) {
+  const idents = [];
+  for (const [ident, info] of globalReplacements(blocks)) {
+    if (!info.api) idents.push(ident); // request fields never appear in SQL
+  }
+  for (const m of manualColumns(blocks)) idents.push(m.from);
+
+  const fns = new Map();
+  const viewOids = new Set();
+  for (const ident of idents) {
+    const { rows } = await client.query(
+      `SELECT n.nspname AS schema, p.proname AS name, p.oid,
+              pg_get_functiondef(p.oid) AS def
+         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE ${APP_SCHEMAS} AND p.prokind = 'f'
+          AND (p.prosrc ILIKE '%' || $1 || '%' OR pg_get_function_result(p.oid) ILIKE '%' || $1 || '%')`,
+      [ident]
+    );
+    for (const r of rows) fns.set(`${r.schema}.${r.name}`, r);
+
+    const { rows: vrows } = await client.query(
+      `SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE ${APP_SCHEMAS} AND c.relkind IN ('v','m')
+          AND pg_get_viewdef(c.oid) ILIKE '%' || $1 || '%'`,
+      [ident]
+    );
+    for (const r of vrows) viewOids.add(r.oid);
+  }
+
+  // Everything that reads an affected view has to come down with it and go back
+  // up afterwards - a DROP ... CASCADE would remove it without rebuilding it.
+  const views = await dependentViews(client, [...viewOids]);
+  return { fns: [...fns.values()], views };
+}
+
+async function cmdFunctions(blocks) {
+  await withDb(async (client) => {
+    const { fns, views } = await affectedSqlObjects(client, blocks);
+    if (fns.length === 0 && views.length === 0) {
+      console.log("\n  No function or view mentions an affected identifier.\n");
+      return;
+    }
+
+    const repl = globalReplacements(blocks);
+    const tokens = [...repl.keys()].filter((k) => !repl.get(k).api);
+    for (const m of manualColumns(blocks)) tokens.push(m.from);
+    const re = buildRegex(tokens);
+    const rewrite = (sql) => sql.replace(re, (t) => (repl.get(t) ? repl.get(t).to : t));
+
+    const qname = (o) => `"${o.schema}"."${o.name}"`;
+    const out = [];
+    const touched = [];
+
+    out.push(
+      `-- Generated by backend/scripts/rename/rename.js functions - READ BEFORE APPLYING.`,
+      `-- Source of truth: backend/scripts/rename/rename-map.json`,
+      `--`,
+      `-- ALTER ... RENAME leaves plpgsql bodies and view output columns alone. This`,
+      `-- file is that leftover, with the same replacement applied that the codemod`,
+      `-- applied to the JS. It is generated, not authored - but it is NOT automatic:`,
+      `--`,
+      `--   * a "table"-scoped identifier was replaced everywhere it appeared here.`,
+      `--     If a body also reads a table that keeps the old column, that line is`,
+      `--     now wrong. Check each one.`,
+      `--   * CREATE VIEW loses an explicit column list, if the original had one.`,
+      `--   * apply this AFTER the ALTER migration, in the same deploy.`,
+      ``
+    );
+
+    if (views.length) {
+      out.push(`-- Views, most dependent first. They come down so their output column`);
+      out.push(`-- names can change - CREATE OR REPLACE VIEW cannot rename a column.`);
+      for (const v of [...views].sort((a, b) => b.lvl - a.lvl)) {
+        out.push(`DROP ${v.kind === "m" ? "MATERIALIZED " : ""}VIEW IF EXISTS ${qname(v)};`);
+        touched.push(`${v.kind === "m" ? "matview" : "view"} ${v.schema}.${v.name}`);
+      }
+      out.push(``);
+    }
+
+    if (fns.length) {
+      out.push(`-- Functions. CREATE OR REPLACE keeps the OID, so grants survive.`);
+      for (const f of fns.sort((a, b) => a.name.localeCompare(b.name))) {
+        out.push(rewrite(f.def).trimEnd().replace(/;?$/, ";"), ``);
+        touched.push(`function ${f.schema}.${f.name}`);
+      }
+    }
+
+    if (views.length) {
+      out.push(`-- Views back up, least dependent first.`);
+      for (const v of [...views].sort((a, b) => a.lvl - b.lvl)) {
+        const kind = v.kind === "m" ? "MATERIALIZED VIEW" : "VIEW";
+        out.push(`CREATE ${kind} ${qname(v)} AS`, rewrite(v.def).trimEnd().replace(/;?$/, ";"), ``);
+      }
+    }
+
+    out.push(`-- PostgREST serves from a cached schema; without this it keeps using the old one.`);
+    out.push(`NOTIFY pgrst, 'reload schema';`);
+
+    const num = nextMigrationNumber();
+    const slug = blocks.length === 1 ? blocks[0].id.replace(/[^a-z0-9]+/gi, "_") : "rename_block";
+    const file = path.join(MIGRATIONS_DIR, `${num}_${slug}_sql_objects.sql`);
+    fs.writeFileSync(file, out.join("\n") + "\n");
+
+    console.log(`\n  wrote  ${path.relative(REPO, file)}`);
+    console.log(`\n  ${touched.length} object(s) rebuilt:`);
+    for (const t of touched) console.log(`    ${t}`);
+    console.log(
+      `\n  Read it before applying. A generated rewrite of a 250-line plpgsql body` +
+      `\n  is still a rewrite of a 250-line plpgsql body.\n`
+    );
+  });
+}
+
 // ------------------------------------------------------------- file traversal
 
 function* walk(dir) {
@@ -310,7 +476,10 @@ function buildRegex(tokens) {
 
 async function withDb(fn) {
   if (!process.env.DATABASE_URL) {
-    fail("DATABASE_URL is not set in backend/.env - needed for check/verify.");
+    fail(
+      "DATABASE_URL is not set in backend/.env - needed for check, functions " +
+      "and verify. Open the tunnel first: scripts/scalingo/04_db_tunnel.sh"
+    );
   }
   const { Client } = require("pg");
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -716,10 +885,13 @@ async function cmdVerify(blocks) {
 // ---------------------------------------------------------------------- main
 
 async function main() {
-  const commands = { check: cmdCheck, sql: cmdSql, apply: cmdApply, guard: cmdGuard, verify: cmdVerify };
+  const commands = {
+    check: cmdCheck, sql: cmdSql, functions: cmdFunctions,
+    apply: cmdApply, guard: cmdGuard, verify: cmdVerify,
+  };
   const fn = commands[CMD];
   if (!fn) {
-    console.log("\nUsage: node backend/scripts/rename/rename.js <check|sql|apply|guard|verify> [--block ID] [--write]\n");
+    console.log("\nUsage: node backend/scripts/rename/rename.js <check|sql|functions|apply|guard|verify> [--block ID] [--write]\n");
     process.exit(1);
   }
   await fn(loadBlocks());

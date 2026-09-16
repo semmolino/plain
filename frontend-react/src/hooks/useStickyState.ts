@@ -24,7 +24,8 @@ import { useAuthStore } from '@/store/authStore'
 
 /**
  * Bei jeder Umbenennung, die persistierte Sortier-/Spaltenschlüssel betrifft,
- * hochzählen. v2: Umbenennung NAME_SHORT->ABBR / NAME_LONG->NAME (2026-09).
+ * hochzählen. v2: die Kurz-/Langnamen-Umbenennung, Bloecke 07 und 08 in
+ * backend/scripts/rename/rename-map.json (2026-09).
  */
 const SCHEMA_VERSION = 'v2'
 
