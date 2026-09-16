@@ -17,28 +17,1314 @@
     "  'table'  -> the same column name exists on other tables that are NOT",
     "              being renamed. Cannot be automated - a repo-wide replace",
     "              would corrupt the other tables' call sites. `apply` skips",
-    "              these and lists every occurrence for manual review."
+    "              these and lists every occurrence for manual review.",
+    "",
+    "columns[].api - the snake_case twin in request bodies (name_long -> name):",
+    "  false          -> no request field carries this name",
+    "  true           -> derive both sides by lowercasing",
+    "  { from, to }   -> spell it out. Required when either side is an everyday",
+    "                    word, because as a source it would match unrelated code",
+    "                    and as a target it can collide with a local variable.",
+    "",
+    "dynamicWatch  - extra identifier prefixes to flag wherever the code",
+    "                interpolates into a string, e.g. `SURCHARGE_${i}_LABEL`.",
+    "alwaysReview  - files that build a column name entirely from a variable.",
+    "                No search can find those; they get read every single block."
+  ],
+  "dynamicWatch": [
+    "SURCHARGE_",
+    "ZONE_",
+    "XML_ZUGFERD_"
+  ],
+  "alwaysReview": [
+    "backend/services/emailTemplates.js   - .select(`ID, ${numberCol}, ${dateCol}, …`)",
+    "backend/services/stammdaten.js       - FEE_ZONE_COLUMN_BY_ROMAN builds ZONE_* names",
+    "backend/services/nachtraege.js       - `SURCHARGE_${i}_LABEL/_PCT/_CUMUL` over [1,2,3]",
+    "backend/services/dependencyCheck.js  - safeReferences(table, selectFields, filter)",
+    "backend/services/importService.js    - DOMAINS registry: table / dependents[].column",
+    "backend/demo/exportTenant.js         - TENANT_TABLES / COMPANY_TABLES / PARENT_TABLES",
+    "backend/demo/seed/lib/reset.js       - MOVEMENT_TABLES"
   ],
   "blocks": [
     {
-      "id": "00-example",
-      "status": "example",
-      "note": "Delete or ignore - shows the shape only.",
+      "id": "01-cost-rate",
+      "status": "planned",
+      "note": "CP_* -> COST_*. Kleinster Block, Probelauf fuer die ganze Kette.",
       "tables": [
         {
-          "from": "TEXT_SNIPPET",
-          "to": "TEXTBAUSTEIN",
+          "from": "EMPLOYEE_CP_RATE",
+          "to": "EMPLOYEE_COST_RATE",
           "columns": [
-            { "from": "SCOPE", "to": "GUELTIGKEITSBEREICH", "scope": "table" },
-            { "from": "SNIPPET_BODY", "to": "INHALT", "scope": "global" }
+            {
+              "from": "CP_RATE",
+              "to": "COST_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PROJECT_BOOKING_PRICE",
+          "to": null,
+          "columns": [
+            {
+              "from": "CP_RATE",
+              "to": "COST_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC",
+          "to": null,
+          "columns": [
+            {
+              "from": "CP_RATE",
+              "to": "COST_RATE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "CP_TOT",
+              "to": "COST_TOTAL",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC_REBOOKING",
+          "to": null,
+          "columns": [
+            {
+              "from": "CP_TOT",
+              "to": "COST_TOTAL",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "02-hourly-rate",
+      "status": "planned",
+      "note": "SP_* -> HOURLY_RATE*. Beruehrt die Honorarkalkulation - hoai-kalkulation-reviewer einplanen.",
+      "tables": [
+        {
+          "from": "EMPLOYEE2PROJECT",
+          "to": null,
+          "columns": [
+            {
+              "from": "SP_RATE",
+              "to": "HOURLY_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "NACHTRAG_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "SP_RATE",
+              "to": "HOURLY_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "OFFER_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "SP_RATE",
+              "to": "HOURLY_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PROJECT_BOOKING_PRICE",
+          "to": null,
+          "columns": [
+            {
+              "from": "SP_RATE",
+              "to": "HOURLY_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PROJECT_SP_RATES",
+          "to": "PROJECT_HOURLY_RATES",
+          "columns": [
+            {
+              "from": "SP_RATE",
+              "to": "HOURLY_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "ROLE",
+          "to": null,
+          "columns": [
+            {
+              "from": "SP_RATE",
+              "to": "HOURLY_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC",
+          "to": null,
+          "columns": [
+            {
+              "from": "SP_RATE",
+              "to": "HOURLY_RATE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "SP_TOT",
+              "to": "HOURLY_RATE_TOTAL",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC_REBOOKING",
+          "to": null,
+          "columns": [
+            {
+              "from": "SP_RATE_BEFORE",
+              "to": "HOURLY_RATE_BEFORE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "SP_RATE_AFTER",
+              "to": "HOURLY_RATE_AFTER",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "SP_TOT_BEFORE",
+              "to": "HOURLY_RATE_TOTAL_BEFORE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "SP_TOT_AFTER",
+              "to": "HOURLY_RATE_TOTAL_AFTER",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "03-role-name",
+      "status": "planned",
+      "note": "ROLE_NAME_SHORT/_LONG -> ROLE_ABBR/ROLE_NAME. Keine SQL-Objekte betroffen.",
+      "tables": [
+        {
+          "from": "EMPLOYEE2PROJECT",
+          "to": null,
+          "columns": [
+            {
+              "from": "ROLE_NAME_SHORT",
+              "to": "ROLE_ABBR",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "ROLE_NAME_LONG",
+              "to": "ROLE_NAME",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "NACHTRAG_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "ROLE_NAME_SHORT",
+              "to": "ROLE_ABBR",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "ROLE_NAME_LONG",
+              "to": "ROLE_NAME",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "OFFER_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "ROLE_NAME_SHORT",
+              "to": "ROLE_ABBR",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "ROLE_NAME_LONG",
+              "to": "ROLE_NAME",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC",
+          "to": null,
+          "columns": [
+            {
+              "from": "ROLE_NAME_SHORT",
+              "to": "ROLE_ABBR",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "ROLE_NAME_LONG",
+              "to": "ROLE_NAME",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "04-employee-abbr",
+      "status": "planned",
+      "note": "EMPLOYEE.SHORT_NAME -> ABBR. Der Zwilling short_name steht in der Anmeldeantwort (routes/auth.js) und im Auth-Store - nach diesem Block zuerst die Anmeldung pruefen.",
+      "tables": [
+        {
+          "from": "EMPLOYEE",
+          "to": null,
+          "columns": [
+            {
+              "from": "SHORT_NAME",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "short_name",
+                "to": "abbr"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "05-advance-invoice",
+      "status": "planned",
+      "note": "PARTIAL_PAYMENT -> ADVANCE_INVOICE. Fachlich der schwerste Block: beruehrt die E-Rechnung (services_einvoice_data.js, Vorauszahlungs-BTs) und den Snapshot-Test tests/einvoice_cii_snapshot.test.js. erechnung-reviewer einplanen.",
+      "tables": [
+        {
+          "from": "INVOICE_DEDUCTION",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PARTIAL_PAYMENT",
+          "to": "ADVANCE_INVOICE",
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_NUMBER",
+              "to": "ADVANCE_INVOICE_NUMBER",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "PARTIAL_PAYMENT_DATE",
+              "to": "ADVANCE_INVOICE_DATE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "PARTIAL_PAYMENT_ADDRESS_ID",
+              "to": "ADVANCE_INVOICE_ADDRESS_ID",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "PARTIAL_PAYMENT_CONTACT_ID",
+              "to": "ADVANCE_INVOICE_CONTACT_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PARTIAL_PAYMENT_STRUCTURE",
+          "to": "ADVANCE_INVOICE_STRUCTURE",
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PAYMENT",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PAYMENT_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PROJECT",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENTS",
+              "to": "ADVANCE_INVOICED",
+              "scope": "global",
+              "api": true
+            }
           ]
         },
         {
           "from": "PROJECT_PROGRESS",
           "to": null,
-          "note": "to: null renames columns only, the table keeps its name.",
           "columns": [
-            { "from": "PROGRESS_PCT", "to": "FORTSCHRITT_PROZENT", "scope": "global" }
+            {
+              "from": "PARTIAL_PAYMENTS",
+              "to": "ADVANCE_INVOICED",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "PROJECT_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENTS",
+              "to": "ADVANCE_INVOICED",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "SE_RELEASE",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "06-booking",
+      "status": "planned",
+      "note": "TEC -> BOOKING. Die Oberflaechentexte sind bereits vorab umformuliert (Commit 67e1abc). ARBZG_AUDIT hat Schutz-Trigger gegen Aenderungen - pruefen, ob sie einem ALTER im Weg stehen.",
+      "tables": [
+        {
+          "from": "ARBZG_AUDIT",
+          "to": null,
+          "columns": [
+            {
+              "from": "DATE_VOUCHER",
+              "to": "BOOKING_DATE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "TEC_ID",
+              "to": "BOOKING_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC",
+          "to": "BOOKING",
+          "columns": [
+            {
+              "from": "DATE_VOUCHER",
+              "to": "BOOKING_DATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC_REBOOKING",
+          "to": "BOOKING_REBOOKING",
+          "columns": [
+            {
+              "from": "DATE_VOUCHER",
+              "to": "BOOKING_DATE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "TEC_ID",
+              "to": "BOOKING_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "07-abbr",
+      "status": "planned",
+      "note": "NAME_SHORT -> ABBR auf allen Traegern. Groesster Block.",
+      "tables": [
+        {
+          "from": "BOOKING_TYPE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "CONTRACT",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "COUNTRY",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "CURRENCY",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "DEPARTMENT",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "DIN276_COST_ESTIMATE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_CALCULATION_BL",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_CALCULATION_MASTER",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_CALCULATION_SURCHARGES",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_GROUPS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_MASTERS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_PHASE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_SURCHARGES",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_ZONES",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "LPH_BLOCK",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "NACHTRAG",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "NACHTRAG_STATUS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "NACHTRAG_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "OFFER",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "OFFER_STATUS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "OFFER_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "PAYMENT_MEANS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "PROJECT",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "PROJECT_STATUS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "PROJECT_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "PROJECT_TYPE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "ROLE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "USER_ROLE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        },
+        {
+          "from": "WIP_CLOSING_LINE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "08-name",
+      "status": "planned",
+      "note": "NAME_LONG -> NAME auf allen Traegern.",
+      "tables": [
+        {
+          "from": "BOOKING_TYPE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "CONTRACT",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "COUNTRY",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "CURRENCY",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "DEPARTMENT",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "DIN276_COST_ESTIMATE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_CALCULATION_MASTER",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_CALCULATION_SURCHARGES",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_GROUPS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_MASTERS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_PHASE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_SURCHARGES",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "FEE_ZONES",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "NACHTRAG",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "NACHTRAG_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "OFFER",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "OFFER_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "PAYMENT_MEANS",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "PROJECT",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "PROJECT_STRUCTURE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "ROLE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "USER_ROLE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "WIP_CLOSING_LINE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
           ]
         }
       ]

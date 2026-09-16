@@ -2453,7 +2453,7 @@ function KostensatzSection() {
                     <input type="checkbox" checked={recalcBookings} onChange={e => setRecalcBookings(e.target.checked)}
                       style={{ marginTop: 2, width: 15, height: 15, flexShrink: 0 }} />
                     <span>
-                      <strong>Bestehende Buchungen (TEC) neu berechnen</strong>
+                      <strong>Bestehende Buchungen neu berechnen</strong>
                       <span style={{ color: 'var(--text-3)', display: 'block', fontSize: 12, marginTop: 2 }}>
                         Alle Buchungen ab dem gewählten Datum werden mit dem neuen Kostensatz (CP_RATE) und dem
                         daraus resultierenden CP_TOT neu berechnet. Buchungen vor diesem Datum bleiben unverändert.

@@ -378,7 +378,7 @@ export const HELP = {
       <>
         Lege fest, welche zusätzlichen Seiten an deine Belege angehängt werden:
         <strong> Projektübersicht</strong> (Leistungsstand je Projektelement),
-        <strong> Stundennachweis</strong> (erfasste Stunden/TEC),
+        <strong> Stundennachweis</strong> (erfasste Stunden aus den Buchungen),
         <strong> HOAI-/Kalkulationsübersicht</strong> und
         <strong> Zahlungsübersicht</strong> (bisherige Abschläge). Die Auswahl ist
         <strong> je Belegtyp</strong> (Rechnungen, Abschlagsrechnungen, Angebote)

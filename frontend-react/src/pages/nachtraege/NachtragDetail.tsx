@@ -311,7 +311,7 @@ function AddPositionForm({ nodes, submitting, onSubmit }: {
       <label>Abrechnungsart
         <select value={bt} onChange={e => setBt(e.target.value as '1' | '2')}>
           <option value="1">Pauschal (Festbetrag)</option>
-          <option value="2">Stunden / TEC</option>
+          <option value="2">Stunden (nach Aufwand)</option>
         </select>
       </label>
       {bt === '1' ? (

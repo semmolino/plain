@@ -32,7 +32,7 @@ const CATEGORIES: Cat[] = [
   {
     value: 'projekte', label: 'Projekte & Kalkulation',
     faq: [
-      { q: 'Pauschal oder Stunden/TEC?', a: <>Die Abrechnungsart wird je Projekt/Struktur festgelegt und steuert, wie Leistungen erfasst und abgerechnet werden.</> },
+      { q: 'Pauschal oder nach Aufwand?', a: <>Die Abrechnungsart wird je Projekt/Struktur festgelegt und steuert, wie Leistungen erfasst und abgerechnet werden.</> },
     ],
   },
   {

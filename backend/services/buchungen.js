@@ -57,7 +57,7 @@ async function recomputeStructure(supabase, structureId) {
     .select("QUANTITY_INT, CP_RATE, CP_TOT, SP_TOT, BOOKING_KIND")
     .eq("STRUCTURE_ID", structureId)
     .neq("STATUS", "DRAFT");
-  if (tecErr) throw new Error("Fehler beim Laden der TEC-Daten: " + tecErr.message);
+  if (tecErr) throw new Error("Fehler beim Laden der Buchungen: " + tecErr.message);
 
   const newCosts = (tecRows || []).reduce((acc, r) => acc + tecCostContribution(r), 0);
   const revenueSum = (tecRows || []).reduce((acc, r) => acc + Number(r.SP_TOT ?? 0), 0);

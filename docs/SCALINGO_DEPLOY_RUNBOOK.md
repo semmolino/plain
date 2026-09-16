@@ -235,6 +235,111 @@ Testfälle unten durchgehen.
 
 ---
 
+## Migrationen einspielen
+
+Die frühen Migrationen wurden von Hand mit `psql -f` eingespielt. Am 08.09.2026
+wurde der Bestand in die Tracking-Tabelle `_migrations` nachgetragen (152
+Einträge), seither ist `backend/scripts/migrate.js` der Weg.
+
+**Für jede neue Migration:**
+
+```bash
+node backend/scripts/migrate.js --status   # was ist offen
+node backend/scripts/migrate.js            # anwenden
+```
+
+Jede Datei läuft in einer eigenen Transaktion; bricht eine ab, wird sie
+zurückgerollt und der Lauf endet.
+
+**Zwei Dinge, die der Runner nicht abnimmt:**
+
+*RLS blockiert Migrationen fail-closed.* Ein `psql`-Lauf trägt kein JWT. Jede
+Migration, die eine Tabelle mit `TENANT_ID` liest oder schreibt, sieht null
+Zeilen und meldet trotzdem Erfolg — genau so lief `0136` beim ersten Einspielen
+ins Leere. An den Anfang solcher Migrationen gehört:
+
+```sql
+SET request.jwt.claims = '{"sys":"true"}';
+-- … INSERT/UPDATE/SELECT auf mandantenbezogene Tabellen …
+RESET request.jwt.claims;
+```
+
+Reines DDL (`CREATE TABLE`, `ALTER TABLE`, `CREATE FUNCTION`) braucht das nicht.
+
+*PostgREST merkt Schemaänderungen nicht von selbst.* Wer Tabellen, Spalten,
+Views oder Funktionen anfasst, hängt ans Ende der Migration:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+Ohne das antwortet PostgREST weiter aus dem alten Cache — `PGRST204 column …
+does not exist`, obwohl die Datenbank stimmt — bis der Container neu startet.
+
+**Falls die Tracking-Tabelle einmal fehlt** (wiederhergestellte oder neu
+aufgebaute Datenbank): `--backfill` trägt Dateien als eingespielt ein, **ohne
+sie auszuführen**. Die Obergrenze ist Pflicht, geschrieben wird nur mit
+`--confirm` — eine fälschlich eingetragene Datei läuft nie mehr.
+
+```bash
+node backend/scripts/migrate.js --backfill --through 0139            # Trockenlauf
+node backend/scripts/migrate.js --backfill --through 0139 --confirm  # schreiben
+```
+
+---
+
+## Sicherung und Rücksicherung der Datenbank
+
+Vor jedem Eingriff, der Struktur verändert — Migration, Umbenennung, Import —
+gehört eine Sicherung davor. Scalingo sichert selbst täglich, aber die Kopie,
+auf die man sich verlässt, sollte man selbst gezogen haben.
+
+**Scalingo-Sicherungen auflisten und holen**
+
+```bash
+scalingo --app planandsimple addons                       # liefert die Addon-Kennung
+scalingo --app planandsimple --addon <addon-id> backups-list
+scalingo --app planandsimple --addon <addon-id> backups-download \
+         --backup <id> --output ./sicherung.tar.gz
+```
+
+**Eigener Dump über den Tunnel**
+
+`scripts/scalingo/04_db_tunnel.sh` legt die Datenbank auf `127.0.0.1:10000`.
+Dann vom Arbeitsrechner aus:
+
+```bash
+# Nur das Schema — die Referenz, gegen die nach einer Umbenennung verglichen wird.
+# Beide Schemas: public UND REPORTING. Ein Dump mit --schema=public allein lässt
+# die Report-Views und -Funktionen weg, die von public aus benutzt werden.
+pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges --no-comments \
+        --schema=public --schema=REPORTING > db/schema/schema_$(date +%F).sql
+
+# Vollständig, mit Daten.
+pg_dump "$DATABASE_URL" --no-owner --no-privileges -Fc > sicherung_$(date +%F).dump
+```
+
+**Im Container statt über den Tunnel** — dort liegen die Postgres-17-Binaries
+nicht in `/usr/bin` (das ist Version 16 und verweigert einen 17er-Server),
+sondern unter `/app/.apt/usr/lib/postgresql/17/bin/`:
+
+```bash
+scalingo --app planandsimple run \
+  '/app/.apt/usr/lib/postgresql/17/bin/pg_dump "$SCALINGO_POSTGRESQL_URL" --schema-only'
+```
+
+**Rücksichern**
+
+```bash
+pg_restore --clean --if-exists --no-owner --no-privileges -d "$DATABASE_URL" sicherung.dump
+```
+
+Danach **immer** `NOTIFY pgrst, 'reload schema';` hinterherschicken oder den
+Container neu starten — PostgREST bedient sonst weiter den alten Schema-Cache
+und antwortet mit `PGRST204`, obwohl die Datenbank längst stimmt.
+
+---
+
 ## Wenn es schiefgeht
 
 Nach Wahrscheinlichkeit sortiert:
