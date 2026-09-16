@@ -35,7 +35,7 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
 function Card({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section style={{
-      background: 'var(--surface, #fff)', border: '1px solid var(--border, #e5e7eb)',
+      background: 'var(--surface, #fff)', border: '1px solid var(--border, var(--border))',
       borderRadius: 8, padding: 16, marginBottom: 16,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>

@@ -380,7 +380,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
           {bookingTypes.length > 0 && (
             <div style={{ marginTop: 22 }}>
               <h4 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 2px' }}>Buchungsarten-Preise (optional)</h4>
-              <p style={{ fontSize: 12, color: 'var(--text-3, #6b7280)', margin: '0 0 8px' }}>
+              <p style={{ fontSize: 12, color: 'var(--text-3, var(--text-3))', margin: '0 0 8px' }}>
                 Standardpreise aus den Stammdaten; hier optional projektbezogen überschreiben. Leer = Standardpreis gilt.
               </p>
               <div className="table-scroll">
@@ -397,8 +397,8 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                   <tbody>
                     {bookingTypes.map(t => (
                       <tr key={t.ID}>
-                        <td style={{ fontSize: 12, color: 'var(--text-3, #6b7280)' }}>{BOOKING_KIND_LABEL[t.KIND]}</td>
-                        <td>{t.NAME_SHORT}{t.NAME_LONG ? <span style={{ color: 'var(--text-3, #6b7280)' }}> – {t.NAME_LONG}</span> : null}</td>
+                        <td style={{ fontSize: 12, color: 'var(--text-3, var(--text-3))' }}>{BOOKING_KIND_LABEL[t.KIND]}</td>
+                        <td>{t.NAME_SHORT}{t.NAME_LONG ? <span style={{ color: 'var(--text-3, var(--text-3))' }}> – {t.NAME_LONG}</span> : null}</td>
                         <td style={{ fontVariantNumeric: 'tabular-nums' }}>{t.DEFAULT_SP_RATE != null ? `${t.DEFAULT_SP_RATE} €` : '—'}</td>
                         <td><input className="tbl-input" style={{ width: 80 }} type="number" step="0.01" placeholder="Standard"
                           value={bookingPrices[t.ID]?.sp ?? ''} onChange={e => setPrice(t.ID, 'sp', e.target.value)} /></td>

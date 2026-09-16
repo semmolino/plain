@@ -1,75 +1,131 @@
 #!/usr/bin/env node
 /**
- * Migration runner for PlaIn backend.
- * Reads .sql files from backend/migrations/, tracks applied ones in the
- * _migrations table, and runs any that are pending.
+ * ════════════════════════════════════════════════════════════════════════════
+ *  Migrations-Runner
+ * ════════════════════════════════════════════════════════════════════════════
  *
- * Usage:
- *   node scripts/migrate.js                      – apply pending migrations
- *   node scripts/migrate.js --status             – show applied / pending
- *   node scripts/migrate.js --only 0140,0141          – nur diese anwenden
- *   node scripts/migrate.js --backfill --through 0138 [--confirm]
+ * Liest die .sql-Dateien aus backend/migrations/, merkt sich in `_migrations`,
+ * was schon gelaufen ist, und spielt den Rest ein.
  *
- * ABOUT --only: a pending migration is not always one you want to run right now.
- * 0070b_license_capabilities_seed.sql is regenerated from capabilities.manifest.js
- * and sits pending; applying it as a side effect of an unrelated change would
- * silently alter which permissions are gated in which tariff. --only takes
- * number prefixes or filename fragments and applies just those, in file order.
+ * AUFRUFE
+ *   node scripts/migrate.js            ausstehende Migrationen einspielen
+ *   node scripts/migrate.js --status   nur anzeigen, was aussteht
+ *   node scripts/migrate.js --auto     Betriebsart des Deploy-Hooks (Procfile)
  *
- * ABOUT --backfill: records files that are already in the database WITHOUT
- * running them, so the runner does not start from the beginning on a database
- * that was migrated by hand. Production was backfilled this way on 2026-09-08
- * (152 rows, all within the same tenth of a second), so this is normally not
- * needed - it is here for a restored or rebuilt database.
+ * VERBINDUNG
+ *   DATABASE_URL, sonst SCALINGO_POSTGRESQL_URL. Auf Scalingo laeuft der
+ *   postdeploy-Hook in einem One-off-Container mit der App-Umgebung, dort ist
+ *   die zweite Variable gesetzt.
  *
- * It is an assertion about the past, so it is deliberately awkward: --through
- * takes the highest number you know is applied, and nothing is written without
- * --confirm. Anything above that number stays pending. A file wrongly recorded
- * as applied never runs.
+ * ────────────────────────────────────────────────────────────────────────────
+ *  DREI EIGENSCHAFTEN, DIE HIER KEINE KOMFORTFUNKTIONEN SIND
+ * ────────────────────────────────────────────────────────────────────────────
  *
- * Requires DATABASE_URL in backend/.env - the Scalingo database, reachable via
- * scripts/scalingo/04_db_tunnel.sh. (The old Supabase project is leftover and
- * holds outdated data; do not point this at it.)
+ * 1. ALTBESTAND WIRD NIE AUSGEFUEHRT.
+ *    Bis September 2026 lief jede Migration von Hand. `_migrations` ist
+ *    produktiv deshalb leer, obwohl die Datenbank auf dem Stand aller Dateien
+ *    ist. Ein Runner, der daraus "nichts angewendet" schliesst, wuerde 151
+ *    Dateien erneut ausfuehren — darunter Daten-Migrationen und Seeds ohne
+ *    ON CONFLICT. Deshalb gilt migrations/APPLIED_BASELINE.txt: was dort
+ *    steht, wird VERMERKT und NIE AUSGEFUEHRT, auch wenn der Vermerk fehlt.
+ *
+ * 2. GENERIERTE SEEDS LAUFEN ERNEUT, WENN SICH IHR INHALT AENDERT.
+ *    `0070b_license_capabilities_seed.sql` entsteht aus
+ *    capabilities.manifest.js. Wer eine Permission an eine Capability haengt,
+ *    aendert damit eine Datei, die nach Dateinamen schon "angewendet" ist —
+ *    ein reiner Namensvergleich haette sie nie wieder eingespielt, und das
+ *    Recht haette als "keiner Capability zugeordnet" in jedem Tarif gewirkt
+ *    (fail-open). Dateien mit dem Marker `-- @repeatable` laufen deshalb
+ *    ueber ihren Inhalts-Hash, nicht ueber den Namen. Sie MUESSEN
+ *    wiederholbar geschrieben sein (INSERT … ON CONFLICT DO NOTHING).
+ *
+ * 3. EIN FEHLER IST LAUT.
+ *    Der Prozess endet mit Code 1. Auf Scalingo scheitert damit der Deploy
+ *    (Status hook-error) und die alte Version bleibt online. Das ist der
+ *    Zweck: eine Migration, die still nicht laeuft, ist der teuerste Fall —
+ *    genau so war `reports.wip.view` nach 0136 fuer alle unsichtbar.
+ *
+ * NOTBREMSE
+ *   MIGRATE_ON_DEPLOY=false schaltet den Hook auf reines Anzeigen um. Der
+ *   Deploy laeuft dann durch, ohne etwas an der Datenbank zu aendern.
+ *
+ * WARUM DIE ERKLAERUNG HIER STEHT UND NICHT IM PROCFILE
+ *   Das Procfile-Format kennt offiziell keine Kommentarzeilen. Ein Parser, der
+ *   sie nicht stillschweigend ueberliest, verwirft im schlimmsten Fall auch den
+ *   `web:`-Prozess — die App waere weg, fuer einen Kommentar. Das Procfile
+ *   bleibt deshalb auf zwei Zeilen; begruendet wird hier.
+ * ════════════════════════════════════════════════════════════════════════════
  */
 
-const path0 = require("path");
-// Explicit path: without it the config depends on the working directory, and a
-// run from the repo root would silently find no DATABASE_URL.
-require("dotenv").config({ path: path0.join(__dirname, "..", ".env") });
+require("dotenv").config();
 const { Client } = require("pg");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "migrations");
+const BASELINE_FILE = path.join(MIGRATIONS_DIR, "APPLIED_BASELINE.txt");
 
 const STATUS_ONLY = process.argv.includes("--status");
-const BACKFILL = process.argv.includes("--backfill");
-const CONFIRM = process.argv.includes("--confirm");
-const THROUGH = (() => {
-  const i = process.argv.indexOf("--through");
-  return i !== -1 ? process.argv[i + 1] : null;
-})();
-const ONLY = (() => {
-  const i = process.argv.indexOf("--only");
-  if (i === -1) return null;
-  return String(process.argv[i + 1] || "").split(",").map((x) => x.trim()).filter(Boolean);
-})();
+const AUTO_MODE = process.argv.includes("--auto");
 
-/** Leading migration number, e.g. "0070b_seed.sql" -> 70. */
-function migrationNumber(filename) {
-  const m = /^(\d{4})/.exec(filename);
-  return m ? parseInt(m[1], 10) : NaN;
+/** Marker in den ersten Zeilen einer Datei: laeuft bei Inhaltsaenderung erneut. */
+const REPEATABLE_MARKER = /^--\s*@repeatable\b/m;
+
+const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
+
+/**
+ * Entscheidet, was laufen darf — ohne Datenbank und ohne Dateisystem.
+ *
+ * Diese Funktion IST die Sicherheitseigenschaft dieses Skripts: was in der
+ * Baseline steht, kann hier nicht in `pending` landen, auch dann nicht, wenn
+ * der Vermerk in `_migrations` fehlt. Deshalb steht sie getrennt und wird von
+ * tests/migrate.plan.test.js geprueft — ein Refactoring, das die Regel
+ * aufweicht, faellt dort auf und nicht erst auf der Produktionsdatenbank.
+ *
+ * @param {object}            a
+ * @param {string[]}          a.files       alle .sql-Dateinamen, sortiert
+ * @param {Set<string>}       a.baseline    von Hand eingespielter Altbestand
+ * @param {Set<string>}       a.applied     was in `_migrations` vermerkt ist
+ * @param {Map<string,string>} a.hashes     Datei → gespeicherter Inhalts-Hash
+ * @param {(f:string)=>string} a.read       liefert den Inhalt einer Datei
+ */
+function plan({ files, baseline, applied, hashes, read }) {
+  const repeatables = files.filter((f) => REPEATABLE_MARKER.test(read(f).slice(0, 2000)));
+  const repeatableSet = new Set(repeatables);
+  return {
+    repeatables,
+    // Nachzutragen: Altbestand ohne Vermerk. Wird VERMERKT, nie ausgefuehrt.
+    baselineToRecord: [...baseline].filter((f) => !applied.has(f)).sort(),
+    // Ausstehend: kein Altbestand, kein Vermerk, nicht wiederholbar.
+    pending: files.filter(
+      (f) => !baseline.has(f) && !applied.has(f) && !repeatableSet.has(f)
+    ),
+    // Faellig: wiederholbare Datei, deren Inhalt sich geaendert hat.
+    repeatableTodo: repeatables.filter((f) => hashes.get(f) !== sha256(read(f))),
+    // Baseline-Eintraege ohne Datei — Hinweis auf Umbenennung/Loeschung.
+    baselineWithoutFile: [...baseline].filter((f) => !files.includes(f)),
+  };
 }
 
 async function getClient() {
-  if (!process.env.DATABASE_URL) {
+  const url = process.env.DATABASE_URL || process.env.SCALINGO_POSTGRESQL_URL;
+  if (!url) {
     console.error(
-      "❌  DATABASE_URL is not set in backend/.env\n" +
-        "    Open the tunnel first: scripts/scalingo/04_db_tunnel.sh"
+      "❌  Kein Datenbankweg: weder DATABASE_URL noch SCALINGO_POSTGRESQL_URL gesetzt."
     );
     process.exit(1);
   }
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  // Verlangt der Verbindungsstring TLS, akzeptieren wir die Kette ohne
+  // Pruefung: die Zertifikate der verwalteten Datenbank haengen an einer CA,
+  // die im Container nicht im Trust Store liegt. Die Verbindung laeuft im
+  // privaten Netz des Anbieters. Ohne diese Zeile bricht der Hook mit
+  // "self-signed certificate in certificate chain" ab.
+  const needsTls = /sslmode=(require|verify-ca|verify-full)/.test(url);
+  const client = new Client({
+    connectionString: url,
+    ...(needsTls ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
   await client.connect();
   return client;
 }
@@ -82,6 +138,17 @@ async function ensureMigrationsTable(client) {
       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  // Woher der Vermerk kommt: 'baseline' = von Hand eingespielt und hier nur
+  // nachgetragen, 'auto' = von diesem Runner ausgefuehrt. Ohne die Spalte
+  // sieht man spaeter nicht mehr, was tatsaechlich gelaufen ist.
+  await client.query(`ALTER TABLE _migrations ADD COLUMN IF NOT EXISTS source TEXT`);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS _migrations_repeatable (
+      filename   TEXT PRIMARY KEY,
+      sha256     TEXT NOT NULL,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
 }
 
 async function getApplied(client) {
@@ -91,6 +158,13 @@ async function getApplied(client) {
   return new Set(rows.map((r) => r.filename));
 }
 
+async function getRepeatableHashes(client) {
+  const { rows } = await client.query(
+    "SELECT filename, sha256 FROM _migrations_repeatable"
+  );
+  return new Map(rows.map((r) => [r.filename, r.sha256]));
+}
+
 function getMigrationFiles() {
   return fs
     .readdirSync(MIGRATIONS_DIR)
@@ -98,143 +172,166 @@ function getMigrationFiles() {
     .sort();
 }
 
-/**
- * Record already-applied migrations without running them.
- *
- * The cutoff is required and has to be spelled out, because the failure mode is
- * silent and permanent in the other direction: a file marked as applied that was
- * never actually run will never run.
- */
-async function backfill(client, applied, files) {
-  if (!THROUGH) {
+/** Der von Hand eingespielte Altbestand. Fehlt die Datei, ist das ein Fehler
+ *  und kein leeres Set: ohne sie wuerde der Runner alles als ausstehend
+ *  ansehen — siehe Eigenschaft 1 im Kopfkommentar. */
+function getBaseline() {
+  if (!fs.existsSync(BASELINE_FILE)) {
     console.error(
-      "\n❌  --backfill needs --through <number>, e.g. --through 0138.\n" +
-        "    That is the highest migration you know is already in the database.\n" +
-        "    Everything above it stays pending and will be applied normally.\n"
+      `❌  ${path.basename(BASELINE_FILE)} fehlt. Ohne diese Liste gilt der ` +
+        `gesamte Altbestand als ausstehend — Abbruch, bevor Schaden entsteht.`
     );
     process.exit(1);
   }
-  const cutoff = parseInt(THROUGH, 10);
-  if (Number.isNaN(cutoff)) {
-    console.error(`\n❌  --through "${THROUGH}" is not a number.\n`);
-    process.exit(1);
-  }
-
-  const candidates = files.filter(
-    (f) => !applied.has(f) && migrationNumber(f) <= cutoff
+  return new Set(
+    fs
+      .readFileSync(BASELINE_FILE, "utf8")
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#"))
   );
-  const above = files.filter((f) => migrationNumber(f) > cutoff);
+}
 
-  if (candidates.length === 0) {
-    console.log("\n✅  Nothing to backfill - every file up to the cutoff is already recorded.\n");
-    return;
+function readMigration(file) {
+  return fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
+}
+
+/** Fuehrt eine Datei in EINER Transaktion aus und vermerkt sie. */
+async function applyFile(client, file, { repeatable }) {
+  const sql = readMigration(file);
+  process.stdout.write(`  ⏳  ${file}${repeatable ? "  (wiederholbar)" : ""}\n`);
+  try {
+    await client.query("BEGIN");
+    await client.query(sql);
+    if (repeatable) {
+      await client.query(
+        `INSERT INTO _migrations_repeatable (filename, sha256, applied_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (filename) DO UPDATE SET sha256 = $2, applied_at = NOW()`,
+        [file, sha256(sql)]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO _migrations (filename, source) VALUES ($1, 'auto')
+         ON CONFLICT (filename) DO NOTHING`,
+        [file]
+      );
+    }
+    await client.query("COMMIT");
+    console.log(`  ✅  ${file}`);
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(`  ❌  ${file} FEHLGESCHLAGEN:\n      ${err.message}`);
+    throw err;
   }
+}
 
-  console.log(`\n${CONFIRM ? "Recording" : "Would record"} ${candidates.length} file(s) as applied, WITHOUT running them:\n`);
-  for (const f of candidates) console.log(`  ${f}`);
-  if (above.length) {
-    console.log(`\n${above.length} file(s) stay pending (above ${THROUGH}):`);
-    for (const f of above) console.log(`  ${f}`);
-  }
-
-  if (!CONFIRM) {
-    console.log(
-      "\n  Dry run. This asserts these migrations are already in the database.\n" +
-        "  Check that before passing --confirm - a wrongly recorded file never runs.\n"
-    );
-    return;
-  }
-
+/** Traegt den Altbestand als angewendet nach, OHNE ihn auszufuehren. */
+async function recordBaseline(client, fehlende) {
+  if (fehlende.length === 0) return 0;
   await client.query("BEGIN");
   try {
-    for (const f of candidates) {
+    for (const f of fehlende) {
       await client.query(
-        "INSERT INTO _migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING",
+        `INSERT INTO _migrations (filename, source) VALUES ($1, 'baseline')
+         ON CONFLICT (filename) DO NOTHING`,
         [f]
       );
     }
     await client.query("COMMIT");
   } catch (err) {
-    await client.query("ROLLBACK");
-    console.error(`\n❌  Backfill failed: ${err.message}\n`);
-    process.exit(1);
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
   }
-  console.log(`\n✅  ${candidates.length} file(s) recorded. Run --status to check.\n`);
+  return fehlende.length;
 }
 
 async function main() {
+  // Notbremse: nur in der Betriebsart des Hooks, damit ein manueller Aufruf
+  // sich nicht unbemerkt verweigert.
+  const abgeschaltet =
+    AUTO_MODE && String(process.env.MIGRATE_ON_DEPLOY || "").toLowerCase() === "false";
+
   const client = await getClient();
   try {
     await ensureMigrationsTable(client);
-    const applied = await getApplied(client);
+    const baseline = getBaseline();
     const files = getMigrationFiles();
 
-    if (BACKFILL) {
-      await backfill(client, applied, files);
-      return;
+    const applied = await getApplied(client);
+    const hashes = await getRepeatableHashes(client);
+
+    const { pending, repeatableTodo, baselineToRecord, baselineWithoutFile } = plan({
+      files, baseline, applied, hashes, read: readMigration,
+    });
+
+    if (baselineWithoutFile.length) {
+      console.warn(
+        `⚠  ${baselineWithoutFile.length} Baseline-Eintrag/-Eintraege ohne Datei ` +
+          `(umbenannt oder geloescht?): ${baselineWithoutFile.join(", ")}`
+      );
     }
 
-    if (STATUS_ONLY) {
-      console.log("\nMigration status:\n");
-      for (const f of files) {
-        const status = applied.has(f) ? "✅ applied" : "⏳ pending";
-        console.log(`  ${status}  ${f}`);
+    if (STATUS_ONLY || abgeschaltet) {
+      if (abgeschaltet) {
+        console.log(
+          "\n⏸  MIGRATE_ON_DEPLOY=false — es wird NICHTS eingespielt, nur berichtet.\n"
+        );
       }
+      console.log(`Dateien: ${files.length} · Altbestand (Baseline): ${baseline.size}`);
+      console.log(`Bereits vermerkt: ${applied.size}`);
+      console.log(
+        `Ausstehend: ${pending.length}${pending.length ? " → " + pending.join(", ") : ""}`
+      );
+      console.log(
+        `Wiederholbar faellig: ${repeatableTodo.length}` +
+          `${repeatableTodo.length ? " → " + repeatableTodo.join(", ") : ""}`
+      );
       console.log();
       return;
     }
 
-    let pending = files.filter((f) => !applied.has(f));
-
-    if (ONLY) {
-      const wanted = pending.filter((f) => ONLY.some((o) => f.startsWith(o) || f.includes(o)));
-      const unmatched = ONLY.filter((o) => !pending.some((f) => f.startsWith(o) || f.includes(o)));
-      if (unmatched.length) {
-        console.error(
-          `\n❌  --only matched nothing pending for: ${unmatched.join(", ")}\n` +
-            "    Either the file is already applied or the name is wrong (--status shows both).\n"
-        );
-        process.exit(1);
-      }
-      const skipped = pending.filter((f) => !wanted.includes(f));
-      if (skipped.length) {
-        console.log(`\nSkipping ${skipped.length} other pending migration(s):`);
-        for (const f of skipped) console.log(`  ⏭  ${f}`);
-      }
-      pending = wanted;
+    const nachgetragen = await recordBaseline(client, baselineToRecord);
+    if (nachgetragen > 0) {
+      console.log(
+        `\n📎  ${nachgetragen} Datei(en) als von Hand eingespielt vermerkt — ` +
+          `NICHT ausgefuehrt (APPLIED_BASELINE.txt).`
+      );
     }
 
-    if (pending.length === 0) {
-      console.log("✅  No pending migrations.");
+    if (pending.length === 0 && repeatableTodo.length === 0) {
+      console.log("✅  Nichts einzuspielen.\n");
       return;
     }
 
-    console.log(`\nRunning ${pending.length} pending migration(s)...\n`);
-    for (const file of pending) {
-      const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
-      console.log(`  ⏳  ${file}`);
-      try {
-        await client.query("BEGIN");
-        await client.query(sql);
-        await client.query(
-          "INSERT INTO _migrations (filename) VALUES ($1)",
-          [file]
-        );
-        await client.query("COMMIT");
-        console.log(`  ✅  ${file}`);
-      } catch (err) {
-        await client.query("ROLLBACK");
-        console.error(`  ❌  ${file} FAILED:\n     ${err.message}`);
-        process.exit(1);
-      }
+    if (pending.length) {
+      console.log(`\nSpiele ${pending.length} Migration(en) ein:\n`);
+      for (const file of pending) await applyFile(client, file, { repeatable: false });
     }
-    console.log("\nAll migrations applied.\n");
+    if (repeatableTodo.length) {
+      console.log(
+        `\nSpiele ${repeatableTodo.length} wiederholbare Datei(en) ein ` +
+          `(Inhalt hat sich geaendert):\n`
+      );
+      for (const file of repeatableTodo) await applyFile(client, file, { repeatable: true });
+    }
+    console.log("\nFertig.\n");
   } finally {
     await client.end();
   }
 }
 
-main().catch((err) => {
-  console.error("Unexpected error:", err);
-  process.exit(1);
-});
+// Die Planung ist als reine Funktion pruefbar (tests/migrate.plan.test.js).
+module.exports = { plan, sha256, REPEATABLE_MARKER };
+
+// Nur beim direkten Aufruf verbinden — ein `require()` im Test darf keine
+// Datenbankverbindung aufbauen.
+if (require.main === module) {
+  main().catch((err) => {
+    // Kein Schoenreden: Exit 1 laesst den Deploy scheitern, und die alte
+    // Version bleibt online. Besser ein sichtbar gescheiterter Deploy als eine
+    // Migration, von der niemand weiss, dass sie fehlt.
+    console.error("\n❌  Migration abgebrochen:", err?.message || err);
+    process.exit(1);
+  });
+}

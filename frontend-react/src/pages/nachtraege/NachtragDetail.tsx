@@ -17,9 +17,8 @@ import {
   type Nachtrag, type NachtragStructureNode, type ReleasePayload, type ReleaseKind, type ReleaseBasis,
   type UpdateNachtragPayload, type ReviewPayload, type ReviewRecommendation,
 } from '@/api/nachtraege'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtDate = (v: string | null | undefined) => v ? new Date(v).toLocaleDateString('de-DE') : '—'
 
 const APPROVAL_LABELS: Record<string, string> = { OPEN: 'offen', APPROVED: 'freigegeben', PARTIAL: 'teilw.', REJECTED: 'abgelehnt' }
@@ -178,9 +177,9 @@ export function NachtragDetail() {
                   <tr key={n.ID}>
                     <td style={{ paddingLeft: 8 + d * 18 }}>{n.NAME_SHORT ? `${n.NAME_SHORT} — ` : ''}{n.NAME_LONG}</td>
                     <td>{Number(n.BILLING_TYPE_ID) === 2 ? 'Stunden' : Number(n.BILLING_TYPE_ID) === 1 ? 'Pauschal' : '—'}</td>
-                    <td style={{ textAlign: 'right' }}>{fmtEur(n.REVENUE)}</td>
+                    <td style={{ textAlign: 'right' }}>{money(n.REVENUE)}</td>
                     <td>
-                      <span style={{ fontSize: 11, color: n.APPROVAL_STATE === 'APPROVED' ? '#16a34a' : n.APPROVAL_STATE === 'PARTIAL' ? '#7c3aed' : '#6b7280' }}>
+                      <span style={{ fontSize: 11, color: n.APPROVAL_STATE === 'APPROVED' ? 'var(--success)' : n.APPROVAL_STATE === 'PARTIAL' ? 'var(--accent2)' : 'var(--text-3)' }}>
                         {APPROVAL_LABELS[n.APPROVAL_STATE] ?? n.APPROVAL_STATE}
                         {n.APPROVED_AMOUNT_NET != null && n.APPROVAL_STATE !== 'OPEN' ? ` (${fmtEur(n.APPROVED_AMOUNT_NET)})` : ''}
                       </span>
@@ -223,7 +222,7 @@ export function NachtragDetail() {
                     <td>{r.RELEASE_NO}</td>
                     <td>{RELEASE_KIND_LABELS[r.RELEASE_KIND]}</td>
                     <td>{r.RELEASE_BASIS ? RELEASE_BASIS_LABELS[r.RELEASE_BASIS] : '—'}</td>
-                    <td style={{ textAlign: 'right' }}>{fmtEur(r.AMOUNT_NET)}</td>
+                    <td style={{ textAlign: 'right' }}>{money(r.AMOUNT_NET)}</td>
                     <td>{fmtDate(r.RELEASED_AT)}</td>
                     <td>{r.NOTE || '—'}</td>
                   </tr>
@@ -384,7 +383,7 @@ function ReleaseForm({ leaves, submitting, onSubmit }: {
               <tr key={l.ID}>
                 <td><input type="checkbox" checked={checked.has(l.ID)} onChange={() => toggle(l.ID)} /></td>
                 <td>{l.NAME_LONG}</td>
-                <td style={{ textAlign: 'right' }}>{fmtEur(l.REVENUE)}</td>
+                <td style={{ textAlign: 'right' }}>{money(l.REVENUE)}</td>
                 <td style={{ textAlign: 'right' }}>
                   {isBt1 ? (
                     <input type="number" inputMode="decimal" style={{ width: 100, textAlign: 'right' }}

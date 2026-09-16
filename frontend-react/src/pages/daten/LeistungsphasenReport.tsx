@@ -13,13 +13,11 @@ import {
 import { Bar } from 'react-chartjs-2'
 import { fetchProjectPhases, type PhaseReportRow } from '@/api/reports'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { fmtEur, fmtEur0, money, negativeStyle } from '@/utils/money'
 import { useChartTheme } from '@/theme/chartTheme'
 
-const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H    = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur   = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtH     = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct   = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
@@ -135,12 +133,12 @@ function PhaseBarChart({ labels, honorar, leistung, kosten, title }: {
       legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, color: t.text, font: { size: 12 } } },
       tooltip: {
         backgroundColor: t.tooltipBg, titleColor: t.tooltipFg, bodyColor: t.tooltipFg, padding: 12, cornerRadius: 8,
-        callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}` },
+        callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}` },
       },
     },
     scales: {
       x: { grid: { display: false }, ticks: { color: t.textMuted, font: { size: 11 } } },
-      y: { grid: { color: t.grid }, ticks: { color: t.textMuted, font: { size: 11 }, callback: (v) => FMT_EUR0.format(Number(v)) } },
+      y: { grid: { color: t.grid }, ticks: { color: t.textMuted, font: { size: 11 }, callback: (v) => fmtEur0(Number(v)) } },
     },
   }
 
@@ -161,13 +159,13 @@ function PhaseCells({ p, indent }: { p: PhaseReportRow; indent?: boolean }) {
         {p.NAME_SHORT}
         {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
       </td>
-      <td className="num">{fmtEur(p.HONORAR_NET)}</td>
+      <td className="num">{money(p.HONORAR_NET)}</td>
       <td className="num">{fmtPct(p.LEISTUNGSSTAND_PERCENT)}</td>
-      <td className="num">{fmtEur(p.EARNED_VALUE_NET)}</td>
+      <td className="num">{money(p.EARNED_VALUE_NET)}</td>
       <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
-      <td className="num">{fmtEur(p.COST_TOTAL)}</td>
+      <td className="num">{money(p.COST_TOTAL)}</td>
       <td className="num">{p.KOSTENQUOTE != null ? fmtPct(p.KOSTENQUOTE * 100) : '—'}</td>
-      <td className="num" style={{ color: p.DB < 0 ? 'var(--danger)' : undefined }}>{fmtEur(p.DB)}</td>
+      <td className="num" style={negativeStyle(p.DB)}>{money(p.DB)}</td>
       <td style={{ textAlign: 'center' }}>{!p.IS_UNASSIGNED && <AmpelDot ampel={p.ampel} />}</td>
     </>
   )
@@ -252,13 +250,13 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
                           </button>
                           <strong>{b.name}</strong>
                         </td>
-                        <td className="num"><strong>{fmtEur(b.HONORAR_NET)}</strong></td>
+                        <td className="num"><strong>{money(b.HONORAR_NET)}</strong></td>
                         <td className="num"><strong>{fmtPct(b.LEISTUNGSSTAND_PERCENT)}</strong></td>
-                        <td className="num"><strong>{fmtEur(b.EARNED_VALUE_NET)}</strong></td>
+                        <td className="num"><strong>{money(b.EARNED_VALUE_NET)}</strong></td>
                         <td className="num"><strong>{fmtH(b.HOURS_TOTAL)}</strong></td>
-                        <td className="num"><strong>{fmtEur(b.COST_TOTAL)}</strong></td>
+                        <td className="num"><strong>{money(b.COST_TOTAL)}</strong></td>
                         <td className="num"><strong>{b.KOSTENQUOTE != null ? fmtPct(b.KOSTENQUOTE * 100) : '—'}</strong></td>
-                        <td className="num" style={{ color: b.DB < 0 ? 'var(--danger)' : undefined }}><strong>{fmtEur(b.DB)}</strong></td>
+                        <td className="num" style={negativeStyle(b.DB)}><strong>{money(b.DB)}</strong></td>
                         <td style={{ textAlign: 'center' }}>{!b.isCatchAll && <AmpelDot ampel={b.ampel} />}</td>
                       </tr>
                       {!isCollapsed && b.phases.map(p => (
@@ -279,13 +277,13 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
             <tfoot>
               <tr className="sum-row">
                 <td><strong>Gesamt</strong></td>
-                <td className="num"><strong>{fmtEur(totals.HONORAR_NET)}</strong></td>
+                <td className="num"><strong>{money(totals.HONORAR_NET)}</strong></td>
                 <td className="num"><strong>{fmtPct(totals.LEISTUNGSSTAND_PERCENT)}</strong></td>
-                <td className="num"><strong>{fmtEur(totals.EARNED_VALUE_NET)}</strong></td>
+                <td className="num"><strong>{money(totals.EARNED_VALUE_NET)}</strong></td>
                 <td className="num"><strong>{fmtH(totals.HOURS_TOTAL)}</strong></td>
-                <td className="num"><strong>{fmtEur(totals.COST_TOTAL)}</strong></td>
+                <td className="num"><strong>{money(totals.COST_TOTAL)}</strong></td>
                 <td className="num"><strong>{totals.KOSTENQUOTE != null ? fmtPct(totals.KOSTENQUOTE * 100) : '—'}</strong></td>
-                <td className="num" style={{ color: totals.DB < 0 ? 'var(--danger)' : undefined }}><strong>{fmtEur(totals.DB)}</strong></td>
+                <td className="num" style={negativeStyle(totals.DB)}><strong>{money(totals.DB)}</strong></td>
                 <td />
               </tr>
             </tfoot>

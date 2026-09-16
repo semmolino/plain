@@ -33,7 +33,7 @@ plain/
 │   ├── services_pdf_render.js # Playwright PDF renderer, Nunjucks env
 │   ├── services_einvoice_*.js # XRechnung/CII/UBL builders
 │   ├── templates/modern_a/   # Nunjucks PDF templates (invoice.njk, offer.njk, …)
-│   └── migrations/            # SQL files — MANUELL gegen die Scalingo-DB einspielen
+│   └── migrations/            # SQL files — laufen im postdeploy-Hook (s. Deployment)
 ├── frontend-react/
 │   └── src/
 │       ├── api/               # One file per domain — apiClient wrappers + TypeScript types
@@ -179,11 +179,14 @@ Kataloge ohne `TENANT_ID` (`PERMISSION`, `CAPABILITY_PERMISSION`,
 `LICENSE_*`) brauchen das nicht. Und: **nach dem Einspielen gegenprüfen** —
 mit gesetztem Claim, sonst prüft man dieselbe Blindheit noch einmal.
 
-**Generierte Seeds nicht vergessen**: wer eine Permission an eine
-Lizenz-Capability hängt, ändert `capabilities.manifest.js`, lässt
-`npm run license:gen` laufen **und spielt `0070b` neu ein**. Ohne die Zeile in
-`CAPABILITY_PERMISSION` gilt das Recht als „keiner Capability zugeordnet" und
-wirkt in jedem Tarif (fail-open).
+**Generierte Seeds**: wer eine Permission an eine Lizenz-Capability hängt,
+ändert `capabilities.manifest.js` und lässt `npm run license:gen` laufen — das
+Einspielen von `0070b` übernimmt der Deploy-Hook, weil die Datei
+`-- @repeatable` trägt und über ihren Inhalts-Hash läuft. **Die generierte
+Datei mit committen**: bleibt sie liegen, ändert sich der Hash nicht und die
+Zeile in `CAPABILITY_PERMISSION` entsteht nie — das Recht gilt dann als
+„keiner Capability zugeordnet" und wirkt in jedem Tarif (fail-open). Genau
+diese Kette prüft `backend/tests/migrate.plan.test.js` mit.
 
 **Neue Mandanten bekommen ihre Rollen nicht aus den Migrationen**, sondern aus
 `seedTenantRbacAndAssignAdmin` in `routes/auth.js`. Dort vergibt „Projektleiter"
@@ -204,6 +207,18 @@ gewollt ist, in `nichtFuerProjektleiter` eintragen.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
+- **Umbuchen von Buchungen** (`rebookBuchungen` in `services/buchungen.js`,
+  `POST /buchungen/umbuchen[/vorschau]`, Recht `projects.bookings.rebook` aus
+  Migration `0139`): verschiebt TEC-Zeilen auf ein anderes Projektelement, auch
+  über Projektgrenzen. Zwei Regeln sind bindend: eine Buchung mit `INVOICE_ID`
+  oder `PARTIAL_PAYMENT_ID` ist **gesperrt** (ein gestellter Beleg darf seine
+  Grundlage nicht verlieren — Korrektur läuft über Storno/Gutschrift), und
+  `COSTS`/`REVENUE` werden bei **Quelle und Ziel** neu gerechnet, auch wenn ein
+  Schreibvorgang mitten in der Auswahl abbricht. Der Stundensatz kommt nach dem
+  Umbuchen aus der `EMPLOYEE2PROJECT`-Zuordnung des Ziels (fehlt sie, bleibt der
+  alte Satz und die Antwort sagt das); der Kostensatz bleibt, er hängt am
+  Mitarbeiter. Die Vorschau ist derselbe Lauf mit `dryRun` — keine zweite Kopie
+  der Prüfungen. Jede Umbuchung landet in `TEC_REBOOKING`.
 - **Teilfertige Leistungen** (`services/wipReport.js`, Report unter Projektdaten):
   der kaufmännische Abschluss. Je Projekt und Stichtag `unfertig = max(0,
   Leistungswert − abgerechnet)`, HGB-Ansatz `min(Kostenanteil, unfertig)`.
@@ -227,9 +242,33 @@ beziehen sich auf diesen früheren Stand.
 
 1. Push to `main` → Scalingo baut über das Node-Buildpack (`scalingo-postbuild` in der
    Root-`package.json`), Start über `Procfile` → `bin/start-web.sh`
-2. **SQL-Migrationen manuell einspielen**, gegen die Scalingo-Datenbank (NICHT mehr im Supabase-Editor):
-   `scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -f backend/migrations/0129_….sql'`
-   Dateien liegen in `backend/migrations/`, nummeriert `0001_…`
+2. **SQL-Migrationen laufen im `postdeploy`-Hook mit** (seit 09/2026, `Procfile` →
+   `node backend/scripts/migrate.js --auto`). Der Hook läuft synchron am Ende jedes
+   Deploys in einem One-off-Container; **schlägt er fehl, schlägt der Deploy fehl**
+   (Status `hook-error`) und die alte Version bleibt online. Neue Migration also nur
+   nach `backend/migrations/` legen und pushen — nichts von Hand einspielen.
+
+   Drei Regeln dazu, jede aus einem konkreten Schaden entstanden:
+   - **`APPLIED_BASELINE.txt` ist die Grenze.** Bis 09/2026 lief jede Migration von
+     Hand, `_migrations` ist produktiv deshalb leer, obwohl die Datenbank auf dem
+     Stand aller Dateien ist. Was in der Baseline steht, wird **vermerkt und nie
+     ausgeführt** — sonst liefen 151 Dateien erneut, inklusive Daten-Migrationen und
+     Seeds ohne `ON CONFLICT`. **Neue Dateien gehören NICHT hinein**, sonst laufen
+     sie nie.
+   - **Generierte Seeds tragen `-- @repeatable`** und werden über ihren Inhalts-Hash
+     eingespielt, nicht über den Dateinamen (siehe unten, `0070b`). Sie müssen
+     deshalb wiederholbar geschrieben sein: `INSERT … ON CONFLICT DO NOTHING`,
+     kein `DELETE`, kein `TRUNCATE`.
+   - **Der RLS-Claim bleibt Sache der Migration.** Der Runner verbindet sich mit
+     `pg` und trägt kein JWT — eine Migration, die mandantenbezogene Tabellen liest
+     oder schreibt, muss `SET request.jwt.claims` selbst setzen (siehe Database
+     conventions). Daran ist `0136` gescheitert, nicht am Einspielweg.
+
+   Notbremse: `MIGRATE_ON_DEPLOY=false` → der Hook berichtet nur und ändert nichts.
+   Von Hand geht weiterhin:
+   `scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -f backend/migrations/0139_….sql'`
+   Dateien liegen in `backend/migrations/`, nummeriert `0001_…`; Status ansehen mit
+   `node backend/scripts/migrate.js --status`.
 3. Umgebungsvariablen über `scalingo --app planandsimple env-set …` bzw. das Dashboard:
    `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `SMTP_*`, `FRONTEND_URL`
 4. Runbook: `docs/SCALINGO_DEPLOY_RUNBOOK.md`
@@ -346,6 +385,107 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 - Dialog-Fußzeile: **immer `<DialogFooter>`** aus `components/ui/`, nie ein eigenes `flex-end`-`<div>` und nie `.modal-actions` direkt. Reihenfolge ist verbindlich: **Abbrechen links, Hauptaktion rechts** (13 Dialoge hatten es umgekehrt — dieselbe Position, gegenteilige Wirkung). Abbrechen trägt `.btn-secondary`, jeder Knopf ein `type="button"`. Ein Löschen-Knopf gehört in die `secondary`-Zone, nicht gleichrangig neben „Speichern". Geprüft von `tests/dialogs.spec.ts`.
 - Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
 - Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
+
+**Keine hartkodierten Farben — geprüft, nicht erhofft.** `npm run check:design`
+lässt jede Hex-Farbe im TSX fehlschlagen. Es gibt genau drei legitime Ausnahmen,
+und jede steht mit Begründung in `COLOR_EXEMPT` (`scripts/check-design-system.mjs`):
+
+1. **Canvas** — Chart.js versteht `var(--token)` nicht (`theme/chartTheme.ts`).
+2. **Werte, die gespeichert oder ins PDF gerendert werden** — Farbwähler,
+   Vorlagen-Akzente. Dort ist eine CSS-Variable schlicht kein Farbwert.
+3. **Vorschauen von gedrucktem Papier** — bewusst papierweiß, dürfen im
+   Dark-Theme nicht mitkippen.
+
+Alles andere gehört an ein Token. Der UX-Audit 08/2026 zählte 812 Hex-Werte,
+im September 2026 waren es 226 — der Rest ist migriert. Im Dark-Theme lag
+`#374151` bei 1,65:1, also praktisch unsichtbar; das ist der Grund für die
+Regel. Achtung bei Lucide-Icons: `color="var(--x)"` landet als SVG-Attribut
+und greift dort **nicht** — `style={{ color: 'var(--x)' }}` nehmen (Lucide
+zeichnet mit `currentColor`).
+
+---
+
+## Farben mit Bedeutung — drei getrennte Ebenen
+
+Vollständige Herleitung samt Messwerten: `docs/FARBKONZEPT_2026-09.md`.
+Die Kurzfassung, weil sie bei jeder neuen Ansicht gilt:
+
+| Ebene | Wofür | Wechselt mit dem Theme? |
+|---|---|---|
+| **Marke** | Kopfzeile, Knöpfe, Akzent | **ja** — dafür gibt es die 7 Themes |
+| **Bedeutung** | „Soll ich hier hinschauen?" | **nein**, nur hell/dunkel |
+| **Daten** | Reihen in Diagrammen unterscheiden | **nein**, nur hell/dunkel |
+
+Bedeutungsfarben sind **Vokabular, nicht Dekoration**: Wer im Tragwerk-Theme
+lernt, dass Orange „beobachten" heißt, darf das nicht verlieren, weil der
+Kollege daneben ein anderes Theme eingestellt hat. Deshalb werden
+`--kpi-*` in keinem Branchen-Theme überschrieben.
+
+**Controlling-Ampel** (`utils/kpiLevel.ts` + `components/ui/KpiValue.tsx`):
+`--kpi-plan` · `--kpi-watch` · `--kpi-critical`. Die vierte Stufe
+`--kpi-good` existiert als Token, wird aber **nie vergeben** — ein Projekt,
+das seine Kosten deckt, ist der Normalfall und keine Auszeichnung. Färbt man
+jede gesunde Zeile grün, verliert Rot seine Wirkung. Die Schwellen liegen als
+`TENANT_SETTINGS` unter Einstellungen → Vorbelegungen; ungepflegt heißt hier
+**bisherige Werte**, nicht „Ampel aus" (anders als beim WIP-Report, wo eine
+fehlende Einstellung die Spalte ausblendet, statt eine Zahl zu behaupten).
+
+**Farbe ist nie der einzige Träger** (WCAG 1.4.1): Ampelstufen tragen Symbol
+und Klartext, negative Beträge das Minuszeichen.
+
+**Diagrammreihen** stehen in `theme/chartTheme.ts` (Okabe-Ito, ein Satz für
+hell und dunkel). Nicht frei Hand erweitern — die Prüfung rechnet den
+Farbabstand bei Protanopie und Deuteranopie nach und verlangt ΔE ≥ 15. Der
+alte Tailwind-Satz lag bei ΔE 1,1: „Deckungsbeitrag" und „Stunden" waren für
+rot-grün-schwache Nutzer identisch.
+
+Welche Kennzahl welche Farbe bekommt, steht **an einer Stelle**: `SERIES_ROLE`
+in derselben Datei, abgerufen über `useSeriesColors()` — nie über
+`t.series[3]`, der Index sagt nicht, was er bedeutet. Es gibt sechs Farben für
+sieben Kennzahlen (Gelb liegt auf Weiß bei 1,1:1, Schwarz ist die
+Achsenfarbe — beide fallen als Linie aus), zwei Paare teilen sich also je eine
+Farbe. Geteilt wird **nur, was nie im selben Diagramm steht**: Honorar/DB und
+Auftragsbestand/Stunden. `chartTheme.test.ts` führt die Diagramme auf und
+lässt jede Reihenkollision fehlschlagen.
+
+**Chart.js zeichnet auf `<canvas>` — dort ist `var(--token)` kein Farbwert,
+sondern Schwarz.** Der Browser meldet nichts. Genau daran sind Projektverlauf
+und Gesamtverlauf gestorben: die Hex-Regel oben hat die Umschreibung sogar
+verlangt, `tsc` sah einen `string`, die Kontrastprüfung liest CSS. Deshalb
+prüft `npm run check:design` jetzt die Gegenrichtung (jede CSS-Variable an
+einer Chart.js-Farboption in einer Diagrammdatei ist ein Befund), und
+`tests/charts.spec.ts` zählt am Ende die Farbtöne auf dem fertigen Canvas.
+Farben in Diagrammen kommen ausschließlich aus `useChartTheme()` /
+`useSeriesColors()` — auch Gitter, Achsen und Tooltip.
+
+---
+
+## Geldbeträge — ein Baustein, eine Konvention
+
+Alles über `frontend-react/src/utils/money.tsx`. **Kein eigener
+`Intl.NumberFormat` mit `currency` und kein eigenes `toLocaleString`** —
+`npm run check:design` lässt beides fehlschlagen.
+
+| Zweck | Nehmen |
+|---|---|
+| Betrag in einer Zelle/Kachel | `money(v)` — negative Werte rot |
+| Betrag ohne Nachkommastellen | `money0(v)` |
+| Zelle mit eigener Grundfarbe (z. B. Akzent) | `moneyOr(v, 'var(--accent)')` |
+| Reiner Text (Tooltip, `title`, aria-Label, Chart-Achse) | `fmtEur(v)` / `fmtEur0(v)` |
+| Eigene Zelle, nur der Stil | `negativeStyle(v)` / `negativeOr(v, …)` |
+
+**„Rote Zahlen"** ist Konvention, keine Bewertung — sie sagt nichts über
+Handlungsbedarf, nur über das Vorzeichen. Deshalb `--kpi-critical` und nicht
+`--danger` (das heißt „Fehler / löschen"), und kein Symbol wie bei der Ampel.
+Die Grenze ist `< 0`, nicht `<= 0`: Null ist kein Verlust.
+
+`NO_VALUE` („—") heißt **kein Wert**, nicht „0 €". Wo eine 0 fachlich stimmt,
+gehört auch eine 0 hin.
+
+Warum das eine eigene Regel ist: Es gab 28 eigene `fmtEur`-Definitionen in 27
+Dateien. Genau diese Streuung war der Grund, warum „rote Zahlen" im ganzen
+Produkt an **einer** Stelle umgesetzt war — es gab keinen gemeinsamen Ort, an
+den man die Regel hätte schreiben können.
 
 ---
 

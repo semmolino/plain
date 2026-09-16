@@ -16,9 +16,8 @@ import {
 import {
   fetchGlobalSnippets, createGlobalSnippet, deleteGlobalSnippet, type TextSnippet,
 } from '@/api/textSnippets'
+import { money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur = (v: number | null) => v == null ? '—' : FMT_EUR.format(v) + ' €'
 
 const KINDS: BookingKind[] = ['UNIT', 'LUMP_COST', 'LUMP_REVENUE']
 
@@ -111,8 +110,8 @@ export function BuchungsartenSection() {
                 <td style={{ padding: '4px 6px 4px 0', fontWeight: 600 }}>{t.NAME_SHORT}</td>
                 <td style={{ padding: '4px 6px 4px 0', color: 'var(--text-3)' }}>{t.NAME_LONG || '—'}</td>
                 <td style={{ padding: '4px 6px 4px 0' }}>{t.KIND === 'UNIT' ? (t.UNIT_LABEL || '—') : '—'}</td>
-                <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtEur(t.DEFAULT_SP_RATE)}</td>
-                <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtEur(t.DEFAULT_CP_RATE)}</td>
+                <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(t.DEFAULT_SP_RATE)}</td>
+                <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(t.DEFAULT_CP_RATE)}</td>
                 <td style={{ padding: '4px 0', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <Can permission="settings.booking_types.edit">
                     <button className="row-action-btn" onClick={() => setEditId(t.ID)} title="Bearbeiten">

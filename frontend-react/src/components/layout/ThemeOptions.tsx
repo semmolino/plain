@@ -21,6 +21,12 @@ const THEMES = [
   { id: 'urban-foto',        label: 'Stadt- und Verkehr',    swatch: '#e9b94c', group: 'Branche' },
   { id: 'tga-foto',          label: 'TGA',                   swatch: '#c79252', group: 'Branche' },
   { id: 'structural-foto',   label: 'Tragwerk',              swatch: '#4c6680', group: 'Branche' },
+  // Vorschau der neuen Markenpalette — laeuft absichtlich NEBEN den
+  // bestehenden Themes, damit sie im Alltag und auf einem echten Geraet
+  // benutzt werden kann, bevor sie das Standard-Theme ersetzt.
+  // Herleitung: docs/MARKENFARBKONZEPT_2026-09.md
+  { id: 'trust',             label: 'Markenblau hell',       swatch: '#2d66b1', group: 'Vorschau' },
+  { id: 'trust-dark',        label: 'Markenblau dunkel',     swatch: '#6b96df', group: 'Vorschau' },
 ] as const
 
 export type ThemeId = typeof THEMES[number]['id']
@@ -99,7 +105,7 @@ interface Props {
 export function ThemeOptions({ current, onSelect }: Props) {
   return (
     <div className="theme-options" role="group" aria-label="Farbthema">
-      {(['Standard', 'Branche'] as const).map(group => (
+      {(['Standard', 'Branche', 'Vorschau'] as const).map(group => (
         <div key={group}>
           <div className="theme-panel-header">{group}</div>
           {THEMES.filter(t => t.group === group).map(t => (

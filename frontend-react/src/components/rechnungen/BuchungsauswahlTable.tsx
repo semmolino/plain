@@ -3,9 +3,8 @@ import { FilterChip } from '@/components/ui/FilterChip'
 import { RotateCcw } from 'lucide-react'
 import { InfoHint } from '@/components/ui/InfoHint'
 import type { TecEntry } from '@/api/rechnungen'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtDate = (v: string | null | undefined) => v ? v.slice(0, 10) : '—'
 
 // ── userbezogene Persistenz (wie ProjektlisteTab & andere Listen) ──────────────
@@ -187,7 +186,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
                       <td>{fmtDate(t.DATE_VOUCHER)}</td>
                       <td>{t.EMPLOYEE_SHORT_NAME ?? '—'}</td>
                       <td>{t.POSTING_DESCRIPTION}</td>
-                      <td className="num">{fmtEur(t.SP_TOT)}</td>
+                      <td className="num">{money(t.SP_TOT)}</td>
                     </tr>
                   ))}
                 </tbody>

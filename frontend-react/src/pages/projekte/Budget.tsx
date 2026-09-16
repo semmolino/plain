@@ -13,9 +13,8 @@ import {
   type BudgetWarningRule,
 } from '@/api/budgetWarnings'
 import { useConfirm } from '@/hooks/useConfirm'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtDate = (s: string | null | undefined) => {
   if (!s) return '—'
   const d = new Date(s); if (isNaN(d.getTime())) return s
@@ -201,12 +200,12 @@ export function Budget({ initialProjectId }: Props) {
           <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>HONORAR + ZUSCHLÄGE</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{fmtEur(overview.projectAggregate.budget)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{money(overview.projectAggregate.budget)}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>ohne Nebenkosten</div>
             </div>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: 'var(--warning-strong)', fontWeight: 600, marginBottom: 4 }}>VERBRAUCHT</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{fmtEur(overview.projectAggregate.verbrauch)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{money(overview.projectAggregate.verbrauch)}</div>
               <div style={{ fontSize: 12, color: 'var(--warning-strong)', marginTop: 2 }}>
                 {overview.projectAggregate.budget > 0
                   ? `${(overview.projectAggregate.verbrauch / overview.projectAggregate.budget * 100).toFixed(1).replace('.', ',')} %`
@@ -214,8 +213,8 @@ export function Budget({ initialProjectId }: Props) {
               </div>
             </div>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: overview.project.BUDGET_WARNINGS_MUTED ? 'rgba(156, 163, 175, 0.10)' : 'rgba(34, 197, 94, 0.08)', border: overview.project.BUDGET_WARNINGS_MUTED ? '1px solid rgba(156, 163, 175, 0.30)' : '1px solid rgba(34, 197, 94, 0.25)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: overview.project.BUDGET_WARNINGS_MUTED ? '#4b5563' : '#166534', fontWeight: 600, marginBottom: 4 }}>STATUS</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: overview.project.BUDGET_WARNINGS_MUTED ? '#374151' : '#14532d', marginBottom: 6 }}>
+              <div style={{ fontSize: 12, color: overview.project.BUDGET_WARNINGS_MUTED ? 'var(--text-2)' : 'var(--success-strong)', fontWeight: 600, marginBottom: 4 }}>STATUS</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: overview.project.BUDGET_WARNINGS_MUTED ? 'var(--text-2)' : 'var(--success-strong)', marginBottom: 6 }}>
                 {overview.project.BUDGET_WARNINGS_MUTED ? 'Stumm geschaltet' : 'Aktiv'}
               </div>
               <button
@@ -271,9 +270,9 @@ export function Budget({ initialProjectId }: Props) {
                             : <strong>Projekt-Ebene</strong>}
                         </td>
                         <td className="ls-td ls-col-num">{Number(r.THRESHOLD_PCT).toFixed(0)} %</td>
-                        <td className="ls-td ls-col-num">{fmtEur(calc.limitEur)}</td>
-                        <td className="ls-td ls-col-num">{fmtEur(calc.verbrauch)}</td>
-                        <td className="ls-td ls-col-num" style={{ color: reached ? '#b91c1c' : undefined, fontWeight: reached ? 600 : undefined }}>
+                        <td className="ls-td ls-col-num">{money(calc.limitEur)}</td>
+                        <td className="ls-td ls-col-num">{money(calc.verbrauch)}</td>
+                        <td className="ls-td ls-col-num" style={{ color: reached ? 'var(--danger-strong)' : undefined, fontWeight: reached ? 600 : undefined }}>
                           {calc.pctActual.toFixed(1).replace('.', ',')} %
                         </td>
                         <td className="ls-td" style={{ fontSize: 12 }}>
@@ -340,8 +339,8 @@ export function Budget({ initialProjectId }: Props) {
                         <tr key={f.ID} className="ls-row">
                           <td className="ls-td">{fmtDate(f.FIRED_AT)}</td>
                           <td className="ls-td">{label}</td>
-                          <td className="ls-td ls-col-num">{fmtEur(f.BUDGET_EUR)}</td>
-                          <td className="ls-td ls-col-num">{fmtEur(f.ACTUAL_EUR)}</td>
+                          <td className="ls-td ls-col-num">{money(f.BUDGET_EUR)}</td>
+                          <td className="ls-td ls-col-num">{money(f.ACTUAL_EUR)}</td>
                           <td className="ls-td">{f.RESET_AT ? <span style={{ color: 'var(--text-3)', fontSize: 12 }}>zurückgesetzt {fmtDate(f.RESET_AT)}</span> : <span style={{ color: 'var(--danger-strong)', fontSize: 12, fontWeight: 600 }}>offen</span>}</td>
                         </tr>
                       )

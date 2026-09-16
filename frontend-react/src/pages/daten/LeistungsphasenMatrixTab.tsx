@@ -8,12 +8,10 @@ import { Bar } from 'react-chartjs-2'
 import { fetchPhaseMatrix, type PhaseCell, type PhaseMatrixProject } from '@/api/reports'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { useChartTheme } from '@/theme/chartTheme'
+import { fmtEur, fmtEur0, money } from '@/utils/money'
 
-const FMT_EUR  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H    = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur   = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtH     = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct   = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
@@ -68,11 +66,11 @@ function PortfolioBarChart({ labels, honorar, leistung, kosten }: {
     plugins: {
       legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, color: t.text, font: { size: 12 } } },
       tooltip: { backgroundColor: t.tooltipBg, titleColor: t.tooltipFg, bodyColor: t.tooltipFg, padding: 12, cornerRadius: 8,
-        callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}` } },
+        callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}` } },
     },
     scales: {
       x: { grid: { display: false }, ticks: { color: t.textMuted, font: { size: 11 } } },
-      y: { grid: { color: t.grid }, ticks: { color: t.textMuted, font: { size: 11 }, callback: (v) => FMT_EUR0.format(Number(v)) } },
+      y: { grid: { color: t.grid }, ticks: { color: t.textMuted, font: { size: 11 }, callback: (v) => fmtEur0(Number(v)) } },
     },
   }
   return (
@@ -191,12 +189,12 @@ export function LeistungsphasenMatrixTab() {
               return (
                 <tr key={ph.num}>
                   <td><strong>{ph.label}</strong></td>
-                  <td className="num">{fmtEur(ph.HONORAR_NET)}</td>
-                  <td className="num">{fmtEur(ph.EARNED_VALUE_NET)}</td>
+                  <td className="num">{money(ph.HONORAR_NET)}</td>
+                  <td className="num">{money(ph.EARNED_VALUE_NET)}</td>
                   <td className="num">{fmtH(ph.HOURS_TOTAL)}</td>
-                  <td className="num">{fmtEur(ph.COST_TOTAL)}</td>
+                  <td className="num">{money(ph.COST_TOTAL)}</td>
                   <td className="num">{ph.KOSTENQUOTE != null ? fmtPct(ph.KOSTENQUOTE * 100) : '—'}</td>
-                  <td className="num" style={{ color: ph.DB < 0 ? 'var(--danger)' : undefined }}>{fmtEur(ph.DB)}</td>
+                  <td className="num">{money(ph.DB)}</td>
                   <td className="num" style={{ color: over ? 'var(--danger-strong)' : undefined, fontWeight: over ? 600 : undefined }}>{fmtPct(ph.HOURS_SHARE)}</td>
                   <td className="num">{fmtPct(ph.HONORAR_SHARE)}</td>
                 </tr>

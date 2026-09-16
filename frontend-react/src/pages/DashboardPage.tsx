@@ -15,6 +15,9 @@ import { BrandGlyph } from '@/components/brand/BrandGlyph'
 import { useSession } from '@/hooks/useSession'
 import { WelcomeSection } from '@/components/onboarding/WelcomePanel'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
+import { KpiValue } from '@/components/ui/KpiValue'
+import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { cpiLevel, vacLevel, readCpiThresholds, KPI_COLOR } from '@/utils/kpiLevel'
 import {
   fetchDashboardKpis,
   fetchDashboardProjects,
@@ -62,20 +65,17 @@ import { RecapCard } from '@/components/engagement/RecapCard'
 import { DashboardHero } from '@/components/theme/DashboardHero'
 import { fetchSetupProgress } from '@/api/setupProgress'
 import { useChartDefaults } from '@/theme/useChartDefaults'
+import { useChartTheme, useSeriesColors } from '@/theme/chartTheme'
+import { fmtEur, fmtEur0, money, money0 } from '@/utils/money'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', {
-  style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2,
-})
-const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_NUM  = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const FMT_HOURS = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const MONTHS_DE = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
 
-function fmtEur(v: number | null | undefined)   { return v == null ? '—' : FMT_EUR.format(v) }
 function fmtH(v: number | null | undefined)     { return v == null ? '—' : FMT_HOURS.format(v) + ' h' }
 function fmtPct(v: number)                      { return FMT_NUM.format(v) + ' %' }
 function fmtMonths(v: number | null | undefined) { return v == null ? '—' : FMT_NUM.format(v) + ' Mon.' }
@@ -207,7 +207,7 @@ function DonutChart({ billed, open, remaining }: { billed: number; open: number;
           return (
             <div key={lbl} className="donut-legend-item">
               <span className="donut-legend-dot" style={{ background: colors[i] }} />
-              <span>{lbl}: <strong>{fmtEur(values[i])}</strong> ({pct}%)</span>
+              <span>{lbl}: <strong>{money(values[i])}</strong> ({pct}%)</span>
             </div>
           )
         })}
@@ -251,6 +251,9 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
     staleTime: 300000,
   })
 
+  const t = useChartTheme()
+  const C = useSeriesColors()
+
   const points: TimelinePoint[] = data?.data ?? []
   if (isLoading) return <div className="timeline-wrap"><p className="empty-note">Laden …</p></div>
   if (points.length === 0) return null
@@ -261,11 +264,11 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
   const chartData = {
     labels,
     datasets: [
-      { label: 'Honorar inkl. NK', data: points.map(p => p.HONORAR_NET), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.07)', fill: true, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Leistungsstand €', data: points.map(p => p.LEISTUNGSSTAND_VALUE), borderColor: '#10b981', backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Kosten €', data: points.map(p => p.KOSTEN_TOTAL), borderColor: '#f59e0b', backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
-      { label: 'Abgerechnet €', data: points.map(p => p.ABGERECHNET_NET), borderColor: '#8b5cf6', backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 1.5 },
-      { label: 'Bezahlt €', data: points.map(p => p.BEZAHLT_NET), borderColor: '#06b6d4', backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 1.5 },
+      { label: 'Honorar inkl. NK', data: points.map(p => p.HONORAR_NET), borderColor: C.honorar, backgroundColor: t.alpha(C.honorar, 0.07), fill: true, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Leistungsstand €', data: points.map(p => p.LEISTUNGSSTAND_VALUE), borderColor: C.leistung, backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Kosten €', data: points.map(p => p.KOSTEN_TOTAL), borderColor: C.kosten, backgroundColor: 'transparent', fill: false, tension: 0.35, pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Abgerechnet €', data: points.map(p => p.ABGERECHNET_NET), borderColor: C.fakturiert, backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
+      { label: 'Bezahlt €', data: points.map(p => p.BEZAHLT_NET), borderColor: C.bezahlt, backgroundColor: 'transparent', fill: false, tension: 0.35, borderDash: [6, 3], pointRadius: ptRadius, pointHoverRadius: 6, borderWidth: 2 },
     ],
   }
 
@@ -276,13 +279,13 @@ function DashboardTimeline({ dateFrom, dateTo, scope }: { dateFrom: string; date
     plugins: {
       legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, font: { size: 12 } } },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)', titleColor: '#f9fafb', bodyColor: '#d1d5db', padding: 12, cornerRadius: 8,
-        callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}` },
+        backgroundColor: t.tooltipBg, titleColor: t.tooltipFg, bodyColor: t.tooltipFg, padding: 12, cornerRadius: 8,
+        callbacks: { label: (ctx) => `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}` },
       },
     },
     scales: {
-      x: { grid: { color: 'var(--text-3)' }, ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: '#6b7280' } },
-      y: { grid: { color: 'var(--text-3)' }, ticks: { font: { size: 11 }, color: '#6b7280', callback: (v) => FMT_EUR0.format(Number(v)) } },
+      x: { grid: { color: t.grid }, ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: t.textMuted } },
+      y: { grid: { color: t.grid }, ticks: { font: { size: 11 }, color: t.textMuted, callback: (v) => fmtEur0(Number(v)) } },
     },
   }
 
@@ -469,7 +472,7 @@ function OverdueInvoicesTable({ invoices }: { invoices: OverdueInvoice[] }) {
               <td>{inv.INVOICE_DATE ? fmtDateDE(inv.INVOICE_DATE) : '—'}</td>
               <td>{fmtDateDE(inv.DUE_DATE)}</td>
               <td className={`num ${dClass}`}><strong>{inv.days_overdue}</strong></td>
-              <td className="num">{fmtEur(inv.TOTAL_AMOUNT_NET)}</td>
+              <td className="num">{money(inv.TOTAL_AMOUNT_NET)}</td>
             </tr>
           )
         })}
@@ -591,11 +594,11 @@ function GeschaeftsleitungView({
         </div>
 
         <NarrativeBlock>
-          Honorar gesamt: <strong>{fmtEur(honorar)}</strong>. Leistungsstand bei{' '}
+          Honorar gesamt: <strong>{money(honorar)}</strong>. Leistungsstand bei{' '}
           <strong>{fmtPct(leistPct)}</strong> — {leistPct >= 80 ? 'gut im Plan' : leistPct >= 50 ? 'im Aufbau' : 'frühe Phase'}.
           {' '}{activeCount} Projekt{activeCount !== 1 ? 'e' : ''} aktiv
           {atRiskCount > 0 ? `, davon ${atRiskCount} über 90% Budget` : ', alle im Budget-Rahmen'}.
-          {' '}Offene Leistung zur Abrechnung: <strong>{fmtEur(offeneLeist)}</strong>.
+          {' '}Offene Leistung zur Abrechnung: <strong>{money(offeneLeist)}</strong>.
         </NarrativeBlock>
 
         <DashboardTimeline dateFrom={dateFrom} dateTo={dateTo} />
@@ -626,7 +629,6 @@ const STUFEN_LABELS_DASH: Record<number, string> = {
   0: 'Keine', 1: 'Zahlungserinnerung', 2: '1. Mahnung', 3: '2. Mahnung', 4: '3. Mahnung',
 }
 
-const FMT_EUR_DASH = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 function SuggestionRow({ s, navigate }: { s: MahnungSuggestion; navigate: ReturnType<typeof useNavigate> }) {
   const isActionDue = s.reason === 'action_due'
@@ -646,7 +648,7 @@ function SuggestionRow({ s, navigate }: { s: MahnungSuggestion; navigate: Return
           {isActionDue ? ' · Aktion fällig!' : ' · noch keine Mahnung'}
         </div>
       </div>
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)', flexShrink: 0 }}>{FMT_EUR_DASH.format(s.openAmount)}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)', flexShrink: 0 }}>{money0(s.openAmount)}</span>
     </div>
   )
 }
@@ -811,11 +813,11 @@ function ControllerView({
         {overdueInvoices.length > 0
           ? <>
               <strong>{overdueInvoices.length} Rechnung{overdueInvoices.length !== 1 ? 'en' : ''}</strong> sind
-              insgesamt <strong>{fmtEur(overdueTotal)}</strong> überfällig.{' '}
+              insgesamt <strong>{money(overdueTotal)}</strong> überfällig.{' '}
             </>
           : 'Keine überfälligen Rechnungen. '}
-        Monatliche Kosten Ø (letzte {monthly.length} Monate): <strong>{fmtEur(avgMonthlyCost)}</strong>.
-        Leistung zur Abrechnung: <strong>{fmtEur(kpis.OFFENE_LEISTUNG)}</strong>.
+        Monatliche Kosten Ø (letzte {monthly.length} Monate): <strong>{money(avgMonthlyCost)}</strong>.
+        Leistung zur Abrechnung: <strong>{money(kpis.OFFENE_LEISTUNG)}</strong>.
         {mahnStats && mahnStats.totalOverdue > 0 && (
           <> {mahnStats.totalOverdue} überfällige Rechnung{mahnStats.totalOverdue !== 1 ? 'en' : ''}
           {mahnStats.noDunningCount > 0 ? `, davon ${mahnStats.noDunningCount} noch ungemahnt` : ''}
@@ -872,7 +874,7 @@ function AbsenceOverviewCard() {
 
   const line = (a: Absence) => (
     <div key={a.ID} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0' }}>
-      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || '#9ca3af' }} />
+      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || 'var(--text-4)' }} />
       <strong style={{ minWidth: 44 }}>{nameOf(a)}</strong>
       <span style={{ color: 'var(--text-3)' }}>{a.TYPE_NAME}</span>
       <span style={{ marginLeft: 'auto', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmtRange(a)}</span>
@@ -919,6 +921,8 @@ function ProjektleiterView({ riskProjects, dateFrom, dateTo }: { riskProjects: R
 // ── Mitarbeiter view ─────────────────────────────────────────────────────────
 
 function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
+  const t = useChartTheme()
+  const C = useSeriesColors()
   if (!months.length) return null
   const labels   = months.map(m => `${MONTHS_DE[m.month - 1]} ${m.year}`)
   const required = months.map(m => Math.round(m.required * 10) / 10)
@@ -933,14 +937,14 @@ function MitarbeiterBalanceChart({ months }: { months: RunningMonth[] }) {
           datasets: [
             { type: 'bar',  label: 'Soll (h)',        data: required, backgroundColor: 'rgba(156,163,175,0.45)', borderRadius: 4, yAxisID: 'yH' },
             { type: 'bar',  label: 'Ist (h)',          data: actual,   backgroundColor: 'rgba(59,130,246,0.65)',  borderRadius: 4, yAxisID: 'yH' },
-            { type: 'line', label: 'Saldo kum. (h)',   data: cumul,    borderColor: '#f59e0b', backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
+            { type: 'line', label: 'Saldo kum. (h)',   data: cumul,    borderColor: C.stunden, backgroundColor: 'transparent', pointRadius: 3, borderWidth: 2, yAxisID: 'yS' },
           ],
         }}
         options={{
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 10 } } },
           scales: {
-            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: 'var(--text-3)' } },
+            yH: { type: 'linear', position: 'left',  ticks: { font: { size: 10 } }, grid: { color: t.grid } },
             yS: { type: 'linear', position: 'right', ticks: { font: { size: 10 }, callback: v => `${Number(v) >= 0 ? '+' : ''}${v} h` }, grid: { display: false } },
             x:  { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
           },
@@ -1088,7 +1092,7 @@ const ACTION_MAP: Record<string, string> = {
 }
 
 const AMPEL_COLORS: Record<string, string> = {
-  rot: '#dc2626', orange: '#ea580c', gelb: '#ca8a04', gruen: '#16a34a',
+  rot: 'var(--danger)', orange: 'var(--warning)', gelb: 'var(--warning)', gruen: 'var(--success)',
 }
 
 const AMPEL_LABELS: Record<string, string> = {
@@ -1099,7 +1103,7 @@ function ampelDot(ampel: string, size = 10) {
   return (
     <span style={{
       display: 'inline-block', width: size, height: size, borderRadius: '50%',
-      background: AMPEL_COLORS[ampel] ?? '#9ca3af', flexShrink: 0,
+      background: AMPEL_COLORS[ampel] ?? 'var(--text-4)', flexShrink: 0,
       verticalAlign: 'middle',
     }} />
   )
@@ -1130,6 +1134,8 @@ function SubNav({ options, active, onChange }: {
 // ── Projekt detail modal ──────────────────────────────────────────────────────
 
 function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClose: () => void }) {
+  // Schwellen der Controlling-Ampel (Einstellungen → Vorbelegungen).
+  const cpiT = readCpiThresholds(useTenantDefaults())
   const navigate = useNavigate()
   const flags    = project.flags ?? []
 
@@ -1143,29 +1149,28 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
               <tr><td>Status</td><td>{project.PROJECT_STATUS_NAME_SHORT || '—'}</td></tr>
               <tr><td>Projektleitung</td><td>{project.PROJECT_MANAGER_DISPLAY || '—'}</td></tr>
               <tr><td>Abteilung</td><td>{project.DEPARTMENT_NAME ? <span className="dept-badge">{project.DEPARTMENT_NAME}</span> : '—'}</td></tr>
-              <tr><td>Honorar</td><td>{fmtEur(project.BUDGET_TOTAL_NET)}</td></tr>
+              <tr><td>Honorar</td><td>{money(project.BUDGET_TOTAL_NET)}</td></tr>
               <tr><td>Leistungsstand</td><td>
-                {fmtEur(project.LEISTUNGSSTAND_VALUE)}
+                {money(project.LEISTUNGSSTAND_VALUE)}
                 {project.LEISTUNGSSTAND_PERCENT != null ? ` (${fmtPct(Number(project.LEISTUNGSSTAND_PERCENT))})` : ''}
               </td></tr>
-              <tr><td>Kosten</td><td>{fmtEur(project.COST_TOTAL)}</td></tr>
+              <tr><td>Kosten</td><td>{money(project.COST_TOTAL)}</td></tr>
               <tr>
                 <td>Deckungsbeitrag</td>
-                <td style={{ color: project.db < 0 ? '#b91c1c' : '#16a34a', fontWeight: 700 }}>
-                  {fmtEur(project.db)}
+                <td style={{ color: project.db < 0 ? 'var(--danger-strong)' : 'var(--success)', fontWeight: 700 }}>
+                  {money(project.db)}
                 </td>
               </tr>
-              <tr><td>Abgerechnet</td><td>{fmtEur(project.BILLED_NET_TOTAL)}</td></tr>
-              <tr><td>Zur Abrechnung</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? '#1d4ed8' : undefined }}>{fmtEur(project.OPEN_NET_TOTAL)}</td></tr>
+              <tr><td>Abgerechnet</td><td>{money(project.BILLED_NET_TOTAL)}</td></tr>
+              <tr><td>Zur Abrechnung</td><td style={{ color: Number(project.OPEN_NET_TOTAL) > 0 ? 'var(--info)' : undefined }}>{money(project.OPEN_NET_TOTAL)}</td></tr>
               {(() => {
                 const evm = computeEvm(project)
                 if (evm.cpi == null) return null
-                const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
                 return (<>
                   <tr><td colSpan={2}><div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} /></td></tr>
-                  <tr><td>CPI (Effizienz)</td><td style={{ color: cpiColor, fontWeight: 700 }}>{fmtCpi(evm.cpi)}</td></tr>
-                  <tr><td>EAC (Progn. Kosten)</td><td>{fmtEur(evm.eac)}</td></tr>
-                  <tr><td>VAC (Abweichung)</td><td style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 700 }}>{fmtEur(evm.vac)}</td></tr>
+                  <tr><td>CPI (Effizienz)</td><td><KpiValue level={cpiLevel(evm.cpi, cpiT)}>{fmtCpi(evm.cpi)}</KpiValue></td></tr>
+                  <tr><td>EAC (Progn. Kosten)</td><td>{money(evm.eac)}</td></tr>
+                  <tr><td>VAC (Abweichung)</td><td style={{ color: KPI_COLOR[vacLevel(evm.vac)], fontWeight: 700 }}>{money(evm.vac)}</td></tr>
                 </>)
               })()}
             </tbody>
@@ -1234,6 +1239,8 @@ const AMPEL_HINT = (
 )
 
 function RisikoView({ projects }: { projects: RiskProject[] }) {
+  // Schwellen der Controlling-Ampel (Einstellungen → Vorbelegungen).
+  const cpiT = readCpiThresholds(useTenantDefaults())
   const [ampelFilter, setAmpelFilter] = useState<AmpelFilter>('alle')
   const [selected, setSelected]       = useState<RiskProject | null>(null)
   const { field, dir, toggle, sort }  = useSort<RiskSortField>('ampel', 'asc')
@@ -1315,7 +1322,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                     key={p.PROJECT_ID}
                     className="clickable-row"
                     onClick={() => setSelected(p)}
-                    style={{ borderLeft: `4px solid ${AMPEL_COLORS[p.ampel] ?? '#9ca3af'}` }}
+                    style={{ borderLeft: `4px solid ${AMPEL_COLORS[p.ampel] ?? 'var(--text-4)'}` }}
                   >
                     <td style={{ padding: 0 }}></td>
                     <td>
@@ -1324,17 +1331,15 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                         <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
                       )}
                     </td>
-                    <td className="num col-hide-mobile">{fmtEur(p.BUDGET_TOTAL_NET)}</td>
-                    <td className="num">{fmtEur(p.COST_TOTAL)}</td>
+                    <td className="num col-hide-mobile">{money(p.BUDGET_TOTAL_NET)}</td>
+                    <td className="num">{money(p.COST_TOTAL)}</td>
                     <td className="num col-hide-mobile">
                       {Number(p.BUDGET_TOTAL_NET) > 0 ? fmtPct(Number(p.COST_RATIO || 0) * 100) : '—'}
                     </td>
                     <td className="num col-hide-mobile">
                       {(() => {
                         const evm = computeEvm(p)
-                        if (evm.cpi == null) return <span style={{ color: 'var(--text-3)' }}>–</span>
-                        const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
-                        return <span style={{ color, fontWeight: 600 }}>{fmtCpi(evm.cpi)}</span>
+                        return <KpiValue level={cpiLevel(evm.cpi, cpiT)}>{fmtCpi(evm.cpi)}</KpiValue>
                       })()}
                     </td>
                     <td className="num col-hide-mobile">
@@ -1356,8 +1361,8 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                 <tr>
                   <td style={{ padding: 0 }}></td>
                   <td style={sumCell}>Summe · {filtered.length} {filtered.length === 1 ? 'Projekt' : 'Projekte'}</td>
-                  <td className="num col-hide-mobile" style={sumCell}>{fmtEur(sumBudget)}</td>
-                  <td className="num" style={sumCell}>{fmtEur(sumCost)}</td>
+                  <td className="num col-hide-mobile" style={sumCell}>{money(sumBudget)}</td>
+                  <td className="num" style={sumCell}>{money(sumCost)}</td>
                   <td className="num col-hide-mobile" style={sumCell}>{sumBudgetPct != null ? fmtPct(sumBudgetPct) : '—'}</td>
                   <td className="num col-hide-mobile" style={sumCell}>{sumCpi != null ? fmtCpi(sumCpi) : '–'}</td>
                   <td className="num col-hide-mobile" style={sumCell}>{sumOpen > 0 ? fmtEur(sumOpen) : '—'}</td>
@@ -1409,7 +1414,7 @@ function TopOpenOffersCard() {
                   <tr key={o.ID} className="clickable-row" onClick={() => navigate('/angebote')} title="Zu den Angeboten">
                     <td>{o.NAME_SHORT || o.NAME_LONG || '—'}</td>
                     <td className="col-hide-mobile" style={{ color: 'var(--text-3)' }}>{o.ADDRESS_NAME || '—'}</td>
-                    <td className="num">{fmtEur(o.TOTAL_AMOUNT)}</td>
+                    <td className="num">{money(o.TOTAL_AMOUNT)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1457,7 +1462,7 @@ function OpenPostenTable({ posten }: { posten: OpenPosten[] }) {
               {p.dueDate ? fmtDateDE(p.dueDate) : '—'}
               {p.daysOverdue > 0 && <span style={{ color: 'var(--danger-strong)', fontSize: 11, marginLeft: 4 }}>+{p.daysOverdue}d</span>}
             </td>
-            <td className="num" style={{ fontWeight: 600 }}>{fmtEur(p.openAmount)}</td>
+            <td className="num" style={{ fontWeight: 600 }}>{money(p.openAmount)}</td>
           </tr>
         ))}
       </tbody>
@@ -1493,7 +1498,7 @@ function BillingPotentialTable({ projects, maxRows = 10 }: { projects: BillingPr
                 <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
               )}
             </td>
-            <td className="num" style={{ fontWeight: 600, color: 'var(--info)' }}>{fmtEur(p.OPEN_NET_TOTAL)}</td>
+            <td className="num" style={{ fontWeight: 600, color: 'var(--info)' }}>{money(p.OPEN_NET_TOTAL)}</td>
           </tr>
         ))}
       </tbody>

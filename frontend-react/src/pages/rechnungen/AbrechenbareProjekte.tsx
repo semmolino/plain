@@ -4,9 +4,8 @@ import { ChevronDown, ChevronRight, FileText, Receipt, FileCheck2, RefreshCcw } 
 import { Modal } from '@/components/ui/Modal'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { fetchBillingSummary } from '@/api/reports'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
 export type WizardType = 'abschlag' | 'rechnung' | 'schluss'
 
@@ -167,7 +166,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
                         {p.PROJECT_MANAGER_DISPLAY ?? '—'}
                       </td>
                       <td className="ls-td ls-col-num" style={{ color: 'var(--info)', fontWeight: 600 }}>
-                        {fmtEur(p.OPEN_NET_TOTAL)}
+                        {money(p.OPEN_NET_TOTAL)}
                       </td>
                     </tr>
                   ))}

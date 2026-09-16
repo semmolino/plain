@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { fetchSeOverviewForProject, fetchSeSummary, type SeSummaryRow } from '@/api/rechnungen'
+import { money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtDate = (s: string | null | undefined) => {
   if (!s) return '—'
   const d = new Date(s); if (isNaN(d.getTime())) return s
@@ -48,11 +47,11 @@ function SeUebersicht({ onSelectProject }: { onSelectProject: (id: number) => vo
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8 }}>
           <div style={{ fontSize: 12, color: 'var(--warning-strong)', fontWeight: 600, marginBottom: 4 }}>OFFENE SICHERHEITSEINBEHALTE</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{fmtEur(totalOpen)}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{money(totalOpen)}</div>
         </div>
         <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.25)', borderRadius: 8 }}>
           <div style={{ fontSize: 12, color: 'var(--success-strong)', fontWeight: 600, marginBottom: 4 }}>BEREITS AUFGELÖST</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success-strong)' }}>{fmtEur(totalReleased)}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success-strong)' }}>{money(totalReleased)}</div>
         </div>
         <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 8 }}>
           <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>PROJEKTE / VERTRÄGE</div>
@@ -96,16 +95,16 @@ function SeUebersicht({ onSelectProject }: { onSelectProject: (id: number) => vo
                     ) : '—'}
                   </td>
                   <td className="ls-td ls-right">
-                    <span style={{ color: r.open_sum > 0 ? '#92400e' : undefined, fontWeight: r.open_sum > 0 ? 600 : 400 }}>
-                      {fmtEur(r.open_sum)}
+                    <span style={{ color: r.open_sum > 0 ? 'var(--warning-strong)' : undefined, fontWeight: r.open_sum > 0 ? 600 : 400 }}>
+                      {money(r.open_sum)}
                     </span>
                     {r.open_count > 0 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}> · {r.open_count}</span>}
                   </td>
                   <td className="ls-td ls-right">
-                    {fmtEur(r.released_sum)}
+                    {money(r.released_sum)}
                     {r.released_count > 0 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}> · {r.released_count}</span>}
                   </td>
-                  <td className="ls-td ls-right" style={{ fontWeight: 600 }}>{fmtEur(r.total_active_sum)}</td>
+                  <td className="ls-td ls-right" style={{ fontWeight: 600 }}>{money(r.total_active_sum)}</td>
                   <td className="ls-td">
                     <button className="btn-small" onClick={e => { e.stopPropagation(); r.project_id && onSelectProject(r.project_id) }}>
                       Details →
@@ -153,17 +152,17 @@ function SeProjektDetails({ projectId, onBack }: { projectId: number; onBack: ()
           <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: 'var(--warning-strong)', fontWeight: 600, marginBottom: 4 }}>OFFENE SICHERHEITSEINBEHALTE</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{fmtEur(openSum)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{money(openSum)}</div>
               <div style={{ fontSize: 12, color: 'var(--warning-strong)', marginTop: 2 }}>{open.length} {open.length === 1 ? 'Eintrag' : 'Einträge'}</div>
             </div>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.25)', borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: 'var(--success-strong)', fontWeight: 600, marginBottom: 4 }}>BEREITS AUFGELÖST</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success-strong)' }}>{fmtEur(releasedSum)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success-strong)' }}>{money(releasedSum)}</div>
               <div style={{ fontSize: 12, color: 'var(--success-strong)', marginTop: 2 }}>{released.length} {released.length === 1 ? 'Eintrag' : 'Einträge'}</div>
             </div>
             <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>GESAMT (AKTIV)</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{fmtEur(openSum + releasedSum)}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{money(openSum + releasedSum)}</div>
               <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
                 {activeRows.length} {activeRows.length === 1 ? 'Eintrag' : 'Einträge'}
                 {cancelled.length > 0 && <span style={{ color: 'var(--text-3)' }}> · {cancelled.length} storniert</span>}
@@ -197,10 +196,10 @@ function SeProjektDetails({ projectId, onBack }: { projectId: number; onBack: ()
                     <tr key={r.id} className="ls-row" style={isStorno ? { opacity: 0.55, textDecoration: 'line-through' } : undefined}>
                       <td className="ls-td"><strong>{r.partial_payment_number || `#${r.id}`}</strong></td>
                       <td className="ls-td">{fmtDate(r.partial_payment_date)}</td>
-                      <td className="ls-td ls-right">{fmtEur(r.total_amount_gross)}</td>
+                      <td className="ls-td ls-right">{money(r.total_amount_gross)}</td>
                       <td className="ls-td ls-right">{r.se_percent != null ? `${r.se_percent} %` : '—'}</td>
                       <td className="ls-td">{r.se_basis === 'NETTO' ? 'Netto' : r.se_basis === 'BRUTTO' ? 'Brutto' : '—'}</td>
-                      <td className="ls-td ls-right" style={{ fontWeight: 600 }}>{fmtEur(r.se_amount)}</td>
+                      <td className="ls-td ls-right" style={{ fontWeight: 600 }}>{money(r.se_amount)}</td>
                       <td className="ls-td" style={{ textDecoration: 'none' }}>
                         {r.status === 'OFFEN' && (
                           <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-strong)', fontSize: 11, fontWeight: 600 }}>OFFEN</span>

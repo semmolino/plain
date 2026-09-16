@@ -6,8 +6,8 @@ import { Modal }        from '@/components/ui/Modal'
 import { fetchFeeCalcMasters, openHonorarPdf, deleteFeeCalcMaster } from '@/api/fee'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import { Pencil, FileText, Trash2 } from 'lucide-react'
+import { fmtEur } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 interface Props {
   initialOfferId?: number
@@ -72,10 +72,10 @@ export function AngeboteHoai({ initialOfferId }: Props) {
                   <td className="ls-td">{c.NAME_SHORT || '—'}</td>
                   <td className="ls-td">{c.NAME_LONG  || '—'}</td>
                   <td className="ls-td ls-right">
-                    {c.grundhonorar != null ? FMT_EUR.format(c.grundhonorar) : '—'}
+                    {c.grundhonorar != null ? fmtEur(c.grundhonorar) : '—'}
                   </td>
                   <td className="ls-td ls-right" style={{ fontWeight: 600 }}>
-                    {c.gesamthonorar != null ? FMT_EUR.format(c.gesamthonorar) : '—'}
+                    {c.gesamthonorar != null ? fmtEur(c.gesamthonorar) : '—'}
                   </td>
                   <td className="ls-td doc-actions">
                     <button className="row-action-btn" onClick={() => setEditCalcId(c.ID)} title="Bearbeiten">

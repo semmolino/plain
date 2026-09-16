@@ -25,6 +25,7 @@ import {
   fetchPayments, createPayment, deletePayment,
   type Payment,
 } from '@/api/rechnungen'
+import { fmtEur, money } from '@/utils/money'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -40,11 +41,6 @@ function fmtDate(d: string | null) {
   if (!d) return '–'
   const [y, m, day] = d.slice(0, 10).split('-')
   return `${day}.${m}.${y}`
-}
-
-function fmtMoney(v: number | null) {
-  if (v == null) return '–'
-  return v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
 }
 
 function daysClass(days: number) {
@@ -772,7 +768,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
 
                       {/* Typ badge */}
                       <td onClick={e => e.stopPropagation()}>
-                        <span style={{ fontSize: 11, background: r.sourceType === 'invoice' ? '#e0f2fe' : '#fce7f3', color: r.sourceType === 'invoice' ? '#0369a1' : '#9d174d', borderRadius: 4, padding: '1px 6px' }}>
+                        <span style={{ fontSize: 11, background: r.sourceType === 'invoice' ? 'var(--info-bg)' : 'var(--accent2-bg)', color: r.sourceType === 'invoice' ? 'var(--info)' : 'var(--accent2)', borderRadius: 4, padding: '1px 6px' }}>
                           {r.sourceType === 'invoice' ? 'Rechnung' : 'Anzahlung'}
                         </span>
                       </td>
@@ -821,8 +817,8 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                       <td style={{ fontSize: 12 }}>{r.addressName1 ?? '–'}</td>
                       {!hiddenCols.has('contractName') && <td style={{ fontSize: 12 }}>{r.contractName ?? '–'}</td>}
                       {!hiddenCols.has('contact')      && <td style={{ fontSize: 12 }}>{r.contact ?? '–'}</td>}
-                      {!hiddenCols.has('totalGross')   && <td className="num">{fmtMoney(r.totalGross)}</td>}
-                      {!hiddenCols.has('openAmount')   && <td className="num" style={{ fontWeight: r.openAmount > 0 ? 600 : undefined, color: r.openAmount > 0 ? 'var(--danger)' : undefined }}>{fmtMoney(r.openAmount)}</td>}
+                      {!hiddenCols.has('totalGross')   && <td className="num">{money(r.totalGross)}</td>}
+                      {!hiddenCols.has('openAmount')   && <td className="num" style={{ fontWeight: r.openAmount > 0 ? 600 : undefined, color: r.openAmount > 0 ? 'var(--danger)' : undefined }}>{money(r.openAmount)}</td>}
 
                       {/* Abgeschlossen checkbox */}
                       <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
@@ -984,7 +980,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                   <div style={{ fontWeight: 600, marginBottom: 6 }}>
                     <span className={`mahnstufe-badge ms-${draft.mahnstufe}`}>{settingsByLevel[draft.mahnstufe!].label}</span>
                   </div>
-                  <div>Gebühr: <strong>{fmtMoney(settingsByLevel[draft.mahnstufe!].fee)}</strong></div>
+                  <div>Gebühr: <strong>{money(settingsByLevel[draft.mahnstufe!].fee)}</strong></div>
                   {settingsByLevel[draft.mahnstufe!].headerText && (
                     <div style={{ marginTop: 8, whiteSpace: 'pre-line', color: 'var(--text-2)' }}>{settingsByLevel[draft.mahnstufe!].headerText}</div>
                   )}
@@ -1001,7 +997,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                         <span className={`mahnstufe-badge ms-${h.mahnstufe}`}>{STUFEN_LABELS[h.mahnstufe] ?? `Stufe ${h.mahnstufe}`}</span>
                         <div style={{ flex: 1 }}>
                           <div>{new Date(h.dateAction).toLocaleDateString('de-DE')}{h.emailSent ? ' · ✉ ' + (h.emailTo ?? '') : ''}</div>
-                          {h.feeAmount > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Gebühr: {fmtMoney(h.feeAmount)}</div>}
+                          {h.feeAmount > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Gebühr: {fmtEur(h.feeAmount)}</div>}
                         </div>
                       </li>
                     ))}
@@ -1064,7 +1060,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                     {existingPayments.map(p => (
                       <tr key={p.ID} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '4px 0', color: 'var(--text-3)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
-                        <td style={{ padding: '4px 6px', fontWeight: 500 }}>{fmtMoney(p.AMOUNT_PAYED_GROSS)}</td>
+                        <td style={{ padding: '4px 6px', fontWeight: 500 }}>{money(p.AMOUNT_PAYED_GROSS)}</td>
                         <td style={{ padding: '4px 0', color: 'var(--text-3)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
                         <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>
                           <button
@@ -1086,10 +1082,10 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
             {payTarget.totalGross != null && (
               <div style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span>
-                  Rechnungsbetrag: <strong>{fmtMoney(payTarget.totalGross)}</strong>
+                  Rechnungsbetrag: <strong>{money(payTarget.totalGross)}</strong>
                   {(payTarget.paidGross ?? 0) > 0 && (
-                    <> · bereits bezahlt: <strong>{fmtMoney(payTarget.paidGross)}</strong>
-                    · offen: <strong>{fmtMoney(Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100)}</strong></>
+                    <> · bereits bezahlt: <strong>{money(payTarget.paidGross)}</strong>
+                    · offen: <strong>{money(Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100)}</strong></>
                   )}
                 </span>
                 <button

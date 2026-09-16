@@ -1,0 +1,177 @@
+# APPLIED_BASELINE.txt — von Hand eingespielter Altbestand
+#
+# WARUM DIESE DATEI EXISTIERT
+#   Bis September 2026 wurde jede Migration per `scalingo run psql -f …`
+#   eingespielt. Die Buchfuehrungstabelle `_migrations` ist deshalb LEER,
+#   obwohl die Datenbank auf dem Stand aller hier gelisteten Dateien ist.
+#   Ein automatischer Runner haette daraus geschlossen, dass nichts angewendet
+#   ist, und alles erneut ausgefuehrt — inklusive Daten-Migrationen und Seeds
+#   ohne ON CONFLICT. Das waere kein Fehlschlag gewesen, sondern ein stiller
+#   Schaden an echten Daten.
+#
+# WAS DER RUNNER DAMIT MACHT
+#   Jede Zeile hier wird in `_migrations` als angewendet VERMERKT und NIE
+#   AUSGEFUEHRT — auch dann nicht, wenn der Vermerk noch fehlt. Diese Datei
+#   ist die Grenze zwischen "war schon da" und "darf laufen".
+#
+# NEUE MIGRATIONEN GEHOEREN HIER NICHT HINEIN
+#   Wer eine neue Datei ergaenzt, laesst sie aus dieser Liste heraus — sonst
+#   laeuft sie nie. Eintragen nur, was nachweislich schon von Hand eingespielt
+#   wurde.
+#
+# Stand beim Anlegen (2026-09-08): 151 Dateien, alles bis 0138 einschliesslich.
+#   NICHT enthalten, damit sie laeuft:        0139_booking_rebook.sql
+#   NICHT enthalten, weil wiederholbar:       0070b_license_capabilities_seed.sql
+#     (generierter Seed, `-- @repeatable`, laeuft ueber den Inhalts-Hash)
+
+0001_rls_tenant_isolation.sql
+0002_document_templates.sql
+0003_document_templates_lifecycle.sql
+0004_invoice_xrechnung_snapshot.sql
+0005_number_ranges.sql
+0006_project_number_ranges.sql
+0007_fix_document_number_range_view.sql
+0008_reporting_views.sql
+0009_reporting_date_filters.sql
+0010_dashboard_functions.sql
+0011_partial_payment_xml_snapshot.sql
+0012_schlussrechnung.sql
+0013_fix_billing_agg_cartesian.sql
+0014_extend_report_header_rpc.sql
+0015_cancellations.sql
+0016_notifications.sql
+0017_structure_sort_order.sql
+0018_tec_status.sql
+0019_fix_number_range.sql
+0020_tenant_settings.sql
+0021_employee_password.sql
+0022_angebote.sql
+0022_project_status_global.sql
+0023_project_type_department_global.sql
+0024_invoice_cancellation_date.sql
+0025_offer_project_link.sql
+0026_offer_refusal_date.sql
+0027_offer_status_global.sql
+0028_fix_report_leaf_aggregation.sql
+0029_project_list_report.sql
+0030_fix_reports_bt2_dates.sql
+0031_fix_budget_fallback_bt2_pct.sql
+0032_fix_bt2_honorar_semantics.sql
+0033_employee_working_time.sql
+0034_cost_rate_calculator.sql
+0034_employee_month_close.sql
+0035_rls_policies.sql
+0036_dashboard_role.sql
+0037_mahnung_tables.sql
+0038_text_template.sql
+0039_fee_calc_offer.sql
+0039_fee_calculation_surcharges.sql
+0039_project_structure_surcharges.sql
+0040_fee_surcharge_lph_filter.sql
+0040_internal_flags.sql
+0041_project_structure_fee_calc.sql
+0041_project_structure_revenue_basis.sql
+0042_fee_calc_bl.sql
+0043_fee_calc_bl_fields.sql
+0044_surcharge_bl_filter.sql
+0045_offer_structure_surcharges.sql
+0046_project_offer_root_surcharges.sql
+0047_security_retention.sql
+0048_se_release_audit.sql
+0049_arbzg_working_time_model.sql
+0050_arbzg_break_rule.sql
+0051_arbzg_tec_extensions.sql
+0052_arbzg_audit.sql
+0053_budget_warnings.sql
+0054_fee_master_base_type.sql
+0055_notification_config.sql
+0056_notification_schedule.sql
+0057_workstart_and_booking_reminder.sql
+0058_einvoice_branch1_fields.sql
+0059_einvoice_vat_category.sql
+0060_einvoice_attachments.sql
+0061_einvoice_peppol_endpoint.sql
+0062_rbac_foundation.sql
+0063_rbac_extra_permissions.sql
+0064_recent_view.sql
+0065_recent_view_meta.sql
+0066_achievements.sql
+0067_achievements_extra.sql
+0068_number_range_templates.sql
+0069_nrt_remove_company_token.sql
+0070_license_foundation.sql
+0070_tenant_slug.sql
+0071_seed_example_plans.sql
+0071_tenant_slug_lowercase_check.sql
+0072_achievement_projektelement_rename.sql
+0073_rbac_repair_tenants_without_roles.sql
+0074_tenant_email_settings.sql
+0075_rbac_email_settings_permission.sql
+0076_employee_avatar.sql
+0076_tenant_email_domain.sql
+0077_notification_labels_umlauts.sql
+0078_rbac_document_template_permission.sql
+0079_booking_types.sql
+0080_project_booking_price.sql
+0081_booking_text_snippet.sql
+0082_booking_text_template_scope.sql
+0083_booking_text_template_kind.sql
+0084_landing_analytics.sql
+0085_employee_employment_dates.sql
+0086_absence.sql
+0087_import_foundation.sql
+0088_rbac_import.sql
+0089_import_employee.sql
+0090_import_project.sql
+0091_import_project_fee.sql
+0092_import_contact.sql
+0093_import_opening_balance.sql
+0094_import_opening_payment.sql
+0095_import_opening_cost.sql
+0096_rbac_service.sql
+0097_lph_blocks.sql
+0097_service_area.sql
+0098_dashboard_exclude_break_hours.sql
+0098_din276_cost_estimate.sql
+0099_address_contact_extension.sql
+0099_fee_calc_din276_link.sql
+0100_absence_notification_types.sql
+0100_fee_calc_zone_split.sql
+0101_absence_clarification_log.sql
+0102_license_console_hardening.sql
+0103_platform_admin_security.sql
+0104_remove_projects_limit.sql
+0105_nachtrag_foundation.sql
+0106_nachtrag_rbac.sql
+0107_nachtrag_review.sql
+0108_nachtrag_notification_types.sql
+0109_nachtrag_plan_capability.sql
+0110_drop_resend_domain_columns.sql
+0111_drop_tenant_smtp_credentials.sql
+0112_platform_email_settings.sql
+0113_push_subscriptions.sql
+0114_email_templates.sql
+0115_hoai_reference_seed.sql
+0116_hoai_anlage1_bauphysik.sql
+0117_hoai_anlage1_geotechnik.sql
+0118_hoai_anlage1_uvs.sql
+0119_hoai_anlage1_ingenieurvermessung.sql
+0120_hoai_fee_zone_lookup.sql
+0121_aho_percent_of_baukosten.sql
+0122_aho_heft17_brandschutz.sql
+0123_hoai_2013_fassung.sql
+0124_hoai_objektlisten_rest.sql
+0125_din276_kg500_selbst_geplant.sql
+0126_zuschlagskatalog.sql
+0127_hoai_zonen_punktesystem.sql
+0128_fee_master_zone_split_flag.sql
+0129_reminder_pm_notify_mode.sql
+0130_email_bcc.sql
+0131_tenant_id_default.sql
+0132_suggestion_org_release.sql
+0133_einvoice_cii_snapshot.sql
+0134_employee_session_epoch.sql
+0135_tenant_signup_approval.sql
+0136_rbac_wip_report.sql
+0137_wip_closing.sql
+0138_wip_closing_tax.sql

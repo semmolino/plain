@@ -9,6 +9,10 @@
 -- DB editierbar (Owner-Konsole). Darum INSERT ... ON CONFLICT DO NOTHING:
 -- ein erneuter Seed legt NUR fehlende Zeilen an und überschreibt KEINE in der
 -- Konsole vorgenommenen Änderungen (Label/Modul/Position/Einheit).
+--
+-- @repeatable — laeuft bei jeder Inhaltsaenderung erneut (siehe scripts/migrate.js).
+--   Deshalb ist JEDE Anweisung hier wiederholbar zu halten:
+--   INSERT ... ON CONFLICT DO NOTHING, kein DELETE, kein TRUNCATE.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- 1. Module
@@ -90,6 +94,7 @@ INSERT INTO "CAPABILITY_PERMISSION" ("CAPABILITY_KEY","PERMISSION_KEY") VALUES
   ('core.time_tracking', 'projects.bookings.create'),
   ('core.time_tracking', 'projects.bookings.edit'),
   ('core.time_tracking', 'projects.bookings.delete'),
+  ('core.time_tracking', 'projects.bookings.rebook'),
   ('projects.management', 'projects.view'),
   ('projects.management', 'projects.create'),
   ('projects.management', 'projects.edit'),

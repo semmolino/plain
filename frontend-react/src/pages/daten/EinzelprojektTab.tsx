@@ -18,6 +18,7 @@ import { fetchProjectsShort } from '@/api/projekte'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { RecentList } from '@/components/recents/RecentList'
 import { useChartDefaults } from '@/theme/useChartDefaults'
+import { useChartTheme, useSeriesColors } from '@/theme/chartTheme'
 import {
   fetchProjectReportHeader,
   fetchProjectReportStructure,
@@ -29,24 +30,36 @@ import {
   type TimelinePoint,
 } from '@/api/reports'
 import { LeistungsphasenReport } from '@/pages/daten/LeistungsphasenReport'
+import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { cpiLevel, vacLevel, costRatioLevel, readCpiThresholds, KPI_COLOR, type KpiLevel } from '@/utils/kpiLevel'
+import { KpiValue } from '@/components/ui/KpiValue'
+import { NO_VALUE, fmtEur, fmtEur0, money, negativeOr, negativeStyle } from '@/utils/money'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtH    = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct  = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
 type SortField = 'path' | 'honorar' | 'lstPct' | 'lstEur' | 'rest' | 'hours' | 'cost' | 'kq'
 
-function KpiTile({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function KpiTile({ label, value, accent, num, level }: {
+  label: string; value: string; accent?: boolean
+  /** Rohwert — nur noetig, wenn die Kachel einen Geldbetrag zeigt: ein
+   *  negativer Betrag wird rot gesetzt („rote Zahlen"). */
+  num?: number | null
+  /** Ampelstufe — fuer bewertete Kennzahlen wie die Kostenquote. Schliesst
+   *  sich mit `num` aus: ein Betrag wird nach Vorzeichen gefaerbt, eine
+   *  Kennzahl nach ihrer Stufe. */
+  level?: KpiLevel
+}) {
+  const style = level ? { color: KPI_COLOR[level] }
+    : accent ? negativeOr(num, 'var(--accent)') : negativeStyle(num)
   return (
     <div className="daten-kpi-tile">
       <span className="daten-kpi-label">{label}</span>
-      <span className={`daten-kpi-value${accent ? ' accent' : ''}`}>{value}</span>
+      <span className="daten-kpi-value" style={style}>{value}</span>
     </div>
   )
 }
@@ -81,14 +94,6 @@ function buildAncestorPath(
 
 // ── Timeline chart ────────────────────────────────────────────────────────────
 
-const CHART_COLORS = {
-  honorar:       '#3b82f6',
-  leistungsstand:'#10b981',
-  kosten:        '#f59e0b',
-  abgerechnet:   '#8b5cf6',
-  bezahlt:       '#06b6d4',
-}
-
 function fmtDateDE(iso: string) {
   const d = new Date(iso + 'T00:00:00')
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -100,6 +105,9 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
     queryFn:  () => fetchProjectTimeline(projectId, filter),
     enabled:  projectId !== null,
   })
+
+  const t = useChartTheme()
+  const C = useSeriesColors()
 
   const points: TimelinePoint[] = data?.data ?? []
 
@@ -127,8 +135,8 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       {
         label: 'Honorar inkl. NK',
         data: points.map(p => p.HONORAR_NET),
-        borderColor: CHART_COLORS.honorar,
-        backgroundColor: 'rgba(59,130,246,0.07)',
+        borderColor: C.honorar,
+        backgroundColor: t.alpha(C.honorar, 0.07),
         fill: true,
         tension: 0.35,
         pointRadius: points.length > 60 ? 0 : 3,
@@ -138,7 +146,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       {
         label: 'Leistungsstand €',
         data: points.map(p => p.LEISTUNGSSTAND_VALUE),
-        borderColor: CHART_COLORS.leistungsstand,
+        borderColor: C.leistung,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -149,7 +157,7 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       {
         label: 'Kosten €',
         data: points.map(p => p.KOSTEN_TOTAL),
-        borderColor: CHART_COLORS.kosten,
+        borderColor: C.kosten,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -160,26 +168,26 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
       {
         label: 'Abgerechnet €',
         data: points.map(p => p.ABGERECHNET_NET),
-        borderColor: CHART_COLORS.abgerechnet,
+        borderColor: C.fakturiert,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderDash: [6, 3],
         pointRadius: points.length > 60 ? 0 : 3,
         pointHoverRadius: 6,
-        borderWidth: 1.5,
+        borderWidth: 2,
       },
       {
         label: 'Bezahlt €',
         data: points.map(p => p.BEZAHLT_NET),
-        borderColor: CHART_COLORS.bezahlt,
+        borderColor: C.bezahlt,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderDash: [6, 3],
         pointRadius: points.length > 60 ? 0 : 3,
         pointHoverRadius: 6,
-        borderWidth: 1.5,
+        borderWidth: 2,
       },
     ],
   }
@@ -200,33 +208,33 @@ function ProjectTimeline({ projectId, filter }: { projectId: number; filter: Dat
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: '#f9fafb',
-        bodyColor: '#d1d5db',
+        backgroundColor: t.tooltipBg,
+        titleColor: t.tooltipFg,
+        bodyColor: t.tooltipFg,
         padding: 12,
         cornerRadius: 8,
         callbacks: {
           label: (ctx) =>
-            `  ${ctx.dataset.label ?? ''}: ${FMT_EUR.format(ctx.parsed.y ?? 0)}`,
+            `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}`,
         },
       },
     },
     scales: {
       x: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: t.grid },
         ticks: {
           maxRotation: 45,
           maxTicksLimit: 12,
           font: { size: 11 },
-          color: 'var(--text-3)',
+          color: t.textMuted,
         },
       },
       y: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: t.grid },
         ticks: {
           font: { size: 11 },
-          color: 'var(--text-3)',
-          callback: (v) => FMT_EUR0.format(Number(v)),
+          color: t.textMuted,
+          callback: (v) => fmtEur0(Number(v)),
         },
       },
     },
@@ -249,6 +257,10 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
   useChartDefaults()
 
   const navigate = useNavigate()
+
+  // Schwellen der Controlling-Ampel (Einstellungen → Vorbelegungen).
+  const cpiT = readCpiThresholds(useTenantDefaults())
+
   const [pid,       setPid]      = useState<number | null>(initialProjectId ?? null)
   const [projectInput,         setProjectInput]         = useState('')
   const [projectDropdownOpen,  setProjectDropdownOpen]  = useState(false)
@@ -490,17 +502,18 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
           </div>
 
           <div className="daten-kpi-grid">
-            <KpiTile label="HONORAR inkl. Nebenkosten"  value={fmtEur(header.BUDGET_TOTAL_NET)} />
+            <KpiTile label="HONORAR inkl. Nebenkosten"  value={fmtEur(header.BUDGET_TOTAL_NET)} num={header.BUDGET_TOTAL_NET} />
             <KpiTile label="Leistungsstand %"            value={fmtPct(header.LEISTUNGSSTAND_PERCENT)} />
-            <KpiTile label="Leistungsstand (€)"          value={fmtEur(header.LEISTUNGSSTAND_VALUE)} />
-            <KpiTile label="Resthonorar"                  value={fmtEur(header.REMAINING_BUDGET_NET)} />
+            <KpiTile label="Leistungsstand (€)"          value={fmtEur(header.LEISTUNGSSTAND_VALUE)} num={header.LEISTUNGSSTAND_VALUE} />
+            <KpiTile label="Resthonorar"                  value={fmtEur(header.REMAINING_BUDGET_NET)} num={header.REMAINING_BUDGET_NET} />
             <KpiTile label="Stunden (int.)"               value={fmtH(header.HOURS_TOTAL)} />
-            <KpiTile label="Kosten (int.)"                value={fmtEur(header.COST_TOTAL)} />
-            <KpiTile label="Abgerechnet (Netto)"          value={fmtEur(header.BILLED_NET_TOTAL)} />
-            <KpiTile label="ABRECHENBAR (Netto)"          value={fmtEur(header.OPEN_NET_TOTAL)} accent />
-            <KpiTile label="Bezahlt (Netto)"              value={fmtEur(header.PAYED_NET_TOTAL)} />
+            <KpiTile label="Kosten (int.)"                value={fmtEur(header.COST_TOTAL)} num={header.COST_TOTAL} />
+            <KpiTile label="Abgerechnet (Netto)"          value={fmtEur(header.BILLED_NET_TOTAL)} num={header.BILLED_NET_TOTAL} />
+            <KpiTile label="ABRECHENBAR (Netto)"          value={fmtEur(header.OPEN_NET_TOTAL)} num={header.OPEN_NET_TOTAL} accent />
+            <KpiTile label="Bezahlt (Netto)"              value={fmtEur(header.PAYED_NET_TOTAL)} num={header.PAYED_NET_TOTAL} />
             {header.COST_RATIO != null && (
-              <KpiTile label="Kostenquote"                value={fmtPct((header.COST_RATIO ?? 0) * 100)} />
+              <KpiTile label="Kostenquote"                value={fmtPct((header.COST_RATIO ?? 0) * 100)}
+                       level={computeEvm(header).cpi == null ? undefined : costRatioLevel(header.COST_RATIO, cpiT)} />
             )}
           </div>
 
@@ -511,9 +524,16 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
             const avgBurn = computeBurnRate(tl.map(p => p.KOSTEN_TOTAL))
             const moRem   = monthsRemaining(evm.etc, avgBurn)
             if (evm.cpi == null) return null
-            const cpiColor = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : '#b91c1c'
+            // Farben aus der Controlling-Ampel statt hartkodiert: die frueheren
+            // Werte (#16a34a/#b45309/#b91c1c) folgten keinem Theme und teilten
+            // sich die Bedeutung mit den UI-Statusfarben.
+            const cpiLvl   = cpiLevel(evm.cpi, cpiT)
+            const cpiColor = KPI_COLOR[cpiLvl]
+            const cpiSub   = cpiLvl === 'plan' ? 'Im Plan'
+                           : cpiLvl === 'watch' ? 'Leicht überbudget — beobachten'
+                           : 'Überbudget — Handlungsbedarf'
             const fmtM    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(v)} Mon.`
-            const fmtB    = (v: number | null) => v == null ? '–' : `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0, style: 'currency', currency: 'EUR' }).format(v)}/Mon.`
+            const fmtB    = (v: number | null) => v == null ? NO_VALUE : `${fmtEur0(v)}/Mon.`
             return (
               <div className="prognose-section">
                 <div className="prognose-title">Prognose</div>
@@ -521,21 +541,21 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                   <div className="prognose-tile">
                     <span className="prognose-label">CPI (Effizienz)</span>
                     <span className="prognose-value" style={{ color: cpiColor }}>{fmtCpi(evm.cpi)}</span>
-                    <span className="prognose-sub">{evm.cpiStatus === 'good' ? 'Unter Budget' : evm.cpiStatus === 'warn' ? 'Leicht überbudget' : 'Überbudget — Handlungsbedarf'}</span>
+                    <span className="prognose-sub">{cpiSub}</span>
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">EAC (Progn. Gesamtkosten)</span>
-                    <span className="prognose-value">{fmtEur(evm.eac)}</span>
+                    <span className="prognose-value" style={negativeStyle(evm.eac)}>{money(evm.eac)}</span>
                     <span className="prognose-sub">von {fmtEur(header.BUDGET_TOTAL_NET)} Budget</span>
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">VAC (Ergebnisabweichung)</span>
-                    <span className="prognose-value" style={{ color: (evm.vac ?? 0) >= 0 ? '#16a34a' : '#b91c1c' }}>{fmtEur(evm.vac)}</span>
+                    <span className="prognose-value" style={{ color: KPI_COLOR[vacLevel(evm.vac)] }}>{money(evm.vac)}</span>
                     <span className="prognose-sub">{(evm.vac ?? 0) >= 0 ? 'Projekt im Plan' : 'Prognose: Überschreitung'}</span>
                   </div>
                   <div className="prognose-tile">
                     <span className="prognose-label">ETC (Noch zu erwartende Kosten)</span>
-                    <span className="prognose-value">{fmtEur(evm.etc)}</span>
+                    <span className="prognose-value">{money(evm.etc)}</span>
                     <span className="prognose-sub">verbleibend bis Abschluss</span>
                   </div>
                   {avgBurn != null && (
@@ -614,22 +634,22 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                           )}
                           <strong>{s.displayLabel}</strong>
                         </td>
-                        <td className="num">{fmtEur(s.HONORAR_NET)}</td>
+                        <td className="num">{money(s.HONORAR_NET)}</td>
                         <td className="num">{fmtPct(s.LEISTUNGSSTAND_PERCENT)}</td>
-                        <td className="num">{fmtEur(s.EARNED_VALUE_NET)}</td>
-                        <td className="num">{fmtEur(s.REST_HONORAR)}</td>
+                        <td className="num">{money(s.EARNED_VALUE_NET)}</td>
+                        <td className="num">{money(s.REST_HONORAR)}</td>
                         <td className="num">{fmtH(s.HOURS_TOTAL)}</td>
-                        <td className="num">{fmtEur(s.COST_TOTAL)}</td>
+                        <td className="num">{money(s.COST_TOTAL)}</td>
                         <td className="num">
                           {s.KOSTENQUOTE != null ? fmtPct(s.KOSTENQUOTE * 100) : '—'}
                         </td>
                         {(() => {
                           const evm = computeEvm({ BUDGET_TOTAL_NET: s.HONORAR_NET, LEISTUNGSSTAND_VALUE: s.EARNED_VALUE_NET, COST_TOTAL: s.COST_TOTAL })
-                          const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : evm.cpiStatus === 'bad' ? '#b91c1c' : 'var(--text-3)'
+                          const lvl = cpiLevel(evm.cpi, cpiT)
                           return (
                             <>
-                              <td className="num" style={{ color, fontWeight: evm.cpi != null ? 600 : undefined }}>{fmtCpi(evm.cpi)}</td>
-                              <td className="num">{fmtEur(evm.eac)}</td>
+                              <td className="num"><KpiValue level={lvl}>{fmtCpi(evm.cpi)}</KpiValue></td>
+                              <td className="num">{money(evm.eac)}</td>
                             </>
                           )
                         })()}
@@ -655,20 +675,19 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                       return (
                         <tr className="sum-row">
                           <td><strong>Gesamt</strong></td>
-                          <td className="num"><strong>{fmtEur(totHonorar)}</strong></td>
+                          <td className="num"><strong>{money(totHonorar)}</strong></td>
                           <td className="num"><strong>{fmtPct(totLstPct)}</strong></td>
-                          <td className="num"><strong>{fmtEur(totEarned)}</strong></td>
-                          <td className="num"><strong>{fmtEur(totRest)}</strong></td>
+                          <td className="num"><strong>{money(totEarned)}</strong></td>
+                          <td className="num"><strong>{money(totRest)}</strong></td>
                           <td className="num"><strong>{fmtH(totHours)}</strong></td>
-                          <td className="num"><strong>{fmtEur(totCost)}</strong></td>
+                          <td className="num"><strong>{money(totCost)}</strong></td>
                           <td className="num"><strong>{totKq != null ? fmtPct(totKq) : '—'}</strong></td>
                           {(() => {
                             const totEvm = computeEvm({ BUDGET_TOTAL_NET: totHonorar, LEISTUNGSSTAND_VALUE: totEarned, COST_TOTAL: totCost })
-                            const col = totEvm.cpiStatus === 'good' ? '#16a34a' : totEvm.cpiStatus === 'warn' ? '#b45309' : totEvm.cpiStatus === 'bad' ? '#b91c1c' : undefined
                             return (
                               <>
-                                <td className="num" style={{ color: col }}><strong>{fmtCpi(totEvm.cpi)}</strong></td>
-                                <td className="num"><strong>{fmtEur(totEvm.eac)}</strong></td>
+                                <td className="num"><KpiValue level={cpiLevel(totEvm.cpi, cpiT)}><strong>{fmtCpi(totEvm.cpi)}</strong></KpiValue></td>
+                                <td className="num"><strong>{money(totEvm.eac)}</strong></td>
                               </>
                             )
                           })()}

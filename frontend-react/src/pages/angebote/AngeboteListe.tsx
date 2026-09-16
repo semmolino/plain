@@ -26,11 +26,10 @@ import {
 import { BeauftragtModal } from './BeauftragtModal'
 import { AngeboteAnlegen } from './AngeboteAnlegen'
 import { Modal }          from '@/components/ui/Modal'
+import { money } from '@/utils/money'
 
 const PAGE_SIZE = 25
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -287,7 +286,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
                   </td>
                   <td className="cell-nowrap">{r.EMPLOYEE_NAME ?? '—'}</td>
                   <td className="cell-ellipsis" title={r.ADDRESS_NAME ?? undefined}>{r.ADDRESS_NAME ?? '—'}</td>
-                  <td className="num">{fmtEur(r.TOTAL_AMOUNT)}</td>
+                  <td className="num">{money(r.TOTAL_AMOUNT)}</td>
                   <td className="num">
                     <InlineNumber
                       value={r.PROBABILITY} suffix=" %" min={0} max={100} step={5}
@@ -374,7 +373,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
                 <td colSpan={5} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
                   {filtered.length} Einträge
                 </td>
-                <td className="num">{fmtEur(totalSum)}</td>
+                <td className="num">{money(totalSum)}</td>
                 <td colSpan={4}></td>
               </tr>
             </tfoot>

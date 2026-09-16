@@ -91,7 +91,10 @@ async function seedTenantRbacAndAssignAdmin(supabase, tenantId, employeeId) {
     const roleDefs = [
       { name: "Administrator",    long: "Voller Zugriff auf alle Funktionen",                          color: "#dc2626", isDefault: false, permIds: allIds },
       { name: "Geschäftsleitung", long: "Voller Lesezugriff, Rechnungen buchen, keine Konfiguration",  color: "#7c3aed", isDefault: false,
-        permIds: uniq([...byCat("reading"), ...byKey(["invoices.book","invoices.send_email","dunning.send","reports.export"])]) },
+        // "projects.bookings.rebook" ausdruecklich: die Geschaeftsleitung
+        // bekommt sonst nur die Lese-Rechte pauschal, und das Umbuchen ist
+        // (Kategorie "editing") keines davon — siehe Migration 0139.
+        permIds: uniq([...byCat("reading"), ...byKey(["invoices.book","invoices.send_email","dunning.send","reports.export","projects.bookings.rebook"])]) },
       { name: "Projektleiter",    long: "Projekte/Angebote/Rechnungen voll, keine Mitarbeiterverwaltung", color: "#2563eb", isDefault: false,
         permIds: byModule(["dashboard","addresses","projects","reports","invoices","dunning","offers"])
           .filter(id => !nichtFuerProjektleiter.has(id)) },

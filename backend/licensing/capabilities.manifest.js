@@ -58,7 +58,8 @@ const capabilities = [
     permissions: ["addresses.view", "addresses.create", "addresses.edit", "addresses.delete",
       "addresses.contacts.view", "addresses.contacts.create", "addresses.contacts.edit", "addresses.contacts.delete"], since: SINCE },
   { key: "core.time_tracking", module: "core", labelDe: "Stundenerfassung", type: "boolean",
-    permissions: ["projects.bookings.view", "projects.bookings.create", "projects.bookings.edit", "projects.bookings.delete"], since: SINCE },
+    permissions: ["projects.bookings.view", "projects.bookings.create", "projects.bookings.edit", "projects.bookings.delete",
+      "projects.bookings.rebook"], since: SINCE },
 
   // ── Projekte ─────────────────────────────────────────────────────────────────
   { key: "projects.management", module: "projects", labelDe: "Projektverwaltung & Struktur", type: "boolean",

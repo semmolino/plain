@@ -19,6 +19,13 @@ module.exports = (supabase) => {
   router.post("/",                    requirePermission("projects.bookings.create"), (req, res) => ctrl.createBuchung(req, res, supabase));
   router.patch("/:id",                requirePermission("projects.bookings.edit"),   (req, res) => ctrl.patchBuchung(req, res, supabase));
   router.delete("/:id",               requirePermission("projects.bookings.delete"), (req, res) => ctrl.deleteBuchung(req, res, supabase));
+  // Umbuchen steht unter einem EIGENEN Recht, nicht unter bookings.edit: es
+  // verschiebt Kosten und Erloes zwischen zwei Projekten, ohne dass sich eine
+  // Zahl aendert und jemandem auffaellt (Migration 0139). Die Vorschau tragt
+  // dasselbe Gate — sie beantwortet, welche Buchungen gesperrt sind und
+  // welcher Stundensatz sich aendert, und das ist keine oeffentliche Auskunft.
+  router.post("/umbuchen/vorschau", requirePermission("projects.bookings.rebook"), (req, res) => ctrl.previewRebook(req, res, supabase));
+  router.post("/umbuchen",          requirePermission("projects.bookings.rebook"), (req, res) => ctrl.rebook(req, res, supabase));
   router.get("/project/:id",          requirePermission("projects.bookings.view"),   (req, res) => ctrl.listBuchungenByProject(req, res, supabase));
   // Die Timer-Endpunkte trugen bisher KEIN Gate, obwohl ihre Zwillinge direkt
   // darueber (POST /, PATCH /:id, DELETE /:id) eines haben. Ein Nutzer mit der

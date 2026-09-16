@@ -6,6 +6,10 @@ import { SlidersHorizontal } from 'lucide-react'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { FilterBar } from '@/components/ui/FilterBar'
 import type { HelpId } from '@/help/helpContent'
+import { KpiValue } from '@/components/ui/KpiValue'
+import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { cpiLevel, vacLevel, costRatioLevel, readCpiThresholds, type CpiThresholds } from '@/utils/kpiLevel'
+import { fmtEur, fmtEur0, money, moneyOr, negativeStyle } from '@/utils/money'
 
 function lsGet<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
@@ -38,13 +42,12 @@ import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import { RecentList } from '@/components/recents/RecentList'
 import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 import { useChartDefaults } from '@/theme/useChartDefaults'
+import { useChartTheme, useSeriesColors } from '@/theme/chartTheme'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_H   = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 const fmtH    = (v: number | null | undefined) => v == null ? '—' : FMT_H.format(v) + ' h'
 const fmtPct  = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + ' %'
 
@@ -102,9 +105,11 @@ interface ColDef {
   className?:     string
   help?:          HelpId
   defaultVisible: boolean
-  render:         (r: ProjectListRow) => React.ReactNode
+  /** `t` = CPI-Schwellen des Mandanten. Nur die Ampel-Spalten werten sie aus;
+   *  COLUMNS steht auf Modulebene und kann selbst keine Hooks lesen. */
+  render:         (r: ProjectListRow, t: CpiThresholds) => React.ReactNode
   sortValue:      (r: ProjectListRow) => number | string
-  renderTotal:    (rows: ProjectListRow[]) => React.ReactNode
+  renderTotal:    (rows: ProjectListRow[], t: CpiThresholds) => React.ReactNode
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -147,9 +152,9 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'honorar', label: 'Honorar Netto', className: 'num', defaultVisible: true,
-    render:      r  => fmtEur(r.BUDGET_TOTAL_NET),
+    render:      r  => money(r.BUDGET_TOTAL_NET),
     sortValue:   r  => r.BUDGET_TOTAL_NET ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.BUDGET_TOTAL_NET)),
+    renderTotal: rs => money(sumRows(rs, r => r.BUDGET_TOTAL_NET)),
   },
   {
     key: 'lstPct', label: 'Lst.%', className: 'num', help: 'report.leistungsstand', defaultVisible: true,
@@ -163,15 +168,15 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'lstEur', label: 'Lst.€', className: 'num', defaultVisible: true,
-    render:      r  => fmtEur(r.LEISTUNGSSTAND_VALUE),
+    render:      r  => money(r.LEISTUNGSSTAND_VALUE),
     sortValue:   r  => r.LEISTUNGSSTAND_VALUE ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)),
+    renderTotal: rs => money(sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)),
   },
   {
     key: 'rest', label: 'Restbudget', className: 'num', help: 'report.restbudget', defaultVisible: true,
-    render:      r  => fmtEur(r.REMAINING_BUDGET_NET),
+    render:      r  => money(r.REMAINING_BUDGET_NET),
     sortValue:   r  => r.REMAINING_BUDGET_NET ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.REMAINING_BUDGET_NET)),
+    renderTotal: rs => money(sumRows(rs, r => r.REMAINING_BUDGET_NET)),
   },
   {
     key: 'hoursInt', label: 'Std.int.', className: 'num', defaultVisible: true,
@@ -181,69 +186,94 @@ const COLUMNS: ColDef[] = [
   },
   {
     key: 'cost', label: 'Kosten €', className: 'num', defaultVisible: false,
-    render:      r  => fmtEur(r.COST_TOTAL),
+    render:      r  => money(r.COST_TOTAL),
     sortValue:   r  => r.COST_TOTAL ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.COST_TOTAL)),
+    renderTotal: rs => money(sumRows(rs, r => r.COST_TOTAL)),
   },
   {
     key: 'billed', label: 'Abgerechnet', className: 'num', defaultVisible: true,
-    render:      r  => fmtEur(r.BILLED_NET_TOTAL),
+    render:      r  => money(r.BILLED_NET_TOTAL),
     sortValue:   r  => r.BILLED_NET_TOTAL ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.BILLED_NET_TOTAL)),
+    renderTotal: rs => money(sumRows(rs, r => r.BILLED_NET_TOTAL)),
   },
   {
     key: 'open', label: 'Abrechenbar', className: 'num', help: 'report.abrechenbar', defaultVisible: true,
-    render:      r  => <span className="accent">{fmtEur(r.OPEN_NET_TOTAL)}</span>,
+    render:      r  => moneyOr(r.OPEN_NET_TOTAL, 'var(--accent)'),
     sortValue:   r  => r.OPEN_NET_TOTAL ?? 0,
-    renderTotal: rs => <span className="accent">{fmtEur(sumRows(rs, r => r.OPEN_NET_TOTAL))}</span>,
+    renderTotal: rs => moneyOr(sumRows(rs, r => r.OPEN_NET_TOTAL), 'var(--accent)'),
   },
   {
     key: 'payed', label: 'Bezahlt', className: 'num', defaultVisible: false,
-    render:      r  => fmtEur(r.PAYED_NET_TOTAL),
+    render:      r  => money(r.PAYED_NET_TOTAL),
     sortValue:   r  => r.PAYED_NET_TOTAL ?? 0,
-    renderTotal: rs => fmtEur(sumRows(rs, r => r.PAYED_NET_TOTAL)),
+    renderTotal: rs => money(sumRows(rs, r => r.PAYED_NET_TOTAL)),
   },
   {
     key: 'kq', label: 'Kostenquote', className: 'num', help: 'report.kostenquote', defaultVisible: false,
-    render:      r  => r.COST_RATIO != null ? fmtPct(r.COST_RATIO * 100) : '—',
+    render: (r, t) => {
+      if (r.COST_RATIO == null) return '—'
+      const text = fmtPct(r.COST_RATIO * 100)
+      // Derselbe Kleinprojekt-Schutz wie beim CPI: computeEvm liefert unter
+      // 500 EUR Budget oder 100 EUR Kosten kein Ergebnis. Ohne den Schutz
+      // waere eine Quote aus 40 EUR Leistung und 50 EUR Kosten „kritisch" —
+      // statistisches Rauschen, keine Aussage.
+      if (computeEvm(r).cpi == null) return text
+      return (
+        <KpiValue level={costRatioLevel(r.COST_RATIO, t)}
+          reason={`Kostenquote ${text} bei Schwelle ${fmtPct(100 / t.watch)} / ${fmtPct(100 / t.critical)}`}>
+          {text}
+        </KpiValue>
+      )
+    },
     sortValue:   r  => r.COST_RATIO ?? -1,
-    renderTotal: rs => {
+    renderTotal: (rs, t) => {
       const l = sumRows(rs, r => r.LEISTUNGSSTAND_VALUE)
       const c = sumRows(rs, r => r.COST_TOTAL)
-      return l > 0 ? fmtPct((c / l) * 100) : '—'
+      if (l <= 0) return '—'
+      return <KpiValue level={costRatioLevel(c / l, t)}>{fmtPct((c / l) * 100)}</KpiValue>
     },
   },
   {
-    key: 'cpi', label: 'CPI', className: 'num', defaultVisible: false,
-    render: r => {
-      const evm = computeEvm(r)
-      const color = evm.cpiStatus === 'good' ? '#16a34a' : evm.cpiStatus === 'warn' ? '#b45309' : evm.cpiStatus === 'bad' ? '#b91c1c' : 'var(--text-3)'
-      return <span style={{ color, fontWeight: evm.cpi != null ? 600 : undefined }}>{fmtCpi(evm.cpi)}</span>
+    key: 'cpi', label: 'CPI', className: 'num', help: 'report.cpi', defaultVisible: false,
+    render: (r, t) => {
+      const cpi = computeEvm(r).cpi
+      const lvl = cpiLevel(cpi, t)
+      return (
+        <KpiValue level={lvl} reason={cpi == null
+          ? 'zu wenig Kosten oder Budget erfasst'
+          : `CPI ${cpi.toFixed(2)} bei Schwelle ${t.watch.toFixed(2)} / ${t.critical.toFixed(2)}`}>
+          {fmtCpi(cpi)}
+        </KpiValue>
+      )
     },
     sortValue:   r  => computeEvm(r).cpi ?? -999,
-    renderTotal: rs => {
+    renderTotal: (rs, t) => {
       const cpi = portfolioCpi(rs)
-      const color = cpi == null ? undefined : cpi >= 0.95 ? '#16a34a' : cpi >= 0.80 ? '#b45309' : '#b91c1c'
-      return <span style={{ color, fontWeight: 600 }}>{fmtCpi(cpi)}</span>
+      return <KpiValue level={cpiLevel(cpi, t)}>{fmtCpi(cpi)}</KpiValue>
     },
   },
   {
     key: 'eac', label: 'EAC (Prognose)', className: 'num', defaultVisible: false,
-    render:      r  => fmtEur(computeEvm(r).eac),
+    render:      r  => <span style={negativeStyle(computeEvm(r).eac)}>{money(computeEvm(r).eac)}</span>,
     sortValue:   r  => computeEvm(r).eac ?? 0,
     renderTotal: rs => fmtEur(rs.reduce((s, r) => s + (computeEvm(r).eac ?? Number(r.BUDGET_TOTAL_NET) ?? 0), 0)),
   },
   {
-    key: 'vac', label: 'VAC (Abweichung)', className: 'num', defaultVisible: false,
+    key: 'vac', label: 'VAC (Abweichung)', className: 'num', help: 'report.vac', defaultVisible: false,
     render: r => {
       const vac = computeEvm(r).vac
       if (vac == null) return '—'
-      return <span style={{ color: vac >= 0 ? '#16a34a' : '#b91c1c' }}>{fmtEur(vac)}</span>
+      return (
+        <KpiValue level={vacLevel(vac)} bold={vac < 0}
+          reason={vac < 0 ? 'Prognose liegt über dem Budget' : 'Prognose bleibt im Budget'}>
+          {money(vac)}
+        </KpiValue>
+      )
     },
     sortValue:   r  => computeEvm(r).vac ?? 0,
     renderTotal: rs => {
       const total = rs.reduce((s, r) => s + (computeEvm(r).vac ?? 0), 0)
-      return <span style={{ color: total >= 0 ? '#16a34a' : '#b91c1c', fontWeight: 600 }}>{fmtEur(total)}</span>
+      return <KpiValue level={vacLevel(total)}>{money(total)}</KpiValue>
     },
   },
 ]
@@ -275,8 +305,6 @@ function SortTh({ label, field, current, dir, onSort, className, help }: {
 
 // ── Aggregate timeline chart ──────────────────────────────────────────────────
 
-const FMT_EUR_CHART = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const FMT_EUR0_CHART = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 function fmtDateDE(iso: string) {
   const d = new Date(iso + 'T00:00:00')
@@ -289,6 +317,9 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
     queryFn:  () => fetchProjectsTimeline(filter, projectIds),
     enabled:  filterReady,
   })
+
+  const t = useChartTheme()
+  const C = useSeriesColors()
 
   const points: TimelinePoint[] = data?.data ?? []
 
@@ -316,8 +347,8 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Honorar inkl. NK',
         data: points.map(p => p.HONORAR_NET),
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59,130,246,0.07)',
+        borderColor: C.honorar,
+        backgroundColor: t.alpha(C.honorar, 0.07),
         fill: true,
         tension: 0.35,
         pointRadius: points.length > 60 ? 0 : 3,
@@ -327,7 +358,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Leistungsstand €',
         data: points.map(p => p.LEISTUNGSSTAND_VALUE),
-        borderColor: '#10b981',
+        borderColor: C.leistung,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -338,7 +369,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Kosten €',
         data: points.map(p => p.KOSTEN_TOTAL),
-        borderColor: '#f59e0b',
+        borderColor: C.kosten,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
@@ -349,26 +380,26 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
       {
         label: 'Abgerechnet €',
         data: points.map(p => p.ABGERECHNET_NET),
-        borderColor: '#8b5cf6',
+        borderColor: C.fakturiert,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderDash: [6, 3],
         pointRadius: points.length > 60 ? 0 : 3,
         pointHoverRadius: 6,
-        borderWidth: 1.5,
+        borderWidth: 2,
       },
       {
         label: 'Bezahlt €',
         data: points.map(p => p.BEZAHLT_NET),
-        borderColor: '#06b6d4',
+        borderColor: C.bezahlt,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.35,
         borderDash: [6, 3],
         pointRadius: points.length > 60 ? 0 : 3,
         pointHoverRadius: 6,
-        borderWidth: 1.5,
+        borderWidth: 2,
       },
     ],
   }
@@ -389,28 +420,28 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17,24,39,0.92)',
-        titleColor: '#f9fafb',
-        bodyColor: '#d1d5db',
+        backgroundColor: t.tooltipBg,
+        titleColor: t.tooltipFg,
+        bodyColor: t.tooltipFg,
         padding: 12,
         cornerRadius: 8,
         callbacks: {
           label: (ctx) =>
-            `  ${ctx.dataset.label ?? ''}: ${FMT_EUR_CHART.format(ctx.parsed.y ?? 0)}`,
+            `  ${ctx.dataset.label ?? ''}: ${fmtEur(ctx.parsed.y ?? 0)}`,
         },
       },
     },
     scales: {
       x: {
-        grid: { color: 'var(--text-3)' },
-        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: '#6b7280' },
+        grid: { color: t.grid },
+        ticks: { maxRotation: 45, maxTicksLimit: 12, font: { size: 11 }, color: t.textMuted },
       },
       y: {
-        grid: { color: 'var(--text-3)' },
+        grid: { color: t.grid },
         ticks: {
           font: { size: 11 },
-          color: 'var(--text-3)',
-          callback: (v) => FMT_EUR0_CHART.format(Number(v)),
+          color: t.textMuted,
+          callback: (v) => fmtEur0(Number(v)),
         },
       },
     },
@@ -433,6 +464,11 @@ export function ProjektlisteTab() {
   useChartDefaults()
 
   const navigate = useNavigate()
+
+  // Schwellen der Controlling-Ampel (Einstellungen → Vorbelegungen). Ungepflegt
+  // heisst hier „Standardwerte", nicht „Ampel aus" — die Einfaerbung gab es
+  // vorher schon, sie wegzunehmen waere ein Rueckschritt.
+  const cpiT = readCpiThresholds(useTenantDefaults())
 
   const [mode,     setMode]     = useState<FilterMode>('now')
   const [asOfDate, setAsOfDate] = useState('')
@@ -703,7 +739,7 @@ export function ProjektlisteTab() {
                       {r.NAME_LONG && <span className="tree-name-long"> – {r.NAME_LONG}</span>}
                     </td>
                     {visibleCols.map(c => (
-                      <td key={c.key} className={c.className}>{c.render(r)}</td>
+                      <td key={c.key} className={c.className}>{c.render(r, cpiT)}</td>
                     ))}
                   </tr>
                 ))}
@@ -714,7 +750,7 @@ export function ProjektlisteTab() {
                     <td><strong>Gesamt ({sorted.length})</strong></td>
                     {visibleCols.map(c => (
                       <td key={c.key} className={c.className}>
-                        <strong>{c.renderTotal(sorted)}</strong>
+                        <strong>{c.renderTotal(sorted, cpiT)}</strong>
                       </td>
                     ))}
                   </tr>

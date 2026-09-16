@@ -10,9 +10,8 @@ import {
   updateDin276Estimate, saveDin276Groups, computeDin276Anrechenbar,
   type Din276Group, type Din276Estimate, type Din276AnrechenbarResult, type Din276Stage,
 } from '@/api/din276'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
 // Erste Hunderter-KG aus einem Code ("410" → 400).
 const kgHundred = (code: string): number | null => {
@@ -312,7 +311,7 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
               <tfoot>
                 <tr className="sum-row">
                   <td colSpan={2}><strong>Baukosten gesamt</strong></td>
-                  <td className="num"><strong>{fmtEur(totalBaukosten)}</strong></td>
+                  <td className="num"><strong>{money(totalBaukosten)}</strong></td>
                   <td colSpan={2} />
                 </tr>
               </tfoot>
@@ -346,16 +345,16 @@ export function Din276Editor({ open, onClose, projectId, offerId, leistungsbild 
                       <tr key={i}>
                         <td>{h.kg}</td>
                         <td>{h.label}</td>
-                        <td className="num">{fmtEur(h.basis)}</td>
+                        <td className="num">{money(h.basis)}</td>
                         <td className="num">{h.ansatz}</td>
-                        <td className="num">{fmtEur(h.betrag)}</td>
+                        <td className="num">{money(h.betrag)}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="sum-row">
                       <td colSpan={4}><strong>Anrechenbare Kosten</strong></td>
-                      <td className="num"><strong>{fmtEur(result.anrechenbareKosten)}</strong></td>
+                      <td className="num"><strong>{money(result.anrechenbareKosten)}</strong></td>
                     </tr>
                   </tfoot>
                 </table>

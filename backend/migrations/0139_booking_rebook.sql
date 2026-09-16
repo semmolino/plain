@@ -1,61 +1,141 @@
--- 0139_booking_rebook.sql
+-- ============================================================================
+-- 0139_booking_rebook.sql — Umbuchen von Buchungen (Recht + Protokoll)
 --
--- REKONSTRUIERT AM 2026-09-16 AUS DEM LAUFENDEN SCHEMA.
+-- WARUM EIN EIGENES RECHT
+--   Eine Buchung tragt Kosten (CP_TOT) und Erloes (SP_TOT) eines Projekts.
+--   Sie umzubuchen verschiebt Geld zwischen zwei Projekten und veraendert
+--   damit Deckungsbeitrag, Budgetauslastung und den Wert der teilfertigen
+--   Leistungen auf BEIDEN Seiten — ohne dass eine Zahl sich aendert und
+--   jemandem auffaellt. `projects.bookings.edit` reicht dafuer nicht: das ist
+--   das Recht, die eigene Zeitzeile zu korrigieren.
 --
--- Diese Migration ist in der Produktionsdatenbank als eingespielt vermerkt
--- (Tabelle _migrations), die Datei fehlte aber im Repository. Damit konnte das
--- Repository die Datenbank nicht mehr vollstaendig aufbauen, und jede Auswertung,
--- die sich auf backend/migrations/ oder db/schema/ stuetzte, kannte TEC_REBOOKING
--- nicht. Genau daran ist die erste Bewertung der Umbenennungsliste vorbeigelaufen.
+-- DEFAULT-ROLLEN
+--   Administrator, Geschaeftsleitung, Projektleiter. Der Projektleiter merkt
+--   die Fehlbuchung im eigenen Projekt zuerst und soll sie ohne Ticket
+--   geradeziehen koennen. Bewusst NICHT die Default-Rolle „Mitarbeiter".
 --
--- Der Inhalt ist aus information_schema und pg_catalog abgeleitet, nicht das
--- Original. Er beschreibt den Zustand korrekt, kann aber in Formulierung und
--- Reihenfolge abweichen. IF NOT EXISTS ueberall, damit ein erneuter Lauf gegen
--- eine Datenbank, die die Tabelle schon hat, folgenlos bleibt.
+--   Fuer NEUE Mandanten kommen die Rollen nicht aus dieser Migration, sondern
+--   aus seedTenantRbacAndAssignAdmin (routes/auth.js). Dort faellt das Recht
+--   ueber byModule(["projects"]) automatisch an den Projektleiter; die
+--   Geschaeftsleitung bekommt nur `reading` pauschal und braucht deshalb den
+--   ausdruecklichen Eintrag in ihrer byKey-Liste — er steht dort.
 --
--- Reines DDL: kein sys-Claim noetig (siehe CLAUDE.md, "Migrationen laufen ohne
--- Mandanten-Claim").
+-- WAS NICHT UMBUCHBAR IST
+--   Buchungen mit INVOICE_ID oder PARTIAL_PAYMENT_ID. Sie stecken in einem
+--   Beleg; sie zu verschieben wuerde eine gestellte Rechnung von ihrer
+--   Grundlage trennen. Das prueft der Service (services/buchungen.js), nicht
+--   die Datenbank — die Meldung soll sagen, WELCHE Rechnung es ist.
+--
+-- PROTOKOLL
+--   TEC_REBOOKING haelt je verschobener Buchung, wer sie wann von wo nach wo
+--   gebucht hat, mit optionalem Grund. Projekt- und Elementnamen liegen als
+--   Text daneben (wie in WIP_CLOSING_LINE): ein spaeter umbenanntes oder
+--   geloeschtes Element darf einen Protokolleintrag nicht unlesbar machen.
+--   Deshalb auch keine Fremdschluessel — der Eintrag ueberlebt sein Ziel.
+--
+-- EINSPIELEN
+--   scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -f backend/migrations/0139_booking_rebook.sql'
+-- ============================================================================
 
-CREATE TABLE IF NOT EXISTS "TEC_REBOOKING" (
-  "ID"                     BIGINT GENERATED ALWAYS AS IDENTITY,
-  "TENANT_ID"              BIGINT DEFAULT public.current_tenant_id(),
-  "TEC_ID"                 BIGINT NOT NULL,
-  "DATE_VOUCHER"           DATE,
-  "BOOKING_EMPLOYEE_ID"    BIGINT,
-  "QUANTITY_INT"           NUMERIC(15,2),
-  "CP_TOT"                 NUMERIC(15,2),
-  "FROM_PROJECT_ID"        BIGINT,
-  "FROM_PROJECT_NAME"      TEXT,
-  "FROM_STRUCTURE_ID"      BIGINT,
-  "FROM_STRUCTURE_NAME"    TEXT,
-  "TO_PROJECT_ID"          BIGINT,
-  "TO_PROJECT_NAME"        TEXT,
-  "TO_STRUCTURE_ID"        BIGINT,
-  "TO_STRUCTURE_NAME"      TEXT,
-  "SP_RATE_BEFORE"         NUMERIC(15,2),
-  "SP_RATE_AFTER"          NUMERIC(15,2),
-  "SP_TOT_BEFORE"          NUMERIC(15,2),
-  "SP_TOT_AFTER"           NUMERIC(15,2),
-  "REASON"                 TEXT,
-  "CREATED_BY_EMPLOYEE_ID" BIGINT,
-  -- Kleingeschrieben, im Gegensatz zu CREATED_AT im uebrigen Schema. So steht
-  -- es in der Datenbank; hier nicht stillschweigend korrigiert.
-  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT "TEC_REBOOKING_pkey" PRIMARY KEY ("ID")
+-- ACHTUNG — RLS: dieses Skript liest "USER_ROLE" (traegt TENANT_ID, also von
+-- der Policy tenant_isolation erfasst, FORCE ROW LEVEL SECURITY, fail-closed
+-- ohne Claim). Ein psql-Lauf hat keinen JWT-Claim: ohne die folgende Zeile
+-- liefert das SELECT null Zeilen, die Rollenzuweisung laeuft ins Leere — und
+-- die Migration meldet trotzdem Erfolg (so ist 0136 beim ersten Einspielen
+-- gescheitert). Siehe CLAUDE.md, Abschnitt Database conventions.
+SET request.jwt.claims = $CLAIM${"sys":"true"}$CLAIM$;
+
+-- ── 1. Permission ───────────────────────────────────────────────────────────
+
+INSERT INTO "PERMISSION" ("KEY", "MODULE", "ACTION", "LABEL_DE", "DESCRIPTION_DE", "CATEGORY", "POSITION") VALUES
+('projects.bookings.rebook', 'projects', 'edit', 'Buchungen umbuchen',
+ 'Buchungen auf ein anderes Projektelement oder Projekt verschieben — einzeln oder als Auswahl. Abgerechnete Buchungen bleiben gesperrt.',
+ 'editing', 234)
+ON CONFLICT ("KEY") DO UPDATE SET
+  "LABEL_DE"       = EXCLUDED."LABEL_DE",
+  "DESCRIPTION_DE" = EXCLUDED."DESCRIPTION_DE",
+  "MODULE"         = EXCLUDED."MODULE",
+  "ACTION"         = EXCLUDED."ACTION",
+  "CATEGORY"       = EXCLUDED."CATEGORY",
+  "POSITION"       = EXCLUDED."POSITION";
+
+DO $$
+DECLARE
+  perm_rebook INT;
+BEGIN
+  SELECT "ID" INTO perm_rebook FROM "PERMISSION" WHERE "KEY" = 'projects.bookings.rebook';
+
+  INSERT INTO "ROLE_PERMISSION" ("ROLE_ID","PERMISSION_ID")
+    SELECT "ID", perm_rebook
+    FROM "USER_ROLE"
+    WHERE "IS_SYSTEM" = TRUE
+      AND "NAME_SHORT" IN ('Administrator', 'Geschäftsleitung', 'Projektleiter')
+  ON CONFLICT DO NOTHING;
+
+  RAISE NOTICE 'projects.bookings.rebook: % Rollenzuweisungen', (
+    SELECT count(*) FROM "ROLE_PERMISSION" rp WHERE rp."PERMISSION_ID" = perm_rebook
+  );
+END $$;
+
+-- ── 2. Protokolltabelle ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public."TEC_REBOOKING" (
+  "ID"                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  "TENANT_ID"         bigint DEFAULT public.current_tenant_id(),
+  "TEC_ID"            bigint NOT NULL,
+  -- Momentaufnahme der Buchung, damit das Protokoll auch nach einer spaeteren
+  -- Loeschung noch aussagt, was verschoben wurde.
+  "DATE_VOUCHER"      date,
+  "BOOKING_EMPLOYEE_ID" bigint,
+  "QUANTITY_INT"      numeric(15,2),
+  "CP_TOT"            numeric(15,2),
+  "FROM_PROJECT_ID"   bigint,
+  "FROM_PROJECT_NAME" text,
+  "FROM_STRUCTURE_ID" bigint,
+  "FROM_STRUCTURE_NAME" text,
+  "TO_PROJECT_ID"     bigint,
+  "TO_PROJECT_NAME"   text,
+  "TO_STRUCTURE_ID"   bigint,
+  "TO_STRUCTURE_NAME" text,
+  -- Erloesseite vor/nach der Umbuchung: der Stundensatz kommt aus der
+  -- Mitarbeiter/Projekt-Zuordnung des ZIELS und kann sich damit aendern.
+  "SP_RATE_BEFORE"    numeric(15,2),
+  "SP_RATE_AFTER"     numeric(15,2),
+  "SP_TOT_BEFORE"     numeric(15,2),
+  "SP_TOT_AFTER"      numeric(15,2),
+  "REASON"            text,
+  "CREATED_BY_EMPLOYEE_ID" bigint,
+  created_at          timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_tec_rebooking_tenant_tec
-  ON public."TEC_REBOOKING" USING btree ("TENANT_ID", "TEC_ID");
+  ON public."TEC_REBOOKING" ("TENANT_ID", "TEC_ID");
 CREATE INDEX IF NOT EXISTS idx_tec_rebooking_created
-  ON public."TEC_REBOOKING" USING btree ("TENANT_ID", created_at DESC);
+  ON public."TEC_REBOOKING" ("TENANT_ID", created_at DESC);
 
-ALTER TABLE "TEC_REBOOKING" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "TEC_REBOOKING" FORCE ROW LEVEL SECURITY;
+-- ── Mandantentrennung in der Datenbank ──────────────────────────────────────
+-- Neue Tabellen sind von 05_rls_scalingo.sql nicht erfasst (das Skript lief
+-- einmal ueber den damaligen Bestand) — Policy hier explizit setzen.
+ALTER TABLE public."TEC_REBOOKING" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."TEC_REBOOKING" FORCE  ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON public."TEC_REBOOKING";
+CREATE POLICY tenant_isolation ON public."TEC_REBOOKING" FOR ALL
+  USING      ("TENANT_ID" = public.current_tenant_id() OR public.is_system_request())
+  WITH CHECK ("TENANT_ID" = public.current_tenant_id() OR public.is_system_request());
 
-DROP POLICY IF EXISTS tenant_isolation ON "TEC_REBOOKING";
-CREATE POLICY tenant_isolation ON "TEC_REBOOKING"
-  USING      (("TENANT_ID" = public.current_tenant_id()) OR public.is_system_request())
-  WITH CHECK (("TENANT_ID" = public.current_tenant_id()) OR public.is_system_request());
+-- PostgREST-Rollen: ALTER DEFAULT PRIVILEGES aus 03_rls_postgrest.sql greift
+-- nur fuer Tabellen, die dieselbe Rolle anlegt. Explizit nachziehen, sonst
+-- antwortet PostgREST mit „permission denied for table".
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'plain_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON public."TEC_REBOOKING" TO plain_app;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'plain_system') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON public."TEC_REBOOKING" TO plain_system;
+  END IF;
+END $$;
 
--- PostgREST serves from a cached schema; without this it keeps using the old one.
+RESET request.jwt.claims;
+
 NOTIFY pgrst, 'reload schema';

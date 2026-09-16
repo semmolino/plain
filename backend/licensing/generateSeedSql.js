@@ -34,6 +34,17 @@ function build() {
   L.push("-- DB editierbar (Owner-Konsole). Darum INSERT ... ON CONFLICT DO NOTHING:");
   L.push("-- ein erneuter Seed legt NUR fehlende Zeilen an und überschreibt KEINE in der");
   L.push("-- Konsole vorgenommenen Änderungen (Label/Modul/Position/Einheit).");
+  L.push("--");
+  // Der Marker steuert den Migrations-Runner (backend/scripts/migrate.js):
+  // diese Datei wird nach ihrem Inhalts-Hash eingespielt, nicht nach ihrem
+  // Namen. Ohne ihn haette der Runner sie nach dem ersten Lauf nie wieder
+  // angefasst — und eine neu an eine Capability gehaengte Permission waere
+  // in der Datenbank nie angekommen, also in jedem Tarif wirksam geblieben
+  // (fail-open). Er gehoert hierher und nicht in die erzeugte Datei: die
+  // traegt "NICHT VON HAND EDITIEREN" und wird bei jedem license:gen ersetzt.
+  L.push("-- @repeatable — laeuft bei jeder Inhaltsaenderung erneut (siehe scripts/migrate.js).");
+  L.push("--   Deshalb ist JEDE Anweisung hier wiederholbar zu halten:");
+  L.push("--   INSERT ... ON CONFLICT DO NOTHING, kein DELETE, kein TRUNCATE.");
   L.push("-- ─────────────────────────────────────────────────────────────────────────────");
   L.push("");
 

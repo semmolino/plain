@@ -201,6 +201,28 @@ export const HELP = {
       </>
     ),
   },
+  'bookings.rebook': {
+    title: 'Buchungen umbuchen',
+    body: (
+      <>
+        Verschiebt Buchungen auf ein anderes <strong>Projektelement</strong> — auf Wunsch
+        auch in ein anderes <strong>Projekt</strong>. Für den Fall, dass versehentlich auf
+        die falsche Position gebucht wurde. Menge, Datum, Mitarbeiter und Beschreibung
+        bleiben unverändert.
+        <br /><strong>Abgerechnete Buchungen sind gesperrt.</strong> Steckt eine Buchung in
+        einer Rechnung oder einem Abschlag, bleibt sie liegen — sonst verliert ein
+        gestellter Beleg seine Grundlage. Die Vorschau nennt die betroffene Belegnummer;
+        korrigiert wird über Storno bzw. Gutschrift.
+        <br /><strong>Der Stundensatz richtet sich nach dem Ziel.</strong> Er kommt aus der
+        Mitarbeiter/Projekt-Zuordnung des Zielprojekts, nicht aus der Buchung — der
+        abrechenbare Erlös kann sich dadurch ändern. Die Vorschau zeigt vorher, um wie
+        viel. Ist im Zielprojekt kein Satz hinterlegt, bleibt der bisherige stehen.
+        Der Kostensatz bleibt immer: er hängt am Mitarbeiter, nicht am Projekt.
+        <br />Kosten- und Erlössummen werden bei Quelle <em>und</em> Ziel neu gerechnet.
+        Jede Umbuchung wird mit Grund protokolliert.
+      </>
+    ),
+  },
   'bookings.text_snippets': {
     title: 'Textbausteine',
     body: (
@@ -506,8 +528,14 @@ export const HELP = {
     title: 'Kostenquote',
     body: (
       <>
-        Kosten im Verhältnis zum Honorar (Kosten ÷ Honorar). Niedriger ist besser;
-        über 100 % bedeutet, die Kosten übersteigen das Honorar.
+        Kosten im Verhältnis zur erbrachten Leistung. Niedriger ist besser;
+        über 100 % bedeutet, die Kosten übersteigen den Leistungswert.
+        <br /><br />
+        Die Quote ist der <strong>Kehrwert des CPI</strong> — dieselbe Zahl,
+        andersherum gelesen. Deshalb nutzt die Ampel hier auch dieselben
+        Schwellen: 0,95 und 0,80 beim CPI entsprechen 105,3 % und 125 % bei der
+        Quote. Damit können die beiden Spalten in einer Zeile nicht
+        widersprüchlich werden.
       </>
     ),
   },
@@ -528,6 +556,63 @@ export const HELP = {
         Vereinbartes Budget minus bereits verbrauchte/gebuchte Kosten. Wird über
         die Budget-Warnschwellen überwacht; bei Über­schreitung der Schwellen
         gibt es Benachrichtigungen.
+      </>
+    ),
+  },
+  // ── Controlling-Ampel ───────────────────────────────────────────────────
+  'report.kpi_ampel': {
+    title: 'Controlling-Ampel',
+    body: (
+      <>
+        Farbliche Markierung wirtschaftlich auffälliger Projekte in Reports und auf der
+        Übersicht. Drei Stufen: <strong>im Plan</strong> (petrol),{' '}
+        <strong>beobachten</strong> (orange) und <strong>Handlungsbedarf</strong> (rot).
+        Bewusst wird <em>nicht</em> jedes gesunde Projekt grün eingefärbt — markiert wird
+        nur, was Aufmerksamkeit braucht. Eine Liste, in der alles bunt ist, transportiert
+        nichts mehr.
+        <br /><br />
+        Die Farbe ist nie der einzige Hinweis: Jede markierte Zahl trägt zusätzlich ein
+        Symbol und einen Klartext beim Überfahren mit der Maus.
+      </>
+    ),
+  },
+  'report.kpi_schwellen': {
+    title: 'Schwellen der Ampel',
+    body: (
+      <>
+        Ab welchem CPI ein Projekt markiert wird. Der <strong>CPI</strong> ist die
+        erbrachte Leistung geteilt durch die angefallenen Kosten: 1,00 heißt „die
+        Leistung deckt die Kosten genau“, darunter wird zugesetzt.
+        <br /><br />
+        Die Vorgaben 0,95 und 0,80 passen für die meisten Büros. Wer knapper kalkuliert
+        oder mit anderen Margen arbeitet, verschiebt sie hier. Die Werte gelten für alle
+        Reports gleichzeitig.
+      </>
+    ),
+  },
+  'report.cpi': {
+    title: 'CPI (Kosteneffizienz)',
+    body: (
+      <>
+        Erbrachte Leistung geteilt durch angefallene Kosten. <strong>Über 1,00</strong>{' '}
+        heißt: für den erreichten Leistungsstand wurde weniger ausgegeben als vereinbart.{' '}
+        <strong>Unter 1,00</strong> heißt: das Projekt zehrt am Honorar.
+        <br /><br />
+        Bei sehr kleinen Projekten (unter 500 € Budget oder unter 100 € Kosten) bleibt der
+        Wert leer — dort wäre er statistisches Rauschen, keine Aussage.
+      </>
+    ),
+  },
+  'report.vac': {
+    title: 'VAC (Ergebnisabweichung)',
+    body: (
+      <>
+        Budget minus prognostizierte Gesamtkosten (EAC). <strong>Positiv</strong> heißt:
+        das Projekt bleibt bei gleichbleibender Effizienz im Budget.{' '}
+        <strong>Negativ</strong> ist der voraussichtliche Fehlbetrag.
+        <br /><br />
+        Die Prognose schreibt den bisherigen CPI fort — sie ist eine Hochrechnung, keine
+        Zusage. Ändert sich die Arbeitsweise im Projekt, ändert sich auch der Wert.
       </>
     ),
   },

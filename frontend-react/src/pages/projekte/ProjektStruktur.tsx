@@ -18,9 +18,8 @@ import {
   type StructureNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
+import { fmtEur, money } from '@/utils/money'
 
-const FMT_EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtEur  = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v)
 
 type RowEdit = {
   nameShort: string; nameLong: string; billingTypeId: string
@@ -792,12 +791,12 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                           <td style={{ paddingLeft: 4, fontSize: 13 }}>{currentProject.NAME_SHORT}</td>
                           <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{currentProject.NAME_LONG}</td>
                           <td><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
-                          <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootRevenue)}</span></td>
-                          <td className="num"><span style={{ color: rootSurcharges > 0 ? '#16a34a' : rootSurcharges < 0 ? '#dc2626' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
-                          <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges !== 0 ? 600 : undefined }}>{fmtEur(rootRevenueFinal)}</span></td>
+                          <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(rootRevenue)}</span></td>
+                          <td className="num"><span style={{ color: rootSurcharges > 0 ? 'var(--success)' : rootSurcharges < 0 ? 'var(--danger)' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
+                          <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges !== 0 ? 600 : undefined }}>{money(rootRevenueFinal)}</span></td>
                           <td style={{ textAlign: 'left' }}><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
-                          <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{fmtEur(rootExtras)}</span></td>
-                          <td className="num"><span style={{ fontSize: 12, fontWeight: 700 }}>{fmtEur(rootGesamt)}</span></td>
+                          <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(rootExtras)}</span></td>
+                          <td className="num"><span style={{ fontSize: 12, fontWeight: 700 }}>{money(rootGesamt)}</span></td>
                           <td></td>
                           <td></td>
                         </tr>
@@ -810,7 +809,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               <td colSpan={13}>
                                 <div className="surcharge-panel">
                                   <div className="surcharge-panel-basis">
-                                    Projektzuschläge – Basis (Summe Wurzel-Honorar): <strong>{fmtEur(rootStructureRevenueSum)}</strong>
+                                    Projektzuschläge – Basis (Summe Wurzel-Honorar): <strong>{money(rootStructureRevenueSum)}</strong>
                                   </div>
                                   <div className="surcharge-grid">
                                     <div className="surcharge-grid-header">
@@ -837,7 +836,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                       </div>
                                     ))}
                                     <div className="surcharge-grid-total">
-                                      Gesamt Projektzuschläge: <strong>{fmtEur(computed.total)}</strong>
+                                      Gesamt Projektzuschläge: <strong>{money(computed.total)}</strong>
                                     </div>
                                   </div>
                                   <div className="surcharge-panel-actions">
@@ -926,7 +925,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               {/* Honorar € = pure leaf sum (REVENUE_BASIS) so it never includes surcharges */}
                               {isParent || isTec ? (
                                 <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                                  {fmtEur(isTec ? node.TEC_SP_TOT_SUM : (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0))}
+                                  {money(isTec ? node.TEC_SP_TOT_SUM : (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0))}
                                 </span>
                               ) : (
                                 <input className="tbl-input" type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}
@@ -939,14 +938,14 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               {(() => {
                                 const sv = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
                                 return sv !== 0
-                                  ? <span style={{ color: sv > 0 ? '#16a34a' : '#dc2626', fontSize: 12 }}>{fmtEur(sv)}</span>
+                                  ? <span style={{ color: sv > 0 ? 'var(--success)' : 'var(--danger)', fontSize: 12 }}>{money(sv)}</span>
                                   : <span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span>
                               })()}
                             </td>
                             <td className="num">
                               {/* Honorar + Zuschläge = REVENUE (final, all surcharges included) */}
                               <span style={{ fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
-                                {fmtEur(node.REVENUE ?? 0)}
+                                {money(node.REVENUE ?? 0)}
                               </span>
                             </td>
                             <td>
@@ -973,7 +972,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                 )}
                               </div>
                             </td>
-                            <td className="num">{fmtEur(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
+                            <td className="num">{money(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
                             <td className="num">{(() => {
                               // Honorar + Zuschl. wird in der Vor-Spalte als node.REVENUE
                               // angezeigt (gilt für Leaves wie Parents). Nebenkosten je
@@ -1009,7 +1008,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               <td colSpan={13}>
                                 <div className="surcharge-panel">
                                   <div className="surcharge-panel-basis">
-                                    Basis (Honorar): <strong>{fmtEur(surchargeBase)}</strong>
+                                    Basis (Honorar): <strong>{money(surchargeBase)}</strong>
                                   </div>
                                   <div className="surcharge-grid">
                                     <div className="surcharge-grid-header">
@@ -1053,7 +1052,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                       </div>
                                     ))}
                                     <div className="surcharge-grid-total">
-                                      Gesamt Zuschläge: <strong>{fmtEur(computed.total)}</strong>
+                                      Gesamt Zuschläge: <strong>{money(computed.total)}</strong>
                                     </div>
                                   </div>
                                   <div className="surcharge-panel-actions">
