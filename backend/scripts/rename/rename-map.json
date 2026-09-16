@@ -236,8 +236,8 @@
     },
     {
       "id": "03-role-name",
-      "status": "planned",
-      "note": "ROLE_NAME_SHORT/_LONG -> ROLE_ABBR/ROLE_NAME. Keine SQL-Objekte betroffen.",
+      "status": "done",
+      "note": "ROLE_NAME_SHORT/_LONG -> ROLE_ABBR/ROLE_NAME. Keine SQL-Objekte betroffen. ERLEDIGT 2026-09-16: Migration 0144 per postdeploy-Hook, verify gruen. Einziger Block ohne betroffene SQL-Objekte.",
       "tables": [
         {
           "from": "EMPLOYEE2PROJECT",
