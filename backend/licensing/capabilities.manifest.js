@@ -58,8 +58,11 @@ const capabilities = [
     permissions: ["addresses.view", "addresses.create", "addresses.edit", "addresses.delete",
       "addresses.contacts.view", "addresses.contacts.create", "addresses.contacts.edit", "addresses.contacts.delete"], since: SINCE },
   { key: "core.time_tracking", module: "core", labelDe: "Stundenerfassung", type: "boolean",
+    // Die letzten drei standen nur in der DB (per Owner-Konsole gesetzt) und
+    // fehlten hier. Ein frisch aufgesetztes System haette sie nicht bekommen.
     permissions: ["projects.bookings.view", "projects.bookings.create", "projects.bookings.edit", "projects.bookings.delete",
-      "projects.bookings.rebook"], since: SINCE },
+      "projects.bookings.rebook", "projects.bookings.special.create",
+      "settings.booking_types.edit", "settings.booking_text_templates.edit"], since: SINCE },
 
   // ── Projekte ─────────────────────────────────────────────────────────────────
   { key: "projects.management", module: "projects", labelDe: "Projektverwaltung & Struktur", type: "boolean",
@@ -156,7 +159,11 @@ const capabilities = [
   { key: "enterprise.multi_company", module: "enterprise", labelDe: "Mehrere Unternehmen pro Tenant", type: "boolean",
     permissions: [], since: SINCE },
   { key: "enterprise.custom_pdf_templates", module: "enterprise", labelDe: "Eigene PDF-Vorlagen", type: "boolean",
-    permissions: [], since: SINCE },
+    // Stand hier mit leerem Array, waehrend settings.document_templates.edit
+    // keiner Capability zugeordnet war - ein Recht ohne Zuordnung wirkt in jedem
+    // Tarif. Ein Mandant ohne diese Lizenz konnte Dokumentvorlagen also trotzdem
+    // bearbeiten.
+    permissions: ["settings.document_templates.edit"], since: SINCE },
   { key: "enterprise.api_access", module: "enterprise", labelDe: "API-Zugang (Token)", type: "boolean",
     permissions: [], since: SINCE },
   { key: "enterprise.sso_saml", module: "enterprise", labelDe: "SSO (SAML/OIDC)", type: "boolean",
@@ -173,4 +180,23 @@ const capabilities = [
     unit: "MB", permissions: [], since: SINCE },
 ];
 
-module.exports = { modules, capabilities, SINCE };
+/**
+ * Rechte, die BEWUSST keiner Capability zugeordnet sind und damit in jedem
+ * Tarif gelten.
+ *
+ * WARUM ES DIESE LISTE BRAUCHT: ein Recht ohne Capability wirkt ueberall
+ * (suppressUnlicensed in middleware/license.js laesst es stehen). Das ist ein
+ * gueltiger Zustand - aber ohne diese Liste ist er von "noch nicht zugeordnet"
+ * nicht zu unterscheiden, und der Drift-Check warnt ewig weiter. Wer hier
+ * eintraegt, entscheidet; wer nichts eintraegt, hat noch nicht entschieden.
+ */
+const deliberatelyUnlicensed = [
+  // Support muss jeden erreichen. Ein Tarif, in dem man um Hilfe nicht bitten
+  // kann, waere auch geschaeftlich unsinnig.
+  { permission: "service.support.use", grund: "Unterstuetzung muss in jedem Tarif erreichbar sein" },
+  { permission: "service.feedback.use", grund: "Rueckmeldung muss in jedem Tarif moeglich sein" },
+  { permission: "service.suggestions.view", grund: "Vorschlagsportal ist Teil des Produkts, nicht des Tarifs" },
+  { permission: "service.suggestions.admin", grund: "gehoert zum Vorschlagsportal" },
+];
+
+module.exports = { modules, capabilities, deliberatelyUnlicensed, SINCE };

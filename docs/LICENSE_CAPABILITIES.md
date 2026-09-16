@@ -5,7 +5,7 @@
 > Architektur: [LICENSE_TIERS_CONCEPT.md](LICENSE_TIERS_CONCEPT.md) ·
 > Workflow: [LICENSE_DEVELOPMENT_CHECKLIST.md](LICENSE_DEVELOPMENT_CHECKLIST.md).
 
-**Stand:** 2026-06-15 · 12 Module · 43 Capabilities · 100 Permission-Verknuepfungen
+**Stand:** 2026-06-15 · 12 Module · 43 Capabilities · 104 Permission-Verknuepfungen
 
 Jede **Capability** ist ein Schalter, den du je Lizenztyp in der Matrix an/aus stellst.
 Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten dahinter liegen
@@ -19,7 +19,7 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 |---|---|---|
 | **Übersicht / Dashboard**<br>`core.dashboard` | boolean | Übersicht sehen; Dashboard-Ansicht wechseln |
 | **Adressbuch & Kontakte**<br>`core.addresses` | boolean | Adressen sehen; Adressen anlegen; Adressen bearbeiten; Adressen löschen; Kontakte sehen; Kontakte anlegen; Kontakte bearbeiten; Kontakte löschen |
-| **Stundenerfassung**<br>`core.time_tracking` | boolean | Buchungen sehen; Buchungen anlegen; Buchungen bearbeiten; Buchungen löschen; Buchungen umbuchen |
+| **Stundenerfassung**<br>`core.time_tracking` | boolean | Buchungen sehen; Buchungen anlegen; Buchungen bearbeiten; Buchungen löschen; Buchungen umbuchen; Pauschalen & Stückleistungen buchen; Buchungsarten verwalten; Buchungstextvorlagen verwalten |
 
 ## Projekte `projects`
 
@@ -104,7 +104,7 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 |---|---|---|
 | **Eigenes Branding (Login-URL & Hintergrundbild)**<br>`enterprise.branding` | boolean | — eigene Funktion |
 | **Mehrere Unternehmen pro Tenant**<br>`enterprise.multi_company` | boolean | — eigene Funktion |
-| **Eigene PDF-Vorlagen**<br>`enterprise.custom_pdf_templates` | boolean | — eigene Funktion |
+| **Eigene PDF-Vorlagen**<br>`enterprise.custom_pdf_templates` | boolean | Dokumentvorlagen bearbeiten |
 | **API-Zugang (Token)**<br>`enterprise.api_access` | boolean | — eigene Funktion |
 | **SSO (SAML/OIDC)**<br>`enterprise.sso_saml` | boolean | — eigene Funktion |
 | **Priority Support (SLA)**<br>`enterprise.priority_support` | boolean | — eigene Funktion |

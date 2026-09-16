@@ -143,9 +143,12 @@ function runDriftCheck() {
     // Abdeckung: RBAC-Rechte (= konkrete Funktionen), die KEINER Capability zugeordnet
     // sind. Da jede neue Funktion ein Recht bekommt, taucht so jede neu entwickelte
     // Funktion hier auf, bis sie im Manifest einer Capability zugeordnet wurde.
+    // Bewusst unlizenzierte Rechte sind entschieden, nicht vergessen - sonst
+    // steht die Warnung dauerhaft da und man liest ueber die echten hinweg.
+    const bewusstFrei = registry.deliberatelyUnlicensedKeys();
     for (const k of catalog) {
-      if (!mapped.has(k)) {
-        warnings.push(`Permission '${k}' ist keiner Capability zugeordnet → noch nicht lizenzierbar (Capability im Manifest ergänzen).`);
+      if (!mapped.has(k) && !bewusstFrei.has(k)) {
+        warnings.push(`Permission '${k}' ist keiner Capability zugeordnet → noch nicht lizenzierbar (Capability im Manifest ergänzen, oder bewusst freigeben via deliberatelyUnlicensed).`);
       }
     }
   }

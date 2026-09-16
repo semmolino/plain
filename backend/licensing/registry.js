@@ -8,7 +8,7 @@
  * Reine Daten + Pure-Functions, kein DB- oder Express-Zugriff.
  */
 
-const { modules, capabilities, SINCE } = require("./capabilities.manifest");
+const { modules, capabilities, deliberatelyUnlicensed, SINCE } = require("./capabilities.manifest");
 
 const VALID_TYPES = new Set(["boolean", "metered"]);
 const KEY_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/; // modul.fähigkeit(.sub)
@@ -101,8 +101,14 @@ function validateManifest() {
   return { errors, warnings };
 }
 
+/** Rechte, die bewusst in jedem Tarif gelten (Set der Permission-Keys). */
+function deliberatelyUnlicensedKeys() {
+  return new Set((deliberatelyUnlicensed || []).map((x) => x.permission));
+}
+
 module.exports = {
   SINCE,
+  deliberatelyUnlicensedKeys,
   getModules,
   getCapabilities,
   getCapabilitiesByModule,

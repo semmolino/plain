@@ -95,6 +95,9 @@ INSERT INTO "CAPABILITY_PERMISSION" ("CAPABILITY_KEY","PERMISSION_KEY") VALUES
   ('core.time_tracking', 'projects.bookings.edit'),
   ('core.time_tracking', 'projects.bookings.delete'),
   ('core.time_tracking', 'projects.bookings.rebook'),
+  ('core.time_tracking', 'projects.bookings.special.create'),
+  ('core.time_tracking', 'settings.booking_types.edit'),
+  ('core.time_tracking', 'settings.booking_text_templates.edit'),
   ('projects.management', 'projects.view'),
   ('projects.management', 'projects.create'),
   ('projects.management', 'projects.edit'),
@@ -179,7 +182,8 @@ INSERT INTO "CAPABILITY_PERMISSION" ("CAPABILITY_KEY","PERMISSION_KEY") VALUES
   ('settings.notifications', 'settings.notifications.edit'),
   ('settings.dunning_config', 'settings.dunning_config.edit'),
   ('cost_rate.calculator', 'settings.cost_rate.edit'),
-  ('arbzg.compliance', 'settings.work_time.edit')
+  ('arbzg.compliance', 'settings.work_time.edit'),
+  ('enterprise.custom_pdf_templates', 'settings.document_templates.edit')
 ON CONFLICT DO NOTHING;
 
 -- 4. Interner Plan 'full' bekommt ALLE Capabilities (Limit NULL = unbegrenzt)
