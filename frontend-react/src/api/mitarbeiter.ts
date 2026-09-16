@@ -309,7 +309,7 @@ export interface EmployeeProject {
   PROJECT_NAME:    string | null
   STATUS_NAME:     string | null
   ROLE_NAME_SHORT: string | null
-  SP_RATE:         number | null
+  HOURLY_RATE:         number | null
 }
 
 export const fetchEmployeeProjects = (id: number) =>

@@ -297,7 +297,7 @@ function AddPositionForm({ nodes, submitting, onSubmit }: {
       name_long: name.trim(),
       billing_type_id: bt,
       father_id: father || null,
-      ...(bt === '2' ? { quantity: qty || 0, sp_rate: rate || 0 } : { revenue: revenue || 0 }),
+      ...(bt === '2' ? { quantity: qty || 0, hourly_rate: rate || 0 } : { revenue: revenue || 0 }),
     })
   }
 

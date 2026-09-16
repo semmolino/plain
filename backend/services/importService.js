@@ -1746,7 +1746,7 @@ async function commitOpeningCostRows(rows, { supabase, tenantId, batchId, employ
       const insertRow = {
         TENANT_ID: tenantId, STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_COST",
         BOOKING_TYPE_ID: null, EMPLOYEE_ID: employeeId ?? null, DATE_VOUCHER: today,
-        QUANTITY_INT: 0, COST_RATE: e.cost, COST_TOTAL: fmt2(e.cost), QUANTITY_EXT: 0, SP_RATE: 0, SP_TOT: 0,
+        QUANTITY_INT: 0, COST_RATE: e.cost, COST_TOTAL: fmt2(e.cost), QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
         POSTING_DESCRIPTION: e.description, PROJECT_ID: e.projectId, STRUCTURE_ID: e.structureId,
         IMPORT_BATCH_ID: batchId,
       };

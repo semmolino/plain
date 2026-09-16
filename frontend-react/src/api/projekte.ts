@@ -7,7 +7,7 @@ export interface ProjectType       { ID: number; NAME_SHORT: string }
 export interface ProjectManager    { ID: number; SHORT_NAME: string; FIRST_NAME?: string | null; LAST_NAME?: string | null }
 export interface Department        { ID: number; NAME_SHORT: string; NAME_LONG: string }
 export interface ActiveEmployee { ID: number; SHORT_NAME: string; FIRST_NAME: string; LAST_NAME: string }
-export interface ActiveRole     { ID: number; NAME_SHORT: string; NAME_LONG: string; SP_RATE: number | null }
+export interface ActiveRole     { ID: number; NAME_SHORT: string; NAME_LONG: string; HOURLY_RATE: number | null }
 export interface BillingType    { ID: number; NAME_SHORT: string; NAME_LONG: string }
 
 export interface Project {
@@ -68,7 +68,7 @@ export interface E2PRow {
   role_id?:       string | number
   role_name_short?: string
   role_name_long?:  string
-  sp_rate?:       string | number
+  hourly_rate?:       string | number
 }
 
 export interface StructureDraftRow {
@@ -96,7 +96,7 @@ export interface CreateProjectPayload {
 
 export interface BookingPriceRow {
   booking_type_id: number
-  sp_rate?:        string | number
+  hourly_rate?:        string | number
   cost_rate?:        string | number
 }
 
@@ -309,8 +309,8 @@ export interface Buchung {
   COST_RATE:             number
   COST_TOTAL:              number
   QUANTITY_EXT:        number
-  SP_RATE:             number
-  SP_TOT:              number
+  HOURLY_RATE:             number
+  HOURLY_RATE_TOTAL:              number
   POSTING_DESCRIPTION:  string
   BOOKING_KIND?:        string | null
   ENTRY_KIND?:          string | null
@@ -331,7 +331,7 @@ export interface CreateBuchungPayload {
   QUANTITY_INT:        number
   COST_RATE?:            number
   QUANTITY_EXT?:       number
-  SP_RATE?:            number
+  HOURLY_RATE?:            number
   POSTING_DESCRIPTION?: string
   // 'BREAK' bucht eine kostenneutrale Pause (ohne Projektelement/Sätze).
   ENTRY_KIND?:         'WORK' | 'BREAK'
@@ -350,7 +350,7 @@ export interface UpdateBuchungPayload {
   QUANTITY_INT?:        number
   COST_RATE?:             number
   QUANTITY_EXT?:        number
-  SP_RATE?:             number
+  HOURLY_RATE?:             number
   POSTING_DESCRIPTION?: string
 }
 
@@ -382,10 +382,10 @@ export interface RebookMoved {
   FROM_STRUCTURE_NAME: string | null
   // Erlösfelder fehlen, wenn der Benutzer `projects.bookings.revenue.view`
   // nicht hat — der Server entfernt sie dann aus der Antwort.
-  SP_RATE_BEFORE?:     number
-  SP_RATE_AFTER?:      number
-  SP_TOT_BEFORE?:      number
-  SP_TOT_AFTER?:       number
+  HOURLY_RATE_BEFORE?:     number
+  HOURLY_RATE_AFTER?:      number
+  HOURLY_RATE_TOTAL_BEFORE?:      number
+  HOURLY_RATE_TOTAL_AFTER?:       number
   /** 'rate_changed' = Satz des Zielprojekts greift · 'no_assignment' = dort kein Satz hinterlegt */
   RATE_NOTE:           'rate_changed' | 'no_assignment' | null
 }
@@ -429,7 +429,7 @@ export const rebookBuchungen = (body: RebookPayload) =>
 
 export interface Employee2ProjectPreset {
   found:           boolean
-  SP_RATE:         number | null
+  HOURLY_RATE:         number | null
   ROLE_ID:         number | null
   ROLE_NAME_SHORT: string | null
   ROLE_NAME_LONG:  string | null
@@ -448,7 +448,7 @@ export interface E2PEntry {
   ROLE_ID:             number | null
   ROLE_NAME_SHORT:     string
   ROLE_NAME_LONG:      string
-  SP_RATE:             number | null
+  HOURLY_RATE:             number | null
   EMPLOYEE_SHORT_NAME: string | null
   EMPLOYEE_FIRST_NAME: string | null
   EMPLOYEE_LAST_NAME:  string | null
@@ -462,14 +462,14 @@ export const createE2P = (projectId: number, body: {
   role_id?:         number | null
   role_name_short?: string
   role_name_long?:  string
-  sp_rate?:         number | null
+  hourly_rate?:         number | null
 }) => apiClient.post<{ data: E2PEntry }>(`/employee2project/project/${projectId}`, body)
 
 export const updateE2P = (id: number, body: {
   role_id?:         number | null
   role_name_short?: string
   role_name_long?:  string
-  sp_rate?:         number | null
+  hourly_rate?:         number | null
 }) => apiClient.patch<{ success: boolean }>(`/employee2project/${id}`, body)
 
 export const deleteE2P = (id: number) =>

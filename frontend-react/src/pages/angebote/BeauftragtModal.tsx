@@ -59,7 +59,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
         role_id:        node.ROLE_ID ?? null,
         role_name_short: node.ROLE_NAME_SHORT ?? '',
         role_name_long:  node.ROLE_NAME_LONG  ?? '',
-        sp_rate:        node.SP_RATE ?? null,
+        hourly_rate:        node.HOURLY_RATE ?? null,
       })
     }
     onConvert({

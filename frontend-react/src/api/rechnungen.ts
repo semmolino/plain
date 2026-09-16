@@ -133,7 +133,7 @@ export interface TecEntry {
   DATE_VOUCHER:        string | null
   EMPLOYEE_SHORT_NAME: string | null
   POSTING_DESCRIPTION: string | null
-  SP_TOT:              number | null
+  HOURLY_RATE_TOTAL:              number | null
   ASSIGNED:            boolean
 }
 

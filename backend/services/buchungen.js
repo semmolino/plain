@@ -40,7 +40,7 @@ async function loadEmployee2Project(supabase, employeeId, projectId) {
   if (!employeeId || !projectId) return null;
   const { data, error } = await supabase
     .from("EMPLOYEE2PROJECT")
-    .select("ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
+    .select("ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
     .eq("EMPLOYEE_ID", employeeId)
     .eq("PROJECT_ID", projectId)
     .limit(1);
@@ -54,13 +54,13 @@ async function recomputeStructure(supabase, structureId) {
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("QUANTITY_INT, COST_RATE, COST_TOTAL, SP_TOT, BOOKING_KIND")
+    .select("QUANTITY_INT, COST_RATE, COST_TOTAL, HOURLY_RATE_TOTAL, BOOKING_KIND")
     .eq("STRUCTURE_ID", structureId)
     .neq("STATUS", "DRAFT");
   if (tecErr) throw new Error("Fehler beim Laden der Buchungen: " + tecErr.message);
 
   const newCosts = (tecRows || []).reduce((acc, r) => acc + tecCostContribution(r), 0);
-  const revenueSum = (tecRows || []).reduce((acc, r) => acc + Number(r.SP_TOT ?? 0), 0);
+  const revenueSum = (tecRows || []).reduce((acc, r) => acc + Number(r.HOURLY_RATE_TOTAL ?? 0), 0);
 
   const { data: structureRow, error: strErr } = await supabase
     .from("PROJECT_STRUCTURE")
@@ -137,7 +137,7 @@ async function createTimerDraft(supabase, { body, tenantId }) {
   if (entryKind === 'WORK') {
     const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
     cpRate = lookedUpRate !== null ? lookedUpRate : 0;
-    spRate = preset?.SP_RATE != null ? Number(preset.SP_RATE) : 0;
+    spRate = preset?.HOURLY_RATE != null ? Number(preset.HOURLY_RATE) : 0;
   }
 
   // ── ArbZG-Vorabprüfung ──────────────────────────────────────────────────
@@ -178,8 +178,8 @@ async function createTimerDraft(supabase, { body, tenantId }) {
     ROLE_ID: preset?.ROLE_ID ?? null,
     ROLE_NAME_SHORT: preset?.ROLE_NAME_SHORT ?? null,
     ROLE_NAME_LONG: preset?.ROLE_NAME_LONG ?? null,
-    SP_RATE: spRate,
-    SP_TOT: quantityExt * spRate,
+    HOURLY_RATE: spRate,
+    HOURLY_RATE_TOTAL: quantityExt * spRate,
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "",
     PROJECT_ID: b.PROJECT_ID ?? null,
     STRUCTURE_ID: b.STRUCTURE_ID ?? null,
@@ -195,8 +195,8 @@ async function createTimerDraft(supabase, { body, tenantId }) {
         TIME_FINISH: b.TIME_FINISH || null, QUANTITY_INT: quantityInt,
         COST_RATE: cpRate, COST_TOTAL: quantityInt * cpRate, QUANTITY_EXT: quantityExt,
         ROLE_ID: preset?.ROLE_ID ?? null, ROLE_NAME_SHORT: preset?.ROLE_NAME_SHORT ?? null,
-        ROLE_NAME_LONG: preset?.ROLE_NAME_LONG ?? null, SP_RATE: spRate,
-        SP_TOT: quantityExt * spRate, POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "",
+        ROLE_NAME_LONG: preset?.ROLE_NAME_LONG ?? null, HOURLY_RATE: spRate,
+        HOURLY_RATE_TOTAL: quantityExt * spRate, POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "",
         PROJECT_ID: b.PROJECT_ID ?? null, STRUCTURE_ID: b.STRUCTURE_ID ?? null,
       }]).select("ID").single();
       if (retryErr) throw { status: 500, message: "Fehler beim Speichern des Entwurfs: " + retryErr.message };
@@ -216,7 +216,7 @@ async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
       ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID,
       DATE_VOUCHER, TIME_START, TIME_FINISH,
       QUANTITY_INT, COST_RATE, COST_TOTAL,
-      QUANTITY_EXT, SP_RATE, SP_TOT,
+      QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION, STATUS,
       PROJECT:PROJECT_ID(NAME_SHORT),
       STRUCTURE:STRUCTURE_ID(NAME_SHORT, NAME_LONG)
@@ -330,7 +330,7 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
               EMPLOYEE_ID: employeeId, DATE_VOUCHER: dateVoucher,
               TIME_START: null, TIME_FINISH: null,
               QUANTITY_INT: Math.round(addMin / 60 * 100) / 100,
-              COST_RATE: 0, COST_TOTAL: 0, QUANTITY_EXT: 0, SP_RATE: 0, SP_TOT: 0,
+              COST_RATE: 0, COST_TOTAL: 0, QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
               POSTING_DESCRIPTION: 'Pause (nachträglich, bestätigt)',
               CONFIRMED_BY_EMPLOYEE_AT: new Date().toISOString(),
             }]);
@@ -494,7 +494,7 @@ async function createBreakBuchung(supabase, { body, tenantId }) {
     TIME_START:          b.TIME_START  || null,
     TIME_FINISH:         b.TIME_FINISH || null,
     QUANTITY_INT:        quantityInt,
-    COST_RATE: 0, COST_TOTAL: 0, QUANTITY_EXT: 0, SP_RATE: 0, SP_TOT: 0,
+    COST_RATE: 0, COST_TOTAL: 0, QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "Pause",
     PROJECT_ID:          b.PROJECT_ID ?? null,
     STRUCTURE_ID:        null,
@@ -518,7 +518,7 @@ async function createBuchung(supabase, { body, tenantId }) {
   }
 
   if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || b.QUANTITY_INT == null ||
-      b.QUANTITY_EXT == null || b.SP_RATE == null || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
+      b.QUANTITY_EXT == null || b.HOURLY_RATE == null || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
 
@@ -549,7 +549,7 @@ async function createBuchung(supabase, { body, tenantId }) {
     throw { status: 500, message: "Fehler beim Laden EMPLOYEE2PROJECT: " + e.message };
   }
 
-  const effectiveSpRate = preset && preset.SP_RATE != null ? Number(preset.SP_RATE) : Number(b.SP_RATE);
+  const effectiveSpRate = preset && preset.HOURLY_RATE != null ? Number(preset.HOURLY_RATE) : Number(b.HOURLY_RATE);
   const roleId = preset ? (preset.ROLE_ID ?? null) : null;
   const roleNameShort = preset ? (preset.ROLE_NAME_SHORT ?? null) : null;
   const roleNameLong = preset ? (preset.ROLE_NAME_LONG ?? null) : null;
@@ -591,8 +591,8 @@ async function createBuchung(supabase, { body, tenantId }) {
     ROLE_ID: roleId,
     ROLE_NAME_SHORT: roleNameShort,
     ROLE_NAME_LONG: roleNameLong,
-    SP_RATE: effectiveSpRate,
-    SP_TOT: b.QUANTITY_EXT * effectiveSpRate,
+    HOURLY_RATE: effectiveSpRate,
+    HOURLY_RATE_TOTAL: b.QUANTITY_EXT * effectiveSpRate,
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
     PROJECT_ID: b.PROJECT_ID,
     STRUCTURE_ID: b.STRUCTURE_ID || null,
@@ -617,11 +617,11 @@ async function createBuchung(supabase, { body, tenantId }) {
   if (Number(currentProjectElement.BILLING_TYPE_ID) === 2) {
     const { data: tecRows, error: tecError } = await supabase
       .from("TEC")
-      .select("SP_TOT")
+      .select("HOURLY_RATE_TOTAL")
       .eq("STRUCTURE_ID", b.STRUCTURE_ID);
     if (tecError) throw { status: 500, message: "Fehler beim Laden der TEC-Summe: " + tecError.message };
 
-    const revenue = (tecRows || []).reduce((sum, r) => sum + (Number(r.SP_TOT) || 0), 0);
+    const revenue = (tecRows || []).reduce((sum, r) => sum + (Number(r.HOURLY_RATE_TOTAL) || 0), 0);
     const extrasPercent = Number(currentProjectElement.EXTRAS_PERCENT) || 0;
     const extras = (revenue * extrasPercent) / 100;
 
@@ -645,7 +645,7 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
 
   const { data: existing, error: exErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, COST_RATE, SP_RATE, BOOKING_KIND, ENTRY_KIND")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, COST_RATE, HOURLY_RATE, BOOKING_KIND, ENTRY_KIND")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .single();
@@ -698,20 +698,20 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   const effQty    = b.QUANTITY_INT !== undefined ? Number(b.QUANTITY_INT) : Number(existing.QUANTITY_INT ?? 0);
   const effQtyExt = b.QUANTITY_EXT !== undefined ? Number(b.QUANTITY_EXT) : Number(existing.QUANTITY_EXT ?? 0);
   const effCpRate = b.COST_RATE      !== undefined ? Number(b.COST_RATE)      : Number(existing.COST_RATE ?? 0);
-  const effSpRate = b.SP_RATE      !== undefined ? Number(b.SP_RATE)      : Number(existing.SP_RATE ?? 0);
+  const effSpRate = b.HOURLY_RATE      !== undefined ? Number(b.HOURLY_RATE)      : Number(existing.HOURLY_RATE ?? 0);
 
   if (b.QUANTITY_INT !== undefined) updateTec.QUANTITY_INT = effQty;
   if (b.QUANTITY_EXT !== undefined) updateTec.QUANTITY_EXT = effQtyExt;
   if (b.COST_RATE      !== undefined) updateTec.COST_RATE      = effCpRate;
-  if (b.SP_RATE      !== undefined) updateTec.SP_RATE      = effSpRate;
+  if (b.HOURLY_RATE      !== undefined) updateTec.HOURLY_RATE      = effSpRate;
 
   // Total-Spalten neu rechnen, wenn sich Menge oder Satz geändert hat
   const totalsChanged =
     b.QUANTITY_INT !== undefined || b.COST_RATE !== undefined ||
-    b.QUANTITY_EXT !== undefined || b.SP_RATE !== undefined;
+    b.QUANTITY_EXT !== undefined || b.HOURLY_RATE !== undefined;
   if (totalsChanged) {
     updateTec.COST_TOTAL = Math.round(effQty    * effCpRate * 100) / 100;
-    updateTec.SP_TOT = Math.round(effQtyExt * effSpRate * 100) / 100;
+    updateTec.HOURLY_RATE_TOTAL = Math.round(effQtyExt * effSpRate * 100) / 100;
   }
 
   if (newEmployeeId  !== undefined) updateTec.EMPLOYEE_ID  = newEmployeeId;
@@ -729,12 +729,12 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
       throw { status: 500, message: "Fehler beim Laden EMPLOYEE2PROJECT: " + e.message };
     }
 
-    if (preset && preset.SP_RATE != null) {
+    if (preset && preset.HOURLY_RATE != null) {
       updateTec.ROLE_ID = preset.ROLE_ID ?? null;
       updateTec.ROLE_NAME_SHORT = preset.ROLE_NAME_SHORT ?? null;
       updateTec.ROLE_NAME_LONG = preset.ROLE_NAME_LONG ?? null;
-      updateTec.SP_RATE = Number(preset.SP_RATE);
-      updateTec.SP_TOT = Math.round(effQtyExt * Number(preset.SP_RATE) * 100) / 100;
+      updateTec.HOURLY_RATE = Number(preset.HOURLY_RATE);
+      updateTec.HOURLY_RATE_TOTAL = Math.round(effQtyExt * Number(preset.HOURLY_RATE) * 100) / 100;
     }
   }
 
@@ -801,12 +801,12 @@ async function deleteBuchung(supabase, { id, tenantId }) {
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("QUANTITY_INT, COST_RATE, COST_TOTAL, SP_TOT, BOOKING_KIND")
+    .select("QUANTITY_INT, COST_RATE, COST_TOTAL, HOURLY_RATE_TOTAL, BOOKING_KIND")
     .eq("STRUCTURE_ID", structureId);
   if (tecErr) throw { status: 500, message: "Fehler beim Laden der TEC-Daten: " + tecErr.message };
 
   const newCosts = (tecRows || []).reduce((acc, r) => acc + tecCostContribution(r), 0);
-  const revenueSum = (tecRows || []).reduce((acc, r) => acc + Number(r.SP_TOT ?? 0), 0);
+  const revenueSum = (tecRows || []).reduce((acc, r) => acc + Number(r.HOURLY_RATE_TOTAL ?? 0), 0);
 
   const { data: structureRow, error: strErr } = await supabase
     .from("PROJECT_STRUCTURE")
@@ -859,7 +859,7 @@ async function deleteBuchung(supabase, { id, tenantId }) {
 // Berechnet die TEC-Felder einer Spezial-Buchung aus dem Request-Body.
 // WICHTIG: QUANTITY_INT bleibt 0 — Spezial-Buchungen sind keine Stunden und
 // dürfen in keiner Stunden-/Reportsumme (HOURS_TOTAL = SUM(QUANTITY_INT))
-// mitgezählt werden. Geld steckt in COST_TOTAL/SP_TOT (so leiten alle Reports
+// mitgezählt werden. Geld steckt in COST_TOTAL/HOURLY_RATE_TOTAL (so leiten alle Reports
 // Kosten/Erlös ab); die Struktur-Kostenrechnung nutzt für Spezialarten COST_TOTAL.
 function computeSpecialEncoding(kind, b) {
   const num = (v) => {
@@ -872,7 +872,7 @@ function computeSpecialEncoding(kind, b) {
     const qty = num(b.QUANTITY);
     if (qty <= 0) throw { status: 400, message: "Menge muss größer als 0 sein." };
     cpRate = num(b.COST_RATE);
-    spRate = num(b.SP_RATE);
+    spRate = num(b.HOURLY_RATE);
     if (cpRate === 0 && spRate === 0) throw { status: 400, message: "Bitte Stückpreis und/oder Stückkosten angeben." };
     qtyExt = qty;                       // Menge in QUANTITY_EXT (nicht _INT)
     cpTot = fmt2(qty * cpRate);
@@ -885,7 +885,7 @@ function computeSpecialEncoding(kind, b) {
   } else if (kind === "LUMP_REVENUE") {
     const amount = num(b.AMOUNT);
     if (amount === 0) throw { status: 400, message: "Bitte einen Betrag angeben." };
-    // QUANTITY_EXT=1 hält die Invariante SP_TOT = QUANTITY_EXT × SP_RATE
+    // QUANTITY_EXT=1 hält die Invariante HOURLY_RATE_TOTAL = QUANTITY_EXT × HOURLY_RATE
     // (QUANTITY_INT bleibt 0 → keine Stunden); so greifen auch Abrechnungs-
     // Pfade, die Menge × Satz nutzen.
     qtyExt = 1; spRate = amount; spTot = fmt2(amount);
@@ -940,8 +940,8 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
     COST_RATE:             cpRate,
     COST_TOTAL:              cpTot,
     QUANTITY_EXT:        qtyExt,
-    SP_RATE:             spRate,
-    SP_TOT:              spTot,
+    HOURLY_RATE:             spRate,
+    HOURLY_RATE_TOTAL:              spTot,
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
     PROJECT_ID:          Number(b.PROJECT_ID),
     STRUCTURE_ID:        b.STRUCTURE_ID ? Number(b.STRUCTURE_ID) : null,
@@ -1005,8 +1005,8 @@ async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
     COST_RATE:             cpRate,
     COST_TOTAL:              cpTot,
     QUANTITY_EXT:        qtyExt,
-    SP_RATE:             spRate,
-    SP_TOT:              spTot,
+    HOURLY_RATE:             spRate,
+    HOURLY_RATE_TOTAL:              spTot,
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
     STRUCTURE_ID:        newStructureId,
   };
@@ -1041,7 +1041,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
       ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID,
       DATE_VOUCHER, TIME_START, TIME_FINISH,
       QUANTITY_INT, COST_RATE, COST_TOTAL,
-      QUANTITY_EXT, SP_RATE, SP_TOT,
+      QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION,
       BOOKING_KIND, ENTRY_KIND, UNIT_LABEL, BOOKING_TYPE_ID,
       PARTIAL_PAYMENT_ID, INVOICE_ID,
@@ -1177,7 +1177,7 @@ async function rebookBuchungen(supabase, {
     .from("TEC")
     .select(`
       ID, TENANT_ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID, DATE_VOUCHER,
-      QUANTITY_INT, QUANTITY_EXT, COST_RATE, COST_TOTAL, SP_RATE, SP_TOT,
+      QUANTITY_INT, QUANTITY_EXT, COST_RATE, COST_TOTAL, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION, STATUS, BOOKING_KIND, ENTRY_KIND,
       INVOICE_ID, PARTIAL_PAYMENT_ID
     `)
@@ -1290,21 +1290,21 @@ async function rebookBuchungen(supabase, {
     const istSpezial = SPECIAL_KINDS.has(r.BOOKING_KIND);
     const update = { PROJECT_ID: target.projectId, STRUCTURE_ID: target.structureId };
 
-    let spRateAfter = Number(r.SP_RATE ?? 0);
-    let spTotAfter  = Number(r.SP_TOT ?? 0);
+    let spRateAfter = Number(r.HOURLY_RATE ?? 0);
+    let spTotAfter  = Number(r.HOURLY_RATE_TOTAL ?? 0);
     let rateNote    = null;
 
     if (!istSpezial) {
       const preset = await zielPreset(r.EMPLOYEE_ID);
-      if (preset && preset.SP_RATE != null) {
-        spRateAfter = Number(preset.SP_RATE);
+      if (preset && preset.HOURLY_RATE != null) {
+        spRateAfter = Number(preset.HOURLY_RATE);
         spTotAfter  = fmt2(Number(r.QUANTITY_EXT ?? 0) * spRateAfter);
-        update.SP_RATE         = spRateAfter;
-        update.SP_TOT          = spTotAfter;
+        update.HOURLY_RATE         = spRateAfter;
+        update.HOURLY_RATE_TOTAL          = spTotAfter;
         update.ROLE_ID         = preset.ROLE_ID ?? null;
         update.ROLE_NAME_SHORT = preset.ROLE_NAME_SHORT ?? null;
         update.ROLE_NAME_LONG  = preset.ROLE_NAME_LONG ?? null;
-        if (fmt2(Number(r.SP_RATE ?? 0)) !== fmt2(spRateAfter)) rateNote = "rate_changed";
+        if (fmt2(Number(r.HOURLY_RATE ?? 0)) !== fmt2(spRateAfter)) rateNote = "rate_changed";
       } else {
         rateNote = "no_assignment";
       }
@@ -1312,10 +1312,10 @@ async function rebookBuchungen(supabase, {
 
     moved.push({
       ...beschreibung,
-      SP_RATE_BEFORE: fmt2(Number(r.SP_RATE ?? 0)),
-      SP_RATE_AFTER:  fmt2(spRateAfter),
-      SP_TOT_BEFORE:  fmt2(Number(r.SP_TOT ?? 0)),
-      SP_TOT_AFTER:   fmt2(spTotAfter),
+      HOURLY_RATE_BEFORE: fmt2(Number(r.HOURLY_RATE ?? 0)),
+      HOURLY_RATE_AFTER:  fmt2(spRateAfter),
+      HOURLY_RATE_TOTAL_BEFORE:  fmt2(Number(r.HOURLY_RATE_TOTAL ?? 0)),
+      HOURLY_RATE_TOTAL_AFTER:   fmt2(spTotAfter),
       RATE_NOTE:      rateNote,
       _update:        update,
       _row:           r,
@@ -1408,10 +1408,10 @@ async function rebookBuchungen(supabase, {
     TO_PROJECT_NAME:      target.projectName,
     TO_STRUCTURE_ID:      target.structureId,
     TO_STRUCTURE_NAME:    target.structureName,
-    SP_RATE_BEFORE:       m.SP_RATE_BEFORE,
-    SP_RATE_AFTER:        m.SP_RATE_AFTER,
-    SP_TOT_BEFORE:        m.SP_TOT_BEFORE,
-    SP_TOT_AFTER:         m.SP_TOT_AFTER,
+    HOURLY_RATE_BEFORE:       m.HOURLY_RATE_BEFORE,
+    HOURLY_RATE_AFTER:        m.HOURLY_RATE_AFTER,
+    HOURLY_RATE_TOTAL_BEFORE:        m.HOURLY_RATE_TOTAL_BEFORE,
+    HOURLY_RATE_TOTAL_AFTER:         m.HOURLY_RATE_TOTAL_AFTER,
     REASON:               String(reason || "").trim().slice(0, 500) || null,
     CREATED_BY_EMPLOYEE_ID: employeeId ?? null,
   }));

@@ -59,7 +59,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return tecList.filter(t => {
-      if (hideZero && (t.SP_TOT ?? 0) === 0) return false
+      if (hideZero && (t.HOURLY_RATE_TOTAL ?? 0) === 0) return false
       if (empFilter.size > 0 && !(t.EMPLOYEE_SHORT_NAME && empFilter.has(t.EMPLOYEE_SHORT_NAME))) return false
       if (dateFrom || dateTo) {
         const d = t.DATE_VOUCHER ? t.DATE_VOUCHER.slice(0, 10) : ''
@@ -81,7 +81,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
   // Auswahl/Summe über die *gesamte* Liste — deckt sich mit der Zusammenfassung
   // des Wizards, auch wenn ein Filter Zeilen ausblendet.
   const selectedTotal    = tecList.reduce((n, t) => selected.has(t.ID) ? n + 1 : n, 0)
-  const selectedTotalSum = tecList.reduce((s, t) => selected.has(t.ID) ? s + (t.SP_TOT ?? 0) : s, 0)
+  const selectedTotalSum = tecList.reduce((s, t) => selected.has(t.ID) ? s + (t.HOURLY_RATE_TOTAL ?? 0) : s, 0)
 
   function resetFilters() {
     setSearch(''); setDateFrom(''); setDateTo(''); setHideZero(false); setEmpFilter(new Set())
@@ -186,7 +186,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
                       <td>{fmtDate(t.DATE_VOUCHER)}</td>
                       <td>{t.EMPLOYEE_SHORT_NAME ?? '—'}</td>
                       <td>{t.POSTING_DESCRIPTION}</td>
-                      <td className="num">{money(t.SP_TOT)}</td>
+                      <td className="num">{money(t.HOURLY_RATE_TOTAL)}</td>
                     </tr>
                   ))}
                 </tbody>

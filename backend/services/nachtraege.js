@@ -257,7 +257,7 @@ async function addStructureNode(supabase, { tenantId, nachtragId, body }) {
 
   const isHourly = btId === 2;
   const quantity = isHourly ? (Number(b.quantity) || 0) : null;
-  const spRate   = isHourly ? (Number(b.sp_rate)  || 0) : null;
+  const spRate   = isHourly ? (Number(b.hourly_rate)  || 0) : null;
   const revenue  = isHourly ? fmt2((quantity || 0) * (spRate || 0)) : fmt2(Number(b.revenue) || 0);
   const extPct   = Number(b.extras_percent) || 0;
   const extras   = fmt2(revenue * extPct / 100);
@@ -280,7 +280,7 @@ async function addStructureNode(supabase, { tenantId, nachtragId, body }) {
     EXTRAS:          extras,
     SORT_ORDER:      maxSort + 10,
     QUANTITY:        quantity,
-    SP_RATE:         spRate,
+    HOURLY_RATE:         spRate,
     APPROVAL_STATE:  'OPEN',
     ROLE_NAME_SHORT: b.role_name_short || null,
     ROLE_NAME_LONG:  b.role_name_long  || null,
@@ -315,19 +315,19 @@ async function updateStructureNode(supabase, { tenantId, nodeId, body }) {
   }
 
   const hasSurchargeChange = [1, 2, 3].some(i => b[`SURCHARGE_${i}_LABEL`] !== undefined || b[`SURCHARGE_${i}_PCT`] !== undefined);
-  const hasRevenueChange   = isHourly || b.quantity !== undefined || b.sp_rate !== undefined || b.revenue !== undefined;
+  const hasRevenueChange   = isHourly || b.quantity !== undefined || b.hourly_rate !== undefined || b.revenue !== undefined;
 
   if (hasRevenueChange || hasSurchargeChange || patch.EXTRAS_PERCENT !== undefined) {
     const { data: c } = await supabase.from('NACHTRAG_STRUCTURE')
-      .select('REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, SP_RATE, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+      .select('REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, HOURLY_RATE, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
       .eq('ID', nodeId).maybeSingle();
 
     let revenueBasis;
-    if (isHourly || b.quantity !== undefined || b.sp_rate !== undefined) {
+    if (isHourly || b.quantity !== undefined || b.hourly_rate !== undefined) {
       const q = Number(b.quantity ?? c?.QUANTITY ?? 0);
-      const s = Number(b.sp_rate  ?? c?.SP_RATE  ?? 0);
+      const s = Number(b.hourly_rate  ?? c?.HOURLY_RATE  ?? 0);
       if (b.quantity !== undefined) patch.QUANTITY = q;
-      if (b.sp_rate  !== undefined) patch.SP_RATE  = s;
+      if (b.hourly_rate  !== undefined) patch.HOURLY_RATE  = s;
       revenueBasis = r2(q * s);
     } else if (b.revenue !== undefined) {
       revenueBasis = r2(Number(b.revenue));
@@ -689,7 +689,7 @@ async function buildNachtragPdfViewModel(supabase, { nachtragId, tenantId }) {
       depth, isLeaf,
       nameShort: n.NAME_SHORT || '', nameLong: n.NAME_LONG || '',
       isHourly: Number(n.BILLING_TYPE_ID) === 2,
-      quantity: Number(n.QUANTITY || 0), spRate: Number(n.SP_RATE || 0),
+      quantity: Number(n.QUANTITY || 0), spRate: Number(n.HOURLY_RATE || 0),
       revenue: Number(n.REVENUE || 0), extras: Number(n.EXTRAS || 0),
       total: fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
     })),

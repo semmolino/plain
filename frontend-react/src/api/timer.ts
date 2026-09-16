@@ -15,8 +15,8 @@ export interface DraftEntry {
   COST_RATE:             number
   COST_TOTAL:              number
   QUANTITY_EXT:        number
-  SP_RATE:             number
-  SP_TOT:              number
+  HOURLY_RATE:             number
+  HOURLY_RATE_TOTAL:              number
   POSTING_DESCRIPTION: string
   STATUS:              string
   ENTRY_KIND?:         EntryKind

@@ -221,12 +221,12 @@ export function UmbuchenModal({ bookings, sourceProjectId, onClose, onDone }: Pr
                           {m.FROM_PROJECT_NAME ?? '—'}
                           {m.FROM_STRUCTURE_NAME ? ` · ${m.FROM_STRUCTURE_NAME}` : ''}
                         </td>
-                        {showRevenue && <td className="num">{money(m.SP_TOT_BEFORE)}</td>}
+                        {showRevenue && <td className="num">{money(m.HOURLY_RATE_TOTAL_BEFORE)}</td>}
                         {showRevenue && (
                           <td className="num">
-                            {m.SP_TOT_AFTER !== m.SP_TOT_BEFORE
-                              ? <strong>{money(m.SP_TOT_AFTER)}</strong>
-                              : money(m.SP_TOT_AFTER)}
+                            {m.HOURLY_RATE_TOTAL_AFTER !== m.HOURLY_RATE_TOTAL_BEFORE
+                              ? <strong>{money(m.HOURLY_RATE_TOTAL_AFTER)}</strong>
+                              : money(m.HOURLY_RATE_TOTAL_AFTER)}
                           </td>
                         )}
                       </tr>

@@ -38,7 +38,7 @@ function welt(extraTec = []) {
       { ID: 31, TENANT_ID: TENANT, PROJECT_ID: 2, FATHER_ID: 30,   NAME_SHORT: "LP4.1", NAME_LONG: null, BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
     ],
     EMPLOYEE2PROJECT: [
-      { ID: 1, TENANT_ID: TENANT, EMPLOYEE_ID: 5, PROJECT_ID: 2, ROLE_ID: 3, ROLE_NAME_SHORT: "PL", ROLE_NAME_LONG: "Projektleitung", SP_RATE: 110 },
+      { ID: 1, TENANT_ID: TENANT, EMPLOYEE_ID: 5, PROJECT_ID: 2, ROLE_ID: 3, ROLE_NAME_SHORT: "PL", ROLE_NAME_LONG: "Projektleitung", HOURLY_RATE: 110 },
     ],
     INVOICE: [{ ID: 500, TENANT_ID: TENANT, INVOICE_NUMBER: "R-2026-0042" }],
     PARTIAL_PAYMENT: [],
@@ -46,12 +46,12 @@ function welt(extraTec = []) {
     TEC: [
       // offen, Mitarbeiter 5, 10 h zu 80 € Kostensatz und 90 € Stundensatz
       { ID: 100, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-03",
-        QUANTITY_INT: 10, QUANTITY_EXT: 10, COST_RATE: 80, COST_TOTAL: 800, SP_RATE: 90, SP_TOT: 900,
+        QUANTITY_INT: 10, QUANTITY_EXT: 10, COST_RATE: 80, COST_TOTAL: 800, HOURLY_RATE: 90, HOURLY_RATE_TOTAL: 900,
         POSTING_DESCRIPTION: "Grundrisse", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
       // dieselbe Struktur, aber abgerechnet
       { ID: 101, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-04",
-        QUANTITY_INT: 4, QUANTITY_EXT: 4, COST_RATE: 80, COST_TOTAL: 320, SP_RATE: 90, SP_TOT: 360,
+        QUANTITY_INT: 4, QUANTITY_EXT: 4, COST_RATE: 80, COST_TOTAL: 320, HOURLY_RATE: 90, HOURLY_RATE_TOTAL: 360,
         POSTING_DESCRIPTION: "Details", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: 500, PARTIAL_PAYMENT_ID: null },
       ...extraTec,
@@ -74,8 +74,8 @@ describe("rebookBuchungen", () => {
     expect(tec.PROJECT_ID).toBe(2);
     expect(tec.STRUCTURE_ID).toBe(20);
     // 10 h × 110 € aus EMPLOYEE2PROJECT des Zielprojekts
-    expect(tec.SP_RATE).toBe(110);
-    expect(tec.SP_TOT).toBe(1100);
+    expect(tec.HOURLY_RATE).toBe(110);
+    expect(tec.HOURLY_RATE_TOTAL).toBe(1100);
     expect(tec.ROLE_NAME_SHORT).toBe("PL");
     // Kostensatz haengt am Mitarbeiter, nicht am Projekt — er bleibt.
     expect(tec.COST_RATE).toBe(80);
@@ -124,7 +124,7 @@ describe("rebookBuchungen", () => {
       FROM_PROJECT_ID: 1, FROM_PROJECT_NAME: "P-26-001",
       FROM_STRUCTURE_ID: 10, FROM_STRUCTURE_NAME: "LP5: Ausführungsplanung",
       TO_PROJECT_ID: 2, TO_STRUCTURE_ID: 20,
-      SP_RATE_BEFORE: 90, SP_RATE_AFTER: 110,
+      HOURLY_RATE_BEFORE: 90, HOURLY_RATE_AFTER: 110,
       REASON: "Fehlbuchung", CREATED_BY_EMPLOYEE_ID: 5,
     });
   });
@@ -148,7 +148,7 @@ describe("rebookBuchungen", () => {
   it("warnt, wenn sich der Stundensatz ändert oder im Ziel keiner hinterlegt ist", async () => {
     const db = welt([
       { ID: 102, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 6, DATE_VOUCHER: "2026-08-05",
-        QUANTITY_INT: 2, QUANTITY_EXT: 2, COST_RATE: 70, COST_TOTAL: 140, SP_RATE: 85, SP_TOT: 170,
+        QUANTITY_INT: 2, QUANTITY_EXT: 2, COST_RATE: 70, COST_TOTAL: 140, HOURLY_RATE: 85, HOURLY_RATE_TOTAL: 170,
         POSTING_DESCRIPTION: "Abstimmung", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
     ]);
@@ -159,23 +159,23 @@ describe("rebookBuchungen", () => {
     expect(codes).toContain("no_assignment");
     // Mitarbeiter 6 hat im Zielprojekt keinen Satz — der alte bleibt stehen.
     const ohne = db._tables.TEC.find(r => r.ID === 102);
-    expect(ohne.SP_RATE).toBe(85);
-    expect(ohne.SP_TOT).toBe(170);
+    expect(ohne.HOURLY_RATE).toBe(85);
+    expect(ohne.HOURLY_RATE_TOTAL).toBe(170);
     expect(ohne.STRUCTURE_ID).toBe(20);
   });
 
   it("lässt Pauschalen ihren Preis und Entwürfe/Pausen liegen", async () => {
     const db = welt([
       { ID: 103, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-06",
-        QUANTITY_INT: 0, QUANTITY_EXT: 1, COST_RATE: 0, COST_TOTAL: 0, SP_RATE: 2500, SP_TOT: 2500,
+        QUANTITY_INT: 0, QUANTITY_EXT: 1, COST_RATE: 0, COST_TOTAL: 0, HOURLY_RATE: 2500, HOURLY_RATE_TOTAL: 2500,
         POSTING_DESCRIPTION: "Gutachten", STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_REVENUE", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
       { ID: 104, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-07",
-        QUANTITY_INT: 3, QUANTITY_EXT: 3, COST_RATE: 80, COST_TOTAL: 240, SP_RATE: 90, SP_TOT: 270,
+        QUANTITY_INT: 3, QUANTITY_EXT: 3, COST_RATE: 80, COST_TOTAL: 240, HOURLY_RATE: 90, HOURLY_RATE_TOTAL: 270,
         POSTING_DESCRIPTION: "Entwurf", STATUS: "DRAFT", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
       { ID: 105, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: null, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-07",
-        QUANTITY_INT: 1, QUANTITY_EXT: 0, COST_RATE: 0, COST_TOTAL: 0, SP_RATE: 0, SP_TOT: 0,
+        QUANTITY_INT: 1, QUANTITY_EXT: 0, COST_RATE: 0, COST_TOTAL: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
         POSTING_DESCRIPTION: "Pause", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "BREAK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
     ]);
@@ -185,8 +185,8 @@ describe("rebookBuchungen", () => {
     // Pauschale: verschoben, Preis unveraendert (kein Stundensatz aus der Zuordnung).
     const pauschale = db._tables.TEC.find(r => r.ID === 103);
     expect(pauschale.STRUCTURE_ID).toBe(20);
-    expect(pauschale.SP_RATE).toBe(2500);
-    expect(pauschale.SP_TOT).toBe(2500);
+    expect(pauschale.HOURLY_RATE).toBe(2500);
+    expect(pauschale.HOURLY_RATE_TOTAL).toBe(2500);
     expect(res.skipped.map(s => s.reason).sort()).toEqual(["break", "draft"]);
   });
 
@@ -218,7 +218,7 @@ describe("rebookBuchungen", () => {
     // im Protokoll stehen — sonst zeigt die Struktur still den alten Stand.
     const db = welt([
       { ID: 106, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 6, DATE_VOUCHER: "2026-08-08",
-        QUANTITY_INT: 2, QUANTITY_EXT: 2, COST_RATE: 70, COST_TOTAL: 140, SP_RATE: 85, SP_TOT: 170,
+        QUANTITY_INT: 2, QUANTITY_EXT: 2, COST_RATE: 70, COST_TOTAL: 140, HOURLY_RATE: 85, HOURLY_RATE_TOTAL: 170,
         POSTING_DESCRIPTION: "Abstimmung", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
     ]);

@@ -88,7 +88,7 @@ export interface CreateSpecialBuchungPayload {
   // UNIT
   QUANTITY?:           number
   UNIT_LABEL?:         string
-  SP_RATE?:            number
+  HOURLY_RATE?:            number
   COST_RATE?:            number
   // LUMP_COST / LUMP_REVENUE
   AMOUNT?:             number
@@ -128,5 +128,5 @@ export interface ProjectBookingPrice {
 export const fetchProjectBookingPrices = (projectId: number) =>
   apiClient.get<{ data: ProjectBookingPrice[] }>(`/buchungen/booking-prices?project_id=${projectId}`)
 
-export const upsertProjectBookingPrice = (body: { project_id: number; booking_type_id: number; sp_rate: number | null; cost_rate: number | null }) =>
+export const upsertProjectBookingPrice = (body: { project_id: number; booking_type_id: number; hourly_rate: number | null; cost_rate: number | null }) =>
   apiClient.put<{ success: boolean }>('/buchungen/booking-prices', body)

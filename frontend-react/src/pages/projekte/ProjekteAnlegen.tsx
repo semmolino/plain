@@ -30,7 +30,7 @@ interface BasicForm {
 }
 
 interface E2PState {
-  [empId: number]: { role_id: string; role_name_short: string; role_name_long: string; sp_rate: string }
+  [empId: number]: { role_id: string; role_name_short: string; role_name_long: string; hourly_rate: string }
 }
 
 function emptyBasic(): BasicForm {
@@ -133,7 +133,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
 
   function setE2pField(empId: number, field: string, value: string) {
     setE2p(prev => {
-      const current = prev[empId] ?? { role_id: '', role_name_short: '', role_name_long: '', sp_rate: '' }
+      const current = prev[empId] ?? { role_id: '', role_name_short: '', role_name_long: '', hourly_rate: '' }
       return { ...prev, [empId]: { ...current, [field]: value } }
     })
   }
@@ -147,7 +147,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
         role_id:         roleId,
         role_name_short: role?.NAME_SHORT ?? '',
         role_name_long:  role?.NAME_LONG  ?? '',
-        sp_rate:         role?.SP_RATE != null ? String(role.SP_RATE) : (prev[empId]?.sp_rate ?? ''),
+        hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : (prev[empId]?.hourly_rate ?? ''),
       },
     }))
   }
@@ -182,12 +182,12 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
       role_id:        e2p[empId]?.role_id        || undefined,
       role_name_short: e2p[empId]?.role_name_short || '',
       role_name_long:  e2p[empId]?.role_name_long  || '',
-      sp_rate:        e2p[empId]?.sp_rate        || undefined,
+      hourly_rate:        e2p[empId]?.hourly_rate        || undefined,
     }))
 
     const priceRows = Object.entries(bookingPrices)
-      .map(([typeId, v]) => ({ booking_type_id: Number(typeId), sp_rate: v.sp || undefined, cost_rate: v.cp || undefined }))
-      .filter(r => r.sp_rate !== undefined || r.cost_rate !== undefined)
+      .map(([typeId, v]) => ({ booking_type_id: Number(typeId), hourly_rate: v.sp || undefined, cost_rate: v.cp || undefined }))
+      .filter(r => r.hourly_rate !== undefined || r.cost_rate !== undefined)
 
     createMut.mutate({
       name_long:          basic.name_long,
@@ -356,7 +356,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                   {Array.from(selectedEmpIds).map(empId => {
                     const emp = employees.find(e => e.ID === empId)
                     if (!emp) return null
-                    const row = e2p[empId] ?? { role_id: '', role_name_short: '', role_name_long: '', sp_rate: '' }
+                    const row = e2p[empId] ?? { role_id: '', role_name_short: '', role_name_long: '', hourly_rate: '' }
                     return (
                       <tr key={empId}>
                         <td>{empLabel(emp)}</td>
@@ -368,7 +368,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                         </td>
                         <td><input className="tbl-input" style={{ width: 80 }} value={row.role_name_short} onChange={e => setE2pField(empId, 'role_name_short', e.target.value)} /></td>
                         <td><input className="tbl-input" style={{ width: 140 }} value={row.role_name_long} onChange={e => setE2pField(empId, 'role_name_long', e.target.value)} /></td>
-                        <td><input className="tbl-input" style={{ width: 80 }} type="number" step="0.01" value={row.sp_rate} onChange={e => setE2pField(empId, 'sp_rate', e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 80 }} type="number" step="0.01" value={row.hourly_rate} onChange={e => setE2pField(empId, 'hourly_rate', e.target.value)} /></td>
                       </tr>
                     )
                   })}

@@ -7,7 +7,7 @@ module.exports = (supabase) => {
 
   // Wer das Projektteam aendert, aendert das Projekt -> projects.edit.
   //
-  // SP_RATE ist davon getrennt: der Stundensatz fliesst in Kostenrechnung und
+  // HOURLY_RATE ist davon getrennt: der Stundensatz fliesst in Kostenrechnung und
   // Nachkalkulation, und der Rechtekatalog fuehrt ihn nicht ohne Grund als
   // eigenes Paar (projects.hourly_rates.view/.edit). Ein Projektleiter darf
   // sein Team zusammenstellen, ohne deshalb Saetze setzen zu duerfen.
@@ -21,7 +21,7 @@ module.exports = (supabase) => {
   /** 403, wenn die Nutzlast einen Stundensatz setzt und das Recht dafuer fehlt. */
   function satzGuard(req, res, next) {
     const b = req.body || {};
-    if (b.sp_rate === undefined) return next();
+    if (b.hourly_rate === undefined) return next();
     if (req.hasPermission("projects.hourly_rates.edit")) return next();
     return res.status(403).json({ error: "Fehlende Berechtigung: projects.hourly_rates.edit" });
   }
@@ -35,7 +35,7 @@ module.exports = (supabase) => {
 
     const { data, error } = await supabase
       .from("EMPLOYEE2PROJECT")
-      .select("ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
+      .select("ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
       .eq("EMPLOYEE_ID", employeeId)
       .eq("PROJECT_ID", projectId)
       // Als einziger Endpunkt dieser Datei fehlte hier der Mandantenfilter.
@@ -53,7 +53,7 @@ module.exports = (supabase) => {
       ROLE_ID:         row.ROLE_ID         ?? null,
       ROLE_NAME_SHORT: row.ROLE_NAME_SHORT ?? null,
       ROLE_NAME_LONG:  row.ROLE_NAME_LONG  ?? null,
-      SP_RATE:         row.SP_RATE         ?? null,
+      HOURLY_RATE:         row.HOURLY_RATE         ?? null,
     });
   });
 
@@ -64,7 +64,7 @@ module.exports = (supabase) => {
 
     const { data: e2pRows, error } = await supabase
       .from("EMPLOYEE2PROJECT")
-      .select("ID, EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
+      .select("ID, EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
       .eq("PROJECT_ID", projectId)
       .eq("TENANT_ID", req.tenantId)
       .order("ID");
@@ -98,7 +98,7 @@ module.exports = (supabase) => {
 
     const { data: e2pRows, error } = await supabase
       .from("EMPLOYEE2PROJECT")
-      .select("ID, PROJECT_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
+      .select("ID, PROJECT_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
       .eq("EMPLOYEE_ID", employeeId)
       .eq("TENANT_ID", req.tenantId)
       .order("ID");
@@ -124,7 +124,7 @@ module.exports = (supabase) => {
         PROJECT_NAME:    projMap[r.PROJECT_ID]?.NAME_LONG  ?? null,
         STATUS_NAME:     projMap[r.PROJECT_ID]?.STATUS?.NAME_SHORT ?? null,
         ROLE_NAME_SHORT: r.ROLE_NAME_SHORT ?? null,
-        SP_RATE:         r.SP_RATE ?? null,
+        HOURLY_RATE:         r.HOURLY_RATE ?? null,
       }));
 
     res.json({ data: enriched });
@@ -146,10 +146,10 @@ module.exports = (supabase) => {
         ROLE_ID:         b.role_id ? Number(b.role_id) : null,
         ROLE_NAME_SHORT: b.role_name_short || "",
         ROLE_NAME_LONG:  b.role_name_long  || "",
-        SP_RATE:         b.sp_rate !== "" && b.sp_rate != null ? Number(b.sp_rate) : null,
+        HOURLY_RATE:         b.hourly_rate !== "" && b.hourly_rate != null ? Number(b.hourly_rate) : null,
         TENANT_ID:       req.tenantId,
       })
-      .select("ID, EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
+      .select("ID, EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
@@ -166,7 +166,7 @@ module.exports = (supabase) => {
     if (b.role_id         !== undefined) update.ROLE_ID         = b.role_id ? Number(b.role_id) : null;
     if (b.role_name_short !== undefined) update.ROLE_NAME_SHORT = b.role_name_short || "";
     if (b.role_name_long  !== undefined) update.ROLE_NAME_LONG  = b.role_name_long  || "";
-    if (b.sp_rate         !== undefined) update.SP_RATE         = b.sp_rate !== "" && b.sp_rate != null ? Number(b.sp_rate) : null;
+    if (b.hourly_rate         !== undefined) update.HOURLY_RATE         = b.hourly_rate !== "" && b.hourly_rate != null ? Number(b.hourly_rate) : null;
 
     if (!Object.keys(update).length)
       return res.status(400).json({ error: "Keine Felder übergeben" });

@@ -70,10 +70,10 @@ async function getActiveEmployees(supabase, { tenantId }) {
 }
 
 async function getActiveRoles(supabase, { tenantId }) {
-  let q = supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, SP_RATE").eq("TENANT_ID", tenantId).eq("ACTIVE", 1);
+  let q = supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, HOURLY_RATE").eq("TENANT_ID", tenantId).eq("ACTIVE", 1);
   let { data, error } = await q;
   if (error && String(error.message || "").toLowerCase().includes("active")) {
-    const r = await supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, SP_RATE, ACTIVE").eq("TENANT_ID", tenantId);
+    const r = await supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, HOURLY_RATE, ACTIVE").eq("TENANT_ID", tenantId);
     data = r.data;
     error = r.error;
     if (!error && Array.isArray(data)) data = data.filter((r0) => String(r0.ACTIVE) === "1" || r0.ACTIVE === true);
@@ -155,7 +155,7 @@ async function createProject(supabase, { body, tenantId }) {
       ROLE_ID: r0.role_id || null,
       ROLE_NAME_SHORT: r0.role_name_short || "",
       ROLE_NAME_LONG: r0.role_name_long || "",
-      SP_RATE: r0.sp_rate === "" || r0.sp_rate === undefined ? null : r0.sp_rate,
+      HOURLY_RATE: r0.hourly_rate === "" || r0.hourly_rate === undefined ? null : r0.hourly_rate,
       TENANT_ID: project.TENANT_ID,
     }));
     const { error: e2pErr } = await supabase.from("EMPLOYEE2PROJECT").insert(rows);
@@ -175,10 +175,10 @@ async function createProject(supabase, { body, tenantId }) {
         TENANT_ID:       project.TENANT_ID,
         PROJECT_ID:      project.ID,
         BOOKING_TYPE_ID: Number(p.booking_type_id),
-        SP_RATE:         toNum(p.sp_rate),
+        HOURLY_RATE:         toNum(p.hourly_rate),
         COST_RATE:         toNum(p.cost_rate),
       }))
-      .filter((r) => r.BOOKING_TYPE_ID && (r.SP_RATE != null || r.COST_RATE != null));
+      .filter((r) => r.BOOKING_TYPE_ID && (r.HOURLY_RATE != null || r.COST_RATE != null));
     if (priceRows.length) {
       const { error: bpErr } = await supabase.from("PROJECT_BOOKING_PRICE").insert(priceRows);
       // Soft-fail: Projekt steht; Preise sind optional und in Preislisten nachpflegbar.
@@ -559,12 +559,12 @@ async function getProjectStructure(supabase, { projectId, tenantId }) {
   if (billingType2Ids.length > 0) {
     const { data: tecRows, error: tecError } = await supabase
       .from("TEC")
-      .select("STRUCTURE_ID, SP_TOT")
+      .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
       .in("STRUCTURE_ID", billingType2Ids);
     if (tecError) throw tecError;
     (tecRows || []).forEach((r) => {
       const sid = String(r.STRUCTURE_ID);
-      const val = Number(r.SP_TOT ?? 0);
+      const val = Number(r.HOURLY_RATE_TOTAL ?? 0);
       tecSums[sid] = (tecSums[sid] ?? 0) + (Number.isFinite(val) ? val : 0);
     });
   }
@@ -760,12 +760,12 @@ async function progressSnapshot(supabase, { projectId, tenantId }) {
   if (bt2Ids.length) {
     const { data: tecRows, error: tecErr } = await supabase
       .from("TEC")
-      .select("STRUCTURE_ID, SP_TOT")
+      .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
       .in("STRUCTURE_ID", bt2Ids);
     if (tecErr) throw tecErr;
     (tecRows || []).forEach((t) => {
       const sid = String(t.STRUCTURE_ID);
-      const v = Number(t.SP_TOT ?? 0);
+      const v = Number(t.HOURLY_RATE_TOTAL ?? 0);
       tecSums[sid] = (tecSums[sid] ?? 0) + (Number.isFinite(v) ? v : 0);
     });
   }
@@ -838,11 +838,11 @@ async function getTecSum(supabase, { structureId, tenantId }) {
   structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { data: tecRows, error } = await supabase
     .from("TEC")
-    .select("SP_TOT")
+    .select("HOURLY_RATE_TOTAL")
     .eq("STRUCTURE_ID", structureId);
   if (error) throw error;
   const sum = (tecRows || []).reduce((acc, r) => {
-    const v = Number(r.SP_TOT ?? 0);
+    const v = Number(r.HOURLY_RATE_TOTAL ?? 0);
     return acc + (Number.isFinite(v) ? v : 0);
   }, 0);
   return sum;
@@ -1112,11 +1112,11 @@ async function patchStructure(supabase, { structureId, update, tenantId }) {
   if (Number(billingTypeId) === 2) {
     const { data: tecRows, error: tecError } = await supabase
       .from("TEC")
-      .select("SP_TOT")
+      .select("HOURLY_RATE_TOTAL")
       .eq("STRUCTURE_ID", structureId);
     if (tecError) throw tecError;
     revenueBasis = (tecRows || []).reduce((acc, r) => {
-      const v = Number(r.SP_TOT ?? 0);
+      const v = Number(r.HOURLY_RATE_TOTAL ?? 0);
       return acc + (Number.isFinite(v) ? v : 0);
     }, 0);
   }
@@ -1259,12 +1259,12 @@ async function inheritStructure(supabase, { structureId, inheritBt, inheritExtra
   for (const part of chunk(bt2Ids, 100)) {
     const { data: tecRows, error: tecErr } = await supabase
       .from("TEC")
-      .select("STRUCTURE_ID, SP_TOT")
+      .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
       .in("STRUCTURE_ID", part);
     if (tecErr) throw tecErr;
     (tecRows || []).forEach((r) => {
       const sid = String(r.STRUCTURE_ID);
-      const v = Number(r.SP_TOT ?? 0);
+      const v = Number(r.HOURLY_RATE_TOTAL ?? 0);
       const prev = tecSumByStructure.get(sid) || 0;
       tecSumByStructure.set(sid, prev + (Number.isFinite(v) ? v : 0));
     });
@@ -1585,12 +1585,12 @@ async function saveLeistungsstand(supabase, { projectId, updates, tenantId }) {
   if (bt2Ids.length) {
     const { data: tecRows, error: tecErr } = await supabase
       .from("TEC")
-      .select("STRUCTURE_ID, SP_TOT")
+      .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
       .in("STRUCTURE_ID", bt2Ids);
     if (tecErr) throw tecErr;
     (tecRows || []).forEach(t => {
       const sid = String(t.STRUCTURE_ID);
-      const v = Number(t.SP_TOT ?? 0);
+      const v = Number(t.HOURLY_RATE_TOTAL ?? 0);
       tecSums[sid] = (tecSums[sid] ?? 0) + (Number.isFinite(v) ? v : 0);
     });
   }
@@ -1809,7 +1809,7 @@ async function copyProject(supabase, { projectId, tenantId }) {
   // Copy EMPLOYEE2PROJECT
   try {
     const { data: e2pRows } = await supabase.from("EMPLOYEE2PROJECT")
-      .select("EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, SP_RATE")
+      .select("EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
       .eq("PROJECT_ID", projectId).eq("TENANT_ID", tenantId);
     if (e2pRows?.length) {
       await supabase.from("EMPLOYEE2PROJECT").insert(e2pRows.map(r => ({ ...r, PROJECT_ID: newProject.ID, TENANT_ID: tenantId })));

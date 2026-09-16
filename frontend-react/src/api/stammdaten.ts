@@ -214,8 +214,8 @@ export const createTyp = (name_short: string) =>
 export const createDepartment = (name_short: string) =>
   apiClient.post<{ data: unknown }>('/stammdaten/department', { name_short })
 
-export const createRolle = (name_short: string, name_long?: string, sp_rate?: string) =>
-  apiClient.post<{ data: unknown }>('/stammdaten/rollen', { name_short, name_long, sp_rate })
+export const createRolle = (name_short: string, name_long?: string, hourly_rate?: string) =>
+  apiClient.post<{ data: unknown }>('/stammdaten/rollen', { name_short, name_long, hourly_rate })
 
 export interface Currency { ID: number; NAME_SHORT: string }
 export interface VatRate  { ID: number; VAT: string; VAT_PERCENT: number }
@@ -235,7 +235,7 @@ export const putDefault = (key: string, value: string | null) =>
 // ── Stammdaten lists + delete ─────────────────────────────────────────────────
 
 export interface StammdatenItem { ID: number; NAME_SHORT: string }
-export interface Rolle { ID: number; NAME_SHORT: string; NAME_LONG: string | null; SP_RATE: number | null }
+export interface Rolle { ID: number; NAME_SHORT: string; NAME_LONG: string | null; HOURLY_RATE: number | null }
 
 export const fetchDepartments = () =>
   apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/departments')
@@ -255,7 +255,7 @@ export const fetchRollen = () =>
   apiClient.get<{ data: Rolle[] }>('/stammdaten/rollen')
 export const deleteRolle = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/stammdaten/rolle/${id}`)
-export const updateRolle = (id: number, body: { name_short: string; name_long?: string; sp_rate?: string | number | null }) =>
+export const updateRolle = (id: number, body: { name_short: string; name_long?: string; hourly_rate?: string | number | null }) =>
   apiClient.patch<{ data: Rolle }>(`/stammdaten/rolle/${id}`, body)
 
 export const deleteAddress = (id: number) =>

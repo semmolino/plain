@@ -241,7 +241,7 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
     const btId     = n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null;
     const isHourly = btId === 2;
     const quantity    = isHourly ? (Number(n.QUANTITY)   || 0) : null;
-    const spRate      = isHourly ? (Number(n.SP_RATE)     || 0) : null;
+    const spRate      = isHourly ? (Number(n.HOURLY_RATE)     || 0) : null;
     const revenue     = isHourly ? fmt2((quantity || 0) * (spRate || 0)) : fmt2(Number(n.REVENUE) || 0);
     const extPct      = Number(n.EXTRAS_PERCENT) || 0;
     const extras      = fmt2(revenue * extPct / 100);
@@ -257,7 +257,7 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
       EXTRAS:          extras,
       SORT_ORDER:      i * 10,
       QUANTITY:        quantity,
-      SP_RATE:         spRate,
+      HOURLY_RATE:         spRate,
       ROLE_NAME_SHORT: n.ROLE_NAME_SHORT ? String(n.ROLE_NAME_SHORT) : null,
       ROLE_NAME_LONG:  n.ROLE_NAME_LONG  ? String(n.ROLE_NAME_LONG)  : null,
       ROLE_ID:         n.ROLE_ID ? parseInt(String(n.ROLE_ID), 10) : null,
@@ -398,7 +398,7 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
 
   const isHourly  = btId === 2;
   const quantity  = isHourly ? (Number(b.quantity)  || 0) : null;
-  const spRate    = isHourly ? (Number(b.sp_rate)    || 0) : null;
+  const spRate    = isHourly ? (Number(b.hourly_rate)    || 0) : null;
   const revenue   = isHourly ? fmt2((quantity || 0) * (spRate || 0)) : fmt2(Number(b.revenue) || 0);
   const extPct    = Number(b.extras_percent) || 0;
   const extras    = fmt2(revenue * extPct / 100);
@@ -428,7 +428,7 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
       EXTRAS:          extras,
       SORT_ORDER:      maxSort + 10,
       QUANTITY:        quantity,
-      SP_RATE:         spRate,
+      HOURLY_RATE:         spRate,
       ROLE_NAME_SHORT: b.role_name_short || null,
       ROLE_NAME_LONG:  b.role_name_long  || null,
       ROLE_ID:         b.role_id ? parseInt(String(b.role_id), 10) : null,
@@ -470,21 +470,21 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
   const hasSurchargeChange = b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined ||
     b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined ||
     b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined;
-  const hasRevenueChange = isHourly || b.quantity !== undefined || b.sp_rate !== undefined || b.revenue !== undefined;
+  const hasRevenueChange = isHourly || b.quantity !== undefined || b.hourly_rate !== undefined || b.revenue !== undefined;
 
   if (hasRevenueChange || hasSurchargeChange || patch.EXTRAS_PERCENT !== undefined) {
     const { data: cur } = await supabase
       .from('OFFER_STRUCTURE')
-      .select('REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, SP_RATE, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+      .select('REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, HOURLY_RATE, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
       .eq('ID', nodeId)
       .maybeSingle();
 
     let revenueBasis;
-    if (isHourly || b.quantity !== undefined || b.sp_rate !== undefined) {
+    if (isHourly || b.quantity !== undefined || b.hourly_rate !== undefined) {
       const q = Number(b.quantity ?? cur?.QUANTITY ?? 0);
-      const s = Number(b.sp_rate  ?? cur?.SP_RATE  ?? 0);
+      const s = Number(b.hourly_rate  ?? cur?.HOURLY_RATE  ?? 0);
       if (b.quantity !== undefined) patch.QUANTITY = q;
-      if (b.sp_rate  !== undefined) patch.SP_RATE  = s;
+      if (b.hourly_rate  !== undefined) patch.HOURLY_RATE  = s;
       revenueBasis = r2(q * s);
     } else if (b.revenue !== undefined) {
       revenueBasis = r2(Number(b.revenue));
@@ -775,7 +775,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
       btId:            Number(n.BILLING_TYPE_ID),
       isHourly:        Number(n.BILLING_TYPE_ID) === 2,
       quantity:        Number(n.QUANTITY       || 0),
-      spRate:          Number(n.SP_RATE        || 0),
+      spRate:          Number(n.HOURLY_RATE        || 0),
       revenueBasis:    Number(n.REVENUE_BASIS  ?? n.REVENUE ?? 0),
       revenue:         Number(n.REVENUE        || 0),
       extrasPct:       Number(n.EXTRAS_PERCENT || 0),
@@ -1163,7 +1163,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
         ROLE_ID:        r.role_id ? parseInt(String(r.role_id), 10) : null,
         ROLE_NAME_SHORT: r.role_name_short || '',
         ROLE_NAME_LONG:  r.role_name_long  || '',
-        SP_RATE:        r.sp_rate != null && r.sp_rate !== '' ? Number(r.sp_rate) : null,
+        HOURLY_RATE:        r.hourly_rate != null && r.hourly_rate !== '' ? Number(r.hourly_rate) : null,
         TENANT_ID:      tenantId,
       });
     }

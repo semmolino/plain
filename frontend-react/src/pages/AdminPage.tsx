@@ -195,7 +195,7 @@ function StammdatenSection() {
 
   function startEditRolle(r: Rolle) {
     setEditingRolleId(r.ID)
-    setEditingRolleForm({ short: r.NAME_SHORT, long: r.NAME_LONG ?? '', spRate: r.SP_RATE != null ? String(r.SP_RATE) : '' })
+    setEditingRolleForm({ short: r.NAME_SHORT, long: r.NAME_LONG ?? '', spRate: r.HOURLY_RATE != null ? String(r.HOURLY_RATE) : '' })
   }
 
   const { data: deptData  } = useQuery({ queryKey: ['departments'],   queryFn: fetchDepartments })
@@ -308,7 +308,7 @@ function StammdatenSection() {
                         <input className="tbl-input num" type="number" step="0.01" min="0" style={{ width: 70 }} value={editingRolleForm.spRate} onChange={e => setEditingRolleForm(f => ({ ...f, spRate: e.target.value }))} placeholder="0.00" />
                       </td>
                       <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
-                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updRolleMut.isPending} onClick={() => updRolleMut.mutate({ id: r.ID, body: { name_short: editingRolleForm.short, name_long: editingRolleForm.long, sp_rate: editingRolleForm.spRate } })}>
+                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updRolleMut.isPending} onClick={() => updRolleMut.mutate({ id: r.ID, body: { name_short: editingRolleForm.short, name_long: editingRolleForm.long, hourly_rate: editingRolleForm.spRate } })}>
                           {updRolleMut.isPending ? '…' : '✓'}
                         </button>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginLeft: 2 }} onClick={() => setEditingRolleId(null)}>✗</button>
@@ -319,7 +319,7 @@ function StammdatenSection() {
                       <td style={{ padding: '3px 6px 3px 0', fontWeight: 600 }}>{r.NAME_SHORT}</td>
                       <td style={{ padding: '3px 6px 3px 0', color: 'var(--text-2)' }}>{r.NAME_LONG ?? '—'}</td>
                       <td style={{ padding: '3px 0 3px 6px', textAlign: 'right', color: 'var(--text-2)' }}>
-                        {r.SP_RATE != null ? `${r.SP_RATE} €/h` : '—'}
+                        {r.HOURLY_RATE != null ? `${r.HOURLY_RATE} €/h` : '—'}
                       </td>
                       <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => startEditRolle(r)}>✎</button>

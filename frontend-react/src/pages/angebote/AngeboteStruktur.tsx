@@ -24,7 +24,7 @@ type AddForm = {
   NAME_SHORT: string; NAME_LONG: string; BILLING_TYPE_ID: string; FATHER_ID: string
   REVENUE: string; EXTRAS_PERCENT: string
   // Aufwandsschätzung (BILLING_TYPE_ID=2): Menge/Stunden × Rolle/Satz
-  QUANTITY: string; SP_RATE: string; ROLE_ID: string; ROLE_NAME_SHORT: string; ROLE_NAME_LONG: string
+  QUANTITY: string; HOURLY_RATE: string; ROLE_ID: string; ROLE_NAME_SHORT: string; ROLE_NAME_LONG: string
 }
 type SurchargeEdit = {
   s1Label: string; s1Pct: string; s1Cumul: boolean
@@ -35,7 +35,7 @@ type SurchargeEdit = {
 function emptyAdd(): AddForm {
   return {
     NAME_SHORT: '', NAME_LONG: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '',
-    QUANTITY: '', SP_RATE: '', ROLE_ID: '', ROLE_NAME_SHORT: '', ROLE_NAME_LONG: '',
+    QUANTITY: '', HOURLY_RATE: '', ROLE_ID: '', ROLE_NAME_SHORT: '', ROLE_NAME_LONG: '',
   }
 }
 
@@ -254,7 +254,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
         if (r.changed.nk)            body.extras_percent  = r.nk
         if (r.changed.budget)        body.revenue         = r.budget
         if (r.changed.hours)         body.quantity        = r.hours
-        if (r.changed.rate)          body.sp_rate         = r.rate
+        if (r.changed.rate)          body.hourly_rate         = r.rate
         await updateOfferStructureNode(oid!, r.id, body)
       }
     },
@@ -343,7 +343,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
           ? {
               // Aufwandsschätzung: Honorar = Menge/Stunden × Satz
               quantity:        f.QUANTITY !== '' ? Number(f.QUANTITY) : 0,
-              sp_rate:         f.SP_RATE  !== '' ? Number(f.SP_RATE)  : 0,
+              hourly_rate:         f.HOURLY_RATE  !== '' ? Number(f.HOURLY_RATE)  : 0,
               role_id:         f.ROLE_ID ? Number(f.ROLE_ID) : undefined,
               role_name_short: f.ROLE_NAME_SHORT || undefined,
               role_name_long:  f.ROLE_NAME_LONG  || undefined,
@@ -391,7 +391,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       nk:     String(node?.EXTRAS_PERCENT ?? 0),
       budget: isHourly ? '' : String(node?.REVENUE_BASIS ?? node?.REVENUE ?? 0),
       hours:  isHourly ? String(node?.QUANTITY ?? 0) : '',
-      rate:   isHourly ? String(node?.SP_RATE ?? 0)  : '',
+      rate:   isHourly ? String(node?.HOURLY_RATE ?? 0)  : '',
     }
   }
 
@@ -415,7 +415,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       const origNk  = node?.EXTRAS_PERCENT ?? 0
       const origBudget = node?.REVENUE_BASIS ?? node?.REVENUE ?? 0
       const origHours  = node?.QUANTITY ?? 0
-      const origRate   = node?.SP_RATE ?? 0
+      const origRate   = node?.HOURLY_RATE ?? 0
       const nk     = edit.nk     !== '' ? Number(edit.nk)     : origNk
       const budget = edit.budget !== '' ? Number(edit.budget) : origBudget
       const hours  = edit.hours  !== '' ? Number(edit.hours)  : origHours
@@ -768,7 +768,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                     const nkVal        = edit?.nk            ?? String(n.EXTRAS_PERCENT ?? 0)
                     const budgetVal    = edit?.budget        ?? String(n.REVENUE_BASIS ?? n.REVENUE ?? 0)
                     const hoursVal     = edit?.hours         ?? String(n.QUANTITY ?? 0)
-                    const rateVal      = edit?.rate          ?? String(n.SP_RATE ?? 0)
+                    const rateVal      = edit?.rate          ?? String(n.HOURLY_RATE ?? 0)
                     const hourlyEur    = Number(hoursVal || 0) * Number(rateVal || 0)
 
                     const hasSurcharges = (n.SURCHARGES_TOTAL ?? 0) > 0
@@ -994,7 +994,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         ROLE_ID: rid,
                         ROLE_NAME_SHORT: role?.NAME_SHORT ?? f.ROLE_NAME_SHORT,
                         ROLE_NAME_LONG:  role?.NAME_LONG  ?? f.ROLE_NAME_LONG,
-                        SP_RATE: role?.SP_RATE != null ? String(role.SP_RATE) : f.SP_RATE,
+                        HOURLY_RATE: role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.HOURLY_RATE,
                       })
                     }}>
                     <option value="">— frei —</option>
@@ -1010,13 +1010,13 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontSize: 11 }}>Satz €/h</label>
                   <input type="number" min={0} step={1} style={{ width: 90 }} placeholder="0"
-                    value={addForm.SP_RATE}
-                    onChange={e => setAddForm(f => f && { ...f, SP_RATE: e.target.value })} />
+                    value={addForm.HOURLY_RATE}
+                    onChange={e => setAddForm(f => f && { ...f, HOURLY_RATE: e.target.value })} />
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontSize: 11 }}>Honorar (berechnet)</label>
                   <div style={{ fontSize: 13, fontWeight: 600, padding: '6px 0' }}>
-                    {money((Number(addForm.QUANTITY) || 0) * (Number(addForm.SP_RATE) || 0))}
+                    {money((Number(addForm.QUANTITY) || 0) * (Number(addForm.HOURLY_RATE) || 0))}
                   </div>
                 </div>
               </>

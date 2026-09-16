@@ -131,7 +131,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
           .from("ROLE")
           .select("ID", { count: "exact", head: true })
           .eq("TENANT_ID", tenantId)
-          .gt("SP_RATE", 0);
+          .gt("HOURLY_RATE", 0);
         return (count || 0) > 0;
       } catch (_) { return false; }
     })(),

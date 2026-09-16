@@ -157,7 +157,7 @@ async function generate({ supabase, md, timeline, cfg, rng, log, apply }) {
 
         const progress = eng.end === eng.start ? 1 : cal.diffDays(eng.start, day) / Math.max(1, cal.diffDays(eng.start, eng.end));
         const leaf = pickLeafForProgress(eng.leaves, Math.max(0, Math.min(1, progress)), empRng);
-        const spRate = eng.e2p.SP_RATE != null ? Number(eng.e2p.SP_RATE) : Number(eng.e2p.ROLE_ID != null ? 90 : 90);
+        const spRate = eng.e2p.HOURLY_RATE != null ? Number(eng.e2p.HOURLY_RATE) : Number(eng.e2p.ROLE_ID != null ? 90 : 90);
 
         const body = {
           EMPLOYEE_ID: Number(emp.ID),
@@ -166,7 +166,7 @@ async function generate({ supabase, md, timeline, cfg, rng, log, apply }) {
           TIME_FINISH: null,
           QUANTITY_INT: hours,
           QUANTITY_EXT: hours,
-          SP_RATE: spRate,
+          HOURLY_RATE: spRate,
           POSTING_DESCRIPTION: activityFor(progress, empRng),
           PROJECT_ID: Number(eng.project.ID),
           STRUCTURE_ID: Number(leaf.ID),

@@ -894,13 +894,13 @@ async function postAddress(req, res, supabase) {
 // POST /api/stammdaten/rollen
 // ---------------------------------------------------------------------------
 async function postRollen(req, res, supabase) {
-  const { name_short, name_long, sp_rate } = req.body || {};
+  const { name_short, name_long, hourly_rate } = req.body || {};
   if (!name_short || typeof name_short !== "string") return res.status(400).json({ error: "name_short is required" });
 
   const insertRow = {
     NAME_SHORT: name_short.trim(),
     NAME_LONG:  (name_long || "").trim() || null,
-    SP_RATE:    sp_rate !== undefined && sp_rate !== "" ? parseFloat(sp_rate) : null,
+    HOURLY_RATE:    hourly_rate !== undefined && hourly_rate !== "" ? parseFloat(hourly_rate) : null,
     TENANT_ID:  req.tenantId ?? null,
     ACTIVE:     1,
   };
@@ -1312,7 +1312,7 @@ async function deleteTyp(req, res, supabase) {
 }
 
 async function getRollen(req, res, supabase) {
-  const { data, error } = await supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, SP_RATE")
+  const { data, error } = await supabase.from("ROLE").select("ID, NAME_SHORT, NAME_LONG, HOURLY_RATE")
     .eq("TENANT_ID", req.tenantId).order("NAME_SHORT", { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data: data || [] });
@@ -1352,13 +1352,13 @@ async function patchTyp(req, res, supabase) {
 async function patchRolle(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
-  const { name_short, name_long, sp_rate } = req.body || {};
+  const { name_short, name_long, hourly_rate } = req.body || {};
   if (!name_short) return res.status(400).json({ error: "name_short is required" });
   const { data, error } = await supabase.from("ROLE").update({
     NAME_SHORT: name_short.trim(),
     NAME_LONG:  (name_long || "").trim() || null,
-    SP_RATE:    sp_rate !== undefined && sp_rate !== "" ? parseFloat(sp_rate) : null,
-  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, NAME_SHORT, NAME_LONG, SP_RATE").single();
+    HOURLY_RATE:    hourly_rate !== undefined && hourly_rate !== "" ? parseFloat(hourly_rate) : null,
+  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, NAME_SHORT, NAME_LONG, HOURLY_RATE").single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
