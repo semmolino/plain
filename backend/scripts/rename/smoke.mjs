@@ -51,6 +51,7 @@ if (!EMAIL || !PASSWORD) {
 }
 
 let token = null;
+let employeeId = null;
 const fails = [];
 const notes = [];
 /** Jeder JSON-Key, der in irgendeiner Antwort vorkam. */
@@ -159,6 +160,7 @@ async function login() {
     process.exit(1);
   }
   token = json.token;
+  employeeId = json.employee_id ?? null;
   harvest(json); // die Login-Antwort traegt selbst short_name/abbr
   note(`\n  angemeldet als ${EMAIL} an ${BASE}\n`);
 }
@@ -173,20 +175,37 @@ async function run() {
   const abschlaege = await probe("Abschlagsrechnungen", "/partial-payments");
   const nachtraege = await probe("Nachtraege", "/nachtraege");
   const mitarbeiter = await probe("Mitarbeiter", "/mitarbeiter");
-  await probe("Buchungen", "/buchungen");
   await probe("Rollen", "/roles");
   await probe("Rollenzuordnung", "/roles/employees");
+  await probe("Buchungsarten (waehlbar)", "/buchungen/booking-types");
+  const heute = new Date().toISOString().slice(0, 10);
+  if (employeeId) {
+    await probe("Timer-Entwuerfe", `/buchungen/timer/drafts?employee_id=${employeeId}&date=${heute}`);
+  }
   // Genau die Endpunkte, die es gibt - jede Traegertabelle der Map soll von
   // mindestens einem hier abgedeckt sein, sonst meldet checkNames() sie als
   // "nie gesehen" und man sucht an der falschen Stelle.
+  // Exakt die Pfade, die es gibt. Mehrere Stammdaten liegen unter einem
+  // Unterpfad (/addresses/list, /payment-means/search) - ein geratener Pfad
+  // liefert 404 und sieht im Bericht aus wie ein Rename-Fehler.
   for (const s of ["countries", "currencies", "departments", "billing-types",
-                   "payment-means", "booking-types", "vat", "fee-zones",
-                   "fee-groups", "fee-masters", "fee-surcharges-global",
-                   "fee-calculation-masters", "fee-zone-criteria", "lph-blocks",
-                   "din276", "typen", "rollen", "addresses", "contacts",
-                   "companies", "salutations", "genders", "working-time-models",
-                   "booking-text-templates", "defaults"]) {
+                   "booking-types", "vat", "fee-groups", "fee-surcharges-global",
+                   "fee-calculation-masters", "typen", "rollen", "companies",
+                   "salutations", "genders", "working-time-models",
+                   "booking-text-templates", "defaults", "addresses/list",
+                   "contacts/list", "payment-means/search", "din276/estimates"]) {
     await probe(`Stammdaten/${s}`, `/stammdaten/${s}`);
+  }
+
+  // Honorartafeln haengen alle an einem Honorar-Stammsatz.
+  const feeMasters = await probe("Stammdaten/fee-masters", "/stammdaten/fee-masters");
+  const feeMasterId = firstId(feeMasters);
+  if (feeMasterId) {
+    for (const s of ["fee-zones", "fee-zone-criteria", "lph-blocks"]) {
+      await probe(`Stammdaten/${s}`, `/stammdaten/${s}?fee_master_id=${feeMasterId}`);
+    }
+  } else {
+    note("  uebersprungen: kein Honorar-Stammsatz (fee-zones, fee-zone-criteria, lph-blocks)");
   }
 
   note("\n=== Reports (RPC-gestuetzt) ===");
@@ -205,6 +224,7 @@ async function run() {
     await probe("Projekt-Struktur", `/reports/project/${projektId}/structure`);
     await probe("Projekt-Phasen", `/reports/project/${projektId}/phases`);
     await probe("Projekt-Detail", `/projekte/${projektId}`);
+    await probe("Buchungen des Projekts", `/buchungen/project/${projektId}`);
   } else {
     note("  uebersprungen: kein Projekt vorhanden (Projekt-Header/Struktur/Phasen)");
   }
@@ -231,8 +251,16 @@ async function run() {
 // ------------------------------------------------- Abgleich mit rename-map
 function checkNames() {
   const raw = JSON.parse(fs.readFileSync(MAP_FILE, "utf8"));
-  let blocks = (raw.blocks || []).filter((b) => b.status === "planned" || b.status === "done");
-  if (BLOCK) blocks = blocks.filter((b) => b.id === BLOCK);
+  // Nur ERLEDIGTE Bloecke. Bei einem geplanten steht der alte Name noch in den
+  // Antworten und der neue noch nicht - beides richtig, beides kein Befund. Ein
+  // ausdrueckliches --block gilt trotzdem, damit sich ein laufender Block
+  // gezielt pruefen laesst.
+  let blocks = (raw.blocks || []).filter((b) => b.status === "done");
+  if (BLOCK) blocks = (raw.blocks || []).filter((b) => b.id === BLOCK);
+  if (blocks.length === 0) {
+    note("\n  Kein erledigter Block in der Map - nichts abzugleichen.");
+    return;
+  }
 
   const expectNew = new Map(); // neuer Name -> woher
   const forbidOld = new Map(); // alter Name -> woher
@@ -241,12 +269,12 @@ function checkNames() {
       for (const c of t.columns || []) {
         expectNew.set(c.to, `${t.to || t.from}.${c.to}`);
         forbidOld.set(c.from, `${t.from}.${c.from}`);
+        // Request-Felder nur VERBIETEN, nicht erwarten: sie stehen in
+        // Anfragen, nicht in Antworten. Sie als "nie gesehen" zu melden hat den
+        // Bericht zur Haelfte mit Rauschen gefuellt.
         const api = c.api === true ? { from: c.from.toLowerCase(), to: c.to.toLowerCase() }
                   : (c.api && typeof c.api === "object" ? c.api : null);
-        if (api) {
-          expectNew.set(api.to, `${t.to || t.from}.${c.to} (Request-Feld)`);
-          forbidOld.set(api.from, `${t.from}.${c.from} (Request-Feld)`);
-        }
+        if (api) forbidOld.set(api.from, `${t.from}.${c.from} (Request-Feld)`);
       }
     }
   }
