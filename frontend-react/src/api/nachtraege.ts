@@ -86,8 +86,8 @@ export interface NachtragStructureNode {
   EXTRAS:                number
   QUANTITY:              number | null
   HOURLY_RATE:               number | null
-  ROLE_NAME_SHORT:       string | null
-  ROLE_NAME_LONG:        string | null
+  ROLE_ABBR:       string | null
+  ROLE_NAME:        string | null
   ROLE_ID:               number | null
   SURCHARGES_TOTAL:      number
   APPROVAL_STATE:        ApprovalState

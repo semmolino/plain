@@ -308,7 +308,7 @@ export interface EmployeeProject {
   PROJECT_NUMBER:  string | null
   PROJECT_NAME:    string | null
   STATUS_NAME:     string | null
-  ROLE_NAME_SHORT: string | null
+  ROLE_ABBR: string | null
   HOURLY_RATE:         number | null
 }
 

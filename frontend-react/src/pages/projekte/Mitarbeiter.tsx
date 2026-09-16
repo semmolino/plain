@@ -35,22 +35,22 @@ function empName(row: E2PEntry) {
 
 interface EditState {
   role_id: string
-  role_name_short: string
-  role_name_long: string
+  role_abbr: string
+  role_name: string
   hourly_rate: string
 }
 
 function emptyEdit(row: E2PEntry): EditState {
   return {
     role_id:         row.ROLE_ID   != null ? String(row.ROLE_ID) : '',
-    role_name_short: row.ROLE_NAME_SHORT ?? '',
-    role_name_long:  row.ROLE_NAME_LONG  ?? '',
+    role_abbr: row.ROLE_ABBR ?? '',
+    role_name:  row.ROLE_NAME  ?? '',
     hourly_rate:         row.HOURLY_RATE   != null ? String(row.HOURLY_RATE)  : '',
   }
 }
 
-function emptyAdd(): { employee_id: string; role_id: string; role_name_short: string; role_name_long: string; hourly_rate: string } {
-  return { employee_id: '', role_id: '', role_name_short: '', role_name_long: '', hourly_rate: '' }
+function emptyAdd(): { employee_id: string; role_id: string; role_abbr: string; role_name: string; hourly_rate: string } {
+  return { employee_id: '', role_id: '', role_abbr: '', role_name: '', hourly_rate: '' }
 }
 
 export function Mitarbeiter({ initialProjectId }: Props) {
@@ -61,7 +61,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
   // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
   useEffect(() => { setPid(initialProjectId ?? null); setEditingId(null); setMsg(null); setAddForm(emptyAdd()) }, [initialProjectId])
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [editForm,  setEditForm]  = useState<EditState>({ role_id: '', role_name_short: '', role_name_long: '', hourly_rate: '' })
+  const [editForm,  setEditForm]  = useState<EditState>({ role_id: '', role_abbr: '', role_name: '', hourly_rate: '' })
   const [addForm,      setAddForm]      = useState(emptyAdd())
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
@@ -99,8 +99,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
     setEditForm(f => ({
       ...f,
       role_id:         roleId,
-      role_name_short: role?.NAME_SHORT ?? f.role_name_short,
-      role_name_long:  role?.NAME_LONG  ?? f.role_name_long,
+      role_abbr: role?.NAME_SHORT ?? f.role_abbr,
+      role_name:  role?.NAME_LONG  ?? f.role_name,
       hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
     }))
   }
@@ -110,8 +110,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
     setAddForm(f => ({
       ...f,
       role_id:         roleId,
-      role_name_short: role?.NAME_SHORT ?? f.role_name_short,
-      role_name_long:  role?.NAME_LONG  ?? f.role_name_long,
+      role_abbr: role?.NAME_SHORT ?? f.role_abbr,
+      role_name:  role?.NAME_LONG  ?? f.role_name,
       hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
     }))
   }
@@ -152,8 +152,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
       id: rowId,
       body: {
         role_id:         editForm.role_id         ? Number(editForm.role_id) : null,
-        role_name_short: editForm.role_name_short,
-        role_name_long:  editForm.role_name_long,
+        role_abbr: editForm.role_abbr,
+        role_name:  editForm.role_name,
         hourly_rate:         editForm.hourly_rate !== '' ? parseFloat(editForm.hourly_rate) : null,
       },
     })
@@ -165,8 +165,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
       body: {
         employee_id:     Number(addForm.employee_id),
         role_id:         addForm.role_id         ? Number(addForm.role_id) : null,
-        role_name_short: addForm.role_name_short,
-        role_name_long:  addForm.role_name_long,
+        role_abbr: addForm.role_abbr,
+        role_name:  addForm.role_name,
         hourly_rate:         addForm.hourly_rate !== '' ? parseFloat(addForm.hourly_rate) : null,
       },
     })
@@ -234,8 +234,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                             {roles.map(r => <option key={r.ID} value={r.ID}>{r.NAME_SHORT}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
                           </select>
                         </td>
-                        <td><input className="tbl-input" style={{ width: 90 }} value={editForm.role_name_short} onChange={e => setEF('role_name_short')(e.target.value)} /></td>
-                        <td><input className="tbl-input" style={{ width: 150 }} value={editForm.role_name_long} onChange={e => setEF('role_name_long')(e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 90 }} value={editForm.role_abbr} onChange={e => setEF('role_abbr')(e.target.value)} /></td>
+                        <td><input className="tbl-input" style={{ width: 150 }} value={editForm.role_name} onChange={e => setEF('role_name')(e.target.value)} /></td>
                         <td><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" min="0" value={editForm.hourly_rate} onChange={e => setEF('hourly_rate')(e.target.value)} placeholder="0.00" /></td>
                         <td className="doc-actions">
                           <button className="btn-small btn-save" disabled={updateMut.isPending} onClick={() => submitEdit(row.ID)}>
@@ -249,8 +249,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                         <td style={{ color: 'var(--text-3)', fontSize: 12 }}>
                           {row.ROLE_ID ? roles.find(r => r.ID === row.ROLE_ID)?.NAME_SHORT ?? '—' : '—'}
                         </td>
-                        <td>{row.ROLE_NAME_SHORT || '—'}</td>
-                        <td>{row.ROLE_NAME_LONG  || '—'}</td>
+                        <td>{row.ROLE_ABBR || '—'}</td>
+                        <td>{row.ROLE_NAME  || '—'}</td>
                         <td className="num">{fmtRate(row.HOURLY_RATE)}</td>
                         <td className="doc-actions">
                           <Can permission="projects.hourly_rates.edit">
@@ -285,8 +285,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                     {roles.map(r => <option key={r.ID} value={r.ID}>{r.NAME_SHORT}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
                   </select>
                 </td>
-                <td><input className="tbl-input" style={{ width: 90 }} value={addForm.role_name_short} onChange={e => setAF('role_name_short')(e.target.value)} placeholder="Kürzel" /></td>
-                <td><input className="tbl-input" style={{ width: 150 }} value={addForm.role_name_long} onChange={e => setAF('role_name_long')(e.target.value)} placeholder="Bezeichnung" /></td>
+                <td><input className="tbl-input" style={{ width: 90 }} value={addForm.role_abbr} onChange={e => setAF('role_abbr')(e.target.value)} placeholder="Kürzel" /></td>
+                <td><input className="tbl-input" style={{ width: 150 }} value={addForm.role_name} onChange={e => setAF('role_name')(e.target.value)} placeholder="Bezeichnung" /></td>
                 <td><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" min="0" value={addForm.hourly_rate} onChange={e => setAF('hourly_rate')(e.target.value)} placeholder="0.00" /></td>
                 <td></td>
                 <td className="doc-actions">

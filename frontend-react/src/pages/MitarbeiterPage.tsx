@@ -254,7 +254,7 @@ function EmployeeProjectsSection({ employeeId }: { employeeId: number }) {
               {r.PROJECT_NAME ? <span style={{ color: 'var(--text-3)' }}> · {r.PROJECT_NAME}</span> : null}
             </td>
             <td style={{ padding: '4px 8px 4px 0' }}>{r.STATUS_NAME || '—'}</td>
-            <td style={{ padding: '4px 8px 4px 0' }}>{r.ROLE_NAME_SHORT || '—'}</td>
+            <td style={{ padding: '4px 8px 4px 0' }}>{r.ROLE_ABBR || '—'}</td>
             <td style={{ padding: '4px 0 4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               {r.HOURLY_RATE != null ? `${Number(r.HOURLY_RATE).toFixed(2)} €/h` : '—'}
             </td>

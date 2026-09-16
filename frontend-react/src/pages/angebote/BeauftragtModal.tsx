@@ -57,8 +57,8 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
       e2p.push({
         employee_id:    Number(empId),
         role_id:        node.ROLE_ID ?? null,
-        role_name_short: node.ROLE_NAME_SHORT ?? '',
-        role_name_long:  node.ROLE_NAME_LONG  ?? '',
+        role_abbr: node.ROLE_ABBR ?? '',
+        role_name:  node.ROLE_NAME  ?? '',
         hourly_rate:        node.HOURLY_RATE ?? null,
       })
     }
@@ -167,7 +167,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
                     {bt2Nodes.map(n => (
                       <tr key={n.ID}>
                         <td style={{ padding: '4px 8px' }}>{n.NAME_SHORT || '—'}</td>
-                        <td style={{ padding: '4px 8px', color: 'var(--text-3)' }}>{n.ROLE_NAME_SHORT || '—'}</td>
+                        <td style={{ padding: '4px 8px', color: 'var(--text-3)' }}>{n.ROLE_ABBR || '—'}</td>
                         <td style={{ padding: '4px 8px' }}>
                           <select
                             value={employeeMap[n.ID] ?? ''}

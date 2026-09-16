@@ -153,8 +153,8 @@ async function createProject(supabase, { body, tenantId }) {
       EMPLOYEE_ID: r0.employee_id,
       PROJECT_ID: project.ID,
       ROLE_ID: r0.role_id || null,
-      ROLE_NAME_SHORT: r0.role_name_short || "",
-      ROLE_NAME_LONG: r0.role_name_long || "",
+      ROLE_ABBR: r0.role_abbr || "",
+      ROLE_NAME: r0.role_name || "",
       HOURLY_RATE: r0.hourly_rate === "" || r0.hourly_rate === undefined ? null : r0.hourly_rate,
       TENANT_ID: project.TENANT_ID,
     }));
@@ -1809,7 +1809,7 @@ async function copyProject(supabase, { projectId, tenantId }) {
   // Copy EMPLOYEE2PROJECT
   try {
     const { data: e2pRows } = await supabase.from("EMPLOYEE2PROJECT")
-      .select("EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
+      .select("EMPLOYEE_ID, ROLE_ID, ROLE_ABBR, ROLE_NAME, HOURLY_RATE")
       .eq("PROJECT_ID", projectId).eq("TENANT_ID", tenantId);
     if (e2pRows?.length) {
       await supabase.from("EMPLOYEE2PROJECT").insert(e2pRows.map(r => ({ ...r, PROJECT_ID: newProject.ID, TENANT_ID: tenantId })));

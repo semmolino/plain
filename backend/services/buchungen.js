@@ -40,7 +40,7 @@ async function loadEmployee2Project(supabase, employeeId, projectId) {
   if (!employeeId || !projectId) return null;
   const { data, error } = await supabase
     .from("EMPLOYEE2PROJECT")
-    .select("ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
+    .select("ROLE_ID, ROLE_ABBR, ROLE_NAME, HOURLY_RATE")
     .eq("EMPLOYEE_ID", employeeId)
     .eq("PROJECT_ID", projectId)
     .limit(1);
@@ -176,8 +176,8 @@ async function createTimerDraft(supabase, { body, tenantId }) {
     COST_TOTAL: quantityInt * cpRate,
     QUANTITY_EXT: quantityExt,
     ROLE_ID: preset?.ROLE_ID ?? null,
-    ROLE_NAME_SHORT: preset?.ROLE_NAME_SHORT ?? null,
-    ROLE_NAME_LONG: preset?.ROLE_NAME_LONG ?? null,
+    ROLE_ABBR: preset?.ROLE_ABBR ?? null,
+    ROLE_NAME: preset?.ROLE_NAME ?? null,
     HOURLY_RATE: spRate,
     HOURLY_RATE_TOTAL: quantityExt * spRate,
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "",
@@ -194,8 +194,8 @@ async function createTimerDraft(supabase, { body, tenantId }) {
         DATE_VOUCHER: b.DATE_VOUCHER, TIME_START: b.TIME_START || null,
         TIME_FINISH: b.TIME_FINISH || null, QUANTITY_INT: quantityInt,
         COST_RATE: cpRate, COST_TOTAL: quantityInt * cpRate, QUANTITY_EXT: quantityExt,
-        ROLE_ID: preset?.ROLE_ID ?? null, ROLE_NAME_SHORT: preset?.ROLE_NAME_SHORT ?? null,
-        ROLE_NAME_LONG: preset?.ROLE_NAME_LONG ?? null, HOURLY_RATE: spRate,
+        ROLE_ID: preset?.ROLE_ID ?? null, ROLE_ABBR: preset?.ROLE_ABBR ?? null,
+        ROLE_NAME: preset?.ROLE_NAME ?? null, HOURLY_RATE: spRate,
         HOURLY_RATE_TOTAL: quantityExt * spRate, POSTING_DESCRIPTION: b.POSTING_DESCRIPTION || "",
         PROJECT_ID: b.PROJECT_ID ?? null, STRUCTURE_ID: b.STRUCTURE_ID ?? null,
       }]).select("ID").single();
@@ -551,8 +551,8 @@ async function createBuchung(supabase, { body, tenantId }) {
 
   const effectiveSpRate = preset && preset.HOURLY_RATE != null ? Number(preset.HOURLY_RATE) : Number(b.HOURLY_RATE);
   const roleId = preset ? (preset.ROLE_ID ?? null) : null;
-  const roleNameShort = preset ? (preset.ROLE_NAME_SHORT ?? null) : null;
-  const roleNameLong = preset ? (preset.ROLE_NAME_LONG ?? null) : null;
+  const roleNameShort = preset ? (preset.ROLE_ABBR ?? null) : null;
+  const roleNameLong = preset ? (preset.ROLE_NAME ?? null) : null;
 
   // Look up time-based CP rate; fall back to 0 if none defined yet
   const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
@@ -589,8 +589,8 @@ async function createBuchung(supabase, { body, tenantId }) {
     COST_TOTAL: b.QUANTITY_INT * effectiveCpRate,
     QUANTITY_EXT: b.QUANTITY_EXT,
     ROLE_ID: roleId,
-    ROLE_NAME_SHORT: roleNameShort,
-    ROLE_NAME_LONG: roleNameLong,
+    ROLE_ABBR: roleNameShort,
+    ROLE_NAME: roleNameLong,
     HOURLY_RATE: effectiveSpRate,
     HOURLY_RATE_TOTAL: b.QUANTITY_EXT * effectiveSpRate,
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
@@ -731,8 +731,8 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
 
     if (preset && preset.HOURLY_RATE != null) {
       updateTec.ROLE_ID = preset.ROLE_ID ?? null;
-      updateTec.ROLE_NAME_SHORT = preset.ROLE_NAME_SHORT ?? null;
-      updateTec.ROLE_NAME_LONG = preset.ROLE_NAME_LONG ?? null;
+      updateTec.ROLE_ABBR = preset.ROLE_ABBR ?? null;
+      updateTec.ROLE_NAME = preset.ROLE_NAME ?? null;
       updateTec.HOURLY_RATE = Number(preset.HOURLY_RATE);
       updateTec.HOURLY_RATE_TOTAL = Math.round(effQtyExt * Number(preset.HOURLY_RATE) * 100) / 100;
     }
@@ -1302,8 +1302,8 @@ async function rebookBuchungen(supabase, {
         update.HOURLY_RATE         = spRateAfter;
         update.HOURLY_RATE_TOTAL          = spTotAfter;
         update.ROLE_ID         = preset.ROLE_ID ?? null;
-        update.ROLE_NAME_SHORT = preset.ROLE_NAME_SHORT ?? null;
-        update.ROLE_NAME_LONG  = preset.ROLE_NAME_LONG ?? null;
+        update.ROLE_ABBR = preset.ROLE_ABBR ?? null;
+        update.ROLE_NAME  = preset.ROLE_NAME ?? null;
         if (fmt2(Number(r.HOURLY_RATE ?? 0)) !== fmt2(spRateAfter)) rateNote = "rate_changed";
       } else {
         rateNote = "no_assignment";

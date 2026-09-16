@@ -282,8 +282,8 @@ async function addStructureNode(supabase, { tenantId, nachtragId, body }) {
     QUANTITY:        quantity,
     HOURLY_RATE:         spRate,
     APPROVAL_STATE:  'OPEN',
-    ROLE_NAME_SHORT: b.role_name_short || null,
-    ROLE_NAME_LONG:  b.role_name_long  || null,
+    ROLE_ABBR: b.role_abbr || null,
+    ROLE_NAME:  b.role_name  || null,
     ROLE_ID:         b.role_id ? parseInt(String(b.role_id), 10) : null,
     TENANT_ID:       tenantId,
   }]).select('*').single();
@@ -304,8 +304,8 @@ async function updateStructureNode(supabase, { tenantId, nodeId, body }) {
   if (b.name_long      !== undefined) patch.NAME_LONG       = String(b.name_long).trim();
   if (btId             !== undefined) patch.BILLING_TYPE_ID = btId;
   if (b.extras_percent !== undefined) patch.EXTRAS_PERCENT  = Number(b.extras_percent) || 0;
-  if (b.role_name_short !== undefined) patch.ROLE_NAME_SHORT = b.role_name_short || null;
-  if (b.role_name_long  !== undefined) patch.ROLE_NAME_LONG  = b.role_name_long  || null;
+  if (b.role_abbr !== undefined) patch.ROLE_ABBR = b.role_abbr || null;
+  if (b.role_name  !== undefined) patch.ROLE_NAME  = b.role_name  || null;
   if (b.role_id         !== undefined) patch.ROLE_ID         = b.role_id ? parseInt(String(b.role_id), 10) : null;
 
   for (const i of [1, 2, 3]) {
@@ -516,7 +516,7 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
       REVENUE_BASIS: isBt1 ? revenue : 0, REVENUE: revenue, EXTRAS_PERCENT: extrasPct, EXTRAS: extras, COSTS: 0,
       REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
       SORT_ORDER: (sortOrder += 10),
-      ROLE_NAME_SHORT: node.ROLE_NAME_SHORT || null, ROLE_NAME_LONG: node.ROLE_NAME_LONG || null, ROLE_ID: node.ROLE_ID || null,
+      ROLE_ABBR: node.ROLE_ABBR || null, ROLE_NAME: node.ROLE_NAME || null, ROLE_ID: node.ROLE_ID || null,
       TENANT_ID: tenantId,
     }]).select('ID').single();
     if (psErr) throw { status: 500, message: 'Position konnte nicht übernommen werden: ' + psErr.message };
