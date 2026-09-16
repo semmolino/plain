@@ -338,7 +338,7 @@ export interface OverdueInvoice {
 
 export interface TeamMemberUtilization {
   employee_id:  number
-  short_name:   string
+  abbr:   string
   hours_4weeks: number
 }
 
@@ -442,7 +442,7 @@ export interface TeamHoursMonth {
 
 export interface TeamHoursEmployee {
   employee_id: number
-  short_name:  string
+  abbr:  string
   months:      TeamHoursMonth[]
   total:       number
 }

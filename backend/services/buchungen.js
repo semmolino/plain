@@ -1045,7 +1045,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
       POSTING_DESCRIPTION,
       BOOKING_KIND, ENTRY_KIND, UNIT_LABEL, BOOKING_TYPE_ID,
       PARTIAL_PAYMENT_ID, INVOICE_ID,
-      EMPLOYEE:EMPLOYEE_ID(SHORT_NAME)
+      EMPLOYEE:EMPLOYEE_ID(ABBR)
     `)
     .eq("TENANT_ID", tenantId)
     .eq("PROJECT_ID", projectId)

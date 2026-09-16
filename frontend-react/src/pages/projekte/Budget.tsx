@@ -51,13 +51,13 @@ function EmpfaengerVorschau({ draft, employees, projectManagerId }: {
 
   if (draft.notify_pm) {
     const pl = employees.find(e => e.ID === projectManagerId)
-    teile.push(pl ? `Projektleiter (${pl.SHORT_NAME})`
+    teile.push(pl ? `Projektleiter (${pl.ABBR})`
                   : 'Projektleiter (für dieses Projekt nicht gesetzt)')
   }
   if (draft.notify_booker) teile.push('wer die auslösende Buchung erfasst hat')
   for (const id of draft.notify_cc) {
     const emp = employees.find(e => e.ID === id)
-    if (emp) teile.push(emp.SHORT_NAME)
+    if (emp) teile.push(emp.ABBR)
   }
 
   // Ein gesetzter PL-Haken ohne hinterlegten PL zählt nicht als Empfänger.
@@ -403,7 +403,7 @@ export function Budget({ initialProjectId }: Props) {
               }}
               style={{ minHeight: 100 }}>
               {employees.map(emp => (
-                <option key={emp.ID} value={emp.ID}>{emp.SHORT_NAME}</option>
+                <option key={emp.ID} value={emp.ID}>{emp.ABBR}</option>
               ))}
             </select>
             <p className="admin-section-hint">

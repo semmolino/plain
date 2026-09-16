@@ -158,7 +158,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const employee = await one(supabase, 'EMPLOYEE', doc.EMPLOYEE_ID, tenantId);
   const contactName  = String(doc.EMPLOYEE ?? '').trim()
     || [employee?.FIRST_NAME, employee?.LAST_NAME].filter(Boolean).join(' ')
-    || String(employee?.SHORT_NAME ?? '').trim();
+    || String(employee?.ABBR ?? '').trim();
   const contactPhone = firstNonEmpty(doc.EMPLOYEE_PHONE, employee?.MOBILE, employee?.PHONE);
   const contactEmail = firstNonEmpty(doc.EMPLOYEE_MAIL, employee?.MAIL);
 

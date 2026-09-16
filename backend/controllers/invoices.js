@@ -271,7 +271,7 @@ async function getTec(req, res, supabase) {
 
     const { data: tecRows, error: tecErr } = await supabase
       .from("TEC")
-      .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, STRUCTURE_ID, PARTIAL_PAYMENT_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(SHORT_NAME)")
+      .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, STRUCTURE_ID, PARTIAL_PAYMENT_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR)")
       .in("STRUCTURE_ID", bt2Ids)
       .neq("STATUS", "DRAFT")
       .order("DATE_VOUCHER", { ascending: true });
@@ -285,7 +285,7 @@ async function getTec(req, res, supabase) {
       .map((t) => ({
         ID: t.ID,
         DATE_VOUCHER: t.DATE_VOUCHER,
-        EMPLOYEE_SHORT_NAME: t.EMPLOYEE?.SHORT_NAME ?? "",
+        EMPLOYEE_SHORT_NAME: t.EMPLOYEE?.ABBR ?? "",
         POSTING_DESCRIPTION: t.POSTING_DESCRIPTION ?? "",
         HOURLY_RATE_TOTAL: svc.round2(t.HOURLY_RATE_TOTAL),
         ASSIGNED: String(t.INVOICE_ID) === String(id),

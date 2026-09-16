@@ -88,7 +88,7 @@ async function list(supabase, { tenantId, projectId }) {
   const [statusRes, projRes, empRes, addrRes] = await Promise.all([
     statusIds.length  ? supabase.from('NACHTRAG_STATUS').select('ID, CODE, NAME_SHORT').in('ID', statusIds) : Promise.resolve({ data: [] }),
     projectIds.length ? supabase.from('PROJECT').select('ID, NAME_SHORT, NAME_LONG').in('ID', projectIds)   : Promise.resolve({ data: [] }),
-    empIds.length     ? supabase.from('EMPLOYEE').select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
+    empIds.length     ? supabase.from('EMPLOYEE').select('ID, ABBR, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds)             : Promise.resolve({ data: [] }),
   ]);
 
@@ -111,7 +111,7 @@ async function list(supabase, { tenantId, projectId }) {
       NACHTRAG_STATUS_ID:  r.NACHTRAG_STATUS_ID,
       PROJECT_ID:          r.PROJECT_ID,
       PROJECT_NAME:        projMap.get(r.PROJECT_ID)?.NAME_SHORT ?? null,
-      EMPLOYEE_NAME:       emp ? `${emp.SHORT_NAME ? emp.SHORT_NAME + ': ' : ''}${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim() : null,
+      EMPLOYEE_NAME:       emp ? `${emp.ABBR ? emp.ABBR + ': ' : ''}${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim() : null,
       ADDRESS_NAME:        addrMap.get(r.ADDRESS_ID)?.ADDRESS_NAME_1 ?? null,
       REVIEW_DUE_DATE:     r.REVIEW_DUE_DATE ?? null,
       AMOUNT_CLAIMED_NET:  fmt2(r.AMOUNT_CLAIMED_NET),
@@ -647,7 +647,7 @@ async function buildNachtragPdfViewModel(supabase, { nachtragId, tenantId }) {
     nachtrag.COMPANY_ID ? supabase.from('COMPANY').select('COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, IBAN, BIC, "TAX-ID", TAX_NUMBER').eq('ID', nachtrag.COMPANY_ID).maybeSingle() : Promise.resolve({ data: null }),
     nachtrag.ADDRESS_ID ? supabase.from('ADDRESS').select('ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY').eq('ID', nachtrag.ADDRESS_ID).maybeSingle() : Promise.resolve({ data: null }),
     nachtrag.CONTACT_ID ? supabase.from('CONTACT').select('FIRST_NAME, LAST_NAME, EMAIL, MOBILE').eq('ID', nachtrag.CONTACT_ID).maybeSingle() : Promise.resolve({ data: null }),
-    nachtrag.EMPLOYEE_ID ? supabase.from('EMPLOYEE').select('SHORT_NAME, FIRST_NAME, LAST_NAME').eq('ID', nachtrag.EMPLOYEE_ID).maybeSingle() : Promise.resolve({ data: null }),
+    nachtrag.EMPLOYEE_ID ? supabase.from('EMPLOYEE').select('ABBR, FIRST_NAME, LAST_NAME').eq('ID', nachtrag.EMPLOYEE_ID).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from('NACHTRAG_STRUCTURE').select('*').eq('NACHTRAG_ID', nachtragId).order('SORT_ORDER', { ascending: true }).order('ID', { ascending: true }),
   ]);
 

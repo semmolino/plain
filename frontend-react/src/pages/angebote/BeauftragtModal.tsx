@@ -131,7 +131,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
               <label>Projektleiter*</label>
               <select value={projectManagerId} onChange={e => setProjectManagerId(e.target.value)}>
                 <option value="">Bitte wählen …</option>
-                {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
+                {managers.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}</option>)}
               </select>
             </div>
 
@@ -176,7 +176,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
                             <option value="">—</option>
                             {employees.map(emp => (
                               <option key={emp.ID} value={emp.ID}>
-                                {emp.SHORT_NAME || `${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim()}
+                                {emp.ABBR || `${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim()}
                               </option>
                             ))}
                           </select>

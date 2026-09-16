@@ -60,7 +60,7 @@ export function LoginPage() {
         token:         res.token,
         employeeId:    res.employee_id,
         tenantId:      res.tenant_id,
-        shortName:     res.short_name,
+        shortName:     res.abbr,
         email:         res.email,
         companyName:   res.company_name,
         dashboardRole: res.dashboard_role ?? null,

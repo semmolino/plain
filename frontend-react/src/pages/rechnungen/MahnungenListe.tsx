@@ -862,7 +862,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                             ><Folder size={13} strokeWidth={1.75} style={{ marginRight: 6, verticalAlign: 'middle' }} />→ Projekt</button>
                           )}
                         </RowMenu>
-                        {emp && <span title={`Verantw.: ${emp.SHORT_NAME}`} style={{ fontSize: 11, color: 'var(--text-3)', padding: '0 2px' }}>{emp.SHORT_NAME}</span>}
+                        {emp && <span title={`Verantw.: ${emp.ABBR}`} style={{ fontSize: 11, color: 'var(--text-3)', padding: '0 2px' }}>{emp.ABBR}</span>}
                       </td>
                     </tr>
                   )
@@ -917,7 +917,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                 <select className="form-control" value={draft.responsibleEmployeeId ?? ''} onChange={e => setDraft(d => ({ ...d, responsibleEmployeeId: e.target.value ? Number(e.target.value) : null }))}>
                   <option value="">– Kein –</option>
                   {employees.filter(e => e.ACTIVE !== 2).map(e => (
-                    <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>
+                    <option key={e.ID} value={e.ID}>{e.ABBR} – {e.FIRST_NAME} {e.LAST_NAME}</option>
                   ))}
                 </select>
               </div>

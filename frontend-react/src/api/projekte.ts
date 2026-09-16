@@ -4,9 +4,9 @@ import { apiClient } from './client'
 
 export interface ProjectStatus     { ID: number; NAME_SHORT: string }
 export interface ProjectType       { ID: number; NAME_SHORT: string }
-export interface ProjectManager    { ID: number; SHORT_NAME: string; FIRST_NAME?: string | null; LAST_NAME?: string | null }
+export interface ProjectManager    { ID: number; ABBR: string; FIRST_NAME?: string | null; LAST_NAME?: string | null }
 export interface Department        { ID: number; NAME_SHORT: string; NAME_LONG: string }
-export interface ActiveEmployee { ID: number; SHORT_NAME: string; FIRST_NAME: string; LAST_NAME: string }
+export interface ActiveEmployee { ID: number; ABBR: string; FIRST_NAME: string; LAST_NAME: string }
 export interface ActiveRole     { ID: number; NAME_SHORT: string; NAME_LONG: string; HOURLY_RATE: number | null }
 export interface BillingType    { ID: number; NAME_SHORT: string; NAME_LONG: string }
 
@@ -318,7 +318,7 @@ export interface Buchung {
   BOOKING_TYPE_ID?:     number | null
   PARTIAL_PAYMENT_ID:   number | null
   INVOICE_ID:           number | null
-  EMPLOYEE:             { SHORT_NAME: string } | null
+  EMPLOYEE:             { ABBR: string } | null
 }
 
 export interface CreateBuchungPayload {

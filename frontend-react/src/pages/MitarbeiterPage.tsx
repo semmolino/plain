@@ -60,7 +60,7 @@ const TABS: { id: string; label: string; permissions: string[]; feature?: string
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 
-type SortKey = 'SHORT_NAME' | 'FIRST_NAME' | 'LAST_NAME' | 'PERSONNEL_NUMBER' | 'MAIL'
+type SortKey = 'ABBR' | 'FIRST_NAME' | 'LAST_NAME' | 'PERSONNEL_NUMBER' | 'MAIL'
 type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'abwesenheit' | 'projekte' | 'rolle' | 'zugang'
 
 function fmtH(n: number) {
@@ -72,7 +72,7 @@ function fmtBalance(n: number) {
 }
 
 function emptyCreateForm(personnelNumber = '', entryDate = ''): CreateEmployeePayload {
-  return { short_name: '', title: '', first_name: '', last_name: '', email: '', mobile: '', personnel_number: personnelNumber, gender_id: '', department_id: null, entry_date: entryDate }
+  return { abbr: '', title: '', first_name: '', last_name: '', email: '', mobile: '', personnel_number: personnelNumber, gender_id: '', department_id: null, entry_date: entryDate }
 }
 
 // Inline-Status-Optionen (Liste). Aktiv=1, Inaktiv=2.
@@ -85,7 +85,7 @@ const EMP_STATUS_OPTS: InlineOption[] = [
 // erwartet die Pflichtfelder) und überschreibt die inline geänderten Felder.
 function employeeRowToPayload(r: Employee, override: Partial<UpdateEmployeePayload>): UpdateEmployeePayload {
   return {
-    short_name:       r.SHORT_NAME,
+    abbr:       r.ABBR,
     title:            r.TITLE ?? '',
     first_name:       r.FIRST_NAME,
     last_name:        r.LAST_NAME,
@@ -560,7 +560,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const canViewAbsence = usePermission('absence.view')
   const [section,  setSection]  = useState<EmpSection>(initialSection)
   const [editForm, setEditForm] = useState<UpdateEmployeePayload>({
-    short_name:       employee.SHORT_NAME ?? '',
+    abbr:       employee.ABBR ?? '',
     title:            employee.TITLE ?? '',
     first_name:       employee.FIRST_NAME ?? '',
     last_name:        employee.LAST_NAME ?? '',
@@ -636,7 +636,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   async function submitEdit(e: React.FormEvent) {
     e.preventDefault()
     setEditMsg(null)
-    if (!editForm.short_name || !editForm.first_name || !editForm.last_name || !editForm.gender_id) {
+    if (!editForm.abbr || !editForm.first_name || !editForm.last_name || !editForm.gender_id) {
       setEditMsg({ text: 'Pflichtfelder ausfüllen', type: 'error' }); return
     }
     setSaving(true)
@@ -726,7 +726,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     { id: 'zugang',      label: 'Zugang' },
   ]
 
-  const seed = employee.SHORT_NAME || employee.LAST_NAME || 'x'
+  const seed = employee.ABBR || employee.LAST_NAME || 'x'
   const avatarHue = [...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 0)
   const avatarBg = `hsl(${avatarHue}, 50%, 45%)`
   const initials = `${employee.FIRST_NAME?.[0] ?? ''}${employee.LAST_NAME?.[0] ?? ''}`.toUpperCase() || '?'
@@ -750,7 +750,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: 14 }}>{employee.FIRST_NAME} {employee.LAST_NAME}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{employee.SHORT_NAME}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{employee.ABBR}</span>
             <span style={{
               fontSize: 11, padding: '1px 7px', borderRadius: 10, fontWeight: 500,
               background: employee.ACTIVE === 2 ? 'var(--danger-bg)' : 'var(--success-bg)',
@@ -786,7 +786,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 
       {section === 'stammdaten' && (
         <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
-          <FormField label="Kürzel*"      id="eku" value={editForm.short_name}         onChange={setE('short_name')} required />
+          <FormField label="Kürzel*"      id="eku" value={editForm.abbr}         onChange={setE('abbr')} required />
           <FormField label="Titel"        id="eti" value={editForm.title ?? ''}         onChange={setE('title')} />
           <div className="form-row">
             <FormField label="Vorname*"   id="efn" value={editForm.first_name}          onChange={setE('first_name')} required />
@@ -1189,7 +1189,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
     if (search.trim()) {
       const q = search.toLowerCase()
       rows = rows.filter(r =>
-        r.SHORT_NAME.toLowerCase().includes(q) ||
+        r.ABBR.toLowerCase().includes(q) ||
         r.FIRST_NAME.toLowerCase().includes(q) ||
         r.LAST_NAME.toLowerCase().includes(q) ||
         (r.DEPARTMENT_NAME || '').toLowerCase().includes(q)
@@ -1218,7 +1218,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
   function sortFlat(rows: EmployeeReportRow[]) {
     return [...rows].sort((a, b) => {
       let va: string | number = 0, vb: string | number = 0
-      if      (sortField === 'name')     { va = a.SHORT_NAME;      vb = b.SHORT_NAME      }
+      if      (sortField === 'name')     { va = a.ABBR;      vb = b.ABBR      }
       else if (sortField === 'dept')     { va = a.DEPARTMENT_NAME; vb = b.DEPARTMENT_NAME }
       else if (sortField === 'required') { va = a.REQUIRED;        vb = b.REQUIRED        }
       else if (sortField === 'actual')   { va = a.ACTUAL;          vb = b.ACTUAL          }
@@ -1247,10 +1247,10 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
       : ['Kürzel', 'Vorname', 'Nachname', 'Abteilung', 'Soll (h)', 'Ist (h)', 'Monatssaldo (h)', 'Laufender Saldo (h)', 'Kosten (EUR)', 'Produktivität (%)']
     const rows: (string | number)[][] = [head]
     const sorted = isPeriod
-      ? [...filtered].sort((a, b) => a.SHORT_NAME.localeCompare(b.SHORT_NAME) || a.YEAR - b.YEAR || a.MONTH - b.MONTH)
+      ? [...filtered].sort((a, b) => a.ABBR.localeCompare(b.ABBR) || a.YEAR - b.YEAR || a.MONTH - b.MONTH)
       : sortFlat(filtered)
     for (const r of sorted) {
-      const base = [r.SHORT_NAME, r.FIRST_NAME, r.LAST_NAME, r.DEPARTMENT_NAME || '']
+      const base = [r.ABBR, r.FIRST_NAME, r.LAST_NAME, r.DEPARTMENT_NAME || '']
       const prod = r.PRODUCTIVITY_PCT != null ? num(r.PRODUCTIVITY_PCT) : ''
       const cost = r.COST > 0 ? num(r.COST) : ''
       rows.push(isPeriod
@@ -1330,7 +1330,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
           onChange={e => setFilterEmpId(e.target.value ? Number(e.target.value) : null)}
         >
           <option value="">— Alle Mitarbeiter —</option>
-          {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+          {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
         </select>
       </div>
 
@@ -1398,7 +1398,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                 <tbody>
                   {sortFlat(filtered).map(r => (
                     <tr key={r.EMPLOYEE_ID}>
-                      <td><strong>{r.SHORT_NAME}</strong></td>
+                      <td><strong>{r.ABBR}</strong></td>
                       <td>{r.FIRST_NAME} {r.LAST_NAME}</td>
                       <td>{r.DEPARTMENT_NAME || '—'}</td>
                       <td className="num">{fmtH(r.REQUIRED)}</td>
@@ -1429,7 +1429,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
               byEmp.get(row.EMPLOYEE_ID)!.push(row)
             }
             const groups = [...byEmp.entries()].sort((a, b) =>
-              (a[1][0]?.SHORT_NAME ?? '').localeCompare(b[1][0]?.SHORT_NAME ?? '')
+              (a[1][0]?.ABBR ?? '').localeCompare(b[1][0]?.ABBR ?? '')
             )
             return (
               <div className="list-section table-scroll">
@@ -1463,7 +1463,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
                             <tr key={`${r.YEAR}-${r.MONTH}`}>
                               {i === 0 && (
                                 <td rowSpan={sorted.length} style={{ verticalAlign: 'top', paddingTop: 8 }}>
-                                  <strong>{r.SHORT_NAME}</strong>
+                                  <strong>{r.ABBR}</strong>
                                   <br /><span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 400 }}>{r.FIRST_NAME} {r.LAST_NAME}</span>
                                 </td>
                               )}
@@ -2122,7 +2122,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                     const dm = byEmp.get(emp.ID)
                     return (
                       <tr key={emp.ID}>
-                        <td style={{ whiteSpace: 'nowrap' }}><strong>{emp.SHORT_NAME}</strong></td>
+                        <td style={{ whiteSpace: 'nowrap' }}><strong>{emp.ABBR}</strong></td>
                         {dayList.map(day => {
                           const cell = dm?.get(day)
                           const we = [0, 6].includes(new Date(year, month - 1, day).getDay())
@@ -2174,7 +2174,7 @@ function EntitlementsBulkEditor({ employees }: { employees: Employee[] }) {
   const { data: entRes, isLoading } = useQuery({ queryKey: ['entitlements-all', year], queryFn: () => fetchAllEntitlements(year) })
 
   const active = useMemo(
-    () => employees.filter(e => e.ACTIVE !== 2).sort((a, b) => (a.SHORT_NAME || '').localeCompare(b.SHORT_NAME || '')),
+    () => employees.filter(e => e.ACTIVE !== 2).sort((a, b) => (a.ABBR || '').localeCompare(b.ABBR || '')),
     [employees])
 
   useEffect(() => {
@@ -2244,7 +2244,7 @@ function EntitlementsBulkEditor({ employees }: { employees: Employee[] }) {
               <tbody>
                 {active.map(e => (
                   <tr key={e.ID}>
-                    <td><strong>{e.SHORT_NAME}</strong> {e.FIRST_NAME} {e.LAST_NAME}</td>
+                    <td><strong>{e.ABBR}</strong> {e.FIRST_NAME} {e.LAST_NAME}</td>
                     <td className="num">
                       <input type="number" step="0.5" min="0" className="tbl-input" style={{ width: 90 }}
                         value={days[e.ID] ?? ''} onChange={ev => setDays(p => ({ ...p, [e.ID]: ev.target.value }))} />
@@ -2278,7 +2278,7 @@ function MitarbeiterPicker({ employees, selectedId, onSelect, onGoToList, placeh
   const [open, setOpen]   = useState(false)
   const acRef = useRef<HTMLDivElement>(null)
 
-  const nameOf = (e: Employee) => `${e.SHORT_NAME} – ${e.FIRST_NAME} ${e.LAST_NAME}`
+  const nameOf = (e: Employee) => `${e.ABBR} – ${e.FIRST_NAME} ${e.LAST_NAME}`
   const selectedName = useMemo(() => {
     const e = selectedId != null ? employees.find(x => x.ID === selectedId) : undefined
     return e ? nameOf(e) : ''
@@ -2288,10 +2288,10 @@ function MitarbeiterPicker({ employees, selectedId, onSelect, onGoToList, placeh
   const query = input.toLowerCase().trim()
   const isFiltering = query.length > 0 && query !== selectedName.toLowerCase()
   const filtered = useMemo(() => {
-    const list = [...employees].sort((a, b) => (a.SHORT_NAME || '').localeCompare(b.SHORT_NAME || ''))
+    const list = [...employees].sort((a, b) => (a.ABBR || '').localeCompare(b.ABBR || ''))
     if (!isFiltering) return list
     return list.filter(e =>
-      (e.SHORT_NAME || '').toLowerCase().includes(query) ||
+      (e.ABBR || '').toLowerCase().includes(query) ||
       (e.FIRST_NAME || '').toLowerCase().includes(query) ||
       (e.LAST_NAME  || '').toLowerCase().includes(query))
   }, [employees, query, isFiltering])
@@ -2327,7 +2327,7 @@ function MitarbeiterPicker({ employees, selectedId, onSelect, onGoToList, placeh
             <button key={e.ID} type="button"
               className={`project-ac-option${e.ID === selectedId ? ' active' : ''}`}
               onMouseDown={ev => { ev.preventDefault(); pick(e.ID) }}>
-              <span className="project-ac-short">{e.SHORT_NAME}</span>
+              <span className="project-ac-short">{e.ABBR}</span>
               <span className="project-ac-long">{e.FIRST_NAME} {e.LAST_NAME}{e.ACTIVE === 2 ? ' (inaktiv)' : ''}</span>
             </button>
           ))}
@@ -2521,7 +2521,7 @@ function MonthsOverviewTab() {
           {rows.map(emp => (
             <tr key={emp.ID}>
               <td style={{ whiteSpace: 'nowrap', paddingRight: 16 }}>
-                <strong>{emp.SHORT_NAME}</strong> {emp.FIRST_NAME} {emp.LAST_NAME}
+                <strong>{emp.ABBR}</strong> {emp.FIRST_NAME} {emp.LAST_NAME}
               </td>
               {emp.months.map(m => (
                 <td key={`${m.year}-${m.month}`} style={{ textAlign: 'center', padding: '4px 8px' }}>
@@ -2697,7 +2697,7 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
           onChange={e => setEmpId(e.target.value === '' ? '' : Number(e.target.value))}
           style={{ minWidth: 200, maxWidth: 240 }}>
           <option value="">— Alle Mitarbeiter —</option>
-          {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+          {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
         </select>
         <label style={{ fontSize: 12 }}>Von
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
@@ -2754,7 +2754,7 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
                 return (
                   <tr key={r.ID}>
                     <td>
-                      <strong>{emp?.SHORT_NAME ?? `#${r.EMPLOYEE_ID}`}</strong>
+                      <strong>{emp?.ABBR ?? `#${r.EMPLOYEE_ID}`}</strong>
                       {emp && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)' }}>
                         {emp.FIRST_NAME} {emp.LAST_NAME}
                       </span>}
@@ -2833,7 +2833,7 @@ export function MitarbeiterPage() {
   // bewusst gespeicherte Auswahl – auch die leere „alle" – bleibt erhalten).
   const [activeStatus, setActiveStatus] = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:status`, ['Aktiv'])))
   const [activeModel,  setActiveModel]  = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:model`, [])))
-  const [sortKey,   setSortKey]  = useState<SortKey>(() => lsGet<SortKey>(`${ML}:sortKey`, 'SHORT_NAME'))
+  const [sortKey,   setSortKey]  = useState<SortKey>(() => lsGet<SortKey>(`${ML}:sortKey`, 'ABBR'))
   const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>(() => lsGet<'asc'|'desc'>(`${ML}:sortDir`, 'asc'))
   const [page,      setPage]     = useState(1)
   const [editRow,   setEditRow]  = useState<Employee | null>(null)
@@ -2922,7 +2922,7 @@ export function MitarbeiterPage() {
     const q = search.trim().toLowerCase()
     if (q) {
       rows = rows.filter(r =>
-        [r.SHORT_NAME, r.FIRST_NAME, r.LAST_NAME, r.MAIL, r.MOBILE, r.PERSONNEL_NUMBER, r.DEPARTMENT_NAME]
+        [r.ABBR, r.FIRST_NAME, r.LAST_NAME, r.MAIL, r.MOBILE, r.PERSONNEL_NUMBER, r.DEPARTMENT_NAME]
           .map(v => String(v ?? '')).join(' ').toLowerCase().includes(q)
       )
     }
@@ -2955,7 +2955,7 @@ export function MitarbeiterPage() {
   function handleDelete(row: Employee) {
     setConfirmState({
       title: 'Mitarbeiter löschen',
-      message: `${row.SHORT_NAME}: ${row.FIRST_NAME} ${row.LAST_NAME} wirklich löschen?`,
+      message: `${row.ABBR}: ${row.FIRST_NAME} ${row.LAST_NAME} wirklich löschen?`,
       onConfirm: async () => {
         try {
           await deleteEmployee(row.ID)
@@ -2968,7 +2968,7 @@ export function MitarbeiterPage() {
   async function submitCreate(e: React.FormEvent) {
     e.preventDefault()
     setCreateMsg(null)
-    if (!form.short_name || !form.first_name || !form.last_name || !form.gender_id) {
+    if (!form.abbr || !form.first_name || !form.last_name || !form.gender_id) {
       setCreateMsg({ text: 'Kürzel, Vorname, Nachname und Geschlecht sind Pflichtfelder', type: 'error' }); return
     }
     if (!createWmModelId || !createWmValidFrom) {
@@ -3090,7 +3090,7 @@ export function MitarbeiterPage() {
                 <table className="master-table">
                   <thead>
                     <tr>
-                      <SortTh label="Kürzel"      column="SHORT_NAME"       {...sortProps} />
+                      <SortTh label="Kürzel"      column="ABBR"       {...sortProps} />
                       <SortTh label="Vorname"     column="FIRST_NAME"       {...sortProps} />
                       <SortTh label="Nachname"    column="LAST_NAME"        {...sortProps} />
                       <SortTh label="Personalnr." column="PERSONNEL_NUMBER" {...sortProps} />
@@ -3109,7 +3109,7 @@ export function MitarbeiterPage() {
                   <tbody>
                     {pageRows.map(r => (
                       <tr key={r.ID} className="clickable-row" onClick={() => { setEditInitialSection('stammdaten'); setEditRow(r) }}>
-                        <td>{r.SHORT_NAME}</td>
+                        <td>{r.ABBR}</td>
                         <td>{r.FIRST_NAME}</td>
                         <td>{r.LAST_NAME}</td>
                         <td className="cell-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -3208,7 +3208,7 @@ export function MitarbeiterPage() {
         )}
       </div>
 
-      <Modal open={editRow !== null} onClose={() => setEditRow(null)} title={`${editRow?.SHORT_NAME ?? ''} – ${editRow?.FIRST_NAME ?? ''} ${editRow?.LAST_NAME ?? ''}`}>
+      <Modal open={editRow !== null} onClose={() => setEditRow(null)} title={`${editRow?.ABBR ?? ''} – ${editRow?.FIRST_NAME ?? ''} ${editRow?.LAST_NAME ?? ''}`}>
         {editRow && (
           <EmployeeEditModal
             employee={editRow}
@@ -3225,7 +3225,7 @@ export function MitarbeiterPage() {
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Neuer Mitarbeiter">
         <form ref={createFormRef} onSubmit={submitCreate} className="master-form">
-          <FormField label="Kürzel*"     id="mku" value={form.short_name}          onChange={setF('short_name')} required />
+          <FormField label="Kürzel*"     id="mku" value={form.abbr}          onChange={setF('abbr')} required />
           <FormField label="Titel"       id="mti" value={form.title ?? ''}          onChange={setF('title')} />
           <div className="form-row">
             <FormField label="Vorname*"  id="mfn" value={form.first_name}          onChange={setF('first_name')} required />

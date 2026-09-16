@@ -564,9 +564,9 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   let employee = null;
   let employeeSalutation = null;
 
-  const { data: emp1, error: empErr1 } = await supabase.from("EMPLOYEE").select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE, SALUTATION_ID").eq("ID", empId).eq("TENANT_ID", tenantId).maybeSingle();
+  const { data: emp1, error: empErr1 } = await supabase.from("EMPLOYEE").select("ID, FIRST_NAME, LAST_NAME, ABBR, MAIL, MOBILE, SALUTATION_ID").eq("ID", empId).eq("TENANT_ID", tenantId).maybeSingle();
   if (empErr1) {
-    const { data: emp2, error: empErr2 } = await supabase.from("EMPLOYEE").select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE").eq("ID", empId).eq("TENANT_ID", tenantId).maybeSingle();
+    const { data: emp2, error: empErr2 } = await supabase.from("EMPLOYEE").select("ID, FIRST_NAME, LAST_NAME, ABBR, MAIL, MOBILE").eq("ID", empId).eq("TENANT_ID", tenantId).maybeSingle();
     if (empErr2 || !emp2) throw { status: 500, message: `Mitarbeiter konnte nicht geladen werden: ${empErr2?.message || empErr1.message || "unbekannter Fehler"}` };
     employee = emp2;
   } else {
@@ -658,7 +658,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     COMPANY_TAX_NUMBER: company.TAX_NUMBER ?? null,
     COMPANY_IBAN: company.IBAN ?? null,
     "COMPANY_CREDITOR-ID": company["CREDITOR-ID"] ?? null,
-    EMPLOYEE: `${employee.SHORT_NAME ?? ""}: ${(employee.FIRST_NAME ?? "").trim()} ${(employee.LAST_NAME ?? "").trim()}`.trim(),
+    EMPLOYEE: `${employee.ABBR ?? ""}: ${(employee.FIRST_NAME ?? "").trim()} ${(employee.LAST_NAME ?? "").trim()}`.trim(),
     EMPLOYEE_SALUTATION: employeeSalutation,
     EMPLOYEE_MAIL: employee.MAIL ?? null,
     EMPLOYEE_PHONE: employee.MOBILE ?? null,

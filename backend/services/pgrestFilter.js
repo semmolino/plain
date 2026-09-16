@@ -6,7 +6,7 @@
  * DAS PROBLEM
  *   PostgREST liest den .or()-Ausdruck als STRUKTUR, nicht als Wert:
  *
- *       .or(`SHORT_NAME.ilike.%${q}%,FIRST_NAME.ilike.%${q}%`)
+ *       .or(`ABBR.ilike.%${q}%,FIRST_NAME.ilike.%${q}%`)
  *
  *   Ein Komma in q erweitert damit die Bedingung. Mit
  *

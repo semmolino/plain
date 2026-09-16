@@ -51,7 +51,7 @@ const hash = (pw) => bcrypt.hashSync(pw, 4); // niedrige Runden: Testlaufzeit
 
 function mitarbeiter(over = {}) {
   return {
-    ID: 1, SHORT_NAME: "AB", FIRST_NAME: "Anna", LAST_NAME: "Beispiel",
+    ID: 1, ABBR: "AB", FIRST_NAME: "Anna", LAST_NAME: "Beispiel",
     PASSWORD: hash("geheim-1234"), TENANT_ID: 1, MAIL: "anna@buero.de",
     ACTIVE: 1, DASHBOARD_ROLE: null, ...over,
   };

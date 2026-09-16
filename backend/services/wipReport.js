@@ -473,13 +473,13 @@ async function resolveEmployeeName(supabase, tenantId, employeeId) {
   try {
     const { data } = await supabase
       .from("EMPLOYEE")
-      .select("SHORT_NAME, FIRST_NAME, LAST_NAME")
+      .select("ABBR, FIRST_NAME, LAST_NAME")
       .eq("TENANT_ID", tenantId)
       .eq("ID", employeeId)
       .maybeSingle();
     if (!data) return null;
     const full = [data.FIRST_NAME, data.LAST_NAME].filter(Boolean).join(" ");
-    return full || data.SHORT_NAME || null;
+    return full || data.ABBR || null;
   } catch (_) {
     return null;
   }

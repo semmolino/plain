@@ -211,7 +211,7 @@ module.exports = (supabase) => {
     // eintippte. Von aussen sah das aus, als sei das Passwort nicht angekommen.
     const { data: kandidaten, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, PASSWORD, TENANT_ID, MAIL, ACTIVE, DASHBOARD_ROLE")
+      .select("ID, ABBR, FIRST_NAME, LAST_NAME, PASSWORD, TENANT_ID, MAIL, ACTIVE, DASHBOARD_ROLE")
       .ilike("MAIL", likeEscape(email.trim()))
       .limit(20);
 
@@ -300,7 +300,7 @@ module.exports = (supabase) => {
       employee_id: employee.ID,
       tenant_id:   tenantId,
       email:       employee.MAIL,
-      short_name:  employee.SHORT_NAME,
+      abbr:  employee.ABBR,
     });
 
     let companyName = null;
@@ -317,7 +317,7 @@ module.exports = (supabase) => {
       employee_id:    employee.ID,
       tenant_id:      tenantId,
       email:          employee.MAIL,
-      short_name:     employee.SHORT_NAME,
+      abbr:     employee.ABBR,
       company_name:   companyName,
       dashboard_role: employee.DASHBOARD_ROLE ?? null,
     });
@@ -340,7 +340,7 @@ module.exports = (supabase) => {
 
     const { data: employee } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, MAIL, TENANT_ID")
+      .select("ID, ABBR, MAIL, TENANT_ID")
       .eq("ID", decoded.employee_id)
       .eq("TENANT_ID", decoded.tenant_id)
       .maybeSingle();
@@ -360,7 +360,7 @@ module.exports = (supabase) => {
       employee_id:  employee.ID,
       tenant_id:    employee.TENANT_ID,
       email:        employee.MAIL,
-      short_name:   employee.SHORT_NAME,
+      abbr:   employee.ABBR,
       company_name: companyName,
     });
   });
@@ -632,7 +632,7 @@ module.exports = (supabase) => {
       const { data: emp, error: empErr } = await supabase.from("EMPLOYEE").insert([{
         MAIL:       email,
         PASSWORD:   hashedPw,
-        SHORT_NAME: shortName.trim().toUpperCase(),
+        ABBR: shortName.trim().toUpperCase(),
         FIRST_NAME: "Administrator",
         LAST_NAME:  "",
         TENANT_ID:  tenantId,

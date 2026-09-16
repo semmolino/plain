@@ -53,7 +53,7 @@ async function getTypes(supabase, { tenantId }) {
 async function getManagers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from("EMPLOYEE")
-    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+    .select("ID, ABBR, FIRST_NAME, LAST_NAME")
     .eq("TENANT_ID", tenantId);
   if (error) throw error;
   return data;
@@ -62,7 +62,7 @@ async function getManagers(supabase, { tenantId }) {
 async function getActiveEmployees(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from("EMPLOYEE")
-    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, ACTIVE")
+    .select("ID, ABBR, FIRST_NAME, LAST_NAME, ACTIVE")
     .eq("TENANT_ID", tenantId)
     .or("ACTIVE.eq.1,ACTIVE.is.null");
   if (error) throw error;
@@ -346,7 +346,7 @@ async function listProjects(supabase, { tenantId }) {
         ID, NAME_SHORT, NAME_LONG,
         STATUS:PROJECT_STATUS_ID(NAME_SHORT),
         TYPE:PROJECT_TYPE_ID(NAME_SHORT),
-        MANAGER:PROJECT_MANAGER_ID(SHORT_NAME)
+        MANAGER:PROJECT_MANAGER_ID(ABBR)
       `)
       .eq("TENANT_ID", tenantId);
     if (error) throw error;
@@ -384,7 +384,7 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
   const [stRes, tyRes, mgRes, addrRes, ctctRes, deptRes] = await Promise.all([
     statusIds.length ? supabase.from("PROJECT_STATUS").select("ID, NAME_SHORT").in("ID", statusIds) : Promise.resolve({ data: [] }),
     typeIds.length   ? supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT").in("ID", typeIds)     : Promise.resolve({ data: [] }),
-    mgrIds.length    ? supabase.from("EMPLOYEE").select("ID, SHORT_NAME").in("ID", mgrIds)          : Promise.resolve({ data: [] }),
+    mgrIds.length    ? supabase.from("EMPLOYEE").select("ID, ABBR").in("ID", mgrIds)          : Promise.resolve({ data: [] }),
     addrIds.length   ? supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").in("ID", addrIds)      : Promise.resolve({ data: [] }),
     ctctIds.length   ? supabase.from("CONTACTS").select("ID, FIRST_NAME, LAST_NAME").in("ID", ctctIds) : Promise.resolve({ data: [] }),
     deptIds.length   ? supabase.from("DEPARTMENT").select("ID, NAME_SHORT").in("ID", deptIds)       : Promise.resolve({ data: [] }),
@@ -392,7 +392,7 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
 
   const statusMap  = new Map((stRes.data  || []).map((x) => [String(x.ID), x.NAME_SHORT]));
   const typeMap    = new Map((tyRes.data  || []).map((x) => [String(x.ID), x.NAME_SHORT]));
-  const mgrMap     = new Map((mgRes.data  || []).map((x) => [String(x.ID), x.SHORT_NAME]));
+  const mgrMap     = new Map((mgRes.data  || []).map((x) => [String(x.ID), x.ABBR]));
   const addressMap = new Map((addrRes.data || []).map((x) => [String(x.ID), x.ADDRESS_NAME_1]));
   const contactMap = new Map((ctctRes.data || []).map((x) => [String(x.ID), `${x.FIRST_NAME || ""} ${x.LAST_NAME || ""}`.trim()]));
   const deptMap    = new Map((deptRes.data || []).map((x) => [String(x.ID), x.NAME_SHORT]));
@@ -488,7 +488,7 @@ async function patchProject(supabase, { id, body, tenantId }) {
       ? supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT").eq("ID", updated.PROJECT_TYPE_ID).single()
       : Promise.resolve({ data: null }),
     updated.PROJECT_MANAGER_ID
-      ? supabase.from("EMPLOYEE").select("ID, SHORT_NAME").eq("ID", updated.PROJECT_MANAGER_ID).single()
+      ? supabase.from("EMPLOYEE").select("ID, ABBR").eq("ID", updated.PROJECT_MANAGER_ID).single()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -496,7 +496,7 @@ async function patchProject(supabase, { id, body, tenantId }) {
     ...updated,
     STATUS_NAME: st.data?.NAME_SHORT || "",
     TYPE_NAME: ty.data?.NAME_SHORT || "",
-    MANAGER_NAME: mg.data?.SHORT_NAME || "",
+    MANAGER_NAME: mg.data?.ABBR || "",
   };
 }
 

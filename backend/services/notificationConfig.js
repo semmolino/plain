@@ -158,14 +158,14 @@ async function previewAudience(supabase, tenantId, typeKey, body) {
 
   const { data } = await supabase
     .from('EMPLOYEE')
-    .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME')
+    .select('ID, ABBR, FIRST_NAME, LAST_NAME')
     .eq('TENANT_ID', tenantId)
     .in('ID', Array.from(ids));
 
   const recipients = (data || [])
     .map(e => ({
       id:   Number(e.ID),
-      name: e.SHORT_NAME || [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(' ') || `#${e.ID}`,
+      name: e.ABBR || [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(' ') || `#${e.ID}`,
     }))
     .sort((a, b2) => a.name.localeCompare(b2.name, 'de'));
 

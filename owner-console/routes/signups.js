@@ -67,7 +67,7 @@ router.get("/signups", async (_req, res) => {
   const ids = tenants.map((t) => t.ID);
   const { data: emps } = await supabase
     .from("EMPLOYEE")
-    .select("ID, TENANT_ID, MAIL, SHORT_NAME")
+    .select("ID, TENANT_ID, MAIL, ABBR")
     .in("TENANT_ID", ids)
     .order("ID", { ascending: true });
 
@@ -80,7 +80,7 @@ router.get("/signups", async (_req, res) => {
       FIRMA: t.TENANT || null,
       STATE: t.SIGNUP_STATE,
       EMAIL: erster.get(t.ID)?.MAIL ?? null,
-      KUERZEL: erster.get(t.ID)?.SHORT_NAME ?? null,
+      KUERZEL: erster.get(t.ID)?.ABBR ?? null,
       ANGELEGT_AM: t.created_at,
       EMAIL_BESTAETIGT_AM: t.EMAIL_CONFIRMED_AT ?? null,
     })),

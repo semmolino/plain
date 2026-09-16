@@ -10,10 +10,10 @@ const { suchwert } = require("../services/pgrestFilter");
 
 // Returns an error message string if a duplicate is found, otherwise null.
 // excludeId: skip this employee ID (used on update to ignore self).
-async function checkEmployeeDuplicates(supabase, tenantId, { short_name, personnel_number, email }, excludeId = null) {
+async function checkEmployeeDuplicates(supabase, tenantId, { abbr, personnel_number, email }, excludeId = null) {
   let q = supabase
     .from("EMPLOYEE")
-    .select("ID, SHORT_NAME, PERSONNEL_NUMBER, MAIL")
+    .select("ID, ABBR, PERSONNEL_NUMBER, MAIL")
     .eq("TENANT_ID", tenantId);
 
   if (excludeId != null) q = q.neq("ID", excludeId);
@@ -22,8 +22,8 @@ async function checkEmployeeDuplicates(supabase, tenantId, { short_name, personn
   if (error) return null; // don't block on lookup failure
 
   for (const emp of data || []) {
-    if (short_name && emp.SHORT_NAME && emp.SHORT_NAME.toLowerCase() === short_name.toLowerCase())
-      return `Kürzel „${short_name}" wird bereits von einem anderen Mitarbeiter verwendet.`;
+    if (abbr && emp.ABBR && emp.ABBR.toLowerCase() === abbr.toLowerCase())
+      return `Kürzel „${abbr}" wird bereits von einem anderen Mitarbeiter verwendet.`;
     if (personnel_number && emp.PERSONNEL_NUMBER && String(emp.PERSONNEL_NUMBER) === String(personnel_number))
       return `Personalnummer „${personnel_number}" wird bereits von einem anderen Mitarbeiter verwendet.`;
     if (email && emp.MAIL && emp.MAIL.toLowerCase() === email.toLowerCase())
@@ -94,7 +94,7 @@ module.exports = (supabase) => {
   router.get("/me", async (req, res) => {
     const { data, error } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE, DASHBOARD_ROLE")
+      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE, DASHBOARD_ROLE")
       .eq("ID", req.employeeId)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
@@ -280,13 +280,13 @@ module.exports = (supabase) => {
   // POST /api/mitarbeiter
   router.post("/", requirePermission("employees.create"), enforceLimit(supabase, "limits.employees"), async (req, res) => {
     const body = req.body;
-    if (!body.short_name || !body.first_name || !body.last_name || !body.gender_id) {
+    if (!body.abbr || !body.first_name || !body.last_name || !body.gender_id) {
       return res.status(400).json({ error: "Pflichtfelder fehlen" });
     }
 
     // Uniqueness check within tenant
     const dupConflict = await checkEmployeeDuplicates(supabase, req.tenantId, {
-      short_name: body.short_name,
+      abbr: body.abbr,
       personnel_number: body.personnel_number,
       email: body.email,
     });
@@ -300,7 +300,7 @@ module.exports = (supabase) => {
     const { data, error } = await supabase
       .from("EMPLOYEE")
       .insert([{
-        "SHORT_NAME": body.short_name,
+        "ABBR": body.abbr,
         "TITLE": body.title,
         "FIRST_NAME": body.first_name,
         "LAST_NAME": body.last_name,
@@ -315,7 +315,7 @@ module.exports = (supabase) => {
         "ACTIVE": 1,
         "TENANT_ID": req.tenantId ?? null,
       }])
-      .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, MAIL, GENDER_ID, ACTIVE")
+      .select("ID, ABBR, FIRST_NAME, LAST_NAME, MAIL, GENDER_ID, ACTIVE")
       .single();
 
     if (error) {
@@ -447,9 +447,9 @@ module.exports = (supabase) => {
 router.get("/", async (req, res) => {
   const { data, error } = await supabase
     .from("EMPLOYEE")
-    .select("ID, SHORT_NAME")
+    .select("ID, ABBR")
     .eq("TENANT_ID", req.tenantId)
-    .order("SHORT_NAME", { ascending: true });
+    .order("ABBR", { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
@@ -464,9 +464,9 @@ router.get("/", async (req, res) => {
 
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ENTRY_DATE, EXIT_DATE, ACTIVE, DASHBOARD_ROLE")
+      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ENTRY_DATE, EXIT_DATE, ACTIVE, DASHBOARD_ROLE")
       .eq("TENANT_ID", req.tenantId)
-      .order("SHORT_NAME", { ascending: true })
+      .order("ABBR", { ascending: true })
       .limit(limit);
 
     if (empErr) return res.status(500).json({ error: empErr.message });
@@ -531,13 +531,13 @@ router.get("/", async (req, res) => {
     const id = req.params.id;
     const body = req.body || {};
 
-    if (!body.short_name || !body.first_name || !body.last_name || !body.gender_id) {
+    if (!body.abbr || !body.first_name || !body.last_name || !body.gender_id) {
       return res.status(400).json({ error: "Pflichtfelder fehlen" });
     }
 
     // Uniqueness check within tenant (exclude current employee)
     const dupConflict = await checkEmployeeDuplicates(supabase, req.tenantId, {
-      short_name: body.short_name,
+      abbr: body.abbr,
       personnel_number: body.personnel_number,
       email: body.mail,
     }, Number(id));
@@ -545,7 +545,7 @@ router.get("/", async (req, res) => {
 
 
     const updateObj = {
-      SHORT_NAME:       body.short_name,
+      ABBR:       body.abbr,
       TITLE:            body.title || null,
       FIRST_NAME:       body.first_name,
       LAST_NAME:        body.last_name,
@@ -565,7 +565,7 @@ router.get("/", async (req, res) => {
       .update(updateObj)
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
-      .select("ID, SHORT_NAME, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DASHBOARD_ROLE")
+      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DASHBOARD_ROLE")
       .single();
 
     if (updErr) return res.status(500).json({ error: updErr.message });
@@ -589,10 +589,10 @@ router.get("/", async (req, res) => {
 router.get("/month-close-overview", requirePermission("employees.bookings.view_all"), async (req, res) => {
   const { data: employees, error: empErr } = await supabase
     .from("EMPLOYEE")
-    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+    .select("ID, ABBR, FIRST_NAME, LAST_NAME")
     .eq("TENANT_ID", req.tenantId)
     .neq("ACTIVE", 2)
-    .order("SHORT_NAME", { ascending: true });
+    .order("ABBR", { ascending: true });
   if (empErr) return res.status(500).json({ error: empErr.message });
 
   // Rolling last 6 months (oldest first)
@@ -626,7 +626,7 @@ router.get("/month-close-overview", requirePermission("employees.bookings.view_a
   res.json({ data, months });
 });
 
-// Search EMPLOYEE by SHORT_NAME / FIRST_NAME / LAST_NAME
+// Search EMPLOYEE by ABBR / FIRST_NAME / LAST_NAME
 // GET /api/mitarbeiter/search?q=...
 router.get("/search", async (req, res) => {
   const q = (req.query.q || "").toString().trim();
@@ -638,10 +638,10 @@ router.get("/search", async (req, res) => {
 
   const { data, error } = await supabase
     .from("EMPLOYEE")
-    .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+    .select("ID, ABBR, FIRST_NAME, LAST_NAME")
     .eq("TENANT_ID", req.tenantId)
-    .or(`SHORT_NAME.ilike.%${sq}%,FIRST_NAME.ilike.%${sq}%,LAST_NAME.ilike.%${sq}%`)
-    .order("SHORT_NAME", { ascending: true })
+    .or(`ABBR.ilike.%${sq}%,FIRST_NAME.ilike.%${sq}%,LAST_NAME.ilike.%${sq}%`)
+    .order("ABBR", { ascending: true })
     .limit(20);
 
   if (error) return res.status(500).json({ error: error.message });

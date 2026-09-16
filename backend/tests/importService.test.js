@@ -211,7 +211,7 @@ function makeEmpCtx() {
 describe("buildAutoMapping (employee)", () => {
   it("maps employee headers and aliases", () => {
     const map = buildAutoMapping(["Kürzel", "Vorname", "Nachname", "Geschlecht", "E-Mail", "Personalnummer"], "employee");
-    expect(map.short_name).toBe("Kürzel");
+    expect(map.abbr).toBe("Kürzel");
     expect(map.first_name).toBe("Vorname");
     expect(map.gender).toBe("Geschlecht");
     expect(map.email).toBe("E-Mail");
@@ -223,7 +223,7 @@ describe("buildEmployeeEntry", () => {
   const ctx = makeEmpCtx();
 
   it("accepts a valid row and resolves gender + date", () => {
-    const e = buildEmployeeEntry({ short_name: "MMu", first_name: "Maria", last_name: "Muster", gender: "weiblich", entry_date: "01.03.2022" }, ctx);
+    const e = buildEmployeeEntry({ abbr: "MMu", first_name: "Maria", last_name: "Muster", gender: "weiblich", entry_date: "01.03.2022" }, ctx);
     expect(e.ok).toBe(true);
     expect(e.dbRow.GENDER_ID).toBe(1);
     expect(e.dbRow.ENTRY_DATE).toBe("2022-03-01");
@@ -232,24 +232,24 @@ describe("buildEmployeeEntry", () => {
   });
 
   it("defaults gender when blank (neutral default present)", () => {
-    const e = buildEmployeeEntry({ short_name: "X", first_name: "A", last_name: "B", gender: "" }, ctx);
+    const e = buildEmployeeEntry({ abbr: "X", first_name: "A", last_name: "B", gender: "" }, ctx);
     expect(e.ok).toBe(true);
     expect(e.dbRow.GENDER_ID).toBe(3);
   });
 
   it("flags missing required fields", () => {
-    const e = buildEmployeeEntry({ short_name: "", first_name: "", last_name: "B", gender: "w" }, ctx);
+    const e = buildEmployeeEntry({ abbr: "", first_name: "", last_name: "B", gender: "w" }, ctx);
     expect(e.ok).toBe(false);
     expect(e.messages.filter(m => m.level === "error").length).toBeGreaterThanOrEqual(2);
   });
 
   it("flags an unknown gender", () => {
-    const e = buildEmployeeEntry({ short_name: "Y", first_name: "A", last_name: "B", gender: "Hamster" }, ctx);
+    const e = buildEmployeeEntry({ abbr: "Y", first_name: "A", last_name: "B", gender: "Hamster" }, ctx);
     expect(e.ok).toBe(false);
   });
 
   it("warns (not errors) on invalid date and bad email", () => {
-    const e = buildEmployeeEntry({ short_name: "Z", first_name: "A", last_name: "B", gender: "m", email: "noatsign", entry_date: "kaputt" }, ctx);
+    const e = buildEmployeeEntry({ abbr: "Z", first_name: "A", last_name: "B", gender: "m", email: "noatsign", entry_date: "kaputt" }, ctx);
     expect(e.ok).toBe(true);
     expect(e.messages.some(m => m.level === "warn")).toBe(true);
   });
@@ -267,7 +267,7 @@ describe("buildPreview (employee, multi-key dedup)", () => {
     return buildPreview({ domainKey: "employee", parsed, mapping: null, ctx });
   }
 
-  it("detects duplicates by mail OR short_name, plus in-file", () => {
+  it("detects duplicates by mail OR abbr, plus in-file", () => {
     const pv = preview([
       ["NEU", "A", "B", "w", "neu@buero.de"],   // ok
       ["XYZ", "C", "D", "m", "alt@buero.de"],   // duplicate (existing mail)

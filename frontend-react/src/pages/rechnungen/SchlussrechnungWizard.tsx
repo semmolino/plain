@@ -570,7 +570,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
             <label>Mitarbeiter*</label>
             <select value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
               <option value="">Bitte wählen …</option>
-              {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+              {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
             </select>
           </div>
           <Message text={msg?.text ?? null} type={msg?.type} />

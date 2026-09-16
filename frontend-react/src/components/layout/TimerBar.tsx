@@ -105,7 +105,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
     const emp = employees.find(e => e.ID === employeeId)
     const session: TimerSession = {
       employeeId,
-      employeeName: emp ? `${emp.SHORT_NAME}` : String(employeeId),
+      employeeName: emp ? `${emp.ABBR}` : String(employeeId),
       cpRate: Number(cpRate) || 0,
       projectId,
       projectName: projectMap[projectId] ?? String(projectId),
@@ -134,7 +134,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
               setEmployeeId(e.target.value ? Number(e.target.value) : null)
             }}>
               <option value="">— Mitarbeiter wählen —</option>
-              {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+              {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
             </select>
           </div>
 

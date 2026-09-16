@@ -402,7 +402,7 @@ async function buildRunningBalances(supabase, tenantId, empIds, upToDate) {
 /**
  * Build a flat list of (employee × month) rows for the employee list report.
  * mode: 'now' | 'as_of' | 'period'
- * Returns [{ EMPLOYEE_ID, SHORT_NAME, FIRST_NAME, LAST_NAME, DEPARTMENT_NAME,
+ * Returns [{ EMPLOYEE_ID, ABBR, FIRST_NAME, LAST_NAME, DEPARTMENT_NAME,
  *            YEAR, MONTH, REQUIRED, ACTUAL, BALANCE, HOURS_EXT, COST }]
  */
 async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dateFrom, dateTo, employeeId }) {
@@ -440,9 +440,9 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
   // hart filtern, fehlten sie auch ohne gesetzten Filter.
   let empQ = supabase
     .from('EMPLOYEE')
-    .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME, DEPARTMENT_ID')
+    .select('ID, ABBR, FIRST_NAME, LAST_NAME, DEPARTMENT_ID')
     .eq('TENANT_ID', tenantId)
-    .order('SHORT_NAME', { ascending: true });
+    .order('ABBR', { ascending: true });
   if (employeeId) empQ = empQ.eq('ID', employeeId);
   const { data: employees, error: empErr } = await empQ;
   if (empErr) throw { status: 500, message: empErr.message };
@@ -597,7 +597,7 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
       const productivityPct = totalHours > 0 ? Math.round((productiveHours / totalHours) * 1000) / 10 : null;
       result.push({
         EMPLOYEE_ID:     emp.ID,
-        SHORT_NAME:      emp.SHORT_NAME,
+        ABBR:      emp.ABBR,
         FIRST_NAME:      emp.FIRST_NAME,
         LAST_NAME:       emp.LAST_NAME,
         DEPARTMENT_NAME: deptMap.get(emp.DEPARTMENT_ID) || '',

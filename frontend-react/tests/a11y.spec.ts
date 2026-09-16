@@ -27,7 +27,7 @@ async function mockLoggedIn(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [] }) }))
   await page.route('/api/v1/auth/me', route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-      employee_id: 1, tenant_id: 1, email: 'test@plain.de', short_name: 'TEST', company_name: 'Test GmbH',
+      employee_id: 1, tenant_id: 1, email: 'test@plain.de', abbr: 'TEST', company_name: 'Test GmbH',
     }) }))
   await page.route('/api/v1/permissions/me', route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ keys: [], unrestricted: true }) }))

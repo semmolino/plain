@@ -45,7 +45,7 @@ describe("buildTemplate", () => {
     GENDER: [{ GENDER: "weiblich" }, { GENDER: "männlich" }],
     PROJECT_STATUS: [{ NAME_SHORT: "in Bearbeitung" }, { NAME_SHORT: "abgeschlossen" }],
     PROJECT_TYPE: [{ TENANT_ID: TENANT, NAME_SHORT: "Neubau" }],
-    EMPLOYEE: [{ TENANT_ID: TENANT, SHORT_NAME: "MMu" }, { TENANT_ID: TENANT, SHORT_NAME: "TBe" }],
+    EMPLOYEE: [{ TENANT_ID: TENANT, ABBR: "MMu" }, { TENANT_ID: TENANT, ABBR: "TBe" }],
     ADDRESS: [{ TENANT_ID: TENANT, ADDRESS_NAME_1: "Stadt Musterhausen" }],
   });
 

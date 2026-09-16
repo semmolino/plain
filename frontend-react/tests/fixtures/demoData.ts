@@ -149,9 +149,9 @@ const contacts = [
 }))
 
 /** Deckt die verschiedenen Namensfelder der Stammdaten-Typen ab —
- *  ProjectManager nutzt SHORT_NAME, Status/Typ/Abteilung NAME_SHORT. */
+ *  ProjectManager nutzt ABBR, Status/Typ/Abteilung NAME_SHORT. */
 const named = (n: string[]) => n.map((name, i) => ({
-  ID: i + 1, NAME: name, NAME_SHORT: name, NAME_LONG: name, SHORT_NAME: name,
+  ID: i + 1, NAME: name, NAME_SHORT: name, NAME_LONG: name, ABBR: name,
 }))
 
 /**
@@ -184,7 +184,7 @@ export async function mockDemo(page: Page) {
   // WICHTIG: alle Muster auf /api/v1/ verankern. Ein loses /\/adressen/ faengt
   // sonst auch die Seiten-Navigation ab und liefert JSON statt der App.
   const routes: Array<[string, unknown]> = [
-    ['auth/me',              { employee_id: 1, tenant_id: 1, email: 'simon@buero.de', short_name: 'SM', company_name: 'Messina Architekten GmbH' }],
+    ['auth/me',              { employee_id: 1, tenant_id: 1, email: 'simon@buero.de', abbr: 'SM', company_name: 'Messina Architekten GmbH' }],
     ['permissions/me',       { keys: [], unrestricted: true }],
     ['license/me',           { unrestricted: true, plan_id: null, state: null, capabilities: [], limits: {} }],
     ['projekte/list',        { data: projects }],

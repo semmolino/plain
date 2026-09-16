@@ -200,10 +200,10 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
   // Fetch employees — use or() to include rows where ACTIVE IS NULL (neq alone excludes NULLs in PostgREST)
   let empQ = supabase
     .from('EMPLOYEE')
-    .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME')
+    .select('ID, ABBR, FIRST_NAME, LAST_NAME')
     .eq('TENANT_ID', tenantId)
     .or('ACTIVE.is.null,ACTIVE.neq.2')
-    .order('SHORT_NAME');
+    .order('ABBR');
   if (employeeIds && employeeIds.length) empQ = empQ.in('ID', employeeIds);
   const { data: employees, error: empErr } = await empQ;
   if (empErr) throw { status: 500, message: empErr.message };
@@ -262,7 +262,7 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
 
     return {
       employee_id:      emp.ID,
-      short_name:       emp.SHORT_NAME,
+      abbr:       emp.ABBR,
       first_name:       emp.FIRST_NAME,
       last_name:        emp.LAST_NAME,
       current_cp_rate:  currentRateMap.has(emp.ID) ? currentRateMap.get(emp.ID) : null,

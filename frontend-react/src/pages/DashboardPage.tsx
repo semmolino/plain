@@ -1559,7 +1559,7 @@ function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: Te
   const topEmps = employees.slice(0, 6)
 
   const datasets = topEmps.map((emp, i) => ({
-    label:           emp.short_name,
+    label:           emp.abbr,
     data:            emp.months.map(m => m.hours),
     backgroundColor: colors[i % colors.length],
     borderRadius:    3,
@@ -1628,7 +1628,7 @@ function PersonalView({ teamHours, snapshot, dateFrom, dateTo }: { teamHours: Te
           <tbody>
             {employees.map(emp => (
               <tr key={emp.employee_id}>
-                <td>{emp.short_name}</td>
+                <td>{emp.abbr}</td>
                 {emp.months.map(m => (
                   <td key={m.month} className="num col-hide-mobile">
                     {m.hours > 0 ? fmtH(m.hours) : <span style={{ color: 'var(--text-3)' }}>—</span>}

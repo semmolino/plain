@@ -49,7 +49,7 @@ async function mockLoggedIn(page: Page) {
         employee_id:  1,
         tenant_id:    1,
         email:        'simon@plain.de',
-        short_name:   'SM',
+        abbr:   'SM',
         company_name: 'Architekturbüro Muster GmbH',
       }),
     })

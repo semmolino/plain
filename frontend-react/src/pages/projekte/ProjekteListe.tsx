@@ -124,7 +124,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   const canEdit = usePermission('projects.edit')
   const statusOpts:  InlineOption[] = useMemo(() => statuses.map(s    => ({ value: String(s.ID), label: s.NAME_SHORT })), [statuses])
   const typeOpts:    InlineOption[] = useMemo(() => types.map(t       => ({ value: String(t.ID), label: t.NAME_SHORT })), [types])
-  const managerOpts: InlineOption[] = useMemo(() => managers.map(m    => ({ value: String(m.ID), label: m.SHORT_NAME })), [managers])
+  const managerOpts: InlineOption[] = useMemo(() => managers.map(m    => ({ value: String(m.ID), label: m.ABBR })), [managers])
   const deptOpts:    InlineOption[] = useMemo(() => departments.map(d => ({ value: String(d.ID), label: d.NAME_SHORT })), [departments])
 
   const inlineMut = useMutation({
@@ -698,7 +698,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
               <label>Projektleitung</label>
               <select value={editForm.project_manager_id} onChange={setE('project_manager_id')}>
                 <option value="">—</option>
-                {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
+                {managers.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}</option>)}
               </select>
             </div>
             <div className="form-group">

@@ -149,12 +149,12 @@ async function checkContact(supabase, { tenantId, id }) {
 async function checkEmployee(supabase, { tenantId, id }) {
   const { data: emp } = await supabase
     .from("EMPLOYEE")
-    .select("SHORT_NAME, FIRST_NAME, LAST_NAME")
+    .select("ABBR, FIRST_NAME, LAST_NAME")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
   const name = emp
-    ? `${emp.SHORT_NAME || ""}${emp.SHORT_NAME && (emp.FIRST_NAME || emp.LAST_NAME) ? " — " : ""}${(emp.FIRST_NAME || "")} ${emp.LAST_NAME || ""}`.trim()
+    ? `${emp.ABBR || ""}${emp.ABBR && (emp.FIRST_NAME || emp.LAST_NAME) ? " — " : ""}${(emp.FIRST_NAME || "")} ${emp.LAST_NAME || ""}`.trim()
     : `#${id}`;
   const entityLabel = `Mitarbeiter:in „${name}"`;
 
@@ -412,12 +412,12 @@ async function checkRole(supabase, { tenantId, id }) {
   const { data: r } = await supabase.from("ROLE").select("NAME_SHORT").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   const entityLabel = `Projekt-Rolle „${r?.NAME_SHORT || `#${id}`}"`;
   const [employees, e2p] = await Promise.all([
-    safeReferences(supabase, "EMPLOYEE",         "ID, SHORT_NAME", { ROLE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "EMPLOYEE",         "ID, ABBR", { ROLE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE2PROJECT", "ID",             { ROLE_ID: id, TENANT_ID: tenantId }),
   ]);
   const refs = [];
   if (employees.length > 0) {
-    const blk = formatRefBlock("employees", employees, e => e.SHORT_NAME || `#${e.ID}`);
+    const blk = formatRefBlock("employees", employees, e => e.ABBR || `#${e.ID}`);
     refs.push({ ...blk, label: blk.count === 1 ? "Mitarbeiter:in" : "Mitarbeiter:innen" });
   }
   if (e2p.length > 0) {
@@ -436,12 +436,12 @@ async function checkDepartment(supabase, { tenantId, id }) {
   const { data: d } = await supabase.from("DEPARTMENT").select("NAME_SHORT").eq("ID", id).maybeSingle();
   const entityLabel = `Abteilung „${d?.NAME_SHORT || `#${id}`}"`;
   const [employees, projects] = await Promise.all([
-    safeReferences(supabase, "EMPLOYEE", "ID, SHORT_NAME, FIRST_NAME, LAST_NAME", { DEPARTMENT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "EMPLOYEE", "ID, ABBR, FIRST_NAME, LAST_NAME", { DEPARTMENT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "PROJECT",  "ID, NAME_SHORT",                        { DEPARTMENT_ID: id, TENANT_ID: tenantId }),
   ]);
   const refs = [];
   if (employees.length > 0) {
-    const blk = formatRefBlock("employees", employees, e => e.SHORT_NAME || `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim() || `#${e.ID}`);
+    const blk = formatRefBlock("employees", employees, e => e.ABBR || `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim() || `#${e.ID}`);
     refs.push({ ...blk, label: blk.count === 1 ? "Mitarbeiter:in" : "Mitarbeiter:innen" });
   }
   if (projects.length > 0) {
@@ -467,8 +467,8 @@ async function checkUserRole(supabase, { tenantId, id }) {
     const empIds = [...new Set(empRoles.map(er => er.EMPLOYEE_ID).filter(Boolean))];
     let sample = [];
     if (empIds.length > 0) {
-      const { data: emps } = await supabase.from("EMPLOYEE").select("ID, SHORT_NAME").in("ID", empIds.slice(0, SAMPLE_LIMIT));
-      sample = (emps || []).map(e => e.SHORT_NAME || `#${e.ID}`);
+      const { data: emps } = await supabase.from("EMPLOYEE").select("ID, ABBR").in("ID", empIds.slice(0, SAMPLE_LIMIT));
+      sample = (emps || []).map(e => e.ABBR || `#${e.ID}`);
     }
     refs.push({ kind: "employees", count: empIds.length, sample, label: empIds.length === 1 ? "Mitarbeiter:in" : "Mitarbeiter:innen" });
   }
@@ -520,8 +520,8 @@ async function checkWorkingTimeModel(supabase, { tenantId, id }) {
     const empIds = [...new Set(assigns.map(a => a.EMPLOYEE_ID).filter(Boolean))];
     let sample = [];
     if (empIds.length > 0) {
-      const { data: emps } = await supabase.from("EMPLOYEE").select("ID, SHORT_NAME").in("ID", empIds.slice(0, SAMPLE_LIMIT));
-      sample = (emps || []).map(e => e.SHORT_NAME || `#${e.ID}`);
+      const { data: emps } = await supabase.from("EMPLOYEE").select("ID, ABBR").in("ID", empIds.slice(0, SAMPLE_LIMIT));
+      sample = (emps || []).map(e => e.ABBR || `#${e.ID}`);
     }
     refs.push({ kind: "employees", count: empIds.length, sample, label: empIds.length === 1 ? "Mitarbeiter:in" : "Mitarbeiter:innen" });
   }
