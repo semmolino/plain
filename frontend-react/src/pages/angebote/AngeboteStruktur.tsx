@@ -24,7 +24,7 @@ type AddForm = {
   NAME_SHORT: string; NAME_LONG: string; BILLING_TYPE_ID: string; FATHER_ID: string
   REVENUE: string; EXTRAS_PERCENT: string
   // Aufwandsschätzung (BILLING_TYPE_ID=2): Menge/Stunden × Rolle/Satz
-  QUANTITY: string; HOURLY_RATE: string; ROLE_ID: string; ROLE_NAME_SHORT: string; ROLE_NAME_LONG: string
+  QUANTITY: string; HOURLY_RATE: string; ROLE_ID: string; ROLE_ABBR: string; ROLE_NAME: string
 }
 type SurchargeEdit = {
   s1Label: string; s1Pct: string; s1Cumul: boolean
@@ -35,7 +35,7 @@ type SurchargeEdit = {
 function emptyAdd(): AddForm {
   return {
     NAME_SHORT: '', NAME_LONG: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '',
-    QUANTITY: '', HOURLY_RATE: '', ROLE_ID: '', ROLE_NAME_SHORT: '', ROLE_NAME_LONG: '',
+    QUANTITY: '', HOURLY_RATE: '', ROLE_ID: '', ROLE_ABBR: '', ROLE_NAME: '',
   }
 }
 
@@ -345,8 +345,8 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
               quantity:        f.QUANTITY !== '' ? Number(f.QUANTITY) : 0,
               hourly_rate:         f.HOURLY_RATE  !== '' ? Number(f.HOURLY_RATE)  : 0,
               role_id:         f.ROLE_ID ? Number(f.ROLE_ID) : undefined,
-              role_name_short: f.ROLE_NAME_SHORT || undefined,
-              role_name_long:  f.ROLE_NAME_LONG  || undefined,
+              role_abbr: f.ROLE_ABBR || undefined,
+              role_name:  f.ROLE_NAME  || undefined,
             }
           : {
               revenue: f.REVENUE !== '' ? Number(f.REVENUE) : undefined,
@@ -815,7 +815,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                             value={nameLong} onChange={e => setField(n.ID, 'nameLong', e.target.value)} />
                           {isHourly && !isParent && (
                             <span className="ls-muted" style={{ marginLeft: 6, fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              {n.ROLE_NAME_SHORT && <span style={{ fontWeight: 600 }}>{n.ROLE_NAME_SHORT}:</span>}
+                              {n.ROLE_ABBR && <span style={{ fontWeight: 600 }}>{n.ROLE_ABBR}:</span>}
                               <input
                                 className="tbl-input" type="number" min={0} step={0.5}
                                 style={{ width: 56, fontSize: 11, padding: '1px 4px', textAlign: 'right' }}
@@ -992,8 +992,8 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                       setAddForm(f => f && {
                         ...f,
                         ROLE_ID: rid,
-                        ROLE_NAME_SHORT: role?.NAME_SHORT ?? f.ROLE_NAME_SHORT,
-                        ROLE_NAME_LONG:  role?.NAME_LONG  ?? f.ROLE_NAME_LONG,
+                        ROLE_ABBR: role?.NAME_SHORT ?? f.ROLE_ABBR,
+                        ROLE_NAME:  role?.NAME_LONG  ?? f.ROLE_NAME,
                         HOURLY_RATE: role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.HOURLY_RATE,
                       })
                     }}>

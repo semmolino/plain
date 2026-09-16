@@ -50,8 +50,8 @@ export interface ConvertOfferPayload {
   employee2project?:  Array<{
     employee_id:      number
     role_id?:         number | null
-    role_name_short?: string
-    role_name_long?:  string
+    role_abbr?: string
+    role_name?:  string
     hourly_rate?:         number | null
   }>
 }
@@ -88,8 +88,8 @@ export interface OfferStructureNode {
   SORT_ORDER:      number
   QUANTITY:        number | null
   HOURLY_RATE:         number | null
-  ROLE_NAME_SHORT: string | null
-  ROLE_NAME_LONG:  string | null
+  ROLE_ABBR: string | null
+  ROLE_NAME:  string | null
   ROLE_ID:         number | null
   TENANT_ID:       number | null
   SURCHARGE_1_LABEL: string | null
@@ -118,8 +118,8 @@ export interface OfferStructureDraftRow {
   QUANTITY:        string
   HOURLY_RATE:         string
   ROLE_ID:         string
-  ROLE_NAME_SHORT: string
-  ROLE_NAME_LONG:  string
+  ROLE_ABBR: string
+  ROLE_NAME:  string
 }
 
 export interface CreateOfferPayload {
@@ -163,8 +163,8 @@ export interface AddStructureNodePayload {
   quantity?:         string | number
   hourly_rate?:          string | number
   role_id?:          string | number
-  role_name_short?:  string
-  role_name_long?:   string
+  role_abbr?:  string
+  role_name?:   string
   father_id?:        string | number | null
 }
 
@@ -177,8 +177,8 @@ export interface UpdateStructureNodePayload {
   quantity?:         string | number
   hourly_rate?:          string | number
   role_id?:          string | number | null
-  role_name_short?:  string
-  role_name_long?:   string
+  role_abbr?:  string
+  role_name?:   string
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────

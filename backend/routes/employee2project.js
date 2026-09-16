@@ -35,7 +35,7 @@ module.exports = (supabase) => {
 
     const { data, error } = await supabase
       .from("EMPLOYEE2PROJECT")
-      .select("ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
+      .select("ROLE_ID, ROLE_ABBR, ROLE_NAME, HOURLY_RATE")
       .eq("EMPLOYEE_ID", employeeId)
       .eq("PROJECT_ID", projectId)
       // Als einziger Endpunkt dieser Datei fehlte hier der Mandantenfilter.
@@ -51,8 +51,8 @@ module.exports = (supabase) => {
     return res.json({
       found:           true,
       ROLE_ID:         row.ROLE_ID         ?? null,
-      ROLE_NAME_SHORT: row.ROLE_NAME_SHORT ?? null,
-      ROLE_NAME_LONG:  row.ROLE_NAME_LONG  ?? null,
+      ROLE_ABBR: row.ROLE_ABBR ?? null,
+      ROLE_NAME:  row.ROLE_NAME  ?? null,
       HOURLY_RATE:         row.HOURLY_RATE         ?? null,
     });
   });
@@ -64,7 +64,7 @@ module.exports = (supabase) => {
 
     const { data: e2pRows, error } = await supabase
       .from("EMPLOYEE2PROJECT")
-      .select("ID, EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
+      .select("ID, EMPLOYEE_ID, ROLE_ID, ROLE_ABBR, ROLE_NAME, HOURLY_RATE")
       .eq("PROJECT_ID", projectId)
       .eq("TENANT_ID", req.tenantId)
       .order("ID");
@@ -98,7 +98,7 @@ module.exports = (supabase) => {
 
     const { data: e2pRows, error } = await supabase
       .from("EMPLOYEE2PROJECT")
-      .select("ID, PROJECT_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
+      .select("ID, PROJECT_ID, ROLE_ABBR, ROLE_NAME, HOURLY_RATE")
       .eq("EMPLOYEE_ID", employeeId)
       .eq("TENANT_ID", req.tenantId)
       .order("ID");
@@ -123,7 +123,7 @@ module.exports = (supabase) => {
         PROJECT_NUMBER:  projMap[r.PROJECT_ID]?.NAME_SHORT ?? null,
         PROJECT_NAME:    projMap[r.PROJECT_ID]?.NAME_LONG  ?? null,
         STATUS_NAME:     projMap[r.PROJECT_ID]?.STATUS?.NAME_SHORT ?? null,
-        ROLE_NAME_SHORT: r.ROLE_NAME_SHORT ?? null,
+        ROLE_ABBR: r.ROLE_ABBR ?? null,
         HOURLY_RATE:         r.HOURLY_RATE ?? null,
       }));
 
@@ -144,12 +144,12 @@ module.exports = (supabase) => {
         PROJECT_ID:      projectId,
         EMPLOYEE_ID:     Number(b.employee_id),
         ROLE_ID:         b.role_id ? Number(b.role_id) : null,
-        ROLE_NAME_SHORT: b.role_name_short || "",
-        ROLE_NAME_LONG:  b.role_name_long  || "",
+        ROLE_ABBR: b.role_abbr || "",
+        ROLE_NAME:  b.role_name  || "",
         HOURLY_RATE:         b.hourly_rate !== "" && b.hourly_rate != null ? Number(b.hourly_rate) : null,
         TENANT_ID:       req.tenantId,
       })
-      .select("ID, EMPLOYEE_ID, ROLE_ID, ROLE_NAME_SHORT, ROLE_NAME_LONG, HOURLY_RATE")
+      .select("ID, EMPLOYEE_ID, ROLE_ID, ROLE_ABBR, ROLE_NAME, HOURLY_RATE")
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
@@ -164,8 +164,8 @@ module.exports = (supabase) => {
     const b = req.body || {};
     const update = {};
     if (b.role_id         !== undefined) update.ROLE_ID         = b.role_id ? Number(b.role_id) : null;
-    if (b.role_name_short !== undefined) update.ROLE_NAME_SHORT = b.role_name_short || "";
-    if (b.role_name_long  !== undefined) update.ROLE_NAME_LONG  = b.role_name_long  || "";
+    if (b.role_abbr !== undefined) update.ROLE_ABBR = b.role_abbr || "";
+    if (b.role_name  !== undefined) update.ROLE_NAME  = b.role_name  || "";
     if (b.hourly_rate         !== undefined) update.HOURLY_RATE         = b.hourly_rate !== "" && b.hourly_rate != null ? Number(b.hourly_rate) : null;
 
     if (!Object.keys(update).length)

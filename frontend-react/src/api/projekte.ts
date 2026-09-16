@@ -66,8 +66,8 @@ export interface StructureNode {
 export interface E2PRow {
   employee_id:    number
   role_id?:       string | number
-  role_name_short?: string
-  role_name_long?:  string
+  role_abbr?: string
+  role_name?:  string
   hourly_rate?:       string | number
 }
 
@@ -431,8 +431,8 @@ export interface Employee2ProjectPreset {
   found:           boolean
   HOURLY_RATE:         number | null
   ROLE_ID:         number | null
-  ROLE_NAME_SHORT: string | null
-  ROLE_NAME_LONG:  string | null
+  ROLE_ABBR: string | null
+  ROLE_NAME:  string | null
 }
 
 export const fetchEmployee2ProjectPreset = (employeeId: number, projectId: number) =>
@@ -446,8 +446,8 @@ export interface E2PEntry {
   ID:                  number
   EMPLOYEE_ID:         number
   ROLE_ID:             number | null
-  ROLE_NAME_SHORT:     string
-  ROLE_NAME_LONG:      string
+  ROLE_ABBR:     string
+  ROLE_NAME:      string
   HOURLY_RATE:             number | null
   EMPLOYEE_SHORT_NAME: string | null
   EMPLOYEE_FIRST_NAME: string | null
@@ -460,15 +460,15 @@ export const fetchE2PByProject = (projectId: number) =>
 export const createE2P = (projectId: number, body: {
   employee_id:      number
   role_id?:         number | null
-  role_name_short?: string
-  role_name_long?:  string
+  role_abbr?: string
+  role_name?:  string
   hourly_rate?:         number | null
 }) => apiClient.post<{ data: E2PEntry }>(`/employee2project/project/${projectId}`, body)
 
 export const updateE2P = (id: number, body: {
   role_id?:         number | null
-  role_name_short?: string
-  role_name_long?:  string
+  role_abbr?: string
+  role_name?:  string
   hourly_rate?:         number | null
 }) => apiClient.patch<{ success: boolean }>(`/employee2project/${id}`, body)
 

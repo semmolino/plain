@@ -258,8 +258,8 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
       SORT_ORDER:      i * 10,
       QUANTITY:        quantity,
       HOURLY_RATE:         spRate,
-      ROLE_NAME_SHORT: n.ROLE_NAME_SHORT ? String(n.ROLE_NAME_SHORT) : null,
-      ROLE_NAME_LONG:  n.ROLE_NAME_LONG  ? String(n.ROLE_NAME_LONG)  : null,
+      ROLE_ABBR: n.ROLE_ABBR ? String(n.ROLE_ABBR) : null,
+      ROLE_NAME:  n.ROLE_NAME  ? String(n.ROLE_NAME)  : null,
       ROLE_ID:         n.ROLE_ID ? parseInt(String(n.ROLE_ID), 10) : null,
       TENANT_ID:       tenantId,
     };
@@ -429,8 +429,8 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
       SORT_ORDER:      maxSort + 10,
       QUANTITY:        quantity,
       HOURLY_RATE:         spRate,
-      ROLE_NAME_SHORT: b.role_name_short || null,
-      ROLE_NAME_LONG:  b.role_name_long  || null,
+      ROLE_ABBR: b.role_abbr || null,
+      ROLE_NAME:  b.role_name  || null,
       ROLE_ID:         b.role_id ? parseInt(String(b.role_id), 10) : null,
       TENANT_ID:       tenantId,
     }])
@@ -452,8 +452,8 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
   if (b.name_long       !== undefined) patch.NAME_LONG       = String(b.name_long).trim();
   if (btId              !== undefined) patch.BILLING_TYPE_ID = btId;
   if (b.extras_percent  !== undefined) patch.EXTRAS_PERCENT  = Number(b.extras_percent) || 0;
-  if (b.role_name_short !== undefined) patch.ROLE_NAME_SHORT = b.role_name_short || null;
-  if (b.role_name_long  !== undefined) patch.ROLE_NAME_LONG  = b.role_name_long  || null;
+  if (b.role_abbr !== undefined) patch.ROLE_ABBR = b.role_abbr || null;
+  if (b.role_name  !== undefined) patch.ROLE_NAME  = b.role_name  || null;
   if (b.role_id         !== undefined) patch.ROLE_ID         = b.role_id ? parseInt(String(b.role_id), 10) : null;
 
   // Surcharge settings
@@ -781,7 +781,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
       extrasPct:       Number(n.EXTRAS_PERCENT || 0),
       extras:          Number(n.EXTRAS         || 0),
       total:           fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
-      roleName:        n.ROLE_NAME_LONG || n.ROLE_NAME_SHORT || '',
+      roleName:        n.ROLE_NAME || n.ROLE_ABBR || '',
       surchargesTotal: Number(n.SURCHARGES_TOTAL || 0),
     })),
     hasExtras,
@@ -1161,8 +1161,8 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
         EMPLOYEE_ID:    empId,
         PROJECT_ID:     project.ID,
         ROLE_ID:        r.role_id ? parseInt(String(r.role_id), 10) : null,
-        ROLE_NAME_SHORT: r.role_name_short || '',
-        ROLE_NAME_LONG:  r.role_name_long  || '',
+        ROLE_ABBR: r.role_abbr || '',
+        ROLE_NAME:  r.role_name  || '',
         HOURLY_RATE:        r.hourly_rate != null && r.hourly_rate !== '' ? Number(r.hourly_rate) : null,
         TENANT_ID:      tenantId,
       });

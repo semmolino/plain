@@ -38,7 +38,7 @@ function welt(extraTec = []) {
       { ID: 31, TENANT_ID: TENANT, PROJECT_ID: 2, FATHER_ID: 30,   NAME_SHORT: "LP4.1", NAME_LONG: null, BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
     ],
     EMPLOYEE2PROJECT: [
-      { ID: 1, TENANT_ID: TENANT, EMPLOYEE_ID: 5, PROJECT_ID: 2, ROLE_ID: 3, ROLE_NAME_SHORT: "PL", ROLE_NAME_LONG: "Projektleitung", HOURLY_RATE: 110 },
+      { ID: 1, TENANT_ID: TENANT, EMPLOYEE_ID: 5, PROJECT_ID: 2, ROLE_ID: 3, ROLE_ABBR: "PL", ROLE_NAME: "Projektleitung", HOURLY_RATE: 110 },
     ],
     INVOICE: [{ ID: 500, TENANT_ID: TENANT, INVOICE_NUMBER: "R-2026-0042" }],
     PARTIAL_PAYMENT: [],
@@ -76,7 +76,7 @@ describe("rebookBuchungen", () => {
     // 10 h × 110 € aus EMPLOYEE2PROJECT des Zielprojekts
     expect(tec.HOURLY_RATE).toBe(110);
     expect(tec.HOURLY_RATE_TOTAL).toBe(1100);
-    expect(tec.ROLE_NAME_SHORT).toBe("PL");
+    expect(tec.ROLE_ABBR).toBe("PL");
     // Kostensatz haengt am Mitarbeiter, nicht am Projekt — er bleibt.
     expect(tec.COST_RATE).toBe(80);
     // Menge, Datum, Person, Beschreibung bleiben unberuehrt.
