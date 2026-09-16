@@ -4,11 +4,15 @@ Arbeitsunterlage für das Umbenennungsvorhaben. Die Daten selbst stehen in
 `backend/scripts/rename/rename-map.json` — hier steht, was man je Block wissen
 muss, bevor man ihn anfasst.
 
-> **Quelle und Vorbehalt.** Alle Zahlen stammen aus `db/schema/schema_2026-08-20.sql`
-> und aus Trockenläufen von `rename.js apply`. Der Dump ist mit `--schema=public`
-> gezogen, kennt das Schema `REPORTING` also nicht, und ist vom 20.08.2026.
-> **Maßgeblich ist `rename.js check` gegen die laufende Datenbank** — erst der
-> Lauf ersetzt diese Tabelle durch belastbare Zahlen.
+> **Stand: gegen die laufende Datenbank geprüft** (16.09.2026). `rename.js check`
+> läuft über alle acht Blöcke ohne Befund. Die Spaltenzahlen stammen aus der
+> Datenbank, die Fundstellen aus Trockenläufen von `rename.js apply`.
+>
+> Die erste Fassung dieses Blatts stützte sich auf `db/schema/schema_2026-08-20.sql`
+> und lag an drei Stellen daneben: `TEC_REBOOKING` und `WIP_CLOSING_LINE` fehlten
+> ganz, und das Schema `REPORTING` war unsichtbar, weil der Dump mit
+> `--schema=public` gezogen war. Der Dump ist als Quelle für dieses Vorhaben
+> untauglich.
 
 ---
 
@@ -36,10 +40,23 @@ und jede Fundstelle müsste einzeln beurteilt werden (`scope: "table"` statt
 Die letzten drei sind zusätzlich fachlich nötig: sonst zeigen Fremdschlüssel­spalten
 auf Tabellennamen, die es nicht mehr gibt.
 
-**Ungeklärt: `TEC_REBOOKING`.** Kommt im Repo nirgends vor — nicht im Dump,
-nicht in den 152 Migrationsdateien, nicht im Code, auch nicht als „rebook" oder
-„Umbuchung". Wenn sie live existiert, wurde sie ohne Migrationsdatei angelegt.
-Bis das geklärt ist, gehört sie keinem Block an.
+**Geklärt: `TEC_REBOOKING`.** Die Tabelle existiert in der Datenbank. Die
+zugehörige Migration `0139_booking_rebook.sql` war dort als eingespielt vermerkt,
+**die Datei fehlte im Repository** — deshalb kannte weder der Dump noch die
+Migrationshistorie die Tabelle. Sie ist aus dem laufenden Schema rekonstruiert
+und liegt wieder unter `backend/migrations/`.
+
+Die Spalten aus der Vorlage waren die *Zielnamen* ohne Pfeile. Zugeordnet:
+`TEC_ID`→`BOOKING_ID`, `DATE_VOUCHER`→`BOOKING_DATE`, `CP_TOT`→`COST_TOTAL`,
+`SP_RATE_BEFORE/AFTER`→`HOURLY_RATE_BEFORE/AFTER`,
+`SP_TOT_BEFORE/AFTER`→`HOURLY_RATE_TOTAL_BEFORE/AFTER`, Tabelle →
+`BOOKING_REBOOKING`.
+
+**Kein Codepfad benutzt sie.** Die Trockenläufe finden null Fundstellen für
+`SP_RATE_BEFORE` und Verwandte; `rebook` und `Umbuchung` kommen repo-weit nicht
+vor. Die Tabelle hat 3 Zeilen und keine Fremdschlüssel. Für die Umbenennung
+unkritisch — aber es lohnt zu wissen, ob dahinter eine begonnene oder eine
+aufgegebene Funktion steht.
 
 ---
 
@@ -50,14 +67,14 @@ Spalten-Block noch den gültigen Tabellennamen. Darin nach wachsendem Umfang.
 
 | # | Block | Spalten | Fundstellen | Dateien |
 |---|---|---|---|---|
-| 1 | `01-cost-rate` | 4 | 185 | 28 |
-| 2 | `02-hourly-rate` | 8 | 316 | 40 |
+| 1 | `01-cost-rate` | 5 | 185 | 28 |
+| 2 | `02-hourly-rate` | 12 | 316 | 40 |
 | 3 | `03-role-name` | 8 | 181 | 14 |
 | 4 | `04-employee-abbr` | 1 | 253 | 62 |
 | 5 | `05-advance-invoice` | 13 | 575 | 49 |
-| 6 | `06-booking` | 3 | 355 | 50 |
-| 7 | `07-abbr` | 28 | 1029 | 104 |
-| 8 | `08-name` | 22 | 716 | 97 |
+| 6 | `06-booking` | 5 | 355 | 50 |
+| 7 | `07-abbr` | 29 | 1029 | 104 |
+| 8 | `08-name` | 23 | 716 | 97 |
 
 Zusammen rund 3.600 Fundstellen. Block 4 fällt auf: eine einzige Spalte, aber
 62 Dateien — `SHORT_NAME` steht überall dort, wo ein Mitarbeiterkürzel angezeigt
@@ -71,24 +88,37 @@ wird, und die Anmeldeantwort selbst trägt das Feld als `short_name`.
 Ausgabespaltennamen. `rename.js functions --block <id>` erzeugt die zweite
 Migration dafür; diese Tabelle sagt, was darin stehen wird.
 
-| Block | Betroffene Funktionen / Views |
+Aus `rename.js check` gegen die laufende Datenbank — mit Schema `REPORTING`,
+das im Dump fehlte:
+
+| Objekt | betroffen in Block |
 |---|---|
-| 01 | `fn_dashboard_monthly`, `fn_project_list_report`, `fn_project_report_header`, `fn_project_report_structure`, `VW_REPORT_PROJECT_DETAIL_STRUCTURE` |
-| 02 | `fn_project_list_report`, `fn_project_report_header`, `fn_project_report_structure` |
-| 03 | **keine** |
-| 04 | `fn_project_list_report`, `fn_project_report_header`, `VW_REPORT_PROJECT_DETAIL` |
-| 05 | `fn_dashboard_kpis`, `fn_project_list_report`, `fn_project_report_header`, `VW_REPORT_PROJECT_DETAIL` |
-| 06 | `fn_dashboard_kpis`, `fn_dashboard_monthly`, `fn_project_list_report`, `fn_project_report_header`, `fn_project_report_structure`, `protect_arbzg_audit_immutability`, `VW_REPORT_PROJECT_DETAIL_STRUCTURE` |
-| 07 | `FN_REPORT_PROJECT_DETAIL`, `fn_dashboard_by_status`, `fn_project_list_report`, `fn_project_report_header`, `fn_project_report_structure`, alle drei `VW_REPORT_*` |
-| 08 | `FN_REPORT_PROJECT_DETAIL`, `fn_project_list_report`, `fn_project_report_header`, `fn_project_report_structure`, alle drei `VW_REPORT_*` |
+| `fn_project_report_header` | 01, 02, 04, 05, 06, 07, 08 |
+| `fn_project_list_report` | 01, 02, 04, 05, 06, 07, 08 |
+| `REPORTING.FN_REPORT_PROJECT_DETAIL` | 01, 04, 05, 06, 07, 08 |
+| `fn_project_report_structure` | 01, 02, 06, 07, 08 |
+| `fn_dashboard_monthly` | 01, 06 |
+| `fn_dashboard_kpis` | 05, 06 |
+| `fn_dashboard_by_status` | 07 |
+| `protect_arbzg_audit_immutability` | 06 |
+| `VW_REPORT_PROJECT_DETAIL` | 04, 05, 07, 08 |
+| `VW_REPORT_PROJECT_DETAIL_STRUCTURE` | 01, 06, 07, 08 |
+| `VW_REPORT_PROJECT_LIST_ROOT` | 05, 07, 08 |
+| `REPORTING.VW_REPORT_PROJECT_DETAIL_STRUCTURE` | 01, 06, 07, 08 |
+| `REPORTING.VW_PROJECT_TIME_AGG` | 01, 02, 06 |
+| `REPORTING.VW_PROJECT_BILLING_AGG` | 05 |
+
+Block 03 als einziger: **keine SQL-Objekte betroffen.**
 
 **`fn_project_report_header` und `fn_project_list_report` sind in sieben von acht
-Blöcken dabei.** Deshalb werden sie erzeugt statt getippt — die erste ist rund
-250 Zeilen plpgsql. Die erzeugte Datei bleibt trotzdem Lesestoff: bei einer
-`table`-scoped Spalte kann die Ersetzung im Rumpf zu weit gegriffen haben.
+Blöcken dabei**, `REPORTING.FN_REPORT_PROJECT_DETAIL` in sechs. Deshalb werden
+sie erzeugt statt getippt — die erste ist rund 250 Zeilen plpgsql. Die erzeugte
+Datei bleibt trotzdem Lesestoff: bei einer `table`-scoped Spalte kann die
+Ersetzung im Rumpf zu weit gegriffen haben.
 
-Das Schema `REPORTING` fehlt in dieser Aufstellung, weil es nicht im Dump ist.
-`rename.js check` sieht es (seit der Schema-Erweiterung) und wird es ergänzen.
+Die vier `REPORTING`-Objekte sind in keiner Migrationsdatei und in keinem Dump
+des Repositories enthalten. Sie existieren nur in der Datenbank — `functions`
+liest sie von dort.
 
 ---
 
@@ -123,11 +153,11 @@ Codemod mitnehmen darf. Zweiter Punkt: `ARBZG_AUDIT` hat Schutz-Trigger gegen
 Änderungen (`protect_arbzg_audit_immutability`) — prüfen, ob sie einem `ALTER`
 im Weg stehen.
 
-**07 — `NAME_SHORT` → `ABBR`.** Der größte Block, 28 Tabellen. Nach der
+**07 — `NAME_SHORT` → `ABBR`.** Der größte Block, 29 Tabellen. Nach der
 Ergänzung der Restträger vollständig automatisierbar. `ABBR` liegt danach auf
-28 Tabellen, ist also für künftige Umbenennungen selbst wieder mehrdeutig.
+30 Tabellen (mit `EMPLOYEE` aus Block 04), ist also für künftige Umbenennungen selbst wieder mehrdeutig.
 
-**08 — `NAME_LONG` → `NAME`.** 22 Tabellen. `NAME` existiert bereits auf
+**08 — `NAME_LONG` → `NAME`.** 23 Tabellen. `NAME` existiert bereits auf
 `ABSENCE_TYPE`, `BREAK_RULE`, `DOCUMENT_TEMPLATE`, `FEE_CALCULATION_BL`,
 `PUBLIC_HOLIDAY`, `WORKING_TIME_MODEL` — keine Kollision, weil keine dieser
 Tabellen ein `NAME_LONG` trägt (geprüft). Der Zwilling `name_long` → `name` ist

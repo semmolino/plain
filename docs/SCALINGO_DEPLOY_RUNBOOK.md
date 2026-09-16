@@ -235,6 +235,59 @@ Testfälle unten durchgehen.
 
 ---
 
+## Migrationen einspielen
+
+Die frühen Migrationen wurden von Hand mit `psql -f` eingespielt. Am 08.09.2026
+wurde der Bestand in die Tracking-Tabelle `_migrations` nachgetragen (152
+Einträge), seither ist `backend/scripts/migrate.js` der Weg.
+
+**Für jede neue Migration:**
+
+```bash
+node backend/scripts/migrate.js --status   # was ist offen
+node backend/scripts/migrate.js            # anwenden
+```
+
+Jede Datei läuft in einer eigenen Transaktion; bricht eine ab, wird sie
+zurückgerollt und der Lauf endet.
+
+**Zwei Dinge, die der Runner nicht abnimmt:**
+
+*RLS blockiert Migrationen fail-closed.* Ein `psql`-Lauf trägt kein JWT. Jede
+Migration, die eine Tabelle mit `TENANT_ID` liest oder schreibt, sieht null
+Zeilen und meldet trotzdem Erfolg — genau so lief `0136` beim ersten Einspielen
+ins Leere. An den Anfang solcher Migrationen gehört:
+
+```sql
+SET request.jwt.claims = '{"sys":"true"}';
+-- … INSERT/UPDATE/SELECT auf mandantenbezogene Tabellen …
+RESET request.jwt.claims;
+```
+
+Reines DDL (`CREATE TABLE`, `ALTER TABLE`, `CREATE FUNCTION`) braucht das nicht.
+
+*PostgREST merkt Schemaänderungen nicht von selbst.* Wer Tabellen, Spalten,
+Views oder Funktionen anfasst, hängt ans Ende der Migration:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+Ohne das antwortet PostgREST weiter aus dem alten Cache — `PGRST204 column …
+does not exist`, obwohl die Datenbank stimmt — bis der Container neu startet.
+
+**Falls die Tracking-Tabelle einmal fehlt** (wiederhergestellte oder neu
+aufgebaute Datenbank): `--backfill` trägt Dateien als eingespielt ein, **ohne
+sie auszuführen**. Die Obergrenze ist Pflicht, geschrieben wird nur mit
+`--confirm` — eine fälschlich eingetragene Datei läuft nie mehr.
+
+```bash
+node backend/scripts/migrate.js --backfill --through 0139            # Trockenlauf
+node backend/scripts/migrate.js --backfill --through 0139 --confirm  # schreiben
+```
+
+---
+
 ## Sicherung und Rücksicherung der Datenbank
 
 Vor jedem Eingriff, der Struktur verändert — Migration, Umbenennung, Import —

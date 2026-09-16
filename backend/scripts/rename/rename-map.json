@@ -49,7 +49,7 @@
     {
       "id": "01-cost-rate",
       "status": "planned",
-      "note": "CP_* -> COST_*. Kleinster Block, Probelauf für die ganze Kette.",
+      "note": "CP_* -> COST_*. Kleinster Block, Probelauf fuer die ganze Kette.",
       "tables": [
         {
           "from": "EMPLOYEE_CP_RATE",
@@ -92,26 +92,26 @@
               "api": true
             }
           ]
+        },
+        {
+          "from": "TEC_REBOOKING",
+          "to": null,
+          "columns": [
+            {
+              "from": "CP_TOT",
+              "to": "COST_TOTAL",
+              "scope": "global",
+              "api": true
+            }
+          ]
         }
       ]
     },
     {
       "id": "02-hourly-rate",
       "status": "planned",
-      "note": "SP_RATE -> HOURLY_RATE. Beruehrt die Honorarkalkulation - hoai-kalkulation-reviewer einplanen.",
+      "note": "SP_* -> HOURLY_RATE*. Beruehrt die Honorarkalkulation - hoai-kalkulation-reviewer einplanen.",
       "tables": [
-        {
-          "from": "PROJECT_SP_RATES",
-          "to": "PROJECT_HOURLY_RATES",
-          "columns": [
-            {
-              "from": "SP_RATE",
-              "to": "HOURLY_RATE",
-              "scope": "global",
-              "api": true
-            }
-          ]
-        },
         {
           "from": "EMPLOYEE2PROJECT",
           "to": null,
@@ -161,6 +161,18 @@
           ]
         },
         {
+          "from": "PROJECT_SP_RATES",
+          "to": "PROJECT_HOURLY_RATES",
+          "columns": [
+            {
+              "from": "SP_RATE",
+              "to": "HOURLY_RATE",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
           "from": "ROLE",
           "to": null,
           "columns": [
@@ -189,13 +201,43 @@
               "api": true
             }
           ]
+        },
+        {
+          "from": "TEC_REBOOKING",
+          "to": null,
+          "columns": [
+            {
+              "from": "SP_RATE_BEFORE",
+              "to": "HOURLY_RATE_BEFORE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "SP_RATE_AFTER",
+              "to": "HOURLY_RATE_AFTER",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "SP_TOT_BEFORE",
+              "to": "HOURLY_RATE_TOTAL_BEFORE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "SP_TOT_AFTER",
+              "to": "HOURLY_RATE_TOTAL_AFTER",
+              "scope": "global",
+              "api": true
+            }
+          ]
         }
       ]
     },
     {
       "id": "03-role-name",
       "status": "planned",
-      "note": "ROLE_NAME_SHORT/_LONG -> ROLE_ABBR/ROLE_NAME auf allen Trägern.",
+      "note": "ROLE_NAME_SHORT/_LONG -> ROLE_ABBR/ROLE_NAME. Keine SQL-Objekte betroffen.",
       "tables": [
         {
           "from": "EMPLOYEE2PROJECT",
@@ -274,7 +316,7 @@
     {
       "id": "04-employee-abbr",
       "status": "planned",
-      "note": "EMPLOYEE.SHORT_NAME -> ABBR. Einziger Träger.",
+      "note": "EMPLOYEE.SHORT_NAME -> ABBR. Der Zwilling short_name steht in der Anmeldeantwort (routes/auth.js) und im Auth-Store - nach diesem Block zuerst die Anmeldung pruefen.",
       "tables": [
         {
           "from": "EMPLOYEE",
@@ -298,6 +340,18 @@
       "status": "planned",
       "note": "PARTIAL_PAYMENT -> ADVANCE_INVOICE. Fachlich der schwerste Block: beruehrt die E-Rechnung (services_einvoice_data.js, Vorauszahlungs-BTs) und den Snapshot-Test tests/einvoice_cii_snapshot.test.js. erechnung-reviewer einplanen.",
       "tables": [
+        {
+          "from": "INVOICE_DEDUCTION",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
         {
           "from": "PARTIAL_PAYMENT",
           "to": "ADVANCE_INVOICE",
@@ -341,18 +395,6 @@
           ]
         },
         {
-          "from": "INVOICE_DEDUCTION",
-          "to": null,
-          "columns": [
-            {
-              "from": "PARTIAL_PAYMENT_ID",
-              "to": "ADVANCE_INVOICE_ID",
-              "scope": "global",
-              "api": true
-            }
-          ]
-        },
-        {
           "from": "PAYMENT",
           "to": null,
           "columns": [
@@ -366,30 +408,6 @@
         },
         {
           "from": "PAYMENT_STRUCTURE",
-          "to": null,
-          "columns": [
-            {
-              "from": "PARTIAL_PAYMENT_ID",
-              "to": "ADVANCE_INVOICE_ID",
-              "scope": "global",
-              "api": true
-            }
-          ]
-        },
-        {
-          "from": "SE_RELEASE",
-          "to": null,
-          "columns": [
-            {
-              "from": "PARTIAL_PAYMENT_ID",
-              "to": "ADVANCE_INVOICE_ID",
-              "scope": "global",
-              "api": true
-            }
-          ]
-        },
-        {
-          "from": "TEC",
           "to": null,
           "columns": [
             {
@@ -435,14 +453,56 @@
               "api": true
             }
           ]
+        },
+        {
+          "from": "SE_RELEASE",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
+        {
+          "from": "TEC",
+          "to": null,
+          "columns": [
+            {
+              "from": "PARTIAL_PAYMENT_ID",
+              "to": "ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
         }
       ]
     },
     {
       "id": "06-booking",
       "status": "planned",
-      "note": "TEC -> BOOKING. VORARBEIT: TEC steht an 8 Stellen als Oberflaechentext, nicht als Spalte - helpContent.tsx:381, NachtragDetail.tsx:314, AdminPage.tsx:2456, ImportSection.tsx:274, UnterstuetzungTab.tsx:35, ProjektStruktur.tsx:388+608, TimerBar.tsx:750. Diese zuerst bewusst auf „Buchungen“ umformulieren, sonst macht der Codemod daraus „Stunden/BOOKING“.",
+      "note": "TEC -> BOOKING. Die Oberflaechentexte sind bereits vorab umformuliert (Commit 67e1abc). ARBZG_AUDIT hat Schutz-Trigger gegen Aenderungen - pruefen, ob sie einem ALTER im Weg stehen.",
       "tables": [
+        {
+          "from": "ARBZG_AUDIT",
+          "to": null,
+          "columns": [
+            {
+              "from": "DATE_VOUCHER",
+              "to": "BOOKING_DATE",
+              "scope": "global",
+              "api": true
+            },
+            {
+              "from": "TEC_ID",
+              "to": "BOOKING_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        },
         {
           "from": "TEC",
           "to": "BOOKING",
@@ -456,8 +516,8 @@
           ]
         },
         {
-          "from": "ARBZG_AUDIT",
-          "to": null,
+          "from": "TEC_REBOOKING",
+          "to": "BOOKING_REBOOKING",
           "columns": [
             {
               "from": "DATE_VOUCHER",
@@ -478,7 +538,7 @@
     {
       "id": "07-abbr",
       "status": "planned",
-      "note": "NAME_SHORT -> ABBR auf allen 28 Trägern. Größter Block.",
+      "note": "NAME_SHORT -> ABBR auf allen Traegern. Groesster Block.",
       "tables": [
         {
           "from": "BOOKING_TYPE",
@@ -899,13 +959,28 @@
               }
             }
           ]
+        },
+        {
+          "from": "WIP_CLOSING_LINE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_SHORT",
+              "to": "ABBR",
+              "scope": "global",
+              "api": {
+                "from": "name_short",
+                "to": "abbr"
+              }
+            }
+          ]
         }
       ]
     },
     {
       "id": "08-name",
       "status": "planned",
-      "note": "NAME_LONG -> NAME auf allen Trägern.",
+      "note": "NAME_LONG -> NAME auf allen Traegern.",
       "tables": [
         {
           "from": "BOOKING_TYPE",
@@ -1224,6 +1299,21 @@
         },
         {
           "from": "USER_ROLE",
+          "to": null,
+          "columns": [
+            {
+              "from": "NAME_LONG",
+              "to": "NAME",
+              "scope": "global",
+              "api": {
+                "from": "name_long",
+                "to": "name"
+              }
+            }
+          ]
+        },
+        {
+          "from": "WIP_CLOSING_LINE",
           "to": null,
           "columns": [
             {

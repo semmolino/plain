@@ -5,14 +5,30 @@
  * _migrations table, and runs any that are pending.
  *
  * Usage:
- *   node scripts/migrate.js            – apply pending migrations
- *   node scripts/migrate.js --status   – show applied / pending migrations
+ *   node scripts/migrate.js                      – apply pending migrations
+ *   node scripts/migrate.js --status             – show applied / pending
+ *   node scripts/migrate.js --backfill --through 0138 [--confirm]
  *
- * Requires DATABASE_URL in backend/.env (Supabase direct Postgres URL):
- *   postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+ * ABOUT --backfill: records files that are already in the database WITHOUT
+ * running them, so the runner does not start from the beginning on a database
+ * that was migrated by hand. Production was backfilled this way on 2026-09-08
+ * (152 rows, all within the same tenth of a second), so this is normally not
+ * needed - it is here for a restored or rebuilt database.
+ *
+ * It is an assertion about the past, so it is deliberately awkward: --through
+ * takes the highest number you know is applied, and nothing is written without
+ * --confirm. Anything above that number stays pending. A file wrongly recorded
+ * as applied never runs.
+ *
+ * Requires DATABASE_URL in backend/.env - the Scalingo database, reachable via
+ * scripts/scalingo/04_db_tunnel.sh. (The old Supabase project is leftover and
+ * holds outdated data; do not point this at it.)
  */
 
-require("dotenv").config();
+const path0 = require("path");
+// Explicit path: without it the config depends on the working directory, and a
+// run from the repo root would silently find no DATABASE_URL.
+require("dotenv").config({ path: path0.join(__dirname, "..", ".env") });
 const { Client } = require("pg");
 const fs = require("fs");
 const path = require("path");
@@ -20,12 +36,24 @@ const path = require("path");
 const MIGRATIONS_DIR = path.join(__dirname, "..", "migrations");
 
 const STATUS_ONLY = process.argv.includes("--status");
+const BACKFILL = process.argv.includes("--backfill");
+const CONFIRM = process.argv.includes("--confirm");
+const THROUGH = (() => {
+  const i = process.argv.indexOf("--through");
+  return i !== -1 ? process.argv[i + 1] : null;
+})();
+
+/** Leading migration number, e.g. "0070b_seed.sql" -> 70. */
+function migrationNumber(filename) {
+  const m = /^(\d{4})/.exec(filename);
+  return m ? parseInt(m[1], 10) : NaN;
+}
 
 async function getClient() {
   if (!process.env.DATABASE_URL) {
     console.error(
-      "❌  DATABASE_URL is not set in .env\n" +
-        "    Add: DATABASE_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres"
+      "❌  DATABASE_URL is not set in backend/.env\n" +
+        "    Open the tunnel first: scripts/scalingo/04_db_tunnel.sh"
     );
     process.exit(1);
   }
@@ -58,12 +86,81 @@ function getMigrationFiles() {
     .sort();
 }
 
+/**
+ * Record already-applied migrations without running them.
+ *
+ * The cutoff is required and has to be spelled out, because the failure mode is
+ * silent and permanent in the other direction: a file marked as applied that was
+ * never actually run will never run.
+ */
+async function backfill(client, applied, files) {
+  if (!THROUGH) {
+    console.error(
+      "\n❌  --backfill needs --through <number>, e.g. --through 0138.\n" +
+        "    That is the highest migration you know is already in the database.\n" +
+        "    Everything above it stays pending and will be applied normally.\n"
+    );
+    process.exit(1);
+  }
+  const cutoff = parseInt(THROUGH, 10);
+  if (Number.isNaN(cutoff)) {
+    console.error(`\n❌  --through "${THROUGH}" is not a number.\n`);
+    process.exit(1);
+  }
+
+  const candidates = files.filter(
+    (f) => !applied.has(f) && migrationNumber(f) <= cutoff
+  );
+  const above = files.filter((f) => migrationNumber(f) > cutoff);
+
+  if (candidates.length === 0) {
+    console.log("\n✅  Nothing to backfill - every file up to the cutoff is already recorded.\n");
+    return;
+  }
+
+  console.log(`\n${CONFIRM ? "Recording" : "Would record"} ${candidates.length} file(s) as applied, WITHOUT running them:\n`);
+  for (const f of candidates) console.log(`  ${f}`);
+  if (above.length) {
+    console.log(`\n${above.length} file(s) stay pending (above ${THROUGH}):`);
+    for (const f of above) console.log(`  ${f}`);
+  }
+
+  if (!CONFIRM) {
+    console.log(
+      "\n  Dry run. This asserts these migrations are already in the database.\n" +
+        "  Check that before passing --confirm - a wrongly recorded file never runs.\n"
+    );
+    return;
+  }
+
+  await client.query("BEGIN");
+  try {
+    for (const f of candidates) {
+      await client.query(
+        "INSERT INTO _migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING",
+        [f]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(`\n❌  Backfill failed: ${err.message}\n`);
+    process.exit(1);
+  }
+  console.log(`\n✅  ${candidates.length} file(s) recorded. Run --status to check.\n`);
+}
+
 async function main() {
   const client = await getClient();
   try {
     await ensureMigrationsTable(client);
     const applied = await getApplied(client);
     const files = getMigrationFiles();
+
+    if (BACKFILL) {
+      await backfill(client, applied, files);
+      return;
+    }
 
     if (STATUS_ONLY) {
       console.log("\nMigration status:\n");

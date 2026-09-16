@@ -263,6 +263,26 @@ function findDynamicSites(prefixes) {
   return hits;
 }
 
+/**
+ * "TABLE.COLUMN" -> new name, for every global column rename in this run.
+ *
+ * A second table carrying the same column name is only a problem if it KEEPS
+ * that name. If this run renames it too, and to the same target, a repo-wide
+ * replace is exactly right - that is the "or you are renaming it on all of
+ * them" case the map documents.
+ */
+function globalColumnTargets(blocks) {
+  const m = new Map();
+  for (const b of blocks) {
+    for (const t of b.tables || []) {
+      for (const c of t.columns || []) {
+        if (c.scope === "global") m.set(`${t.from}.${c.from}`, c.to);
+      }
+    }
+  }
+  return m;
+}
+
 /** Column renames that a repo-wide replace would corrupt. */
 function manualColumns(blocks) {
   const out = [];
@@ -502,10 +522,17 @@ const APP_SCHEMAS = `n.nspname NOT IN ('pg_catalog', 'information_schema') AND n
 const qual = (r) => (r.schema === "public" ? r.table : `${r.schema}.${r.table}`);
 
 async function tablesWithColumn(client, column) {
+  // relkind 'r'/'p' only: information_schema.columns also lists view columns,
+  // and a view column is not something ALTER ... RENAME can touch - it follows
+  // the view definition. Counting them made every NAME_SHORT carrier look
+  // ambiguous against the VW_REPORT_* views.
   const { rows } = await client.query(
     `SELECT c.table_schema AS schema, c.table_name AS table
        FROM information_schema.columns c
        JOIN pg_namespace n ON n.nspname = c.table_schema
+       JOIN pg_class k ON k.relname = c.table_name
+                      AND k.relnamespace = n.oid
+                      AND k.relkind IN ('r', 'p')
       WHERE ${APP_SCHEMAS} AND c.column_name = $1
       ORDER BY c.table_schema, c.table_name`,
     [column]
@@ -552,6 +579,7 @@ async function cmdCheck(blocks) {
   await withDb(async (client) => {
     let problems = 0;
     const dbRefs = new Map();
+    const covered = globalColumnTargets(blocks);
 
     for (const b of blocks) {
       console.log(`\n=== block ${b.id} ===`);
@@ -577,7 +605,10 @@ async function cmdCheck(blocks) {
             problems++;
             continue;
           }
-          const others = carriers.filter((r) => r.table !== t.from);
+          // Carriers this same run renames to the same target are not conflicts.
+          const others = carriers
+            .filter((r) => r.table !== t.from)
+            .filter((r) => covered.get(`${r.table}.${c.from}`) !== c.to);
           const target = await tablesWithColumn(client, c.to);
           if (target.some((r) => r.table === t.from)) {
             console.log(`  COLLISION  ${t.from}."${c.to}" already exists`);
@@ -585,8 +616,8 @@ async function cmdCheck(blocks) {
           }
           if (c.scope === "global" && others.length) {
             console.log(
-              `  UNSAFE  ${t.from}."${c.from}" is marked "global" but the same ` +
-                `column name exists on: ${others.map(qual).join(", ")}\n` +
+              `  UNSAFE  ${t.from}."${c.from}" is marked "global" but these tables ` +
+                `KEEP that column name: ${others.map(qual).join(", ")}\n` +
                 `          -> a repo-wide replace would corrupt those. Either rename it there\n` +
                 `             too, or use "scope": "table" and judge each call site by hand.`
             );
