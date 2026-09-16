@@ -6,8 +6,14 @@ import { useAuthStore } from '@/store/authStore'
  * Spaltenauswahl) im localStorage.
  *
  * Der Storage-Key wird beim ersten Render auf den eingeloggten Mitarbeiter
- * fixiert (`plain:filt:<employeeId>:<key>`), damit sich mehrere Nutzer an einem
- * geteilten Browser nicht dieselben Filter teilen.
+ * fixiert (`plain:filt:<version>:<employeeId>:<key>`), damit sich mehrere Nutzer
+ * an einem geteilten Browser nicht dieselben Filter teilen.
+ *
+ * SCHEMA_VERSION hochzählen, wenn sich die *Werte* ändern statt nur die Keys:
+ * mehrere Listen speichern hier Spaltennamen (Sortierung, Spaltenauswahl). Nach
+ * einer Spalten-Umbenennung stünde dort ein Name, den es nicht mehr gibt — das
+ * wirft keinen Fehler, es sortiert nur still nach dem Falschen. Ein neuer
+ * Präfix entwertet die Altstände in einem Zug.
  *
  * Für `Set`-basierte Zustände (Filter-Chips) `useStickySet` verwenden — es
  * kümmert sich um die Serialisierung, die JSON von Haus aus nicht beherrscht.
@@ -15,6 +21,12 @@ import { useAuthStore } from '@/store/authStore'
  * Bewusst NICHT persistiert wird die Freitextsuche: ein gespeicherter Suchtext
  * würde die Liste beim späteren Öffnen ohne erkennbaren Grund einschränken.
  */
+
+/**
+ * Bei jeder Umbenennung, die persistierte Sortier-/Spaltenschlüssel betrifft,
+ * hochzählen. v2: Umbenennung NAME_SHORT->ABBR / NAME_LONG->NAME (2026-09).
+ */
+const SCHEMA_VERSION = 'v2'
 
 interface StickyOpts<T> {
   /** Wandelt den State in etwas JSON-Serialisierbares um (z. B. Set → Array). */
@@ -37,7 +49,7 @@ export function useStickyState<T>(
   const keyRef = useRef<string>('')
   if (!keyRef.current) {
     const eid = useAuthStore.getState().employeeId ?? 'anon'
-    keyRef.current = `plain:filt:${eid}:${rawKey}`
+    keyRef.current = `plain:filt:${SCHEMA_VERSION}:${eid}:${rawKey}`
   }
   const key = keyRef.current
 

@@ -12,15 +12,23 @@
  *   node backend/scripts/rename/rename.js guard   [--block ID]
  *   node backend/scripts/rename/rename.js verify  [--block ID]
  *
- * check   - introspects the live DB: do the old names exist, is a column name
- *           ambiguous across tables, would a new name collide, and which
- *           plpgsql functions / views mention the old identifiers. Function
- *           bodies are plain text and are NOT updated by ALTER ... RENAME, so
- *           this list is the manual work the rename leaves behind.
- * sql     - writes the next numbered up-migration plus a matching down file.
- * apply   - the codemod. Dry-run unless --write is passed.
+ * check   - introspects the live DB across ALL application schemas, not just
+ *           public: do the old names exist, is a column name ambiguous across
+ *           tables, would a new name collide, and which plpgsql functions /
+ *           views mention the old identifiers. Function bodies are plain text
+ *           and are NOT updated by ALTER ... RENAME, so that list is the manual
+ *           work the rename leaves behind. Also lists identifiers the code
+ *           assembles at runtime, which no search can rewrite.
+ * sql     - writes the next numbered up-migration plus a matching down file,
+ *           each ending in NOTIFY pgrst so PostgREST drops its schema cache.
+ * apply   - the codemod. Dry-run unless --write is passed; --write without
+ *           --block is refused, because blocks are meant to land one at a time.
  * guard   - fails if any old identifier is still present in the code.
- * verify  - asserts the live DB matches the map (new there, old gone).
+ * verify  - asserts the live DB matches the map (new there, old gone) AND that
+ *           no function or view body still carries an old name.
+ *
+ * Neither the tests nor tsc can catch a rename mistake - see smoke.mjs next to
+ * this file for the one check that actually puts code and database together.
  *
  * Requires DATABASE_URL in backend/.env (same variable migrate.js uses).
  */
@@ -35,13 +43,25 @@ require("dotenv").config({ path: path.join(REPO, "backend", ".env") });
 const MAP_FILE = path.join(HERE, "rename-map.json");
 const MIGRATIONS_DIR = path.join(REPO, "backend", "migrations");
 
-/** Roots the codemod and the guard walk. */
-const SCAN_ROOTS = ["backend", "frontend-react/src", "frontend-react/tests"];
+/**
+ * Roots the codemod and the guard walk.
+ *
+ * owner-console is a second Express app on the same database - it carries its
+ * own .from(...) calls and would silently keep the old names if it were left
+ * out here.
+ */
+const SCAN_ROOTS = [
+  "backend",
+  "frontend-react/src",
+  "frontend-react/tests",
+  "owner-console",
+];
 const SCAN_EXT = new Set([".js", ".cjs", ".mjs", ".ts", ".tsx", ".njk", ".json"]);
 const SKIP_DIRS = new Set([
   "node_modules", ".git", "dist", "build", "coverage", "uploads",
   "android", "playwright-report", "test-results", ".vite",
   "migrations", // history is never rewritten
+  "sql",        // backend/sql holds the superseded originals of early migrations
   "rename",     // this tool holds the old names on purpose
 ]);
 
@@ -55,8 +75,15 @@ const BLOCK_FILTER = (() => {
 
 // ---------------------------------------------------------------- map loading
 
+/** Extra identifier prefixes the map asks the guard to watch. */
+let EXTRA_DYNAMIC_WATCH = [];
+/** Files that assemble column names from variables - no search can cover them. */
+let ALWAYS_REVIEW = [];
+
 function loadBlocks() {
   const raw = JSON.parse(fs.readFileSync(MAP_FILE, "utf8"));
+  EXTRA_DYNAMIC_WATCH = raw.dynamicWatch || [];
+  ALWAYS_REVIEW = raw.alwaysReview || [];
   let blocks = (raw.blocks || []).filter((b) => b.status === "planned");
   if (BLOCK_FILTER) blocks = blocks.filter((b) => b.id === BLOCK_FILTER);
   if (blocks.length === 0) {
@@ -71,15 +98,75 @@ function loadBlocks() {
   return blocks;
 }
 
+/**
+ * Lowercase words that also occur as ordinary identifiers throughout the code.
+ * Deriving the request-field twin from them automatically would be reckless, so
+ * the author has to spell it out after looking at the call sites.
+ */
+const RISKY_API_TOKENS = new Set([
+  "id", "name", "date", "type", "value", "status", "role", "position",
+  "category", "abbr", "scope", "key", "label", "code", "order", "group",
+  "level", "state", "title", "amount", "total", "rate", "count", "index",
+  "data", "text", "time", "year", "month", "start", "end",
+]);
+
+/**
+ * The snake_case twin of an identifier, the way it appears in request bodies.
+ * Returns null when the entry does not opt in via "api".
+ */
+function apiTwin(entry) {
+  if (!entry || entry.api === undefined || entry.api === false) return null;
+  if (entry.api === true) {
+    return entry.to
+      ? { from: entry.from.toLowerCase(), to: entry.to.toLowerCase() }
+      : null;
+  }
+  if (typeof entry.api === "object" && entry.api.from && entry.api.to) {
+    return { from: entry.api.from, to: entry.api.to };
+  }
+  return null;
+}
+
+function validateApi(block, what, entry) {
+  if (entry.api === undefined || entry.api === false) return;
+  if (entry.api === true) {
+    if (!entry.to) fail(`Block ${block.id}: ${what} has "api": true but no "to".`);
+    const from = entry.from.toLowerCase();
+    const to = entry.to.toLowerCase();
+    if (RISKY_API_TOKENS.has(from) || RISKY_API_TOKENS.has(to)) {
+      fail(
+        `Block ${block.id}: ${what} would derive the request-field rename ` +
+          `"${from}" -> "${to}".\n` +
+          `          One of those is an everyday word: as a source it would match ` +
+          `unrelated code,\n          as a target it can collide with a local ` +
+          `variable already called that. So it is\n          not derived ` +
+          `automatically - run "apply" without --write, read the call sites, then\n` +
+          `          spell it out as "api": { "from": "…", "to": "…" } - or set ` +
+          `"api": false.`
+      );
+    }
+    return;
+  }
+  if (typeof entry.api === "object" && entry.api !== null) {
+    if (!entry.api.from || !entry.api.to) {
+      fail(`Block ${block.id}: ${what} has an "api" entry without from/to.`);
+    }
+    return;
+  }
+  fail(`Block ${block.id}: ${what} has an invalid "api" - use true, false or { from, to }.`);
+}
+
 function validateBlock(block) {
   const seen = new Map();
   for (const t of block.tables || []) {
     if (!t.from) fail(`Block ${block.id}: a table entry has no "from".`);
+    validateApi(block, `table ${t.from}`, t);
     for (const c of t.columns || []) {
       if (!c.from || !c.to) fail(`Block ${block.id}: ${t.from} has a column entry without from/to.`);
       if (!["global", "table"].includes(c.scope || "")) {
         fail(`Block ${block.id}: ${t.from}.${c.from} needs "scope": "global" or "table".`);
       }
+      validateApi(block, `${t.from}.${c.from}`, c);
       // The same identifier must not be renamed to two different targets.
       if (c.scope === "global") {
         const prev = seen.get(c.from);
@@ -100,21 +187,75 @@ function fail(msg) {
 /** All identifier replacements a codemod may safely apply repo-wide. */
 function globalReplacements(blocks) {
   const map = new Map();
-  const add = (from, to, what) => {
+  const add = (from, to, what, api = false) => {
     if (map.has(from) && map.get(from).to !== to) {
       fail(`"${from}" is mapped to both "${map.get(from).to}" and "${to}".`);
     }
-    map.set(from, { to, what });
+    map.set(from, { to, what, api });
   };
   for (const b of blocks) {
     for (const t of b.tables || []) {
       if (t.to) add(t.from, t.to, `table ${t.from}`);
+      const tTwin = apiTwin(t);
+      if (tTwin) add(tTwin.from, tTwin.to, `table ${t.from} (request field)`, true);
       for (const c of t.columns || []) {
-        if (c.scope === "global") add(c.from, c.to, `${t.from}.${c.from}`);
+        // A "table"-scoped column is ambiguous, and so is its request field.
+        if (c.scope !== "global") continue;
+        add(c.from, c.to, `${t.from}.${c.from}`);
+        const cTwin = apiTwin(c);
+        if (cTwin) add(cTwin.from, cTwin.to, `${t.from}.${c.from} (request field)`, true);
       }
     }
   }
   return map;
+}
+
+/**
+ * Identifier prefixes that the code may assemble at runtime, e.g.
+ * `SURCHARGE_${i}_LABEL`. A word-boundary replace never sees those, and neither
+ * does the guard - the token is not in the file. Derived from every affected
+ * identifier plus whatever the map lists under "dynamicWatch".
+ */
+function dynamicPrefixes(blocks, extra = []) {
+  const prefixes = new Set(extra);
+  const consider = (ident) => {
+    const parts = ident.split("_");
+    // Every leading segment is a candidate: SURCHARGE_1_LABEL -> SURCHARGE_, SURCHARGE_1_
+    for (let i = 1; i < parts.length; i++) {
+      prefixes.add(parts.slice(0, i).join("_") + "_");
+    }
+  };
+  for (const b of blocks) {
+    for (const t of b.tables || []) {
+      consider(t.from);
+      for (const c of t.columns || []) consider(c.from);
+    }
+  }
+  return [...prefixes].filter((p) => p.length > 3);
+}
+
+/**
+ * Call sites where an identifier is cut in half by an interpolation or a
+ * concatenation - `SURCHARGE_${i}_LABEL`, 'ZONE_' + n. The prefix has to sit
+ * directly against the seam; merely mentioning it somewhere on a line that also
+ * interpolates is what the first version matched, and it drowned the real hits.
+ *
+ * A name assembled entirely from a variable has no prefix to find at all. Those
+ * files are listed under "alwaysReview" in the map instead.
+ */
+function findDynamicSites(prefixes) {
+  if (prefixes.length === 0) return [];
+  const alt = prefixes.map(escapeRe).join("|");
+  const seam = new RegExp(`(${alt})(?:\\$\\{|['"\`]\\s*\\+)`);
+  const hits = [];
+  for (const file of sourceFiles()) {
+    const text = fs.readFileSync(file, "utf8");
+    text.split("\n").forEach((line, i) => {
+      const m = seam.exec(line);
+      if (m) hits.push({ file: path.relative(REPO, file), line: i + 1, prefix: m[1], text: line.trim().slice(0, 100) });
+    });
+  }
+  return hits;
 }
 
 /** Column renames that a repo-wide replace would corrupt. */
@@ -181,38 +322,56 @@ async function withDb(fn) {
   }
 }
 
+/**
+ * Every schema the application owns. Hardcoding 'public' would hide the
+ * REPORTING schema, whose views and functions are called from public and are
+ * not covered by the repo's schema dump.
+ */
+const APP_SCHEMAS = `n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg\\_%'`;
+
+/** "TABLE" in public, "SCHEMA.TABLE" anywhere else - public is the common case. */
+const qual = (r) => (r.schema === "public" ? r.table : `${r.schema}.${r.table}`);
+
 async function tablesWithColumn(client, column) {
   const { rows } = await client.query(
-    `SELECT table_name FROM information_schema.columns
-      WHERE table_schema = 'public' AND column_name = $1
-      ORDER BY table_name`,
+    `SELECT c.table_schema AS schema, c.table_name AS table
+       FROM information_schema.columns c
+       JOIN pg_namespace n ON n.nspname = c.table_schema
+      WHERE ${APP_SCHEMAS} AND c.column_name = $1
+      ORDER BY c.table_schema, c.table_name`,
     [column]
   );
-  return rows.map((r) => r.table_name);
+  return rows;
 }
 
-async function tableExists(client, table) {
+/** The schemas that carry a table of this name - usually zero or one. */
+async function tableSchemas(client, table) {
   const { rows } = await client.query(
-    `SELECT 1 FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name = $1`,
+    `SELECT t.table_schema AS schema, t.table_name AS table
+       FROM information_schema.tables t
+       JOIN pg_namespace n ON n.nspname = t.table_schema
+      WHERE ${APP_SCHEMAS} AND t.table_name = $1
+      ORDER BY t.table_schema`,
     [table]
   );
-  return rows.length > 0;
+  return rows;
 }
+
+const tableExists = async (client, table) => (await tableSchemas(client, table)).length > 0;
 
 /** Functions and views whose *body text* mentions an identifier. */
 async function dbObjectsReferencing(client, identifier) {
   const { rows } = await client.query(
-    `SELECT p.proname AS name, 'function' AS kind
+    `SELECT n.nspname AS schema, p.proname AS name, 'function' AS kind
        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE n.nspname = 'public' AND p.prosrc ILIKE '%' || $1 || '%'
+      WHERE ${APP_SCHEMAS} AND p.prosrc ILIKE '%' || $1 || '%'
       UNION ALL
-     SELECT c.relname AS name,
+     SELECT n.nspname AS schema, c.relname AS name,
             CASE c.relkind WHEN 'v' THEN 'view' ELSE 'matview' END AS kind
        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm')
+      WHERE ${APP_SCHEMAS} AND c.relkind IN ('v', 'm')
         AND pg_get_viewdef(c.oid) ILIKE '%' || $1 || '%'
-      ORDER BY kind, name`,
+      ORDER BY kind, schema, name`,
     [identifier]
   );
   return rows;
@@ -244,22 +403,23 @@ async function cmdCheck(blocks) {
 
         for (const c of t.columns || []) {
           const carriers = await tablesWithColumn(client, c.from);
-          if (!carriers.includes(t.from)) {
+          if (!carriers.some((r) => r.table === t.from)) {
             console.log(`  MISSING  ${t.from}."${c.from}" does not exist`);
             problems++;
             continue;
           }
-          const others = carriers.filter((x) => x !== t.from);
+          const others = carriers.filter((r) => r.table !== t.from);
           const target = await tablesWithColumn(client, c.to);
-          if (target.includes(t.from)) {
+          if (target.some((r) => r.table === t.from)) {
             console.log(`  COLLISION  ${t.from}."${c.to}" already exists`);
             problems++;
           }
           if (c.scope === "global" && others.length) {
             console.log(
               `  UNSAFE  ${t.from}."${c.from}" is marked "global" but the same ` +
-                `column name exists on: ${others.join(", ")}\n` +
-                `          -> a repo-wide replace would corrupt those. Use "scope": "table".`
+                `column name exists on: ${others.map(qual).join(", ")}\n` +
+                `          -> a repo-wide replace would corrupt those. Either rename it there\n` +
+                `             too, or use "scope": "table" and judge each call site by hand.`
             );
             problems++;
           } else if (c.scope === "table" && !others.length) {
@@ -275,21 +435,18 @@ async function cmdCheck(blocks) {
     }
 
     // ALTER ... RENAME does not touch plpgsql bodies. Collect the fallout.
-    for (const [ident] of globalReplacements(blocks)) {
-      const refs = await dbObjectsReferencing(client, ident);
-      for (const r of refs) {
-        const key = `${r.kind}:${r.name}`;
-        if (!dbRefs.has(key)) dbRefs.set(key, new Set());
-        dbRefs.get(key).add(ident);
-      }
+    // Request-field twins are a code-level concern and never appear in SQL.
+    const noteRef = (r, ident) => {
+      const key = `${r.kind} ${qual({ schema: r.schema, table: r.name })}`;
+      if (!dbRefs.has(key)) dbRefs.set(key, new Set());
+      dbRefs.get(key).add(ident);
+    };
+    for (const [ident, info] of globalReplacements(blocks)) {
+      if (info.api) continue;
+      for (const r of await dbObjectsReferencing(client, ident)) noteRef(r, ident);
     }
     for (const m of manualColumns(blocks)) {
-      const refs = await dbObjectsReferencing(client, m.from);
-      for (const r of refs) {
-        const key = `${r.kind}:${r.name}`;
-        if (!dbRefs.has(key)) dbRefs.set(key, new Set());
-        dbRefs.get(key).add(`${m.table}.${m.from}`);
-      }
+      for (const r of await dbObjectsReferencing(client, m.from)) noteRef(r, `${m.table}.${m.from}`);
     }
 
     console.log(`\n=== DB objects to rewrite by hand ===`);
@@ -301,6 +458,16 @@ async function cmdCheck(blocks) {
       for (const [key, idents] of [...dbRefs].sort()) {
         console.log(`  ${key}  <- ${[...idents].join(", ")}`);
       }
+    }
+
+    // Identifiers the code assembles at runtime - invisible to replace and guard.
+    const dyn = findDynamicSites(dynamicPrefixes(blocks, EXTRA_DYNAMIC_WATCH));
+    console.log(`\n=== possible runtime-assembled identifiers ===`);
+    if (dyn.length === 0) {
+      console.log("  none");
+    } else {
+      console.log("  Neither the codemod nor the guard can see these - check each one.\n");
+      for (const d of dyn) console.log(`  ${d.file}:${d.line}  [${d.prefix}]  ${d.text}`);
     }
 
     console.log(
@@ -351,15 +518,21 @@ function cmdSql(blocks) {
     `-- Source of truth: backend/scripts/rename/rename-map.json\n` +
     `-- migrate.js wraps this file in a transaction; a failure rolls the whole file back.\n\n`;
 
+  // PostgREST caches the schema. Without this it keeps answering from the old
+  // one - PGRST204 "column does not exist" - until the container restarts.
+  const reload =
+    "\n\n-- PostgREST serves from a cached schema; without this it keeps using the old one.\n" +
+    "NOTIFY pgrst, 'reload schema';\n";
+
   const upFile = path.join(MIGRATIONS_DIR, `${num}_${slug}.sql`);
   const downFile = path.join(HERE, `${num}_${slug}_DOWN.sql`);
 
-  fs.writeFileSync(upFile, header("up") + upLines.join("\n") + "\n");
+  fs.writeFileSync(upFile, header("up") + upLines.join("\n") + reload);
   fs.writeFileSync(
     downFile,
     header("down") +
       "-- Not a migration. Paste into the SQL editor to undo the block.\n\n" +
-      downLines.join("\n") + "\n"
+      downLines.join("\n") + reload
   );
 
   console.log(`\n  wrote  ${path.relative(REPO, upFile)}`);
@@ -368,6 +541,20 @@ function cmdSql(blocks) {
 }
 
 function cmdApply(blocks) {
+  // The whole point of blocks is that one lands at a time. Rewriting all of
+  // them in one pass is almost always a slip, so it has to be said out loud.
+  if (WRITE && !BLOCK_FILTER && blocks.length > 1 && !args.includes("--all")) {
+    fail(
+      `apply --write would rewrite all ${blocks.length} planned blocks at once.\n` +
+        `          Pass --block <id> for one block, or --all if you really mean it.`
+    );
+  }
+  for (const b of blocks) {
+    if (b.note) console.log(`
+  ${b.id}: ${b.note}
+`);
+  }
+
   const repl = globalReplacements(blocks);
   const manual = manualColumns(blocks);
 
@@ -403,7 +590,8 @@ function cmdApply(blocks) {
     console.log("  These column names also exist on tables that are not being renamed,");
     console.log("  so each occurrence has to be judged by which table it queries.\n");
     for (const m of manual) {
-      const re = buildRegex([m.from]);
+      const twin = apiTwin(m);
+      const re = buildRegex(twin ? [m.from, twin.from] : [m.from]);
       const found = [];
       for (const file of sourceFiles()) {
         const text = fs.readFileSync(file, "utf8");
@@ -417,12 +605,37 @@ function cmdApply(blocks) {
       console.log();
     }
   }
+
+  reportDynamicSites(blocks);
+}
+
+/** Shared by apply and guard - the blind spot both of them have. */
+function reportDynamicSites(blocks) {
+  const dyn = findDynamicSites(dynamicPrefixes(blocks, EXTRA_DYNAMIC_WATCH));
+  if (dyn.length) {
+    console.log("=== runtime-assembled identifiers - not covered above ===");
+    console.log("  A word-boundary replace cannot see `SURCHARGE_${i}_LABEL`, and the guard");
+    console.log("  cannot either, because the token is never written out. Check each one.\n");
+    for (const d of dyn) console.log(`  ${d.file}:${d.line}  [${d.prefix}]  ${d.text}`);
+    console.log();
+  }
+  if (ALWAYS_REVIEW.length) {
+    // These build the column name entirely from a variable, e.g.
+    // .select(`ID, ${numberCol}, ${dateCol}`) - no prefix search can find them.
+    console.log("=== files that build column names from variables - read them every block ===");
+    for (const f of ALWAYS_REVIEW) console.log(`  ${f}`);
+    console.log();
+  }
 }
 
 function cmdGuard(blocks) {
   const tokens = new Map();
   for (const [from, info] of globalReplacements(blocks)) tokens.set(from, info.what);
-  for (const m of manualColumns(blocks)) tokens.set(m.from, `${m.table}.${m.from}`);
+  for (const m of manualColumns(blocks)) {
+    tokens.set(m.from, `${m.table}.${m.from}`);
+    const twin = apiTwin(m);
+    if (twin) tokens.set(twin.from, `${m.table}.${m.from} (request field)`);
+  }
 
   const re = buildRegex([...tokens.keys()]);
   const leftovers = [];
@@ -440,14 +653,16 @@ function cmdGuard(blocks) {
 
   if (leftovers.length === 0) {
     console.log("\n  Guard clean - no old identifier left in the scanned code.\n");
+    reportDynamicSites(blocks);
     return;
   }
   console.log(`\n  ${leftovers.length} leftover occurrence(s):\n`);
   for (const l of leftovers) console.log(`  ${l.file}:${l.line}   ${l.token}`);
   console.log(
-    "\n  Note: backend/migrations/ and docs/ are deliberately not scanned -" +
-      "\n  migration history stays as written.\n"
+    "\n  Note: backend/migrations/, backend/sql/ and docs/ are deliberately not" +
+      "\n  scanned - migration history stays as written.\n"
   );
+  reportDynamicSites(blocks);
   process.exitCode = 1;
 }
 
@@ -463,12 +678,36 @@ async function cmdVerify(blocks) {
         }
         for (const c of t.columns || []) {
           const carriers = await tablesWithColumn(client, c.to);
-          if (!carriers.includes(live)) { console.log(`  FAIL  ${live}."${c.to}" missing`); bad++; }
+          if (!carriers.some((r) => r.table === live)) { console.log(`  FAIL  ${live}."${c.to}" missing`); bad++; }
           const oldCarriers = await tablesWithColumn(client, c.from);
-          if (oldCarriers.includes(live)) { console.log(`  FAIL  ${live}."${c.from}" still exists`); bad++; }
+          if (oldCarriers.some((r) => r.table === live)) { console.log(`  FAIL  ${live}."${c.from}" still exists`); bad++; }
         }
       }
     }
+
+    // ALTER ... RENAME leaves plpgsql bodies and view output columns untouched.
+    // Without this the block looks verified while a report function still
+    // carries the old name and only breaks when someone calls it.
+    for (const [ident, info] of globalReplacements(blocks)) {
+      if (info.api) continue; // request fields never appear in SQL
+      for (const r of await dbObjectsReferencing(client, ident)) {
+        console.log(`  FAIL  ${r.kind} ${qual({ schema: r.schema, table: r.name })} still mentions "${ident}"`);
+        bad++;
+      }
+    }
+    // A "table"-scoped name legitimately survives on the tables left alone, so
+    // its remaining references are a reading task, not a failure.
+    const stillAmbiguous = [];
+    for (const m of manualColumns(blocks)) {
+      for (const r of await dbObjectsReferencing(client, m.from)) {
+        stillAmbiguous.push(`${r.kind} ${qual({ schema: r.schema, table: r.name })}  <- ${m.table}.${m.from}`);
+      }
+    }
+    if (stillAmbiguous.length) {
+      console.log(`\n  Still mentioning a "table"-scoped name (may be correct - confirm which table each one reads):`);
+      for (const s of [...new Set(stillAmbiguous)].sort()) console.log(`    ${s}`);
+    }
+
     console.log(bad === 0 ? "\n  DB matches the map.\n" : `\n  ${bad} mismatch(es).\n`);
     if (bad) process.exitCode = 1;
   });
