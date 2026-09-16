@@ -48,8 +48,8 @@
   "blocks": [
     {
       "id": "01-cost-rate",
-      "status": "planned",
-      "note": "CP_* -> COST_*. Kleinster Block, Probelauf fuer die ganze Kette.",
+      "status": "done",
+      "note": "CP_* -> COST_*. Kleinster Block, Probelauf fuer die ganze Kette. ERLEDIGT 2026-09-16: Migrationen 0140/0141, verify gruen, alle 11 Report-Objekte gegen echte Daten geprueft.",
       "tables": [
         {
           "from": "EMPLOYEE_CP_RATE",
