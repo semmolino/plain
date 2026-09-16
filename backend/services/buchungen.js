@@ -1177,7 +1177,7 @@ async function rebookBuchungen(supabase, {
     .from("TEC")
     .select(`
       ID, TENANT_ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID, DATE_VOUCHER,
-      QUANTITY_INT, QUANTITY_EXT, CP_RATE, CP_TOT, SP_RATE, SP_TOT,
+      QUANTITY_INT, QUANTITY_EXT, COST_RATE, COST_TOTAL, SP_RATE, SP_TOT,
       POSTING_DESCRIPTION, STATUS, BOOKING_KIND, ENTRY_KIND,
       INVOICE_ID, PARTIAL_PAYMENT_ID
     `)
@@ -1270,8 +1270,8 @@ async function rebookBuchungen(supabase, {
   // das Ziel mit einem Preis, der dort nie vereinbart wurde. Fehlt die
   // Zuordnung, bleibt der alte Satz stehen und die Antwort sagt das — eine
   // stillschweigende 0 waere ein verschwundener Erloes.
-  // Der Kostensatz (CP_RATE) bleibt in jedem Fall: er kommt aus
-  // EMPLOYEE_CP_RATE und ist projektunabhaengig.
+  // Der Kostensatz (COST_RATE) bleibt in jedem Fall: er kommt aus
+  // EMPLOYEE_COST_RATE und ist projektunabhaengig.
   const presetCache = new Map();
   const zielPreset = async (mitarbeiterId) => {
     const key = Number(mitarbeiterId);
@@ -1399,7 +1399,7 @@ async function rebookBuchungen(supabase, {
     DATE_VOUCHER:         m.DATE_VOUCHER || null,
     BOOKING_EMPLOYEE_ID:  m._row.EMPLOYEE_ID ?? null,
     QUANTITY_INT:         Number(m._row.QUANTITY_INT ?? 0),
-    CP_TOT:               Number(m._row.CP_TOT ?? 0),
+    COST_TOTAL:               Number(m._row.COST_TOTAL ?? 0),
     FROM_PROJECT_ID:      m.FROM_PROJECT_ID,
     FROM_PROJECT_NAME:    m.FROM_PROJECT_NAME,
     FROM_STRUCTURE_ID:    m.FROM_STRUCTURE_ID,

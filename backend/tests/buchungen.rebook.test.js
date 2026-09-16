@@ -46,12 +46,12 @@ function welt(extraTec = []) {
     TEC: [
       // offen, Mitarbeiter 5, 10 h zu 80 € Kostensatz und 90 € Stundensatz
       { ID: 100, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-03",
-        QUANTITY_INT: 10, QUANTITY_EXT: 10, CP_RATE: 80, CP_TOT: 800, SP_RATE: 90, SP_TOT: 900,
+        QUANTITY_INT: 10, QUANTITY_EXT: 10, COST_RATE: 80, COST_TOTAL: 800, SP_RATE: 90, SP_TOT: 900,
         POSTING_DESCRIPTION: "Grundrisse", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
       // dieselbe Struktur, aber abgerechnet
       { ID: 101, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-04",
-        QUANTITY_INT: 4, QUANTITY_EXT: 4, CP_RATE: 80, CP_TOT: 320, SP_RATE: 90, SP_TOT: 360,
+        QUANTITY_INT: 4, QUANTITY_EXT: 4, COST_RATE: 80, COST_TOTAL: 320, SP_RATE: 90, SP_TOT: 360,
         POSTING_DESCRIPTION: "Details", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: 500, PARTIAL_PAYMENT_ID: null },
       ...extraTec,
@@ -78,7 +78,7 @@ describe("rebookBuchungen", () => {
     expect(tec.SP_TOT).toBe(1100);
     expect(tec.ROLE_NAME_SHORT).toBe("PL");
     // Kostensatz haengt am Mitarbeiter, nicht am Projekt — er bleibt.
-    expect(tec.CP_RATE).toBe(80);
+    expect(tec.COST_RATE).toBe(80);
     // Menge, Datum, Person, Beschreibung bleiben unberuehrt.
     expect(tec.QUANTITY_INT).toBe(10);
     expect(tec.DATE_VOUCHER).toBe("2026-08-03");
@@ -148,7 +148,7 @@ describe("rebookBuchungen", () => {
   it("warnt, wenn sich der Stundensatz ändert oder im Ziel keiner hinterlegt ist", async () => {
     const db = welt([
       { ID: 102, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 6, DATE_VOUCHER: "2026-08-05",
-        QUANTITY_INT: 2, QUANTITY_EXT: 2, CP_RATE: 70, CP_TOT: 140, SP_RATE: 85, SP_TOT: 170,
+        QUANTITY_INT: 2, QUANTITY_EXT: 2, COST_RATE: 70, COST_TOTAL: 140, SP_RATE: 85, SP_TOT: 170,
         POSTING_DESCRIPTION: "Abstimmung", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
     ]);
@@ -167,15 +167,15 @@ describe("rebookBuchungen", () => {
   it("lässt Pauschalen ihren Preis und Entwürfe/Pausen liegen", async () => {
     const db = welt([
       { ID: 103, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-06",
-        QUANTITY_INT: 0, QUANTITY_EXT: 1, CP_RATE: 0, CP_TOT: 0, SP_RATE: 2500, SP_TOT: 2500,
+        QUANTITY_INT: 0, QUANTITY_EXT: 1, COST_RATE: 0, COST_TOTAL: 0, SP_RATE: 2500, SP_TOT: 2500,
         POSTING_DESCRIPTION: "Gutachten", STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_REVENUE", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
       { ID: 104, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-07",
-        QUANTITY_INT: 3, QUANTITY_EXT: 3, CP_RATE: 80, CP_TOT: 240, SP_RATE: 90, SP_TOT: 270,
+        QUANTITY_INT: 3, QUANTITY_EXT: 3, COST_RATE: 80, COST_TOTAL: 240, SP_RATE: 90, SP_TOT: 270,
         POSTING_DESCRIPTION: "Entwurf", STATUS: "DRAFT", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
       { ID: 105, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: null, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-07",
-        QUANTITY_INT: 1, QUANTITY_EXT: 0, CP_RATE: 0, CP_TOT: 0, SP_RATE: 0, SP_TOT: 0,
+        QUANTITY_INT: 1, QUANTITY_EXT: 0, COST_RATE: 0, COST_TOTAL: 0, SP_RATE: 0, SP_TOT: 0,
         POSTING_DESCRIPTION: "Pause", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "BREAK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
     ]);
@@ -218,7 +218,7 @@ describe("rebookBuchungen", () => {
     // im Protokoll stehen — sonst zeigt die Struktur still den alten Stand.
     const db = welt([
       { ID: 106, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 6, DATE_VOUCHER: "2026-08-08",
-        QUANTITY_INT: 2, QUANTITY_EXT: 2, CP_RATE: 70, CP_TOT: 140, SP_RATE: 85, SP_TOT: 170,
+        QUANTITY_INT: 2, QUANTITY_EXT: 2, COST_RATE: 70, COST_TOTAL: 140, SP_RATE: 85, SP_TOT: 170,
         POSTING_DESCRIPTION: "Abstimmung", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, PARTIAL_PAYMENT_ID: null },
     ]);

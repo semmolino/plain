@@ -122,9 +122,16 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0070b ist der generierte Seed (wiederholbar), 0139 die erste Migration,
     // die der Runner selbst einspielt. Kommt hier etwas Neues hinzu, ist das
     // richtig — dann gehoert es aber bewusst hierher, nicht versehentlich.
+    //
+    // 0140/0141 gehoeren zum Umbenennungsvorhaben (Block 01, CP_* -> COST_*).
+    // Je Block kommen zwei dazu: die ALTER-Anweisungen und die SQL-Objekte, die
+    // ALTER nicht anfasst. Auf der Produktionsdatenbank sind sie bereits
+    // vermerkt; eine frisch aufgebaute Datenbank braucht sie.
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0139_booking_rebook.sql",
+      "0140_01_cost_rate.sql",
+      "0141_01_cost_rate_sql_objects.sql",
     ]);
   });
 
