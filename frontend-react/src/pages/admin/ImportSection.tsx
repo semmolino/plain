@@ -271,7 +271,7 @@ export function ImportSection() {
         {domainKey === 'opening_cost' && (
           <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0' }}>
             Hinweis: Trägt <strong>bereits angefallene Kosten</strong> je Projekt als einen Kostenblock
-            (Pauschalkosten-Buchung) ein — <em>keine</em> Einzelbuchungen. Besonders für Stunden-/TEC-Projekte,
+            (Pauschalkosten-Buchung) ein — <em>keine</em> Einzelbuchungen. Besonders für Projekte, die nach Aufwand abgerechnet werden,
             damit Deckungsbeitrag und Wirtschaftlichkeit ab Tag 1 stimmen. Voraussetzung: das Projekt ist
             importiert/angelegt.
           </p>

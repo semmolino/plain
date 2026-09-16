@@ -385,7 +385,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       const tec_moved = (res as { data?: { tec_moved?: boolean } }).data?.tec_moved
       setSaveMsg({
         text: tec_moved
-          ? 'Element angelegt ✅ — Hinweis: TEC-Einträge des übergeordneten Elements wurden auf dieses Element übertragen.'
+          ? 'Element angelegt ✅ — Hinweis: Buchungen des übergeordneten Elements wurden auf dieses Element übertragen.'
           : 'Element angelegt ✅',
         type: 'success',
       })
