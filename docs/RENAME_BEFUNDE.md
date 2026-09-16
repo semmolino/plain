@@ -4,6 +4,14 @@ Arbeitsunterlage für das Umbenennungsvorhaben. Die Daten selbst stehen in
 `backend/scripts/rename/rename-map.json` — hier steht, was man je Block wissen
 muss, bevor man ihn anfasst.
 
+> ## Vor jedem Block: `git fetch origin`
+>
+> Block 01 lief auf einem Arbeitsverzeichnis, das **28 Commits hinter
+> `origin/main`** lag. Die Datenbank wurde in den Zielzustand gebracht, während
+> der ausgerollte Code die alten Namen trug — die Produktion war kaputt, bis der
+> Merge nachgezogen war. Der Zustand der Datenbank wird gegen die Datenbank
+> geprüft, der Zustand des Codes gegen `origin/main`. Beides, jedes Mal.
+
 > **Stand: gegen die laufende Datenbank geprüft** (16.09.2026). `rename.js check`
 > läuft über alle acht Blöcke ohne Befund. Die Spaltenzahlen stammen aus der
 > Datenbank, die Fundstellen aus Trockenläufen von `rename.js apply`.
@@ -52,11 +60,10 @@ Die Spalten aus der Vorlage waren die *Zielnamen* ohne Pfeile. Zugeordnet:
 `SP_TOT_BEFORE/AFTER`→`HOURLY_RATE_TOTAL_BEFORE/AFTER`, Tabelle →
 `BOOKING_REBOOKING`.
 
-**Kein Codepfad benutzt sie.** Die Trockenläufe finden null Fundstellen für
-`SP_RATE_BEFORE` und Verwandte; `rebook` und `Umbuchung` kommen repo-weit nicht
-vor. Die Tabelle hat 3 Zeilen und keine Fremdschlüssel. Für die Umbenennung
-unkritisch — aber es lohnt zu wissen, ob dahinter eine begonnene oder eine
-aufgegebene Funktion steht.
+Die Tabelle gehört zum Feature **„Buchungen umbuchen"** (`UmbuchenModal.tsx`,
+`services/buchungen.js`, eigenes Recht laut `0139_booking_rebook.sql`). Eine
+frühere Fassung dieses Blatts behauptete, kein Codepfad benutze sie — das war
+der veraltete Checkout, nicht die Wirklichkeit.
 
 ---
 
@@ -208,3 +215,29 @@ Der Rauchtest entscheidet, ob ein Block fertig ist. Er prüft nicht nur
 Statuscodes, sondern liest die Map: kommt jeder **neue** Name in einer Antwort
 an, taucht noch ein **alter** auf, haben die PDFs Substanz. Ein alter Name in
 einer Antwort ist fast immer eine View, die ihre Ausgabespalten behalten hat.
+
+---
+
+## Reihenfolge beim Ausrollen
+
+Seit `Procfile: postdeploy: node backend/scripts/migrate.js --auto` spielt der
+Deploy die Migrationen selbst ein. Bei einer Umbenennung gibt es keine
+Reihenfolge ohne Lücke, aber sehr unterschiedlich lange:
+
+| Reihenfolge | Lücke | Dauer |
+|---|---|---|
+| Migration von Hand, dann pushen | alter Code trifft neues Schema | **Minuten** (ein Deploy dauert ~4–5) |
+| Pushen, Hook spielt ein | neuer Code trifft altes Schema | **Sekunden** |
+
+Also pushen und den Hook arbeiten lassen. Scheitert eine Migration, endet der
+Deploy mit `hook-error` und die alte Version bleibt online — der Fehler ist
+laut, nicht still.
+
+Zwei Dinge, die dazugehören:
+
+- Der Wächter-Test `backend/tests/migrate.plan.test.js` hält fest, welche
+  Migrationen außerhalb von `APPLIED_BASELINE.txt` stehen. Je Block kommen zwei
+  dazu; sie gehören bewusst in die Erwartungsliste eingetragen.
+- Ein Push löst den Deploy über die GitHub-Anbindung aus. Wenn er ausbleibt:
+  `scalingo --app planandsimple integration-link-manual-deploy main`.
+  Notbremse für den Hook: `MIGRATE_ON_DEPLOY=false`.
