@@ -135,6 +135,12 @@ const capabilities = [
     permissions: ["employees.salary.view", "employees.salary.edit"], since: SINCE },
   { key: "employees.month_close", module: "employees", labelDe: "Monatsabschluss", type: "boolean",
     permissions: ["employees.month_close.edit", "settings.monthly_close.edit"], since: SINCE },
+  // Bewusst NICHT in employees.management gehaengt: das ist Personalstammdaten,
+  // die Abwesenheitsverwaltung ist ein eigener Arbeitsablauf (beantragen,
+  // genehmigen, verwalten) und soll getrennt lizenzierbar sein.
+  { key: "employees.absence", module: "employees", labelDe: "Abwesenheiten & Urlaub", type: "boolean",
+    permissions: ["absence.view", "absence.request", "absence.approve", "absence.manage"],
+    since: "2026-09-16" },
 
   // ── Einstellungen ────────────────────────────────────────────────────────────
   { key: "settings.core", module: "settings", labelDe: "Stammdaten, Unternehmen, Nummernkreise", type: "boolean",
@@ -148,6 +154,15 @@ const capabilities = [
     permissions: ["settings.notifications.edit"], since: SINCE },
   { key: "settings.dunning_config", module: "settings", labelDe: "Mahnungs-Einstellungen", type: "boolean",
     permissions: ["settings.dunning_config.edit"], since: SINCE },
+  // Eigene Capability statt Teil von settings.core: der Import ist die
+  // Uebernahme eines Altbestands und taucht typischerweise einmal beim
+  // Einstieg auf - ein anderer Zuschnitt als die laufenden Stammdaten.
+  { key: "settings.data_import", module: "settings", labelDe: "Datenimport", type: "boolean",
+    permissions: ["import.manage"], since: "2026-09-16" },
+  // Getrennt von settings.notifications: dort geht es darum, WELCHE
+  // Benachrichtigungen es gibt, hier um den Versandweg (Absender, Domain).
+  { key: "settings.email", module: "settings", labelDe: "E-Mail-Versand", type: "boolean",
+    permissions: ["settings.email.edit"], since: "2026-09-16" },
   { key: "cost_rate.calculator", module: "settings", labelDe: "Kostensatz-Rechner", type: "boolean",
     permissions: ["settings.cost_rate.edit"], since: SINCE },
   { key: "arbzg.compliance", module: "settings", labelDe: "ArbZG-Validierung & Audit", type: "boolean",

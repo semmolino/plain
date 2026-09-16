@@ -5,7 +5,7 @@
 > Architektur: [LICENSE_TIERS_CONCEPT.md](LICENSE_TIERS_CONCEPT.md) ·
 > Workflow: [LICENSE_DEVELOPMENT_CHECKLIST.md](LICENSE_DEVELOPMENT_CHECKLIST.md).
 
-**Stand:** 2026-06-15 · 12 Module · 43 Capabilities · 104 Permission-Verknuepfungen
+**Stand:** 2026-06-15 · 12 Module · 46 Capabilities · 110 Permission-Verknuepfungen
 
 Jede **Capability** ist ein Schalter, den du je Lizenztyp in der Matrix an/aus stellst.
 Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten dahinter liegen
@@ -85,6 +85,7 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 | **Mitarbeiterverwaltung**<br>`employees.management` | boolean | Mitarbeiter sehen; Mitarbeiter anlegen; Mitarbeiter bearbeiten; Mitarbeiter löschen; Rollen zuweisen; Passwörter setzen; Buchungen aller Mitarbeiter |
 | **Gehaltsdaten**<br>`employees.salary` | boolean | Gehalt sehen; Gehalt bearbeiten |
 | **Monatsabschluss**<br>`employees.month_close` | boolean | Monatsabschluss bearbeiten; Monatsabschluss-Einstellungen |
+| **Abwesenheiten & Urlaub**<br>`employees.absence` | boolean | Abwesenheiten ansehen; Abwesenheit beantragen; Abwesenheiten genehmigen; Abwesenheiten verwalten |
 
 ## Einstellungen `settings`
 
@@ -95,6 +96,8 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 | **Textvorlagen**<br>`settings.text_templates` | boolean | Textvorlagen bearbeiten |
 | **Konfigurierbare Benachrichtigungen**<br>`settings.notifications` | boolean | Benachrichtigungen bearbeiten |
 | **Mahnungs-Einstellungen**<br>`settings.dunning_config` | boolean | Mahnungs-Einstellungen |
+| **Datenimport**<br>`settings.data_import` | boolean | Datenimport verwalten |
+| **E-Mail-Versand**<br>`settings.email` | boolean | E-Mail-Versand bearbeiten |
 | **Kostensatz-Rechner**<br>`cost_rate.calculator` | boolean | Kostensatz-Rechner |
 | **ArbZG-Validierung & Audit**<br>`arbzg.compliance` | boolean | Arbeitszeit-Einstellungen |
 
