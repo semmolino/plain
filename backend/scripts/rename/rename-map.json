@@ -315,8 +315,8 @@
     },
     {
       "id": "04-employee-abbr",
-      "status": "planned",
-      "note": "EMPLOYEE.SHORT_NAME -> ABBR. Der Zwilling short_name steht in der Anmeldeantwort (routes/auth.js) und im Auth-Store - nach diesem Block zuerst die Anmeldung pruefen.",
+      "status": "done",
+      "note": "EMPLOYEE.SHORT_NAME -> ABBR. Der Zwilling short_name steht in der Anmeldeantwort (routes/auth.js) und im Auth-Store - nach diesem Block zuerst die Anmeldung pruefen. ERLEDIGT 2026-09-16: Migrationen 0145/0146, verify gruen, Rauchtest inkl. Anmeldung sauber.",
       "tables": [
         {
           "from": "EMPLOYEE",
