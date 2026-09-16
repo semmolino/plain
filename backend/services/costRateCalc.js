@@ -209,12 +209,12 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
   if (empErr) throw { status: 500, message: empErr.message };
   if (!employees || !employees.length) return [];
 
-  // Fetch current CP_RATE for each employee from EMPLOYEE_CP_RATE (latest entry ≤ today)
+  // Fetch current COST_RATE for each employee from EMPLOYEE_COST_RATE (latest entry ≤ today)
   const today = new Date().toISOString().slice(0, 10);
   const empIds = employees.map(e => e.ID);
   const { data: rateRows } = await supabase
-    .from('EMPLOYEE_CP_RATE')
-    .select('EMPLOYEE_ID, CP_RATE, VALID_FROM')
+    .from('EMPLOYEE_COST_RATE')
+    .select('EMPLOYEE_ID, COST_RATE, VALID_FROM')
     .eq('TENANT_ID', tenantId)
     .in('EMPLOYEE_ID', empIds)
     .lte('VALID_FROM', today)
@@ -223,7 +223,7 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
   const currentRateMap = new Map();
   for (const row of (rateRows || [])) {
     if (!currentRateMap.has(row.EMPLOYEE_ID)) {
-      currentRateMap.set(row.EMPLOYEE_ID, Number(row.CP_RATE));
+      currentRateMap.set(row.EMPLOYEE_ID, Number(row.COST_RATE));
     }
   }
 
@@ -288,7 +288,7 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
   });
 }
 
-// ── Import to EMPLOYEE_CP_RATE ────────────────────────────────────────────────
+// ── Import to EMPLOYEE_COST_RATE ────────────────────────────────────────────────
 
 async function importCostRates(supabase, tenantId, rates, validFrom, recalcBookings = false) {
   if (!rates || !rates.length) return;
@@ -297,15 +297,15 @@ async function importCostRates(supabase, tenantId, rates, validFrom, recalcBooki
   const rows = rates.map(r => ({
     TENANT_ID:   tenantId,
     EMPLOYEE_ID: r.employee_id,
-    CP_RATE:     r.rate,
+    COST_RATE:     r.rate,
     VALID_FROM:  validFrom,
   }));
-  const { error } = await supabase.from('EMPLOYEE_CP_RATE').insert(rows);
+  const { error } = await supabase.from('EMPLOYEE_COST_RATE').insert(rows);
   if (error) throw { status: 500, message: error.message };
 
   if (!recalcBookings) return;
 
-  // Recalculate CP_RATE + CP_TOT on TEC bookings dated >= validFrom
+  // Recalculate COST_RATE + COST_TOTAL on TEC bookings dated >= validFrom
   for (const r of rates) {
     const { data: tecRows, error: fetchErr } = await supabase
       .from('TEC')
@@ -323,8 +323,8 @@ async function importCostRates(supabase, tenantId, rates, validFrom, recalcBooki
     const updates = tecRows.map(row => ({
       ID:        row.ID,
       TENANT_ID: tenantId,
-      CP_RATE:   r.rate,
-      CP_TOT:    Math.round(Number(row.QUANTITY_INT) * r.rate * 100) / 100,
+      COST_RATE:   r.rate,
+      COST_TOTAL:    Math.round(Number(row.QUANTITY_INT) * r.rate * 100) / 100,
     }));
     const { error: updErr } = await supabase
       .from('TEC')

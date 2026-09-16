@@ -12,8 +12,8 @@ export interface DraftEntry {
   TIME_START:          string | null
   TIME_FINISH:         string | null
   QUANTITY_INT:        number
-  CP_RATE:             number
-  CP_TOT:              number
+  COST_RATE:             number
+  COST_TOTAL:              number
   QUANTITY_EXT:        number
   SP_RATE:             number
   SP_TOT:              number
@@ -32,7 +32,7 @@ export interface CreateDraftPayload {
   TIME_START:          string
   TIME_FINISH:         string
   QUANTITY_INT:        number
-  CP_RATE:             number
+  COST_RATE:             number
   POSTING_DESCRIPTION: string
   ENTRY_KIND?:         EntryKind
 }

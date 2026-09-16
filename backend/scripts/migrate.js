@@ -7,7 +7,14 @@
  * Usage:
  *   node scripts/migrate.js                      – apply pending migrations
  *   node scripts/migrate.js --status             – show applied / pending
+ *   node scripts/migrate.js --only 0140,0141          – nur diese anwenden
  *   node scripts/migrate.js --backfill --through 0138 [--confirm]
+ *
+ * ABOUT --only: a pending migration is not always one you want to run right now.
+ * 0070b_license_capabilities_seed.sql is regenerated from capabilities.manifest.js
+ * and sits pending; applying it as a side effect of an unrelated change would
+ * silently alter which permissions are gated in which tariff. --only takes
+ * number prefixes or filename fragments and applies just those, in file order.
  *
  * ABOUT --backfill: records files that are already in the database WITHOUT
  * running them, so the runner does not start from the beginning on a database
@@ -41,6 +48,11 @@ const CONFIRM = process.argv.includes("--confirm");
 const THROUGH = (() => {
   const i = process.argv.indexOf("--through");
   return i !== -1 ? process.argv[i + 1] : null;
+})();
+const ONLY = (() => {
+  const i = process.argv.indexOf("--only");
+  if (i === -1) return null;
+  return String(process.argv[i + 1] || "").split(",").map((x) => x.trim()).filter(Boolean);
 })();
 
 /** Leading migration number, e.g. "0070b_seed.sql" -> 70. */
@@ -172,7 +184,26 @@ async function main() {
       return;
     }
 
-    const pending = files.filter((f) => !applied.has(f));
+    let pending = files.filter((f) => !applied.has(f));
+
+    if (ONLY) {
+      const wanted = pending.filter((f) => ONLY.some((o) => f.startsWith(o) || f.includes(o)));
+      const unmatched = ONLY.filter((o) => !pending.some((f) => f.startsWith(o) || f.includes(o)));
+      if (unmatched.length) {
+        console.error(
+          `\n❌  --only matched nothing pending for: ${unmatched.join(", ")}\n` +
+            "    Either the file is already applied or the name is wrong (--status shows both).\n"
+        );
+        process.exit(1);
+      }
+      const skipped = pending.filter((f) => !wanted.includes(f));
+      if (skipped.length) {
+        console.log(`\nSkipping ${skipped.length} other pending migration(s):`);
+        for (const f of skipped) console.log(`  ⏭  ${f}`);
+      }
+      pending = wanted;
+    }
+
     if (pending.length === 0) {
       console.log("✅  No pending migrations.");
       return;

@@ -354,7 +354,7 @@ describe("commit + rollback (opening_cost)", () => {
     expect(tec).toHaveLength(1);
     expect(tec[0]).toMatchObject({
       BOOKING_KIND: "LUMP_COST", STATUS: "CONFIRMED", STRUCTURE_ID: 41,
-      QUANTITY_INT: 0, CP_TOT: 45000, IMPORT_BATCH_ID: res.batchId, TENANT_ID: TENANT,
+      QUANTITY_INT: 0, COST_TOTAL: 45000, IMPORT_BATCH_ID: res.batchId, TENANT_ID: TENANT,
     });
     // COSTS am Strukturknoten neu gerechnet
     expect(supabase._tables.PROJECT_STRUCTURE[0].COSTS).toBe(45000);

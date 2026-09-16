@@ -69,7 +69,7 @@ interface BuchungForm {
   TIME_START:          string
   TIME_FINISH:         string
   QUANTITY_INT:        string
-  CP_RATE:             string
+  COST_RATE:             string
   QUANTITY_EXT:        string
   SP_RATE:             string
   POSTING_DESCRIPTION: string
@@ -79,7 +79,7 @@ function emptyForm(): BuchungForm {
   return {
     EMPLOYEE_ID: String(useAuthStore.getState().employeeId ?? ''), STRUCTURE_ID: '', DATE_VOUCHER: todayIso(),
     TIME_START: '', TIME_FINISH: '',
-    QUANTITY_INT: '', CP_RATE: '', QUANTITY_EXT: '', SP_RATE: '',
+    QUANTITY_INT: '', COST_RATE: '', QUANTITY_EXT: '', SP_RATE: '',
     POSTING_DESCRIPTION: '',
   }
 }
@@ -92,7 +92,7 @@ function buchungToForm(b: Buchung): BuchungForm {
     TIME_START:          b.TIME_START ?? '',
     TIME_FINISH:         b.TIME_FINISH ?? '',
     QUANTITY_INT:        String(b.QUANTITY_INT),
-    CP_RATE:             String(b.CP_RATE),
+    COST_RATE:             String(b.COST_RATE),
     QUANTITY_EXT:        String(b.QUANTITY_EXT),
     SP_RATE:             String(b.SP_RATE),
     POSTING_DESCRIPTION: b.POSTING_DESCRIPTION,
@@ -172,14 +172,14 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     setForm(f => ({ ...f, SP_RATE: presetData.found && presetData.SP_RATE != null ? String(presetData.SP_RATE) : f.SP_RATE }))
   }, [presetData, showForm])
 
-  // CP_RATE (Kostensatz) aus dem Kostensatz-Verlauf laden. Ebenfalls an `showForm`
+  // COST_RATE (Kostensatz) aus dem Kostensatz-Verlauf laden. Ebenfalls an `showForm`
   // gekoppelt, sonst feuert der Effect beim erneuten Öffnen (gleicher empId/Datum)
   // nicht und der von emptyForm() geleerte Wert würde als 0 gespeichert.
   useEffect(() => {
     if (!showForm) return
-    if (!empId || !form.DATE_VOUCHER) { setForm(f => ({ ...f, CP_RATE: '' })); setCpRateFound(null); return }
+    if (!empId || !form.DATE_VOUCHER) { setForm(f => ({ ...f, COST_RATE: '' })); setCpRateFound(null); return }
     fetchEmployeeCpRateForDate(empId, form.DATE_VOUCHER)
-      .then(res => { setForm(f => ({ ...f, CP_RATE: String(res.data.rate) })); setCpRateFound(res.data.found) })
+      .then(res => { setForm(f => ({ ...f, COST_RATE: String(res.data.rate) })); setCpRateFound(res.data.found) })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empId, form.DATE_VOUCHER, showForm])
@@ -300,7 +300,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
         case 'description': cmp = (a.POSTING_DESCRIPTION ?? '').localeCompare(b.POSTING_DESCRIPTION ?? '', 'de'); break
         case 'h_int':       cmp = (a.QUANTITY_INT ?? 0) - (b.QUANTITY_INT ?? 0); break
         case 'h_ext':       cmp = (a.QUANTITY_EXT ?? 0) - (b.QUANTITY_EXT ?? 0); break
-        case 'cost':        cmp = (a.CP_TOT ?? 0) - (b.CP_TOT ?? 0); break
+        case 'cost':        cmp = (a.COST_TOTAL ?? 0) - (b.COST_TOTAL ?? 0); break
         case 'revenue':     cmp = (a.SP_TOT ?? 0) - (b.SP_TOT ?? 0); break
       }
       return sortDir === 'asc' ? cmp : -cmp
@@ -311,7 +311,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
 
   const totalIntH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) || isBreakRow(b) ? 0 : Number(b.QUANTITY_INT) || 0), 0)
   const totalExtH = visibleBuchungen.reduce((s, b) => s + (isSpecialKind(b.BOOKING_KIND) || isBreakRow(b) ? 0 : Number(b.QUANTITY_EXT) || 0), 0)
-  const totalCost = visibleBuchungen.reduce((s, b) => s + (Number(b.CP_TOT) || 0), 0)
+  const totalCost = visibleBuchungen.reduce((s, b) => s + (Number(b.COST_TOTAL) || 0), 0)
   const totalRev  = visibleBuchungen.reduce((s, b) => s + (Number(b.SP_TOT) || 0), 0)
 
   function toggleSort(col: SortCol) {
@@ -374,7 +374,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
       TIME_START:          form.TIME_START  || undefined,
       TIME_FINISH:         form.TIME_FINISH || undefined,
       QUANTITY_INT:        Number(form.QUANTITY_INT),
-      CP_RATE:             Number(form.CP_RATE),
+      COST_RATE:             Number(form.COST_RATE),
       QUANTITY_EXT:        Number(form.QUANTITY_EXT),
       SP_RATE:             Number(form.SP_RATE),
       POSTING_DESCRIPTION: form.POSTING_DESCRIPTION,
@@ -385,7 +385,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     e.preventDefault()
     if (!editRow) return
     setEditMsg(null)
-    if (!editForm.EMPLOYEE_ID || !editForm.STRUCTURE_ID || !editForm.DATE_VOUCHER || !editForm.QUANTITY_INT || editForm.CP_RATE === '' || !editForm.QUANTITY_EXT || editForm.SP_RATE === '' || !editForm.POSTING_DESCRIPTION) {
+    if (!editForm.EMPLOYEE_ID || !editForm.STRUCTURE_ID || !editForm.DATE_VOUCHER || !editForm.QUANTITY_INT || editForm.COST_RATE === '' || !editForm.QUANTITY_EXT || editForm.SP_RATE === '' || !editForm.POSTING_DESCRIPTION) {
       setEditMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
     patchMut.mutate({
@@ -397,7 +397,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
         TIME_START:          editForm.TIME_START  || undefined,
         TIME_FINISH:         editForm.TIME_FINISH || undefined,
         QUANTITY_INT:        Number(editForm.QUANTITY_INT),
-        CP_RATE:             Number(editForm.CP_RATE),
+        COST_RATE:             Number(editForm.COST_RATE),
         QUANTITY_EXT:        Number(editForm.QUANTITY_EXT),
         SP_RATE:             Number(editForm.SP_RATE),
         POSTING_DESCRIPTION: editForm.POSTING_DESCRIPTION,
@@ -411,7 +411,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     setForm(f => ({
       ...f,
       [k]: value,
-      ...(k === 'EMPLOYEE_ID' ? { SP_RATE: '', CP_RATE: '' } : {}),
+      ...(k === 'EMPLOYEE_ID' ? { SP_RATE: '', COST_RATE: '' } : {}),
       ...(k === 'QUANTITY_INT' && !extTouched ? { QUANTITY_EXT: value } : {}),
     }))
   }
@@ -576,7 +576,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                     {showCosts && (
                       <div className="form-group">
                         <label htmlFor="bcr">Kostensatz</label>
-                        <input id="bcr" type="number" step="0.01" value={form.CP_RATE} readOnly
+                        <input id="bcr" type="number" step="0.01" value={form.COST_RATE} readOnly
                           style={{ background: 'var(--dim)', cursor: 'not-allowed' }}
                           title="Wird automatisch aus dem Kostensatz-Verlauf ermittelt" />
                         {cpRateFound === false && (
@@ -652,7 +652,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                             : isSpecialKind(b.BOOKING_KIND) ? '—' : fmtN(b.QUANTITY_INT)}
                         </td>
                         {showRevenue && <td className="num">{isSpecialKind(b.BOOKING_KIND) && b.BOOKING_KIND !== 'UNIT' ? '—' : fmtN(b.QUANTITY_EXT)}</td>}
-                        {showCosts && <td className="num">{fmtN(b.CP_TOT)}</td>}
+                        {showCosts && <td className="num">{fmtN(b.COST_TOTAL)}</td>}
                         {showRevenue && <td className="num">{fmtN(b.SP_TOT)}</td>}
                         <td className="doc-actions">
                           {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
@@ -724,7 +724,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
           </div>
           <div className="form-row">
             {showCosts && (
-              <FormField label="Kostensatz*"   id="ecr" type="number" value={editForm.CP_RATE}       onChange={setEF('CP_RATE')} step="0.01" required />
+              <FormField label="Kostensatz*"   id="ecr" type="number" value={editForm.COST_RATE}       onChange={setEF('COST_RATE')} step="0.01" required />
             )}
             {showRevenue && (
               <FormField label="Stundensatz*"  id="esr" type="number" value={editForm.SP_RATE}       onChange={setEF('SP_RATE')} step="0.01" required />
@@ -830,9 +830,9 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
   const [quantity,      setQuantity]      = useState<string>(existing && kind === 'UNIT' ? String(existing.QUANTITY_EXT ?? '') : '')
   const [unitLabel,     setUnitLabel]     = useState<string>(existing?.UNIT_LABEL ?? '')
   const [spRate,        setSpRate]        = useState<string>(existing && kind === 'UNIT' && existing.SP_RATE != null ? String(existing.SP_RATE) : '')
-  const [cpRate,        setCpRate]        = useState<string>(existing && kind === 'UNIT' && existing.CP_RATE != null ? String(existing.CP_RATE) : '')
+  const [cpRate,        setCpRate]        = useState<string>(existing && kind === 'UNIT' && existing.COST_RATE != null ? String(existing.COST_RATE) : '')
   const [amount,        setAmount]        = useState<string>(
-    existing && kind === 'LUMP_COST'    ? String(existing.CP_TOT ?? '') :
+    existing && kind === 'LUMP_COST'    ? String(existing.COST_TOTAL ?? '') :
     existing && kind === 'LUMP_REVENUE' ? String(existing.SP_TOT ?? '') : ''
   )
   const [msg,           setMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -879,7 +879,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
         BOOKING_TYPE_ID:     bookingTypeId ? Number(bookingTypeId) : undefined,
         POSTING_DESCRIPTION: description,
         ...(isUnit
-          ? { QUANTITY: num(quantity), UNIT_LABEL: unitLabel || undefined, SP_RATE: num(spRate), CP_RATE: num(cpRate) }
+          ? { QUANTITY: num(quantity), UNIT_LABEL: unitLabel || undefined, SP_RATE: num(spRate), COST_RATE: num(cpRate) }
           : { AMOUNT: num(amount) }),
       }
       return isEdit ? updateSpecialBuchung(existing!.ID, payload) : createSpecialBuchung(payload)

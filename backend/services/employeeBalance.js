@@ -457,7 +457,7 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
   // Bulk TEC (CONFIRMED only)
   const { data: tecRows, error: tecErr } = await supabase
     .from('TEC')
-    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, CP_TOT, STRUCTURE_ID, BOOKING_KIND, ENTRY_KIND')
+    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, COST_TOTAL, STRUCTURE_ID, BOOKING_KIND, ENTRY_KIND')
     .eq('TENANT_ID', tenantId)
     .in('EMPLOYEE_ID', empIds)
     .eq('STATUS', 'CONFIRMED')
@@ -507,7 +507,7 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
     const a = tecIdx.get(k) || { hoursInt: 0, hoursExt: 0, cost: 0, hoursExtNonInternal: 0 };
     a.hoursInt += Number(row.QUANTITY_INT) || 0;
     a.hoursExt += Number(row.QUANTITY_EXT) || 0;
-    a.cost     += Number(row.CP_TOT)       || 0;
+    a.cost     += Number(row.COST_TOTAL)       || 0;
     // Count external hours only if neither the structure position nor its project is internal
     const sid = row.STRUCTURE_ID;
     const pid = sid ? structureToProject.get(sid) : null;

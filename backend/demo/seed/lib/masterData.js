@@ -40,7 +40,7 @@ async function loadMasterData(supabase, tenantId) {
   const contracts = (await fetchAll(supabase, "CONTRACT", tenantId)).rows;
   const assignments = (await fetchAll(supabase, "EMPLOYEE2PROJECT", tenantId)).rows;
   const offers = (await fetchAll(supabase, "OFFER", tenantId)).rows;
-  const cpRates = (await fetchAll(supabase, "EMPLOYEE_CP_RATE", tenantId)).rows;
+  const cpRates = (await fetchAll(supabase, "EMPLOYEE_COST_RATE", tenantId)).rows;
   const bookingTypes = (await fetchAll(supabase, "BOOKING_TYPE", tenantId)).rows;
 
   // Referenzdaten (teils global, teils tenant): tolerant laden.
@@ -54,7 +54,7 @@ async function loadMasterData(supabase, tenantId) {
   for (const r of cpRates) {
     const k = String(r.EMPLOYEE_ID);
     if (!cpByEmp.has(k)) cpByEmp.set(k, []);
-    cpByEmp.get(k).push({ CP_RATE: Number(r.CP_RATE), VALID_FROM: r.VALID_FROM });
+    cpByEmp.get(k).push({ COST_RATE: Number(r.COST_RATE), VALID_FROM: r.VALID_FROM });
   }
   for (const list of cpByEmp.values()) list.sort((a, b) => (a.VALID_FROM < b.VALID_FROM ? -1 : 1));
 
@@ -95,11 +95,11 @@ async function loadMasterData(supabase, tenantId) {
     return { ...p, structures: projStructs, leaves, assignments: projAssign, contract, offer };
   });
 
-  // Kostensätze fehlen → Buchungen bekommen CP_RATE 0 (Kosten unrealistisch niedrig).
+  // Kostensätze fehlen → Buchungen bekommen COST_RATE 0 (Kosten unrealistisch niedrig).
   const empsWithoutRate = employeesEnriched.filter((e) => e.cpRates.length === 0);
   if (empsWithoutRate.length > 0) {
     warnings.push(
-      `${empsWithoutRate.length} Mitarbeiter ohne Kostensatz-Historie (EMPLOYEE_CP_RATE) — ` +
+      `${empsWithoutRate.length} Mitarbeiter ohne Kostensatz-Historie (EMPLOYEE_COST_RATE) — ` +
         `Buchungen kalkulieren dann mit Kosten 0. Tipp: seedCostRates aktivieren oder Sätze pflegen.`,
     );
   }

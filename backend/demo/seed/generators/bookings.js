@@ -9,7 +9,7 @@
  * (frühe Leistungsphasen zuerst), damit spätere Leistungsstände plausibel sind.
  *
  * Gebucht wird über den echten Service `createBuchung` → Kostensatz (aus
- * EMPLOYEE_CP_RATE nach Datum), Rollen-Preset (EMPLOYEE2PROJECT) und der
+ * EMPLOYEE_COST_RATE nach Datum), Rollen-Preset (EMPLOYEE2PROJECT) und der
  * COSTS/REVENUE-Rollup in PROJECT_STRUCTURE entstehen exakt wie in der App.
  */
 
@@ -70,13 +70,13 @@ async function ensureCostRates({ supabase, md, spanStartISO, apply, log }) {
     const rows = [];
     for (let y = startYear; y <= endYear; y++) {
       const rate = Math.round(base * Math.pow(1.03, y - startYear) * 100) / 100;
-      rows.push({ TENANT_ID: md.tenantId, EMPLOYEE_ID: Number(emp.ID), CP_RATE: rate, VALID_FROM: `${y}-01-01` });
+      rows.push({ TENANT_ID: md.tenantId, EMPLOYEE_ID: Number(emp.ID), COST_RATE: rate, VALID_FROM: `${y}-01-01` });
     }
     if (apply && rows.length) {
-      const { error } = await supabase.from("EMPLOYEE_CP_RATE").insert(rows);
-      if (error) log(`  ⚠︎ CP_RATE für MA ${emp.ID}: ${error.message}`);
+      const { error } = await supabase.from("EMPLOYEE_COST_RATE").insert(rows);
+      if (error) log(`  ⚠︎ COST_RATE für MA ${emp.ID}: ${error.message}`);
       else {
-        emp.cpRates = rows.map((r) => ({ CP_RATE: r.CP_RATE, VALID_FROM: r.VALID_FROM }));
+        emp.cpRates = rows.map((r) => ({ COST_RATE: r.COST_RATE, VALID_FROM: r.VALID_FROM }));
         inserted += rows.length;
       }
     } else {

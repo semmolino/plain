@@ -723,15 +723,15 @@ router.get("/:id/cp-rate", async (req, res) => {
   const empId = Number(req.params.id);
   const date  = String(req.query.date || new Date().toISOString().slice(0, 10));
   const { data } = await supabase
-    .from("EMPLOYEE_CP_RATE")
-    .select("CP_RATE")
+    .from("EMPLOYEE_COST_RATE")
+    .select("COST_RATE")
     .eq("TENANT_ID", req.tenantId)
     .eq("EMPLOYEE_ID", empId)
     .lte("VALID_FROM", date)
     .order("VALID_FROM", { ascending: false })
     .limit(1);
   const found = data && data.length > 0;
-  res.json({ data: { rate: found ? Number(data[0].CP_RATE) : 0, found: !!found } });
+  res.json({ data: { rate: found ? Number(data[0].COST_RATE) : 0, found: !!found } });
 });
 
 // ── CP-rate history ────────────────────────────────────────────────────────────
@@ -739,8 +739,8 @@ router.get("/:id/cp-rate", async (req, res) => {
 router.get("/:id/cp-rates", async (req, res) => {
   const empId = Number(req.params.id);
   const { data, error } = await supabase
-    .from("EMPLOYEE_CP_RATE")
-    .select("ID, CP_RATE, VALID_FROM")
+    .from("EMPLOYEE_COST_RATE")
+    .select("ID, COST_RATE, VALID_FROM")
     .eq("TENANT_ID", req.tenantId)
     .eq("EMPLOYEE_ID", empId)
     .order("VALID_FROM", { ascending: false });
@@ -750,12 +750,12 @@ router.get("/:id/cp-rates", async (req, res) => {
 
 router.post("/:id/cp-rates", requirePermission("employees.salary.edit"), async (req, res) => {
   const empId = Number(req.params.id);
-  const { cp_rate, valid_from } = req.body;
-  if (cp_rate == null || !valid_from) return res.status(400).json({ error: 'cp_rate und valid_from sind Pflichtfelder' });
+  const { cost_rate, valid_from } = req.body;
+  if (cost_rate == null || !valid_from) return res.status(400).json({ error: 'cost_rate und valid_from sind Pflichtfelder' });
   const { data, error } = await supabase
-    .from("EMPLOYEE_CP_RATE")
-    .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, CP_RATE: Number(cp_rate), VALID_FROM: valid_from }])
-    .select("ID, CP_RATE, VALID_FROM")
+    .from("EMPLOYEE_COST_RATE")
+    .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, COST_RATE: Number(cost_rate), VALID_FROM: valid_from }])
+    .select("ID, COST_RATE, VALID_FROM")
     .single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
@@ -764,17 +764,17 @@ router.post("/:id/cp-rates", requirePermission("employees.salary.edit"), async (
 router.patch("/:id/cp-rates/:rid", requirePermission("employees.salary.edit"), async (req, res) => {
   const rid   = Number(req.params.rid);
   const empId = Number(req.params.id);
-  const { cp_rate, valid_from } = req.body;
+  const { cost_rate, valid_from } = req.body;
   const update = {};
-  if (cp_rate != null)  update.CP_RATE    = Number(cp_rate);
+  if (cost_rate != null)  update.COST_RATE    = Number(cost_rate);
   if (valid_from)       update.VALID_FROM = valid_from;
   const { data, error } = await supabase
-    .from("EMPLOYEE_CP_RATE")
+    .from("EMPLOYEE_COST_RATE")
     .update(update)
     .eq("ID", rid)
     .eq("EMPLOYEE_ID", empId)
     .eq("TENANT_ID", req.tenantId)
-    .select("ID, CP_RATE, VALID_FROM")
+    .select("ID, COST_RATE, VALID_FROM")
     .single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
@@ -784,7 +784,7 @@ router.delete("/:id/cp-rates/:rid", requirePermission("employees.salary.edit"), 
   const rid   = Number(req.params.rid);
   const empId = Number(req.params.id);
   const { error } = await supabase
-    .from("EMPLOYEE_CP_RATE")
+    .from("EMPLOYEE_COST_RATE")
     .delete()
     .eq("ID", rid)
     .eq("EMPLOYEE_ID", empId)

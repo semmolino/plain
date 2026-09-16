@@ -43,7 +43,7 @@ async function upsertProjectPrice(req, res, supabase) {
       projectId: b.project_id,
       bookingTypeId: b.booking_type_id,
       spRate: b.sp_rate,
-      cpRate: b.cp_rate,
+      cpRate: b.cost_rate,
     });
     res.json({ success: true, data });
   } catch (e) {

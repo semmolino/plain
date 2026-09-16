@@ -121,7 +121,7 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
     existsRow(supabase, "MAHNUNG_SETTINGS",   { TENANT_ID: tenantId }),
     existsRow(supabase, "TEXT_TEMPLATE",      { TENANT_ID: tenantId }),
     existsRow(supabase, "NOTIFICATION_TYPE_CONFIG", { TENANT_ID: tenantId }),
-    existsRow(supabase, "EMPLOYEE_CP_RATE",   { TENANT_ID: tenantId }),
+    existsRow(supabase, "EMPLOYEE_COST_RATE",   { TENANT_ID: tenantId }),
     existsRow(supabase, "DEPARTMENT",         { TENANT_ID: tenantId }),
     // Stammdaten-Rolle (Tätigkeitsprofil) mit hinterlegtem Standard-Stundensatz
     // angelegt — Einstellungen → Stammdaten → Rollen. NICHT die RBAC-Rolle.

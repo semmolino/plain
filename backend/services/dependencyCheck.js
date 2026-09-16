@@ -178,7 +178,7 @@ async function checkEmployee(supabase, { tenantId, id }) {
     safeReferences(supabase, "PROJECT",                "ID, NAME_SHORT",  { PROJECT_MANAGER_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE2PROJECT",       "ID, PROJECT_ID",  { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE_MONTH_CLOSE",   "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "EMPLOYEE_CP_RATE",       "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "EMPLOYEE_COST_RATE",       "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE_WORK_MODEL",    "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
   ]);
 

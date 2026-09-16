@@ -580,7 +580,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const [newCpRate,       setNewCpRate]       = useState('')
   const [newCpValidFrom,  setNewCpValidFrom]  = useState('')
   const [editingCpId,     setEditingCpId]     = useState<number | null>(null)
-  const [editCpForm,      setEditCpForm]      = useState({ cp_rate: '', valid_from: '' })
+  const [editCpForm,      setEditCpForm]      = useState({ cost_rate: '', valid_from: '' })
   const [cpMsg,           setCpMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   // Work model history state
@@ -625,7 +625,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   const currentWmId = useMemo(() => latestValidId(empWmList, todayStr), [empWmList, todayStr])
   const currentCpRate = useMemo(() => {
     const cur = cpRates.find(r => r.ID === currentCpId)
-    return cur ? cur.CP_RATE : null
+    return cur ? cur.COST_RATE : null
   }, [cpRates, currentCpId])
 
   const [saving, setSaving]   = useState(false)
@@ -661,7 +661,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     if (!newCpRate || !newCpValidFrom) { setCpMsg({ text: 'Kostensatz und Datum erforderlich', type: 'error' }); return }
     setCpSaving(true)
     try {
-      await createEmployeeCpRate(employee.ID, { cp_rate: parseFloat(newCpRate), valid_from: newCpValidFrom })
+      await createEmployeeCpRate(employee.ID, { cost_rate: parseFloat(newCpRate), valid_from: newCpValidFrom })
       void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] })
       setNewCpRate(''); setNewCpValidFrom('')
     } catch (e: unknown) { setCpMsg({ text: (e as Error).message, type: 'error' }) }
@@ -671,7 +671,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   async function saveCpRate(id: number) {
     setCpSaving(true)
     try {
-      await updateEmployeeCpRate(employee.ID, id, { cp_rate: parseFloat(editCpForm.cp_rate), valid_from: editCpForm.valid_from })
+      await updateEmployeeCpRate(employee.ID, id, { cost_rate: parseFloat(editCpForm.cost_rate), valid_from: editCpForm.valid_from })
       void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] })
       setEditingCpId(null)
     } catch (e: unknown) { setCpMsg({ text: (e as Error).message, type: 'error' }) }
@@ -867,7 +867,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                         <input type="date" className="tbl-input" value={editCpForm.valid_from} onChange={e => setEditCpForm(f => ({ ...f, valid_from: e.target.value }))} />
                       </td>
                       <td style={{ padding: '3px 0 3px 8px', textAlign: 'right' }}>
-                        <input type="number" step="0.01" min="0" className="tbl-input num" style={{ width: 80 }} value={editCpForm.cp_rate} onChange={e => setEditCpForm(f => ({ ...f, cp_rate: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" className="tbl-input num" style={{ width: 80 }} value={editCpForm.cost_rate} onChange={e => setEditCpForm(f => ({ ...f, cost_rate: e.target.value }))} />
                       </td>
                       <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
                         <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={cpSaving} onClick={() => saveCpRate(r.ID)}>✓</button>
@@ -881,10 +881,10 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
                         {r.ID === currentCpId ? <HistBadge kind="current" /> : r.VALID_FROM > todayStr ? <HistBadge kind="planned" /> : null}
                       </td>
                       <td style={{ padding: '3px 0 3px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {Number(r.CP_RATE).toFixed(2)} €/h
+                        {Number(r.COST_RATE).toFixed(2)} €/h
                       </td>
                       <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                        <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => { setEditingCpId(r.ID); setEditCpForm({ cp_rate: String(r.CP_RATE), valid_from: r.VALID_FROM }) }}>✎</button>
+                        <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => { setEditingCpId(r.ID); setEditCpForm({ cost_rate: String(r.COST_RATE), valid_from: r.VALID_FROM }) }}>✎</button>
                         <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => deleteCpRate(r.ID)}>×</button>
                       </td>
                     </>
@@ -1560,7 +1560,7 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
     mutationFn: async () => {
       if (!editBooking) return
       // PATCH-Semantik: nur die wirklich geänderten Felder schicken. DATE_VOUCHER,
-      // CP_RATE etc. bleiben so unverändert in der DB. Ohne diesen Trimm
+      // COST_RATE etc. bleiben so unverändert in der DB. Ohne diesen Trimm
       // setzte das Backend DATE_VOUCHER auf NULL → Buchung war aus der
       // Monatsübersicht verschwunden.
       const qty = Number(editQty.replace(',', '.')) || 0
@@ -2982,7 +2982,7 @@ export function MitarbeiterPage() {
       const res = await createEmployee(form)
       const empId = res.data.ID
       await createEmployeeWorkModel(empId, { model_id: Number(createWmModelId), valid_from: createWmValidFrom })
-      await createEmployeeCpRate(empId, { cp_rate: parseFloat(createCpRate), valid_from: createCpValidFrom })
+      await createEmployeeCpRate(empId, { cost_rate: parseFloat(createCpRate), valid_from: createCpValidFrom })
       void qc.invalidateQueries({ queryKey: ['employees'] })
       void qc.invalidateQueries({ queryKey: ['license-usage'] })
       // Der Versand der Einladung darf das Anlegen nicht als Fehler erscheinen

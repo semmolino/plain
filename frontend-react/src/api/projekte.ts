@@ -97,7 +97,7 @@ export interface CreateProjectPayload {
 export interface BookingPriceRow {
   booking_type_id: number
   sp_rate?:        string | number
-  cp_rate?:        string | number
+  cost_rate?:        string | number
 }
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
@@ -306,8 +306,8 @@ export interface Buchung {
   TIME_START:          string | null
   TIME_FINISH:         string | null
   QUANTITY_INT:        number
-  CP_RATE:             number
-  CP_TOT:              number
+  COST_RATE:             number
+  COST_TOTAL:              number
   QUANTITY_EXT:        number
   SP_RATE:             number
   SP_TOT:              number
@@ -329,7 +329,7 @@ export interface CreateBuchungPayload {
   TIME_START?:         string
   TIME_FINISH?:        string
   QUANTITY_INT:        number
-  CP_RATE?:            number
+  COST_RATE?:            number
   QUANTITY_EXT?:       number
   SP_RATE?:            number
   POSTING_DESCRIPTION?: string
@@ -348,7 +348,7 @@ export interface UpdateBuchungPayload {
   TIME_START?:          string
   TIME_FINISH?:         string
   QUANTITY_INT?:        number
-  CP_RATE?:             number
+  COST_RATE?:             number
   QUANTITY_EXT?:        number
   SP_RATE?:             number
   POSTING_DESCRIPTION?: string

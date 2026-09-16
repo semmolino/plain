@@ -176,9 +176,9 @@ async function createProject(supabase, { body, tenantId }) {
         PROJECT_ID:      project.ID,
         BOOKING_TYPE_ID: Number(p.booking_type_id),
         SP_RATE:         toNum(p.sp_rate),
-        CP_RATE:         toNum(p.cp_rate),
+        COST_RATE:         toNum(p.cost_rate),
       }))
-      .filter((r) => r.BOOKING_TYPE_ID && (r.SP_RATE != null || r.CP_RATE != null));
+      .filter((r) => r.BOOKING_TYPE_ID && (r.SP_RATE != null || r.COST_RATE != null));
     if (priceRows.length) {
       const { error: bpErr } = await supabase.from("PROJECT_BOOKING_PRICE").insert(priceRows);
       // Soft-fail: Projekt steht; Preise sind optional und in Preislisten nachpflegbar.

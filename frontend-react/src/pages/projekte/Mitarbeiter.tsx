@@ -372,7 +372,7 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
       project_id:      projectId,
       booking_type_id: r.BOOKING_TYPE_ID,
       sp_rate:         editSp !== '' ? Number(editSp) : null,
-      cp_rate:         editCp !== '' ? Number(editCp) : null,
+      cost_rate:         editCp !== '' ? Number(editCp) : null,
     }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['project-booking-prices', projectId] })
