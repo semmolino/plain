@@ -37,11 +37,16 @@ describe("Inbox-Regeln", () => {
 
   it("neue Permission ohne Capability wird gemeldet", () => {
     const snap = healthySnapshot();
-    snap.catalogPermissions.push({ key: "absence.view", label: "Abwesenheit sehen", module: "absence" });
+    // Bewusst ein erfundener Schluessel. Frueher stand hier absence.view - ein
+    // echtes, damals unzugeordnetes Recht. Als es eine Capability bekam, fiel
+    // der Test um, obwohl die Regel unveraendert stimmte. Ein Test auf "es gibt
+    // ein unzugeordnetes Recht" darf nicht davon abhaengen, dass irgendwo eines
+    // uebrig bleibt.
+    snap.catalogPermissions.push({ key: "zzz.nur_fuer_test.view", label: "Nur im Test", module: "zzz" });
     const { items } = buildInbox(snap);
     const it = items.find((i) => i.kind === "permission_unmapped");
     expect(it).toBeTruthy();
-    expect(it.ref).toBe("absence.view");
+    expect(it.ref).toBe("zzz.nur_fuer_test.view");
     expect(it.severity).toBe("hoch");
   });
 
