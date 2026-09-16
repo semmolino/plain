@@ -553,7 +553,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
       {/* Step 2: Amounts */}
       {step === 2 && (() => {
         const perfAmt        = perfInput !== '' ? Number(perfInput) : (proposal?.performance_amount ?? 0)
-        const selectedTecSum = tecList.filter(t => selected.has(t.ID)).reduce((s, t) => s + (t.SP_TOT ?? 0), 0)
+        const selectedTecSum = tecList.filter(t => selected.has(t.ID)).reduce((s, t) => s + (t.HOURLY_RATE_TOTAL ?? 0), 0)
         const liveNet        = perfAmt + selectedTecSum
         const vatFactor      = 1 + (proposal?.vat_percent ?? 0) / 100
         const liveGross      = liveNet * vatFactor

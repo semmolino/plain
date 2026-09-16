@@ -309,15 +309,15 @@ ${basis}`;
       if (bt2StructIds.length > 0) {
         const { data: tecRows } = await supabase
           .from('TEC')
-          .select('STRUCTURE_ID, QUANTITY_INT, SP_RATE, SP_TOT, BOOKING_KIND')
+          .select('STRUCTURE_ID, QUANTITY_INT, HOURLY_RATE, HOURLY_RATE_TOTAL, BOOKING_KIND')
           .eq('INVOICE_ID', docId)
           .in('STRUCTURE_ID', bt2StructIds);
         for (const t of (tecRows || [])) {
           const sid = t.STRUCTURE_ID;
           const agg = tecAggByStructure.get(sid) || { hours: 0, totalNet: 0, distinctRates: new Set(), hasSpecial: false };
           agg.hours    += toNum(t.QUANTITY_INT);
-          agg.totalNet += toNum(t.SP_TOT);
-          if (t.SP_RATE != null) agg.distinctRates.add(Number(t.SP_RATE));
+          agg.totalNet += toNum(t.HOURLY_RATE_TOTAL);
+          if (t.HOURLY_RATE != null) agg.distinctRates.add(Number(t.HOURLY_RATE));
           // Pauschalen/Stückleistungen (BOOKING_KIND ∈ UNIT/LUMP_*) sind keine
           // Stunden → eine HUR-Position wäre irreführend; solche Strukturen
           // werden als Pauschalposition (LS) ausgewiesen.
@@ -378,7 +378,7 @@ ${basis}`;
     const label = docType === 'PARTIAL_PAYMENT' ? 'Abschlagsrechnung' : 'Rechnung';
 
     // Branch 3 — Stundenrechnungen: wenn TEC-Stunden mit diesem Dokument
-    // verknuepft sind und deren SP_TOT-Summe (== Stunden-Anteil am Net)
+    // verknuepft sind und deren HOURLY_RATE_TOTAL-Summe (== Stunden-Anteil am Net)
     // dem amountNet entspricht, dann Unit=HUR statt LS.
     let unitCode  = 'LS';
     let quantity  = 1;
@@ -391,15 +391,15 @@ ${basis}`;
         : { col: 'INVOICE_ID',          val: docId };
       const { data: tecRows } = await supabase
         .from('TEC')
-        .select('QUANTITY_INT, SP_RATE, SP_TOT, BOOKING_KIND')
+        .select('QUANTITY_INT, HOURLY_RATE, HOURLY_RATE_TOTAL, BOOKING_KIND')
         .eq(tecFilter.col, tecFilter.val);
       if (tecRows && tecRows.length > 0) {
         let hours = 0, totalNetTec = 0, hasSpecial = false;
         const distinctRates = new Set();
         for (const t of tecRows) {
           hours       += toNum(t.QUANTITY_INT);
-          totalNetTec += toNum(t.SP_TOT);
-          if (t.SP_RATE != null) distinctRates.add(Number(t.SP_RATE));
+          totalNetTec += toNum(t.HOURLY_RATE_TOTAL);
+          if (t.HOURLY_RATE != null) distinctRates.add(Number(t.HOURLY_RATE));
           if (EINVOICE_SPECIAL_KINDS.has(t.BOOKING_KIND)) hasSpecial = true;
         }
         // Akzeptanz: reine Stunden (keine Pauschalen/Stück) und TEC-Summe deckt amountNet.

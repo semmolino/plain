@@ -115,7 +115,7 @@ async function sumTecForStructures(supabase, { structureIds, partialPaymentId })
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("ID, SP_TOT, PARTIAL_PAYMENT_ID, INVOICE_ID, STRUCTURE_ID")
+    .select("ID, HOURLY_RATE_TOTAL, PARTIAL_PAYMENT_ID, INVOICE_ID, STRUCTURE_ID")
     .in("STRUCTURE_ID", structureIds)
     .neq("STATUS", "DRAFT");
   if (tecErr) throw new Error(tecErr.message);
@@ -131,7 +131,7 @@ async function sumTecForStructures(supabase, { structureIds, partialPaymentId })
   const assignedSum = round2(
     eligible.reduce((acc, t) => {
       const isAssigned = String(t.PARTIAL_PAYMENT_ID) === String(partialPaymentId) || toAssignIds.includes(t.ID);
-      return acc + (isAssigned ? toNum(t.SP_TOT) : 0);
+      return acc + (isAssigned ? toNum(t.HOURLY_RATE_TOTAL) : 0);
     }, 0)
   );
 
@@ -392,7 +392,7 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("STRUCTURE_ID, SP_TOT")
+    .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
     .eq("PARTIAL_PAYMENT_ID", partialPaymentId)
     .in("STRUCTURE_ID", bt2Ids)
     .neq("STATUS", "DRAFT");
@@ -402,7 +402,7 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
   (tecRows || []).forEach((t) => {
     const sid = String(t.STRUCTURE_ID);
     const cur = bySid.get(sid) || 0;
-    bySid.set(sid, round2(cur + toNum(t.SP_TOT)));
+    bySid.set(sid, round2(cur + toNum(t.HOURLY_RATE_TOTAL)));
   });
 
   const rows = bt2.map((s) => {

@@ -139,7 +139,7 @@ module.exports = (supabase) => {
 
     let tecQ = supabase
       .from("TEC")
-      .select("STRUCTURE_ID, DATE_VOUCHER, COST_TOTAL, SP_TOT")
+      .select("STRUCTURE_ID, DATE_VOUCHER, COST_TOTAL, HOURLY_RATE_TOTAL")
       .eq("TENANT_ID", tenantId)
       .in("STRUCTURE_ID", leafIds)
       .order("DATE_VOUCHER", { ascending: true });
@@ -211,7 +211,7 @@ module.exports = (supabase) => {
         );
 
         if (leaf.BILLING_TYPE_ID === 2) {
-          const sp = leafTec.reduce((s, r) => s + +(r.SP_TOT || 0), 0);
+          const sp = leafTec.reduce((s, r) => s + +(r.HOURLY_RATE_TOTAL || 0), 0);
           honorar        += sp;
           leistungsstand += sp;
         } else {
@@ -818,7 +818,7 @@ module.exports = (supabase) => {
       // 3. TEC rows (fetch up to dateTo for efficiency; full history needed for cumulative)
       let tecQ = supabase
         .from("TEC")
-        .select("STRUCTURE_ID, DATE_VOUCHER, COST_TOTAL, SP_TOT")
+        .select("STRUCTURE_ID, DATE_VOUCHER, COST_TOTAL, HOURLY_RATE_TOTAL")
         .eq("TENANT_ID", tenantId)
         .in("STRUCTURE_ID", leafIds)
         .order("DATE_VOUCHER", { ascending: true });
@@ -896,8 +896,8 @@ module.exports = (supabase) => {
           );
 
           if (leaf.BILLING_TYPE_ID === 2) {
-            // Hourly: honorar = cumulative SP_TOT (earned revenue = billed selling price)
-            const sp = leafTec.reduce((s, r) => s + +(r.SP_TOT || 0), 0);
+            // Hourly: honorar = cumulative HOURLY_RATE_TOTAL (earned revenue = billed selling price)
+            const sp = leafTec.reduce((s, r) => s + +(r.HOURLY_RATE_TOTAL || 0), 0);
             honorar       += sp;
             leistungsstand += sp;
           } else {
@@ -1360,15 +1360,15 @@ module.exports = (supabase) => {
       const all = structs || [];
       const parentIds = new Set(all.filter((s) => s.FATHER_ID != null).map((s) => String(s.FATHER_ID)));
       const internalLeaves = all.filter((s) => s.IS_INTERNAL && !parentIds.has(String(s.ID)));
-      // BT=2-Blätter: Erlös = Σ TEC.SP_TOT; BT=1-Blätter: REVENUE_COMPLETION + EXTRAS_COMPLETION.
+      // BT=2-Blätter: Erlös = Σ TEC.HOURLY_RATE_TOTAL; BT=1-Blätter: REVENUE_COMPLETION + EXTRAS_COMPLETION.
       const bt2Ids = internalLeaves.filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
       const spBySid = new Map();
       if (bt2Ids.length) {
         const { data: tec } = await supabase
-          .from("TEC").select("STRUCTURE_ID, SP_TOT").in("STRUCTURE_ID", bt2Ids).neq("STATUS", "DRAFT");
+          .from("TEC").select("STRUCTURE_ID, HOURLY_RATE_TOTAL").in("STRUCTURE_ID", bt2Ids).neq("STATUS", "DRAFT");
         for (const t of tec || []) {
           const k = String(t.STRUCTURE_ID);
-          spBySid.set(k, (spBySid.get(k) || 0) + Number(t.SP_TOT || 0));
+          spBySid.set(k, (spBySid.get(k) || 0) + Number(t.HOURLY_RATE_TOTAL || 0));
         }
       }
       for (const s of internalLeaves) {

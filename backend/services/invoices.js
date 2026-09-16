@@ -374,7 +374,7 @@ async function updateBt2FromTec(supabase, { invoiceId, contractId, projectId, te
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID, SP_TOT, PARTIAL_PAYMENT_ID, INVOICE_ID")
+    .select("ID, STRUCTURE_ID, HOURLY_RATE_TOTAL, PARTIAL_PAYMENT_ID, INVOICE_ID")
     .in("STRUCTURE_ID", bt2Ids)
     .eq("INVOICE_ID", invoiceId)
     .neq("STATUS", "DRAFT");
@@ -386,7 +386,7 @@ async function updateBt2FromTec(supabase, { invoiceId, contractId, projectId, te
     if (!isNullOrZero(t.PARTIAL_PAYMENT_ID)) return;
     const sid = String(t.STRUCTURE_ID);
     const cur = sumByStructure.get(sid) || 0;
-    sumByStructure.set(sid, round2(cur + toNum(t.SP_TOT)));
+    sumByStructure.set(sid, round2(cur + toNum(t.HOURLY_RATE_TOTAL)));
   });
 
   const rows = Array.from(sumByStructure.entries())

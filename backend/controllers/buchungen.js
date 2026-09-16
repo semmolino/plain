@@ -77,8 +77,8 @@ async function listBuchungenByProject(req, res, supabase) {
       const out = { ...r };
       if (!showRevenue) {
         delete out.QUANTITY_EXT;
-        delete out.SP_RATE;
-        delete out.SP_TOT;
+        delete out.HOURLY_RATE;
+        delete out.HOURLY_RATE_TOTAL;
       }
       if (!showCosts) {
         delete out.COST_RATE;
@@ -185,7 +185,7 @@ async function rebookHandler(req, res, supabase, dryRun) {
     // Entscheidung.
     const showRevenue = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.revenue.view");
     if (!showRevenue) {
-      data.moved = (data.moved || []).map(({ SP_RATE_BEFORE, SP_RATE_AFTER, SP_TOT_BEFORE, SP_TOT_AFTER, ...rest }) => rest);
+      data.moved = (data.moved || []).map(({ HOURLY_RATE_BEFORE, HOURLY_RATE_AFTER, HOURLY_RATE_TOTAL_BEFORE, HOURLY_RATE_TOTAL_AFTER, ...rest }) => rest);
     }
 
     res.json({ success: true, data });

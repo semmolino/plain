@@ -85,7 +85,7 @@ export interface NachtragStructureNode {
   EXTRAS_PERCENT:        number
   EXTRAS:                number
   QUANTITY:              number | null
-  SP_RATE:               number | null
+  HOURLY_RATE:               number | null
   ROLE_NAME_SHORT:       string | null
   ROLE_NAME_LONG:        string | null
   ROLE_ID:               number | null
@@ -147,7 +147,7 @@ export interface AddNachtragStructureNodePayload {
   extras_percent?:  string | number
   revenue?:         string | number
   quantity?:        string | number
-  sp_rate?:         string | number
+  hourly_rate?:         string | number
   father_id?:       string | number | null
 }
 

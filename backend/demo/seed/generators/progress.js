@@ -10,7 +10,7 @@
  *   und schreibt je Stichtag einen PROJECT_PROGRESS-Snapshot.
  * - Stunden-Projekte (BT=2): REVENUE entsteht aus Buchungen (bereits durch den
  *   Buchungs-Generator gesetzt). Hier werden nur Erlös-Snapshots über die Zeit
- *   geschrieben (kumulierte SP_TOT bis zum Stichtag), damit Reports einen
+ *   geschrieben (kumulierte HOURLY_RATE_TOTAL bis zum Stichtag), damit Reports einen
  *   Verlauf zeigen.
  *
  * Läuft NACH dem Buchungs-Generator.
@@ -55,12 +55,12 @@ async function generate({ supabase, md, timeline, cfg, log, apply }) {
     if (hasBt2 && apply) {
       const { data: tecRows } = await supabase
         .from("TEC")
-        .select("STRUCTURE_ID, SP_TOT, DATE_VOUCHER")
+        .select("STRUCTURE_ID, HOURLY_RATE_TOTAL, DATE_VOUCHER")
         .eq("PROJECT_ID", p.ID);
       for (const r of tecRows || []) {
         const k = String(r.STRUCTURE_ID);
         if (!tecByLeaf.has(k)) tecByLeaf.set(k, []);
-        tecByLeaf.get(k).push({ d: r.DATE_VOUCHER, v: Number(r.SP_TOT) || 0 });
+        tecByLeaf.get(k).push({ d: r.DATE_VOUCHER, v: Number(r.HOURLY_RATE_TOTAL) || 0 });
       }
     }
 

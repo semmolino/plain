@@ -143,6 +143,8 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0139_booking_rebook.sql",
       "0140_01_cost_rate.sql",
       "0141_01_cost_rate_sql_objects.sql",
+      "0142_02_hourly_rate.sql",
+      "0143_02_hourly_rate_sql_objects.sql",
     ]);
   });
 

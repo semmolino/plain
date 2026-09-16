@@ -473,7 +473,7 @@ async function loadTecRows({ supabase, docType, docId }) {
     const field = docType === 'INVOICE' ? 'INVOICE_ID' : 'PARTIAL_PAYMENT_ID';
     const { data, error } = await supabase
       .from('TEC')
-      .select('ID, DATE_VOUCHER, EMPLOYEE_ID, STRUCTURE_ID, QUANTITY_EXT, SP_RATE, SP_TOT, POSTING_DESCRIPTION, BOOKING_KIND')
+      .select('ID, DATE_VOUCHER, EMPLOYEE_ID, STRUCTURE_ID, QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL, POSTING_DESCRIPTION, BOOKING_KIND')
       .eq(field, docId);
 
     if (error) {
@@ -510,7 +510,7 @@ async function loadTecRows({ supabase, docType, docId }) {
     let sumQty = 0, sumTot = 0;
     const out = rows.map(r => {
       const qty = Number(r.QUANTITY_EXT || 0);
-      const tot = Number(r.SP_TOT      || 0);
+      const tot = Number(r.HOURLY_RATE_TOTAL      || 0);
       // Pauschalpositionen (LUMP_*) sind mengenlos -> als Menge 1 ausweisen
       // (Einheitspreis = Summe), damit Menge × Einheitspreis = Summe aufgeht.
       const isLump = r.BOOKING_KIND === 'LUMP_COST' || r.BOOKING_KIND === 'LUMP_REVENUE';
@@ -521,7 +521,7 @@ async function loadTecRows({ supabase, docType, docId }) {
         dateVoucher:        r.DATE_VOUCHER || '',
         employeeName:       empMap.get(String(r.EMPLOYEE_ID)) || '',
         quantityExt:        dispQty,
-        spRate:             Number(r.SP_RATE || 0),
+        spRate:             Number(r.HOURLY_RATE || 0),
         spTot:              tot,
         postingDescription: r.POSTING_DESCRIPTION || '',
       };

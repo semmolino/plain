@@ -292,7 +292,7 @@ async function recomputeStructureAggregates(supabase, structureId) {
   if (structureErr) throw new Error(structureErr.message);
   if (!structureRow) return;
 
-  const { data: tecRows, error: tecErr } = await supabase.from("TEC").select("QUANTITY_INT, COST_RATE, COST_TOTAL, SP_TOT, BOOKING_KIND").eq("STRUCTURE_ID", structureId);
+  const { data: tecRows, error: tecErr } = await supabase.from("TEC").select("QUANTITY_INT, COST_RATE, COST_TOTAL, HOURLY_RATE_TOTAL, BOOKING_KIND").eq("STRUCTURE_ID", structureId);
   if (tecErr) throw new Error(tecErr.message);
 
   // Spezialarten (Pauschalen/Stückleistungen) tragen ihren COST_TOTAL direkt
@@ -306,7 +306,7 @@ async function recomputeStructureAggregates(supabase, structureId) {
   const updatePayload = { COSTS: costs };
 
   if (Number(structureRow.BILLING_TYPE_ID) === 2) {
-    const revenue = (tecRows || []).reduce((sum, row) => sum + (Number(row.SP_TOT) || 0), 0);
+    const revenue = (tecRows || []).reduce((sum, row) => sum + (Number(row.HOURLY_RATE_TOTAL) || 0), 0);
     const extrasPercent = Number(structureRow.EXTRAS_PERCENT ?? 0) || 0;
     const extras = (revenue * extrasPercent) / 100;
     updatePayload.REVENUE = revenue;

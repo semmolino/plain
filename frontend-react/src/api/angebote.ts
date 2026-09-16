@@ -52,7 +52,7 @@ export interface ConvertOfferPayload {
     role_id?:         number | null
     role_name_short?: string
     role_name_long?:  string
-    sp_rate?:         number | null
+    hourly_rate?:         number | null
   }>
 }
 
@@ -87,7 +87,7 @@ export interface OfferStructureNode {
   FATHER_ID:       number | null
   SORT_ORDER:      number
   QUANTITY:        number | null
-  SP_RATE:         number | null
+  HOURLY_RATE:         number | null
   ROLE_NAME_SHORT: string | null
   ROLE_NAME_LONG:  string | null
   ROLE_ID:         number | null
@@ -116,7 +116,7 @@ export interface OfferStructureDraftRow {
   EXTRAS_PERCENT:  string
   REVENUE:         string
   QUANTITY:        string
-  SP_RATE:         string
+  HOURLY_RATE:         string
   ROLE_ID:         string
   ROLE_NAME_SHORT: string
   ROLE_NAME_LONG:  string
@@ -161,7 +161,7 @@ export interface AddStructureNodePayload {
   extras_percent?:   string | number
   revenue?:          string | number
   quantity?:         string | number
-  sp_rate?:          string | number
+  hourly_rate?:          string | number
   role_id?:          string | number
   role_name_short?:  string
   role_name_long?:   string
@@ -175,7 +175,7 @@ export interface UpdateStructureNodePayload {
   extras_percent?:   string | number
   revenue?:          string | number
   quantity?:         string | number
-  sp_rate?:          string | number
+  hourly_rate?:          string | number
   role_id?:          string | number | null
   role_name_short?:  string
   role_name_long?:   string
