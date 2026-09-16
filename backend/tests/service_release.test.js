@@ -52,9 +52,9 @@ async function call(supabase, ctx, method, path, body) {
 const mitSprecher = (extra = {}) => makeFakeSupabase({
   TENANT_SETTINGS: [{ ID: 1, TENANT_ID: TENANT, KEY: "suggestion_delegate_employee_id", VALUE: String(SPRECHER) }],
   EMPLOYEE: [
-    { ID: SPRECHER,    TENANT_ID: TENANT, SHORT_NAME: "SP", FIRST_NAME: "Sina",  LAST_NAME: "Sprecher" },
-    { ID: MITARBEITER, TENANT_ID: TENANT, SHORT_NAME: "MA", FIRST_NAME: "Mark",  LAST_NAME: "Mitarbeit" },
-    { ID: ADMIN,       TENANT_ID: TENANT, SHORT_NAME: "AD", FIRST_NAME: "Alex",  LAST_NAME: "Admin" },
+    { ID: SPRECHER,    TENANT_ID: TENANT, ABBR: "SP", FIRST_NAME: "Sina",  LAST_NAME: "Sprecher" },
+    { ID: MITARBEITER, TENANT_ID: TENANT, ABBR: "MA", FIRST_NAME: "Mark",  LAST_NAME: "Mitarbeit" },
+    { ID: ADMIN,       TENANT_ID: TENANT, ABBR: "AD", FIRST_NAME: "Alex",  LAST_NAME: "Admin" },
   ],
   SUGGESTION: [],
   SUGGESTION_COMMENT: [],

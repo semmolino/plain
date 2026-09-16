@@ -75,7 +75,7 @@ module.exports = (supabase) => {
     const employeeIds = [...new Set(e2pRows.map(r => r.EMPLOYEE_ID))];
     const { data: emps } = await supabase
       .from("EMPLOYEE")
-      .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+      .select("ID, ABBR, FIRST_NAME, LAST_NAME")
       .in("ID", employeeIds)
       .eq("TENANT_ID", req.tenantId);
 
@@ -83,7 +83,7 @@ module.exports = (supabase) => {
 
     const enriched = e2pRows.map(r => ({
       ...r,
-      EMPLOYEE_SHORT_NAME: empMap[r.EMPLOYEE_ID]?.SHORT_NAME ?? null,
+      EMPLOYEE_SHORT_NAME: empMap[r.EMPLOYEE_ID]?.ABBR ?? null,
       EMPLOYEE_FIRST_NAME: empMap[r.EMPLOYEE_ID]?.FIRST_NAME ?? null,
       EMPLOYEE_LAST_NAME:  empMap[r.EMPLOYEE_ID]?.LAST_NAME  ?? null,
     }));

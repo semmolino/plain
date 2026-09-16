@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             token,
             employeeId:  me.employee_id,
             tenantId:    me.tenant_id,
-            shortName:   me.short_name,
+            shortName:   me.abbr,
             email:       me.email,
             companyName: me.company_name,
           })

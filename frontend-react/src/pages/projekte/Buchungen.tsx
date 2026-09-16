@@ -246,7 +246,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
 
   // Filter-Optionen aus den geladenen Daten ableiten (keine harten Listen).
   const empOptions = useMemo(
-    () => [...new Set(buchungen.map(b => b.EMPLOYEE?.SHORT_NAME).filter((n): n is string => !!n))]
+    () => [...new Set(buchungen.map(b => b.EMPLOYEE?.ABBR).filter((n): n is string => !!n))]
       .sort((a, b) => a.localeCompare(b, 'de')),
     [buchungen],
   )
@@ -267,7 +267,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
       rows = rows.filter(b => b.STRUCTURE_ID != null && filterDescendants.has(b.STRUCTURE_ID))
     }
 
-    if (filterEmp.size)    rows = rows.filter(b => !!b.EMPLOYEE?.SHORT_NAME && filterEmp.has(b.EMPLOYEE.SHORT_NAME))
+    if (filterEmp.size)    rows = rows.filter(b => !!b.EMPLOYEE?.ABBR && filterEmp.has(b.EMPLOYEE.ABBR))
     if (filterKind.size)   rows = rows.filter(b => filterKind.has(bookingTypeLabel(b)))
     if (filterStatus.size) rows = rows.filter(b => filterStatus.has(isBilled(b) ? 'Abgerechnet' : 'Offen'))
     if (hideZeroExt)       rows = rows.filter(hasBillable)
@@ -278,7 +278,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
       const q = search.trim().toLowerCase()
       rows = rows.filter(b =>
         fmtDate(b.DATE_VOUCHER).includes(q) ||
-        (b.EMPLOYEE?.SHORT_NAME ?? '').toLowerCase().includes(q) ||
+        (b.EMPLOYEE?.ABBR ?? '').toLowerCase().includes(q) ||
         (b.POSTING_DESCRIPTION ?? '').toLowerCase().includes(q) ||
         (b.STRUCTURE_ID != null ? (pathCache.get(b.STRUCTURE_ID) ?? '').toLowerCase().includes(q) : false)
       )
@@ -288,7 +288,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
       let cmp = 0
       switch (sortCol) {
         case 'date':        cmp = (a.DATE_VOUCHER ?? '').localeCompare(b.DATE_VOUCHER ?? ''); break
-        case 'employee':    cmp = (a.EMPLOYEE?.SHORT_NAME ?? '').localeCompare(b.EMPLOYEE?.SHORT_NAME ?? '', 'de'); break
+        case 'employee':    cmp = (a.EMPLOYEE?.ABBR ?? '').localeCompare(b.EMPLOYEE?.ABBR ?? '', 'de'); break
         case 'path':        cmp = (a.STRUCTURE_ID != null ? pathCache.get(a.STRUCTURE_ID) ?? '' : '').localeCompare(b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '' : '', 'de', { numeric: true }); break
         case 'description': cmp = (a.POSTING_DESCRIPTION ?? '').localeCompare(b.POSTING_DESCRIPTION ?? '', 'de'); break
         case 'h_int':       cmp = (a.QUANTITY_INT ?? 0) - (b.QUANTITY_INT ?? 0); break
@@ -562,7 +562,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                     <label>Mitarbeiter*</label>
                     <select value={form.EMPLOYEE_ID} onChange={setF('EMPLOYEE_ID')} required>
                       <option value="">Bitte wählen …</option>
-                      {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+                      {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
@@ -688,7 +688,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                           </td>
                         )}
                         <td>{fmtDate(b.DATE_VOUCHER)}</td>
-                        <td>{b.EMPLOYEE?.SHORT_NAME}</td>
+                        <td>{b.EMPLOYEE?.ABBR}</td>
                         <td style={{ fontSize: 13, color: 'var(--text-3)' }}>
                           {b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'}
                         </td>
@@ -765,7 +765,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
             <label>Mitarbeiter*</label>
             <select value={editForm.EMPLOYEE_ID} onChange={setEF('EMPLOYEE_ID')} required>
               <option value="">Bitte wählen …</option>
-              {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+              {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
             </select>
           </div>
           <div className="form-group">
@@ -1144,7 +1144,7 @@ function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }:
           <label>Mitarbeiter*</label>
           <select value={employeeId} onChange={e => setEmployeeId(e.target.value)} required>
             <option value="">Bitte wählen …</option>
-            {employees.map(e => <option key={e.ID} value={e.ID}>{e.SHORT_NAME}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+            {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
           </select>
         </div>
         <div className="form-row">

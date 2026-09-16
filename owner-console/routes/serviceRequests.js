@@ -37,10 +37,10 @@ async function orgNames(tenantIds) {
 }
 async function empNames(ids) {
   if (!ids.length) return {};
-  const { data } = await supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, MAIL").in("ID", ids);
+  const { data } = await supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME, MAIL").in("ID", ids);
   const map = {};
   for (const e of data || [])
-    map[e.ID] = { name: [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(" ").trim() || e.SHORT_NAME || `#${e.ID}`, mail: e.MAIL || null };
+    map[e.ID] = { name: [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(" ").trim() || e.ABBR || `#${e.ID}`, mail: e.MAIL || null };
   return map;
 }
 

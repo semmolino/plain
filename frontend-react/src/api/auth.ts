@@ -5,7 +5,7 @@ export interface LoginResponse {
   employee_id:    number
   tenant_id:      number
   email:          string
-  short_name:     string
+  abbr:     string
   company_name:   string | null
   dashboard_role: string | null
 }
@@ -25,7 +25,7 @@ export interface MeResponse {
   employee_id:  number
   tenant_id:    number
   email:        string
-  short_name:   string
+  abbr:   string
   company_name: string | null
 }
 

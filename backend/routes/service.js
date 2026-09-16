@@ -27,7 +27,7 @@ module.exports = (supabase) => {
   function employeeName(e) {
     if (!e) return null;
     const full = [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(" ").trim();
-    return full || e.SHORT_NAME || `#${e.ID}`;
+    return full || e.ABBR || `#${e.ID}`;
   }
 
   async function getDelegateId(tenantId) {
@@ -113,7 +113,7 @@ module.exports = (supabase) => {
       if (delegateId) {
         const { data: emp } = await supabase
           .from("EMPLOYEE")
-          .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+          .select("ID, ABBR, FIRST_NAME, LAST_NAME")
           .eq("ID", delegateId)
           .eq("TENANT_ID", req.tenantId)
           .maybeSingle();
@@ -280,7 +280,7 @@ module.exports = (supabase) => {
     ]))];
     if (empIds.length) {
       const { data: emps } = await supabase.from("EMPLOYEE")
-        .select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME").in("ID", empIds).eq("TENANT_ID", req.tenantId);
+        .select("ID, ABBR, FIRST_NAME, LAST_NAME").in("ID", empIds).eq("TENANT_ID", req.tenantId);
       nameMap = Object.fromEntries((emps || []).map(e => [e.ID, employeeName(e)]));
     }
 
@@ -467,11 +467,11 @@ module.exports = (supabase) => {
   // GET /requests/contact — Vorbelegung aus Login (Name, E-Mail, Organisation)
   router.get("/requests/contact", async (req, res) => {
     const [{ data: emp }, { data: comp }] = await Promise.all([
-      supabase.from("EMPLOYEE").select("FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL").eq("ID", req.employeeId).eq("TENANT_ID", req.tenantId).maybeSingle(),
+      supabase.from("EMPLOYEE").select("FIRST_NAME, LAST_NAME, ABBR, MAIL").eq("ID", req.employeeId).eq("TENANT_ID", req.tenantId).maybeSingle(),
       supabase.from("COMPANY").select("COMPANY_NAME_1").eq("TENANT_ID", req.tenantId).order("ID", { ascending: true }).limit(1).maybeSingle(),
     ]);
     res.json({
-      name:  emp ? ([emp.FIRST_NAME, emp.LAST_NAME].filter(Boolean).join(" ").trim() || emp.SHORT_NAME || "") : "",
+      name:  emp ? ([emp.FIRST_NAME, emp.LAST_NAME].filter(Boolean).join(" ").trim() || emp.ABBR || "") : "",
       email: emp?.MAIL || "",
       org:   comp?.COMPANY_NAME_1 || "",
     });

@@ -581,7 +581,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
 
   const { data: emp1, error: empErr1 } = await supabase
     .from("EMPLOYEE")
-    .select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE, SALUTATION_ID")
+    .select("ID, FIRST_NAME, LAST_NAME, ABBR, MAIL, MOBILE, SALUTATION_ID")
     .eq("ID", empId)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -589,7 +589,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   if (empErr1) {
     const { data: emp2, error: empErr2 } = await supabase
       .from("EMPLOYEE")
-      .select("ID, FIRST_NAME, LAST_NAME, SHORT_NAME, MAIL, MOBILE")
+      .select("ID, FIRST_NAME, LAST_NAME, ABBR, MAIL, MOBILE")
       .eq("ID", empId)
       .eq("TENANT_ID", tenantId)
       .maybeSingle();
@@ -685,7 +685,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     COMPANY_TAX_NUMBER: company.TAX_NUMBER ?? null,
     COMPANY_IBAN: company.IBAN ?? null,
     "COMPANY_CREDITOR-ID": company["CREDITOR-ID"] ?? null,
-    EMPLOYEE: `${employee.SHORT_NAME ?? ""}: ${(employee.FIRST_NAME ?? "").trim()} ${(employee.LAST_NAME ?? "").trim()}`.trim(),
+    EMPLOYEE: `${employee.ABBR ?? ""}: ${(employee.FIRST_NAME ?? "").trim()} ${(employee.LAST_NAME ?? "").trim()}`.trim(),
     EMPLOYEE_SALUTATION: employeeSalutation,
     EMPLOYEE_MAIL: employee.MAIL ?? null,
     EMPLOYEE_PHONE: employee.MOBILE ?? null,

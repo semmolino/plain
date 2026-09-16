@@ -113,7 +113,7 @@ async function exportAudit(req, res, supabase) {
     const empIds = [...new Set((data || []).map(r => r.EMPLOYEE_ID))];
     const { data: emps } = await supabase
       .from('EMPLOYEE')
-      .select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME')
+      .select('ID, ABBR, FIRST_NAME, LAST_NAME')
       .in('ID', empIds);
     const empMap = Object.fromEntries((emps || []).map(e => [e.ID, e]));
 
@@ -128,7 +128,7 @@ async function exportAudit(req, res, supabase) {
     for (const r of data || []) {
       const e = empMap[r.EMPLOYEE_ID] || {};
       lines.push([
-        r.ID, e.SHORT_NAME || '', e.FIRST_NAME || '', e.LAST_NAME || '',
+        r.ID, e.ABBR || '', e.FIRST_NAME || '', e.LAST_NAME || '',
         r.DATE_VOUCHER, r.EVENT_TYPE, r.SEVERITY, r.TEC_ID ?? '',
         r.CREATED_AT, JSON.stringify(r.DETAILS || {}),
       ].map(escape).join(';'));

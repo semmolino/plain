@@ -92,7 +92,7 @@ async function listOffers(supabase, { tenantId }) {
 
   const [statusRes, empRes, addrRes, contactRes, structRes, projectRes] = await Promise.all([
     statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, NAME_SHORT').in('ID', statusIds) : Promise.resolve({ data: [] }),
-    empIds.length     ? supabase.from('EMPLOYEE').select('ID, SHORT_NAME, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
+    empIds.length     ? supabase.from('EMPLOYEE').select('ID, ABBR, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
     contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
     supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
@@ -144,7 +144,7 @@ async function listOffers(supabase, { tenantId }) {
       STATUS_NAME:     statusMap.get(r.OFFER_STATUS_ID)?.NAME_SHORT ?? null,
       OFFER_STATUS_ID: r.OFFER_STATUS_ID,
       EMPLOYEE_NAME:   emp
-        ? `${emp.SHORT_NAME ? emp.SHORT_NAME + ': ' : ''}${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim()
+        ? `${emp.ABBR ? emp.ABBR + ': ' : ''}${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim()
         : null,
       ADDRESS_NAME:    addrMap.get(r.ADDRESS_ID)?.ADDRESS_NAME_1 ?? null,
       CONTACT_NAME:    contact
@@ -683,7 +683,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   // Load employee (Ansprechpartner)
   const { data: employee } = await supabase
     .from('EMPLOYEE')
-    .select('SHORT_NAME, FIRST_NAME, LAST_NAME')
+    .select('ABBR, FIRST_NAME, LAST_NAME')
     .eq('ID', offer.EMPLOYEE_ID)
     .maybeSingle();
 

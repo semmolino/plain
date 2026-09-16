@@ -198,7 +198,7 @@ function buildAddressEntry(mapped, ctx) {
 
 // ── Domäne: Mitarbeiter ──────────────────────────────────────────────────────
 const EMPLOYEE_FIELDS = [
-  { key: "short_name",       header: "Kürzel",         required: true,  example: "MMu",               aliases: ["kuerzel", "kurzzeichen", "shortname", "initialen", "krzl"] },
+  { key: "abbr",       header: "Kürzel",         required: true,  example: "MMu",               aliases: ["kuerzel", "kurzzeichen", "shortname", "initialen", "krzl"] },
   { key: "first_name",       header: "Vorname",        required: true,  example: "Maria",             aliases: ["vorname", "firstname"] },
   { key: "last_name",        header: "Nachname",       required: true,  example: "Muster",            aliases: ["nachname", "name", "lastname", "familienname", "surname"] },
   { key: "gender",           header: "Geschlecht",     required: true,  example: "weiblich",          aliases: ["geschlecht", "gender"] , list: "gender" },
@@ -237,11 +237,11 @@ async function loadEmployeeContext(supabase, tenantId) {
   const existingKeys = new Set();
   const existingIds = new Map();
   const { data: emps } = await supabase
-    .from("EMPLOYEE").select("ID, SHORT_NAME, MAIL, PERSONNEL_NUMBER").eq("TENANT_ID", tenantId).limit(100000);
+    .from("EMPLOYEE").select("ID, ABBR, MAIL, PERSONNEL_NUMBER").eq("TENANT_ID", tenantId).limit(100000);
   for (const e of emps || []) {
     const keys = [];
     if (e.MAIL) keys.push("mail:" + norm(e.MAIL));
-    if (e.SHORT_NAME) keys.push("short:" + norm(e.SHORT_NAME));
+    if (e.ABBR) keys.push("short:" + norm(e.ABBR));
     if (e.PERSONNEL_NUMBER) keys.push("pnr:" + norm(e.PERSONNEL_NUMBER));
     for (const k of keys) { existingKeys.add(k); if (!existingIds.has(k)) existingIds.set(k, e.ID); }
   }
@@ -252,7 +252,7 @@ function buildEmployeeEntry(mapped, ctx) {
   const messages = [];
   let ok = true;
 
-  const short = s(mapped.short_name);
+  const short = s(mapped.abbr);
   const first = s(mapped.first_name);
   const last  = s(mapped.last_name);
   if (!short) { messages.push({ level: "error", text: "Kürzel fehlt (Pflichtfeld)" }); ok = false; }
@@ -280,7 +280,7 @@ function buildEmployeeEntry(mapped, ctx) {
   if (exit.invalid) messages.push({ level: "warn", text: "Austrittsdatum nicht erkannt — übersprungen" });
 
   const dbRow = {
-    SHORT_NAME:       short || null,
+    ABBR:       short || null,
     TITLE:            s(mapped.title) || null,
     FIRST_NAME:       first || null,
     LAST_NAME:        last || null,
@@ -299,7 +299,7 @@ function buildEmployeeEntry(mapped, ctx) {
   if (s(mapped.personnel_number)) matchKey.push("pnr:" + norm(mapped.personnel_number));
 
   const display = {
-    short_name: short, first_name: first, last_name: last,
+    abbr: short, first_name: first, last_name: last,
     gender: genderId != null ? (ctx.genders.byId.get(genderId) || gin) : gin, mail: email,
   };
   return { ok, messages, dbRow, matchKey, display };
@@ -442,7 +442,7 @@ async function loadProjectContext(supabase, tenantId) {
     supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).order("ID", { ascending: true }).limit(1),
     supabase.from("PROJECT_STATUS").select("ID, NAME_SHORT"),                          // global
     supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId),
-    supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("PROJECT").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId).limit(100000),
   ]);
@@ -454,7 +454,7 @@ async function loadProjectContext(supabase, tenantId) {
   for (const r of typeRes.data || []) if (r.NAME_SHORT) typeByName.set(norm(r.NAME_SHORT), r.ID);
   const empByName = new Map();
   for (const e of empRes.data || []) {
-    if (e.SHORT_NAME) empByName.set(norm(e.SHORT_NAME), e.ID);
+    if (e.ABBR) empByName.set(norm(e.ABBR), e.ID);
     const full = norm(`${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`);
     if (full) empByName.set(full, e.ID);
   }
@@ -2406,7 +2406,7 @@ async function loadTemplateLists(supabase, tenantId) {
     safe(() => supabase.from("SALUTATION").select("SALUTATION")),
     safe(() => supabase.from("PROJECT_STATUS").select("NAME_SHORT")),
     safe(() => supabase.from("PROJECT_TYPE").select("NAME_SHORT").eq("TENANT_ID", tenantId)),
-    safe(() => supabase.from("EMPLOYEE").select("SHORT_NAME").eq("TENANT_ID", tenantId).limit(2000)),
+    safe(() => supabase.from("EMPLOYEE").select("ABBR").eq("TENANT_ID", tenantId).limit(2000)),
     safe(() => supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(2000)),
   ]);
 
@@ -2415,7 +2415,7 @@ async function loadTemplateLists(supabase, tenantId) {
   lists.salutation    = pick(salutations.data, "SALUTATION");
   lists.projectStatus = pick(statuses.data, "NAME_SHORT");
   lists.projectType   = pick(types.data, "NAME_SHORT");
-  lists.employeeShort = pick(employees.data, "SHORT_NAME");
+  lists.employeeShort = pick(employees.data, "ABBR");
   lists.addressName   = pick(addresses.data, "ADDRESS_NAME_1");
   return lists;
 }

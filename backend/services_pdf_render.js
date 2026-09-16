@@ -487,9 +487,9 @@ async function loadTecRows({ supabase, docType, docId }) {
 
     if (empIds.length) {
       const { data: emps } = await supabase
-        .from('EMPLOYEE').select('ID, FIRST_NAME, LAST_NAME, SHORT_NAME').in('ID', empIds);
+        .from('EMPLOYEE').select('ID, FIRST_NAME, LAST_NAME, ABBR').in('ID', empIds);
       (emps || []).forEach(e =>
-        empMap.set(String(e.ID), `${e.FIRST_NAME || ''} ${e.LAST_NAME || ''}`.trim() || e.SHORT_NAME || '')
+        empMap.set(String(e.ID), `${e.FIRST_NAME || ''} ${e.LAST_NAME || ''}`.trim() || e.ABBR || '')
       );
     }
 

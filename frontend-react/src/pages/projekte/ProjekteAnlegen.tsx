@@ -211,7 +211,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
   }
 
   const empLabel = (e: typeof employees[0]) =>
-    `${e.SHORT_NAME ? e.SHORT_NAME + ': ' : ''}${e.FIRST_NAME ?? ''} ${e.LAST_NAME ?? ''}`.trim()
+    `${e.ABBR ? e.ABBR + ': ' : ''}${e.FIRST_NAME ?? ''} ${e.LAST_NAME ?? ''}`.trim()
 
   return (
     <div className="wizard-wrap">
@@ -274,7 +274,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
               <option value="">Bitte wählen …</option>
               {managers.map(m => {
                 const full = `${m.FIRST_NAME ?? ''} ${m.LAST_NAME ?? ''}`.trim()
-                return <option key={m.ID} value={m.ID}>{m.SHORT_NAME}{full ? `: ${full}` : ''}</option>
+                return <option key={m.ID} value={m.ID}>{m.ABBR}{full ? `: ${full}` : ''}</option>
               })}
             </select>
           </div>

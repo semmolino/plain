@@ -481,7 +481,7 @@ function DelegateCard() {
           <select className="list-search" value={selected} onChange={e => setSelected(e.target.value)} style={{ maxWidth: 280 }}>
             <option value="">Mitarbeiter auswählen …</option>
             {employees.map(e => (
-              <option key={e.ID} value={e.ID}>{e.NAME || `${e.FIRST_NAME} ${e.LAST_NAME}`.trim() || e.SHORT_NAME}</option>
+              <option key={e.ID} value={e.ID}>{e.NAME || `${e.FIRST_NAME} ${e.LAST_NAME}`.trim() || e.ABBR}</option>
             ))}
           </select>
           <button type="button" className="btn-primary" disabled={!selected || save.isPending} onClick={() => save.mutate(Number(selected))}>Festlegen</button>

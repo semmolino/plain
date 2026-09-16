@@ -192,7 +192,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
             <label>Ansprechpartner*</label>
             <select value={basic.employee_id} onChange={e => setB('employee_id')(e.target.value)}>
               <option value="">Bitte wählen …</option>
-              {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
+              {managers.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}</option>)}
             </select>
           </div>
 

@@ -2350,7 +2350,7 @@ function KostensatzSection() {
                 )
                 return (
                   <tr key={emp.ID} style={{ background: p.dirty ? 'var(--dim)' : undefined }}>
-                    <td><strong>{emp.SHORT_NAME}</strong></td>
+                    <td><strong>{emp.ABBR}</strong></td>
                     <td>{inp('annual_salary', 110)}</td>
                     <td style={{ textAlign: 'right' }}>{inp('weekly_hours', 60)}</td>
                     <td style={{ textAlign: 'right' }}>{inp('vacation_days', 55)}</td>
@@ -2437,7 +2437,7 @@ function KostensatzSection() {
                           <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>
                             {isExp ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
                           </td>
-                          <td><strong>{r.short_name}</strong> <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>{r.first_name} {r.last_name}</span></td>
+                          <td><strong>{r.abbr}</strong> <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>{r.first_name} {r.last_name}</span></td>
                           <td style={{ textAlign: 'right' }}>{FMT_H_KS(bd.productive_hours)}</td>
                           <td style={{ textAlign: 'right' }}>{money(bd.direct_cost_per_h)}</td>
                           <td style={{ textAlign: 'right' }}>{money(bd.overhead_per_h)}</td>
@@ -3670,7 +3670,7 @@ function LeistungsstandReminderBlock() {
                   style={{ minHeight: 100 }}
                 >
                   {employees.map(emp => (
-                    <option key={emp.ID} value={emp.ID}>{emp.SHORT_NAME}</option>
+                    <option key={emp.ID} value={emp.ID}>{emp.ABBR}</option>
                   ))}
                 </select>
               </div>
@@ -4042,7 +4042,7 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
                 style={{ minHeight: 110 }}
               >
                 {employees.map(emp => (
-                  <option key={emp.ID} value={emp.ID}>{emp.SHORT_NAME}</option>
+                  <option key={emp.ID} value={emp.ID}>{emp.ABBR}</option>
                 ))}
               </select>
               <p className="admin-section-hint">

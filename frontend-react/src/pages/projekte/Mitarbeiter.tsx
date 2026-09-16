@@ -274,7 +274,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                   <select className="tbl-select" value={addForm.employee_id} onChange={e => setAF('employee_id')(e.target.value)}>
                     <option value="">— Mitarbeiter wählen —</option>
                     {unassigned.map(e => {
-                      const label = `${e.SHORT_NAME ? e.SHORT_NAME + ': ' : ''}${e.FIRST_NAME ?? ''} ${e.LAST_NAME ?? ''}`.trim()
+                      const label = `${e.ABBR ? e.ABBR + ': ' : ''}${e.FIRST_NAME ?? ''} ${e.LAST_NAME ?? ''}`.trim()
                       return <option key={e.ID} value={e.ID}>{label}</option>
                     })}
                   </select>

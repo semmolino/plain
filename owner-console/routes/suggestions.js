@@ -41,7 +41,7 @@ async function enrich(rows) {
       ? supabase.from("COMPANY").select("TENANT_ID, COMPANY_NAME_1").in("TENANT_ID", tenantIds)
       : Promise.resolve({ data: [] }),
     empIds.length
-      ? supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME, MAIL").in("ID", empIds)
+      ? supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME, MAIL").in("ID", empIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -49,7 +49,7 @@ async function enrich(rows) {
   for (const c of comps || []) if (!orgMap[c.TENANT_ID]) orgMap[c.TENANT_ID] = c.COMPANY_NAME_1; // erste Firma je Tenant
   const empMap = {};
   for (const e of emps || []) {
-    const name = [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(" ").trim() || e.SHORT_NAME || `#${e.ID}`;
+    const name = [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(" ").trim() || e.ABBR || `#${e.ID}`;
     empMap[e.ID] = { name, mail: e.MAIL || null };
   }
   return { orgMap, empMap };
@@ -132,8 +132,8 @@ router.get("/suggestions/:id", async (req, res) => {
   const cEmpIds = [...new Set((comments || []).map((c) => c.EMPLOYEE_ID).filter(Boolean))];
   let cEmpMap = {};
   if (cEmpIds.length) {
-    const { data: ce } = await supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME").in("ID", cEmpIds);
-    cEmpMap = Object.fromEntries((ce || []).map((e) => [e.ID, [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(" ").trim() || e.SHORT_NAME]));
+    const { data: ce } = await supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME").in("ID", cEmpIds);
+    cEmpMap = Object.fromEntries((ce || []).map((e) => [e.ID, [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(" ").trim() || e.ABBR]));
   }
 
   const { data: atts } = await supabase.from("SUGGESTION_ATTACHMENT")

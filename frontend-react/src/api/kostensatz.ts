@@ -35,7 +35,7 @@ export interface CalcBreakdown {
 
 export interface CalcResult {
   employee_id:     number
-  short_name:      string
+  abbr:      string
   first_name:      string
   last_name:       string
   current_cp_rate: number | null

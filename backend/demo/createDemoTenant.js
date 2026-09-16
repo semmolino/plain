@@ -105,7 +105,7 @@ async function main() {
   // 4) EMPLOYEE
   const hashedPw = await bcrypt.hash(password, 10);
   const { data: emp, error: eErr } = await supabase.from("EMPLOYEE").insert([{
-    MAIL: email, PASSWORD: hashedPw, SHORT_NAME: String(shortNm).trim().toUpperCase(),
+    MAIL: email, PASSWORD: hashedPw, ABBR: String(shortNm).trim().toUpperCase(),
     FIRST_NAME: "Demo", LAST_NAME: "Admin", TENANT_ID: tenantId,
   }]).select("ID").single();
   if (eErr) { console.error("✗ EMPLOYEE:", eErr.message); process.exit(1); }

@@ -162,7 +162,7 @@ function fmtRangeDe(a) {
 async function loadEmp(supabase, tenantId, empId) {
   try {
     const { data } = await supabase.from("EMPLOYEE")
-      .select("SHORT_NAME, FIRST_NAME, LAST_NAME, MAIL")
+      .select("ABBR, FIRST_NAME, LAST_NAME, MAIL")
       .eq("ID", empId).eq("TENANT_ID", tenantId).maybeSingle();
     return data || null;
   } catch (_) { return null; }
@@ -203,7 +203,7 @@ async function notifyAbsenceRequest(supabase, tenantId, absence) {
     if (!approverIds.length) return;
     const emp = await loadEmp(supabase, tenantId, absence.EMPLOYEE_ID);
     const typeName = await loadTypeName(supabase, tenantId, absence.ABSENCE_TYPE_ID);
-    const who = emp ? `${emp.FIRST_NAME} ${emp.LAST_NAME} (${emp.SHORT_NAME})` : `Mitarbeiter #${absence.EMPLOYEE_ID}`;
+    const who = emp ? `${emp.FIRST_NAME} ${emp.LAST_NAME} (${emp.ABBR})` : `Mitarbeiter #${absence.EMPLOYEE_ID}`;
     const title = "Neuer Abwesenheitsantrag";
     const body  = `${who}: ${typeName}, ${fmtRangeDe(absence)}`;
     for (const empId of approverIds) {
@@ -241,7 +241,7 @@ async function notifyAbsenceReply(supabase, tenantId, absence) {
     const approverIds = await employeeIdsWithPermission(supabase, tenantId, "absence.approve");
     if (!approverIds.length) return;
     const emp = await loadEmp(supabase, tenantId, absence.EMPLOYEE_ID);
-    const who = emp ? `${emp.FIRST_NAME} ${emp.LAST_NAME} (${emp.SHORT_NAME})` : `Mitarbeiter #${absence.EMPLOYEE_ID}`;
+    const who = emp ? `${emp.FIRST_NAME} ${emp.LAST_NAME} (${emp.ABBR})` : `Mitarbeiter #${absence.EMPLOYEE_ID}`;
     for (const empId of approverIds) {
       if (empId === absence.EMPLOYEE_ID) continue;
       try {
@@ -381,7 +381,7 @@ module.exports = (supabase) => {
     const empIds  = [...new Set(rows.map(r => r.EMPLOYEE_ID))];
     const [typesRes, empsRes] = await Promise.all([
       typeIds.length ? supabase.from("ABSENCE_TYPE").select("ID, NAME, COLOR, COUNTS_AS_WORKED, REDUCES_VACATION").in("ID", typeIds) : Promise.resolve({ data: [] }),
-      empIds.length  ? supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME").in("ID", empIds).eq("TENANT_ID", req.tenantId) : Promise.resolve({ data: [] }),
+      empIds.length  ? supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME").in("ID", empIds).eq("TENANT_ID", req.tenantId) : Promise.resolve({ data: [] }),
     ]);
     const typeMap = Object.fromEntries((typesRes.data || []).map(t => [t.ID, t]));
     const empMap  = Object.fromEntries((empsRes.data  || []).map(e => [e.ID, e]));
@@ -400,7 +400,7 @@ module.exports = (supabase) => {
       TYPE_NAME:           typeMap[r.ABSENCE_TYPE_ID]?.NAME  ?? null,
       TYPE_COLOR:          typeMap[r.ABSENCE_TYPE_ID]?.COLOR ?? null,
       REDUCES_VACATION:    typeMap[r.ABSENCE_TYPE_ID]?.REDUCES_VACATION ?? false,
-      EMPLOYEE_SHORT_NAME: empMap[r.EMPLOYEE_ID]?.SHORT_NAME ?? null,
+      EMPLOYEE_SHORT_NAME: empMap[r.EMPLOYEE_ID]?.ABBR ?? null,
       EMPLOYEE_FIRST_NAME: empMap[r.EMPLOYEE_ID]?.FIRST_NAME ?? null,
       EMPLOYEE_LAST_NAME:  empMap[r.EMPLOYEE_ID]?.LAST_NAME  ?? null,
     }));

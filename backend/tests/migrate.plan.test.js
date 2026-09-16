@@ -146,6 +146,8 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0142_02_hourly_rate.sql",
       "0143_02_hourly_rate_sql_objects.sql",
       "0144_03_role_name.sql",
+      "0145_04_employee_abbr.sql",
+      "0146_04_employee_abbr_sql_objects.sql",
     ]);
   });
 

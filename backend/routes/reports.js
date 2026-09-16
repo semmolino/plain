@@ -1568,7 +1568,7 @@ module.exports = (supabase) => {
       supabase.from("TEC").select("EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT")
         .eq("TENANT_ID", tenantId).eq("STATUS", "CONFIRMED")
         .gte("DATE_VOUCHER", fromStr).lte("DATE_VOUCHER", toStr),
-      supabase.from("EMPLOYEE").select("ID, SHORT_NAME, FIRST_NAME, LAST_NAME")
+      supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME")
         .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
     ]);
 
@@ -1602,7 +1602,7 @@ module.exports = (supabase) => {
         const total = empMonths.reduce((s, m) => s + m.hours, 0);
         return {
           employee_id: e.ID,
-          short_name:  e.SHORT_NAME || `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim(),
+          abbr:  e.ABBR || `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim(),
           months:      empMonths,
           total:       Math.round(total * 100) / 100,
         };
@@ -1627,7 +1627,7 @@ module.exports = (supabase) => {
       supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT")
         .eq("TENANT_ID", tenantId).eq("STATUS", "CONFIRMED")
         .gte("DATE_VOUCHER", fromStr).lte("DATE_VOUCHER", toStr),
-      supabase.from("EMPLOYEE").select("ID, SHORT_NAME")
+      supabase.from("EMPLOYEE").select("ID, ABBR")
         .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
     ]);
 
@@ -1637,7 +1637,7 @@ module.exports = (supabase) => {
     }
     const result = (employees || []).map(e => ({
       employee_id:  e.ID,
-      short_name:   e.SHORT_NAME,
+      abbr:   e.ABBR,
       hours_4weeks: Math.round((byEmployee[e.ID] || 0) * 100) / 100,
     }));
     res.json({ data: result });

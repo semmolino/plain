@@ -219,7 +219,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
         <label>Ansprechpartner*</label>
         <select value={form.employee_id} onChange={e => setF('employee_id')(e.target.value)}>
           <option value="">Bitte wählen …</option>
-          {managers.map(m => <option key={m.ID} value={m.ID}>{m.SHORT_NAME}</option>)}
+          {managers.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}</option>)}
         </select>
       </div>
 

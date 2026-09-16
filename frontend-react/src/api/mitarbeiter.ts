@@ -2,7 +2,7 @@ import { apiClient } from './client'
 
 export interface Employee {
   ID:                  number
-  SHORT_NAME:          string
+  ABBR:          string
   TITLE:               string | null
   FIRST_NAME:          string
   LAST_NAME:           string
@@ -25,7 +25,7 @@ export interface Employee {
 export interface EmpGender { ID: number; GENDER: string }
 
 export interface CreateEmployeePayload {
-  short_name:        string
+  abbr:        string
   title?:            string
   first_name:        string
   last_name:         string
@@ -48,7 +48,7 @@ export interface InviteResult {
 }
 
 export interface UpdateEmployeePayload {
-  short_name:        string
+  abbr:        string
   title?:            string
   first_name:        string
   last_name:         string
@@ -270,7 +270,7 @@ export const fetchMyMastery = () =>
 
 export interface EmployeeReportRow {
   EMPLOYEE_ID:      number
-  SHORT_NAME:       string
+  ABBR:       string
   FIRST_NAME:       string
   LAST_NAME:        string
   DEPARTMENT_NAME:  string
@@ -331,7 +331,7 @@ export interface MonthClose {
 
 export interface MonthCloseOverviewEmployee {
   ID:         number
-  SHORT_NAME: string
+  ABBR: string
   FIRST_NAME: string
   LAST_NAME:  string
   months:     Array<{ year: number; month: number; closed: boolean; closed_at: string | null }>
@@ -356,7 +356,7 @@ export const setEmployeePassword = (id: number, new_password: string | null) =>
 
 export interface MyProfile {
   ID:               number
-  SHORT_NAME:       string
+  ABBR:       string
   TITLE:            string | null
   FIRST_NAME:       string
   LAST_NAME:        string
