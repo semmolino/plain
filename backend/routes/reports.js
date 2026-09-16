@@ -139,7 +139,7 @@ module.exports = (supabase) => {
 
     let tecQ = supabase
       .from("TEC")
-      .select("STRUCTURE_ID, DATE_VOUCHER, CP_TOT, SP_TOT")
+      .select("STRUCTURE_ID, DATE_VOUCHER, COST_TOTAL, SP_TOT")
       .eq("TENANT_ID", tenantId)
       .in("STRUCTURE_ID", leafIds)
       .order("DATE_VOUCHER", { ascending: true });
@@ -236,7 +236,7 @@ module.exports = (supabase) => {
 
       const kosten = (tecRows || [])
         .filter(r => r.DATE_VOUCHER <= date)
-        .reduce((s, r) => s + +(r.CP_TOT || 0), 0);
+        .reduce((s, r) => s + +(r.COST_TOTAL || 0), 0);
 
       const abgerechnet =
         (ppRows || []).filter(r => r.PARTIAL_PAYMENT_DATE <= date)
@@ -818,7 +818,7 @@ module.exports = (supabase) => {
       // 3. TEC rows (fetch up to dateTo for efficiency; full history needed for cumulative)
       let tecQ = supabase
         .from("TEC")
-        .select("STRUCTURE_ID, DATE_VOUCHER, CP_TOT, SP_TOT")
+        .select("STRUCTURE_ID, DATE_VOUCHER, COST_TOTAL, SP_TOT")
         .eq("TENANT_ID", tenantId)
         .in("STRUCTURE_ID", leafIds)
         .order("DATE_VOUCHER", { ascending: true });
@@ -925,7 +925,7 @@ module.exports = (supabase) => {
 
         const kosten = (tecRows || [])
           .filter(r => r.DATE_VOUCHER <= date)
-          .reduce((s, r) => s + +(r.CP_TOT || 0), 0);
+          .reduce((s, r) => s + +(r.COST_TOTAL || 0), 0);
 
         const abgerechnet =
           (ppRows || []).filter(r => r.PARTIAL_PAYMENT_DATE <= date)
@@ -1051,7 +1051,7 @@ module.exports = (supabase) => {
     if (dateFrom && dateTo) {
       const { data, error } = await supabase
         .from("TEC")
-        .select("DATE_VOUCHER, QUANTITY_INT, CP_TOT")
+        .select("DATE_VOUCHER, QUANTITY_INT, COST_TOTAL")
         .eq("TENANT_ID", tenantId)
         .gte("DATE_VOUCHER", dateFrom)
         .lte("DATE_VOUCHER", dateTo);
@@ -1062,7 +1062,7 @@ module.exports = (supabase) => {
         const m = String(row.DATE_VOUCHER).substring(0, 7);
         if (!byMonth[m]) byMonth[m] = { MONTH: m, HOURS_TOTAL: 0, COST_TOTAL: 0 };
         byMonth[m].HOURS_TOTAL = Math.round((byMonth[m].HOURS_TOTAL + Number(row.QUANTITY_INT || 0)) * 100) / 100;
-        byMonth[m].COST_TOTAL  = Math.round((byMonth[m].COST_TOTAL  + Number(row.CP_TOT || 0)) * 100) / 100;
+        byMonth[m].COST_TOTAL  = Math.round((byMonth[m].COST_TOTAL  + Number(row.COST_TOTAL || 0)) * 100) / 100;
       }
       return res.json({ data: Object.values(byMonth).sort((a, b) => a.MONTH.localeCompare(b.MONTH)) });
     }
@@ -1488,7 +1488,7 @@ module.exports = (supabase) => {
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
           .gte("PARTIAL_PAYMENT_DATE", from).lte("PARTIAL_PAYMENT_DATE", to)
           .is("CANCELS_PARTIAL_PAYMENT_ID", null),
-        supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT, CP_TOT")
+        supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT, COST_TOTAL")
           .eq("TENANT_ID", tenantId).gte("DATE_VOUCHER", from).lte("DATE_VOUCHER", to),
         supabase.from("EMPLOYEE").select("ID")
           .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
@@ -1502,7 +1502,7 @@ module.exports = (supabase) => {
       const revenue        = round2(invoiceRevenue + ppRevenue);
       const tecRows        = tecRes.data || [];
       const totalHours     = round2(tecRows.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0));
-      const directCosts    = round2(tecRows.reduce((s, r) => s + Number(r.CP_TOT || 0), 0));
+      const directCosts    = round2(tecRows.reduce((s, r) => s + Number(r.COST_TOTAL || 0), 0));
       const projectEmployeeCount = new Set(tecRows.map(r => r.EMPLOYEE_ID)).size;
       const employeeCount  = (empRes.data || []).length;
       const backlog        = round2((backlogRes.data || []).reduce((s, r) =>
@@ -1700,7 +1700,7 @@ module.exports = (supabase) => {
 
         // TEC: all entries in year (employee_id, hours, costs)
         supabase.from("TEC")
-          .select("EMPLOYEE_ID, QUANTITY_INT, CP_TOT")
+          .select("EMPLOYEE_ID, QUANTITY_INT, COST_TOTAL")
           .eq("TENANT_ID", tenantId)
           .gte("DATE_VOUCHER", periodStart)
           .lte("DATE_VOUCHER", periodEnd),
@@ -1729,7 +1729,7 @@ module.exports = (supabase) => {
       // TEC metrics
       const tecRows      = tecRes.data || [];
       const totalHours   = Math.round(tecRows.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0) * 100) / 100;
-      const directCosts  = Math.round(tecRows.reduce((s, r) => s + Number(r.CP_TOT || 0), 0) * 100) / 100;
+      const directCosts  = Math.round(tecRows.reduce((s, r) => s + Number(r.COST_TOTAL || 0), 0) * 100) / 100;
       const uniqueEmpIds = new Set(tecRows.map(r => r.EMPLOYEE_ID));
       const projectEmployeeCount = uniqueEmpIds.size;
 
@@ -1853,7 +1853,7 @@ module.exports = (supabase) => {
       // Fetch all data in parallel; some need all-time data for running totals
       const [tecRes, invRes, ppRes, payRes, projectsRes, allInvRes, allPpRes] = await Promise.all([
         supabase.from("TEC")
-          .select("DATE_VOUCHER, QUANTITY_INT, CP_TOT")
+          .select("DATE_VOUCHER, QUANTITY_INT, COST_TOTAL")
           .eq("TENANT_ID", tenantId)
           .gte("DATE_VOUCHER", dateFrom)
           .lte("DATE_VOUCHER", overallEnd),
@@ -1908,7 +1908,7 @@ module.exports = (supabase) => {
       const result = periods.map(p => {
         const periodTec = tec.filter(r => r.DATE_VOUCHER >= p.start && r.DATE_VOUCHER <= p.end);
         const stunden   = round2(periodTec.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0));
-        const kosten    = round2(periodTec.reduce((s, r) => s + Number(r.CP_TOT || 0), 0));
+        const kosten    = round2(periodTec.reduce((s, r) => s + Number(r.COST_TOTAL || 0), 0));
 
         const periodInv = invoices.filter(r => r.INVOICE_DATE >= p.start && r.INVOICE_DATE <= p.end);
         const periodPp  = pps.filter(r => r.PARTIAL_PAYMENT_DATE >= p.start && r.PARTIAL_PAYMENT_DATE <= p.end);

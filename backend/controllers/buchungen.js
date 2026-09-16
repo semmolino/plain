@@ -81,8 +81,8 @@ async function listBuchungenByProject(req, res, supabase) {
         delete out.SP_TOT;
       }
       if (!showCosts) {
-        delete out.CP_RATE;
-        delete out.CP_TOT;
+        delete out.COST_RATE;
+        delete out.COST_TOTAL;
       }
       return out;
     });

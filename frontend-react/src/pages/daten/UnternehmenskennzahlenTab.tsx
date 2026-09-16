@@ -222,7 +222,7 @@ export function UnternehmenskennzahlenTab() {
               label="Deckungsbeitragsmarge"
               value={fmtPct(kpis.deckungsbeitragMarge)}
               formula="(Umsatz – Einzelkosten) / Umsatz"
-              note="Näherungswert: Einzelkosten = CP_TOT aus Zeitbuchungen (ohne Gemeinkosten)"
+              note="Näherungswert: Einzelkosten = COST_TOTAL aus Zeitbuchungen (ohne Gemeinkosten)"
               highlight={dbMargeHighlight(kpis.deckungsbeitragMarge)}
             />
 
@@ -284,7 +284,7 @@ export function UnternehmenskennzahlenTab() {
             </summary>
             <div className="unk-base-strip">
               <BaseDataRow label="Umsatz (Rechnungen + Abschläge)" value={fmtEur(raw?.revenue ?? null)} />
-              <BaseDataRow label="Einzelkosten (Zeitbuchungen CP_TOT)" value={fmtEur(raw?.directCosts ?? null)} />
+              <BaseDataRow label="Einzelkosten (Zeitbuchungen COST_TOTAL)" value={fmtEur(raw?.directCosts ?? null)} />
               <BaseDataRow label="Projektstunden (Zeitbuchungen)" value={fmtH(raw?.totalHours ?? null)} />
               <BaseDataRow label="Aktive Mitarbeiter" value={raw?.employeeCount != null ? String(raw.employeeCount) : '–'} />
               <BaseDataRow label="Mitarbeiter mit Buchungen" value={raw?.projectEmployeeCount != null ? String(raw.projectEmployeeCount) : '–'} />

@@ -298,7 +298,8 @@ auf die man sich verlässt, sollte man selbst gezogen haben.
 
 ```bash
 scalingo --app planandsimple addons                       # liefert die Addon-Kennung
-scalingo --app planandsimple --addon <addon-id> backups-list
+scalingo --app planandsimple --addon <addon-id> backups          # auflisten
+scalingo --app planandsimple --addon <addon-id> backups-create   # neue erstellen
 scalingo --app planandsimple --addon <addon-id> backups-download \
          --backup <id> --output ./sicherung.tar.gz
 ```

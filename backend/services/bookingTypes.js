@@ -65,7 +65,7 @@ async function loadProjectPriceMap(supabase, tenantId, projectId) {
   if (projectId == null) return new Map();
   const { data, error } = await supabase
     .from("PROJECT_BOOKING_PRICE")
-    .select("BOOKING_TYPE_ID, SP_RATE, CP_RATE")
+    .select("BOOKING_TYPE_ID, SP_RATE, COST_RATE")
     .eq("TENANT_ID", tenantId)
     .eq("PROJECT_ID", projectId);
   if (error) throw { status: 500, message: error.message };
@@ -94,7 +94,7 @@ async function listSelectableForBooking(supabase, { tenantId, projectId = null }
     const ov = priceMap.get(Number(r.ID));
     if (ov) {
       if (ov.SP_RATE != null) r.DEFAULT_SP_RATE = Number(ov.SP_RATE);
-      if (ov.CP_RATE != null) r.DEFAULT_CP_RATE = Number(ov.CP_RATE);
+      if (ov.COST_RATE != null) r.DEFAULT_CP_RATE = Number(ov.COST_RATE);
     }
   }
   // Projektbezogene zuerst.
@@ -132,9 +132,9 @@ async function listProjectPriceList(supabase, { tenantId, projectId }) {
       DEFAULT_SP_RATE:   r.DEFAULT_SP_RATE,
       DEFAULT_CP_RATE:   r.DEFAULT_CP_RATE,
       PROJECT_SP_RATE:   ov && ov.SP_RATE != null ? Number(ov.SP_RATE) : null,
-      PROJECT_CP_RATE:   ov && ov.CP_RATE != null ? Number(ov.CP_RATE) : null,
+      PROJECT_CP_RATE:   ov && ov.COST_RATE != null ? Number(ov.COST_RATE) : null,
       EFFECTIVE_SP_RATE: ov && ov.SP_RATE != null ? Number(ov.SP_RATE) : r.DEFAULT_SP_RATE,
-      EFFECTIVE_CP_RATE: ov && ov.CP_RATE != null ? Number(ov.CP_RATE) : r.DEFAULT_CP_RATE,
+      EFFECTIVE_CP_RATE: ov && ov.COST_RATE != null ? Number(ov.COST_RATE) : r.DEFAULT_CP_RATE,
     };
   });
 }
@@ -156,12 +156,12 @@ async function upsertProjectPrice(supabase, { tenantId, projectId, bookingTypeId
 
   if (existing) {
     const { error } = await supabase.from("PROJECT_BOOKING_PRICE")
-      .update({ SP_RATE: sp, CP_RATE: cp }).eq("ID", existing.ID).eq("TENANT_ID", tenantId);
+      .update({ SP_RATE: sp, COST_RATE: cp }).eq("ID", existing.ID).eq("TENANT_ID", tenantId);
     if (error) throw { status: 500, message: error.message };
     return { id: existing.ID };
   }
   const { data, error } = await supabase.from("PROJECT_BOOKING_PRICE")
-    .insert([{ TENANT_ID: tenantId, PROJECT_ID: Number(projectId), BOOKING_TYPE_ID: Number(bookingTypeId), SP_RATE: sp, CP_RATE: cp }])
+    .insert([{ TENANT_ID: tenantId, PROJECT_ID: Number(projectId), BOOKING_TYPE_ID: Number(bookingTypeId), SP_RATE: sp, COST_RATE: cp }])
     .select("ID").single();
   if (error) throw { status: 500, message: error.message };
   return { id: data.ID };

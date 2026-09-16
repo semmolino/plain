@@ -186,8 +186,8 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
     }))
 
     const priceRows = Object.entries(bookingPrices)
-      .map(([typeId, v]) => ({ booking_type_id: Number(typeId), sp_rate: v.sp || undefined, cp_rate: v.cp || undefined }))
-      .filter(r => r.sp_rate !== undefined || r.cp_rate !== undefined)
+      .map(([typeId, v]) => ({ booking_type_id: Number(typeId), sp_rate: v.sp || undefined, cost_rate: v.cp || undefined }))
+      .filter(r => r.sp_rate !== undefined || r.cost_rate !== undefined)
 
     createMut.mutate({
       name_long:          basic.name_long,

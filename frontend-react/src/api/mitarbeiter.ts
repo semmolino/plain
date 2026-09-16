@@ -80,7 +80,7 @@ export interface EmployeeWorkModel {
 
 export interface EmployeeCpRate {
   ID:         number
-  CP_RATE:    number
+  COST_RATE:    number
   VALID_FROM: string
 }
 
@@ -173,10 +173,10 @@ export const fetchEmployeeCpRateForDate = (id: number, date: string) =>
 export const fetchEmployeeCpRates = (id: number) =>
   apiClient.get<{ data: EmployeeCpRate[] }>(`/mitarbeiter/${id}/cp-rates`)
 
-export const createEmployeeCpRate = (id: number, body: { cp_rate: number; valid_from: string }) =>
+export const createEmployeeCpRate = (id: number, body: { cost_rate: number; valid_from: string }) =>
   apiClient.post<{ data: EmployeeCpRate }>(`/mitarbeiter/${id}/cp-rates`, body)
 
-export const updateEmployeeCpRate = (id: number, rid: number, body: { cp_rate?: number; valid_from?: string }) =>
+export const updateEmployeeCpRate = (id: number, rid: number, body: { cost_rate?: number; valid_from?: string }) =>
   apiClient.patch<{ data: EmployeeCpRate }>(`/mitarbeiter/${id}/cp-rates/${rid}`, body)
 
 export const deleteEmployeeCpRate = (id: number, rid: number) =>

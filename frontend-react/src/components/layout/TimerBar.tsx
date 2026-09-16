@@ -212,7 +212,7 @@ function NextTaskModal({ onClose }: { onClose: () => void }) {
         TIME_START:          new Date(session.blockStartIso).toTimeString().slice(0, 8),
         TIME_FINISH:         finishTime,
         QUANTITY_INT:        quantityFromSeconds(elapsed),
-        CP_RATE:             session.cpRate,
+        COST_RATE:             session.cpRate,
         POSTING_DESCRIPTION: description,
       })
       nextBlock(structureId, structureName, projectId, projectMap[projectId] ?? String(projectId))
@@ -301,7 +301,7 @@ function FinishModal({ onClose }: { onClose: () => void }) {
         TIME_START:          new Date(session.blockStartIso).toTimeString().slice(0, 8),
         TIME_FINISH:         finishTime,
         QUANTITY_INT:        quantityFromSeconds(elapsed),
-        CP_RATE:             session.cpRate,
+        COST_RATE:             session.cpRate,
         POSTING_DESCRIPTION: description,
       })
       void qc.invalidateQueries({ queryKey: ['timer-drafts'] })
@@ -796,7 +796,7 @@ export function TimerBar() {
         TIME_START:          startStr,
         TIME_FINISH:         finStr,
         QUANTITY_INT:        qty,
-        CP_RATE:             0,
+        COST_RATE:             0,
         POSTING_DESCRIPTION: 'Pause',
         ENTRY_KIND:          'BREAK',
       })
