@@ -3,7 +3,7 @@
 /**
  * Generator: Rechnungen & Zahlungen.
  *
- * Iteration 2a — Abschlagsrechnungen (PARTIAL_PAYMENT) + Zahlungseingänge (PAYMENT).
+ * Iteration 2a — Abschlagsrechnungen (ADVANCE_INVOICE) + Zahlungseingänge (PAYMENT).
  * Die Schlussrechnung (INVOICE mit Abschlags-Abzügen) folgt separat.
  *
  * Für jedes Projekt werden über die Laufzeit im Rhythmus `partialEveryDays`
@@ -58,7 +58,7 @@ function billingDates(startISO, endISO, everyDays) {
 }
 
 // Zahlung für eine gebuchte AR ODER Rechnung verbuchen — gespiegelt aus routes/payments.js (POST).
-// docType: "PARTIAL_PAYMENT" | "INVOICE"
+// docType: "ADVANCE_INVOICE" | "INVOICE"
 async function recordPayment({ supabase, tenantId, docType, docRow, paymentDateISO }) {
   const isInvoice = docType === "INVOICE";
   const gross = toNum(docRow.TOTAL_AMOUNT_GROSS);
@@ -73,7 +73,7 @@ async function recordPayment({ supabase, tenantId, docType, docRow, paymentDateI
     .from("PAYMENT")
     .insert([
       {
-        PARTIAL_PAYMENT_ID: isInvoice ? null : docRow.ID,
+        ADVANCE_INVOICE_ID: isInvoice ? null : docRow.ID,
         INVOICE_ID: isInvoice ? docRow.ID : null,
         AMOUNT_PAYED_GROSS: gross,
         AMOUNT_PAYED_NET: net,
@@ -81,7 +81,7 @@ async function recordPayment({ supabase, tenantId, docType, docRow, paymentDateI
         PAYMENT_DATE: paymentDateISO,
         PROJECT_ID: projectId,
         CONTRACT_ID: contractId,
-        PURPOSE_OF_PAYMENT: (isInvoice ? docRow.INVOICE_NUMBER : docRow.PARTIAL_PAYMENT_NUMBER) || null,
+        PURPOSE_OF_PAYMENT: (isInvoice ? docRow.INVOICE_NUMBER : docRow.ADVANCE_INVOICE_NUMBER) || null,
         COMMENT: null,
         TENANT_ID: tenantId,
         AMOUNT_PAYED_EXTRAS_NET: null,
@@ -99,8 +99,8 @@ async function recordPayment({ supabase, tenantId, docType, docRow, paymentDateI
     .eq("ID", projectId);
 
   // Verteilung auf Strukturelemente (Quelle je nach Belegart)
-  const structTable = isInvoice ? "INVOICE_STRUCTURE" : "PARTIAL_PAYMENT_STRUCTURE";
-  const structFilter = isInvoice ? "INVOICE_ID" : "PARTIAL_PAYMENT_ID";
+  const structTable = isInvoice ? "INVOICE_STRUCTURE" : "ADVANCE_INVOICE_STRUCTURE";
+  const structFilter = isInvoice ? "INVOICE_ID" : "ADVANCE_INVOICE_ID";
   const { data: structureRows } = await supabase
     .from(structTable)
     .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
@@ -113,7 +113,7 @@ async function recordPayment({ supabase, tenantId, docType, docRow, paymentDateI
       const share = totalAllocated !== 0 ? round2((net * rowTotal) / totalAllocated) : round2(net / structureRows.length);
       return {
         PAYMENT_ID: created.ID,
-        PARTIAL_PAYMENT_ID: isInvoice ? null : docRow.ID,
+        ADVANCE_INVOICE_ID: isInvoice ? null : docRow.ID,
         INVOICE_ID: isInvoice ? docRow.ID : null,
         STRUCTURE_ID: r.STRUCTURE_ID,
         AMOUNT_PAYED_NET: share,
@@ -163,15 +163,15 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
     if (bt2Ids.length > 0) {
       const { data: cand } = await supabase
         .from("TEC")
-        .select("ID, PARTIAL_PAYMENT_ID, INVOICE_ID")
+        .select("ID, ADVANCE_INVOICE_ID, INVOICE_ID")
         .in("STRUCTURE_ID", bt2Ids)
         .lte("DATE_VOUCHER", dateISO)
         .neq("STATUS", "DRAFT");
       const assignable = (cand || [])
-        .filter((t) => pp.isNullOrZero(t.PARTIAL_PAYMENT_ID) && pp.isUninvoiced(t.INVOICE_ID))
+        .filter((t) => pp.isNullOrZero(t.ADVANCE_INVOICE_ID) && pp.isUninvoiced(t.INVOICE_ID))
         .map((t) => t.ID);
       if (assignable.length > 0) {
-        await supabase.from("TEC").update({ PARTIAL_PAYMENT_ID: id }).in("ID", assignable);
+        await supabase.from("TEC").update({ ADVANCE_INVOICE_ID: id }).in("ID", assignable);
       }
     }
 
@@ -217,9 +217,9 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
 
     // 6) Datumsfelder setzen
     await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .update({
-        PARTIAL_PAYMENT_DATE: dateISO,
+        ADVANCE_INVOICE_DATE: dateISO,
         DUE_DATE: cal.addDays(dateISO, 30),
         BILLING_PERIOD_START: prevDateISO || tl.start,
         BILLING_PERIOD_FINISH: dateISO,
@@ -228,8 +228,8 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
 
     // 7) Buchen (ohne PDF/XML)
     const { data: ppRow } = await supabase
-      .from("PARTIAL_PAYMENT")
-      .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, PARTIAL_PAYMENT_NUMBER, DOCUMENT_TEMPLATE_ID, TENANT_ID, CANCELS_PARTIAL_PAYMENT_ID")
+      .from("ADVANCE_INVOICE")
+      .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, ADVANCE_INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID, TENANT_ID, CANCELS_PARTIAL_PAYMENT_ID")
       .eq("ID", id)
       .maybeSingle();
     await pp.bookPartialPayment(supabase, { id, pp: ppRow, tenantId: md.tenantId, force: true, skipDocuments: cfg.invoicing.skipDocuments });
@@ -241,11 +241,11 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
       const payDate = cal.addDays(dateISO, delay);
       if (payDate <= cal.todayISO()) {
         const { data: booked } = await supabase
-          .from("PARTIAL_PAYMENT")
-          .select("ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_GROSS, VAT_PERCENT, PARTIAL_PAYMENT_NUMBER")
+          .from("ADVANCE_INVOICE")
+          .select("ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_GROSS, VAT_PERCENT, ADVANCE_INVOICE_NUMBER")
           .eq("ID", id)
           .maybeSingle();
-        const paid = await recordPayment({ supabase, tenantId: md.tenantId, docType: "PARTIAL_PAYMENT", docRow: booked, paymentDateISO: payDate });
+        const paid = await recordPayment({ supabase, tenantId: md.tenantId, docType: "ADVANCE_INVOICE", docRow: booked, paymentDateISO: payDate });
         if (paid) stats.paid++;
       }
     }
@@ -254,7 +254,7 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
     if (stats.errors <= 8) log(`  ⚠︎ Abschlag P${project.ID} ${dateISO}: ${e?.message || e}`);
     // Draft aufräumen, falls noch ungebucht
     try {
-      const { data: chk } = await supabase.from("PARTIAL_PAYMENT").select("STATUS_ID").eq("ID", id).maybeSingle();
+      const { data: chk } = await supabase.from("ADVANCE_INVOICE").select("STATUS_ID").eq("ID", id).maybeSingle();
       if (chk && String(chk.STATUS_ID) !== "2") await pp.deletePartialPayment(supabase, { id, tenantId: md.tenantId });
     } catch (_) {
       /* ignore cleanup errors */
@@ -285,7 +285,7 @@ async function makeFinalInvoice({ supabase, md, project, tl, cfg, rng, stats, lo
 
   // Gebuchte Abschläge des Projekts (netto inkl. Nebenkosten) → Abzüge
   const { data: booked } = await supabase
-    .from("PARTIAL_PAYMENT")
+    .from("ADVANCE_INVOICE")
     .select("ID, TOTAL_AMOUNT_NET")
     .eq("TENANT_ID", md.tenantId)
     .eq("PROJECT_ID", project.ID)
@@ -304,7 +304,7 @@ async function makeFinalInvoice({ supabase, md, project, tl, cfg, rng, stats, lo
 
   try {
     await finalInvoices.savePhases(supabase, { id, tenantId: md.tenantId, structureIds: leafIds });
-    const items = (booked || []).map((p) => ({ partial_payment_id: p.ID, deduction_amount_net: toNum(p.TOTAL_AMOUNT_NET) }));
+    const items = (booked || []).map((p) => ({ advance_invoice_id: p.ID, deduction_amount_net: toNum(p.TOTAL_AMOUNT_NET) }));
     await finalInvoices.saveDeductions(supabase, { id, tenantId: md.tenantId, items });
 
     let invDate = cal.addDays(tl.end, 7);

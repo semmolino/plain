@@ -266,7 +266,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
   })
 
   const dedMut = useMutation({
-    mutationFn: ({ id, items }: { id: number; items: { partial_payment_id: number; deduction_amount_net: number }[] }) =>
+    mutationFn: ({ id, items }: { id: number; items: { advance_invoice_id: number; deduction_amount_net: number }[] }) =>
       saveFinalInvoiceDeductions(id, items),
     onSuccess: (res) => {
       setDedTotals({
@@ -428,7 +428,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
     if (!draftId) return
     setMsg(null)
     const items = Array.from(dedSelected).map(id => ({
-      partial_payment_id:   id,
+      advance_invoice_id:   id,
       deduction_amount_net: Number(deductAmounts[id] ?? 0),
     }))
     dedMut.mutate({ id: draftId, items })
@@ -446,7 +446,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
       const uncovered = (d.STRUCTURE_IDS ?? []).filter(sid => !phaseChecked.has(sid))
       if (uncovered.length > 0) {
         setDedWarn(
-          `Hinweis: ${d.PARTIAL_PAYMENT_NUMBER ?? `Abschlag #${id}`} enthält Positionen, die in Schritt 2 (Positionen) nicht ausgewählt sind.`
+          `Hinweis: ${d.ADVANCE_INVOICE_NUMBER ?? `Abschlag #${id}`} enthält Positionen, die in Schritt 2 (Positionen) nicht ausgewählt sind.`
         )
       }
     } else {
@@ -772,8 +772,8 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                       <td>
                         <input type="checkbox" checked={dedSelected.has(d.ID)} onChange={() => toggleDed(d)} />
                       </td>
-                      <td>{d.PARTIAL_PAYMENT_NUMBER ?? '—'}</td>
-                      <td>{fmtDate(d.PARTIAL_PAYMENT_DATE)}</td>
+                      <td>{d.ADVANCE_INVOICE_NUMBER ?? '—'}</td>
+                      <td>{fmtDate(d.ADVANCE_INVOICE_DATE)}</td>
                       <td className="num">{money(d.AMOUNT_NET)}</td>
                       <td>
                         <input
@@ -990,8 +990,8 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                   <tbody>
                     {deductions.filter(d => dedSelected.has(d.ID)).map(d => (
                       <tr key={d.ID}>
-                        <td>{d.PARTIAL_PAYMENT_NUMBER ?? '—'}</td>
-                        <td>{fmtDate(d.PARTIAL_PAYMENT_DATE)}</td>
+                        <td>{d.ADVANCE_INVOICE_NUMBER ?? '—'}</td>
+                        <td>{fmtDate(d.ADVANCE_INVOICE_DATE)}</td>
                         <td className="num">{money(Number(deductAmounts[d.ID] ?? d.DEDUCTION_AMOUNT_NET ?? 0))}</td>
                       </tr>
                     ))}
@@ -1026,8 +1026,8 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                       }}
                     />
                     <span style={{ minWidth: 140 }}>
-                      Nr. <strong>{e.PARTIAL_PAYMENT_NUMBER || `#${e.ID}`}</strong>
-                      {e.PARTIAL_PAYMENT_DATE ? <span style={{ color: 'var(--text-3)' }}> · {fmtDate(e.PARTIAL_PAYMENT_DATE)}</span> : null}
+                      Nr. <strong>{e.ADVANCE_INVOICE_NUMBER || `#${e.ID}`}</strong>
+                      {e.ADVANCE_INVOICE_DATE ? <span style={{ color: 'var(--text-3)' }}> · {fmtDate(e.ADVANCE_INVOICE_DATE)}</span> : null}
                     </span>
                     <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--success)' }}>+ {fmtEur(e.SE_AMOUNT)}</span>
                   </label>

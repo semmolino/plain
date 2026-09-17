@@ -55,7 +55,7 @@ module.exports = (supabase) => {
     try {
       const composed = await emailTemplates.composeInvoiceEmail(supabase, {
         tenantId: req.tenantId,
-        docType:  "PARTIAL_PAYMENT",
+        docType:  "ADVANCE_INVOICE",
         docId:    Number(req.params.id),
       });
       return res.json(composed);
@@ -74,23 +74,23 @@ module.exports = (supabase) => {
       const { emailTo, emailSubject, emailBody } = req.body || {};
 
       const { data: pp } = await supabase
-        .from("PARTIAL_PAYMENT")
-        .select("PARTIAL_PAYMENT_NUMBER")
+        .from("ADVANCE_INVOICE")
+        .select("ADVANCE_INVOICE_NUMBER")
         .eq("ID", ppId)
         .eq("TENANT_ID", tenantId)
         .maybeSingle();
       if (!pp) return res.status(404).json({ error: "Anzahlung nicht gefunden" });
 
       const composed = await emailTemplates.composeInvoiceEmail(supabase, {
-        tenantId, docType: "PARTIAL_PAYMENT", docId: ppId,
+        tenantId, docType: "ADVANCE_INVOICE", docId: ppId,
         subject: emailSubject, body: emailBody,
       });
       const to = emailTo || composed.to;
       if (!to) return res.status(400).json({ error: "Keine E-Mail-Adresse hinterlegt" });
 
-      const { pdf } = await renderDocumentPdf({ supabase, tenantId, docType: "PARTIAL_PAYMENT", docId: ppId });
+      const { pdf } = await renderDocumentPdf({ supabase, tenantId, docType: "ADVANCE_INVOICE", docId: ppId });
       const pdfBuffer = Buffer.from(pdf);
-      const safeName  = (pp.PARTIAL_PAYMENT_NUMBER || `Anzahlung_${ppId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
+      const safeName  = (pp.ADVANCE_INVOICE_NUMBER || `Anzahlung_${ppId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
       await sendMail({
         supabase,
         tenantId,

@@ -147,13 +147,13 @@ module.exports = (supabase) => {
     const { data: tecRows } = await tecQ;
 
     let ppQ = supabase
-      .from("PARTIAL_PAYMENT")
-      .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+      .from("ADVANCE_INVOICE")
+      .select("ADVANCE_INVOICE_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
-      .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+      .order("ADVANCE_INVOICE_DATE", { ascending: true });
     if (projectIds) ppQ = ppQ.in("PROJECT_ID", projectIds);
-    if (dateTo) ppQ = ppQ.lte("PARTIAL_PAYMENT_DATE", dateTo);
+    if (dateTo) ppQ = ppQ.lte("ADVANCE_INVOICE_DATE", dateTo);
     const { data: ppRows } = await ppQ;
 
     let invRows = [];
@@ -182,7 +182,7 @@ module.exports = (supabase) => {
     const dateSet = new Set();
     (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
     (tecRows      || []).forEach(r => { if (r.DATE_VOUCHER) dateSet.add(r.DATE_VOUCHER); });
-    (ppRows       || []).forEach(r => { if (r.PARTIAL_PAYMENT_DATE) dateSet.add(r.PARTIAL_PAYMENT_DATE); });
+    (ppRows       || []).forEach(r => { if (r.ADVANCE_INVOICE_DATE) dateSet.add(r.ADVANCE_INVOICE_DATE); });
     invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
     (payRows      || []).forEach(r => { if (r.PAYMENT_DATE) dateSet.add(r.PAYMENT_DATE); });
 
@@ -239,7 +239,7 @@ module.exports = (supabase) => {
         .reduce((s, r) => s + +(r.COST_TOTAL || 0), 0);
 
       const abgerechnet =
-        (ppRows || []).filter(r => r.PARTIAL_PAYMENT_DATE <= date)
+        (ppRows || []).filter(r => r.ADVANCE_INVOICE_DATE <= date)
           .reduce((s, r) => s + +(r.AMOUNT_NET || 0) + +(r.AMOUNT_EXTRAS_NET || 0), 0) +
         invRows.filter(r => r.INVOICE_DATE <= date)
           .reduce((s, r) => s + +(r.TOTAL_AMOUNT_NET || 0), 0);
@@ -827,13 +827,13 @@ module.exports = (supabase) => {
 
       // 4. Partial payments
       let ppQ = supabase
-        .from("PARTIAL_PAYMENT")
-        .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+        .from("ADVANCE_INVOICE")
+        .select("ADVANCE_INVOICE_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
         .eq("TENANT_ID", tenantId)
         .eq("PROJECT_ID", projectId)
         .eq("STATUS_ID", 2)
-        .order("PARTIAL_PAYMENT_DATE", { ascending: true });
-      if (dateTo) ppQ = ppQ.lte("PARTIAL_PAYMENT_DATE", dateTo);
+        .order("ADVANCE_INVOICE_DATE", { ascending: true });
+      if (dateTo) ppQ = ppQ.lte("ADVANCE_INVOICE_DATE", dateTo);
       const { data: ppRows } = await ppQ;
 
       // 5. Invoices (table may not exist in all tenants)
@@ -865,7 +865,7 @@ module.exports = (supabase) => {
       const dateSet = new Set();
       (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
       (tecRows      || []).forEach(r => { if (r.DATE_VOUCHER) dateSet.add(r.DATE_VOUCHER); });
-      (ppRows       || []).forEach(r => { if (r.PARTIAL_PAYMENT_DATE) dateSet.add(r.PARTIAL_PAYMENT_DATE); });
+      (ppRows       || []).forEach(r => { if (r.ADVANCE_INVOICE_DATE) dateSet.add(r.ADVANCE_INVOICE_DATE); });
       invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
       (payRows      || []).forEach(r => { if (r.PAYMENT_DATE) dateSet.add(r.PAYMENT_DATE); });
 
@@ -928,7 +928,7 @@ module.exports = (supabase) => {
           .reduce((s, r) => s + +(r.COST_TOTAL || 0), 0);
 
         const abgerechnet =
-          (ppRows || []).filter(r => r.PARTIAL_PAYMENT_DATE <= date)
+          (ppRows || []).filter(r => r.ADVANCE_INVOICE_DATE <= date)
             .reduce((s, r) => s + +(r.AMOUNT_NET || 0) + +(r.AMOUNT_EXTRAS_NET || 0), 0) +
           invRows.filter(r => r.INVOICE_DATE <= date)
             .reduce((s, r) => s + +(r.TOTAL_AMOUNT_NET || 0), 0);
@@ -1227,7 +1227,7 @@ module.exports = (supabase) => {
     if (!tenantId) return;
     try {
       let { data, error } = await supabase
-        .from("PARTIAL_PAYMENT")
+        .from("ADVANCE_INVOICE")
         .select("ID, PROJECT_ID, SE_AMOUNT")
         .eq("TENANT_ID", tenantId)
         .eq("STATUS_ID", 2)
@@ -1244,7 +1244,7 @@ module.exports = (supabase) => {
       if (rows.length > 0) {
         const ids = rows.map(r => r.ID);
         const { data: stornos } = await supabase
-          .from("PARTIAL_PAYMENT")
+          .from("ADVANCE_INVOICE")
           .select("CANCELS_PARTIAL_PAYMENT_ID")
           .in("CANCELS_PARTIAL_PAYMENT_ID", ids);
         const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
@@ -1416,8 +1416,8 @@ module.exports = (supabase) => {
           .select("ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID")
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
           .neq("INVOICE_TYPE", "stornorechnung").neq("INVOICE_TYPE", "storno_partial"),
-        supabase.from("PARTIAL_PAYMENT")
-          .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID")
+        supabase.from("ADVANCE_INVOICE")
+          .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID")
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
           .is("CANCELS_PARTIAL_PAYMENT_ID", null),
       ]);
@@ -1434,8 +1434,8 @@ module.exports = (supabase) => {
       }
       if (ppIds.length) {
         const { data: pays } = await supabase.from("PAYMENT")
-          .select("PARTIAL_PAYMENT_ID, AMOUNT_PAYED_GROSS").in("PARTIAL_PAYMENT_ID", ppIds);
-        for (const p of (pays || [])) ppPay[p.PARTIAL_PAYMENT_ID] = (ppPay[p.PARTIAL_PAYMENT_ID] || 0) + parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
+          .select("ADVANCE_INVOICE_ID, AMOUNT_PAYED_GROSS").in("ADVANCE_INVOICE_ID", ppIds);
+        for (const p of (pays || [])) ppPay[p.ADVANCE_INVOICE_ID] = (ppPay[p.ADVANCE_INVOICE_ID] || 0) + parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
       }
 
       const daysOverdue = (due) => (due && due < today) ? Math.floor((new Date(today) - new Date(due)) / 86400000) : 0;
@@ -1453,8 +1453,8 @@ module.exports = (supabase) => {
         const open = round2(Math.max(0, Number(pp.TOTAL_AMOUNT_GROSS || 0) - (ppPay[pp.ID] || 0)));
         if (open <= 0.005) continue;
         posten.push({
-          sourceType: "pp", sourceId: pp.ID, number: pp.PARTIAL_PAYMENT_NUMBER || `#${pp.ID}`,
-          date: pp.PARTIAL_PAYMENT_DATE, dueDate: pp.DUE_DATE || null, addressName: pp.ADDRESS_NAME_1 || null,
+          sourceType: "pp", sourceId: pp.ID, number: pp.ADVANCE_INVOICE_NUMBER || `#${pp.ID}`,
+          date: pp.ADVANCE_INVOICE_DATE, dueDate: pp.DUE_DATE || null, addressName: pp.ADDRESS_NAME_1 || null,
           projectId: pp.PROJECT_ID || null, openAmount: open, daysOverdue: daysOverdue(pp.DUE_DATE),
         });
       }
@@ -1484,9 +1484,9 @@ module.exports = (supabase) => {
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
           .gte("INVOICE_DATE", from).lte("INVOICE_DATE", to)
           .neq("INVOICE_TYPE", "stornorechnung").neq("INVOICE_TYPE", "storno_partial"),
-        supabase.from("PARTIAL_PAYMENT").select("AMOUNT_NET, AMOUNT_EXTRAS_NET")
+        supabase.from("ADVANCE_INVOICE").select("AMOUNT_NET, AMOUNT_EXTRAS_NET")
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
-          .gte("PARTIAL_PAYMENT_DATE", from).lte("PARTIAL_PAYMENT_DATE", to)
+          .gte("ADVANCE_INVOICE_DATE", from).lte("ADVANCE_INVOICE_DATE", to)
           .is("CANCELS_PARTIAL_PAYMENT_ID", null),
         supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT, COST_TOTAL")
           .eq("TENANT_ID", tenantId).gte("DATE_VOUCHER", from).lte("DATE_VOUCHER", to),
@@ -1690,12 +1690,12 @@ module.exports = (supabase) => {
           .neq("INVOICE_TYPE", "storno_partial"),
 
         // Revenue: confirmed partial payments in year
-        supabase.from("PARTIAL_PAYMENT")
+        supabase.from("ADVANCE_INVOICE")
           .select("AMOUNT_NET, AMOUNT_EXTRAS_NET")
           .eq("TENANT_ID", tenantId)
           .eq("STATUS_ID", 2)
-          .gte("PARTIAL_PAYMENT_DATE", periodStart)
-          .lte("PARTIAL_PAYMENT_DATE", periodEnd)
+          .gte("ADVANCE_INVOICE_DATE", periodStart)
+          .lte("ADVANCE_INVOICE_DATE", periodEnd)
           .is("CANCELS_PARTIAL_PAYMENT_ID", null),
 
         // TEC: all entries in year (employee_id, hours, costs)
@@ -1865,13 +1865,13 @@ module.exports = (supabase) => {
           .neq("INVOICE_TYPE", "storno_partial")
           .gte("INVOICE_DATE", dateFrom)
           .lte("INVOICE_DATE", overallEnd),
-        supabase.from("PARTIAL_PAYMENT")
-          .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+        supabase.from("ADVANCE_INVOICE")
+          .select("ADVANCE_INVOICE_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
           .eq("TENANT_ID", tenantId)
           .eq("STATUS_ID", 2)
           .is("CANCELS_PARTIAL_PAYMENT_ID", null)
-          .gte("PARTIAL_PAYMENT_DATE", dateFrom)
-          .lte("PARTIAL_PAYMENT_DATE", overallEnd),
+          .gte("ADVANCE_INVOICE_DATE", dateFrom)
+          .lte("ADVANCE_INVOICE_DATE", overallEnd),
         supabase.from("PAYMENT")
           .select("PAYMENT_DATE, AMOUNT_PAYED_NET")
           .eq("TENANT_ID", tenantId)
@@ -1889,12 +1889,12 @@ module.exports = (supabase) => {
           .neq("INVOICE_TYPE", "stornorechnung")
           .neq("INVOICE_TYPE", "storno_partial")
           .lte("INVOICE_DATE", overallEnd),
-        supabase.from("PARTIAL_PAYMENT")
-          .select("PARTIAL_PAYMENT_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+        supabase.from("ADVANCE_INVOICE")
+          .select("ADVANCE_INVOICE_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
           .eq("TENANT_ID", tenantId)
           .eq("STATUS_ID", 2)
           .is("CANCELS_PARTIAL_PAYMENT_ID", null)
-          .lte("PARTIAL_PAYMENT_DATE", overallEnd),
+          .lte("ADVANCE_INVOICE_DATE", overallEnd),
       ]);
 
       const tec      = tecRes.data      || [];
@@ -1911,7 +1911,7 @@ module.exports = (supabase) => {
         const kosten    = round2(periodTec.reduce((s, r) => s + Number(r.COST_TOTAL || 0), 0));
 
         const periodInv = invoices.filter(r => r.INVOICE_DATE >= p.start && r.INVOICE_DATE <= p.end);
-        const periodPp  = pps.filter(r => r.PARTIAL_PAYMENT_DATE >= p.start && r.PARTIAL_PAYMENT_DATE <= p.end);
+        const periodPp  = pps.filter(r => r.ADVANCE_INVOICE_DATE >= p.start && r.ADVANCE_INVOICE_DATE <= p.end);
         const fakturiert = round2(
           periodInv.reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0) +
           periodPp.reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0)
@@ -1931,7 +1931,7 @@ module.exports = (supabase) => {
         const billedUpTo = round2(
           allInv.filter(r => r.INVOICE_DATE <= p.end)
             .reduce((s, r) => s + Number(r.TOTAL_AMOUNT_NET || 0), 0) +
-          allPp.filter(r => r.PARTIAL_PAYMENT_DATE <= p.end)
+          allPp.filter(r => r.ADVANCE_INVOICE_DATE <= p.end)
             .reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0)
         );
         const auftragsbestand = round2(Math.max(0, contractedUpTo - billedUpTo));

@@ -162,22 +162,22 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
     });
   }
 
-  // --- Amounts from booked PARTIAL_PAYMENT rows (must also be subtracted) ---
+  // --- Amounts from booked ADVANCE_INVOICE rows (must also be subtracted) ---
   // Storno-Paare: Original wird STATUS_ID=3 + Storno hat STATUS_ID=2 mit
   // negierten Beträgen. Beide einbeziehen, damit sie auf 0 saldieren.
   const ppStatusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
-  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID").in("STATUS_ID", ppStatusIds);
+  let ppQ = supabase.from("ADVANCE_INVOICE").select("ID").in("STATUS_ID", ppStatusIds);
   if (contractId) ppQ = ppQ.eq("CONTRACT_ID", contractId);
   else ppQ = ppQ.eq("PROJECT_ID", projectId);
 
   const { data: ppRows, error: ppErr } = await ppQ;
   if (!ppErr && ppRows && ppRows.length > 0) {
     const ppIds = ppRows.map((r) => r.ID);
-    for (const table of ["PARTIAL_PAYMENT_STRUCTURE", "PARTIAL_PAYMENTS_STRUCTURE"]) {
+    for (const table of ["ADVANCE_INVOICE_STRUCTURE", "PARTIAL_PAYMENTS_STRUCTURE"]) {
       const { data: ppsRows, error: ppsErr } = await supabase
         .from(table)
         .select("STRUCTURE_ID, AMOUNT_NET")
-        .in("PARTIAL_PAYMENT_ID", ppIds)
+        .in("ADVANCE_INVOICE_ID", ppIds)
         .in("STRUCTURE_ID", ids);
       if (!ppsErr) {
         (ppsRows || []).forEach((r) => {
@@ -374,7 +374,7 @@ async function updateBt2FromTec(supabase, { invoiceId, contractId, projectId, te
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID, HOURLY_RATE_TOTAL, PARTIAL_PAYMENT_ID, INVOICE_ID")
+    .select("ID, STRUCTURE_ID, HOURLY_RATE_TOTAL, ADVANCE_INVOICE_ID, INVOICE_ID")
     .in("STRUCTURE_ID", bt2Ids)
     .eq("INVOICE_ID", invoiceId)
     .neq("STATUS", "DRAFT");
@@ -383,7 +383,7 @@ async function updateBt2FromTec(supabase, { invoiceId, contractId, projectId, te
 
   const sumByStructure = new Map();
   (tecRows || []).forEach((t) => {
-    if (!isNullOrZero(t.PARTIAL_PAYMENT_ID)) return;
+    if (!isNullOrZero(t.ADVANCE_INVOICE_ID)) return;
     const sid = String(t.STRUCTURE_ID);
     const cur = sumByStructure.get(sid) || 0;
     sumByStructure.set(sid, round2(cur + toNum(t.HOURLY_RATE_TOTAL)));
@@ -410,13 +410,13 @@ async function findTecIdsToAutoAssign(supabase, { invoiceId, structureIds }) {
 
   const { data: tecRows, error } = await supabase
     .from("TEC")
-    .select("ID, PARTIAL_PAYMENT_ID, INVOICE_ID")
+    .select("ID, ADVANCE_INVOICE_ID, INVOICE_ID")
     .in("STRUCTURE_ID", ids)
     .neq("STATUS", "DRAFT");
   if (error) throw new Error(error.message);
 
   const toAssignIds = (tecRows || [])
-    .filter((t) => isNullOrZero(t.PARTIAL_PAYMENT_ID) && isNullOrZero(t.INVOICE_ID))
+    .filter((t) => isNullOrZero(t.ADVANCE_INVOICE_ID) && isNullOrZero(t.INVOICE_ID))
     .map((t) => t.ID);
 
   return { toAssignIds };
@@ -918,7 +918,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
     try {
       // Load each PP's SE_AMOUNT (and double-check it's still open + same project)
       const { data: pps, error: ppsErr } = await supabase
-        .from("PARTIAL_PAYMENT")
+        .from("ADVANCE_INVOICE")
         .select("ID, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID, PROJECT_ID, TENANT_ID")
         .in("ID", releasePpIds);
       if (ppsErr) throw new Error(ppsErr.message);
@@ -934,7 +934,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
         const amt = round2(Number(pp.SE_AMOUNT || 0));
         seReleaseTotal = round2(seReleaseTotal + amt);
         const { error: upPpErr } = await supabase
-          .from("PARTIAL_PAYMENT")
+          .from("ADVANCE_INVOICE")
           .update({ SE_RELEASED_BY_INVOICE_ID: parseInt(id, 10) })
           .eq("ID", pp.ID);
         if (upPpErr) throw new Error(upPpErr.message);
@@ -943,7 +943,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
         try {
           await supabase.from("SE_RELEASE").insert({
             TENANT_ID:           tenantId || pp.TENANT_ID,
-            PARTIAL_PAYMENT_ID:  pp.ID,
+            ADVANCE_INVOICE_ID:  pp.ID,
             INVOICE_ID:          parseInt(id, 10),
             SE_AMOUNT_RELEASED:  amt,
           });
@@ -1160,7 +1160,7 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
   if (isFinalInvoice) {
     try {
       const { data: linkedPps } = await supabase
-        .from("PARTIAL_PAYMENT")
+        .from("ADVANCE_INVOICE")
         .select("ID, SE_AMOUNT")
         .eq("SE_RELEASED_BY_INVOICE_ID", parseInt(id, 10));
       const ppCount = (linkedPps || []).length;
@@ -1168,7 +1168,7 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
         const totalReversed = (linkedPps || []).reduce((s, p) => s + Number(p.SE_AMOUNT || 0), 0);
         console.log(`[CANCEL_INVOICE] Reversing SE release: ${ppCount} PP(s), total ${totalReversed.toFixed(2)} EUR (invoice ${id})`);
         await supabase
-          .from("PARTIAL_PAYMENT")
+          .from("ADVANCE_INVOICE")
           .update({ SE_RELEASED_BY_INVOICE_ID: null })
           .eq("SE_RELEASED_BY_INVOICE_ID", parseInt(id, 10));
       }
@@ -1303,10 +1303,10 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
     .update({ CLOSED_BY_INVOICE_ID: null })
     .eq("CLOSED_BY_INVOICE_ID", id);
 
-  // For Schlussrechnung/Teilschlussrechnung: unlink PARTIAL_PAYMENTs that were
+  // For Schlussrechnung/Teilschlussrechnung: unlink ADVANCE_INVOICEs that were
   // closed by this invoice (they should become "open" again for a new Schlussrechnung)
   if (isFinalInvoice) {
-    await supabase.from("PARTIAL_PAYMENT")
+    await supabase.from("ADVANCE_INVOICE")
       .update({ INVOICE_ID: null })
       .eq("INVOICE_ID", id);
   }

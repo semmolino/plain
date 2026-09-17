@@ -378,7 +378,7 @@ ${lineItems}
 const { loadInvoiceData } = require('./services_einvoice_data');
 
 async function generateUblInvoiceXml({ supabase, doc, invoice, partialPayment, docType, tenantId }) {
-  const resolvedDocType = docType || (invoice ? 'INVOICE' : 'PARTIAL_PAYMENT');
+  const resolvedDocType = docType || (invoice ? 'INVOICE' : 'ADVANCE_INVOICE');
   const resolvedDoc     = doc || invoice || partialPayment;
   if (!resolvedDoc) throw new Error('No document provided.');
   const tid  = tenantId || resolvedDoc.TENANT_ID;

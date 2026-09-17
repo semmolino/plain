@@ -2,14 +2,14 @@
 
 // Columns that must be ACCUMULATED (previous + incoming delta).
 // All other tracked columns are SET (replace the previous value or carry forward if not provided).
-const ACCUMULATE_COLS = ['PARTIAL_PAYMENTS', 'INVOICED', 'PAYED'];
+const ACCUMULATE_COLS = ['ADVANCE_INVOICED', 'INVOICED', 'PAYED'];
 
 // All columns we carry forward from a previous snapshot row.
 const SNAPSHOT_COLS = [
   'REVENUE', 'EXTRAS', 'EXTRAS_PERCENT',
   'REVENUE_COMPLETION_PERCENT', 'EXTRAS_COMPLETION_PERCENT',
   'REVENUE_COMPLETION', 'EXTRAS_COMPLETION',
-  'PARTIAL_PAYMENTS', 'INVOICED', 'PAYED',
+  'ADVANCE_INVOICED', 'INVOICED', 'PAYED',
 ];
 
 function round2(n) {

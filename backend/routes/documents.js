@@ -18,7 +18,7 @@ module.exports = (supabase) => {
     if (docType === "INVOICE") {
       return res.redirect(307, `/api/invoices/${id}/pdf${qs}`);
     }
-    if (docType === "PARTIAL_PAYMENT") {
+    if (docType === "ADVANCE_INVOICE") {
       return res.redirect(307, `/api/partial-payments/${id}/pdf${qs}`);
     }
 

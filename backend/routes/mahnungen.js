@@ -165,8 +165,8 @@ module.exports = (supabase) => {
         const { data: inv } = await supabase.from("INVOICE").select("INVOICE_NUMBER").eq("ID", mahnung.INVOICE_ID).maybeSingle();
         if (inv?.INVOICE_NUMBER) docNumber = inv.INVOICE_NUMBER;
       } else if (mahnung.PP_ID) {
-        const { data: pp } = await supabase.from("PARTIAL_PAYMENT").select("PARTIAL_PAYMENT_NUMBER").eq("ID", mahnung.PP_ID).maybeSingle();
-        if (pp?.PARTIAL_PAYMENT_NUMBER) docNumber = pp.PARTIAL_PAYMENT_NUMBER;
+        const { data: pp } = await supabase.from("ADVANCE_INVOICE").select("ADVANCE_INVOICE_NUMBER").eq("ID", mahnung.PP_ID).maybeSingle();
+        if (pp?.ADVANCE_INVOICE_NUMBER) docNumber = pp.ADVANCE_INVOICE_NUMBER;
       }
       const stufeLabels = ['Keine', 'Zahlungserinnerung', '1_Mahnung', '2_Mahnung', '3_Mahnung'];
       const stufeLabel  = stufeLabels[mahnung.MAHNSTUFE] || `Stufe_${mahnung.MAHNSTUFE}`;

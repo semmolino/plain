@@ -354,7 +354,7 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
     if (!draftId) return
     setMsg(null)
     patchMut.mutate({ id: draftId, body: {
-      partial_payment_date:  detDate  || undefined,
+      advance_invoice_date:  detDate  || undefined,
       due_date:              dueDate  || undefined,
       billing_period_start:  bpStart  || undefined,
       billing_period_finish: bpFinish || undefined,

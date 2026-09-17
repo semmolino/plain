@@ -72,8 +72,8 @@ export const VAT_CATEGORY_LABELS: Record<VatCategory, string> = {
 
 export interface PartialPayment {
   ID:                           number
-  PARTIAL_PAYMENT_NUMBER:       string | null
-  PARTIAL_PAYMENT_DATE:         string | null
+  ADVANCE_INVOICE_NUMBER:       string | null
+  ADVANCE_INVOICE_DATE:         string | null
   DUE_DATE:                     string | null
   TOTAL_AMOUNT_NET:             number | null
   TAX_AMOUNT_NET:               number | null
@@ -157,8 +157,8 @@ export interface FinalPhase {
 
 export interface FinalDeduction {
   ID:                      number
-  PARTIAL_PAYMENT_NUMBER:  string | null
-  PARTIAL_PAYMENT_DATE:    string | null
+  ADVANCE_INVOICE_NUMBER:  string | null
+  ADVANCE_INVOICE_DATE:    string | null
   AMOUNT_NET:              number | null
   TOTAL_AMOUNT_NET:        number | null
   DEDUCTION_AMOUNT_NET:    number | null
@@ -245,8 +245,8 @@ export const bookInvoice = (id: number, opts?: { release_partial_payment_ids?: n
 
 export interface OpenSeEntry {
   ID: number
-  PARTIAL_PAYMENT_NUMBER: string | null
-  PARTIAL_PAYMENT_DATE: string | null
+  ADVANCE_INVOICE_NUMBER: string | null
+  ADVANCE_INVOICE_DATE: string | null
   TOTAL_AMOUNT_NET: number | null
   TOTAL_AMOUNT_GROSS: number | null
   SE_PERCENT: number | null
@@ -260,8 +260,8 @@ export const fetchOpenSeForProject = (projectId: number) =>
 
 export interface SeOverviewEntry {
   id: number
-  partial_payment_number: string | null
-  partial_payment_date:   string | null
+  advance_invoice_number: string | null
+  advance_invoice_date:   string | null
   total_amount_gross:     number
   se_percent:             number | null
   se_basis:               'BRUTTO' | 'NETTO' | null
@@ -406,7 +406,7 @@ export const getPartialPayment = (id: number) =>
   apiClient.get<{ data: { pp: PartialPayment } }>(`/partial-payments/${id}`)
 
 export const patchPartialPayment = (id: number, body: Partial<{
-  partial_payment_number: string; partial_payment_date: string; due_date: string
+  advance_invoice_number: string; advance_invoice_date: string; due_date: string
   billing_period_start: string; billing_period_finish: string
   amount_net: number; amount_extras_net: number
   vat_id: number; payment_means_id: number; comment: string
@@ -486,7 +486,7 @@ export const saveFinalInvoicePhases = (id: number, structure_ids: number[]) =>
 export const getFinalInvoiceDeductions = (id: number) =>
   apiClient.get<{ data: FinalDeduction[] }>(`/final-invoices/${id}/deductions`)
 
-export const saveFinalInvoiceDeductions = (id: number, items: { partial_payment_id: number; deduction_amount_net: number }[]) =>
+export const saveFinalInvoiceDeductions = (id: number, items: { advance_invoice_id: number; deduction_amount_net: number }[]) =>
   apiClient.post<{ ok: boolean } & FinalTotals>(`/final-invoices/${id}/deductions`, { items })
 
 export const bookFinalInvoice = (id: number, opts?: { release_partial_payment_ids?: number[] }) =>
@@ -504,16 +504,16 @@ export interface Payment {
   COMMENT: string | null
 }
 
-export const fetchPayments = (params: { invoice_id?: number; partial_payment_id?: number }) => {
+export const fetchPayments = (params: { invoice_id?: number; advance_invoice_id?: number }) => {
   const q = params.invoice_id
     ? `invoice_id=${params.invoice_id}`
-    : `partial_payment_id=${params.partial_payment_id}`
+    : `advance_invoice_id=${params.advance_invoice_id}`
   return apiClient.get<{ data: Payment[] }>(`/payments?${q}`)
 }
 
 export const createPayment = (body: {
   invoice_id?: number
-  partial_payment_id?: number
+  advance_invoice_id?: number
   amount_payed_gross: number
   payment_date: string
   purpose_of_payment?: string

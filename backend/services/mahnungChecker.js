@@ -49,11 +49,11 @@ async function checkMahnungen(supabase) {
       if (inv?.INVOICE_NUMBER) docNumber = inv.INVOICE_NUMBER;
     } else if (m.PP_ID) {
       const { data: pp } = await supabase
-        .from("PARTIAL_PAYMENT")
-        .select("PARTIAL_PAYMENT_NUMBER")
+        .from("ADVANCE_INVOICE")
+        .select("ADVANCE_INVOICE_NUMBER")
         .eq("ID", m.PP_ID)
         .maybeSingle();
-      if (pp?.PARTIAL_PAYMENT_NUMBER) docNumber = pp.PARTIAL_PAYMENT_NUMBER;
+      if (pp?.ADVANCE_INVOICE_NUMBER) docNumber = pp.ADVANCE_INVOICE_NUMBER;
     }
 
     const stufeLabel = STUFE_LABELS[m.MAHNSTUFE] || `Stufe ${m.MAHNSTUFE}`;

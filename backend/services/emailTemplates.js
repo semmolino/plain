@@ -201,14 +201,14 @@ async function resolveTemplate(supabase, { tenantId, key }) {
 
 /**
  * Laedt die Platzhalterwerte eines Belegs.
- * @param {'INVOICE'|'PARTIAL_PAYMENT'} docType
+ * @param {'INVOICE'|'ADVANCE_INVOICE'} docType
  * @returns {Promise<{values: object, to: string, number: string}|null>}
  */
 async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
   const isInvoice = docType === "INVOICE";
-  const table     = isInvoice ? "INVOICE" : "PARTIAL_PAYMENT";
-  const numberCol = isInvoice ? "INVOICE_NUMBER" : "PARTIAL_PAYMENT_NUMBER";
-  const dateCol   = isInvoice ? "INVOICE_DATE"   : "PARTIAL_PAYMENT_DATE";
+  const table     = isInvoice ? "INVOICE" : "ADVANCE_INVOICE";
+  const numberCol = isInvoice ? "INVOICE_NUMBER" : "ADVANCE_INVOICE_NUMBER";
+  const dateCol   = isInvoice ? "INVOICE_DATE"   : "ADVANCE_INVOICE_DATE";
   // Storno erkennt man je Belegart anders: bei Rechnungen am INVOICE_TYPE, bei
   // Abschlagsrechnungen an der Verweisspalte auf den stornierten Beleg.
   const typeCols  = isInvoice ? ", INVOICE_TYPE" : ", CANCELS_PARTIAL_PAYMENT_ID";
@@ -228,7 +228,7 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
     gross = Math.round(Number(doc.TOTAL_AMOUNT_NET) * (1 + Number(doc.VAT_PERCENT ?? 0) / 100) * 100) / 100;
   }
 
-  const payCol = isInvoice ? "INVOICE_ID" : "PARTIAL_PAYMENT_ID";
+  const payCol = isInvoice ? "INVOICE_ID" : "ADVANCE_INVOICE_ID";
   const { data: pays } = await supabase
     .from("PAYMENT")
     .select("AMOUNT_PAYED_GROSS")
@@ -327,7 +327,7 @@ async function composeInvoiceEmail(supabase, { tenantId, docType, docId, subject
  * @param {object} mahnung – MAHNUNG-Zeile (INVOICE_ID/PP_ID/MAHNSTUFE)
  */
 async function composeMahnungEmail(supabase, { tenantId, mahnung, subject, body }) {
-  const docType = mahnung.INVOICE_ID ? "INVOICE" : "PARTIAL_PAYMENT";
+  const docType = mahnung.INVOICE_ID ? "INVOICE" : "ADVANCE_INVOICE";
   const docId   = mahnung.INVOICE_ID || mahnung.PP_ID;
   const ctx = await loadDocumentContext(supabase, { tenantId, docType, docId });
   if (!ctx) throw { status: 404, message: "Beleg zur Mahnung nicht gefunden" };

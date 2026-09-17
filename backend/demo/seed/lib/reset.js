@@ -18,12 +18,12 @@ const MOVEMENT_TABLES = [
   "PAYMENT",
   "INVOICE_DEDUCTION",
   "INVOICE_STRUCTURE",
-  "PARTIAL_PAYMENT_STRUCTURE",
+  "ADVANCE_INVOICE_STRUCTURE",
   "SE_RELEASE",
   "MAHNUNG_HISTORY",
   "MAHNUNG",
   "INVOICE",
-  "PARTIAL_PAYMENT",
+  "ADVANCE_INVOICE",
   "PROJECT_PROGRESS",
   "ARBZG_AUDIT",
   "EMPLOYEE_MONTH_CLOSE",
@@ -83,7 +83,7 @@ async function resetMovements({ supabase, tenantId, apply, log = () => {} }) {
     const zeroAll = {
       COSTS: 0,
       INVOICED: 0,
-      PARTIAL_PAYMENTS: 0,
+      ADVANCE_INVOICED: 0,
       PAYED: 0,
       REVENUE_COMPLETION: 0,
       EXTRAS_COMPLETION: 0,
@@ -99,7 +99,7 @@ async function resetMovements({ supabase, tenantId, apply, log = () => {} }) {
       .eq("BILLING_TYPE_ID", 2);
     await supabase
       .from("PROJECT")
-      .update({ INVOICED: 0, PARTIAL_PAYMENTS: 0, PAYED: 0 })
+      .update({ INVOICED: 0, ADVANCE_INVOICED: 0, PAYED: 0 })
       .eq("TENANT_ID", tenantId);
     log("  PROJECT_STRUCTURE/PROJECT: Aggregat-Spalten auf 0 zurückgesetzt");
   }

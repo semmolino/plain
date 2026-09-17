@@ -27,7 +27,7 @@ const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;  // 10 MB pro Anlage
 const MAX_TOTAL_BYTES      = 50 * 1024 * 1024;  // 50 MB Gesamtsumme
 
 function ensureDocKey(docType) {
-  if (docType !== "INVOICE" && docType !== "PARTIAL_PAYMENT") {
+  if (docType !== "INVOICE" && docType !== "ADVANCE_INVOICE") {
     throw { status: 400, message: `Ungueltiger docType: ${docType}` };
   }
   return docType === "INVOICE" ? "INVOICE_ID" : "PP_ID";

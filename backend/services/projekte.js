@@ -628,7 +628,7 @@ function computeSurchargesNode(revenueBasis, settings) {
 async function recalcParent(supabase, { parentId }) {
   const { data: children, error } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("REVENUE, EXTRAS, COSTS, REVENUE_COMPLETION, EXTRAS_COMPLETION, PARTIAL_PAYMENTS, INVOICED, PAYED")
+    .select("REVENUE, EXTRAS, COSTS, REVENUE_COMPLETION, EXTRAS_COMPLETION, ADVANCE_INVOICED, INVOICED, PAYED")
     .eq("FATHER_ID", parentId);
   if (error) throw error;
   if (!children || children.length === 0) return;
@@ -640,7 +640,7 @@ async function recalcParent(supabase, { parentId }) {
   const costs            = s("COSTS");
   const revenueCompletion = s("REVENUE_COMPLETION");
   const extrasCompletion  = s("EXTRAS_COMPLETION");
-  const partialPayments  = s("PARTIAL_PAYMENTS");
+  const partialPayments  = s("ADVANCE_INVOICED");
   const invoiced         = s("INVOICED");
   const payed            = s("PAYED");
 
@@ -676,7 +676,7 @@ async function recalcParent(supabase, { parentId }) {
       EXTRAS_COMPLETION: extrasCompletion,
       REVENUE_COMPLETION_PERCENT: revenuePct,
       EXTRAS_COMPLETION_PERCENT: extrasPct,
-      PARTIAL_PAYMENTS: partialPayments,
+      ADVANCE_INVOICED: partialPayments,
       INVOICED: invoiced,
       PAYED: payed,
       SURCHARGES_TOTAL:  surchargesTotal,
@@ -747,7 +747,7 @@ async function progressSnapshot(supabase, { projectId, tenantId }) {
   projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   const { data: structures, error: sErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, TENANT_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, PARTIAL_PAYMENTS, INVOICED, PAYED")
+    .select("ID, TENANT_ID, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, ADVANCE_INVOICED, INVOICED, PAYED")
     .eq("PROJECT_ID", projectId);
 
   if (sErr) throw sErr;
@@ -797,7 +797,7 @@ async function progressSnapshot(supabase, { projectId, tenantId }) {
       EXTRAS_COMPLETION_PERCENT: exPct,
       REVENUE_COMPLETION: revenueCompletion,
       EXTRAS_COMPLETION: extrasCompletion,
-      PARTIAL_PAYMENTS: Number(r.PARTIAL_PAYMENTS ?? 0) || 0,
+      ADVANCE_INVOICED: Number(r.ADVANCE_INVOICED ?? 0) || 0,
       INVOICED: Number(r.INVOICED ?? 0) || 0,
       PAYED: Number(r.PAYED ?? 0) || 0,
     });
@@ -852,7 +852,7 @@ async function checkParentForChild(supabase, { parentId, tenantId }) {
   parentId = await assertStructureInTenant(supabase, parentId, tenantId);
   const { data: parent, error } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION_PERCENT, EXTRAS_COMPLETION, COSTS, PARTIAL_PAYMENTS, INVOICED, PAYED, CLOSED_BY_INVOICE_ID")
+    .select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION_PERCENT, EXTRAS_COMPLETION, COSTS, ADVANCE_INVOICED, INVOICED, PAYED, CLOSED_BY_INVOICE_ID")
     .eq("ID", parentId)
     .maybeSingle();
   if (error) throw error;
@@ -870,7 +870,7 @@ async function checkParentForChild(supabase, { parentId, tenantId }) {
   if (isAlreadyNode) return { status: "ok" };
 
   // Leaf element: block if it already has billing/payment data attached.
-  if (num(parent.PARTIAL_PAYMENTS) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICE_ID != null) {
+  if (num(parent.ADVANCE_INVOICED) !== 0 || num(parent.INVOICED) !== 0 || num(parent.PAYED) !== 0 || parent.CLOSED_BY_INVOICE_ID != null) {
     return { status: "blocked", reason: "Das übergeordnete Element enthält Rechnungs- oder Zahlungsdaten. Neue Unterelemente können daher nicht erstellt werden." };
   }
 
@@ -1701,7 +1701,7 @@ async function deleteStructure(supabase, { structureId, cascade, tenantId }) {
   };
 
   const tecRef = await hasRefs("TEC", "STRUCTURE_ID");
-  const ppsRef = await hasRefs("PARTIAL_PAYMENT_STRUCTURE", "STRUCTURE_ID");
+  const ppsRef = await hasRefs("ADVANCE_INVOICE_STRUCTURE", "STRUCTURE_ID");
   const invsRef = await hasRefs("INVOICE_STRUCTURE", "STRUCTURE_ID");
 
   if (tecRef || ppsRef || invsRef) {

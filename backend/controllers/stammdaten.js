@@ -1044,7 +1044,7 @@ async function getAddressDetail(req, res, supabase) {
     safe(supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
     safe(supabase.from("OFFER").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
     safe(supabase.from("INVOICE").select("ID, INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
-    safe(supabase.from("PARTIAL_PAYMENT").select("ID, PARTIAL_PAYMENT_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
+    safe(supabase.from("ADVANCE_INVOICE").select("ID, ADVANCE_INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
     safe(supabase.from("SALUTATION").select("ID, SALUTATION").limit(5000)),
     safe(supabase.from("GENDER").select("ID, GENDER").limit(5000)),
   ]);

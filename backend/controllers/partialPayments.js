@@ -11,7 +11,7 @@ const { validateEInvoiceData } = require("../services_einvoice_validator");
 // ---------------------------------------------------------------------------
 // GET /api/v1/partial-payments/open-se?project_id=...
 // List open Sicherheitseinbehalte for a project (Phase 2)
-// Returns PARTIAL_PAYMENTs that:
+// Returns ADVANCE_INVOICEs that:
 //  - belong to the given project
 //  - have SE_AMOUNT > 0
 //  - are NOT yet released (SE_RELEASED_BY_INVOICE_ID IS NULL)
@@ -23,19 +23,19 @@ async function listOpenSeForProject(req, res, supabase) {
     return res.status(400).json({ error: "project_id erforderlich" });
   }
   try {
-    const baseCols = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID";
+    const baseCols = "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID";
     const seCols = ", SE_PERCENT, SE_BASIS, SE_BASIS_AMT, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID";
 
     // Try with SE columns
     let { data, error } = await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select(baseCols + seCols)
       .eq("TENANT_ID", req.tenantId)
       .eq("PROJECT_ID", projectId)
       .eq("STATUS_ID", 2)
       .gt("SE_AMOUNT", 0)
       .is("SE_RELEASED_BY_INVOICE_ID", null)
-      .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+      .order("ADVANCE_INVOICE_DATE", { ascending: true });
 
     if (error && String(error.message || "").includes("SE_")) {
       // Migration 0047 not yet run — return empty list
@@ -47,7 +47,7 @@ async function listOpenSeForProject(req, res, supabase) {
     const ids = (data || []).map(r => r.ID);
     if (ids.length > 0) {
       const { data: stornos } = await supabase
-        .from("PARTIAL_PAYMENT")
+        .from("ADVANCE_INVOICE")
         .select("CANCELS_PARTIAL_PAYMENT_ID")
         .in("CANCELS_PARTIAL_PAYMENT_ID", ids);
       const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
@@ -69,7 +69,7 @@ async function listOpenSeForProject(req, res, supabase) {
 async function seSummary(req, res, supabase) {
   try {
     let { data: pps, error } = await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select("ID, PROJECT_ID, CONTRACT_ID, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID")
       .eq("TENANT_ID", req.tenantId)
       .eq("STATUS_ID", 2)
@@ -83,7 +83,7 @@ async function seSummary(req, res, supabase) {
     // Storno-Markierung
     const allIds = pps.map(p => p.ID);
     const { data: stornos } = await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select("CANCELS_PARTIAL_PAYMENT_ID")
       .in("CANCELS_PARTIAL_PAYMENT_ID", allIds);
     const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
@@ -159,7 +159,7 @@ async function seSummary(req, res, supabase) {
 // GET /api/v1/partial-payments/se-overview?project_id=...
 // Phase 3 — Full SE overview for a project: all SE entries (open + released)
 // Returns array of:
-//   { id, partial_payment_number, partial_payment_date, total_amount_gross,
+//   { id, advance_invoice_number, advance_invoice_date, total_amount_gross,
 //     se_percent, se_basis, se_amount,
 //     status: 'OFFEN' | 'AUFGELOEST',
 //     released_by_invoice_id, released_by_invoice_number, released_at }
@@ -170,15 +170,15 @@ async function seOverviewForProject(req, res, supabase) {
     return res.status(400).json({ error: "project_id erforderlich" });
   }
   try {
-    const cols = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_GROSS, SE_PERCENT, SE_BASIS, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID";
+    const cols = "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_GROSS, SE_PERCENT, SE_BASIS, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID";
     let { data: pps, error } = await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select(cols)
       .eq("TENANT_ID", req.tenantId)
       .eq("PROJECT_ID", projectId)
       .eq("STATUS_ID", 2)
       .gt("SE_AMOUNT", 0)
-      .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+      .order("ADVANCE_INVOICE_DATE", { ascending: true });
     if (error && String(error.message || "").includes("SE_")) return res.json({ data: [] });
     if (error) return res.status(500).json({ error: error.message });
     pps = pps || [];
@@ -198,9 +198,9 @@ async function seOverviewForProject(req, res, supabase) {
       try {
         const { data: rels } = await supabase
           .from("SE_RELEASE")
-          .select("PARTIAL_PAYMENT_ID, RELEASED_AT")
+          .select("ADVANCE_INVOICE_ID, RELEASED_AT")
           .in("INVOICE_ID", releaseInvoiceIds);
-        (rels || []).forEach(r => releaseTimes.set(r.PARTIAL_PAYMENT_ID, r.RELEASED_AT));
+        (rels || []).forEach(r => releaseTimes.set(r.ADVANCE_INVOICE_ID, r.RELEASED_AT));
       } catch (_) { /* table may not exist */ }
     }
 
@@ -209,7 +209,7 @@ async function seOverviewForProject(req, res, supabase) {
     let cancelled = new Set();
     if (allIds.length > 0) {
       const { data: stornos } = await supabase
-        .from("PARTIAL_PAYMENT")
+        .from("ADVANCE_INVOICE")
         .select("CANCELS_PARTIAL_PAYMENT_ID")
         .in("CANCELS_PARTIAL_PAYMENT_ID", allIds);
       cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
@@ -220,8 +220,8 @@ async function seOverviewForProject(req, res, supabase) {
       const isCancelled = cancelled.has(p.ID);
       return {
         id: p.ID,
-        partial_payment_number: p.PARTIAL_PAYMENT_NUMBER,
-        partial_payment_date:   p.PARTIAL_PAYMENT_DATE,
+        advance_invoice_number: p.ADVANCE_INVOICE_NUMBER,
+        advance_invoice_date:   p.ADVANCE_INVOICE_DATE,
         total_amount_gross:     Number(p.TOTAL_AMOUNT_GROSS || 0),
         se_percent:             p.SE_PERCENT,
         se_basis:               p.SE_BASIS,
@@ -293,14 +293,14 @@ async function patchPartialPayment(req, res, supabase) {
 
   const payload = {};
 
-  if (b.partial_payment_number !== undefined) {
-    const num = String(b.partial_payment_number || "").trim();
+  if (b.advance_invoice_number !== undefined) {
+    const num = String(b.advance_invoice_number || "").trim();
     if (!num) return res.status(400).json({ error: "Abschlagsrechnung Nr. ist erforderlich" });
 
     const { data: existing, error: existErr } = await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select("ID")
-      .eq("PARTIAL_PAYMENT_NUMBER", num)
+      .eq("ADVANCE_INVOICE_NUMBER", num)
       .eq("TENANT_ID", req.tenantId)
       .neq("ID", id)
       .limit(1);
@@ -308,10 +308,10 @@ async function patchPartialPayment(req, res, supabase) {
     if (Array.isArray(existing) && existing.length > 0) {
       return res.status(409).json({ error: "Abschlagsrechnung Nr. ist bereits vergeben" });
     }
-    payload.PARTIAL_PAYMENT_NUMBER = num;
+    payload.ADVANCE_INVOICE_NUMBER = num;
   }
 
-  if (b.partial_payment_date !== undefined) payload.PARTIAL_PAYMENT_DATE = b.partial_payment_date || null;
+  if (b.advance_invoice_date !== undefined) payload.ADVANCE_INVOICE_DATE = b.advance_invoice_date || null;
   if (b.due_date !== undefined) payload.DUE_DATE = b.due_date || null;
   if (b.billing_period_start !== undefined) payload.BILLING_PERIOD_START = b.billing_period_start || null;
   if (b.billing_period_finish !== undefined) payload.BILLING_PERIOD_FINISH = b.billing_period_finish || null;
@@ -371,7 +371,7 @@ async function patchPartialPayment(req, res, supabase) {
     payload.VAT_CATEGORY     !== undefined;
   if (needsTaxRecalc) {
     const { data: cur, error: curErr } = await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select("TOTAL_AMOUNT_NET, VAT_PERCENT, VAT_CATEGORY")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
@@ -407,12 +407,12 @@ async function patchPartialPayment(req, res, supabase) {
   if (b.buyer_accounting_reference !== undefined) payload.BUYER_ACCOUNTING_REFERENCE  = String(b.buyer_accounting_reference || "").trim() || null;
   if (b.remittance_information     !== undefined) payload.REMITTANCE_INFORMATION      = String(b.remittance_information     || "").trim() || null;
 
-  let { error } = await supabase.from("PARTIAL_PAYMENT").update(payload).eq("ID", id).eq("TENANT_ID", req.tenantId);
+  let { error } = await supabase.from("ADVANCE_INVOICE").update(payload).eq("ID", id).eq("TENANT_ID", req.tenantId);
   if (error && String(error.message || "").includes("SE_")) {
     // Migration 0047 not yet run — retry without SE fields
     const stripped = { ...payload };
     delete stripped.SE_PERCENT; delete stripped.SE_BASIS; delete stripped.SE_BASIS_AMT; delete stripped.SE_AMOUNT;
-    const r = await supabase.from("PARTIAL_PAYMENT").update(stripped).eq("ID", id).eq("TENANT_ID", req.tenantId);
+    const r = await supabase.from("ADVANCE_INVOICE").update(stripped).eq("ID", id).eq("TENANT_ID", req.tenantId);
     error = r.error;
   }
   if (error) return res.status(500).json({ error: error.message });
@@ -427,12 +427,12 @@ async function getBillingProposal(req, res, supabase) {
   const { id } = req.params;
 
   const { data: pp, error: ppErr } = await supabase
-    .from("PARTIAL_PAYMENT")
+    .from("ADVANCE_INVOICE")
     .select("ID, PROJECT_ID, CONTRACT_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT, VAT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
-  if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
+  if (ppErr || !pp) return res.status(500).json({ error: "ADVANCE_INVOICE konnte nicht geladen werden" });
 
   // Self-Heal: wenn VAT_PERCENT auf der AR fehlt, aus Vertrag oder
   // Tenant-Standard nachziehen und in die DB persistieren. Damit zeigt
@@ -466,7 +466,7 @@ async function getBillingProposal(req, res, supabase) {
           .from("VAT").select("VAT_PERCENT").eq("ID", resolvedVatId).maybeSingle();
         const newVatPct = vat?.VAT_PERCENT ?? null;
         if (newVatPct != null) {
-          await supabase.from("PARTIAL_PAYMENT")
+          await supabase.from("ADVANCE_INVOICE")
             .update({ VAT_ID: resolvedVatId, VAT_PERCENT: newVatPct })
             .eq("ID", id);
           pp.VAT_ID = resolvedVatId;
@@ -575,12 +575,12 @@ async function putPerformance(req, res, supabase) {
   const amount = svc.round2(svc.toNum(req.body?.amount));
 
   const { data: pp, error: ppErr } = await supabase
-    .from("PARTIAL_PAYMENT")
+    .from("ADVANCE_INVOICE")
     .select("ID, PROJECT_ID, CONTRACT_ID, VAT_PERCENT")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
-  if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
+  if (ppErr || !pp) return res.status(500).json({ error: "ADVANCE_INVOICE konnte nicht geladen werden" });
 
   try {
     const r = await svc.applyPerformanceAmount(supabase, { partialPaymentId: id, contractId: pp.CONTRACT_ID, projectId: pp.PROJECT_ID, amount, tenantId: req.tenantId });
@@ -609,12 +609,12 @@ async function getTec(req, res, supabase) {
   const { id } = req.params;
 
   const { data: pp, error: ppErr } = await supabase
-    .from("PARTIAL_PAYMENT")
+    .from("ADVANCE_INVOICE")
     .select("ID, PROJECT_ID, CONTRACT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
-  if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
+  if (ppErr || !pp) return res.status(500).json({ error: "ADVANCE_INVOICE konnte nicht geladen werden" });
 
   let structures = [];
   try {
@@ -628,7 +628,7 @@ async function getTec(req, res, supabase) {
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, PARTIAL_PAYMENT_ID, INVOICE_ID, STRUCTURE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR)")
+    .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, ADVANCE_INVOICE_ID, INVOICE_ID, STRUCTURE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR)")
     .in("STRUCTURE_ID", bt2Ids)
     .neq("STATUS", "DRAFT")
     .order("DATE_VOUCHER", { ascending: true });
@@ -637,7 +637,7 @@ async function getTec(req, res, supabase) {
   const rows = (tecRows || [])
     .filter((t) => {
       if (!svc.isUninvoiced(t.INVOICE_ID)) return false;
-      const ppId = t.PARTIAL_PAYMENT_ID;
+      const ppId = t.ADVANCE_INVOICE_ID;
       return svc.isNullOrZero(ppId) || String(ppId) === String(id);
     })
     .map((t) => ({
@@ -646,7 +646,7 @@ async function getTec(req, res, supabase) {
       POSTING_DESCRIPTION: t.POSTING_DESCRIPTION,
       HOURLY_RATE_TOTAL: t.HOURLY_RATE_TOTAL,
       EMPLOYEE_SHORT_NAME: t.EMPLOYEE?.ABBR ?? "",
-      ASSIGNED: String(t.PARTIAL_PAYMENT_ID) === String(id),
+      ASSIGNED: String(t.ADVANCE_INVOICE_ID) === String(id),
     }));
 
   return res.json({ data: rows, hasBt2: true });
@@ -664,12 +664,12 @@ async function postTec(req, res, supabase) {
   const performanceAmountProvided = b.performance_amount !== undefined ? svc.round2(svc.toNum(b.performance_amount)) : null;
 
   const { data: pp, error: ppErr } = await supabase
-    .from("PARTIAL_PAYMENT")
+    .from("ADVANCE_INVOICE")
     .select("ID, PROJECT_ID, CONTRACT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
-  if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
+  if (ppErr || !pp) return res.status(500).json({ error: "ADVANCE_INVOICE konnte nicht geladen werden" });
 
   try {
     if (performanceAmountProvided !== null) {
@@ -686,20 +686,20 @@ async function postTec(req, res, supabase) {
   }
 
   if (idsUnassign.length > 0) {
-    const { error: unErr } = await supabase.from("TEC").update({ PARTIAL_PAYMENT_ID: null }).in("ID", idsUnassign).eq("PARTIAL_PAYMENT_ID", id);
+    const { error: unErr } = await supabase.from("TEC").update({ ADVANCE_INVOICE_ID: null }).in("ID", idsUnassign).eq("ADVANCE_INVOICE_ID", id);
     if (unErr) return res.status(500).json({ error: unErr.message });
   }
 
   if (idsAssign.length > 0) {
-    const { data: cand, error: candErr } = await supabase.from("TEC").select("ID, PARTIAL_PAYMENT_ID, INVOICE_ID").in("ID", idsAssign);
+    const { data: cand, error: candErr } = await supabase.from("TEC").select("ID, ADVANCE_INVOICE_ID, INVOICE_ID").in("ID", idsAssign);
     if (candErr) return res.status(500).json({ error: candErr.message });
 
     const assignableIds = (cand || [])
-      .filter((t) => svc.isNullOrZero(t.PARTIAL_PAYMENT_ID) && svc.isUninvoiced(t.INVOICE_ID))
+      .filter((t) => svc.isNullOrZero(t.ADVANCE_INVOICE_ID) && svc.isUninvoiced(t.INVOICE_ID))
       .map((t) => t.ID);
 
     if (assignableIds.length > 0) {
-      const { error: asErr } = await supabase.from("TEC").update({ PARTIAL_PAYMENT_ID: id }).in("ID", assignableIds);
+      const { error: asErr } = await supabase.from("TEC").update({ ADVANCE_INVOICE_ID: id }).in("ID", assignableIds);
       if (asErr) return res.status(500).json({ error: asErr.message });
     }
   }
@@ -780,35 +780,35 @@ async function getEinvoiceUbl(req, res, supabase) {
   const preview = String(req.query.preview || "") === "1";
   const download = String(req.query.download || "") === "1";
 
-  const logCtx = (extra = {}) => ({ tag: "EINVOICE_XRECHNUNG_PP", partial_payment_id: ppId, preview, download, ...extra });
+  const logCtx = (extra = {}) => ({ tag: "EINVOICE_XRECHNUNG_PP", advance_invoice_id: ppId, preview, download, ...extra });
   const logError = (extra, err) => {
     console.error("[EINVOICE_XRECHNUNG_PP]", { ...logCtx(extra), error: err?.message || String(err), stack: err?.stack });
   };
 
   const { data: ppRow, error: ppRowErr } = await supabase
-    .from("PARTIAL_PAYMENT")
-    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
+    .from("ADVANCE_INVOICE")
+    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, ADVANCE_INVOICE_NUMBER, COMPANY_ID")
     .eq("ID", ppId)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (ppRowErr) { logError({ step: "load_pp_min" }, ppRowErr); return res.status(500).json({ error: ppRowErr.message }); }
-  if (!ppRow) return res.status(404).json({ error: "PARTIAL_PAYMENT nicht gefunden" });
+  if (!ppRow) return res.status(404).json({ error: "ADVANCE_INVOICE nicht gefunden" });
 
   const isBooked = String(ppRow.STATUS_ID) === "2";
-  const fname = `XRechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
+  const fname = `XRechnung_${ppRow.ADVANCE_INVOICE_NUMBER || ppRow.ID}.xml`;
 
   if (isBooked && !preview && ppRow.DOCUMENT_XML_ASSET_ID) {
     try {
       return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
     } catch (snapErr) {
-      console.warn("[EINVOICE_XRECHNUNG_PP] snapshot missing on disk, regenerating live", { partial_payment_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
+      console.warn("[EINVOICE_XRECHNUNG_PP] snapshot missing on disk, regenerating live", { advance_invoice_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
     }
   }
 
   try {
-    const { data: ppFull, error: ppFullErr } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", ppId).eq("TENANT_ID", req.tenantId).maybeSingle();
-    if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "PARTIAL_PAYMENT nicht gefunden");
+    const { data: ppFull, error: ppFullErr } = await supabase.from("ADVANCE_INVOICE").select("*").eq("ID", ppId).eq("TENANT_ID", req.tenantId).maybeSingle();
+    if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "ADVANCE_INVOICE nicht gefunden");
 
     const xml = await svc.generateUblInvoiceXml({ supabase, partialPayment: ppFull });
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
@@ -822,7 +822,7 @@ async function getEinvoiceUbl(req, res, supabase) {
     return res.status(500).json({
       error: "EINVOICE_GENERATION_FAILED",
       message: `E-Rechnung konnte nicht erzeugt werden: ${err?.message || err}`,
-      partial_payment_id: ppRow.ID,
+      advance_invoice_id: ppRow.ID,
     });
   }
 }
@@ -835,33 +835,33 @@ async function postEinvoiceUblSnapshot(req, res, supabase) {
   if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
 
   const { data: ppRow, error: ppRowErr } = await supabase
-    .from("PARTIAL_PAYMENT")
-    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
+    .from("ADVANCE_INVOICE")
+    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, ADVANCE_INVOICE_NUMBER, COMPANY_ID")
     .eq("ID", ppId)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (ppRowErr) {
-    console.error("[EINVOICE_SNAPSHOT_PP]", { step: "load_pp_min", partial_payment_id: ppId, error: ppRowErr.message });
+    console.error("[EINVOICE_SNAPSHOT_PP]", { step: "load_pp_min", advance_invoice_id: ppId, error: ppRowErr.message });
     return res.status(500).json({ error: ppRowErr.message });
   }
-  if (!ppRow) return res.status(404).json({ error: "PARTIAL_PAYMENT nicht gefunden" });
+  if (!ppRow) return res.status(404).json({ error: "ADVANCE_INVOICE nicht gefunden" });
   if (String(ppRow.STATUS_ID) !== "2") return res.status(400).json({ error: "Snapshot ist nur fuer gebuchte Abschlagsrechnungen (STATUS_ID=2) erlaubt" });
 
   if (ppRow.DOCUMENT_XML_ASSET_ID) {
-    return res.json({ success: true, partial_payment_id: ppRow.ID, xml_asset_id: ppRow.DOCUMENT_XML_ASSET_ID, already_existed: true });
+    return res.json({ success: true, advance_invoice_id: ppRow.ID, xml_asset_id: ppRow.DOCUMENT_XML_ASSET_ID, already_existed: true });
   }
 
-  const fname = `XRechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
+  const fname = `XRechnung_${ppRow.ADVANCE_INVOICE_NUMBER || ppRow.ID}.xml`;
 
   try {
-    const { data: ppFull, error: ppFullErr } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", ppId).eq("TENANT_ID", req.tenantId).maybeSingle();
-    if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "PARTIAL_PAYMENT nicht gefunden");
+    const { data: ppFull, error: ppFullErr } = await supabase.from("ADVANCE_INVOICE").select("*").eq("ID", ppId).eq("TENANT_ID", req.tenantId).maybeSingle();
+    if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "ADVANCE_INVOICE nicht gefunden");
 
     const xml = await svc.generateUblInvoiceXml({ supabase, partialPayment: ppFull });
-    const xmlAsset = await svc.storeGeneratedXmlAsAsset({ supabase, companyId: ppRow.COMPANY_ID, fileName: fname, xmlString: xml, assetType: "XML_XRECHNUNG_PARTIAL_PAYMENT" });
+    const xmlAsset = await svc.storeGeneratedXmlAsAsset({ supabase, companyId: ppRow.COMPANY_ID, fileName: fname, xmlString: xml, assetType: "XML_XRECHNUNG_ADVANCE_INVOICE" });
 
-    const { error: upErr } = await supabase.from("PARTIAL_PAYMENT").update({
+    const { error: upErr } = await supabase.from("ADVANCE_INVOICE").update({
       DOCUMENT_XML_ASSET_ID: xmlAsset?.ID ?? null,
       DOCUMENT_XML_PROFILE: "xrechnung-ubl",
       DOCUMENT_XML_RENDERED_AT: new Date().toISOString(),
@@ -872,9 +872,9 @@ async function postEinvoiceUblSnapshot(req, res, supabase) {
       throw new Error(upErr.message);
     }
 
-    return res.json({ success: true, partial_payment_id: ppRow.ID, xml_asset_id: xmlAsset.ID, already_existed: false });
+    return res.json({ success: true, advance_invoice_id: ppRow.ID, xml_asset_id: xmlAsset.ID, already_existed: false });
   } catch (e) {
-    console.error("[EINVOICE_SNAPSHOT_PP]", { partial_payment_id: ppId, error: e?.message || String(e), stack: e?.stack });
+    console.error("[EINVOICE_SNAPSHOT_PP]", { advance_invoice_id: ppId, error: e?.message || String(e), stack: e?.stack });
     return res.status(500).json({ error: `Snapshot konnte nicht erzeugt werden: ${e?.message || e}` });
   }
 }
@@ -886,15 +886,15 @@ async function bookPartialPayment(req, res, supabase) {
   const { id } = req.params;
 
   const { data: pp, error: ppErr } = await supabase
-    .from("PARTIAL_PAYMENT")
-    .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, PARTIAL_PAYMENT_NUMBER, DOCUMENT_TEMPLATE_ID")
+    .from("ADVANCE_INVOICE")
+    .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, ADVANCE_INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
-  if (ppErr || !pp) return res.status(500).json({ error: "PARTIAL_PAYMENT konnte nicht geladen werden" });
+  if (ppErr || !pp) return res.status(500).json({ error: "ADVANCE_INVOICE konnte nicht geladen werden" });
 
   if (String(pp.STATUS_ID) === "2") {
-    return res.status(400).json({ error: "PARTIAL_PAYMENT ist bereits gebucht" });
+    return res.status(400).json({ error: "ADVANCE_INVOICE ist bereits gebucht" });
   }
 
   const force = String(req.query.force || req.body?.force || "") === "1" || req.body?.force === true;
@@ -919,7 +919,7 @@ async function validatePp(req, res, supabase) {
     const ppId = parseInt(req.params.id, 10);
     if (!ppId || Number.isNaN(ppId)) return res.status(400).json({ error: "invalid id" });
 
-    const data = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const data = await loadInvoiceData(supabase, ppId, "ADVANCE_INVOICE", req.tenantId);
     const result = validateEInvoiceData(data);
     return res.json(result);
   } catch (e) {
@@ -943,8 +943,8 @@ async function getPdf(req, res, supabase) {
     // getPdf in controllers/invoices.js. Mit ?preview=1 wurde sie sonst
     // uebersprungen (Pentest 2026-08-06).
     const { data: ppRow, error: ppRowErr } = await supabase
-      .from("PARTIAL_PAYMENT")
-      .select("ID, STATUS_ID, DOCUMENT_PDF_ASSET_ID, PARTIAL_PAYMENT_NUMBER")
+      .from("ADVANCE_INVOICE")
+      .select("ID, STATUS_ID, DOCUMENT_PDF_ASSET_ID, ADVANCE_INVOICE_NUMBER")
       .eq("ID", ppId)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
@@ -953,14 +953,14 @@ async function getPdf(req, res, supabase) {
     if (!ppRow) return res.status(404).json({ error: "Abschlagsrechnung nicht gefunden." });
 
     if (!preview && String(ppRow.STATUS_ID) === "2" && ppRow.DOCUMENT_PDF_ASSET_ID) {
-      const fname = `Abschlagsrechnung_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.pdf`;
+      const fname = `Abschlagsrechnung_${ppRow.ADVANCE_INVOICE_NUMBER || ppRow.ID}.pdf`;
       return svc.streamPdfAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_PDF_ASSET_ID, dispositionName: fname, download });
     }
 
     const { pdf } = await renderDocumentPdf({
       supabase,
       tenantId: req.tenantId,
-      docType: "PARTIAL_PAYMENT",
+      docType: "ADVANCE_INVOICE",
       docId: ppId,
       templateId: Number.isFinite(templateId) ? templateId : null,
     });
@@ -987,16 +987,16 @@ async function getEinvoicePeppol(req, res, supabase) {
 
   try {
     const { data: ppRow } = await supabase
-      .from("PARTIAL_PAYMENT")
-      .select("PARTIAL_PAYMENT_NUMBER")
+      .from("ADVANCE_INVOICE")
+      .select("ADVANCE_INVOICE_NUMBER")
       .eq("ID", ppId)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
-    if (!ppRow) return res.status(404).json({ error: "PARTIAL_PAYMENT nicht gefunden" });
+    if (!ppRow) return res.status(404).json({ error: "ADVANCE_INVOICE nicht gefunden" });
 
-    const data = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const data = await loadInvoiceData(supabase, ppId, "ADVANCE_INVOICE", req.tenantId);
     const xml = generatePeppolXml(data);
-    const fname = `Peppol_${ppRow.PARTIAL_PAYMENT_NUMBER || ppId}.xml`;
+    const fname = `Peppol_${ppRow.ADVANCE_INVOICE_NUMBER || ppId}.xml`;
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fname}"`);
     return res.send(xml);
@@ -1036,16 +1036,16 @@ async function getPdfHybrid(req, res, supabase) {
       renderDocumentPdf({
         supabase,
         tenantId: req.tenantId,
-        docType: "PARTIAL_PAYMENT",
+        docType: "ADVANCE_INVOICE",
         docId: ppId,
         templateId: Number.isFinite(templateId) ? templateId : null,
       }),
-      loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId),
+      loadInvoiceData(supabase, ppId, "ADVANCE_INVOICE", req.tenantId),
     ]);
 
     // select("*"): die CII-Spalten aus Migration 0133 sind optional.
     const { data: ppRow } = await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select("*")
       .eq("ID", ppId)
       .eq("TENANT_ID", req.tenantId)
@@ -1071,14 +1071,14 @@ async function getPdfHybrid(req, res, supabase) {
     const xmlProfileKey = profile;
     const xmlFilename   = "factur-x.xml";
 
-    const pdfName = `Abschlagsrechnung_${ppRow?.PARTIAL_PAYMENT_NUMBER || ppId}_ZUGFeRD.pdf`;
+    const pdfName = `Abschlagsrechnung_${ppRow?.ADVANCE_INVOICE_NUMBER || ppId}_ZUGFeRD.pdf`;
 
     const hybrid = await embedXmlIntoPdf({
       pdfBuffer: Buffer.from(pdf),
       xml,
       profileKey: xmlProfileKey,
       filename: xmlFilename,
-      title: `Abschlagsrechnung ${ppRow?.PARTIAL_PAYMENT_NUMBER || ppId}`,
+      title: `Abschlagsrechnung ${ppRow?.ADVANCE_INVOICE_NUMBER || ppId}`,
       author: "PlaIn",
       producer: "PlaIn — Hybrid PDF",
     });
@@ -1110,16 +1110,16 @@ async function getEinvoiceCii(req, res, supabase) {
   // sind optional. Eine namentliche Auswahl wuerde fehlschlagen, solange die
   // Migration nicht eingespielt ist.
   const { data: ppRow, error: ppRowErr } = await supabase
-    .from("PARTIAL_PAYMENT")
+    .from("ADVANCE_INVOICE")
     .select("*")
     .eq("ID", ppId)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (ppRowErr) return res.status(500).json({ error: ppRowErr.message });
-  if (!ppRow)   return res.status(404).json({ error: "PARTIAL_PAYMENT nicht gefunden" });
+  if (!ppRow)   return res.status(404).json({ error: "ADVANCE_INVOICE nicht gefunden" });
 
-  const fname      = `ZUGFeRD_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
+  const fname      = `ZUGFeRD_${ppRow.ADVANCE_INVOICE_NUMBER || ppRow.ID}.xml`;
   const profileKey = `zugferd-${profile.toLowerCase()}`;
 
   // R6: eingefrorene CII-Fassung, siehe Migration 0133. Die
@@ -1133,7 +1133,7 @@ async function getEinvoiceCii(req, res, supabase) {
     try {
       return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ciiSnapshotId, dispositionName: fname, download });
     } catch (snapErr) {
-      console.warn("[EINVOICE_CII_PP] CII-Snapshot fehlt auf der Platte, wird live erzeugt", { partial_payment_id: ppRow.ID, asset_id: ciiSnapshotId });
+      console.warn("[EINVOICE_CII_PP] CII-Snapshot fehlt auf der Platte, wird live erzeugt", { advance_invoice_id: ppRow.ID, asset_id: ciiSnapshotId });
     }
   }
 
@@ -1142,19 +1142,19 @@ async function getEinvoiceCii(req, res, supabase) {
     try {
       return await svc.streamXmlAsset({ supabase, res, tenantId: req.tenantId, assetId: ppRow.DOCUMENT_XML_ASSET_ID, dispositionName: fname, download });
     } catch (snapErr) {
-      console.warn("[EINVOICE_CII_PP] snapshot missing on disk, regenerating live", { partial_payment_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
+      console.warn("[EINVOICE_CII_PP] snapshot missing on disk, regenerating live", { advance_invoice_id: ppRow.ID, asset_id: ppRow.DOCUMENT_XML_ASSET_ID });
     }
   }
 
   try {
-    const data = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const data = await loadInvoiceData(supabase, ppId, "ADVANCE_INVOICE", req.tenantId);
     const xml  = generateCiiXml(data, profile);
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.setHeader("Content-Disposition", `${download ? "attachment" : "inline"}; filename="${fname}"`);
     return res.send(xml);
   } catch (err) {
-    console.error("[EINVOICE_CII_PP]", { partial_payment_id: ppId, profile, error: err?.message, stack: err?.stack });
-    return res.status(500).json({ error: `E-Rechnung (CII) konnte nicht erzeugt werden: ${err?.message || err}`, partial_payment_id: ppRow.ID });
+    console.error("[EINVOICE_CII_PP]", { advance_invoice_id: ppId, profile, error: err?.message, stack: err?.stack });
+    return res.status(500).json({ error: `E-Rechnung (CII) konnte nicht erzeugt werden: ${err?.message || err}`, advance_invoice_id: ppRow.ID });
   }
 }
 
@@ -1168,28 +1168,28 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
   const profile = String(req.query.profile || "EXTENDED").toUpperCase();
 
   const { data: ppRow, error: ppRowErr } = await supabase
-    .from("PARTIAL_PAYMENT")
-    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, PARTIAL_PAYMENT_NUMBER, COMPANY_ID")
+    .from("ADVANCE_INVOICE")
+    .select("ID, STATUS_ID, DOCUMENT_XML_ASSET_ID, ADVANCE_INVOICE_NUMBER, COMPANY_ID")
     .eq("ID", ppId)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();
 
   if (ppRowErr) return res.status(500).json({ error: ppRowErr.message });
-  if (!ppRow)   return res.status(404).json({ error: "PARTIAL_PAYMENT nicht gefunden" });
+  if (!ppRow)   return res.status(404).json({ error: "ADVANCE_INVOICE nicht gefunden" });
   if (String(ppRow.STATUS_ID) !== "2") {
     return res.status(400).json({ error: "Snapshot ist nur fuer gebuchte Abschlagsrechnungen (STATUS_ID=2) erlaubt" });
   }
   if (ppRow.DOCUMENT_XML_ASSET_ID) {
-    return res.json({ success: true, partial_payment_id: ppRow.ID, xml_asset_id: ppRow.DOCUMENT_XML_ASSET_ID, already_existed: true });
+    return res.json({ success: true, advance_invoice_id: ppRow.ID, xml_asset_id: ppRow.DOCUMENT_XML_ASSET_ID, already_existed: true });
   }
 
-  const fname = `ZUGFeRD_${ppRow.PARTIAL_PAYMENT_NUMBER || ppRow.ID}.xml`;
+  const fname = `ZUGFeRD_${ppRow.ADVANCE_INVOICE_NUMBER || ppRow.ID}.xml`;
   try {
-    const data     = await loadInvoiceData(supabase, ppId, "PARTIAL_PAYMENT", req.tenantId);
+    const data     = await loadInvoiceData(supabase, ppId, "ADVANCE_INVOICE", req.tenantId);
     const xml      = generateCiiXml(data, profile);
-    const xmlAsset = await svc.storeGeneratedXmlAsAsset({ supabase, companyId: ppRow.COMPANY_ID, fileName: fname, xmlString: xml, assetType: "XML_ZUGFERD_PARTIAL_PAYMENT" });
+    const xmlAsset = await svc.storeGeneratedXmlAsAsset({ supabase, companyId: ppRow.COMPANY_ID, fileName: fname, xmlString: xml, assetType: "XML_ZUGFERD_ADVANCE_INVOICE" });
 
-    const { error: upErr } = await supabase.from("PARTIAL_PAYMENT").update({
+    const { error: upErr } = await supabase.from("ADVANCE_INVOICE").update({
       DOCUMENT_XML_ASSET_ID:    xmlAsset?.ID ?? null,
       DOCUMENT_XML_PROFILE:     `zugferd-${profile.toLowerCase()}`,
       DOCUMENT_XML_RENDERED_AT: new Date().toISOString(),
@@ -1200,9 +1200,9 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
       throw new Error(upErr.message);
     }
 
-    return res.json({ success: true, partial_payment_id: ppRow.ID, xml_asset_id: xmlAsset.ID, already_existed: false });
+    return res.json({ success: true, advance_invoice_id: ppRow.ID, xml_asset_id: xmlAsset.ID, already_existed: false });
   } catch (e) {
-    console.error("[EINVOICE_CII_SNAPSHOT_PP]", { partial_payment_id: ppId, error: e?.message, stack: e?.stack });
+    console.error("[EINVOICE_CII_SNAPSHOT_PP]", { advance_invoice_id: ppId, error: e?.message, stack: e?.stack });
     return res.status(500).json({ error: `Snapshot konnte nicht erzeugt werden: ${e?.message || e}` });
   }
 }

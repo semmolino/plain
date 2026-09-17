@@ -304,7 +304,7 @@ describe("commit (opening_balance)", () => {
     CONTRACT: [{ ID: 31, TENANT_ID: TENANT, PROJECT_ID: 1, INVOICE_ADDRESS_ID: 11, INVOICE_CONTACT_ID: 21 }],
     PROJECT_STRUCTURE: [{ ID: 41, TENANT_ID: TENANT, PROJECT_ID: 1, BILLING_TYPE_ID: 1, REVENUE: 80000, EXTRAS_PERCENT: 0 }],
     // Belege, die die gemockte init-Funktion "erzeugt" haette:
-    PARTIAL_PAYMENT: [{ ID: 500, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 0, VAT_PERCENT: 19 }],
+    ADVANCE_INVOICE: [{ ID: 500, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 0, VAT_PERCENT: 19 }],
     INVOICE: [{ ID: 600, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 0, VAT_PERCENT: 19 }],
   });
 
@@ -319,7 +319,7 @@ describe("commit (opening_balance)", () => {
       expect.objectContaining({ tenantId: TENANT, projectId: 1, contractId: 31 }),
     );
     // Beleg traegt den Stapel → Rollback kann ihn spaeter reversieren.
-    expect(supabase._tables.PARTIAL_PAYMENT[0].IMPORT_BATCH_ID).toBe(res.batchId);
+    expect(supabase._tables.ADVANCE_INVOICE[0].IMPORT_BATCH_ID).toBe(res.batchId);
   });
 
   it("reicht tenantId an initInvoice durch", async () => {

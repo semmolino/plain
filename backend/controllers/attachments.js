@@ -4,7 +4,7 @@ const svc = require("../services/attachments");
 
 function docTypeFromPath(req) {
   // mounted under /api/v1/invoices/:id/attachments and /api/v1/partial-payments/:id/attachments
-  return req.baseUrl.includes("partial-payments") ? "PARTIAL_PAYMENT" : "INVOICE";
+  return req.baseUrl.includes("partial-payments") ? "ADVANCE_INVOICE" : "INVOICE";
 }
 
 async function list(req, res, supabase) {

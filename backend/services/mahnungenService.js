@@ -33,8 +33,8 @@ async function listMahnungen(supabase, { tenantId }) {
       .neq("INVOICE_TYPE", "stornorechnung"),
 
     supabase
-      .from("PARTIAL_PAYMENT")
-      .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL, EMPLOYEE_ID")
+      .from("ADVANCE_INVOICE")
+      .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL, EMPLOYEE_ID")
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
@@ -66,10 +66,10 @@ async function listMahnungen(supabase, { tenantId }) {
     }
   }
   if (allPpIds.length > 0) {
-    const { data: pays } = await supabase.from("PAYMENT").select("PARTIAL_PAYMENT_ID, AMOUNT_PAYED_GROSS").in("PARTIAL_PAYMENT_ID", allPpIds);
+    const { data: pays } = await supabase.from("PAYMENT").select("ADVANCE_INVOICE_ID, AMOUNT_PAYED_GROSS").in("ADVANCE_INVOICE_ID", allPpIds);
     for (const p of (pays || [])) {
       const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
-      ppPayMap[p.PARTIAL_PAYMENT_ID] = (ppPayMap[p.PARTIAL_PAYMENT_ID] || 0) + (Number.isFinite(v) ? v : 0);
+      ppPayMap[p.ADVANCE_INVOICE_ID] = (ppPayMap[p.ADVANCE_INVOICE_ID] || 0) + (Number.isFinite(v) ? v : 0);
     }
   }
 
@@ -148,8 +148,8 @@ async function listMahnungen(supabase, { tenantId }) {
     const prj = pp.PROJECT_ID  ? projectsMap[pp.PROJECT_ID]   : null;
     const ctr = pp.CONTRACT_ID ? contractsMap[pp.CONTRACT_ID] : null;
     rows.push(buildRow("pp", pp.ID, {
-      number:       pp.PARTIAL_PAYMENT_NUMBER,
-      invoiceDate:  pp.PARTIAL_PAYMENT_DATE,
+      number:       pp.ADVANCE_INVOICE_NUMBER,
+      invoiceDate:  pp.ADVANCE_INVOICE_DATE,
       dueDate:      pp.DUE_DATE,
       totalGross:      pp.TOTAL_AMOUNT_GROSS,
       amountPaidGross: ppPayMap[pp.ID] ?? 0,
@@ -189,8 +189,8 @@ async function getMahnungStats(supabase, { tenantId }) {
       .neq("INVOICE_TYPE", "stornorechnung"),
 
     supabase
-      .from("PARTIAL_PAYMENT")
-      .select("ID, PARTIAL_PAYMENT_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1")
+      .from("ADVANCE_INVOICE")
+      .select("ID, ADVANCE_INVOICE_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1")
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
@@ -216,10 +216,10 @@ async function getMahnungStats(supabase, { tenantId }) {
     }
   }
   if (allPpIds.length > 0) {
-    const { data: pays } = await supabase.from("PAYMENT").select("PARTIAL_PAYMENT_ID, AMOUNT_PAYED_GROSS").in("PARTIAL_PAYMENT_ID", allPpIds);
+    const { data: pays } = await supabase.from("PAYMENT").select("ADVANCE_INVOICE_ID, AMOUNT_PAYED_GROSS").in("ADVANCE_INVOICE_ID", allPpIds);
     for (const p of (pays || [])) {
       const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
-      ppPayMap[p.PARTIAL_PAYMENT_ID] = (ppPayMap[p.PARTIAL_PAYMENT_ID] || 0) + (Number.isFinite(v) ? v : 0);
+      ppPayMap[p.ADVANCE_INVOICE_ID] = (ppPayMap[p.ADVANCE_INVOICE_ID] || 0) + (Number.isFinite(v) ? v : 0);
     }
   }
 
@@ -245,7 +245,7 @@ async function getMahnungStats(supabase, { tenantId }) {
     const daysOverdue = Math.floor((new Date(today) - new Date(pp.DUE_DATE)) / 86400000);
     const totalGross  = parseFloat(pp.TOTAL_AMOUNT_GROSS ?? 0);
     const openAmount  = Math.max(0, totalGross - (ppPayMap[pp.ID] || 0));
-    items.push({ sourceType: "pp", sourceId: pp.ID, number: pp.PARTIAL_PAYMENT_NUMBER, daysOverdue, openAmount, addressName1: pp.ADDRESS_NAME_1, mahnung: m });
+    items.push({ sourceType: "pp", sourceId: pp.ID, number: pp.ADVANCE_INVOICE_NUMBER, daysOverdue, openAmount, addressName1: pp.ADDRESS_NAME_1, mahnung: m });
   }
 
   // Compute byStufe for open (not closed) mahnungen

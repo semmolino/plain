@@ -42,7 +42,7 @@ const isBreakRow = (b?: Buchung | null) => b?.ENTRY_KIND === 'BREAK'
 const KIND_BADGE: Record<string, string> = { UNIT: 'Stück', LUMP_COST: 'Pauschale K', LUMP_REVENUE: 'Pauschale E' }
 
 /** Zeigt an, ob eine Buchung bereits einer Rechnung/Abschlag zugeordnet (abgerechnet) ist. */
-const isBilled = (b: Buchung) => b.PARTIAL_PAYMENT_ID != null || b.INVOICE_ID != null
+const isBilled = (b: Buchung) => b.ADVANCE_INVOICE_ID != null || b.INVOICE_ID != null
 
 /** Hat die Buchung einen abrechenbaren (externen) Anteil? Für „0 extern ausblenden". */
 function hasBillable(b: Buchung): boolean {
@@ -714,7 +714,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                         {showCosts && <td className="num">{fmtN(b.COST_TOTAL)}</td>}
                         {showRevenue && <td className="num">{fmtN(b.HOURLY_RATE_TOTAL)}</td>}
                         <td className="doc-actions">
-                          {b.PARTIAL_PAYMENT_ID == null && b.INVOICE_ID == null ? (
+                          {b.ADVANCE_INVOICE_ID == null && b.INVOICE_ID == null ? (
                             <>
                               <button className="row-action-btn" onClick={() => isBreakRow(b) ? setPauseModal({ mode: 'edit', row: b }) : isSpecialKind(b.BOOKING_KIND) ? setEditSpecial(b) : openEdit(b)} title="Bearbeiten">
                                 <Pencil size={14} strokeWidth={2} />

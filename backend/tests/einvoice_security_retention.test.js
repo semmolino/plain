@@ -59,16 +59,16 @@ const belegFelder = {
 /** Abschlagsrechnung, die einen Einbehalt zurueckhaelt. */
 function abschlag({ seAmount = SE } = {}) {
   return makeFakeSupabase(Object.assign({}, stammdaten, {
-    PARTIAL_PAYMENT: [Object.assign({}, belegFelder, {
-      ID: 700, PARTIAL_PAYMENT_NUMBER: "AR-2026-0007", PARTIAL_PAYMENT_DATE: "2026-06-09",
-      PARTIAL_PAYMENT_ADDRESS_ID: 900,
+    ADVANCE_INVOICE: [Object.assign({}, belegFelder, {
+      ID: 700, ADVANCE_INVOICE_NUMBER: "AR-2026-0007", ADVANCE_INVOICE_DATE: "2026-06-09",
+      ADVANCE_INVOICE_ADDRESS_ID: 900,
       TOTAL_AMOUNT_NET: AR_NETTO, TAX_AMOUNT_NET: AR_USt, TOTAL_AMOUNT_GROSS: AR_BRUTTO,
       // Die Abschlagsrechnung traegt ihren Betrag hier, nicht in Strukturzeilen.
       AMOUNT_NET: AR_NETTO, AMOUNT_EXTRAS_NET: 0,
       SE_PERCENT: 5, SE_BASIS: "BRUTTO", SE_BASIS_AMT: AR_BRUTTO, SE_AMOUNT: seAmount,
     })],
-    PARTIAL_PAYMENT_STRUCTURE: [
-      { ID: 1, TENANT_ID: TENANT, PARTIAL_PAYMENT_ID: 700, STRUCTURE_ID: 500, AMOUNT_NET: AR_NETTO, AMOUNT_EXTRAS_NET: 0 },
+    ADVANCE_INVOICE_STRUCTURE: [
+      { ID: 1, TENANT_ID: TENANT, ADVANCE_INVOICE_ID: 700, STRUCTURE_ID: 500, AMOUNT_NET: AR_NETTO, AMOUNT_EXTRAS_NET: 0 },
     ],
     PROJECT_STRUCTURE: [{ ID: 500, TENANT_ID: TENANT, NAME_SHORT: "LPH 1-4", NAME_LONG: "Abschlag", BILLING_TYPE_ID: 1 }],
     INVOICE: [], INVOICE_STRUCTURE: [], INVOICE_DEDUCTION: [],
@@ -89,19 +89,19 @@ function schlussrechnung({ seAmount = SE } = {}) {
     ],
     PROJECT_STRUCTURE: [{ ID: 500, TENANT_ID: TENANT, NAME_SHORT: "LPH 1-9", NAME_LONG: "Gesamt", BILLING_TYPE_ID: 1 }],
     INVOICE_DEDUCTION: [
-      { ID: 1, TENANT_ID: TENANT, INVOICE_ID: 800, PARTIAL_PAYMENT_ID: 700, DEDUCTION_AMOUNT_NET: AR_NETTO },
+      { ID: 1, TENANT_ID: TENANT, INVOICE_ID: 800, ADVANCE_INVOICE_ID: 700, DEDUCTION_AMOUNT_NET: AR_NETTO },
     ],
-    PARTIAL_PAYMENT: [{
-      ID: 700, TENANT_ID: TENANT, PARTIAL_PAYMENT_NUMBER: "AR-2026-0007",
-      PARTIAL_PAYMENT_DATE: "2026-06-09",
+    ADVANCE_INVOICE: [{
+      ID: 700, TENANT_ID: TENANT, ADVANCE_INVOICE_NUMBER: "AR-2026-0007",
+      ADVANCE_INVOICE_DATE: "2026-06-09",
       TOTAL_AMOUNT_NET: AR_NETTO, TOTAL_AMOUNT_GROSS: AR_BRUTTO,
       SE_AMOUNT: seAmount, SE_RELEASED_BY_INVOICE_ID: 800,
     }],
-    PARTIAL_PAYMENT_STRUCTURE: [],
+    ADVANCE_INVOICE_STRUCTURE: [],
   }));
 }
 
-const ladeAbschlag = (db) => loadInvoiceData(db, 700, "PARTIAL_PAYMENT", TENANT);
+const ladeAbschlag = (db) => loadInvoiceData(db, 700, "ADVANCE_INVOICE", TENANT);
 const ladeSchluss  = (db) => loadInvoiceData(db, 800, "INVOICE", TENANT);
 
 describe("Sicherheitseinbehalt: Abschlagsrechnung (N10)", () => {

@@ -202,9 +202,9 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   return {
     key:         `pp-${pp.ID}`,
     source:      'pp',
-    number:      pp.PARTIAL_PAYMENT_NUMBER ?? null,
+    number:      pp.ADVANCE_INVOICE_NUMBER ?? null,
     typ:         'Abschlagsrechnung',
-    date:        pp.PARTIAL_PAYMENT_DATE ?? null,
+    date:        pp.ADVANCE_INVOICE_DATE ?? null,
     dueDate:     dueDate2,
     isOverdue:   isOverdue2,
     project:     pp.PROJECT ?? null,
@@ -651,7 +651,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       cashDiscountPct:  Number(raw.CASH_DISCOUNT_PERCENT ?? 0),
       cashDiscountDays: Number(raw.CASH_DISCOUNT_DAYS ?? 0),
     })
-    const params = row.source === 'invoice' ? { invoice_id: id } : { partial_payment_id: id }
+    const params = row.source === 'invoice' ? { invoice_id: id } : { advance_invoice_id: id }
     fetchPayments(params).then(r => setExistingPayments(r.data ?? [])).catch(() => {})
   }
 
@@ -697,7 +697,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     payMut.mutate({
       ...(payTarget.source === 'invoice'
         ? { invoice_id: payTarget.id }
-        : { partial_payment_id: payTarget.id }),
+        : { advance_invoice_id: payTarget.id }),
       amount_payed_gross: gross,
       payment_date:       payForm.payment_date,
       purpose_of_payment: payForm.purpose_of_payment || undefined,
@@ -711,7 +711,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     try {
       const paysRes = row.source === 'invoice'
         ? await fetchPayments({ invoice_id: (row.raw as Invoice).ID })
-        : await fetchPayments({ partial_payment_id: (row.raw as PartialPayment).ID })
+        : await fetchPayments({ advance_invoice_id: (row.raw as PartialPayment).ID })
       pays = paysRes.data ?? []
     } catch { /* proceed without payment info */ }
     const payTotal = pays.reduce((s, p) => s + (p.AMOUNT_PAYED_GROSS ?? 0), 0)
@@ -824,7 +824,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         await downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'ubl')
       } else {
         const pp = row.raw as PartialPayment
-        await downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'ubl')
+        await downloadPpEinvoice(pp.ID, pp.ADVANCE_INVOICE_NUMBER, 'ubl')
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -839,7 +839,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         await downloadInvoiceEinvoice(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER, 'cii')
       } else {
         const pp = row.raw as PartialPayment
-        await downloadPpEinvoice(pp.ID, pp.PARTIAL_PAYMENT_NUMBER, 'cii')
+        await downloadPpEinvoice(pp.ID, pp.ADVANCE_INVOICE_NUMBER, 'cii')
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -854,7 +854,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         await downloadInvoicePeppol(inv.ID, inv.INVOICE_TYPE, inv.INVOICE_NUMBER)
       } else {
         const pp = row.raw as PartialPayment
-        await downloadPpPeppol(pp.ID, pp.PARTIAL_PAYMENT_NUMBER)
+        await downloadPpPeppol(pp.ID, pp.ADVANCE_INVOICE_NUMBER)
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -869,7 +869,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         await downloadInvoicePdfHybrid(inv.ID, inv.INVOICE_NUMBER)
       } else {
         const pp = row.raw as PartialPayment
-        await downloadPpPdfHybrid(pp.ID, pp.PARTIAL_PAYMENT_NUMBER)
+        await downloadPpPdfHybrid(pp.ID, pp.ADVANCE_INVOICE_NUMBER)
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -1268,7 +1268,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <tbody>
                   {row2('Status', <span className={`status-badge ${detailRow.statusClass}`}>{detailRow.statusLabel}</span>)}
-                  {row2('Datum', fmtDate(isInv ? inv!.INVOICE_DATE : pp!.PARTIAL_PAYMENT_DATE))}
+                  {row2('Datum', fmtDate(isInv ? inv!.INVOICE_DATE : pp!.ADVANCE_INVOICE_DATE))}
                   {(inv?.DUE_DATE ?? pp?.DUE_DATE) && row2('Fällig', fmtDate(inv?.DUE_DATE ?? pp?.DUE_DATE))}
                   {detailRow.project && row2('Projekt', detailRow.project)}
                   {(inv?.CONTRACT ?? pp?.CONTRACT) && row2('Vertrag', inv?.CONTRACT ?? pp?.CONTRACT)}

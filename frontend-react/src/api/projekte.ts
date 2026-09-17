@@ -316,7 +316,7 @@ export interface Buchung {
   ENTRY_KIND?:          string | null
   UNIT_LABEL?:          string | null
   BOOKING_TYPE_ID?:     number | null
-  PARTIAL_PAYMENT_ID:   number | null
+  ADVANCE_INVOICE_ID:   number | null
   INVOICE_ID:           number | null
   EMPLOYEE:             { ABBR: string } | null
 }

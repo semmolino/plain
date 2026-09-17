@@ -271,7 +271,7 @@ async function getTec(req, res, supabase) {
 
     const { data: tecRows, error: tecErr } = await supabase
       .from("TEC")
-      .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, STRUCTURE_ID, PARTIAL_PAYMENT_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR)")
+      .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, STRUCTURE_ID, ADVANCE_INVOICE_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR)")
       .in("STRUCTURE_ID", bt2Ids)
       .neq("STATUS", "DRAFT")
       .order("DATE_VOUCHER", { ascending: true });
@@ -279,7 +279,7 @@ async function getTec(req, res, supabase) {
 
     const out = (tecRows || [])
       .filter((t) => {
-        if (!svc.isNullOrZero(t.PARTIAL_PAYMENT_ID)) return false;
+        if (!svc.isNullOrZero(t.ADVANCE_INVOICE_ID)) return false;
         return svc.isNullOrZero(t.INVOICE_ID) || String(t.INVOICE_ID) === String(id);
       })
       .map((t) => ({
@@ -341,12 +341,12 @@ async function postTec(req, res, supabase) {
     if (idsAssign.length > 0) {
       const { data: rows, error: selErr } = await supabase
         .from("TEC")
-        .select("ID, PARTIAL_PAYMENT_ID, INVOICE_ID")
+        .select("ID, ADVANCE_INVOICE_ID, INVOICE_ID")
         .in("ID", idsAssign);
       if (selErr) throw new Error(selErr.message);
 
       const allow = (rows || [])
-        .filter((t) => svc.isNullOrZero(t.PARTIAL_PAYMENT_ID) && svc.isNullOrZero(t.INVOICE_ID))
+        .filter((t) => svc.isNullOrZero(t.ADVANCE_INVOICE_ID) && svc.isNullOrZero(t.INVOICE_ID))
         .map((t) => t.ID);
 
       if (allow.length > 0) {

@@ -49,7 +49,7 @@ module.exports = (supabase) => {
 
     const { data: siblings } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("REVENUE, EXTRAS, COSTS, REVENUE_COMPLETION, EXTRAS_COMPLETION, PARTIAL_PAYMENTS, INVOICED, PAYED")
+      .select("REVENUE, EXTRAS, COSTS, REVENUE_COMPLETION, EXTRAS_COMPLETION, ADVANCE_INVOICED, INVOICED, PAYED")
       .eq("FATHER_ID", parentId);
     if (siblings && siblings.length > 0) {
       const s = (f) => siblings.reduce((acc, c) => acc + Number(c[f] ?? 0), 0);
@@ -59,7 +59,7 @@ module.exports = (supabase) => {
         COSTS:                     s("COSTS"),
         REVENUE_COMPLETION:        s("REVENUE_COMPLETION"),
         EXTRAS_COMPLETION:         s("EXTRAS_COMPLETION"),
-        PARTIAL_PAYMENTS:          s("PARTIAL_PAYMENTS"),
+        ADVANCE_INVOICED:          s("ADVANCE_INVOICED"),
         INVOICED:                  s("INVOICED"),
         PAYED:                     s("PAYED"),
       }).eq("ID", parentId);
@@ -67,13 +67,13 @@ module.exports = (supabase) => {
     await propagatePayedUpwards(parentId);
   }
 
-  // GET /api/payments?invoice_id=X  or  ?partial_payment_id=X
+  // GET /api/payments?invoice_id=X  or  ?advance_invoice_id=X
   router.get("/", requirePermission("payments.view"), async (req, res) => {
     try {
       const invoiceId = req.query.invoice_id ? parseInt(req.query.invoice_id, 10) : null;
-      const ppId = req.query.partial_payment_id ? parseInt(req.query.partial_payment_id, 10) : null;
+      const ppId = req.query.advance_invoice_id ? parseInt(req.query.advance_invoice_id, 10) : null;
       if (!invoiceId && !ppId) {
-        return res.status(400).json({ error: "invoice_id oder partial_payment_id erforderlich." });
+        return res.status(400).json({ error: "invoice_id oder advance_invoice_id erforderlich." });
       }
 
       let query = supabase
@@ -83,7 +83,7 @@ module.exports = (supabase) => {
         .order("PAYMENT_DATE", { ascending: true });
 
       if (invoiceId) query = query.eq("INVOICE_ID", invoiceId);
-      else query = query.eq("PARTIAL_PAYMENT_ID", ppId);
+      else query = query.eq("ADVANCE_INVOICE_ID", ppId);
 
       const { data, error } = await query;
       if (error) return res.status(500).json({ error: error.message });
@@ -97,7 +97,7 @@ module.exports = (supabase) => {
   router.post("/", requirePermission("payments.create"), async (req, res) => {
     try {
       const b = req.body || {};
-      const partialPaymentId = b.partial_payment_id ?? null;
+      const partialPaymentId = b.advance_invoice_id ?? null;
       const invoiceId = b.invoice_id ?? null;
 
       if (!!partialPaymentId === !!invoiceId) {
@@ -118,7 +118,7 @@ module.exports = (supabase) => {
 
       if (partialPaymentId) {
         const { data, error } = await supabase
-          .from("PARTIAL_PAYMENT")
+          .from("ADVANCE_INVOICE")
           .select("ID, PROJECT_ID, CONTRACT_ID, VAT_ID, VAT_PERCENT")
           .eq("ID", partialPaymentId)
           .eq("TENANT_ID", req.tenantId)
@@ -161,7 +161,7 @@ module.exports = (supabase) => {
       }
 
       const insertRow = {
-        PARTIAL_PAYMENT_ID: partialPaymentId ? parseInt(String(partialPaymentId), 10) : null,
+        ADVANCE_INVOICE_ID: partialPaymentId ? parseInt(String(partialPaymentId), 10) : null,
         INVOICE_ID: invoiceId ? parseInt(String(invoiceId), 10) : null,
         AMOUNT_PAYED_GROSS: gross,
         AMOUNT_PAYED_NET: net,
@@ -194,9 +194,9 @@ module.exports = (supabase) => {
         let structureRows = [];
         if (partialPaymentId) {
           const { data } = await supabase
-            .from("PARTIAL_PAYMENT_STRUCTURE")
+            .from("ADVANCE_INVOICE_STRUCTURE")
             .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
-            .eq("PARTIAL_PAYMENT_ID", partialPaymentId);
+            .eq("ADVANCE_INVOICE_ID", partialPaymentId);
           structureRows = data || [];
         } else if (invoiceId) {
           const { data } = await supabase
@@ -218,7 +218,7 @@ module.exports = (supabase) => {
               : round2(net / structureRows.length);
             return {
               PAYMENT_ID:              created.ID,
-              PARTIAL_PAYMENT_ID:      partialPaymentId ? parseInt(String(partialPaymentId), 10) : null,
+              ADVANCE_INVOICE_ID:      partialPaymentId ? parseInt(String(partialPaymentId), 10) : null,
               INVOICE_ID:              invoiceId ? parseInt(String(invoiceId), 10) : null,
               STRUCTURE_ID:            r.STRUCTURE_ID,
               AMOUNT_PAYED_NET:        share,
@@ -273,7 +273,7 @@ module.exports = (supabase) => {
       // 1. Load the payment (tenant check)
       const { data: payment, error: pErr } = await supabase
         .from("PAYMENT")
-        .select("ID, PROJECT_ID, INVOICE_ID, PARTIAL_PAYMENT_ID, AMOUNT_PAYED_NET, TENANT_ID")
+        .select("ID, PROJECT_ID, INVOICE_ID, ADVANCE_INVOICE_ID, AMOUNT_PAYED_NET, TENANT_ID")
         .eq("ID", id)
         .eq("TENANT_ID", req.tenantId)
         .maybeSingle();

@@ -109,7 +109,7 @@ async function recomputeTotal(supabase, invoiceId) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Selbstheilende Neuberechnung von INVOICED / PARTIAL_PAYMENTS je Struktur,
+// Selbstheilende Neuberechnung von INVOICED / ADVANCE_INVOICED je Struktur,
 // aus den Rohdaten statt aus den gecachten Spalten von PROJECT_STRUCTURE.
 //
 // A2 (Audit 25.08.2026): Dieser Block sass frueher nur in getPhases. savePhases
@@ -150,16 +150,16 @@ async function recomputeBilledByStructure(supabase, { contractId, excludeInvoice
     // sieht die Funktion nach AR-Storno nur die Storno-Hälfte (-X) und
     // das Original (+X) rutscht durch. Wie bei loadPreviouslyBilledByStructure.
     const { data: pps } = await supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select("ID")
       .eq("CONTRACT_ID", contractId)
       .in("STATUS_ID", [2, 3]);
     const ppIds = (pps || []).map(p => p.ID);
     if (ppIds.length > 0) {
       const { data: ppStructs } = await supabase
-        .from("PARTIAL_PAYMENT_STRUCTURE")
+        .from("ADVANCE_INVOICE_STRUCTURE")
         .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
-        .in("PARTIAL_PAYMENT_ID", ppIds);
+        .in("ADVANCE_INVOICE_ID", ppIds);
       for (const r of ppStructs || []) {
         const sid = String(r.STRUCTURE_ID);
         recomputedPartial.set(sid,
@@ -185,14 +185,14 @@ async function getPhases(supabase, { id, tenantId }) {
   if (inv.CONTRACT_ID) {
     const { data: byContract } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT, PARTIAL_PAYMENTS, INVOICED, CLOSED_BY_INVOICE_ID, FATHER_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED, CLOSED_BY_INVOICE_ID, FATHER_ID")
       .eq("CONTRACT_ID", inv.CONTRACT_ID);
     if (Array.isArray(byContract) && byContract.length > 0) psRows = byContract;
   }
   if (psRows.length === 0) {
     const { data: byProject, error: psErr } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT, PARTIAL_PAYMENTS, INVOICED, CLOSED_BY_INVOICE_ID, FATHER_ID")
+      .select("ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED, CLOSED_BY_INVOICE_ID, FATHER_ID")
       .eq("PROJECT_ID", inv.PROJECT_ID);
     if (psErr) throw psErr;
     psRows = byProject || [];
@@ -253,7 +253,7 @@ async function getPhases(supabase, { id, tenantId }) {
       : round2(toNum(ps.INVOICED));
     const partialNet = recomputeOk
       ? (recomputedPartial.get(sidKey) || 0)
-      : round2(toNum(ps.PARTIAL_PAYMENTS));
+      : round2(toNum(ps.ADVANCE_INVOICED));
     // alreadyBilled: Fill-First-Verteilung (wenn verfügbar), sonst Roh-Summe.
     const alreadyBilled = recomputeOk && alreadyBilledByLeaf.has(sidKey)
       ? alreadyBilledByLeaf.get(sidKey)
@@ -297,7 +297,7 @@ async function savePhases(supabase, { id, tenantId, structureIds }) {
   if (structureIds.length > 0) {
     const { data: psRows, error: psErr } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, REVENUE_COMPLETION, EXTRAS_PERCENT, PARTIAL_PAYMENTS, INVOICED")
+      .select("ID, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED")
       .in("ID", structureIds);
     if (psErr) throw new Error(psErr.message);
 
@@ -353,19 +353,19 @@ async function getDeductions(supabase, { id, tenantId }) {
   // haben zwar auch STATUS=2, sollen aber NICHT als Abzug auftauchen — sie
   // gehören zum Storno-Paar mit dem Original und beide saldieren netto auf 0.
   const { data: ppRows, error: ppErr } = await supabase
-    .from("PARTIAL_PAYMENT")
-    .select("ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_NET, CANCELS_PARTIAL_PAYMENT_ID")
+    .from("ADVANCE_INVOICE")
+    .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_NET, CANCELS_PARTIAL_PAYMENT_ID")
     .eq("PROJECT_ID", inv.PROJECT_ID)
     .eq("STATUS_ID", 2)
     .is("CANCELS_PARTIAL_PAYMENT_ID", null)
     .eq("TENANT_ID", tenantId)
-    .order("PARTIAL_PAYMENT_DATE", { ascending: true });
+    .order("ADVANCE_INVOICE_DATE", { ascending: true });
   if (ppErr) throw new Error(ppErr.message);
 
   // Find PPs already claimed by other booked final invoices
   const { data: usedRows } = await supabase
     .from("INVOICE_DEDUCTION")
-    .select("PARTIAL_PAYMENT_ID, INVOICE_ID")
+    .select("ADVANCE_INVOICE_ID, INVOICE_ID")
     .eq("TENANT_ID", tenantId)
     .neq("INVOICE_ID", id);
 
@@ -382,7 +382,7 @@ async function getDeductions(supabase, { id, tenantId }) {
     alreadyUsedPpIds = new Set(
       (usedRows || [])
         .filter((r) => bookedFinalIds.has(String(r.INVOICE_ID)))
-        .map((r) => String(r.PARTIAL_PAYMENT_ID))
+        .map((r) => String(r.ADVANCE_INVOICE_ID))
     );
   }
 
@@ -391,10 +391,10 @@ async function getDeductions(supabase, { id, tenantId }) {
   // Saved deduction amounts for this draft invoice
   const { data: idRows } = await supabase
     .from("INVOICE_DEDUCTION")
-    .select("PARTIAL_PAYMENT_ID, DEDUCTION_AMOUNT_NET")
+    .select("ADVANCE_INVOICE_ID, DEDUCTION_AMOUNT_NET")
     .eq("INVOICE_ID", id);
   const selectedMap = new Map(
-    (idRows || []).map((r) => [String(r.PARTIAL_PAYMENT_ID), toNum(r.DEDUCTION_AMOUNT_NET)])
+    (idRows || []).map((r) => [String(r.ADVANCE_INVOICE_ID), toNum(r.DEDUCTION_AMOUNT_NET)])
   );
 
   // Structure IDs linked to each PP (for warning feature in frontend)
@@ -402,11 +402,11 @@ async function getDeductions(supabase, { id, tenantId }) {
   const ppStructureMap = new Map();
   if (ppIds.length > 0) {
     const { data: ppsRows } = await supabase
-      .from("PARTIAL_PAYMENT_STRUCTURE")
-      .select("PARTIAL_PAYMENT_ID, STRUCTURE_ID")
-      .in("PARTIAL_PAYMENT_ID", ppIds);
+      .from("ADVANCE_INVOICE_STRUCTURE")
+      .select("ADVANCE_INVOICE_ID, STRUCTURE_ID")
+      .in("ADVANCE_INVOICE_ID", ppIds);
     for (const pps of (ppsRows || [])) {
-      const key = String(pps.PARTIAL_PAYMENT_ID);
+      const key = String(pps.ADVANCE_INVOICE_ID);
       if (!ppStructureMap.has(key)) ppStructureMap.set(key, []);
       ppStructureMap.get(key).push(pps.STRUCTURE_ID);
     }
@@ -414,8 +414,8 @@ async function getDeductions(supabase, { id, tenantId }) {
 
   return filteredPpRows.map((pp) => ({
     ID: pp.ID,
-    PARTIAL_PAYMENT_NUMBER: pp.PARTIAL_PAYMENT_NUMBER ?? "",
-    PARTIAL_PAYMENT_DATE: pp.PARTIAL_PAYMENT_DATE ?? null,
+    ADVANCE_INVOICE_NUMBER: pp.ADVANCE_INVOICE_NUMBER ?? "",
+    ADVANCE_INVOICE_DATE: pp.ADVANCE_INVOICE_DATE ?? null,
     AMOUNT_NET: toNum(pp.TOTAL_AMOUNT_NET),
     TOTAL_AMOUNT_NET: toNum(pp.TOTAL_AMOUNT_NET),
     SELECTED: selectedMap.has(String(pp.ID)),
@@ -441,10 +441,10 @@ async function saveDeductions(supabase, { id, tenantId, items }) {
 
   if (items.length > 0) {
     const rows = items
-      .filter((item) => item.partial_payment_id)
+      .filter((item) => item.advance_invoice_id)
       .map((item) => ({
         INVOICE_ID: parseInt(id, 10),
-        PARTIAL_PAYMENT_ID: parseInt(item.partial_payment_id, 10),
+        ADVANCE_INVOICE_ID: parseInt(item.advance_invoice_id, 10),
         DEDUCTION_AMOUNT_NET: round2(toNum(item.deduction_amount_net)),
         TENANT_ID: inv.TENANT_ID,
       }));
@@ -477,7 +477,7 @@ async function getFinalInvoice(supabase, { id, tenantId }) {
 
   const { data: idRows } = await supabase
     .from("INVOICE_DEDUCTION")
-    .select("DEDUCTION_AMOUNT_NET, PARTIAL_PAYMENT_ID")
+    .select("DEDUCTION_AMOUNT_NET, ADVANCE_INVOICE_ID")
     .eq("INVOICE_ID", id);
   const deductionsTotal = round2(
     (idRows || []).reduce((s, r) => s + toNum(r.DEDUCTION_AMOUNT_NET), 0)
@@ -529,7 +529,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
   if (Array.isArray(releasePpIds) && releasePpIds.length > 0) {
     try {
       const { data: pps, error: ppsErr } = await supabase
-        .from("PARTIAL_PAYMENT")
+        .from("ADVANCE_INVOICE")
         .select("ID, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID, PROJECT_ID, TENANT_ID")
         .in("ID", releasePpIds);
       if (ppsErr) throw new Error(ppsErr.message);
@@ -545,7 +545,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
         const amt = round2(Number(pp.SE_AMOUNT || 0));
         seReleaseTotal = round2(seReleaseTotal + amt);
         const { error: upPpErr } = await supabase
-          .from("PARTIAL_PAYMENT")
+          .from("ADVANCE_INVOICE")
           .update({ SE_RELEASED_BY_INVOICE_ID: parseInt(id, 10) })
           .eq("ID", pp.ID);
         if (upPpErr) throw new Error(upPpErr.message);
@@ -553,7 +553,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
         try {
           await supabase.from("SE_RELEASE").insert({
             TENANT_ID:          tenantId || pp.TENANT_ID,
-            PARTIAL_PAYMENT_ID: pp.ID,
+            ADVANCE_INVOICE_ID: pp.ID,
             INVOICE_ID:         parseInt(id, 10),
             SE_AMOUNT_RELEASED: amt,
           });
