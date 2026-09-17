@@ -1331,8 +1331,8 @@
     },
     {
       "id": "05b-advance-invoice-rest",
-      "status": "planned",
-      "note": "Nachzuegler zu Block 05: die Storno-Selbstreferenz und das Report-Ausgabefeld, die in der urspruenglichen Liste fehlten. Schreibweise ADVANCE_ (ohne D), wie Tabelle und uebrige Spalten.",
+      "status": "done",
+      "note": "Nachzuegler zu Block 05: die Storno-Selbstreferenz und das Report-Ausgabefeld, die in der urspruenglichen Liste fehlten. Schreibweise ADVANCE_ (ohne D), wie Tabelle und uebrige Spalten. ERLEDIGT 2026-09-17: Migrationen 0150/0151, verify gruen, Rauchtest sauber. Erster Block, der DROP+CREATE fuer Funktionen brauchte.",
       "derived": [
         {
           "from": "PARTIAL_PAYMENT_NET_TOTAL",
