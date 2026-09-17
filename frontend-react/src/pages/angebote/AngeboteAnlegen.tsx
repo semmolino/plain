@@ -101,7 +101,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
       void qc.invalidateQueries({ queryKey: ['offers'] })
       void qc.invalidateQueries({ queryKey: ['number-ranges'] })
       setCreatedOfferId(res.data.ID)
-      setMsg({ text: `Angebot "${res.data.NAME_SHORT}" wurde angelegt ✅`, type: 'success' })
+      setMsg({ text: `Angebot "${res.data.ABBR}" wurde angelegt ✅`, type: 'success' })
       if (onOfferCreated) {
         onOfferCreated(res.data.ID)
       } else {
@@ -184,7 +184,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
             <label>Angebotsstatus*</label>
             <select value={basic.offer_status_id} onChange={e => setB('offer_status_id')(e.target.value)}>
               <option value="">Bitte wählen …</option>
-              {statuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+              {statuses.map(s => <option key={s.ID} value={s.ID}>{s.ABBR}</option>)}
             </select>
           </div>
 

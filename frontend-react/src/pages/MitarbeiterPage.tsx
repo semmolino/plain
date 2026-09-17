@@ -206,7 +206,7 @@ function RoleSection({ employeeId, roles, mapping }: {
               })} />
               <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || 'var(--text-3)' }} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{r.NAME_SHORT}</div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{r.ABBR}</div>
                 {r.NAME_LONG && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.NAME_LONG}</div>}
               </div>
               {r.IS_SYSTEM && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>SYSTEM</span>}
@@ -806,7 +806,7 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             <label htmlFor="edept">Abteilung</label>
             <select id="edept" value={editForm.department_id ?? ''} onChange={e => setEditForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}>
               <option value="">— keine —</option>
-              {departments.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
+              {departments.map(d => <option key={d.ID} value={d.ID}>{d.ABBR}</option>)}
             </select>
           </div>
           <div className="form-row">
@@ -2813,7 +2813,7 @@ function EmployeeRoleBadge({ employeeId, roles, mapping, onClick }: {
           background: r.COLOR || 'var(--text-3)', color: '#fff',
           fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
         }}>
-          {r.NAME_SHORT}
+          {r.ABBR}
         </span>
       ))}
     </button>
@@ -2888,7 +2888,7 @@ export function MitarbeiterPage() {
   // ── Inline-Edit (Abteilung / Status direkt in der Liste) ──
   const canEditEmp = usePermission('employees.edit')
   const deptOpts: InlineOption[] = useMemo(
-    () => departments.map(d => ({ value: String(d.ID), label: d.NAME_SHORT })),
+    () => departments.map(d => ({ value: String(d.ID), label: d.ABBR })),
     [departments],
   )
   const empInlineMut = useMutation({
@@ -3259,7 +3259,7 @@ export function MitarbeiterPage() {
               <select id="mdept" value={form.department_id ?? ''}
                 onChange={e => setForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}>
                 <option value="">—</option>
-                {departments.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
+                {departments.map(d => <option key={d.ID} value={d.ID}>{d.ABBR}</option>)}
               </select>
             </div>
           </div>

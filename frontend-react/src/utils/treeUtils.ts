@@ -81,7 +81,7 @@ export function structurePaths(rows: StructureNode[]): Map<number, string> {
   const byId = new Map(rows.map(r => [r.STRUCTURE_ID, r]))
   const out  = new Map<number, string>()
   for (const row of rows) {
-    const leaf = row.NAME_LONG ? `${row.NAME_SHORT}: ${row.NAME_LONG}` : row.NAME_SHORT
+    const leaf = row.NAME_LONG ? `${row.ABBR}: ${row.NAME_LONG}` : row.ABBR
     const ancestors: string[] = []
     let fatherId = row.FATHER_ID != null ? Number(row.FATHER_ID) : null
     // Schleifenschutz: ein zyklischer FATHER_ID (Importfehler) darf die
@@ -91,7 +91,7 @@ export function structurePaths(rows: StructureNode[]): Map<number, string> {
       seen.add(fatherId)
       const parent = byId.get(fatherId)
       if (!parent) break
-      ancestors.unshift(parent.NAME_SHORT)
+      ancestors.unshift(parent.ABBR)
       fatherId = parent.FATHER_ID != null ? Number(parent.FATHER_ID) : null
     }
     out.set(row.STRUCTURE_ID, ancestors.length ? `${ancestors.join(' > ')} > ${leaf}` : leaf)

@@ -211,7 +211,7 @@ function stockChange(totalsNow, totalsBefore, method) {
 // ── Datenbeschaffung ─────────────────────────────────────────────────────────
 
 const SELECT_COLS = [
-  "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+  "PROJECT_ID", "ABBR", "NAME_LONG",
   "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
   "PROJECT_TYPE_ID", "PROJECT_TYPE_NAME_SHORT",
   "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
@@ -256,7 +256,7 @@ async function loadBaseRows(supabase, tenantId, asOf) {
     .from("VW_REPORT_PROJECT_DETAIL")
     .select(SELECT_COLS.join(", "))
     .eq("TENANT_ID", tenantId)
-    .order("NAME_SHORT", { ascending: true });
+    .order("ABBR", { ascending: true });
   if (error) throw { status: 500, message: error.message };
   return { rows: data || [], historic };
 }
@@ -367,7 +367,7 @@ async function evaluateAsOf(supabase, tenantId, asOf, valuation, withDetails) {
 
     rows.push({
       PROJECT_ID:                r.PROJECT_ID,
-      NAME_SHORT:                r.NAME_SHORT ?? null,
+      ABBR:                r.ABBR ?? null,
       NAME_LONG:                 r.NAME_LONG ?? null,
       PROJECT_STATUS_ID:         r.PROJECT_STATUS_ID ?? null,
       PROJECT_STATUS_NAME_SHORT: r.PROJECT_STATUS_NAME_SHORT ?? null,
@@ -386,7 +386,7 @@ async function evaluateAsOf(supabase, tenantId, asOf, valuation, withDetails) {
     });
   }
 
-  rows.sort((a, b) => String(a.NAME_SHORT || "").localeCompare(String(b.NAME_SHORT || ""), "de"));
+  rows.sort((a, b) => String(a.ABBR || "").localeCompare(String(b.ABBR || ""), "de"));
 
   return { rows, totals: aggregateWip(rows), historic };
 }
@@ -540,7 +540,7 @@ async function saveClosing(supabase, tenantId, opts = {}) {
     TENANT_ID:            tenantId,
     CLOSING_ID:           closingId,
     PROJECT_ID:           r.PROJECT_ID,
-    NAME_SHORT:           r.NAME_SHORT,
+    ABBR:           r.ABBR,
     NAME_LONG:            r.NAME_LONG,
     PROJECT_STATUS_NAME:  r.PROJECT_STATUS_NAME_SHORT,
     PROJECT_MANAGER:      r.PROJECT_MANAGER_DISPLAY,
@@ -610,7 +610,7 @@ async function getClosing(supabase, tenantId, id, { withDrift = false } = {}) {
     .select("*")
     .eq("TENANT_ID", tenantId)
     .eq("CLOSING_ID", id)
-    .order("NAME_SHORT", { ascending: true });
+    .order("ABBR", { ascending: true });
   if (lErr) throw { status: 500, message: lErr.message };
 
   let drift = null;

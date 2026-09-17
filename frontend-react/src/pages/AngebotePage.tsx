@@ -66,7 +66,7 @@ export function AngebotePage() {
     persistOfferId(id ?? undefined)
   }
 
-  const offerName = offerData?.data?.NAME_SHORT ?? (selectedOfferId ? `#${selectedOfferId}` : '')
+  const offerName = offerData?.data?.ABBR ?? (selectedOfferId ? `#${selectedOfferId}` : '')
 
   const [editStammdatenId, setEditStammdatenId] = useState<number | null>(null)
 

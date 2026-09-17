@@ -22,7 +22,7 @@ const WIP = {
     historic: true,
     rows: [
       {
-        PROJECT_ID: 1, NAME_SHORT: 'P-001', NAME_LONG: 'Wohnhaus Seestrasse',
+        PROJECT_ID: 1, ABBR: 'P-001', NAME_LONG: 'Wohnhaus Seestrasse',
         PROJECT_STATUS_ID: 2, PROJECT_STATUS_NAME_SHORT: 'Laufend',
         PROJECT_TYPE_ID: 1, PROJECT_TYPE_NAME_SHORT: 'Neubau',
         PROJECT_MANAGER_ID: 1, PROJECT_MANAGER_DISPLAY: 'M. Messina',
@@ -38,7 +38,7 @@ const WIP = {
         COMPARE_WIP_NET: 4800, CHANGE_WIP_NET: 5200,
       },
       {
-        PROJECT_ID: 2, NAME_SHORT: 'P-002', NAME_LONG: 'Schulsanierung Nord',
+        PROJECT_ID: 2, ABBR: 'P-002', NAME_LONG: 'Schulsanierung Nord',
         PROJECT_STATUS_ID: 2, PROJECT_STATUS_NAME_SHORT: 'Laufend',
         PROJECT_TYPE_ID: 2, PROJECT_TYPE_NAME_SHORT: 'Sanierung',
         PROJECT_MANAGER_ID: 2, PROJECT_MANAGER_DISPLAY: 'T. Kern',

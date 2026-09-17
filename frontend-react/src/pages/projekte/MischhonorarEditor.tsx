@@ -83,7 +83,7 @@ export function MischhonorarEditor({ open, onClose, calcMasterId, zones, onAppli
 
   const zoneName = (id: number) => {
     const z = zones.find(z => z.ID === id)
-    return z ? z.NAME_SHORT : `Zone ${id}`
+    return z ? z.ABBR : `Zone ${id}`
   }
 
   return (
@@ -121,7 +121,7 @@ export function MischhonorarEditor({ open, onClose, calcMasterId, zones, onAppli
                     <td>
                       <select value={r.zoneId} onChange={e => setRow(i, { zoneId: e.target.value ? Number(e.target.value) : '' })}>
                         <option value="">— wählen —</option>
-                        {zones.map(z => <option key={z.ID} value={z.ID}>{z.NAME_SHORT}{z.NAME_LONG ? ` – ${z.NAME_LONG}` : ''}</option>)}
+                        {zones.map(z => <option key={z.ID} value={z.ID}>{z.ABBR}{z.NAME_LONG ? ` – ${z.NAME_LONG}` : ''}</option>)}
                       </select>
                     </td>
                     <td>

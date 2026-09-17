@@ -123,7 +123,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
               <label>Projektstatus*</label>
               <select value={projectStatusId} onChange={e => setProjectStatusId(e.target.value)}>
                 <option value="">Bitte wählen …</option>
-                {statuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+                {statuses.map(s => <option key={s.ID} value={s.ID}>{s.ABBR}</option>)}
               </select>
             </div>
 
@@ -140,14 +140,14 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
                 <label>Projekttyp</label>
                 <select value={projectTypeId} onChange={e => setProjectTypeId(e.target.value)}>
                   <option value="">—</option>
-                  {types.map(t => <option key={t.ID} value={t.ID}>{t.NAME_SHORT}</option>)}
+                  {types.map(t => <option key={t.ID} value={t.ID}>{t.ABBR}</option>)}
                 </select>
               </div>
               <div className="form-group">
                 <label>Abteilung</label>
                 <select value={departmentId} onChange={e => setDepartmentId(e.target.value)}>
                   <option value="">—</option>
-                  {depts.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
+                  {depts.map(d => <option key={d.ID} value={d.ID}>{d.ABBR}</option>)}
                 </select>
               </div>
             </div>
@@ -166,7 +166,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
                   <tbody>
                     {bt2Nodes.map(n => (
                       <tr key={n.ID}>
-                        <td style={{ padding: '4px 8px' }}>{n.NAME_SHORT || '—'}</td>
+                        <td style={{ padding: '4px 8px' }}>{n.ABBR || '—'}</td>
                         <td style={{ padding: '4px 8px', color: 'var(--text-3)' }}>{n.ROLE_ABBR || '—'}</td>
                         <td style={{ padding: '4px 8px' }}>
                           <select
@@ -198,7 +198,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
                 <option value="">— Kein Projekt verknüpfen —</option>
                 {projects.map(p => (
                   <option key={p.ID} value={p.ID}>
-                    {p.NAME_SHORT}{p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''}
+                    {p.ABBR}{p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''}
                   </option>
                 ))}
               </select>

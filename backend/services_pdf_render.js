@@ -322,7 +322,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
 
   const { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, FATHER_ID, BILLING_TYPE_ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, ADVANCE_INVOICED, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
+    .select('ID, FATHER_ID, BILLING_TYPE_ID, ABBR, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, ADVANCE_INVOICED, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
     .eq('PROJECT_ID', projectId)
     .order('ID', { ascending: true });
 
@@ -423,7 +423,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
       id:             r.ID,
       isLeaf,
       depth,
-      nameShort:      r.NAME_SHORT || '',
+      nameShort:      r.ABBR || '',
       nameLong:       r.NAME_LONG  || '',
       feeTotal,
       alreadyBilled,
@@ -498,9 +498,9 @@ async function loadTecRows({ supabase, docType, docId }) {
     const structMap = new Map();
     if (structIds.length) {
       const { data: structs } = await supabase
-        .from('PROJECT_STRUCTURE').select('ID, NAME_SHORT, NAME_LONG').in('ID', structIds);
+        .from('PROJECT_STRUCTURE').select('ID, ABBR, NAME_LONG').in('ID', structIds);
       (structs || []).forEach(s =>
-        structMap.set(String(s.ID), { kuerzel: s.NAME_SHORT || '', bezeichnung: s.NAME_LONG || '' })
+        structMap.set(String(s.ID), { kuerzel: s.ABBR || '', bezeichnung: s.NAME_LONG || '' })
       );
     }
 
@@ -658,13 +658,13 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
   let projectName = '', contractName = '';
   if (rawDoc.PROJECT_ID) {
     const { data: proj } = await supabase
-      .from('PROJECT').select('NAME_SHORT, NAME_LONG').eq('ID', rawDoc.PROJECT_ID).maybeSingle();
-    if (proj) projectName = [proj.NAME_SHORT, proj.NAME_LONG].filter(Boolean).join(' \u2013 ');
+      .from('PROJECT').select('ABBR, NAME_LONG').eq('ID', rawDoc.PROJECT_ID).maybeSingle();
+    if (proj) projectName = [proj.ABBR, proj.NAME_LONG].filter(Boolean).join(' \u2013 ');
   }
   if (rawDoc.CONTRACT_ID) {
     const { data: con } = await supabase
-      .from('CONTRACT').select('NAME_SHORT, NAME_LONG').eq('ID', rawDoc.CONTRACT_ID).maybeSingle();
-    if (con) contractName = [con.NAME_SHORT, con.NAME_LONG].filter(Boolean).join(' \u2013 ');
+      .from('CONTRACT').select('ABBR, NAME_LONG').eq('ID', rawDoc.CONTRACT_ID).maybeSingle();
+    if (con) contractName = [con.ABBR, con.NAME_LONG].filter(Boolean).join(' \u2013 ');
   }
 
   // Appendix data
@@ -857,7 +857,7 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
     try {
       const { data: calcMasters } = await supabase
         .from('FEE_CALCULATION_MASTER')
-        .select('ID, NAME_SHORT, NAME_LONG')
+        .select('ID, ABBR, NAME_LONG')
         .eq('PROJECT_ID', rawDoc.PROJECT_ID)
         .eq('TENANT_ID', tenantId)
         .order('ID', { ascending: true });
@@ -1026,7 +1026,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
   await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_angebot');
   applyPlaceholders(vm, {
-    belegnummer: vm.offer?.NAME_SHORT ?? '',
+    belegnummer: vm.offer?.ABBR ?? '',
     belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
     projekt:     vm.offer?.NAME_LONG ?? '',
     kunde:       vm.buyer?.name ?? '',
@@ -1046,7 +1046,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   try {
     const { data: calcMasters } = await supabase
       .from('FEE_CALCULATION_MASTER')
-      .select('ID, NAME_SHORT, NAME_LONG')
+      .select('ID, ABBR, NAME_LONG')
       .eq('OFFER_ID', offerId)
       .eq('TENANT_ID', tenantId)
       .order('ID', { ascending: true });
@@ -1088,7 +1088,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
   await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_auftragsbestaetigung');
   applyPlaceholders(vm, {
-    belegnummer: vm.offer?.NAME_SHORT ?? '',
+    belegnummer: vm.offer?.ABBR ?? '',
     belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
     projekt:     vm.offer?.NAME_LONG ?? '',
     kunde:       vm.buyer?.name ?? '',
@@ -1359,7 +1359,7 @@ async function buildHonorarCalcData(supabase, calcMasterId, tenantId) {
 
   const { data: surchargeRows } = await supabase
     .from('FEE_CALCULATION_SURCHARGES')
-    .select('NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, BL_FILTER, CALC_MODE, INCLUDE_BL')
+    .select('ABBR, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, BL_FILTER, CALC_MODE, INCLUDE_BL')
     .eq('FEE_CALC_MASTER_ID', calcMasterId)
     .eq('TENANT_ID', tenantId)
     .order('SORT_ORDER', { ascending: true });
@@ -1368,7 +1368,7 @@ async function buildHonorarCalcData(supabase, calcMasterId, tenantId) {
   try {
     const { data: blData } = await supabase
       .from('FEE_CALCULATION_BL')
-      .select('ID, NAME_SHORT, NAME, LPH_REF, LPH_PHASE_ID, AMOUNT, SORT_ORDER')
+      .select('ID, ABBR, NAME, LPH_REF, LPH_PHASE_ID, AMOUNT, SORT_ORDER')
       .eq('FEE_CALC_MASTER_ID', calcMasterId)
       .eq('TENANT_ID', tenantId)
       .order('SORT_ORDER', { ascending: true });
@@ -1419,7 +1419,7 @@ async function buildHonorarCalcData(supabase, calcMasterId, tenantId) {
       .map(b => {
         const bBase = Number(b.AMOUNT) || 0;
         return {
-          name:          [b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || 'BL',
+          name:          [b.ABBR, b.NAME].filter(Boolean).join(': ') || 'BL',
           baseAmount:    bBase,
           surchargeAmount: base > 0 ? Math.round(amount * (bBase / base) * 100) / 100 : 0,
         };
@@ -1453,8 +1453,8 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
 
   let zoneName = null;
   if (calc.ZONE_ID) {
-    const { data: zone } = await supabase.from('FEE_ZONES').select('NAME_SHORT').eq('ID', calc.ZONE_ID).maybeSingle();
-    zoneName = zone?.NAME_SHORT ?? null;
+    const { data: zone } = await supabase.from('FEE_ZONES').select('ABBR').eq('ID', calc.ZONE_ID).maybeSingle();
+    zoneName = zone?.ABBR ?? null;
   }
 
   // Bemessungsgrundlage des Leistungsbilds (cost_eur | area_ha | verrechnungseinheiten)
@@ -1510,8 +1510,8 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     const mr = await misch.computeMischhonorarForMaster(supabase, { calcMasterId, tenantId });
     if (mr && mr.herleitung.length) {
       const zoneIds = [...new Set(mr.herleitung.map(h => h.zoneId))];
-      const { data: zs } = await supabase.from('FEE_ZONES').select('ID, NAME_SHORT').in('ID', zoneIds);
-      const zoneNames = new Map((zs || []).map(z => [z.ID, z.NAME_SHORT]));
+      const { data: zs } = await supabase.from('FEE_ZONES').select('ID, ABBR').in('ID', zoneIds);
+      const zoneNames = new Map((zs || []).map(z => [z.ID, z.ABBR]));
       mischhonorarCtx = {
         akGesamt: mr.akGesamt,
         honorar: mr.honorar,
@@ -1535,7 +1535,7 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
       } catch { /* ignore */ }
     }
     return {
-      nameShort:   r.NAME_SHORT || '',
+      nameShort:   r.ABBR || '',
       nameLong:    r.NAME_LONG  || '',
       percent:     r.PERCENT ?? '',
       baseAmount:  effectiveBase,
@@ -1548,10 +1548,10 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
   };
 
   return {
-    nameShort: calc.NAME_SHORT || '',
+    nameShort: calc.ABBR || '',
     nameLong:  calc.NAME_LONG  || '',
     calc: {
-      nameShort:           calc.NAME_SHORT || '',
+      nameShort:           calc.ABBR || '',
       nameLong:            calc.NAME_LONG  || '',
       baseType,
       isAreaHa:            baseType === 'area_ha',
@@ -1590,7 +1590,7 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     blItems: d.blRows.map(r => {
       const lphPhase = r.LPH_PHASE_ID ? d.phaseRows.find(p => p.ID === r.LPH_PHASE_ID) : null;
       return {
-        nameShort: r.NAME_SHORT || null,
+        nameShort: r.ABBR || null,
         name:      r.NAME || '',
         lphRef:    r.LPH_REF || null,
         lphLabel:  lphPhase ? (lphPhase.PHASE_LABEL || null) : null,
@@ -1621,8 +1621,8 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
     .single();
   let projectLabel = null;
   if (calcMeta?.PROJECT_ID) {
-    const { data: proj } = await supabase.from('PROJECT').select('NAME_SHORT, NAME_LONG').eq('ID', calcMeta.PROJECT_ID).maybeSingle();
-    if (proj) projectLabel = [proj.NAME_SHORT, proj.NAME_LONG].filter(Boolean).join(' – ');
+    const { data: proj } = await supabase.from('PROJECT').select('ABBR, NAME_LONG').eq('ID', calcMeta.PROJECT_ID).maybeSingle();
+    if (proj) projectLabel = [proj.ABBR, proj.NAME_LONG].filter(Boolean).join(' – ');
   }
 
   // Load company (seller) data + logo

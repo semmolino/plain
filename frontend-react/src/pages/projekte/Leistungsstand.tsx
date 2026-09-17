@@ -108,7 +108,7 @@ export function Leistungsstand({ initialProjectId }: Props) {
     const matchIds = new Set(
       flatNodes
         .filter(({ node }) =>
-          node.NAME_SHORT.toLowerCase().includes(sq) ||
+          node.ABBR.toLowerCase().includes(sq) ||
           (node.NAME_LONG?.toLowerCase().includes(sq) ?? false)
         )
         .map(({ node }) => node.STRUCTURE_ID)
@@ -140,14 +140,14 @@ export function Leistungsstand({ initialProjectId }: Props) {
   }
 
   const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject ? ([currentProject.NAME_SHORT, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
+  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
 
   return (
     <div className="ls-wrap">
       {pid !== null && currentProject && (
         <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject.NAME_SHORT}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.NAME_SHORT, backProject: { id: pid, name: currentProject.NAME_SHORT } } })}>
+          <span className="proj-jump-label">{currentProject.ABBR}</span>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.ABBR, backProject: { id: pid, name: currentProject.ABBR } } })}>
             Rechnungen →
           </button>
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
@@ -205,7 +205,7 @@ export function Leistungsstand({ initialProjectId }: Props) {
                   return (
                     <tr key={sid} className={isLeaf ? 'ls-row ls-row-leaf' : 'ls-row ls-row-parent'}>
                       <td className="ls-td ls-col-short">
-                        <span style={{ paddingLeft: depth * 16 }}>{n.NAME_SHORT}</span>
+                        <span style={{ paddingLeft: depth * 16 }}>{n.ABBR}</span>
                       </td>
                       <td className="ls-td ls-col-name">{n.NAME_LONG}</td>
                       <td className="ls-td ls-col-num ls-right">{money(revenue)}</td>

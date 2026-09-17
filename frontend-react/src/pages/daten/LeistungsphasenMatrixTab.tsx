@@ -141,7 +141,7 @@ export function LeistungsphasenMatrixTab() {
                 <td>
                   <button type="button" onClick={() => goToProject(p)} title="Zum Projekt-Report"
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', font: 'inherit', textAlign: 'left' }}>
-                    <strong>{p.NAME_SHORT}</strong>
+                    <strong>{p.ABBR}</strong>
                   </button>
                   {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
                 </td>

@@ -334,9 +334,9 @@ export function AddressDetailPage() {
       {(detail!.projects.length + detail!.offers.length + detail!.invoices.length + detail!.partials.length) > 0 && (
         <Card title="Verknüpfungen">
           <LinkList items={detail!.projects} icon={<FolderOpen size={14} />} label="Projekte"
-            render={p => p.NAME_SHORT || p.NAME_LONG || `#${p.ID}`} onClick={p => navigate('/projekte', { state: { projectId: p.ID } })} />
+            render={p => p.ABBR || p.NAME_LONG || `#${p.ID}`} onClick={p => navigate('/projekte', { state: { projectId: p.ID } })} />
           <LinkList items={detail!.offers} icon={<FileSignature size={14} />} label="Angebote"
-            render={o => o.NAME_SHORT || `#${o.ID}`} onClick={o => navigate('/angebote', { state: { offerId: o.ID } })} />
+            render={o => o.ABBR || `#${o.ID}`} onClick={o => navigate('/angebote', { state: { offerId: o.ID } })} />
           <LinkList items={detail!.invoices} icon={<Receipt size={14} />} label="Rechnungen"
             render={i => i.INVOICE_NUMBER || `#${i.ID}`} onClick={() => navigate('/rechnungen')} />
           <LinkList items={detail!.partials} icon={<Banknote size={14} />} label="Abschläge"

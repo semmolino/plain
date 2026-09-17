@@ -100,7 +100,7 @@ export function RollenSection() {
               onDuplicate={() => dupMut.mutate(r.ID)}
               onDelete={() => setConfirmState({
                 title: 'Rolle löschen',
-                message: `Soll die Rolle „${r.NAME_SHORT}" wirklich gelöscht werden? Mitarbeiter, die nur diese Rolle haben, verlieren damit ihre Berechtigungen.`,
+                message: `Soll die Rolle „${r.ABBR}" wirklich gelöscht werden? Mitarbeiter, die nur diese Rolle haben, verlieren damit ihre Berechtigungen.`,
                 onConfirm: () => delMut.mutate(r.ID),
               })}
             />
@@ -145,7 +145,7 @@ function RoleRow({ role, onEdit, onDelete, onDuplicate }: { role: UserRole; onEd
       <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: role.COLOR || 'var(--text-3)', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <strong style={{ fontSize: 14 }}>{role.NAME_SHORT}</strong>
+          <strong style={{ fontSize: 14 }}>{role.ABBR}</strong>
           {role.IS_SYSTEM && (
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4, letterSpacing: 0.4 }}>
               SYSTEM
@@ -196,8 +196,8 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
     enabled:  !isCreate,
   })
 
-  const [form, setForm] = useState<{ name_short: string; name_long: string; color: string; is_default: boolean }>({
-    name_short: '', name_long: '', color: 'var(--accent)', is_default: false,
+  const [form, setForm] = useState<{ abbr: string; name_long: string; color: string; is_default: boolean }>({
+    abbr: '', name_long: '', color: 'var(--accent)', is_default: false,
   })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -207,7 +207,7 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
     if (isCreate || !roleData?.data) return
     const d = roleData.data
     setForm({
-      name_short: d.NAME_SHORT,
+      abbr: d.ABBR,
       name_long:  d.NAME_LONG  || '',
       color:      d.COLOR      || '#2563eb',
       is_default: d.IS_DEFAULT,
@@ -251,14 +251,14 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
     mutationFn: async () => {
       if (isCreate) {
         return createRole({
-          name_short:     form.name_short.trim(),
+          abbr:     form.abbr.trim(),
           name_long:      form.name_long.trim() || null,
           color:          form.color || null,
           permission_ids: Array.from(selected),
         })
       } else {
         return patchRole(roleId!, {
-          name_short:     isSystem ? undefined : form.name_short.trim(),
+          abbr:     isSystem ? undefined : form.abbr.trim(),
           name_long:      form.name_long.trim() || null,
           color:          form.color || null,
           is_default:     isSystem ? undefined : form.is_default,
@@ -274,18 +274,18 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
   })
 
   function handleSave() {
-    if (!form.name_short.trim()) { setMsg({ text: 'Name erforderlich', type: 'error' }); return }
+    if (!form.abbr.trim()) { setMsg({ text: 'Name erforderlich', type: 'error' }); return }
     setMsg(null); saveMut.mutate()
   }
 
   return (
-    <Modal open onClose={onClose} title={isCreate ? 'Neue Rolle' : `Rolle bearbeiten — ${form.name_short || roleData?.data?.NAME_SHORT || ''}`} className="modal-xl">
+    <Modal open onClose={onClose} title={isCreate ? 'Neue Rolle' : `Rolle bearbeiten — ${form.abbr || roleData?.data?.ABBR || ''}`} className="modal-xl">
       {!isCreate && isLoading && <p>Lade …</p>}
       {(isCreate || !isLoading) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px', gap: 10 }}>
-            <FormField label="Name *" id="role-name" value={form.name_short}
-              onChange={e => setForm(f => ({ ...f, name_short: e.target.value }))}
+            <FormField label="Name *" id="role-name" value={form.abbr}
+              onChange={e => setForm(f => ({ ...f, abbr: e.target.value }))}
               disabled={isSystem} />
             <FormField label="Beschreibung" id="role-long" value={form.name_long}
               onChange={e => setForm(f => ({ ...f, name_long: e.target.value }))} />

@@ -34,7 +34,7 @@ export interface BudgetWarningStructureAgg {
 export interface BudgetWarningOverview {
   project: {
     ID: number
-    NAME_SHORT: string | null
+    ABBR: string | null
     NAME_LONG:  string | null
     PROJECT_MANAGER_ID: number | null
     BUDGET_WARNINGS_MUTED: boolean

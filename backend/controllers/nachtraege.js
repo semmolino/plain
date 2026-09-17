@@ -147,7 +147,7 @@ async function getPdf(req, res, supabase) {
     if (!id) return res.status(400).json({ error: 'Ungültige ID' });
     const download = String(req.query.download || '') === '1';
     const { pdf, nachtrag } = await renderNachtragPdf({ supabase, nachtragId: id, tenantId: req.tenantId });
-    const filename = `Nachtrag_${nachtrag.NAME_SHORT || id}.pdf`;
+    const filename = `Nachtrag_${nachtrag.ABBR || id}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${filename}"`);
     res.setHeader('Cache-Control', 'no-store');

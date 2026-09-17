@@ -72,7 +72,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1
     </div>
     <div class="meta-col">
       <table class="meta-table">
-        <tr><td class="ml">Nachtrag-Nr.</td><td class="mv bold">{{ nachtrag.NAME_SHORT }}</td></tr>
+        <tr><td class="ml">Nachtrag-Nr.</td><td class="mv bold">{{ nachtrag.ABBR }}</td></tr>
         <tr><td class="ml">Datum</td><td class="mv">{{ (nachtrag.SUBMITTED_DATE or nachtrag.CREATED_AT) | date_de }}</td></tr>
         {% if projectName %}<tr><td class="ml">Projekt</td><td class="mv">{{ projectName }}</td></tr>{% endif %}
         {% if categoryLabel %}<tr><td class="ml">Kategorie</td><td class="mv">{{ categoryLabel }}</td></tr>{% endif %}

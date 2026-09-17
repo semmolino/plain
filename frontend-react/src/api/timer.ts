@@ -20,8 +20,8 @@ export interface DraftEntry {
   POSTING_DESCRIPTION: string
   STATUS:              string
   ENTRY_KIND?:         EntryKind
-  PROJECT:             { NAME_SHORT: string } | null
-  STRUCTURE:           { NAME_SHORT: string; NAME_LONG: string } | null
+  PROJECT:             { ABBR: string } | null
+  STRUCTURE:           { ABBR: string; NAME_LONG: string } | null
 }
 
 export interface CreateDraftPayload {

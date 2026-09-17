@@ -218,8 +218,8 @@ async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
       QUANTITY_INT, COST_RATE, COST_TOTAL,
       QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION, STATUS,
-      PROJECT:PROJECT_ID(NAME_SHORT),
-      STRUCTURE:STRUCTURE_ID(NAME_SHORT, NAME_LONG)
+      PROJECT:PROJECT_ID(ABBR),
+      STRUCTURE:STRUCTURE_ID(ABBR, NAME_LONG)
     `)
     .eq("EMPLOYEE_ID", employeeId)
     .eq("BOOKING_DATE", date)
@@ -1107,7 +1107,7 @@ async function loadRebookTarget(supabase, { targetProjectId, targetStructureId, 
   // dieselbe Zeile ein zweites Mal lesen zu lassen.
   const { data: node, error: nodeErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, PROJECT_ID, NAME_SHORT, NAME_LONG")
+    .select("ID, PROJECT_ID, ABBR, NAME_LONG")
     .eq("ID", structureId)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -1132,7 +1132,7 @@ async function loadRebookTarget(supabase, { targetProjectId, targetStructureId, 
 
   const { data: projekt } = await supabase
     .from("PROJECT")
-    .select("ID, NAME_SHORT, NAME_LONG")
+    .select("ID, ABBR, NAME_LONG")
     .eq("ID", projectId)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -1140,8 +1140,8 @@ async function loadRebookTarget(supabase, { targetProjectId, targetStructureId, 
   return {
     projectId,
     structureId,
-    projectName:   projekt?.NAME_SHORT || `#${projectId}`,
-    structureName: node.NAME_LONG ? `${node.NAME_SHORT}: ${node.NAME_LONG}` : (node.NAME_SHORT || `#${structureId}`),
+    projectName:   projekt?.ABBR || `#${projectId}`,
+    structureName: node.NAME_LONG ? `${node.ABBR}: ${node.NAME_LONG}` : (node.ABBR || `#${structureId}`),
   };
 }
 
@@ -1194,13 +1194,13 @@ async function rebookBuchungen(supabase, {
   const [projektNamen, strukturNamen] = await Promise.all([
     (async () => {
       if (!quellProjektIds.length) return new Map();
-      const { data } = await supabase.from("PROJECT").select("ID, NAME_SHORT").in("ID", quellProjektIds).eq("TENANT_ID", tenantId);
-      return new Map((data || []).map(p => [Number(p.ID), p.NAME_SHORT || `#${p.ID}`]));
+      const { data } = await supabase.from("PROJECT").select("ID, ABBR").in("ID", quellProjektIds).eq("TENANT_ID", tenantId);
+      return new Map((data || []).map(p => [Number(p.ID), p.ABBR || `#${p.ID}`]));
     })(),
     (async () => {
       if (!quellStrukturIds.length) return new Map();
-      const { data } = await supabase.from("PROJECT_STRUCTURE").select("ID, NAME_SHORT, NAME_LONG").in("ID", quellStrukturIds).eq("TENANT_ID", tenantId);
-      return new Map((data || []).map(s => [Number(s.ID), s.NAME_LONG ? `${s.NAME_SHORT}: ${s.NAME_LONG}` : (s.NAME_SHORT || `#${s.ID}`)]));
+      const { data } = await supabase.from("PROJECT_STRUCTURE").select("ID, ABBR, NAME_LONG").in("ID", quellStrukturIds).eq("TENANT_ID", tenantId);
+      return new Map((data || []).map(s => [Number(s.ID), s.NAME_LONG ? `${s.ABBR}: ${s.NAME_LONG}` : (s.ABBR || `#${s.ID}`)]));
     })(),
   ]);
 

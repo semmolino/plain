@@ -65,7 +65,7 @@ async function fireForTenant(supabase, cfg) {
   // Projekte fuer diesen Tenant (gefiltert nach PROJECT_STATUS_IDS, falls gesetzt)
   let projectsQuery = supabase
     .from("PROJECT")
-    .select("ID, NAME_SHORT, NAME_LONG, PROJECT_MANAGER_ID, PROJECT_STATUS_ID")
+    .select("ID, ABBR, NAME_LONG, PROJECT_MANAGER_ID, PROJECT_STATUS_ID")
     .eq("TENANT_ID", tenantId);
   if (Array.isArray(cfg.PROJECT_STATUS_IDS) && cfg.PROJECT_STATUS_IDS.length > 0) {
     projectsQuery = projectsQuery.in("PROJECT_STATUS_ID", cfg.PROJECT_STATUS_IDS);
@@ -129,7 +129,7 @@ async function fireForTenant(supabase, cfg) {
 
 // Beschriftung eines Projekts fuer Titel und Fliesstext.
 function projektLabel(p) {
-  return `${p.NAME_SHORT || ""}${p.NAME_LONG ? " – " + p.NAME_LONG : ""}`.trim() || `#${p.ID}`;
+  return `${p.ABBR || ""}${p.NAME_LONG ? " – " + p.NAME_LONG : ""}`.trim() || `#${p.ID}`;
 }
 
 // Je Projekt eine eigene Nachricht (Vorgabe, bisheriges Verhalten).
@@ -152,7 +152,7 @@ async function notifyPmPerProject(supabase, { tenantId, pmId, projekte }) {
         tenantId,
         userId:   pmId,                       // managed_by_rule -> wird durchgereicht
         type:     TYPE_KEY,
-        title:    `Leistungsstand pflegen: ${p.NAME_SHORT || `#${p.ID}`}`,
+        title:    `Leistungsstand pflegen: ${p.ABBR || `#${p.ID}`}`,
         body:     `Bitte den Leistungsstand für „${projektLabel(p)}" aktualisieren.`,
         link:     `/projekte?tab=leistungsstand&projectId=${p.ID}`,
         metadata: {
@@ -200,7 +200,7 @@ async function notifyPmSummary(supabase, { tenantId, pmId, projekte }) {
       userId:   pmId,
       type:     TYPE_KEY,
       title:    anzahl === 1
-        ? `Leistungsstand pflegen: ${projekte[0].NAME_SHORT || `#${projekte[0].ID}`}`
+        ? `Leistungsstand pflegen: ${projekte[0].ABBR || `#${projekte[0].ID}`}`
         : `Leistungsstände pflegen (${anzahl} Projekte)`,
       body:     anzahl === 1
         ? `Bitte den Leistungsstand für „${projektLabel(projekte[0])}" aktualisieren.`

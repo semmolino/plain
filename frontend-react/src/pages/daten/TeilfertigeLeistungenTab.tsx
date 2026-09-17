@@ -312,7 +312,7 @@ export function TeilfertigeLeistungenTab() {
     if (search.trim()) {
       const q = search.toLowerCase()
       rows = rows.filter(r =>
-        (r.NAME_SHORT ?? '').toLowerCase().includes(q) ||
+        (r.ABBR ?? '').toLowerCase().includes(q) ||
         (r.NAME_LONG  ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_MANAGER_DISPLAY ?? '').toLowerCase().includes(q) ||
         (r.ADDRESS_NAME ?? '').toLowerCase().includes(q)
@@ -350,8 +350,8 @@ export function TeilfertigeLeistungenTab() {
     const arr = [...filtered]
     const col = COLUMNS.find(c => c.key === sortField)
     arr.sort((a, b) => {
-      const va = sortField === 'name' ? (a.NAME_SHORT ?? '') : (col?.sortValue(a, effectiveMethod) ?? '')
-      const vb = sortField === 'name' ? (b.NAME_SHORT ?? '') : (col?.sortValue(b, effectiveMethod) ?? '')
+      const va = sortField === 'name' ? (a.ABBR ?? '') : (col?.sortValue(a, effectiveMethod) ?? '')
+      const vb = sortField === 'name' ? (b.ABBR ?? '') : (col?.sortValue(b, effectiveMethod) ?? '')
       if (va < vb) return sortDir === 'asc' ? -1 : 1
       if (va > vb) return sortDir === 'asc' ?  1 : -1
       return 0
@@ -395,7 +395,7 @@ export function TeilfertigeLeistungenTab() {
       'Stunden', 'Snapshot', 'Hinweise',
     ]
     const rows = sorted.map(r => [
-      r.NAME_SHORT, r.NAME_LONG, r.PROJECT_STATUS_NAME_SHORT, r.PROJECT_MANAGER_DISPLAY,
+      r.ABBR, r.NAME_LONG, r.PROJECT_STATUS_NAME_SHORT, r.PROJECT_MANAGER_DISPLAY,
       csvNum(r.ORDER_VALUE_NET), csvNum(r.PERFORMANCE_NET), csvNum(r.PERFORMANCE_PERCENT), csvNum(r.BILLED_NET),
       csvNum(r.UNBILLED_NET), csvNum(r.COST_NET), csvNum(r.COST_UNBILLED_NET),
       csvNum(r.WIP_HK_NET), csvNum(r.WIP_REVENUE_NET), csvNum(r.WIP_TAX_NET),
@@ -638,7 +638,7 @@ export function TeilfertigeLeistungenTab() {
                   {sorted.map(r => (
                     <tr key={r.PROJECT_ID}>
                       <td>
-                        <strong>{r.NAME_SHORT}</strong>
+                        <strong>{r.ABBR}</strong>
                         {r.NAME_LONG && <span className="tree-name-long"> – {r.NAME_LONG}</span>}
                         {(r.flags ?? []).length > 0 && (
                           <span className="tfl-flags">

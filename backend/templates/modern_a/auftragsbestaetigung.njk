@@ -240,7 +240,7 @@ body {
         </tr>
         <tr>
           <td class="ml">Angebots-Nr.</td>
-          <td class="mv bold">{{ offer.NAME_SHORT }}</td>
+          <td class="mv bold">{{ offer.ABBR }}</td>
         </tr>
       </table>
     </div>
@@ -260,7 +260,7 @@ body {
   <div class="salutation">Sehr geehrte Damen und Herren,</div>
   <div class="intro-text">
     vielen Dank für Ihren Auftrag. Wir freuen uns, Ihnen hiermit zu bestätigen, dass wir den
-    Auftrag gemäß Angebot Nr.&nbsp;<strong>{{ offer.NAME_SHORT }}</strong>{% if offer.OFFER_DATE %} vom&nbsp;{{ offer.OFFER_DATE | date_de }}{% endif %}
+    Auftrag gemäß Angebot Nr.&nbsp;<strong>{{ offer.ABBR }}</strong>{% if offer.OFFER_DATE %} vom&nbsp;{{ offer.OFFER_DATE | date_de }}{% endif %}
     gerne annehmen und die vereinbarten Leistungen für Sie erbringen werden.
   </div>
   {% endif %}
@@ -332,7 +332,7 @@ body {
     <table>
       <tr>
         <td class="lbl">Bezug auf Angebot</td>
-        <td class="val">{{ offer.NAME_SHORT }}{% if offer.OFFER_DATE %} &middot; {{ offer.OFFER_DATE | date_de }}{% endif %}</td>
+        <td class="val">{{ offer.ABBR }}{% if offer.OFFER_DATE %} &middot; {{ offer.OFFER_DATE | date_de }}{% endif %}</td>
       </tr>
       {% if offer.VALID_UNTIL %}
       <tr>

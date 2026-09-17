@@ -122,7 +122,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
   })
 
   const { data: statusListData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
-  const beauftragtStatusId = statusListData?.data?.find(s => s.NAME_SHORT === 'Beauftragt')?.ID ?? null
+  const beauftragtStatusId = statusListData?.data?.find(s => s.ABBR === 'Beauftragt')?.ID ?? null
 
   const markOrderedMut = useMutation({
     mutationFn: (body: { order_date: string; project_id?: number | null }) =>
@@ -211,7 +211,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
         <label>Angebotsstatus*</label>
         <select value={form.offer_status_id} onChange={e => setF('offer_status_id')(e.target.value)}>
           <option value="">Bitte wählen …</option>
-          {statuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+          {statuses.map(s => <option key={s.ID} value={s.ID}>{s.ABBR}</option>)}
         </select>
       </div>
 
@@ -276,7 +276,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
 
       <BeauftragtModal
         open={showBeauftragt}
-        offerName={offerData?.data?.NAME_SHORT ?? offerData?.data?.NAME_LONG ?? ''}
+        offerName={offerData?.data?.ABBR ?? offerData?.data?.NAME_LONG ?? ''}
         structNodes={structData?.data ?? []}
         onConvert={body => convertMut.mutate(body)}
         onMarkOrdered={body => markOrderedMut.mutate(body)}

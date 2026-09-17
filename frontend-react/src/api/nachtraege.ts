@@ -12,7 +12,7 @@ export type ReviewRecommendation = 'ACCEPT' | 'REDUCE' | 'REJECT' | 'QUERY'
 export interface NachtragStatus {
   ID:             number
   CODE:           string
-  NAME_SHORT:     string
+  ABBR:     string
   SORT_ORDER:     number
   IS_TERMINAL:    boolean
   ALLOWS_RELEASE: boolean
@@ -20,7 +20,7 @@ export interface NachtragStatus {
 
 export interface NachtragListItem {
   ID:                  number
-  NAME_SHORT:          string | null
+  ABBR:          string | null
   NAME_LONG:           string
   NACHTRAG_TYPE:       NachtragType
   CATEGORY:            NachtragCategory | null
@@ -43,7 +43,7 @@ export interface Nachtrag {
   PROJECT_ID:          number
   CONTRACT_ID:         number | null
   OFFER_ID:            number | null
-  NAME_SHORT:          string | null
+  ABBR:          string | null
   NAME_LONG:           string
   NACHTRAG_TYPE:       NachtragType
   NACHTRAG_STATUS_ID:  number | null
@@ -74,7 +74,7 @@ export interface Nachtrag {
 
 export interface NachtragStructureNode {
   ID:                    number
-  NAME_SHORT:            string | null
+  ABBR:            string | null
   NAME_LONG:             string | null
   NACHTRAG_ID:           number
   FATHER_ID:             number | null
@@ -141,7 +141,7 @@ export interface ReviewPayload {
 }
 
 export interface AddNachtragStructureNodePayload {
-  name_short?:      string
+  abbr?:      string
   name_long?:       string
   billing_type_id:  string | number
   extras_percent?:  string | number

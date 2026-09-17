@@ -13,7 +13,7 @@ export interface Din276Group {
 
 export interface Din276Estimate {
   ID:                            number
-  NAME_SHORT:                    string | null
+  ABBR:                    string | null
   NAME_LONG:                     string | null
   STAGE:                         Din276Stage
   STATUS:                        string
@@ -48,11 +48,11 @@ export const fetchDin276Estimates = (params: { project_id?: number; offer_id?: n
 export const fetchDin276Estimate = (id: number) =>
   apiClient.get<{ data: Din276Estimate }>(`/stammdaten/din276/estimates/${id}`)
 
-export const createDin276Estimate = (body: { project_id?: number; offer_id?: number; name_short?: string; stage?: Din276Stage }) =>
+export const createDin276Estimate = (body: { project_id?: number; offer_id?: number; abbr?: string; stage?: Din276Stage }) =>
   apiClient.post<{ data: Din276Estimate }>('/stammdaten/din276/estimates', body)
 
 export const updateDin276Estimate = (id: number, body: Partial<{
-  name_short: string; name_long: string; stage: Din276Stage; status: string; mitverarbeitete_bausubstanz: number
+  abbr: string; name_long: string; stage: Din276Stage; status: string; mitverarbeitete_bausubstanz: number
 }>) =>
   apiClient.patch<{ data: Din276Estimate }>(`/stammdaten/din276/estimates/${id}`, body)
 

@@ -242,8 +242,8 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
   let projekt = "";
   if (doc.PROJECT_ID) {
     const { data: p } = await supabase
-      .from("PROJECT").select("NAME_SHORT, NAME_LONG").eq("ID", doc.PROJECT_ID).maybeSingle();
-    if (p) projekt = [p.NAME_SHORT, p.NAME_LONG].filter(Boolean).join(": ");
+      .from("PROJECT").select("ABBR, NAME_LONG").eq("ID", doc.PROJECT_ID).maybeSingle();
+    if (p) projekt = [p.ABBR, p.NAME_LONG].filter(Boolean).join(": ");
   }
 
   // Eigener Firmenname: bevorzugt die am Beleg haengende Firma, sonst die

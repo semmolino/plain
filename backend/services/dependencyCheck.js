@@ -63,16 +63,16 @@ async function checkAddress(supabase, { tenantId, id }) {
 
   const [contacts, projects, offers, invoices, partials] = await Promise.all([
     safeReferences(supabase, "CONTACTS",        "ID, FIRST_NAME, LAST_NAME", { ADDRESS_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PROJECT",         "ID, NAME_SHORT, NAME_LONG", { ADDRESS_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "OFFER",           "ID, NAME_SHORT",            { ADDRESS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "PROJECT",         "ID, ABBR, NAME_LONG", { ADDRESS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "OFFER",           "ID, ABBR",            { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ ADDRESS_ID: id, TENANT_ID: tenantId }),
   ]);
 
   const refs = [
     formatRefBlock("contacts", contacts, c => `${c.FIRST_NAME || ""} ${c.LAST_NAME || ""}`.trim() || `#${c.ID}`),
-    formatRefBlock("projects", projects, p => p.NAME_SHORT || `#${p.ID}`),
-    formatRefBlock("offers",   offers,   o => o.NAME_SHORT || `#${o.ID}`),
+    formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`),
+    formatRefBlock("offers",   offers,   o => o.ABBR || `#${o.ID}`),
     formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
     formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
   ].filter(Boolean);
@@ -111,15 +111,15 @@ async function checkContact(supabase, { tenantId, id }) {
   const entityLabel = `Kontakt „${name || "ohne Namen"}"`;
 
   const [projects, offers, invoices, partials] = await Promise.all([
-    safeReferences(supabase, "PROJECT",         "ID, NAME_SHORT",            { CONTACT_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "OFFER",           "ID, NAME_SHORT",            { CONTACT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "PROJECT",         "ID, ABBR",            { CONTACT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "OFFER",           "ID, ABBR",            { CONTACT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { CONTACT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ CONTACT_ID: id, TENANT_ID: tenantId }),
   ]);
 
   const refs = [
-    formatRefBlock("projects", projects, p => p.NAME_SHORT || `#${p.ID}`),
-    formatRefBlock("offers",   offers,   o => o.NAME_SHORT || `#${o.ID}`),
+    formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`),
+    formatRefBlock("offers",   offers,   o => o.ABBR || `#${o.ID}`),
     formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
     formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
   ].filter(Boolean);
@@ -168,14 +168,14 @@ async function checkEmployee(supabase, { tenantId, id }) {
     if (projIds.length > 0) {
       const { data: projs } = await supabase
         .from("PROJECT")
-        .select("ID, NAME_SHORT")
+        .select("ID, ABBR")
         .in("ID", projIds.slice(0, SAMPLE_LIMIT));
-      tecProjectSamples = (projs || []).map(p => p.NAME_SHORT || `#${p.ID}`);
+      tecProjectSamples = (projs || []).map(p => p.ABBR || `#${p.ID}`);
     }
   }
 
   const [managedProjects, e2pAssignments, monthCloses, cpRates, workModels] = await Promise.all([
-    safeReferences(supabase, "PROJECT",                "ID, NAME_SHORT",  { PROJECT_MANAGER_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "PROJECT",                "ID, ABBR",  { PROJECT_MANAGER_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE2PROJECT",       "ID, PROJECT_ID",  { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE_MONTH_CLOSE",   "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE_COST_RATE",       "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
@@ -191,7 +191,7 @@ async function checkEmployee(supabase, { tenantId, id }) {
       extraNote: tecProjectsCount > 0 ? ` aus ${tecProjectsCount} Projekt${tecProjectsCount === 1 ? "" : "en"}` : "",
     });
   }
-  const managedBlock = formatRefBlock("managed", managedProjects, p => p.NAME_SHORT || `#${p.ID}`);
+  const managedBlock = formatRefBlock("managed", managedProjects, p => p.ABBR || `#${p.ID}`);
   if (managedBlock) refs.push({ ...managedBlock, label: managedBlock.count === 1 ? "Projektleitung" : "Projektleitungen" });
   if (e2pAssignments.length > 0) {
     refs.push({ kind: "team_assignments", count: e2pAssignments.length, sample: [], label: e2pAssignments.length === 1 ? "Team-Zuordnung" : "Team-Zuordnungen" });
@@ -232,11 +232,11 @@ async function checkEmployee(supabase, { tenantId, id }) {
 async function checkProject(supabase, { tenantId, id }) {
   const { data: proj } = await supabase
     .from("PROJECT")
-    .select("NAME_SHORT, NAME_LONG")
+    .select("ABBR, NAME_LONG")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  const name = proj ? `${proj.NAME_SHORT || ""}${proj.NAME_SHORT && proj.NAME_LONG ? " — " : ""}${proj.NAME_LONG || ""}`.trim() : `#${id}`;
+  const name = proj ? `${proj.ABBR || ""}${proj.ABBR && proj.NAME_LONG ? " — " : ""}${proj.NAME_LONG || ""}`.trim() : `#${id}`;
   const entityLabel = `Projekt „${name}"`;
 
   const [tec, invoices, partials, structure, e2p] = await Promise.all([
@@ -276,11 +276,11 @@ async function checkProject(supabase, { tenantId, id }) {
 async function checkOffer(supabase, { tenantId, id }) {
   const { data: off } = await supabase
     .from("OFFER")
-    .select("NAME_SHORT, NAME_LONG, PROJECT_ID")
+    .select("ABBR, NAME_LONG, PROJECT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  const name = off ? `${off.NAME_SHORT || ""}${off.NAME_SHORT && off.NAME_LONG ? " — " : ""}${off.NAME_LONG || ""}`.trim() : `#${id}`;
+  const name = off ? `${off.ABBR || ""}${off.ABBR && off.NAME_LONG ? " — " : ""}${off.NAME_LONG || ""}`.trim() : `#${id}`;
   const entityLabel = `Angebot „${name}"`;
 
   const refs = [];
@@ -289,12 +289,12 @@ async function checkOffer(supabase, { tenantId, id }) {
   if (off?.PROJECT_ID) {
     const { data: linkedProj } = await supabase
       .from("PROJECT")
-      .select("NAME_SHORT")
+      .select("ABBR")
       .eq("ID", off.PROJECT_ID)
       .maybeSingle();
     refs.push({
       kind: "linked_project", count: 1,
-      sample: [linkedProj?.NAME_SHORT || `#${off.PROJECT_ID}`],
+      sample: [linkedProj?.ABBR || `#${off.PROJECT_ID}`],
       label: "konvertiertem Projekt",
     });
   }
@@ -356,18 +356,18 @@ async function checkMahnung(supabase, { tenantId, id }) {
 
 async function checkProjectStatus(supabase, { tenantId, id }) {
   // Status-Tabelle ist global (kein TENANT_ID), Name aufloesen
-  const { data: st } = await supabase.from("PROJECT_STATUS").select("NAME_SHORT").eq("ID", id).maybeSingle();
-  const entityLabel = `Status „${st?.NAME_SHORT || `#${id}`}"`;
+  const { data: st } = await supabase.from("PROJECT_STATUS").select("ABBR").eq("ID", id).maybeSingle();
+  const entityLabel = `Status „${st?.ABBR || `#${id}`}"`;
 
   const [projects, offers, invoices, partials] = await Promise.all([
-    safeReferences(supabase, "PROJECT",         "ID, NAME_SHORT",            { PROJECT_STATUS_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "OFFER",           "ID, NAME_SHORT",            { OFFER_STATUS_ID:   id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "PROJECT",         "ID, ABBR",            { PROJECT_STATUS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "OFFER",           "ID, ABBR",            { OFFER_STATUS_ID:   id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { STATUS_ID:         id, TENANT_ID: tenantId }),
     safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ STATUS_ID:         id, TENANT_ID: tenantId }),
   ]);
   const refs = [
-    formatRefBlock("projects", projects, p => p.NAME_SHORT || `#${p.ID}`),
-    formatRefBlock("offers",   offers,   o => o.NAME_SHORT || `#${o.ID}`),
+    formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`),
+    formatRefBlock("offers",   offers,   o => o.ABBR || `#${o.ID}`),
     formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
     formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
   ].filter(Boolean);
@@ -393,11 +393,11 @@ async function checkProjectStatus(supabase, { tenantId, id }) {
 // ── PROJECT_TYPE (Projekttyp) ─────────────────────────────────────────────
 
 async function checkProjectTyp(supabase, { tenantId, id }) {
-  const { data: t } = await supabase.from("PROJECT_TYPE").select("NAME_SHORT").eq("ID", id).maybeSingle();
-  const entityLabel = `Projekttyp „${t?.NAME_SHORT || `#${id}`}"`;
-  const projects = await safeReferences(supabase, "PROJECT", "ID, NAME_SHORT", { TYP_ID: id, TENANT_ID: tenantId });
+  const { data: t } = await supabase.from("PROJECT_TYPE").select("ABBR").eq("ID", id).maybeSingle();
+  const entityLabel = `Projekttyp „${t?.ABBR || `#${id}`}"`;
+  const projects = await safeReferences(supabase, "PROJECT", "ID, ABBR", { TYP_ID: id, TENANT_ID: tenantId });
   const refs = [];
-  const blk = formatRefBlock("projects", projects, p => p.NAME_SHORT || `#${p.ID}`);
+  const blk = formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`);
   if (blk) refs.push({ ...blk, label: blk.count === 1 ? "Projekt" : "Projekten" });
   const blocked = refs.length > 0;
   return {
@@ -409,8 +409,8 @@ async function checkProjectTyp(supabase, { tenantId, id }) {
 // ── ROLE (Projekt-Rolle, mit Stundensatz) ─────────────────────────────────
 
 async function checkRole(supabase, { tenantId, id }) {
-  const { data: r } = await supabase.from("ROLE").select("NAME_SHORT").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
-  const entityLabel = `Projekt-Rolle „${r?.NAME_SHORT || `#${id}`}"`;
+  const { data: r } = await supabase.from("ROLE").select("ABBR").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  const entityLabel = `Projekt-Rolle „${r?.ABBR || `#${id}`}"`;
   const [employees, e2p] = await Promise.all([
     safeReferences(supabase, "EMPLOYEE",         "ID, ABBR", { ROLE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE2PROJECT", "ID",             { ROLE_ID: id, TENANT_ID: tenantId }),
@@ -433,11 +433,11 @@ async function checkRole(supabase, { tenantId, id }) {
 // ── DEPARTMENT (Abteilung) ────────────────────────────────────────────────
 
 async function checkDepartment(supabase, { tenantId, id }) {
-  const { data: d } = await supabase.from("DEPARTMENT").select("NAME_SHORT").eq("ID", id).maybeSingle();
-  const entityLabel = `Abteilung „${d?.NAME_SHORT || `#${id}`}"`;
+  const { data: d } = await supabase.from("DEPARTMENT").select("ABBR").eq("ID", id).maybeSingle();
+  const entityLabel = `Abteilung „${d?.ABBR || `#${id}`}"`;
   const [employees, projects] = await Promise.all([
     safeReferences(supabase, "EMPLOYEE", "ID, ABBR, FIRST_NAME, LAST_NAME", { DEPARTMENT_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PROJECT",  "ID, NAME_SHORT",                        { DEPARTMENT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "PROJECT",  "ID, ABBR",                        { DEPARTMENT_ID: id, TENANT_ID: tenantId }),
   ]);
   const refs = [];
   if (employees.length > 0) {
@@ -445,7 +445,7 @@ async function checkDepartment(supabase, { tenantId, id }) {
     refs.push({ ...blk, label: blk.count === 1 ? "Mitarbeiter:in" : "Mitarbeiter:innen" });
   }
   if (projects.length > 0) {
-    const blk = formatRefBlock("projects", projects, p => p.NAME_SHORT || `#${p.ID}`);
+    const blk = formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`);
     refs.push({ ...blk, label: blk.count === 1 ? "Projekt" : "Projekten" });
   }
   const blocked = refs.length > 0;
@@ -458,8 +458,8 @@ async function checkDepartment(supabase, { tenantId, id }) {
 // ── USER_ROLE (RBAC-Rolle) ────────────────────────────────────────────────
 
 async function checkUserRole(supabase, { tenantId, id }) {
-  const { data: r } = await supabase.from("USER_ROLE").select("NAME_SHORT").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
-  const entityLabel = `Rolle „${r?.NAME_SHORT || `#${id}`}"`;
+  const { data: r } = await supabase.from("USER_ROLE").select("ABBR").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  const entityLabel = `Rolle „${r?.ABBR || `#${id}`}"`;
   // Mitarbeiter mit dieser Rolle (per EMPLOYEE_ROLE-Tabelle)
   const empRoles = await safeReferences(supabase, "EMPLOYEE_ROLE", "EMPLOYEE_ID", { ROLE_ID: id });
   const refs = [];
@@ -482,8 +482,8 @@ async function checkUserRole(supabase, { tenantId, id }) {
 // ── CONTRACT ──────────────────────────────────────────────────────────────
 
 async function checkContract(supabase, { tenantId, id }) {
-  const { data: c } = await supabase.from("CONTRACT").select("NAME_SHORT, NAME_LONG").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
-  const name = c ? `${c.NAME_SHORT || ""}${c.NAME_SHORT && c.NAME_LONG ? " — " : ""}${c.NAME_LONG || ""}`.trim() : `#${id}`;
+  const { data: c } = await supabase.from("CONTRACT").select("ABBR, NAME_LONG").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  const name = c ? `${c.ABBR || ""}${c.ABBR && c.NAME_LONG ? " — " : ""}${c.NAME_LONG || ""}`.trim() : `#${id}`;
   const entityLabel = `Vertrag „${name}"`;
   const [invoices, partials, structure] = await Promise.all([
     safeReferences(supabase, "INVOICE",           "ID, INVOICE_NUMBER",         { CONTRACT_ID: id, TENANT_ID: tenantId }),
@@ -566,15 +566,15 @@ async function checkTec(supabase, { tenantId, id }) {
 async function checkProjectStructure(supabase, { tenantId, id }) {
   const { data: s } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("NAME_SHORT, PROJECT_ID")
+    .select("ABBR, PROJECT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  const entityLabel = `Projektelement „${s?.NAME_SHORT || `#${id}`}"`;
+  const entityLabel = `Projektelement „${s?.ABBR || `#${id}`}"`;
 
   const [tec, children] = await Promise.all([
     safeReferences(supabase, "BOOKING",               "ID", { STRUCTURE_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PROJECT_STRUCTURE", "ID, NAME_SHORT", { FATHER_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "PROJECT_STRUCTURE", "ID, ABBR", { FATHER_ID: id, TENANT_ID: tenantId }),
   ]);
 
   const refs = [];
@@ -582,7 +582,7 @@ async function checkProjectStructure(supabase, { tenantId, id }) {
     refs.push({ kind: "bookings", count: tec.length, sample: [], label: tec.length === 1 ? "Buchung" : "Buchungen" });
   }
   if (children.length > 0) {
-    const blk = formatRefBlock("children", children, c => c.NAME_SHORT || `#${c.ID}`);
+    const blk = formatRefBlock("children", children, c => c.ABBR || `#${c.ID}`);
     refs.push({ ...blk, label: blk.count === 1 ? "Kind-Projektelement" : "Kind-Projektelementen" });
   }
   const blocked = refs.length > 0;
@@ -597,16 +597,16 @@ async function checkProjectStructure(supabase, { tenantId, id }) {
 async function checkOfferStructure(supabase, { tenantId, id }) {
   const { data: s } = await supabase
     .from("OFFER_STRUCTURE")
-    .select("NAME_SHORT, OFFER_ID")
+    .select("ABBR, OFFER_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  const entityLabel = `Angebotsstrukturelement „${s?.NAME_SHORT || `#${id}`}"`;
+  const entityLabel = `Angebotsstrukturelement „${s?.ABBR || `#${id}`}"`;
 
-  const children = await safeReferences(supabase, "OFFER_STRUCTURE", "ID, NAME_SHORT", { FATHER_ID: id, TENANT_ID: tenantId });
+  const children = await safeReferences(supabase, "OFFER_STRUCTURE", "ID, ABBR", { FATHER_ID: id, TENANT_ID: tenantId });
   const refs = [];
   if (children.length > 0) {
-    const blk = formatRefBlock("children", children, c => c.NAME_SHORT || `#${c.ID}`);
+    const blk = formatRefBlock("children", children, c => c.ABBR || `#${c.ID}`);
     refs.push({ ...blk, label: blk.count === 1 ? "Kind-Strukturelement" : "Kind-Strukturelementen" });
   }
   const blocked = refs.length > 0;

@@ -185,14 +185,14 @@ async function getPhases(supabase, { id, tenantId }) {
   if (inv.CONTRACT_ID) {
     const { data: byContract } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED, CLOSED_BY_INVOICE_ID, FATHER_ID")
+      .select("ID, ABBR, NAME_LONG, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED, CLOSED_BY_INVOICE_ID, FATHER_ID")
       .eq("CONTRACT_ID", inv.CONTRACT_ID);
     if (Array.isArray(byContract) && byContract.length > 0) psRows = byContract;
   }
   if (psRows.length === 0) {
     const { data: byProject, error: psErr } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED, CLOSED_BY_INVOICE_ID, FATHER_ID")
+      .select("ID, ABBR, NAME_LONG, BILLING_TYPE_ID, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED, CLOSED_BY_INVOICE_ID, FATHER_ID")
       .eq("PROJECT_ID", inv.PROJECT_ID);
     if (psErr) throw psErr;
     psRows = byProject || [];
@@ -264,7 +264,7 @@ async function getPhases(supabase, { id, tenantId }) {
     return {
       ID: ps.ID,
       FATHER_ID: ps.FATHER_ID ?? null,
-      NAME_SHORT: ps.NAME_SHORT ?? "",
+      ABBR: ps.ABBR ?? "",
       NAME_LONG: ps.NAME_LONG ?? "",
       BILLING_TYPE_ID: ps.BILLING_TYPE_ID,
       REVENUE_COMPLETION: revenue,

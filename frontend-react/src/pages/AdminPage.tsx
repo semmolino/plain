@@ -195,7 +195,7 @@ function StammdatenSection() {
 
   function startEditRolle(r: Rolle) {
     setEditingRolleId(r.ID)
-    setEditingRolleForm({ short: r.NAME_SHORT, long: r.NAME_LONG ?? '', spRate: r.HOURLY_RATE != null ? String(r.HOURLY_RATE) : '' })
+    setEditingRolleForm({ short: r.ABBR, long: r.NAME_LONG ?? '', spRate: r.HOURLY_RATE != null ? String(r.HOURLY_RATE) : '' })
   }
 
   const { data: deptData  } = useQuery({ queryKey: ['departments'],   queryFn: fetchDepartments })
@@ -264,7 +264,7 @@ function StammdatenSection() {
       <div className="admin-block">
         <h3 className="admin-block-title">Abteilungen</h3>
         <TagList
-          items={departments.map((d: StammdatenItem) => ({ ID: d.ID, label: d.NAME_SHORT }))}
+          items={departments.map((d: StammdatenItem) => ({ ID: d.ID, label: d.ABBR }))}
           onDelete={id => withMsg(() => delDeptMut.mutate(id))}
           onEdit={(id, name) => withMsg(() => updDeptMut.mutate({ id, name }))}
         />
@@ -274,7 +274,7 @@ function StammdatenSection() {
       <div className="admin-block">
         <h3 className="admin-block-title">Projekttypen</h3>
         <TagList
-          items={typen.map((t: StammdatenItem) => ({ ID: t.ID, label: t.NAME_SHORT }))}
+          items={typen.map((t: StammdatenItem) => ({ ID: t.ID, label: t.ABBR }))}
           onDelete={id => withMsg(() => delTypMut.mutate(id))}
           onEdit={(id, name) => withMsg(() => updTypMut.mutate({ id, name }))}
         />
@@ -308,7 +308,7 @@ function StammdatenSection() {
                         <input className="tbl-input num" type="number" step="0.01" min="0" style={{ width: 70 }} value={editingRolleForm.spRate} onChange={e => setEditingRolleForm(f => ({ ...f, spRate: e.target.value }))} placeholder="0.00" />
                       </td>
                       <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
-                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updRolleMut.isPending} onClick={() => updRolleMut.mutate({ id: r.ID, body: { name_short: editingRolleForm.short, name_long: editingRolleForm.long, hourly_rate: editingRolleForm.spRate } })}>
+                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updRolleMut.isPending} onClick={() => updRolleMut.mutate({ id: r.ID, body: { abbr: editingRolleForm.short, name_long: editingRolleForm.long, hourly_rate: editingRolleForm.spRate } })}>
                           {updRolleMut.isPending ? '…' : '✓'}
                         </button>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginLeft: 2 }} onClick={() => setEditingRolleId(null)}>✗</button>
@@ -316,7 +316,7 @@ function StammdatenSection() {
                     </>
                   ) : (
                     <>
-                      <td style={{ padding: '3px 6px 3px 0', fontWeight: 600 }}>{r.NAME_SHORT}</td>
+                      <td style={{ padding: '3px 6px 3px 0', fontWeight: 600 }}>{r.ABBR}</td>
                       <td style={{ padding: '3px 6px 3px 0', color: 'var(--text-2)' }}>{r.NAME_LONG ?? '—'}</td>
                       <td style={{ padding: '3px 0 3px 6px', textAlign: 'right', color: 'var(--text-2)' }}>
                         {r.HOURLY_RATE != null ? `${r.HOURLY_RATE} €/h` : '—'}
@@ -831,7 +831,7 @@ function UnternehmenSection() {
           <label htmlFor="uco">Land</label>
           <select id="uco" value={form.country_id} onChange={set('country_id')}>
             <option value="">Bitte wählen …</option>
-            {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_SHORT}: {c.NAME_LONG}</option>)}
+            {countries.map(c => <option key={c.ID} value={c.ID}>{c.ABBR}: {c.NAME_LONG}</option>)}
           </select>
         </div>
         <FormField label="Steuernummer"                    id="utn"   value={form.tax_number}      onChange={set('tax_number')} />
@@ -1196,7 +1196,7 @@ function VorbelegungenSection() {
               <label htmlFor="def-country">Land</label>
               <select id="def-country" value={countryId} onChange={e => setCountryId(e.target.value)}>
                 <option value="">— keine Vorbelegung —</option>
-                {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.NAME_SHORT}</option>)}
+                {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.ABBR}</option>)}
               </select>
             </div>
             <p className="admin-section-hint">Land, mit dem eine neue Adresse startet.</p>
@@ -1226,14 +1226,14 @@ function VorbelegungenSection() {
                 <label htmlFor="def-pstatus">Projektstatus</label>
                 <select id="def-pstatus" value={projStatusId} onChange={e => setProjStatusId(e.target.value)}>
                   <option value="">— keine Vorbelegung —</option>
-                  {projStatuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+                  {projStatuses.map(s => <option key={s.ID} value={s.ID}>{s.ABBR}</option>)}
                 </select>
               </div>
               <div className="form-group">
                 <label htmlFor="def-ostatus">Angebotsstatus</label>
                 <select id="def-ostatus" value={offerStatusId} onChange={e => setOfferStatusId(e.target.value)}>
                   <option value="">— keine Vorbelegung —</option>
-                  {offerStatuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+                  {offerStatuses.map(s => <option key={s.ID} value={s.ID}>{s.ABBR}</option>)}
                 </select>
               </div>
             </div>
@@ -1248,7 +1248,7 @@ function VorbelegungenSection() {
               <label>Währung</label>
               <select value={currencyId} onChange={e => setCurrencyId(e.target.value)}>
                 <option value="">— keine Vorbelegung —</option>
-                {currencies.map(c => <option key={c.ID} value={c.ID}>{c.NAME_SHORT}</option>)}
+                {currencies.map(c => <option key={c.ID} value={c.ID}>{c.ABBR}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -1663,7 +1663,7 @@ function MonatsabschlussSection() {
                 onChange={() => toggleStatus(s.ID)}
                 style={{ cursor: 'pointer' }}
               />
-              {s.NAME_SHORT}
+              {s.ABBR}
             </label>
           ))}
         </div>
@@ -3562,7 +3562,7 @@ function LeistungsstandReminderBlock() {
                 style={{ minHeight: 90, width: '100%' }}
               >
                 {statuses.map(s => (
-                  <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>
+                  <option key={s.ID} value={s.ID}>{s.ABBR}</option>
                 ))}
               </select>
               <p className="admin-section-hint">
@@ -3656,7 +3656,7 @@ function LeistungsstandReminderBlock() {
                   style={{ minHeight: 90 }}
                 >
                   {departments.map(d => (
-                    <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>
+                    <option key={d.ID} value={d.ID}>{d.ABBR}</option>
                   ))}
                 </select>
               </div>
@@ -4024,7 +4024,7 @@ function BenachrichtigungEditModal({ open, config, onClose }: {
                     style={{ minHeight: 90 }}
                   >
                     {departments.map(d => (
-                      <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>
+                      <option key={d.ID} value={d.ID}>{d.ABBR}</option>
                     ))}
                   </select>
                 </div>

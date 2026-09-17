@@ -99,7 +99,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
     setEditForm(f => ({
       ...f,
       role_id:         roleId,
-      role_abbr: role?.NAME_SHORT ?? f.role_abbr,
+      role_abbr: role?.ABBR ?? f.role_abbr,
       role_name:  role?.NAME_LONG  ?? f.role_name,
       hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
     }))
@@ -110,7 +110,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
     setAddForm(f => ({
       ...f,
       role_id:         roleId,
-      role_abbr: role?.NAME_SHORT ?? f.role_abbr,
+      role_abbr: role?.ABBR ?? f.role_abbr,
       role_name:  role?.NAME_LONG  ?? f.role_name,
       hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
     }))
@@ -188,8 +188,8 @@ export function Mitarbeiter({ initialProjectId }: Props) {
       {/* Jump bar */}
       {pid && (
         <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject?.NAME_SHORT ?? ''}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME_LONG ?? currentProject?.NAME_SHORT, backProject: { id: pid, name: currentProject?.NAME_SHORT } } })}>
+          <span className="proj-jump-label">{currentProject?.ABBR ?? ''}</span>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME_LONG ?? currentProject?.ABBR, backProject: { id: pid, name: currentProject?.ABBR } } })}>
             Rechnungen →
           </button>
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
@@ -231,7 +231,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                         <td>
                           <select className="tbl-select" value={editForm.role_id} onChange={e => applyRoleToEdit(e.target.value)}>
                             <option value="">—</option>
-                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.NAME_SHORT}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
+                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
                           </select>
                         </td>
                         <td><input className="tbl-input" style={{ width: 90 }} value={editForm.role_abbr} onChange={e => setEF('role_abbr')(e.target.value)} /></td>
@@ -247,7 +247,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                     ) : (
                       <>
                         <td style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                          {row.ROLE_ID ? roles.find(r => r.ID === row.ROLE_ID)?.NAME_SHORT ?? '—' : '—'}
+                          {row.ROLE_ID ? roles.find(r => r.ID === row.ROLE_ID)?.ABBR ?? '—' : '—'}
                         </td>
                         <td>{row.ROLE_ABBR || '—'}</td>
                         <td>{row.ROLE_NAME  || '—'}</td>
@@ -282,7 +282,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                 <td>
                   <select className="tbl-select" value={addForm.role_id} onChange={e => applyRoleToAdd(e.target.value)}>
                     <option value="">—</option>
-                    {roles.map(r => <option key={r.ID} value={r.ID}>{r.NAME_SHORT}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
+                    {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
                   </select>
                 </td>
                 <td><input className="tbl-input" style={{ width: 90 }} value={addForm.role_abbr} onChange={e => setAF('role_abbr')(e.target.value)} placeholder="Kürzel" /></td>
@@ -434,7 +434,7 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
                 return (
                   <tr key={r.BOOKING_TYPE_ID}>
                     <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{BOOKING_KIND_LABEL[r.KIND]}{r.SCOPE === 'project' ? ' · Projekt' : ''}</td>
-                    <td>{r.NAME_SHORT}{r.NAME_LONG ? <span style={{ color: 'var(--text-3)' }}> – {r.NAME_LONG}</span> : null}</td>
+                    <td>{r.ABBR}{r.NAME_LONG ? <span style={{ color: 'var(--text-3)' }}> – {r.NAME_LONG}</span> : null}</td>
                     <td>{r.KIND === 'UNIT' ? (r.UNIT_LABEL || '—') : '—'}</td>
                     <td className="num">{fmtRateOpt(r.DEFAULT_SP_RATE)}</td>
                     <td className="num">{fmtRateOpt(r.DEFAULT_CP_RATE)}</td>
@@ -460,7 +460,7 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
                             </button>
                             {r.SCOPE === 'project' && (
                               <button className="row-action-btn row-action-btn--danger"
-                                onClick={() => setDelConfirm({ id: r.BOOKING_TYPE_ID, label: r.NAME_SHORT })} title="Projektbezogene Buchungsart löschen">
+                                onClick={() => setDelConfirm({ id: r.BOOKING_TYPE_ID, label: r.ABBR })} title="Projektbezogene Buchungsart löschen">
                                 <Trash2 size={14} strokeWidth={2} />
                               </button>
                             )}
@@ -514,7 +514,7 @@ function ProjectBookingTypeModal({ projectId, onClose, onSaved }: { projectId: n
       const payload: BookingTypePayload & { project_id: number } = {
         project_id:      projectId,
         kind,
-        name_short:      nameShort.trim(),
+        abbr:      nameShort.trim(),
         name_long:       nameLong.trim() || null,
         unit_label:      isUnit ? (unitLabel.trim() || null) : null,
         // Bei Pauschalen ist der Betrag der Standardwert: Kosten→CP, Erlös→SP.

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchRecents } from '@/api/recents'
 
-export interface ProjectOption { ID: number; NAME_SHORT: string; NAME_LONG: string }
+export interface ProjectOption { ID: number; ABBR: string; NAME_LONG: string }
 
 interface Props {
   projects:    ProjectOption[]
@@ -13,7 +13,7 @@ interface Props {
   placeholder?: string
 }
 
-const displayName = (p: ProjectOption) => p.NAME_SHORT + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : '')
+const displayName = (p: ProjectOption) => p.ABBR + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : '')
 
 /**
  * Einheitliche Projekt-Suchbox (Autocomplete) für alle Projekt-Tabs.
@@ -47,7 +47,7 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
   const filtered = useMemo(() => {
     if (!isFiltering) return projects
     return projects.filter(p =>
-      p.NAME_SHORT.toLowerCase().includes(query) || (p.NAME_LONG?.toLowerCase().includes(query) ?? false),
+      p.ABBR.toLowerCase().includes(query) || (p.NAME_LONG?.toLowerCase().includes(query) ?? false),
     )
   }, [projects, query, isFiltering])
 
@@ -105,7 +105,7 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
                 <button key={`r${p.ID}`} type="button"
                   className={`project-ac-option${p.ID === selectedId ? ' active' : ''}`}
                   onMouseDown={ev => { ev.preventDefault(); pick(p.ID) }}>
-                  <span className="project-ac-short">{p.NAME_SHORT}</span>
+                  <span className="project-ac-short">{p.ABBR}</span>
                   {p.NAME_LONG && <span className="project-ac-long">{p.NAME_LONG}</span>}
                 </button>
               ))}
@@ -117,7 +117,7 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
             <button key={p.ID} type="button"
               className={`project-ac-option${p.ID === selectedId ? ' active' : ''}`}
               onMouseDown={ev => { ev.preventDefault(); pick(p.ID) }}>
-              <span className="project-ac-short">{p.NAME_SHORT}</span>
+              <span className="project-ac-short">{p.ABBR}</span>
               {p.NAME_LONG && <span className="project-ac-long">{p.NAME_LONG}</span>}
             </button>
           ))}

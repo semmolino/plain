@@ -136,10 +136,10 @@ async function listRoles(req, res, supabase) {
   try {
     const { data: roles, error } = await supabase
       .from("USER_ROLE")
-      .select("ID, NAME_SHORT, NAME_LONG, COLOR, IS_SYSTEM, IS_DEFAULT, CREATED_AT, UPDATED_AT")
+      .select("ID, ABBR, NAME_LONG, COLOR, IS_SYSTEM, IS_DEFAULT, CREATED_AT, UPDATED_AT")
       .eq("TENANT_ID", req.tenantId)
       .order("IS_SYSTEM", { ascending: false })
-      .order("NAME_SHORT", { ascending: true });
+      .order("ABBR", { ascending: true });
     if (error) {
       if (/does not exist/i.test(error.message)) return res.json({ data: [] });
       return res.status(500).json({ error: error.message });
@@ -175,7 +175,7 @@ async function getRole(req, res, supabase) {
 
     const { data: role, error } = await supabase
       .from("USER_ROLE")
-      .select("ID, NAME_SHORT, NAME_LONG, COLOR, IS_SYSTEM, IS_DEFAULT")
+      .select("ID, ABBR, NAME_LONG, COLOR, IS_SYSTEM, IS_DEFAULT")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
@@ -199,12 +199,12 @@ async function getRole(req, res, supabase) {
 async function createRole(req, res, supabase) {
   try {
     const b = req.body || {};
-    const name_short = String(b.name_short || "").trim();
-    if (!name_short) return res.status(400).json({ error: "name_short erforderlich" });
+    const abbr = String(b.abbr || "").trim();
+    if (!abbr) return res.status(400).json({ error: "abbr erforderlich" });
 
     const insertRow = {
       TENANT_ID:  req.tenantId,
-      NAME_SHORT: name_short,
+      ABBR: abbr,
       NAME_LONG:  b.name_long || null,
       COLOR:      b.color     || null,
       IS_SYSTEM:  false,
@@ -249,7 +249,7 @@ async function patchRole(req, res, supabase) {
     const update = { UPDATED_AT: new Date().toISOString() };
 
     // System-Rollen: Name/IS_SYSTEM/IS_DEFAULT bleiben unveraendert, aber Permissions + Color + Long-Name editierbar
-    if (b.name_short != null && !existing.IS_SYSTEM) update.NAME_SHORT = String(b.name_short).trim();
+    if (b.abbr != null && !existing.IS_SYSTEM) update.ABBR = String(b.abbr).trim();
     if (b.name_long  !== undefined) update.NAME_LONG  = b.name_long || null;
     if (b.color      !== undefined) update.COLOR      = b.color     || null;
     if (b.is_default !== undefined && !existing.IS_SYSTEM) update.IS_DEFAULT = !!b.is_default;
@@ -310,14 +310,14 @@ async function duplicateRole(req, res, supabase) {
 
     const { data: src } = await supabase
       .from("USER_ROLE")
-      .select("NAME_SHORT, NAME_LONG, COLOR")
+      .select("ABBR, NAME_LONG, COLOR")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
     if (!src) return res.status(404).json({ error: "Rolle nicht gefunden" });
 
     // Eindeutigen Namen finden: "X (Kopie)", "X (Kopie 2)", ...
-    const baseName = `${src.NAME_SHORT} (Kopie)`;
+    const baseName = `${src.ABBR} (Kopie)`;
     let candidate = baseName;
     let suffix = 2;
     while (true) {
@@ -325,7 +325,7 @@ async function duplicateRole(req, res, supabase) {
         .from("USER_ROLE")
         .select("ID")
         .eq("TENANT_ID", req.tenantId)
-        .eq("NAME_SHORT", candidate)
+        .eq("ABBR", candidate)
         .maybeSingle();
       if (!dup) break;
       candidate = `${baseName} ${suffix++}`;
@@ -336,7 +336,7 @@ async function duplicateRole(req, res, supabase) {
       .from("USER_ROLE")
       .insert([{
         TENANT_ID:  req.tenantId,
-        NAME_SHORT: candidate,
+        ABBR: candidate,
         NAME_LONG:  src.NAME_LONG,
         COLOR:      src.COLOR,
         IS_SYSTEM:  false,

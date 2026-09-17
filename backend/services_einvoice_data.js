@@ -72,8 +72,8 @@ async function one(supabase, table, id, tenantId) {
 
 async function lookupCountryCode(supabase, countryId) {
   if (!countryId) return 'DE';
-  const { data } = await supabase.from('COUNTRY').select('NAME_SHORT').eq('ID', countryId).maybeSingle();
-  return isCountryCode(data?.NAME_SHORT) ? data.NAME_SHORT : 'DE';
+  const { data } = await supabase.from('COUNTRY').select('ABBR').eq('ID', countryId).maybeSingle();
+  return isCountryCode(data?.ABBR) ? data.ABBR : 'DE';
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -189,7 +189,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   let currency = 'EUR';
   if (doc.CURRENCY_ID) {
     const cur = await one(supabase, 'CURRENCY', doc.CURRENCY_ID, null);
-    if (cur?.NAME_SHORT) currency = cur.NAME_SHORT;
+    if (cur?.ABBR) currency = cur.ABBR;
   }
 
   // ── 6. VAT ────────────────────────────────────────────────────────────────
@@ -294,7 +294,7 @@ ${basis}`;
       const structIds = invStructures.map(r => r.STRUCTURE_ID);
       const { data: projStructures } = await supabase
         .from('PROJECT_STRUCTURE')
-        .select('ID, NAME_SHORT, NAME_LONG, BILLING_TYPE_ID')
+        .select('ID, ABBR, NAME_LONG, BILLING_TYPE_ID')
         .in('ID', structIds);
 
       const nameMap = Object.fromEntries((projStructures ?? []).map(r => [r.ID, r]));
@@ -331,7 +331,7 @@ ${basis}`;
         const amountNet    = fmt2(row.AMOUNT_NET ?? 0);
         const amountExtras = fmt2(row.AMOUNT_EXTRAS_NET ?? 0);
         const lineTotal    = fmt2(amountNet + amountExtras);
-        const desc = [ps.NAME_SHORT, ps.NAME_LONG].filter(Boolean).join(' – ') || `Position ${idx + 1}`;
+        const desc = [ps.ABBR, ps.NAME_LONG].filter(Boolean).join(' – ') || `Position ${idx + 1}`;
 
         // Default Pauschal-Line
         let unitCode  = 'LS';
@@ -587,7 +587,7 @@ ${basis}`;
   let contractNumber = '';
   if (doc.PROJECT_ID) {
     const proj = await one(supabase, 'PROJECT', doc.PROJECT_ID, tenantId);
-    projectNumber = String(proj?.PROJECT_NUMBER ?? proj?.NAME_SHORT ?? '').trim();
+    projectNumber = String(proj?.PROJECT_NUMBER ?? proj?.ABBR ?? '').trim();
   }
   if (doc.CONTRACT_ID) {
     const contract = await one(supabase, 'CONTRACT', doc.CONTRACT_ID, tenantId);

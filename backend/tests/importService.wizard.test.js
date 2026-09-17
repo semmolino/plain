@@ -11,7 +11,7 @@ const TENANT = 7;
 const EMPLOYEE = 99;
 
 const seed = (extra = {}) => makeFakeSupabase({
-  COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", NAME_SHORT: "DE" }],
+  COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", ABBR: "DE" }],
   ADDRESS: [
     { ID: 900, TENANT_ID: TENANT, ADDRESS_NAME_1: "Bestand GmbH", POST_CODE: "10115", CITY: "Berlin", EMAIL: null, PHONE: "030 111", STREET: "Altstr. 1" },
   ],

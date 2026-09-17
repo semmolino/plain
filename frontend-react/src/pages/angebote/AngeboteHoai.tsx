@@ -69,7 +69,7 @@ export function AngeboteHoai({ initialOfferId }: Props) {
             <tbody>
               {feeCalcs.map(c => (
                 <tr key={c.ID} className="ls-row">
-                  <td className="ls-td">{c.NAME_SHORT || '—'}</td>
+                  <td className="ls-td">{c.ABBR || '—'}</td>
                   <td className="ls-td">{c.NAME_LONG  || '—'}</td>
                   <td className="ls-td ls-right">
                     {c.grundhonorar != null ? fmtEur(c.grundhonorar) : '—'}
@@ -87,7 +87,7 @@ export function AngeboteHoai({ initialOfferId }: Props) {
                     <button className="row-action-btn row-action-btn--danger" disabled={deleteMut.isPending} title="Löschen"
                       onClick={() => setConfirmState({
                         title: 'Kalkulation löschen',
-                        message: `Kalkulation „${c.NAME_SHORT || c.NAME_LONG || 'Kalkulation'}" löschen?`,
+                        message: `Kalkulation „${c.ABBR || c.NAME_LONG || 'Kalkulation'}" löschen?`,
                         onConfirm: () => deleteMut.mutate(c.ID),
                       })}>
                       <Trash2 size={14} strokeWidth={2} />

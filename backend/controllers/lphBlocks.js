@@ -28,14 +28,14 @@ async function getBlocks(req, res, supabase) {
   try {
     const [{ data: blocks, error: bErr }, { data: phases, error: pErr }] = await Promise.all([
       supabase.from("LPH_BLOCK")
-        .select("ID, NAME_SHORT, SORT_ORDER")
+        .select("ID, ABBR, SORT_ORDER")
         .eq("TENANT_ID", tenantId)
         .eq("FEE_MASTER_ID", feeMasterId)
         .order("SORT_ORDER", { ascending: true })
         .order("ID", { ascending: true }),
       // FEE_PHASE ist global (keine TENANT_ID) — nur die Katalog-Felder lesen.
       supabase.from("FEE_PHASE")
-        .select("ID, NAME_SHORT, NAME_LONG")
+        .select("ID, ABBR, NAME_LONG")
         .eq("FEE_MASTER_ID", feeMasterId),
     ]);
     if (bErr) throw bErr;
@@ -56,8 +56,8 @@ async function getBlocks(req, res, supabase) {
     const sortedPhases = (phases || [])
       .map((p) => ({ ...p, BLOCK_ID: assignMap.get(p.ID) ?? null }))
       .sort((a, b) => {
-        const ka = lphNumber(a.NAME_SHORT) ?? Number.MAX_SAFE_INTEGER;
-        const kb = lphNumber(b.NAME_SHORT) ?? Number.MAX_SAFE_INTEGER;
+        const ka = lphNumber(a.ABBR) ?? Number.MAX_SAFE_INTEGER;
+        const kb = lphNumber(b.ABBR) ?? Number.MAX_SAFE_INTEGER;
         return ka - kb || (Number(a.ID) - Number(b.ID));
       });
 
@@ -73,7 +73,7 @@ async function getBlocks(req, res, supabase) {
 // POST /stammdaten/lph-blocks/save
 // Body: {
 //   fee_master_id,
-//   blocks:  [{ key: string, id?: number|null, name_short: string, sort_order: number }],
+//   blocks:  [{ key: string, id?: number|null, abbr: string, sort_order: number }],
 //   assignments: { [feePhaseId]: blockKey | null }
 // }
 // Blöcke die nicht mehr in `blocks` vorkommen werden gelöscht
@@ -103,20 +103,20 @@ async function saveBlocks(req, res, supabase) {
     const keptIds = new Set();
     for (let i = 0; i < incoming.length; i++) {
       const b = incoming[i] || {};
-      const name = String(b.name_short || "").trim();
+      const name = String(b.abbr || "").trim();
       if (!name) continue;
       const sort = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : i;
       const id   = Number.isFinite(Number(b.id)) ? Number(b.id) : null;
       if (id && existingIds.has(id)) {
         const { error } = await supabase.from("LPH_BLOCK")
-          .update({ NAME_SHORT: name, SORT_ORDER: sort })
+          .update({ ABBR: name, SORT_ORDER: sort })
           .eq("ID", id).eq("TENANT_ID", tenantId);
         if (error) throw error;
         keyToId.set(String(b.key ?? id), id);
         keptIds.add(id);
       } else {
         const { data: ins, error } = await supabase.from("LPH_BLOCK")
-          .insert({ TENANT_ID: tenantId, FEE_MASTER_ID: feeMasterId, NAME_SHORT: name, SORT_ORDER: sort })
+          .insert({ TENANT_ID: tenantId, FEE_MASTER_ID: feeMasterId, ABBR: name, SORT_ORDER: sort })
           .select("ID").single();
         if (error) throw error;
         keyToId.set(String(b.key ?? ins.ID), ins.ID);
@@ -190,18 +190,18 @@ async function seedDefault(req, res, supabase) {
   ];
   try {
     const { data: phases, error: phErr } = await supabase
-      .from("FEE_PHASE").select("ID, NAME_SHORT, BLOCK_ID").eq("FEE_MASTER_ID", feeMasterId);
+      .from("FEE_PHASE").select("ID, ABBR, BLOCK_ID").eq("FEE_MASTER_ID", feeMasterId);
     if (phErr) throw phErr;
     if (!phases || phases.length === 0) {
       return res.status(400).json({ error: "Dieses Leistungsbild hat keine Phasen." });
     }
 
     const blocks = DEFAULTS.map((d, i) => ({
-      key: `def${i}`, id: null, name_short: d.name, sort_order: d.sort,
+      key: `def${i}`, id: null, abbr: d.name, sort_order: d.sort,
     }));
     const assignments = {};
     for (const p of phases) {
-      const n = lphNumber(p.NAME_SHORT);
+      const n = lphNumber(p.ABBR);
       const di = DEFAULTS.findIndex((d) => n != null && n >= d.min && n <= d.max);
       assignments[p.ID] = di >= 0 ? `def${di}` : null;
     }

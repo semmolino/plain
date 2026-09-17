@@ -104,7 +104,7 @@ describe("calculateRevenueFields", () => {
   });
 
   it("computes interpolated revenues for zone II with known table rows", async () => {
-    const zone = { ID: 2, NAME_SHORT: "II" };
+    const zone = { ID: 2, ABBR: "II" };
     const feeTables = [
       { BASE: 100000, ZONE_2: 10000, ZONE_3: 12000 },
       { BASE: 200000, ZONE_2: 18000, ZONE_3: 22000 },
@@ -231,24 +231,24 @@ describe("calculateRevenueFields", () => {
 // ── feePhaseSortKey ───────────────────────────────────────────────────────────
 
 describe("feePhaseSortKey", () => {
-  it("parst die führende Zahl aus NAME_SHORT, wenn kein SORT_ORDER gesetzt ist", () => {
-    expect(feePhaseSortKey({ NAME_SHORT: "LPH 1" })).toBe(1);
-    expect(feePhaseSortKey({ NAME_SHORT: "LPH 9" })).toBe(9);
+  it("parst die führende Zahl aus ABBR, wenn kein SORT_ORDER gesetzt ist", () => {
+    expect(feePhaseSortKey({ ABBR: "LPH 1" })).toBe(1);
+    expect(feePhaseSortKey({ ABBR: "LPH 9" })).toBe(9);
   });
   it("bevorzugt SORT_ORDER vor dem Namens-Parsing", () => {
-    expect(feePhaseSortKey({ NAME_SHORT: "LPH 9", SORT_ORDER: 1 })).toBe(1);
+    expect(feePhaseSortKey({ ABBR: "LPH 9", SORT_ORDER: 1 })).toBe(1);
   });
   it("liefert MAX_SAFE_INTEGER für Namen ohne Ziffer und ohne SORT_ORDER (z. B. Geotechnik vor 0117)", () => {
-    expect(feePhaseSortKey({ NAME_SHORT: "TL a" })).toBe(Number.MAX_SAFE_INTEGER);
+    expect(feePhaseSortKey({ ABBR: "TL a" })).toBe(Number.MAX_SAFE_INTEGER);
   });
   it("sortiert Teilleistungen a/b/c korrekt, wenn SORT_ORDER gesetzt ist", () => {
     const phases = [
-      { NAME_SHORT: "TL c", SORT_ORDER: 3 },
-      { NAME_SHORT: "TL a", SORT_ORDER: 1 },
-      { NAME_SHORT: "TL b", SORT_ORDER: 2 },
+      { ABBR: "TL c", SORT_ORDER: 3 },
+      { ABBR: "TL a", SORT_ORDER: 1 },
+      { ABBR: "TL b", SORT_ORDER: 2 },
     ];
     const sorted = [...phases].sort((a, b) => feePhaseSortKey(a) - feePhaseSortKey(b));
-    expect(sorted.map((p) => p.NAME_SHORT)).toEqual(["TL a", "TL b", "TL c"]);
+    expect(sorted.map((p) => p.ABBR)).toEqual(["TL a", "TL b", "TL c"]);
   });
   it("behandelt fehlende Phase (undefined) wie MAX_SAFE_INTEGER", () => {
     expect(feePhaseSortKey(undefined)).toBe(Number.MAX_SAFE_INTEGER);

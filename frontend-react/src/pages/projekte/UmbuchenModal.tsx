@@ -127,7 +127,7 @@ export function UmbuchenModal({ bookings, sourceProjectId, onClose, onDone }: Pr
               <option value="">Bitte wählen …</option>
               {projects.map(p => (
                 <option key={p.ID} value={p.ID}>
-                  {p.NAME_SHORT}{p.NAME_LONG ? `: ${p.NAME_LONG}` : ''}
+                  {p.ABBR}{p.NAME_LONG ? `: ${p.NAME_LONG}` : ''}
                 </option>
               ))}
             </select>
@@ -143,7 +143,7 @@ export function UmbuchenModal({ bookings, sourceProjectId, onClose, onDone }: Pr
               <option value="">{structLoading ? 'Lädt …' : 'Bitte wählen …'}</option>
               {leaves.map(n => (
                 <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
-                  {paths.get(n.STRUCTURE_ID) ?? n.NAME_SHORT}
+                  {paths.get(n.STRUCTURE_ID) ?? n.ABBR}
                 </option>
               ))}
             </select>

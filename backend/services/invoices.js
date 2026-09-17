@@ -53,11 +53,11 @@ async function getCountryNameShort(supabase, countryId) {
   if (!countryId) return null;
   const { data, error } = await supabase
     .from("COUNTRY")
-    .select("NAME_SHORT")
+    .select("ABBR")
     .eq("ID", countryId)
     .maybeSingle();
   if (error) return null;
-  return data?.NAME_SHORT ?? null;
+  return data?.ABBR ?? null;
 }
 
 async function getSalutationText(supabase, salutationId) {
@@ -475,23 +475,23 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
 
   const projectMap = {};
   if (projectIds.length > 0) {
-    const { data: projects } = await supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG").in("ID", projectIds);
+    const { data: projects } = await supabase.from("PROJECT").select("ID, ABBR, NAME_LONG").in("ID", projectIds);
     (projects || []).forEach(p => {
-      projectMap[p.ID] = `${p.NAME_SHORT ?? ""}: ${p.NAME_LONG ?? ""}`.trim();
+      projectMap[p.ID] = `${p.ABBR ?? ""}: ${p.NAME_LONG ?? ""}`.trim();
     });
   }
 
   const contractMap = {};
   if (contractIds.length > 0) {
     let contracts = null;
-    const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, NAME_SHORT, NAME_LONG").in("ID", contractIds);
+    const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, ABBR, NAME_LONG").in("ID", contractIds);
     if (!c1Err) contracts = c1;
     if (!Array.isArray(contracts) || contracts.length === 0) {
-      const { data: c2 } = await supabase.from("CONTRACTS").select("ID, NAME_SHORT, NAME_LONG").in("ID", contractIds);
+      const { data: c2 } = await supabase.from("CONTRACTS").select("ID, ABBR, NAME_LONG").in("ID", contractIds);
       contracts = c2;
     }
     (contracts || []).forEach(c => {
-      contractMap[c.ID] = `${c.NAME_SHORT ?? ""}: ${c.NAME_LONG ?? ""}`.trim();
+      contractMap[c.ID] = `${c.ABBR ?? ""}: ${c.NAME_LONG ?? ""}`.trim();
     });
   }
 
@@ -550,7 +550,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   }
   const { data: project, error: projectErr } = await supabase
     .from("PROJECT")
-    .select("ID, NAME_SHORT, NAME_LONG, TENANT_ID, COMPANY_ID")
+    .select("ID, ABBR, NAME_LONG, TENANT_ID, COMPANY_ID")
     .eq("ID", projectId)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -605,7 +605,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   {
     const { data: c1, error: c1Err } = await supabase
       .from("CONTRACT")
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT")
+      .select("ID, ABBR, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT")
       .eq("ID", contractId)
       .eq("TENANT_ID", tenantId)
       .maybeSingle();
@@ -614,7 +614,7 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   if (!contractRow) {
     const { data: c2, error: c2Err } = await supabase
       .from("CONTRACTS")
-      .select("ID, NAME_SHORT, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT")
+      .select("ID, ABBR, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT")
       .eq("ID", contractId)
       .maybeSingle();
     if (c2Err || !c2) throw { status: 500, message: "Vertrag konnte nicht geladen werden" };
@@ -839,13 +839,13 @@ async function getInvoice(supabase, { id, tenantId }) {
   const { data: inv, error } = await supabase.from("INVOICE").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (error || !inv) throw { status: 500, message: "INVOICE konnte nicht geladen werden" };
 
-  const { data: project } = await supabase.from("PROJECT").select("NAME_SHORT, NAME_LONG").eq("ID", inv.PROJECT_ID).maybeSingle();
+  const { data: project } = await supabase.from("PROJECT").select("ABBR, NAME_LONG").eq("ID", inv.PROJECT_ID).maybeSingle();
 
   let contract = null;
-  const { data: c1 } = await supabase.from("CONTRACT").select("NAME_SHORT, NAME_LONG").eq("ID", inv.CONTRACT_ID).maybeSingle();
+  const { data: c1 } = await supabase.from("CONTRACT").select("ABBR, NAME_LONG").eq("ID", inv.CONTRACT_ID).maybeSingle();
   contract = c1;
   if (!contract) {
-    const { data: c2 } = await supabase.from("CONTRACTS").select("NAME_SHORT, NAME_LONG").eq("ID", inv.CONTRACT_ID).maybeSingle();
+    const { data: c2 } = await supabase.from("CONTRACTS").select("ABBR, NAME_LONG").eq("ID", inv.CONTRACT_ID).maybeSingle();
     contract = c2;
   }
 

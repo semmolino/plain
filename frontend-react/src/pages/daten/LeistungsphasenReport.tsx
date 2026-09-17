@@ -156,7 +156,7 @@ function PhaseCells({ p, indent }: { p: PhaseReportRow; indent?: boolean }) {
   return (
     <>
       <td style={indent ? { paddingLeft: 28 } : undefined}>
-        {p.NAME_SHORT}
+        {p.ABBR}
         {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
       </td>
       <td className="num">{money(p.HONORAR_NET)}</td>
@@ -202,7 +202,7 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
   // Diagramm: bei Blöcken je Block, sonst je Phase.
   const chart = hasBlocks
     ? { labels: blocks.map(b => b.name), honorar: blocks.map(b => b.HONORAR_NET), leistung: blocks.map(b => b.EARNED_VALUE_NET), kosten: blocks.map(b => b.COST_TOTAL), title: 'Honorar · Leistung · Kosten je Block' }
-    : { labels: phases.map(p => p.NAME_SHORT), honorar: phases.map(p => p.HONORAR_NET), leistung: phases.map(p => p.EARNED_VALUE_NET), kosten: phases.map(p => p.COST_TOTAL), title: 'Honorar · Leistung · Kosten je Leistungsphase' }
+    : { labels: phases.map(p => p.ABBR), honorar: phases.map(p => p.HONORAR_NET), leistung: phases.map(p => p.EARNED_VALUE_NET), kosten: phases.map(p => p.COST_TOTAL), title: 'Honorar · Leistung · Kosten je Leistungsphase' }
 
   return (
     <div style={{ marginTop: 20 }}>
@@ -260,7 +260,7 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
                         <td style={{ textAlign: 'center' }}>{!b.isCatchAll && <AmpelDot ampel={b.ampel} />}</td>
                       </tr>
                       {!isCollapsed && b.phases.map(p => (
-                        <tr key={p.PHASE_STRUCTURE_ID ?? `none-${p.NAME_SHORT}`}>
+                        <tr key={p.PHASE_STRUCTURE_ID ?? `none-${p.ABBR}`}>
                           <PhaseCells p={p} indent />
                         </tr>
                       ))}

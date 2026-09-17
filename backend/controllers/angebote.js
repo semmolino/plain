@@ -159,7 +159,7 @@ async function getOfferPdf(req, res, supabase) {
 
     const { pdf, offer } = await renderOfferPdf({ supabase, offerId: id, tenantId: req.tenantId });
 
-    const filename = `Angebot_${offer.NAME_SHORT || id}.pdf`;
+    const filename = `Angebot_${offer.ABBR || id}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${filename}"`);
     res.setHeader('Cache-Control', 'no-store');
@@ -177,7 +177,7 @@ async function getAuftragsbestaetigungPdf(req, res, supabase) {
 
     const { pdf, offer } = await renderAuftragsbestaetigungPdf({ supabase, offerId: id, tenantId: req.tenantId });
 
-    const filename = `Auftragsbestaetigung_${offer.NAME_SHORT || id}.pdf`;
+    const filename = `Auftragsbestaetigung_${offer.ABBR || id}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${filename}"`);
     res.setHeader('Cache-Control', 'no-store');

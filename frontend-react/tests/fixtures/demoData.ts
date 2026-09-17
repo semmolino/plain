@@ -33,7 +33,7 @@ const PROJECTS = [
 
 const projects = PROJECTS.map(([short, long, status, typ, mgr, addr], i) => ({
   ID: i + 1,
-  NAME_SHORT: short, NAME_LONG: long,
+  ABBR: short, NAME_LONG: long,
   PROJECT_STATUS_ID: i % 4 + 1, PROJECT_TYPE_ID: i % 5 + 1,
   PROJECT_MANAGER_ID: i % 3 + 1, DEPARTMENT_ID: 1,
   ADDRESS_ID: i + 1, CONTACT_ID: i + 1, IS_INTERNAL: false,
@@ -75,7 +75,7 @@ const invoices = INVOICES.map(([nr, date, due, net, status, typ], i) => ({
   TOTAL_AMOUNT_GROSS: Math.round((net as number) * 1.19 * 100) / 100,
   STATUS_ID: status as number,
   PROJECT_ID: (i % projects.length) + 1, CONTRACT_ID: 1, VAT_PERCENT: 19,
-  PROJECT: projects[i % projects.length].NAME_SHORT + ' ' + projects[i % projects.length].NAME_LONG,
+  PROJECT: projects[i % projects.length].ABBR + ' ' + projects[i % projects.length].NAME_LONG,
   CONTRACT: 'Vertrag ' + (i + 1),
   CONTACT: 'A. Ansprechpartner', CONTACT_MAIL: 'kontakt@kunde.de',
   ADDRESS_NAME_1: projects[i % projects.length].ADDRESS_NAME,
@@ -98,7 +98,7 @@ const OFFERS = [
 
 const offers = OFFERS.map(([short, long, status, prob, total], i) => ({
   ID: i + 1,
-  NAME_SHORT: short as string, NAME_LONG: long as string,
+  ABBR: short as string, NAME_LONG: long as string,
   PROBABILITY: prob as number,
   CREATED_AT: '2025-06-0' + ((i % 8) + 1),
   OFFER_DATE: '2025-07-0' + ((i % 8) + 1),
@@ -149,9 +149,9 @@ const contacts = [
 }))
 
 /** Deckt die verschiedenen Namensfelder der Stammdaten-Typen ab —
- *  ProjectManager nutzt ABBR, Status/Typ/Abteilung NAME_SHORT. */
+ *  ProjectManager nutzt ABBR, Status/Typ/Abteilung ABBR. */
 const named = (n: string[]) => n.map((name, i) => ({
-  ID: i + 1, NAME: name, NAME_SHORT: name, NAME_LONG: name, ABBR: name,
+  ID: i + 1, NAME: name, ABBR: name, NAME_LONG: name, ABBR: name,
 }))
 
 /**

@@ -101,9 +101,9 @@ export function NachtragDetail() {
 
       {/* ── Kopf ─────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-        <h1 className="master-title" style={{ margin: 0 }}>{nachtrag.NAME_SHORT} · {nachtrag.NAME_LONG}</h1>
+        <h1 className="master-title" style={{ margin: 0 }}>{nachtrag.ABBR} · {nachtrag.NAME_LONG}</h1>
         <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, background: 'var(--info-bg)', color: 'var(--accent2)' }}>
-          {curStatus?.NAME_SHORT ?? '—'}
+          {curStatus?.ABBR ?? '—'}
         </span>
       </div>
 
@@ -126,7 +126,7 @@ export function NachtragDetail() {
               onChange={e => patchMut.mutate({ status_code: e.target.value })}
             >
               {statuses.filter(s => MANUAL_STATUS.has(s.CODE) || s.CODE === curStatus?.CODE).map(s => (
-                <option key={s.CODE} value={s.CODE}>{s.NAME_SHORT}</option>
+                <option key={s.CODE} value={s.CODE}>{s.ABBR}</option>
               ))}
             </select>
           </label>
@@ -175,7 +175,7 @@ export function NachtragDetail() {
                 const isLeaf = !withChildren.has(n.ID)
                 return (
                   <tr key={n.ID}>
-                    <td style={{ paddingLeft: 8 + d * 18 }}>{n.NAME_SHORT ? `${n.NAME_SHORT} — ` : ''}{n.NAME_LONG}</td>
+                    <td style={{ paddingLeft: 8 + d * 18 }}>{n.ABBR ? `${n.ABBR} — ` : ''}{n.NAME_LONG}</td>
                     <td>{Number(n.BILLING_TYPE_ID) === 2 ? 'Stunden' : Number(n.BILLING_TYPE_ID) === 1 ? 'Pauschal' : '—'}</td>
                     <td style={{ textAlign: 'right' }}>{money(n.REVENUE)}</td>
                     <td>

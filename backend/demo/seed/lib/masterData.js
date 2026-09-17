@@ -87,10 +87,10 @@ async function loadMasterData(supabase, tenantId) {
     const contract = contractByProject.get(String(p.ID)) || null;
     const offer = p.OFFER_ID != null ? offerById.get(String(p.OFFER_ID)) || null : null;
 
-    if (projStructs.length === 0) warnings.push(`Projekt "${p.NAME_SHORT || p.ID}" hat keine Struktur.`);
-    else if (leaves.length === 0) warnings.push(`Projekt "${p.NAME_SHORT || p.ID}" hat keine Blatt-Elemente.`);
-    if (projAssign.length === 0) warnings.push(`Projekt "${p.NAME_SHORT || p.ID}" hat keine Mitarbeiter-Zuordnung (EMPLOYEE2PROJECT).`);
-    if (!contract) warnings.push(`Projekt "${p.NAME_SHORT || p.ID}" hat keinen CONTRACT — ohne Vertrag keine Rechnungen.`);
+    if (projStructs.length === 0) warnings.push(`Projekt "${p.ABBR || p.ID}" hat keine Struktur.`);
+    else if (leaves.length === 0) warnings.push(`Projekt "${p.ABBR || p.ID}" hat keine Blatt-Elemente.`);
+    if (projAssign.length === 0) warnings.push(`Projekt "${p.ABBR || p.ID}" hat keine Mitarbeiter-Zuordnung (EMPLOYEE2PROJECT).`);
+    if (!contract) warnings.push(`Projekt "${p.ABBR || p.ID}" hat keinen CONTRACT — ohne Vertrag keine Rechnungen.`);
 
     return { ...p, structures: projStructs, leaves, assignments: projAssign, contract, offer };
   });
@@ -116,7 +116,7 @@ async function loadMasterData(supabase, tenantId) {
     bookingTypes,
     refs: {
       vat: vats[0] || null,
-      currency: currencies.find((c) => c.NAME_SHORT === "EUR") || currencies[0] || null,
+      currency: currencies.find((c) => c.ABBR === "EUR") || currencies[0] || null,
       paymentMeans: paymentMeans[0] || null,
       projectStatus,
     },
@@ -133,7 +133,7 @@ function summarize(md) {
   lines.push(`Projekte: ${md.projects.length}`);
   for (const p of md.projects) {
     lines.push(
-      `  • ${String(p.NAME_SHORT || p.ID).padEnd(24)} ` +
+      `  • ${String(p.ABBR || p.ID).padEnd(24)} ` +
         `Blätter:${String(p.leaves.length).padStart(2)}  ` +
         `Zuordn.:${String(p.assignments.length).padStart(2)}  ` +
         `Vertrag:${p.contract ? "ja" : "NEIN"}`,

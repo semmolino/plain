@@ -14,7 +14,7 @@ function projekt(id, pmId, extra = {}) {
   return {
     ID: id,
     TENANT_ID: TENANT,
-    NAME_SHORT: `P-${id}`,
+    ABBR: `P-${id}`,
     NAME_LONG: `Projekt ${id}`,
     PROJECT_MANAGER_ID: pmId,
     PROJECT_STATUS_ID: 1,

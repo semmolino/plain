@@ -13,7 +13,7 @@ export const BOOKING_KIND_LABEL: Record<BookingKind, string> = {
 export interface BookingType {
   ID:              number
   KIND:            BookingKind
-  NAME_SHORT:      string
+  ABBR:      string
   NAME_LONG:       string | null
   UNIT_LABEL:      string | null
   UNIT_CODE:       string | null
@@ -27,7 +27,7 @@ export interface BookingType {
 
 export interface BookingTypePayload {
   kind:            BookingKind
-  name_short:      string
+  abbr:      string
   name_long?:      string | null
   unit_label?:     string | null
   unit_code?:      string | null
@@ -63,7 +63,7 @@ export const deleteBookingType = (id: number) =>
 export interface SelectableBookingType {
   ID:              number
   KIND:            BookingKind
-  NAME_SHORT:      string
+  ABBR:      string
   NAME_LONG:       string | null
   UNIT_LABEL:      string | null
   UNIT_CODE:       string | null
@@ -113,7 +113,7 @@ export const deleteProjectBookingType = (id: number) =>
 export interface ProjectBookingPrice {
   BOOKING_TYPE_ID:   number
   KIND:              BookingKind
-  NAME_SHORT:        string
+  ABBR:        string
   NAME_LONG:         string | null
   UNIT_LABEL:        string | null
   SCOPE:             'global' | 'project'
