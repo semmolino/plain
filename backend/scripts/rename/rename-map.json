@@ -337,8 +337,8 @@
     },
     {
       "id": "05-advance-invoice",
-      "status": "planned",
-      "note": "PARTIAL_PAYMENT -> ADVANCE_INVOICE. Fachlich der schwerste Block: beruehrt die E-Rechnung (services_einvoice_data.js, Vorauszahlungs-BTs) und den Snapshot-Test tests/einvoice_cii_snapshot.test.js. erechnung-reviewer einplanen.",
+      "status": "done",
+      "note": "PARTIAL_PAYMENT -> ADVANCE_INVOICE. Fachlich der schwerste Block: beruehrt die E-Rechnung (services_einvoice_data.js, Vorauszahlungs-BTs) und den Snapshot-Test tests/einvoice_cii_snapshot.test.js. erechnung-reviewer einplanen. ERLEDIGT 2026-09-17: Migrationen 0147/0148/0149 plus Vorab-Zaehler, verify gruen, erechnung-reviewer ohne Befund, Rauchtest sauber.",
       "tables": [
         {
           "from": "INVOICE_DEDUCTION",

@@ -555,18 +555,25 @@ async function tableSchemas(client, table) {
 
 const tableExists = async (client, table) => (await tableSchemas(client, table)).length > 0;
 
-/** Functions and views whose *body text* mentions an identifier. */
+/**
+ * Functions and views whose *body text* mentions an identifier.
+ *
+ * Word boundaries, not a substring match. PARTIAL_PAYMENT_NET_TOTAL is an
+ * output column of the report functions - a computed field, not a table
+ * column, and deliberately not renamed. A LIKE '%...%' flagged every report
+ * function over it and buried the real findings.
+ */
 async function dbObjectsReferencing(client, identifier) {
   const { rows } = await client.query(
     `SELECT n.nspname AS schema, p.proname AS name, 'function' AS kind
        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE ${APP_SCHEMAS} AND p.prosrc ILIKE '%' || $1 || '%'
+      WHERE ${APP_SCHEMAS} AND p.prosrc ~ ('\\m' || $1 || '\\M')
       UNION ALL
      SELECT n.nspname AS schema, c.relname AS name,
             CASE c.relkind WHEN 'v' THEN 'view' ELSE 'matview' END AS kind
        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE ${APP_SCHEMAS} AND c.relkind IN ('v', 'm')
-        AND pg_get_viewdef(c.oid) ILIKE '%' || $1 || '%'
+        AND pg_get_viewdef(c.oid) ~ ('\\m' || $1 || '\\M')
       ORDER BY kind, schema, name`,
     [identifier]
   );
