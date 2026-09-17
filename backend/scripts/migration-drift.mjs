@@ -80,7 +80,18 @@ const UMBENANNT = erledigteUmbenennungen();
 /** Namen auf den heutigen Stand bringen. */
 const heute = {
   tabelle: (t) => UMBENANNT.tabellen.get(t) ?? t,
-  spalte: (t, c) => UMBENANNT.spalten.get(`${t}.${c}`) ?? c,
+  /*
+   * Die Spalte muss unter BEIDEN Tabellennamen gesucht werden. Eine alte
+   * Migration nennt die Tabelle so, wie sie damals hiess; der Block, der die
+   * Spalte umbenannt hat, fuehrt sie unter dem Namen, den die Tabelle zu
+   * SEINEM Zeitpunkt trug. Wurde die Tabelle dazwischen umbenannt, treffen
+   * sich die beiden Schluessel nie - und eine laengst eingespielte Migration
+   * gilt als "nie gelaufen".
+   */
+  spalte: (t, c) =>
+    UMBENANNT.spalten.get(`${t}.${c}`) ??
+    UMBENANNT.spalten.get(`${UMBENANNT.tabellen.get(t) ?? t}.${c}`) ??
+    c,
 };
 
 const UNMARK = process.argv.includes("--unmark");
